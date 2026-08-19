@@ -76,6 +76,7 @@ export function followBridge(url: string, onChange: () => void): BridgeLink {
   const state = emptySet();
   let socket: WebSocket | null = null;
   let timer: NodeJS.Timeout | null = null;
+  let asking: NodeJS.Timeout | null = null;
   let closed = false;
 
   const connect = () => {
@@ -104,6 +105,11 @@ export function followBridge(url: string, onChange: () => void): BridgeLink {
     socket.on('close', () => {
       state.connected = false;
       state.lomReady = false;
+      state.rev = -1;
+      if (asking) {
+        clearTimeout(asking);
+        asking = null;
+      }
       onChange();
       retry();
     });
@@ -125,11 +131,40 @@ export function followBridge(url: string, onChange: () => void): BridgeLink {
     if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(request));
   };
 
+  /**
+   * Ask again, later, until the set actually arrives.
+   *
+   * A connected bridge is not the same as a bridge that can answer. The device
+   * refuses every request with `device not ready` until `init()` has run in
+   * `lom.ts`, which happens on `live.thisdevice` — so a bridge whose device is
+   * still coming up, or whose script was recompiled under a loaded device, is
+   * reachable and unhelpful.
+   *
+   * That is the ordinary case on a show rig rather than an edge one: the
+   * visuals machine has no reason to be started after the one running Live, and
+   * a rack that had to be powered on in the right order is a rack that fails at
+   * the worst moment. So this asks once a second until it is answered, and stops
+   * the moment `rev` says a set landed.
+   */
+  const askAgain = () => {
+    if (closed || asking || state.rev >= 0) return;
+    asking = setTimeout(() => {
+      asking = null;
+      if (closed || state.rev >= 0) return;
+      send({ type: 'snapshot' });
+      askAgain();
+    }, 1000);
+  };
+
   /** Returns whether anything a renderer cares about actually moved. */
   const take = (event: BSV.Event): boolean => {
     switch (event.type) {
       case 'status':
         state.lomReady = event.lomReady;
+        // The LOM going ready is the signal that an earlier refusal is worth
+        // retrying, and it arrives unprompted.
+        if (event.lomReady && state.rev < 0) send({ type: 'snapshot' });
+        askAgain();
         return true;
       case 'snapshot': {
         const snap = event.data;
@@ -169,6 +204,12 @@ export function followBridge(url: string, onChange: () => void): BridgeLink {
         // Levels move 30 times a second and are read, never diffed against.
         // Saying "nothing changed" keeps them out of the push scheduler.
         return false;
+      case 'error':
+        // Never fatal here. The device refuses everything until it is ready,
+        // and the only useful response is to ask again rather than to give up
+        // or to take the process down with an unhandled rejection.
+        askAgain();
+        return false;
       default:
         return false;
     }
@@ -181,6 +222,7 @@ export function followBridge(url: string, onChange: () => void): BridgeLink {
     close() {
       closed = true;
       if (timer) clearTimeout(timer);
+      if (asking) clearTimeout(asking);
       socket?.close();
     },
   };
