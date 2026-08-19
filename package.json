@@ -1,0 +1,14 @@
+{
+  "name": "bsv-visuals",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Visuals client: an Ableton Link peer that renders a Live set.",
+  "scripts": {
+    "build:link": "node --disable-warning=ExperimentalWarning tools/build-link.ts"
+  },
+  "dependencies": {
+    "@ktamas77/abletonlink": "^1.2.3",
+    "ws": "^8.18.0"
+  }
+}

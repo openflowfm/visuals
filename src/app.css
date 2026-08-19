@@ -1,0 +1,118 @@
+* { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+.stage {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+}
+
+.panel {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  min-width: 460px;
+  padding: 10px 12px 8px;
+  border: 1px solid #2c2c31;
+  border-radius: 4px;
+  background: rgb(10 10 11 / 0.82);
+  color: #b7b7be;
+  font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  backdrop-filter: blur(8px);
+  user-select: none;
+}
+
+.panel h1 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  color: #ececed;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.panel h1 span {
+  padding: 1px 6px;
+  border-radius: 2px;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.ok { background: #14351f; color: #6ee7a0; }
+.bad { background: #3a1418; color: #ff8b8b; }
+.warn { background: #3a2f14; color: #f0b23c; }
+.idle { background: #1c1c20; color: #5e5e66; }
+
+.bad-line {
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  border-radius: 3px;
+  background: #3a1418;
+  color: #ff8b8b;
+  white-space: pre-wrap;
+}
+
+.panel dl {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
+  grid-template-rows: auto auto;
+  gap: 0 18px;
+  margin: 0 0 8px;
+}
+
+.panel dt { color: #5e5e66; font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; }
+.panel dd { margin: 0; color: #ececed; }
+
+.panel table { width: 100%; border-collapse: collapse; }
+
+.panel th {
+  padding: 2px 6px 3px 0;
+  border-bottom: 1px solid #26262a;
+  color: #5e5e66;
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.panel td { padding: 2px 6px 2px 0; }
+.panel tr.silent td { color: #3a3a41; }
+
+.panel td i {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 5px;
+  border-radius: 1px;
+}
+
+.panel td b {
+  display: block;
+  height: 5px;
+  min-width: 1px;
+  border-radius: 1px;
+  background: #f0b23c;
+}
+
+.panel td.empty { padding: 8px 0; color: #5e5e66; text-align: center; }
+
+.hint { margin: 8px 0 0; color: #5e5e66; }
+
+kbd {
+  padding: 0 3px;
+  border: 1px solid #2c2c31;
+  border-radius: 2px;
+  background: #151517;
+}
