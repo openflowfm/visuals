@@ -6,6 +6,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { VISUALS_PORT, VISUALS_WS_PATH } from '../protocol.ts';
 import { followBridge } from './bridge.ts';
 import { openLink } from './link.ts';
+import { openScheme } from './scheme.ts';
 import { buildShow } from './show.ts';
 
 /**
@@ -45,6 +46,7 @@ const ROOT = path.resolve(here, '../dist');
  */
 
 const link = openLink(120, 4);
+const scheme = openScheme();
 let dirty = true;
 const bridge = followBridge(BRIDGE, () => {
   dirty = true;
@@ -87,7 +89,7 @@ sockets.on('connection', (socket) => {
   clients.add(socket);
   socket.on('close', () => clients.delete(socket));
   socket.on('error', () => clients.delete(socket));
-  socket.send(JSON.stringify(buildShow(bridge.state, link.sample())));
+  socket.send(JSON.stringify(buildShow(bridge.state, link.sample(), scheme)));
 });
 
 /**
@@ -109,6 +111,11 @@ sockets.on('connection', (socket) => {
 const ANCHOR_MS = 100;
 const SHOW_MS = 1000;
 
+// The scheme is a file someone edits with the picture on screen beside them, so
+// a save has to reach the renderer without a reconnect. Nothing here diffs it —
+// the heartbeat is a second away at worst, and the whole show is ~2 kB.
+let lastScheme = '';
+
 let sinceShow = 0;
 setInterval(() => {
   sinceShow += ANCHOR_MS;
@@ -118,9 +125,12 @@ setInterval(() => {
     sinceShow = 0;
   }
   if (clients.size === 0) return;
-  const show = buildShow(bridge.state, link.sample());
+  const show = buildShow(bridge.state, link.sample(), scheme);
   show.clock = link.live;
-  const wire = JSON.stringify(due ? show : anchorOf(show));
+  const stamp = `${show.colorway}|${show.archetype}|${show.energy}|${show.schemeError}`;
+  const reloaded = stamp !== lastScheme;
+  lastScheme = stamp;
+  const wire = JSON.stringify(due || reloaded ? show : anchorOf(show));
   for (const socket of clients) {
     if (socket.readyState === socket.OPEN) socket.send(wire);
   }
@@ -149,6 +159,7 @@ server.listen(PORT, HOST, () => {
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
     link.stop();
+    scheme.stop();
     bridge.close();
     server.close();
     process.exit(0);

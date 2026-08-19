@@ -50,7 +50,7 @@ export function App() {
       const dt = Math.min((now - last) / 1000, 0.1);
       last = now;
       clock.advance(dt);
-      compositor.frame(showRef.current, clock.beat(), clock.seconds());
+      compositor.frame(showRef.current, clock.beat(), clock.seconds(), dt);
 
       frames += 1;
       if (now - since >= 500) {
@@ -93,6 +93,7 @@ export function App() {
           </h1>
 
           {glError && <p className="bad-line">{glError}</p>}
+          {show.schemeError && <p className="bad-line">scheme.json: {show.schemeError}</p>}
 
           <dl>
             <dt>tempo</dt>
@@ -101,8 +102,12 @@ export function App() {
             <dd>{clockText(show.quantum)}</dd>
             <dt>song</dt>
             <dd>{show.song ?? '—'}</dd>
+            <dt>colourway</dt>
+            <dd>{show.colorway ?? '—'}</dd>
             <dt>section</dt>
-            <dd>{show.role ?? '—'}</dd>
+            <dd>{show.role ?? '—'}{show.role && !show.archetype ? ' (no archetype)' : ''}</dd>
+            <dt>energy</dt>
+            <dd>{Math.round(show.energy * 100)}</dd>
             <dt>fps</dt>
             <dd>{fps}</dd>
           </dl>
@@ -113,7 +118,8 @@ export function App() {
                 <th>layer</th>
                 <th>clip</th>
                 <th>source</th>
-                <th>effect</th>
+                <th>effects</th>
+                <th>nrg</th>
                 <th>blend</th>
                 <th>fader</th>
                 <th>level</th>
@@ -123,12 +129,20 @@ export function App() {
               {show.layers.map((layer) => (
                 <tr key={layer.t} className={layer.playing < 0 ? 'silent' : undefined}>
                   <td>
-                    <i style={{ background: hex(layer.clipColor) }} />
+                    <i style={{ background: hex(layer.color) }} />
                     {layer.name}
                   </td>
                   <td>{layer.playing < 0 ? '—' : layer.clipName || `scene ${layer.playing}`}</td>
                   <td>{layer.source}</td>
-                  <td>{layer.effect === 'none' ? '' : layer.effect}</td>
+                  <td className="fx">
+                    {layer.effects
+                      // The amount is only worth the room when it isn't full —
+                      // a column of "100"s is noise that pushes the useful
+                      // columns off the edge.
+                      .map((e) => (e.amount > 0.95 ? e.kind : `${e.kind} ${Math.round(e.amount * 100)}`))
+                      .join(' + ') || '—'}
+                  </td>
+                  <td>{Math.round(layer.energy * 100)}</td>
                   <td>{layer.blend}</td>
                   <td>{Math.round(layer.opacity * 100)}</td>
                   <td>

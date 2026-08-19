@@ -50,6 +50,10 @@ const RESTING: Show = {
   layers: [],
   song: null,
   role: null,
+  archetype: null,
+  colorway: null,
+  energy: 0.4,
+  schemeError: null,
 };
 
 export function useShow(): {

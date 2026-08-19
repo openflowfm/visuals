@@ -16,7 +16,7 @@ Live ─ SessionBridge :17800 ─WS─> visuals server :17900 ─WS─> browser 
 | doc | read it before touching | source |
 |---|---|---|
 | [the clock](docs/clock.md) | Link, tempo, the beat, why the browser extrapolates, the native addon | `server/link.ts`, `src/state/useShow.ts`, `tools/build-link.ts` |
-| [the mapping](docs/mapping.md) | what a track means, what a scene means, how a show is derived from a set | `server/show.ts` |
+| [the cascade](docs/mapping.md) | archetypes, energy, colourways, and the scheme file | `server/show.ts`, `server/scheme.ts`, `scheme.json` |
 | [the renderer](docs/render.md) | layers, blending, sources, effects, fill rate | `src/render/*` |
 | [the harness](docs/harness.md) | working on this with no Ableton, and the Link safety rule | `tools/fake-live.ts` |
 
@@ -69,14 +69,27 @@ display, a CLI — should cost nothing and perturb nothing."* This asks for `sna
 without `fresh`, never sends the device's own watches, and can connect, drop and reconnect
 without the bridge noticing.
 
-## Two things that are not built
+## Customising it
 
-**No override.** Every visual is derived from the set — track name picks the source, scene
-role picks the effect, clip colour is the colour. There is no way to say "this cell draws
-*that*" yet, and derivation came first deliberately: it is what keeps an override optional
-rather than mandatory. See [the mapping](docs/mapping.md).
+[`scheme.json`](scheme.json) — hot-reloaded, and entirely optional. It defines colourways
+and assigns one per song, gives each role an **archetype** (an energy and a character), and
+carries rules matched against track and clip names.
+
+The resolution is a cascade: **song → archetype → track → clip**, with live signals
+threading through all of it as shader uniforms rather than being a level of their own.
+Scalars override, effects add up, energy accumulates. Energy is the load-bearing idea — one
+number per section that drives effect intensity, reaction speed, brightness and how many
+layers draw at all, which is what makes an archetype dynamic instead of a preset.
+
+Full reasoning in [the cascade](docs/mapping.md).
+
+## What is not built
+
+**Clip colour is not an input, on purpose.** Those colours are navigation — how you find
+your place in the grid during a show — and driving the picture from them would force a
+choice between a set you can read and a set that looks right.
 
 **No note reactivity.** The LOM has no played-note event and the bridge device is an audio
 effect, so notes cost a small MIDI Effect on each track you want them from. Meters and the
-beat carry the MVP; notes are the obvious next input and would arrive as one more field on
-`Layer`.
+beat carry it for now; a note would thread through as one more uniform, which is precisely
+why signals are not a cascade level.

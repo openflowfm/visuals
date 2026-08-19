@@ -1,92 +1,50 @@
-import type { Blend, EffectKind, Layer, Show, SourceKind } from '../protocol.ts';
+import type { AppliedEffect, EffectKind, Layer, Show } from '../protocol.ts';
 import type { SetState } from './bridge.ts';
 import type { LinkFrame } from './link.ts';
+import { compile, type Rule, type Scheme, type SchemeSource } from './scheme.ts';
 
 /**
- * Turning a Live set into a show, with nothing to configure.
+ * Resolving a Live set into a show, through a cascade.
  *
- * This is `docs/direction.md`'s argument applied one module over: **the mapping
- * is derived, not declared.** The song mapping is read back out of scene names
- * rather than stored beside the set, and the same reasoning works here — a set
- * that has been named and coloured has already said what its sections are and
- * what its tracks play, and asking someone to say it a second time in a visuals
- * app would be asking them to keep two records in step.
+ * Four levels, each owning what it is actually in a position to know, and each
+ * more specific than the last:
  *
- * Point this at a set that has been through the session view and it has an
- * opinion immediately. Point it at an unnamed set and it still runs, on the
- * positional fallbacks below.
- *
- * ## What decides what, and why it is split this way
- *
- * | | comes from | because |
+ * | level | owns | because |
  * |---|---|---|
- * | source | the **track** | a track is an instrument, and its layer should stay recognisable across a whole song |
- * | effect | the **scene's role** | a section is a change of treatment, and it should be visible the moment the chorus lands |
- * | blend | the layer's **depth** | something has to be opaque at the bottom, and stacked light adds |
- * | colour | the **clip** | the set is already colour-coded; that work should not be done twice |
- * | opacity | the **track fader** | a layer stack with a level per layer *is* a mixer |
+ * | **song** | the colours | a song has an identity that outlives any one section of it |
+ * | **archetype** | energy and character | a section is a feeling, and the same chorus should differ between two songs |
+ * | **track** | what a layer does with content | a track is an instrument; its layer should stay recognisable across a whole song |
+ * | **clip** | the exception | the most specific thing there is, and the only level that can say "not this time" |
  *
- * The first row was the mistake worth recording. Keying the source off the role
- * looked right — the section is what changed, so let it pick the picture — but a
- * role belongs to the *scene*, which is a whole column of the grid, so every
- * layer in that column drew the identical thing on top of itself. Sections
- * change together; instruments differ from each other. They are perpendicular,
- * and the two axes of the grid are exactly that distinction.
+ * **Live signals are not a level.** The meter, the beat, the phase and the
+ * tempo thread through everything as uniforms rather than being resolved at one
+ * step, because they are not a description of what the picture should be — they
+ * are what makes it move once it has been decided. Anything can be modulated by
+ * them, and nothing in the cascade has to know they exist.
  *
- * An explicit override — this cell draws *that* — is the obvious next thing and
- * deliberately isn't here. Derivation first is what keeps the override optional,
- * which is the difference between a tool and a chore.
+ * ## What the levels do to each other
+ *
+ * Scalars — `source`, `blend`, `floor` — are **overridden**, most specific
+ * winning, which is what "a clip is an exception" has to mean.
+ *
+ * `effects` are **added**, and that is the difference between this and a lookup
+ * table. "The chorus should mix in more frenetic effects" is additive by
+ * construction: the archetype contributes the section's character, the track
+ * contributes what that instrument always does, and both survive. `maxEffects`
+ * caps the pile, and energy decides how many of them actually reach the picture.
+ *
+ * `energyBias` **accumulates**, which is what makes energy per layer rather than
+ * per show. A drum track can run hotter than the pad under it in the same
+ * chorus — the thing a single global number cannot say.
  */
 
-/**
- * Track name to source, because people name tracks after what plays on them.
- *
- * Matched loosely and on a first hit, so "Drum Bus", "drums 2" and "DRUMS" all
- * land together. An unmatched track falls through to its position, which is how
- * a set of tracks called "1" through "5" still gets five different layers.
- */
-const BY_NAME: readonly (readonly [RegExp, SourceKind])[] = [
-  [/\b(kick|drum|beat|perc|snare)/i, 'strobe'],
-  [/\b(bass|sub|808)/i, 'bars'],
-  [/\b(lead|solo|gtr|guitar|vox|vocal)/i, 'rings'],
-  [/\b(pad|string|atmos|amb)/i, 'noise'],
-  [/\b(key|synth|chord|piano|organ)/i, 'grid'],
-];
-
-const BY_POSITION: readonly SourceKind[] = ['bars', 'rings', 'grid', 'noise', 'strobe', 'solid'];
-
-/**
- * Role to effect. The section changes the treatment of every layer at once,
- * which is what makes a chorus land as a chorus.
- *
- * Most sections get nothing on purpose: an effect distinguishes a moment only
- * while the moments around it are plain, so a table where every row is an
- * effect is a table that has stopped saying anything.
- *
- * And even in a section that has one, it lands on **alternate layers only**.
- * Kaleidoscoping all five at once was the first thing this did and it read as
- * a single texture — every source lost the identity the row above works to
- * give it. Half the stack changing is enough to say the chorus arrived while
- * the other half still says which instrument is which.
- */
-const BY_ROLE: Record<string, EffectKind> = {
-  INTRO: 'pixelate',
-  VERSE: 'none',
-  CHORUS: 'kaleido',
-  JAM1: 'shift',
-  JAM2: 'mirror',
-  ENDING: 'pixelate',
-  PRACTICE: 'none',
-};
-
-/**
- * Layers stack, so their blends have to differ or the top one simply wins.
- *
- * The bottom is `over` because something has to be opaque, and most of what is
- * above it adds — which is what a stack of light does, and where a VJ mixer
- * defaults too.
- */
-const BY_DEPTH: readonly Blend[] = ['over', 'add', 'screen', 'add', 'multiply', 'add'];
+/** Hex, `#rrggbb` or `#rgb`, to the packed integer the renderer wants. */
+function packColor(text: string): number {
+  const clean = text.trim().replace(/^#/, '');
+  const full = clean.length === 3 ? clean.replace(/./g, '$&$&') : clean;
+  const value = Number.parseInt(full, 16);
+  return Number.isFinite(value) ? value & 0xffffff : 0xffffff;
+}
 
 /** Live's own `[ROLE]` prefix, which is the convention the set is named with. */
 function roleOf(name: string): string | null {
@@ -94,19 +52,6 @@ function roleOf(name: string): string | null {
   return match ? match[1].trim().toUpperCase() : null;
 }
 
-function sourceFor(name: string, depth: number): SourceKind {
-  for (const [pattern, kind] of BY_NAME) if (pattern.test(name)) return kind;
-  return BY_POSITION[depth % BY_POSITION.length];
-}
-
-/**
- * A parameter's 0–1 position, given Live's own range for it.
- *
- * `MixerDevice.volume` is already the fader's own 0–1 position rather than
- * decibels, so this is a normalisation against the reported range and not a
- * taper of its own. A missing parameter reads fully open: a layer that vanished
- * because the mixer had not arrived yet would look like a renderer bug.
- */
 function positionOf(p: BSV.MixerParameterState | null | undefined): number {
   if (!p) return 1;
   const span = p.max - p.min;
@@ -114,40 +59,125 @@ function positionOf(p: BSV.MixerParameterState | null | undefined): number {
   return Math.max(0, Math.min(1, (p.value - p.min) / span));
 }
 
-export function buildShow(set: SetState, link: LinkFrame): Show {
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+/**
+ * How many of the offered effects actually land, and how hard.
+ *
+ * The first fades in across the bottom half of the energy range and the second
+ * across the top, so a section never acquires two effects at once — it grows
+ * into them. Below a tenth an effect is dropped rather than drawn, because a
+ * pass that changes nothing visible still costs a full-screen draw.
+ */
+function dialEffects(kinds: EffectKind[], energy: number, max: number): AppliedEffect[] {
+  const applied: AppliedEffect[] = [];
+  for (let i = 0; i < Math.min(kinds.length, max); i++) {
+    const opensAt = i * 0.45;
+    const amount = clamp01((energy - opensAt) / 0.45);
+    if (amount > 0.1) applied.push({ kind: kinds[i], amount });
+  }
+  return applied;
+}
+
+export function buildShow(set: SetState, link: LinkFrame, source: SchemeSource): Show {
+  const scheme: Scheme = source.current();
   const strips = new Map((set.mixer?.tracks ?? []).map((strip) => [strip.t, strip]));
+  const trackRules = compile(scheme.tracks);
+  const clipRules = compile(scheme.clips);
 
   // Group tracks are not layers: they carry no clips of their own, and drawing
   // one would double every layer inside it.
-  const layers: Layer[] = set.tracks
-    .filter((track) => !track.isGroup)
-    .map((track, depth): Layer => {
-      const play = set.play[track.i];
-      const playing = play?.playing ?? -1;
-      const clip = playing >= 0 ? set.clips.get(`${track.i}:${playing}`) : undefined;
-      const scene = playing >= 0 ? set.scenes[playing] : undefined;
-      const role = scene ? roleOf(scene.name) : null;
-      const strip = strips.get(track.i);
-
-      return {
-        t: track.i,
-        name: track.name,
-        color: track.color,
-        source: sourceFor(track.name, depth),
-        effect: role && depth % 2 === 0 ? (BY_ROLE[role] ?? 'none') : 'none',
-        blend: BY_DEPTH[depth % BY_DEPTH.length],
-        // A muted track draws nothing, which is what its Track Activator means
-        // for the sound and should mean here too.
-        opacity: strip && !strip.active ? 0 : positionOf(strip?.volume),
-        level: set.levels.get(track.i) ?? 0,
-        playing,
-        clipColor: clip?.color ?? track.color,
-        clipName: clip?.name ?? '',
-      };
-    });
+  const tracks = set.tracks.filter((track) => !track.isGroup);
 
   const scene = set.play.find((p) => p && p.playing >= 0)?.playing ?? -1;
   const songKey = scene >= 0 ? (set.model?.songByScene[String(scene)] ?? null) : null;
+  const role = scene >= 0 ? roleOf(set.scenes[scene]?.name ?? '') : null;
+
+  const archetypeName = role && scheme.archetypes[role] ? role : null;
+  const archetype = archetypeName ? scheme.archetypes[archetypeName] : null;
+  const baseEnergy = archetype?.energy ?? scheme.defaults.energy;
+
+  // A song with no assignment still gets colours: an unstyled song would be a
+  // black screen for the one thing nobody remembered to configure.
+  const named = songKey ? scheme.songs[songKey] : undefined;
+  const colorwayName =
+    (named && scheme.colorways[named] ? named : undefined) ??
+    (scheme.colorways[scheme.defaults.colorway] ? scheme.defaults.colorway : undefined) ??
+    Object.keys(scheme.colorways)[0] ??
+    null;
+  const colors = (colorwayName ? scheme.colorways[colorwayName] : null) ?? ['#ffffff'];
+
+  const layers: Layer[] = tracks.map((track, depth): Layer => {
+    const play = set.play[track.i];
+    const playing = play?.playing ?? -1;
+    const clip = playing >= 0 ? set.clips.get(`${track.i}:${playing}`) : undefined;
+    const strip = strips.get(track.i);
+
+    let kind = scheme.defaults.sources[depth % scheme.defaults.sources.length];
+    let blend = scheme.defaults.blend[depth % scheme.defaults.blend.length];
+    // Derived so the bottom layer is always in and a tall stack's top needs a
+    // fairly loud section to appear. A rule may say otherwise.
+    let floor = tracks.length > 1 ? (depth / (tracks.length - 1)) * 0.45 : 0;
+    let energy = baseEnergy;
+    const kinds: EffectKind[] = [...(archetype?.effects ?? [])];
+
+    const apply = (rule: Rule) => {
+      if (rule.source) kind = rule.source;
+      if (rule.blend) blend = rule.blend;
+      if (rule.floor !== undefined) floor = rule.floor;
+      if (rule.energyBias) energy += rule.energyBias;
+      for (const effect of rule.effects ?? []) if (!kinds.includes(effect)) kinds.push(effect);
+    };
+
+    for (const { test, rule } of trackRules) {
+      if (test.test(track.name)) {
+        apply(rule);
+        break;
+      }
+    }
+    if (clip) {
+      for (const { test, rule } of clipRules) {
+        if (test.test(clip.name)) {
+          apply(rule);
+          break;
+        }
+      }
+    }
+
+    energy = clamp01(energy);
+
+    // Energy thinning the stack, as a fade rather than a cut: a layer just under
+    // its floor is dim, not absent, so a quiet section reads as the picture
+    // closing down rather than as something having failed.
+    //
+    // **Tested against the section's energy, not the layer's.** They are
+    // different questions and conflating them was a real bug: a pad track with
+    // `energyBias: -0.15` is asking to be *calmer*, and the biased value made it
+    // *absent* for the whole verse instead. Presence belongs to the section —
+    // "the chorus brings everything in" is a fact about the chorus — while the
+    // bias only ever describes how frenetic a layer is once it is there.
+    const admitted = floor <= 0 ? 1 : clamp01((baseEnergy - floor) / 0.2 + 1);
+    const fader = strip && !strip.active ? 0 : positionOf(strip?.volume);
+
+    return {
+      t: track.i,
+      name: track.name,
+      // By depth out of the song's colourway, so the stack reads as one scheme.
+      // Never from the clip — that colour is navigation and belongs to whoever
+      // is reading the grid to find their place.
+      color: packColor(colors[depth % colors.length]),
+      source: kind,
+      effects: dialEffects(kinds, energy, scheme.defaults.maxEffects),
+      blend,
+      opacity: fader * admitted,
+      level: set.levels.get(track.i) ?? 0,
+      energy,
+      playing,
+      clipName: clip?.name ?? '',
+    };
+  });
 
   return {
     connected: set.connected,
@@ -168,6 +198,10 @@ export function buildShow(set: SetState, link: LinkFrame): Show {
     master: set.masterLevel,
     layers,
     song: songKey,
-    role: scene >= 0 ? roleOf(set.scenes[scene]?.name ?? '') : null,
+    role,
+    archetype: archetypeName,
+    colorway: colorwayName,
+    energy: baseEnergy,
+    schemeError: source.error(),
   };
 }

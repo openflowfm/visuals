@@ -14,40 +14,63 @@ export type Blend = 'over' | 'add' | 'screen' | 'multiply';
 /** What draws a layer's picture. One fragment shader each. */
 export type SourceKind = 'solid' | 'bars' | 'rings' | 'noise' | 'strobe' | 'grid';
 
-/** What a layer's picture is put through afterwards. */
-export type EffectKind = 'none' | 'mirror' | 'kaleido' | 'shift' | 'pixelate';
+/** What a layer's picture is put through afterwards. One fragment shader each. */
+export type EffectKind = 'mirror' | 'kaleido' | 'shift' | 'pixelate' | 'ripple' | 'smear';
+
+/**
+ * An effect and how far it is dialled in.
+ *
+ * `amount` rather than presence is what makes energy continuous. An effect that
+ * could only be on or off would make a chorus a step change; at 0.3 it is a
+ * suggestion and at 0.95 it has taken the picture over, and the archetype's
+ * energy is what moves between them.
+ */
+export interface AppliedEffect {
+  kind: EffectKind;
+  /** 0–1. Every effect shader mixes against its untouched input by this. */
+  amount: number;
+}
 
 export interface Layer {
   /** Live's track index, and the layer's identity. */
   t: number;
   name: string;
-  /** Live's track colour, as 0xRRGGBB. The set is already colour-coded; use it. */
-  color: number;
   /**
-   * Bottom layer first, so the renderer composites in array order and the last
-   * one is on top. Live's leftmost track is the bottom layer, which matches how
-   * a session grid reads.
+   * Resolved from the song's colourway by depth — **not** from the clip.
+   *
+   * Clip colour belongs to whoever is reading the grid to find their place in
+   * the show, and driving the picture from it would mean choosing between a set
+   * you can navigate and a set that looks right. The song says what the colours
+   * are; the grid stays yours.
    */
+  color: number;
   source: SourceKind;
-  effect: EffectKind;
+  /** Additive across the cascade, ordered, and already capped by energy. */
+  effects: AppliedEffect[];
   blend: Blend;
-  /** 0–1, from the track's volume. A track fader is a layer fader. */
+  /** 0–1, from the track's fader, already gated by this layer's energy floor. */
   opacity: number;
   /** 0–1 output meter, for anything that should move with the sound. */
   level: number;
+  /**
+   * This layer's own energy: the archetype's, biased by the track and the clip.
+   *
+   * Per layer rather than per show because the cascade lets a track and a clip
+   * bias it — a drum layer can run hotter than the pad underneath it in the same
+   * chorus, which is the thing a single global number cannot say.
+   */
+  energy: number;
   /** The scene index playing in this track, or -1. */
   playing: number;
-  /** The clip's own colour when one is playing, else the track's. */
-  clipColor: number;
   clipName: string;
 }
 
 /**
  * One coherent description of what should be on screen.
  *
- * Pushed on change and on a slow heartbeat — never per frame. The clock below
- * is an *anchor*, not a position, so the browser extrapolates between pushes
- * and stays smooth at any refresh rate.
+ * Pushed on change and on a slow heartbeat — never per frame. The clock is an
+ * *anchor*, not a position, so the browser extrapolates between pushes and stays
+ * smooth at any refresh rate.
  */
 export interface Show {
   connected: boolean;
@@ -65,9 +88,18 @@ export interface Show {
   at: number;
   master: number;
   layers: Layer[];
-  /** The song the set says is playing, when its names describe one. */
+  /** The song the set's names describe, when they describe one. */
   song: string | null;
+  /** The role the playing scene names — the archetype that was resolved. */
   role: string | null;
+  /** Which archetype answered, after fallbacks. Null when nothing matched. */
+  archetype: string | null;
+  /** Which colourway the song resolved to. */
+  colorway: string | null;
+  /** The section's own energy, before any track or clip bias. */
+  energy: number;
+  /** Set when the scheme file failed to parse, so the panel can say so. */
+  schemeError: string | null;
 }
 
 export const VISUALS_PORT = 17900;
