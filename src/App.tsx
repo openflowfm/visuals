@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createCompositor, type Compositor } from './render/compositor.ts';
 import { useShow } from './state/useShow.ts';
+import { effectLabel } from './ui/edits.ts';
 import { Editor } from './ui/Editor.tsx';
 import './app.css';
 
@@ -15,6 +16,11 @@ import './app.css';
 export function App() {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const { show, showRef, scheme, save, clock, online } = useShow();
+  // The render loop reads the scheme every frame because effects live in it, and
+  // reads it through a ref for the same reason it reads the show through one:
+  // rebuilding the loop whenever a knob moved would drop a frame per edit.
+  const schemeRef = useRef(scheme);
+  schemeRef.current = scheme;
   const [panel, setPanel] = useState(true);
   const [editing, setEditing] = useState(false);
   const [fps, setFps] = useState(0);
@@ -62,7 +68,7 @@ export function App() {
       const dt = Math.min((now - last) / 1000, 0.1);
       last = now;
       clock.advance(dt);
-      compositor.frame(showRef.current, clock.beat(), clock.seconds(), dt);
+      compositor.frame(showRef.current, schemeRef.current, clock.beat(), clock.seconds(), dt);
 
       frames += 1;
       if (now - since >= 500) {
@@ -149,12 +155,7 @@ export function App() {
                   </td>
                   <td>{layer.source}</td>
                   <td className="fx">
-                    {layer.effects
-                      // The amount is only worth the room when it isn't full —
-                      // a column of "100"s is noise that pushes the useful
-                      // columns off the edge.
-                      .map((e) => (e.amount > 0.95 ? e.kind : `${e.kind} ${Math.round(e.amount * 100)}`))
-                      .join(' + ') || '—'}
+                    {layer.effects.map((e) => effectLabel(scheme, e)).join(' + ') || '—'}
                   </td>
                   <td>{Math.round(layer.energy * 100)}</td>
                   <td>{layer.blend}</td>
@@ -180,7 +181,13 @@ export function App() {
         </div>
       )}
       {editing && scheme && (
-        <Editor show={show} scheme={scheme} save={save} onClose={() => setEditing(false)} />
+        <Editor
+          show={show}
+          scheme={scheme}
+          save={save}
+          clock={clock}
+          onClose={() => setEditing(false)}
+        />
       )}
     </>
   );

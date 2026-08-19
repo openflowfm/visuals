@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Archetype, Rule, Scheme } from '../protocol.ts';
+import type { LayerSpec, Scheme, SongSpec } from '../protocol.ts';
 
 /**
  * The scheme: what a song looks like, what a section feels like, what a track
@@ -43,22 +43,20 @@ const BUILT_IN: Scheme = {
     ENDING: { energy: 0.3, effects: ['smear'] },
     PRACTICE: { energy: 0.15, effects: [] },
   },
-  tracks: [
-    // Word boundaries are load-bearing, not tidiness. Without them `beat`
-    // matches inside "Beating Pad" and a pad track draws as a drum — found
-    // against a real set, where it was the only wrong layer on screen and the
-    // hardest kind of wrong to trace back to a regular expression.
-    { match: '\\b(kick|drums?|beats?|perc|snare)\\b', source: 'strobe', energyBias: 0.1, floor: 0 },
-    { match: '\\b(bass|sub|808|303)\\b', source: 'bars', floor: 0.05 },
-    // Before the keys rule: an arp is a sequence rather than a chord, and four
-    // of them scattered across unrelated sources read as four unrelated things
-    // when they are a family.
-    { match: '\\barps?\\b', source: 'bars', energyBias: 0.05 },
-    { match: '\\b(lead|solo|gtr|guitar|vox|vocal)\\b', source: 'rings', energyBias: 0.1 },
-    { match: '\\b(pad|strings?|atmos|amb|texture)\\b', source: 'noise', energyBias: -0.15 },
-    { match: '\\b(keys?|synth|chords?|piano|organ|pluck)\\b', source: 'grid' },
-  ],
-  clips: [],
+  layers: {},
+  clips: {},
+  // Ids are what an archetype or a layer names, so the built-ins claim their own
+  // spelling and a circuit gets a fresh one. Parameters are deliberately absent:
+  // each built-in declares its own defaults in `src/render/shaders.ts`, and a
+  // value only lands here once someone has actually moved it.
+  effects: {
+    mirror: { name: 'Mirror', builtin: 'mirror' },
+    kaleido: { name: 'Kaleido', builtin: 'kaleido' },
+    shift: { name: 'Shift', builtin: 'shift' },
+    pixelate: { name: 'Pixelate', builtin: 'pixelate' },
+    ripple: { name: 'Ripple', builtin: 'ripple' },
+    smear: { name: 'Smear', builtin: 'smear' },
+  },
   defaults: {
     colorway: 'aurora',
     energy: 0.4,
@@ -67,6 +65,39 @@ const BUILT_IN: Scheme = {
     maxEffects: 2,
   },
 };
+
+/**
+ * What a track's name suggests, for a track nobody has bound.
+ *
+ * These used to be the scheme's own rule list, editable as regular expressions
+ * in the file and in the editor. They are hints in code now, and the demotion is
+ * the point: a pattern language is the wrong surface for a set whose track names
+ * are already known, but it is exactly the right shape for a *guess* at one
+ * nobody has configured. So the guessing stays and the editing moved to the
+ * names themselves — `Scheme.layers`, keyed by what the track is actually called.
+ *
+ * Word boundaries are load-bearing, not tidiness. Without them `beat` matches
+ * inside "Beating Pad" and a pad track draws as a drum — found against a real
+ * set, where it was the only wrong layer on screen and the hardest kind of wrong
+ * to trace back to a regular expression.
+ */
+const HINTS: readonly (readonly [RegExp, LayerSpec])[] = [
+  [/\b(kick|drums?|beats?|perc|snare)\b/i, { source: 'strobe', bias: 0.1, floor: 0 }],
+  [/\b(bass|sub|808|303)\b/i, { source: 'bars', floor: 0.05 }],
+  // Before the keys hint: an arp is a sequence rather than a chord, and four of
+  // them scattered across unrelated sources read as four unrelated things when
+  // they are a family.
+  [/\barps?\b/i, { source: 'bars', bias: 0.05 }],
+  [/\b(lead|solo|gtr|guitar|vox|vocal)\b/i, { source: 'rings', bias: 0.1 }],
+  [/\b(pads?|strings?|atmos|amb|textures?)\b/i, { source: 'noise', bias: -0.15 }],
+  [/\b(keys?|synth|chords?|piano|organ|pluck)\b/i, { source: 'grid' }],
+];
+
+/** The first hint a track name answers to, or null. Order is meaning. */
+export function hint(name: string): LayerSpec | null {
+  for (const [test, spec] of HINTS) if (test.test(name)) return spec;
+  return null;
+}
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const FILE = process.env.BSV_VISUALS_SCHEME ?? path.resolve(here, '../scheme.json');
@@ -100,6 +131,16 @@ export function openScheme(): SchemeSource {
   let error: string | null = null;
   let watcher: fs.FSWatcher | null = null;
   let debounce: NodeJS.Timeout | null = null;
+  /**
+   * The file lags the edit by a moment, deliberately.
+   *
+   * A knob turning and a node being dragged both emit on every pointer move, so
+   * an editor mid-gesture sends sixty schemes a second. What it holds is
+   * published immediately — the show must follow the pointer — but writing the
+   * file that often would put a synchronous write in the middle of a drag for
+   * no benefit, since nobody reads the file until the gesture is over.
+   */
+  let pending: NodeJS.Timeout | null = null;
   /**
    * The last thing we wrote ourselves.
    *
@@ -156,32 +197,43 @@ export function openScheme(): SchemeSource {
     replace(next) {
       scheme = merge(next);
       error = null;
-
-      // Written over whatever the file already held rather than in place of it,
-      // and indented rather than minified. The file is meant to be read, edited
-      // by hand and committed — the editor is a way of writing the record, not a
-      // second place the truth lives. Without this, the first turn of a knob
-      // flattens it to one line and silently drops the `_` block explaining what
-      // every key means.
-      let held: Record<string, unknown> = {};
-      try {
-        held = JSON.parse(fs.readFileSync(FILE, 'utf8')) as Record<string, unknown>;
-      } catch {
-        // No file yet, or an unparseable one we are about to replace anyway.
-      }
-      // Ours, so the watcher ignores the change it is about to see.
-      written = JSON.stringify({ ...held, ...next }, null, 2);
-      try {
-        fs.writeFileSync(FILE, `${written}\n`);
-      } catch (err) {
-        error = `could not write ${path.basename(FILE)}: ${(err as Error).message}`;
-      }
+      if (pending) clearTimeout(pending);
+      pending = setTimeout(() => {
+        pending = null;
+        write(next);
+      }, 200);
     },
     stop() {
       if (debounce) clearTimeout(debounce);
+      if (pending) {
+        clearTimeout(pending);
+        write(scheme);
+      }
       watcher?.close();
     },
   };
+
+  function write(next: Scheme) {
+    // Written over whatever the file already held rather than in place of it,
+    // and indented rather than minified. The file is meant to be read, edited
+    // by hand and committed — the editor is a way of writing the record, not a
+    // second place the truth lives. Without this, the first turn of a knob
+    // flattens it to one line and silently drops the `_` block explaining what
+    // every key means.
+    let held: Record<string, unknown> = {};
+    try {
+      held = JSON.parse(fs.readFileSync(FILE, 'utf8')) as Record<string, unknown>;
+    } catch {
+      // No file yet, or an unparseable one we are about to replace anyway.
+    }
+    // Ours, so the watcher ignores the change it is about to see.
+    written = JSON.stringify({ ...held, ...next }, null, 2);
+    try {
+      fs.writeFileSync(FILE, `${written}\n`);
+    } catch (err) {
+      error = `could not write ${path.basename(FILE)}: ${(err as Error).message}`;
+    }
+  }
 }
 
 /**
@@ -189,50 +241,33 @@ export function openScheme(): SchemeSource {
  *
  * Shallow per section, deliberately. Naming one archetype should not delete the
  * other six, and naming one colourway should not leave every other song
- * unstyled — but a rule *list* replaces wholesale, because a list you can only
- * add to is a list you cannot correct.
+ * unstyled. `layers` and `clips` merge the same way, because they are keyed by a
+ * name the set owns: an entry for one track has nothing to say about another.
  */
-function merge(file: Partial<Scheme>): Scheme {
+export function merge(file: Partial<Scheme>): Scheme {
   return {
     colorways: { ...BUILT_IN.colorways, ...(file.colorways ?? {}) },
-    songs: { ...BUILT_IN.songs, ...(file.songs ?? {}) },
+    songs: songsOf(file.songs),
     archetypes: { ...BUILT_IN.archetypes, ...(file.archetypes ?? {}) },
-    tracks: file.tracks ?? BUILT_IN.tracks,
-    clips: file.clips ?? BUILT_IN.clips,
+    layers: { ...BUILT_IN.layers, ...(file.layers ?? {}) },
+    clips: { ...BUILT_IN.clips, ...(file.clips ?? {}) },
+    effects: { ...BUILT_IN.effects, ...(file.effects ?? {}) },
     defaults: { ...BUILT_IN.defaults, ...(file.defaults ?? {}) },
   };
 }
 
-export interface CompiledRule {
-  test: RegExp;
-  rule: Rule;
-}
-
-/** Compiled once per resolve rather than per layer; a set has few rules and many cells. */
-export function compile(rules: Rule[]): CompiledRule[] {
-  const built: CompiledRule[] = [];
-  for (const rule of rules) {
-    try {
-      built.push({ test: new RegExp(rule.match, 'i'), rule });
-    } catch {
-      // A bad pattern skips its own rule rather than taking the scheme down.
-    }
-  }
-  return built;
-}
-
 /**
- * The first rule whose pattern is in the name, or null.
- *
- * First match rather than best match, so **order in the file is meaning**: an
- * arp rule above a keys rule is how "Pluck Arp" reads as a sequence rather than
- * a chord. Extracted from the resolver so it can be tested, which it earns —
- * this is where a missing word boundary turned "Beating Pad" into a drum, and a
- * mis-routed layer looks like a rendering bug rather than a regex one.
+ * A song used to be assigned a colourway and nothing else, so its whole entry
+ * was the colourway's name. It owns a second thing now — how hard it plays its
+ * own sections — and a bare string still means what it always did rather than
+ * quietly unstyling every song in a file written last week.
  */
-export function firstMatch(rules: CompiledRule[], name: string): Rule | null {
-  for (const { test, rule } of rules) if (test.test(name)) return rule;
-  return null;
+function songsOf(songs: Record<string, SongSpec | string> | undefined): Record<string, SongSpec> {
+  const out: Record<string, SongSpec> = { ...BUILT_IN.songs };
+  for (const [name, spec] of Object.entries(songs ?? {})) {
+    out[name] = typeof spec === 'string' ? { colorway: spec } : spec;
+  }
+  return out;
 }
 
 export { BUILT_IN };

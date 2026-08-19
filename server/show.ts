@@ -1,7 +1,7 @@
-import type { AppliedEffect, EffectKind, Layer, Rule, Scheme, Show } from '../protocol.ts';
+import type { AppliedEffect, Layer, LayerSpec, Scheme, Show } from '../protocol.ts';
 import type { SetState } from './bridge.ts';
 import type { LinkFrame } from './link.ts';
-import { compile, firstMatch, type SchemeSource } from './scheme.ts';
+import { hint, type SchemeSource } from './scheme.ts';
 
 /**
  * Resolving a Live set into a show, through a cascade.
@@ -11,7 +11,7 @@ import { compile, firstMatch, type SchemeSource } from './scheme.ts';
  *
  * | level | owns | because |
  * |---|---|---|
- * | **song** | the colours | a song has an identity that outlives any one section of it |
+ * | **song** | the colours, and how hard it plays | a song has an identity that outlives any one section of it |
  * | **archetype** | energy and character | a section is a feeling, and the same chorus should differ between two songs |
  * | **track** | what a layer does with content | a track is an instrument; its layer should stay recognisable across a whole song |
  * | **clip** | the exception | the most specific thing there is, and the only level that can say "not this time" |
@@ -24,8 +24,11 @@ import { compile, firstMatch, type SchemeSource } from './scheme.ts';
  *
  * ## What the levels do to each other
  *
- * Scalars — `source`, `blend`, `floor` — are **overridden**, most specific
- * winning, which is what "a clip is an exception" has to mean.
+ * Scalars — `source`, `blend`, `floor`, `bias`, `hide` — are **overridden**,
+ * most specific winning, field by field. That is what "a clip is an exception"
+ * has to mean, and it is also why binding one field of a track leaves the rest
+ * to the name hint: an entry saying `{ bias: 0.2 }` on a drum track is asking
+ * for one change, not for everything else to be forgotten.
  *
  * `effects` are **added**, and that is the difference between this and a lookup
  * table. "The chorus should mix in more frenetic effects" is additive by
@@ -33,9 +36,9 @@ import { compile, firstMatch, type SchemeSource } from './scheme.ts';
  * contributes what that instrument always does, and both survive. `maxEffects`
  * caps the pile, and energy decides how many of them actually reach the picture.
  *
- * `energyBias` **accumulates**, which is what makes energy per layer rather than
- * per show. A drum track can run hotter than the pad under it in the same
- * chorus — the thing a single global number cannot say.
+ * `bias` **accumulates** down the levels, which is what makes energy per layer
+ * rather than per show. A drum track can run hotter than the pad under it in the
+ * same chorus — the thing a single global number cannot say.
  */
 
 /** Hex, `#rrggbb` or `#rgb`, to the packed integer the renderer wants. */
@@ -71,12 +74,12 @@ function clamp01(value: number): number {
  * into them. Below a tenth an effect is dropped rather than drawn, because a
  * pass that changes nothing visible still costs a full-screen draw.
  */
-function dialEffects(kinds: EffectKind[], energy: number, max: number): AppliedEffect[] {
+function dialEffects(ids: string[], energy: number, max: number): AppliedEffect[] {
   const applied: AppliedEffect[] = [];
-  for (let i = 0; i < Math.min(kinds.length, max); i++) {
+  for (let i = 0; i < Math.min(ids.length, max); i++) {
     const opensAt = i * 0.45;
     const amount = clamp01((energy - opensAt) / 0.45);
-    if (amount > 0.1) applied.push({ kind: kinds[i], amount });
+    if (amount > 0.1) applied.push({ id: ids[i], amount });
   }
   return applied;
 }
@@ -84,8 +87,6 @@ function dialEffects(kinds: EffectKind[], energy: number, max: number): AppliedE
 export function buildShow(set: SetState, link: LinkFrame, source: SchemeSource): Show {
   const scheme: Scheme = source.current();
   const strips = new Map((set.mixer?.tracks ?? []).map((strip) => [strip.t, strip]));
-  const trackRules = compile(scheme.tracks);
-  const clipRules = compile(scheme.clips);
 
   // Group tracks are not layers: they carry no clips of their own, and drawing
   // one would double every layer inside it.
@@ -97,11 +98,16 @@ export function buildShow(set: SetState, link: LinkFrame, source: SchemeSource):
 
   const archetypeName = role && scheme.archetypes[role] ? role : null;
   const archetype = archetypeName ? scheme.archetypes[archetypeName] : null;
-  const baseEnergy = archetype?.energy ?? scheme.defaults.energy;
+  const song = songKey ? scheme.songs[songKey] : undefined;
+
+  // The song's bias is part of the *section's* energy rather than of any one
+  // layer's, so a song that plays hard brings the whole picture up with it —
+  // including the floor gate, which is what decides how much of the stack is in.
+  const baseEnergy = clamp01((archetype?.energy ?? scheme.defaults.energy) + (song?.bias ?? 0));
 
   // A song with no assignment still gets colours: an unstyled song would be a
   // black screen for the one thing nobody remembered to configure.
-  const named = songKey ? scheme.songs[songKey] : undefined;
+  const named = song?.colorway;
   const colorwayName =
     (named && scheme.colorways[named] ? named : undefined) ??
     (scheme.colorways[scheme.defaults.colorway] ? scheme.defaults.colorway : undefined) ??
@@ -118,25 +124,37 @@ export function buildShow(set: SetState, link: LinkFrame, source: SchemeSource):
     let kind = scheme.defaults.sources[depth % scheme.defaults.sources.length];
     let blend = scheme.defaults.blend[depth % scheme.defaults.blend.length];
     // Derived so the bottom layer is always in and a tall stack's top needs a
-    // fairly loud section to appear. A rule may say otherwise.
+    // fairly loud section to appear. Any level may say otherwise.
     let floor = tracks.length > 1 ? (depth / (tracks.length - 1)) * 0.45 : 0;
-    let energy = baseEnergy;
-    const kinds: EffectKind[] = [...(archetype?.effects ?? [])];
+    let bias = 0;
+    let hidden = false;
+    const offers: string[] = [...(archetype?.effects ?? [])];
 
-    const apply = (rule: Rule) => {
-      if (rule.source) kind = rule.source;
-      if (rule.blend) blend = rule.blend;
-      if (rule.floor !== undefined) floor = rule.floor;
-      if (rule.energyBias) energy += rule.energyBias;
-      for (const effect of rule.effects ?? []) if (!kinds.includes(effect)) kinds.push(effect);
+    const apply = (spec: LayerSpec) => {
+      if (spec.source) kind = spec.source;
+      if (spec.blend) blend = spec.blend;
+      if (spec.floor !== undefined) floor = spec.floor;
+      if (spec.bias !== undefined) bias = spec.bias;
+      if (spec.hide !== undefined) hidden = spec.hide;
+      for (const id of spec.effects ?? []) if (!offers.includes(id)) offers.push(id);
     };
 
-    const byTrack = firstMatch(trackRules, track.name);
-    if (byTrack) apply(byTrack);
-    const byClip = clip ? firstMatch(clipRules, clip.name) : null;
-    if (byClip) apply(byClip);
+    // The name hint first, so an explicit entry can say one thing without
+    // having to restate everything the name already implied.
+    const guessed = hint(track.name);
+    if (guessed) apply(guessed);
+    const bound = scheme.layers[track.name];
+    if (bound) apply(bound);
+    // Bias accumulates rather than overriding across the last two levels: a
+    // clip that is the quiet one in a loud track is saying "and also this".
+    const byClip = clip ? scheme.clips[clip.name] : undefined;
+    if (byClip) {
+      const carried = bias;
+      apply(byClip);
+      if (byClip.bias !== undefined) bias = carried + byClip.bias;
+    }
 
-    energy = clamp01(energy);
+    const energy = clamp01(baseEnergy + bias);
 
     // Energy thinning the stack, as a fade rather than a cut: a layer just under
     // its floor is dim, not absent, so a quiet section reads as the picture
@@ -144,12 +162,17 @@ export function buildShow(set: SetState, link: LinkFrame, source: SchemeSource):
     //
     // **Tested against the section's energy, not the layer's.** They are
     // different questions and conflating them was a real bug: a pad track with
-    // `energyBias: -0.15` is asking to be *calmer*, and the biased value made it
+    // `bias: -0.15` is asking to be *calmer*, and the biased value made it
     // *absent* for the whole verse instead. Presence belongs to the section —
     // "the chorus brings everything in" is a fact about the chorus — while the
     // bias only ever describes how frenetic a layer is once it is there.
     const admitted = floor <= 0 ? 1 : clamp01((baseEnergy - floor) / 0.2 + 1);
     const fader = strip && !strip.active ? 0 : positionOf(strip?.volume);
+
+    // An id naming an effect that has been deleted is dropped here rather than
+    // in the renderer, so a stale reference costs a missing effect and never a
+    // failed compile.
+    const live = offers.filter((id) => scheme.effects[id]);
 
     return {
       t: track.i,
@@ -159,11 +182,14 @@ export function buildShow(set: SetState, link: LinkFrame, source: SchemeSource):
       // is reading the grid to find their place.
       color: packColor(colors[depth % colors.length]),
       source: kind,
-      effects: dialEffects(kinds, energy, scheme.defaults.maxEffects),
+      effects: hidden ? [] : dialEffects(live, energy, scheme.defaults.maxEffects),
+      offers: live,
       blend,
-      opacity: fader * admitted,
+      floor,
+      opacity: hidden ? 0 : fader * admitted,
       level: set.levels.get(track.i) ?? 0,
       energy,
+      hidden,
       playing,
       clipName: clip?.name ?? '',
     };
@@ -194,10 +220,11 @@ export function buildShow(set: SetState, link: LinkFrame, source: SchemeSource):
     energy: baseEnergy,
     schemeError: source.error(),
     // What the set actually contains, so the editor can offer it rather than
-    // asking anyone to type it. A rule matched against a role that does not
-    // exist is invisible until the night it was written for.
-    roles: [...new Set(set.scenes.map((s) => roleOf(s.name)).filter((r): r is string => !!r))].sort(),
+    // asking anyone to type it. Track names arrive on the layers themselves,
+    // which is also where their resolved answer is.
+    roles: [
+      ...new Set(set.scenes.map((s) => roleOf(s.name)).filter((r): r is string => !!r)),
+    ].sort(),
     songs: [...new Set(Object.values(set.model?.songByScene ?? {}))].sort(),
-    trackNames: tracks.map((t) => t.name),
   };
 }

@@ -10,13 +10,19 @@
     "has no invisible inheritance to reason about at two in the morning. Delete the",
     "file entirely and the built-in scheme is a complete show on its own.",
     "",
-    "The cascade is song -> archetype -> track -> clip. Scalars override, effects",
-    "add up, energyBias accumulates. Live signals are not a level: the meter and the",
-    "beat thread through every source and effect as uniforms. See docs/mapping.md.",
+    "The cascade is song -> archetype -> track -> clip. Scalars override field by",
+    "field, effects add up, bias accumulates. Live signals are not a level: the",
+    "meter and the beat thread through every source and effect as uniforms, and a",
+    "circuit can read them as `signal` nodes. See docs/mapping.md.",
+    "",
+    "`layers` and `clips` are keyed by the EXACT name of a track or a clip. A track",
+    "with no entry falls back to the name hints in server/scheme.ts, so an",
+    "unconfigured set still draws.",
     "",
     "sources: solid bars rings noise strobe grid",
-    "effects: mirror kaleido shift pixelate ripple smear",
-    "blends:  over add screen multiply"
+    "blends:  over add screen multiply",
+    "effects: whatever `effects` below defines. Six are built-in shaders; anything",
+    "with a `circuit` is wired out of nodes on the effects pane. See docs/circuit.md."
   ],
   "colorways": {
     "aurora": [
@@ -48,11 +54,7 @@
       "#8b8b93"
     ]
   },
-  "songs": {
-    "baby again": "dusk",
-    "sandstorm": "ember",
-    "strobe": "mono"
-  },
+  "songs": {},
   "archetypes": {
     "INTRO": {
       "energy": 0.2,
@@ -108,39 +110,136 @@
       "effects": []
     }
   },
-  "tracks": [
-    {
-      "match": "\\b(kick|drums?|beats?|perc|snare)\\b",
-      "source": "strobe",
-      "energyBias": 0.1,
-      "floor": 0
+  "layers": {},
+  "clips": {},
+  "effects": {
+    "mirror": {
+      "name": "Mirror",
+      "builtin": "mirror"
     },
-    {
-      "match": "\\b(bass|sub|808|303)\\b",
-      "source": "bars",
-      "floor": 0.05
+    "kaleido": {
+      "name": "Kaleido",
+      "builtin": "kaleido"
     },
-    {
-      "match": "\\barps?\\b",
-      "source": "bars",
-      "energyBias": 0.05
+    "shift": {
+      "name": "Shift",
+      "builtin": "shift"
     },
-    {
-      "match": "\\b(lead|solo|gtr|guitar|vox|vocal)\\b",
-      "source": "rings",
-      "energyBias": 0.1
+    "pixelate": {
+      "name": "Pixelate",
+      "builtin": "pixelate"
     },
-    {
-      "match": "\\b(pad|strings?|atmos|amb|texture)\\b",
-      "source": "noise",
-      "energyBias": -0.15
+    "ripple": {
+      "name": "Ripple",
+      "builtin": "ripple"
     },
-    {
-      "match": "\\b(keys?|synth|chords?|piano|organ|pluck)\\b",
-      "source": "grid"
+    "smear": {
+      "name": "Smear",
+      "builtin": "smear"
+    },
+    "fx1": {
+      "name": "Breathe",
+      "circuit": {
+        "nodes": [
+          {
+            "id": "point1",
+            "kind": "point",
+            "x": 20,
+            "y": 20
+          },
+          {
+            "id": "signal1",
+            "kind": "signal",
+            "op": "pulse",
+            "x": 20,
+            "y": 110
+          },
+          {
+            "id": "value1",
+            "kind": "value",
+            "x": 20,
+            "y": 210,
+            "value": 0.4,
+            "label": "depth"
+          },
+          {
+            "id": "math1",
+            "kind": "math",
+            "op": "multiply",
+            "x": 175,
+            "y": 130
+          },
+          {
+            "id": "value2",
+            "kind": "value",
+            "x": 175,
+            "y": 250,
+            "value": 0.55,
+            "label": "centre"
+          },
+          {
+            "id": "math2",
+            "kind": "math",
+            "op": "add",
+            "x": 330,
+            "y": 190
+          },
+          {
+            "id": "zoom1",
+            "kind": "zoom",
+            "x": 330,
+            "y": 30
+          },
+          {
+            "id": "sample1",
+            "kind": "sample",
+            "x": 460,
+            "y": 40
+          },
+          {
+            "id": "out1",
+            "kind": "out",
+            "x": 580,
+            "y": 45
+          }
+        ],
+        "cords": [
+          {
+            "from": "signal1/n",
+            "to": "math1/a"
+          },
+          {
+            "from": "value1/n",
+            "to": "math1/b"
+          },
+          {
+            "from": "math1/n",
+            "to": "math2/a"
+          },
+          {
+            "from": "value2/n",
+            "to": "math2/b"
+          },
+          {
+            "from": "point1/p",
+            "to": "zoom1/p"
+          },
+          {
+            "from": "math2/n",
+            "to": "zoom1/by"
+          },
+          {
+            "from": "zoom1/p",
+            "to": "sample1/p"
+          },
+          {
+            "from": "sample1/c",
+            "to": "out1/c"
+          }
+        ]
+      }
     }
-  ],
-  "clips": [],
+  },
   "defaults": {
     "colorway": "aurora",
     "energy": 0.4,

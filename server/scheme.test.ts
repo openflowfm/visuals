@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { BUILT_IN, compile, firstMatch } from './scheme.ts';
+import { BUILT_IN, hint, merge } from './scheme.ts';
 
 /**
- * The track rules, against the names of a real set.
+ * The name hints, against the names of a real set.
  *
  * These exist because a mis-routed layer does not look like a bad regular
  * expression — it looks like a rendering bug. A pad drawing as a strobe is one
@@ -11,14 +11,19 @@ import { BUILT_IN, compile, firstMatch } from './scheme.ts';
  *
  * The names below are taken from an actual set rather than invented, which is
  * the whole point: the failures were all in names nobody would think to make up.
+ *
+ * They matter *less* than they used to and are still worth keeping. A hint is
+ * now only what an unbound track falls back to — anything you actually care
+ * about gets bound by name in the editor — but "unbound" is the state a set
+ * spends its first evening in, and a first evening where every layer is roughly
+ * right is the difference between configuring this and not bothering.
  */
-const rules = compile(BUILT_IN.tracks);
-const sourceFor = (name: string) => firstMatch(rules, name)?.source ?? null;
+const sourceFor = (name: string) => hint(name)?.source ?? null;
 
-describe('track rules', () => {
+describe('name hints', () => {
   it('does not match a word inside a longer one', () => {
     // The bug this file was written for. "beat" is inside "Beating", so without
-    // a word boundary a pad track drew as a drum — and it was the drum rule
+    // a word boundary a pad track drew as a drum — and it was the drum hint
     // that won, because it is first.
     expect(sourceFor('Beating Pad')).toBe('noise');
     expect(sourceFor('Subtle Keys')).toBe('grid');
@@ -26,7 +31,7 @@ describe('track rules', () => {
 
   it('is strict in both directions, which is the price of the fix', () => {
     // The same boundary that saves "Beating Pad" means "Padded" is not a pad
-    // and "Bassline" is not a bass. They fall through to positional instead,
+    // and "Drumming" is not a drum. They fall through to positional instead,
     // which is the safe half of being wrong: an unremarkable layer rather than
     // a confidently misrouted one.
     expect(sourceFor('Padded Cell')).toBeNull();
@@ -54,8 +59,16 @@ describe('track rules', () => {
 
   it('leaves a name that says nothing to fall through', () => {
     // These become positional, which is what makes an unnamed set still work.
-    for (const name of ['MIDI', 'Uppers', 'Downers', 'Song', 'Sample', 'Patterns', '29-Kontakt 8']) {
-      expect(sourceFor(name), name).toBeNull();
+    for (const name of [
+      'MIDI',
+      'Uppers',
+      'Downers',
+      'Song',
+      'Sample',
+      'Patterns',
+      '29-Kontakt 8',
+    ]) {
+      expect(hint(name), name).toBeNull();
     }
   });
 
@@ -83,17 +96,50 @@ describe('the built-in scheme', () => {
     expect(a.BRIDGE.energy).toBeLessThan(a.CHORUS.energy);
   });
 
-  it('names only colourways it defines', () => {
-    expect(BUILT_IN.colorways[BUILT_IN.defaults.colorway]).toBeDefined();
-    for (const [song, way] of Object.entries(BUILT_IN.songs)) {
-      expect(BUILT_IN.colorways[way], `${song} -> ${way}`).toBeDefined();
+  it('names only effects it defines', () => {
+    // An archetype pointing at an id nothing registers is a section that
+    // quietly carries one effect fewer than it says it does.
+    for (const [role, archetype] of Object.entries(BUILT_IN.archetypes)) {
+      for (const id of archetype.effects ?? []) {
+        expect(BUILT_IN.effects[id], `${role} -> ${id}`).toBeDefined();
+      }
     }
   });
 
-  it('has every rule compile', () => {
-    // A bad pattern is skipped silently at runtime so one typo cannot take the
-    // show down, which is right — and exactly why it needs catching here.
-    expect(compile(BUILT_IN.tracks)).toHaveLength(BUILT_IN.tracks.length);
-    expect(compile(BUILT_IN.clips)).toHaveLength(BUILT_IN.clips.length);
+  it('names only colourways it defines', () => {
+    expect(BUILT_IN.colorways[BUILT_IN.defaults.colorway]).toBeDefined();
+    for (const [song, spec] of Object.entries(BUILT_IN.songs)) {
+      if (spec.colorway) expect(BUILT_IN.colorways[spec.colorway], song).toBeDefined();
+    }
+  });
+});
+
+describe('merging a file over the built-in', () => {
+  it('overrides one archetype without deleting the rest', () => {
+    const merged = merge({ archetypes: { CHORUS: { energy: 1 } } });
+    expect(merged.archetypes.CHORUS.energy).toBe(1);
+    expect(merged.archetypes.VERSE).toBeDefined();
+  });
+
+  it('keeps the built-in effects alongside a circuit the file adds', () => {
+    // A file that registered one effect used to be a file that had six fewer,
+    // which would break every archetype at once.
+    const merged = merge({
+      effects: { fx1: { name: 'Mine', circuit: { nodes: [], cords: [] } } },
+    });
+    expect(merged.effects.fx1).toBeDefined();
+    expect(merged.effects.kaleido).toBeDefined();
+  });
+
+  it('reads a song written as a bare colourway name', () => {
+    // The shape before a song owned anything but its colours. A file written
+    // then should not quietly unstyle every song in it.
+    const merged = merge({ songs: { sandstorm: 'ember' } as never });
+    expect(merged.songs.sandstorm).toEqual({ colorway: 'ember' });
+  });
+
+  it('carries layer bindings through, keyed by the track name', () => {
+    const merged = merge({ layers: { Drums: { source: 'rings' } } });
+    expect(merged.layers.Drums.source).toBe('rings');
   });
 });

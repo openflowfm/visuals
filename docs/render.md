@@ -47,6 +47,14 @@ in instead of switching it on. It samples an already-premultiplied picture, so `
 bound to 1 for an effect pass — the fader was applied when the source drew, and applying it
 again would square it at every step of the chain.
 
+**A layer names its effects by id, and the scheme says what an id is.** So the compositor
+takes the scheme every frame alongside the show: an id is either six lines of handwritten
+GLSL or a canvas full of nodes, and resolving that on the server would mean shipping a
+shader down the wire on every edit. `uParams` is an eight-float bank an effect's own knobs
+ride in — a bank rather than a named uniform each, because a [circuit](circuit.md)'s knobs
+are discovered from its nodes and cannot be declared ahead of time, and because a value in
+a uniform is one that can be turned without rebuilding a shader.
+
 ## The clock is a uniform, and so is energy
 
 Nothing in a shader reads a wall clock or counts frames. `uBeat` and `uPhase` come from
@@ -87,12 +95,26 @@ eight-track set with two clips playing costs two passes and not eight.
 
 A show changes which source a layer draws whenever a clip fires, and compiling a shader
 mid-set is a dropped frame at the worst possible moment. So each kind compiles the first
-time it is asked for and is held for the life of the page. A shader that fails to compile
-sets `error`, which the panel shows, and the layer is skipped rather than the frame being
-abandoned.
+time it is asked for and is held for the life of the page.
+
+An effect is held against a **signature** of what it was built from — its built-in name, or
+a circuit's node kinds, modes and cords. Node positions and knob values are deliberately
+absent from it, or dragging a node would rebuild a shader sixty times a second.
+
+A build that fails is remembered as a failure, for the same reason: retrying it every frame
+calls the driver's compiler sixty times a second for as long as it stays broken, which is a
+stall rather than an error message. `error` is what the panel and the effects pane show, and
+a broken effect drops out of its layer's chain rather than taking the layer with it.
+
+`src/render/effect.ts` holds the three things both the compositor and the effect bench need
+from an `EffectDef` — the shader, the parameter bank, the signature. The bench draws on its
+own canvas with its own context (`src/render/preview.ts`), and sharing that file is what
+stops it from being a second, subtly different renderer.
 
 ## What is not built
 
+- **Custom sources.** A [circuit](circuit.md) that paints without sampling is already a
+  generator, but a layer's `source` slot still only offers the six built-in ones.
 - **Video clips.** Every source is procedural. A `<video>` texture is one more source kind
   and no change to the pipeline, but it brings a whole question about where files live that
   the derived mapping has no answer for yet.

@@ -1,7 +1,8 @@
-import type { EffectKind, SourceKind } from '../../protocol.ts';
+import type { BuiltinEffect, SourceKind } from '../../protocol.ts';
 
 /**
- * Every source and effect, as fragment shaders over one shared preamble.
+ * Every source and built-in effect, as fragment shaders over one shared
+ * preamble.
  *
  * **The clock is a uniform, not a timer.** Nothing here reads a wall clock or
  * counts frames: `uBeat` and `uPhase` come from Link, so a shape that grows over
@@ -22,7 +23,7 @@ import type { EffectKind, SourceKind } from '../../protocol.ts';
  * `OUT(rgb, a)` is the one way out of a source, and it does the multiply.
  */
 
-const PREAMBLE = `#version 300 es
+export const PREAMBLE = `#version 300 es
 precision highp float;
 
 in vec2 vUv;
@@ -46,6 +47,14 @@ vec2 centred() {
   vec2 p = vUv - 0.5;
   p.x *= uRes.x / uRes.y;
   return p;
+}
+
+// And back, for anything that has finished moving a point about and wants to
+// read the picture at it. The pair is what lets every geometric operation work
+// in one space without each of them knowing the frame's shape.
+vec2 uncentred(vec2 p) {
+  p.x /= uRes.x / uRes.y;
+  return p + 0.5;
 }
 
 float hash(vec2 p) {
@@ -174,39 +183,97 @@ void main() {
  * They sample an already-premultiplied picture, so `uOpacity` is bound to 1 for
  * an effect pass — the fader has been applied once already and must not be
  * applied twice.
+ *
+ * `uParams` is the eight-float bank an effect's own knobs ride in. A bank rather
+ * than a named uniform each, because a circuit's knobs are discovered from its
+ * nodes and cannot be declared ahead of time — and because a value arriving in a
+ * uniform is a value that can be turned without recompiling a shader, which is
+ * the difference between a knob and a rebuild.
  */
-const EFFECT_PREAMBLE = `${PREAMBLE}
+export const EFFECT_PREAMBLE = `${PREAMBLE}
 uniform sampler2D uTex;
 uniform float uAmount;
+uniform float uParams[8];
 #define MIXED(c) { fragColor = mix(texture(uTex, vUv), (c), uAmount); }
 `;
 
-const EFFECTS: Record<EffectKind, string> = {
+/** One knob an effect declares: a range, a resting value, and a name to show. */
+export interface EffectParam {
+  name: string;
+  min: number;
+  max: number;
+  value: number;
+}
+
+/**
+ * What each built-in exposes, in the order its shader reads `uParams`.
+ *
+ * Position is the contract — index 0 in this list is `uParams[0]` in that
+ * shader — so a parameter is appended rather than inserted. The names are what
+ * the scheme stores against, so renaming one loses whatever was set for it.
+ */
+export const BUILTIN_PARAMS: Record<BuiltinEffect, readonly EffectParam[]> = {
+  mirror: [
+    { name: 'line', min: 0, max: 1, value: 0.5 },
+    { name: 'angle', min: 0, max: 1, value: 0 },
+  ],
+  kaleido: [
+    { name: 'segments', min: 2, max: 12, value: 3 },
+    { name: 'spin', min: -0.3, max: 0.3, value: 0.05 },
+  ],
+  shift: [
+    { name: 'spread', min: 0, max: 1, value: 0.3 },
+    { name: 'drive', min: 0, max: 1, value: 0.5 },
+  ],
+  pixelate: [
+    { name: 'blocks', min: 4, max: 128, value: 24 },
+    { name: 'resolve', min: 0, max: 1, value: 1 },
+  ],
+  ripple: [
+    { name: 'waves', min: 2, max: 60, value: 20 },
+    { name: 'depth', min: 0, max: 1, value: 0.3 },
+    { name: 'speed', min: 0.25, max: 4, value: 1 },
+  ],
+  smear: [
+    { name: 'reach', min: 0, max: 1, value: 0.3 },
+    { name: 'drive', min: 0, max: 1, value: 0.5 },
+  ],
+};
+
+const EFFECTS: Record<BuiltinEffect, string> = {
   mirror: `${EFFECT_PREAMBLE}
 void main() {
-  vec2 uv = vec2(vUv.x < 0.5 ? vUv.x : 1.0 - vUv.x, vUv.y) * vec2(2.0, 1.0);
-  MIXED(texture(uTex, vec2(uv.x * 0.5 + 0.25, uv.y)))
+  // A fold, at an angle. Rotating into the fold and back out is what turns one
+  // mirror into every mirror — vertical, horizontal, and the diagonals nobody
+  // gets from a shader that only knows which half of the frame it is in.
+  float a = uParams[1] * PI;
+  float c = cos(a), s = sin(a);
+  vec2 p = mat2(c, -s, s, c) * centred();
+  float line = (uParams[0] - 0.5) * 2.0;
+  p.x = line - abs(p.x - line);
+  p = mat2(c, s, -s, c) * p;
+  MIXED(texture(uTex, clamp(uncentred(p), 0.0, 1.0)))
 }`,
 
   kaleido: `${EFFECT_PREAMBLE}
 void main() {
-  // Folded in polar space, rotating one turn every several bars so it moves
-  // with the music rather than at a rate of its own. Energy adds segments.
+  // Folded in polar space, rotating with the beat so it moves with the music
+  // rather than at a rate of its own. Energy adds segments on top of the knob,
+  // which is what keeps a chorus busier than a verse without a second preset.
   vec2 p = centred();
-  float segments = floor(mix(3.0, 8.0, uEnergy));
-  float a = atan(p.y, p.x) + uBeat * 0.05;
+  float segments = floor(max(2.0, uParams[0] + uEnergy * 4.0));
+  float a = atan(p.y, p.x) + uBeat * uParams[1];
   float r = length(p);
   float wedge = PI / segments;
   a = abs(mod(a, wedge * 2.0) - wedge);
-  vec2 uv = vec2(cos(a), sin(a)) * r + 0.5;
-  MIXED(texture(uTex, clamp(uv, 0.0, 1.0)))
+  MIXED(texture(uTex, clamp(uncentred(vec2(cos(a), sin(a)) * r), 0.0, 1.0)))
 }`,
 
   shift: `${EFFECT_PREAMBLE}
 void main() {
   // Channel separation that opens with the level, so it bites on transients
   // and closes to nothing in the gaps.
-  float d = (0.004 + uLevel * 0.02) * mix(0.5, 2.0, uEnergy);
+  float d = uParams[0] * 0.03 * (0.25 + uLevel * uParams[1] * 2.0) * mix(0.5, 2.0, uEnergy);
   float r = texture(uTex, vUv + vec2(d, 0.0)).r;
   vec4 g = texture(uTex, vUv);
   float b = texture(uTex, vUv - vec2(d, 0.0)).b;
@@ -217,9 +284,9 @@ void main() {
 void main() {
   // Blocks that resolve across the bar. Quantising the picture the way the
   // clock quantises the launch.
-  float steps = mix(mix(24.0, 10.0, uEnergy), 96.0, 1.0 - uPhase / uQuantum);
-  vec2 uv = (floor(vUv * steps) + 0.5) / steps;
-  MIXED(texture(uTex, uv))
+  float base = mix(uParams[0], uParams[0] * 0.45, uEnergy);
+  float steps = max(2.0, mix(base, base * 4.0, (1.0 - uPhase / uQuantum) * uParams[1]));
+  MIXED(texture(uTex, (floor(vUv * steps) + 0.5) / steps))
 }`,
 
   ripple: `${EFFECT_PREAMBLE}
@@ -229,8 +296,9 @@ void main() {
   // reaches for it: the whole frame moves rather than being recoloured.
   vec2 p = centred();
   float r = length(p);
-  float wave = sin(r * mix(14.0, 40.0, uEnergy) - uBeat * rate() * PI * 2.0);
-  float push = wave * (0.006 + uLevel * 0.02);
+  float wave = sin(r * mix(uParams[0] * 0.7, uParams[0] * 2.0, uEnergy)
+                   - uBeat * rate() * uParams[2] * PI * 2.0);
+  float push = wave * uParams[1] * (0.01 + uLevel * 0.04);
   MIXED(texture(uTex, clamp(vUv + normalize(p + 1e-6) * push, 0.0, 1.0)))
 }`,
 
@@ -239,7 +307,7 @@ void main() {
   // A short radial blur, taken in a handful of steps toward the centre. Softens
   // a layer into the ones under it, which is what a quiet section wants and
   // what makes it the opposite of ripple.
-  vec2 toward = (vec2(0.5) - vUv) * (0.02 + uLevel * 0.03);
+  vec2 toward = (vec2(0.5) - vUv) * uParams[0] * (0.03 + uLevel * uParams[1] * 0.12);
   vec4 sum = vec4(0.0);
   for (int i = 0; i < 6; i++) sum += texture(uTex, vUv + toward * (float(i) / 6.0));
   MIXED(sum / 6.0)
@@ -250,6 +318,6 @@ export const sourceSources: ReadonlyMap<SourceKind, string> = new Map(
   Object.entries(SOURCES) as [SourceKind, string][],
 );
 
-export const effectSources: ReadonlyMap<EffectKind, string> = new Map(
-  Object.entries(EFFECTS) as [EffectKind, string][],
+export const effectSources: ReadonlyMap<BuiltinEffect, string> = new Map(
+  Object.entries(EFFECTS) as [BuiltinEffect, string][],
 );

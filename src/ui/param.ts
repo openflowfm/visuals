@@ -1,4 +1,5 @@
 import type { Param } from '../../../widgets/src/param/param.ts';
+import type { EffectParam } from '../render/shaders.ts';
 
 /**
  * The one adapter between `widgets/` and this app.
@@ -77,3 +78,57 @@ export const MAX_EFFECTS: Param = {
   name: 'Max effects',
   shortName: 'Max fx',
 };
+
+/** How hard the bench drives the effect it is showing. */
+export const AMOUNT: Param = {
+  kind: 'float',
+  min: 0,
+  max: 100,
+  defaultValue: 100,
+  unit: 'percent',
+  name: 'Amount',
+  shortName: 'Amount',
+};
+
+/**
+ * A circuit's own knob.
+ *
+ * Every number inside a circuit is 0–1 by construction, so every `value` node
+ * gets the same control and nothing has to declare a range. That uniformity is
+ * what makes the vocabulary composable — see `render/circuit.ts`.
+ */
+export const KNOB: Param = {
+  kind: 'float',
+  min: 0,
+  max: 100,
+  defaultValue: 50,
+  unit: 'percent',
+  name: 'Knob',
+  shortName: 'Knob',
+};
+
+/**
+ * A built-in effect's declared parameter, as something a knob can turn.
+ *
+ * A range whose ends and resting point are all whole numbers, and which is wide
+ * enough for the distinction to matter, is a count of something — segments,
+ * blocks, waves — so it reads as one. Everything else is a proportion and reads
+ * with a decimal. Guessing this from the numbers rather than declaring it keeps
+ * `BUILTIN_PARAMS` a table of ranges instead of a table of ranges and spellings.
+ */
+export function effectParam(spec: EffectParam): Param {
+  const counted =
+    Number.isInteger(spec.min) &&
+    Number.isInteger(spec.max) &&
+    Number.isInteger(spec.value) &&
+    spec.max - spec.min >= 4;
+  return {
+    kind: counted ? 'int' : 'float',
+    min: spec.min,
+    max: spec.max,
+    defaultValue: spec.value,
+    unit: counted ? 'int' : 'float',
+    name: spec.name,
+    shortName: spec.name,
+  };
+}

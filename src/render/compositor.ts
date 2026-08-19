@@ -1,6 +1,7 @@
-import type { Blend, EffectKind, Show, SourceKind } from '../../protocol.ts';
-import { compile, createTarget, drawFullscreen, rgb, type Program, type Target } from './gl.ts';
-import { effectSources, sourceSources } from './shaders.ts';
+import type { Blend, EffectDef, Scheme, Show, SourceKind } from '../../protocol.ts';
+import { effectShader, paramsOf, signatureOf } from './effect.ts';
+import { compile, createTarget, drawFullscreen, rgb, type Program } from './gl.ts';
+import { sourceSources } from './shaders.ts';
 
 /**
  * The layer stack, drawn once a frame.
@@ -25,10 +26,28 @@ const BLENDS: Record<Blend, [number, number]> = {
 };
 
 export interface Compositor {
-  frame(show: Show, beat: number, seconds: number, dt: number): void;
+  /**
+   * The scheme comes in per frame because effects now live in it.
+   *
+   * A layer's effects are ids, and what an id *is* — six lines of handwritten
+   * GLSL or a canvas full of nodes — is the scheme's to say. Resolving that on
+   * the server would mean shipping a shader down the wire on every edit; doing
+   * it here means an effect recompiles the moment its wiring changes and never
+   * when only a knob moved.
+   */
+  frame(show: Show, scheme: Scheme | null, beat: number, seconds: number, dt: number): void;
   resize(): void;
   free(): void;
   readonly error: string | null;
+}
+
+/** A built effect, and enough about it to know when it stopped being current. */
+interface BuiltEffect {
+  program: Program | null;
+  /** What it was compiled from. Structure only — a knob's value is a uniform. */
+  signature: string;
+  error: string | null;
+  params: Float32Array;
 }
 
 export function createCompositor(canvas: HTMLCanvasElement): Compositor {
@@ -52,7 +71,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
 
   let error: string | null = null;
   const sources = new Map<SourceKind, Program>();
-  const effects = new Map<EffectKind, Program>();
+  const effects = new Map<string, BuiltEffect>();
 
   /**
    * Two targets, ping-ponged, because a layer can carry more than one effect.
@@ -89,17 +108,41 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
     }
   };
 
-  const effectProgram = (kind: EffectKind): Program | null => {
-    const held = effects.get(kind);
-    if (held) return held;
-    try {
-      const built = compile(gl, effectSources.get(kind)!, `effect:${kind}`);
-      effects.set(kind, built);
-      return built;
-    } catch (err) {
-      error = (err as Error).message;
-      return null;
+  /**
+   * An effect by id, rebuilt only when its structure changed.
+   *
+   * A failed build is remembered as a failure. Retrying a broken circuit every
+   * frame would call the driver's compiler sixty times a second for as long as
+   * it stayed broken, which is a stall rather than an error message.
+   */
+  const effectProgram = (id: string, def: EffectDef): BuiltEffect => {
+    const signature = signatureOf(def);
+    const held = effects.get(id);
+    if (held && held.signature === signature) {
+      held.params = paramsOf(def);
+      return held;
     }
+    if (held?.program) gl.deleteProgram(held.program.program);
+
+    const built: BuiltEffect = {
+      program: null,
+      signature,
+      error: null,
+      params: paramsOf(def),
+    };
+    const { source, error: why } = effectShader(def);
+    if (!source) {
+      built.error = why ?? 'no shader';
+    } else {
+      try {
+        built.program = compile(gl, source, `effect:${id}`);
+      } catch (err) {
+        built.error = (err as Error).message;
+      }
+    }
+    if (built.error) error = `${def.name || id}: ${built.error}`;
+    effects.set(id, built);
+    return built;
   };
 
   /**
@@ -167,9 +210,11 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
     free() {
       for (const target of targets) target.free();
       for (const p of sources.values()) gl.deleteProgram(p.program);
-      for (const p of effects.values()) gl.deleteProgram(p.program);
+      for (const built of effects.values()) {
+        if (built.program) gl.deleteProgram(built.program.program);
+      }
     },
-    frame(show, beat, seconds, dt) {
+    frame(show, scheme, beat, seconds, dt) {
       resize();
       gl.viewport(0, 0, canvas.width, canvas.height);
       gl.disable(gl.DEPTH_TEST);
@@ -198,11 +243,15 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
         if (!source) continue;
         const [src, dst] = BLENDS[layer.blend] ?? BLENDS.over;
 
-        const chain = layer.effects
-          .map((applied) => ({ applied, program: effectProgram(applied.kind) }))
-          .filter((step): step is { applied: (typeof layer.effects)[number]; program: Program } =>
-            Boolean(step.program),
-          );
+        // An effect that failed to build drops out of the chain rather than
+        // taking the layer with it. A broken circuit should cost the effect it
+        // broke and nothing else — the alternative is a black stage.
+        const chain = layer.effects.flatMap((applied) => {
+          const def = scheme?.effects[applied.id];
+          if (!def) return [];
+          const built = effectProgram(applied.id, def);
+          return built.program ? [{ applied, built, program: built.program }] : [];
+        });
 
         if (chain.length === 0) {
           gl.blendFunc(src, dst);
@@ -224,7 +273,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
         drawFullscreen(gl);
 
         for (let step = 0; step < chain.length; step++) {
-          const { applied, program } = chain[step];
+          const { applied, built, program } = chain[step];
           const last = step === chain.length - 1;
           const write = 1 - read;
 
@@ -245,6 +294,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
           // picture, so applying it again would square it at every step.
           gl.uniform1f(program.uniform('uOpacity'), 1);
           gl.uniform1f(program.uniform('uAmount'), applied.amount);
+          gl.uniform1fv(program.uniform('uParams'), built.params);
           gl.activeTexture(gl.TEXTURE0);
           gl.bindTexture(gl.TEXTURE_2D, targets[read].texture);
           gl.uniform1i(program.uniform('uTex'), 0);

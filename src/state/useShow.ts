@@ -45,7 +45,6 @@ const RESTING: Show = {
   schemeError: null,
   roles: [],
   songs: [],
-  trackNames: [],
 };
 
 export function useShow(): {
