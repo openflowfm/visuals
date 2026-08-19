@@ -1,7 +1,7 @@
 import type { AppliedEffect, EffectKind, Layer, Show } from '../protocol.ts';
 import type { SetState } from './bridge.ts';
 import type { LinkFrame } from './link.ts';
-import { compile, type Rule, type Scheme, type SchemeSource } from './scheme.ts';
+import { compile, firstMatch, type Rule, type Scheme, type SchemeSource } from './scheme.ts';
 
 /**
  * Resolving a Live set into a show, through a cascade.
@@ -131,20 +131,10 @@ export function buildShow(set: SetState, link: LinkFrame, source: SchemeSource):
       for (const effect of rule.effects ?? []) if (!kinds.includes(effect)) kinds.push(effect);
     };
 
-    for (const { test, rule } of trackRules) {
-      if (test.test(track.name)) {
-        apply(rule);
-        break;
-      }
-    }
-    if (clip) {
-      for (const { test, rule } of clipRules) {
-        if (test.test(clip.name)) {
-          apply(rule);
-          break;
-        }
-      }
-    }
+    const byTrack = firstMatch(trackRules, track.name);
+    if (byTrack) apply(byTrack);
+    const byClip = clip ? firstMatch(clipRules, clip.name) : null;
+    if (byClip) apply(byClip);
 
     energy = clamp01(energy);
 

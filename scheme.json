@@ -22,13 +22,17 @@
   },
 
   "songs": {
-    "NIGHTFALL": "dusk"
+    "baby again": "dusk",
+    "sandstorm": "ember",
+    "strobe": "mono"
   },
 
   "archetypes": {
     "INTRO": { "energy": 0.2, "effects": ["smear"] },
     "VERSE": { "energy": 0.35, "effects": [] },
+    "BUILD": { "energy": 0.65, "effects": ["ripple"] },
     "CHORUS": { "energy": 0.92, "effects": ["kaleido", "ripple"] },
+    "BRIDGE": { "energy": 0.45, "effects": ["mirror"] },
     "JAM1": { "energy": 0.75, "effects": ["shift", "ripple"] },
     "JAM2": { "energy": 0.8, "effects": ["mirror", "kaleido"] },
     "ENDING": { "energy": 0.3, "effects": ["smear"] },
@@ -36,11 +40,12 @@
   },
 
   "tracks": [
-    { "match": "kick|drum|beat|perc|snare", "source": "strobe", "energyBias": 0.1, "floor": 0 },
-    { "match": "bass|sub|808", "source": "bars", "floor": 0.05 },
-    { "match": "lead|solo|gtr|guitar|vox|vocal", "source": "rings", "energyBias": 0.1 },
-    { "match": "pad|string|atmos|amb", "source": "noise", "energyBias": -0.15 },
-    { "match": "key|synth|chord|piano|organ", "source": "grid" }
+    { "match": "\\b(kick|drums?|beats?|perc|snare)\\b", "source": "strobe", "energyBias": 0.1, "floor": 0 },
+    { "match": "\\b(bass|sub|808|303)\\b", "source": "bars", "floor": 0.05 },
+    { "match": "\\barps?\\b", "source": "bars", "energyBias": 0.05 },
+    { "match": "\\b(lead|solo|gtr|guitar|vox|vocal)\\b", "source": "rings", "energyBias": 0.1 },
+    { "match": "\\b(pad|strings?|atmos|amb|texture)\\b", "source": "noise", "energyBias": -0.15 },
+    { "match": "\\b(keys?|synth|chords?|piano|organ|pluck)\\b", "source": "grid" }
   ],
 
   "clips": [],

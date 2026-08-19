@@ -81,20 +81,33 @@ const BUILT_IN: Scheme = {
   },
   songs: {},
   archetypes: {
-    INTRO: { energy: 0.2, effects: ['pixelate'] },
+    INTRO: { energy: 0.2, effects: ['smear'] },
     VERSE: { energy: 0.35, effects: [] },
+    // A build is the ramp into something, so it sits between a verse and a
+    // chorus and reaches for the effect that moves the whole frame.
+    BUILD: { energy: 0.65, effects: ['ripple'] },
     CHORUS: { energy: 0.9, effects: ['kaleido', 'ripple'] },
+    // A bridge is a contrast rather than a peak: different, not louder.
+    BRIDGE: { energy: 0.45, effects: ['mirror'] },
     JAM1: { energy: 0.75, effects: ['shift', 'smear'] },
     JAM2: { energy: 0.8, effects: ['mirror', 'kaleido'] },
     ENDING: { energy: 0.3, effects: ['smear'] },
     PRACTICE: { energy: 0.15, effects: [] },
   },
   tracks: [
-    { match: 'kick|drum|beat|perc|snare', source: 'strobe', energyBias: 0.1, floor: 0 },
-    { match: 'bass|sub|808', source: 'bars', floor: 0.05 },
-    { match: 'lead|solo|gtr|guitar|vox|vocal', source: 'rings', energyBias: 0.1 },
-    { match: 'pad|string|atmos|amb', source: 'noise', energyBias: -0.15 },
-    { match: 'key|synth|chord|piano|organ', source: 'grid' },
+    // Word boundaries are load-bearing, not tidiness. Without them `beat`
+    // matches inside "Beating Pad" and a pad track draws as a drum — found
+    // against a real set, where it was the only wrong layer on screen and the
+    // hardest kind of wrong to trace back to a regular expression.
+    { match: '\\b(kick|drums?|beats?|perc|snare)\\b', source: 'strobe', energyBias: 0.1, floor: 0 },
+    { match: '\\b(bass|sub|808|303)\\b', source: 'bars', floor: 0.05 },
+    // Before the keys rule: an arp is a sequence rather than a chord, and four
+    // of them scattered across unrelated sources read as four unrelated things
+    // when they are a family.
+    { match: '\\barps?\\b', source: 'bars', energyBias: 0.05 },
+    { match: '\\b(lead|solo|gtr|guitar|vox|vocal)\\b', source: 'rings', energyBias: 0.1 },
+    { match: '\\b(pad|strings?|atmos|amb|texture)\\b', source: 'noise', energyBias: -0.15 },
+    { match: '\\b(keys?|synth|chords?|piano|organ|pluck)\\b', source: 'grid' },
   ],
   clips: [],
   defaults: {
@@ -192,9 +205,14 @@ function merge(file: Partial<Scheme>): Scheme {
   };
 }
 
+export interface CompiledRule {
+  test: RegExp;
+  rule: Rule;
+}
+
 /** Compiled once per resolve rather than per layer; a set has few rules and many cells. */
-export function compile(rules: Rule[]): { test: RegExp; rule: Rule }[] {
-  const built: { test: RegExp; rule: Rule }[] = [];
+export function compile(rules: Rule[]): CompiledRule[] {
+  const built: CompiledRule[] = [];
   for (const rule of rules) {
     try {
       built.push({ test: new RegExp(rule.match, 'i'), rule });
@@ -203,6 +221,20 @@ export function compile(rules: Rule[]): { test: RegExp; rule: Rule }[] {
     }
   }
   return built;
+}
+
+/**
+ * The first rule whose pattern is in the name, or null.
+ *
+ * First match rather than best match, so **order in the file is meaning**: an
+ * arp rule above a keys rule is how "Pluck Arp" reads as a sequence rather than
+ * a chord. Extracted from the resolver so it can be tested, which it earns —
+ * this is where a missing word boundary turned "Beating Pad" into a drum, and a
+ * mis-routed layer looks like a rendering bug rather than a regex one.
+ */
+export function firstMatch(rules: CompiledRule[], name: string): Rule | null {
+  for (const { test, rule } of rules) if (test.test(name)) return rule;
+  return null;
 }
 
 export { BUILT_IN };
