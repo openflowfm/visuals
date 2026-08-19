@@ -1,7 +1,7 @@
-import type { AppliedEffect, EffectKind, Layer, Show } from '../protocol.ts';
+import type { AppliedEffect, EffectKind, Layer, Rule, Scheme, Show } from '../protocol.ts';
 import type { SetState } from './bridge.ts';
 import type { LinkFrame } from './link.ts';
-import { compile, firstMatch, type Rule, type Scheme, type SchemeSource } from './scheme.ts';
+import { compile, firstMatch, type SchemeSource } from './scheme.ts';
 
 /**
  * Resolving a Live set into a show, through a cascade.
@@ -193,5 +193,11 @@ export function buildShow(set: SetState, link: LinkFrame, source: SchemeSource):
     colorway: colorwayName,
     energy: baseEnergy,
     schemeError: source.error(),
+    // What the set actually contains, so the editor can offer it rather than
+    // asking anyone to type it. A rule matched against a role that does not
+    // exist is invisible until the night it was written for.
+    roles: [...new Set(set.scenes.map((s) => roleOf(s.name)).filter((r): r is string => !!r))].sort(),
+    songs: [...new Set(Object.values(set.model?.songByScene ?? {}))].sort(),
+    trackNames: tracks.map((t) => t.name),
   };
 }

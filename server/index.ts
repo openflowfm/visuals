@@ -3,7 +3,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { VISUALS_PORT, VISUALS_WS_PATH } from '../protocol.ts';
+import { VISUALS_PORT, VISUALS_WS_PATH, type Up } from '../protocol.ts';
 import { followBridge } from './bridge.ts';
 import { openLink } from './link.ts';
 import { openScheme } from './scheme.ts';
@@ -85,11 +85,33 @@ const server = http.createServer((req, res) => {
 const sockets = new WebSocketServer({ server, path: VISUALS_WS_PATH });
 const clients = new Set<WebSocket>();
 
+const sendScheme = (socket: WebSocket) => {
+  socket.send(JSON.stringify({ kind: 'scheme', scheme: scheme.current() }));
+};
+
 sockets.on('connection', (socket) => {
   clients.add(socket);
   socket.on('close', () => clients.delete(socket));
   socket.on('error', () => clients.delete(socket));
-  socket.send(JSON.stringify(buildShow(bridge.state, link.sample(), scheme)));
+  sendScheme(socket);
+  socket.send(JSON.stringify({ kind: 'show', ...buildShow(bridge.state, link.sample(), scheme) }));
+
+  socket.on('message', (raw) => {
+    let message: Up;
+    try {
+      message = JSON.parse(String(raw)) as Up;
+    } catch {
+      return;
+    }
+    if (message.kind !== 'scheme' || !message.scheme) return;
+    scheme.replace(message.scheme);
+    dirty = true;
+    // Back to everyone, including the editor that sent it: the server merges
+    // against the built-in scheme, so what it now holds is not byte-identical
+    // to what was sent, and an editor showing its own guess rather than the
+    // resolved truth is an editor that drifts.
+    for (const other of clients) if (other.readyState === other.OPEN) sendScheme(other);
+  });
 });
 
 /**
@@ -130,16 +152,22 @@ setInterval(() => {
   const stamp = `${show.colorway}|${show.archetype}|${show.energy}|${show.schemeError}`;
   const reloaded = stamp !== lastScheme;
   lastScheme = stamp;
-  const wire = JSON.stringify(due || reloaded ? show : anchorOf(show));
+  const wire = JSON.stringify(
+    due || reloaded ? { kind: 'show' as const, ...show } : anchorOf(show),
+  );
+  // A file edited on disk has to reach the editor too, not just the renderer.
+  const schemeWire = reloaded ? JSON.stringify({ kind: 'scheme', scheme: scheme.current() }) : null;
   for (const socket of clients) {
-    if (socket.readyState === socket.OPEN) socket.send(wire);
+    if (socket.readyState !== socket.OPEN) continue;
+    if (schemeWire) socket.send(schemeWire);
+    socket.send(wire);
   }
 }, ANCHOR_MS);
 
 /** The subset that moves every tick, so a quiet show sends ~200 bytes. */
 function anchorOf(show: ReturnType<typeof buildShow>) {
   return {
-    anchor: true as const,
+    kind: 'anchor' as const,
     tempo: show.tempo,
     beat: show.beat,
     at: show.at,

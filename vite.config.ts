@@ -29,6 +29,9 @@ export default defineConfig({
   server: {
     port: PORT,
     strictPort: true,
+    // The editor is composed from `widgets/`, which lives outside this root.
+    // Same reason both benches allow the repo: Vite refuses paths above its root.
+    fs: { allow: [path.resolve(here, '..')] },
     // Dev serves the page; the visuals server stays authoritative for the show
     // and is the only thing holding the Link peer.
     proxy: {

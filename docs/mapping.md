@@ -84,6 +84,33 @@ A parse error **keeps the scheme that was already working** and reports the mess
 panel. Losing the show to a trailing comma is the wrong answer at any time and an
 unthinkable one during a set.
 
+## The editor
+
+`e` in the app opens it, over the picture rather than beside it, because the whole point is
+tuning a chorus while a chorus is on screen. The section list **follows the set** until you
+click one to pin it, and clicking the pinned one again lets go — no second control to
+explain.
+
+It is composed from [`widgets/`](../../widgets/README.md), which is the first use of that
+module outside a device chain and the reason it exists: a knob that knew what an archetype
+was could not have been written before archetypes did, while one that takes a `Param` and a
+number was ready. The single adapter is [`src/ui/param.ts`](../src/ui/param.ts), the same
+shape `ui/` has in `lib/liveParam.ts`.
+
+Two things it does that a text editor cannot. Every name it offers — roles, songs, tracks —
+comes from **the set**, so nothing asks you to type one; a rule matched against a role that
+does not exist is invisible until the night it was written for. And each rule shows **what
+it would actually catch**, which is the question a pattern raises and the one a plain field
+cannot answer.
+
+**Saving writes the whole resolved scheme**, so the file grows to state everything rather
+than inheriting from the built-in. That is deliberate: a file that says exactly what the
+show is has no invisible inheritance to reason about at two in the morning, and deleting it
+still leaves the built-in as a complete show. It costs the hand-written formatting — the
+file comes back as ordinary two-space JSON — but the `_` block and any other key it does
+not know are preserved, because the editor writes *over* the file rather than in place of
+it.
+
 It is a file rather than device state for now, and that is a staging decision rather than a
 final one. Archetypes belong beside roles eventually — roles are already set-owned, they
 travel in the `.als`, and a show that looked different on the gig laptop would be a bug.

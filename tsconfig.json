@@ -3,11 +3,23 @@
   "compilerOptions": {
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "jsx": "react-jsx",
-    "types": ["node"],
+    "types": [
+      "node"
+    ],
     "noEmit": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["src", "server", "tools", "../protocol"]
+  "include": [
+    "src",
+    "server",
+    "tools",
+    "../protocol",
+    "../widgets/src"
+  ]
 }

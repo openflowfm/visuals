@@ -42,7 +42,7 @@ npm run dev:fake-live    # a bridge that isn't one, for working without Ableton
 ```
 
 Open `http://localhost:17900` for the built renderer, or `:5473` while working on it.
-`i` toggles the panel, `f` goes fullscreen.
+`i` toggles the panel, `e` the editor, `f` fullscreen.
 
 | | | |
 |---|---|---|
@@ -70,6 +70,10 @@ without `fresh`, never sends the device's own watches, and can connect, drop and
 without the bridge noticing.
 
 ## Customising it
+
+Press **`e`** in the app for the editor — energy, effects, colourways and layer rules, over
+the picture so you can tune a chorus while one is on screen. It writes
+[`scheme.json`](scheme.json), which stays the record; edit either.
 
 [`scheme.json`](scheme.json) — hot-reloaded, and entirely optional. It defines colourways
 and assigns one per song, gives each role an **archetype** (an energy and a character), and

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Blend, EffectKind, SourceKind } from '../protocol.ts';
+import type { Archetype, Rule, Scheme } from '../protocol.ts';
 
 /**
  * The scheme: what a song looks like, what a section feels like, what a track
@@ -20,57 +20,6 @@ import type { Blend, EffectKind, SourceKind } from '../protocol.ts';
  * committing to a shape before it has met a real set is how you get a protocol
  * you regret. So: a file, shaped so it can move without changing.
  */
-
-/** A rule that matches something by name and contributes to the cascade. */
-export interface Rule {
-  /** Case-insensitive regular expression, tested against the name. */
-  match: string;
-  source?: SourceKind;
-  /** Added to whatever earlier levels contributed, not replacing it. */
-  effects?: EffectKind[];
-  blend?: Blend;
-  /** Added to the archetype's energy, then clamped. Negative calms a layer. */
-  energyBias?: number;
-  /**
-   * The energy at which this layer joins the picture, 0–1.
-   *
-   * How energy thins the stack. A layer below its floor fades out rather than
-   * cutting, so a section change reads as the picture opening up instead of
-   * something failing. Default is derived from depth: the bottom layer is
-   * always in, the top of a tall stack needs a loud section to appear.
-   */
-  floor?: number;
-}
-
-export interface Archetype {
-  /** 0–1. The one number a section is really described by. */
-  energy: number;
-  /** The character of the section. Dialled in by energy, not switched on. */
-  effects?: EffectKind[];
-}
-
-export interface Scheme {
-  /** Named colour sets, as `#rrggbb`. A song is assigned one. */
-  colorways: Record<string, string[]>;
-  /** Song name (the set's `songKey`) to colourway name. */
-  songs: Record<string, string>;
-  /** Role name to its archetype. Roles come from the set's own vocabulary. */
-  archetypes: Record<string, Archetype>;
-  /** Matched against a track's name. First hit wins for scalars. */
-  tracks: Rule[];
-  /** Matched against a playing clip's name. The most specific level. */
-  clips: Rule[];
-  defaults: {
-    colorway: string;
-    energy: number;
-    /** By depth, cycled. Something has to be opaque at the bottom. */
-    blend: Blend[];
-    /** Sources by depth, for a track whose name says nothing. */
-    sources: SourceKind[];
-    /** Most effects a layer may carry at once, however many the cascade offers. */
-    maxEffects: number;
-  };
-}
 
 const BUILT_IN: Scheme = {
   colorways: {
@@ -124,6 +73,14 @@ const FILE = process.env.BSV_VISUALS_SCHEME ?? path.resolve(here, '../scheme.jso
 
 export interface SchemeSource {
   current(): Scheme;
+  /**
+   * Replace it wholesale and write it back to disk.
+   *
+   * The file stays the record — the editor is a way of writing it, not a second
+   * place the truth lives. Which also means a scheme edited in the browser is
+   * one you can read, diff and commit afterwards.
+   */
+  replace(next: Scheme): void;
   /** The last parse failure, or null. Shown in the panel rather than logged away. */
   error(): string | null;
   stop(): void;
@@ -143,6 +100,15 @@ export function openScheme(): SchemeSource {
   let error: string | null = null;
   let watcher: fs.FSWatcher | null = null;
   let debounce: NodeJS.Timeout | null = null;
+  /**
+   * The last thing we wrote ourselves.
+   *
+   * Saving from the editor changes the file, which wakes the watcher, which
+   * would re-read and re-publish what the editor already has — harmless but for
+   * one thing: the re-read lands a render or two later and would yank a control
+   * out from under a drag. Recognising our own write is what stops that.
+   */
+  let written: string | null = null;
 
   const load = () => {
     if (!fs.existsSync(FILE)) {
@@ -150,8 +116,16 @@ export function openScheme(): SchemeSource {
       error = null;
       return;
     }
+    let text: string;
     try {
-      const parsed = JSON.parse(fs.readFileSync(FILE, 'utf8')) as Partial<Scheme>;
+      text = fs.readFileSync(FILE, 'utf8');
+    } catch {
+      return;
+    }
+    if (written !== null && text.trim() === written.trim()) return;
+    written = null;
+    try {
+      const parsed = JSON.parse(text) as Partial<Scheme>;
       scheme = merge(parsed);
       error = null;
       console.log(`visuals: scheme loaded from ${path.relative(process.cwd(), FILE)}`);
@@ -179,6 +153,30 @@ export function openScheme(): SchemeSource {
   return {
     current: () => scheme,
     error: () => error,
+    replace(next) {
+      scheme = merge(next);
+      error = null;
+
+      // Written over whatever the file already held rather than in place of it,
+      // and indented rather than minified. The file is meant to be read, edited
+      // by hand and committed — the editor is a way of writing the record, not a
+      // second place the truth lives. Without this, the first turn of a knob
+      // flattens it to one line and silently drops the `_` block explaining what
+      // every key means.
+      let held: Record<string, unknown> = {};
+      try {
+        held = JSON.parse(fs.readFileSync(FILE, 'utf8')) as Record<string, unknown>;
+      } catch {
+        // No file yet, or an unparseable one we are about to replace anyway.
+      }
+      // Ours, so the watcher ignores the change it is about to see.
+      written = JSON.stringify({ ...held, ...next }, null, 2);
+      try {
+        fs.writeFileSync(FILE, `${written}\n`);
+      } catch (err) {
+        error = `could not write ${path.basename(FILE)}: ${(err as Error).message}`;
+      }
+    },
     stop() {
       if (debounce) clearTimeout(debounce);
       watcher?.close();

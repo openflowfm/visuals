@@ -1,58 +1,165 @@
 {
   "_": [
-    "The scheme. Every key is optional and overrides the built-in one in",
-    "server/scheme.ts section by section - naming one archetype does not delete",
-    "the others. Saves are picked up while the show runs; a parse error keeps",
-    "whatever was last working and reports itself in the panel.",
+    "The scheme. Edit it here or press `e` in the app; both write this file, and",
+    "the app picks up a save while the show runs. A parse error keeps whatever was",
+    "last working and reports itself in the panel.",
+    "",
+    "Saving from the editor writes the WHOLE resolved scheme, so this file grows to",
+    "state everything rather than inheriting the built-in defaults in",
+    "server/scheme.ts. That is deliberate: a file that says exactly what the show is",
+    "has no invisible inheritance to reason about at two in the morning. Delete the",
+    "file entirely and the built-in scheme is a complete show on its own.",
     "",
     "The cascade is song -> archetype -> track -> clip. Scalars override, effects",
-    "add up, energyBias accumulates. Live signals are not a level: the meter and",
-    "the beat thread through every source and effect as uniforms. docs/mapping.md.",
+    "add up, energyBias accumulates. Live signals are not a level: the meter and the",
+    "beat thread through every source and effect as uniforms. See docs/mapping.md.",
     "",
     "sources: solid bars rings noise strobe grid",
     "effects: mirror kaleido shift pixelate ripple smear",
     "blends:  over add screen multiply"
   ],
-
   "colorways": {
-    "aurora": ["#3cc8ff", "#6ee7a0", "#9b5aff", "#3cff9b", "#e8f4ff"],
-    "ember": ["#ff5a3c", "#ffd23c", "#ff2d6f", "#ff9b3c", "#fff0c8"],
-    "dusk": ["#9b5aff", "#ff2d6f", "#3c6eff", "#ffd23c", "#f0e8ff"],
-    "mono": ["#ffffff", "#b7b7be", "#5e5e66", "#ececed", "#8b8b93"]
+    "aurora": [
+      "#3cc8ff",
+      "#6ee7a0",
+      "#9b5aff",
+      "#3cff9b",
+      "#e8f4ff"
+    ],
+    "ember": [
+      "#ff5a3c",
+      "#ffd23c",
+      "#ff2d6f",
+      "#ff9b3c",
+      "#fff0c8"
+    ],
+    "dusk": [
+      "#9b5aff",
+      "#ff2d6f",
+      "#3c6eff",
+      "#ffd23c",
+      "#f0e8ff"
+    ],
+    "mono": [
+      "#ffffff",
+      "#b7b7be",
+      "#5e5e66",
+      "#ececed",
+      "#8b8b93"
+    ]
   },
-
   "songs": {
     "baby again": "dusk",
     "sandstorm": "ember",
     "strobe": "mono"
   },
-
   "archetypes": {
-    "INTRO": { "energy": 0.2, "effects": ["smear"] },
-    "VERSE": { "energy": 0.35, "effects": [] },
-    "BUILD": { "energy": 0.65, "effects": ["ripple"] },
-    "CHORUS": { "energy": 0.92, "effects": ["kaleido", "ripple"] },
-    "BRIDGE": { "energy": 0.45, "effects": ["mirror"] },
-    "JAM1": { "energy": 0.75, "effects": ["shift", "ripple"] },
-    "JAM2": { "energy": 0.8, "effects": ["mirror", "kaleido"] },
-    "ENDING": { "energy": 0.3, "effects": ["smear"] },
-    "PRACTICE": { "energy": 0.15, "effects": [] }
+    "INTRO": {
+      "energy": 0.2,
+      "effects": [
+        "smear"
+      ]
+    },
+    "VERSE": {
+      "energy": 0.35,
+      "effects": []
+    },
+    "BUILD": {
+      "energy": 0.65,
+      "effects": [
+        "ripple"
+      ]
+    },
+    "CHORUS": {
+      "energy": 0.92,
+      "effects": [
+        "kaleido",
+        "ripple"
+      ]
+    },
+    "BRIDGE": {
+      "energy": 0.45,
+      "effects": [
+        "mirror"
+      ]
+    },
+    "JAM1": {
+      "energy": 0.75,
+      "effects": [
+        "shift",
+        "ripple"
+      ]
+    },
+    "JAM2": {
+      "energy": 0.8,
+      "effects": [
+        "mirror",
+        "kaleido"
+      ]
+    },
+    "ENDING": {
+      "energy": 0.3,
+      "effects": [
+        "smear"
+      ]
+    },
+    "PRACTICE": {
+      "energy": 0.15,
+      "effects": []
+    }
   },
-
   "tracks": [
-    { "match": "\\b(kick|drums?|beats?|perc|snare)\\b", "source": "strobe", "energyBias": 0.1, "floor": 0 },
-    { "match": "\\b(bass|sub|808|303)\\b", "source": "bars", "floor": 0.05 },
-    { "match": "\\barps?\\b", "source": "bars", "energyBias": 0.05 },
-    { "match": "\\b(lead|solo|gtr|guitar|vox|vocal)\\b", "source": "rings", "energyBias": 0.1 },
-    { "match": "\\b(pad|strings?|atmos|amb|texture)\\b", "source": "noise", "energyBias": -0.15 },
-    { "match": "\\b(keys?|synth|chords?|piano|organ|pluck)\\b", "source": "grid" }
+    {
+      "match": "\\b(kick|drums?|beats?|perc|snare)\\b",
+      "source": "strobe",
+      "energyBias": 0.1,
+      "floor": 0
+    },
+    {
+      "match": "\\b(bass|sub|808|303)\\b",
+      "source": "bars",
+      "floor": 0.05
+    },
+    {
+      "match": "\\barps?\\b",
+      "source": "bars",
+      "energyBias": 0.05
+    },
+    {
+      "match": "\\b(lead|solo|gtr|guitar|vox|vocal)\\b",
+      "source": "rings",
+      "energyBias": 0.1
+    },
+    {
+      "match": "\\b(pad|strings?|atmos|amb|texture)\\b",
+      "source": "noise",
+      "energyBias": -0.15
+    },
+    {
+      "match": "\\b(keys?|synth|chords?|piano|organ|pluck)\\b",
+      "source": "grid"
+    }
   ],
-
   "clips": [],
-
   "defaults": {
     "colorway": "aurora",
     "energy": 0.4,
+    "blend": [
+      "over",
+      "add",
+      "screen",
+      "add",
+      "multiply",
+      "add"
+    ],
+    "sources": [
+      "bars",
+      "rings",
+      "grid",
+      "noise",
+      "strobe",
+      "solid"
+    ],
     "maxEffects": 2
   }
 }

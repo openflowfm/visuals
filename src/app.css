@@ -89,6 +89,13 @@ html, body, #root {
 
 .panel td { padding: 2px 6px 2px 0; }
 
+.panel td.clip {
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .panel td.fx {
   max-width: 150px;
   overflow: hidden;

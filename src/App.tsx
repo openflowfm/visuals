@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createCompositor, type Compositor } from './render/compositor.ts';
 import { useShow } from './state/useShow.ts';
+import { Editor } from './ui/Editor.tsx';
 import './app.css';
 
 /**
@@ -13,14 +14,25 @@ import './app.css';
  */
 export function App() {
   const canvas = useRef<HTMLCanvasElement | null>(null);
-  const { show, showRef, clock, online } = useShow();
+  const { show, showRef, scheme, save, clock, online } = useShow();
   const [panel, setPanel] = useState(true);
+  const [editing, setEditing] = useState(false);
   const [fps, setFps] = useState(0);
   const [glError, setGlError] = useState<string | null>(null);
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
+      // Ignore keys aimed at a field: `e` is a letter before it is a shortcut,
+      // and a regex being typed into a rule contains most of the alphabet.
+      //
+      // `instanceof` rather than a truthiness check, because a keydown's target
+      // is not always an element — on a synthetic event it can be `window`,
+      // which has no `matches` and threw, taking every shortcut down with it.
+      const target = e.target;
+      if (target instanceof HTMLElement && target.matches('input, textarea, select')) return;
       if (e.key === 'i') setPanel((on) => !on);
+      if (e.key === 'e') setEditing((on) => !on);
+      if (e.key === 'Escape') setEditing(false);
       if (e.key === 'f') void document.documentElement.requestFullscreen?.().catch(() => {});
     };
     window.addEventListener('keydown', key);
@@ -132,7 +144,9 @@ export function App() {
                     <i style={{ background: hex(layer.color) }} />
                     {layer.name}
                   </td>
-                  <td>{layer.playing < 0 ? '—' : layer.clipName || `scene ${layer.playing}`}</td>
+                  <td className="clip" title={layer.clipName}>
+                    {layer.playing < 0 ? '—' : layer.clipName || `scene ${layer.playing}`}
+                  </td>
                   <td>{layer.source}</td>
                   <td className="fx">
                     {layer.effects
@@ -161,9 +175,12 @@ export function App() {
           </table>
           <p className="hint">
             {drawing.length} of {show.layers.length} layers drawing · <kbd>i</kbd> panel ·{' '}
-            <kbd>f</kbd> fullscreen
+            <kbd>e</kbd> edit · <kbd>f</kbd> fullscreen
           </p>
         </div>
+      )}
+      {editing && scheme && (
+        <Editor show={show} scheme={scheme} save={save} onClose={() => setEditing(false)} />
       )}
     </>
   );

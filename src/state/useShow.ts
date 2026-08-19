@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Show } from '../../protocol.ts';
+import type { Down, Scheme, Show } from '../../protocol.ts';
 
 /**
  * The connection to the visuals server, and the clock the renderer runs on.
@@ -25,17 +25,6 @@ export interface Clock {
   advance(dtSeconds: number): void;
 }
 
-interface Anchor {
-  anchor: true;
-  tempo: number;
-  beat: number;
-  at: number;
-  playing: boolean;
-  master: number;
-  levels: number[];
-  opacity: number[];
-}
-
 const RESTING: Show = {
   connected: false,
   lomReady: false,
@@ -54,6 +43,9 @@ const RESTING: Show = {
   colorway: null,
   energy: 0.4,
   schemeError: null,
+  roles: [],
+  songs: [],
+  trackNames: [],
 };
 
 export function useShow(): {
@@ -61,11 +53,17 @@ export function useShow(): {
   show: Show;
   /** The same value, read by the render loop every frame without re-rendering. */
   showRef: { readonly current: Show };
+  /** What the editor edits. Null until the server has sent one. */
+  scheme: Scheme | null;
+  /** Send a whole scheme back. The server writes it to `scheme.json`. */
+  save(next: Scheme): void;
   clock: Clock;
   online: boolean;
 } {
   const [show, setShow] = useState<Show>(RESTING);
+  const [scheme, setScheme] = useState<Scheme | null>(null);
   const [online, setOnline] = useState(false);
+  const live = useRef<WebSocket | null>(null);
 
   // The show is also held in a ref because the render loop reads it every frame
   // and must not be re-created when React re-renders for the overlay.
@@ -81,6 +79,7 @@ export function useShow(): {
       if (closed) return;
       const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
       socket = new WebSocket(url);
+      live.current = socket;
 
       socket.onopen = () => setOnline(true);
       socket.onclose = () => {
@@ -97,9 +96,13 @@ export function useShow(): {
       socket.onerror = () => socket?.close();
 
       socket.onmessage = (event) => {
-        const message = JSON.parse(event.data as string) as Show | Anchor;
+        const message = JSON.parse(event.data as string) as Down;
         const t = timing.current;
-        if ('anchor' in message) {
+        if (message.kind === 'scheme') {
+          setScheme(message.scheme);
+          return;
+        }
+        if (message.kind === 'anchor') {
           t.tempo = message.tempo;
           t.anchorBeat = message.beat;
           t.anchorAt = performance.now();
@@ -157,7 +160,17 @@ export function useShow(): {
   // render loop reads the ref sixty times a second without involving React at
   // all. A meter arriving on an anchor updates the ref and nothing re-renders,
   // which is the whole reason levels don't wake a diff on the server either.
-  return { show, showRef: held, clock, online };
+  const save = useRef((next: Scheme) => {
+    // Optimistic, so a knob follows the pointer rather than the round trip.
+    // The server answers with what it resolved, which is what finally sticks.
+    setScheme(next);
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'scheme', scheme: next }));
+    }
+  }).current;
+
+  return { show, showRef: held, scheme, save, clock, online };
 }
 
 export { RESTING };
