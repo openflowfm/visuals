@@ -1,7 +1,3 @@
-:root {
-  --console-inset: 18px;
-}
-
 .console {
   --surface-control: #151517;
   --bd3: #2c2c31;
@@ -26,16 +22,13 @@
   --live: #6ee7a0;
 
   position: fixed;
-  inset: var(--console-inset);
+  inset: 0;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--edge);
-  border-radius: var(--radius-md);
-  background: rgb(10 10 11 / 0.94);
+  background: #0a0a0b;
   color: var(--ui);
   font-family: var(--mono);
   font-size: 11px;
-  backdrop-filter: blur(12px);
   overflow: hidden;
 }
 
@@ -195,7 +188,7 @@
   position: sticky;
   top: -10px;
   z-index: 2;
-  background: rgb(10 10 11 / 0.96);
+  background: #0a0a0b;
   padding-bottom: 4px;
   align-items: end;
   height: 78px;
