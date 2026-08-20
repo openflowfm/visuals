@@ -25,311 +25,345 @@
     "with a `circuit` is wired out of nodes in the looks view. See docs/circuit.md."
   ],
   "colorways": {
+    "ash": [
+      "#e65e70",
+      "#7be3a1",
+      "#199ce7",
+      "#e8e3e0",
+      "#4cf0da"
+    ],
+    "brine": [
+      "#5ed5ec",
+      "#f53978",
+      "#e9c47b",
+      "#edeef1",
+      "#d6563e"
+    ],
     "slate": [
-      "#c7ef32",
-      "#a3df20",
-      "#edf457",
-      "#dee3d6",
-      "#e8e162"
+      "#5a74dd",
+      "#f98553",
+      "#b6ec34",
+      "#dfdce7",
+      "#cdad2f"
     ],
-    "cinder": [
-      "#e9e6ef",
-      "#acdd2c",
-      "#ac55f9",
-      "#88f02a",
-      "#d8dd39"
-    ],
-    "violet": [
-      "#d92329",
-      "#ecf0f0",
-      "#fb5a2e",
-      "#1cb6e1",
-      "#38f8c2"
-    ],
-    "frost": [
-      "#578bfc",
-      "#443af3",
-      "#6f16ea",
-      "#e3e4f0",
-      "#7659d9"
+    "storm": [
+      "#ede4e1",
+      "#e9b65e",
+      "#fcfb58",
+      "#ef9b49",
+      "#fcd53c"
     ]
   },
   "songs": {
     "40oz to freedom": {
-      "colorway": "slate"
+      "colorway": "brine"
     },
     "90s": {
-      "colorway": "violet"
+      "colorway": "slate"
     },
     "90s kenan": {
-      "colorway": "cinder",
-      "bias": 0.11
+      "colorway": "storm"
     },
     "90s ppg": {
-      "colorway": "frost",
-      "bias": 0.13
+      "colorway": "ash",
+      "bias": 0.09
     },
     "a minor jam": {
-      "colorway": "slate"
+      "colorway": "brine"
     },
     "baby again": {
-      "colorway": "violet"
+      "colorway": "slate"
     },
     "cherub rock": {
-      "colorway": "cinder",
-      "bias": 0.12
+      "colorway": "storm"
     },
     "cobblestone": {
-      "colorway": "frost",
-      "bias": -0.1
+      "colorway": "ash",
+      "bias": -0.11
     },
     "conquest": {
-      "colorway": "slate"
+      "colorway": "brine"
     },
     "crystalize": {
-      "colorway": "violet"
+      "colorway": "slate",
+      "bias": 0.07
     },
     "d minor jam": {
-      "colorway": "cinder"
+      "colorway": "storm",
+      "bias": -0.08
     },
     "fire starts": {
-      "colorway": "frost"
+      "colorway": "ash"
     },
     "fly like an eagle": {
-      "colorway": "slate"
+      "colorway": "brine"
     },
     "free jam": {
-      "colorway": "violet",
-      "bias": 0.11
+      "colorway": "slate"
     },
     "g minor jam": {
-      "colorway": "cinder"
+      "colorway": "storm"
     },
     "gin and juice": {
-      "colorway": "frost",
-      "bias": 0.13
+      "colorway": "ash"
     },
     "howl to the moon": {
-      "colorway": "slate"
+      "colorway": "brine"
     },
     "i remember": {
-      "colorway": "violet"
-    },
-    "luminescent cool": {
-      "colorway": "cinder"
-    },
-    "mr fixer": {
-      "colorway": "frost",
-      "bias": 0.14
-    },
-    "night call": {
-      "colorway": "slate"
-    },
-    "papercut": {
-      "colorway": "violet"
-    },
-    "pull me out of this": {
-      "colorway": "cinder"
-    },
-    "pump up": {
-      "colorway": "frost"
-    },
-    "quote jam": {
       "colorway": "slate",
-      "bias": 0.05
-    },
-    "sandstorm": {
-      "colorway": "violet"
-    },
-    "set break": {
-      "colorway": "cinder",
-      "bias": 0.14
-    },
-    "space jam": {
-      "colorway": "frost"
-    },
-    "stompin": {
-      "colorway": "slate"
-    },
-    "strobe": {
-      "colorway": "violet"
-    },
-    "ttstu": {
-      "colorway": "cinder",
-      "bias": 0.08
-    },
-    "universal eyes": {
-      "colorway": "frost",
       "bias": 0
     },
+    "luminescent cool": {
+      "colorway": "storm",
+      "bias": 0.01
+    },
+    "mr fixer": {
+      "colorway": "ash"
+    },
+    "night call": {
+      "colorway": "brine"
+    },
+    "papercut": {
+      "colorway": "slate"
+    },
+    "pull me out of this": {
+      "colorway": "storm"
+    },
+    "pump up": {
+      "colorway": "ash"
+    },
+    "quote jam": {
+      "colorway": "brine",
+      "bias": 0.11
+    },
+    "sandstorm": {
+      "colorway": "slate"
+    },
+    "set break": {
+      "colorway": "storm"
+    },
+    "space jam": {
+      "colorway": "ash",
+      "bias": -0.02
+    },
+    "stompin": {
+      "colorway": "brine",
+      "bias": -0.05
+    },
+    "strobe": {
+      "colorway": "slate"
+    },
+    "ttstu": {
+      "colorway": "storm"
+    },
+    "universal eyes": {
+      "colorway": "ash",
+      "bias": -0.06
+    },
     "vasoline": {
-      "colorway": "slate",
-      "bias": -0.1
+      "colorway": "brine"
     },
     "void": {
-      "colorway": "violet",
-      "bias": -0.1
+      "colorway": "slate",
+      "bias": 0.11
     },
     "waterfalls": {
-      "colorway": "cinder"
+      "colorway": "storm"
     }
   },
   "archetypes": {
     "BRIDGE": {
-      "energy": 0.54,
-      "effects": []
+      "energy": 0.41,
+      "looks": []
     },
     "BUILD": {
-      "energy": 0.67,
-      "effects": [
-        "twist"
+      "energy": 0.56,
+      "looks": [
+        "roll1"
       ]
     },
     "CHORUS": {
-      "energy": 0.96,
-      "effects": [
-        "twist",
-        "mirror"
+      "energy": 0.85,
+      "looks": [
+        "slice",
+        "edge"
       ]
     },
     "ENDING": {
-      "energy": 0.36,
-      "effects": []
+      "energy": 0.16,
+      "looks": [
+        "twist"
+      ]
     },
     "INTRO": {
-      "energy": 0.16,
-      "effects": []
+      "energy": 0.13,
+      "looks": []
     },
     "JAM1": {
-      "energy": 0.81,
-      "effects": [
-        "slice"
+      "energy": 0.59,
+      "looks": [
+        "bloom"
       ]
     },
     "JAM2": {
-      "energy": 0.82,
-      "effects": [
-        "smear"
+      "energy": 0.79,
+      "looks": [
+        "smear",
+        "posterize"
       ]
     },
     "PRACTICE": {
-      "energy": 0.19,
-      "effects": [
-        "roll2"
-      ]
+      "energy": 0.07,
+      "looks": []
     },
     "VERSE": {
-      "energy": 0.31,
-      "effects": [
-        "pixelate"
+      "energy": 0.4,
+      "looks": [
+        "shift"
       ]
     }
   },
   "layers": {
     "Sparkle Pad": {
-      "source": "tunnel",
-      "blend": "screen"
+      "looks": [
+        "noise"
+      ],
+      "blend": "multiply"
     },
     "Beating Pad": {
-      "source": "tunnel",
-      "blend": "screen",
-      "bias": -0.06,
-      "effects": [
-        "mirror"
-      ]
+      "looks": [
+        "noise"
+      ],
+      "blend": "screen"
     },
     "Magz Pad": {
-      "source": "tunnel",
-      "blend": "screen",
-      "bias": -0.15
-    },
-    "Trance Pad": {
-      "source": "tunnel",
-      "blend": "screen",
-      "effects": [
-        "mirror"
-      ]
-    },
-    "MIDI": {
-      "source": "sparks",
-      "blend": "screen",
-      "bias": -0.11
-    },
-    "Space Arp": {
-      "source": "solid",
+      "looks": [
+        "noise",
+        "edge"
+      ],
       "blend": "add"
     },
+    "Trance Pad": {
+      "looks": [
+        "noise"
+      ],
+      "blend": "screen"
+    },
+    "MIDI": {
+      "looks": [
+        "sparks"
+      ],
+      "blend": "screen",
+      "bias": -0.08
+    },
+    "Space Arp": {
+      "looks": [
+        "rings",
+        "roll1"
+      ],
+      "blend": "screen",
+      "bias": 0.13
+    },
     "Retro Arp": {
-      "source": "solid",
-      "blend": "multiply"
+      "looks": [
+        "rings",
+        "slice"
+      ],
+      "blend": "add",
+      "bias": -0.12
     },
     "Pluck Arp": {
-      "source": "solid",
-      "blend": "screen"
+      "looks": [
+        "rings"
+      ]
     },
     "13-Felixian Pluck Arp": {
-      "source": "solid",
-      "blend": "multiply"
+      "looks": [
+        "rings"
+      ]
     },
     "303 EXT": {
-      "source": "noise",
-      "blend": "screen",
-      "bias": 0.09
+      "looks": [
+        "plasma",
+        "edge"
+      ],
+      "blend": "add"
     },
     "Texture": {
-      "source": "tunnel",
-      "blend": "screen"
+      "looks": [
+        "noise"
+      ],
+      "blend": "multiply"
     },
     "Vox": {
-      "source": "rings",
-      "bias": 0.11
+      "looks": [
+        "scan"
+      ],
+      "bias": 0.1
     },
     "Uppers": {
-      "source": "sparks"
+      "looks": [
+        "sparks"
+      ],
+      "bias": 0.1
     },
     "Downers": {
-      "source": "sparks",
-      "bias": -0.15
+      "looks": [
+        "sparks"
+      ],
+      "bias": 0.18
     },
     "Song": {
-      "source": "sparks",
+      "looks": [
+        "sparks",
+        "smear"
+      ],
+      "blend": "over",
       "bias": -0.1
     },
     "Sample": {
-      "source": "sparks",
-      "blend": "over"
-    },
-    "24-Drum Rack": {
-      "source": "bars",
-      "bias": -0.02
+      "looks": [
+        "sparks",
+        "posterize"
+      ],
+      "bias": -0.07
     },
     "Guitar": {
-      "source": "rings",
-      "blend": "add",
-      "bias": -0.17
+      "looks": [
+        "scan"
+      ],
+      "bias": 0.06
     },
     "Drums": {
-      "source": "bars",
-      "bias": 0.03,
-      "effects": [
-        "posterize"
+      "looks": [
+        "strobe"
       ]
     },
     "Bass": {
-      "source": "noise",
-      "blend": "screen"
+      "looks": [
+        "plasma"
+      ],
+      "blend": "multiply"
     },
     "Sub Bass": {
-      "source": "noise",
-      "blend": "screen"
+      "looks": [
+        "plasma",
+        "slice"
+      ],
+      "blend": "multiply"
     },
-    "30-Kontakt 8": {
-      "source": "sparks",
-      "bias": -0.07
+    "29-Kontakt 8": {
+      "looks": [
+        "sparks"
+      ],
+      "blend": "multiply"
     },
     "Patterns": {
-      "source": "sparks",
-      "bias": -0.16
+      "looks": [
+        "sparks"
+      ],
+      "bias": -0.11
     }
   },
   "clips": {},
@@ -383,7 +417,7 @@
       "builtin": "invert"
     },
     "roll1": {
-      "name": "Neon glass",
+      "name": "Aurora brine",
       "circuit": {
         "nodes": [
           {
@@ -394,159 +428,17 @@
           },
           {
             "id": "n1",
-            "kind": "fold",
+            "kind": "tile",
             "x": 175,
             "y": 20
           },
           {
             "id": "n2",
-            "kind": "signal",
-            "op": "phase",
-            "x": 25,
-            "y": 150
-          },
-          {
-            "id": "n3",
-            "kind": "wave",
-            "op": "ramp",
+            "kind": "value",
             "x": 175,
-            "y": 150
-          },
-          {
-            "id": "n4",
-            "kind": "wobble",
-            "x": 330,
-            "y": 20
-          },
-          {
-            "id": "n5",
-            "kind": "value",
-            "x": 330,
-            "y": 270,
-            "value": 0.77,
-            "label": "quartz"
-          },
-          {
-            "id": "n6",
-            "kind": "sample",
-            "x": 485,
-            "y": 20
-          },
-          {
-            "id": "n7",
-            "kind": "hue",
-            "x": 640,
-            "y": 20
-          },
-          {
-            "id": "n8",
-            "kind": "signal",
-            "op": "beat",
-            "x": 490,
-            "y": 150
-          },
-          {
-            "id": "n9",
-            "kind": "wave",
-            "op": "ramp",
-            "x": 640,
-            "y": 150
-          },
-          {
-            "id": "n10",
-            "kind": "levels",
-            "x": 795,
-            "y": 20
-          },
-          {
-            "id": "n11",
-            "kind": "value",
-            "x": 795,
             "y": 150,
-            "value": 0.79,
-            "label": "ash"
-          },
-          {
-            "id": "n12",
-            "kind": "out",
-            "x": 950,
-            "y": 20
-          }
-        ],
-        "cords": [
-          {
-            "from": "n0/p",
-            "to": "n1/p"
-          },
-          {
-            "from": "n2/n",
-            "to": "n3/phase"
-          },
-          {
-            "from": "n3/n",
-            "to": "n1/sides"
-          },
-          {
-            "from": "n1/p",
-            "to": "n4/p"
-          },
-          {
-            "from": "n5/n",
-            "to": "n4/amount"
-          },
-          {
-            "from": "n4/p",
-            "to": "n6/p"
-          },
-          {
-            "from": "n6/c",
-            "to": "n7/c"
-          },
-          {
-            "from": "n8/n",
-            "to": "n9/phase"
-          },
-          {
-            "from": "n9/n",
-            "to": "n7/shift"
-          },
-          {
-            "from": "n7/c",
-            "to": "n10/c"
-          },
-          {
-            "from": "n11/n",
-            "to": "n10/gain"
-          },
-          {
-            "from": "n10/c",
-            "to": "n12/c"
-          }
-        ]
-      }
-    },
-    "roll2": {
-      "name": "Storm violet",
-      "circuit": {
-        "nodes": [
-          {
-            "id": "n0",
-            "kind": "point",
-            "x": 20,
-            "y": 20
-          },
-          {
-            "id": "n1",
-            "kind": "fold",
-            "x": 175,
-            "y": 20
-          },
-          {
-            "id": "n2",
-            "kind": "signal",
-            "op": "beat",
-            "x": 175,
-            "y": 150
+            "value": 0.38,
+            "label": "mica"
           },
           {
             "id": "n3",
@@ -562,29 +454,16 @@
           },
           {
             "id": "n5",
-            "kind": "signal",
-            "op": "energy",
+            "kind": "value",
             "x": 485,
-            "y": 150
+            "y": 150,
+            "value": 0.78,
+            "label": "ember"
           },
           {
             "id": "n6",
-            "kind": "levels",
-            "x": 640,
-            "y": 20
-          },
-          {
-            "id": "n7",
-            "kind": "value",
-            "x": 640,
-            "y": 150,
-            "value": 0.37,
-            "label": "aurora"
-          },
-          {
-            "id": "n8",
             "kind": "out",
-            "x": 795,
+            "x": 640,
             "y": 20
           }
         ],
@@ -595,7 +474,7 @@
           },
           {
             "from": "n2/n",
-            "to": "n1/sides"
+            "to": "n1/count"
           },
           {
             "from": "n1/p",
@@ -612,47 +491,431 @@
           {
             "from": "n4/c",
             "to": "n6/c"
+          }
+        ]
+      }
+    },
+    "roll2": {
+      "name": "Jade flint",
+      "circuit": {
+        "nodes": [
+          {
+            "id": "n0",
+            "kind": "point",
+            "x": 20,
+            "y": 20
           },
           {
-            "from": "n7/n",
-            "to": "n6/gain"
+            "id": "n1",
+            "kind": "tile",
+            "x": 175,
+            "y": 20
           },
           {
-            "from": "n6/c",
-            "to": "n8/c"
+            "id": "n2",
+            "kind": "signal",
+            "op": "energy",
+            "x": 25,
+            "y": 150
+          },
+          {
+            "id": "n3",
+            "kind": "wave",
+            "op": "ramp",
+            "x": 175,
+            "y": 150
+          },
+          {
+            "id": "n4",
+            "kind": "sample",
+            "x": 330,
+            "y": 20
+          },
+          {
+            "id": "n5",
+            "kind": "hue",
+            "x": 485,
+            "y": 20
+          },
+          {
+            "id": "n6",
+            "kind": "signal",
+            "op": "pulse",
+            "x": 485,
+            "y": 150
+          },
+          {
+            "id": "n7",
+            "kind": "levels",
+            "x": 640,
+            "y": 20
+          },
+          {
+            "id": "n8",
+            "kind": "signal",
+            "op": "energy",
+            "x": 640,
+            "y": 150
+          },
+          {
+            "id": "n9",
+            "kind": "out",
+            "x": 795,
+            "y": 20
+          }
+        ],
+        "cords": [
+          {
+            "from": "n0/p",
+            "to": "n1/p"
+          },
+          {
+            "from": "n2/n",
+            "to": "n3/phase"
+          },
+          {
+            "from": "n3/n",
+            "to": "n1/count"
+          },
+          {
+            "from": "n1/p",
+            "to": "n4/p"
+          },
+          {
+            "from": "n4/c",
+            "to": "n5/c"
+          },
+          {
+            "from": "n6/n",
+            "to": "n5/shift"
+          },
+          {
+            "from": "n5/c",
+            "to": "n7/c"
+          },
+          {
+            "from": "n8/n",
+            "to": "n7/gain"
+          },
+          {
+            "from": "n7/c",
+            "to": "n9/c"
           }
         ]
       }
     }
   },
   "defaults": {
-    "colorway": "frost",
-    "energy": 0.42,
+    "colorway": "storm",
+    "energy": 0.38,
     "blend": [
       "over",
+      "screen",
       "add",
+      "screen",
+      "screen",
       "multiply",
-      "screen",
-      "screen",
-      "screen",
       "over",
       "over"
     ],
-    "sources": [
-      "tunnel",
-      "grid",
-      "plasma",
-      "sparks",
-      "solid",
-      "spiral",
-      "strobe",
+    "looks": [
       "noise",
       "scan",
-      "rings",
-      "bars"
+      "sparks",
+      "tunnel",
+      "spiral",
+      "strobe",
+      "plasma",
+      "bars",
+      "grid",
+      "solid",
+      "rings"
     ],
-    "maxEffects": 2,
-    "pace": -1
+    "maxLooks": 4,
+    "pace": 0
   },
-  "seed": "glass-drift-576"
+  "seed": "violet-mica-885",
+  "looks": {
+    "solid": {
+      "name": "Solid",
+      "builtin": "solid"
+    },
+    "bars": {
+      "name": "Bars",
+      "builtin": "bars"
+    },
+    "rings": {
+      "name": "Rings",
+      "builtin": "rings"
+    },
+    "noise": {
+      "name": "Noise",
+      "builtin": "noise"
+    },
+    "strobe": {
+      "name": "Strobe",
+      "builtin": "strobe"
+    },
+    "grid": {
+      "name": "Grid",
+      "builtin": "grid"
+    },
+    "tunnel": {
+      "name": "Tunnel",
+      "builtin": "tunnel"
+    },
+    "plasma": {
+      "name": "Plasma",
+      "builtin": "plasma"
+    },
+    "spiral": {
+      "name": "Spiral",
+      "builtin": "spiral"
+    },
+    "scan": {
+      "name": "Scan",
+      "builtin": "scan"
+    },
+    "sparks": {
+      "name": "Sparks",
+      "builtin": "sparks"
+    },
+    "mirror": {
+      "name": "Mirror",
+      "builtin": "mirror"
+    },
+    "kaleido": {
+      "name": "Kaleido",
+      "builtin": "kaleido"
+    },
+    "shift": {
+      "name": "Shift",
+      "builtin": "shift"
+    },
+    "pixelate": {
+      "name": "Pixelate",
+      "builtin": "pixelate"
+    },
+    "ripple": {
+      "name": "Ripple",
+      "builtin": "ripple"
+    },
+    "smear": {
+      "name": "Smear",
+      "builtin": "smear"
+    },
+    "bloom": {
+      "name": "Bloom",
+      "builtin": "bloom"
+    },
+    "slice": {
+      "name": "Slice",
+      "builtin": "slice"
+    },
+    "edge": {
+      "name": "Edge",
+      "builtin": "edge"
+    },
+    "posterize": {
+      "name": "Posterize",
+      "builtin": "posterize"
+    },
+    "twist": {
+      "name": "Twist",
+      "builtin": "twist"
+    },
+    "invert": {
+      "name": "Invert",
+      "builtin": "invert"
+    },
+    "roll1": {
+      "name": "Ion slate",
+      "circuit": {
+        "nodes": [
+          {
+            "id": "n0",
+            "kind": "point",
+            "x": 20,
+            "y": 20
+          },
+          {
+            "id": "n1",
+            "kind": "tile",
+            "x": 175,
+            "y": 20
+          },
+          {
+            "id": "n2",
+            "kind": "value",
+            "x": 175,
+            "y": 150,
+            "value": 0.41,
+            "label": "opal"
+          },
+          {
+            "id": "n3",
+            "kind": "sample",
+            "x": 330,
+            "y": 20
+          },
+          {
+            "id": "n4",
+            "kind": "hue",
+            "x": 485,
+            "y": 20
+          },
+          {
+            "id": "n5",
+            "kind": "value",
+            "x": 485,
+            "y": 150,
+            "value": 0.58,
+            "label": "mica"
+          },
+          {
+            "id": "n6",
+            "kind": "out",
+            "x": 640,
+            "y": 20
+          }
+        ],
+        "cords": [
+          {
+            "from": "n0/p",
+            "to": "n1/p"
+          },
+          {
+            "from": "n2/n",
+            "to": "n1/count"
+          },
+          {
+            "from": "n1/p",
+            "to": "n3/p"
+          },
+          {
+            "from": "n3/c",
+            "to": "n4/c"
+          },
+          {
+            "from": "n5/n",
+            "to": "n4/shift"
+          },
+          {
+            "from": "n4/c",
+            "to": "n6/c"
+          }
+        ]
+      }
+    },
+    "roll2": {
+      "name": "Tide ion",
+      "circuit": {
+        "nodes": [
+          {
+            "id": "n0",
+            "kind": "point",
+            "x": 20,
+            "y": 20
+          },
+          {
+            "id": "n1",
+            "kind": "wobble",
+            "x": 175,
+            "y": 20
+          },
+          {
+            "id": "n2",
+            "kind": "signal",
+            "op": "phase",
+            "x": 25,
+            "y": 150
+          },
+          {
+            "id": "n3",
+            "kind": "wave",
+            "op": "saw",
+            "x": 175,
+            "y": 150
+          },
+          {
+            "id": "n4",
+            "kind": "zoom",
+            "x": 330,
+            "y": 20
+          },
+          {
+            "id": "n5",
+            "kind": "value",
+            "x": 330,
+            "y": 270,
+            "value": 0.16,
+            "label": "mica"
+          },
+          {
+            "id": "n6",
+            "kind": "sample",
+            "x": 485,
+            "y": 20
+          },
+          {
+            "id": "n7",
+            "kind": "hue",
+            "x": 640,
+            "y": 20
+          },
+          {
+            "id": "n8",
+            "kind": "signal",
+            "op": "phase",
+            "x": 640,
+            "y": 150
+          },
+          {
+            "id": "n9",
+            "kind": "out",
+            "x": 795,
+            "y": 20
+          }
+        ],
+        "cords": [
+          {
+            "from": "n0/p",
+            "to": "n1/p"
+          },
+          {
+            "from": "n2/n",
+            "to": "n3/phase"
+          },
+          {
+            "from": "n3/n",
+            "to": "n1/amount"
+          },
+          {
+            "from": "n1/p",
+            "to": "n4/p"
+          },
+          {
+            "from": "n5/n",
+            "to": "n4/by"
+          },
+          {
+            "from": "n4/p",
+            "to": "n6/p"
+          },
+          {
+            "from": "n6/c",
+            "to": "n7/c"
+          },
+          {
+            "from": "n8/n",
+            "to": "n7/shift"
+          },
+          {
+            "from": "n7/c",
+            "to": "n9/c"
+          }
+        ]
+      }
+    }
+  }
 }
