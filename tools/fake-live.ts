@@ -75,10 +75,40 @@ for (const track of tracks) {
   }
 }
 
+// Written out in full rather than cast into shape. The obvious version is
+// `buildSetModel(derive(scenes, SCENE_PATTERNS))`, and it cannot be: `core/`
+// spells its internal imports the TypeScript way (`./derive.js`), which Node's
+// type stripping resolves literally and does not find. So a harness run
+// straight by Node states the model itself — and states **all** of it, because
+// the fields a cast used to paper over are exactly the ones a client would then
+// be written against wrongly. `bpm` really is a rendered string, and a song
+// really does carry a tag whether or not this one has anything to say in it.
+const song: BSV.SongEntry = {
+  songKey: 'nightfall',
+  name: 'NIGHTFALL',
+  scenes: scenes.map((s) => s.i),
+  blocks: [{ from: 0, to: scenes.length - 1 }],
+  bpm: String(BPM),
+  key: 'Am',
+  artist: 'THE AVIATORS',
+  tag: 'ORIGINAL',
+  bpmClash: false,
+  keyClash: false,
+  artistClash: false,
+  tagClash: false,
+  colorIndex: 10,
+  colorClash: false,
+  firstSceneTempo: null,
+  tempoScenes: [],
+};
+
 const model: BSV.SetModel = {
   rev: 1,
-  songs: [{ songKey: 'NIGHTFALL', name: 'NIGHTFALL', artist: 'THE AVIATORS', bpm: BPM, key: 'Am', scenes: scenes.map((s) => s.i) }] as unknown as BSV.SongEntry[],
-  songByScene: Object.fromEntries(scenes.map((s) => [String(s.i), 'NIGHTFALL'])),
+  songs: [song],
+  songByScene: Object.fromEntries(scenes.map((s) => [String(s.i), song.songKey])),
+  factsByScene: Object.fromEntries(
+    scenes.map((s, i) => [String(s.i), { role: ROLES[i], key: 'Am', bpm: String(BPM) }]),
+  ),
   unmapped: [],
 };
 
