@@ -137,6 +137,19 @@ Two things fell out of that boundary working:
   hit-testing a bezier is real work, so an inlet that has a cord grows a small `×` beside
   its port. The graph never learns that cords can be removed.
 
+## Rolled circuits
+
+The randomiser wires two of them per roll, and it walks a **shape** rather than the whole
+vocabulary: a point, one to three things done to it, a sample, and sometimes a thing or two
+done to the colour. Each geometry node's amount is driven by a knob, a live signal, or a
+wave riding one.
+
+A random walk over every node kind produces garbage nine times in ten. The shape is what
+makes the result an effect; the fill is what makes it a different one every time. Its knobs
+are capped at four so two rolls' worth still fit the bank, and `roll.test.ts` compiles every
+circuit from forty seeds — really an assertion that the generator never names a port that
+does not exist, which is the way a hand-written node table drifts.
+
 ## What is not built
 
 - **Naming a circuit's knobs on the layer that uses it.** An effect's knobs are global to

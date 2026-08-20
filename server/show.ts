@@ -1,7 +1,8 @@
 import type { AppliedEffect, Layer, LayerSpec, Scheme, Show } from '../protocol.ts';
 import type { SetState } from './bridge.ts';
 import type { LinkFrame } from './link.ts';
-import { hint, type SchemeSource } from './scheme.ts';
+import { hint } from '../hints.ts';
+import type { SchemeSource } from './scheme.ts';
 
 /**
  * Resolving a Live set into a show, through a cascade.

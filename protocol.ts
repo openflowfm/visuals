@@ -16,7 +16,18 @@
 export type Blend = 'over' | 'add' | 'screen' | 'multiply';
 
 /** What draws a layer's picture. One fragment shader each. */
-export type SourceKind = 'solid' | 'bars' | 'rings' | 'noise' | 'strobe' | 'grid';
+export type SourceKind =
+  | 'solid'
+  | 'bars'
+  | 'rings'
+  | 'noise'
+  | 'strobe'
+  | 'grid'
+  | 'tunnel'
+  | 'plasma'
+  | 'spiral'
+  | 'scan'
+  | 'sparks';
 
 /**
  * The six effects that ship as handwritten shaders.
@@ -26,7 +37,19 @@ export type SourceKind = 'solid' | 'bars' | 'rings' | 'noise' | 'strobe' | 'grid
  * GLSL behind them rather than a circuit, and they exist so a rig draws
  * something good before anyone has wired anything.
  */
-export type BuiltinEffect = 'mirror' | 'kaleido' | 'shift' | 'pixelate' | 'ripple' | 'smear';
+export type BuiltinEffect =
+  | 'mirror'
+  | 'kaleido'
+  | 'shift'
+  | 'pixelate'
+  | 'ripple'
+  | 'smear'
+  | 'bloom'
+  | 'slice'
+  | 'edge'
+  | 'posterize'
+  | 'twist'
+  | 'invert';
 
 /** Every member, in the order an editor should offer them. */
 export const SOURCE_KINDS: readonly SourceKind[] = [
@@ -36,6 +59,11 @@ export const SOURCE_KINDS: readonly SourceKind[] = [
   'noise',
   'strobe',
   'grid',
+  'tunnel',
+  'plasma',
+  'spiral',
+  'scan',
+  'sparks',
 ];
 export const BUILTIN_EFFECTS: readonly BuiltinEffect[] = [
   'mirror',
@@ -44,6 +72,12 @@ export const BUILTIN_EFFECTS: readonly BuiltinEffect[] = [
   'pixelate',
   'ripple',
   'smear',
+  'bloom',
+  'slice',
+  'edge',
+  'posterize',
+  'twist',
+  'invert',
 ];
 export const BLENDS: readonly Blend[] = ['over', 'add', 'screen', 'multiply'];
 
@@ -224,6 +258,14 @@ export interface Scheme {
   clips: Record<string, LayerSpec>;
   /** Every effect there is, by id. Built-ins are pre-registered under their own names. */
   effects: Record<string, EffectDef>;
+  /**
+   * What the randomiser was rolled from, when it was.
+   *
+   * Kept so a show you liked can be got back — one level of undo covers the roll
+   * you just did, and a seed covers the one from last week. Absent on a scheme
+   * nobody rolled, which is most of them.
+   */
+  seed?: string;
   defaults: {
     colorway: string;
     energy: number;

@@ -55,6 +55,46 @@ ride in — a bank rather than a named uniform each, because a [circuit](circuit
 are discovered from its nodes and cannot be declared ahead of time, and because a value in
 a uniform is one that can be turned without rebuilding a shader.
 
+## What there is to look at
+
+Eleven sources and twelve built-in effects, plus whatever [circuits](circuit.md) have been
+wired. They are deliberately unlike each other rather than variations on a theme — a stack
+of five layers all drawing soft noise is one picture, however many layers it has.
+
+| source | |
+|---|---|
+| `solid` | the song's colour, breathing on the bar. Something has to be opaque at the bottom |
+| `bars` | a bar of music as columns, with the playhead sweeping them |
+| `rings` | rings launched on the beat, expanding out |
+| `noise` | a drifting field that thickens with the sound. Weather, not a metronome |
+| `strobe` | whole-frame flashes on the division energy chose |
+| `grid` | cells lighting on their own beats. Structure rather than motion |
+| `tunnel` | a corridor rushing toward you. Depth is `1/r`, which is what makes it perspective rather than rings |
+| `plasma` | four crossed sines. The full-frame wash, in a colourway and its complement |
+| `spiral` | arms winding out and turning on the beat. The only one with a direction |
+| `scan` | lines, with a bar's sweep passing down them. The one that looks like a machine |
+| `sparks` | a cell per spark, each firing on its own beat and drifting as it dies |
+
+| effect | |
+|---|---|
+| `mirror` | a fold, at an angle. Rotating in and out is what turns one mirror into every mirror |
+| `kaleido` | folded in polar space, turning with the beat. Energy adds segments |
+| `shift` | channel separation that opens with the level, so it bites on transients |
+| `pixelate` | blocks that resolve across the bar |
+| `ripple` | a wave leaving the centre on each beat. The most frenetic of them |
+| `smear` | a short radial blur. The opposite of ripple |
+| `bloom` | eight taps on a ring, and only what is bright is added back |
+| `slice` | rows thrown sideways, re-diced on each beat division. Wrapped, not clamped |
+| `edge` | difference across a pixel. The one effect that makes a busy frame *less* busy |
+| `posterize` | colour quantised to a handful of steps |
+| `twist` | rotation growing with radius. Where kaleido folds, this wrings |
+| `invert` | on the beat and off again. The only one that is a switch rather than a shape |
+
+Adding one is a shader and a row in `BUILTIN_PARAMS`, and nothing else — the scheme
+registers built-ins by id from `server/scheme.ts`, and `merge` puts new ones into every
+existing file. The parameter bank is positional: index 0 in the list is `uParams[0]` in
+that shader, so a parameter is appended rather than inserted.
+
 ## The clock is a uniform, and so is energy
 
 Nothing in a shader reads a wall clock or counts frames. `uBeat` and `uPhase` come from

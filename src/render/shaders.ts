@@ -170,6 +170,79 @@ void main() {
   float inset = smoothstep(0.0, 0.06, min(min(f.x, f.y), min(1.0 - f.x, 1.0 - f.y)));
   OUT(uColor * (0.5 + lit), inset * (0.12 + lit * (0.55 + uLevel * 0.45)))
 }`,
+  tunnel: `${PREAMBLE}
+void main() {
+  // A corridor rushing toward you. Depth is 1/r, which is what makes it read as
+  // perspective rather than as rings — and the rush is on the beat, so the room
+  // moves through it in time rather than at a rate of its own.
+  vec2 p = centred();
+  float r = max(length(p), 1e-3);
+  float a = atan(p.y, p.x);
+  float depth = uBeat * mix(0.3, 1.4, uEnergy) + 0.16 / r;
+  float rings = smoothstep(0.82, 1.0, abs(fract(depth) * 2.0 - 1.0));
+  float arms = floor(mix(4.0, 12.0, uEnergy));
+  float spokes = smoothstep(0.86, 1.0, abs(fract(a / PI * arms) * 2.0 - 1.0));
+  float lit = max(rings, spokes * 0.8);
+  // Fades into the vanishing point, where the maths goes to infinity anyway.
+  float fade = smoothstep(0.02, 0.3, r);
+  OUT(mix(uColor, vec3(1.0), rings * 0.4), lit * fade * (0.35 + uLevel * 0.9))
+}`,
+
+  plasma: `${PREAMBLE}
+void main() {
+  // Four sines crossed. The oldest trick there is and still the best full-frame
+  // wash — it never repeats visibly, it costs nothing, and it takes a colourway
+  // and its complement rather than a fixed palette.
+  vec2 p = centred() * mix(2.0, 5.0, uEnergy);
+  float t = uBeat * 0.3;
+  float v = sin(p.x + t) + sin(p.y * 1.3 - t) + sin((p.x + p.y) * 0.7 + t * 0.8)
+          + sin(length(p) * 2.2 - t * 1.6);
+  v = v * 0.125 + 0.5;
+  OUT(mix(uColor, vec3(1.0) - uColor, v) * (0.5 + uLevel * 0.8), 0.5 + v * 0.5)
+}`,
+
+  spiral: `${PREAMBLE}
+void main() {
+  // Arms winding out of the centre and turning on the beat. Reads as motion
+  // with a direction, which nothing else here does — rings expand, this one
+  // rotates.
+  vec2 p = centred();
+  float r = length(p);
+  float arms = floor(mix(2.0, 7.0, uEnergy));
+  float band = 0.5 + 0.5 * sin(atan(p.y, p.x) * arms + r * mix(7.0, 22.0, uEnergy)
+                               - uBeat * rate() * PI);
+  band = smoothstep(0.45, 0.85, band);
+  float fade = 1.0 - smoothstep(0.16, 0.64, r);
+  OUT(uColor * (0.5 + band * 0.7), band * fade * (0.4 + uLevel))
+}`,
+
+  scan: `${PREAMBLE}
+void main() {
+  // Lines, with a bar's worth of sweep passing down them. The one source that
+  // looks like a machine rather than like weather, which a set of them needs.
+  float lines = mix(40.0, 170.0, uEnergy);
+  float line = smoothstep(0.4, 0.5, abs(fract(vUv.y * lines) - 0.5));
+  float head = 1.0 - uPhase / uQuantum;
+  float sweep = pow(1.0 - min(abs(vUv.y - head) * 3.5, 1.0), 3.0);
+  OUT(mix(uColor, vec3(1.0), sweep * 0.55),
+      clamp(line * (0.16 + sweep * 1.5) * (0.45 + uLevel), 0.0, 1.0))
+}`,
+
+  sparks: `${PREAMBLE}
+void main() {
+  // A cell per spark, each firing on its own beat and drifting as it dies. The
+  // aspect correction is on the cell count rather than the coordinates, so a
+  // spark stays round on a wide frame.
+  float density = mix(9.0, 24.0, uEnergy);
+  vec2 g = vUv * vec2(density * uRes.x / uRes.y, density);
+  vec2 id = floor(g);
+  vec2 f = fract(g) - 0.5;
+  float life = fract(uBeat * rate() * 0.5 + hash(id));
+  float pop = pow(1.0 - life, 5.0);
+  vec2 drift = (vec2(hash(id + 3.7), hash(id + 9.1)) - 0.5) * 0.7;
+  float spark = smoothstep(0.02 + 0.18 * pop, 0.0, length(f - drift * life));
+  OUT(mix(uColor, vec3(1.0), 0.35), spark * pop * (0.35 + uLevel * 0.9))
+}`,
 };
 
 /**
@@ -237,6 +310,27 @@ export const BUILTIN_PARAMS: Record<BuiltinEffect, readonly EffectParam[]> = {
   smear: [
     { name: 'reach', min: 0, max: 1, value: 0.3 },
     { name: 'drive', min: 0, max: 1, value: 0.5 },
+  ],
+  bloom: [
+    { name: 'reach', min: 0, max: 1, value: 0.35 },
+    { name: 'floor', min: 0, max: 1, value: 0.25 },
+  ],
+  slice: [
+    { name: 'bands', min: 0, max: 1, value: 0.4 },
+    { name: 'throw', min: 0, max: 1, value: 0.35 },
+  ],
+  edge: [
+    { name: 'width', min: 0, max: 1, value: 0.4 },
+    { name: 'gain', min: 0, max: 1, value: 0.5 },
+  ],
+  posterize: [{ name: 'levels', min: 0, max: 1, value: 0.5 }],
+  twist: [
+    { name: 'turn', min: 0, max: 1, value: 0.65 },
+    { name: 'sway', min: 0, max: 1, value: 0.25 },
+  ],
+  invert: [
+    { name: 'hold', min: 0, max: 1, value: 0.35 },
+    { name: 'rate', min: 0, max: 1, value: 0.5 },
   ],
 };
 
@@ -311,6 +405,76 @@ void main() {
   vec4 sum = vec4(0.0);
   for (int i = 0; i < 6; i++) sum += texture(uTex, vUv + toward * (float(i) / 6.0));
   MIXED(sum / 6.0)
+}`,
+  bloom: `${EFFECT_PREAMBLE}
+void main() {
+  // Eight taps on a ring, and only what is already bright gets added back. The
+  // cheapest thing that makes a projector look like it cost more than it did:
+  // a cheap lamp has no contrast to spare, so the highlights have to be built.
+  vec4 base = texture(uTex, vUv);
+  float reach = (0.003 + uParams[0] * 0.022) * (0.6 + uLevel * 0.8);
+  vec4 sum = vec4(0.0);
+  for (int i = 0; i < 8; i++) {
+    float a = float(i) * PI * 0.25;
+    sum += texture(uTex, vUv + vec2(cos(a), sin(a)) * reach);
+  }
+  MIXED(base + max(sum / 8.0 - vec4(uParams[1]), vec4(0.0)) * mix(0.7, 2.2, uEnergy))
+}`,
+
+  slice: `${EFFECT_PREAMBLE}
+void main() {
+  // Rows thrown sideways, re-diced on each beat division. Wrapped rather than
+  // clamped, because a slice that ran off the edge and smeared would read as a
+  // broken texture instead of as a deliberate glitch.
+  float bands = floor(mix(5.0, 26.0, uParams[0]));
+  float row = floor(vUv.y * bands);
+  float tick = floor(uBeat * rate());
+  float pick = hash(vec2(row * 1.7, tick));
+  float push = (hash(vec2(row, tick * 2.3)) - 0.5) * uParams[1] * 0.5 * step(0.55, pick);
+  MIXED(texture(uTex, vec2(fract(vUv.x + push), vUv.y)))
+}`,
+
+  edge: `${EFFECT_PREAMBLE}
+void main() {
+  // Difference across a pixel, both ways. Throws away the fill and keeps the
+  // outline, which turns any source into a diagram — the one effect here that
+  // makes a busy frame *less* busy.
+  vec2 px = (0.5 + uParams[0] * 3.0) / uRes;
+  vec3 h = abs(texture(uTex, vUv + vec2(px.x, 0.0)).rgb - texture(uTex, vUv - vec2(px.x, 0.0)).rgb);
+  vec3 v = abs(texture(uTex, vUv + vec2(0.0, px.y)).rgb - texture(uTex, vUv - vec2(0.0, px.y)).rgb);
+  float m = clamp(length(h + v) * mix(1.5, 6.0, uParams[1]), 0.0, 1.0);
+  MIXED(vec4(mix(uColor, vec3(1.0), 0.45) * m, m))
+}`,
+
+  posterize: `${EFFECT_PREAMBLE}
+void main() {
+  // Colour quantised to a handful of steps. Undone and redone around the
+  // premultiply, or the banding lands on the alpha as well and the edges crawl.
+  vec4 c = texture(uTex, vUv);
+  float a = max(c.a, 1e-4);
+  float steps = floor(mix(14.0, 2.0, uParams[0]));
+  MIXED(vec4(clamp(floor(c.rgb / a * steps + 0.5) / steps, 0.0, 1.0) * c.a, c.a))
+}`,
+
+  twist: `${EFFECT_PREAMBLE}
+void main() {
+  // Rotation that grows with radius, swaying on the beat. Where kaleido folds
+  // the frame, this one wrings it.
+  vec2 p = centred();
+  float a = (uParams[0] - 0.5) * 9.0 * length(p) + sin(uBeat * PI * 0.5) * uParams[1] * 1.5;
+  float c = cos(a), s = sin(a);
+  MIXED(texture(uTex, clamp(uncentred(mat2(c, -s, s, c) * p), 0.0, 1.0)))
+}`,
+
+  invert: `${EFFECT_PREAMBLE}
+void main() {
+  // On the beat and off again. The only effect here that is a switch rather
+  // than a shape, which is why the hold knob is how *much* of the beat it holds:
+  // an inversion that never let go would just be a different colourway.
+  vec4 c = texture(uTex, vUv);
+  float a = max(c.a, 1e-4);
+  float on = step(1.0 - uParams[0], beatPulse(rate() * mix(0.5, 2.0, uParams[1])));
+  MIXED(vec4(mix(c.rgb / a, vec3(1.0) - c.rgb / a, on) * c.a, c.a))
 }`,
 };
 

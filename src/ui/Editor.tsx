@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Scheme, Show } from '../../protocol.ts';
+import { newSeed, rollScheme } from '../../roll.ts';
 import '../../../widgets/src/tokens.css';
 import { Effects } from './Effects.tsx';
 import { Layers } from './Layers.tsx';
@@ -50,11 +51,27 @@ type Tab = (typeof TABS)[number];
 
 export function Editor({ show, scheme, save, clock, onClose }: EditorProps) {
   const [tab, setTab] = useState<Tab>('sections');
+  /**
+   * The scheme as it was before the last roll.
+   *
+   * One level, and one level is the right number. A roll replaces everything, so
+   * the thing you want back is always the thing you had a moment ago — and for
+   * anything older than that the seed is a better answer than a stack, because
+   * it survives a reload and can be written on a hand.
+   */
+  const [before, setBefore] = useState<Scheme | null>(null);
+  const [typedSeed, setTypedSeed] = useState<string | null>(null);
   // Held here rather than in the sections pane, so pinning a chorus and then
   // going to look at a layer does not quietly let go of it.
   const [pinned, setPinned] = useState<string | null>(null);
 
   const patch = (next: Partial<Scheme>) => save({ ...scheme, ...next });
+
+  const roll = (seed: string) => {
+    setBefore(scheme);
+    setTypedSeed(null);
+    save(rollScheme(seed, show, scheme));
+  };
 
   return (
     <div className="editor wdg" data-wide={tab === 'effects' ? '' : undefined}>
@@ -72,6 +89,9 @@ export function Editor({ show, scheme, save, clock, onClose }: EditorProps) {
             </button>
           ))}
         </nav>
+        <button type="button" className="roll" onClick={() => roll(newSeed())}>
+          roll
+        </button>
         <button type="button" className="close" onClick={onClose} aria-label="Close editor">
           ×
         </button>
@@ -96,6 +116,32 @@ export function Editor({ show, scheme, save, clock, onClose }: EditorProps) {
 
       <footer>
         <span className="path">scheme.json</span>
+        <label className="seed">
+          seed
+          <input
+            value={typedSeed ?? scheme.seed ?? ''}
+            placeholder="never rolled"
+            spellCheck={false}
+            aria-label="Roll seed"
+            onChange={(e) => setTypedSeed(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter') return;
+              const wanted = (typedSeed ?? '').trim();
+              if (wanted) roll(wanted);
+            }}
+          />
+        </label>
+        {before && (
+          <button
+            type="button"
+            onClick={() => {
+              save(before);
+              setBefore(null);
+            }}
+          >
+            undo roll
+          </button>
+        )}
         {show.schemeError && <span className="bad">{show.schemeError}</span>}
       </footer>
     </div>

@@ -54,7 +54,7 @@ export function Layers({
         <h3>
           layers
           <em>
-            {Object.keys(scheme.layers).length} of {show.layers.length} bound
+            {show.layers.filter((l) => scheme.layers[l.name]).length} of {show.layers.length} bound
           </em>
         </h3>
 

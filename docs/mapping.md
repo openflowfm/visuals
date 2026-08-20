@@ -79,10 +79,16 @@ invisible until the night the section it was written for arrived. What a binding
 return is that **every layer is on screen**, in composite order, each showing what it
 actually resolved to. A show is configured once and read a hundred times.
 
-The patterns did not die; they were **demoted to hints**. `hint()` in `server/scheme.ts`
-holds the same table, and it answers only for a track nobody has bound — which is exactly
-what a pattern is good at. An unconfigured set still draws something roughly right, and
-that first evening is the difference between configuring this and not bothering.
+The patterns did not die; they were **demoted to hints**. [`hints.ts`](../hints.ts) holds
+the same table, and it answers only for a track nobody has bound — which is exactly what a
+pattern is good at. An unconfigured set still draws something roughly right, and that first
+evening is the difference between configuring this and not bothering. It sits beside
+`protocol.ts` rather than in `server/` because the randomiser needs the same reading of a
+name that the resolver does.
+
+Two tracks with the **same name share one binding**, since the name is the key. That is
+usually what you want — three tracks called `MIDI` are three of the same thing — and it is
+visible in the editor, where all of them light the bound marker together.
 
 Word boundaries in those hints are load-bearing, not tidiness: without them `beat` matches
 inside "Beating Pad" and a pad track draws as a drum. `scheme.test.ts` pins that against
@@ -173,6 +179,40 @@ one more `signal` node, which is exactly why signals are not a cascade level.
 **Per-clip visuals as files.** A clip exception can change what a layer *does*; it cannot
 yet point at a video. That brings a whole question about where media lives that the derived
 mapping has no answer for.
+
+## Rolling a show
+
+The `roll` button in the editor's header replaces the whole scheme with a new one, drawn
+from a seed and from whatever the set actually contains. [`roll.ts`](../roll.ts).
+
+It is not a scatter of random numbers over a scheme. A random show is easy and always looks
+like noise; what makes a rolled one read as a *show* is that it obeys the same constraints
+a hand-made scheme does:
+
+- **One source per family, not per track.** Every arp in the set draws the same way, because
+  four arps across four unrelated sources read as four unrelated things when they are one
+  family. The families are the name hints above, which is why they had to move somewhere
+  both the resolver and the roll could reach.
+- **A song keeps its shape.** `INTRO < VERSE < BUILD < CHORUS` holds for every seed, because
+  those four are drawn from **disjoint** energy bands. Ranges that merely *tended* the right
+  way put an intro above a verse about one roll in thirty — often enough to happen on stage
+  and never while you are looking. A bridge, a jam and an ending are not in that chain and
+  may overlap freely, because nothing says a bridge is louder than a verse.
+- **Colours are a harmony, not five hues.** A base hue, one of five relationships to it, and
+  one member kept near white so a busy frame has something to read edges against. All of it
+  kept light: a cheap projector has no black to work against, so a dark colourway is a dark
+  screen.
+- **A drum is not a wash and a pad is not a strobe.** Percussive families draw from a
+  percussive set and pads from a soft one; everything else may have anything.
+
+Each roll also wires **two fresh circuits** and clears the ones before them, or a week of
+rolling leaves forty of them and every archetype pointing at a ghost.
+
+**Undo covers the roll you just did; the seed covers the one from last Tuesday.** One level
+of undo is the right number — a roll replaces everything, so the thing you want back is
+always the thing you had a moment ago. Anything older is better served by a seed, which is
+two words and a number, survives a reload, and can be written on a hand. Typing one back
+into the footer reproduces that show exactly.
 
 ## Where the graph fits
 

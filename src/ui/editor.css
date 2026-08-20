@@ -83,10 +83,27 @@
   color: var(--amber);
 }
 
+.editor .roll {
+  margin-left: auto;
+  padding: 3px 10px;
+  border: 1px solid var(--amber);
+  border-radius: 3px;
+  background: #2a2113;
+  color: var(--amber);
+  font-family: inherit;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+
+.editor .roll:hover {
+  background: #3a2d16;
+  color: #ffd27a;
+}
+
 .editor .close {
   width: 20px;
   height: 20px;
-  margin-left: auto;
   padding: 0;
   border: 1px solid var(--bd3);
   border-radius: 3px;
@@ -119,6 +136,51 @@
 
 .editor footer .bad {
   color: var(--alarm);
+}
+
+.editor footer .seed {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.editor footer .seed input {
+  width: 132px;
+  padding: 1px 5px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: none;
+  color: var(--ui);
+  font-family: inherit;
+  font-size: 10px;
+}
+
+.editor footer .seed input:hover {
+  border-color: var(--bd3);
+}
+
+.editor footer .seed input:focus {
+  border-color: var(--focus);
+  background: var(--well);
+  color: var(--fg);
+  outline: none;
+}
+
+.editor footer button {
+  margin-left: auto;
+  padding: 2px 8px;
+  border: 1px solid var(--bd3);
+  border-radius: 3px;
+  background: var(--surface-control);
+  color: #8b8b93;
+  font-family: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.editor footer button:hover {
+  border-color: var(--focus);
+  color: var(--fg);
 }
 
 .editor section {

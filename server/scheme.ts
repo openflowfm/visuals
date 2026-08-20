@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { LayerSpec, Scheme, SongSpec } from '../protocol.ts';
+import type { Scheme, SongSpec } from '../protocol.ts';
+
 
 /**
  * The scheme: what a song looks like, what a section feels like, what a track
@@ -56,48 +57,21 @@ const BUILT_IN: Scheme = {
     pixelate: { name: 'Pixelate', builtin: 'pixelate' },
     ripple: { name: 'Ripple', builtin: 'ripple' },
     smear: { name: 'Smear', builtin: 'smear' },
+    bloom: { name: 'Bloom', builtin: 'bloom' },
+    slice: { name: 'Slice', builtin: 'slice' },
+    edge: { name: 'Edge', builtin: 'edge' },
+    posterize: { name: 'Posterize', builtin: 'posterize' },
+    twist: { name: 'Twist', builtin: 'twist' },
+    invert: { name: 'Invert', builtin: 'invert' },
   },
   defaults: {
     colorway: 'aurora',
     energy: 0.4,
     blend: ['over', 'add', 'screen', 'add', 'multiply', 'add'],
-    sources: ['bars', 'rings', 'grid', 'noise', 'strobe', 'solid'],
+    sources: ['plasma', 'bars', 'rings', 'grid', 'spiral', 'noise', 'scan', 'strobe', 'sparks'],
     maxEffects: 2,
   },
 };
-
-/**
- * What a track's name suggests, for a track nobody has bound.
- *
- * These used to be the scheme's own rule list, editable as regular expressions
- * in the file and in the editor. They are hints in code now, and the demotion is
- * the point: a pattern language is the wrong surface for a set whose track names
- * are already known, but it is exactly the right shape for a *guess* at one
- * nobody has configured. So the guessing stays and the editing moved to the
- * names themselves — `Scheme.layers`, keyed by what the track is actually called.
- *
- * Word boundaries are load-bearing, not tidiness. Without them `beat` matches
- * inside "Beating Pad" and a pad track draws as a drum — found against a real
- * set, where it was the only wrong layer on screen and the hardest kind of wrong
- * to trace back to a regular expression.
- */
-const HINTS: readonly (readonly [RegExp, LayerSpec])[] = [
-  [/\b(kick|drums?|beats?|perc|snare)\b/i, { source: 'strobe', bias: 0.1, floor: 0 }],
-  [/\b(bass|sub|808|303)\b/i, { source: 'bars', floor: 0.05 }],
-  // Before the keys hint: an arp is a sequence rather than a chord, and four of
-  // them scattered across unrelated sources read as four unrelated things when
-  // they are a family.
-  [/\barps?\b/i, { source: 'bars', bias: 0.05 }],
-  [/\b(lead|solo|gtr|guitar|vox|vocal)\b/i, { source: 'rings', bias: 0.1 }],
-  [/\b(pads?|strings?|atmos|amb|textures?)\b/i, { source: 'noise', bias: -0.15 }],
-  [/\b(keys?|synth|chords?|piano|organ|pluck)\b/i, { source: 'grid' }],
-];
-
-/** The first hint a track name answers to, or null. Order is meaning. */
-export function hint(name: string): LayerSpec | null {
-  for (const [test, spec] of HINTS) if (test.test(name)) return spec;
-  return null;
-}
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const FILE = process.env.BSV_VISUALS_SCHEME ?? path.resolve(here, '../scheme.json');
@@ -246,6 +220,9 @@ export function openScheme(): SchemeSource {
  */
 export function merge(file: Partial<Scheme>): Scheme {
   return {
+    // Carried rather than rebuilt, so a rolled show can still say where it came
+    // from after a reload. Without it the seed lived exactly as long as the tab.
+    ...(file.seed ? { seed: file.seed } : {}),
     colorways: { ...BUILT_IN.colorways, ...(file.colorways ?? {}) },
     songs: songsOf(file.songs),
     archetypes: { ...BUILT_IN.archetypes, ...(file.archetypes ?? {}) },

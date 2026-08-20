@@ -91,6 +91,10 @@ is on screen. Its four panes **are the cascade**, in the order specificity runs:
 Everything it offers — roles, songs, tracks, the playing clip — comes from **the set**, so
 it never asks you to type a name.
 
+**`roll` in the header replaces the whole show** — colours, energies, what each family of
+tracks draws, and two freshly wired circuits. It is seeded, so `undo roll` gets back the one
+you just left and typing a seed back into the footer gets back one from last week.
+
 It writes [`scheme.json`](scheme.json), which stays the record — hot-reloaded, entirely
 optional, and readable, diffable and committable after a night of tuning. Edit either.
 

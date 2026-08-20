@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { BUILT_IN, hint, merge } from './scheme.ts';
+import { hint } from '../hints.ts';
+import { BUILT_IN, merge } from './scheme.ts';
 
 /**
  * The name hints, against the names of a real set.
@@ -141,5 +142,12 @@ describe('merging a file over the built-in', () => {
   it('carries layer bindings through, keyed by the track name', () => {
     const merged = merge({ layers: { Drums: { source: 'rings' } } });
     expect(merged.layers.Drums.source).toBe('rings');
+  });
+
+  it('remembers what a rolled show was rolled from', () => {
+    // The seed used to live exactly as long as the tab, because merge rebuilt
+    // the scheme field by field and this one was not among them.
+    expect(merge({ seed: 'coral-tide-207' }).seed).toBe('coral-tide-207');
+    expect(merge({}).seed).toBeUndefined();
   });
 });
