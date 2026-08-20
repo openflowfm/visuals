@@ -79,6 +79,23 @@ export const MAX_EFFECTS: Param = {
   shortName: 'Max fx',
 };
 
+/**
+ * A shift along the ladder of divisions a layer reacts on.
+ *
+ * Whole rungs, which is why it is an `int` — every rung is a musical division
+ * and a rate between two of them is in time with nothing, so a control that
+ * could land at 0.4 would be a control that could take the show off the grid.
+ */
+export const PACE: Param = {
+  kind: 'int',
+  min: -2,
+  max: 2,
+  defaultValue: 0,
+  unit: 'int',
+  name: 'Pace',
+  shortName: 'Pace',
+};
+
 /** How hard the bench drives the effect it is showing. */
 export const AMOUNT: Param = {
   kind: 'float',

@@ -213,6 +213,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
   const setCommon = (
     program: Program,
     show: Show,
+    scheme: Scheme | null,
     index: number,
     opacity: number,
     beat: number,
@@ -231,7 +232,10 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
     gl.uniform3fv(program.uniform('uColor'), rgb(layer.color));
     // Per layer and stable, so two layers drawing the same source out of the
     // same colourway don't draw the identical picture on top of each other.
+    // It is also what spreads the stack across the division ladder — see
+    // `rate()` in the preamble.
     gl.uniform1f(program.uniform('uSeed'), layer.t * 37.13);
+    gl.uniform1f(program.uniform('uPace'), scheme?.defaults.pace ?? 0);
   };
 
   return {
@@ -299,7 +303,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
           gl.bindFramebuffer(gl.FRAMEBUFFER, screen);
           gl.blendFunc(src, dst);
           gl.useProgram(source.program);
-          setCommon(source, show, i, opacity, beat, seconds);
+          setCommon(source, show, scheme, i, opacity, beat, seconds);
           drawFullscreen(gl);
           continue;
         }
@@ -312,7 +316,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
         gl.clearColor(0, 0, 0, 0);
         gl.clear(gl.COLOR_BUFFER_BIT);
         gl.useProgram(source.program);
-        setCommon(source, show, i, opacity, beat, seconds);
+        setCommon(source, show, scheme, i, opacity, beat, seconds);
         drawFullscreen(gl);
 
         for (let step = 0; step < chain.length; step++) {
@@ -332,7 +336,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
           }
 
           gl.useProgram(program.program);
-          setCommon(program, show, i, opacity, beat, seconds);
+          setCommon(program, show, scheme, i, opacity, beat, seconds);
           // The fader was applied when the source drew. An effect samples that
           // picture, so applying it again would square it at every step.
           gl.uniform1f(program.uniform('uOpacity'), 1);

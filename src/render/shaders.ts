@@ -39,6 +39,7 @@ uniform float uEnergy;   // this layer's resolved energy, 0-1
 uniform float uOpacity;  // this layer's fader, already gated by energy
 uniform vec3  uColor;    // from the song's colourway, by depth
 uniform float uSeed;
+uniform float uPace;     // whole rungs along the division ladder, -2 to +2
 
 #define PI 3.14159265359
 
@@ -68,21 +69,26 @@ float noise(vec2 p) {
              mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y);
 }
 
-// How often a layer reacts, in events per beat. The single biggest thing energy
-// does: a calm section moves once every four beats, a loud one three times a
-// beat. Quantised to musical divisions rather than smeared across them, because
-// a rate between an eighth and a triplet is not in time with anything.
+// How often a layer reacts, in events per beat, on a ladder of musical
+// divisions: once every two bars, once a bar, every two beats, every beat,
+// eighths, triplets. Quantised rather than smeared across them, because a rate
+// *between* an eighth and a triplet is in time with nothing.
 //
-// **Per layer as well as per energy.** Energy alone put every layer on the same
-// division, so a chorus was twenty-three layers flashing in unison — which is
-// one flash, however many things are drawing it, and it reads as a strobe rather
-// than as a picture. The offset is a hash of the layer's seed, so it is stable
-// and it is still a musical division: one layer lands on the bar while another
-// lands on eighths, and both are in time.
+// **Three things choose the rung, and having all three is the point.** Energy
+// moves the whole section up the ladder. A hash of the layer's seed spreads the
+// stack a couple of rungs either side of that — energy alone put every layer on
+// the same division, and twenty-three layers pulsing in unison is one flash
+// however many things are drawing it. And uPace shifts the lot, for a room that
+// wants the whole show slower or quicker than the ladder assumes.
+//
+// The ladder reaches much further down than it used to. Its old floor was one
+// event every two beats, which meant even an intro never really *drifted*; the
+// two rungs added below it are where a layer moves once a bar, or once in two,
+// and that bottom end is most of what makes a section feel calm.
 float rate() {
-  float steps[5] = float[5](0.25, 0.5, 1.0, 2.0, 3.0);
-  int i = int(clamp(floor(uEnergy * 3.6 + hash(vec2(11.3, 4.7)) * 1.4), 0.0, 4.0));
-  return steps[i];
+  float steps[6] = float[6](0.125, 0.25, 0.5, 1.0, 2.0, 3.0);
+  float rung = uEnergy * 3.2 + hash(vec2(11.3, 4.7)) * 2.2 + uPace;
+  return steps[int(clamp(floor(rung), 0.0, 5.0))];
 }
 
 // 1 on the beat, decaying to 0 across it. The shape every reactive thing here
@@ -204,7 +210,9 @@ void main() {
   vec2 p = centred();
   float r = max(length(p), 1e-3);
   float a = atan(p.y, p.x);
-  float depth = uBeat * mix(0.3, 1.4, uEnergy) + 0.16 / r;
+  // On the ladder rather than straight off energy, so the rush inherits both the
+  // per-layer spread and the pace trim instead of running at a rate of its own.
+  float depth = uBeat * rate() * 0.45 + 0.16 / r;
   float rings = smoothstep(0.82, 1.0, abs(fract(depth) * 2.0 - 1.0));
   float arms = floor(mix(4.0, 12.0, uEnergy));
   float spokes = smoothstep(0.86, 1.0, abs(fract(a / PI * arms) * 2.0 - 1.0));
@@ -220,7 +228,7 @@ void main() {
   // wash — it never repeats visibly, it costs nothing, and it takes a colourway
   // and its complement rather than a fixed palette.
   vec2 p = centred() * mix(2.0, 5.0, uEnergy);
-  float t = uBeat * 0.3;
+  float t = uBeat * rate() * 0.25;
   float v = sin(p.x + t) + sin(p.y * 1.3 - t) + sin((p.x + p.y) * 0.7 + t * 0.8)
           + sin(length(p) * 2.2 - t * 1.6);
   v = v * 0.125 + 0.5;
@@ -487,7 +495,8 @@ void main() {
   // Rotation that grows with radius, swaying on the beat. Where kaleido folds
   // the frame, this one wrings it.
   vec2 p = centred();
-  float a = (uParams[0] - 0.5) * 9.0 * length(p) + sin(uBeat * PI * 0.5) * uParams[1] * 1.5;
+  float a = (uParams[0] - 0.5) * 9.0 * length(p)
+          + sin(uBeat * rate() * PI * 0.5) * uParams[1] * 1.5;
   float c = cos(a), s = sin(a);
   MIXED(texture(uTex, clamp(uncentred(mat2(c, -s, s, c) * p), 0.0, 1.0)))
 }`,

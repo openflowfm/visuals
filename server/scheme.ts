@@ -74,6 +74,7 @@ const BUILT_IN: Scheme = {
     blend: ['over', 'screen', 'add', 'screen', 'multiply', 'screen'],
     sources: ['plasma', 'bars', 'rings', 'grid', 'spiral', 'noise', 'scan', 'strobe', 'sparks'],
     maxEffects: 2,
+    pace: 0,
   },
 };
 

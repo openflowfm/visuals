@@ -69,6 +69,7 @@ export function Effects({
           amount={amount}
           energy={energy}
           color={pack(colors[0])}
+          pace={scheme.defaults.pace}
           quantum={show.quantum || 4}
           clock={clock}
           onError={setGlError}

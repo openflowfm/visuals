@@ -275,6 +275,17 @@ export interface Scheme {
     sources: SourceKind[];
     /** Most effects a layer may carry at once, however many the cascade offers. */
     maxEffects: number;
+    /**
+     * A shift, in rungs, along the ladder of divisions a layer may react on.
+     *
+     * Whole rungs rather than a multiplier, because every rung is a musical
+     * division and a rate *between* two of them is in time with nothing. Zero
+     * leaves the show where energy and the per-layer spread put it; -2 takes
+     * everything down to a bar or slower; +2 pushes it to eighths and up.
+     *
+     * Not called speed: a DAW already means playback rate by that.
+     */
+    pace: number;
   };
 }
 

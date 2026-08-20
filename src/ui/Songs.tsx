@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Scheme, Show, SongSpec } from '../../protocol.ts';
 import { Knob } from '../../../widgets/src/controls/Knob.tsx';
 import { Select } from '../../../widgets/src/controls/Select.tsx';
+import { Row } from '../../../widgets/src/chrome/Row.tsx';
 import { BIAS, PERCENT } from './param.ts';
 
 /**
@@ -221,6 +222,20 @@ export function Songs({
         >
           + colourway
         </button>
+
+        <Row gap={14}>
+          <Select
+            items={ways}
+            index={Math.max(0, ways.indexOf(scheme.defaults.colorway))}
+            onChange={(i) => patch({ defaults: { ...scheme.defaults, colorway: ways[i] } })}
+            name="Fallback"
+          />
+        </Row>
+        <p className="note">
+          What a song with no colourway of its own takes. Nothing is ever unstyled — an
+          unassigned song going dark would be a black screen for the one thing nobody
+          remembered to configure.
+        </p>
       </section>
     </>
   );

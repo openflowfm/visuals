@@ -52,8 +52,8 @@ as `uEnergy`.
 
 | it drives | how |
 |---|---|
+| **reaction speed** | see `rate()` in [the renderer](render.md) — energy moves a section up a ladder of musical divisions, each layer sits a rung or two either side of it, and `defaults.pace` shifts the lot |
 | **effect intensity and count** | `dialEffects` opens the first across the bottom half of the range and the second across the top, so a section *grows into* its effects rather than acquiring two at once. Every effect mixes against its own input by `uAmount`, so 0.3 is a suggestion and 0.95 has taken the frame |
-| **reaction speed** | `rate()` in the preamble, quantised to musical divisions — half-beat, beat, half-bar. A rate *between* an eighth and a triplet is in time with nothing, so it steps rather than smears |
 | **brightness and contrast** | `charge()`, applied by `OUT`, so no source can forget it |
 | **how many layers draw** | each layer has a `floor`; below it the layer fades out rather than cutting, so a quiet section reads as the picture closing down |
 
@@ -139,7 +139,7 @@ pane is one level of the resolver, in the order specificity runs.
 
 | pane | edits | notes |
 |---|---|---|
-| sections | `archetypes` | the role list **follows the set** until you click one to pin it, and clicking the pinned one again lets go — no second control to explain |
+| sections | `archetypes`, `defaults` | the role list **follows the set** until you click one to pin it, and clicking the pinned one again lets go — no second control to explain. What a section falls back to lives here too, including **pace** |
 | songs | `songs`, `colorways` | every song in the set, whether or not anything is assigned to it. A set with thirty-five songs and three assignments used to look identical to a set with three songs |
 | layers | `layers`, `clips` | one row per track, in composite order, each showing what it resolved to. An exception is made from the clip that is **playing**, because that is when you notice you want one |
 | effects | `effects` | each effect apart from anywhere it is used. Built-ins get their declared knobs; a [circuit](circuit.md) gets a canvas |
@@ -204,6 +204,9 @@ a hand-made scheme does:
   screen.
 - **A drum is not a wash and a pad is not a strobe.** Percussive families draw from a
   percussive set and pads from a soft one; everything else may have anything.
+- **The pace moves by a whole rung either way.** Two rolls of the same set should not only
+  look different, they should *move* differently — and a rung is a big enough step to feel
+  without any of them landing off the grid.
 - **A wash never gets `over`.** `solid`, `plasma` and `noise` fill the frame, and layer order
   is Live's track order, which a roll cannot change — so one of them landing on `over` near
   the top of the stack is a curtain drawn across the show. Every other mode lets what is

@@ -117,12 +117,26 @@ and dense and hard-edged in a chorus. See [the cascade](mapping.md).
 Two things about those that were wrong for a while, and are worth stating because both
 failed in the same direction — *everything at once*:
 
-**`rate()` is per layer as well as per energy.** Energy alone put every layer on the same
-division, so a chorus was twenty-odd layers flashing in unison — which is one flash, however
-many things are drawing it, and it reads as a strobe rather than as a picture. The offset is
-a hash of the layer's seed, so it is stable and still a musical division: one layer lands on
-the bar while another lands on eighths, and both are in time. The top of the ladder came
-down from four events per beat to three at the same time.
+**`rate()` is a ladder, and three things choose the rung.** The rungs are musical divisions
+— once every two bars, once a bar, every two beats, every beat, eighths, triplets — because
+a rate *between* an eighth and a triplet is in time with nothing.
+
+| chooses it | why |
+|---|---|
+| **energy** | moves the whole section up the ladder. This is most of what a section *is* |
+| **a hash of the layer's seed** | spreads the stack a couple of rungs either side. Energy alone put every layer on the same division, and twenty-odd layers pulsing together is one flash however many things are drawing it |
+| **`uPace`** | a whole-rung shift over everything, from `Scheme.defaults.pace`. For a room that wants the show slower or quicker than the ladder assumes |
+
+The bottom two rungs — a bar, and two bars — were added because the old floor was one event
+every two beats, which meant even an intro never really *drifted*. That bottom end turns out
+to be most of what makes a section feel calm, and having it is what gives the ladder a range
+rather than a setting: at a chorus the stack now spreads from half-time to eighths instead
+of sitting together at the top.
+
+Sources with a motion of their own — `tunnel`'s rush, `plasma`'s drift, `twist`'s sway —
+are on the ladder too, so they inherit the per-layer spread and the pace trim rather than
+running at rates of their own. `noise` is the exception and stays on `uTime`: its drift is
+weather, and weather is the one thing here that should specifically not be in time.
 
 **`charge()` is a contrast about a pivot, not a squared multiply.** The old shape scaled the
 colour and then squared it, which at a chorus put a white pixel at 1.9 — meaning everything

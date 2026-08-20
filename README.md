@@ -83,7 +83,7 @@ is on screen. Its four panes **are the cascade**, in the order specificity runs:
 
 | pane | |
 |---|---|
-| **sections** | one energy and a character per role. Follows the set until you pin a section |
+| **sections** | one energy and a character per role, and what a section falls back to — including **pace**, which moves the whole show along the ladder of divisions it reacts on. Follows the set until you pin a section |
 | **songs** | a colourway and a drive per song — every song in the set, assigned or not |
 | **layers** | one row per track, in composite order, showing what it resolved to. An exception for the clip that is playing is one click |
 | **effects** | each effect on its own, with a live bench. Built-ins have knobs; a **circuit** has a canvas |

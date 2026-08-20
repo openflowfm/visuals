@@ -144,6 +144,13 @@ describe('merging a file over the built-in', () => {
     expect(merged.layers.Drums.source).toBe('rings');
   });
 
+  it('gives a file written before pace existed a pace anyway', () => {
+    // `defaults` merges field by field, which is what stops an older file from
+    // arriving with a hole in it where a uniform is about to read.
+    expect(merge({ defaults: { maxEffects: 3 } as never }).defaults.pace).toBe(0);
+    expect(merge({ defaults: { maxEffects: 3 } as never }).defaults.maxEffects).toBe(3);
+  });
+
   it('remembers what a rolled show was rolled from', () => {
     // The seed used to live exactly as long as the tab, because merge rebuilt
     // the scheme field by field and this one was not among them.

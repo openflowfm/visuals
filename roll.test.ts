@@ -150,6 +150,31 @@ describe('a roll is a show', () => {
     for (const seed of seeds.slice(0, 8)) expect(rolled(seed).defaults.blend[0]).toBe('over');
   });
 
+  it('never draws a wash over the top of the stack', () => {
+    // Layer order is Live's track order, which a roll cannot change, so a
+    // full-frame source on `over` near the top is a curtain across the show.
+    const wash = ['solid', 'plasma', 'noise'];
+    for (const seed of seeds) {
+      for (const [name, spec] of Object.entries(rolled(seed).layers)) {
+        if (wash.includes(spec.source!)) expect(spec.blend, `${seed} ${name}`).not.toBe('over');
+      }
+    }
+  });
+
+  it('moves the pace by whole rungs and no further than one', () => {
+    // Whole, because every rung is a musical division and a rate between two of
+    // them is in time with nothing. One, because a roll should vary how a show
+    // moves without ever landing it somewhere unusable.
+    const seen = new Set<number>();
+    for (const seed of seeds) {
+      const { pace } = rolled(seed).defaults;
+      expect(Number.isInteger(pace), seed).toBe(true);
+      expect(Math.abs(pace), seed).toBeLessThanOrEqual(1);
+      seen.add(pace);
+    }
+    expect(seen.size, 'forty seeds should not all pick the same pace').toBeGreaterThan(1);
+  });
+
   it('writes colours a projector can actually show', () => {
     // A cheap lamp has no black to work against, so a dark colourway is a dark
     // screen. Every colour is a valid hex and none of them is close to one.

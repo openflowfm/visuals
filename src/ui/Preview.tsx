@@ -24,6 +24,7 @@ export function Preview({
   amount,
   energy,
   color,
+  pace,
   quantum,
   clock,
   onError,
@@ -33,6 +34,7 @@ export function Preview({
   amount: number;
   energy: number;
   color: number;
+  pace: number;
   quantum: number;
   clock: Clock;
   onError(next: string | null): void;
@@ -40,8 +42,8 @@ export function Preview({
   const canvas = useRef<HTMLCanvasElement | null>(null);
   // Read by the loop rather than closed over, so changing a knob doesn't tear
   // down the GL context and rebuild every program.
-  const now = useRef({ def, source, amount, energy, color, quantum, onError });
-  now.current = { def, source, amount, energy, color, quantum, onError };
+  const now = useRef({ def, source, amount, energy, color, pace, quantum, onError });
+  now.current = { def, source, amount, energy, color, pace, quantum, onError };
 
   useEffect(() => {
     if (!canvas.current) return;
@@ -60,6 +62,7 @@ export function Preview({
         energy: at.energy,
         level: 0.25 + 0.75 * (1 - (beat % 1)) ** 3,
         color: at.color,
+        pace: at.pace,
         quantum: at.quantum,
         beat,
         seconds: clock.seconds(),

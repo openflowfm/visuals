@@ -1,7 +1,8 @@
 import type { Archetype, Scheme, Show } from '../../protocol.ts';
 import { Knob } from '../../../widgets/src/controls/Knob.tsx';
+import { Row } from '../../../widgets/src/chrome/Row.tsx';
 import { EffectPicks } from './EffectPicks.tsx';
-import { ENERGY, PERCENT } from './param.ts';
+import { ENERGY, MAX_EFFECTS, PACE, PERCENT } from './param.ts';
 
 /**
  * Archetypes: what a section *is*, bound to the roles the set already names.
@@ -91,6 +92,41 @@ export function Sections({
             </p>
           </>
         )}
+      </section>
+
+      <section>
+        <h3>
+          everything
+          <em>what a section falls back to</em>
+        </h3>
+        <Row gap={16}>
+          <Knob
+            param={ENERGY}
+            value={PERCENT.to(scheme.defaults.energy)}
+            onChange={(v) =>
+              patch({ defaults: { ...scheme.defaults, energy: PERCENT.from(v) } })
+            }
+            name="Energy"
+          />
+          <Knob
+            param={MAX_EFFECTS}
+            value={scheme.defaults.maxEffects}
+            onChange={(v) => patch({ defaults: { ...scheme.defaults, maxEffects: Math.round(v) } })}
+            name="Max fx"
+          />
+          <Knob
+            param={PACE}
+            value={scheme.defaults.pace}
+            onChange={(v) => patch({ defaults: { ...scheme.defaults, pace: Math.round(v) } })}
+            name="Pace"
+          />
+        </Row>
+        <p className="note">
+          <b>Pace</b> shifts every layer along the ladder of divisions it may react on — a
+          bar, two beats, a beat, eighths. Whole rungs, because a rate between two of them
+          is in time with nothing. Energy already moves a section up that ladder and each
+          layer sits a rung or two either side of its section; this moves the whole show.
+        </p>
       </section>
 
       <section>

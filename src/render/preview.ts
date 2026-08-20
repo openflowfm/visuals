@@ -30,6 +30,8 @@ export interface PreviewFrame {
   level: number;
   /** Packed `0xRRGGBB`, standing in for the song's colourway. */
   color: number;
+  /** The scheme's pace trim, so the bench moves at the speed the stage will. */
+  pace: number;
   beat: number;
   seconds: number;
   quantum: number;
@@ -121,6 +123,7 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
     gl.uniform1f(program.uniform('uOpacity'), opacity);
     gl.uniform3fv(program.uniform('uColor'), rgb(next.color));
     gl.uniform1f(program.uniform('uSeed'), 11.7);
+    gl.uniform1f(program.uniform('uPace'), next.pace);
   };
 
   return {

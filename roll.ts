@@ -381,6 +381,10 @@ export function rollScheme(seed: string, show: Show, base: Scheme): Scheme {
       blend,
       sources: shuffled(rng, SOURCE_KINDS),
       maxEffects: chance(rng, 0.35) ? 3 : 2,
+      // A whole rung either way. Two rolls of the same set should not only look
+      // different, they should *move* differently — and a rung is a big enough
+      // step that you can feel it without any of them landing off the grid.
+      pace: Math.round(between(rng, -1, 1)),
     },
   };
 }
