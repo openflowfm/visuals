@@ -3,6 +3,7 @@ import type { Circuit, CircuitNode, NodeKind } from '../../protocol.ts';
 import { Graph, GraphNode, type GraphCord } from '../../../widgets/src/chrome/Graph.tsx';
 import { Port } from '../../../widgets/src/chrome/Port.tsx';
 import { Device } from '../../../widgets/src/chrome/Device.tsx';
+import { Button } from '../../../widgets/src/controls/Button.tsx';
 import { Knob } from '../../../widgets/src/controls/Knob.tsx';
 import { Select } from '../../../widgets/src/controls/Select.tsx';
 import { NODE_SPECS, portId, signalOf } from '../render/circuit.ts';
@@ -98,9 +99,7 @@ export function CircuitEditor({
           label="Node to add"
           width={96}
         />
-        <button type="button" className="tick" onClick={add}>
-          + node
-        </button>
+        <Button onPress={add}>+ node</Button>
         <span className="about">{NODE_SPECS[kinds[adding]]?.about}</span>
       </div>
 
@@ -171,14 +170,9 @@ function NodeFace({
       title={spec.about}
       headerEnd={
         node.kind === 'out' ? undefined : (
-          <button
-            type="button"
-            className="tick"
-            aria-label={`Delete ${spec.name}`}
-            onClick={onDrop}
-          >
+          <Button tone="quiet" label={`Delete ${spec.name}`} onPress={onDrop}>
             ×
-          </button>
+          </Button>
         )
       }
       inlets={spec.inlets.map((port) => {
@@ -187,14 +181,14 @@ function NodeFace({
           <span key={id} className="wire">
             <Port id={id} side="in" label={port.name} kind={port.kind} connected={fed.has(id)} />
             {fed.has(id) && (
-              <button
-                type="button"
+              <Button
+                tone="quiet"
                 className="cut"
-                aria-label={`Unwire ${port.name}`}
-                onClick={() => onCut(id)}
+                label={`Unwire ${port.name}`}
+                onPress={() => onCut(id)}
               >
                 ×
-              </button>
+              </Button>
             )}
           </span>
         );

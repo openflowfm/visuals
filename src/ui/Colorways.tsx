@@ -1,4 +1,5 @@
 import type { Scheme } from '../../protocol.ts';
+import { Button } from '../../../widgets/src/controls/Button.tsx';
 
 /**
  * The colours a song can be assigned, and how to author one.
@@ -86,42 +87,37 @@ export function Colorways({
               />
             ))}
           </span>
-          <button
-            type="button"
-            className="tick"
-            aria-label={`Add a colour to ${name}`}
-            onClick={() => setWay(name, [...scheme.colorways[name], '#ffffff'])}
+          <Button
+            tone="quiet"
+            label={`Add a colour to ${name}`}
+            onPress={() => setWay(name, [...scheme.colorways[name], '#ffffff'])}
           >
             +
-          </button>
-          <button
-            type="button"
-            className="tick"
-            aria-label={`Remove the last colour from ${name}`}
+          </Button>
+          <Button
+            tone="quiet"
+            label={`Remove the last colour from ${name}`}
             disabled={scheme.colorways[name].length <= 1}
-            onClick={() => setWay(name, scheme.colorways[name].slice(0, -1))}
+            onPress={() => setWay(name, scheme.colorways[name].slice(0, -1))}
           >
             {String.fromCharCode(8722)}
-          </button>
-          <button
-            type="button"
-            className="tick drop"
-            aria-label={`Delete ${name}`}
+          </Button>
+          <Button
+            tone="danger"
+            label={`Delete ${name}`}
             disabled={ways.length <= 1 || name === scheme.defaults.colorway}
             title={
               name === scheme.defaults.colorway
                 ? 'the fallback colourway cannot be deleted'
                 : undefined
             }
-            onClick={() => setWay(name, null)}
+            onPress={() => setWay(name, null)}
           >
             ×
-          </button>
+          </Button>
         </div>
       ))}
-      <button type="button" onClick={add}>
-        + colourway
-      </button>
+      <Button onPress={add}>+ colourway</Button>
     </div>
   );
 }

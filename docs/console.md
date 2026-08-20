@@ -89,6 +89,23 @@ The look designer, the stack rules, the addressing drawers and the picture-per-n
 live in [looks](looks.md), because they are about **what a look is** rather than about how
 the three views fit together. This file is the shell and the two binding views.
 
+## It is built from `widgets`, and that was a correction too
+
+The first pass of this console imported **no widgets at all**. The tab bar was raw
+buttons, the segmented controls were hand-rolled five times across two stylesheets, and
+`console.css` carried a blanket `button` rule to prop it all up — a rule that outranked
+`.wdg-toggle-body` on specificity and would quietly have redrawn any widget dropped near
+it.
+
+Everything that is a control is now the widget for it: `Segmented` for the tabs, the
+row/column cuts, the A/B mode and the scope; `Toggle` for hold and loop; `Button` for every
+action; `Knob`, `Slider`, `NumberField`, `Meter` for values. What stayed hand-written is
+what is genuinely not a control — a matrix cell, a list row, a layer chip — and those now
+name themselves in CSS rather than claiming every `button` on the page.
+
+Two widgets came out of the exercise rather than going into it: `Button` and `Meter`. Both
+are in [the catalogue](../../widgets/docs/catalogue.md) with the reasoning.
+
 ## What is deliberately absent
 
 **A device parameter as a source.** "Crossfade driven by a filter cutoff" is the second of

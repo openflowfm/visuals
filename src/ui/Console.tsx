@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import type { Scheme, SetGrid, Show } from '../../protocol.ts';
 import '../../../widgets/src/tokens.css';
+import { Button } from '../../../widgets/src/controls/Button.tsx';
+import { Segmented } from '../../../widgets/src/controls/Segmented.tsx';
 import { Bind } from './Bind.tsx';
 import { Coverage } from './Coverage.tsx';
 import { Designer } from './Designer.tsx';
@@ -102,22 +104,17 @@ export function Console({ show, showRef, scheme, grid, save, clock, onClose }: C
   return (
     <div className="console wdg">
       <header>
-        <nav>
-          {VIEWS.map((name) => (
-            <button
-              key={name}
-              type="button"
-              data-on={name === view ? '' : undefined}
-              onClick={() => setView(name)}
-            >
-              {name}
-            </button>
-          ))}
-        </nav>
+        <Segmented
+          items={VIEWS as unknown as string[]}
+          index={VIEWS.indexOf(view)}
+          onChange={(i) => setView(VIEWS[i])}
+          label="View"
+          className="views"
+        />
         <span className="context">{contextOf(view, show, scheme, look, edits.length)}</span>
-        <button type="button" className="close" onClick={onClose} aria-label="Close console">
+        <Button tone="quiet" label="Close console" onPress={onClose}>
           ×
-        </button>
+        </Button>
       </header>
 
       {view === 'coverage' && (

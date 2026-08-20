@@ -2,7 +2,9 @@ import { useRef, useState } from 'react';
 import type { Scheme, SetGrid, Show } from '../../protocol.ts';
 import { BLENDS } from '../../protocol.ts';
 import { resolveLayer } from '../../resolve.ts';
+import { Button } from '../../../widgets/src/controls/Button.tsx';
 import { Knob } from '../../../widgets/src/controls/Knob.tsx';
+import { Segmented } from '../../../widgets/src/controls/Segmented.tsx';
 import { Select } from '../../../widgets/src/controls/Select.tsx';
 import { Toggle } from '../../../widgets/src/controls/Toggle.tsx';
 import type { Aim } from './Console.tsx';
@@ -41,6 +43,10 @@ import type { Clock } from '../state/useShow.ts';
  * you would read that as your edit. Hence one clock, and hence `hold` and
  * `loop`, which are the two ways to stop the music being the variable.
  */
+/** The three ways to look at two pictures, and what they are called on screen. */
+const MODES = ['side', 'wipe', 'toggle'] as const;
+const MODE_LABELS = ['side by side', 'wipe', 'toggle'];
+
 export function Bind({
   show,
   showRef,
@@ -144,38 +150,24 @@ export function Bind({
 
         <div className="ab">
           <span className="cap">same instant</span>
-          <span className="seg">
-            {(['side', 'wipe', 'toggle'] as const).map((name) => (
-              <button
-                key={name}
-                type="button"
-                data-on={name === mode ? '' : undefined}
-                onClick={() => setMode(name)}
-              >
-                {name === 'side' ? 'side by side' : name}
-              </button>
-            ))}
-          </span>
+          <Segmented
+            items={MODE_LABELS}
+            index={MODES.indexOf(mode)}
+            onChange={(i) => setMode(MODES[i])}
+            label="How to compare"
+          />
           {mode === 'toggle' && (
-            <button
-              type="button"
-              className="flip"
-              onClick={() => setShowing((s) => (s === 'on' ? 'proposed' : 'on'))}
-            >
+            <Button onPress={() => setShowing((s) => (s === 'on' ? 'proposed' : 'on'))}>
               showing {showing === 'on' ? 'on screen' : 'proposed'}
-            </button>
+            </Button>
           )}
           <span className="gap" />
-          <button type="button" data-on={held ? '' : undefined} onClick={() => setHeld((h) => !h)}>
+          <Toggle on={held} onChange={setHeld} width={64}>
             hold clock
-          </button>
-          <button
-            type="button"
-            data-on={looping ? '' : undefined}
-            onClick={() => setLooping((l) => !l)}
-          >
+          </Toggle>
+          <Toggle on={looping} onChange={setLooping} width={72}>
             loop 4 bars
-          </button>
+          </Toggle>
         </div>
 
         <div className="stack">
@@ -205,20 +197,13 @@ export function Bind({
       <aside className="edit">
         <section className="reach">
           <h4>how far does this reach</h4>
-          <span className="seg wide">
-            {SCOPES.map((name) => (
-              <button
-                key={name}
-                type="button"
-                data-on={name === scope ? '' : undefined}
-                disabled={!keyFor(aim, name)}
-                title={keyFor(aim, name) ?? 'nothing to aim at'}
-                onClick={() => setScope(name)}
-              >
-                {name}
-              </button>
-            ))}
-          </span>
+          <Segmented
+            items={SCOPES as unknown as string[]}
+            index={SCOPES.indexOf(scope)}
+            onChange={(i) => setScope(SCOPES[i])}
+            label="How far this reaches"
+            className="wide"
+          />
           {reach ? (
             <p className="lands">
               lands on <b>{reach.lands}</b>
@@ -240,14 +225,13 @@ export function Bind({
             return (
               <p key={edit.field} className="delta">
                 <span className="was">{was}</span> ▸ <b>{becomes}</b>
-                <button
-                  type="button"
-                  className="tick"
-                  aria-label={`Unstage ${edit.field}`}
-                  onClick={() => setEdits(edits.filter((e) => e !== edit))}
+                <Button
+                  tone="quiet"
+                  label={`Unstage ${edit.field}`}
+                  onPress={() => setEdits(edits.filter((e) => e !== edit))}
                 >
                   ×
-                </button>
+                </Button>
               </p>
             );
           })}
@@ -258,12 +242,12 @@ export function Bind({
         <Inherited scheme={proposed} show={show} aim={aim} scope={scope} grid={grid} onLook={onLook} />
 
         <div className="acts">
-          <button type="button" className="go" disabled={edits.length === 0} onClick={onLand}>
+          <Button className="go" disabled={edits.length === 0} onPress={onLand}>
             land it
-          </button>
-          <button type="button" disabled={edits.length === 0} onClick={onDiscard}>
+          </Button>
+          <Button disabled={edits.length === 0} onPress={onDiscard}>
             discard
-          </button>
+          </Button>
           <span className="gap" />
           {edits.length > 0 && <span className="cap">{edits.length} pending</span>}
         </div>
@@ -456,9 +440,9 @@ function Inherited({
       {live.length > 0 && (
         <p className="fx">
           {live.map((id) => (
-            <button key={id} type="button" className="link" onClick={() => onLook(id)}>
+            <Button key={id} tone="quiet" className="link" onPress={() => onLook(id)}>
               {scheme.looks[id]?.name || id}
-            </button>
+            </Button>
           ))}
         </p>
       )}

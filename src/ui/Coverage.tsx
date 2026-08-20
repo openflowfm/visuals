@@ -5,7 +5,9 @@ import { newSeed, rollScheme } from '../../roll.ts';
 import { cellForColumn, columnsOf, passes, usesOf, type Column, type Cut, type Filter } from './coverage.ts';
 import type { Aim } from './Console.tsx';
 import { Colorways } from './Colorways.tsx';
+import { Button } from '../../../widgets/src/controls/Button.tsx';
 import { Knob } from '../../../widgets/src/controls/Knob.tsx';
+import { Segmented } from '../../../widgets/src/controls/Segmented.tsx';
 import { ENERGY, MAX_LOOKS, PACE, PERCENT } from './param.ts';
 import { Preview } from './Preview.tsx';
 import type { Clock } from '../state/useShow.ts';
@@ -28,6 +30,11 @@ import type { Clock } from '../state/useShow.ts';
  * configured for the verses and forgotten for the choruses. Neither is the
  * primary one and the toolbar refuses to imply that either is.
  */
+/** The toolbar's three cuts, hoisted so `Segmented` can index them. */
+const ROWS = ['songs', 'sections'] as const;
+const CUTS: readonly Cut[] = ['tracks', 'groups'];
+const FILTERS: readonly Filter[] = ['all', 'gaps', 'bound'];
+
 export function Coverage({
   show,
   scheme,
@@ -86,19 +93,32 @@ export function Coverage({
     <div className="coverage">
       <div className="bar">
         <span className="cap">rows</span>
-        <Seg<'songs' | 'sections'> value={rows} set={setRows} of={['songs', 'sections']} />
+        <Segmented
+          items={ROWS as unknown as string[]}
+          index={ROWS.indexOf(rows)}
+          onChange={(i) => setRows(ROWS[i])}
+          label="Rows"
+        />
         <span className="cap">cols</span>
-        <Seg<Cut> value={cut} set={setCut} of={['tracks', 'groups']} />
+        <Segmented
+          items={CUTS as unknown as string[]}
+          index={CUTS.indexOf(cut)}
+          onChange={(i) => setCut(CUTS[i])}
+          label="Columns"
+        />
         <span className="gap" />
-        <Seg<Filter> value={filter} set={setFilter} of={['all', 'gaps', 'bound']} />
-        <button
-          type="button"
-          className="roll"
+        <Segmented
+          items={FILTERS as unknown as string[]}
+          index={FILTERS.indexOf(filter)}
+          onChange={(i) => setFilter(FILTERS[i])}
+          label="Show"
+        />
+        <Button
           title="Deal the whole set a new identity from a fresh seed"
-          onClick={() => roll(newSeed())}
+          onPress={() => roll(newSeed())}
         >
           roll
-        </button>
+        </Button>
         <label className="seed">
           seed
           <input
@@ -115,15 +135,14 @@ export function Coverage({
           />
         </label>
         {before && (
-          <button
-            type="button"
-            onClick={() => {
+          <Button
+            onPress={() => {
               save(before);
               setBefore(null);
             }}
           >
             undo roll
-          </button>
+          </Button>
         )}
       </div>
 
@@ -208,31 +227,6 @@ export function Coverage({
         <span data-answer="absent" /> not in this row
       </div>
     </div>
-  );
-}
-
-function Seg<T extends string>({
-  value,
-  set,
-  of,
-}: {
-  value: T;
-  set(next: T): void;
-  of: readonly T[];
-}) {
-  return (
-    <span className="seg">
-      {of.map((name) => (
-        <button
-          key={name}
-          type="button"
-          data-on={name === value ? '' : undefined}
-          onClick={() => set(name)}
-        >
-          {name}
-        </button>
-      ))}
-    </span>
   );
 }
 
@@ -409,13 +403,13 @@ function Inspect({
       )}
 
       <div className="acts">
-        <button type="button" className="go" onClick={onOpen}>
-          open in bind ▸
-        </button>
+        <Button className="go" onPress={onOpen}>
+          open in bind {String.fromCharCode(9656)}
+        </Button>
         {live[0] && (
-          <button type="button" onClick={() => onLook(live[0])}>
-            edit the look ▸
-          </button>
+          <Button onPress={() => onLook(live[0])}>
+            edit the look {String.fromCharCode(9656)}
+          </Button>
         )}
       </div>
     </aside>

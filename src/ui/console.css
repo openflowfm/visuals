@@ -48,12 +48,25 @@
   flex: none;
 }
 
-.console header nav {
-  display: flex;
-  gap: 2px;
+.console .context {
+  margin-left: auto;
+  color: var(--caption);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-size: 9.5px;
 }
 
-.console button {
+/*
+ * The buttons that are genuinely not widgets: a matrix cell, a list row, a
+ * layer chip. Everything else in here is a `Button`, a `Toggle` or a
+ * `Segmented`, and a blanket rule on `button` would reach inside those and
+ * fight them — `.console button` outranks `.wdg-toggle-body` on specificity,
+ * which is exactly the kind of quiet override this consolidation removed.
+ */
+.bind .chip,
+.coverage .row .label,
+.coverage .cell,
+.designer .entry .pick {
   border: 1px solid var(--bd3);
   border-radius: var(--radius-xs);
   background: var(--surface-control);
@@ -63,39 +76,21 @@
   cursor: pointer;
 }
 
-.console button:hover:not(:disabled) {
+.bind .chip:hover:not(:disabled),
+.designer .entry .pick:hover:not(:disabled) {
   border-color: var(--focus);
   color: var(--fg);
 }
 
-.console button:disabled {
-  opacity: 0.38;
+.bind .chip:disabled,
+.coverage .cell:disabled {
   cursor: default;
 }
 
-.console button[data-on] {
+.bind .chip[data-on] {
   background: var(--fg);
   border-color: var(--fg);
   color: #000;
-}
-
-.console header nav button {
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  font-size: 10px;
-  padding: 4px 12px;
-}
-
-.console .context {
-  margin-left: auto;
-  color: var(--caption);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  font-size: 9.5px;
-}
-
-.console .close {
-  padding: 2px 8px;
 }
 
 .console .cap {
@@ -120,24 +115,6 @@
   text-transform: uppercase;
   font-size: 9px;
   font-weight: 500;
-}
-
-.console .seg {
-  display: inline-flex;
-  gap: 1px;
-}
-
-.console .seg button {
-  border-radius: 0;
-  padding: 3px 8px;
-}
-
-.console .seg button:first-child {
-  border-radius: var(--radius-xs) 0 0 var(--radius-xs);
-}
-
-.console .seg button:last-child {
-  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
 }
 
 .console .seg.wide {
@@ -721,13 +698,6 @@
   border-radius: 1px;
   background: none;
   flex: none;
-}
-
-.console .tick {
-  padding: 0 5px;
-  border: 0;
-  background: none;
-  line-height: 1.5;
 }
 
 .console .tick.drop:hover:not(:disabled) {
