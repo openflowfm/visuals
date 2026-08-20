@@ -1,8 +1,7 @@
-import type { Blend, EffectDef, Scheme, Show, SourceKind } from '../../protocol.ts';
-import { effectShader, namedTracks, paramsOf, signatureOf, trackBank } from './effect.ts';
+import type { Blend, LookDef, Scheme, Show } from '../../protocol.ts';
+import { lookShader, namedTracks, paramsOf, signatureOf, trackBank } from './look.ts';
 import { compile, createTarget, drawFullscreen, rgb, type Program } from './gl.ts';
 import { columns, warpFor, OUTPUT_SHADER, SQUARE, type Corners } from './output.ts';
-import { sourceSources } from './shaders.ts';
 
 /**
  * The layer stack, drawn once a frame.
@@ -57,15 +56,15 @@ export interface Output {
   test: boolean;
 }
 
-/** A built effect, and enough about it to know when it stopped being current. */
-interface BuiltEffect {
+/** A built look, and enough about it to know when it stopped being current. */
+interface BuiltLook {
   program: Program | null;
   /** What it was compiled from. Structure only — a knob's value is a uniform. */
   signature: string;
   error: string | null;
   params: Float32Array;
   /**
-   * The tracks this effect named, in `uTracks` order, or empty when it named
+   * The tracks this look named, in `uTracks` order, or empty when it named
    * none. Cached beside the program because it is a function of the circuit's
    * structure — the same thing the signature is — and recomputing it per layer
    * per frame would walk every node sixty times a second to learn nothing.
@@ -94,8 +93,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
   }
 
   let error: string | null = null;
-  const sources = new Map<SourceKind, Program>();
-  const effects = new Map<string, BuiltEffect>();
+  const looks = new Map<string, BuiltLook>();
 
   /**
    * Two targets, ping-ponged, because a layer can carry more than one effect.
@@ -133,54 +131,34 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
    */
   const shown = new Map<number, number>();
 
-  const sourceProgram = (kind: SourceKind): Program | null => {
-    const held = sources.get(kind);
-    if (held) return held;
-    try {
-      const built = compile(gl, sourceSources.get(kind)!, `source:${kind}`);
-      sources.set(kind, built);
-      return built;
-    } catch (err) {
-      error = (err as Error).message;
-      return null;
-    }
-  };
-
-  /**
-   * An effect by id, rebuilt only when its structure changed.
-   *
-   * A failed build is remembered as a failure. Retrying a broken circuit every
-   * frame would call the driver's compiler sixty times a second for as long as
-   * it stayed broken, which is a stall rather than an error message.
-   */
-  const effectProgram = (id: string, def: EffectDef): BuiltEffect => {
+  const lookProgram = (id: string, def: LookDef): BuiltLook => {
     const signature = signatureOf(def);
-    const held = effects.get(id);
+    const held = looks.get(id);
     if (held && held.signature === signature) {
       held.params = paramsOf(def);
       return held;
     }
     if (held?.program) gl.deleteProgram(held.program.program);
 
-    const built: BuiltEffect = {
+    const built: BuiltLook = {
       program: null,
       signature,
       error: null,
       params: paramsOf(def),
       tracks: namedTracks(def),
     };
-    const { source, error: why } = effectShader(def);
+    const { source, error: why } = lookShader(def);
     if (!source) {
       built.error = why ?? 'no shader';
     } else {
       try {
-        built.program = compile(gl, source, `effect:${id}`);
+        built.program = compile(gl, source, `look:${id}`);
       } catch (err) {
         built.error = (err as Error).message;
       }
     }
     if (built.error) error = `${def.name || id}: ${built.error}`;
-    effects.set(id, built);
+    looks.set(id, built);
     return built;
   };
 
@@ -260,8 +238,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       out.free();
       if (stage) gl.deleteProgram(stage.program);
       for (const target of targets) target.free();
-      for (const p of sources.values()) gl.deleteProgram(p.program);
-      for (const built of effects.values()) {
+      for (const built of looks.values()) {
         if (built.program) gl.deleteProgram(built.program.program);
       }
     },
@@ -293,43 +270,29 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
         shown.set(layer.t, opacity);
         if (opacity <= 0.002) continue;
 
-        const source = sourceProgram(layer.source);
-        if (!source) continue;
         const [src, dst] = BLENDS[layer.blend] ?? BLENDS.over;
 
-        // An effect that failed to build drops out of the chain rather than
-        // taking the layer with it. A broken circuit should cost the effect it
-        // broke and nothing else — the alternative is a black stage.
-        const chain = layer.effects.flatMap((applied) => {
-          const def = scheme?.effects[applied.id];
+        // The stack, bottom first. A look that failed to build drops out of it
+        // rather than taking the layer with it, and one naming a look the
+        // scheme no longer has is dropped in `show.ts` before it ever gets here.
+        const stack = layer.looks.flatMap((applied) => {
+          const def = scheme?.looks[applied.id];
           if (!def) return [];
-          const built = effectProgram(applied.id, def);
+          const built = lookProgram(applied.id, def);
           return built.program ? [{ applied, built, program: built.program }] : [];
         });
+        if (stack.length === 0) continue;
 
-        if (chain.length === 0) {
-          gl.bindFramebuffer(gl.FRAMEBUFFER, screen);
-          gl.blendFunc(src, dst);
-          gl.useProgram(source.program);
-          setCommon(source, show, scheme, i, opacity, beat, seconds);
-          drawFullscreen(gl);
-          continue;
-        }
-
-        // The source goes offscreen first, so the chain has a whole picture to
-        // work on rather than whatever is already on the screen underneath it.
+        // One loop where there used to be a source pass and then an effect
+        // chain. Collapsing the noun collapsed this with it: every pass reads
+        // the frame beneath it and writes the frame above, and whether a given
+        // one *uses* what it read is the shader's business rather than the
+        // compositor's.
         let read = 0;
-        gl.bindFramebuffer(gl.FRAMEBUFFER, targets[read].framebuffer);
-        gl.disable(gl.BLEND);
-        gl.clearColor(0, 0, 0, 0);
-        gl.clear(gl.COLOR_BUFFER_BIT);
-        gl.useProgram(source.program);
-        setCommon(source, show, scheme, i, opacity, beat, seconds);
-        drawFullscreen(gl);
-
-        for (let step = 0; step < chain.length; step++) {
-          const { applied, built, program } = chain[step];
-          const last = step === chain.length - 1;
+        for (let step = 0; step < stack.length; step++) {
+          const { applied, built, program } = stack[step];
+          const first = step === 0;
+          const last = step === stack.length - 1;
           const write = 1 - read;
 
           if (last) {
@@ -344,15 +307,16 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
           }
 
           gl.useProgram(program.program);
-          setCommon(program, show, scheme, i, opacity, beat, seconds);
-          // The fader was applied when the source drew. An effect samples that
-          // picture, so applying it again would square it at every step.
-          gl.uniform1f(program.uniform('uOpacity'), 1);
+          // The fader is applied exactly once, by the bottom of the stack.
+          // `OUT` multiplies by it and `MIXED` does not, so a pass that mixes
+          // preserves whatever alpha arrived — applying it again at every step
+          // would raise it to the power of the stack's depth.
+          setCommon(program, show, scheme, i, first ? opacity : 1, beat, seconds);
           gl.uniform1f(program.uniform('uAmount'), applied.amount);
           gl.uniform1fv(program.uniform('uParams'), built.params);
-          // Only for a circuit that named a track. `namedTracks` is empty for a
+          // Only for a circuit that named a track. `tracks` is empty for a
           // built-in and for every look that reads only the layer it draws, so
-          // the common effect costs one array lookup and no uniform upload.
+          // the common case costs one array lookup and no uniform upload.
           if (built.tracks.some(Boolean)) {
             gl.uniform1fv(
               program.uniform('uTracks'),
@@ -363,6 +327,8 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
               ),
             );
           }
+          // A generator ignores this; a transformer reads it. Bound either way,
+          // because the compositor no longer knows which it has.
           gl.activeTexture(gl.TEXTURE0);
           gl.bindTexture(gl.TEXTURE_2D, targets[read].texture);
           gl.uniform1i(program.uniform('uTex'), 0);

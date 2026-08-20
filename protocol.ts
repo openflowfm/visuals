@@ -15,8 +15,25 @@
 /** How a layer combines with everything already drawn beneath it. */
 export type Blend = 'over' | 'add' | 'screen' | 'multiply';
 
-/** What draws a layer's picture. One fragment shader each. */
-export type SourceKind =
+/**
+ * One of the looks that ship as handwritten shaders.
+ *
+ * **There is only one noun here, and that is the point.** These used to be two
+ * lists — eleven "sources" that drew a picture and twelve "effects" that changed
+ * one — and the split was never real. A shader either reads the frame that
+ * arrived or it ignores it, which is a property of the shader rather than a
+ * category of thing, and the circuit compiler had already worked that out: a
+ * graph with `paint` and no `sample` was called a generator and drew a source,
+ * while the source slot could not be pointed at one.
+ *
+ * Collapsing them costs nothing and buys three things. Custom sources fall out
+ * for free — the feature three docs listed as "not built". The compositor stops
+ * having two kinds of pass. And the designer has exactly one kind of object to
+ * author, which is what makes a library of looks a thing you can build before
+ * deciding what drives it.
+ */
+export type BuiltinLook =
+  // generators: they ignore what arrived and draw their own picture
   | 'solid'
   | 'bars'
   | 'rings'
@@ -27,17 +44,8 @@ export type SourceKind =
   | 'plasma'
   | 'spiral'
   | 'scan'
-  | 'sparks';
-
-/**
- * The six effects that ship as handwritten shaders.
- *
- * Not the whole set of effects — an effect is named by an **id** everywhere
- * else, and an id can also name one built out of nodes. These are the ones with
- * GLSL behind them rather than a circuit, and they exist so a rig draws
- * something good before anyone has wired anything.
- */
-export type BuiltinEffect =
+  | 'sparks'
+  // transformers: they read the frame underneath and change it
   | 'mirror'
   | 'kaleido'
   | 'shift'
@@ -51,8 +59,15 @@ export type BuiltinEffect =
   | 'twist'
   | 'invert';
 
-/** Every member, in the order an editor should offer them. */
-export const SOURCE_KINDS: readonly SourceKind[] = [
+/**
+ * Every built-in, in the order an editor should offer them.
+ *
+ * Generators first, because a stack has to start with something that draws.
+ * That ordering is a hint to whoever is picking, not a rule the renderer keeps:
+ * a generator anywhere in a stack replaces what is under it, which is exactly
+ * what "ignores what arrived" has to mean.
+ */
+export const BUILTIN_LOOKS: readonly BuiltinLook[] = [
   'solid',
   'bars',
   'rings',
@@ -64,8 +79,6 @@ export const SOURCE_KINDS: readonly SourceKind[] = [
   'spiral',
   'scan',
   'sparks',
-];
-export const BUILTIN_EFFECTS: readonly BuiltinEffect[] = [
   'mirror',
   'kaleido',
   'shift',
@@ -79,6 +92,10 @@ export const BUILTIN_EFFECTS: readonly BuiltinEffect[] = [
   'twist',
   'invert',
 ];
+
+/** The ones that draw their own picture, for an editor that wants to say so. */
+export const GENERATORS: readonly BuiltinLook[] = BUILTIN_LOOKS.slice(0, 11);
+
 export const BLENDS: readonly Blend[] = ['over', 'add', 'screen', 'multiply'];
 
 // --- circuits: an effect built out of nodes ------------------------------
@@ -176,18 +193,22 @@ export interface Circuit {
 }
 
 /**
- * One effect, however it is built.
+ * One look, however it is built.
  *
  * A built-in has GLSL and a handful of named parameters; a circuit has nodes
  * and its `value` nodes are its parameters. Both are addressed by the same id
- * from an archetype or a layer, so nothing that *uses* an effect has to know
- * which kind it is — which is the point, and the reason a circuit is worth
- * having rather than a seventh hard-coded shader.
+ * wherever a look is named, so nothing that *uses* one has to know which kind
+ * it got — which is the point, and the reason a circuit is worth having rather
+ * than a twenty-fourth hard-coded shader.
+ *
+ * A look is the base unit of visual work: the thing you make in the designer
+ * before you have decided what drives it. Stacking looks is how a picture gets
+ * complicated, and that stack is a **composition**.
  */
-export interface EffectDef {
+export interface LookDef {
   /** What it is called in the editor. Ids are stable; names are not. */
   name: string;
-  builtin?: BuiltinEffect;
+  builtin?: BuiltinLook;
   /** Values for the parameters a built-in declares, by name. */
   params?: Record<string, number>;
   circuit?: Circuit;
@@ -203,9 +224,15 @@ export interface EffectDef {
  * and "except this time".
  */
 export interface LayerSpec {
-  source?: SourceKind;
-  /** Effect ids, **added** to whatever the section contributes rather than replacing it. */
-  effects?: string[];
+  /**
+   * Look ids, bottom of the stack first, **added** to whatever the section
+   * contributes rather than replacing it.
+   *
+   * The first one that draws its own picture is where the layer starts; the
+   * rest work on what is already there. There is no separate source slot,
+   * because a source was only ever the first look in the stack.
+   */
+  looks?: string[];
   blend?: Blend;
   /** Added to the section's energy, then clamped. Negative calms a layer. */
   bias?: number;
@@ -237,8 +264,12 @@ export interface SongSpec {
 export interface Archetype {
   /** 0–1. The one number a section is really described by. */
   energy: number;
-  /** Effect ids. The character of the section, dialled in by energy, not switched on. */
-  effects?: string[];
+  /**
+   * Look ids. The character of the section, dialled in by energy, not switched
+   * on. Usually transformers — but a section naming a generator replaces every
+   * layer's base, which is how "in the drop, everything becomes strobe" is said.
+   */
+  looks?: string[];
 }
 
 export interface Scheme {
@@ -263,8 +294,8 @@ export interface Scheme {
   layers: Record<string, LayerSpec>;
   /** By exact clip name: the exception, made from the clip that is playing. */
   clips: Record<string, LayerSpec>;
-  /** Every effect there is, by id. Built-ins are pre-registered under their own names. */
-  effects: Record<string, EffectDef>;
+  /** Every look there is, by id. Built-ins are pre-registered under their own names. */
+  looks: Record<string, LookDef>;
   /**
    * What the randomiser was rolled from, when it was.
    *
@@ -278,10 +309,10 @@ export interface Scheme {
     energy: number;
     /** By depth, cycled. Something has to be opaque at the bottom. */
     blend: Blend[];
-    /** Sources by depth, for a track whose name says nothing. */
-    sources: SourceKind[];
-    /** Most effects a layer may carry at once, however many the cascade offers. */
-    maxEffects: number;
+    /** A first look by depth, for a track whose name says nothing. */
+    looks: string[];
+    /** Longest stack a layer may carry, however many the cascade offers it. */
+    maxLooks: number;
     /**
      * A shift, in rungs, along the ladder of divisions a layer may react on.
      *
@@ -306,10 +337,17 @@ export interface Scheme {
  * suggestion and at 0.95 it has taken the picture over, and the archetype's
  * energy is what moves between them.
  */
-export interface AppliedEffect {
-  /** A key into `Scheme.effects`. The renderer looks up how to draw it. */
+export interface AppliedLook {
+  /** A key into `Scheme.looks`. The renderer looks up how to draw it. */
   id: string;
-  /** 0–1. Every effect mixes against its untouched input by this. */
+  /**
+   * 0–1, and how far this pass has taken the frame.
+   *
+   * A look that **reads** what arrived mixes against it by this, so energy can
+   * dial one in rather than switch it on. A look that ignores what arrived — a
+   * generator — writes the frame outright and this means nothing to it, which
+   * is why the bottom of a stack always draws at full whatever the number says.
+   */
   amount: number;
 }
 
@@ -325,11 +363,15 @@ export interface Layer {
    * you can navigate and a set that looks right.
    */
   color: number;
-  source: SourceKind;
-  /** Additive across the cascade, ordered, and already capped by energy. */
-  effects: AppliedEffect[];
   /**
-   * Every effect id the cascade offered, before `maxEffects` and energy cut it
+   * The stack this layer draws, bottom first. Already capped by energy.
+   *
+   * One list where there used to be a source and a list of effects, because
+   * that split was never real — see `BuiltinLook`.
+   */
+  looks: AppliedLook[];
+  /**
+   * Every look id the cascade offered, before `maxLooks` and energy cut it
    * down. The editor shows this: what a layer *would* carry explains what it
    * carries far better than the survivors do.
    */

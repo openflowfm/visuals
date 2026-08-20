@@ -1,9 +1,9 @@
-import type { Scheme } from '../../protocol.ts';
+import type { LookDef, Scheme } from '../../protocol.ts';
 import { Toggle } from '../../../widgets/src/controls/Toggle.tsx';
-import { effectList, toggleId } from './edits.ts';
+import { lookList, toggleId } from './edits.ts';
 
 /**
- * Which effects a level contributes, as a row of switches.
+ * Which looks a level contributes, as a row of switches.
  *
  * The same control for an archetype and for a layer, because the cascade treats
  * them the same way: both **add** to the pile and neither replaces the other.
@@ -12,7 +12,7 @@ import { effectList, toggleId } from './edits.ts';
  * Circuits sit after the built-ins and are marked, so the list stays readable as
  * it grows and so it is obvious which of these you can open up and change.
  */
-export function EffectPicks({
+export function LookPicks({
   scheme,
   chosen,
   onChange,
@@ -25,7 +25,7 @@ export function EffectPicks({
 }) {
   return (
     <div className="picks">
-      {effectList(scheme).map(({ id, def }) => (
+      {lookList(scheme).map(({ id, def }: { id: string; def: LookDef }) => (
         <Toggle
           key={id}
           on={(chosen ?? []).includes(id)}

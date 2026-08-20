@@ -1,10 +1,10 @@
 import { useEffect, useRef } from 'react';
-import type { EffectDef, SourceKind } from '../../protocol.ts';
+import type { LookDef } from '../../protocol.ts';
 import { createPreview } from '../render/preview.ts';
 import type { Clock } from '../state/useShow.ts';
 
 /**
- * One effect, drawn on its own, on the show's clock.
+ * A stack of looks, drawn on the show's clock.
  *
  * Editing a shader against the stage means editing something you cannot see:
  * the panel is over it, the section's energy may have dialled the effect to
@@ -19,9 +19,7 @@ import type { Clock } from '../state/useShow.ts';
  * measurement.
  */
 export function Preview({
-  def,
-  source,
-  amount,
+  stack,
   energy,
   color,
   pace,
@@ -30,9 +28,8 @@ export function Preview({
   meters,
   onError,
 }: {
-  def: EffectDef | null;
-  source: SourceKind;
-  amount: number;
+  /** The stack, bottom first. One look is a stack of one; several is a composition. */
+  stack: readonly { def: LookDef; amount: number }[];
   energy: number;
   color: number;
   pace: number;
@@ -45,8 +42,8 @@ export function Preview({
   const canvas = useRef<HTMLCanvasElement | null>(null);
   // Read by the loop rather than closed over, so changing a knob doesn't tear
   // down the GL context and rebuild every program.
-  const now = useRef({ def, source, amount, energy, color, pace, quantum, meters, onError });
-  now.current = { def, source, amount, energy, color, pace, quantum, meters, onError };
+  const now = useRef({ stack, energy, color, pace, quantum, meters, onError });
+  now.current = { stack, energy, color, pace, quantum, meters, onError };
 
   useEffect(() => {
     if (!canvas.current) return;
@@ -59,9 +56,7 @@ export function Preview({
       const at = now.current;
       const beat = clock.beat();
       preview.frame({
-        source: at.source,
-        def: at.def,
-        amount: at.amount,
+        stack: at.stack,
         energy: at.energy,
         level: 0.25 + 0.75 * (1 - (beat % 1)) ** 3,
         color: at.color,

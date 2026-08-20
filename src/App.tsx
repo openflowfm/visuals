@@ -3,7 +3,7 @@ import { createCompositor, type Compositor } from './render/compositor.ts';
 import { useOutput } from './state/useOutput.ts';
 import { useShow } from './state/useShow.ts';
 import { Align } from './ui/Align.tsx';
-import { effectLabel } from './ui/edits.ts';
+import { lookLabel } from './ui/edits.ts';
 import { Console } from './ui/Console.tsx';
 import './app.css';
 
@@ -153,8 +153,7 @@ export function App() {
               <tr>
                 <th>layer</th>
                 <th>clip</th>
-                <th>source</th>
-                <th>effects</th>
+                <th>looks</th>
                 <th>nrg</th>
                 <th>blend</th>
                 <th>fader</th>
@@ -171,9 +170,8 @@ export function App() {
                   <td className="clip" title={layer.clipName}>
                     {layer.playing < 0 ? '—' : layer.clipName || `scene ${layer.playing}`}
                   </td>
-                  <td>{layer.source}</td>
                   <td className="fx">
-                    {layer.effects.map((e) => effectLabel(scheme, e)).join(' + ') || '—'}
+                    {layer.looks.map((l) => lookLabel(scheme, l)).join(' → ') || '—'}
                   </td>
                   <td>{Math.round(layer.energy * 100)}</td>
                   <td>{layer.blend}</td>

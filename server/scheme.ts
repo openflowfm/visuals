@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Scheme, SongSpec } from '../protocol.ts';
+import type { Archetype, LayerSpec, LookDef, Scheme, SongSpec } from '../protocol.ts';
 
 
 /**
@@ -31,18 +31,18 @@ const BUILT_IN: Scheme = {
   },
   songs: {},
   archetypes: {
-    INTRO: { energy: 0.2, effects: ['smear'] },
-    VERSE: { energy: 0.35, effects: [] },
+    INTRO: { energy: 0.2, looks: ['smear'] },
+    VERSE: { energy: 0.35, looks: [] },
     // A build is the ramp into something, so it sits between a verse and a
     // chorus and reaches for the effect that moves the whole frame.
-    BUILD: { energy: 0.65, effects: ['ripple'] },
-    CHORUS: { energy: 0.9, effects: ['kaleido', 'ripple'] },
+    BUILD: { energy: 0.65, looks: ['ripple'] },
+    CHORUS: { energy: 0.9, looks: ['kaleido', 'ripple'] },
     // A bridge is a contrast rather than a peak: different, not louder.
-    BRIDGE: { energy: 0.45, effects: ['mirror'] },
-    JAM1: { energy: 0.75, effects: ['shift', 'smear'] },
-    JAM2: { energy: 0.8, effects: ['mirror', 'kaleido'] },
-    ENDING: { energy: 0.3, effects: ['smear'] },
-    PRACTICE: { energy: 0.15, effects: [] },
+    BRIDGE: { energy: 0.45, looks: ['mirror'] },
+    JAM1: { energy: 0.75, looks: ['shift', 'smear'] },
+    JAM2: { energy: 0.8, looks: ['mirror', 'kaleido'] },
+    ENDING: { energy: 0.3, looks: ['smear'] },
+    PRACTICE: { energy: 0.15, looks: [] },
   },
   layers: {},
   clips: {},
@@ -50,7 +50,22 @@ const BUILT_IN: Scheme = {
   // spelling and a circuit gets a fresh one. Parameters are deliberately absent:
   // each built-in declares its own defaults in `src/render/shaders.ts`, and a
   // value only lands here once someone has actually moved it.
-  effects: {
+  //
+  // Generators and transformers in one map, because they are one noun now. The
+  // only thing that still tells them apart is `isGenerator`, and it asks the
+  // look rather than reading which list it came out of.
+  looks: {
+    solid: { name: 'Solid', builtin: 'solid' },
+    bars: { name: 'Bars', builtin: 'bars' },
+    rings: { name: 'Rings', builtin: 'rings' },
+    noise: { name: 'Noise', builtin: 'noise' },
+    strobe: { name: 'Strobe', builtin: 'strobe' },
+    grid: { name: 'Grid', builtin: 'grid' },
+    tunnel: { name: 'Tunnel', builtin: 'tunnel' },
+    plasma: { name: 'Plasma', builtin: 'plasma' },
+    spiral: { name: 'Spiral', builtin: 'spiral' },
+    scan: { name: 'Scan', builtin: 'scan' },
+    sparks: { name: 'Sparks', builtin: 'sparks' },
     mirror: { name: 'Mirror', builtin: 'mirror' },
     kaleido: { name: 'Kaleido', builtin: 'kaleido' },
     shift: { name: 'Shift', builtin: 'shift' },
@@ -72,8 +87,10 @@ const BUILT_IN: Scheme = {
     // tracks is a white rectangle by the fourth layer however good each of them
     // looks alone. `add` is still here, because nothing else has its bite.
     blend: ['over', 'screen', 'add', 'screen', 'multiply', 'screen'],
-    sources: ['plasma', 'bars', 'rings', 'grid', 'spiral', 'noise', 'scan', 'strobe', 'sparks'],
-    maxEffects: 2,
+    looks: ['plasma', 'bars', 'rings', 'grid', 'spiral', 'noise', 'scan', 'strobe', 'sparks'],
+    // One more than the old cap, because the base now counts toward it: two
+    // transformers on top of a base is what `maxEffects: 2` used to mean.
+    maxLooks: 3,
     pace: 0,
   },
 };
@@ -223,7 +240,8 @@ export function openScheme(): SchemeSource {
  * unstyled. `layers` and `clips` merge the same way, because they are keyed by a
  * name the set owns: an entry for one track has nothing to say about another.
  */
-export function merge(file: Partial<Scheme>): Scheme {
+export function merge(raw: Partial<Scheme>): Scheme {
+  const file = carried(raw);
   return {
     // Carried rather than rebuilt, so a rolled show can still say where it came
     // from after a reload. Without it the seed lived exactly as long as the tab.
@@ -233,9 +251,77 @@ export function merge(file: Partial<Scheme>): Scheme {
     archetypes: { ...BUILT_IN.archetypes, ...(file.archetypes ?? {}) },
     layers: { ...BUILT_IN.layers, ...(file.layers ?? {}) },
     clips: { ...BUILT_IN.clips, ...(file.clips ?? {}) },
-    effects: { ...BUILT_IN.effects, ...(file.effects ?? {}) },
+    looks: { ...BUILT_IN.looks, ...(file.looks ?? {}) },
     defaults: { ...BUILT_IN.defaults, ...(file.defaults ?? {}) },
   };
+}
+
+/**
+ * A scheme written before source and effect became one noun.
+ *
+ * The split was real on disk for months, so a file out there says `effects`,
+ * `source`, `sources` and `maxEffects` — including the one rolled last night
+ * and committed. Refusing it would mean losing a show to a rename, which is the
+ * wrong answer at any time and an unthinkable one before a gig.
+ *
+ * Carried rather than migrated in place: the file is not rewritten until
+ * someone saves, and then it is written in the new spelling. Reading an old
+ * file and writing a new one is the whole migration.
+ */
+function carried(file: Partial<Scheme> & LegacyScheme): Partial<Scheme> {
+  const out: Partial<Scheme> & LegacyScheme = { ...file };
+
+  if (!out.looks && out.effects) out.looks = out.effects;
+  delete out.effects;
+
+  const fold = (spec: (LayerSpec & LegacyLayer) | undefined): LayerSpec | undefined => {
+    if (!spec) return spec;
+    const { source, effects, ...rest } = spec;
+    if (!source && !effects) return rest;
+    // The base first, which is exactly where a source always sat.
+    return { ...rest, looks: [...(source ? [source] : []), ...(effects ?? [])] };
+  };
+  const foldAll = (record: Record<string, LayerSpec & LegacyLayer> | undefined) =>
+    record &&
+    (Object.fromEntries(
+      Object.entries(record).map(([key, spec]) => [key, fold(spec)]),
+    ) as Record<string, LayerSpec>);
+
+  out.layers = foldAll(out.layers as Record<string, LayerSpec & LegacyLayer> | undefined);
+  out.clips = foldAll(out.clips as Record<string, LayerSpec & LegacyLayer> | undefined);
+
+  if (out.archetypes) {
+    out.archetypes = Object.fromEntries(
+      Object.entries(out.archetypes).map(([role, arch]) => {
+        const { effects: was, ...rest } = arch as Archetype & { effects?: string[] };
+        return [role, was && !rest.looks ? { ...rest, looks: was } : rest];
+      }),
+    );
+  }
+
+  if (out.defaults) {
+    const { sources, maxEffects, ...rest } = out.defaults as Scheme['defaults'] & LegacyDefaults;
+    out.defaults = {
+      ...rest,
+      ...(rest.looks || !sources ? {} : { looks: sources }),
+      ...(rest.maxLooks || maxEffects === undefined ? {} : { maxLooks: maxEffects + 1 }),
+    };
+  }
+
+  return out;
+}
+
+/** The shapes a file written before the collapse can still be in. */
+interface LegacyScheme {
+  effects?: Record<string, LookDef>;
+}
+interface LegacyLayer {
+  source?: string;
+  effects?: string[];
+}
+interface LegacyDefaults {
+  sources?: string[];
+  maxEffects?: number;
 }
 
 /**

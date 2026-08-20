@@ -17,13 +17,13 @@ const scheme = (over: Partial<Scheme> = {}): Scheme => ({
   archetypes: {},
   layers: {},
   clips: {},
-  effects: {},
+  looks: {},
   defaults: {
     colorway: 'default',
     energy: 0.4,
     blend: ['over'],
-    sources: ['bars'],
-    maxEffects: 2,
+    looks: ['bars'],
+    maxLooks: 3,
     pace: 0,
   },
   ...over,
@@ -50,12 +50,12 @@ describe('who answered for a cell', () => {
   });
 
   it('is inherited when the track is bound', () => {
-    const s = scheme({ layers: { Pad: { source: 'rings' } } });
+    const s = scheme({ layers: { Pad: { looks: ['rings'] } } });
     expect(cellFor(s, row({ 3: ['pad loop'] }), track).answer).toBe('inherited');
   });
 
   it('is said here when a clip in this row carries an exception', () => {
-    const s = scheme({ layers: { Pad: { source: 'rings' } }, clips: { 'pad loop': { hide: true } } });
+    const s = scheme({ layers: { Pad: { looks: ['rings'] } }, clips: { 'pad loop': { hide: true } } });
     const cell = cellFor(s, row({ 3: ['pad loop', 'pad swell'] }), track);
     expect(cell.answer).toBe('said');
     expect(cell.exceptions).toEqual(['pad loop']);
@@ -87,7 +87,7 @@ describe('a group column', () => {
   it('takes the strongest answer any member gave', () => {
     // The lie that matters runs the other way: a group reading "backstop" while
     // a track inside it is already bound sends you to do work twice.
-    const s = scheme({ layers: { Snare: { source: 'strobe' } } });
+    const s = scheme({ layers: { Snare: { looks: ['strobe'] } } });
     const column = columnsOf(grid, 'groups')[0];
     expect(cellForColumn(s, row({ 0: ['kick'], 1: ['snare'] }), column).answer).toBe('inherited');
   });
@@ -124,22 +124,22 @@ describe('staging an edit', () => {
   });
 
   it('keeps a different field on the same key', () => {
-    const staged = stage(stage([], edit('bias', 0.1)), edit('source', 'rings'));
+    const staged = stage(stage([], edit('bias', 0.1)), edit('looks', ['rings']));
     expect(staged).toHaveLength(2);
   });
 
   it('folds into a scheme without touching the one it came from', () => {
     const base = scheme();
-    const next = applyEdits(base, [edit('source', 'rings')]);
-    expect(next.layers.Pad).toEqual({ source: 'rings' });
+    const next = applyEdits(base, [edit('looks', ['rings'])]);
+    expect(next.layers.Pad).toEqual({ looks: ['rings'] });
     expect(base.layers.Pad).toBeUndefined();
   });
 
   it('drops a binding once its last field is cleared', () => {
     // A binding left behind would claim a decision nobody made, and would stop
     // the name hint ever applying to that track again.
-    const base = scheme({ layers: { Pad: { source: 'rings' } } });
-    expect(applyEdits(base, [edit('source', undefined)]).layers.Pad).toBeUndefined();
+    const base = scheme({ layers: { Pad: { looks: ['rings'] } } });
+    expect(applyEdits(base, [edit('looks', undefined)]).layers.Pad).toBeUndefined();
   });
 });
 

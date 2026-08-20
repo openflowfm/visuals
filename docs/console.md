@@ -9,14 +9,15 @@ the same set, and the three are the whole job of configuring one:
 
 | view | the question it answers | the scale |
 |---|---|---|
+| **design** | what is worth putting on a wall | one look, and a stack of them |
 | **coverage** | what have I not decided about | the set, all of it at once |
 | **bind** | is this right, and how far should the fix reach | one moment |
-| **looks** | what is this thing made of | one effect |
 
-The order is the order a night before a gig runs in: find the gaps, fix them against the
-picture, and only then open up the thing you are fixing *with*. Coverage hands an address
-to bind, bind hands an effect to looks, and nothing hands anything back — going back is
-what the tabs are for.
+**Design is first, and that ordering is the correction.** The console was built
+binding-first, so a look only existed in relation to a track and the only way to see one
+was to have Ableton running with the right clip playing. You cannot build a library that
+way; you can only tweak whatever happens to be on screen. Make things, then decide what
+drives them. The designer is [its own doc](looks.md).
 
 This replaced a four-pane editor whose panes were the four levels of the cascade. That was
 the right first shape and the wrong second one: it was organised by *where a value lives*
@@ -82,43 +83,11 @@ at track level makes it calmer in every song with a pad. The readout says so, in
 clips. The level that means *this song's pad* is the clip, which is what makes the clip the
 exception.
 
-## Looks is the one thing that is genuinely a graph
+## Design is documented separately
 
-The other two views are lists of decisions. What an effect *is* is a dataflow, and a table
-has never been able to say that. See [circuits](circuit.md) for the vocabulary.
-
-### Two drawers, and the difference between them is the whole idea
-
-A look reads signal from somewhere, and there are exactly two somewheres.
-
-- **My track** is *relative*: a `signal` node means whichever layer is drawing this, so the
-  same look means something correct on the bass and on the pad, and travels between songs
-  untouched.
-- **A named track** is *absolute*: a `track` node names one thing and keeps meaning it,
-  which is what "crossfade on the bass meter" needs and is also what breaks the moment the
-  look is used somewhere else.
-
-Both are wanted. The design problem was never which to have — it was making which one you
-are looking at obvious without making anyone think about the word "relative". Hence the
-shapes: **rounded travels, squared stays put.**
-
-### A picture on every node
-
-Each node face shows what *that node* has made, not a thumbnail of the finished effect —
-six copies of the same image would teach nothing, while a picture per step turns the canvas
-into something you can read along the chain.
-
-`probe.ts` builds it by cutting the circuit off at one outlet and bringing the result back
-to a colour through `paint` or `sample`, which are the vocabulary's own two crossings. So a
-number is shown the way `paint` would show it: how it will actually look if you wire it
-that way.
-
-All of them come out of **one** GL context, blitted into a small 2D canvas per node. A
-context each is the obvious build and the wrong one — browsers keep about sixteen alive and
-start evicting the oldest, and this page already has the stage, two A/B stages and a bench.
-That is also why `preview.ts` caches programs by signature in a map rather than a single
-slot: one context cycling through a dozen defs a frame would otherwise recompile every one
-of them, every frame.
+The look designer, the stack rules, the addressing drawers and the picture-per-node all
+live in [looks](looks.md), because they are about **what a look is** rather than about how
+the three views fit together. This file is the shell and the two binding views.
 
 ## What is deliberately absent
 

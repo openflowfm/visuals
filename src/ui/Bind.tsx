@@ -1,12 +1,12 @@
 import { useRef, useState } from 'react';
 import type { Scheme, SetGrid, Show } from '../../protocol.ts';
-import { BLENDS, SOURCE_KINDS } from '../../protocol.ts';
+import { BLENDS } from '../../protocol.ts';
 import { resolveLayer } from '../../resolve.ts';
 import { Knob } from '../../../widgets/src/controls/Knob.tsx';
 import { Select } from '../../../widgets/src/controls/Select.tsx';
 import { Toggle } from '../../../widgets/src/controls/Toggle.tsx';
 import type { Aim } from './Console.tsx';
-import { EffectPicks } from './EffectPicks.tsx';
+import { LookPicks } from './LookPicks.tsx';
 import { BIAS, ENERGY, FLOOR, PERCENT } from './param.ts';
 import {
   describe,
@@ -331,30 +331,19 @@ function Fields({
         </label>
         <div className="wide">
           <span className="cap">character</span>
-          <EffectPicks
+          <LookPicks
             scheme={scheme}
-            chosen={at('effects') as string[] | undefined}
-            onChange={(next) => put('effects', next)}
+            chosen={at('looks') as string[] | undefined}
+            onChange={(next: string[]) => put('looks', next)}
           />
         </div>
       </div>
     );
   }
 
-  const source = (at('source') as string) ?? '';
   const blend = (at('blend') as string) ?? '';
   return (
     <div className="fields">
-      <label>
-        <span>source</span>
-        <Select
-          items={['—', ...SOURCE_KINDS]}
-          index={Math.max(0, SOURCE_KINDS.indexOf(source as never) + 1)}
-          onChange={(i) => put('source', i === 0 ? undefined : SOURCE_KINDS[i - 1])}
-          label="Source"
-          width={92}
-        />
-      </label>
       <label>
         <span>blend</span>
         <Select
@@ -390,11 +379,11 @@ function Fields({
         </Toggle>
       </label>
       <div className="wide">
-        <span className="cap">effects, added to the section's</span>
-        <EffectPicks
+        <span className="cap">the stack — a generator sets the base, the rest add</span>
+        <LookPicks
           scheme={scheme}
-          chosen={at('effects') as string[] | undefined}
-          onChange={(next) => put('effects', next)}
+          chosen={at('looks') as string[] | undefined}
+          onChange={(next: string[]) => put('looks', next)}
         />
       </div>
     </div>
@@ -431,12 +420,12 @@ function Inherited({
     name: aim.track.name,
     depth,
     count: grid?.tracks.length ?? show.layers.length ?? 1,
-    section: role ? scheme.archetypes[role]?.effects : undefined,
+    section: role ? scheme.archetypes[role]?.looks : undefined,
     clip: aim.clip,
   });
   const colorway = aim.song ? scheme.songs[aim.song]?.colorway : undefined;
   const energy = role ? scheme.archetypes[role]?.energy : undefined;
-  const live = r.offers.filter((id) => scheme.effects[id]);
+  const live = r.offers.filter((id) => scheme.looks[id]);
 
   // Only the levels this edit is not the one deciding, which is what makes the
   // list mean "untouched" rather than "everything".
@@ -447,11 +436,12 @@ function Inherited({
   if (scope !== 'section' && role && energy !== undefined) {
     lines.push({ what: 'energy', from: `[${role}]`, is: energy.toFixed(2) });
   }
-  if (scope !== 'track' && r.said.source === 'track') {
-    lines.push({ what: 'source', from: `track · ${aim.track.name}`, is: r.source });
+  const baseName = scheme.looks[r.base]?.name ?? r.base;
+  if (scope !== 'track' && r.said.base === 'track') {
+    lines.push({ what: 'base', from: `track · ${aim.track.name}`, is: baseName });
   }
-  if (r.said.source === 'hint') {
-    lines.push({ what: 'source', from: 'name hint', is: r.source });
+  if (r.said.base === 'hint') {
+    lines.push({ what: 'base', from: 'name hint', is: baseName });
   }
 
   return (
@@ -467,7 +457,7 @@ function Inherited({
         <p className="fx">
           {live.map((id) => (
             <button key={id} type="button" className="link" onClick={() => onLook(id)}>
-              {scheme.effects[id]?.name || id}
+              {scheme.looks[id]?.name || id}
             </button>
           ))}
         </p>

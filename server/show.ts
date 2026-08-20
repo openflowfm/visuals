@@ -1,4 +1,4 @@
-import type { AppliedEffect, Layer, Scheme, Show } from '../protocol.ts';
+import type { AppliedLook, Layer, Scheme, Show } from '../protocol.ts';
 import type { SetState } from './bridge.ts';
 import type { LinkFrame } from './link.ts';
 import { liveOffers, resolveLayer } from '../resolve.ts';
@@ -74,17 +74,22 @@ function clamp01(value: number): number {
 }
 
 /**
- * How many of the offered effects actually land, and how hard.
+ * How much of the offered stack actually lands, and how hard.
  *
- * The first fades in across the bottom half of the energy range and the second
- * across the top, so a section never acquires two effects at once — it grows
- * into them. Below a tenth an effect is dropped rather than drawn, because a
- * pass that changes nothing visible still costs a full-screen draw.
+ * The base is always in. Above it, the first transformer fades in across the
+ * bottom half of the energy range and the second across the top, so a section
+ * never acquires two at once — it grows into them. Below a tenth a pass is
+ * dropped rather than drawn, because one that changes nothing visible still
+ * costs a full-screen draw.
  */
-function dialEffects(ids: string[], energy: number, max: number): AppliedEffect[] {
-  const applied: AppliedEffect[] = [];
-  for (let i = 0; i < Math.min(ids.length, max); i++) {
-    const opensAt = i * 0.45;
+function dialStack(ids: string[], energy: number, max: number): AppliedLook[] {
+  if (ids.length === 0) return [];
+  // The base always draws at full. It is what the layer *is*, and a section
+  // being quiet should thin the stack rather than fade the thing underneath it
+  // — that is what the floor gate is for, and doing both would dim twice.
+  const applied: AppliedLook[] = [{ id: ids[0], amount: 1 }];
+  for (let i = 1; i < Math.min(ids.length, max); i++) {
+    const opensAt = (i - 1) * 0.45;
     const amount = clamp01((energy - opensAt) / 0.45);
     if (amount > 0.1) applied.push({ id: ids[i], amount });
   }
@@ -136,7 +141,7 @@ export function buildShow(set: SetState, link: LinkFrame, source: SchemeSource):
       name: track.name,
       depth,
       count: tracks.length,
-      section: archetype?.effects,
+      section: archetype?.looks,
       clip: clip?.name ?? null,
     });
 
@@ -164,8 +169,7 @@ export function buildShow(set: SetState, link: LinkFrame, source: SchemeSource):
       // Never from the clip — that colour is navigation and belongs to whoever
       // is reading the grid to find their place.
       color: packColor(colors[depth % colors.length]),
-      source: r.source,
-      effects: r.hidden ? [] : dialEffects(live, energy, scheme.defaults.maxEffects),
+      looks: r.hidden ? [] : dialStack(live, energy, scheme.defaults.maxLooks),
       offers: live,
       blend: r.blend,
       floor: r.floor,

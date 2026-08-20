@@ -110,6 +110,21 @@ discovered later.
 Override, mixin and "a specific look" are one concept, not three: a more specific level
 saying something the levels above it did not.
 
+## Where binding is going
+
+Recorded because it is the shape the data model has to leave room for, not because it is
+next. **The composition is simply what the renderer is showing** — it is the output, not an
+artifact you save and recall. What builds it is a cascade of looks:
+
+- A look per song is already enough to make the set read as dynamic and distinct, and that
+  alone is the first useful version.
+- Per-track overrides go on top, so improvising on one instrument changes the picture in a
+  way that belongs to that instrument.
+
+So a composition is never bound *as a thing*; it is what a cascade of looks resolves to at
+a moment. That is the same shape the existing cascade already has — the difference is that
+the unit being cascaded becomes a **look** rather than a source-plus-effect-list.
+
 ## Constraints
 
 - **Hands-off during the show.** Nothing in v1 is a performance surface. If the interface

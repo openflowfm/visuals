@@ -19,15 +19,15 @@ import { BUILT_IN, merge } from './scheme.ts';
  * spends its first evening in, and a first evening where every layer is roughly
  * right is the difference between configuring this and not bothering.
  */
-const sourceFor = (name: string) => hint(name)?.source ?? null;
+const baseFor = (name: string) => hint(name)?.looks?.[0] ?? null;
 
 describe('name hints', () => {
   it('does not match a word inside a longer one', () => {
     // The bug this file was written for. "beat" is inside "Beating", so without
     // a word boundary a pad track drew as a drum — and it was the drum hint
     // that won, because it is first.
-    expect(sourceFor('Beating Pad')).toBe('noise');
-    expect(sourceFor('Subtle Keys')).toBe('grid');
+    expect(baseFor('Beating Pad')).toBe('noise');
+    expect(baseFor('Subtle Keys')).toBe('grid');
   });
 
   it('is strict in both directions, which is the price of the fix', () => {
@@ -35,27 +35,27 @@ describe('name hints', () => {
     // and "Drumming" is not a drum. They fall through to positional instead,
     // which is the safe half of being wrong: an unremarkable layer rather than
     // a confidently misrouted one.
-    expect(sourceFor('Padded Cell')).toBeNull();
-    expect(sourceFor('Drumming')).toBeNull();
+    expect(baseFor('Padded Cell')).toBeNull();
+    expect(baseFor('Drumming')).toBeNull();
   });
 
   it('reads an arp as a sequence rather than a chord', () => {
     // Four of these in one set. Scattered across positional fallbacks they read
     // as four unrelated layers when they are one family.
     for (const name of ['Space Arp', 'Retro Arp', 'Pluck Arp', '13-Felixian Pluck Arp']) {
-      expect(sourceFor(name), name).toBe('bars');
+      expect(baseFor(name), name).toBe('bars');
     }
   });
 
   it('routes the ordinary instrument names', () => {
-    expect(sourceFor('Drums')).toBe('strobe');
-    expect(sourceFor('Bass')).toBe('bars');
-    expect(sourceFor('Sub Bass')).toBe('bars');
-    expect(sourceFor('303 EXT')).toBe('bars');
-    expect(sourceFor('Guitar')).toBe('rings');
-    expect(sourceFor('Vox')).toBe('rings');
-    expect(sourceFor('Sparkle Pad')).toBe('noise');
-    expect(sourceFor('Texture')).toBe('noise');
+    expect(baseFor('Drums')).toBe('strobe');
+    expect(baseFor('Bass')).toBe('bars');
+    expect(baseFor('Sub Bass')).toBe('bars');
+    expect(baseFor('303 EXT')).toBe('bars');
+    expect(baseFor('Guitar')).toBe('rings');
+    expect(baseFor('Vox')).toBe('rings');
+    expect(baseFor('Sparkle Pad')).toBe('noise');
+    expect(baseFor('Texture')).toBe('noise');
   });
 
   it('leaves a name that says nothing to fall through', () => {
@@ -74,8 +74,8 @@ describe('name hints', () => {
   });
 
   it('is case-insensitive, because nobody is consistent', () => {
-    expect(sourceFor('DRUMS')).toBe('strobe');
-    expect(sourceFor('drum bus')).toBe('strobe');
+    expect(baseFor('DRUMS')).toBe('strobe');
+    expect(baseFor('drum bus')).toBe('strobe');
   });
 });
 
@@ -101,8 +101,8 @@ describe('the built-in scheme', () => {
     // An archetype pointing at an id nothing registers is a section that
     // quietly carries one effect fewer than it says it does.
     for (const [role, archetype] of Object.entries(BUILT_IN.archetypes)) {
-      for (const id of archetype.effects ?? []) {
-        expect(BUILT_IN.effects[id], `${role} -> ${id}`).toBeDefined();
+      for (const id of archetype.looks ?? []) {
+        expect(BUILT_IN.looks[id], `${role} -> ${id}`).toBeDefined();
       }
     }
   });
@@ -126,10 +126,10 @@ describe('merging a file over the built-in', () => {
     // A file that registered one effect used to be a file that had six fewer,
     // which would break every archetype at once.
     const merged = merge({
-      effects: { fx1: { name: 'Mine', circuit: { nodes: [], cords: [] } } },
+      looks: { fx1: { name: 'Mine', circuit: { nodes: [], cords: [] } } },
     });
-    expect(merged.effects.fx1).toBeDefined();
-    expect(merged.effects.kaleido).toBeDefined();
+    expect(merged.looks.fx1).toBeDefined();
+    expect(merged.looks.kaleido).toBeDefined();
   });
 
   it('reads a song written as a bare colourway name', () => {
@@ -140,15 +140,17 @@ describe('merging a file over the built-in', () => {
   });
 
   it('carries layer bindings through, keyed by the track name', () => {
-    const merged = merge({ layers: { Drums: { source: 'rings' } } });
-    expect(merged.layers.Drums.source).toBe('rings');
+    const merged = merge({ layers: { Drums: { looks: ['rings'] } } });
+    expect(merged.layers.Drums.looks?.[0]).toBe('rings');
   });
 
   it('gives a file written before pace existed a pace anyway', () => {
     // `defaults` merges field by field, which is what stops an older file from
     // arriving with a hole in it where a uniform is about to read.
     expect(merge({ defaults: { maxEffects: 3 } as never }).defaults.pace).toBe(0);
-    expect(merge({ defaults: { maxEffects: 3 } as never }).defaults.maxEffects).toBe(3);
+    // And a cap written before the collapse gains one, because the base it
+    // never counted is now part of the stack it is capping.
+    expect(merge({ defaults: { maxEffects: 3 } as never }).defaults.maxLooks).toBe(4);
   });
 
   it('remembers what a rolled show was rolled from', () => {
@@ -156,5 +158,50 @@ describe('merging a file over the built-in', () => {
     // the scheme field by field and this one was not among them.
     expect(merge({ seed: 'coral-tide-207' }).seed).toBe('coral-tide-207');
     expect(merge({}).seed).toBeUndefined();
+  });
+});
+
+/**
+ * A file written before source and effect became one noun.
+ *
+ * The split was real on disk for months, and one of those files is committed.
+ * Refusing it would mean losing a show to a rename, so the reader carries the
+ * old spelling forward and the next save writes the new one — reading old and
+ * writing new is the whole migration.
+ */
+describe('a scheme from before the collapse', () => {
+  it('folds a layer\'s source and effects into one stack, base first', () => {
+    const merged = merge({
+      layers: { Pad: { source: 'rings', effects: ['kaleido'], bias: 0.2 } },
+    } as never);
+    expect(merged.layers.Pad.looks).toEqual(['rings', 'kaleido']);
+    // Everything that was not part of the split is untouched.
+    expect(merged.layers.Pad.bias).toBe(0.2);
+  });
+
+  it('keeps a source with no effects, and effects with no source', () => {
+    const onlyBase = merge({ layers: { A: { source: 'bars' } } } as never);
+    expect(onlyBase.layers.A.looks).toEqual(['bars']);
+    const onlyOver = merge({ layers: { B: { effects: ['ripple'] } } } as never);
+    expect(onlyOver.layers.B.looks).toEqual(['ripple']);
+  });
+
+  it('reads the old `effects` map as the look library', () => {
+    const merged = merge({
+      effects: { fx1: { name: 'Mine', circuit: { nodes: [], cords: [] } } },
+    } as never);
+    expect(merged.looks.fx1).toBeDefined();
+    // And the built-ins are still there underneath it.
+    expect(merged.looks.kaleido).toBeDefined();
+  });
+
+  it('carries an archetype\'s effects over as its looks', () => {
+    const merged = merge({ archetypes: { DROP: { energy: 0.9, effects: ['smear'] } } } as never);
+    expect(merged.archetypes.DROP.looks).toEqual(['smear']);
+  });
+
+  it('leaves a file already written in the new spelling alone', () => {
+    const merged = merge({ layers: { Pad: { looks: ['grid', 'twist'] } } });
+    expect(merged.layers.Pad.looks).toEqual(['grid', 'twist']);
   });
 });

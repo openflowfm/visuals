@@ -1,5 +1,5 @@
 import type { Circuit, CircuitNode, NodeKind } from '../../protocol.ts';
-import { EFFECT_PREAMBLE } from './shaders.ts';
+import { LOOK_PREAMBLE } from './shaders.ts';
 
 /**
  * An effect built out of nodes, compiled to a fragment shader.
@@ -375,7 +375,7 @@ export interface Compiled {
   knobs: CircuitKnob[];
 }
 
-/** At most eight, because that is the size of the bank in `EFFECT_PREAMBLE`. */
+/** At most eight, because that is the size of the bank in `LOOK_PREAMBLE`. */
 export const MAX_KNOBS = 8;
 
 /** Likewise, and for the same bank-sized reason. */
@@ -536,7 +536,7 @@ export function compileCircuit(circuit: Circuit): Compiled {
   }
   if (failed) return { source: null, error: failed, knobs };
 
-  const source = `${EFFECT_PREAMBLE}${HELPERS}
+  const source = `${LOOK_PREAMBLE}${HELPERS}
 void main() {
 ${lines.join('\n')}
   MIXED(${result})

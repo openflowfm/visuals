@@ -1,4 +1,4 @@
-import type { AppliedEffect, Circuit, EffectDef, LayerSpec, Scheme } from '../../protocol.ts';
+import type { AppliedLook, Circuit, LookDef, LayerSpec, Scheme } from '../../protocol.ts';
 import { starterCircuit } from '../render/circuit.ts';
 
 /**
@@ -18,14 +18,14 @@ import { starterCircuit } from '../render/circuit.ts';
  * the edge. Shared between the panel and the layers pane so a layer reads the
  * same in both.
  */
-export function effectLabel(scheme: Scheme | null, effect: AppliedEffect): string {
-  const name = scheme?.effects[effect.id]?.name ?? effect.id;
-  return effect.amount > 0.95 ? name : `${name} ${Math.round(effect.amount * 100)}`;
+export function lookLabel(scheme: Scheme | null, look: AppliedLook): string {
+  const name = scheme?.looks[look.id]?.name ?? look.id;
+  return look.amount > 0.95 ? name : `${name} ${Math.round(look.amount * 100)}`;
 }
 
 /** An effect id and what to call it, built-ins first and each group by name. */
-export function effectList(scheme: Scheme): { id: string; def: EffectDef }[] {
-  return Object.entries(scheme.effects)
+export function lookList(scheme: Scheme): { id: string; def: LookDef }[] {
+  return Object.entries(scheme.looks)
     .map(([id, def]) => ({ id, def }))
     .sort((a, b) => {
       const kind = Number(Boolean(a.def.circuit)) - Number(Boolean(b.def.circuit));
@@ -64,23 +64,23 @@ export function setLayer(
 }
 
 /** The next free `fx*` id. Ids are stable and never shown; names are neither. */
-export function freeEffectId(scheme: Scheme): string {
+export function freeLookId(scheme: Scheme): string {
   for (let n = 1; ; n++) {
     const id = `fx${n}`;
-    if (!scheme.effects[id]) return id;
+    if (!scheme.looks[id]) return id;
   }
 }
 
 export function addCircuit(scheme: Scheme): { scheme: Scheme; id: string } {
-  const id = freeEffectId(scheme);
-  const used = new Set(Object.values(scheme.effects).map((def) => def.name));
+  const id = freeLookId(scheme);
+  const used = new Set(Object.values(scheme.looks).map((def) => def.name));
   let name = 'New effect';
   for (let n = 2; used.has(name); n++) name = `New effect ${n}`;
   return {
     id,
     scheme: {
       ...scheme,
-      effects: { ...scheme.effects, [id]: { name, circuit: starterCircuit() } },
+      looks: { ...scheme.looks, [id]: { name, circuit: starterCircuit() } },
     },
   };
 }
@@ -92,20 +92,17 @@ export function addCircuit(scheme: Scheme): { scheme: Scheme; id: string } {
  * cannot find — but it would also mean a chorus quietly carrying a ghost, and
  * an effect list that could never tell you what an archetype actually does.
  */
-export function dropEffect(scheme: Scheme, id: string): Scheme {
+export function dropLook(scheme: Scheme, id: string): Scheme {
   const without = (list: string[] | undefined) => list?.filter((x) => x !== id);
-  const effects = { ...scheme.effects };
-  delete effects[id];
-  const strip = <T extends { effects?: string[] }>(record: Record<string, T>) =>
+  const looks = { ...scheme.looks };
+  delete looks[id];
+  const strip = <T extends { looks?: string[] }>(record: Record<string, T>) =>
     Object.fromEntries(
-      Object.entries(record).map(([key, value]) => [
-        key,
-        { ...value, effects: without(value.effects) },
-      ]),
+      Object.entries(record).map(([key, value]) => [key, { ...value, looks: without(value.looks) }]),
     ) as Record<string, T>;
   return {
     ...scheme,
-    effects,
+    looks,
     archetypes: strip(scheme.archetypes),
     layers: strip(scheme.layers),
     clips: strip(scheme.clips),

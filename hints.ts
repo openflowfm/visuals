@@ -32,27 +32,27 @@ export const HINTS: readonly Hint[] = [
   {
     family: 'drums',
     test: /\b(kick|drums?|beats?|perc|snare)\b/i,
-    spec: { source: 'strobe', bias: 0.1, floor: 0 },
+    spec: { looks: ['strobe'], bias: 0.1, floor: 0 },
   },
-  { family: 'bass', test: /\b(bass|sub|808|303)\b/i, spec: { source: 'bars', floor: 0.05 } },
+  { family: 'bass', test: /\b(bass|sub|808|303)\b/i, spec: { looks: ['bars'], floor: 0.05 } },
   // Before the keys hint: an arp is a sequence rather than a chord, and four of
   // them scattered across unrelated sources read as four unrelated things when
   // they are a family.
-  { family: 'arp', test: /\barps?\b/i, spec: { source: 'bars', bias: 0.05 } },
+  { family: 'arp', test: /\barps?\b/i, spec: { looks: ['bars'], bias: 0.05 } },
   {
     family: 'lead',
     test: /\b(lead|solo|gtr|guitar|vox|vocal)\b/i,
-    spec: { source: 'rings', bias: 0.1 },
+    spec: { looks: ['rings'], bias: 0.1 },
   },
   {
     family: 'pad',
     test: /\b(pads?|strings?|atmos|amb|textures?)\b/i,
-    spec: { source: 'noise', bias: -0.15 },
+    spec: { looks: ['noise'], bias: -0.15 },
   },
   {
     family: 'keys',
     test: /\b(keys?|synth|chords?|piano|organ|pluck)\b/i,
-    spec: { source: 'grid' },
+    spec: { looks: ['grid'] },
   },
 ];
 

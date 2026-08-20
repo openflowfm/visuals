@@ -1,7 +1,7 @@
 # Circuits
 
-`src/render/circuit.ts`, `src/ui/Circuit.tsx`, `src/ui/Looks.tsx`. An effect built out of
-nodes, compiled to a fragment shader.
+`src/render/circuit.ts`, `src/ui/Circuit.tsx`, `src/ui/Designer.tsx`. A **look** built out
+of nodes, compiled to a fragment shader. See [looks](looks.md) for what a look is.
 
 ## Why a graph here and nowhere else
 
@@ -10,10 +10,10 @@ dataflow — a point moved about, a picture read at it, a colour worked on — a
 never been able to say that. So the canvas is here, on one effect at a time, and the rest
 of the editor is lists.
 
-The six built-ins are handwritten GLSL and always will be: they are what a rig draws before
+The built-ins are handwritten GLSL and always will be: they are what a rig draws before
 anyone has wired anything. A circuit is the other half, and the compositor cannot tell them
-apart. Both are addressed by an **id** from an archetype or a layer, so nothing that *uses*
-an effect knows which kind it got.
+apart. Both are addressed by an **id** wherever a look is named, so nothing that *uses* one
+knows which kind it got.
 
 ## Three signals, and everything follows from them
 
@@ -79,9 +79,12 @@ goes costs nothing.
 | `out` | `c` | | what leaves, mixed against the untouched frame by the effect's amount |
 
 `paint` and `sample` are the two crossings, and a circuit that has a `paint` but no
-`sample` is a **generator** rather than an effect — it ignores what arrived. That works
-today and is how a custom source would eventually arrive; the source slot itself is still
-one of the six built-ins.
+`sample` is a **generator** — it ignores what arrived and draws its own picture.
+
+That sentence used to end "…and is how a custom source would eventually arrive; the source
+slot itself is still one of the six built-ins." It arrived. Source and effect are one noun
+now, `isGenerator` asks exactly this question of a circuit, and a graph you draw can be the
+bottom of a stack. See [looks](looks.md).
 
 ## Compiling
 
@@ -111,20 +114,22 @@ not take the layer with it.
 
 ## The bench
 
-The looks view draws its own frame: one source, the selected effect, at whatever amount
-and energy you ask for.
+The designer draws its own frame: a **stack**, at whatever amount and energy you ask for —
+and on its own transport, so none of it needs a set to be running.
 
 It has to. Editing a shader against the stage means editing something you cannot see — the
-panel is over it, the section's energy may have dialled the effect to nothing, and the
-layer carrying it may not be playing. But it runs on **Link's beat**, which is the whole
-difference between this and a shader toy: a `wave` wired to the beat is in time with the
-room while you are building it.
+panel is over it, the section's energy may have dialled it to nothing, and the layer
+carrying it may not be playing. Worse, it means Ableton has to be running at all.
 
-The meter is synthetic and deliberately so. A real one would be some particular track's,
-and choosing which is a question with no good answer here; a pulse on each beat shows what
-`level` does to the picture without pretending to be a measurement.
+It still runs on a **musical** beat, which is the whole difference between this and a
+shader toy: a `wave` wired to the beat is in time while you build it. The beat is just no
+longer required to come from a room.
 
-`src/render/effect.ts` is shared between the bench and the compositor — the shader, the
+The meter is hand-driven or synthetic, and deliberately so. A real one would be some
+particular track's, and choosing which is a question with no good answer at a desk — so it
+is either a value you hold or a pulse on each beat, and a `Meter` shows which.
+
+`src/render/look.ts` is shared between the bench and the compositor — the shader, the
 parameter bank, and the cache signature. A preview that could disagree with the stage about
 what an effect looks like would be worse than no preview.
 
@@ -168,7 +173,5 @@ does not exist, which is the way a hand-written node table drifts.
   the effect; two layers carrying the same circuit carry the same settings.
 - **Copying or forking an effect.** A new circuit always starts from the same working
   kaleidoscope.
-- **Custom sources.** A generator circuit draws one, but the layer's `source` slot still
-  only offers the six built-ins.
 - **Undo.** The scheme is replaced whole on every edit and the file is the record, so `git
   diff` is the undo.

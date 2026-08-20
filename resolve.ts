@@ -1,5 +1,5 @@
 import { hint } from './hints.ts';
-import type { Blend, LayerSpec, Scheme, SourceKind } from './protocol.ts';
+import { GENERATORS, type Blend, type LayerSpec, type LookDef, type Scheme } from './protocol.ts';
 
 /**
  * One layer, resolved through the cascade — the whole of it, in one place.
@@ -22,19 +22,47 @@ import type { Blend, LayerSpec, Scheme, SourceKind } from './protocol.ts';
  */
 export type Said = 'default' | 'hint' | 'track' | 'clip';
 
+/**
+ * Whether a look draws its own picture or works on the one that arrived.
+ *
+ * The whole difference between the two halves of the old split, asked as a
+ * question about one look rather than answered by which list it was in. A
+ * built-in is a generator by name; a circuit is one when it never samples the
+ * frame, which is exactly what `circuit.md` already said made it a source.
+ *
+ * The resolver needs this because the two combine differently. A generator is
+ * the **base** of a stack and a more specific level *replaces* it — that is what
+ * "a clip is an exception" has to mean. A transformer is **added**, because the
+ * section's character and the track's own character should both survive.
+ */
+export function isGenerator(scheme: Scheme, id: string): boolean {
+  const def: LookDef | undefined = scheme.looks[id];
+  if (!def) return false;
+  if (def.builtin) return (GENERATORS as readonly string[]).includes(def.builtin);
+  if (!def.circuit) return false;
+  return !def.circuit.nodes.some((node) => node.kind === 'sample');
+}
+
 export interface Resolution {
-  source: SourceKind;
+  /** The generator the stack starts from. */
+  base: string;
   blend: Blend;
   /** The section energy at which this layer joins the picture. */
   floor: number;
   /** Added to the section's energy. Accumulates from track to clip. */
   bias: number;
   hidden: boolean;
-  /** Every effect id the cascade offered, in the order it offered them. */
+  /**
+   * The whole stack the cascade offered, base first, in draw order.
+   *
+   * Not yet capped: `maxLooks` and energy cut it down in `show.ts`, and an
+   * editor wants to see what a layer *would* carry, which explains what it
+   * carries far better than the survivors do.
+   */
   offers: string[];
   /** Which level last set each scalar. `default` means nobody did. */
-  said: Record<'source' | 'blend' | 'floor' | 'bias' | 'hide', Said>;
-  /** The effect ids each level contributed, kept apart so an editor can say. */
+  said: Record<'base' | 'blend' | 'floor' | 'bias' | 'hide', Said>;
+  /** The look ids each level contributed, kept apart so an editor can say. */
   gave: { section: string[]; track: string[]; clip: string[] };
 }
 
@@ -45,7 +73,7 @@ export interface Asked {
   depth: number;
   /** How many layers there are, for the derived floor. */
   count: number;
-  /** The section's effects, which are the first thing on the pile. */
+  /** The section's looks, which are the first thing on the pile. */
   section?: readonly string[];
   /** The clip playing, or the one an exception is being written against. */
   clip?: string | null;
@@ -69,7 +97,7 @@ export interface Asked {
 export function resolveLayer(scheme: Scheme, asked: Asked): Resolution {
   const { defaults } = scheme;
   const out: Resolution = {
-    source: defaults.sources[asked.depth % defaults.sources.length],
+    base: defaults.looks[asked.depth % defaults.looks.length],
     blend: defaults.blend[asked.depth % defaults.blend.length],
     // Derived so the bottom layer is always in and a tall stack's top needs a
     // fairly loud section to appear. Any level may say otherwise.
@@ -77,15 +105,15 @@ export function resolveLayer(scheme: Scheme, asked: Asked): Resolution {
     bias: 0,
     hidden: false,
     offers: [...(asked.section ?? [])],
-    said: { source: 'default', blend: 'default', floor: 'default', bias: 'default', hide: 'default' },
-    gave: { section: [...(asked.section ?? [])], track: [], clip: [] },
+    said: { base: 'default', blend: 'default', floor: 'default', bias: 'default', hide: 'default' },
+    gave: { section: [], track: [], clip: [] },
   };
 
+  /** Transformers, in the order the levels offered them. The base is separate. */
+  const transforms: string[] = [];
+
   const apply = (spec: LayerSpec, level: Said, into: 'track' | 'clip' | null) => {
-    if (spec.source) {
-      out.source = spec.source;
-      out.said.source = level;
-    }
+
     if (spec.blend) {
       out.blend = spec.blend;
       out.said.blend = level;
@@ -102,15 +130,38 @@ export function resolveLayer(scheme: Scheme, asked: Asked): Resolution {
       out.hidden = spec.hide;
       out.said.hide = level;
     }
-    for (const id of spec.effects ?? []) {
-      if (!out.offers.includes(id)) {
-        out.offers.push(id);
+    take(spec.looks, level, into);
+  };
+
+  /**
+   * A generator replaces the base; a transformer joins the queue.
+   *
+   * This is the one place the collapsed noun still has to tell the two apart,
+   * and it is the right place: combining is the cascade's job, and drawing —
+   * which genuinely does not care — is the compositor's.
+   */
+  const take = (ids: readonly string[] | undefined, level: Said, into: 'track' | 'clip' | null) => {
+    for (const id of ids ?? []) {
+      if (isGenerator(scheme, id)) {
+        out.base = id;
+        out.said.base = level;
         if (into) out.gave[into].push(id);
+        continue;
       }
+      if (transforms.includes(id)) continue;
+      transforms.push(id);
+      if (into) out.gave[into].push(id);
     }
   };
 
-  // The name hint first, so an explicit entry can say one thing without having
+  // The section is the first thing on the pile. It usually contributes
+  // character, but nothing stops it naming a generator — "in the drop,
+  // everything becomes strobe" is a real thing to want, and the rule stays
+  // uniform: a generator sets the base wherever it came from.
+  take(asked.section, 'default', null);
+  out.gave.section = [...transforms];
+
+  // The name hint next, so an explicit entry can say one thing without having
   // to restate everything the name already implied.
   const guessed = hint(asked.name);
   if (guessed) apply(guessed, 'hint', null);
@@ -124,15 +175,16 @@ export function resolveLayer(scheme: Scheme, asked: Asked): Resolution {
     if (byClip.bias !== undefined) out.bias = carried + byClip.bias;
   }
 
+  out.offers = [out.base, ...transforms];
   return out;
 }
 
 /**
- * The offers that name an effect the scheme still has.
+ * The offers that name a look the scheme still has.
  *
- * An id naming a deleted effect is dropped here rather than in the renderer, so
- * a stale reference costs a missing effect and never a failed compile.
+ * An id naming a deleted look is dropped here rather than in the renderer, so
+ * a stale reference costs a missing pass and never a failed compile.
  */
 export function liveOffers(scheme: Scheme, offers: readonly string[]): string[] {
-  return offers.filter((id) => scheme.effects[id]);
+  return offers.filter((id) => scheme.looks[id]);
 }

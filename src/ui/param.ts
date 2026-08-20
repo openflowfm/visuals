@@ -1,5 +1,5 @@
 import type { Param } from '../../../widgets/src/param/param.ts';
-import type { EffectParam } from '../render/shaders.ts';
+import type { LookParam } from '../render/shaders.ts';
 
 /**
  * The one adapter between `widgets/` and this app.
@@ -68,15 +68,15 @@ export const FLOOR: Param = {
   shortName: 'Floor',
 };
 
-/** How many effects a layer may carry, whatever the cascade offers it. */
-export const MAX_EFFECTS: Param = {
+/** How long a layer's stack may get, whatever the cascade offers it. */
+export const MAX_LOOKS: Param = {
   kind: 'int',
-  min: 0,
-  max: 3,
+  min: 1,
+  max: 4,
   defaultValue: 2,
   unit: 'int',
-  name: 'Max effects',
-  shortName: 'Max fx',
+  name: 'Max looks',
+  shortName: 'Max looks',
 };
 
 /**
@@ -96,7 +96,24 @@ export const PACE: Param = {
   shortName: 'Pace',
 };
 
-/** How hard the bench drives the effect it is showing. */
+/**
+ * The designer's own tempo, when it is not following a room.
+ *
+ * A float rather than an int because Live's tempo is one, and a look built at
+ * 128.5 should be judged at 128.5. Live's own range, so nothing here refuses a
+ * number Ableton would accept.
+ */
+export const BPM: Param = {
+  kind: 'float',
+  min: 20,
+  max: 999,
+  defaultValue: 120,
+  unit: 'float',
+  name: 'Tempo',
+  shortName: 'BPM',
+};
+
+/** How hard the bench drives the look it is showing. */
 export const AMOUNT: Param = {
   kind: 'float',
   min: 0,
@@ -133,7 +150,7 @@ export const KNOB: Param = {
  * with a decimal. Guessing this from the numbers rather than declaring it keeps
  * `BUILTIN_PARAMS` a table of ranges instead of a table of ranges and spellings.
  */
-export function effectParam(spec: EffectParam): Param {
+export function lookParam(spec: LookParam): Param {
   const counted =
     Number.isInteger(spec.min) &&
     Number.isInteger(spec.max) &&

@@ -1,4 +1,4 @@
-import type { BuiltinEffect, SourceKind } from '../../protocol.ts';
+import type { BuiltinLook } from '../../protocol.ts';
 
 /**
  * Every source and built-in effect, as fragment shaders over one shared
@@ -117,8 +117,49 @@ vec3 charge(vec3 c) {
 #define OUT(rgb, a) { float _a = (a) * uOpacity; fragColor = vec4(charge(rgb) * _a, _a); }
 `;
 
-const SOURCES: Record<SourceKind, string> = {
-  solid: `${PREAMBLE}
+/**
+ * One preamble, for every look there is.
+ *
+ * There used to be two — a short one for a source and a longer one for an
+ * effect — and merging them is most of what collapsing the noun cost. The
+ * longer was always a superset, so a generator simply never mentions `uTex`,
+ * and an unused uniform costs nothing. What is left is a real difference of
+ * *authorship* rather than of kind: a shader ends with `OUT` if it draws its
+ * own picture, or with `MIXED` if it works on the one that arrived.
+ *
+ * Effects mix against their own input rather than replacing it.
+ *
+ * `uAmount` is what lets an archetype's energy dial one in instead of switching
+ * it on: at 0.3 a kaleidoscope is a suggestion in the corner of the eye, and at
+ * 0.95 it has taken the frame. `MIXED(colour)` is the one way out, and every
+ * effect below ends with it so none of them can forget.
+ *
+ * They sample an already-premultiplied picture, so `uOpacity` is bound to 1 for
+ * an effect pass — the fader has been applied once already and must not be
+ * applied twice.
+ *
+ * `uParams` is the eight-float bank an effect's own knobs ride in. A bank rather
+ * than a named uniform each, because a circuit's knobs are discovered from its
+ * nodes and cannot be declared ahead of time — and because a value arriving in a
+ * uniform is a value that can be turned without recompiling a shader, which is
+ * the difference between a knob and a rebuild.
+ */
+export const LOOK_PREAMBLE = `${PREAMBLE}
+uniform sampler2D uTex;
+uniform float uAmount;
+uniform float uParams[8];
+// Meters of tracks this effect NAMED, in the order its track nodes appear. A
+// bank rather than a uniform each, for the same reason uParams is one: which
+// tracks a circuit reaches is discovered from its nodes and cannot be declared
+// ahead of time. uLevel is the layer's own meter and needs no name; this is
+// every other track's, and that distinction is the whole of relative versus
+// absolute addressing.
+uniform float uTracks[8];
+#define MIXED(c) { fragColor = mix(texture(uTex, vUv), (c), uAmount); }
+`;
+
+const GENERATORS: Record<string, string> = {
+  solid: `${LOOK_PREAMBLE}
 void main() {
   // The plainest layer there is: the song's colour, breathing on the bar and
   // brightening with the sound. It exists so a stack has something solid at the
@@ -132,7 +173,7 @@ void main() {
   OUT(uColor * (breathe * 0.6 + uLevel * 0.45), 1.0)
 }`,
 
-  bars: `${PREAMBLE}
+  bars: `${LOOK_PREAMBLE}
 void main() {
   // Vertical bars whose heights are a bar of music: each column is one
   // subdivision, and the playhead sweeps them. Energy adds columns, so the
@@ -146,7 +187,7 @@ void main() {
   OUT(uColor * (0.35 + 0.65 * lit), bar * (0.35 + 0.65 * lit))
 }`,
 
-  rings: `${PREAMBLE}
+  rings: `${LOOK_PREAMBLE}
 void main() {
   // Rings launched on the beat and expanding outward, so the picture carries
   // the pulse even when the sound is quiet. Energy launches them more often
@@ -163,7 +204,7 @@ void main() {
   OUT(uColor, clamp(total * (0.6 + uLevel * 1.4), 0.0, 1.0))
 }`,
 
-  noise: `${PREAMBLE}
+  noise: `${LOOK_PREAMBLE}
 void main() {
   // A drifting field that thickens with the sound. The drift is on uTime
   // deliberately — it should feel like weather, not like a metronome — while
@@ -176,7 +217,7 @@ void main() {
   OUT(uColor * (0.6 + n), smoothstep(threshold, threshold + 0.18, n))
 }`,
 
-  strobe: `${PREAMBLE}
+  strobe: `${LOOK_PREAMBLE}
 void main() {
   // Whole-frame flashes on the beat division energy chose. The one source with
   // no shape at all, and the reason opacity has to be honest: it is unusable
@@ -190,7 +231,7 @@ void main() {
   OUT(mix(uColor, vec3(1.0), 0.3), flash * (0.1 + uLevel * 0.75))
 }`,
 
-  grid: `${PREAMBLE}
+  grid: `${LOOK_PREAMBLE}
 void main() {
   // A grid of cells, each lighting on its own beat. Reads as structure rather
   // than as motion, which is what a chorus wants under everything else.
@@ -202,7 +243,7 @@ void main() {
   float inset = smoothstep(0.0, 0.06, min(min(f.x, f.y), min(1.0 - f.x, 1.0 - f.y)));
   OUT(uColor * (0.5 + lit), inset * (0.12 + lit * (0.55 + uLevel * 0.45)))
 }`,
-  tunnel: `${PREAMBLE}
+  tunnel: `${LOOK_PREAMBLE}
 void main() {
   // A corridor rushing toward you. Depth is 1/r, which is what makes it read as
   // perspective rather than as rings — and the rush is on the beat, so the room
@@ -222,7 +263,7 @@ void main() {
   OUT(mix(uColor, vec3(1.0), rings * 0.4), lit * fade * (0.35 + uLevel * 0.9))
 }`,
 
-  plasma: `${PREAMBLE}
+  plasma: `${LOOK_PREAMBLE}
 void main() {
   // Four sines crossed. The oldest trick there is and still the best full-frame
   // wash — it never repeats visibly, it costs nothing, and it takes a colourway
@@ -235,7 +276,7 @@ void main() {
   OUT(mix(uColor, vec3(1.0) - uColor, v) * (0.45 + uLevel * 0.7), 0.3 + v * 0.55)
 }`,
 
-  spiral: `${PREAMBLE}
+  spiral: `${LOOK_PREAMBLE}
 void main() {
   // Arms winding out of the centre and turning on the beat. Reads as motion
   // with a direction, which nothing else here does — rings expand, this one
@@ -250,7 +291,7 @@ void main() {
   OUT(uColor * (0.5 + band * 0.7), band * fade * (0.4 + uLevel))
 }`,
 
-  scan: `${PREAMBLE}
+  scan: `${LOOK_PREAMBLE}
 void main() {
   // Lines, with a bar's worth of sweep passing down them. The one source that
   // looks like a machine rather than like weather, which a set of them needs.
@@ -262,7 +303,7 @@ void main() {
       clamp(line * (0.16 + sweep * 1.5) * (0.45 + uLevel), 0.0, 1.0))
 }`,
 
-  sparks: `${PREAMBLE}
+  sparks: `${LOOK_PREAMBLE}
 void main() {
   // A cell per spark, each firing on its own beat and drifting as it dies. The
   // aspect correction is on the cell count rather than the coordinates, so a
@@ -279,40 +320,9 @@ void main() {
 }`,
 };
 
-/**
- * Effects mix against their own input rather than replacing it.
- *
- * `uAmount` is what lets an archetype's energy dial one in instead of switching
- * it on: at 0.3 a kaleidoscope is a suggestion in the corner of the eye, and at
- * 0.95 it has taken the frame. `MIXED(colour)` is the one way out, and every
- * effect below ends with it so none of them can forget.
- *
- * They sample an already-premultiplied picture, so `uOpacity` is bound to 1 for
- * an effect pass — the fader has been applied once already and must not be
- * applied twice.
- *
- * `uParams` is the eight-float bank an effect's own knobs ride in. A bank rather
- * than a named uniform each, because a circuit's knobs are discovered from its
- * nodes and cannot be declared ahead of time — and because a value arriving in a
- * uniform is a value that can be turned without recompiling a shader, which is
- * the difference between a knob and a rebuild.
- */
-export const EFFECT_PREAMBLE = `${PREAMBLE}
-uniform sampler2D uTex;
-uniform float uAmount;
-uniform float uParams[8];
-// Meters of tracks this effect NAMED, in the order its track nodes appear. A
-// bank rather than a uniform each, for the same reason uParams is one: which
-// tracks a circuit reaches is discovered from its nodes and cannot be declared
-// ahead of time. uLevel is the layer's own meter and needs no name; this is
-// every other track's, and that distinction is the whole of relative versus
-// absolute addressing.
-uniform float uTracks[8];
-#define MIXED(c) { fragColor = mix(texture(uTex, vUv), (c), uAmount); }
-`;
 
-/** One knob an effect declares: a range, a resting value, and a name to show. */
-export interface EffectParam {
+/** One knob a look declares: a range, a resting value, and a name to show. */
+export interface LookParam {
   name: string;
   min: number;
   max: number;
@@ -326,7 +336,7 @@ export interface EffectParam {
  * shader — so a parameter is appended rather than inserted. The names are what
  * the scheme stores against, so renaming one loses whatever was set for it.
  */
-export const BUILTIN_PARAMS: Record<BuiltinEffect, readonly EffectParam[]> = {
+export const BUILTIN_PARAMS: Record<string, readonly LookParam[]> = {
   mirror: [
     { name: 'line', min: 0, max: 1, value: 0.5 },
     { name: 'angle', min: 0, max: 1, value: 0 },
@@ -375,8 +385,8 @@ export const BUILTIN_PARAMS: Record<BuiltinEffect, readonly EffectParam[]> = {
   ],
 };
 
-const EFFECTS: Record<BuiltinEffect, string> = {
-  mirror: `${EFFECT_PREAMBLE}
+const TRANSFORMERS: Record<string, string> = {
+  mirror: `${LOOK_PREAMBLE}
 void main() {
   // A fold, at an angle. Rotating into the fold and back out is what turns one
   // mirror into every mirror — vertical, horizontal, and the diagonals nobody
@@ -390,7 +400,7 @@ void main() {
   MIXED(texture(uTex, clamp(uncentred(p), 0.0, 1.0)))
 }`,
 
-  kaleido: `${EFFECT_PREAMBLE}
+  kaleido: `${LOOK_PREAMBLE}
 void main() {
   // Folded in polar space, rotating with the beat so it moves with the music
   // rather than at a rate of its own. Energy adds segments on top of the knob,
@@ -404,7 +414,7 @@ void main() {
   MIXED(texture(uTex, clamp(uncentred(vec2(cos(a), sin(a)) * r), 0.0, 1.0)))
 }`,
 
-  shift: `${EFFECT_PREAMBLE}
+  shift: `${LOOK_PREAMBLE}
 void main() {
   // Channel separation that opens with the level, so it bites on transients
   // and closes to nothing in the gaps.
@@ -415,7 +425,7 @@ void main() {
   MIXED(vec4(r, g.g, b, g.a))
 }`,
 
-  pixelate: `${EFFECT_PREAMBLE}
+  pixelate: `${LOOK_PREAMBLE}
 void main() {
   // Blocks that resolve across the bar. Quantising the picture the way the
   // clock quantises the launch.
@@ -424,7 +434,7 @@ void main() {
   MIXED(texture(uTex, (floor(vUv * steps) + 0.5) / steps))
 }`,
 
-  ripple: `${EFFECT_PREAMBLE}
+  ripple: `${LOOK_PREAMBLE}
 void main() {
   // A wave leaving the centre on each beat, displacing what it passes over.
   // The most obviously *frenetic* of these, which is why a loud archetype
@@ -437,7 +447,7 @@ void main() {
   MIXED(texture(uTex, clamp(vUv + normalize(p + 1e-6) * push, 0.0, 1.0)))
 }`,
 
-  smear: `${EFFECT_PREAMBLE}
+  smear: `${LOOK_PREAMBLE}
 void main() {
   // A short radial blur, taken in a handful of steps toward the centre. Softens
   // a layer into the ones under it, which is what a quiet section wants and
@@ -447,7 +457,7 @@ void main() {
   for (int i = 0; i < 6; i++) sum += texture(uTex, vUv + toward * (float(i) / 6.0));
   MIXED(sum / 6.0)
 }`,
-  bloom: `${EFFECT_PREAMBLE}
+  bloom: `${LOOK_PREAMBLE}
 void main() {
   // Eight taps on a ring, and only what is already bright gets added back. The
   // cheapest thing that makes a projector look like it cost more than it did:
@@ -462,7 +472,7 @@ void main() {
   MIXED(base + max(sum / 8.0 - vec4(uParams[1]), vec4(0.0)) * mix(0.4, 1.1, uEnergy))
 }`,
 
-  slice: `${EFFECT_PREAMBLE}
+  slice: `${LOOK_PREAMBLE}
 void main() {
   // Rows thrown sideways, re-diced on each beat division. Wrapped rather than
   // clamped, because a slice that ran off the edge and smeared would read as a
@@ -475,7 +485,7 @@ void main() {
   MIXED(texture(uTex, vec2(fract(vUv.x + push), vUv.y)))
 }`,
 
-  edge: `${EFFECT_PREAMBLE}
+  edge: `${LOOK_PREAMBLE}
 void main() {
   // Difference across a pixel, both ways. Throws away the fill and keeps the
   // outline, which turns any source into a diagram — the one effect here that
@@ -487,7 +497,7 @@ void main() {
   MIXED(vec4(mix(uColor, vec3(1.0), 0.45) * m, m))
 }`,
 
-  posterize: `${EFFECT_PREAMBLE}
+  posterize: `${LOOK_PREAMBLE}
 void main() {
   // Colour quantised to a handful of steps. Undone and redone around the
   // premultiply, or the banding lands on the alpha as well and the edges crawl.
@@ -497,7 +507,7 @@ void main() {
   MIXED(vec4(clamp(floor(c.rgb / a * steps + 0.5) / steps, 0.0, 1.0) * c.a, c.a))
 }`,
 
-  twist: `${EFFECT_PREAMBLE}
+  twist: `${LOOK_PREAMBLE}
 void main() {
   // Rotation that grows with radius, swaying on the beat. Where kaleido folds
   // the frame, this one wrings it.
@@ -508,7 +518,7 @@ void main() {
   MIXED(texture(uTex, clamp(uncentred(mat2(c, -s, s, c) * p), 0.0, 1.0)))
 }`,
 
-  invert: `${EFFECT_PREAMBLE}
+  invert: `${LOOK_PREAMBLE}
 void main() {
   // On the beat and off again. The only effect here that is a switch rather
   // than a shape, which is why the hold knob is how *much* of the beat it holds:
@@ -520,10 +530,14 @@ void main() {
 }`,
 };
 
-export const sourceSources: ReadonlyMap<SourceKind, string> = new Map(
-  Object.entries(SOURCES) as [SourceKind, string][],
-);
-
-export const effectSources: ReadonlyMap<BuiltinEffect, string> = new Map(
-  Object.entries(EFFECTS) as [BuiltinEffect, string][],
+/**
+ * Every built-in look, by name, in one map.
+ *
+ * Two maps was the shape of the old split and the last place it lived. Nothing
+ * that draws a look needs to know which half it came from — that is the whole
+ * claim `BuiltinLook` makes, and a single map is what makes it true rather than
+ * merely stated.
+ */
+export const lookSources: ReadonlyMap<BuiltinLook, string> = new Map(
+  Object.entries({ ...GENERATORS, ...TRANSFORMERS }) as [BuiltinLook, string][],
 );

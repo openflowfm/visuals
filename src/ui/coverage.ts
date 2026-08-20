@@ -132,14 +132,14 @@ export function usesOf(
   id: string,
 ): { layers: string[]; songs: string[]; sections: string[] } {
   const layers = Object.entries(scheme.layers)
-    .filter(([, spec]) => spec.effects?.includes(id))
+    .filter(([, spec]) => spec.looks?.includes(id))
     .map(([name]) => name);
   const sections = Object.entries(scheme.archetypes)
-    .filter(([, arch]) => arch.effects?.includes(id))
+    .filter(([, arch]) => arch.looks?.includes(id))
     .map(([name]) => name);
   const clipNames = new Set(
     Object.entries(scheme.clips)
-      .filter(([, spec]) => spec.effects?.includes(id))
+      .filter(([, spec]) => spec.looks?.includes(id))
       .map(([name]) => name),
   );
   // A song counts when a layer it uses carries the effect, or when one of its

@@ -3,7 +3,7 @@ import type { Scheme, SetGrid, Show } from '../../protocol.ts';
 import '../../../widgets/src/tokens.css';
 import { Bind } from './Bind.tsx';
 import { Coverage } from './Coverage.tsx';
-import { Looks } from './Looks.tsx';
+import { Designer } from './Designer.tsx';
 import { applyEdits, type Edit, type Scope } from './pending.ts';
 import type { Clock } from '../state/useShow.ts';
 import './console.css';
@@ -35,7 +35,7 @@ export interface ConsoleProps {
   onClose(): void;
 }
 
-const VIEWS = ['coverage', 'bind', 'looks'] as const;
+const VIEWS = ['design', 'coverage', 'bind'] as const;
 export type View = (typeof VIEWS)[number];
 
 /**
@@ -64,7 +64,7 @@ export function keyFor(aim: Aim, scope: Scope): string | null {
 }
 
 export function Console({ show, showRef, scheme, grid, save, clock, onClose }: ConsoleProps) {
-  const [view, setView] = useState<View>('coverage');
+  const [view, setView] = useState<View>('design');
   /**
    * Staged, not saved.
    *
@@ -135,7 +135,7 @@ export function Console({ show, showRef, scheme, grid, save, clock, onClose }: C
           }}
           onLook={(id) => {
             setLook(id);
-            setView('looks');
+            setView('design');
           }}
         />
       )}
@@ -156,21 +156,19 @@ export function Console({ show, showRef, scheme, grid, save, clock, onClose }: C
           onDiscard={() => setEdits([])}
           onLook={(id) => {
             setLook(id);
-            setView('looks');
+            setView('design');
           }}
         />
       )}
 
-      {view === 'looks' && (
-        <Looks
+      {view === 'design' && (
+        <Designer
           show={show}
           scheme={scheme}
-          grid={grid}
           save={save}
           clock={clock}
           look={look}
           setLook={setLook}
-          onBind={() => setView('bind')}
         />
       )}
     </div>
@@ -206,11 +204,10 @@ function contextOf(
     const staged = pending > 0 ? ` · ${pending} pending` : '';
     return `${where} · ${show.tempo.toFixed(0)}${staged}`;
   }
-  const def = look ? scheme.effects[look] : null;
-  if (!def) return 'no effect selected';
-  const reach = Object.values(scheme.layers).filter((l) => l.effects?.includes(look!)).length;
-  // A circuit that never samples the frame draws its own picture and so can go
-  // anywhere; one that samples is an effect and needs something underneath it.
-  const portable = def.circuit ? !def.circuit.nodes.some((n) => n.kind === 'sample') : false;
-  return `${def.name} · ${reach} layer${reach === 1 ? '' : 's'}${portable ? ' · generator' : ''}`;
+  const def = look ? scheme.looks[look] : null;
+  const made = Object.values(scheme.looks).filter((each) => each.circuit).length;
+  if (!def) return `${Object.keys(scheme.looks).length} looks · ${made} of your own`;
+  const reach = Object.values(scheme.layers).filter((l) => l.looks?.includes(look!)).length;
+  const bound = reach === 0 ? 'not bound yet' : `${reach} layer${reach === 1 ? '' : 's'}`;
+  return `${def.name} · ${bound}`;
 }

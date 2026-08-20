@@ -85,10 +85,10 @@ describe('a roll is a show', () => {
     for (const seed of seeds) {
       const s = rolled(seed);
       const named = [
-        ...Object.values(s.archetypes).flatMap((a) => a.effects ?? []),
-        ...Object.values(s.layers).flatMap((l) => l.effects ?? []),
+        ...Object.values(s.archetypes).flatMap((a) => a.looks ?? []),
+        ...Object.values(s.layers).flatMap((l) => l.looks ?? []),
       ];
-      for (const id of named) expect(s.effects[id], `${seed} ${id}`).toBeDefined();
+      for (const id of named) expect(s.looks[id], `${seed} ${id}`).toBeDefined();
     }
   });
 
@@ -128,8 +128,9 @@ describe('a roll is a show', () => {
       for (const [name, spec] of Object.entries(s.layers)) {
         const family = familyOf(name);
         const held = byFamily.get(family);
-        if (held) expect(spec.source, `${seed} ${family}`).toBe(held);
-        else byFamily.set(family, spec.source!);
+        const base = spec.looks?.[0];
+        if (held) expect(base, `${seed} ${family}`).toBe(held);
+        else byFamily.set(family, base!);
       }
       // And the families differ from each other, or the whole set is one picture.
       expect(new Set(byFamily.values()).size, seed).toBeGreaterThan(1);
@@ -139,9 +140,9 @@ describe('a roll is a show', () => {
   it('keeps a wash off the drums and a strobe off the pads', () => {
     for (const seed of seeds) {
       const s = rolled(seed);
-      expect(['strobe', 'sparks', 'scan', 'bars', 'grid'], seed).toContain(s.layers.Drums.source);
+      expect(['strobe', 'sparks', 'scan', 'bars', 'grid'], seed).toContain(s.layers.Drums.looks?.[0]);
       expect(['plasma', 'noise', 'solid', 'tunnel'], seed).toContain(
-        s.layers['Sparkle Pad'].source,
+        s.layers['Sparkle Pad'].looks?.[0],
       );
     }
   });
@@ -156,7 +157,7 @@ describe('a roll is a show', () => {
     const wash = ['solid', 'plasma', 'noise'];
     for (const seed of seeds) {
       for (const [name, spec] of Object.entries(rolled(seed).layers)) {
-        if (wash.includes(spec.source!)) expect(spec.blend, `${seed} ${name}`).not.toBe('over');
+        if (wash.includes(spec.looks?.[0] as string)) expect(spec.blend, `${seed} ${name}`).not.toBe('over');
       }
     }
   });
@@ -221,7 +222,7 @@ describe('rolled circuits', () => {
     // which is the way a hand-written node table drifts.
     for (const seed of seeds) {
       const s = rollScheme(seed, SHOW, BUILT_IN);
-      for (const [id, def] of Object.entries(s.effects)) {
+      for (const [id, def] of Object.entries(s.looks)) {
         if (!def.circuit) continue;
         expect(compileCircuit(def.circuit).error, `${seed} ${id}`).toBeNull();
       }
@@ -250,9 +251,9 @@ describe('rolled circuits', () => {
     // of rolling leaves forty of them and every archetype pointing at a ghost.
     let scheme = BUILT_IN;
     for (const seed of seeds.slice(0, 10)) scheme = rollScheme(seed, SHOW, scheme);
-    expect(Object.values(scheme.effects).filter((d) => d.circuit)).toHaveLength(2);
-    expect(Object.keys(scheme.effects).filter((id) => BUILT_IN.effects[id])).toHaveLength(
-      Object.keys(BUILT_IN.effects).length,
+    expect(Object.values(scheme.looks).filter((d) => d.circuit)).toHaveLength(2);
+    expect(Object.keys(scheme.looks).filter((id) => BUILT_IN.looks[id])).toHaveLength(
+      Object.keys(BUILT_IN.looks).length,
     );
   });
 });

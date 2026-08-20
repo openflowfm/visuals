@@ -1,4 +1,4 @@
-import type { Circuit, EffectDef } from '../../protocol.ts';
+import type { Circuit, LookDef } from '../../protocol.ts';
 import { NODE_SPECS } from '../render/circuit.ts';
 
 /**
@@ -52,7 +52,7 @@ export function probeAt(circuit: Circuit, nodeId: string): Circuit | null {
 }
 
 /** That circuit, as something the bench can draw. */
-export function probeDef(def: EffectDef, nodeId: string): EffectDef | null {
+export function probeDef(def: LookDef, nodeId: string): LookDef | null {
   if (!def.circuit) return null;
   const circuit = probeAt(def.circuit, nodeId);
   return circuit ? { name: def.name, circuit } : null;

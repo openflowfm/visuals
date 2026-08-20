@@ -17,7 +17,8 @@ Live ─ SessionBridge :17800 ─WS─> visuals server :17900 ─WS─> browser 
 |---|---|---|
 | [the clock](docs/clock.md) | Link, tempo, the beat, why the browser extrapolates, the native addon | `server/link.ts`, `src/state/useShow.ts`, `tools/build-link.ts` |
 | [the cascade](docs/mapping.md) | archetypes, energy, colourways, layer bindings, the scheme file | `server/show.ts`, `server/scheme.ts`, `resolve.ts`, `scheme.json` |
-| [the console](docs/console.md) | the three views, the override gesture, the A/B, the addressing drawers | `src/ui/Console.tsx`, `Coverage.tsx`, `Bind.tsx`, `Looks.tsx` |
+| [looks](docs/looks.md) | the one noun, stacks and compositions, the designer and its own clock | `protocol.ts`, `resolve.ts`, `src/ui/Designer.tsx`, `stack.ts` |
+| [the console](docs/console.md) | the three views, the override gesture, the A/B, the addressing drawers | `src/ui/Console.tsx`, `Designer.tsx`, `Coverage.tsx`, `Bind.tsx` |
 | [circuits](docs/circuit.md) | building an effect out of nodes, the node vocabulary, the bench | `src/render/circuit.ts`, `src/ui/Circuit.tsx` |
 | [the renderer](docs/render.md) | layers, blending, sources, effects, fill rate, **pointing a projector** | `src/render/*` |
 | [the harness](docs/harness.md) | working on this with no Ableton, and the Link safety rule | `tools/fake-live.ts` |
@@ -37,13 +38,18 @@ The corollary is that this app has almost no state of its own, which is the poin
 ## Running it
 
 ```sh
-npm run dev:visuals      # the server: Link peer + bridge client + host, :17900
+npm run dev              # everything, this included: server on :17900, renderer on :5473
+npm run dev:visuals      # the server alone: Link peer + bridge client + host, :17900
 npm run dev:visuals-ui   # the renderer with HMR, :5473, proxying /ws to the server
 npm run build:visuals    # the renderer into visuals/dist, which the server serves
 npm run dev:fake-live    # a bridge that isn't one, for working without Ableton
 ```
 
 Open `http://localhost:17900` for the built renderer, or `:5473` while working on it.
+
+`npm run dev` runs both alongside the bridge and `ui/`. It uses `concurrently -k`, so a
+port already in use here takes the whole dev session down with it — if `npm run dev` dies
+on startup, look for a `dev:visuals` you left running.
 `i` toggles the panel, `e` the editor, `k` the output stage, `f` fullscreen.
 
 **`k` opens the output stage** — corner pinning and master brightness. Drag the four corners
@@ -84,14 +90,16 @@ one is on screen. Its three views are three **distances** to stand at from the s
 
 | view | the question | the scale |
 |---|---|---|
+| **design** | what is worth putting on a wall | one look, and a stack of them |
 | **coverage** | what have I not decided about | the set, all of it at once |
 | **bind** | is this right, and how far should the fix reach | one moment |
-| **looks** | what is this thing made of | one effect |
 
-That is the order a night before a gig runs in — find the gaps, fix them against the
-picture, then open up the thing you are fixing with.
+Design comes first because that is the order the work goes in: **build a library of looks
+with nothing playing, and bind it to the set afterwards.** The designer runs on its own
+clock and needs no bridge, no set and no Link — a library you can only see during a
+rehearsal is a library nobody builds.
 
-Two rules the whole thing rests on. **Nothing lands until it has been seen next to what it
+Two rules the binding half rests on. **Nothing lands until it has been seen next to what it
 replaces**: bind draws the live scheme and your staged one side by side, on one clock, so
 the only thing that differs is the edit. And **the hard part of an override is its scope**,
 so the same address can be fixed at the song, the section, the track or the clip, with a
@@ -103,9 +111,13 @@ it never asks you to type a name.
 It writes [`scheme.json`](scheme.json), which stays the record — hot-reloaded, entirely
 optional, and readable, diffable and committable after a night of tuning. Edit either.
 
+Everything that draws is a **look** — one noun, whether it paints its own picture or works
+on the one underneath. A stack of looks is a **composition**, which is what the renderer is
+showing. See [looks](docs/looks.md).
+
 The resolution is a cascade: **song → archetype → track → clip**, with live signals
-threading through all of it as shader uniforms rather than being a level of their own.
-Scalars override field by field, effects add up, bias accumulates. Energy is the
+threading through all of it as shader uniforms rather than being a level of their own. A
+generator replaces the base, transformers add up, bias accumulates. Energy is the
 load-bearing idea — one number per section that drives effect intensity, reaction speed,
 brightness and how many layers draw at all, which is what makes an archetype dynamic
 instead of a preset.

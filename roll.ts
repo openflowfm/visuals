@@ -1,4 +1,5 @@
 import { FAMILIES, familyOf } from './hints.ts';
+import { isGenerator } from './resolve.ts';
 import type {
   Blend,
   Circuit,
@@ -6,9 +7,8 @@ import type {
   LayerSpec,
   Scheme,
   Show,
-  SourceKind,
 } from './protocol.ts';
-import { SOURCE_KINDS } from './protocol.ts';
+import { GENERATORS } from './protocol.ts';
 
 /**
  * A whole show, rolled.
@@ -151,9 +151,9 @@ const SHAPE: Record<string, readonly [number, number]> = {
   JAM2: [0.62, 0.9],
 };
 
-/** Sources a percussive family can wear, and ones a wash can. */
-const PERCUSSIVE: readonly SourceKind[] = ['strobe', 'sparks', 'scan', 'bars', 'grid'];
-const WASH: readonly SourceKind[] = ['plasma', 'noise', 'solid', 'tunnel'];
+/** Bases a percussive family can wear, and ones a wash can. */
+const PERCUSSIVE: readonly string[] = ['strobe', 'sparks', 'scan', 'bars', 'grid'];
+const WASH: readonly string[] = ['plasma', 'noise', 'solid', 'tunnel'];
 
 /**
  * Blend modes to draw from, weighted toward `screen`.
@@ -311,22 +311,25 @@ export function rollScheme(seed: string, show: Show, base: Scheme): Scheme {
     if (chance(rng, 0.35)) songs[song].bias = round2(between(rng, -0.12, 0.14));
   });
 
-  const effects: Scheme['effects'] = { ...base.effects };
-  // Anything rolled last time goes, or a roll a week in would be forty effects
+  const looks: Scheme['looks'] = { ...base.looks };
+  // Anything rolled last time goes, or a roll a week in would be forty looks
   // deep and every archetype would be pointing at a ghost.
-  for (const [id, def] of Object.entries(effects)) if (def.circuit) delete effects[id];
+  for (const [id, def] of Object.entries(looks)) if (def.circuit) delete looks[id];
   const wired: string[] = [];
   for (let i = 0; i < 2; i++) {
     const id = `roll${i + 1}`;
     const [a, b] = shuffled(rng, WORDS);
-    effects[id] = {
+    looks[id] = {
       name: `${a[0].toUpperCase()}${a.slice(1)} ${b}`,
       circuit: rollCircuit(rng),
     };
     wired.push(id);
   }
 
-  const pool = [...Object.keys(effects)];
+  // Only transformers go in the character pool. A rolled section that dealt
+  // itself a generator would replace every layer's base at once, which is a
+  // legal thing to *say* and a terrible thing to roll by accident.
+  const pool = Object.keys(looks).filter((id) => !isGenerator({ ...base, looks }, id));
   const roles = [...new Set([...show.roles, ...Object.keys(base.archetypes)])].sort();
   const archetypes: Scheme['archetypes'] = {};
   for (const role of roles) {
@@ -335,32 +338,32 @@ export function rollScheme(seed: string, show: Show, base: Scheme): Scheme {
     // A loud section reaches for more, which is the additive half of the cascade
     // doing what it is for rather than a rule about randomness.
     const count = energy > 0.7 ? 1 + Math.floor(rng() * 2) : rng() < energy + 0.3 ? 1 : 0;
-    archetypes[role] = { energy, effects: shuffled(rng, pool).slice(0, count) };
+    archetypes[role] = { energy, looks: shuffled(rng, pool).slice(0, count) };
   }
 
-  const sources = shuffled(rng, SOURCE_KINDS);
-  const byFamily: Record<string, SourceKind> = {};
+  const bases = shuffled(rng, GENERATORS);
+  const byFamily: Record<string, string> = {};
   for (const family of FAMILIES) {
-    const wanted =
-      family === 'drums' ? PERCUSSIVE : family === 'pad' ? WASH : SOURCE_KINDS;
+    const wanted: readonly string[] =
+      family === 'drums' ? PERCUSSIVE : family === 'pad' ? WASH : GENERATORS;
     // Prefer one nothing else took, so a five-track set is five different
     // pictures rather than the same one drawn five times.
-    byFamily[family] = sources.find((s) => wanted.includes(s)) ?? pick(rng, wanted);
-    const at = sources.indexOf(byFamily[family]);
-    if (at >= 0) sources.splice(at, 1);
+    byFamily[family] = bases.find((s) => wanted.includes(s)) ?? pick(rng, wanted);
+    const at = bases.indexOf(byFamily[family] as never);
+    if (at >= 0) bases.splice(at, 1);
   }
 
   const layers: Scheme['layers'] = {};
   for (const layer of show.layers) {
-    const source = byFamily[familyOf(layer.name)];
-    const spec: LayerSpec = { source };
-    const wash = WASH.includes(source);
+    const base_ = byFamily[familyOf(layer.name)];
+    const spec: LayerSpec = { looks: [base_] };
+    const wash = (WASH as readonly string[]).includes(base_);
     // A wash always gets a blend rather than sometimes, because leaving it to
     // the depth-cycled default is leaving it a one-in-six chance of `over`.
     if (wash) spec.blend = pick(rng, THROUGH);
     else if (chance(rng, 0.4)) spec.blend = pick(rng, BLEND_BAG);
     if (chance(rng, 0.5)) spec.bias = round2(between(rng, -0.18, 0.18));
-    if (chance(rng, 0.3)) spec.effects = [pick(rng, pool)];
+    if (chance(rng, 0.3)) spec.looks = [base_, pick(rng, pool)];
     layers[layer.name] = spec;
   }
 
@@ -374,13 +377,13 @@ export function rollScheme(seed: string, show: Show, base: Scheme): Scheme {
     archetypes,
     layers,
     clips: {},
-    effects,
+    looks,
     defaults: {
       colorway: pick(rng, names),
       energy: round2(between(rng, 0.32, 0.5)),
       blend,
-      sources: shuffled(rng, SOURCE_KINDS),
-      maxEffects: chance(rng, 0.35) ? 3 : 2,
+      looks: shuffled(rng, GENERATORS),
+      maxLooks: chance(rng, 0.35) ? 4 : 3,
       // A whole rung either way. Two rolls of the same set should not only look
       // different, they should *move* differently — and a rung is a big enough
       // step that you can feel it without any of them landing off the grid.

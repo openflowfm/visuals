@@ -8,10 +8,14 @@
 clear black
 for each layer, bottom to top:
   ease its opacity toward the target; below 0.002 -> skip entirely
-  no effects:   source -> screen, blended
-  otherwise:    source -> offscreen, then each effect ping-ponging,
-                the last one landing on the screen, blended
+  run its stack, ping-ponging offscreen, the last pass
+  landing on the screen, blended
 ```
+
+**One kind of pass.** There used to be two — a source, and then a chain of effects over it
+— and collapsing source and effect into [one noun](looks.md) collapsed this with them.
+Every pass reads the frame beneath it and writes the frame above; whether a given one
+*uses* what it read is the shader's business rather than the compositor's.
 
 **Opacity is eased, not set.** Energy moves the floor gate and the floor gate moves
 opacity, so a chorus arriving would otherwise pop three layers into existence on one frame.
@@ -42,12 +46,13 @@ held its previous clip after the scene changed is the failure that looks most li
 renderer having crashed. Its target goes to zero rather than being skipped outright, so it
 fades rather than cutting.
 
-**An effect mixes against its own input** by `uAmount`, which is what lets energy dial one
-in instead of switching it on. It samples an already-premultiplied picture, so `uOpacity` is
+**A pass that reads its input mixes against it** by `uAmount`, which is what lets energy
+dial one in instead of switching it on. A generator ignores it and writes the frame
+outright, which is why the bottom of a stack always draws at full. It samples an already-premultiplied picture, so `uOpacity` is
 bound to 1 for an effect pass — the fader was applied when the source drew, and applying it
 again would square it at every step of the chain.
 
-**A layer names its effects by id, and the scheme says what an id is.** So the compositor
+**A layer names its stack by id, and the scheme says what an id is.** So the compositor
 takes the scheme every frame alongside the show: an id is either six lines of handwritten
 GLSL or a canvas full of nodes, and resolving that on the server would mean shipping a
 shader down the wire on every edit. `uTracks` is a second eight-float bank, filled only for a circuit that
@@ -260,8 +265,6 @@ stops it from being a second, subtly different renderer.
 
 ## What is not built
 
-- **Custom sources.** A [circuit](circuit.md) that paints without sampling is already a
-  generator, but a layer's `source` slot still only offers the six built-in ones.
 - **Video clips.** Every source is procedural. A `<video>` texture is one more source kind
   and no change to the pipeline, but it brings a whole question about where files live that
   the derived mapping has no answer for yet.

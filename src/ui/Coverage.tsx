@@ -6,7 +6,7 @@ import { cellForColumn, columnsOf, passes, usesOf, type Column, type Cut, type F
 import type { Aim } from './Console.tsx';
 import { Colorways } from './Colorways.tsx';
 import { Knob } from '../../../widgets/src/controls/Knob.tsx';
-import { ENERGY, MAX_EFFECTS, PACE, PERCENT } from './param.ts';
+import { ENERGY, MAX_LOOKS, PACE, PERCENT } from './param.ts';
 import { Preview } from './Preview.tsx';
 import type { Clock } from '../state/useShow.ts';
 
@@ -326,10 +326,10 @@ function Inspect({
             name="energy"
           />
           <Knob
-            param={MAX_EFFECTS}
-            value={scheme.defaults.maxEffects}
+            param={MAX_LOOKS}
+            value={scheme.defaults.maxLooks}
             onChange={(v) =>
-              save({ ...scheme, defaults: { ...scheme.defaults, maxEffects: Math.round(v) } })
+              save({ ...scheme, defaults: { ...scheme.defaults, maxLooks: Math.round(v) } })
             }
             name="max fx"
           />
@@ -358,11 +358,11 @@ function Inspect({
     name: track.name,
     depth: Math.max(0, depth),
     count: grid.tracks.length,
-    section: role ? scheme.archetypes[role]?.effects : undefined,
+    section: role ? scheme.archetypes[role]?.looks : undefined,
     clip,
   });
-  const live = r.offers.filter((id) => scheme.effects[id]);
-  const first = live[0] ? scheme.effects[live[0]] : null;
+  const live = r.offers.filter((id) => scheme.looks[id]);
+  const first = live[0] ? scheme.looks[live[0]] : null;
   const uses = live[0] ? usesOf(scheme, grid, live[0]) : null;
   const energy = clamp01((scheme.archetypes[role ?? '']?.energy ?? scheme.defaults.energy) + r.bias);
   const colors = scheme.colorways[scheme.songs[row.key]?.colorway ?? scheme.defaults.colorway] ??
@@ -374,9 +374,7 @@ function Inspect({
         {row.name} · {track.name}
       </h3>
       <Preview
-        def={first}
-        source={r.source}
-        amount={0.8}
+        stack={live.map((id, i) => ({ def: scheme.looks[id], amount: i === 0 ? 1 : 0.8 }))}
         energy={energy}
         color={pack(colors[Math.max(0, depth) % colors.length])}
         pace={scheme.defaults.pace}
@@ -386,12 +384,12 @@ function Inspect({
       />
       {error && <p className="bad">{error}</p>}
       <dl>
-        <dt>source</dt>
+        <dt>base</dt>
         <dd>
-          {r.source} <em>{r.said.source}</em>
+          {scheme.looks[r.base]?.name ?? r.base} <em>{r.said.base}</em>
         </dd>
-        <dt>effects</dt>
-        <dd>{live.map((id) => scheme.effects[id]?.name || id).join(' + ') || '—'}</dd>
+        <dt>stack</dt>
+        <dd>{live.map((id) => scheme.looks[id]?.name || id).join(' → ') || '—'}</dd>
         <dt>blend</dt>
         <dd>
           {r.blend} <em>{r.said.blend}</em>
@@ -402,7 +400,7 @@ function Inspect({
 
       {uses && live[0] && (uses.layers.length > 1 || uses.songs.length > 1) && (
         <div className="also">
-          <h4>also uses {scheme.effects[live[0]]?.name}</h4>
+          <h4>also uses {scheme.looks[live[0]]?.name}</h4>
           <p>
             {uses.layers.length} layer{uses.layers.length === 1 ? '' : 's'} · {uses.songs.length}{' '}
             song{uses.songs.length === 1 ? '' : 's'}

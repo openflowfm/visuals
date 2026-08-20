@@ -1,11 +1,11 @@
-import type { EffectDef } from '../../protocol.ts';
+import type { LookDef } from '../../protocol.ts';
 import { compileCircuit, knobsOf, tracksOf } from './circuit.ts';
-import { BUILTIN_PARAMS, effectSources } from './shaders.ts';
+import { BUILTIN_PARAMS, lookSources } from './shaders.ts';
 
 /**
  * What an effect *is*, independent of who is drawing it.
  *
- * The compositor and the preview both take an `EffectDef` and need the same
+ * The compositor and the preview both take an `LookDef` and need the same
  * three things out of it — the shader, the eight floats its knobs ride in, and
  * whether the shader it has is still the right one. Keeping those here is what
  * stops the preview from being a second, subtly different renderer: if the two
@@ -14,12 +14,12 @@ import { BUILTIN_PARAMS, effectSources } from './shaders.ts';
  */
 
 /** The fragment shader for an effect, or why there isn't one. */
-export function effectShader(def: EffectDef): {
+export function lookShader(def: LookDef): {
   source: string | null;
   error: string | null;
 } {
   if (def.builtin) {
-    const source = effectSources.get(def.builtin);
+    const source = lookSources.get(def.builtin);
     return source
       ? { source, error: null }
       : { source: null, error: `no built-in called ${def.builtin}` };
@@ -36,7 +36,7 @@ export function effectShader(def: EffectDef): {
  * turning a knob must not rebuild a shader, and a signature that included them
  * would rebuild one sixty times a second during a drag.
  */
-export function signatureOf(def: EffectDef): string {
+export function signatureOf(def: LookDef): string {
   if (def.builtin) return `builtin:${def.builtin}`;
   const circuit = def.circuit;
   if (!circuit) return 'empty';
@@ -46,7 +46,7 @@ export function signatureOf(def: EffectDef): string {
 }
 
 /** The parameter bank, in the order the shader reads it. */
-export function paramsOf(def: EffectDef): Float32Array {
+export function paramsOf(def: LookDef): Float32Array {
   const values = new Float32Array(8);
   if (def.builtin) {
     const declared = BUILTIN_PARAMS[def.builtin] ?? [];
@@ -66,7 +66,7 @@ export function paramsOf(def: EffectDef): Float32Array {
  * drawing — which is most of them, and is the cheap case this exists to keep
  * cheap. A look that names nothing is a look that travels.
  */
-export function namedTracks(def: EffectDef): string[] {
+export function namedTracks(def: LookDef): string[] {
   if (!def.circuit) return [];
   const names = new Array<string>(8).fill('');
   for (const track of tracksOf(def.circuit)) names[track.index] = track.name;

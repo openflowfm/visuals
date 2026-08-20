@@ -1,4 +1,4 @@
-import type { Archetype, Blend, LayerSpec, Scheme, SetGrid, SongSpec, SourceKind } from '../../protocol.ts';
+import type { Archetype, Blend, LayerSpec, Scheme, SetGrid, SongSpec } from '../../protocol.ts';
 import { setLayer } from './edits.ts';
 
 /**
@@ -28,15 +28,7 @@ export type Scope = 'song' | 'section' | 'track' | 'clip';
 
 export const SCOPES: readonly Scope[] = ['song', 'section', 'track', 'clip'];
 
-export type Field =
-  | 'colorway'
-  | 'energy'
-  | 'source'
-  | 'blend'
-  | 'bias'
-  | 'floor'
-  | 'hide'
-  | 'effects';
+export type Field = 'colorway' | 'energy' | 'blend' | 'bias' | 'floor' | 'hide' | 'looks';
 
 export type Value = string | number | boolean | string[] | undefined;
 
@@ -51,9 +43,9 @@ export interface Edit {
 /** Which fields each level is actually in a position to decide. */
 export const FIELDS: Record<Scope, Field[]> = {
   song: ['colorway', 'bias'],
-  section: ['energy', 'effects'],
-  track: ['source', 'blend', 'bias', 'floor', 'hide', 'effects'],
-  clip: ['source', 'blend', 'bias', 'floor', 'hide', 'effects'],
+  section: ['energy', 'looks'],
+  track: ['looks', 'blend', 'bias', 'floor', 'hide'],
+  clip: ['looks', 'blend', 'bias', 'floor', 'hide'],
 };
 
 /** What a field says right now, before anything is staged. */
@@ -64,7 +56,7 @@ export function valueAt(scheme: Scheme, scope: Scope, key: string, field: Field)
   }
   if (scope === 'section') {
     const arch = scheme.archetypes[key];
-    return field === 'energy' ? arch?.energy : arch?.effects;
+    return field === 'energy' ? arch?.energy : arch?.looks;
   }
   const spec = scope === 'track' ? scheme.layers[key] : scheme.clips[key];
   return spec?.[field as keyof LayerSpec] as Value;
@@ -103,7 +95,7 @@ function applyEdit(scheme: Scheme, edit: Edit): Scheme {
     const held = scheme.archetypes[key];
     const arch: Archetype = held ? { ...held } : { energy: scheme.defaults.energy };
     if (field === 'energy') arch.energy = to as number;
-    if (field === 'effects') arch.effects = to as string[];
+    if (field === 'looks') arch.looks = to as string[];
     return { ...scheme, archetypes: { ...scheme.archetypes, [key]: arch } };
   }
   const patch: Partial<LayerSpec> = {
@@ -197,7 +189,7 @@ function spell(scheme: Scheme, field: Field, value: Value): string {
   if (Array.isArray(value)) {
     return value.length === 0
       ? 'none'
-      : value.map((id) => scheme.effects[id]?.name || id).join(' + ');
+      : value.map((id) => scheme.looks[id]?.name || id).join(' → ');
   }
   if (typeof value === 'boolean') return value ? 'yes' : 'no';
   if (typeof value === 'number') return field === 'energy' ? value.toFixed(2) : fmt(value);
@@ -209,4 +201,4 @@ function fmt(value: number): string {
   return (rounded > 0 ? '+' : '') + String(rounded);
 }
 
-export type { Blend, SourceKind };
+export type { Blend };

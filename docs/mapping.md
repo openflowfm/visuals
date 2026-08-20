@@ -11,7 +11,7 @@ the last:
 |---|---|---|
 | **song** | the colours, and how hard it plays | a song has an identity that outlives any one section of it |
 | **archetype** | energy and character | a section is a feeling, and the same chorus should differ between two songs |
-| **track** | what a layer does with content | a track is an instrument; its layer should stay recognisable across a whole song |
+| **track** | what a layer draws | a track is an instrument; its layer should stay recognisable across a whole song |
 | **clip** | the exception | the most specific thing there is, and the only level that can say "not this time" |
 
 **Live signals are deliberately not a level.** The meter, the beat, the phase and the tempo
@@ -34,10 +34,12 @@ Three different rules, and each is deliberate:
   Field by field matters as much as the order: binding one field of a track leaves the rest
   to the name hint, so saying "this drum track is calmer" does not also throw away "this
   drum track is a drum".
-- **Effects add up.** The archetype contributes the section's character, the track
-  contributes what that instrument always does, and both survive. "The chorus should mix in
-  more frenetic effects" is additive by construction — anything else would make the track
-  and the section fight over one slot. `maxEffects` caps the pile.
+- **Looks combine two ways, and which one depends on the look.** A **generator** replaces
+  the base of the stack, because that is what "a clip is an exception" has to mean. A
+  **transformer** is added, so the archetype's character and the track's own character both
+  survive — "the chorus should mix in more frenetic looks" is additive by construction, and
+  anything else would make the track and the section fight over one slot. `maxLooks` caps
+  the whole stack, base included. See [looks](looks.md).
 - **`bias` accumulates**, which is what makes **energy per layer** rather than per show. A
   drum track can run hotter than the pad under it in the same chorus, and that is a thing a
   single global number cannot say. The song's bias is the exception: it lands on the
@@ -53,7 +55,7 @@ as `uEnergy`.
 | it drives | how |
 |---|---|
 | **reaction speed** | see `rate()` in [the renderer](render.md) — energy moves a section up a ladder of musical divisions, each layer sits a rung or two either side of it, and `defaults.pace` shifts the lot |
-| **effect intensity and count** | `dialEffects` opens the first across the bottom half of the range and the second across the top, so a section *grows into* its effects rather than acquiring two at once. Every effect mixes against its own input by `uAmount`, so 0.3 is a suggestion and 0.95 has taken the frame |
+| **how much of the stack lands** | the base always draws at full; above it `dialStack` opens the first across the bottom half of the range and the second across the top, so a section *grows into* what it carries rather than acquiring two at once. Each mixes against its own input by `uAmount`, so 0.3 is a suggestion and 0.95 has taken the frame |
 | **brightness and contrast** | `charge()`, applied by `OUT`, so no source can forget it |
 | **how many layers draw** | each layer has a `floor`; below it the layer fades out rather than cutting, so a quiet section reads as the picture closing down |
 

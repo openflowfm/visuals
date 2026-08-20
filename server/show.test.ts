@@ -109,8 +109,8 @@ describe('the cascade', () => {
 
   it('guesses an unbound track from its name', () => {
     const drawn = show(setOf(['Drums', 'Sparkle Pad'], '[VERSE] one'), BUILT_IN);
-    expect(drawn.layers[0].source).toBe('strobe');
-    expect(drawn.layers[1].source).toBe('noise');
+    expect(drawn.layers[0].looks[0].id).toBe('strobe');
+    expect(drawn.layers[1].looks[0].id).toBe('noise');
   });
 
   it('lets a binding change one field and leave the hint the rest', () => {
@@ -120,17 +120,17 @@ describe('the cascade', () => {
       setOf(['Drums'], '[VERSE] one'),
       merge({ layers: { Drums: { bias: -0.2 } } }),
     );
-    expect(drawn.layers[0].source).toBe('strobe');
+    expect(drawn.layers[0].looks[0].id).toBe('strobe');
     expect(drawn.layers[0].energy).toBeCloseTo(0.35 - 0.2);
   });
 
   it("lets a clip be the exception, and adds its bias to the track's", () => {
     const scheme = merge({
-      layers: { Lead: { bias: 0.1, source: 'rings' } },
-      clips: { 'quiet one': { bias: -0.3, source: 'noise' } },
+      layers: { Lead: { bias: 0.1, looks: ['rings'] } },
+      clips: { 'quiet one': { bias: -0.3, looks: ['noise'] } },
     });
     const drawn = show(setOf(['Lead'], '[VERSE] one', { 0: 'quiet one' }), scheme);
-    expect(drawn.layers[0].source).toBe('noise');
+    expect(drawn.layers[0].looks[0].id).toBe('noise');
     expect(drawn.layers[0].energy).toBeCloseTo(0.35 + 0.1 - 0.3);
   });
 
@@ -139,29 +139,39 @@ describe('the cascade', () => {
     // construction: the section contributes its character, the track its own,
     // and both survive.
     const scheme = merge({
-      layers: { Lead: { effects: ['shift'] } },
-      defaults: { ...BUILT_IN.defaults, maxEffects: 3 },
+      layers: { Lead: { looks: ['shift'] } },
+      defaults: { ...BUILT_IN.defaults, maxLooks: 3 },
     });
     const drawn = show(setOf(['Lead'], '[CHORUS] one'), scheme);
-    expect(drawn.layers[0].offers).toEqual(['kaleido', 'ripple', 'shift']);
+    // The base leads, because a stack has to start with something that draws.
+    // Everything after it is what the levels contributed, in the order they did.
+    expect(drawn.layers[0].offers).toEqual(['rings', 'kaleido', 'ripple', 'shift']);
   });
 
   it('caps the pile and dials the survivors in by energy', () => {
     const loud = show(setOf(['Lead'], '[CHORUS] one'), BUILT_IN).layers[0];
     const quiet = show(setOf(['Lead'], '[INTRO] one'), BUILT_IN).layers[0];
-    expect(loud.effects).toHaveLength(2);
-    expect(loud.effects[0].amount).toBeCloseTo(1);
-    // An intro offers one and barely opens it.
-    expect(quiet.effects.length).toBeLessThanOrEqual(1);
+    // A base and two on top of it, which is what `maxLooks: 3` means now that
+    // the base counts toward the cap.
+    expect(loud.looks).toHaveLength(3);
+    // The base always draws at full. Energy thins the stack above it and the
+    // floor gate decides whether the layer is in at all — dimming the base as
+    // well would be dimming the same thing twice.
+    expect(loud.looks[0].amount).toBeCloseTo(1);
+    expect(loud.looks[1].amount).toBeGreaterThan(0.5);
+    // An intro keeps its base and barely opens anything over it.
+    expect(quiet.looks.length).toBeLessThanOrEqual(2);
+    expect(quiet.looks[0].amount).toBeCloseTo(1);
   });
 
-  it('drops an id naming an effect that no longer exists', () => {
-    // Deleting an effect strips its references, but a hand-edited file can
-    // still name one. A missing effect must cost the effect and not the show.
+  it('drops an id naming a look that no longer exists', () => {
+    // Deleting a look strips its references, but a hand-edited file can still
+    // name one. A missing look must cost that pass and not the show — and the
+    // base survives it, so the layer still draws something.
     const scheme = merge({
-      archetypes: { VERSE: { energy: 0.9, effects: ['ghost'] } },
+      archetypes: { VERSE: { energy: 0.9, looks: ['ghost'] } },
     });
-    expect(show(setOf(['Lead'], '[VERSE] one'), scheme).layers[0].offers).toEqual([]);
+    expect(show(setOf(['Lead'], '[VERSE] one'), scheme).layers[0].offers).toEqual(['rings']);
   });
 
   it('gates presence on the section, not on the layer', () => {
@@ -185,7 +195,7 @@ describe('the cascade', () => {
     expect(drawn.layers).toHaveLength(2);
     expect(drawn.layers[1].hidden).toBe(true);
     expect(drawn.layers[1].opacity).toBe(0);
-    expect(drawn.layers[1].effects).toEqual([]);
+    expect(drawn.layers[1].looks).toEqual([]);
   });
 
   it('does not make a layer out of a group track', () => {

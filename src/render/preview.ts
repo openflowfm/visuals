@@ -1,8 +1,7 @@
-import type { EffectDef, SourceKind } from '../../protocol.ts';
-import { effectShader, namedTracks, paramsOf, signatureOf, trackBank } from './effect.ts';
+import type { LookDef } from '../../protocol.ts';
+import { lookShader, namedTracks, paramsOf, signatureOf, trackBank } from './look.ts';
 import { compile, createTarget, drawFullscreen, rgb, type Program } from './gl.ts';
 import { columns, warpFor, OUTPUT_SHADER, SQUARE } from './output.ts';
-import { sourceSources } from './shaders.ts';
 
 /**
  * One source through one effect, on its own canvas.
@@ -21,11 +20,25 @@ import { sourceSources } from './shaders.ts';
  * stage about what an effect looks like would be worse than no preview, and
  * brightness is exactly the thing you come here to judge.
  */
-export interface PreviewFrame {
-  source: SourceKind;
-  /** Null draws the bare source, which is also what a broken effect falls back to. */
-  def: EffectDef | null;
+/** One pass of a preview's stack. */
+export interface PreviewPass {
+  def: LookDef;
+  /** 0–1. Meaningless to a generator, which writes the frame outright. */
   amount: number;
+}
+
+export interface PreviewFrame {
+  /**
+   * The stack, bottom first.
+   *
+   * A stack rather than a source and an effect, because that split is gone —
+   * and because it is what makes one renderer serve both halves of the
+   * designer. A single look is a stack of one; a **composition** is a stack of
+   * several, drawn exactly the way the stage will draw it. Two code paths for
+   * those would be two things that could disagree about what you are about to
+   * put on a wall.
+   */
+  stack: readonly PreviewPass[];
   energy: number;
   level: number;
   /** Packed `0xRRGGBB`, standing in for the song's colourway. */
@@ -64,16 +77,15 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
   }
 
   let error: string | null = null;
-  const sources = new Map<SourceKind, Program>();
-  // Two, ping-ponged the way the compositor does it: the source lands in one,
-  // the effect in the other, and the output stage reads whichever ended up last.
+  // Two, ping-ponged the way the compositor does it: each pass reads the one it
+  // did not just write, and the output stage takes whichever ended up last.
   const targets = [createTarget(gl), createTarget(gl)];
   let stage: Program | null = null;
   const identity = columns(warpFor(SQUARE));
   /**
    * Programs by signature, plural, and the plural is load-bearing.
    *
-   * One bench shows one effect and a single slot was right for it. The look
+   * One bench showing one look could live with a single slot. The look
    * canvas draws a picture *per node* — the same circuit cut off at each of its
    * outlets in turn — which means one context cycling through a dozen defs every
    * frame. A single slot would evict and recompile on each of them, calling the
@@ -81,24 +93,11 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
    * again. A failure is remembered as a failure for the same reason it is in the
    * compositor.
    */
-  const effects = new Map<string, { program: Program | null; error: string | null }>();
+  const looks = new Map<string, { program: Program | null; error: string | null }>();
 
-  const sourceProgram = (kind: SourceKind): Program | null => {
-    const held = sources.get(kind);
-    if (held) return held;
-    try {
-      const built = compile(gl, sourceSources.get(kind)!, `preview:${kind}`);
-      sources.set(kind, built);
-      return built;
-    } catch (err) {
-      error = (err as Error).message;
-      return null;
-    }
-  };
-
-  const effectProgram = (def: EffectDef): Program | null => {
+  const lookProgram = (def: LookDef): Program | null => {
     const signature = signatureOf(def);
-    const held = effects.get(signature);
+    const held = looks.get(signature);
     if (held) {
       error = held.error;
       return held.program;
@@ -107,7 +106,7 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
       program: null,
       error: null,
     };
-    const { source, error: why } = effectShader(def);
+    const { source, error: why } = lookShader(def);
     if (!source) {
       built.error = why;
     } else {
@@ -117,7 +116,7 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
         built.error = (err as Error).message;
       }
     }
-    effects.set(signature, built);
+    looks.set(signature, built);
     error = built.error;
     return built.program;
   };
@@ -156,9 +155,8 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
     },
     free() {
       for (const target of targets) target.free();
-      for (const p of sources.values()) gl.deleteProgram(p.program);
       if (stage) gl.deleteProgram(stage.program);
-      for (const built of effects.values()) {
+      for (const built of looks.values()) {
         if (built.program) gl.deleteProgram(built.program.program);
       }
     },
@@ -171,28 +169,32 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
       // preview wants to show.
       gl.disable(gl.BLEND);
 
-      const source = sourceProgram(next.source);
-      if (!source) return;
-      const program = next.def ? effectProgram(next.def) : null;
+      // A pass that failed to build drops out rather than emptying the stack,
+      // so a broken look in the middle of a composition costs that look and not
+      // the picture.
+      const stack = next.stack.flatMap((pass) => {
+        const program = lookProgram(pass.def);
+        return program ? [{ pass, program }] : [];
+      });
 
       let read = 0;
-      gl.bindFramebuffer(gl.FRAMEBUFFER, targets[read].framebuffer);
-      gl.clearColor(0, 0, 0, 1);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.useProgram(source.program);
-      setCommon(source, next, 1);
-      drawFullscreen(gl);
+      if (stack.length === 0) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, targets[read].framebuffer);
+        gl.clearColor(0, 0, 0, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+      }
 
-      if (program) {
-        read = 1;
+      for (let step = 0; step < stack.length; step++) {
+        const { pass, program } = stack[step];
+        read = step % 2;
         gl.bindFramebuffer(gl.FRAMEBUFFER, targets[read].framebuffer);
         gl.clearColor(0, 0, 0, 1);
         gl.clear(gl.COLOR_BUFFER_BIT);
         gl.useProgram(program.program);
         setCommon(program, next, 1);
-        gl.uniform1f(program.uniform('uAmount'), next.amount);
-        gl.uniform1fv(program.uniform('uParams'), paramsOf(next.def!));
-        const named = namedTracks(next.def!);
+        gl.uniform1f(program.uniform('uAmount'), pass.amount);
+        gl.uniform1fv(program.uniform('uParams'), paramsOf(pass.def));
+        const named = namedTracks(pass.def);
         if (named.some(Boolean)) {
           const meters = next.meters;
           gl.uniform1fv(
@@ -200,8 +202,9 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
             trackBank(named, (name) => meters?.(name) ?? 0),
           );
         }
+        // The frame beneath, which the bottom of a stack reads as black.
         gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, targets[0].texture);
+        gl.bindTexture(gl.TEXTURE_2D, targets[1 - read].texture);
         gl.uniform1i(program.uniform('uTex'), 0);
         drawFullscreen(gl);
       }
