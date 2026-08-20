@@ -50,7 +50,9 @@ again would square it at every step of the chain.
 **A layer names its effects by id, and the scheme says what an id is.** So the compositor
 takes the scheme every frame alongside the show: an id is either six lines of handwritten
 GLSL or a canvas full of nodes, and resolving that on the server would mean shipping a
-shader down the wire on every edit. `uParams` is an eight-float bank an effect's own knobs
+shader down the wire on every edit. `uTracks` is a second eight-float bank, filled only for a circuit that
+**named** a track — `uLevel` is the layer's own meter and needs no name, and that
+distinction is the whole of relative versus absolute addressing. `uParams` is an eight-float bank an effect's own knobs
 ride in — a bank rather than a named uniform each, because a [circuit](circuit.md)'s knobs
 are discovered from its nodes and cannot be declared ahead of time, and because a value in
 a uniform is one that can be turned without rebuilding a shader.
@@ -248,7 +250,7 @@ absent from it, or dragging a node would rebuild a shader sixty times a second.
 
 A build that fails is remembered as a failure, for the same reason: retrying it every frame
 calls the driver's compiler sixty times a second for as long as it stays broken, which is a
-stall rather than an error message. `error` is what the panel and the effects pane show, and
+stall rather than an error message. `error` is what the panel and the looks bench show, and
 a broken effect drops out of its layer's chain rather than taking the layer with it.
 
 `src/render/effect.ts` holds the three things both the compositor and the effect bench need

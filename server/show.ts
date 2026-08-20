@@ -1,7 +1,7 @@
-import type { AppliedEffect, Layer, LayerSpec, Scheme, Show } from '../protocol.ts';
+import type { AppliedEffect, Layer, Scheme, Show } from '../protocol.ts';
 import type { SetState } from './bridge.ts';
 import type { LinkFrame } from './link.ts';
-import { hint } from '../hints.ts';
+import { liveOffers, resolveLayer } from '../resolve.ts';
 import type { SchemeSource } from './scheme.ts';
 
 /**
@@ -50,8 +50,14 @@ function packColor(text: string): number {
   return Number.isFinite(value) ? value & 0xffffff : 0xffffff;
 }
 
-/** Live's own `[ROLE]` prefix, which is the convention the set is named with. */
-function roleOf(name: string): string | null {
+/**
+ * Live's own `[ROLE]` prefix, which is the convention the set is named with.
+ *
+ * Exported for `grid.ts`, which asks the same question of every scene rather
+ * than of the playing one. Two readings of a scene name is exactly the drift
+ * `SetModel` exists to prevent.
+ */
+export function roleOf(name: string): string | null {
   const match = /^\s*\[([^\]]+)\]/.exec(name);
   return match ? match[1].trim().toUpperCase() : null;
 }
@@ -122,40 +128,19 @@ export function buildShow(set: SetState, link: LinkFrame, source: SchemeSource):
     const clip = playing >= 0 ? set.clips.get(`${track.i}:${playing}`) : undefined;
     const strip = strips.get(track.i);
 
-    let kind = scheme.defaults.sources[depth % scheme.defaults.sources.length];
-    let blend = scheme.defaults.blend[depth % scheme.defaults.blend.length];
-    // Derived so the bottom layer is always in and a tall stack's top needs a
-    // fairly loud section to appear. Any level may say otherwise.
-    let floor = tracks.length > 1 ? (depth / (tracks.length - 1)) * 0.45 : 0;
-    let bias = 0;
-    let hidden = false;
-    const offers: string[] = [...(archetype?.effects ?? [])];
+    // The cascade itself lives in `resolve.ts`, shared with the editor. What is
+    // left here is what only a *running* set can supply: the mixer, the meter,
+    // and the energy gate — the parts of a layer that are facts about now
+    // rather than decisions about the show.
+    const r = resolveLayer(scheme, {
+      name: track.name,
+      depth,
+      count: tracks.length,
+      section: archetype?.effects,
+      clip: clip?.name ?? null,
+    });
 
-    const apply = (spec: LayerSpec) => {
-      if (spec.source) kind = spec.source;
-      if (spec.blend) blend = spec.blend;
-      if (spec.floor !== undefined) floor = spec.floor;
-      if (spec.bias !== undefined) bias = spec.bias;
-      if (spec.hide !== undefined) hidden = spec.hide;
-      for (const id of spec.effects ?? []) if (!offers.includes(id)) offers.push(id);
-    };
-
-    // The name hint first, so an explicit entry can say one thing without
-    // having to restate everything the name already implied.
-    const guessed = hint(track.name);
-    if (guessed) apply(guessed);
-    const bound = scheme.layers[track.name];
-    if (bound) apply(bound);
-    // Bias accumulates rather than overriding across the last two levels: a
-    // clip that is the quiet one in a loud track is saying "and also this".
-    const byClip = clip ? scheme.clips[clip.name] : undefined;
-    if (byClip) {
-      const carried = bias;
-      apply(byClip);
-      if (byClip.bias !== undefined) bias = carried + byClip.bias;
-    }
-
-    const energy = clamp01(baseEnergy + bias);
+    const energy = clamp01(baseEnergy + r.bias);
 
     // Energy thinning the stack, as a fade rather than a cut: a layer just under
     // its floor is dim, not absent, so a quiet section reads as the picture
@@ -167,13 +152,10 @@ export function buildShow(set: SetState, link: LinkFrame, source: SchemeSource):
     // *absent* for the whole verse instead. Presence belongs to the section —
     // "the chorus brings everything in" is a fact about the chorus — while the
     // bias only ever describes how frenetic a layer is once it is there.
-    const admitted = floor <= 0 ? 1 : clamp01((baseEnergy - floor) / 0.2 + 1);
+    const admitted = r.floor <= 0 ? 1 : clamp01((baseEnergy - r.floor) / 0.2 + 1);
     const fader = strip && !strip.active ? 0 : positionOf(strip?.volume);
 
-    // An id naming an effect that has been deleted is dropped here rather than
-    // in the renderer, so a stale reference costs a missing effect and never a
-    // failed compile.
-    const live = offers.filter((id) => scheme.effects[id]);
+    const live = liveOffers(scheme, r.offers);
 
     return {
       t: track.i,
@@ -182,15 +164,15 @@ export function buildShow(set: SetState, link: LinkFrame, source: SchemeSource):
       // Never from the clip — that colour is navigation and belongs to whoever
       // is reading the grid to find their place.
       color: packColor(colors[depth % colors.length]),
-      source: kind,
-      effects: hidden ? [] : dialEffects(live, energy, scheme.defaults.maxEffects),
+      source: r.source,
+      effects: r.hidden ? [] : dialEffects(live, energy, scheme.defaults.maxEffects),
       offers: live,
-      blend,
-      floor,
-      opacity: hidden ? 0 : fader * admitted,
+      blend: r.blend,
+      floor: r.floor,
+      opacity: r.hidden ? 0 : fader * admitted,
       level: set.levels.get(track.i) ?? 0,
       energy,
-      hidden,
+      hidden: r.hidden,
       playing,
       clipName: clip?.name ?? '',
     };

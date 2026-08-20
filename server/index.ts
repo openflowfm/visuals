@@ -8,6 +8,7 @@ import { followBridge } from './bridge.ts';
 import { openLink } from './link.ts';
 import { openScheme } from './scheme.ts';
 import { buildShow } from './show.ts';
+import { buildGrid } from './grid.ts';
 
 /**
  * The visuals server: a Link peer, a bridge client, and an HTTP host for the
@@ -89,11 +90,29 @@ const sendScheme = (socket: WebSocket) => {
   socket.send(JSON.stringify({ kind: 'scheme', scheme: scheme.current() }));
 };
 
+/**
+ * A cheap stand-in for "the set changed shape".
+ *
+ * Stringifying the grid to compare it would mean building tens of kilobytes ten
+ * times a second to discover that nothing moved. These four numbers move
+ * whenever a track, a scene or a clip does, which is every way the grid can
+ * change, and reading them is free.
+ */
+const gridStamp = () =>
+  `${bridge.state.rev}|${bridge.state.tracks.length}|${bridge.state.scenes.length}|${bridge.state.clips.size}`;
+
+let lastGrid = '';
+
+const sendGrid = (socket: WebSocket) => {
+  socket.send(JSON.stringify({ kind: 'grid', grid: buildGrid(bridge.state) }));
+};
+
 sockets.on('connection', (socket) => {
   clients.add(socket);
   socket.on('close', () => clients.delete(socket));
   socket.on('error', () => clients.delete(socket));
   sendScheme(socket);
+  sendGrid(socket);
   socket.send(JSON.stringify({ kind: 'show', ...buildShow(bridge.state, link.sample(), scheme) }));
 
   socket.on('message', (raw) => {
@@ -147,11 +166,21 @@ setInterval(() => {
     sinceShow = 0;
   }
   if (clients.size === 0) return;
+  // Before the show, because a browser that drew a matrix against a stale grid
+  // would show gaps for tracks that had just been recorded into.
+  const stamp = gridStamp();
+  if (stamp !== lastGrid) {
+    lastGrid = stamp;
+    const gridWire = JSON.stringify({ kind: 'grid', grid: buildGrid(bridge.state) });
+    for (const socket of clients) {
+      if (socket.readyState === socket.OPEN) socket.send(gridWire);
+    }
+  }
   const show = buildShow(bridge.state, link.sample(), scheme);
   show.clock = link.live;
-  const stamp = `${show.colorway}|${show.archetype}|${show.energy}|${show.schemeError}`;
-  const reloaded = stamp !== lastScheme;
-  lastScheme = stamp;
+  const schemeStamp = `${show.colorway}|${show.archetype}|${show.energy}|${show.schemeError}`;
+  const reloaded = schemeStamp !== lastScheme;
+  lastScheme = schemeStamp;
   const wire = JSON.stringify(
     due || reloaded ? { kind: 'show' as const, ...show } : anchorOf(show),
   );

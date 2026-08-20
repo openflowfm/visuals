@@ -1,5 +1,5 @@
 import type { EffectDef, SourceKind } from '../../protocol.ts';
-import { effectShader, paramsOf, signatureOf } from './effect.ts';
+import { effectShader, namedTracks, paramsOf, signatureOf, trackBank } from './effect.ts';
 import { compile, createTarget, drawFullscreen, rgb, type Program } from './gl.ts';
 import { columns, warpFor, OUTPUT_SHADER, SQUARE } from './output.ts';
 import { sourceSources } from './shaders.ts';
@@ -35,6 +35,15 @@ export interface PreviewFrame {
   beat: number;
   seconds: number;
   quantum: number;
+  /**
+   * A meter per track, by name, for a look that named one.
+   *
+   * The bench has no show to read, so the editor supplies the reading. It hands
+   * over the real ones — a look wired to the bass has to be judged against the
+   * bass actually playing, and a synthetic stand-in would be showing you a
+   * different effect from the one the stage will draw.
+   */
+  meters?: (name: string) => number;
 }
 
 export interface Preview {
@@ -61,10 +70,18 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
   const targets = [createTarget(gl), createTarget(gl)];
   let stage: Program | null = null;
   const identity = columns(warpFor(SQUARE));
-  let effect: { program: Program | null; signature: string } = {
-    program: null,
-    signature: '',
-  };
+  /**
+   * Programs by signature, plural, and the plural is load-bearing.
+   *
+   * One bench shows one effect and a single slot was right for it. The look
+   * canvas draws a picture *per node* — the same circuit cut off at each of its
+   * outlets in turn — which means one context cycling through a dozen defs every
+   * frame. A single slot would evict and recompile on each of them, calling the
+   * driver's compiler twelve times a frame; a map compiles each once and never
+   * again. A failure is remembered as a failure for the same reason it is in the
+   * compositor.
+   */
+  const effects = new Map<string, { program: Program | null; error: string | null }>();
 
   const sourceProgram = (kind: SourceKind): Program | null => {
     const held = sources.get(kind);
@@ -81,21 +98,28 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
 
   const effectProgram = (def: EffectDef): Program | null => {
     const signature = signatureOf(def);
-    if (effect.signature === signature) return effect.program;
-    if (effect.program) gl.deleteProgram(effect.program.program);
-    effect = { program: null, signature };
+    const held = effects.get(signature);
+    if (held) {
+      error = held.error;
+      return held.program;
+    }
+    const built: { program: Program | null; error: string | null } = {
+      program: null,
+      error: null,
+    };
     const { source, error: why } = effectShader(def);
     if (!source) {
-      error = why;
-      return null;
+      built.error = why;
+    } else {
+      try {
+        built.program = compile(gl, source, 'preview:effect');
+      } catch (err) {
+        built.error = (err as Error).message;
+      }
     }
-    try {
-      effect.program = compile(gl, source, 'preview:effect');
-      error = null;
-    } catch (err) {
-      error = (err as Error).message;
-    }
-    return effect.program;
+    effects.set(signature, built);
+    error = built.error;
+    return built.program;
   };
 
   const size = () => {
@@ -134,7 +158,9 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
       for (const target of targets) target.free();
       for (const p of sources.values()) gl.deleteProgram(p.program);
       if (stage) gl.deleteProgram(stage.program);
-      if (effect.program) gl.deleteProgram(effect.program.program);
+      for (const built of effects.values()) {
+        if (built.program) gl.deleteProgram(built.program.program);
+      }
     },
     frame(next) {
       size();
@@ -166,6 +192,14 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
         setCommon(program, next, 1);
         gl.uniform1f(program.uniform('uAmount'), next.amount);
         gl.uniform1fv(program.uniform('uParams'), paramsOf(next.def!));
+        const named = namedTracks(next.def!);
+        if (named.some(Boolean)) {
+          const meters = next.meters;
+          gl.uniform1fv(
+            program.uniform('uTracks'),
+            trackBank(named, (name) => meters?.(name) ?? 0),
+          );
+        }
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, targets[0].texture);
         gl.uniform1i(program.uniform('uTex'), 0);

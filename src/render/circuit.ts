@@ -153,6 +153,16 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     emit: () => ({ n: 'uParams[0]' }),
   },
 
+  track: {
+    name: 'track',
+    about: 'Another track\'s meter, by name. Absolute — it breaks if the look moves.',
+    inlets: [],
+    outlets: [N('level')],
+    // The slot is the compiler's, like a knob's. The *name* is the node's, and
+    // it is what makes this the addressing that stays put.
+    emit: () => ({ level: 'uTracks[0]' }),
+  },
+
   fold: {
     name: 'fold',
     about: 'Mirror the frame into wedges around the centre. A kaleidoscope.',
@@ -368,6 +378,17 @@ export interface Compiled {
 /** At most eight, because that is the size of the bank in `EFFECT_PREAMBLE`. */
 export const MAX_KNOBS = 8;
 
+/** Likewise, and for the same bank-sized reason. */
+export const MAX_TRACKS = 8;
+
+/** One `track` node: what it names, and which slot of `uTracks` it reads. */
+export interface CircuitTrack {
+  id: string;
+  /** The exact track name, or `master`. Empty until someone picks one. */
+  name: string;
+  index: number;
+}
+
 /** A port address, as cords name it. */
 export function portId(node: string, port: string): string {
   return `${node}/${port}`;
@@ -387,6 +408,20 @@ export function signalOf(circuit: Circuit, id: string): Signal | null {
   const found =
     spec.inlets.find((p) => p.name === port) ?? spec.outlets.find((p) => p.name === port);
   return found?.kind ?? null;
+}
+
+/**
+ * Every track this circuit names, in the order the compiler will bank them.
+ *
+ * Positional rather than keyed by name so that two nodes naming the same track
+ * still get a slot each — deduplicating them would make deleting one silently
+ * change what the other reads.
+ */
+export function tracksOf(circuit: Circuit): CircuitTrack[] {
+  return circuit.nodes
+    .filter((node) => node.kind === 'track')
+    .slice(0, MAX_TRACKS)
+    .map((node, index) => ({ id: node.id, name: node.op ?? '', index }));
 }
 
 export function knobsOf(circuit: Circuit): CircuitKnob[] {
@@ -413,6 +448,7 @@ export function compileCircuit(circuit: Circuit): Compiled {
   const knobs = knobsOf(circuit);
   const byId = new Map(circuit.nodes.map((node) => [node.id, node]));
   const slot = new Map(knobs.map((knob) => [knob.id, knob.index]));
+  const trackSlot = new Map(tracksOf(circuit).map((track) => [track.id, track.index]));
 
   const end = circuit.nodes.find((node) => node.kind === 'out');
   if (!end)
@@ -426,6 +462,9 @@ export function compileCircuit(circuit: Circuit): Compiled {
   }
   if (circuit.nodes.filter((n) => n.kind === 'value').length > MAX_KNOBS) {
     return { source: null, error: `more than ${MAX_KNOBS} knobs`, knobs };
+  }
+  if (circuit.nodes.filter((n) => n.kind === 'track').length > MAX_TRACKS) {
+    return { source: null, error: `more than ${MAX_TRACKS} named tracks`, knobs };
   }
 
   /** Inlet address to the outlet feeding it. The last cord to an inlet wins. */
@@ -468,7 +507,11 @@ export function compileCircuit(circuit: Circuit): Compiled {
     };
 
     const emitted =
-      node.kind === 'value' ? { n: `uParams[${slot.get(node.id) ?? 0}]` } : spec.emit(read, node);
+      node.kind === 'value'
+        ? { n: `uParams[${slot.get(node.id) ?? 0}]` }
+        : node.kind === 'track'
+          ? { level: `uTracks[${trackSlot.get(node.id) ?? 0}]` }
+          : spec.emit(read, node);
     open.delete(nodeId);
 
     const at = circuit.nodes.indexOf(node);

@@ -27,6 +27,7 @@ export function Preview({
   pace,
   quantum,
   clock,
+  meters,
   onError,
 }: {
   def: EffectDef | null;
@@ -37,13 +38,15 @@ export function Preview({
   pace: number;
   quantum: number;
   clock: Clock;
+  /** Real meters, by track name, for a look that named one. See `PreviewFrame`. */
+  meters?: (name: string) => number;
   onError(next: string | null): void;
 }) {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   // Read by the loop rather than closed over, so changing a knob doesn't tear
   // down the GL context and rebuild every program.
-  const now = useRef({ def, source, amount, energy, color, pace, quantum, onError });
-  now.current = { def, source, amount, energy, color, pace, quantum, onError };
+  const now = useRef({ def, source, amount, energy, color, pace, quantum, meters, onError });
+  now.current = { def, source, amount, energy, color, pace, quantum, meters, onError };
 
   useEffect(() => {
     if (!canvas.current) return;
@@ -66,6 +69,7 @@ export function Preview({
         quantum: at.quantum,
         beat,
         seconds: clock.seconds(),
+        meters: at.meters,
       });
       // Only on a change: a driver message arriving sixty times a second would
       // re-render the pane sixty times a second.

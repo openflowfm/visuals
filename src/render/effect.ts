@@ -1,5 +1,5 @@
 import type { EffectDef } from '../../protocol.ts';
-import { compileCircuit, knobsOf } from './circuit.ts';
+import { compileCircuit, knobsOf, tracksOf } from './circuit.ts';
 import { BUILTIN_PARAMS, effectSources } from './shaders.ts';
 
 /**
@@ -56,5 +56,37 @@ export function paramsOf(def: EffectDef): Float32Array {
     return values;
   }
   if (def.circuit) for (const knob of knobsOf(def.circuit)) values[knob.index] = knob.value;
+  return values;
+}
+
+/**
+ * The tracks an effect names, in `uTracks` order.
+ *
+ * Empty for a built-in and for any circuit that only ever reads the layer it is
+ * drawing — which is most of them, and is the cheap case this exists to keep
+ * cheap. A look that names nothing is a look that travels.
+ */
+export function namedTracks(def: EffectDef): string[] {
+  if (!def.circuit) return [];
+  const names = new Array<string>(8).fill('');
+  for (const track of tracksOf(def.circuit)) names[track.index] = track.name;
+  return names;
+}
+
+/**
+ * Those names, resolved to meters.
+ *
+ * The reading is the caller's because the two callers have different sets to
+ * read from: the compositor has the show, and the bench has whatever the editor
+ * decided to feed it. A name nobody can resolve reads zero rather than throwing
+ * — a look pointed at a track that has since been renamed should go quiet, not
+ * take the layer down with it.
+ */
+export function trackBank(names: readonly string[], read: (name: string) => number): Float32Array {
+  const values = new Float32Array(8);
+  for (let i = 0; i < values.length; i++) {
+    const name = names[i];
+    if (name) values[i] = read(name);
+  }
   return values;
 }

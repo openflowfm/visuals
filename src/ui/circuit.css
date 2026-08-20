@@ -1,0 +1,194 @@
+/*
+ * What the look canvas is made of.
+ *
+ * This was the editor's stylesheet. The editor it dressed is gone — three views
+ * replaced its four panes — and what survived is the part that was never about
+ * the editor at all: a node's faceplate, the colours a cord and a port carry,
+ * and the small controls the canvas is built from. Everything scoped to the old
+ * shell went with it.
+ */
+
+.tick {
+  padding: 3px 7px;
+  border: 1px solid var(--bd3);
+  border-radius: 3px;
+  background: var(--surface-control);
+  color: #8b8b93;
+  font-family: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.tick:hover:not(:disabled) {
+  border-color: var(--focus);
+  color: var(--fg);
+}
+
+.tick[data-on] {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
+.tick:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.tick.warn:hover {
+  border-color: var(--alarm);
+  color: var(--alarm);
+}
+
+.add {
+  padding: 4px 10px;
+  border: 1px dashed var(--bd3);
+  border-radius: 3px;
+  background: transparent;
+  color: #8b8b93;
+  font-family: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.add:hover {
+  border-color: var(--focus);
+  color: var(--fg);
+}
+
+.hits {
+  margin: 8px 0 0;
+  overflow: hidden;
+  color: var(--caption);
+  font-size: 10px;
+  text-overflow: ellipsis;
+}
+
+.hits.bad {
+  color: var(--alarm);
+}
+
+.picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 8px;
+}
+
+.picks .wired .wdg-body {
+  border-style: dashed;
+}
+
+.preview {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  margin-bottom: 10px;
+  border: 1px solid var(--bd3);
+  border-radius: 4px;
+  background: #000;
+}
+
+.about {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--caption);
+  font-family: var(--sans);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.circuit .canvas {
+  height: 400px;
+  margin-top: 6px;
+}
+
+.node {
+  --wdg-space: 5px;
+  min-width: 92px;
+  font-size: 10px;
+}
+
+.node .wdg-device-head {
+  gap: 3px;
+}
+
+.node .tick {
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  line-height: 1;
+}
+
+.node-out {
+  --wdg-plate-head: #2a2113;
+}
+
+.node-value .knobface {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.node-value .field {
+  width: 70px;
+  text-align: center;
+}
+
+.wire {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.cut {
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--idle);
+  font-family: inherit;
+  font-size: 9px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.cut:hover {
+  color: var(--alarm);
+}
+
+.wdg-graph-cord[data-kind='p'] {
+  stroke: #3cc8ff;
+}
+
+.wdg-graph-cord[data-kind='n'] {
+  stroke: #f0b23c;
+}
+
+.wdg-graph-cord[data-kind='c'] {
+  stroke: #9b5aff;
+}
+
+.wdg-port[data-kind='p'] {
+  border-color: #3cc8ff;
+}
+
+.wdg-port[data-kind='n'] {
+  border-color: #f0b23c;
+}
+
+.wdg-port[data-kind='c'] {
+  border-color: #9b5aff;
+}
+
+.wdg-port[data-kind='p'][data-connected] {
+  background: #3cc8ff;
+}
+
+.wdg-port[data-kind='n'][data-connected] {
+  background: #f0b23c;
+}
+
+.wdg-port[data-kind='c'][data-connected] {
+  background: #9b5aff;
+}

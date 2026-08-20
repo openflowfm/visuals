@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { Circuit, CircuitNode, NodeKind } from '../../protocol.ts';
 import { Graph, GraphNode, type GraphCord } from '../../../widgets/src/chrome/Graph.tsx';
 import { Port } from '../../../widgets/src/chrome/Port.tsx';
@@ -28,9 +28,19 @@ import { KNOB, PERCENT } from './param.ts';
 export function CircuitEditor({
   circuit,
   onChange,
+  tracks = [],
+  picture,
 }: {
   circuit: Circuit;
   onChange(next: Circuit): void;
+  /**
+   * Every name a `track` node may point at, which is **the set's** — the same
+   * rule the rest of the editor keeps. A name you can typo is a look that goes
+   * quiet on the one night it mattered.
+   */
+  tracks?: readonly string[];
+  /** A small picture of what a node has made, when the host can draw one. */
+  picture?: (nodeId: string) => ReactNode;
 }) {
   const [adding, setAdding] = useState(0);
   const [refused, setRefused] = useState<string | null>(null);
@@ -107,6 +117,8 @@ export function CircuitEditor({
               <NodeFace
                 node={node}
                 circuit={circuit}
+                tracks={tracks}
+                picture={picture}
                 onChange={(next) => onChange(setNode(circuit, node.id, next))}
                 onCut={(inlet) => onChange(disconnect(circuit, inlet))}
                 onDrop={() => onChange(dropNode(circuit, node.id))}
@@ -134,12 +146,16 @@ const LONG: Record<string, string> = { p: 'point', n: 'number', c: 'colour' };
 function NodeFace({
   node,
   circuit,
+  tracks,
+  picture,
   onChange,
   onCut,
   onDrop,
 }: {
   node: CircuitNode;
   circuit: Circuit;
+  tracks: readonly string[];
+  picture?: (nodeId: string) => ReactNode;
   onChange(next: Partial<CircuitNode>): void;
   onCut(inlet: string): void;
   onDrop(): void;
@@ -197,7 +213,16 @@ function NodeFace({
         );
       })}
     >
-      {node.kind === 'value' ? (
+      {picture?.(node.id)}
+      {node.kind === 'track' ? (
+        <Select
+          items={tracks.length > 0 ? tracks : ['no tracks']}
+          index={Math.max(0, tracks.indexOf(node.op ?? ''))}
+          onChange={(i) => onChange({ op: tracks[i] })}
+          label="Track this reads"
+          width={104}
+        />
+      ) : node.kind === 'value' ? (
         <div className="knobface">
           <Knob
             param={KNOB}

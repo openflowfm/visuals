@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Circuit } from '../../protocol.ts';
-import { compileCircuit, knobsOf, signalOf, starterCircuit } from './circuit.ts';
+import { compileCircuit, knobsOf, signalOf, starterCircuit, tracksOf } from './circuit.ts';
 
 /**
  * The circuit compiler.
@@ -177,5 +177,82 @@ describe('what a port carries', () => {
     // rather than optimistic.
     expect(signalOf(starterCircuit(), 'nope/n')).toBeNull();
     expect(signalOf(starterCircuit(), 'p/nope')).toBeNull();
+  });
+});
+
+/**
+ * Naming another track, which is the absolute half of addressing.
+ *
+ * A `signal` node means the layer it is drawing and travels wherever the look
+ * is used; a `track` node names one thing and keeps meaning it. The compiler's
+ * whole job here is the banking — a slot per node, in node order, matching what
+ * the compositor uploads — because a look reading the wrong track's meter is a
+ * bug you would chase in the wrong file for an hour.
+ */
+describe('a track node', () => {
+  const paintFrom = (from: string): Circuit['cords'] => [
+    { from, to: 'p/amount' },
+    { from: 'p/c', to: 'o/c' },
+  ];
+
+  it('reads its own slot of the bank', () => {
+    const built = compileCircuit(
+      wire(
+        [
+          { id: 't', kind: 'track', op: 'Bass', x: 0, y: 0 },
+          { id: 'p', kind: 'paint', x: 1, y: 0 },
+          { id: 'o', kind: 'out', x: 2, y: 0 },
+        ],
+        paintFrom('t/level'),
+      ),
+    );
+    expect(built.error).toBeNull();
+    expect(bodyOf(built.source!)).toContain('uTracks[0]');
+  });
+
+  it('banks a slot per node, in node order', () => {
+    const circuit = wire(
+      [
+        { id: 'a', kind: 'track', op: 'Bass', x: 0, y: 0 },
+        { id: 'b', kind: 'track', op: 'Vox', x: 0, y: 1 },
+        { id: 'm', kind: 'math', op: 'add', x: 1, y: 0 },
+        { id: 'p', kind: 'paint', x: 2, y: 0 },
+        { id: 'o', kind: 'out', x: 3, y: 0 },
+      ],
+      [
+        { from: 'a/level', to: 'm/a' },
+        { from: 'b/level', to: 'm/b' },
+        { from: 'm/n', to: 'p/amount' },
+        { from: 'p/c', to: 'o/c' },
+      ],
+    );
+    expect(tracksOf(circuit)).toEqual([
+      { id: 'a', name: 'Bass', index: 0 },
+      { id: 'b', name: 'Vox', index: 1 },
+    ]);
+    const body = bodyOf(compileCircuit(circuit).source!);
+    expect(body).toContain('uTracks[0]');
+    expect(body).toContain('uTracks[1]');
+  });
+
+  it('refuses more than the bank holds rather than reading past it', () => {
+    const nodes: Circuit['nodes'] = Array.from({ length: 9 }, (_, i) => ({
+      id: `t${i}`,
+      kind: 'track' as const,
+      op: 'Bass',
+      x: 0,
+      y: i,
+    }));
+    nodes.push({ id: 'o', kind: 'out', x: 1, y: 0 });
+    const built = compileCircuit(wire(nodes, []));
+    expect(built.source).toBeNull();
+    expect(built.error).toMatch(/named tracks/);
+  });
+
+  it('is a number, so it will not go into a point', () => {
+    // The canvas refuses by type rather than inventing a conversion, and a
+    // meter is exactly the thing someone will try to drop onto a position.
+    const circuit = wire([{ id: 't', kind: 'track', op: 'Bass', x: 0, y: 0 }], []);
+    expect(signalOf(circuit, 't/level')).toBe('n');
   });
 });

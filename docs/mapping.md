@@ -127,46 +127,36 @@ pointer move, so what the server *holds* updates immediately — the picture has
 the pointer — while the write is debounced, since nobody reads the file until the gesture
 is over.
 
-## The editor
+## The console
 
 `e` in the app opens it, over the picture rather than beside it, because the whole point is
-tuning a chorus while a chorus is on screen.
+tuning a chorus while a chorus is on screen. Full reasoning in [the console](console.md).
 
-**Its four panes are the cascade.** Songs own colour and drive; sections own energy and
-character; layers own what a track does with content and carry the clip exceptions; effects
-are the vocabulary the other three point at. It is not a settings screen with tabs — each
-pane is one level of the resolver, in the order specificity runs.
+It used to be four panes that **were** the cascade — songs, sections, layers, effects, in
+the order specificity runs. That was the right first shape and the wrong second one: it was
+organised by *where a value lives* rather than by *what you are trying to do*, so the
+commonest job of all ("this song reads wrong, fix it") was spread across three panes and
+none of them showed the picture. The three views that replaced it are three distances
+instead — the set, a moment, one effect.
 
-| pane | edits | notes |
-|---|---|---|
-| sections | `archetypes`, `defaults` | the role list **follows the set** until you click one to pin it, and clicking the pinned one again lets go — no second control to explain. What a section falls back to lives here too, including **pace** |
-| songs | `songs`, `colorways` | every song in the set, whether or not anything is assigned to it. A set with thirty-five songs and three assignments used to look identical to a set with three songs |
-| layers | `layers`, `clips` | one row per track, in composite order, each showing what it resolved to. An exception is made from the clip that is **playing**, because that is when you notice you want one |
-| effects | `effects` | each effect apart from anywhere it is used. Built-ins get their declared knobs; a [circuit](circuit.md) gets a canvas |
+The cascade did not go anywhere; it stopped being the *navigation*. Coverage draws it as
+four cell states (said here, inherited, backstop, not in this row), and bind's scope
+selector is the same four levels asked as one question: how far should this reach.
 
-It is composed from [`widgets/`](../../widgets/README.md), which is the first use of that
-module outside a device chain and the reason it exists: a knob that knew what an archetype
-was could not have been written before archetypes did, while one that takes a `Param` and a
-number was ready. The single adapter is [`src/ui/param.ts`](../src/ui/param.ts), the same
-shape `ui/` has in `lib/liveParam.ts`.
+**The resolver is shared with the server.** [`resolve.ts`](../resolve.ts) sits beside
+`protocol.ts` for the reason [`hints.ts`](../hints.ts) does — two consumers, one reading.
+`buildShow` resolves the cell the transport is sitting in and calls it the show; the console
+resolves any cell you point at and calls it the answer. A second implementation would
+drift, and it would drift in the worst way: the editor would tell you what a chorus was
+going to look like and the stage would disagree.
 
-Every name the editor offers — roles, songs, tracks, the playing clip — comes from **the
-set**, so nothing asks anyone to type one.
+It also returns **who answered** for every scalar, which the old inline resolution computed
+and threw away. That was fine while the only consumer drew pixels. An editor cannot work
+without it: "said at track level" and "inherited, untouched" are both questions about where
+a value came from rather than what it is.
 
-**Saving writes the whole resolved scheme**, so the file grows to state everything rather
-than inheriting from the built-in. That is deliberate: a file that says exactly what the
-show is has no invisible inheritance to reason about at two in the morning, and deleting it
-still leaves the built-in as a complete show. It costs the hand-written formatting — the
-file comes back as ordinary two-space JSON — but the `_` block and any other key it does
-not know are preserved, because the editor writes *over* the file rather than in place of
-it.
-
-It is a file rather than device state for now, and that is a staging decision rather than a
-final one. Archetypes belong beside roles eventually — roles are already set-owned, they
-travel in the `.als`, and a show that looked different on the gig laptop would be a bug.
-But that costs a protocol change through `lom.ts`, `bridge.ts` and `ui/`, and committing to
-a shape before it has met a real set is how you get a protocol you regret. So: a file,
-shaped so it can move without changing.
+Every name it offers — roles, songs, tracks, the playing clip — comes from **the set**, so
+nothing asks anyone to type one.
 
 ## What is deliberately absent
 
@@ -231,7 +221,7 @@ of this kind actually spends its vocabulary on, and a table was never the right 
 one.
 
 The scheme itself stays a table, and should. A default good enough never to touch beats a
-canvas that demands wiring, and the four panes above are lists of decisions rather than a
+canvas that demands wiring, and coverage and bind are lists of decisions rather than a
 dataflow. The thing that genuinely *is* a graph is what drives what — and that is what a
 circuit's `signal` nodes already are, per effect. A global modulation matrix, wiring a
 track's meter to another layer's parameter, is the version of that idea that has not been

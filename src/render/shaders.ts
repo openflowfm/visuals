@@ -301,6 +301,13 @@ export const EFFECT_PREAMBLE = `${PREAMBLE}
 uniform sampler2D uTex;
 uniform float uAmount;
 uniform float uParams[8];
+// Meters of tracks this effect NAMED, in the order its track nodes appear. A
+// bank rather than a uniform each, for the same reason uParams is one: which
+// tracks a circuit reaches is discovered from its nodes and cannot be declared
+// ahead of time. uLevel is the layer's own meter and needs no name; this is
+// every other track's, and that distinction is the whole of relative versus
+// absolute addressing.
+uniform float uTracks[8];
 #define MIXED(c) { fragColor = mix(texture(uTex, vUv), (c), uAmount); }
 `;
 

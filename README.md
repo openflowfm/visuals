@@ -16,7 +16,8 @@ Live ─ SessionBridge :17800 ─WS─> visuals server :17900 ─WS─> browser 
 | doc | read it before touching | source |
 |---|---|---|
 | [the clock](docs/clock.md) | Link, tempo, the beat, why the browser extrapolates, the native addon | `server/link.ts`, `src/state/useShow.ts`, `tools/build-link.ts` |
-| [the cascade](docs/mapping.md) | archetypes, energy, colourways, layer bindings, the scheme file, the editor | `server/show.ts`, `server/scheme.ts`, `scheme.json`, `src/ui/*` |
+| [the cascade](docs/mapping.md) | archetypes, energy, colourways, layer bindings, the scheme file | `server/show.ts`, `server/scheme.ts`, `resolve.ts`, `scheme.json` |
+| [the console](docs/console.md) | the three views, the override gesture, the A/B, the addressing drawers | `src/ui/Console.tsx`, `Coverage.tsx`, `Bind.tsx`, `Looks.tsx` |
 | [circuits](docs/circuit.md) | building an effect out of nodes, the node vocabulary, the bench | `src/render/circuit.ts`, `src/ui/Circuit.tsx` |
 | [the renderer](docs/render.md) | layers, blending, sources, effects, fill rate, **pointing a projector** | `src/render/*` |
 | [the harness](docs/harness.md) | working on this with no Ableton, and the Link safety rule | `tools/fake-live.ts` |
@@ -78,22 +79,26 @@ without the bridge noticing.
 
 ## Customising it
 
-Press **`e`** in the app for the editor, over the picture so you can tune a chorus while one
-is on screen. Its four panes **are the cascade**, in the order specificity runs:
+Press **`e`** in the app for the console, over the picture so you can tune a chorus while
+one is on screen. Its three views are three **distances** to stand at from the same set:
 
-| pane | |
-|---|---|
-| **sections** | one energy and a character per role, and what a section falls back to — including **pace**, which moves the whole show along the ladder of divisions it reacts on. Follows the set until you pin a section |
-| **songs** | a colourway and a drive per song — every song in the set, assigned or not |
-| **layers** | one row per track, in composite order, showing what it resolved to. An exception for the clip that is playing is one click |
-| **effects** | each effect on its own, with a live bench. Built-ins have knobs; a **circuit** has a canvas |
+| view | the question | the scale |
+|---|---|---|
+| **coverage** | what have I not decided about | the set, all of it at once |
+| **bind** | is this right, and how far should the fix reach | one moment |
+| **looks** | what is this thing made of | one effect |
+
+That is the order a night before a gig runs in — find the gaps, fix them against the
+picture, then open up the thing you are fixing with.
+
+Two rules the whole thing rests on. **Nothing lands until it has been seen next to what it
+replaces**: bind draws the live scheme and your staged one side by side, on one clock, so
+the only thing that differs is the edit. And **the hard part of an override is its scope**,
+so the same address can be fixed at the song, the section, the track or the clip, with a
+readout that tells you how many songs the fix is about to reach.
 
 Everything it offers — roles, songs, tracks, the playing clip — comes from **the set**, so
 it never asks you to type a name.
-
-**`roll` in the header replaces the whole show** — colours, energies, what each family of
-tracks draws, and two freshly wired circuits. It is seeded, so `undo roll` gets back the one
-you just left and typing a seed back into the footer gets back one from last week.
 
 It writes [`scheme.json`](scheme.json), which stays the record — hot-reloaded, entirely
 optional, and readable, diffable and committable after a night of tuning. Edit either.

@@ -4,7 +4,7 @@ import { useOutput } from './state/useOutput.ts';
 import { useShow } from './state/useShow.ts';
 import { Align } from './ui/Align.tsx';
 import { effectLabel } from './ui/edits.ts';
-import { Editor } from './ui/Editor.tsx';
+import { Console } from './ui/Console.tsx';
 import './app.css';
 
 /**
@@ -18,7 +18,7 @@ import './app.css';
 export function App() {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const stage = useRef<Compositor | null>(null);
-  const { show, showRef, scheme, save, clock, online } = useShow();
+  const { show, showRef, scheme, grid, save, clock, online } = useShow();
   // The render loop reads the scheme every frame because effects live in it, and
   // reads it through a ref for the same reason it reads the show through one:
   // rebuilding the loop whenever a knob moved would drop a frame per edit.
@@ -209,9 +209,11 @@ export function App() {
         />
       )}
       {editing && scheme && (
-        <Editor
+        <Console
           show={show}
+          showRef={showRef}
           scheme={scheme}
+          grid={grid}
           save={save}
           clock={clock}
           onClose={() => setEditing(false)}

@@ -103,6 +103,7 @@ export type NodeKind =
   | 'point'
   | 'signal'
   | 'value'
+  | 'track'
   // geometry: point in, point out
   | 'fold'
   | 'swirl'
@@ -148,7 +149,13 @@ export interface CircuitNode {
   /** Canvas position, in graph units. The editor's, never the compiler's. */
   x: number;
   y: number;
-  /** The mode of a node that has one: a signal name, a maths op, a wave shape. */
+  /**
+   * The mode of a node that has one: a signal name, a maths op, a wave shape.
+   *
+   * A `track` node's mode is the **exact name of a track**, or `master`. That
+   * is what makes it the absolute half of addressing: it names something and
+   * stays put, where a `signal` node always means the layer it is drawing.
+   */
   op?: string;
   /** A `value` node's amount, 0–1. Rides a uniform, so turning it never recompiles. */
   value?: number;
@@ -380,6 +387,69 @@ export interface Show {
   songs: string[];
 }
 
+// --- the set's own shape, for reading coverage ---------------------------
+
+/**
+ * One row of the coverage matrix — a song, or a section.
+ *
+ * The same shape for both because the matrix asks the same question either way:
+ * *for this slice of the set, on this track, who decided what the layer is.*
+ * A song slices by name and a section slices by role, and the only thing that
+ * differs is which scenes end up in the slice.
+ *
+ * The clip names are what make that answerable. The cascade's most specific
+ * level is keyed by them, so whether a slice has said anything of its own about
+ * a track is a question only the names can answer. Distinct rather than every
+ * occurrence: firing one clip in four scenes is one decision, not four.
+ */
+export interface GridRow {
+  /** The set's own spelling — a song's name, or the role itself. */
+  name: string;
+  /** Identity: `songKey` for a song, the role for a section. */
+  key: string;
+  /** Already rendered by the bridge — `128`, or `128 / 130`. Songs only. */
+  bpm?: string;
+  /** The musical key, likewise rendered. Songs only. */
+  tonality?: string;
+  /** The roles this row covers: a song's sections, or a section's own name. */
+  roles: string[];
+  /**
+   * By track index: the distinct clip names this row holds on that track.
+   *
+   * Absent for a track the row never uses, which is a cell state of its own.
+   * A gap you cannot fill is not a gap, and colouring it like one would make
+   * the night-before to-do list mostly noise.
+   */
+  clips: Record<number, string[]>;
+}
+
+/**
+ * The set's shape, sent apart from the show and rarely.
+ *
+ * The show goes out every second and is a couple of kilobytes; this is tens of
+ * kilobytes for a real set and changes only when the set does. Riding the show
+ * with it would put a full grid on the wire sixty times a minute to say nothing.
+ *
+ * Both cuts are built here rather than one being derived in the browser,
+ * because deriving the section cut needs the scene-to-role reading and that
+ * reading belongs to the server — the same argument `SetModel` makes about not
+ * parsing a name twice.
+ */
+export interface SetGrid {
+  /**
+   * The matrix columns: every track that can carry a layer, in composite order.
+   *
+   * `group` is the immediate parent group's name, which is what the *groups*
+   * cut collapses on. Sent rather than inferred from track order, because Live
+   * allows groups inside groups and order alone cannot tell you which.
+   */
+  tracks: { t: number; name: string; group: string | null }[];
+  /** Rows in the set's running order. */
+  songs: GridRow[];
+  /** The same tracks, sliced by role instead. */
+  sections: GridRow[];
+}
+
 // --- the wire -----------------------------------------------------------
 
 /**
@@ -399,7 +469,8 @@ export type Down =
       levels: number[];
       opacity: number[];
     }
-  | { kind: 'scheme'; scheme: Scheme };
+  | { kind: 'scheme'; scheme: Scheme }
+  | { kind: 'grid'; grid: SetGrid };
 
 /**
  * Browser to server. One message: the whole scheme, replaced.

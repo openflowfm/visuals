@@ -1,5 +1,5 @@
 import type { Blend, EffectDef, Scheme, Show, SourceKind } from '../../protocol.ts';
-import { effectShader, paramsOf, signatureOf } from './effect.ts';
+import { effectShader, namedTracks, paramsOf, signatureOf, trackBank } from './effect.ts';
 import { compile, createTarget, drawFullscreen, rgb, type Program } from './gl.ts';
 import { columns, warpFor, OUTPUT_SHADER, SQUARE, type Corners } from './output.ts';
 import { sourceSources } from './shaders.ts';
@@ -64,6 +64,13 @@ interface BuiltEffect {
   signature: string;
   error: string | null;
   params: Float32Array;
+  /**
+   * The tracks this effect named, in `uTracks` order, or empty when it named
+   * none. Cached beside the program because it is a function of the circuit's
+   * structure — the same thing the signature is — and recomputing it per layer
+   * per frame would walk every node sixty times a second to learn nothing.
+   */
+  tracks: string[];
 }
 
 export function createCompositor(canvas: HTMLCanvasElement): Compositor {
@@ -160,6 +167,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       signature,
       error: null,
       params: paramsOf(def),
+      tracks: namedTracks(def),
     };
     const { source, error: why } = effectShader(def);
     if (!source) {
@@ -342,6 +350,19 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
           gl.uniform1f(program.uniform('uOpacity'), 1);
           gl.uniform1f(program.uniform('uAmount'), applied.amount);
           gl.uniform1fv(program.uniform('uParams'), built.params);
+          // Only for a circuit that named a track. `namedTracks` is empty for a
+          // built-in and for every look that reads only the layer it draws, so
+          // the common effect costs one array lookup and no uniform upload.
+          if (built.tracks.some(Boolean)) {
+            gl.uniform1fv(
+              program.uniform('uTracks'),
+              trackBank(built.tracks, (name) =>
+                name === 'master'
+                  ? show.master
+                  : (show.layers.find((l) => l.name === name)?.level ?? 0),
+              ),
+            );
+          }
           gl.activeTexture(gl.TEXTURE0);
           gl.bindTexture(gl.TEXTURE_2D, targets[read].texture);
           gl.uniform1i(program.uniform('uTex'), 0);

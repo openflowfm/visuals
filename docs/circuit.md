@@ -1,6 +1,6 @@
 # Circuits
 
-`src/render/circuit.ts`, `src/ui/Circuit.tsx`, `src/ui/Effects.tsx`. An effect built out of
+`src/render/circuit.ts`, `src/ui/Circuit.tsx`, `src/ui/Looks.tsx`. An effect built out of
 nodes, compiled to a fragment shader.
 
 ## Why a graph here and nowhere else
@@ -60,7 +60,8 @@ goes costs nothing.
 | node | in | out | |
 |---|---|---|---|
 | `point` | | `p` | where this fragment is |
-| `signal` | | `n` | `level` `energy` `beat` `phase` `pulse` `time` `amount` `random` |
+| `signal` | | `n` | `level` `energy` `beat` `phase` `pulse` `time` `amount` `random`. **This layer's**, wherever it is used |
+| `track` | | `n` | another track's meter, **by name**, or `master`. Absolute: it breaks if the look moves |
 | `value` | | `n` | a knob. Named here, turned in the effect list |
 | `fold` | `p` `sides` | `p` | mirror into wedges around the centre |
 | `swirl` | `p` `turn` | `p` | rotate by more the further out you are |
@@ -91,6 +92,13 @@ rather than three times.
 A cycle is refused by name rather than hung in. More than one `out`, or more than eight
 knobs, is refused too — eight is the size of `uParams` in the shader preamble.
 
+**A named track rides a uniform bank too.** A `track` node compiles to `uTracks[i]`, banked
+positionally the way knobs are, and the compositor fills it by looking each name up in the
+show. Positional rather than keyed by name so two nodes naming the same track still get a
+slot each — deduplicating them would make deleting one silently change what the other read.
+A name nobody can resolve reads zero rather than failing, so a look pointed at a track that
+has since been renamed goes quiet instead of taking its layer down.
+
 **Knobs ride a uniform, not the source.** A `value` node compiles to `uParams[i]`, so
 turning one never rebuilds a shader. The compositor's cache key is the circuit's *structure*
 — node ids, kinds and modes, and the cords — and deliberately excludes node positions and
@@ -103,7 +111,7 @@ not take the layer with it.
 
 ## The bench
 
-The effects pane draws its own frame: one source, the selected effect, at whatever amount
+The looks view draws its own frame: one source, the selected effect, at whatever amount
 and energy you ask for.
 
 It has to. Editing a shader against the stage means editing something you cannot see — the
@@ -152,6 +160,10 @@ does not exist, which is the way a hand-written node table drifts.
 
 ## What is not built
 
+- **A device parameter as a source.** `track` reaches another track's meter because the
+  meter is already on the wire. A filter cutoff is not: it needs the bridge to watch device
+  parameters, and until it does, the drawer says so rather than offering something that
+  would silently read zero.
 - **Naming a circuit's knobs on the layer that uses it.** An effect's knobs are global to
   the effect; two layers carrying the same circuit carry the same settings.
 - **Copying or forking an effect.** A new circuit always starts from the same working

@@ -22,7 +22,7 @@
     "sources: solid bars rings noise strobe grid",
     "blends:  over add screen multiply",
     "effects: whatever `effects` below defines. Six are built-in shaders; anything",
-    "with a `circuit` is wired out of nodes on the effects pane. See docs/circuit.md."
+    "with a `circuit` is wired out of nodes in the looks view. See docs/circuit.md."
   ],
   "colorways": {
     "slate": [

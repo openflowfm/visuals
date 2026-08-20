@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Down, Scheme, Show } from '../../protocol.ts';
+import type { Down, Scheme, SetGrid, Show } from '../../protocol.ts';
 
 /**
  * The connection to the visuals server, and the clock the renderer runs on.
@@ -54,6 +54,13 @@ export function useShow(): {
   showRef: { readonly current: Show };
   /** What the editor edits. Null until the server has sent one. */
   scheme: Scheme | null;
+  /**
+   * The set's shape — every song against every track. Null until it arrives.
+   *
+   * Apart from the show because it is large and still: it changes when someone
+   * records a clip, not when one fires.
+   */
+  grid: SetGrid | null;
   /** Send a whole scheme back. The server writes it to `scheme.json`. */
   save(next: Scheme): void;
   clock: Clock;
@@ -61,6 +68,7 @@ export function useShow(): {
 } {
   const [show, setShow] = useState<Show>(RESTING);
   const [scheme, setScheme] = useState<Scheme | null>(null);
+  const [grid, setGrid] = useState<SetGrid | null>(null);
   const [online, setOnline] = useState(false);
   const live = useRef<WebSocket | null>(null);
 
@@ -99,6 +107,10 @@ export function useShow(): {
         const t = timing.current;
         if (message.kind === 'scheme') {
           setScheme(message.scheme);
+          return;
+        }
+        if (message.kind === 'grid') {
+          setGrid(message.grid);
           return;
         }
         if (message.kind === 'anchor') {
@@ -169,7 +181,7 @@ export function useShow(): {
     }
   }).current;
 
-  return { show, showRef: held, scheme, save, clock, online };
+  return { show, showRef: held, scheme, grid, save, clock, online };
 }
 
 export { RESTING };
