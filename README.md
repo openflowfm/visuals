@@ -108,8 +108,14 @@ readout that tells you how many songs the fix is about to reach.
 Everything it offers — roles, songs, tracks, the playing clip — comes from **the set**, so
 it never asks you to type a name.
 
-It writes [`scheme.json`](scheme.json), which stays the record — hot-reloaded, entirely
-optional, and readable, diffable and committable after a night of tuning. Edit either.
+It writes `visuals/scheme.json`, which stays the record — hot-reloaded, readable, and
+**entirely optional**: delete it and the built-in scheme is a complete show. Edit either.
+
+**It is not in the repo.** The file is yours the way `bridge/roles.json` is yours — it is
+rewritten every time a knob moves, so source control was carrying a diff for every gesture
+and a merge conflict for every roll. It is gitignored, and a fresh clone draws the built-in
+show until you make one of your own. Loading *between* saved shows is a thing this will
+want and does not have yet.
 
 Everything that draws is a **look** — one noun, whether it paints its own picture or works
 on the one underneath. A stack of looks is a **composition**, which is what the renderer is

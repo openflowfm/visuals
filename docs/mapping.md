@@ -111,7 +111,7 @@ colours are; the grid stays yours.
 
 ## The scheme file
 
-`visuals/scheme.json`, hot-reloaded, and **entirely optional** — the built-in scheme in
+`visuals/scheme.json`, hot-reloaded, **gitignored**, and **entirely optional** — the built-in scheme in
 `server/scheme.ts` is a complete show, and the file only ever overrides parts of it. A rig
 that draws nothing until configured is a rig nobody configures.
 
@@ -123,6 +123,15 @@ another's.
 A parse error **keeps the scheme that was already working** and reports the message in the
 panel. Losing the show to a trailing comma is the wrong answer at any time and an
 unthinkable one during a set.
+
+**The file is not tracked**, for the reason `bridge/roles.json` is not: it is rewritten on
+every gesture, so git was carrying a diff per knob-turn and a conflict per roll — and two
+people working on this repo do not want each other's show. A clone with no file draws the
+built-in one, which is what makes that safe.
+
+The thing this gives up is *a* record where there used to be *the* record, and getting it
+back is the same feature as the one worth having anyway: **more than one scheme**, named
+and switchable, with `BSV_VISUALS_SCHEME` already pointing at whichever is live. Not built.
 
 The file lags an edit by 200ms. A knob turning and a node being dragged both emit on every
 pointer move, so what the server *holds* updates immediately — the picture has to follow
