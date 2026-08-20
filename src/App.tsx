@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { createCompositor, type Compositor } from './render/compositor.ts';
+import { useOutput } from './state/useOutput.ts';
 import { useShow } from './state/useShow.ts';
+import { Align } from './ui/Align.tsx';
 import { effectLabel } from './ui/edits.ts';
 import { Editor } from './ui/Editor.tsx';
 import './app.css';
@@ -15,14 +17,17 @@ import './app.css';
  */
 export function App() {
   const canvas = useRef<HTMLCanvasElement | null>(null);
+  const stage = useRef<Compositor | null>(null);
   const { show, showRef, scheme, save, clock, online } = useShow();
   // The render loop reads the scheme every frame because effects live in it, and
   // reads it through a ref for the same reason it reads the show through one:
   // rebuilding the loop whenever a knob moved would drop a frame per edit.
   const schemeRef = useRef(scheme);
   schemeRef.current = scheme;
+  const { corners, moveCorner, reset } = useOutput();
   const [panel, setPanel] = useState(true);
   const [editing, setEditing] = useState(false);
+  const [aligning, setAligning] = useState(false);
   const [fps, setFps] = useState(0);
   const [glError, setGlError] = useState<string | null>(null);
 
@@ -38,7 +43,11 @@ export function App() {
       if (target instanceof HTMLElement && target.matches('input, textarea, select')) return;
       if (e.key === 'i') setPanel((on) => !on);
       if (e.key === 'e') setEditing((on) => !on);
-      if (e.key === 'Escape') setEditing(false);
+      if (e.key === 'k') setAligning((on) => !on);
+      if (e.key === 'Escape') {
+        setEditing(false);
+        setAligning(false);
+      }
       if (e.key === 'f') void document.documentElement.requestFullscreen?.().catch(() => {});
     };
     window.addEventListener('keydown', key);
@@ -55,6 +64,7 @@ export function App() {
       return;
     }
     if (compositor.error) setGlError(compositor.error);
+    stage.current = compositor;
 
     let raf = 0;
     let last = performance.now();
@@ -85,9 +95,17 @@ export function App() {
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', resize);
+      stage.current = null;
       compositor.free();
     };
   }, [clock, showRef]);
+
+  // The corners belong to the projector rather than to the show, so they reach
+  // the compositor on a change rather than riding every frame. The grid comes on
+  // with the mode: it is only ever useful while something is being lined up.
+  useEffect(() => {
+    stage.current?.setOutput({ corners, test: aligning });
+  }, [corners, aligning]);
 
   const drawing = show.layers.filter((l) => l.playing >= 0 && l.opacity > 0.001);
 
@@ -176,9 +194,17 @@ export function App() {
           </table>
           <p className="hint">
             {drawing.length} of {show.layers.length} layers drawing · <kbd>i</kbd> panel ·{' '}
-            <kbd>e</kbd> edit · <kbd>f</kbd> fullscreen
+            <kbd>e</kbd> edit · <kbd>k</kbd> align · <kbd>f</kbd> fullscreen
           </p>
         </div>
+      )}
+      {aligning && (
+        <Align
+          corners={corners}
+          moveCorner={moveCorner}
+          reset={reset}
+          onClose={() => setAligning(false)}
+        />
       )}
       {editing && scheme && (
         <Editor

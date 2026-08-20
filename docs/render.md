@@ -74,6 +74,49 @@ triplet is in time with nothing — and `charge()` turns it into brightness and 
 applied by `OUT` so no source can forget it. The same source is coarse and calm in a verse
 and dense and hard-edged in a chorus. See [the cascade](mapping.md).
 
+## The last pass, and the projector
+
+`render/keystone.ts`. A projector is never square to the wall, and moving the stand is not
+an option when the stand is where it has to be. An angled throw lands a **trapezoid**, so
+the correction is the inverse trapezoid: draw the picture into the shape that arrives as a
+rectangle.
+
+It is a **homography**, not a scale. The four corners move independently, lines stay
+straight, and the spacing *along* them does not — which is the whole point, because an
+angled throw makes the far edge of the image larger and the correction has to shrink it by
+an amount that varies across the frame. Two keystone sliders cannot express that, which is
+why the ones built into cheap projectors never quite line up.
+
+```
+layers -> the output target -> one pass through the inverse homography -> the screen
+```
+
+`squareToQuad` is Heckbert's closed form — worth using over an 8×8 solve, because the
+square's corners are known constants and most of the general solution collapses. The shader
+gets it **inverted**: a fragment shader is asked what colour *this output pixel* is and has
+to answer by reading the input, and mapping forwards would leave holes wherever the warp
+stretched. Sampling outside the source is black rather than clamped, or the projector paints
+a bright fringe exactly where you are trying to find the edge of the frame.
+
+**Square corners skip the pass entirely.** Everyone whose projector is pointed at the wall
+pays nothing for this existing — the layers draw straight to the screen exactly as they did
+before. The one exception is while the align overlay is up, because the test grid is drawn
+*by* that pass, and someone about to line a projector up needs to see the frame's edges
+before they have moved anything.
+
+The grid is computed in **source** space, so it arrives on the wall already warped: line it
+up until it is square where the picture is going, and the picture is square too. Its line
+widths come off `fwidth`, so a line stays one pixel wide where the warp has squeezed the
+grid rather than thinning out of existence.
+
+**It is not in the scheme, and must not be.** The scheme is a file you commit and carry to
+the gig laptop; a show that looked different there would be a bug. A keystone is the exact
+opposite — it describes one projector at one angle in one room, so one that travelled would
+be wrong everywhere except where it was set. It lives in the browser's `localStorage`, which
+is the correct scope: this machine, surviving a restart, going nowhere.
+
+`k` opens it. Drag a corner or arrow it, hold shift for a single pixel.
+
 ## Fill rate is the only performance number
 
 Every layer is a full-screen pass, so cost is `pixels × layers × 60`, and the resolution is
@@ -120,5 +163,9 @@ stops it from being a second, subtly different renderer.
   the derived mapping has no answer for yet.
 - **Layer transforms** — position, scale, rotation. Resolume has them per layer; here a
   source fills the frame.
+- **More than one output.** Corner pinning is one quad over the whole frame. Resolume slices
+  a composition across several projectors with a warp each, which is the same maths repeated
+  and a much larger question about what a slice *is*.
+- **Edge blending**, for overlapping two projectors.
 - **A master fader.** `Show.master` is on the wire and unused. Live's Master volume is the
   obvious source for a global brightness.

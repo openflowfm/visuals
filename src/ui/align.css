@@ -1,0 +1,92 @@
+.align {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+.pin {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+  padding: 0;
+  border: 2px solid #f0b23c;
+  border-radius: 50%;
+  background: rgb(240 178 60 / 0.15);
+  cursor: grab;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.pin::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  background: #f0b23c;
+  content: '';
+}
+
+.pin:hover,
+.pin:focus-visible {
+  background: rgb(240 178 60 / 0.35);
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(240 178 60 / 0.25);
+}
+
+.pin:active {
+  cursor: grabbing;
+}
+
+.alignbar {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid #2c2c31;
+  border-radius: 4px;
+  background: rgb(10 10 11 / 0.85);
+  color: #b7b7be;
+  font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  pointer-events: auto;
+  transform: translateX(-50%);
+  backdrop-filter: blur(8px);
+}
+
+.alignbar b {
+  color: #f0b23c;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.alignbar span {
+  color: #5e5e66;
+}
+
+.alignbar button {
+  padding: 3px 9px;
+  border: 1px solid #2c2c31;
+  border-radius: 3px;
+  background: #151517;
+  color: #b7b7be;
+  font: inherit;
+  cursor: pointer;
+}
+
+.alignbar button:hover:not(:disabled) {
+  border-color: #4a4a52;
+  color: #ececed;
+}
+
+.alignbar button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

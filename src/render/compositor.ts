@@ -1,6 +1,7 @@
 import type { Blend, EffectDef, Scheme, Show, SourceKind } from '../../protocol.ts';
 import { effectShader, paramsOf, signatureOf } from './effect.ts';
 import { compile, createTarget, drawFullscreen, rgb, type Program } from './gl.ts';
+import { columns, isSquare, warpFor, KEYSTONE_SHADER, SQUARE, type Corners } from './keystone.ts';
 import { sourceSources } from './shaders.ts';
 
 /**
@@ -36,9 +37,21 @@ export interface Compositor {
    * when only a knob moved.
    */
   frame(show: Show, scheme: Scheme | null, beat: number, seconds: number, dt: number): void;
+  /**
+   * Where the picture lands, which is a property of the projector rather than of
+   * the show — see `keystone.ts`. Set on a change rather than passed per frame:
+   * it moves when someone drags a corner, not sixty times a second.
+   */
+  setOutput(output: Output | null): void;
   resize(): void;
   free(): void;
   readonly error: string | null;
+}
+
+export interface Output {
+  corners: Corners;
+  /** Overlay a grid, in source space, so it arrives on the wall already warped. */
+  test: boolean;
 }
 
 /** A built effect, and enough about it to know when it stopped being current. */
@@ -63,6 +76,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
   if (!gl) {
     return {
       frame() {},
+      setOutput() {},
       resize() {},
       free() {},
       error: 'WebGL2 is not available in this browser.',
@@ -82,6 +96,19 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
    * exactly two here and no pool.
    */
   const targets = [createTarget(gl), createTarget(gl)];
+
+  /**
+   * Where the stack lands when it is going to be warped afterwards.
+   *
+   * A third target, and allocated whether or not it is used, because the
+   * alternative is allocating one mid-set the first time somebody touches a
+   * corner. It costs one screen of RGBA8; the pass through it costs nothing at
+   * all while the corners are square, because there isn't one.
+   */
+  const out = createTarget(gl);
+  let warp: Float32Array | null = null;
+  let test = false;
+  let keystone: Program | null = null;
 
   /**
    * Where each layer's opacity currently is, as against where the show says it
@@ -174,6 +201,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       canvas.height = height;
     }
     for (const target of targets) target.resize(width, height);
+    out.resize(width, height);
   };
 
   resize();
@@ -207,7 +235,17 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       return error;
     },
     resize,
+    setOutput(output) {
+      test = output?.test ?? false;
+      // Square corners skip the pass — except while the grid is up, since the
+      // grid is drawn *by* the pass and someone about to line a projector up
+      // needs to see the frame's edges before they have moved anything.
+      const straight = !output || isSquare(output.corners);
+      warp = straight && !test ? null : columns(warpFor(output?.corners ?? SQUARE));
+    },
     free() {
+      out.free();
+      if (keystone) gl.deleteProgram(keystone.program);
       for (const target of targets) target.free();
       for (const p of sources.values()) gl.deleteProgram(p.program);
       for (const built of effects.values()) {
@@ -218,7 +256,11 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       resize();
       gl.viewport(0, 0, canvas.width, canvas.height);
       gl.disable(gl.DEPTH_TEST);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+      // Square corners draw straight to the screen, exactly as before. Everyone
+      // whose projector is pointed at the wall pays nothing for this.
+      const screen = warp ? out.framebuffer : null;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, screen);
       gl.clearColor(0, 0, 0, 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.enable(gl.BLEND);
@@ -254,6 +296,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
         });
 
         if (chain.length === 0) {
+          gl.bindFramebuffer(gl.FRAMEBUFFER, screen);
           gl.blendFunc(src, dst);
           gl.useProgram(source.program);
           setCommon(source, show, i, opacity, beat, seconds);
@@ -278,7 +321,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
           const write = 1 - read;
 
           if (last) {
-            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, screen);
             gl.enable(gl.BLEND);
             gl.blendFunc(src, dst);
           } else {
@@ -303,6 +346,29 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
           read = write;
         }
       }
+
+      if (!warp) return;
+      if (!keystone) {
+        try {
+          keystone = compile(gl, KEYSTONE_SHADER, 'keystone');
+        } catch (err) {
+          error = (err as Error).message;
+          warp = null;
+          return;
+        }
+      }
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.disable(gl.BLEND);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.useProgram(keystone.program);
+      gl.uniformMatrix3fv(keystone.uniform('uWarp'), false, warp);
+      gl.uniform1f(keystone.uniform('uTest'), test ? 1 : 0);
+      gl.uniform2f(keystone.uniform('uRes'), canvas.width, canvas.height);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, out.texture);
+      gl.uniform1i(keystone.uniform('uTex'), 0);
+      drawFullscreen(gl);
     },
   };
 }

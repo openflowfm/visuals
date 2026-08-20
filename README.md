@@ -18,7 +18,7 @@ Live ─ SessionBridge :17800 ─WS─> visuals server :17900 ─WS─> browser 
 | [the clock](docs/clock.md) | Link, tempo, the beat, why the browser extrapolates, the native addon | `server/link.ts`, `src/state/useShow.ts`, `tools/build-link.ts` |
 | [the cascade](docs/mapping.md) | archetypes, energy, colourways, layer bindings, the scheme file, the editor | `server/show.ts`, `server/scheme.ts`, `scheme.json`, `src/ui/*` |
 | [circuits](docs/circuit.md) | building an effect out of nodes, the node vocabulary, the bench | `src/render/circuit.ts`, `src/ui/Circuit.tsx` |
-| [the renderer](docs/render.md) | layers, blending, sources, effects, fill rate | `src/render/*` |
+| [the renderer](docs/render.md) | layers, blending, sources, effects, fill rate, **pointing a projector** | `src/render/*` |
 | [the harness](docs/harness.md) | working on this with no Ableton, and the Link safety rule | `tools/fake-live.ts` |
 
 ## The one idea
@@ -43,7 +43,13 @@ npm run dev:fake-live    # a bridge that isn't one, for working without Ableton
 ```
 
 Open `http://localhost:17900` for the built renderer, or `:5473` while working on it.
-`i` toggles the panel, `e` the editor, `f` fullscreen.
+`i` toggles the panel, `e` the editor, `k` the projector alignment, `f` fullscreen.
+
+**If the projector isn't square to the wall, press `k`.** Drag the four corners until the
+test grid is square *on the wall* — that is corner pinning, and it corrects an angled throw
+in a way two keystone sliders cannot. It is kept in the browser's storage rather than in
+`scheme.json`, because it describes this projector in this room and would be wrong
+everywhere else. See [the renderer](docs/render.md).
 
 | | | |
 |---|---|---|
