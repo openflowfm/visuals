@@ -71,6 +71,25 @@
   color: #5e5e66;
 }
 
+.alignbar .gain {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #5e5e66;
+}
+
+.alignbar .gain input {
+  width: 110px;
+  accent-color: #f0b23c;
+}
+
+.alignbar .gain i {
+  width: 34px;
+  color: #b7b7be;
+  font-style: normal;
+  text-align: right;
+}
+
 .alignbar button {
   padding: 3px 9px;
   border: 1px solid #2c2c31;

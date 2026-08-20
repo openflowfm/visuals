@@ -24,7 +24,7 @@ export function App() {
   // rebuilding the loop whenever a knob moved would drop a frame per edit.
   const schemeRef = useRef(scheme);
   schemeRef.current = scheme;
-  const { corners, moveCorner, reset } = useOutput();
+  const { output, moveCorner, setGain, reset } = useOutput();
   const [panel, setPanel] = useState(true);
   const [editing, setEditing] = useState(false);
   const [aligning, setAligning] = useState(false);
@@ -104,8 +104,8 @@ export function App() {
   // the compositor on a change rather than riding every frame. The grid comes on
   // with the mode: it is only ever useful while something is being lined up.
   useEffect(() => {
-    stage.current?.setOutput({ corners, test: aligning });
-  }, [corners, aligning]);
+    stage.current?.setOutput({ ...output, test: aligning });
+  }, [output, aligning]);
 
   const drawing = show.layers.filter((l) => l.playing >= 0 && l.opacity > 0.001);
 
@@ -200,8 +200,10 @@ export function App() {
       )}
       {aligning && (
         <Align
-          corners={corners}
+          corners={output.corners}
+          gain={output.gain}
           moveCorner={moveCorner}
+          setGain={setGain}
           reset={reset}
           onClose={() => setAligning(false)}
         />

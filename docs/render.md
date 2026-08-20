@@ -114,9 +114,57 @@ triplet is in time with nothing — and `charge()` turns it into brightness and 
 applied by `OUT` so no source can forget it. The same source is coarse and calm in a verse
 and dense and hard-edged in a chorus. See [the cascade](mapping.md).
 
-## The last pass, and the projector
+Two things about those that were wrong for a while, and are worth stating because both
+failed in the same direction — *everything at once*:
 
-`render/keystone.ts`. A projector is never square to the wall, and moving the stand is not
+**`rate()` is per layer as well as per energy.** Energy alone put every layer on the same
+division, so a chorus was twenty-odd layers flashing in unison — which is one flash, however
+many things are drawing it, and it reads as a strobe rather than as a picture. The offset is
+a hash of the layer's seed, so it is stable and still a musical division: one layer lands on
+the bar while another lands on eighths, and both are in time. The top of the ladder came
+down from four events per beat to three at the same time.
+
+**`charge()` is a contrast about a pivot, not a squared multiply.** The old shape scaled the
+colour and then squared it, which at a chorus put a white pixel at 1.9 — meaning everything
+above 0.66 came out flat white *before a single layer had been composited*. A chorus was not
+brighter than a verse; it was clipped. It now pushes the darks down as it lifts, which is
+what contrast actually is, and leaves a little headroom for the shoulder to work with rather
+than handing it a frame that has already lost the top.
+
+The same reasoning caps `solid`: it is the one source that fills the frame at full alpha, so
+it is the one that can hide everything under it, and its brightness has to stay well short
+of white.
+
+## The output stage
+
+`render/output.ts`. One pass, after everything is drawn, doing the three things that belong
+to **the projector and the room** rather than to the show: a shoulder, a master brightness,
+and a keystone.
+
+### The shoulder
+
+Layers composite with fixed-function blending, most of them additively, so a frame with five
+bright layers in it lands well past what a projector can show. Clipping that is what made a
+chorus look like a white rectangle — every layer arrived at 1.0 and none of them had any
+shape left.
+
+So the last thing that happens is **linear below a knee, asymptotic above it**. Everything
+under the knee is untouched, which is what makes it not a dimmer: it only takes the top off,
+where the picture had already stopped carrying information. It is per channel, so a highlight
+that has run away in one of them desaturates toward white the way film does rather than
+shifting hue on its way to being clipped. There is no setting for it, because there is no
+setting that is right in one room and wrong in another.
+
+### Brightness
+
+One number, stored per machine, in front of the shoulder. A hall with the lights up wants a
+different one from a black box, and it is the control to reach for when the answer is "still
+too much" — everything else in this file is about the picture having *shape*, and this is
+about how much of it there is.
+
+### Corner pinning
+
+A projector is never square to the wall, and moving the stand is not
 an option when the stand is where it has to be. An angled throw lands a **trapezoid**, so
 the correction is the inverse trapezoid: draw the picture into the shape that arrives as a
 rectangle.
@@ -128,7 +176,7 @@ an amount that varies across the frame. Two keystone sliders cannot express that
 why the ones built into cheap projectors never quite line up.
 
 ```
-layers -> the output target -> one pass through the inverse homography -> the screen
+layers -> the output target -> gain, shoulder, homography, grid -> the screen
 ```
 
 `squareToQuad` is Heckbert's closed form — worth using over an 8×8 solve, because the
@@ -138,11 +186,10 @@ to answer by reading the input, and mapping forwards would leave holes wherever 
 stretched. Sampling outside the source is black rather than clamped, or the projector paints
 a bright fringe exactly where you are trying to find the edge of the frame.
 
-**Square corners skip the pass entirely.** Everyone whose projector is pointed at the wall
-pays nothing for this existing — the layers draw straight to the screen exactly as they did
-before. The one exception is while the align overlay is up, because the test grid is drawn
-*by* that pass, and someone about to line a projector up needs to see the frame's edges
-before they have moved anything.
+The pass **always runs**. It used to be skipped while the corners were square, which was
+right when all it did was a keystone; it does the shoulder now, and that is wanted on every
+rig whether or not its projector is straight. The cost is one full-screen read and write,
+against the dozen passes the layers themselves already cost.
 
 The grid is computed in **source** space, so it arrives on the wall already warped: line it
 up until it is square where the picture is going, and the picture is square too. Its line
@@ -155,7 +202,8 @@ opposite — it describes one projector at one angle in one room, so one that tr
 be wrong everywhere except where it was set. It lives in the browser's `localStorage`, which
 is the correct scope: this machine, surviving a restart, going nowhere.
 
-`k` opens it. Drag a corner or arrow it, hold shift for a single pixel.
+`k` opens it. Drag a corner or arrow it, hold shift for a single pixel; the brightness sits
+on the same bar.
 
 ## Fill rate is the only performance number
 

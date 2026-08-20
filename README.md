@@ -43,13 +43,13 @@ npm run dev:fake-live    # a bridge that isn't one, for working without Ableton
 ```
 
 Open `http://localhost:17900` for the built renderer, or `:5473` while working on it.
-`i` toggles the panel, `e` the editor, `k` the projector alignment, `f` fullscreen.
+`i` toggles the panel, `e` the editor, `k` the output stage, `f` fullscreen.
 
-**If the projector isn't square to the wall, press `k`.** Drag the four corners until the
-test grid is square *on the wall* — that is corner pinning, and it corrects an angled throw
-in a way two keystone sliders cannot. It is kept in the browser's storage rather than in
-`scheme.json`, because it describes this projector in this room and would be wrong
-everywhere else. See [the renderer](docs/render.md).
+**`k` opens the output stage** — corner pinning and master brightness. Drag the four corners
+until the test grid is square *on the wall*; that corrects an angled throw in a way two
+keystone sliders cannot. Both are kept in the browser's storage rather than in `scheme.json`,
+because they describe this projector in this room and would be wrong everywhere else. See
+[the renderer](docs/render.md).
 
 | | | |
 |---|---|---|

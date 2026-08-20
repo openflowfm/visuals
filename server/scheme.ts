@@ -67,7 +67,11 @@ const BUILT_IN: Scheme = {
   defaults: {
     colorway: 'aurora',
     energy: 0.4,
-    blend: ['over', 'add', 'screen', 'add', 'multiply', 'add'],
+    // Weighted toward `screen`, which saturates at white rather than climbing
+    // past it. Half the cycle used to be `add`, which on a set of twenty-seven
+    // tracks is a white rectangle by the fourth layer however good each of them
+    // looks alone. `add` is still here, because nothing else has its bite.
+    blend: ['over', 'screen', 'add', 'screen', 'multiply', 'screen'],
     sources: ['plasma', 'bars', 'rings', 'grid', 'spiral', 'noise', 'scan', 'strobe', 'sparks'],
     maxEffects: 2,
   },

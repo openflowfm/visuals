@@ -1,5 +1,12 @@
 /**
- * Corner pinning: the projector is never square to the wall.
+ * The output stage: the one pass that happens after everything is drawn.
+ *
+ * It does three things, and they are here together because they are all
+ * properties of **the projector and the room** rather than of the show — a
+ * keystone, a master brightness, and the shoulder that stops a stack of
+ * twenty-three layers arriving as a white rectangle.
+ *
+ * ## Corner pinning: the projector is never square to the wall.
  *
  * A projector throwing at an angle lands a **trapezoid** on the wall, and no
  * amount of moving the stand fixes it when the stand is where it has to be.
@@ -14,14 +21,28 @@
  * throw makes the far edge of the image larger, so the correction has to make it
  * smaller in a way that varies across the frame.
  *
+ * ## The shoulder
+ *
+ * Layers composite with fixed-function blending, most of them additively, so a
+ * frame with five bright layers in it lands well past what the projector can
+ * show. Clipping that is what made a chorus look like a white rectangle: every
+ * layer arrived at 1.0 and none of them had any shape left.
+ *
+ * So the last thing that happens is a **soft shoulder** — linear below a knee,
+ * asymptotic above it. Everything under the knee is untouched, which is what
+ * makes it not a dimmer: it only takes the top off, where the picture had
+ * already stopped carrying information. It is not adjustable, because there is
+ * no setting of it that is right for one room and wrong for another; it is
+ * simply what should have been happening all along.
+ *
  * ## Why this belongs to the machine and not to the scheme
  *
- * A keystone describes **this projector in this room**, and nothing else. The
- * scheme travels — it is a file you commit, and a show that looked different on
- * the gig laptop would be a bug. A keystone is the opposite: one that travelled
- * would be *wrong* everywhere except where it was set. So it lives in the
- * browser's own storage, keyed to the machine doing the projecting, and never
- * goes near `scheme.json`.
+ * A keystone describes **this projector in this room**, and nothing else, and
+ * so does how bright it should be. The scheme travels — it is a file you commit,
+ * and a show that looked different on the gig laptop would be a bug. These are
+ * the opposite: ones that travelled would be *wrong* everywhere except where
+ * they were set. So they live in the browser's own storage, keyed to the machine
+ * doing the projecting, and never go near `scheme.json`.
  */
 
 /** A corner, in output space: `0,0` top left, `1,1` bottom right, y down. */
@@ -147,6 +168,9 @@ export function columns(m: Matrix3): Float32Array {
   return new Float32Array([m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]]);
 }
 
+/** Where the shoulder starts. Below this nothing is touched at all. */
+export const KNEE = 0.75;
+
 /**
  * The final pass.
  *
@@ -158,9 +182,10 @@ export function columns(m: Matrix3): Float32Array {
  *
  * The test pattern is computed in **source** space and therefore arrives warped,
  * which is what makes it useful: line it up until the grid is square *on the
- * wall*, and the picture is square too.
+ * wall*, and the picture is square too. It is drawn after the shoulder, so the
+ * grid stays a readable white however hot the picture under it is.
  */
-export const KEYSTONE_SHADER = `#version 300 es
+export const OUTPUT_SHADER = `#version 300 es
 precision highp float;
 
 in vec2 vUv;
@@ -169,7 +194,16 @@ out vec4 fragColor;
 uniform sampler2D uTex;
 uniform mat3 uWarp;
 uniform float uTest;
+uniform float uGain;
 uniform vec2 uRes;
+
+// Linear below the knee, asymptotic above it. Per channel, so a highlight that
+// has run away in one of them desaturates toward white the way film does,
+// rather than shifting hue on its way to being clipped.
+float shoulder(float x) {
+  const float knee = ${KNEE.toFixed(3)};
+  return x < knee ? x : knee + (1.0 - knee) * (1.0 - exp(-(x - knee) / (1.0 - knee)));
+}
 
 void main() {
   vec2 p = vec2(vUv.x, 1.0 - vUv.y);
@@ -181,7 +215,8 @@ void main() {
     return;
   }
 
-  vec4 c = texture(uTex, vec2(uv.x, 1.0 - uv.y));
+  vec3 c = texture(uTex, vec2(uv.x, 1.0 - uv.y)).rgb * uGain;
+  c = vec3(shoulder(c.r), shoulder(c.g), shoulder(c.b));
 
   if (uTest > 0.5) {
     // Eight cells across, and a heavier line on the outside edge. Widths are in
@@ -191,8 +226,8 @@ void main() {
     float line = 1.0 - min(min(grid.x, grid.y), 1.0);
     vec2 edge = min(uv, 1.0 - uv) / fwidth(uv);
     float border = 1.0 - min(min(edge.x, edge.y) / 2.0, 1.0);
-    c = mix(c, vec4(1.0), max(line * 0.45, border));
+    c = mix(c, vec3(1.0), max(line * 0.45, border));
   }
 
-  fragColor = vec4(c.rgb, 1.0);
+  fragColor = vec4(c, 1.0);
 }`;

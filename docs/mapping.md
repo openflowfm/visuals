@@ -204,6 +204,13 @@ a hand-made scheme does:
   screen.
 - **A drum is not a wash and a pad is not a strobe.** Percussive families draw from a
   percussive set and pads from a soft one; everything else may have anything.
+- **A wash never gets `over`.** `solid`, `plasma` and `noise` fill the frame, and layer order
+  is Live's track order, which a roll cannot change — so one of them landing on `over` near
+  the top of the stack is a curtain drawn across the show. Every other mode lets what is
+  underneath through. Blends generally lean toward `screen`, which saturates at white rather
+  than climbing past it: an even pick over the four modes puts a quarter of a tall stack on
+  `add`, and a quarter is enough to white out the frame before the layers that were meant to
+  be seen have drawn.
 
 Each roll also wires **two fresh circuits** and clears the ones before them, or a week of
 rolling leaves forty of them and every archetype pointing at a ghost.

@@ -1,7 +1,7 @@
 import type { Blend, EffectDef, Scheme, Show, SourceKind } from '../../protocol.ts';
 import { effectShader, paramsOf, signatureOf } from './effect.ts';
 import { compile, createTarget, drawFullscreen, rgb, type Program } from './gl.ts';
-import { columns, isSquare, warpFor, KEYSTONE_SHADER, SQUARE, type Corners } from './keystone.ts';
+import { columns, warpFor, OUTPUT_SHADER, SQUARE, type Corners } from './output.ts';
 import { sourceSources } from './shaders.ts';
 
 /**
@@ -38,9 +38,10 @@ export interface Compositor {
    */
   frame(show: Show, scheme: Scheme | null, beat: number, seconds: number, dt: number): void;
   /**
-   * Where the picture lands, which is a property of the projector rather than of
-   * the show — see `keystone.ts`. Set on a change rather than passed per frame:
-   * it moves when someone drags a corner, not sixty times a second.
+   * How the picture leaves, which is a property of the projector and the room
+   * rather than of the show — see `output.ts`. Set on a change rather than
+   * passed per frame: it moves when someone drags a corner, not sixty times a
+   * second.
    */
   setOutput(output: Output | null): void;
   resize(): void;
@@ -50,6 +51,8 @@ export interface Compositor {
 
 export interface Output {
   corners: Corners;
+  /** Master brightness. 1 is what the layers asked for. */
+  gain: number;
   /** Overlay a grid, in source space, so it arrives on the wall already warped. */
   test: boolean;
 }
@@ -98,17 +101,18 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
   const targets = [createTarget(gl), createTarget(gl)];
 
   /**
-   * Where the stack lands when it is going to be warped afterwards.
+   * Where the stack lands, before the output stage takes it to the screen.
    *
-   * A third target, and allocated whether or not it is used, because the
-   * alternative is allocating one mid-set the first time somebody touches a
-   * corner. It costs one screen of RGBA8; the pass through it costs nothing at
-   * all while the corners are square, because there isn't one.
+   * The pass used to be skipped while the corners were square, which was right
+   * when all it did was a keystone. It does the shoulder now — the thing that
+   * stops five bright layers arriving as a white rectangle — and that is wanted
+   * on every rig whether or not its projector is straight, so it always runs.
    */
   const out = createTarget(gl);
-  let warp: Float32Array | null = null;
+  let warp = columns(warpFor(SQUARE));
+  let gain = 1;
   let test = false;
-  let keystone: Program | null = null;
+  let stage: Program | null = null;
 
   /**
    * Where each layer's opacity currently is, as against where the show says it
@@ -237,15 +241,12 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
     resize,
     setOutput(output) {
       test = output?.test ?? false;
-      // Square corners skip the pass — except while the grid is up, since the
-      // grid is drawn *by* the pass and someone about to line a projector up
-      // needs to see the frame's edges before they have moved anything.
-      const straight = !output || isSquare(output.corners);
-      warp = straight && !test ? null : columns(warpFor(output?.corners ?? SQUARE));
+      gain = output?.gain ?? 1;
+      warp = columns(warpFor(output?.corners ?? SQUARE));
     },
     free() {
       out.free();
-      if (keystone) gl.deleteProgram(keystone.program);
+      if (stage) gl.deleteProgram(stage.program);
       for (const target of targets) target.free();
       for (const p of sources.values()) gl.deleteProgram(p.program);
       for (const built of effects.values()) {
@@ -257,9 +258,8 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       gl.viewport(0, 0, canvas.width, canvas.height);
       gl.disable(gl.DEPTH_TEST);
 
-      // Square corners draw straight to the screen, exactly as before. Everyone
-      // whose projector is pointed at the wall pays nothing for this.
-      const screen = warp ? out.framebuffer : null;
+      // Everything lands offscreen; the output stage takes it to the screen.
+      const screen = out.framebuffer;
       gl.bindFramebuffer(gl.FRAMEBUFFER, screen);
       gl.clearColor(0, 0, 0, 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
@@ -347,13 +347,11 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
         }
       }
 
-      if (!warp) return;
-      if (!keystone) {
+      if (!stage) {
         try {
-          keystone = compile(gl, KEYSTONE_SHADER, 'keystone');
+          stage = compile(gl, OUTPUT_SHADER, 'output');
         } catch (err) {
           error = (err as Error).message;
-          warp = null;
           return;
         }
       }
@@ -361,13 +359,14 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       gl.disable(gl.BLEND);
       gl.clearColor(0, 0, 0, 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.useProgram(keystone.program);
-      gl.uniformMatrix3fv(keystone.uniform('uWarp'), false, warp);
-      gl.uniform1f(keystone.uniform('uTest'), test ? 1 : 0);
-      gl.uniform2f(keystone.uniform('uRes'), canvas.width, canvas.height);
+      gl.useProgram(stage.program);
+      gl.uniformMatrix3fv(stage.uniform('uWarp'), false, warp);
+      gl.uniform1f(stage.uniform('uTest'), test ? 1 : 0);
+      gl.uniform1f(stage.uniform('uGain'), gain);
+      gl.uniform2f(stage.uniform('uRes'), canvas.width, canvas.height);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, out.texture);
-      gl.uniform1i(keystone.uniform('uTex'), 0);
+      gl.uniform1i(stage.uniform('uTex'), 0);
       drawFullscreen(gl);
     },
   };

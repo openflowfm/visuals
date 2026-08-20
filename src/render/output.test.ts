@@ -6,12 +6,14 @@ import {
   isSquare,
   squareToQuad,
   warpFor,
+  KNEE,
+  OUTPUT_SHADER,
   SQUARE,
   type Corners,
-} from './keystone.ts';
+} from './output.ts';
 
 /**
- * The corner-pin maths.
+ * The output stage's maths.
  *
  * Worth pinning because the failure is silent and looks like a broken renderer:
  * a homography with a transposed term still draws *something*, and what it draws
@@ -106,13 +108,38 @@ describe('degenerate input', () => {
   });
 });
 
-describe('skipping the pass', () => {
-  it('knows when there is nothing to correct', () => {
-    // Square corners skip the whole pass, so everyone whose projector is pointed
-    // at the wall pays nothing for this existing.
+describe('knowing when the corners are square', () => {
+  it('is exact enough to drive a reset button and loose enough to survive a float', () => {
     expect(isSquare(SQUARE)).toBe(true);
     expect(isSquare(ANGLED)).toBe(false);
     expect(isSquare({ ...SQUARE, tr: [1 - 1e-9, 0] })).toBe(true);
     expect(isSquare({ ...SQUARE, tr: [0.999, 0] })).toBe(false);
+  });
+});
+
+describe('the shoulder', () => {
+  it('spells its knee as a float, which GLSL will not infer', () => {
+    // `const float knee = 1;` does not compile, and a knee that arrived as an
+    // integer would take the whole output stage down with it — which is the
+    // entire picture, not one effect.
+    expect(OUTPUT_SHADER).toContain(`const float knee = ${KNEE.toFixed(3)};`);
+    expect(OUTPUT_SHADER).toMatch(/const float knee = \d+\.\d+;/);
+  });
+
+  it('leaves room under the knee for a picture to live in', () => {
+    // If the knee sat low, this would be a dimmer rather than a shoulder: every
+    // midtone would be compressed and the whole frame would go flat.
+    expect(KNEE).toBeGreaterThan(0.6);
+    expect(KNEE).toBeLessThan(0.95);
+  });
+
+  it('is applied before the test grid, so the grid stays readable', () => {
+    // The grid is how a projector gets lined up. Compressing it along with the
+    // picture would make it dimmest exactly where the picture is brightest.
+    // Against the branch, not the uniform declaration — that one is at the top
+    // of the file and would make this assertion pass for the wrong reason.
+    expect(OUTPUT_SHADER.indexOf('shoulder(c.r)')).toBeLessThan(
+      OUTPUT_SHADER.indexOf('if (uTest'),
+    );
   });
 });

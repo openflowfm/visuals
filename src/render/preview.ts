@@ -1,6 +1,7 @@
 import type { EffectDef, SourceKind } from '../../protocol.ts';
 import { effectShader, paramsOf, signatureOf } from './effect.ts';
 import { compile, createTarget, drawFullscreen, rgb, type Program } from './gl.ts';
+import { columns, warpFor, OUTPUT_SHADER, SQUARE } from './output.ts';
 import { sourceSources } from './shaders.ts';
 
 /**
@@ -14,9 +15,11 @@ import { sourceSources } from './shaders.ts';
  * **same clock as the show**: a wave wired to the beat is in time with the room
  * while you are building it.
  *
- * It shares `effect.ts` with the compositor rather than reimplementing it. A
- * preview that could disagree with the stage about what an effect looks like
- * would be worse than no preview.
+ * It shares `effect.ts` with the compositor rather than reimplementing it, and
+ * it ends on the same **output stage** — so the shoulder that keeps the stage
+ * from blowing out is in the bench too. A preview that could disagree with the
+ * stage about what an effect looks like would be worse than no preview, and
+ * brightness is exactly the thing you come here to judge.
  */
 export interface PreviewFrame {
   source: SourceKind;
@@ -51,7 +54,11 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
 
   let error: string | null = null;
   const sources = new Map<SourceKind, Program>();
-  const target = createTarget(gl);
+  // Two, ping-ponged the way the compositor does it: the source lands in one,
+  // the effect in the other, and the output stage reads whichever ended up last.
+  const targets = [createTarget(gl), createTarget(gl)];
+  let stage: Program | null = null;
+  const identity = columns(warpFor(SQUARE));
   let effect: { program: Program | null; signature: string } = {
     program: null,
     signature: '',
@@ -97,7 +104,7 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
       canvas.width = width;
       canvas.height = height;
     }
-    target.resize(width, height);
+    for (const target of targets) target.resize(width, height);
   };
 
   const setCommon = (program: Program, next: PreviewFrame, opacity: number) => {
@@ -121,8 +128,9 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
       return error;
     },
     free() {
-      target.free();
+      for (const target of targets) target.free();
       for (const p of sources.values()) gl.deleteProgram(p.program);
+      if (stage) gl.deleteProgram(stage.program);
       if (effect.program) gl.deleteProgram(effect.program.program);
     },
     frame(next) {
@@ -138,24 +146,50 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
       if (!source) return;
       const program = next.def ? effectProgram(next.def) : null;
 
-      gl.bindFramebuffer(gl.FRAMEBUFFER, program ? target.framebuffer : null);
-      gl.clearColor(0, 0, 0, program ? 0 : 1);
+      let read = 0;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, targets[read].framebuffer);
+      gl.clearColor(0, 0, 0, 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.useProgram(source.program);
       setCommon(source, next, 1);
       drawFullscreen(gl);
-      if (!program) return;
 
+      if (program) {
+        read = 1;
+        gl.bindFramebuffer(gl.FRAMEBUFFER, targets[read].framebuffer);
+        gl.clearColor(0, 0, 0, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.useProgram(program.program);
+        setCommon(program, next, 1);
+        gl.uniform1f(program.uniform('uAmount'), next.amount);
+        gl.uniform1fv(program.uniform('uParams'), paramsOf(next.def!));
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, targets[0].texture);
+        gl.uniform1i(program.uniform('uTex'), 0);
+        drawFullscreen(gl);
+      }
+
+      if (!stage) {
+        try {
+          stage = compile(gl, OUTPUT_SHADER, 'preview:output');
+        } catch (err) {
+          error = (err as Error).message;
+          return;
+        }
+      }
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.clearColor(0, 0, 0, 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.useProgram(program.program);
-      setCommon(program, next, 1);
-      gl.uniform1f(program.uniform('uAmount'), next.amount);
-      gl.uniform1fv(program.uniform('uParams'), paramsOf(next.def!));
+      gl.useProgram(stage.program);
+      // Square and at unity: the bench is not where a projector gets pointed,
+      // and a keystone here would only make the effect harder to judge.
+      gl.uniformMatrix3fv(stage.uniform('uWarp'), false, identity);
+      gl.uniform1f(stage.uniform('uTest'), 0);
+      gl.uniform1f(stage.uniform('uGain'), 1);
+      gl.uniform2f(stage.uniform('uRes'), canvas.width, canvas.height);
       gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, target.texture);
-      gl.uniform1i(program.uniform('uTex'), 0);
+      gl.bindTexture(gl.TEXTURE_2D, targets[read].texture);
+      gl.uniform1i(stage.uniform('uTex'), 0);
       drawFullscreen(gl);
     },
   };

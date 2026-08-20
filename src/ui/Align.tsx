@@ -5,7 +5,8 @@ import {
   type Corner,
   type CornerName,
   type Corners,
-} from '../render/keystone.ts';
+} from '../render/output.ts';
+import { GAIN_RANGE } from '../state/useOutput.ts';
 import './align.css';
 
 /**
@@ -31,12 +32,16 @@ const LABELS: Record<CornerName, string> = {
 
 export function Align({
   corners,
+  gain,
   moveCorner,
+  setGain,
   reset,
   onClose,
 }: {
   corners: Corners;
+  gain: number;
   moveCorner(name: CornerName, to: Corner): void;
+  setGain(next: number): void;
   reset(): void;
   onClose(): void;
 }) {
@@ -98,8 +103,21 @@ export function Align({
       })}
 
       <div className="alignbar">
-        <b>align</b>
+        <b>output</b>
         <span>drag a corner, or arrow it — hold shift for one pixel</span>
+        <label className="gain">
+          bright
+          <input
+            type="range"
+            min={GAIN_RANGE.min}
+            max={GAIN_RANGE.max}
+            step={0.01}
+            value={gain}
+            aria-label="Master brightness"
+            onChange={(e) => setGain(Number(e.target.value))}
+          />
+          <i>{Math.round(gain * 100)}%</i>
+        </label>
         <button type="button" onClick={reset} disabled={isSquare(corners)}>
           square
         </button>

@@ -69,12 +69,19 @@ float noise(vec2 p) {
 }
 
 // How often a layer reacts, in events per beat. The single biggest thing energy
-// does: a calm section moves once every two beats, a loud one four times a beat.
-// Quantised to musical divisions rather than smeared across them, because a
-// rate between an eighth and a triplet is not in time with anything.
+// does: a calm section moves once every four beats, a loud one three times a
+// beat. Quantised to musical divisions rather than smeared across them, because
+// a rate between an eighth and a triplet is not in time with anything.
+//
+// **Per layer as well as per energy.** Energy alone put every layer on the same
+// division, so a chorus was twenty-three layers flashing in unison — which is
+// one flash, however many things are drawing it, and it reads as a strobe rather
+// than as a picture. The offset is a hash of the layer's seed, so it is stable
+// and it is still a musical division: one layer lands on the bar while another
+// lands on eighths, and both are in time.
 float rate() {
-  float steps[5] = float[5](0.5, 1.0, 2.0, 3.0, 4.0);
-  int i = int(clamp(floor(uEnergy * 5.0), 0.0, 4.0));
+  float steps[5] = float[5](0.25, 0.5, 1.0, 2.0, 3.0);
+  int i = int(clamp(floor(uEnergy * 3.6 + hash(vec2(11.3, 4.7)) * 1.4), 0.0, 4.0));
   return steps[i];
 }
 
@@ -82,14 +89,23 @@ float rate() {
 // is built from, so "on the beat" means one thing everywhere. Higher energy
 // also sharpens the decay, so a loud section punches instead of swelling.
 float beatPulse(float division) {
-  return pow(1.0 - fract(uBeat * division), mix(2.0, 7.0, uEnergy));
+  return pow(1.0 - fract(uBeat * division), mix(2.5, 5.0, uEnergy));
 }
 
 // Brightness and contrast, the cheap half of what energy is for. It reads
 // instantly on a projector and costs one multiply.
+//
+// **Contrast about a pivot, not a squared multiply.** The old shape scaled the
+// colour and then squared it: at a chorus it put a white pixel at 1.9, which
+// meant everything above 0.66 came out flat white *before a single layer had
+// been composited*. A chorus was not brighter than a verse, it was clipped —
+// every layer arrived as the same white with no shape left in it. This pushes
+// the darks down as it lifts, which is what contrast actually is, and leaves a
+// little headroom for the output stage's shoulder to work with rather than
+// handing it a frame that has already lost the top.
 vec3 charge(vec3 c) {
-  vec3 lifted = c * mix(0.75, 1.35, uEnergy);
-  return mix(lifted, lifted * lifted * 1.6, uEnergy * 0.5);
+  vec3 lifted = c * mix(0.8, 1.1, uEnergy);
+  return clamp((lifted - 0.28) * mix(1.0, 1.3, uEnergy) + 0.28, 0.0, 1.2);
 }
 
 #define OUT(rgb, a) { float _a = (a) * uOpacity; fragColor = vec4(charge(rgb) * _a, _a); }
@@ -101,8 +117,13 @@ void main() {
   // The plainest layer there is: the song's colour, breathing on the bar and
   // brightening with the sound. It exists so a stack has something solid at the
   // bottom, and so a set nobody has configured still reads as a colour scheme.
+  //
+  // It is the one source that fills the frame at full alpha, which makes it the
+  // one that can hide everything under it — so its *brightness* has to stay
+  // well short of white. It used to reach 1.8x the colourway with the meter up,
+  // which on most blends is a flat wash and on a plain over is a curtain.
   float breathe = 0.55 + 0.45 * (1.0 - uPhase / uQuantum);
-  OUT(uColor * (breathe + uLevel * 0.8), 1.0)
+  OUT(uColor * (breathe * 0.6 + uLevel * 0.45), 1.0)
 }`,
 
   bars: `${PREAMBLE}
@@ -154,8 +175,13 @@ void main() {
   // Whole-frame flashes on the beat division energy chose. The one source with
   // no shape at all, and the reason opacity has to be honest: it is unusable
   // if a fader doesn't actually take it down.
+  //
+  // It leans on the song's colour rather than on white, and its silent floor is
+  // low: a strobe layer with nothing playing through it used to flash at a third
+  // of full whatever the track was doing, which on a stack of them is the whole
+  // frame going off on every beat for no reason at all.
   float flash = beatPulse(rate());
-  OUT(mix(uColor, vec3(1.0), 0.6), flash * (0.35 + uLevel * 0.65))
+  OUT(mix(uColor, vec3(1.0), 0.3), flash * (0.1 + uLevel * 0.75))
 }`,
 
   grid: `${PREAMBLE}
@@ -198,7 +224,7 @@ void main() {
   float v = sin(p.x + t) + sin(p.y * 1.3 - t) + sin((p.x + p.y) * 0.7 + t * 0.8)
           + sin(length(p) * 2.2 - t * 1.6);
   v = v * 0.125 + 0.5;
-  OUT(mix(uColor, vec3(1.0) - uColor, v) * (0.5 + uLevel * 0.8), 0.5 + v * 0.5)
+  OUT(mix(uColor, vec3(1.0) - uColor, v) * (0.45 + uLevel * 0.7), 0.3 + v * 0.55)
 }`,
 
   spiral: `${PREAMBLE}
@@ -418,7 +444,7 @@ void main() {
     float a = float(i) * PI * 0.25;
     sum += texture(uTex, vUv + vec2(cos(a), sin(a)) * reach);
   }
-  MIXED(base + max(sum / 8.0 - vec4(uParams[1]), vec4(0.0)) * mix(0.7, 2.2, uEnergy))
+  MIXED(base + max(sum / 8.0 - vec4(uParams[1]), vec4(0.0)) * mix(0.4, 1.1, uEnergy))
 }`,
 
   slice: `${EFFECT_PREAMBLE}

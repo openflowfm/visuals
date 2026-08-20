@@ -8,7 +8,7 @@ import type {
   Show,
   SourceKind,
 } from './protocol.ts';
-import { BLENDS, SOURCE_KINDS } from './protocol.ts';
+import { SOURCE_KINDS } from './protocol.ts';
 
 /**
  * A whole show, rolled.
@@ -154,6 +154,36 @@ const SHAPE: Record<string, readonly [number, number]> = {
 /** Sources a percussive family can wear, and ones a wash can. */
 const PERCUSSIVE: readonly SourceKind[] = ['strobe', 'sparks', 'scan', 'bars', 'grid'];
 const WASH: readonly SourceKind[] = ['plasma', 'noise', 'solid', 'tunnel'];
+
+/**
+ * Blend modes to draw from, weighted toward `screen`.
+ *
+ * `screen` saturates at white rather than climbing past it. An even pick over
+ * the four puts a quarter of a tall stack on `add`, and a quarter is enough to
+ * white out the frame before the layers that were meant to be seen have drawn.
+ * `add` stays in the bag because nothing else has its bite — it is just no
+ * longer the house style.
+ */
+const BLEND_BAG: readonly Blend[] = [
+  'screen',
+  'screen',
+  'over',
+  'add',
+  'multiply',
+  'screen',
+  'over',
+];
+
+/**
+ * What a wash may be blended with, which is anything but `over`.
+ *
+ * `solid`, `plasma` and `noise` fill the frame. On `over` — and layer order is
+ * Live's track order, which a roll cannot change — one of them landing near the
+ * top of the stack is a curtain drawn across the show. Every other mode lets
+ * what is underneath through, so the wash becomes what it is for: a ground for
+ * the rest of the stack to sit on rather than a replacement for it.
+ */
+const THROUGH: readonly Blend[] = ['screen', 'add', 'multiply', 'screen'];
 
 // --- circuits ------------------------------------------------------------
 
@@ -322,15 +352,20 @@ export function rollScheme(seed: string, show: Show, base: Scheme): Scheme {
 
   const layers: Scheme['layers'] = {};
   for (const layer of show.layers) {
-    const spec: LayerSpec = { source: byFamily[familyOf(layer.name)] };
-    if (chance(rng, 0.4)) spec.blend = pick(rng, BLENDS);
+    const source = byFamily[familyOf(layer.name)];
+    const spec: LayerSpec = { source };
+    const wash = WASH.includes(source);
+    // A wash always gets a blend rather than sometimes, because leaving it to
+    // the depth-cycled default is leaving it a one-in-six chance of `over`.
+    if (wash) spec.blend = pick(rng, THROUGH);
+    else if (chance(rng, 0.4)) spec.blend = pick(rng, BLEND_BAG);
     if (chance(rng, 0.5)) spec.bias = round2(between(rng, -0.18, 0.18));
     if (chance(rng, 0.3)) spec.effects = [pick(rng, pool)];
     layers[layer.name] = spec;
   }
 
   // `over` first, because something at the bottom of the stack has to be opaque.
-  const blend: Blend[] = ['over', ...shuffled(rng, BLENDS)];
+  const blend: Blend[] = ['over', ...shuffled(rng, BLEND_BAG)];
 
   return {
     seed,
