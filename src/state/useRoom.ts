@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { Scheme, Show } from '../../protocol.ts';
+import type { Scheme, Show, Track } from '../../protocol.ts';
 import type { Transport } from './useTransport.ts';
 
 /**
@@ -88,6 +88,38 @@ function packColor(text: string): number {
   const full = clean.length === 3 ? clean.replace(/./g, '$&$&') : clean;
   const value = Number.parseInt(full, 16);
   return Number.isFinite(value) ? value & 0xffffff : 0xffffff;
+}
+
+/**
+ * The show with a stand-in set in it, when there is no set.
+ *
+ * The last invented thing, and the one that could not go in the memo below: it
+ * runs off the beat, so it changes sixty times a second and belongs in whatever
+ * loop is drawing rather than in React state.
+ *
+ * Exported because **both** things that draw a look at a desk need it — the
+ * bench and the node faces — and a look built on the set would otherwise be
+ * black in one of them. The stand-ins are deliberately obvious rather than
+ * convincing, they take their colours from whatever colourway is up, and they
+ * disappear the moment a real set arrives.
+ */
+export function withStandIns(show: Show, beat: number): Show {
+  if (show.connected && show.tracks.length > 0) return show;
+  const energy = show.master;
+  const pulse = (i: number) => {
+    const phase = (beat * (0.5 + i * 0.25)) % 1;
+    return Math.max(0, (1 - phase) ** 3) * (0.35 + energy * 0.65);
+  };
+  const tracks: Track[] = ['Drums', 'Bass', 'Keys', 'Pad'].map((name, i) => ({
+    t: i,
+    name,
+    color: show.colors[i % Math.max(1, show.colors.length)] ?? 0xffb347,
+    opacity: 1,
+    level: pulse(i),
+    playing: 0,
+    clipName: '',
+  }));
+  return { ...show, tracks };
 }
 
 export function useRoom(show: Show, scheme: Scheme, transport: Transport): Room {

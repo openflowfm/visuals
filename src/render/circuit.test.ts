@@ -473,12 +473,20 @@ describe('the four ways two pictures combine', () => {
 });
 
 describe('an effect reads its input where it says it does', () => {
-  it('takes an edge difference the same distance in both directions', () => {
-    // Centring is what makes a circle round, so it is also what makes a pixel
-    // square — and the aspect correction was applied a second time on the
-    // horizontal tap. Every outline came out with a sideways smear on it, which
-    // looks like the effect reading the wrong picture rather than like a step
-    // being 1.78 pixels wide.
+  it('takes an edge difference the same distance in both directions, in plane units', () => {
+    // Two rules in one expression, both learned by looking at it.
+    //
+    // The same distance both ways, because centring is what makes a circle
+    // round and so is what makes a step square — the aspect correction had been
+    // applied a second time on the horizontal tap, and every outline came out
+    // with a sideways smear that looks like the effect reading the wrong
+    // picture rather than like a step being 1.78 pixels wide.
+    //
+    // And **not** a count of pixels, which is the tap an edge detector normally
+    // wants and is wrong for a rig authored on a 320-pixel node face, judged on
+    // an 800-pixel bench and projected at 1920. `uRes` in here at all means the
+    // one node whose whole job is a line is the one node no preview of which
+    // can be trusted.
     const built = compileCircuit(
       wire(
         [
@@ -493,9 +501,11 @@ describe('an effect reads its input where it says it does', () => {
       ),
     );
     expect(built.error).toBeNull();
-    const step = '((0.5 + 0.5 * 3.0) / uRes.y)';
-    expect(bodyOf(built.source!)).toContain(`vec2(${step}, 0.0)`);
-    expect(bodyOf(built.source!)).toContain(`vec2(0.0, ${step})`);
+    const body = bodyOf(built.source!);
+    const step = body.match(/vec2\((\([^)]*\)), 0\.0\)/)?.[1];
+    expect(step).toBeTruthy();
+    expect(body).toContain(`vec2(0.0, ${step})`);
+    expect(step).not.toContain('uRes');
   });
 });
 

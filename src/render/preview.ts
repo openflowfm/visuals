@@ -1,16 +1,15 @@
-import type { Circuit, LookDef } from '../../protocol.ts';
+import { TRACK_DRAWS, type Circuit, type LookDef, type Scheme, type Show } from '../../protocol.ts';
 import { compileCircuit, flatten } from './circuit.ts';
-import { paramsOf, signatureOfCircuit } from './look.ts';
-import { compile, createTarget, drawFullscreen, rgb, type Program } from './gl.ts';
-import { TRACK_SHADERS } from './shaders.ts';
+import { createFeed } from './feed.ts';
+import { banksOf, signatureOfCircuit } from './look.ts';
+import { compile, createTarget, drawFullscreen, type Program } from './gl.ts';
 
 /**
  * A small picture of what one node has made.
  *
  * Not the bench. The bench is a whole `Compositor` on its own canvas, drawing
- * the look exactly the way the wall will — one renderer, so nothing can
- * disagree about what you are about to project. This is the other thing: the
- * face of every node on the canvas, showing what *that* node produced.
+ * the look exactly the way the wall will. This is the other thing: the face of
+ * every node on the canvas, showing what *that* node produced.
  *
  * A node face showing a thumbnail of the finished look would be the same image
  * a dozen times over and would teach nothing. One showing what has been built so
@@ -23,58 +22,96 @@ import { TRACK_SHADERS } from './shaders.ts';
  * the stage and the bench. Programs are cached by signature in a map rather than
  * one slot, because one context cycling through a dozen graphs a frame would
  * otherwise recompile every one of them, every frame.
+ *
+ * ## It is fed exactly what the bench is fed
+ *
+ * It used to be fed stand-ins — the set as one grid shader in a hardcoded
+ * orange, every meter banked at a half, the tempo at 120, the section at the
+ * middle, the song's key not set at all — on the argument that a node face is a
+ * *diagram* and the real set would make a dozen tiny canvases flicker.
+ *
+ * That argument was wrong in the way that matters. The gesture this whole panel
+ * is built around is **click a face and see it bigger**, and a small picture
+ * that cannot be compared to the big one has failed at the only thing it is
+ * for: you cannot tell whether the difference you are looking at is the node or
+ * the renderer. So the faces now read the same [`Show`](../state/useRoom.ts) the
+ * bench does — which at a desk is the room, dialled, and therefore steady
+ * anyway — through the same [`feed`](./feed.ts), and land through the same
+ * output stage. What is left different is framing and resolution, which are
+ * properties of a 320-pixel canvas and cannot be otherwise.
  */
-export interface PreviewFrame {
-  circuit: Circuit;
+
+/** What every face this frame shares. */
+export interface PreviewRoom {
   /**
-   * The library, because a face may be showing a node that *is* another look.
+   * The graph the faces are all probes of.
    *
-   * Without it a `look` node's face is black, and so is every face downstream of
-   * one — `compileCircuit` alone cannot expand a nested look, and a graph whose
-   * `look` node resolves to nothing draws nothing. The bench and the wall never
-   * had the problem because they go through `compileLook`, which has the
+   * Here so the set's own pass is drawn **once** for the whole canvas rather
+   * than once per face: every probe of one look reads the same `tracks` node,
+   * and drawing twenty-six Live tracks a dozen times over for one frame is the
+   * kind of cost that only shows up on somebody else's laptop.
+   */
+  circuit: Circuit;
+  show: Show;
+  /**
+   * The whole scheme, for the same reason the compositor takes one.
+   *
+   * Its library is what a face showing a `look` node is expanded against —
+   * without it that face is black, and so is every face downstream of one, since
+   * `compileCircuit` alone cannot expand a nested look. The bench and the wall
+   * never had the problem because they go through `compileLook`, which has the
    * library; this is the one path that was handed a bare circuit.
    */
-  looks: Record<string, LookDef>;
-  /** Hand-driven, because the whole point is seeing the node move on demand. */
-  energy: number;
-  level: number;
-  /** Packed `0xRRGGBB`, standing in for the colourway. */
-  color: number;
-  pace: number;
+  scheme: Scheme;
   beat: number;
   seconds: number;
-  quantum: number;
+  dt: number;
 }
 
 export interface Preview {
-  frame(next: PreviewFrame): void;
+  /** The clock and the set's picture, once, before any face is drawn. */
+  begin(at: PreviewRoom): void;
+  /** One face, onto the shared canvas, for the caller to blit. */
+  draw(circuit: Circuit): void;
   free(): void;
   /** The last compile failure, so a face can say what is wrong with the wiring. */
   readonly error: string | null;
 }
 
+/** A built probe. The banks are not here: they are re-read every frame. */
+interface Built {
+  program: Program | null;
+  error: string | null;
+}
+
+/**
+ * How many probe shaders to keep before dropping the oldest.
+ *
+ * A face is cached by what it was compiled from, so turning a knob costs
+ * nothing and every structural edit costs one more entry — which over an
+ * evening's building is thousands. Far above a canvas's worth of nodes, so the
+ * only thing ever evicted is a graph that no longer exists.
+ */
+const KEEP = 96;
+
 export function createPreview(canvas: HTMLCanvasElement): Preview {
   const gl = canvas.getContext('webgl2', { alpha: false, antialias: false });
   if (!gl) {
-    return { frame() {}, free() {}, error: 'WebGL2 is not available in this browser.' };
+    return { begin() {}, draw() {}, free() {}, error: 'WebGL2 is not available in this browser.' };
   }
 
   let error: string | null = null;
-  /**
-   * A stand-in for the Live set, so a graph containing a `tracks` node shows
-   * something on a node face rather than black.
-   *
-   * Deliberately a stand-in rather than the real thing. A node picture is a
-   * **diagram** — it is answering "what does this node do to what it was given"
-   * — and threading the actual set through twelve tiny canvases would make every
-   * face flicker with whatever happened to be playing, which is the opposite of
-   * legible. The bench next to it is where you judge the real thing.
-   */
+  const feed = createFeed(gl);
+  const built = new Map<string, Built>();
+
+  /** Where the set's own picture lands, for every face to read. */
   const live = createTarget(gl);
-  let ground: Program | null = null;
-  let groundTried = false;
-  const looks = new Map<string, { program: Program | null; error: string | null }>();
+  /** Where a face lands, before the output stage grades it onto the canvas. */
+  const out = createTarget(gl);
+
+  let at: PreviewRoom | null = null;
+  let width = 1;
+  let height = 1;
 
   /**
    * The probe graph with every nested look spliced in.
@@ -84,107 +121,102 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
    * with the bench about what a nested look draws would be worse than a face
    * that showed nothing, because it would be believed.
    */
-  const whole = (at: PreviewFrame): Circuit =>
-    flatten({ ...at.looks, [FACE]: { name: 'face', circuit: at.circuit } }, FACE).circuit;
+  const whole = (circuit: Circuit, looks: Record<string, LookDef>): Circuit =>
+    flatten({ ...looks, [FACE]: { name: 'face', circuit } }, FACE).circuit;
 
-  const programFor = (circuit: Circuit): Program | null => {
+  const programFor = (circuit: Circuit): Built => {
     const signature = signatureOfCircuit(circuit);
-    const held = looks.get(signature);
+    const held = built.get(signature);
     if (held) {
       error = held.error;
-      return held.program;
+      return held;
     }
-    const built: { program: Program | null; error: string | null } = { program: null, error: null };
+    const made: Built = { program: null, error: null };
     const compiled = compileCircuit(circuit);
     if (!compiled.source) {
-      built.error = compiled.error;
+      made.error = compiled.error;
     } else {
       try {
-        built.program = compile(gl, compiled.source, 'preview');
+        made.program = compile(gl, compiled.source, 'preview');
       } catch (err) {
-        built.error = (err as Error).message;
+        made.error = (err as Error).message;
       }
     }
     // A build that failed is remembered as a failure. Retrying a broken graph
     // every frame would call the driver's compiler sixty times a second for as
     // long as it stayed broken, which is a stall rather than an error message.
-    looks.set(signature, built);
-    error = built.error;
-    return built.program;
-  };
-
-  const clock = (program: Program, at: PreviewFrame) => {
-    gl.uniform2f(program.uniform('uRes'), canvas.width, canvas.height);
-    gl.uniform1f(program.uniform('uTime'), at.seconds);
-    gl.uniform1f(program.uniform('uBeat'), at.beat);
-    gl.uniform1f(program.uniform('uPhase'), ((at.beat % at.quantum) + at.quantum) % at.quantum);
-    gl.uniform1f(program.uniform('uQuantum'), at.quantum);
-    gl.uniform1f(program.uniform('uLevel'), at.level);
-    gl.uniform1f(program.uniform('uEnergy'), at.energy);
-    gl.uniform1f(program.uniform('uOpacity'), 1);
-    gl.uniform3fv(program.uniform('uColor'), rgb(at.color));
-    gl.uniform1f(program.uniform('uSeed'), 3.71);
-    gl.uniform1f(program.uniform('uPace'), at.pace);
+    built.set(signature, made);
+    if (built.size > KEEP) {
+      const oldest = built.keys().next().value;
+      if (oldest !== undefined) {
+        const dropped = built.get(oldest);
+        if (dropped?.program) gl.deleteProgram(dropped.program.program);
+        built.delete(oldest);
+      }
+    }
+    error = made.error;
+    return made;
   };
 
   return {
     get error() {
-      return error;
+      return error ?? feed.error;
     },
+
     free() {
       live.free();
-      if (ground) gl.deleteProgram(ground.program);
-      for (const built of looks.values()) if (built.program) gl.deleteProgram(built.program.program);
+      out.free();
+      feed.free();
+      for (const made of built.values()) if (made.program) gl.deleteProgram(made.program.program);
     },
-    frame(at) {
-      const width = Math.max(1, canvas.width);
-      const height = Math.max(1, canvas.height);
+
+    begin(room) {
+      at = room;
+      width = Math.max(1, canvas.width);
+      height = Math.max(1, canvas.height);
       gl.viewport(0, 0, width, height);
       gl.disable(gl.DEPTH_TEST);
       gl.disable(gl.BLEND);
       live.resize(width, height);
+      out.resize(width, height);
 
-      if (!groundTried) {
-        groundTried = true;
-        try {
-          ground = compile(gl, TRACK_SHADERS.get('grid')!, 'preview:ground');
-        } catch {
-          ground = null;
-        }
-      }
       gl.bindFramebuffer(gl.FRAMEBUFFER, live.framebuffer);
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
-      if (ground) {
-        gl.useProgram(ground.program);
-        clock(ground, at);
+      // The op off the look's own `tracks` node, expanded, so a look that only
+      // reads the set through a nested one still gets the right picture. Read
+      // off the graph rather than out of `compileCircuit`, which would emit a
+      // whole shader's worth of GLSL to answer one question, sixty times a
+      // second.
+      const drawn = whole(room.circuit, room.scheme.looks).nodes.find((n) => n.kind === 'tracks');
+      if (drawn) feed.drawSet({ ...room, width, height }, drawn.op ?? TRACK_DRAWS[0]);
+    },
+
+    draw(circuit) {
+      if (!at) return;
+      const graph = whole(circuit, at.scheme.looks);
+      const made = programFor(graph);
+      const feeding = { ...at, width, height };
+
+      gl.bindFramebuffer(gl.FRAMEBUFFER, out.framebuffer);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.disable(gl.BLEND);
+      if (made.program) {
+        gl.useProgram(made.program.program);
+        feed.look(made.program, feeding, banksOf(graph));
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, live.texture);
+        gl.uniform1i(made.program.uniform('uTracksTex'), 0);
         drawFullscreen(gl);
       }
 
-      // Once. The bank is cut to the graph and the shader declares it at that
-      // size, so a face compiled from one expansion and fed from another is a
-      // bank of the wrong length — which is a GL error and a black face.
-      const graph = whole(at);
-      const program = programFor(graph);
+      // Through the same output stage the wall gets, minus the keystone and the
+      // gain — which describe a projector rather than a look. The shoulder is
+      // not one of those: a face that skipped it would show highlights the
+      // bench beside it has already rolled off.
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-      gl.clearColor(0, 0, 0, 1);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      if (!program) return;
-
-      gl.useProgram(program.program);
-      clock(program, at);
-      const bank = new Float32Array(8).fill(0.5);
-      gl.uniform1fv(program.uniform('uParams'), paramsOf(graph));
-      gl.uniform1fv(program.uniform('uTracks'), bank);
-      gl.uniform1fv(program.uniform('uEnergies'), new Float32Array(8).fill(at.energy));
-      gl.uniform1f(program.uniform('uSongSeed'), 0.42);
-      gl.uniform1f(program.uniform('uSongTempo'), 120);
-      gl.uniform1f(program.uniform('uSection'), 0.5);
-      gl.uniform1f(program.uniform('uSections'), 0.5);
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, live.texture);
-      gl.uniform1i(program.uniform('uTracksTex'), 0);
-      drawFullscreen(gl);
+      feed.grade(out.texture, feeding);
     },
   };
 }

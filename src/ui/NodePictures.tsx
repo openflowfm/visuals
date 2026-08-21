@@ -1,8 +1,9 @@
 import { useEffect, useRef, type ReactNode } from 'react';
-import type { Circuit, LookDef } from '../../protocol.ts';
+import type { Circuit, Scheme, Show } from '../../protocol.ts';
 import { createPreview } from '../render/preview.ts';
 import { probeAt } from './probe.ts';
 import type { Clock } from '../state/useShow.ts';
+import { withStandIns } from '../state/useRoom.ts';
 
 /**
  * A picture per node, out of one GL context.
@@ -24,53 +25,59 @@ import type { Clock } from '../state/useShow.ts';
  * It renders through a child function rather than owning the canvas, because
  * what a node *is* belongs to the graph and what a node *looks like* belongs
  * here, and the two should not have to know each other.
+ *
+ * **It takes the room, not a pair of numbers.** These faces are the thing you
+ * click to promote into the big picture, so a face that was drawn under
+ * different conditions from the bench makes that gesture lie — see
+ * [`preview.ts`](../render/preview.ts). One `Show` and one `Scheme` in, exactly
+ * as the bench takes, and nothing here is left to choose a colour or a tempo of
+ * its own.
  */
 export function NodePictures({
   circuit,
-  looks,
+  show,
+  scheme,
   transport,
-  energy,
-  level,
   children,
 }: {
   circuit: Circuit;
-  /** The library, so a face showing a `look` node is not black. See `preview.ts`. */
-  looks: Record<string, LookDef>;
+  show: Show;
+  scheme: Scheme;
   transport: Clock;
-  energy: number;
-  /** A held meter, or undefined to run the beat envelope the bench runs. */
-  level?: number;
   children(picture: (nodeId: string) => ReactNode): ReactNode;
 }) {
   const offscreen = useRef<HTMLCanvasElement | null>(null);
   const faces = useRef(new Map<string, HTMLCanvasElement>());
-  const now = useRef({ circuit, looks, transport, energy, level });
-  now.current = { circuit, looks, transport, energy, level };
+  const now = useRef({ circuit, show, scheme, transport });
+  now.current = { circuit, show, scheme, transport };
 
   useEffect(() => {
     const canvas = offscreen.current;
     if (!canvas) return;
     const preview = createPreview(canvas);
     let raf = 0;
+    let last = performance.now();
 
-    const loop = () => {
+    const loop = (stamp: number) => {
       raf = requestAnimationFrame(loop);
+      const dt = Math.min((stamp - last) / 1000, 0.1);
+      last = stamp;
       const at = now.current;
       const beat = at.transport.beat();
+      preview.begin({
+        circuit: at.circuit,
+        // The same stand-in set the bench uses, so a look built on the set is
+        // not black here and lit there. See [`withStandIns`](../state/useRoom.ts).
+        show: withStandIns(at.show, beat),
+        scheme: at.scheme,
+        beat,
+        seconds: at.transport.seconds(),
+        dt,
+      });
       for (const [id, face] of faces.current) {
         const probed = probeAt(at.circuit, id);
         if (!probed) continue;
-        preview.frame({
-          circuit: probed,
-          looks: at.looks,
-          energy: at.energy,
-          level: at.level ?? 0.25 + 0.75 * (1 - (beat % 1)) ** 3,
-          color: 0xffb347,
-          pace: 0,
-          quantum: 4,
-          beat,
-          seconds: at.transport.seconds(),
-        });
+        preview.draw(probed);
         const ctx = face.getContext('2d');
         if (!ctx) continue;
         ctx.drawImage(canvas, 0, 0, face.width, face.height);
@@ -87,8 +94,8 @@ export function NodePictures({
     <canvas
       key={id}
       className="nodeshot"
-      width={104}
-      height={58}
+      width={FACE.w}
+      height={FACE.h}
       ref={(el) => {
         if (el) faces.current.set(id, el);
         else faces.current.delete(id);
@@ -99,7 +106,29 @@ export function NodePictures({
   return (
     <>
       {children(picture)}
-      <canvas ref={offscreen} className="probe-canvas" aria-hidden />
+      <canvas ref={offscreen} className="probe-canvas" width={SHOT.w} height={SHOT.h} aria-hidden />
     </>
   );
 }
+
+/**
+ * The shape of a face, and it is the wall's.
+ *
+ * Sixteen by nine because that is what the picture is going to be projected as,
+ * and because a face whose shape disagrees with the bench's is a face you cannot
+ * compare to it. It used to be a 300×150 buffer squeezed into a 104×58 canvas
+ * and then cropped to a 34-pixel strip by `object-fit`, which between them
+ * turned every circle into an ellipse and threw away the top and bottom of the
+ * frame.
+ */
+const FACE = { w: 208, h: 117 };
+
+/**
+ * The buffer every face is drawn in before it is blitted down.
+ *
+ * Bigger than a face, because one canvas serves them all and a node is as wide
+ * as its faceplate makes it. Downsampling into the 2D canvas is also the only
+ * antialiasing anything here gets: the context is `antialias: false` and every
+ * picture is procedural, so a hard edge drawn at face size crawls.
+ */
+const SHOT = { w: 320, h: 180 };

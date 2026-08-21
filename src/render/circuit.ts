@@ -314,13 +314,22 @@ const EFFECT_EMIT: Record<string, (ctx: Emitting, e: string, k: (i: number) => s
     // outline, which turns any picture into a diagram — the one effect here that
     // makes a busy frame *less* busy.
     edge: (c, _e, k) => {
-      // A pixel, in centred units — and the same number in both directions,
-      // because centring is what makes a circle round and therefore makes a
-      // pixel square. The aspect ratio belongs to the *uv* form of this, which
-      // is where it was written; carrying it across as well stretched the
-      // horizontal difference by the aspect and gave every outline a sideways
+      // A fraction of the frame's height, and **not** a count of pixels.
+      //
+      // It was pixels, which is what an edge detector normally wants and is
+      // wrong here: this rig is authored on a 320-pixel node face, judged on an
+      // 800-pixel bench and projected at 1920, and a tap of one output pixel is
+      // three different thicknesses in those three places. So the one node you
+      // could not trust a preview of was the one whose whole job is a line.
+      //
+      // In plane units the bench predicts the wall exactly and a face is the
+      // same picture with less of it, which is the trade everything else here
+      // already makes. The same number in both directions, because centring is
+      // what makes a circle round and therefore makes a step square — the
+      // aspect belongs to the *uv* form of this, and carrying it across as well
+      // stretched the horizontal difference and gave every outline a sideways
       // smear that looked like the effect was reading the wrong picture.
-      const px = `((0.5 + ${k(0)} * 3.0) / uRes.y)`;
+      const px = `(0.0012 + ${k(0)} * 0.006)`;
       const x = `vec2(${px}, 0.0)`;
       const y = `vec2(0.0, ${px})`;
       const h = `abs(${c.readAt('c', `(${c.at} + ${x})`)}.rgb - ${c.readAt('c', `(${c.at} - ${x})`)}.rgb)`;

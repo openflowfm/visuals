@@ -117,11 +117,17 @@ about a look that is fine. So the header names the node, says plainly that it is
 and turns amber, because a reader who has stopped reading still sees a colour. A `p` or an
 `n` outlet gets a clause of its own: those have no picture, so `probeAt` brings a number back
 through `paint` and a point back through a `plasma` source, and what is on screen is a
-**diagram** of a signal rather than a frame. At 104 by 34 nobody was going to mistake one;
-at 600 wide they would. The node reads as chosen on the canvas too, by an `outline` rather
+**diagram** of a signal rather than a frame. On a face nobody was going to mistake one; at
+600 wide they would. The node reads as chosen on the canvas too, by an `outline` rather
 than a border, so lighting it cannot move the face a pixel.
 
-The second is the **cache**. The compositor keeps one compiled program per *look id* and
+The second is that promoting a face must not **change** the picture, only its size. That is
+[`feed.ts`](../src/render/feed.ts)'s job and it took a rewrite to get: the faces and the
+bench had been feeding their looks different uniforms in fourteen places, so clicking one
+gave you a picture with a different colourway, a different set, a different key and no
+shoulder — and no way to tell which of those you were looking at. They read one list now.
+
+The third is the **cache**. The compositor keeps one compiled program per *look id* and
 swaps it — old one deleted, new one compiled — whenever that id's signature changes. So the
 promoted graph is parked under one reused throwaway id, and clicking through forty nodes
 leaves one probe program alive. An id per node would compile just as correctly and leak one

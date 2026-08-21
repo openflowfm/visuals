@@ -276,11 +276,12 @@ What is not right is a look that is only alive when the room is loud, because mo
 hours anyone spends in the designer are hours with no Live attached. The fix is in the wiring
 rather than in the number: **take the motion off the clock and let the meter add to it.**
 `phase`, `beat`, `pulse` and a `wave` all run whether or not anything is playing, since Link
-free-runs. The four looks that ship keep that rule, and it is the difference between a
+free-runs. The ten looks that ship keep that rule, and it is the difference between a
 library that reads as calm at a desk and one that reads as broken.
 
-The bench and the node faces are already fed a hand-driven energy rather than the room's, for
-the same reason and from the other end.
+The bench and the node faces are both fed the **room's** energy — the knob on the designer's
+own bar — for the same reason and from the other end: it is a condition you can dial rather
+than one you have to wait for.
 
 ## The set is a pass, and it is the only one
 
@@ -377,10 +378,22 @@ context each is the obvious build and the wrong one: browsers keep about sixteen
 start evicting the oldest, and this page already has the stage and the bench. That is also
 why `preview.ts` caches programs by signature in a map rather than one slot.
 
-A node picture uses a **stand-in** for the Live set rather than the real one. It is a
-diagram — it answers "what does this node do to what it was given" — and threading the
-actual set through twelve tiny canvases would make every face flicker with whatever happened
-to be playing. The bench is where you judge the real thing.
+A node picture is fed **exactly what the bench is fed**, and that is a correction. It used
+to be stand-ins — the set as one grid shader in a hardcoded orange, every meter banked at a
+half, the tempo at 120, the section in the middle, the song's key not set at all — on the
+argument that a face is a *diagram* and the real set would make a dozen tiny canvases
+flicker.
+
+That argument was wrong in the way that matters. The gesture this panel is built around is
+**click a face and see it bigger**, and a small picture that cannot be compared to the big
+one has failed at the only thing it is for: you cannot tell whether what you are looking at
+is the node or the renderer. Fourteen separate uniforms had drifted between the two lists,
+in different files, neither of which looked wrong on its own — so there is one list, in
+[`feed.ts`](../src/render/feed.ts), and the stage, the bench and every face read it.
+
+The faces get the same [`Show`](../src/state/useRoom.ts) the bench does, which at a desk is
+the room, dialled, and therefore steady anyway — including the same stand-in set when there
+is no Live attached, which is `withStandIns` and is shared for the same reason.
 
 **A face gets the library, not just the graph.** A nested look is a *different* graph, so a
 `preview.ts` handed only a circuit had nothing to expand a `look` node against — which made
@@ -393,16 +406,20 @@ stage uses, rather than given an expander of its own. A face that disagreed with
 about what a nested look draws would be worse than one that showed nothing, because it would
 be believed.
 
-**Clicking a face promotes it to the bench**, which is the other half of the same idea: 104
-by 34 pixels is enough to see *that* something is happening and nowhere near enough to see
-what. The only way to look properly used to be to wire the node into `out`, look, and wire it
+**Clicking a face promotes it to the bench**, which is the other half of the same idea: a
+hundred pixels across is enough to see *that* something is happening and nowhere near enough
+to see what. The only way to look properly used to be to wire the node into `out`, look, and wire it
 back — an edit, made to answer a question, on a graph that is the record.
 
-The two are not quite the same picture, and the difference is the point. The face runs on
-`preview.ts` with a stand-in set, a fixed colour and no pace, because a face is a diagram;
-promoted, the same `probeAt` graph runs on the **`Compositor`**, on the room and the
-colourway the bench is on. So a `tracks` node's face shows you what the node does and its
-promotion shows you what it is doing right now.
+The two are now the same picture at two sizes, which is what makes the click worth making.
+The same `probeAt` graph, the same feed, and the same output stage — a face lands through
+the **shoulder** as well, so it does not show a highlight the bench beside it has already
+rolled off.
+
+**What is left different is framing and resolution**, and both are honest. A face is 16:9
+because the wall is; a bench is whatever shape you dragged it, and a wider one shows more of
+the same plane with circles still round. Resolution is the other one, and it is why `edge`
+measures its tap as a fraction of the frame rather than in pixels — see [render](render.md).
 
 `probeAt` is shared rather than reimplemented, so what gets bigger is the picture and not the
 reading of the node. It is [the console](console.md) that has to say which of the two you are

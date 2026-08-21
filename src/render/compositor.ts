@@ -1,17 +1,9 @@
-import type { Blend, LookDef, Scheme, Show } from '../../protocol.ts';
-import { hint } from '../../hints.ts';
+import type { Scheme, Show } from '../../protocol.ts';
 import { flatten } from './circuit.ts';
-import {
-  buildLook,
-  namedEnergies,
-  namedTracks,
-  paramsOf,
-  signatureOf,
-  trackBank,
-} from './look.ts';
-import { compile, createTarget, drawFullscreen, rgb, type Program } from './gl.ts';
-import { columns, warpFor, OUTPUT_SHADER, SQUARE, type Corners } from './output.ts';
-import { TRACK_SHADERS } from './shaders.ts';
+import { createFeed, type Banks } from './feed.ts';
+import { banksOf, buildLook, signatureOf } from './look.ts';
+import { compile, createTarget, drawFullscreen, type Program } from './gl.ts';
+import { columns, warpFor, SQUARE, type Corners } from './output.ts';
 
 /**
  * Two passes and an output stage, where there used to be a stack of them.
@@ -26,17 +18,12 @@ import { TRACK_SHADERS } from './shaders.ts';
  * number of those cheaply. So it stays a pass: every playing track drawn into
  * one target, which the look then reads as a texture.
  *
- * **Blending is fixed-function** in that pass, so there is no accumulator
- * buffer. Every track shader writes premultiplied alpha, which lets one
- * `blendFunc` per track give the four modes below.
+ * **What each pass is fed is [not this file's](./feed.ts)**, and the split is
+ * recent. The node faces on the canvas are the other front end, they were
+ * feeding their own looks a different set of numbers, and the two lists drifted
+ * until the small picture and the big one could not be compared. What is left
+ * here is what a *wall* adds: a target to draw into, a keystone and a gain.
  */
-const BLENDS: Record<Blend, [number, number]> = {
-  // Premultiplied "over" — the ordinary stacking that something has to do.
-  over: [1, 0x0303], // ONE, ONE_MINUS_SRC_ALPHA
-  add: [1, 1], // ONE, ONE
-  screen: [1, 0x0301], // ONE, ONE_MINUS_SRC_COLOR
-  multiply: [0x0306, 0x0303], // DST_COLOR, ONE_MINUS_SRC_ALPHA
-};
 
 export interface Compositor {
   frame(show: Show, scheme: Scheme | null, beat: number, seconds: number, dt: number): void;
@@ -60,9 +47,8 @@ interface Built {
   /** What it was compiled from. Structure only — a knob's value is a uniform. */
   signature: string;
   error: string | null;
-  params: Float32Array;
-  tracks: string[];
-  energies: { name: string; smooth: number }[];
+  /** Re-read every frame, because a value is a uniform. See `banksOf`. */
+  banks: Banks;
   /** How each Live track draws, or null when the look never asked for the set. */
   draws: string | null;
 }
@@ -87,7 +73,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
 
   let error: string | null = null;
   const looks = new Map<string, Built>();
-  const sources = new Map<string, Program | null>();
+  const feed = createFeed(gl);
 
   /** Where the set's own picture lands, for the look to read. */
   const live = createTarget(gl);
@@ -96,48 +82,13 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
   let warp = columns(warpFor(SQUARE));
   let gain = 1;
   let test = false;
-  let stage: Program | null = null;
-
-  /**
-   * Where each track's opacity currently is, as against where the show says.
-   *
-   * Without this, a scene change would pop tracks into existence on one frame.
-   * Eased, it reads as the picture opening up, which is what the scene actually
-   * did. Keyed by track index because that is a track's identity across every
-   * reshuffle of the set.
-   */
-  const shown = new Map<number, number>();
-
-  /**
-   * Smoothed meters, one per name an `energy` node asked for.
-   *
-   * On the CPU because an envelope follower has to remember what it saw last
-   * frame, and a fragment shader cannot. This is the whole implementation of
-   * "energy means whatever you decide it means": a meter, an attack and a
-   * release, and the name is yours.
-   */
-  const followed = new Map<string, number>();
-
-  const sourceProgram = (mode: string): Program | null => {
-    const held = sources.get(mode);
-    if (held !== undefined) return held;
-    const glsl = TRACK_SHADERS.get(mode) ?? TRACK_SHADERS.get('plasma')!;
-    let built: Program | null = null;
-    try {
-      built = compile(gl, glsl, `source:${mode}`);
-    } catch (err) {
-      error = `${mode}: ${(err as Error).message}`;
-    }
-    sources.set(mode, built);
-    return built;
-  };
 
   const lookProgram = (scheme: Scheme, id: string): Built => {
     const signature = signatureOf(scheme.looks, id);
     const held = looks.get(id);
     const { circuit } = flatten(scheme.looks, id);
     if (held && held.signature === signature) {
-      held.params = paramsOf(circuit);
+      held.banks = banksOf(circuit);
       return held;
     }
     if (held?.program) gl.deleteProgram(held.program.program);
@@ -147,9 +98,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       program: null,
       signature,
       error: compiled.error,
-      params: paramsOf(circuit),
-      tracks: namedTracks(circuit),
-      energies: namedEnergies(circuit),
+      banks: banksOf(circuit),
       draws: compiled.draws,
     };
     if (compiled.source) {
@@ -197,25 +146,9 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
 
   resize();
 
-  const clock = (
-    program: Program,
-    show: Show,
-    scheme: Scheme | null,
-    beat: number,
-    seconds: number,
-  ) => {
-    const quantum = show.quantum || 4;
-    gl.uniform2f(program.uniform('uRes'), canvas.width, canvas.height);
-    gl.uniform1f(program.uniform('uTime'), seconds);
-    gl.uniform1f(program.uniform('uBeat'), beat);
-    gl.uniform1f(program.uniform('uPhase'), ((beat % quantum) + quantum) % quantum);
-    gl.uniform1f(program.uniform('uQuantum'), quantum);
-    gl.uniform1f(program.uniform('uPace'), scheme?.defaults.pace ?? 0);
-  };
-
   return {
     get error() {
-      return error;
+      return error ?? feed.error;
     },
     resize,
     setOutput(output) {
@@ -226,20 +159,15 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
     free() {
       live.free();
       out.free();
-      if (stage) gl.deleteProgram(stage.program);
+      feed.free();
       for (const built of looks.values()) if (built.program) gl.deleteProgram(built.program.program);
-      for (const program of sources.values()) if (program) gl.deleteProgram(program.program);
     },
     frame(show, scheme, beat, seconds, dt) {
       resize();
       gl.viewport(0, 0, canvas.width, canvas.height);
       gl.disable(gl.DEPTH_TEST);
 
-      const room = show.master;
-      // Roughly a 200ms glide however fast the display runs, so a change looks
-      // the same on 60 Hz and 144 Hz.
-      const glide = 1 - Math.exp(-dt / 0.2);
-
+      const at = { show, scheme, beat, seconds, dt, width: canvas.width, height: canvas.height };
       const id = show.look;
       const built = scheme && id ? lookProgram(scheme, id) : null;
 
@@ -247,37 +175,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       gl.bindFramebuffer(gl.FRAMEBUFFER, live.framebuffer);
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
-      if (built?.draws) {
-        gl.enable(gl.BLEND);
-        for (const track of show.tracks) {
-          // Nothing playing means nothing drawn — not the last thing that
-          // played. A track holding its previous clip after the scene changed
-          // is the failure that looks most like the renderer having crashed.
-          const target = track.playing < 0 ? 0 : track.opacity;
-          const was = shown.get(track.t) ?? 0;
-          const opacity = was + (target - was) * glide;
-          shown.set(track.t, opacity);
-          if (opacity <= 0.002) continue;
-
-          const mode = built.draws === 'by name' ? hint(track.name) : built.draws;
-          const program = sourceProgram(mode);
-          if (!program) continue;
-
-          const [src, dst] = BLENDS[trackBlend(track.t)] ?? BLENDS.screen;
-          gl.blendFunc(src, dst);
-          gl.useProgram(program.program);
-          clock(program, show, scheme, beat, seconds);
-          gl.uniform1f(program.uniform('uLevel'), track.level);
-          gl.uniform1f(program.uniform('uEnergy'), room);
-          gl.uniform1f(program.uniform('uOpacity'), opacity);
-          gl.uniform3fv(program.uniform('uColor'), rgb(track.color));
-          // Per track and stable, so two tracks drawing the same picture out of
-          // the same colourway do not draw the identical thing on top of each
-          // other. It is also what spreads them across the division ladder.
-          gl.uniform1f(program.uniform('uSeed'), track.t * 37.13);
-          drawFullscreen(gl);
-        }
-      }
+      if (built?.draws) feed.drawSet(at, built.draws);
 
       // --- the look --------------------------------------------------------
       gl.bindFramebuffer(gl.FRAMEBUFFER, out.framebuffer);
@@ -286,109 +184,17 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       gl.disable(gl.BLEND);
 
       if (built?.program) {
-        const program = built.program;
-        gl.useProgram(program.program);
-        clock(program, show, scheme, beat, seconds);
-        gl.uniform1f(program.uniform('uLevel'), room);
-        gl.uniform1f(program.uniform('uEnergy'), room);
-        gl.uniform1f(program.uniform('uOpacity'), 1);
-        gl.uniform1f(program.uniform('uSeed'), 3.71);
-        gl.uniform3fv(program.uniform('uColor'), rgb(show.colors[0] ?? 0xffffff));
-        gl.uniform1f(program.uniform('uSongSeed'), seedOf(show.song));
-        gl.uniform1f(program.uniform('uSongTempo'), show.tempo);
-        // A half for a set that states no key, which is the convention every
-        // other song fact here already follows: no answer sits in the middle.
-        gl.uniform1f(program.uniform('uSongKey'), show.key ?? 0.5);
-        gl.uniform1f(program.uniform('uSection'), sectionOf(show));
-        gl.uniform1f(program.uniform('uSections'), show.roles.length / 8);
-        gl.uniform1fv(program.uniform('uParams'), built.params);
-
-        const meter = (name: string) =>
-          name === 'master' ? show.master : (show.tracks.find((t) => t.name === name)?.level ?? 0);
-
-        if (built.tracks.some(Boolean)) {
-          gl.uniform1fv(program.uniform('uTracks'), trackBank(built.tracks, meter));
-        }
-        if (built.energies.some((each) => each.name)) {
-          const bank = new Float32Array(8);
-          built.energies.forEach((each, i) => {
-            if (!each.name) return;
-            // Fast up, slow down. An envelope that fell as quickly as it rose
-            // would be the meter again, and the meter is already a node.
-            const now = meter(each.name);
-            const was = followed.get(each.name) ?? 0;
-            const fall = 1 - Math.exp(-dt / (0.05 + each.smooth * 1.95));
-            const value = now > was ? now : was + (now - was) * fall;
-            followed.set(each.name, value);
-            bank[i] = value;
-          });
-          gl.uniform1fv(program.uniform('uEnergies'), bank);
-        }
-
+        gl.useProgram(built.program.program);
+        feed.look(built.program, at, built.banks);
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, live.texture);
-        gl.uniform1i(program.uniform('uTracksTex'), 0);
+        gl.uniform1i(built.program.uniform('uTracksTex'), 0);
         drawFullscreen(gl);
       }
 
       // --- to the wall -----------------------------------------------------
-      if (!stage) {
-        try {
-          stage = compile(gl, OUTPUT_SHADER, 'output');
-        } catch (err) {
-          error = (err as Error).message;
-          return;
-        }
-      }
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-      gl.disable(gl.BLEND);
-      gl.clearColor(0, 0, 0, 1);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.useProgram(stage.program);
-      gl.uniformMatrix3fv(stage.uniform('uWarp'), false, warp);
-      gl.uniform1f(stage.uniform('uTest'), test ? 1 : 0);
-      gl.uniform1f(stage.uniform('uGain'), gain);
-      gl.uniform2f(stage.uniform('uRes'), canvas.width, canvas.height);
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, out.texture);
-      gl.uniform1i(stage.uniform('uTex'), 0);
-      drawFullscreen(gl);
+      feed.grade(out.texture, at, { warp, gain, test });
     },
   };
-}
-
-/**
- * How a track stacks on the ones drawn before it.
- *
- * `screen` for everything above the bottom, because it saturates at white rather
- * than climbing past it. An even pick over the four modes puts a quarter of a
- * tall stack on `add`, and a quarter is enough to white out the frame before the
- * tracks that were meant to be seen have drawn. The bottom one is `over` because
- * something has to be opaque.
- *
- * A fixed rule rather than a bound one, and that is the trade this whole change
- * makes: per-track blend was a field on a binding that no longer exists. If it
- * needs to vary, it varies inside the graph — a `blend` node is right there.
- */
-function trackBlend(t: number): Blend {
-  return t === 0 ? 'over' : 'screen';
-}
-
-/** A stable 0–1 per song name, so `song.seed` is a different number per song. */
-function seedOf(name: string | null): number {
-  if (!name) return 0.5;
-  let h = 1779033703 ^ name.length;
-  for (let i = 0; i < name.length; i++) {
-    h = Math.imul(h ^ name.charCodeAt(i), 3432918353);
-    h = (h << 13) | (h >>> 19);
-  }
-  h = Math.imul(h ^ (h >>> 16), 2246822507);
-  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
-}
-
-/** Where the playing section sits among the ones the set uses, 0–1. */
-function sectionOf(show: Show): number {
-  if (!show.role || show.roles.length < 2) return 0.5;
-  const at = show.roles.indexOf(show.role);
-  return at < 0 ? 0.5 : at / (show.roles.length - 1);
 }

@@ -5,11 +5,12 @@ import {
   useRef,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import type { Circuit, CircuitNode, Scheme, Show, Track } from '../../protocol.ts';
+import type { Circuit, CircuitNode, Scheme, Show } from '../../protocol.ts';
 import { Button } from '../../../widgets/src/controls/Button.tsx';
 import { NODE_SPECS } from '../render/circuit.ts';
 import { createCompositor } from '../render/compositor.ts';
 import { inside, usePlace, type Place } from '../state/usePlace.ts';
+import { withStandIns } from '../state/useRoom.ts';
 import type { Clock } from '../state/useShow.ts';
 import { probeAt } from './probe.ts';
 
@@ -59,10 +60,15 @@ export function Bench({
       const dt = Math.min((at - last) / 1000, 0.1);
       last = at;
       const held = now.current;
+      const beat = held.clock.beat();
       compositor.frame(
-        benched(held.show, held.look, held.clock.beat()),
+        // The look is the one being **edited** rather than the one the wheel has
+        // landed on, or the bench would show you something else while you
+        // worked. The stand-in set is the room's, shared with the node faces —
+        // see [`withStandIns`](../state/useRoom.ts).
+        { ...withStandIns(held.show, beat), look: held.look },
         held.scheme,
-        held.clock.beat(),
+        beat,
         held.clock.seconds(),
         dt,
       );
@@ -166,8 +172,8 @@ function showing(node: CircuitNode): string {
  *
  * ## It will draw one node instead
  *
- * A node's own face is 104 by 34 pixels, which is enough to tell you *that*
- * something is happening and not nearly enough to tell you what. The only way to
+ * A node's own face is about a hundred pixels across, which is enough to tell
+ * you *that* something is happening and not nearly enough to tell you what. The only way to
  * look properly used to be to rewire the node into `out`, look, and rewire it
  * back — an edit, to answer a question. Clicking the face promotes it here
  * instead, at whatever size the panel is, and nothing about the graph changes.
@@ -321,38 +327,4 @@ export function FloatingBench({
       />
     </div>
   );
-}
-
-/**
- * The show, as the bench should see it.
- *
- * Two changes and both are the point. The **look** is the one being edited
- * rather than the one the wheel has landed on, or the bench would show you
- * something else while you worked. And with no bridge there are **stand-in
- * tracks**, because a look built on the set would otherwise be black at a desk
- * — which is precisely the situation the designer exists to work in.
- *
- * The stand-ins run off the beat rather than off nothing, so a look wired to a
- * meter still moves; they are deliberately obvious rather than convincing, and
- * they disappear the moment a real set arrives. What drives them is
- * `show.master`, which the room's energy knob is already writing, so the one
- * control means the same thing here as it does in the shader.
- */
-function benched(show: Show, look: string, beat: number): Show {
-  if (show.connected && show.tracks.length > 0) return { ...show, look };
-  const energy = show.master;
-  const pulse = (i: number) => {
-    const phase = (beat * (0.5 + i * 0.25)) % 1;
-    return Math.max(0, (1 - phase) ** 3) * (0.35 + energy * 0.65);
-  };
-  const tracks: Track[] = ['Drums', 'Bass', 'Keys', 'Pad'].map((name, i) => ({
-    t: i,
-    name,
-    color: show.colors[i % Math.max(1, show.colors.length)] ?? 0xffb347,
-    opacity: 1,
-    level: pulse(i),
-    playing: 0,
-    clipName: '',
-  }));
-  return { ...show, look, tracks };
 }

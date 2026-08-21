@@ -251,9 +251,9 @@ export function Designer({
           {def && (
             <NodePictures
               circuit={def.circuit}
-              looks={scheme.looks}
+              show={room.show}
+              scheme={scheme}
               transport={transport}
-              energy={room.show.master}
             >
               {(picture) => (
                 <CircuitEditor

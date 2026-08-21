@@ -291,6 +291,38 @@ banks, the signature. **The bench is not in that list**, because the bench is a 
 was a standing risk: a bench that could disagree with the stage about brightness or blend is
 worse than no bench.
 
+## One list of uniforms, because two of them drifted
+
+`src/render/feed.ts` is what a look is *fed*: the clock, the set's own pass, every uniform a
+compiled look reads, and the output stage. The stage and the node faces both call it.
+
+It was two lists, in two files, and they had drifted apart in fourteen places — the faces
+drew the set as one grid shader in a hardcoded orange, banked every meter at a half, ran the
+tempo and the section off constants, never set the song's key at all, and skipped the
+shoulder. None of that was a decision anybody made, and the effect was that clicking a node
+face to see it bigger gave you a different picture and no way to know why.
+
+**What a front end still decides is the destination.** A wall gets a keystone and a master
+gain; a node face gets neither. Everything above that line is one list.
+
+The banks are re-read **every frame** rather than kept beside the program, and that is what
+`banksOf` is for. Two of the three change without the shader changing: a knob's value is a
+uniform, and so is an `energy` node's smoothing — which, held from compile time, left that
+one control doing nothing until something else forced a rebuild.
+
+## An effect must not measure itself in pixels
+
+`edge` did. Its tap was a count of output pixels, which is what an edge detector normally
+wants and is wrong here: a look is authored on a 320-pixel node face, judged on an
+800-pixel bench and projected at 1920, and one output pixel is three different thicknesses
+in those three places. The one node you could not trust a preview of was the one whose whole
+job is a line.
+
+It is a fraction of the frame's height now, so the bench predicts the wall exactly and a face
+is the same picture with less of it. Every other effect was already in plane units — the
+`uRes` in `shift` and in the source shaders is aspect correction, which is a different thing
+and is right.
+
 ## What is not built
 
 - **Video clips.** Every picture is procedural. A `<video>` texture is one more `source` mode

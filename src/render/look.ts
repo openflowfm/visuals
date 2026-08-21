@@ -57,6 +57,28 @@ export function signatureOfCircuit(circuit: Circuit): string {
 }
 
 /**
+ * Every bank a compiled look reads, cut to its own graph.
+ *
+ * Computed **per frame** rather than kept beside the program, and that is the
+ * whole reason it is one function: two of the three change without the shader
+ * changing. A knob's value is a uniform, so turning one must not recompile —
+ * and an `energy` node's smoothing is a value too, so a bank held from compile
+ * time left that one control doing nothing until something else forced a
+ * rebuild, which reads as the knob being unwired.
+ */
+export function banksOf(circuit: Circuit): {
+  params: Float32Array;
+  tracks: string[];
+  energies: { name: string; smooth: number }[];
+} {
+  return {
+    params: paramsOf(circuit),
+    tracks: namedTracks(circuit),
+    energies: namedEnergies(circuit),
+  };
+}
+
+/**
  * The knob bank, in the order the shader reads it and exactly as long.
  *
  * Cut to the graph, because the shader declares `uParams` at the size this
