@@ -1,7 +1,7 @@
 import type { Scheme, Show, Track } from '../protocol.ts';
 import type { SetState } from './bridge.ts';
 import type { LinkFrame } from './link.ts';
-import { turnsAt, whatIsUp } from '../resolve.ts';
+import { atOne, bumped, reOne, turnsAt, whatIsUp, type Wheel } from '../resolve.ts';
 import type { SchemeSource } from './scheme.ts';
 
 /**
@@ -74,8 +74,8 @@ function positionOf(p: BSV.MixerParameterState | null | undefined): number {
  * What the rotation has to remember between frames.
  *
  * A wheel that turns on *events* needs somewhere to count them, and a show built
- * from scratch every second has nowhere. Two fields: what was playing last time,
- * and how many times a player has done something the rig should react to.
+ * from scratch every second has nowhere. Three fields, and all three are about
+ * noticing that something changed rather than about what it changed to.
  *
  * Held by the server and handed in, rather than a module-level variable, because
  * a module-level one is a second place the truth lives and the tests would have
@@ -84,11 +84,13 @@ function positionOf(p: BSV.MixerParameterState | null | undefined): number {
 export interface Turning {
   /** Per track, the scene index that was playing when we last looked. */
   was: number[];
-  /** Out-of-band clip launches so far. Only ever goes up. */
-  bumps: number;
+  /** Where the phrase starts, and what has turned by hand. See `resolve.ts`. */
+  wheel: Wheel;
+  /** Whether Live's transport was running when we last looked. */
+  rolling: boolean;
 }
 
-export const noTurning = (): Turning => ({ was: [], bumps: 0 });
+export const noTurning = (): Turning => ({ was: [], wheel: atOne(), rolling: false });
 
 /**
  * The scene most of the set is playing, and whether anyone has departed from it.
@@ -148,8 +150,21 @@ export function buildShow(
   // everything inside it.
   const tracks = set.tracks.filter((track) => !track.isGroup);
 
-  const { scene, bumped } = readPlaying(set, turning);
-  if (bumped && scheme.rotation.onClip) turning.bumps += 1;
+  const { scene, bumped: departed } = readPlaying(set, turning);
+  if (departed && scheme.rotation.onClip) turning.wheel = bumped(turning.wheel);
+
+  // **Live starting is the one.** A transport that has just been rolled is the
+  // clearest statement of where a phrase begins that this rig will ever get,
+  // and it costs nobody a gesture — so the wheel re-phases itself on every
+  // start and the shortcut is for the times a set never stops.
+  //
+  // Nothing turns; see `reOne`. And a first read counts, because until then the
+  // phrase was being counted from whenever the first Link peer in the building
+  // opened its laptop, which is not a worse guess to replace.
+  if (set.playing && !turning.rolling) {
+    turning.wheel = reOne(scheme.rotation, link.beat, link.quantum, turning.wheel);
+  }
+  turning.rolling = set.playing;
 
   const songKey = scene >= 0 ? (set.model?.songByScene[String(scene)] ?? null) : null;
   const role = scene >= 0 ? roleOf(set.scenes[scene]?.name ?? '') : null;
@@ -161,7 +176,7 @@ export function buildShow(
     (scene >= 0 ? set.model?.factsByScene?.[String(scene)]?.key : null) ??
     set.model?.songs?.find((entry) => entry.songKey === songKey)?.key;
 
-  const turns = turnsAt(scheme.rotation, link.beat, link.quantum, turning.bumps);
+  const turns = turnsAt(scheme.rotation, link.beat, link.quantum, turning.wheel);
   const up = whatIsUp(scheme, songKey, turns);
 
   // A colourway nobody assigned still has colours: an unstyled song would be a
@@ -213,6 +228,7 @@ export function buildShow(
     song: songKey,
     key: pitchOf(stated),
     role,
+    one: turning.wheel.one,
     schemeError: source.error(),
     // What the set actually contains, so the editor can offer it rather than
     // asking anyone to type it.

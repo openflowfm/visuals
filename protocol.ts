@@ -446,6 +446,14 @@ export interface Show {
   key: number | null;
   /** The role the playing scene names. */
   role: string | null;
+  /**
+   * The Link beat the phrase is counted from. See `resolve.ts`.
+   *
+   * On the wire because the panel says where in the phrase the set is, and a
+   * browser that worked it out for itself would be a second answer to a
+   * question the server has already answered.
+   */
+  one: number;
   schemeError: string | null;
   /** Every role and song the set contains, so the editor can offer them. */
   roles: string[];
@@ -491,13 +499,18 @@ export type Down =
   | { kind: 'grid'; grid: SetGrid };
 
 /**
- * Browser to server. One message: the whole scheme, replaced.
+ * Browser to server. Two messages, and the first is the whole scheme, replaced.
  *
  * Whole rather than a patch because the scheme is a few kilobytes and an editor
  * that sent deltas would need every one of them to be reversible to be
  * undoable. The server writes it to `scheme.json`, which stays the record.
+ *
+ * `downbeat` is the other one, and it carries nothing: *when* it arrives is the
+ * whole message. It goes to the server rather than being handled in the browser
+ * because the wheel belongs to the show and not to whoever is watching it —
+ * two screens on one rig have to be counting the same phrase.
  */
-export type Up = { kind: 'scheme'; scheme: Scheme };
+export type Up = { kind: 'scheme'; scheme: Scheme } | { kind: 'downbeat' };
 
 export const VISUALS_PORT = 17900;
 export const VISUALS_WS_PATH = '/ws';

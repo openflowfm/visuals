@@ -30,6 +30,9 @@ reads beat 3480. That is not the song's bar and never will be. The *phase* — p
 within the quantum — is the part that is shared, exact and meaningful, so it is the part
 the panel shows and the part the shaders use.
 
+It is also why the rotation counts bars from a **one** the server holds rather than from
+Link's zero, and why Live's transport starting sets it. See [the wheel](wheel.md).
+
 **There is no private session.** Link is every machine on the local network at once. A peer
 that can set the tempo can yank the tempo of every machine at the show, including the one
 playing the set. So `link.ts` has no method to set anything: it exposes `sample()` and

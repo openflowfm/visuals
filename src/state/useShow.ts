@@ -44,6 +44,7 @@ const RESTING: Show = {
   song: null,
   key: null,
   role: null,
+  one: 0,
   schemeError: null,
   roles: [],
   songs: [],
@@ -65,6 +66,8 @@ export function useShow(): {
   grid: SetGrid | null;
   /** Send a whole scheme back. The server writes it to `scheme.json`. */
   save(next: Scheme): void;
+  /** "The one is here." Nothing to carry: when it arrives is the message. */
+  downbeat(): void;
   clock: Clock;
   online: boolean;
 } {
@@ -183,7 +186,12 @@ export function useShow(): {
     }
   }).current;
 
-  return { show, showRef: held, scheme, grid, save, clock, online };
+  const downbeat = useRef(() => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ kind: 'downbeat' }));
+  }).current;
+
+  return { show, showRef: held, scheme, grid, save, downbeat, clock, online };
 }
 
 export { RESTING };

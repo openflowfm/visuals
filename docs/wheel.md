@@ -61,6 +61,35 @@ a live set, and the only gesture the rig can hear without being told.
 A **scene change is deliberately not a trigger.** Scenes fire constantly and the picture would
 never settle into anything.
 
+## Where the phrase starts, and why the rig has to be told
+
+Bars are counted from **the one**, which is a beat the server holds and not Link's zero.
+
+Link's beat is one continuous session timeline that started whenever the first peer in the
+building opened a laptop, so an eight-bar wheel counted from its zero turns on a boundary
+with nothing to do with the music — the third beat of some bar nobody can name — and stays
+there all night. Every change lands slightly wrong and no amount of choosing the right
+number of bars fixes it, because the number of bars was never the problem.
+
+Two things set it, and the first costs nobody a gesture:
+
+- **Live's transport starting.** A set that stops between songs re-phases itself. The
+  clearest statement of where a phrase begins that this rig will ever get is somebody
+  pressing play, and it is free.
+- **The `1` key**, for a set that never stops. A digit rather than a letter because it *is*
+  the count.
+
+**Neither of them turns a wheel**, and that is the part worth getting right. A reset lands
+on a downbeat, which is exactly the moment `beat - one` is nearest zero — which is where a
+naive count would snap every wheel back to the start of its cycle. So the gesture you make
+when the picture is right and only the timing is off would change the picture, every single
+time. `reOne` reads the counts on both sides of the move and carries the difference, so what
+changes is *when* the next turn happens and nothing else.
+
+The one is snapped to the nearest whole beat, because a hand is never exactly on it and an
+origin a tenth of a beat early puts every boundary for the rest of the night a tenth of a
+beat early too.
+
 The counting lives in `Turning`, held by the server and handed in, because a show built from
 scratch every second has nowhere to remember an event. One per server rather than per client:
 the wheel is a property of the show rather than of who is watching it, and two browsers open

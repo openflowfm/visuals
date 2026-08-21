@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createCompositor, type Compositor } from './render/compositor.ts';
 import { useOutput } from './state/useOutput.ts';
-import { useShow } from './state/useShow.ts';
+import { useShow, type Clock } from './state/useShow.ts';
 import { Align } from './ui/Align.tsx';
 import { Console } from './ui/Console.tsx';
 import './app.css';
@@ -17,7 +17,7 @@ import './app.css';
 export function App() {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const stage = useRef<Compositor | null>(null);
-  const { show, showRef, scheme, grid, save, clock, online } = useShow();
+  const { show, showRef, scheme, grid, save, downbeat, clock, online } = useShow();
   // The render loop reads the scheme every frame because effects live in it, and
   // reads it through a ref for the same reason it reads the show through one:
   // rebuilding the loop whenever a knob moved would drop a frame per edit.
@@ -40,6 +40,9 @@ export function App() {
       // which has no `matches` and threw, taking every shortcut down with it.
       const target = e.target;
       if (target instanceof HTMLElement && target.matches('input, textarea, select')) return;
+      // The one. A digit rather than a letter because it *is* the count, and
+      // because the four letters worth having are already shortcuts.
+      if (e.key === '1') downbeat();
       if (e.key === 'i') setPanel((on) => !on);
       if (e.key === 'e') setEditing((on) => !on);
       if (e.key === 'k') setAligning((on) => !on);
@@ -51,7 +54,7 @@ export function App() {
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
-  }, []);
+  }, [downbeat]);
 
   useEffect(() => {
     if (!canvas.current) return;
@@ -107,6 +110,7 @@ export function App() {
   }, [output, aligning]);
 
   const drawing = show.tracks.filter((t) => t.playing >= 0 && t.opacity > 0.001);
+  const bars = scheme?.rotation.bars ?? 0;
 
   return (
     <>
@@ -132,65 +136,30 @@ export function App() {
 
           <dl>
             <dt>tempo</dt>
-            <dd>{show.tempo.toFixed(2)}</dd>
-            <dt>beat</dt>
-            <dd>{clockText(show.quantum)}</dd>
+            <dd>{show.tempo.toFixed(1)}</dd>
+            <Phrase clock={clock} quantum={show.quantum} one={show.one} bars={bars} />
+            <dt>playing</dt>
+            <dd>
+              {drawing.length}/{show.tracks.length}
+            </dd>
             <dt>song</dt>
-            <dd>{show.song ?? '—'}</dd>
+            <dd className="wide">{show.song ?? '—'}</dd>
             <dt>section</dt>
             <dd>{show.role ?? '—'}</dd>
             <dt>look</dt>
-            <dd>
+            <dd className="wide">
               {show.look ? (scheme?.looks[show.look]?.name ?? show.look) : '—'}
-              {show.pinned ? ' (pinned)' : ''}
+              {show.pinned ? '*' : ''}
             </dd>
-            <dt>colourway</dt>
-            <dd>{show.colorway ?? '—'}</dd>
+            <dt>colours</dt>
+            <dd className="wide">{show.colorway ?? '—'}</dd>
             <dt>fps</dt>
             <dd>{fps}</dd>
           </dl>
 
-          {/* The tracks, not the layers. A track is a fact about the set now;
-              what it *draws* is the graph's business, so there is nothing here
-              to say about a stack, a blend or an energy — those were four
-              columns explaining a cascade that no longer runs. */}
-          <table>
-            <thead>
-              <tr>
-                <th>track</th>
-                <th>clip</th>
-                <th>fader</th>
-                <th>level</th>
-              </tr>
-            </thead>
-            <tbody>
-              {show.tracks.map((track) => (
-                <tr key={track.t} className={track.playing < 0 ? 'silent' : undefined}>
-                  <td>
-                    <i style={{ background: hex(track.color) }} />
-                    {track.name}
-                  </td>
-                  <td className="clip" title={track.clipName}>
-                    {track.playing < 0 ? '—' : track.clipName || `scene ${track.playing}`}
-                  </td>
-                  <td>{Math.round(track.opacity * 100)}</td>
-                  <td>
-                    <b style={{ width: `${Math.round(track.level * 100)}%` }} />
-                  </td>
-                </tr>
-              ))}
-              {show.tracks.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="empty">
-                    {show.connected ? 'the set has no tracks yet' : 'waiting for the bridge'}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
           <p className="hint">
-            {drawing.length} of {show.tracks.length} tracks playing · <kbd>i</kbd> panel ·{' '}
-            <kbd>e</kbd> edit · <kbd>k</kbd> align · <kbd>f</kbd> fullscreen
+            <kbd>1</kbd> the one · <kbd>i</kbd> panel · <kbd>e</kbd> edit · <kbd>k</kbd> align ·{' '}
+            <kbd>f</kbd> fullscreen
           </p>
         </div>
       )}
@@ -217,25 +186,78 @@ export function App() {
       )}
     </>
   );
-
-  /**
-   * Beat within the bar, and deliberately not a bar number.
-   *
-   * Link's beat is one continuous session timeline that started whenever the
-   * first peer in the session did, so its absolute value is meaningless here —
-   * connecting to a Live that has been open all afternoon reads "bar 3480",
-   * which is not the song's bar and never will be. The *phase* is the part that
-   * is shared, exact, and worth showing, so that is the part shown.
-   *
-   * Read off the same clock the shaders use, so the panel cannot disagree with
-   * the picture about where in the bar it is.
-   */
-  function clockText(quantum: number): string {
-    const phase = ((clock.beat() % quantum) + quantum) % quantum;
-    return `${Math.floor(phase) + 1} of ${quantum}`;
-  }
 }
 
-function hex(color: number): string {
-  return `#${(color >>> 0).toString(16).padStart(6, '0').slice(-6)}`;
+/**
+ * Where the music is: the beat, and the bar within the phrase.
+ *
+ * **Its own component because it runs its own loop.** The rest of the panel
+ * re-renders when the *set* changes, roughly once a second, and a beat drawn on
+ * that schedule counts 1, 3, 4, 2 — it is not wrong, it is sampled too slowly to
+ * be right, which reads as a rig with a stutter in it. So this reads the clock
+ * the shaders read and re-renders when the **digit** changes, which is three
+ * times a second at worst and never touches the console mounted beside it.
+ *
+ * Digits rather than a sentence. `1 of 4` is a fact you read; four numerals with
+ * one lit is a thing you glance at, which is the only way anything on this panel
+ * gets looked at during a set.
+ *
+ * The bar is counted **from the one** rather than from Link's zero, which is the
+ * whole point of there being a one — see [`resolve.ts`](../resolve.ts). Shown
+ * against the rotation's window, so it is also a countdown to the next change.
+ */
+function Phrase({
+  clock,
+  quantum,
+  one,
+  bars,
+}: {
+  clock: Clock;
+  quantum: number;
+  /** The Link beat the phrase starts on, as the server counts it. */
+  one: number;
+  /** How many bars the look wheel runs for. Zero when it is held. */
+  bars: number;
+}) {
+  const [at, setAt] = useState({ beat: 1, bar: 1 });
+  const now = useRef({ quantum, one, bars });
+  now.current = { quantum, one, bars };
+
+  useEffect(() => {
+    let raf = 0;
+    const loop = () => {
+      raf = requestAnimationFrame(loop);
+      const held = now.current;
+      const q = Math.max(1, held.quantum);
+      const since = clock.beat() - held.one;
+      const beat = Math.floor(((since % q) + q) % q) + 1;
+      const window = held.bars > 0 ? held.bars : 0;
+      const whole = Math.floor(since / q);
+      const bar = window > 0 ? (((whole % window) + window) % window) + 1 : 1;
+      setAt((was) => (was.beat === beat && was.bar === bar ? was : { beat, bar }));
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [clock]);
+
+  return (
+    <>
+      <dt>beat</dt>
+      <dd className="beat">
+        {Array.from({ length: Math.max(1, Math.min(quantum, 8)) }, (_, i) => (
+          <b key={i} data-on={i + 1 === at.beat ? '' : undefined}>
+            {i + 1}
+          </b>
+        ))}
+      </dd>
+      {bars > 0 && (
+        <>
+          <dt>bar</dt>
+          <dd>
+            {at.bar}/{bars}
+          </dd>
+        </>
+      )}
+    </>
+  );
 }

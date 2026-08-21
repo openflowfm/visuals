@@ -4,7 +4,7 @@ import { emptySet, type SetState } from './bridge.ts';
 import type { LinkFrame } from './link.ts';
 import { merge, type SchemeSource } from './scheme.ts';
 import { buildShow, noTurning } from './show.ts';
-import { atTurn, poolsOf, turnsAt, whatIsUp } from '../resolve.ts';
+import { atOne, atTurn, poolsOf, reOne, turnsAt, whatIsUp } from '../resolve.ts';
 
 /**
  * What is on screen, and why.
@@ -174,14 +174,14 @@ describe('what is up', () => {
 describe('turning on musical time', () => {
   it('counts bars, not seconds', () => {
     const rotation = twoOf().rotation;
-    expect(turnsAt(rotation, 0, 4, 0).look).toBe(0);
-    expect(turnsAt(rotation, 15.9, 4, 0).look).toBe(0);
-    expect(turnsAt(rotation, 16, 4, 0).look).toBe(1);
+    expect(turnsAt(rotation, 0, 4, atOne()).look).toBe(0);
+    expect(turnsAt(rotation, 15.9, 4, atOne()).look).toBe(0);
+    expect(turnsAt(rotation, 16, 4, atOne()).look).toBe(1);
   });
 
   it('holds whatever is up when the wheel is stopped', () => {
     const rotation = { ...twoOf().rotation, bars: 0, colorEvery: 0 };
-    expect(turnsAt(rotation, 400, 4, 0).look).toBe(0);
+    expect(turnsAt(rotation, 400, 4, atOne()).look).toBe(0);
   });
 
   it('turns when a clip is fired out of band, and not when a scene is', () => {
@@ -193,18 +193,18 @@ describe('turning on musical time', () => {
     const scheme = twoOf();
     const set = setOf(['Drums', 'Bass', 'Keys'], '[VERSE] one');
     show(set, scheme, turning);
-    expect(turning.bumps).toBe(0);
+    expect(turning.wheel.turned.look).toBe(0);
 
     // Everything moves to scene 1: a scene launch.
     set.scenes = [set.scenes[0], scene(1, '[CHORUS] one')];
     set.play = set.play.map(() => ({ playing: 1, fired: -1 }) as BSV.TrackPlayState);
     show(set, scheme, turning);
-    expect(turning.bumps).toBe(0);
+    expect(turning.wheel.turned.look).toBe(0);
 
     // One track departs: a clip launch.
     set.play[2] = { playing: 0, fired: -1 } as BSV.TrackPlayState;
     show(set, scheme, turning);
-    expect(turning.bumps).toBe(1);
+    expect(turning.wheel.turned.look).toBe(1);
   });
 
   it('does not count the first read as a change', () => {
@@ -214,7 +214,59 @@ describe('turning on musical time', () => {
     const set = setOf(['Drums', 'Bass'], '[VERSE] one');
     set.play[1] = { playing: 3, fired: -1 } as BSV.TrackPlayState;
     show(set, twoOf(), turning);
-    expect(turning.bumps).toBe(0);
+    expect(turning.wheel.turned.look).toBe(0);
+  });
+
+  it('counts the phrase from the one, not from Link\'s zero', () => {
+    // Link's beat is one session timeline that started whenever the first peer
+    // in the building opened a laptop, so a 32-bar wheel counted from its zero
+    // turns on a boundary with nothing to do with the music — and stays there.
+    const rotation = twoOf().rotation;
+    const wheel = { one: 8, turned: { look: 0, color: 0 } };
+    // 16 beats is four bars, so the first turn is now at 24 rather than at 16.
+    expect(turnsAt(rotation, 23.9, 4, wheel).look).toBe(0);
+    expect(turnsAt(rotation, 24, 4, wheel).look).toBe(1);
+  });
+
+  it('re-phases without turning, so saying "here is the one" changes nothing', () => {
+    // The gesture is made when the picture is right and the timing is not. A
+    // reset lands on a downbeat, which is exactly where a naive count snaps the
+    // wheel back to the start of its cycle — so it would change the look every
+    // single time, which is the opposite of what was asked for.
+    const rotation = twoOf().rotation;
+    const before = turnsAt(rotation, 100, 4, atOne());
+    const moved = reOne(rotation, 100, 4, atOne());
+    expect(moved.one).toBe(100);
+    expect(turnsAt(rotation, 100, 4, moved)).toEqual(before);
+    // What *does* change is when the next one happens: sixteen beats from here
+    // rather than from wherever Link happened to start.
+    expect(turnsAt(rotation, 115.9, 4, moved).look).toBe(before.look);
+    expect(turnsAt(rotation, 116, 4, moved).look).toBe(before.look + 1);
+  });
+
+  it('snaps the one to the nearest beat', () => {
+    // A hand is never exactly on it, and an origin a tenth of a beat early puts
+    // every boundary for the rest of the night a tenth of a beat early too.
+    expect(reOne(twoOf().rotation, 100.4, 4, atOne()).one).toBe(100);
+    expect(reOne(twoOf().rotation, 100.6, 4, atOne()).one).toBe(101);
+  });
+
+  it('takes the one from Live starting, and only from it starting', () => {
+    const turning = noTurning();
+    const scheme = twoOf();
+    const set = setOf(['Drums', 'Bass'], '[VERSE] one');
+    set.playing = false;
+    expect(show(set, scheme, turning).one).toBe(0);
+
+    // Rolling the transport is the clearest statement of where a phrase begins
+    // that this rig will ever get, and it costs nobody a gesture.
+    set.playing = true;
+    expect(show(set, scheme, turning).one).toBe(LINK.beat);
+
+    // Still playing is not starting. Re-phasing every second would leave the
+    // wheel unable to reach a boundary at all.
+    turning.wheel = { ...turning.wheel, one: 40 };
+    expect(show(set, scheme, turning).one).toBe(40);
   });
 
   it('ignores an out-of-band clip when the rotation was told to', () => {
@@ -226,7 +278,7 @@ describe('turning on musical time', () => {
     show(set, scheme, turning);
     set.play[1] = { playing: 5, fired: -1 } as BSV.TrackPlayState;
     show(set, scheme, turning);
-    expect(turning.bumps).toBe(0);
+    expect(turning.wheel.turned.look).toBe(0);
   });
 });
 

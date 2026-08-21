@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { VISUALS_PORT, VISUALS_WS_PATH, type Up } from '../protocol.ts';
+import { reOne } from '../resolve.ts';
 import { followBridge } from './bridge.ts';
 import { openLink } from './link.ts';
 import { openScheme } from './scheme.ts';
@@ -131,6 +132,17 @@ sockets.on('connection', (socket) => {
     try {
       message = JSON.parse(String(raw)) as Up;
     } catch {
+      return;
+    }
+    // "Here is the one." Nothing to carry — *when* it arrives is the message,
+    // and it lands on the server because the wheel belongs to the show rather
+    // than to whoever pressed the key. `dirty` so the re-phased show goes out
+    // on the next tick rather than at the heartbeat, since the point of the
+    // gesture is that it happened just now.
+    if (message.kind === 'downbeat') {
+      const at = link.sample();
+      turning.wheel = reOne(scheme.current().rotation, at.beat, at.quantum, turning.wheel);
+      dirty = true;
       return;
     }
     if (message.kind !== 'scheme' || !message.scheme) return;
