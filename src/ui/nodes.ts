@@ -202,7 +202,12 @@ export function palette(scheme: Scheme, tracks: readonly string[]): Entry[] {
   node('energy', 'master', 'energy', NODE_SPECS.energy.about);
   // Targets again, and the reason the search box has to reach them: a name from
   // the set is the one thing in this browser nobody could guess.
-  for (const name of tracks) {
+  //
+  // Distinct, and not merely because the caller ought to hand them over that
+  // way. A `track` node addresses a track by *name*, so two tracks called `MIDI`
+  // are one target however many of them the set has — a second row would offer a
+  // chip that does exactly what the first one does, under the same key.
+  for (const name of new Set(tracks)) {
     node('track', name, `${name} meter`, "That track's output meter, by name");
   }
   modes('song', 'song', SONG_FACTS);

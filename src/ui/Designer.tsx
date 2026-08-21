@@ -95,8 +95,18 @@ export function Designer({
   const id = look && scheme.looks[look] ? look : (list[0]?.id ?? null);
   const def = id ? scheme.looks[id] : null;
 
+  /**
+   * The names a `track` or `energy` node may point at, **distinct**.
+   *
+   * A real set has five tracks called `MIDI`, and a `track` node addresses a
+   * track by *name* — so five of them are five chips that do exactly the same
+   * thing, five identical rows in a Select, and five React children under one
+   * key. The last of those is the one that shouts: the browser rebuilds
+   * whenever the show does, so it warned about once a second for as long as the
+   * designer was open.
+   */
   const trackNames = useMemo(
-    () => [...show.tracks.map((t) => t.name), 'master'],
+    () => [...new Set([...show.tracks.map((t) => t.name), 'master'])],
     [show.tracks],
   );
   const all = useMemo(() => palette(scheme, trackNames), [scheme, trackNames]);

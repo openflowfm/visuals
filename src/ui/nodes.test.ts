@@ -23,6 +23,26 @@ const find = (entries: readonly Entry[], kind: string, op?: string) =>
   entries.find((each) => each.node.kind === kind && (op === undefined || each.node.op === op));
 
 describe('what the browser lists', () => {
+  it('lists a track name once however many tracks carry it', () => {
+    // A real set has five tracks called `MIDI`. A `track` node addresses a
+    // track by name, so five of them are one target — and five rows meant five
+    // chips that did the same thing under the same React key, which warned
+    // about once a second for as long as the designer was open.
+    const entries = browser(['Bass', 'MIDI', 'MIDI', 'MIDI', 'master']);
+    const named = entries.filter((each) => each.node.kind === 'track');
+    expect(named.map((each) => each.node.op)).toEqual(['Bass', 'MIDI', 'master']);
+  });
+
+  it('gives every row a key nothing else in the browser shares', () => {
+    // The browser renders one child per row, and React keys them by kind and
+    // mode. A duplicate is not cosmetic: children under one key may be
+    // duplicated or omitted, which is a node you cannot drop.
+    const keys = browser(['Bass', 'MIDI', 'MIDI', 'master']).map(
+      (each) => `${each.node.kind}:${each.node.op ?? ''}`,
+    );
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
   it('lists the node once, with its modes as presets under it', () => {
     // It used to list eleven pictures and never mention the node they were, so
     // what you got on the canvas was a node you had not chosen with a mode
