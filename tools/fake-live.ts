@@ -183,14 +183,18 @@ server.on('connection', (socket) => {
 });
 
 /**
- * Notes for one clip, invented so the chord chart can be worked on with no
- * Ableton.
+ * Notes for one clip, invented so the roll can be worked on with no Ableton.
  *
- * The point of the fixture is the *shape* of a real set rather than a tune: a
- * drum track whose notes must be excluded, a bass supplying roots, keys
- * supplying quality, and a lead that spells nothing. Between them they exercise
- * every branch of `core/src/chords.ts` — including the one that matters most,
- * that merging drums in misspells the whole progression.
+ * The point of the fixture is the *shape* of a real set rather than a tune. The
+ * one the chart draws is **Bass**, and it is written to exercise what a roll has
+ * to survive: notes off the downbeat, one that is not a whole beat long, and an
+ * octave jump — the gesture a pitch-class roll used to flatten and the reason
+ * this one draws real pitches.
+ *
+ * The other tracks are here because a fixture that is only a bass line tests
+ * nothing about picking a track out of a set: a drum track that must not be
+ * mistaken for it, keys and pads carrying the harmony, and a lead that spells
+ * nothing.
  */
 const PROGRESSION = [
   [57, 60, 64],
@@ -213,7 +217,10 @@ function notesFor(t: number, s: number): BSV.ClipNotes {
 
   if (name === 'Bass') {
     PROGRESSION.forEach((triad, bar) => {
-      notes.push({ pitch: triad[0]! - 24, start: bar * 4, duration: 3.5 });
+      const root = triad[0]! - 24;
+      notes.push({ pitch: root, start: bar * 4, duration: 1.5 });
+      notes.push({ pitch: root, start: bar * 4 + 2, duration: 0.5 });
+      notes.push({ pitch: root + 12, start: bar * 4 + 3, duration: 0.5 });
     });
     return { t, s, instrument: 'Operator', notes };
   }
@@ -315,16 +322,18 @@ setInterval(() => {
 /**
  * Where every playing clip's playhead is, at the 20 Hz the device pushes it.
  *
- * Without this the loop wheels and the chord chart cannot be worked on with no
- * Ableton at all — both are driven by `clipStatus`, and a harness that answers
+ * Without this the loop wheels and the roll cannot be worked on with no Ableton
+ * at all — both are driven by `clipStatus`, and a harness that answers
  * `snapshot` and `playState` but not this one leaves them permanently empty and
  * looking broken rather than unimplemented.
  *
- * Loop lengths differ per track on purpose: a two-bar bass under an eight-bar
- * chord cycle is exactly the case a chart has to time against the *longest*
- * loop, and equal loops everywhere would never exercise it.
+ * Loop lengths differ per track on purpose. A one-bar loop beside an eight-bar
+ * one is what the wheels are read for, and the bass is four so the roll draws a
+ * full four-bar line rather than the front half of one — a clip whose loop
+ * bracket is shorter than its notes is a real case, and it should be a case
+ * somebody chooses to test rather than the only thing the harness can show.
  */
-const LOOP_BARS = [4, 2, 4, 1, 4];
+const LOOP_BARS = [4, 4, 8, 1, 2];
 const started = Date.now();
 setInterval(() => {
   if (!playing) return;

@@ -56,16 +56,16 @@ real machine:
 
 Both were added for `chart/`, and both are the difference between a client that can be
 worked on without Ableton and one that only *looks* implemented. `clipStatus` drives the
-loop wheels and the chord chart's timeline; without it a chart connects, shows the song, and
-draws neither — indistinguishable from broken.
+loop wheels and the roll's playhead; without it a chart connects, shows the song, and draws
+neither — indistinguishable from broken.
 
-The note fixture is shaped like a set rather than like a tune: a drum track whose notes have
-to be excluded, a bass supplying roots, keys arpeggiating and pads holding the same
-progression, and a melody over the top. Between them they exercise every branch of
-[`core/src/chords.ts`](../../core/docs/chords.md), including the two that matter most —
-that merging drums in misspells every chord, and that a melody's passing tones must not
-rename one.
+The note fixture is shaped like a set rather than like a tune. The track the roll draws is
+**Bass**, written to exercise what a roll has to survive: notes off the downbeat, one that
+is not a whole beat long, and an octave jump. The rest are there so that *finding* the bass
+track is exercised at all — a drum track that must not be mistaken for it, keys and pads
+carrying the harmony, and a melody over the top.
 
-Loop lengths differ per track deliberately. A two-bar bass under a four-bar chord cycle is
-exactly the case a chart has to time against the **longest** loop, and equal loops
-everywhere would never exercise it.
+Loop lengths differ per track deliberately: a one-bar loop beside an eight-bar one is what
+the wheels are read for. The bass is four bars, so the roll draws a whole line rather than
+the front half of one — a loop bracket shorter than the notes inside it is a real case, and
+it should be one somebody chooses to test rather than the only thing the harness can show.
