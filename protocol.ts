@@ -87,12 +87,17 @@ export type NodeKind =
  */
 export const NODE_FAMILIES: readonly { name: string; about: string; kinds: NodeKind[] }[] = [
   {
-    name: 'pictures',
+    name: 'draw',
     about: 'Everything that makes a colour out of nothing',
     kinds: ['source', 'tracks', 'look', 'paint'],
   },
   {
-    name: 'colour',
+    // Not `colour`, which it was: half of what `effect` contains never touches
+    // a colour at all — `kaleido`, `ripple` and four more move the point their
+    // input is read at, and only then hand back a picture. A heading has to be
+    // true of everything under it or it is teaching the wrong thing to the one
+    // person who reads headings, which is whoever is here for the first time.
+    name: 'transform',
     about: 'Everything that takes a picture and gives one back',
     kinds: ['effect', 'blend', 'hue', 'levels'],
   },
@@ -102,7 +107,12 @@ export const NODE_FAMILIES: readonly { name: string; about: string; kinds: NodeK
     kinds: ['point', 'fold', 'swirl', 'zoom', 'wobble', 'tile', 'polar'],
   },
   {
-    name: 'the room',
+    // The one heading that names something outside this program, and it should:
+    // this rig reads a Live set and nothing else, and a metaphor over the top of
+    // that — it was `the room` — asks somebody to learn a word for a thing they
+    // already have a word for. If it ever reads a second workstation, the
+    // heading is the smallest part of what would have to change.
+    name: 'Ableton',
     about: 'Three questions you can ask the set, and nothing else can answer',
     kinds: ['playback', 'track', 'song'],
   },
