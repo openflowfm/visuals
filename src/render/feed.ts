@@ -1,7 +1,7 @@
 import type { Blend, Scheme, Show } from '../../protocol.ts';
 import { hint } from '../../hints.ts';
 import { compile, drawFullscreen, rgb, type Program } from './gl.ts';
-import { trackBank } from './look.ts';
+import type { TrackAsk } from './look.ts';
 import { OUTPUT_SHADER, SQUARE, columns, warpFor } from './output.ts';
 import { TRACK_SHADERS } from './shaders.ts';
 
@@ -40,8 +40,7 @@ export interface Feeding {
 /** What a compiled look needs banked, cut to its own graph. */
 export interface Banks {
   params: Float32Array;
-  tracks: readonly string[];
-  energies: readonly { name: string; smooth: number }[];
+  tracks: readonly TrackAsk[];
 }
 
 /**
@@ -147,12 +146,12 @@ export function createFeed(gl: WebGL2RenderingContext): Feed {
   const shown = new Map<number, number>();
 
   /**
-   * Smoothed meters, one per name an `energy` node asked for.
+   * Smoothed readings, one per track-and-reading a `track` node asked for.
    *
    * On the CPU because an envelope follower has to remember what it saw last
    * frame, and a fragment shader cannot. This is the whole implementation of
-   * "energy means whatever you decide it means": a meter, an attack and a
-   * release, and the name is yours.
+   * "energy means whatever you decide it means": a number, an attack and a
+   * release, and which number is yours.
    */
   const followed = new Map<string, number>();
 
@@ -181,8 +180,25 @@ export function createFeed(gl: WebGL2RenderingContext): Feed {
     gl.uniform1f(program.uniform('uPace'), at.scheme?.defaults.pace ?? 0);
   };
 
-  const meterOf = (show: Show, name: string) =>
-    name === 'master' ? show.master : (show.tracks.find((t) => t.name === name)?.level ?? 0);
+  /**
+   * One number out of the set, by track name and by which number was asked for.
+   *
+   * A name nobody can resolve reads zero rather than throwing — a look pointed
+   * at a track that has since been renamed should go quiet, not take the
+   * picture down with it. `master` is the room rather than a track, so the two
+   * readings it has no answer for are answered by the transport instead: it is
+   * always up, and it is playing when the set is.
+   */
+  const readOf = (show: Show, name: string, read: string): number => {
+    if (name === 'master') {
+      return read === 'level' ? show.master : read === 'fader' ? 1 : show.playing ? 1 : 0;
+    }
+    const track = show.tracks.find((t) => t.name === name);
+    if (!track) return 0;
+    if (read === 'fader') return track.opacity;
+    if (read === 'playing') return track.playing >= 0 ? 1 : 0;
+    return track.level;
+  };
 
   return {
     get error() {
@@ -244,26 +260,30 @@ export function createFeed(gl: WebGL2RenderingContext): Feed {
       gl.uniform1f(program.uniform('uSections'), show.roles.length / 8);
       gl.uniform1fv(program.uniform('uParams'), banks.params);
 
-      if (banks.tracks.some(Boolean)) {
-        gl.uniform1fv(
-          program.uniform('uTracks'),
-          trackBank(banks.tracks, (name) => meterOf(show, name)),
-        );
-      }
-      if (banks.energies.some((each) => each.name)) {
+      // One bank, filled per slot with whatever that node asked for. What used
+      // to be two — raw meters and smoothed ones — is one question with a knob
+      // on it now, so the shader reads a number without learning which.
+      if (banks.tracks.some((each) => each.name)) {
         const bank = new Float32Array(8);
-        banks.energies.forEach((each, i) => {
+        banks.tracks.forEach((each, i) => {
           if (!each.name) return;
+          const now = readOf(show, each.name, each.read);
+          if (each.smooth <= 0) {
+            bank[i] = now;
+            return;
+          }
           // Fast up, slow down. An envelope that fell as quickly as it rose
-          // would be the meter again, and the meter is already a node.
-          const now = meterOf(show, each.name);
-          const was = followed.get(each.name) ?? 0;
+          // would be the number again, and the number is already the node
+          // with its knob at zero. Keyed by name *and* reading, so a fader and
+          // a meter off the same track do not share one follower.
+          const key = `${each.name}/${each.read}`;
+          const was = followed.get(key) ?? 0;
           const fall = 1 - Math.exp(-at.dt / (0.05 + each.smooth * 1.95));
           const value = now > was ? now : was + (now - was) * fall;
-          followed.set(each.name, value);
+          followed.set(key, value);
           bank[i] = value;
         });
-        gl.uniform1fv(program.uniform('uEnergies'), bank);
+        gl.uniform1fv(program.uniform('uTracks'), bank);
       }
     },
 

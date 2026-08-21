@@ -8,7 +8,7 @@ import { Select } from '../../../widgets/src/controls/Select.tsx';
 import { Toggle } from '../../../widgets/src/controls/Toggle.tsx';
 import { CircuitEditor } from './Circuit.tsx';
 import { addLook, dropLook, forkLook, lookList, renameLook, setCircuit } from './edits.ts';
-import { drop, matching, palette, type Entry, type Pick } from './nodes.ts';
+import { drop, keyOf, matching, palette, type Entry, type Pick } from './nodes.ts';
 import { NodePictures } from './NodePictures.tsx';
 import { FloatingBench } from './Preview.tsx';
 import { BPM, ENERGY, PERCENT } from './param.ts';
@@ -438,7 +438,7 @@ function NodeBrowser({
               const on = opened === null || opened.includes(entry.node.kind);
               return (
                 <div
-                  key={`${entry.node.kind}:${entry.node.op ?? ''}`}
+                  key={keyOf(entry.node)}
                   className="node-entry"
                   // Open, it takes the width and its presets sit under it.
                   // Closed, it flows into the row with its neighbours — which

@@ -73,9 +73,12 @@ so editing a look changes the signature of every look that contains it.
 inlet — and it is **declared at the size the graph needs**, since the shader is generated.
 Giving an inlet a number for the first time is a change to the shader's shape and recompiles
 once; every turn of it after that recompiles nothing, which is the whole reason a knob is a
-uniform. `uTracks` is a second bank, of eight, filled only for a look that **named** a track.
-`uEnergies` is a third, filled on the CPU because an envelope follower has to remember what
-it saw last frame.
+uniform. `uTracks` is a second bank, of eight, filled only for a look that **named** a track — and
+filled on the CPU, both because a name has to be resolved against the set and because a
+`track` node's smoothing is an envelope follower, which has to remember what it saw last
+frame. There used to be a third bank for those; `track` and `energy` are one node now, so
+what goes in a slot is that node's business and the shader reads a number without learning
+which.
 
 ## What there is to look at
 
@@ -307,7 +310,7 @@ gain; a node face gets neither. Everything above that line is one list.
 
 The banks are re-read **every frame** rather than kept beside the program, and that is what
 `banksOf` is for. Two of the three change without the shader changing: a knob's value is a
-uniform, and so is an `energy` node's smoothing — which, held from compile time, left that
+uniform, and so is a `track` node's smoothing — which, held from compile time, left that
 one control doing nothing until something else forced a rebuild.
 
 ## An effect must not measure itself in pixels

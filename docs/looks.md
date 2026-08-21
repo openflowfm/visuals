@@ -17,7 +17,7 @@ other looks. That collapse deleted four concepts:
 | the layer stack | a base plus two transformers, ping-ponged | a chain you draw, in one shader |
 | `Scheme.layers` | what each track draws, bound by name | a `tracks` node |
 | `Scheme.clips` | the exception, keyed by clip name | a graph, or a song override |
-| `Scheme.archetypes` | energy and character per section | an `energy` node and a `song` node |
+| `Scheme.archetypes` | energy and character per section | a `track` node and a `song` node |
 
 Each of them was a different answer to **how do two pictures combine**, and a graph answers
 that once. What is left above the graph is [the wheel](wheel.md), which is deliberately tiny.
@@ -171,14 +171,32 @@ editors listing these differently would be two different vocabularies.
 `point`, `fold`, `swirl`, `zoom`, `wobble`, `tile`, `polar`. Point in, point out, except
 `polar`, which is how a position becomes a number.
 
-### the room — what the music is doing
+### the room — three questions you can ask the set
 
 | node | out | |
 |---|---|---|
-| `signal` | `n` | `level` `beat` `phase` `pulse` `time` `random` |
-| `track` | `level` | another track's meter, **by name**. Absolute: it breaks if the track is renamed |
-| `energy` | `n` | a meter, smoothed. See below |
-| `song` | `n` | `seed` `tempo` `key` `section` `sections` |
+| `playback` | `n` | where the music is now: `level` `beat` `phase` `pulse` `time` `random` |
+| `track` | `n` | one track, **by name**, and which of its numbers: `level` `fader` `playing` — plus how much to smooth it |
+| `song` | `n` | what the set's names say: `seed` `tempo` `key` `section` `sections` |
+
+**Three, and there is no fourth.** It was four — `signal`, `song`, `track`, `energy` — and
+the seam was in the wrong place twice.
+
+`energy` was `track` with an envelope on it: same signature, same bank, named the same way,
+differing by one number that happened to be computed on a CPU. Two rows in a browser for one
+question, and two uniform banks for what is almost always two floats. It is a **knob** now,
+and at zero it is the number itself.
+
+`signal` sat next to `song`, which was also, unhelpfully, a signal. What separates them is
+not where the number comes from but what you are asking: `playback` is where the music *is*,
+`song` is what it *is*. Swapping `beat` for `phase` is a change of mind; swapping `beat` for
+`key` is not.
+
+That test — **would you flick between these two with the picture up and no cords moving?** —
+is what decides a kind from a mode here, and it is worth stating because it is falsifiable at
+the wall rather than a matter of taste. `level` and `fader` pass it, which is why they are
+one node: a fader is a hand on a control, the most deliberate thing a player does that a rig
+can hear, and it is a different answer to the same question rather than a different question.
 
 `song key` is the musical one — the tonic as a pitch class over twelve, chromatic, with the
 mode dropped. Two songs in the same key get the same number on purpose, which is what makes
@@ -253,21 +271,25 @@ exactly one thing forever — where in practice it means whatever you decide, an
 one is often a particular track's. **Bass energy** is a different picture from master energy
 and neither is more correct.
 
-So it is a node: a meter, an envelope, and a name that is yours. `rate`, `beatPulse`,
-`charge` and every generator take it as a **parameter**, and every `source` and `effect` has
-an `energy` inlet.
+So it is a node — and then it stopped being one. It is a **knob on `track`**, because a
+meter with an envelope on it is a `track` node with its smoothing turned up, and a node whose
+only difference from another node is one number is a mode of that node. At zero the knob is
+the number itself, which is exactly what `track` always did.
 
-It is computed on the CPU and banked into `uEnergies`, because an envelope follower has to
-remember what it saw last frame and a fragment shader cannot. Fast up, slow down — an
-envelope that fell as quickly as it rose would be the meter again, and the meter is already
-a node.
+`rate`, `beatPulse`, `charge` and every generator take an energy as a **parameter**, and
+every `source` and `effect` has an `energy` inlet — so what you wire in is yours.
+
+The envelope is computed on the CPU and banked into `uTracks`, because an envelope follower
+has to remember what it saw last frame and a fragment shader cannot. Fast up, slow down — one
+that fell as quickly as it rose would be the meter again, and the meter is the same knob at
+zero.
 
 `uEnergy` survives as **the room's** energy, a smoothed master meter, which is what an
 unwired energy inlet falls back to. A default, not a level.
 
 ### It has no floor, and should not get one
 
-With nothing playing, `Show.master` is zero — so an `energy` node reading `master` is zero,
+With nothing playing, `Show.master` is zero — so a `track` node reading `master` is zero,
 `charge` takes about a fifth off the brightness, and `rate` picks the slowest rung it has.
 That is **right**: energy is a meter, and a meter with a floor under it cannot say *silence*,
 which is the one thing a section break needs it to say.
@@ -441,7 +463,7 @@ empty one.
 
 Two node kinds changed meaning rather than disappearing. `sample` meant "the frame that
 arrived", which was the layer underneath in a stack — the nearest thing to that now is the
-set's own picture, so it becomes `tracks`. The `signal` modes `energy` and `amount` are gone
+set's own picture, so it becomes `tracks`. The `playback` modes `energy` and `amount` are gone
 and fall back to the meter, which is the signal they were most often standing in for.
 
 ## What is not built

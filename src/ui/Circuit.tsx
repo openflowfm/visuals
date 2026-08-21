@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import type { Circuit, CircuitNode, LookDef } from '../../protocol.ts';
+import { TRACK_READS, type Circuit, type CircuitNode, type LookDef } from '../../protocol.ts';
 import { Graph, GraphNode, type GraphCord } from '../../../widgets/src/chrome/Graph.tsx';
 import { Port } from '../../../widgets/src/chrome/Port.tsx';
 import { Device } from '../../../widgets/src/chrome/Device.tsx';
@@ -257,30 +257,37 @@ function NodeFace({
           label="Look this draws"
           width={120}
         />
-      ) : node.kind === 'energy' ? (
+      ) : node.kind === 'track' ? (
+        // Two pickers and a knob, because a track node answers two questions
+        // and neither is the other's mode: **which** track, out of a list only
+        // this set has, and **which of its numbers**, out of a list this
+        // codebase writes down. The knob is how much envelope to put on
+        // whichever — at zero it is the number itself, which is what folded the
+        // old `energy` node in here.
         <div className="knobface">
-          <Select
-            items={tracks.length > 0 ? tracks : ['master']}
-            index={Math.max(0, tracks.indexOf(node.op ?? 'master'))}
-            onChange={(i) => onChange({ op: tracks[i] })}
-            label="Meter this follows"
-            width={104}
-          />
+          <div className="stack">
+            <Select
+              items={tracks.length > 0 ? tracks : ['master']}
+              index={Math.max(0, tracks.indexOf(node.of ?? 'master'))}
+              onChange={(i) => onChange({ of: tracks[i] })}
+              label="Track this reads"
+              width={100}
+            />
+            <Select
+              items={TRACK_READS}
+              index={Math.max(0, TRACK_READS.indexOf(node.op ?? TRACK_READS[0]))}
+              onChange={(i) => onChange({ op: TRACK_READS[i] })}
+              label="Which of its numbers"
+              width={100}
+            />
+          </div>
           <Knob
             param={KNOB}
-            value={PERCENT.to(node.value ?? 0.4)}
+            value={PERCENT.to(node.value ?? 0)}
             onChange={(v) => onChange({ value: PERCENT.from(v) })}
-            name="fall"
+            name="smooth"
           />
         </div>
-      ) : node.kind === 'track' ? (
-        <Select
-          items={tracks.length > 0 ? tracks : ['no tracks']}
-          index={Math.max(0, tracks.indexOf(node.op ?? ''))}
-          onChange={(i) => onChange({ op: tracks[i] })}
-          label="Track this reads"
-          width={104}
-        />
       ) : node.kind === 'value' ? (
         <div className="knobface">
           <Knob
@@ -341,10 +348,11 @@ function faceName(
 ): string {
   if (node.kind === 'value') return node.label || 'knob';
   if (node.kind === 'look') return looks?.find((each) => each.id === node.op)?.def.name ?? 'look';
-  if (node.kind === 'track') return node.op ? `${node.op} meter` : 'track';
-  if (node.kind === 'energy') return 'energy';
+  // The track's name and not the reading, because the name is the part nobody
+  // could guess from the canvas and the reading is on a dropdown an inch below.
+  if (node.kind === 'track') return node.of || 'track';
   if (node.kind === 'tracks') return 'the set';
-  if (node.kind === 'source' || node.kind === 'effect' || node.kind === 'signal') {
+  if (node.kind === 'source' || node.kind === 'effect' || node.kind === 'playback') {
     return node.op || fallback;
   }
   if (node.kind === 'song') return `song ${node.op ?? 'seed'}`;

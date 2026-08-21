@@ -3,7 +3,7 @@ import type { Scheme } from '../../protocol.ts';
 import { EFFECTS, NODE_FAMILIES } from '../../protocol.ts';
 import { BUILT_IN } from '../../server/scheme.ts';
 import { bareCircuit } from '../render/circuit.ts';
-import { drop, matching, palette, type Entry } from './nodes.ts';
+import { drop, keyOf, matching, palette, type Entry } from './nodes.ts';
 
 /**
  * The node browser.
@@ -30,16 +30,15 @@ describe('what the browser lists', () => {
     // about once a second for as long as the designer was open.
     const entries = browser(['Bass', 'MIDI', 'MIDI', 'MIDI', 'master']);
     const named = entries.filter((each) => each.node.kind === 'track');
-    expect(named.map((each) => each.node.op)).toEqual(['Bass', 'MIDI', 'master']);
+    expect(named.map((each) => each.node.of)).toEqual(['Bass', 'MIDI', 'master']);
   });
 
   it('gives every row a key nothing else in the browser shares', () => {
-    // The browser renders one child per row, and React keys them by kind and
-    // mode. A duplicate is not cosmetic: children under one key may be
-    // duplicated or omitted, which is a node you cannot drop.
-    const keys = browser(['Bass', 'MIDI', 'MIDI', 'master']).map(
-      (each) => `${each.node.kind}:${each.node.op ?? ''}`,
-    );
+    // The browser renders one child per row, and React keys them by `keyOf`.
+    // A duplicate is not cosmetic: children under one key may be duplicated or
+    // omitted, which is a node you cannot drop. It caught the merge that gave
+    // every `track` row the same mode — three rows spelling `track:level`.
+    const keys = browser(['Bass', 'MIDI', 'MIDI', 'master']).map((each) => keyOf(each.node));
     expect(new Set(keys).size).toBe(keys.length);
   });
 
@@ -102,7 +101,7 @@ describe('finding one', () => {
 
   it('finds a track by its name in the set', () => {
     const hit = matching(browser(), 'bass');
-    expect(hit.map((each) => each.node.op)).toEqual(['Bass']);
+    expect(hit.map((each) => each.node.of)).toEqual(['Bass']);
   });
 
   it('keeps everything under a node when the node itself matches', () => {

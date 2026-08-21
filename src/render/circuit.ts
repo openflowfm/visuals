@@ -1,7 +1,8 @@
 import {
   EFFECTS,
   MATH_OPS,
-  SIGNAL_NAMES,
+  PLAYBACK_NAMES,
+  TRACK_READS,
   SONG_FACTS,
   SOURCES,
   TRACK_DRAWS,
@@ -350,12 +351,12 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     emit: (c) => ({ p: c.at }),
   },
 
-  signal: {
-    name: 'signal',
-    about: 'What the music is doing right now. The reason any of this moves.',
+  playback: {
+    name: 'playback',
+    about: 'Where the music is right now. The reason any of this moves.',
     inlets: [],
     outlets: [N('n')],
-    ops: SIGNAL_NAMES,
+    ops: PLAYBACK_NAMES,
     emit: (c) => ({ n: SIGNALS[c.node.op ?? 'level'] ?? 'uLevel' }),
   },
 
@@ -371,22 +372,15 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
 
   track: {
     name: 'track',
-    about: "A Live track's meter, by name. Absolute — it breaks if the track is renamed.",
-    inlets: [],
-    outlets: [N('level')],
-    named: 'track',
-    emit: () => ({ level: 'uTracks[0]' }),
-  },
-
-  energy: {
-    name: 'energy',
-    about: 'A meter, smoothed into something you can drive a picture with.',
+    about: 'One track in the set: pick which, and which of its numbers. Named, so a rename breaks it.',
     inlets: [],
     outlets: [N('n')],
+    ops: TRACK_READS,
     named: 'track',
-    // Computed on the CPU and banked, because an envelope follower has to
-    // remember what it saw last frame and a fragment shader cannot.
-    emit: () => ({ n: 'uEnergies[0]' }),
+    // The slot is assigned by the compiler; what goes *in* it is decided on the
+    // CPU, because the smoothing is an envelope follower and one of those has
+    // to remember what it saw last frame. See `feed.ts`.
+    emit: () => ({ n: 'uTracks[0]' }),
   },
 
   song: {
@@ -658,9 +652,11 @@ export interface CircuitTrack {
   id: string;
   /** The exact track name, or `master`. Empty until someone picks one. */
   name: string;
+  /** Which of the track's numbers — one of `TRACK_READS`. */
+  read: string;
   index: number;
-  /** How much smoothing an `energy` node asked for. Meaningless for `track`. */
-  smooth?: number;
+  /** How much of an envelope to put on it. Zero is the number itself. */
+  smooth: number;
 }
 
 export interface Compiled {
@@ -668,7 +664,6 @@ export interface Compiled {
   error: string | null;
   knobs: CircuitKnob[];
   tracks: CircuitTrack[];
-  energies: CircuitTrack[];
   /** How each Live track should draw, if this look asked for the set at all. */
   draws: string | null;
 }
@@ -685,7 +680,7 @@ export interface Compiled {
  */
 export const MAX_KNOBS = 64;
 
-/** At most eight named tracks and eight energies: those banks are fixed. */
+/** At most eight named tracks: the bank is a fixed-size uniform array. */
 export const MAX_TRACKS = 8;
 
 /**
@@ -827,19 +822,30 @@ function madeOut(circuit: Circuit): CircuitNode {
   return { id, kind: 'out', x: right + 220, y: circuit.nodes[0]?.y ?? 60 };
 }
 
-const banked = (circuit: Circuit, kind: NodeKind): CircuitTrack[] =>
+/**
+ * Every `track` node, in the order they take slots in the one bank.
+ *
+ * One bank rather than two, which is what merging `energy` into `track` bought:
+ * the CPU fills each slot with whatever that node asked for — a meter, a fader,
+ * a gate, any of them through an envelope — and the shader reads a number
+ * without learning which. Two banks meant a look could name eight tracks *and*
+ * eight energies and a shader declaring sixteen floats to hold what is almost
+ * always two.
+ */
+export const tracksOf = (circuit: Circuit): CircuitTrack[] =>
   circuit.nodes
-    .filter((node) => node.kind === kind)
+    .filter((node) => node.kind === 'track')
     .slice(0, MAX_TRACKS)
     .map((node, index) => ({
       id: node.id,
-      name: node.op ?? '',
+      name: node.of ?? '',
+      read: node.op ?? TRACK_READS[0],
       index,
-      smooth: node.value ?? 0.5,
+      // Zero, so a `track` that never asked for one is the number itself. The
+      // default belongs here rather than at the reader, which cannot tell a
+      // node that wants none from a node that has not said.
+      smooth: node.value ?? 0,
     }));
-
-export const tracksOf = (circuit: Circuit): CircuitTrack[] => banked(circuit, 'track');
-export const energiesOf = (circuit: Circuit): CircuitTrack[] => banked(circuit, 'energy');
 
 /**
  * Every number riding `uParams`, in the order the shader reads them.
@@ -914,7 +920,7 @@ export function keepKnobs(node: CircuitNode): CircuitNode {
  * The graph a `look` node names is **pasted in around it**, with every id
  * prefixed so two copies of the same look cannot collide. Expanding before
  * compiling rather than teaching the compiler about sub-looks is what keeps the
- * compiler one thing: knobs, named tracks and energies all get their bank slots
+ * compiler one thing: knobs and named tracks both get their bank slots
  * from the expanded graph without anyone writing a second pass to gather them.
  *
  * **Around it, not in place of it.** The node survives, holding the sub-graph on
@@ -991,7 +997,6 @@ export function compileLook(looks: Record<string, LookDef>, id: string): Compile
     error: expanded.error,
     knobs: [],
     tracks: [],
-    energies: [],
     draws: null,
   };
   if (expanded.error) return empty;
@@ -1001,15 +1006,13 @@ export function compileLook(looks: Record<string, LookDef>, id: string): Compile
 export function compileCircuit(circuit: Circuit): Compiled {
   const knobs = knobsOf(circuit);
   const tracks = tracksOf(circuit);
-  const energies = energiesOf(circuit);
   const drawn = circuit.nodes.find((node) => node.kind === 'tracks');
   const draws = drawn ? (drawn.op ?? TRACK_DRAWS[0]) : null;
-  const bare: Compiled = { source: null, error: null, knobs, tracks, energies, draws };
+  const bare: Compiled = { source: null, error: null, knobs, tracks, draws };
 
   const byId = new Map(circuit.nodes.map((node) => [node.id, node]));
   const slot = new Map(knobs.map((knob) => [knob.id, knob.index]));
   const trackSlot = new Map(tracks.map((track) => [track.id, track.index]));
-  const energySlot = new Map(energies.map((each) => [each.id, each.index]));
 
   // Exactly one, and the backstop rather than the rule. `out` is not in the node
   // browser and the model refuses to delete it, so neither of these can be
@@ -1024,9 +1027,6 @@ export function compileCircuit(circuit: Circuit): Compiled {
   }
   if (circuit.nodes.filter((n) => n.kind === 'track').length > MAX_TRACKS) {
     return { ...bare, error: `more than ${MAX_TRACKS} named tracks` };
-  }
-  if (circuit.nodes.filter((n) => n.kind === 'energy').length > MAX_TRACKS) {
-    return { ...bare, error: `more than ${MAX_TRACKS} energy nodes` };
   }
 
   /** Inlet address to the outlet feeding it. The last cord to an inlet wins. */
@@ -1114,10 +1114,8 @@ export function compileCircuit(circuit: Circuit): Compiled {
       node.kind === 'value'
         ? { n: `uParams[${slot.get(node.id) ?? 0}]` }
         : node.kind === 'track'
-          ? { level: `uTracks[${trackSlot.get(node.id) ?? 0}]` }
-          : node.kind === 'energy'
-            ? { n: `uEnergies[${energySlot.get(node.id) ?? 0}]` }
-            : spec.emit(ctx);
+          ? { n: `uTracks[${trackSlot.get(node.id) ?? 0}]` }
+          : spec.emit(ctx);
     open.delete(nodeId);
 
     // A serial rather than the node's index, because one node is now several

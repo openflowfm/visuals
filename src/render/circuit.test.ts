@@ -174,8 +174,8 @@ describe('compiling a look', () => {
   it('is a number, so it will not go into a point', () => {
     // The canvas refuses by type rather than inventing a conversion, and a
     // meter is exactly the thing someone will try to drop onto a position.
-    const circuit = wire([{ id: 't', kind: 'track', op: 'Bass', x: 0, y: 0 }], []);
-    expect(signalOf(circuit, 't/level')).toBe('n');
+    const circuit = wire([{ id: 't', kind: 'track', of: 'Bass', x: 0, y: 0 }], []);
+    expect(signalOf(circuit, 't/n')).toBe('n');
   });
 
   it('banks the tracks a look names, positionally', () => {
@@ -184,12 +184,33 @@ describe('compiling a look', () => {
     // what the other read.
     const circuit = wire(
       [
-        { id: 't1', kind: 'track', op: 'Bass', x: 0, y: 0 },
-        { id: 't2', kind: 'track', op: 'Bass', x: 0, y: 1 },
+        { id: 't1', kind: 'track', of: 'Bass', x: 0, y: 0 },
+        { id: 't2', kind: 'track', of: 'Bass', x: 0, y: 1 },
       ],
       [],
     );
     expect(tracksOf(circuit).map((each) => each.index)).toEqual([0, 1]);
+  });
+
+  it('banks a reading and a smoothing, not just a name', () => {
+    // One bank rather than two, which is what merging `energy` into `track`
+    // bought: the CPU fills each slot with whatever that node asked for, and
+    // the shader reads a number without learning which. Two banks meant a look
+    // could name eight tracks *and* eight energies, and a shader declaring
+    // sixteen floats to hold what is almost always two.
+    const circuit = wire(
+      [
+        { id: 't1', kind: 'track', of: 'Bass', op: 'fader', x: 0, y: 0 },
+        { id: 't2', kind: 'track', of: 'Drums', x: 0, y: 1, value: 0.6 },
+      ],
+      [],
+    );
+    expect(tracksOf(circuit)).toEqual([
+      { id: 't1', name: 'Bass', read: 'fader', index: 0, smooth: 0 },
+      // Nothing said is the number itself, so a `track` that never asked for an
+      // envelope behaves exactly as it did before there was one to ask for.
+      { id: 't2', name: 'Drums', read: 'level', index: 1, smooth: 0.6 },
+    ]);
   });
 });
 

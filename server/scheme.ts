@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Circuit, CircuitNode, LookDef, Scheme, SongSpec } from '../protocol.ts';
-import { repaired } from '../src/render/circuit.ts';
+import { repaired, splitPort } from '../src/render/circuit.ts';
 
 /**
  * The scheme: every look there is, the colours they draw from, and the wheel
@@ -37,9 +37,19 @@ import { repaired } from '../src/render/circuit.ts';
  * links in a chain and made a six-node look need untangling before it could be
  * read, which for the library that *is* the manual is the wrong first sight.
  */
+/**
+ * How far apart two nodes in one column are laid out.
+ *
+ * Tall enough for the tallest faceplate there is, which is a `track`: a picture,
+ * two pickers and a knob. Nodes grew when their pictures went to 16:9 and grew
+ * again when `track` took on a second dropdown, and a spacing left at the old
+ * height put the second row of every built-in through the first one.
+ */
+const ROW = 220;
+
 function wire(
   name: string,
-  nodes: [string, string, string?, Record<string, number>?, number?, string?][],
+  nodes: [string, string, string?, Record<string, number>?, number?, string?, string?][],
   cords: string[],
 ): LookDef {
   const wired = cords.map((each) => {
@@ -54,7 +64,7 @@ function wire(
   return {
     name,
     circuit: {
-      nodes: nodes.map(([id, kind, op, knobs, value, label]): CircuitNode => {
+      nodes: nodes.map(([id, kind, op, knobs, value, label, of]): CircuitNode => {
         const column = at.get(id) ?? 0;
         const depth = row.get(column) ?? 0;
         row.set(column, depth + 1);
@@ -62,8 +72,9 @@ function wire(
           id,
           kind: kind as CircuitNode['kind'],
           x: 40 + column * 210,
-          y: 40 + depth * 175,
+          y: 40 + depth * ROW,
           ...(op ? { op } : {}),
+          ...(of ? { of } : {}),
           ...(knobs ? { knobs } : {}),
           ...(value !== undefined ? { value } : {}),
           ...(label ? { label } : {}),
@@ -154,12 +165,12 @@ const BUILT_IN: Scheme = {
       'Folded',
       [
         ['pt', 'point'],
-        ['bar', 'signal', 'phase'],
+        ['bar', 'playback', 'phase'],
         ['sway', 'wave', 'sine'],
         ['half', 'math', 'average'],
         ['turn', 'swirl'],
         ['live', 'tracks', 'by name'],
-        ['e', 'energy', 'master', undefined, 0.35],
+        ['e', 'track', 'level', undefined, 0.35, undefined, 'master'],
         // The wedge count is set on the effect's own face rather than wired in
         // from a knob node. One number, one place, no cord across the canvas.
         ['fold', 'effect', 'kaleido', { segments: 0.3 }],
@@ -184,7 +195,7 @@ const BUILT_IN: Scheme = {
     deep: wire(
       'Deep',
       [
-        ['e', 'energy', 'master', undefined, 0.4],
+        ['e', 'track', 'level', undefined, 0.4, undefined, 'master'],
         ['pt', 'point'],
         ['tun', 'source', 'tunnel'],
         ['wob', 'wobble'],
@@ -260,11 +271,11 @@ const BUILT_IN: Scheme = {
       'Water',
       [
         ['pt', 'point'],
-        ['t', 'signal', 'time'],
+        ['t', 'playback', 'time'],
         ['slow', 'math', 'multiply', { b: 0.12 }],
         ['sway', 'wave', 'sine'],
         ['wob', 'wobble'],
-        ['e', 'energy', 'master', undefined, 0.55],
+        ['e', 'track', 'level', undefined, 0.55, undefined, 'master'],
         ['surf', 'source', 'plasma'],
         ['rip', 'effect', 'ripple', { waves: 0.72, depth: 0.4, speed: 0.22 }],
         ['soft', 'effect', 'smear', { reach: 0.2, drive: 0.35 }],
@@ -296,9 +307,9 @@ const BUILT_IN: Scheme = {
       'Vortex',
       [
         ['pt', 'point'],
-        ['hit', 'signal', 'pulse'],
+        ['hit', 'playback', 'pulse'],
         ['zm', 'zoom'],
-        ['e', 'energy', 'master', undefined, 0.3],
+        ['e', 'track', 'level', undefined, 0.3, undefined, 'master'],
         ['sp', 'source', 'spiral'],
         ['tw', 'effect', 'twist', { turn: 0.68, sway: 0.4 }],
         // A short reach and a floor high enough that only the arms bloom. Wide
@@ -329,7 +340,7 @@ const BUILT_IN: Scheme = {
       [
         ['pt', 'point'],
         ['fld', 'fold', undefined, { sides: 0.45 }],
-        ['e', 'energy', 'master', undefined, 0.35],
+        ['e', 'track', 'level', undefined, 0.35, undefined, 'master'],
         ['tun', 'source', 'tunnel'],
         ['rng', 'source', 'rings'],
         ['mix', 'blend', 'add', { amount: 0.6 }],
@@ -423,7 +434,7 @@ const BUILT_IN: Scheme = {
       'Glitch',
       [
         ['live', 'tracks', 'by name'],
-        ['e', 'energy', 'master', undefined, 0.12],
+        ['e', 'track', 'level', undefined, 0.12, undefined, 'master'],
         ['cut', 'effect', 'slice', { bands: 0.5, throw: 0.45 }],
         ['px', 'effect', 'pixelate', { blocks: 0.22, resolve: 0.8 }],
         ['rgb', 'effect', 'shift', { spread: 0.45, drive: 0.7 }],
@@ -699,27 +710,62 @@ function carried(file: Partial<Scheme> & Legacy): Partial<Scheme> {
   return out;
 }
 
+/** A kind that used to exist, for a file that still spells one. */
+type Was = Omit<CircuitNode, 'kind'> & {
+  kind: CircuitNode['kind'] | 'sample' | 'signal' | 'energy';
+};
+
 /**
- * A graph written against the old vocabulary.
+ * A graph written against an older vocabulary.
  *
- * Two node kinds changed meaning rather than disappearing. `sample` read "the
- * frame that arrived", which was the layer underneath in a stack — the nearest
- * thing to that now is the set's own picture, so it becomes `tracks`. And two
- * `signal` modes went: `energy` is a node of its own and `amount` described how
- * far a look was dialled into a stack, which is not a thing any more. Both fall
- * back to the meter, which is the signal they were most often standing in for.
+ * Every scheme on every machine arrives through here, so this is where a
+ * renaming stops being a breaking change. Four so far:
+ *
+ * `sample` read "the frame that arrived", which was the layer underneath in a
+ * stack — the nearest thing to that now is the set's own picture, so it becomes
+ * `tracks`. Two `signal` modes went with the cascade: `energy` is its own
+ * question and `amount` described how far a look was dialled into a stack,
+ * which is not a thing any more. Both fall back to the meter.
+ *
+ * `signal` is **`playback`**, unchanged but for the word: it is where the music
+ * is now, and it sat next to a `song` node that was also, unhelpfully, a signal.
+ *
+ * `energy` is **`track`**, which is the merge this pass exists for. It was
+ * `track` with an envelope on it — same signature, same bank, named the same
+ * way — so it is a `track` reading a level with its smoothing already turned
+ * up. And `track` itself moves its name from `op` to `of`, because the node now
+ * has to say which track *and* which of its numbers; its outlet goes from
+ * `level` to the `n` every other number outlet in the vocabulary already used,
+ * which is why the cords are walked too.
  */
 function reword(circuit: Circuit): Circuit {
+  const renamed = new Set<string>();
+  const nodes = circuit.nodes.map((old): CircuitNode => {
+    const node = old as Was;
+    if (node.kind === 'sample') return { ...node, kind: 'tracks', op: 'by name' };
+    if (node.kind === 'signal') {
+      const op = node.op === 'energy' || node.op === 'amount' ? 'level' : node.op;
+      return { ...node, kind: 'playback', op };
+    }
+    if (node.kind === 'energy') {
+      // A fall of nothing written down was 0.4, and the merged node's nothing
+      // is zero — so an unstated fall has to be written down rather than
+      // inherited, or every rolled look would lose its breathing.
+      return { ...node, kind: 'track', op: 'level', of: node.op ?? 'master', value: node.value ?? 0.4 };
+    }
+    if (node.kind === 'track' && node.of === undefined) {
+      renamed.add(node.id);
+      return { ...node, kind: 'track', of: node.op ?? 'master', op: 'level', value: node.value ?? 0 };
+    }
+    return old;
+  });
   return {
-    ...circuit,
-    nodes: circuit.nodes.map((node) => {
-      if (node.kind === ('sample' as CircuitNode['kind'])) {
-        return { ...node, kind: 'tracks' as const, op: 'by name' };
-      }
-      if (node.kind === 'signal' && (node.op === 'energy' || node.op === 'amount')) {
-        return { ...node, op: 'level' };
-      }
-      return node;
+    nodes,
+    cords: circuit.cords.map((cord) => {
+      const from = splitPort(cord.from);
+      return renamed.has(from.node) && from.port === 'level'
+        ? { ...cord, from: `${from.node}/n` }
+        : cord;
     }),
   };
 }

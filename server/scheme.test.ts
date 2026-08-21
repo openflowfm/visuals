@@ -218,6 +218,70 @@ describe('a file written when the cascade existed', () => {
     expect(kept.nodes.find((n) => n.id === 's')?.op).toBe('by name');
     // `energy` and `amount` were signal modes and are not any more.
     expect(kept.nodes.find((n) => n.id === 'e')?.op).toBe('level');
+    // And `signal` itself is `playback` — the same node, next to a `song` node
+    // that was also, unhelpfully, a signal.
+    expect(kept.nodes.find((n) => n.id === 'e')?.kind).toBe('playback');
+  });
+
+  it('folds an energy node into the track it was following', () => {
+    // It was `track` with an envelope on it: same signature, same bank, named
+    // the same way. A file full of them has to keep breathing, so an unstated
+    // fall is written down at the value it used to mean rather than inheriting
+    // the merged node's zero.
+    const merged = merge({
+      looks: {
+        mine: {
+          name: 'Mine',
+          circuit: {
+            nodes: [
+              { id: 'e', kind: 'energy', op: 'Bass', x: 0, y: 0 },
+              { id: 'p', kind: 'paint', x: 1, y: 0 },
+              { id: 'o', kind: 'out', x: 2, y: 0 },
+            ],
+            cords: [
+              { from: 'e/n', to: 'p/amount' },
+              { from: 'p/c', to: 'o/c' },
+            ],
+          },
+        },
+      },
+    } as never).looks.mine.circuit;
+    const node = merged.nodes.find((n) => n.id === 'e');
+    expect(node?.kind).toBe('track');
+    expect(node?.of).toBe('Bass');
+    expect(node?.op).toBe('level');
+    expect(node?.value).toBe(0.4);
+    // Its outlet was already `n`, so the cord is untouched.
+    expect(merged.cords).toContainEqual({ from: 'e/n', to: 'p/amount' });
+  });
+
+  it('moves a track name off op, and its cords off level', () => {
+    // The node has to say which track *and* which of its numbers now, so the
+    // name moves to `of` and `op` becomes the reading. The outlet goes with it:
+    // `level` was the only number outlet in the vocabulary not called `n`, and
+    // a cord addressed to a port that is not there is one `repaired` deletes.
+    const merged = merge({
+      looks: {
+        mine: {
+          name: 'Mine',
+          circuit: {
+            nodes: [
+              { id: 't', kind: 'track', op: 'Drums', x: 0, y: 0 },
+              { id: 'p', kind: 'paint', x: 1, y: 0 },
+              { id: 'o', kind: 'out', x: 2, y: 0 },
+            ],
+            cords: [
+              { from: 't/level', to: 'p/amount' },
+              { from: 'p/c', to: 'o/c' },
+            ],
+          },
+        },
+      },
+    } as never).looks.mine.circuit;
+    const node = merged.nodes.find((n) => n.id === 't');
+    expect(node?.of).toBe('Drums');
+    expect(node?.op).toBe('level');
+    expect(merged.cords).toContainEqual({ from: 't/n', to: 'p/amount' });
   });
 
   it('carries the pace across and forgets the rest of the defaults', () => {

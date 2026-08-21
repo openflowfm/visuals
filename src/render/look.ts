@@ -1,5 +1,5 @@
-import type { Circuit, LookDef } from '../../protocol.ts';
-import { compileLook, flatten, knobsOf, energiesOf, tracksOf, type Compiled } from './circuit.ts';
+import { TRACK_READS, type Circuit, type LookDef } from '../../protocol.ts';
+import { compileLook, flatten, knobsOf, tracksOf, type Compiled } from './circuit.ts';
 
 /**
  * What a look *is*, independent of who is drawing it.
@@ -66,16 +66,8 @@ export function signatureOfCircuit(circuit: Circuit): string {
  * time left that one control doing nothing until something else forced a
  * rebuild, which reads as the knob being unwired.
  */
-export function banksOf(circuit: Circuit): {
-  params: Float32Array;
-  tracks: string[];
-  energies: { name: string; smooth: number }[];
-} {
-  return {
-    params: paramsOf(circuit),
-    tracks: namedTracks(circuit),
-    energies: namedEnergies(circuit),
-  };
+export function banksOf(circuit: Circuit): { params: Float32Array; tracks: TrackAsk[] } {
+  return { params: paramsOf(circuit), tracks: namedTracks(circuit) };
 }
 
 /**
@@ -94,41 +86,31 @@ export function paramsOf(circuit: Circuit): Float32Array {
   return values;
 }
 
-/**
- * The names a look's `track` nodes point at, in bank order.
- *
- * Empty for a look that reads no named track, which is most of them and is the
- * cheap case this exists to keep cheap. A look that names nothing travels.
- */
-export function namedTracks(circuit: Circuit): string[] {
-  const names = new Array<string>(8).fill('');
-  for (const track of tracksOf(circuit)) names[track.index] = track.name;
-  return names;
+/** What one `track` node is asking the set for, in the slot it asks from. */
+export interface TrackAsk {
+  /** The track's name, or empty for a slot nobody claimed. */
+  name: string;
+  /** One of `TRACK_READS`. */
+  read: string;
+  /** How much envelope to put on it. Zero is the number itself. */
+  smooth: number;
 }
 
-/** The same, for `energy` nodes, which additionally carry how much to smooth. */
-export function namedEnergies(circuit: Circuit): { name: string; smooth: number }[] {
-  const out = Array.from({ length: 8 }, () => ({ name: '', smooth: 0.5 }));
-  for (const each of energiesOf(circuit)) {
-    out[each.index] = { name: each.name, smooth: each.smooth ?? 0.5 };
+/**
+ * What a look's `track` nodes are asking for, in bank order.
+ *
+ * Every slot empty for a look that reads no named track, which is most of them
+ * and is the cheap case this exists to keep cheap: a bank with nothing claimed
+ * is never uploaded at all, so a look that names nothing travels.
+ */
+export function namedTracks(circuit: Circuit): TrackAsk[] {
+  const out: TrackAsk[] = Array.from({ length: 8 }, () => ({
+    name: '',
+    read: TRACK_READS[0],
+    smooth: 0,
+  }));
+  for (const each of tracksOf(circuit)) {
+    out[each.index] = { name: each.name, read: each.read, smooth: each.smooth };
   }
   return out;
-}
-
-/**
- * Those names, resolved to meters.
- *
- * The reading is the caller's because the two callers have different sets to
- * read from: the stage has the show, and the bench has whatever the editor
- * decided to feed it. A name nobody can resolve reads zero rather than throwing
- * — a look pointed at a track that has since been renamed should go quiet, not
- * take the picture down with it.
- */
-export function trackBank(names: readonly string[], read: (name: string) => number): Float32Array {
-  const values = new Float32Array(8);
-  for (let i = 0; i < values.length; i++) {
-    const name = names[i];
-    if (name) values[i] = read(name);
-  }
-  return values;
 }

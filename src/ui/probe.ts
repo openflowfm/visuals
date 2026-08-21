@@ -1,5 +1,5 @@
 import type { Circuit } from '../../protocol.ts';
-import { NODE_SPECS } from '../render/circuit.ts';
+import { NODE_SPECS, splitPort } from '../render/circuit.ts';
 
 /**
  * The graph as it stands at one node's outlet — what that node has made.
@@ -16,7 +16,24 @@ export function probeAt(circuit: Circuit, nodeId: string): Circuit | null {
   // `out` has no outlet of its own, so its picture is the whole graph's.
   if (node.kind === 'out') return circuit;
 
-  const outlet = NODE_SPECS[node.kind].outlets[0];
+  // The outlet somebody is **using**, not the first one declared.
+  //
+  // `polar` has two — a radius and an angle — and a face that always showed the
+  // radius would be showing the wrong number for half the graphs that contain
+  // one, silently, with no way to tell from the picture. Colour first when two
+  // are wired, because a colour has a picture of its own and a number only ever
+  // gets a diagram of one.
+  const outlets = NODE_SPECS[node.kind].outlets;
+  const wired = new Set(
+    circuit.cords
+      .map((cord) => splitPort(cord.from))
+      .filter((port) => port.node === nodeId)
+      .map((port) => port.port),
+  );
+  const outlet =
+    outlets.find((port) => port.kind === 'c' && wired.has(port.name)) ??
+    outlets.find((port) => wired.has(port.name)) ??
+    outlets[0];
   if (!outlet) return null;
 
   const from = `${nodeId}/${outlet.name}`;
@@ -27,7 +44,7 @@ export function probeAt(circuit: Circuit, nodeId: string): Circuit | null {
 
   const kept = circuit.nodes.filter((n) => n.kind !== 'out');
   const ends = new Set(circuit.nodes.filter((n) => n.kind === 'out').map((n) => n.id));
-  const cords = circuit.cords.filter((c) => !ends.has(c.to.slice(0, c.to.lastIndexOf('/'))));
+  const cords = circuit.cords.filter((c) => !ends.has(splitPort(c.to).node));
   const nodes = [...kept, { id: END, kind: 'out' as const, x: node.x + 200, y: node.y }];
 
   if (outlet.kind === 'c') {

@@ -373,7 +373,6 @@ uniform float uParams[${Math.max(1, knobs)}];
 // energies computed on the CPU for its energy nodes. Banks rather than a
 // uniform each, for the same reason uParams is one.
 uniform float uTracks[8];
-uniform float uEnergies[8];
 // Facts about the song that is playing: a stable hash of its name, its tempo,
 // its key as a pitch class over twelve, and where the section sits in the song.
 uniform float uSongSeed;

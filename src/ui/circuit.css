@@ -67,6 +67,12 @@
   color: var(--alarm);
 }
 
+.knobface .stack {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
 .picks {
   display: flex;
   flex-wrap: wrap;

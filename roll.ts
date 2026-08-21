@@ -177,8 +177,9 @@ export function rollCircuit(rng: Rng): Circuit {
       // a picture driven by the raw meter twitches and one driven by an
       // envelope breathes — and breathing is what makes a rig look designed.
       const from = add({
-        kind: 'energy',
-        op: 'master',
+        kind: 'track',
+        of: 'master',
+        op: 'level',
         x,
         y,
         value: round2(between(rng, 0.2, 0.7)),
@@ -187,11 +188,11 @@ export function rollCircuit(rng: Rng): Circuit {
       return;
     }
     if (roll < 0.8) {
-      const from = add({ kind: 'signal', op: pick(rng, SIGNALS), x, y });
+      const from = add({ kind: 'playback', op: pick(rng, SIGNALS), x, y });
       wire(`${from}/n`, into);
       return;
     }
-    const source = add({ kind: 'signal', op: pick(rng, SIGNALS), x: x - 150, y });
+    const source = add({ kind: 'playback', op: pick(rng, SIGNALS), x: x - 150, y });
     const shape = add({ kind: 'wave', op: pick(rng, WAVES), x, y });
     wire(`${source}/n`, `${shape}/phase`);
     wire(`${shape}/n`, into);

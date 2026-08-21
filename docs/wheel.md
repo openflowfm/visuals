@@ -273,7 +273,7 @@ number, survives a reload, and can be written on a hand.
 **Notes.** The LOM exposes no played-note event and the bridge device is an audio effect that
 never sees MIDI, so notes cost a small MIDI Effect on each track you want them from. The
 meter approximates it — a track making sound moves — but it cannot tell you *which* note.
-It would arrive as one more `signal` mode.
+It would arrive as one more `playback` mode.
 
 **Per-clip visuals as files.** Nothing here can point at a video. That brings a whole question
 about where media lives.

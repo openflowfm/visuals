@@ -146,7 +146,7 @@ choice between a set you can read and a set that looks right.
 
 **No note reactivity.** The LOM has no played-note event and the bridge device is an audio
 effect, so notes cost a small MIDI Effect on each track you want them from. Meters and the
-beat carry it for now; a note would arrive as one more `signal` mode and nothing else would
+beat carry it for now; a note would arrive as one more `playback` mode and nothing else would
 have to change.
 
 **One track's picture as another's input.** A look reaches a track's *meter* and not its

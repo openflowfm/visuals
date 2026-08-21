@@ -2,7 +2,8 @@ import {
   EFFECTS,
   MATH_OPS,
   NODE_FAMILIES,
-  SIGNAL_NAMES,
+  PLAYBACK_NAMES,
+  TRACK_READS,
   SONG_FACTS,
   SOURCES,
   WAVE_SHAPES,
@@ -52,6 +53,8 @@ export interface Pick {
   label: string;
   kind: NodeKind;
   op?: string;
+  /** Which thing in the set, for a row that names one. See `CircuitNode.of`. */
+  of?: string;
   /** What a preset sets on the node's own inlets. */
   knobs?: Record<string, number>;
   about: string;
@@ -104,7 +107,7 @@ const ABOUT: Record<string, string> = {
   screen: 'Both, saturating at white rather than climbing past it',
   multiply: 'The base seen through the top. The only one that darkens',
 
-  level: "This pass's own meter",
+  level: 'The room\'s own meter — everything, as loud as it is',
   beat: 'Continuous beats. Wire it into a wave',
   phase: 'Where you are in the bar, 0 to 1',
   pulse: 'One on the beat, decaying across it',
@@ -132,6 +135,20 @@ const PRESET_KNOBS: Record<string, Record<string, number>> = {
   posterize: { levels: 0.78 },
 };
 
+/**
+ * A row's identity, which is what React keys it by.
+ *
+ * The **name** is in here as well as the mode, and it has to be: a `track` row
+ * carries a mode now — every one of them drops a meter — so three tracks would
+ * be three rows spelling `track:level`, and children under one key may be
+ * duplicated or dropped. That is not a cosmetic bug; it is a node you cannot
+ * add. A test pins it, because a real set is where it shows up and a two-track
+ * fixture is where it does not.
+ */
+export function keyOf(pick: Pick): string {
+  return `${pick.kind}:${pick.op ?? ''}:${pick.of ?? ''}`;
+}
+
 /** The whole browser, built from the vocabulary rather than typed out beside it. */
 export function palette(scheme: Scheme, tracks: readonly string[]): Entry[] {
   const out: Entry[] = [];
@@ -144,10 +161,12 @@ export function palette(scheme: Scheme, tracks: readonly string[]): Entry[] {
     label: string,
     about: string,
     knobs?: Record<string, number>,
+    of?: string,
   ): Pick => ({
     label,
     kind,
     op,
+    ...(of ? { of } : {}),
     ...(knobs ? { knobs } : {}),
     about,
     family: family(kind),
@@ -156,8 +175,14 @@ export function palette(scheme: Scheme, tracks: readonly string[]): Entry[] {
     terms: `${label} ${kind} ${op ?? ''} ${about}`.toLowerCase(),
   });
 
-  const node = (kind: NodeKind, op: string | undefined, label: string, about: string) => {
-    out.push({ node: pick(kind, op, label, about), presets: [] });
+  const node = (
+    kind: NodeKind,
+    op: string | undefined,
+    label: string,
+    about: string,
+    of?: string,
+  ) => {
+    out.push({ node: pick(kind, op, label, about, undefined, of), presets: [] });
   };
 
   // Values only here, because only a *mode* is a preset. A track called
@@ -197,9 +222,8 @@ export function palette(scheme: Scheme, tracks: readonly string[]): Entry[] {
     node(kind, undefined, NODE_SPECS[kind].name, NODE_SPECS[kind].about);
   }
 
-  // The room.
-  modes('signal', 'signal', SIGNAL_NAMES);
-  node('energy', 'master', 'energy', NODE_SPECS.energy.about);
+  // The room: three questions you can ask the set, and nothing else can answer.
+  modes('playback', 'playback', PLAYBACK_NAMES);
   // Targets again, and the reason the search box has to reach them: a name from
   // the set is the one thing in this browser nobody could guess.
   //
@@ -207,8 +231,12 @@ export function palette(scheme: Scheme, tracks: readonly string[]): Entry[] {
   // way. A `track` node addresses a track by *name*, so two tracks called `MIDI`
   // are one target however many of them the set has — a second row would offer a
   // chip that does exactly what the first one does, under the same key.
+  //
+  // The row drops a **meter**, because that is what anybody reaching for a track
+  // wants first. Which of its numbers is a dropdown on the face rather than
+  // three rows per track here, which for a real set would be seventy-eight.
   for (const name of new Set(tracks)) {
-    node('track', name, `${name} meter`, "That track's output meter, by name");
+    node('track', TRACK_READS[0], `${name} meter`, "That track's own numbers, by name", name);
   }
   modes('song', 'song', SONG_FACTS);
 
@@ -252,10 +280,10 @@ export function drop(circuit: Circuit, pick: Pick): Circuit {
         // Copied, or every node dropped from that preset would share one map
         // and turning a knob on one would turn it on all of them.
         ...(pick.knobs ? { knobs: { ...pick.knobs } } : {}),
+        ...(pick.of ? { of: pick.of } : {}),
         ...(pick.kind === 'value' ? { value: 0.5, label: 'knob' } : {}),
-        ...(pick.kind === 'energy' ? { value: 0.4 } : {}),
         x: 60 + (at % 4) * 200,
-        y: 60 + Math.floor(at / 4) * 165,
+        y: 60 + Math.floor(at / 4) * 220,
       },
     ],
   };

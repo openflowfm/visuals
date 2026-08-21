@@ -48,11 +48,11 @@ export const BLENDS: readonly Blend[] = ['over', 'add', 'screen', 'multiply'];
 export type NodeKind =
   // where you are, and what the room is doing
   | 'point'
-  | 'signal'
   | 'value'
+  // the three the set answers
+  | 'playback'
   | 'track'
   | 'song'
-  | 'energy'
   // pictures
   | 'source'
   | 'tracks'
@@ -103,8 +103,8 @@ export const NODE_FAMILIES: readonly { name: string; about: string; kinds: NodeK
   },
   {
     name: 'the room',
-    about: 'What the music is doing right now',
-    kinds: ['signal', 'track', 'song', 'energy'],
+    about: 'Three questions you can ask the set, and nothing else can answer',
+    kinds: ['playback', 'track', 'song'],
   },
   {
     name: 'numbers',
@@ -153,16 +153,29 @@ export const EFFECTS: readonly string[] = [
 ];
 
 /**
- * Which live signal a `signal` node reads. All of them are 0–1 except `beat`.
+ * Three nodes read the set, and between them they are the whole of it.
  *
- * `energy` is deliberately **not** here any more. It was a uniform every shader
- * read and every archetype set, and that made it one thing the whole show had
- * to agree about — where in practice "energy" means whatever you decide it
- * means, and the useful one is often a particular track's. It is a node now.
+ * They used to be four — `signal`, `song`, `track`, `energy` — and the seam was
+ * in the wrong place. `energy` was `track` with an envelope on it: same
+ * signature, same bank shape, named the same way, differing by one number that
+ * happened to be computed on a CPU. Two rows in a browser for one question.
+ *
+ * What decides a node here is **what you have to ask the set** rather than what
+ * the renderer has to fetch. There are three of those and there is no fourth:
+ *
+ * - `playback` — where the music is *now*: the beat, the bar, the meter.
+ * - `track` — one named track, and which of its numbers you want.
+ * - `song` — what the set's own names say about the song that is playing.
+ *
+ * The test that draws the line is whether swapping one for the other is a change
+ * of mind or a change of wiring. `beat` for `phase` is a change of mind. `beat`
+ * for `key` is not — one is where you are and the other is what you are in.
  */
-export type SignalName = 'level' | 'beat' | 'phase' | 'pulse' | 'time' | 'random';
 
-export const SIGNAL_NAMES: readonly SignalName[] = [
+/** Where the music is now, as a `playback` node reads it. 0–1 except `beat`. */
+export type PlaybackName = 'level' | 'beat' | 'phase' | 'pulse' | 'time' | 'random';
+
+export const PLAYBACK_NAMES: readonly PlaybackName[] = [
   'level',
   'beat',
   'phase',
@@ -170,6 +183,22 @@ export const SIGNAL_NAMES: readonly SignalName[] = [
   'time',
   'random',
 ];
+
+/**
+ * Which of a track's numbers a `track` node reads.
+ *
+ * The meter is the one anybody reaches for first and the other two are why this
+ * is a *property* rather than a node called "meter": a **fader** is a hand on a
+ * control, which is the most deliberate thing a player does that a rig can
+ * hear, and **playing** is a gate — is this track on at all — which is the one
+ * fact about a track a picture most often wants to be gated by.
+ *
+ * All three go through the same smoothing, which is what folded `energy` in
+ * here: an envelope follower on a meter is an energy, and one on a gate is a
+ * fade-in. It is a knob on the node's face rather than an inlet because the
+ * envelope runs on the CPU and a cord cannot reach it.
+ */
+export const TRACK_READS: readonly string[] = ['level', 'fader', 'playing'];
 
 /**
  * What a `song` node can tell you about the song that is playing.
@@ -204,6 +233,21 @@ export interface CircuitNode {
    */
   op?: string;
   /**
+   * Which **thing in the set** this node points at: a track's name.
+   *
+   * Apart from `op` because they answer different questions and a node can need
+   * both. `op` picks one of a node kind's fixed behaviours — a list this
+   * codebase writes down — where this names an instance of something that only
+   * exists because somebody's Live set contains it. A `track` node has to say
+   * *which track* and *which of its numbers*, and squeezing those into one
+   * string would make a browser unable to offer either.
+   *
+   * A name rather than an index, and it breaks if the track is renamed. An
+   * index breaks when a track is *moved*, which happens far more often and
+   * silently repoints the node at somebody else's part.
+   */
+  of?: string;
+  /**
    * What each unwired number inlet holds, by inlet name, 0–1.
    *
    * An inlet with nothing wired to it used to get a fallback written into the
@@ -223,13 +267,14 @@ export interface CircuitNode {
    */
   knobs?: Record<string, number>;
   /**
-   * A `value` node's amount, or an `energy` node's fall. 0–1 either way.
+   * A `value` node's amount, or a `track` node's smoothing. 0–1 either way.
    *
-   * Not folded into `knobs`, and the reason is that neither node has an inlet:
+   * Not folded into `knobs`, and the reason is that neither is an inlet:
    * `knobs` is keyed by inlet name and is trimmed against the inlets a node
    * actually has, so a number parked under a name no port answers to would be
-   * dropped the first time anything came through `merge`. An `energy` node's
-   * fall is not even a shader number — the envelope runs on the CPU.
+   * dropped the first time anything came through `merge`. A track's smoothing
+   * is not even a shader number — the envelope runs on the CPU, because it has
+   * to remember what it saw last frame and a fragment shader cannot.
    */
   value?: number;
   /** A `value` node's name, which is what it is called in the editor. */
