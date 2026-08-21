@@ -247,6 +247,206 @@ const BUILT_IN: Scheme = {
         'mix/c -> o/c',
       ],
     ),
+    // Refraction, which is what water actually is: a surface that displaces
+    // what you see *through* it rather than a blue thing drawn on top. The
+    // wobble moves the point the plasma is read at, `ripple` moves it again on
+    // the beat, and `smear` softens the result the way depth does.
+    //
+    // The drift is the one thing here deliberately **not** in time. Water does
+    // not obey a bar, so `time` goes through a multiply to slow it to a cycle
+    // every eight seconds or so — the one place a number outside 0–1 is useful,
+    // and why `math` takes what it is given rather than clamping.
+    water: wire(
+      'Water',
+      [
+        ['pt', 'point'],
+        ['t', 'signal', 'time'],
+        ['slow', 'math', 'multiply', { b: 0.12 }],
+        ['sway', 'wave', 'sine'],
+        ['wob', 'wobble'],
+        ['e', 'energy', 'master', undefined, 0.55],
+        ['surf', 'source', 'plasma'],
+        ['rip', 'effect', 'ripple', { waves: 0.72, depth: 0.4, speed: 0.22 }],
+        ['soft', 'effect', 'smear', { reach: 0.2, drive: 0.35 }],
+        // A lifted floor and a gain just under neutral: milky rather than
+        // contrasty, because nothing underwater has a hard edge — but not so
+        // soft that the ripple it is there to carry stops reading.
+        ['milk', 'levels', undefined, { gain: 0.52, lift: 0.6 }],
+        ['o', 'out'],
+      ],
+      [
+        't/n -> slow/a',
+        'slow/n -> sway/phase',
+        'pt/p -> wob/p',
+        'sway/n -> wob/amount',
+        'wob/p -> surf/p',
+        'e/n -> surf/energy',
+        'surf/c -> rip/c',
+        'e/n -> rip/energy',
+        'rip/c -> soft/c',
+        'soft/c -> milk/c',
+        'milk/c -> o/c',
+      ],
+    ),
+    // A portal that turns rather than recedes. `zoom` is driven by the beat
+    // pulse, so the whole spiral punches inward on every hit and falls back out
+    // across it — a portal you feel the tempo through, where `Deep` is one you
+    // travel down.
+    vortex: wire(
+      'Vortex',
+      [
+        ['pt', 'point'],
+        ['hit', 'signal', 'pulse'],
+        ['zm', 'zoom'],
+        ['e', 'energy', 'master', undefined, 0.3],
+        ['sp', 'source', 'spiral'],
+        ['tw', 'effect', 'twist', { turn: 0.68, sway: 0.4 }],
+        // A short reach and a floor high enough that only the arms bloom. Wide
+        // open it welds the spiral into two flat colours, which is the failure
+        // this effect always has: it is the cheapest way to look expensive and
+        // the cheapest way to lose every edge you had.
+        ['glow', 'effect', 'bloom', { reach: 0.34, floor: 0.34 }],
+        ['o', 'out'],
+      ],
+      [
+        'pt/p -> zm/p',
+        'hit/n -> zm/by',
+        'zm/p -> sp/p',
+        'e/n -> sp/energy',
+        'sp/c -> tw/c',
+        'e/n -> tw/energy',
+        'tw/c -> glow/c',
+        'e/n -> glow/energy',
+        'glow/c -> o/c',
+      ],
+    ),
+    // Two pictures read at two different points and added, then folded about a
+    // line. A corridor through a kaleidoscope with rings coming up it — the one
+    // that shows most plainly that geometry happens *before* the picture, since
+    // `fold` and `pt` feed two sources that never meet until the blend.
+    gateway: wire(
+      'Gateway',
+      [
+        ['pt', 'point'],
+        ['fld', 'fold', undefined, { sides: 0.45 }],
+        ['e', 'energy', 'master', undefined, 0.35],
+        ['tun', 'source', 'tunnel'],
+        ['rng', 'source', 'rings'],
+        ['mix', 'blend', 'add', { amount: 0.6 }],
+        ['mir', 'effect', 'mirror', { line: 0.5, angle: 0.25 }],
+        ['o', 'out'],
+      ],
+      [
+        'pt/p -> fld/p',
+        'fld/p -> tun/p',
+        'e/n -> tun/energy',
+        'pt/p -> rng/p',
+        'e/n -> rng/energy',
+        'tun/c -> mix/base',
+        'rng/c -> mix/top',
+        'mix/c -> mir/c',
+        'mir/c -> o/c',
+      ],
+    ),
+    // The set as a diagram. `edge` keeps the outline and throws the fill away,
+    // which is the one effect here that makes a busy frame *less* busy — and a
+    // wall full of outlines is legible at a distance no filled picture is.
+    //
+    // Two `tracks` nodes, one texture. The set is drawn once a frame and read
+    // twice: once for the outline and once, dimmed, as the ghost underneath, so
+    // the shapes still have somewhere to sit.
+    outline: wire(
+      'Outline',
+      [
+        ['ink', 'tracks', 'by name'],
+        // A wide tap and a hard gain. The gradient of a soft picture is a very
+        // small number, so an outline drawn at the effect's own middle is one
+        // you can only see in a dark room — which is the whole point of the
+        // look and the one thing it was failing at.
+        ['cut', 'effect', 'edge', { width: 0.72, gain: 0.85 }],
+        ['lift', 'levels', undefined, { gain: 0.6, lift: 0.74 }],
+        ['fill', 'tracks', 'by name'],
+        ['ghost', 'levels', undefined, { gain: 0.34, lift: 0.46 }],
+        ['mix', 'blend', 'screen', { amount: 0.85 }],
+        ['o', 'out'],
+      ],
+      [
+        'ink/c -> cut/c',
+        'cut/c -> lift/c',
+        'fill/c -> ghost/c',
+        'ghost/c -> mix/base',
+        'lift/c -> mix/top',
+        'mix/c -> o/c',
+      ],
+    ),
+    // Flat bands of colour, and the one look that changes with the *music*
+    // rather than with the playing. `posterize` quantises the set to four steps
+    // — its own middle is fourteen, which is invisible, so the number is set on
+    // the node — and `song key` rotates the hue, so two songs a fifth apart are
+    // two palettes and the same song is always the same one.
+    poster: wire(
+      'Poster',
+      [
+        ['live', 'tracks', 'by name'],
+        // Lifted *before* the quantise, not after. Four steps taken out of a
+        // dark picture are four dark steps, and no amount of grading afterwards
+        // puts back a band that was never cut.
+        ['punch', 'levels', undefined, { gain: 0.68, lift: 0.66 }],
+        ['flat', 'effect', 'posterize', { levels: 0.78 }],
+        ['key', 'song', 'key'],
+        // Halved about no-shift, because `hue` reads a half as "leave it alone"
+        // and a pitch class reads C as zero — so the key wired straight in put
+        // every song in C at a full half-turn, which is the one rotation that
+        // makes the colourway its own opposite. Averaged, the whole set of keys
+        // swings a quarter-turn either side of the colours you chose.
+        ['centre', 'math', 'average'],
+        ['tint', 'hue'],
+        ['o', 'out'],
+      ],
+      [
+        'live/c -> punch/c',
+        'punch/c -> flat/c',
+        'flat/c -> tint/c',
+        'key/n -> centre/a',
+        'centre/n -> tint/shift',
+        'tint/c -> o/c',
+      ],
+    ),
+    // Four effects in a row and nothing else, which is the other end of the
+    // vocabulary from `The set`. Rows thrown sideways, quantised to blocks, the
+    // channels pulled apart on transients, and the whole thing inverted on the
+    // beat and back.
+    //
+    // A fast fall on the envelope is the point: everything else here breathes,
+    // and this one twitches.
+    glitch: wire(
+      'Glitch',
+      [
+        ['live', 'tracks', 'by name'],
+        ['e', 'energy', 'master', undefined, 0.12],
+        ['cut', 'effect', 'slice', { bands: 0.5, throw: 0.45 }],
+        ['px', 'effect', 'pixelate', { blocks: 0.22, resolve: 0.8 }],
+        ['rgb', 'effect', 'shift', { spread: 0.45, drive: 0.7 }],
+        ['flip', 'effect', 'invert', { hold: 0.28, rate: 0.6 }],
+        // Last, so the lift is on the glitch rather than on the set: brightening
+        // first would have `shift` pulling apart channels that were already at
+        // the top and the aberration would go white instead of coloured.
+        ['up', 'levels', undefined, { gain: 0.58, lift: 0.72 }],
+        ['o', 'out'],
+      ],
+      [
+        'live/c -> cut/c',
+        'e/n -> cut/energy',
+        'cut/c -> px/c',
+        'e/n -> px/energy',
+        'px/c -> rgb/c',
+        'e/n -> rgb/energy',
+        'rgb/c -> flip/c',
+        'e/n -> flip/energy',
+        'flip/c -> up/c',
+        'up/c -> o/c',
+      ],
+    ),
   },
   colorways: {
     // Kept light on purpose: a cheap projector has no black to work against, so

@@ -100,7 +100,7 @@ between a set you can navigate and a set that looks right.
 scheme in `server/scheme.ts` is a complete show and the file only ever overrides parts of it.
 
 Overrides are shallow per section: naming one colourway does not delete the other three, and
-registering one look does not remove the four that ship.
+registering one look does not remove the ten that ship.
 
 A parse error **keeps the scheme that was already working** and reports the message in the
 panel. Losing the show to a trailing comma is the wrong answer at any time and an unthinkable
@@ -118,17 +118,18 @@ two things a *file* can say and the editor cannot. Repairing here means the repa
 back the next time anything saves; repairing in the compiler would mean silently redoing the
 same fix sixty times a second and never telling anyone. See [looks](looks.md).
 
-**A saved file holds a copy of the four that ship**, because the editor sends the whole
+**A saved file holds a copy of the ten that ship**, because the editor sends the whole
 scheme and the server writes the whole scheme. So improving a built-in does not reach a
 machine that has already saved once — its `scheme.json` shadows the new one under the same
 id. Deleting those four entries from the file is the whole fix, and it is worth knowing
 before wondering why an updated library did not arrive.
 
-## The four that ship
+## The ten that ship
 
 `BUILT_IN.looks` in `server/scheme.ts`, and they are the manual: nobody reads a node
 reference and everybody takes a working example apart. So they are a **spread** rather than
-four variations, one lesson each.
+ten variations, one lesson each — and because the wheel turns through everything by default,
+they are also the show a fresh clone puts on.
 
 | look | what it is for |
 |---|---|
@@ -136,6 +137,16 @@ four variations, one lesson each.
 | **Folded** | a colour is a function of a point: the set read through a swirl, folded by a kaleidoscope that moves the whole chain |
 | **Deep** | two pictures, one of them the room's — a corridor with the set screened into it and graded |
 | **Weather** | no set and no shipped picture: `polar` makes two numbers out of a position, `paint` makes a colour out of one and `hue` makes every colour out of the other |
+| **Water** | refraction. A surface that displaces what you see *through* it, and the one drift here deliberately not in time |
+| **Vortex** | a portal that turns rather than recedes: `zoom` on the beat pulse, so the whole spiral punches inward on every hit |
+| **Gateway** | geometry happens *before* the picture — `fold` and a bare point feed two sources that never meet until the blend |
+| **Outline** | the set as a diagram. `edge` keeps the outline and throws the fill away, over a ghost of the same set |
+| **Poster** | flat bands, and the one look that changes with the *music*: `posterize` to four steps, hue rotated by the song's key |
+| **Glitch** | four effects in a row and nothing else — the other end of the vocabulary from `The set` |
+
+Three of them are **portals**, and that is deliberate rather than repetition: `Deep` recedes,
+`Vortex` turns and `Gateway` opens. It is the shape this kind of rig reaches for most, and
+one example of it would have taught that a portal is a source rather than a way of building.
 
 Between them they use every family in `NODE_FAMILIES`, which a test pins, and they keep two
 rules that were learned the hard way.

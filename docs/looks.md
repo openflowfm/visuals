@@ -203,7 +203,7 @@ collection, because a song that modulates is in the first key when it starts.
 on the face does not, and costs a cord across the canvas to say it. What it still does, and
 nothing else can, is put *the same* number on two inlets at once: turn it and both move.
 `Weather` in the built-in library is wired that way on purpose, and it is the only knob node
-left in the four looks that ship.
+left in the ten looks that ship.
 
 ## `out` is one, required, and not in the browser
 
