@@ -350,7 +350,9 @@ knob for.
 standing risk: a bench that could disagree with the stage about brightness or blend is worse
 than no bench, because those are exactly what you come here to judge. With no bridge it gets
 **stand-in tracks** driven off the beat, so a look built on the set is not black at a desk —
-which is precisely the situation the designer exists to work in.
+which is precisely the situation the designer exists to work in. Those are `withStandIns` and
+belong to the room rather than to the bench, because the node faces need the same four or
+they are black while the bench beside them is lit.
 
 **It floats over the canvas** rather than sitting in a column beside it, which is a layout
 question with a real answer: a fixed sidebar takes its width from the narrowest thing in it,
