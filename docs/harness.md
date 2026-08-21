@@ -51,3 +51,21 @@ real machine:
 - **Link against Live**, including whether the tempo and the transport actually follow.
 - **Whether a real set draws well** — the track-name table in [`hints.ts`](../hints.ts) is a
   guess about how people name things until it meets a set nobody wrote it for.
+
+## It answers `clipNotes` and `clipStatus` too
+
+Both were added for `chart/`, and both are the difference between a client that can be
+worked on without Ableton and one that only *looks* implemented. `clipStatus` drives the
+loop wheels and the chord chart's timeline; without it a chart connects, shows the song, and
+draws neither — indistinguishable from broken.
+
+The note fixture is shaped like a set rather than like a tune: a drum track whose notes have
+to be excluded, a bass supplying roots, keys arpeggiating and pads holding the same
+progression, and a melody over the top. Between them they exercise every branch of
+[`core/src/chords.ts`](../../core/docs/chords.md), including the two that matter most —
+that merging drums in misspells every chord, and that a melody's passing tones must not
+rename one.
+
+Loop lengths differ per track deliberately. A two-bar bass under a four-bar chord cycle is
+exactly the case a chart has to time against the **longest** loop, and equal loops
+everywhere would never exercise it.

@@ -170,8 +170,80 @@ server.on('connection', (socket) => {
       sendPlay();
       sendMixer();
     }
+    if (request.type === 'clipNotes') {
+      socket.send(
+        JSON.stringify({
+          type: 'clipNotes',
+          id: request.id,
+          clips: request.clips.map((clip) => notesFor(clip.t, clip.s)),
+        }),
+      );
+    }
   });
 });
+
+/**
+ * Notes for one clip, invented so the chord chart can be worked on with no
+ * Ableton.
+ *
+ * The point of the fixture is the *shape* of a real set rather than a tune: a
+ * drum track whose notes must be excluded, a bass supplying roots, keys
+ * supplying quality, and a lead that spells nothing. Between them they exercise
+ * every branch of `core/src/chords.ts` — including the one that matters most,
+ * that merging drums in misspells the whole progression.
+ */
+const PROGRESSION = [
+  [57, 60, 64],
+  [53, 57, 60],
+  [48, 52, 55],
+  [55, 59, 62],
+];
+
+function notesFor(t: number, s: number): BSV.ClipNotes {
+  const name = TRACKS[t % TRACKS.length] ?? '';
+  const notes: BSV.ClipNote[] = [];
+
+  if (name === 'Drums') {
+    for (let beat = 0; beat < 16; beat++) {
+      notes.push({ pitch: 36, start: beat, duration: 0.25 });
+      if (beat % 2 === 1) notes.push({ pitch: 38, start: beat, duration: 0.25 });
+    }
+    return { t, s, instrument: 'DrumGroupDevice', notes };
+  }
+
+  if (name === 'Bass') {
+    PROGRESSION.forEach((triad, bar) => {
+      notes.push({ pitch: triad[0]! - 24, start: bar * 4, duration: 3.5 });
+    });
+    return { t, s, instrument: 'Operator', notes };
+  }
+
+  if (name === 'Keys' || name === 'Pads') {
+    PROGRESSION.forEach((triad, bar) => {
+      // Keys arpeggiate and pads hold, which is the pair the half-bar window
+      // exists to cope with.
+      if (name === 'Pads') {
+        for (const pitch of triad) notes.push({ pitch, start: bar * 4, duration: 4 });
+      } else {
+        for (let i = 0; i < 8; i++) {
+          notes.push({ pitch: triad[i % 3]! + 12, start: bar * 4 + i * 0.5, duration: 0.5 });
+        }
+      }
+    });
+    return { t, s, instrument: 'Operator', notes };
+  }
+
+  // A melody, in key, over the top. Deliberately **not** a chromatic run: a
+  // line that touches all twelve pitch classes is not a lead, and a fixture
+  // like that tests only whether the analysis can be broken rather than whether
+  // it works. What this does exercise is the real case — a monophonic part
+  // whose passing tones are not the chord, which must not rename it.
+  const LINE = [76, 79, 77, 76, 74, 72, 74, 76];
+  for (let i = 0; i < 16; i++) {
+    notes.push({ pitch: LINE[i % LINE.length]!, start: i, duration: 0.5 });
+  }
+  return { t, s, instrument: 'Operator', notes };
+}
 
 const all = (payload: unknown) => {
   const wire = JSON.stringify(payload);
@@ -239,6 +311,47 @@ setInterval(() => {
     },
   });
 }, 1000 / 30);
+
+/**
+ * Where every playing clip's playhead is, at the 20 Hz the device pushes it.
+ *
+ * Without this the loop wheels and the chord chart cannot be worked on with no
+ * Ableton at all — both are driven by `clipStatus`, and a harness that answers
+ * `snapshot` and `playState` but not this one leaves them permanently empty and
+ * looking broken rather than unimplemented.
+ *
+ * Loop lengths differ per track on purpose: a two-bar bass under an eight-bar
+ * chord cycle is exactly the case a chart has to time against the *longest*
+ * loop, and equal loops everywhere would never exercise it.
+ */
+const LOOP_BARS = [4, 2, 4, 1, 4];
+const started = Date.now();
+setInterval(() => {
+  if (!playing) return;
+  const beats = ((Date.now() - started) / 60_000) * BPM;
+  all({
+    type: 'clipStatus',
+    frame: {
+      tracks: tracks
+        .filter((track) => (track.i + scene) % 7 !== 3)
+        .map((track) => {
+          const bars = LOOP_BARS[track.i % LOOP_BARS.length] ?? 4;
+          const span = bars * 4;
+          return {
+            t: track.i,
+            position: beats % span,
+            loopStart: 0,
+            loopEnd: span,
+            looping: true,
+            recording: false,
+            inSeconds: false,
+            signatureNumerator: 4,
+            signatureDenominator: 4,
+          };
+        }),
+    },
+  });
+}, 50);
 
 // One fader riding, so opacity is visibly a live value and not a constant.
 setInterval(() => {
