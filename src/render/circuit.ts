@@ -1,5 +1,7 @@
 import {
-  EFFECTS,
+  LENS_MODES,
+  GRADE_MODES,
+  SPREAD_MODES,
   MATH_OPS,
   PLAYBACK_NAMES,
   TRACK_READS,
@@ -104,6 +106,16 @@ export interface Emitting {
   readAt(inlet: string, at: string): string;
   /** The point expression this evaluation is happening at. */
   at: string;
+  /**
+   * The outlet being asked for.
+   *
+   * A node emits every outlet it has in one go, which is right for `polar` —
+   * both its numbers come off the same decomposition — and wrong for `lens`,
+   * whose colour outlet *reads its input* while its point outlet does not.
+   * Emitting the colour when somebody only wanted the point sends the resolver
+   * back round a graph that was never circular, and it refuses a legal look.
+   */
+  outlet: string;
   node: CircuitNode;
 }
 
@@ -123,6 +135,15 @@ export interface NodeSpec {
   outlets: readonly PortSpec[];
   /** The modes this node has, if it has any. The first is the default. */
   ops?: readonly string[];
+  /**
+   * Which inlets an outlet actually reads. Absent means all of them.
+   *
+   * Only `lens` needs it, and it needs it badly: its `p` outlet is a function of
+   * the point alone, so a lens whose point feeds a picture that feeds the lens's
+   * colour back is a graph that terminates and draws. Anything that reasoned
+   * node-to-node would call that a loop and refuse the cord.
+   */
+  reads?(node: CircuitNode, outlet: string): readonly string[];
   /** True when the modes are names from the set rather than a fixed list. */
   named?: 'track' | 'look';
   emit(ctx: Emitting): Record<string, string>;
@@ -240,44 +261,108 @@ const MIXES: Record<string, (a: string, b: string) => string> = {
  * file can say, produced a node with no knob inlets at all whose shader was
  * calling for knobs that were therefore always zero.
  */
-const effectOp = (node: CircuitNode): string =>
-  EFFECTS.includes(node.op ?? '') ? node.op! : EFFECTS[0];
+const modeOf = (node: CircuitNode, modes: readonly string[]): string =>
+  modes.includes(node.op ?? '') ? node.op! : modes[0];
 
-const EFFECT_KNOBS: Record<string, string[]> = {
+/**
+ * Every mode's knobs, by the family that owns it.
+ *
+ * Kept as three tables rather than one because the split is the point: a knob
+ * list is the shape of a *mode*, and a mode belongs to exactly one kind now.
+ */
+const LENS_KNOBS: Record<string, string[]> = {
+  zoom: ['by'],
+  swirl: ['turn'],
+  fold: ['sides'],
+  wobble: ['amount'],
+  tile: ['count'],
   mirror: ['line', 'angle'],
   kaleido: ['segments', 'spin'],
-  shift: ['spread', 'drive'],
-  pixelate: ['blocks', 'resolve'],
-  ripple: ['waves', 'depth', 'speed'],
-  smear: ['reach', 'drive'],
-  bloom: ['reach', 'floor'],
-  slice: ['bands', 'throw'],
-  edge: ['width', 'gain'],
-  posterize: ['levels'],
   twist: ['turn', 'sway'],
+  ripple: ['waves', 'depth', 'speed'],
+  slice: ['bands', 'throw'],
+  pixelate: ['blocks', 'resolve'],
+};
+
+const GRADE_KNOBS: Record<string, string[]> = {
+  levels: ['gain', 'lift'],
+  hue: ['shift'],
+  // `steps`, where it was `levels` — which is now the name of the mode beside
+  // it. A knob and a sibling mode sharing a word is the kind of collision that
+  // only shows up when somebody reads the dropdown out loud.
+  posterize: ['steps'],
   invert: ['hold', 'rate'],
 };
 
+const SPREAD_KNOBS: Record<string, string[]> = {
+  bloom: ['reach', 'floor'],
+  smear: ['reach', 'drive'],
+  edge: ['width', 'gain'],
+  // `split`, where it was `spread` — same collision, this time with the kind.
+  shift: ['split', 'drive'],
+};
+
+/** Where a knob sits when nobody has turned it. A half unless it says. */
+const KNOB_AT: Record<string, number> = { sides: 0.2, amount: 0.3, count: 0.3 };
+
+/** The modes that read an energy. The rest have no such inlet to leave unwired. */
+const NEEDS_ENERGY = new Set([
+  'kaleido',
+  'twist',
+  'ripple',
+  'slice',
+  'pixelate',
+  'invert',
+  'bloom',
+  'shift',
+]);
+
+const knobPorts = (knobs: readonly string[], op: string): PortSpec[] => [
+  ...(NEEDS_ENERGY.has(op) ? [E()] : []),
+  ...knobs.map((name) => N(name, KNOB_AT[name] ?? 0.5)),
+];
+
 /**
- * How each effect reads its input.
+ * Where each `lens` mode moves the point to.
  *
- * Three shapes, and the difference between them is exactly what a graph makes
- * visible. A **remap** reads once at a moved point and costs nothing. A
- * **colour** operation reads once where it already was. A **tap** reads several
- * times, and is the only thing here that can make a shader expensive.
+ * Eleven functions of a point, which is all a lens has ever been — five of them
+ * were standalone node kinds and six were `effect` modes, written under two
+ * prefixes in two files, and `fold` and `kaleido` were the same wedge fold
+ * twice. Reading the point off the node's own `p` inlet rather than off
+ * `ctx.at` is the only change to any of them, and with that inlet unwired the
+ * two are the same thing.
  */
-const EFFECT_EMIT: Record<string, (ctx: Emitting, e: string, k: (i: number) => string) => string> =
+const LENS_POINT: Record<string, (ctx: Emitting, e: string, k: (i: number) => string) => string> = {
+  zoom: (c, _e, k) => `cZoom(${c.read('p')}, ${k(0)})`,
+  swirl: (c, _e, k) => `cSwirl(${c.read('p')}, ${k(0)})`,
+  fold: (c, _e, k) => `cFold(${c.read('p')}, ${k(0)})`,
+  wobble: (c, _e, k) => `cWobble(${c.read('p')}, ${k(0)})`,
+  tile: (c, _e, k) => `cTile(${c.read('p')}, ${k(0)})`,
+  mirror: (c, _e, k) => `fxMirror(${c.read('p')}, ${k(0)}, ${k(1)})`,
+  kaleido: (c, e, k) => `fxKaleido(${c.read('p')}, ${k(0)}, ${k(1)}, ${e})`,
+  twist: (c, e, k) => `fxTwist(${c.read('p')}, ${k(0)}, ${k(1)}, ${e})`,
+  ripple: (c, e, k) => `fxRipple(${c.read('p')}, ${k(0)}, ${k(1)}, ${k(2)}, ${e})`,
+  slice: (c, e, k) => `fxSlice(${c.read('p')}, ${k(0)}, ${k(1)}, ${e})`,
+  pixelate: (c, e, k) => `fxPixelate(${c.read('p')}, ${k(0)}, ${k(1)}, ${e})`,
+};
+
+/** The colour where it already is. Four one-liners, and none of them move. */
+const GRADE_EMIT: Record<string, (ctx: Emitting, e: string, k: (i: number) => string) => string> = {
+  levels: (c, _e, k) => `cLevels(${c.read('c')}, ${k(0)}, ${k(1)})`,
+  hue: (c, _e, k) => `cHue(${c.read('c')}, ${k(0)})`,
+  posterize: (c, _e, k) => `fxPosterize(${c.read('c')}, ${k(0)})`,
+  invert: (c, e, k) => `fxInvert(${c.read('c')}, ${k(0)}, ${k(1)}, ${e})`,
+};
+
+/**
+ * The four that read their input several times.
+ *
+ * The only family that can make a shader too big to draw, which is why it is a
+ * family: nesting two of these multiplies everything upstream of them, and
+ * `MAX_LINES` is the backstop rather than the plan.
+ */
+const SPREAD_EMIT: Record<string, (ctx: Emitting, e: string, k: (i: number) => string) => string> =
   {
-    mirror: (c, _e, k) => c.readAt('c', `fxMirror(${c.at}, ${k(0)}, ${k(1)})`),
-    kaleido: (c, e, k) => c.readAt('c', `fxKaleido(${c.at}, ${k(0)}, ${k(1)}, ${e})`),
-    pixelate: (c, e, k) => c.readAt('c', `fxPixelate(${c.at}, ${k(0)}, ${k(1)}, ${e})`),
-    ripple: (c, e, k) => c.readAt('c', `fxRipple(${c.at}, ${k(0)}, ${k(1)}, ${k(2)}, ${e})`),
-    slice: (c, e, k) => c.readAt('c', `fxSlice(${c.at}, ${k(0)}, ${k(1)}, ${e})`),
-    twist: (c, e, k) => c.readAt('c', `fxTwist(${c.at}, ${k(0)}, ${k(1)}, ${e})`),
-
-    posterize: (c, _e, k) => `fxPosterize(${c.read('c')}, ${k(0)})`,
-    invert: (c, e, k) => `fxInvert(${c.read('c')}, ${k(0)}, ${k(1)}, ${e})`,
-
     // Channel separation that opens with the level, so it bites on transients
     // and closes to nothing in the gaps. Three taps, one per channel.
     shift: (c, e, k) => {
@@ -443,44 +528,40 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     }),
   },
 
-  fold: {
-    name: 'fold',
-    about: 'Mirror the frame into wedges around the centre. A kaleidoscope.',
-    inlets: [P('p'), N('sides', 0.2)],
-    outlets: [P('p')],
-    emit: (c) => ({ p: `cFold(${c.read('p')}, ${c.read('sides')})` }),
-  },
-
-  swirl: {
-    name: 'swirl',
-    about: 'Rotate by more the further out you are. Twists the frame.',
-    inlets: [P('p'), N('turn')],
-    outlets: [P('p')],
-    emit: (c) => ({ p: `cSwirl(${c.read('p')}, ${c.read('turn')})` }),
-  },
-
-  zoom: {
-    name: 'zoom',
-    about: 'Push in or pull out. A half is life size.',
-    inlets: [P('p'), N('by')],
-    outlets: [P('p')],
-    emit: (c) => ({ p: `cZoom(${c.read('p')}, ${c.read('by')})` }),
-  },
-
-  wobble: {
-    name: 'wobble',
-    about: 'Displace on a sine that runs on the beat.',
-    inlets: [P('p'), N('amount', 0.3)],
-    outlets: [P('p')],
-    emit: (c) => ({ p: `cWobble(${c.read('p')}, ${c.read('amount')})` }),
-  },
-
-  tile: {
-    name: 'tile',
-    about: 'Repeat the frame in a grid.',
-    inlets: [P('p'), N('count', 0.3)],
-    outlets: [P('p')],
-    emit: (c) => ({ p: `cTile(${c.read('p')}, ${c.read('count')})` }),
+  lens: {
+    name: 'lens',
+    about: 'Move the point, and hand back what is there. Geometry, and the effects that are geometry.',
+    // `c` on a node somebody is using as geometry, and `p` on one somebody is
+    // using as an effect. Neither is dead weight: which outlet you take is the
+    // whole difference between the two, and a node with only one of them would
+    // be two nodes again.
+    inlets: (node) => {
+      const op = modeOf(node, LENS_MODES);
+      return [P('p'), C('c'), ...knobPorts(LENS_KNOBS[op], op)];
+    },
+    outlets: [P('p'), C('c')],
+    ops: LENS_MODES,
+    // The `p` outlet cannot see the `c` inlet, and saying so is what makes a
+    // lens feeding a picture that feeds the lens back a **legal** graph rather
+    // than a refused one. See `wouldFeedItself`.
+    reads: (node, outlet) => {
+      const named = inletsOf(node).map((port) => port.name);
+      return outlet === 'p' ? named.filter((name) => name !== 'c') : named;
+    },
+    emit: (c) => {
+      const op = modeOf(c.node, LENS_MODES);
+      const knobs = LENS_KNOBS[op];
+      const moved = LENS_POINT[op](c, c.read('energy'), (i) =>
+        knobs[i] ? c.read(knobs[i]) : '0.0',
+      );
+      // One outlet, and only the one asked for. Emitting the colour to fill a
+      // cache slot nobody wanted sends the resolver back round a graph that was
+      // never circular — and emitting the point beside it declares a line of
+      // GLSL that nothing reads, which is a line off the budget for nothing.
+      const one: Record<string, string> =
+        c.outlet === 'p' ? { p: moved } : { c: c.readAt('c', moved) };
+      return one;
+    },
   },
 
   polar: {
@@ -494,33 +575,40 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     }),
   },
 
-  effect: {
-    name: 'effect',
-    about: 'One of the effects that ship, worked on the picture wired into it.',
-    inlets: (node) => [C('c'), E(), ...EFFECT_KNOBS[effectOp(node)].map((name) => N(name))],
+  grade: {
+    name: 'grade',
+    about: 'The colour where it already is. Nothing here moves anything.',
+    inlets: (node) => {
+      const op = modeOf(node, GRADE_MODES);
+      return [C('c'), ...knobPorts(GRADE_KNOBS[op], op)];
+    },
     outlets: [C('c')],
-    ops: EFFECTS,
+    ops: GRADE_MODES,
     emit: (c) => {
-      const op = effectOp(c.node);
-      const knobs = EFFECT_KNOBS[op];
-      return { c: EFFECT_EMIT[op](c, c.read('energy'), (i) => c.read(knobs[i] ?? 'energy')) };
+      const op = modeOf(c.node, GRADE_MODES);
+      const knobs = GRADE_KNOBS[op];
+      return {
+        c: GRADE_EMIT[op](c, c.read('energy'), (i) => (knobs[i] ? c.read(knobs[i]) : '0.0')),
+      };
     },
   },
 
-  hue: {
-    name: 'hue',
-    about: 'Rotate the colour without touching the shape.',
-    inlets: [C('c'), N('shift')],
+  spread: {
+    name: 'spread',
+    about: 'Reads its input several times, all round where it is. The only expensive family.',
+    inlets: (node) => {
+      const op = modeOf(node, SPREAD_MODES);
+      return [C('c'), ...knobPorts(SPREAD_KNOBS[op], op)];
+    },
     outlets: [C('c')],
-    emit: (c) => ({ c: `cHue(${c.read('c')}, ${c.read('shift')})` }),
-  },
-
-  levels: {
-    name: 'levels',
-    about: 'Contrast and brightness. A half of each is neutral.',
-    inlets: [C('c'), N('gain'), N('lift')],
-    outlets: [C('c')],
-    emit: (c) => ({ c: `cLevels(${c.read('c')}, ${c.read('gain')}, ${c.read('lift')})` }),
+    ops: SPREAD_MODES,
+    emit: (c) => {
+      const op = modeOf(c.node, SPREAD_MODES);
+      const knobs = SPREAD_KNOBS[op];
+      return {
+        c: SPREAD_EMIT[op](c, c.read('energy'), (i) => (knobs[i] ? c.read(knobs[i]) : '0.0')),
+      };
+    },
   },
 
   blend: {
@@ -694,6 +782,14 @@ export const MAX_TRACKS = 8;
  */
 export const MAX_LINES = 2000;
 
+/** The outlets of this node that depend on that inlet. */
+function outletsReading(node: CircuitNode, inlet: string): string[] {
+  const spec = NODE_SPECS[node.kind];
+  return spec.outlets
+    .map((port) => port.name)
+    .filter((name) => (spec.reads?.(node, name) ?? inletsOf(node).map((p) => p.name)).includes(inlet));
+}
+
 /** A port address, as cords name it. */
 export function portId(node: string, port: string): string {
   return `${node}/${port}`;
@@ -742,22 +838,36 @@ export function reachesOut(circuit: Circuit): boolean {
  * dropping is a sentence about the thing just clicked.
  */
 export function wouldFeedItself(circuit: Circuit, from: string, to: string): boolean {
-  const start = splitPort(from).node;
-  const target = splitPort(to).node;
-  if (start === target) return true;
+  const byId = new Map(circuit.nodes.map((node) => [node.id, node]));
   const onward = new Map<string, string[]>();
   for (const cord of circuit.cords) {
-    const at = splitPort(cord.from).node;
-    onward.set(at, [...(onward.get(at) ?? []), splitPort(cord.to).node]);
+    onward.set(cord.from, [...(onward.get(cord.from) ?? []), cord.to]);
   }
   const seen = new Set<string>();
-  const walk = (at: string): boolean => {
-    if (at === start) return true;
-    if (seen.has(at)) return false;
-    seen.add(at);
-    return (onward.get(at) ?? []).some(walk);
+  /**
+   * Forward from an inlet: through its node to the outlets that **read** it,
+   * and on along whatever those feed.
+   *
+   * Port to port rather than node to node, which is what `lens` forced and what
+   * was always more honest. A node is not one thing that everything inside it
+   * depends on — `lens` hands back a point that never looked at its colour, and
+   * `polar` hands back two numbers — so asking "can this node reach that node"
+   * refuses graphs that terminate perfectly well.
+   */
+  const walk = (inlet: string): boolean => {
+    if (seen.has(inlet)) return false;
+    seen.add(inlet);
+    const { node: id, port } = splitPort(inlet);
+    const node = byId.get(id);
+    if (!node) return false;
+    for (const outlet of outletsReading(node, port)) {
+      const at = portId(id, outlet);
+      if (at === from) return true;
+      for (const next of onward.get(at) ?? []) if (walk(next)) return true;
+    }
+    return false;
   };
-  return walk(target);
+  return walk(to);
 }
 
 /**
@@ -1061,14 +1171,22 @@ export function compileCircuit(circuit: Circuit): Compiled {
     const key = `${portId(nodeId, port)}@${at}`;
     const held = named.get(key);
     if (held) return held;
-    // The **node**, not the node at this point. A node is only ever reachable
-    // from its own inlets by going round a loop, so this cannot refuse anything
-    // legitimate — where keying it by the point could not catch anything at
-    // all once a loop had a geometry effect in it, because the point expression
-    // grew on every trip round and never repeated. That descended until the
-    // stack gave out, which reaches a person as a page that has stopped rather
-    // than as a sentence about their wiring.
-    if (open.has(nodeId)) {
+    // The **outlet**, not the node, and not the node at this point.
+    //
+    // By the node was right until `lens` had two outlets: its point never looks
+    // at its colour, so a lens feeding a picture that feeds the lens back is a
+    // graph that terminates, and a node-wide guard refused it. By outlet the
+    // set is still finite — two entries for a lens — so it still terminates,
+    // and it still catches every real loop, because a colour that comes back
+    // round reaches the same outlet with that outlet already open.
+    //
+    // Not by the *point*, which was the tempting third option and caught
+    // nothing at all: the point expression grows on every trip round a loop and
+    // never repeats, so the descent ran until the stack gave out — which
+    // reaches a person as a page that has stopped rather than as a sentence
+    // about their wiring.
+    const here = portId(nodeId, port);
+    if (open.has(here)) {
       failed ??= `${spec.name} feeds itself — a look cannot loop`;
       return null;
     }
@@ -1076,7 +1194,7 @@ export function compileCircuit(circuit: Circuit): Compiled {
       failed ??= 'too big to draw — an effect that takes many samples is nested too deep';
       return null;
     }
-    open.add(nodeId);
+    open.add(here);
 
     /**
      * What an inlet reads with nothing wired to it: the number somebody set,
@@ -1105,6 +1223,7 @@ export function compileCircuit(circuit: Circuit): Compiled {
 
     const ctx: Emitting = {
       at,
+      outlet: port,
       node,
       read: (inlet) => readAt(inlet, at),
       readAt,
@@ -1116,7 +1235,7 @@ export function compileCircuit(circuit: Circuit): Compiled {
         : node.kind === 'track'
           ? { n: `uTracks[${trackSlot.get(node.id) ?? 0}]` }
           : spec.emit(ctx);
-    open.delete(nodeId);
+    open.delete(here);
 
     // A serial rather than the node's index, because one node is now several
     // variables — one per point it was read at — and two of them sharing a name
@@ -1166,7 +1285,7 @@ export function starterCircuit(): Circuit {
       { id: 'live', kind: 'tracks', op: 'by name', x: 40, y: 60 },
       { id: 'wash', kind: 'source', op: 'plasma', x: 40, y: 250 },
       { id: 'k', kind: 'value', x: 40, y: 400, value: 0.35, label: 'wash' },
-      { id: 'fold', kind: 'effect', op: 'kaleido', x: 260, y: 60 },
+      { id: 'fold', kind: 'lens', op: 'kaleido', x: 260, y: 60 },
       { id: 'mix', kind: 'blend', op: 'screen', x: 500, y: 140 },
       { id: 'o', kind: 'out', x: 720, y: 150 },
     ],

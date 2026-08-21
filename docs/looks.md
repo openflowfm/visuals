@@ -148,7 +148,7 @@ full of nodes that is broken, and the difference is one cord. So the canvas says
 Grouped the way the browser groups them, which is `NODE_FAMILIES` in `protocol.ts` — two
 editors listing these differently would be two different vocabularies.
 
-### pictures — everything that makes a colour out of nothing
+### draw — everything that makes a colour out of nothing
 
 | node | in | out | |
 |---|---|---|---|
@@ -157,19 +157,57 @@ editors listing these differently would be two different vocabularies.
 | `look` | `p` | `c` | another look, whole, as one node |
 | `paint` | `amount` `energy` | `c` | the colourway's colour at a brightness |
 
-### colour — everything that takes a picture and gives one back
+### transform — everything that gives a picture back where it already is
 
 | node | in | out | |
 |---|---|---|---|
-| `effect` | `c` `energy` + its own knobs | `c` | one of twelve: `mirror` `kaleido` `shift` `pixelate` `ripple` `smear` `bloom` `slice` `edge` `posterize` `twist` `invert` |
+| `grade` | `c` + its mode's knobs | `c` | `levels` `hue` `posterize` `invert` |
+| `spread` | `c` `energy` + its mode's knobs | `c` | `bloom` `smear` `edge` `shift` |
 | `blend` | `base` `top` `amount` | `c` | `over` `add` `screen` `multiply` |
-| `hue` | `c` `shift` | `c` | rotate the colour without touching the shape |
-| `levels` | `c` `gain` `lift` | `c` | contrast and brightness; a half of each is neutral |
 
 ### geometry — moving the point a picture is read at
 
-`point`, `fold`, `swirl`, `zoom`, `wobble`, `tile`, `polar`. Point in, point out, except
-`polar`, which is how a position becomes a number.
+| node | in | out | |
+|---|---|---|---|
+| `point` | — | `p` | where this fragment is being read |
+| `lens` | `p` `c` `energy` + its mode's knobs | `p` `c` | `zoom` `swirl` `fold` `wobble` `tile` `mirror` `kaleido` `twist` `ripple` `slice` `pixelate` |
+| `polar` | `p` | `radius` `angle` | how a position becomes a number |
+
+## `effect` was three things wearing one name
+
+There is no `effect` node. There were twelve modes on one, and the compiler had been saying
+for a while that they were not one thing: **six** of them emitted *read my input at a moved
+point*, **two** emitted *change the colour where it is*, and **four** read their input
+several times. Only the last can make a shader too big to draw; only the first is geometry.
+One dropdown holding all three taught that they were variations on each other.
+
+The six that move the point went to **`lens`** — and took the five standalone geometry kinds
+with them, because those were already the same functions written twice under two prefixes in
+two files: `fold` **is** `kaleido`'s wedge fold and `swirl` **is** `twist`'s rotation. Eleven
+`vec2 → vec2` functions, one node.
+
+### A lens has both outlets, and that is the whole trick
+
+Take `p` and it is the geometry node it replaced. Take `c` and it is the effect: *the colour
+of my input, at the point I moved to.*
+
+Without the second outlet this would have been a regression rather than a merge. `Folded` is
+the set kaleidoscoped — the plainest sentence in the vocabulary — and a point-only lens would
+need a second node and two more cords to say it. With the colour outlet it is the same eight
+cords it always was, and it now teaches something extra: one kind at both ends of one graph,
+and the difference is which port you took.
+
+The point outlet **cannot see the colour inlet**, which the spec says out loud. That is what
+makes a lens feeding a picture that feeds the lens back a graph that terminates and draws,
+where anything reasoning node-to-node calls it a loop and refuses the cord.
+
+### `spread` is a kind because of what it *costs*
+
+`bloom`, `smear`, `edge` and `shift` each read their whole input several times, so nesting
+two multiplies everything upstream of them. That was already true and already load-bearing —
+`roll.ts` kept a hand-written list of these four by name so a roll would never stack three —
+and a fact the vocabulary could not state was a fact somebody had to remember. It is a kind
+now, and the list is gone.
 
 ### the room — three questions you can ask the set
 
@@ -247,8 +285,8 @@ See below.
 
 ## A mode moves the inlets
 
-An `effect` node's inlets are its *mode's*: a `ripple` has `waves`, `depth` and `speed`; a
-`posterize` has `levels` and nothing else. Changing a mode therefore changes the shape of the
+A node's inlets are its *mode's*: a `lens` set to `ripple` has `waves`, `depth` and `speed`;
+a `grade` set to `posterize` has `steps` and nothing else. Changing a mode therefore changes the shape of the
 node under whatever was already wired to it, and the cords that have nowhere to go are cut.
 
 They used not to be, and the symptom was not the cord — the canvas cannot draw a cord to a
@@ -277,7 +315,7 @@ only difference from another node is one number is a mode of that node. At zero 
 the number itself, which is exactly what `track` always did.
 
 `rate`, `beatPulse`, `charge` and every generator take an energy as a **parameter**, and
-every `source` and `effect` has an `energy` inlet — so what you wire in is yours.
+every mode that reads one has an `energy` inlet — so what you wire in is yours.
 
 The envelope is computed on the CPU and banked into `uTracks`, because an envelope follower
 has to remember what it saw last frame and a fragment shader cannot. Fast up, slow down — one
@@ -343,12 +381,17 @@ compile time the honest message is "one of these seven looks contains itself", w
 can act on; at the moment of dropping, the message is about the thing you just clicked. The
 compiler refuses one too, because a file can be hand-edited.
 
-**A cord that would loop inside one graph is refused the same way**, by `wouldFeedItself`.
-The compiler's guard is keyed by the node alone rather than by the node *and the point it is
-being read at* — a node is only ever reachable from its own inlets by going round a loop, and
-a loop with a geometry effect in it arrives at a different point every trip, so keying it by
-the pair caught nothing at all and the resolver descended until the stack gave out. What that
-reaches a person as is a page that has stopped rather than a sentence about their wiring.
+**A cord that would loop inside one graph is refused the same way**, by `wouldFeedItself`,
+and both it and the compiler's guard are keyed by the **outlet**.
+
+Not by the node, which was right until a lens had two of them: its point never looks at its
+colour, so a lens feeding a picture that feeds the lens back terminates, and a node-wide
+guard refused a graph that draws. Not by the node *and the point it is read at*, which is the
+tempting third option and catches nothing at all — a loop with a lens in it arrives at a
+different point every trip, so the pair never repeats and the resolver descends until the
+stack gives out. What that reaches a person as is a page that has stopped rather than a
+sentence about their wiring. By outlet the set is finite, so it terminates, and a colour that
+comes back round still reaches an outlet that is already open.
 
 A look that has been deleted makes the node draw nothing rather than failing. A look you
 deleted should make the thing that used it go quiet, not stop the show.

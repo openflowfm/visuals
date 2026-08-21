@@ -1,5 +1,7 @@
 import {
-  EFFECTS,
+  GRADE_MODES,
+  LENS_MODES,
+  SPREAD_MODES,
   MATH_OPS,
   NODE_FAMILIES,
   PLAYBACK_NAMES,
@@ -132,7 +134,7 @@ const ABOUT: Record<string, string> = {
  * effect you should be able to drop and have *do* something.
  */
 const PRESET_KNOBS: Record<string, Record<string, number>> = {
-  posterize: { levels: 0.78 },
+  posterize: { steps: 0.78 },
 };
 
 /**
@@ -210,17 +212,18 @@ export function palette(scheme: Scheme, tracks: readonly string[]): Entry[] {
     node('look', id, def.name || id, 'Another look, whole, as one node');
   }
 
-  // Colour.
-  modes('effect', 'effect', EFFECTS);
+  // Colour, and only what is actually colour: `grade` changes it where it is
+  // and `spread` reads around it. The six modes that used to sit beside them
+  // under `effect` never touched a colour at all — they are `lens` now, down in
+  // geometry with the five kinds they were already the same functions as.
+  modes('grade', 'grade', GRADE_MODES);
+  modes('spread', 'spread', SPREAD_MODES);
   modes('blend', 'blend', BLENDS);
-  node('hue', undefined, 'hue', NODE_SPECS.hue.about);
-  node('levels', undefined, 'levels', NODE_SPECS.levels.about);
 
   // Geometry.
   node('point', undefined, 'point', NODE_SPECS.point.about);
-  for (const kind of ['fold', 'swirl', 'zoom', 'wobble', 'tile', 'polar'] as NodeKind[]) {
-    node(kind, undefined, NODE_SPECS[kind].name, NODE_SPECS[kind].about);
-  }
+  modes('lens', 'lens', LENS_MODES);
+  node('polar', undefined, NODE_SPECS.polar.name, NODE_SPECS.polar.about);
 
   // The room: three questions you can ask the set, and nothing else can answer.
   modes('playback', 'playback', PLAYBACK_NAMES);

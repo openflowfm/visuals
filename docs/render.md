@@ -82,8 +82,8 @@ which.
 
 ## What there is to look at
 
-Eleven pictures and twelve effects, all of them **node modes** rather than a parallel
-registry of their own. They are deliberately unlike each other rather than variations on a
+Eleven pictures and nineteen ways to work on one, all of them **node modes** rather than a
+parallel registry of their own. They are deliberately unlike each other rather than variations on a
 theme — five sources all drawing soft noise is one picture, however many of them there are.
 
 | source | |
@@ -100,28 +100,43 @@ theme — five sources all drawing soft noise is one picture, however many of th
 | `scan` | lines, with a bar's sweep passing down them. The one that looks like a machine |
 | `sparks` | a cell per spark, each firing on its own beat and drifting as it dies |
 
-| effect | |
+| `lens` — eleven functions of a point | |
 |---|---|
+| `zoom` | in or out. A half is life size |
+| `swirl` | rotation growing with radius |
+| `fold` | mirrored into wedges around the centre |
+| `wobble` | displaced on a sine that runs on the beat |
+| `tile` | the frame repeated in a grid |
 | `mirror` | a fold, at an angle. Rotating in and out is what turns one mirror into every mirror |
-| `kaleido` | folded in polar space, turning with the beat. Energy adds segments |
-| `shift` | channel separation that opens with the level, so it bites on transients |
-| `pixelate` | blocks that resolve across the bar |
+| `kaleido` | the same wedge fold as `fold`, turning with the beat. Energy adds segments |
+| `twist` | the same rotation as `swirl`, swaying. Where kaleido folds, this wrings |
 | `ripple` | a wave leaving the centre on each beat. The most frenetic of them |
-| `smear` | a short radial blur. The opposite of ripple |
-| `bloom` | eight taps on a ring, and only what is bright is added back |
 | `slice` | rows thrown sideways, re-diced on each beat division. Wrapped, not clamped |
-| `edge` | difference across a pixel. The one effect that makes a busy frame *less* busy |
+| `pixelate` | blocks that resolve across the bar |
+
+| `grade` — the colour where it is | |
+|---|---|
+| `levels` | contrast and brightness. A half of each is neutral |
+| `hue` | rotation about the grey axis, undone and redone around the premultiply |
 | `posterize` | colour quantised to a handful of steps |
-| `twist` | rotation growing with radius. Where kaleido folds, this wrings |
 | `invert` | on the beat and off again. The only one that is a switch rather than a shape |
+
+| `spread` — reads its input several times | |
+|---|---|
+| `bloom` | eight taps on a ring, and only what is bright is added back |
+| `smear` | six taps toward the centre. A short radial blur, and the opposite of ripple |
+| `edge` | four taps, a fraction of the frame apart. The one that makes a busy frame *less* busy |
+| `shift` | three taps, one per channel, opening with the level so it bites on transients |
 
 Adding a picture is a body in `GENERATOR_BODIES` and a name in `SOURCES`, and nothing else:
 the same body serves the `source` node and the track pass, so what a built-in draws and what
-a node draws cannot drift. Adding an effect is a row in `EFFECT_KNOBS` and a row in
-`EFFECT_EMIT` — the second is a function of `(read at a point, energy, knobs)`, which is
-where the three shapes an effect can have become visible. A **remap** reads once at a moved
-point; a **colour** operation reads once where it was; a **tap** reads several times and is
-the only thing here that can make a shader expensive.
+a node draws cannot drift.
+
+Adding a *way to work on one* means picking which of the three it is, and that choice is now
+the node it goes in rather than a shape hidden inside a twelve-entry table. A `lens` mode is
+a row in `LENS_KNOBS` and a one-line function of a point in `LENS_POINT`. A `grade` is the
+same, one line of colour. A `spread` needs the compiler's `readAt`, which is exactly what
+makes it the family that can run out of budget.
 
 Nothing has to be registered in a scheme, because a mode is not a look.
 
@@ -144,7 +159,7 @@ being asked. That made "energy" mean exactly one thing forever, where in practic
 whatever you decide and the useful one is often a particular track's.
 
 So `rate`, `beatPulse`, `charge` and every generator take it as a parameter, and every
-`source` and `effect` node has an `energy` inlet. `uEnergy` survives as **the room's** energy
+mode that reads one has an `energy` inlet. `uEnergy` survives as **the room's** energy
 — a smoothed master meter — which is what an unwired inlet falls back to. A default, not a
 level. See [looks](looks.md).
 

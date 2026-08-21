@@ -1,5 +1,5 @@
 import type { Circuit, CircuitNode, Scheme, Show } from './protocol.ts';
-import { EFFECTS, SOURCES } from './protocol.ts';
+import { GRADE_MODES, LENS_MODES, SOURCES } from './protocol.ts';
 
 /**
  * A library, rolled.
@@ -112,29 +112,49 @@ function palette(rng: Rng): string[] {
   );
 }
 
-/** The geometry nodes a roll wires, and the inlet each one drives. */
-const GEOMETRY: readonly (readonly [CircuitNode['kind'], string])[] = [
-  ['fold', 'sides'],
-  ['swirl', 'turn'],
-  ['zoom', 'by'],
-  ['wobble', 'amount'],
-  ['tile', 'count'],
-];
+/**
+ * The `lens` modes a roll wires, and the inlet each one drives.
+ *
+ * This was a hand-written table of five node kinds, because the five geometry
+ * kinds were five kinds with five different knob names and nothing in the
+ * vocabulary said they were a set. They are one node's modes now, so what is
+ * left here is only the part a roll actually needs: which knob to reach for.
+ */
+const LENS_KNOB: Record<string, string> = {
+  zoom: 'by',
+  swirl: 'turn',
+  fold: 'sides',
+  wobble: 'amount',
+  tile: 'count',
+  mirror: 'line',
+  kaleido: 'segments',
+  twist: 'turn',
+  ripple: 'waves',
+  slice: 'bands',
+  pixelate: 'blocks',
+};
+
+/** The knob a rolled `grade` drives, one per mode. */
+const GRADE_KNOB: Record<string, string> = {
+  levels: 'gain',
+  hue: 'shift',
+  posterize: 'steps',
+  invert: 'hold',
+};
 
 const SIGNALS = ['level', 'beat', 'phase', 'pulse'] as const;
 const WAVES = ['sine', 'saw', 'ramp', 'pulse'] as const;
 
 /**
- * Effects cheap enough to wire blind.
+ * Everything a roll may wire blind, which is everything that is not `spread`.
  *
- * `bloom`, `smear`, `edge` and `shift` are missing on purpose: each reads its
- * input several times, so nesting two of them multiplies the shader. A hand
- * reaches for one knowing what it costs; a roll would stack three and hand the
- * driver something that takes a second to compile. See `MAX_LINES`.
+ * It used to be `EFFECTS` minus a hand-maintained list of the four that read
+ * their input several times, kept by name and by hand because nesting two of
+ * them multiplies the shader — a roll would stack three and hand the driver
+ * something that takes a second to compile. **`spread` is that list now**, so
+ * there is nothing to keep: a roll reaches for `lens` and `grade` and the rule
+ * is in the vocabulary rather than in a filter beside it. See `MAX_LINES`.
  */
-const CHEAP_EFFECTS = EFFECTS.filter(
-  (name) => !['bloom', 'smear', 'edge', 'shift'].includes(name),
-);
 
 /**
  * A look that always compiles and usually looks like something.
@@ -204,11 +224,13 @@ export function rollCircuit(rng: Rng): Circuit {
   const point = `${add({ kind: 'point', x: at(), y: 20 })}/p`;
   let carry = point;
   const steps = 1 + Math.floor(rng() * 3);
-  for (const [kind, inlet] of shuffled(rng, GEOMETRY).slice(0, steps)) {
+  // Point form, so what comes out is a place rather than a picture: the lens
+  // is in front of the picture here, and its colour outlet is unwired.
+  for (const op of shuffled(rng, [...LENS_MODES]).slice(0, steps)) {
     const x = at();
-    const node = add({ kind, x, y: 20 });
+    const node = add({ kind: 'lens', op, x, y: 20 });
     wire(carry, `${node}/p`);
-    drive(x, 210 + (next % 2) * 150, `${node}/${inlet}`);
+    drive(x, 210 + (next % 2) * 150, `${node}/${LENS_KNOB[op]}`);
     carry = `${node}/p`;
   }
 
@@ -221,7 +243,7 @@ export function rollCircuit(rng: Rng): Circuit {
   carry = `${picture}/c`;
 
   if (chance(rng, 0.6)) {
-    const node = add({ kind: 'effect', op: pick(rng, CHEAP_EFFECTS), x: at(), y: 20 });
+    const node = add({ kind: 'lens', op: pick(rng, LENS_MODES), x: at(), y: 20 });
     wire(carry, `${node}/c`);
     carry = `${node}/c`;
   }
@@ -241,9 +263,10 @@ export function rollCircuit(rng: Rng): Circuit {
 
   if (chance(rng, 0.5)) {
     const x = at();
-    const node = add({ kind: 'hue', x, y: 20 });
+    const op = pick(rng, GRADE_MODES);
+    const node = add({ kind: 'grade', op, x, y: 20 });
     wire(carry, `${node}/c`);
-    drive(x, 210, `${node}/shift`);
+    drive(x, 210, `${node}/${GRADE_KNOB[op]}`);
     carry = `${node}/c`;
   }
 

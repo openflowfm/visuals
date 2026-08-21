@@ -77,7 +77,7 @@ describe('compiling a look', () => {
     const built = compileCircuit(
       wire(
         [
-          { id: 'f', kind: 'fold', x: 0, y: 0 },
+          { id: 'f', kind: 'lens', op: 'fold', x: 0, y: 0 },
           { id: 'g', kind: 'source', op: 'plasma', x: 1, y: 0 },
           { id: 'o', kind: 'out', x: 2, y: 0 },
         ],
@@ -95,7 +95,7 @@ describe('compiling a look', () => {
     const built = compileCircuit(
       wire(
         [
-          { id: 'a', kind: 'hue', x: 0, y: 0 },
+          { id: 'a', kind: 'grade', op: 'hue', x: 0, y: 0 },
           { id: 'o', kind: 'out', x: 1, y: 0 },
         ],
         [
@@ -116,7 +116,7 @@ describe('compiling a look', () => {
     const built = compileCircuit(
       wire(
         [
-          { id: 'k', kind: 'effect', op: 'kaleido', x: 0, y: 0 },
+          { id: 'k', kind: 'lens', op: 'kaleido', x: 0, y: 0 },
           { id: 'b', kind: 'blend', op: 'screen', x: 1, y: 0 },
           { id: 'o', kind: 'out', x: 2, y: 0 },
         ],
@@ -134,8 +134,8 @@ describe('compiling a look', () => {
   it('refuses a cord that would close a loop, before it is dropped', () => {
     const circuit = wire(
       [
-        { id: 'a', kind: 'hue', x: 0, y: 0 },
-        { id: 'b', kind: 'levels', x: 1, y: 0 },
+        { id: 'a', kind: 'grade', op: 'hue', x: 0, y: 0 },
+        { id: 'b', kind: 'grade', op: 'levels', x: 1, y: 0 },
       ],
       [{ from: 'a/c', to: 'b/c' }],
     );
@@ -162,13 +162,13 @@ describe('compiling a look', () => {
     expect(reachesOut(starterCircuit())).toBe(true);
   });
 
-  it('gives an effect nobody has heard of the knobs it will be compiled with', () => {
+  it('gives a mode nobody has heard of the knobs it will be compiled with', () => {
     // The inlets took `op` at its word and the emit fell back to the first
-    // effect, so a mode out of a hand-edited file drew a faceplate with no knobs
-    // on it and a shader whose knobs were all zero — a mirror folded hard left
-    // with nothing on the canvas to say why.
-    const node = { id: 'e', kind: 'effect' as const, op: 'lasers', x: 0, y: 0 };
-    expect(inletsOf(node).map((port) => port.name)).toEqual(['c', 'energy', 'line', 'angle']);
+    // mode, so one out of a hand-edited file drew a faceplate with no knobs on
+    // it and a shader whose knobs were all zero — a lens folded hard left with
+    // nothing on the canvas to say why.
+    const node = { id: 'e', kind: 'lens' as const, op: 'lasers', x: 0, y: 0 };
+    expect(inletsOf(node).map((port) => port.name)).toEqual(['p', 'c', 'by']);
   });
 
   it('is a number, so it will not go into a point', () => {
@@ -214,6 +214,94 @@ describe('compiling a look', () => {
   });
 });
 
+describe('a lens has two outlets and they are not the same node twice', () => {
+  it('is the geometry node from its point and the effect from its colour', () => {
+    // The claim the merge rests on. `fold` and `kaleido` were two kinds under
+    // two prefixes in two files and are one wedge fold; which of them you get
+    // is which outlet you take, and the graph says so rather than the browser.
+    const asPoint = compileCircuit(
+      wire(
+        [
+          { id: 'pt', kind: 'point', x: 0, y: 0 },
+          { id: 'l', kind: 'lens', op: 'fold', x: 1, y: 0 },
+          { id: 'g', kind: 'source', op: 'plasma', x: 2, y: 0 },
+          { id: 'o', kind: 'out', x: 3, y: 0 },
+        ],
+        [
+          { from: 'pt/p', to: 'l/p' },
+          { from: 'l/p', to: 'g/p' },
+          { from: 'g/c', to: 'o/c' },
+        ],
+      ),
+    );
+    // A plasma read at a folded point: the fold lands in a variable and the
+    // picture is read there.
+    const folded = /vec2 (v\d+) = cFold\(/.exec(bodyOf(asPoint.source!))?.[1];
+    expect(folded).toBeTruthy();
+    expect(bodyOf(asPoint.source!)).toContain(`gen_plasma(${folded}`);
+
+    const asEffect = compileCircuit(
+      wire(
+        [
+          { id: 'g', kind: 'source', op: 'plasma', x: 0, y: 0 },
+          { id: 'l', kind: 'lens', op: 'fold', x: 1, y: 0 },
+          { id: 'o', kind: 'out', x: 2, y: 0 },
+        ],
+        [
+          { from: 'g/c', to: 'l/c' },
+          { from: 'l/c', to: 'o/c' },
+        ],
+      ),
+    );
+    // The same fold and the same GLSL, inline this time because the colour
+    // outlet asks its input for a point rather than handing one on. Nothing is
+    // wired to the lens's own `p`, so the point it moves is the one it was
+    // asked about — which is exactly what the effect it replaced did.
+    expect(bodyOf(asEffect.source!)).toContain('gen_plasma(cFold(centred()');
+    // And nothing dead: the point outlet nobody took is not declared.
+    expect(bodyOf(asEffect.source!)).not.toMatch(/vec2 v\d+ = cFold/);
+  });
+
+  it('lets a lens feed a picture that feeds the lens back', () => {
+    // The graph a node-wide loop guard refused and a person would draw without
+    // thinking: the point goes out to a source, the source comes back as the
+    // colour. It terminates, because the point never looked at the colour —
+    // which is exactly what `reads` on the spec says and what the compiler's
+    // guard is keyed by now.
+    const circuit = wire(
+      [
+        { id: 'l', kind: 'lens', op: 'swirl', x: 0, y: 0 },
+        { id: 'g', kind: 'source', op: 'rings', x: 1, y: 0 },
+        { id: 'o', kind: 'out', x: 2, y: 0 },
+      ],
+      [
+        { from: 'l/p', to: 'g/p' },
+        { from: 'g/c', to: 'l/c' },
+        { from: 'l/c', to: 'o/c' },
+      ],
+    );
+    expect(wouldFeedItself(circuit, 'g/c', 'l/c')).toBe(false);
+    const built = compileCircuit(circuit);
+    expect(built.error).toBeNull();
+    expect(built.source).toBeTruthy();
+  });
+
+  it('still refuses a colour that comes back round to itself', () => {
+    const circuit = wire(
+      [
+        { id: 'l', kind: 'lens', op: 'swirl', x: 0, y: 0 },
+        { id: 'gr', kind: 'grade', op: 'hue', x: 1, y: 0 },
+        { id: 'o', kind: 'out', x: 2, y: 0 },
+      ],
+      [
+        { from: 'l/c', to: 'gr/c' },
+        { from: 'gr/c', to: 'o/c' },
+      ],
+    );
+    expect(wouldFeedItself(circuit, 'gr/c', 'l/c')).toBe(true);
+  });
+});
+
 describe('an inlet holds a number of its own', () => {
   /** The size the shader declared its bank at, which is what the CPU must match. */
   const bankOf = (source: string) => Number(/uniform float uParams\[(\d+)\]/.exec(source)?.[1]);
@@ -223,7 +311,7 @@ describe('an inlet holds a number of its own', () => {
       [
         { id: 'g', kind: 'source', op: 'plasma', x: 0, y: 0 },
         { id: 'k', kind: 'value', x: 0, y: 1, value: 0.25, label: 'dial' },
-        { id: 'e', kind: 'effect', op: 'posterize', x: 1, y: 0, ...(knobs ? { knobs } : {}) },
+        { id: 'e', kind: 'grade', op: 'posterize', x: 1, y: 0, ...(knobs ? { knobs } : {}) },
         { id: 'o', kind: 'out', x: 2, y: 0 },
       ],
       [{ from: 'g/c', to: 'e/c' }, { from: 'e/c', to: 'o/c' }, ...cords],
@@ -238,7 +326,7 @@ describe('an inlet holds a number of its own', () => {
     // dragging one does not rebuild a shader sixty times a second — a value
     // interpolated into the GLSL hands that back at every inlet on the canvas,
     // and what it reaches a person as is a knob that stalls the picture.
-    const built = compileCircuit(posterize({ levels: 0.78 }));
+    const built = compileCircuit(posterize({ steps: 0.78 }));
     expect(built.error).toBeNull();
     expect(bodyOf(built.source!)).not.toContain('0.78');
     expect(bodyOf(built.source!)).toContain('fxPosterize(v0, uParams[1])');
@@ -250,7 +338,7 @@ describe('an inlet holds a number of its own', () => {
     // bank big enough for every inlet would be hundreds of unread uniforms.
     expect(bankOf(compileCircuit(bareCircuit()).source!)).toBe(1);
     expect(bankOf(compileCircuit(posterize()).source!)).toBe(1);
-    expect(bankOf(compileCircuit(posterize({ levels: 0.78 })).source!)).toBe(2);
+    expect(bankOf(compileCircuit(posterize({ steps: 0.78 })).source!)).toBe(2);
   });
 
   it('hands the CPU a bank exactly as long as the shader declared', () => {
@@ -263,9 +351,9 @@ describe('an inlet holds a number of its own', () => {
   });
 
   it('gives the slots out in the order the graph reads', () => {
-    const knobs = knobsOf(posterize({ levels: 0.78 }));
-    expect(knobs.map((each) => each.id)).toEqual(['k', 'e/levels']);
-    expect(paramsOf(posterize({ levels: 0.78 }))).toEqual(new Float32Array([0.25, 0.78]));
+    const knobs = knobsOf(posterize({ steps: 0.78 }));
+    expect(knobs.map((each) => each.id)).toEqual(['k', 'e/steps']);
+    expect(paramsOf(posterize({ steps: 0.78 }))).toEqual(new Float32Array([0.25, 0.78]));
   });
 
   it('goes dormant under a cord rather than being lost', () => {
@@ -273,7 +361,7 @@ describe('an inlet holds a number of its own', () => {
     // the node, out of the bank while the cord is on top of it, and comes back
     // where it was when the cord goes. Snapping to the default on unwiring is
     // the sort of thing that makes people stop experimenting with a canvas.
-    const wired = posterize({ levels: 0.78 }, [{ from: 'k/n', to: 'e/levels' }]);
+    const wired = posterize({ levels: 0.78 }, [{ from: 'k/n', to: 'e/steps' }]);
     expect(knobsOf(wired).map((each) => each.id)).toEqual(['k']);
     // The knob node's slot, read through the cord — not the number on the face.
     expect(bodyOf(compileCircuit(wired).source!)).toContain('float v1 = uParams[0]');
@@ -289,7 +377,7 @@ describe('an inlet holds a number of its own', () => {
       inletsOf(node)
         .filter((port) => port.at !== undefined)
         .map((port) => port.name);
-    expect(knobs({ id: 'e', kind: 'effect', op: 'ripple', x: 0, y: 0 })).toEqual([
+    expect(knobs({ id: 'e', kind: 'lens', op: 'ripple', x: 0, y: 0 })).toEqual([
       'waves',
       'depth',
       'speed',
@@ -305,7 +393,7 @@ describe('an inlet holds a number of its own', () => {
         circuit: wire(
           [
             { id: 'g', kind: 'source', op: 'rings', x: 0, y: 0 },
-            { id: 'p', kind: 'effect', op: 'posterize', x: 1, y: 0, knobs: { levels: 0.9 } },
+            { id: 'p', kind: 'grade', op: 'posterize', x: 1, y: 0, knobs: { steps: 0.9 } },
             { id: 'o', kind: 'out', x: 2, y: 0 },
           ],
           [
@@ -319,7 +407,7 @@ describe('an inlet holds a number of its own', () => {
         circuit: wire(
           [
             { id: 'sub', kind: 'look', op: 'inner', x: 0, y: 0 },
-            { id: 'h', kind: 'hue', x: 1, y: 0, knobs: { shift: 0.3 } },
+            { id: 'h', kind: 'grade', op: 'hue', x: 1, y: 0, knobs: { shift: 0.3 } },
             { id: 'o', kind: 'out', x: 2, y: 0 },
           ],
           [
@@ -331,7 +419,7 @@ describe('an inlet holds a number of its own', () => {
     };
     const built = compileLook(looks, 'outer');
     expect(built.error).toBeNull();
-    expect(built.knobs.map((each) => each.id)).toEqual(['sub~p/levels', 'h/shift']);
+    expect(built.knobs.map((each) => each.id)).toEqual(['sub~p/steps', 'h/shift']);
     expect(bankOf(built.source!)).toBe(2);
   });
 
@@ -358,7 +446,7 @@ describe('a colour is a function of a point', () => {
       wire(
         [
           { id: 'g', kind: 'source', op: 'plasma', x: 0, y: 0 },
-          { id: 'k', kind: 'effect', op: 'kaleido', x: 1, y: 0 },
+          { id: 'k', kind: 'lens', op: 'kaleido', x: 1, y: 0 },
           { id: 'o', kind: 'out', x: 2, y: 0 },
         ],
         [
@@ -384,8 +472,8 @@ describe('a colour is a function of a point', () => {
       wire(
         [
           { id: 'p', kind: 'point', x: 0, y: 0 },
-          { id: 'f', kind: 'fold', x: 1, y: 0 },
-          { id: 's', kind: 'swirl', x: 1, y: 1 },
+          { id: 'f', kind: 'lens', op: 'fold', x: 1, y: 0 },
+          { id: 's', kind: 'lens', op: 'swirl', x: 1, y: 1 },
           { id: 'a', kind: 'source', op: 'plasma', x: 2, y: 0 },
           { id: 'b', kind: 'source', op: 'rings', x: 2, y: 1 },
           { id: 'm', kind: 'blend', op: 'screen', x: 3, y: 0 },
@@ -417,7 +505,7 @@ describe('a colour is a function of a point', () => {
       wire(
         [
           { id: 'g', kind: 'source', op: 'sparks', x: 0, y: 0 },
-          { id: 'b', kind: 'effect', op: 'bloom', x: 1, y: 0 },
+          { id: 'b', kind: 'spread', op: 'bloom', x: 1, y: 0 },
           { id: 'o', kind: 'out', x: 2, y: 0 },
         ],
         [
@@ -512,7 +600,7 @@ describe('an effect reads its input where it says it does', () => {
       wire(
         [
           { id: 'g', kind: 'source', op: 'grid', x: 0, y: 0 },
-          { id: 'e', kind: 'effect', op: 'edge', x: 1, y: 0 },
+          { id: 'e', kind: 'spread', op: 'edge', x: 1, y: 0 },
           { id: 'o', kind: 'out', x: 2, y: 0 },
         ],
         [
@@ -565,7 +653,7 @@ describe('exactly one out, and it is not optional', () => {
       wire(
         [
           { id: 'k', kind: 'value', x: 0, y: 0, value: 0.5 },
-          { id: 'e', kind: 'effect', op: 'posterize', x: 1, y: 0 },
+          { id: 'e', kind: 'grade', op: 'posterize', x: 1, y: 0 },
           { id: 'o', kind: 'out', x: 2, y: 0 },
         ],
         [
@@ -587,24 +675,24 @@ describe('exactly one out, and it is not optional', () => {
         [
           {
             id: 'e',
-            kind: 'effect',
+            kind: 'grade',
             op: 'posterize',
             x: 0,
             y: 0,
-            knobs: { levels: 0.8, waves: 0.3 },
+            knobs: { steps: 0.8, waves: 0.3 },
           },
           { id: 'o', kind: 'out', x: 1, y: 0 },
         ],
         [{ from: 'e/c', to: 'o/c' }],
       ),
     );
-    expect(fixed.nodes[0].knobs).toEqual({ levels: 0.8 });
+    expect(fixed.nodes[0].knobs).toEqual({ steps: 0.8 });
     // And a node whose values were all strays loses the field rather than
     // keeping an empty map in every save of the file from then on.
     const bare = repaired(
       wire(
         [
-          { id: 'h', kind: 'hue', x: 0, y: 0, knobs: { reach: 0.4 } },
+          { id: 'h', kind: 'grade', op: 'hue', x: 0, y: 0, knobs: { reach: 0.4 } },
           { id: 'o', kind: 'out', x: 1, y: 0 },
         ],
         [{ from: 'h/c', to: 'o/c' }],
@@ -637,7 +725,7 @@ describe('a look inside a look', () => {
       circuit: wire(
         [
           { id: 'sub', kind: 'look', op: 'inner', x: 0, y: 0 },
-          { id: 'fx', kind: 'effect', op: 'twist', x: 1, y: 0 },
+          { id: 'fx', kind: 'lens', op: 'twist', x: 1, y: 0 },
           { id: 'o', kind: 'out', x: 2, y: 0 },
         ],
         [
@@ -663,7 +751,7 @@ describe('a look inside a look', () => {
     const looks = library();
     looks.outer.circuit.nodes.push(
       { id: 'pt', kind: 'point', x: 0, y: 2 },
-      { id: 'z', kind: 'zoom', x: 0, y: 3 },
+      { id: 'z', kind: 'lens', op: 'zoom', x: 0, y: 3 },
     );
     looks.outer.circuit.cords.push({ from: 'pt/p', to: 'z/p' }, { from: 'z/p', to: 'sub/p' });
     const built = compileLook(looks, 'outer');

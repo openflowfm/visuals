@@ -352,7 +352,13 @@ function faceName(
   // could guess from the canvas and the reading is on a dropdown an inch below.
   if (node.kind === 'track') return node.of || 'track';
   if (node.kind === 'tracks') return 'the set';
-  if (node.kind === 'source' || node.kind === 'effect' || node.kind === 'playback') {
+  if (
+    node.kind === 'source' ||
+    node.kind === 'lens' ||
+    node.kind === 'grade' ||
+    node.kind === 'spread' ||
+    node.kind === 'playback'
+  ) {
     return node.op || fallback;
   }
   if (node.kind === 'song') return `song ${node.op ?? 'seed'}`;

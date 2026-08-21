@@ -168,12 +168,12 @@ const BUILT_IN: Scheme = {
         ['bar', 'playback', 'phase'],
         ['sway', 'wave', 'sine'],
         ['half', 'math', 'average'],
-        ['turn', 'swirl'],
+        ['turn', 'lens', 'swirl'],
         ['live', 'tracks', 'by name'],
         ['e', 'track', 'level', undefined, 0.35, undefined, 'master'],
         // The wedge count is set on the effect's own face rather than wired in
         // from a knob node. One number, one place, no cord across the canvas.
-        ['fold', 'effect', 'kaleido', { segments: 0.3 }],
+        ['fold', 'lens', 'kaleido', { segments: 0.3 }],
         ['o', 'out'],
       ],
       [
@@ -198,13 +198,13 @@ const BUILT_IN: Scheme = {
         ['e', 'track', 'level', undefined, 0.4, undefined, 'master'],
         ['pt', 'point'],
         ['tun', 'source', 'tunnel'],
-        ['wob', 'wobble'],
+        ['wob', 'lens', 'wobble'],
         ['live', 'tracks', 'by name'],
         // How much of the set is in the picture, and how hard the grade is:
         // both are numbers you turn while looking at the wall, and both live on
         // the node they belong to.
         ['mix', 'blend', 'screen', { amount: 0.75 }],
-        ['grade', 'levels', undefined, { gain: 0.62 }],
+        ['grade', 'grade', 'levels', { gain: 0.62 }],
         ['o', 'out'],
       ],
       [
@@ -239,7 +239,7 @@ const BUILT_IN: Scheme = {
         ['fade', 'math', 'subtract', { a: 1 }],
         ['grain', 'source', 'noise'],
         ['glow', 'paint'],
-        ['tint', 'hue'],
+        ['tint', 'grade', 'hue'],
         ['song', 'song', 'seed'],
         ['mix', 'blend', 'screen'],
         ['o', 'out'],
@@ -274,15 +274,15 @@ const BUILT_IN: Scheme = {
         ['t', 'playback', 'time'],
         ['slow', 'math', 'multiply', { b: 0.12 }],
         ['sway', 'wave', 'sine'],
-        ['wob', 'wobble'],
+        ['wob', 'lens', 'wobble'],
         ['e', 'track', 'level', undefined, 0.55, undefined, 'master'],
         ['surf', 'source', 'plasma'],
-        ['rip', 'effect', 'ripple', { waves: 0.72, depth: 0.4, speed: 0.22 }],
-        ['soft', 'effect', 'smear', { reach: 0.2, drive: 0.35 }],
+        ['rip', 'lens', 'ripple', { waves: 0.72, depth: 0.4, speed: 0.22 }],
+        ['soft', 'spread', 'smear', { reach: 0.2, drive: 0.35 }],
         // A lifted floor and a gain just under neutral: milky rather than
         // contrasty, because nothing underwater has a hard edge — but not so
         // soft that the ripple it is there to carry stops reading.
-        ['milk', 'levels', undefined, { gain: 0.52, lift: 0.6 }],
+        ['milk', 'grade', 'levels', { gain: 0.52, lift: 0.6 }],
         ['o', 'out'],
       ],
       [
@@ -308,15 +308,15 @@ const BUILT_IN: Scheme = {
       [
         ['pt', 'point'],
         ['hit', 'playback', 'pulse'],
-        ['zm', 'zoom'],
+        ['zm', 'lens', 'zoom'],
         ['e', 'track', 'level', undefined, 0.3, undefined, 'master'],
         ['sp', 'source', 'spiral'],
-        ['tw', 'effect', 'twist', { turn: 0.68, sway: 0.4 }],
+        ['tw', 'lens', 'twist', { turn: 0.68, sway: 0.4 }],
         // A short reach and a floor high enough that only the arms bloom. Wide
         // open it welds the spiral into two flat colours, which is the failure
         // this effect always has: it is the cheapest way to look expensive and
         // the cheapest way to lose every edge you had.
-        ['glow', 'effect', 'bloom', { reach: 0.34, floor: 0.34 }],
+        ['glow', 'spread', 'bloom', { reach: 0.34, floor: 0.34 }],
         ['o', 'out'],
       ],
       [
@@ -339,12 +339,12 @@ const BUILT_IN: Scheme = {
       'Gateway',
       [
         ['pt', 'point'],
-        ['fld', 'fold', undefined, { sides: 0.45 }],
+        ['fld', 'lens', 'fold', { sides: 0.45 }],
         ['e', 'track', 'level', undefined, 0.35, undefined, 'master'],
         ['tun', 'source', 'tunnel'],
         ['rng', 'source', 'rings'],
         ['mix', 'blend', 'add', { amount: 0.6 }],
-        ['mir', 'effect', 'mirror', { line: 0.5, angle: 0.25 }],
+        ['mir', 'lens', 'mirror', { line: 0.5, angle: 0.25 }],
         ['o', 'out'],
       ],
       [
@@ -374,10 +374,10 @@ const BUILT_IN: Scheme = {
         // small number, so an outline drawn at the effect's own middle is one
         // you can only see in a dark room — which is the whole point of the
         // look and the one thing it was failing at.
-        ['cut', 'effect', 'edge', { width: 0.72, gain: 0.85 }],
-        ['lift', 'levels', undefined, { gain: 0.6, lift: 0.74 }],
+        ['cut', 'spread', 'edge', { width: 0.72, gain: 0.85 }],
+        ['lift', 'grade', 'levels', { gain: 0.6, lift: 0.74 }],
         ['fill', 'tracks', 'by name'],
-        ['ghost', 'levels', undefined, { gain: 0.34, lift: 0.46 }],
+        ['ghost', 'grade', 'levels', { gain: 0.34, lift: 0.46 }],
         ['mix', 'blend', 'screen', { amount: 0.85 }],
         ['o', 'out'],
       ],
@@ -402,8 +402,8 @@ const BUILT_IN: Scheme = {
         // Lifted *before* the quantise, not after. Four steps taken out of a
         // dark picture are four dark steps, and no amount of grading afterwards
         // puts back a band that was never cut.
-        ['punch', 'levels', undefined, { gain: 0.68, lift: 0.66 }],
-        ['flat', 'effect', 'posterize', { levels: 0.78 }],
+        ['punch', 'grade', 'levels', { gain: 0.68, lift: 0.66 }],
+        ['flat', 'grade', 'posterize', { steps: 0.78 }],
         ['key', 'song', 'key'],
         // Halved about no-shift, because `hue` reads a half as "leave it alone"
         // and a pitch class reads C as zero — so the key wired straight in put
@@ -411,7 +411,7 @@ const BUILT_IN: Scheme = {
         // makes the colourway its own opposite. Averaged, the whole set of keys
         // swings a quarter-turn either side of the colours you chose.
         ['centre', 'math', 'average'],
-        ['tint', 'hue'],
+        ['tint', 'grade', 'hue'],
         ['o', 'out'],
       ],
       [
@@ -435,14 +435,14 @@ const BUILT_IN: Scheme = {
       [
         ['live', 'tracks', 'by name'],
         ['e', 'track', 'level', undefined, 0.12, undefined, 'master'],
-        ['cut', 'effect', 'slice', { bands: 0.5, throw: 0.45 }],
-        ['px', 'effect', 'pixelate', { blocks: 0.22, resolve: 0.8 }],
-        ['rgb', 'effect', 'shift', { spread: 0.45, drive: 0.7 }],
-        ['flip', 'effect', 'invert', { hold: 0.28, rate: 0.6 }],
+        ['cut', 'lens', 'slice', { bands: 0.5, throw: 0.45 }],
+        ['px', 'lens', 'pixelate', { blocks: 0.22, resolve: 0.8 }],
+        ['rgb', 'spread', 'shift', { split: 0.45, drive: 0.7 }],
+        ['flip', 'grade', 'invert', { hold: 0.28, rate: 0.6 }],
         // Last, so the lift is on the glitch rather than on the set: brightening
         // first would have `shift` pulling apart channels that were already at
         // the top and the aberration would go white instead of coloured.
-        ['up', 'levels', undefined, { gain: 0.58, lift: 0.72 }],
+        ['up', 'grade', 'levels', { gain: 0.58, lift: 0.72 }],
         ['o', 'out'],
       ],
       [
@@ -712,8 +712,51 @@ function carried(file: Partial<Scheme> & Legacy): Partial<Scheme> {
 
 /** A kind that used to exist, for a file that still spells one. */
 type Was = Omit<CircuitNode, 'kind'> & {
-  kind: CircuitNode['kind'] | 'sample' | 'signal' | 'energy';
+  kind:
+    | CircuitNode['kind']
+    | 'sample'
+    | 'signal'
+    | 'energy'
+    | 'effect'
+    | 'hue'
+    | 'levels'
+    | 'fold'
+    | 'swirl'
+    | 'zoom'
+    | 'wobble'
+    | 'tile';
 };
+
+/** The five geometry kinds, which are `lens` modes now and were always its functions. */
+const WAS_GEOMETRY = ['fold', 'swirl', 'zoom', 'wobble', 'tile'] as const;
+
+/** Where each old `effect` mode went when `effect` turned out to be three things. */
+const WAS_EFFECT: Record<string, CircuitNode['kind']> = {
+  mirror: 'lens',
+  kaleido: 'lens',
+  pixelate: 'lens',
+  ripple: 'lens',
+  slice: 'lens',
+  twist: 'lens',
+  posterize: 'grade',
+  invert: 'grade',
+  bloom: 'spread',
+  smear: 'spread',
+  edge: 'spread',
+  shift: 'spread',
+};
+
+/** A knob renamed out of a collision with a mode or a kind beside it. */
+function swapKnob(
+  knobs: Record<string, number> | undefined,
+  was: string,
+  now: string,
+): Record<string, number> | undefined {
+  if (!knobs || knobs[was] === undefined) return knobs;
+  const next = { ...knobs, [now]: knobs[was] };
+  delete next[was];
+  return next;
+}
 
 /**
  * A graph written against an older vocabulary.
@@ -752,6 +795,29 @@ function reword(circuit: Circuit): Circuit {
       // is zero — so an unstated fall has to be written down rather than
       // inherited, or every rolled look would lose its breathing.
       return { ...node, kind: 'track', op: 'level', of: node.op ?? 'master', value: node.value ?? 0.4 };
+    }
+    // `effect` was three things wearing one name, and the compiler said so: six
+    // of its modes moved the point, two changed the colour where it was, and
+    // four read their input many times. Every one of them keeps its `c` inlet
+    // and its `c` outlet, so **no cord moves** — which is the whole reason the
+    // split could be done to a library people already have.
+    if (node.kind === 'effect') {
+      const kind = WAS_EFFECT[node.op ?? ''] ?? 'lens';
+      const knobs =
+        node.op === 'posterize'
+          ? swapKnob(node.knobs, 'levels', 'steps')
+          : node.op === 'shift'
+            ? swapKnob(node.knobs, 'spread', 'split')
+            : node.knobs;
+      return { ...node, kind, op: node.op ?? 'mirror', ...(knobs ? { knobs } : {}) };
+    }
+    // The five that were kinds of their own are the same eleven functions the
+    // six above are: `fold` **is** `kaleido`'s wedge fold, written twice.
+    if ((WAS_GEOMETRY as readonly string[]).includes(node.kind)) {
+      return { ...node, kind: 'lens', op: node.kind };
+    }
+    if (node.kind === 'hue' || node.kind === 'levels') {
+      return { ...node, kind: 'grade', op: node.kind };
     }
     if (node.kind === 'track' && node.of === undefined) {
       renamed.add(node.id);

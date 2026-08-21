@@ -195,7 +195,7 @@ they are also the show a fresh clone puts on.
 | **Gateway** | geometry happens *before* the picture — `fold` and a bare point feed two sources that never meet until the blend |
 | **Outline** | the set as a diagram. `edge` keeps the outline and throws the fill away, over a ghost of the same set |
 | **Poster** | flat bands, and the one look that changes with the *music*: `posterize` to four steps, hue rotated by the song's key |
-| **Glitch** | four effects in a row and nothing else — the other end of the vocabulary from `The set` |
+| **Glitch** | two lenses, a spread and two grades in a row and nothing else — the other end of the vocabulary from `The set` |
 
 Three of them are **portals**, and that is deliberate rather than repetition: `Deep` recedes,
 `Vortex` turns and `Gateway` opens. It is the shape this kind of rig reaches for most, and
@@ -236,9 +236,10 @@ Three constraints are worth stating because they are what make a rolled one read
 
 - **It reaches for the set more often than not.** A rolled look that ignored whoever is
   playing is a screensaver, and this rig is not one.
-- **It never wires the four expensive effects.** `bloom`, `smear`, `edge` and `shift` each
-  read their input several times, so nesting two of them multiplies the shader. A hand
-  reaches for one knowing what it costs; a roll would stack three.
+- **It never wires a `spread`.** `bloom`, `smear`, `edge` and `shift` each read their input
+  several times, so nesting two of them multiplies the shader. A hand reaches for one knowing
+  what it costs; a roll would stack three. This used to be a list of four names kept beside
+  the roll and maintained by hand — it is a node kind now, so there is nothing to keep.
 - **Colours are a harmony, not four hues.** A base, one of five relationships to it, one
   member kept near white so a busy frame has something to read edges against — and all of it
   kept light, because a cheap projector has no black to work against and a dark colourway is

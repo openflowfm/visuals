@@ -58,17 +58,12 @@ export type NodeKind =
   | 'tracks'
   | 'look'
   | 'paint'
-  // geometry: point in, point out
-  | 'fold'
-  | 'swirl'
-  | 'zoom'
-  | 'wobble'
-  | 'tile'
+  // geometry: it moves the point, and hands back what it found there
+  | 'lens'
   | 'polar'
   // colour
-  | 'effect'
-  | 'hue'
-  | 'levels'
+  | 'grade'
+  | 'spread'
   | 'blend'
   // arithmetic
   | 'math'
@@ -92,19 +87,18 @@ export const NODE_FAMILIES: readonly { name: string; about: string; kinds: NodeK
     kinds: ['source', 'tracks', 'look', 'paint'],
   },
   {
-    // Not `colour`, which it was: half of what `effect` contains never touches
-    // a colour at all — `kaleido`, `ripple` and four more move the point their
-    // input is read at, and only then hand back a picture. A heading has to be
-    // true of everything under it or it is teaching the wrong thing to the one
-    // person who reads headings, which is whoever is here for the first time.
+    // Not `colour`, which it was: half of what `effect` contained never touched
+    // a colour at all. Those six left for `lens`, so the heading is true of
+    // everything under it now — which is the least a heading can do for the one
+    // person who reads headings, who is whoever is here for the first time.
     name: 'transform',
-    about: 'Everything that takes a picture and gives one back',
-    kinds: ['effect', 'blend', 'hue', 'levels'],
+    about: 'Everything that takes a picture and gives one back where it is',
+    kinds: ['grade', 'spread', 'blend'],
   },
   {
     name: 'geometry',
     about: 'Moving the point a picture is read at',
-    kinds: ['point', 'fold', 'swirl', 'zoom', 'wobble', 'tile', 'polar'],
+    kinds: ['point', 'lens', 'polar'],
   },
   {
     // The one heading that names something outside this program, and it should:
@@ -147,20 +141,58 @@ export const SOURCES: readonly string[] = [
 ];
 
 /** The effects that ship, as `effect` node modes. The other half of the old split. */
-export const EFFECTS: readonly string[] = [
+/**
+ * The three that `effect` split into, and why it had to.
+ *
+ * `effect` was one name over three different things, and the compiler said so
+ * without anyone meaning it to: six of its twelve modes compiled to *read my
+ * input at a moved point*, two to *change the colour where it already is*, and
+ * four to *read my input several times*. Only the last can make a shader
+ * expensive; only the first is geometry. One dropdown containing all three
+ * taught that they were variations on each other, which is the opposite of true.
+ *
+ * The five standalone geometry kinds came into `lens` with the six remaps,
+ * because they were already the same functions: `fold` **is** `kaleido`'s wedge
+ * fold and `swirl` **is** `twist`'s rotation, written twice under two prefixes
+ * in two files.
+ */
+
+/**
+ * `lens` — move the point, then read what is there.
+ *
+ * The node carries **both** outlets, which is what stops this being a
+ * regression. Take `p` and it is the geometry node it replaced; take `c` and it
+ * is the effect. Without the `c` outlet, "the set, kaleidoscoped" would need a
+ * second node and two more cords to say — and it is the plainest sentence the
+ * vocabulary has.
+ */
+export const LENS_MODES: readonly string[] = [
+  'zoom',
+  'swirl',
+  'fold',
+  'wobble',
+  'tile',
   'mirror',
   'kaleido',
-  'shift',
-  'pixelate',
-  'ripple',
-  'smear',
-  'bloom',
-  'slice',
-  'edge',
-  'posterize',
   'twist',
-  'invert',
+  'ripple',
+  'slice',
+  'pixelate',
 ];
+
+/** `grade` — the colour where it already is, without moving anything. */
+export const GRADE_MODES: readonly string[] = ['levels', 'hue', 'posterize', 'invert'];
+
+/**
+ * `spread` — reads its input several times, and is the only family that can
+ * make a shader too big to draw.
+ *
+ * Its own kind because that is a fact about **cost** rather than about what it
+ * does to a picture, and cost is the one thing the vocabulary could not say out
+ * loud before: `roll.ts` kept a hand-written list of these four so it would
+ * never stack two, and the list is the kind now.
+ */
+export const SPREAD_MODES: readonly string[] = ['bloom', 'smear', 'edge', 'shift'];
 
 /**
  * Three nodes read the set, and between them they are the whole of it.

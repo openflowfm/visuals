@@ -255,6 +255,83 @@ describe('a file written when the cascade existed', () => {
     expect(merged.cords).toContainEqual({ from: 'e/n', to: 'p/amount' });
   });
 
+  it('splits effect three ways without moving a single cord', () => {
+    // `effect` was one name over three things — six modes that moved the point,
+    // two that changed the colour where it was, four that read their input many
+    // times. The split could be done to libraries people already have precisely
+    // because all twelve kept their `c` inlet and their `c` outlet: only the
+    // kind changes, and a cord names ports rather than kinds.
+    const kept = merge({
+      looks: {
+        mine: {
+          name: 'Mine',
+          circuit: {
+            nodes: [
+              { id: 'g', kind: 'source', op: 'plasma', x: 0, y: 0 },
+              { id: 'k', kind: 'effect', op: 'kaleido', x: 1, y: 0 },
+              { id: 'b', kind: 'effect', op: 'bloom', x: 2, y: 0 },
+              { id: 'p', kind: 'effect', op: 'posterize', x: 3, y: 0, knobs: { levels: 0.8 } },
+              { id: 's', kind: 'effect', op: 'shift', x: 4, y: 0, knobs: { spread: 0.4 } },
+              { id: 'o', kind: 'out', x: 5, y: 0 },
+            ],
+            cords: [
+              { from: 'g/c', to: 'k/c' },
+              { from: 'k/c', to: 'b/c' },
+              { from: 'b/c', to: 'p/c' },
+              { from: 'p/c', to: 's/c' },
+              { from: 's/c', to: 'o/c' },
+            ],
+          },
+        },
+      },
+    } as never).looks.mine.circuit;
+    const kindOf = (id: string) => kept.nodes.find((n) => n.id === id)?.kind;
+    expect(kindOf('k')).toBe('lens');
+    expect(kindOf('b')).toBe('spread');
+    expect(kindOf('p')).toBe('grade');
+    expect(kindOf('s')).toBe('spread');
+    expect(kept.cords).toHaveLength(5);
+    // Two knobs collided with a name beside them once the families existed:
+    // posterize's `levels` with the mode next to it, shift's `spread` with the
+    // kind it landed in. A knob that kept a stale name would be trimmed away by
+    // `repaired` and the look would quietly revert to a default.
+    expect(kept.nodes.find((n) => n.id === 'p')?.knobs).toEqual({ steps: 0.8 });
+    expect(kept.nodes.find((n) => n.id === 's')?.knobs).toEqual({ split: 0.4 });
+  });
+
+  it('makes the five geometry kinds modes of the lens they always were', () => {
+    const kept = merge({
+      looks: {
+        mine: {
+          name: 'Mine',
+          circuit: {
+            nodes: [
+              { id: 'pt', kind: 'point', x: 0, y: 0 },
+              { id: 'f', kind: 'fold', x: 1, y: 0, knobs: { sides: 0.4 } },
+              { id: 'g', kind: 'source', op: 'rings', x: 2, y: 0 },
+              { id: 'h', kind: 'hue', x: 3, y: 0, knobs: { shift: 0.7 } },
+              { id: 'o', kind: 'out', x: 4, y: 0 },
+            ],
+            cords: [
+              { from: 'pt/p', to: 'f/p' },
+              { from: 'f/p', to: 'g/p' },
+              { from: 'g/c', to: 'h/c' },
+              { from: 'h/c', to: 'o/c' },
+            ],
+          },
+        },
+      },
+    } as never).looks.mine.circuit;
+    const fold = kept.nodes.find((n) => n.id === 'f');
+    expect(fold?.kind).toBe('lens');
+    expect(fold?.op).toBe('fold');
+    expect(fold?.knobs).toEqual({ sides: 0.4 });
+    expect(kept.nodes.find((n) => n.id === 'h')?.kind).toBe('grade');
+    // `p` in and `p` out on the lens, `c` on the grade — every port kept its
+    // name, so every cord survived.
+    expect(kept.cords).toHaveLength(4);
+  });
+
   it('moves a track name off op, and its cords off level', () => {
     // The node has to say which track *and* which of its numbers now, so the
     // name moves to `of` and `op` becomes the reading. The outlet goes with it:
