@@ -217,7 +217,10 @@ function notesFor(t: number, s: number): BSV.ClipNotes {
 
   if (name === 'Bass') {
     PROGRESSION.forEach((triad, bar) => {
-      const root = triad[0]! - 24;
+      // An octave below the keys rather than two: the roll's keyboard is where
+      // the low B of a real set's clips sounds, and a fixture written a further
+      // octave down would arrive folded and test the wrong thing.
+      const root = triad[0]! - 12;
       notes.push({ pitch: root, start: bar * 4, duration: 1.5 });
       notes.push({ pitch: root, start: bar * 4 + 2, duration: 0.5 });
       notes.push({ pitch: root + 12, start: bar * 4 + 3, duration: 0.5 });
