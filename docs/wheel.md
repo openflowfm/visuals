@@ -79,6 +79,32 @@ Two things set it, and the first costs nobody a gesture:
 - **The `1` key**, for a set that never stops. A digit rather than a letter because it *is*
   the count.
 
+### Pressing play is not starting
+
+With a session up, pressing play does not start playback — it **arms** it, and Live holds
+until the next bar line so that every machine on the network starts together. That is the
+phase widget filling up beside the Link button.
+
+Live's transport flag goes true at the **press**, which is up to a whole bar before a note
+is heard. Taking the one from that moment puts the phrase a bar early for the rest of the
+night, which is the same misalignment the one exists to fix, arrived at by a different road.
+
+So the server waits the same wait, by the same clock: it holds the reset until Link's phase
+drops, which is the bar line, which is where Live actually started. **The wait only happens
+when there is somebody to wait for** — with no peers there is no session to start together
+with, Live rolls immediately, and a rig that held on for a bar would be the one thing in the
+building out of time.
+
+### The line comes from the phase, never from the beat
+
+`Math.round(beat)` is not a downbeat. Link's beat has no bar 1 in it, so a whole beat of it
+lands on some beat of some bar with no relation to the music — which is the original problem
+in miniature. `phase` is the part Link shares that *is* musical: subtract it and you are on
+the line Live's own grid is drawn on.
+
+Nearest line rather than the one just passed, because a hand is as likely to be early as
+late and a tap three quarters of the way through a bar means the downbeat about to happen.
+
 **Neither of them turns a wheel**, and that is the part worth getting right. A reset lands
 on a downbeat, which is exactly the moment `beat - one` is nearest zero — which is where a
 naive count would snap every wheel back to the start of its cycle. So the gesture you make
@@ -86,9 +112,7 @@ when the picture is right and only the timing is off would change the picture, e
 time. `reOne` reads the counts on both sides of the move and carries the difference, so what
 changes is *when* the next turn happens and nothing else.
 
-The one is snapped to the nearest whole beat, because a hand is never exactly on it and an
-origin a tenth of a beat early puts every boundary for the rest of the night a tenth of a
-beat early too.
+
 
 The counting lives in `Turning`, held by the server and handed in, because a show built from
 scratch every second has nowhere to remember an event. One per server rather than per client:

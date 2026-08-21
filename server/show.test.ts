@@ -3,7 +3,7 @@ import type { Scheme } from '../protocol.ts';
 import { emptySet, type SetState } from './bridge.ts';
 import type { LinkFrame } from './link.ts';
 import { merge, type SchemeSource } from './scheme.ts';
-import { buildShow, noTurning } from './show.ts';
+import { buildShow, noTurning, type Turning } from './show.ts';
 import { atOne, atTurn, poolsOf, reOne, turnsAt, whatIsUp } from '../resolve.ts';
 
 /**
@@ -88,6 +88,14 @@ function setOf(names: string[], sceneName: string, clips: Record<number, string>
 
 const show = (state: SetState, scheme: Scheme, turning = noTurning()) =>
   buildShow(state, LINK, sourceOf(scheme), turning);
+
+/** The same, at some point on Link's clock rather than at its zero. */
+const at = (
+  state: SetState,
+  scheme: Scheme,
+  turning: Turning,
+  link: Partial<LinkFrame>,
+) => buildShow(state, { ...LINK, ...link }, sourceOf(scheme), turning);
 
 /** A scheme with two named looks and two colourways, and nothing else said. */
 const twoOf = (over: Partial<Scheme> = {}): Scheme =>
@@ -235,7 +243,7 @@ describe('turning on musical time', () => {
     // single time, which is the opposite of what was asked for.
     const rotation = twoOf().rotation;
     const before = turnsAt(rotation, 100, 4, atOne());
-    const moved = reOne(rotation, 100, 4, atOne());
+    const moved = reOne(rotation, { beat: 100, phase: 0, quantum: 4 }, atOne());
     expect(moved.one).toBe(100);
     expect(turnsAt(rotation, 100, 4, moved)).toEqual(before);
     // What *does* change is when the next one happens: sixteen beats from here
@@ -244,11 +252,17 @@ describe('turning on musical time', () => {
     expect(turnsAt(rotation, 116, 4, moved).look).toBe(before.look + 1);
   });
 
-  it('snaps the one to the nearest beat', () => {
-    // A hand is never exactly on it, and an origin a tenth of a beat early puts
-    // every boundary for the rest of the night a tenth of a beat early too.
-    expect(reOne(twoOf().rotation, 100.4, 4, atOne()).one).toBe(100);
-    expect(reOne(twoOf().rotation, 100.6, 4, atOne()).one).toBe(101);
+  it('takes the one off the bar line Link draws, not off a whole beat', () => {
+    // Link's beat has no bar 1 in it — it started whenever the first peer did —
+    // so a whole beat of it is not a downbeat. `phase` is the part that is
+    // musical, and the line it points at is the line Live's own grid is on.
+    const rotation = twoOf().rotation;
+    const at = (beat: number, phase: number) => reOne(rotation, { beat, phase, quantum: 4 }, atOne());
+    // Two beats into the bar: the line was at 98.4, and rounding the beat would
+    // have said 100.
+    expect(at(100.4, 2).one).toBeCloseTo(98.4);
+    // Three quarters of the way through: the downbeat meant is the coming one.
+    expect(at(100.4, 3).one).toBeCloseTo(101.4);
   });
 
   it('takes the one from Live starting, and only from it starting', () => {
@@ -256,17 +270,39 @@ describe('turning on musical time', () => {
     const scheme = twoOf();
     const set = setOf(['Drums', 'Bass'], '[VERSE] one');
     set.playing = false;
-    expect(show(set, scheme, turning).one).toBe(0);
+    expect(at(set, scheme, turning, { beat: 8, phase: 0 }).one).toBe(0);
 
     // Rolling the transport is the clearest statement of where a phrase begins
-    // that this rig will ever get, and it costs nobody a gesture.
+    // that this rig will ever get, and it costs nobody a gesture. No peers, so
+    // no wait: with nobody to start together with, Live rolls immediately.
     set.playing = true;
-    expect(show(set, scheme, turning).one).toBe(LINK.beat);
+    expect(at(set, scheme, turning, { beat: 8, phase: 0 }).one).toBe(8);
 
     // Still playing is not starting. Re-phasing every second would leave the
     // wheel unable to reach a boundary at all.
     turning.wheel = { ...turning.wheel, one: 40 };
-    expect(show(set, scheme, turning).one).toBe(40);
+    expect(at(set, scheme, turning, { beat: 20, phase: 0 }).one).toBe(40);
+  });
+
+  it('waits for the bar line Live is going to start on', () => {
+    // With a session up, pressing play does not start playback — it arms it,
+    // and Live waits for the next bar so every machine starts together. The
+    // transport flag goes true at the *press*, which is up to a whole bar
+    // early, so taking the one from that moment puts the phrase a bar out for
+    // the rest of the night.
+    const turning = noTurning();
+    const scheme = twoOf();
+    const set = setOf(['Drums', 'Bass'], '[VERSE] one');
+    set.playing = false;
+    at(set, scheme, turning, { beat: 100, phase: 0, peers: 1 });
+
+    // Play, pressed a beat and a half into the bar. Nothing happens yet.
+    set.playing = true;
+    expect(at(set, scheme, turning, { beat: 101.5, phase: 1.5, peers: 1 }).one).toBe(0);
+    expect(at(set, scheme, turning, { beat: 103.5, phase: 3.5, peers: 1 }).one).toBe(0);
+
+    // The phase drops: the bar line has arrived and so has the music.
+    expect(at(set, scheme, turning, { beat: 104.1, phase: 0.1, peers: 1 }).one).toBeCloseTo(104);
   });
 
   it('ignores an out-of-band clip when the rotation was told to', () => {

@@ -140,8 +140,7 @@ sockets.on('connection', (socket) => {
     // on the next tick rather than at the heartbeat, since the point of the
     // gesture is that it happened just now.
     if (message.kind === 'downbeat') {
-      const at = link.sample();
-      turning.wheel = reOne(scheme.current().rotation, at.beat, at.quantum, turning.wheel);
+      turning.wheel = reOne(scheme.current().rotation, link.sample(), turning.wheel);
       dirty = true;
       return;
     }

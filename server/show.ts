@@ -88,9 +88,20 @@ export interface Turning {
   wheel: Wheel;
   /** Whether Live's transport was running when we last looked. */
   rolling: boolean;
+  /**
+   * The Link phase we were at when play was pressed, while waiting for the bar.
+   *
+   * Null when nothing is pending. See `buildShow` for why there is a wait.
+   */
+  waiting: number | null;
 }
 
-export const noTurning = (): Turning => ({ was: [], wheel: atOne(), rolling: false });
+export const noTurning = (): Turning => ({
+  was: [],
+  wheel: atOne(),
+  rolling: false,
+  waiting: null,
+});
 
 /**
  * The scene most of the set is playing, and whether anyone has departed from it.
@@ -153,16 +164,37 @@ export function buildShow(
   const { scene, bumped: departed } = readPlaying(set, turning);
   if (departed && scheme.rotation.onClip) turning.wheel = bumped(turning.wheel);
 
-  // **Live starting is the one.** A transport that has just been rolled is the
-  // clearest statement of where a phrase begins that this rig will ever get,
-  // and it costs nobody a gesture — so the wheel re-phases itself on every
-  // start and the shortcut is for the times a set never stops.
+  // **Live starting is the one**, and it costs nobody a gesture: a transport
+  // that has just been rolled is the clearest statement of where a phrase
+  // begins that this rig will ever get, so the wheel re-phases itself on every
+  // start and the `1` key is for the times a set never stops.
+  //
+  // **But not the instant it is asked for.** With a Link session up, pressing
+  // play does not start playback — it *arms* it, and Live waits for the next
+  // bar line so that every machine on the network starts together. Live's
+  // transport flag goes true at the press, which is up to a whole bar before a
+  // note is heard, and taking the one from that moment puts the phrase a bar
+  // early for the rest of the night. So this waits the same wait, by the same
+  // clock, and takes the one from the line Live actually started on.
+  //
+  // The wait is only when there is somebody to wait *for*. With no peers there
+  // is no session to start together with, Live rolls immediately, and a rig
+  // that held on for a bar would be the one thing out of time.
   //
   // Nothing turns; see `reOne`. And a first read counts, because until then the
   // phrase was being counted from whenever the first Link peer in the building
   // opened its laptop, which is not a worse guess to replace.
-  if (set.playing && !turning.rolling) {
-    turning.wheel = reOne(scheme.rotation, link.beat, link.quantum, turning.wheel);
+  if (!set.playing) turning.waiting = null;
+  else if (!turning.rolling) {
+    if (link.peers > 0) turning.waiting = link.phase;
+    else turning.wheel = reOne(scheme.rotation, link, turning.wheel);
+  }
+  // Phase climbs through the bar and drops at the line, so the first reading
+  // below where the wait began is the line itself — which is where playback
+  // just started.
+  if (turning.waiting !== null && link.phase < turning.waiting) {
+    turning.waiting = null;
+    turning.wheel = reOne(scheme.rotation, link, turning.wheel);
   }
   turning.rolling = set.playing;
 

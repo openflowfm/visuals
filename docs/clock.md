@@ -31,7 +31,13 @@ within the quantum — is the part that is shared, exact and meaningful, so it i
 the panel shows and the part the shaders use.
 
 It is also why the rotation counts bars from a **one** the server holds rather than from
-Link's zero, and why Live's transport starting sets it. See [the wheel](wheel.md).
+Link's zero, and why that one comes off `phase` rather than off a rounded beat.
+
+**And why pressing play is not the same event as starting.** With a session up Live arms the
+transport and waits for the next bar line so every machine starts together, but its transport
+flag goes true at the press — up to a whole bar early. Anything that wants the moment the
+music began has to wait for the phase to drop, exactly as Live does. See
+[the wheel](wheel.md).
 
 **There is no private session.** Link is every machine on the local network at once. A peer
 that can set the tempo can yank the tempo of every machine at the show, including the one
