@@ -124,6 +124,14 @@
   --wdg-plate-head: #2a2113;
 }
 
+.node .knobs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px 4px;
+  margin-top: 4px;
+}
+
 .node-value .knobface {
   display: flex;
   flex-direction: column;

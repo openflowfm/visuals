@@ -13,6 +13,12 @@ import type { Clock } from './useShow.ts';
  * So the designer free-runs by default and can be told to follow the room when
  * there is a room to follow. Following is not the fallback; it is the option.
  *
+ * **`following` now means more than the clock.** The designer reads this one
+ * flag for every invented condition — the section, the colourway, the key, the
+ * energy — because a stage beat under a desk's section is a state that exists
+ * nowhere. See [`useRoom`](./useRoom.ts); the clock is still all *this* file
+ * does with it.
+ *
  * **It is a `Clock`**, the same shape the compositor and the bench already take,
  * so nothing downstream learns that there are now two kinds. A preview cannot
  * tell whether the beat it is drawing on came from a laptop or from a stage, and
@@ -25,7 +31,7 @@ export interface Transport extends Clock {
   setBpm(next: number): void;
   /** Beats in a bar, for `uPhase` and for the loop length. */
   quantum: number;
-  /** Follow the show's clock instead of running one. */
+  /** Take the room as it is instead of inventing one. Here, that is the clock. */
   following: boolean;
   setFollowing(next: boolean): void;
   /** Back to the top of the bar, for judging the same moment twice. */

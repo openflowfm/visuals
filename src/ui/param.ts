@@ -1,5 +1,4 @@
 import type { Param } from '../../../widgets/src/param/param.ts';
-import type { LookParam } from '../render/shaders.ts';
 
 /**
  * The one adapter between `widgets/` and this app.
@@ -113,17 +112,6 @@ export const BPM: Param = {
   shortName: 'BPM',
 };
 
-/** How hard the bench drives the look it is showing. */
-export const AMOUNT: Param = {
-  kind: 'float',
-  min: 0,
-  max: 100,
-  defaultValue: 100,
-  unit: 'percent',
-  name: 'Amount',
-  shortName: 'Amount',
-};
-
 /**
  * A circuit's own knob.
  *
@@ -141,28 +129,20 @@ export const KNOB: Param = {
   shortName: 'Knob',
 };
 
+
 /**
- * A built-in effect's declared parameter, as something a knob can turn.
+ * How often the wheel turns, in bars.
  *
- * A range whose ends and resting point are all whole numbers, and which is wide
- * enough for the distinction to matter, is a count of something — segments,
- * blocks, waves — so it reads as one. Everything else is a proportion and reads
- * with a decimal. Guessing this from the numbers rather than declaring it keeps
- * `BUILTIN_PARAMS` a table of ranges instead of a table of ranges and spellings.
+ * Bars rather than seconds because everything here is musical, and a picture
+ * that changes 11.4 seconds in changes in the middle of a phrase. Zero holds
+ * whatever is up, which is how you stop it turning without emptying the pool.
  */
-export function lookParam(spec: LookParam): Param {
-  const counted =
-    Number.isInteger(spec.min) &&
-    Number.isInteger(spec.max) &&
-    Number.isInteger(spec.value) &&
-    spec.max - spec.min >= 4;
-  return {
-    kind: counted ? 'int' : 'float',
-    min: spec.min,
-    max: spec.max,
-    defaultValue: spec.value,
-    unit: counted ? 'int' : 'float',
-    name: spec.name,
-    shortName: spec.name,
-  };
-}
+export const BARS: Param = {
+  kind: 'int',
+  min: 0,
+  max: 64,
+  defaultValue: 8,
+  unit: 'int',
+  name: 'Bars',
+  shortName: 'Bars',
+};

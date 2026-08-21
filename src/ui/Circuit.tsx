@@ -1,13 +1,20 @@
 import { useState, type ReactNode } from 'react';
-import type { Circuit, CircuitNode, NodeKind } from '../../protocol.ts';
+import type { Circuit, CircuitNode, LookDef } from '../../protocol.ts';
 import { Graph, GraphNode, type GraphCord } from '../../../widgets/src/chrome/Graph.tsx';
 import { Port } from '../../../widgets/src/chrome/Port.tsx';
 import { Device } from '../../../widgets/src/chrome/Device.tsx';
 import { Button } from '../../../widgets/src/controls/Button.tsx';
 import { Knob } from '../../../widgets/src/controls/Knob.tsx';
 import { Select } from '../../../widgets/src/controls/Select.tsx';
-import { NODE_SPECS, portId, signalOf } from '../render/circuit.ts';
-import { connect, disconnect, dropNode, freeNodeId, setNode } from './edits.ts';
+import {
+  inletsOf,
+  NODE_SPECS,
+  portId,
+  reachesOut,
+  signalOf,
+  wouldFeedItself,
+} from '../render/circuit.ts';
+import { connect, disconnect, dropNode, setKnob, setNode } from './edits.ts';
 import { KNOB, PERCENT } from './param.ts';
 
 /**
@@ -30,6 +37,7 @@ export function CircuitEditor({
   circuit,
   onChange,
   tracks = [],
+  looks = [],
   picture,
 }: {
   circuit: Circuit;
@@ -40,15 +48,17 @@ export function CircuitEditor({
    * quiet on the one night it mattered.
    */
   tracks?: readonly string[];
+  /**
+   * Every look a `look` node may point at, which is the library minus this one.
+   *
+   * Handed in rather than read, for the same reason the track names are: what a
+   * node may name comes from something the canvas has no business knowing about.
+   */
+  looks?: readonly { id: string; def: LookDef }[];
   /** A small picture of what a node has made, when the host can draw one. */
   picture?: (nodeId: string) => ReactNode;
 }) {
-  const [adding, setAdding] = useState(0);
   const [refused, setRefused] = useState<string | null>(null);
-
-  const kinds = (Object.keys(NODE_SPECS) as NodeKind[]).filter(
-    (kind) => kind !== 'out' || !circuit.nodes.some((n) => n.kind === 'out'),
-  );
 
   const cords: GraphCord[] = circuit.cords.map((cord) => ({
     from: cord.from,
@@ -64,45 +74,20 @@ export function CircuitEditor({
       setRefused(`a ${LONG[out]} does not go into a ${LONG[into]}`);
       return;
     }
+    // Refused where it is dropped rather than where it fails, the same bargain
+    // a look inside a look gets. The compiler will say "blend feeds itself",
+    // which is true and is about a node; this is about the cord in your hand,
+    // and it happens before the whole look goes black.
+    if (wouldFeedItself(circuit, from, to)) {
+      setRefused('that would feed this back into itself');
+      return;
+    }
     setRefused(null);
     onChange(connect(circuit, from, to));
   };
 
-  const add = () => {
-    const kind = kinds[adding];
-    if (!kind) return;
-    const at = circuit.nodes.length;
-    onChange({
-      ...circuit,
-      nodes: [
-        ...circuit.nodes,
-        {
-          id: freeNodeId(circuit, kind),
-          kind,
-          // Somewhere free-ish rather than somewhere clever. Every node drags,
-          // and a layout algorithm would fight whatever you did by hand.
-          x: 40 + (at % 4) * 180,
-          y: 30 + Math.floor(at / 4) * 130,
-          ...(kind === 'value' ? { value: 0.5, label: 'knob' } : {}),
-        },
-      ],
-    });
-  };
-
   return (
     <div className="circuit">
-      <div className="line">
-        <Select
-          items={kinds}
-          index={Math.min(adding, kinds.length - 1)}
-          onChange={setAdding}
-          label="Node to add"
-          width={96}
-        />
-        <Button onPress={add}>+ node</Button>
-        <span className="about">{NODE_SPECS[kinds[adding]]?.about}</span>
-      </div>
-
       <div className="canvas">
         <Graph
           cords={cords}
@@ -117,8 +102,10 @@ export function CircuitEditor({
                 node={node}
                 circuit={circuit}
                 tracks={tracks}
+                looks={looks}
                 picture={picture}
                 onChange={(next) => onChange(setNode(circuit, node.id, next))}
+                onTurn={(inlet, value) => onChange(setKnob(circuit, node.id, inlet, value))}
                 onCut={(inlet) => onChange(disconnect(circuit, inlet))}
                 onDrop={() => onChange(dropNode(circuit, node.id))}
               />
@@ -127,6 +114,19 @@ export function CircuitEditor({
         </Graph>
       </div>
 
+      {/*
+        A look with nothing wired to `out` compiles, on purpose — it draws
+        transparent black, which is the state every graph passes through on the
+        way to being one. What it must not do is look identical to a look that
+        is broken. So the canvas says it, in the one place a canvas can say
+        anything, and it is not an error: nothing is refused, nothing stops, and
+        the moment a cord lands the line goes away.
+      */}
+      {!reachesOut(circuit) && (
+        <p className="hits bad">
+          nothing reaches out — this look draws nothing until something does
+        </p>
+      )}
       {refused && <p className="hits bad">{refused}</p>}
     </div>
   );
@@ -146,16 +146,20 @@ function NodeFace({
   node,
   circuit,
   tracks,
+  looks,
   picture,
   onChange,
+  onTurn,
   onCut,
   onDrop,
 }: {
   node: CircuitNode;
   circuit: Circuit;
   tracks: readonly string[];
+  looks?: readonly { id: string; def: LookDef }[];
   picture?: (nodeId: string) => ReactNode;
   onChange(next: Partial<CircuitNode>): void;
+  onTurn(inlet: string, value: number): void;
   onCut(inlet: string): void;
   onDrop(): void;
 }) {
@@ -163,36 +167,70 @@ function NodeFace({
   const fed = new Set(circuit.cords.map((cord) => cord.to));
   const feeding = new Set(circuit.cords.map((cord) => cord.from));
 
+  /**
+   * The inlets with a knob on the face: settable, and nothing wired to them.
+   *
+   * Only while unwired, because a cord already answers the inlet and two
+   * controls for one number is a face that lies about one of them. The value is
+   * kept on the node either way, so a cord is not a destructive gesture: unwire
+   * it and the knob comes back where it was rather than at the default.
+   */
+  const turnable = inletsOf(node).filter(
+    (port) => port.at !== undefined && !fed.has(portId(node.id, port.name)),
+  );
+
+  /**
+   * The library, minus the look being edited.
+   *
+   * Which is the one holding *this* graph — the canvas is handed a circuit
+   * rather than an id, and the entry whose circuit is this one is the only
+   * honest way to name it. It used to compare a look id against a **node** id,
+   * which are different things that occasionally spell the same: drop a look
+   * node on a canvas and it is called `look1`, and `look1` is also the first id
+   * a hand-made look gets. When they collided the list lost an entry while the
+   * selected index was still counted against the full one, so the dropdown
+   * named the wrong look and picking one wired a different look again.
+   */
+  const others = (looks ?? []).filter((each) => each.def.circuit !== circuit);
+
   return (
     <Device
-      name={node.kind === 'value' ? node.label || 'value' : spec.name}
+      name={faceName(node, spec.name, looks)}
       className={`node node-${node.kind}`}
       title={spec.about}
       headerEnd={
+        // No delete on `out`. Every look has exactly one and it is what leaves;
+        // a look without one does not draw a smaller picture, it refuses. The
+        // model refuses the deletion too — this is the half that stops anyone
+        // reaching for it, rather than the half that catches them.
         node.kind === 'out' ? undefined : (
           <Button tone="quiet" label={`Delete ${spec.name}`} onPress={onDrop}>
             ×
           </Button>
         )
       }
-      inlets={spec.inlets.map((port) => {
-        const id = portId(node.id, port.name);
-        return (
-          <span key={id} className="wire">
-            <Port id={id} side="in" label={port.name} kind={port.kind} connected={fed.has(id)} />
-            {fed.has(id) && (
-              <Button
-                tone="quiet"
-                className="cut"
-                label={`Unwire ${port.name}`}
-                onPress={() => onCut(id)}
-              >
-                ×
-              </Button>
-            )}
-          </span>
-        );
-      })}
+      // A tilde is the flattener's, not a person's: `look` carries one for the
+      // graph it names, which nobody wires and nobody should see a port for.
+      inlets={inletsOf(node)
+        .filter((port) => !port.name.startsWith('~'))
+        .map((port) => {
+          const id = portId(node.id, port.name);
+          return (
+            <span key={id} className="wire">
+              <Port id={id} side="in" label={port.name} kind={port.kind} connected={fed.has(id)} />
+              {fed.has(id) && (
+                <Button
+                  tone="quiet"
+                  className="cut"
+                  label={`Unwire ${port.name}`}
+                  onPress={() => onCut(id)}
+                >
+                  ×
+                </Button>
+              )}
+            </span>
+          );
+        })}
       outlets={spec.outlets.map((port) => {
         const id = portId(node.id, port.name);
         return (
@@ -208,7 +246,34 @@ function NodeFace({
       })}
     >
       {picture?.(node.id)}
-      {node.kind === 'track' ? (
+      {node.kind === 'look' ? (
+        <Select
+          items={others.map((each) => each.def.name || each.id)}
+          index={Math.max(
+            0,
+            others.findIndex((each) => each.id === node.op),
+          )}
+          onChange={(i) => onChange({ op: others[i]?.id })}
+          label="Look this draws"
+          width={120}
+        />
+      ) : node.kind === 'energy' ? (
+        <div className="knobface">
+          <Select
+            items={tracks.length > 0 ? tracks : ['master']}
+            index={Math.max(0, tracks.indexOf(node.op ?? 'master'))}
+            onChange={(i) => onChange({ op: tracks[i] })}
+            label="Meter this follows"
+            width={104}
+          />
+          <Knob
+            param={KNOB}
+            value={PERCENT.to(node.value ?? 0.4)}
+            onChange={(v) => onChange({ value: PERCENT.from(v) })}
+            name="fall"
+          />
+        </div>
+      ) : node.kind === 'track' ? (
         <Select
           items={tracks.length > 0 ? tracks : ['no tracks']}
           index={Math.max(0, tracks.indexOf(node.op ?? ''))}
@@ -243,6 +308,45 @@ function NodeFace({
           label={`${spec.name} mode`}
         />
       ) : null}
+
+      {turnable.length > 0 && (
+        <div className="knobs">
+          {turnable.map((port) => (
+            <Knob
+              key={port.name}
+              param={KNOB}
+              value={PERCENT.to(node.knobs?.[port.name] ?? port.at!)}
+              onChange={(v) => onTurn(port.name, PERCENT.from(v))}
+              name={port.name}
+            />
+          ))}
+        </div>
+      )}
     </Device>
   );
+}
+
+/**
+ * What a node is called on its faceplate.
+ *
+ * The **mode**, not the kind, whenever a node has one — a node showing `source`
+ * with a dropdown reading `plasma` makes you read two things to learn one, and
+ * the browser you dropped it from called it `plasma`. A faceplate that disagrees
+ * with the drawer it came out of is a faceplate you stop trusting.
+ */
+function faceName(
+  node: CircuitNode,
+  fallback: string,
+  looks?: readonly { id: string; def: LookDef }[],
+): string {
+  if (node.kind === 'value') return node.label || 'knob';
+  if (node.kind === 'look') return looks?.find((each) => each.id === node.op)?.def.name ?? 'look';
+  if (node.kind === 'track') return node.op ? `${node.op} meter` : 'track';
+  if (node.kind === 'energy') return 'energy';
+  if (node.kind === 'tracks') return 'the set';
+  if (node.kind === 'source' || node.kind === 'effect' || node.kind === 'signal') {
+    return node.op || fallback;
+  }
+  if (node.kind === 'song') return `song ${node.op ?? 'seed'}`;
+  return fallback;
 }

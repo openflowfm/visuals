@@ -1,0 +1,218 @@
+# The wheel
+
+`resolve.ts`, `server/show.ts`, `server/scheme.ts`, `roll.ts`. What is on screen, and why.
+
+## It replaced a cascade
+
+This file used to be called *the cascade* and described four levels — song, archetype, track,
+clip — each overriding the last, with additive look lists, accumulating bias, and a `Said`
+for every scalar so the editor could explain which level had answered.
+
+All of it existed to combine pictures. [A graph combines pictures](looks.md), so it is gone,
+and what replaced it is one question with one answer: **which look, and which colours.**
+
+## The rotation is the default and binding is the exception
+
+That inversion is why most of the model could go, and it is the whole design.
+
+A rig that draws nothing until it is configured is a rig nobody configures. This one turns
+through everything you have made — a wheel of looks and a wheel of colourways, advancing on
+musical time — so a set it has never seen still gets a show. A song entry is how you say
+"not for this one".
+
+```
+Rotation {
+  looks: []        // empty means EVERY look there is
+  colorways: []    // empty means EVERY colourway there is
+  bars: 8          // turn the look every 8 bars. 0 holds
+  colorEvery: 16   // turn the palette on a longer wheel
+  onClip: true     // and turn when a clip is fired out of band
+}
+```
+
+**An empty pool means everything, never nothing.** That reading is the one thing a blank
+field must not have here: it is the state a fresh install is in, and a fresh install has to
+draw a show.
+
+## A shuffled cycle, not a random pick
+
+`atTurn` walks a shuffled cycle rather than picking independently each time, so a pool of
+five shows all five before it shows any of them twice.
+
+Independent picks *feel* random and *read* as broken: the same look twice in a row looks like
+the change failed, and two of five never appearing at all looks like they are unwired.
+
+The shuffle is deterministic in the pool and the lap, so the server and the editor agree
+about what is up without either telling the other, and a lap later is a different order
+rather than the same one again. The join between two laps is fixed up too — the last of one
+lap and the first of the next are never the same thing, which is the one repeat a shuffled
+cycle can still make and the one that reads as the wheel having jammed.
+
+## Two triggers, and the second is a gesture
+
+**Bars, not seconds.** Everything here is musical, and a picture that changes 11.4 seconds in
+changes in the middle of a phrase.
+
+**An out-of-band clip launch.** A scene launch moves every track at once; a clip launch moves
+one. So the dominant playing index is the scene, and a track that has moved somewhere else on
+its own is somebody reaching past the grid — which is already the "and now something else" of
+a live set, and the only gesture the rig can hear without being told.
+
+A **scene change is deliberately not a trigger.** Scenes fire constantly and the picture would
+never settle into anything.
+
+The counting lives in `Turning`, held by the server and handed in, because a show built from
+scratch every second has nowhere to remember an event. One per server rather than per client:
+the wheel is a property of the show rather than of who is watching it, and two browsers open
+on the same rig have to be looking at the same picture. A **first read never counts as a
+change**, or the wheel would advance every time a browser connected.
+
+## What a song may say
+
+Two fields, both optional, both meaning *pin this instead of letting it turn*.
+
+```ts
+interface SongSpec {
+  colorway?: string;
+  looks?: string[];
+}
+```
+
+A song naming exactly **one** look is the only case that stops the wheel. A song naming three
+is still a rotation, just a shorter one — which is what makes the override cheap to reach
+for, because "these three, for this song" is a normal thing to want and should not need a
+second concept.
+
+A pin naming a look nobody has any more is dropped rather than obeyed. A stale id must not
+black the screen for a whole song.
+
+## Colours come from the wheel, never from the clip
+
+Each track takes a colour by its position in the set out of whatever colourway is up.
+
+**Clip colour is not an input and should not become one.** Those colours are how you find
+your place in the grid during a show, and driving the picture from them would force a choice
+between a set you can navigate and a set that looks right.
+
+## The scheme file
+
+`visuals/scheme.json`, hot-reloaded, **gitignored**, and **entirely optional** — the built-in
+scheme in `server/scheme.ts` is a complete show and the file only ever overrides parts of it.
+
+Overrides are shallow per section: naming one colourway does not delete the other three, and
+registering one look does not remove the four that ship.
+
+A parse error **keeps the scheme that was already working** and reports the message in the
+panel. Losing the show to a trailing comma is the wrong answer at any time and an unthinkable
+one during a set.
+
+The file lags an edit by 200ms. A knob turning and a node being dragged both emit on every
+pointer move, so what the server *holds* updates immediately — the picture has to follow the
+pointer — while the write is debounced.
+
+**`merge` is the one door, so it is where a graph gets repaired.** A scheme reaches the
+renderer exactly two ways — read off disk, or sent up by an editor that gets it straight back
+down again — and both come through that function. Every look that passes through it comes out
+with exactly one `out` and with no cord addressed to a port that is not there, which are the
+two things a *file* can say and the editor cannot. Repairing here means the repair is written
+back the next time anything saves; repairing in the compiler would mean silently redoing the
+same fix sixty times a second and never telling anyone. See [looks](looks.md).
+
+**A saved file holds a copy of the four that ship**, because the editor sends the whole
+scheme and the server writes the whole scheme. So improving a built-in does not reach a
+machine that has already saved once — its `scheme.json` shadows the new one under the same
+id. Deleting those four entries from the file is the whole fix, and it is worth knowing
+before wondering why an updated library did not arrive.
+
+## The four that ship
+
+`BUILT_IN.looks` in `server/scheme.ts`, and they are the manual: nobody reads a node
+reference and everybody takes a working example apart. So they are a **spread** rather than
+four variations, one lesson each.
+
+| look | what it is for |
+|---|---|
+| **The set** | one node. The floor of the vocabulary, and the claim the rig is built on |
+| **Folded** | a colour is a function of a point: the set read through a swirl, folded by a kaleidoscope that moves the whole chain |
+| **Deep** | two pictures, one of them the room's — a corridor with the set screened into it and graded |
+| **Weather** | no set and no shipped picture: `polar` makes two numbers out of a position, `paint` makes a colour out of one and `hue` makes every colour out of the other |
+
+Between them they use every family in `NODE_FAMILIES`, which a test pins, and they keep two
+rules that were learned the hard way.
+
+**Nothing is only alive when the room is loud.** `master` is zero with no Live attached,
+which is most of the hours anyone spends building one of these, and a look whose every motion
+came off a meter is a still frame at a desk and indistinguishable from one that is wired
+wrong. The motion comes off the clock and the meter adds to it.
+
+**Nothing is wired to something that cannot move it.** `Weather` used to drive a `hue` from
+`song seed`, and a set with no song names holds that at a half — which is exactly the
+rotation that does nothing. A cord drawn right across the canvas into a node that visibly
+never changed is worse than no cord: it teaches the wrong thing about the vocabulary. A
+number that idles at a half belongs on an inlet where a half means something, which is why it
+now drives a blend amount instead.
+
+They are also **laid out from their own wiring** — a column per step along the signal — so
+the first thing anyone opens reads left to right instead of needing untangling.
+
+## Rolling a library
+
+`roll` deals a new one from a seed. It used to roll a *show* — colourways, song assignments,
+section energies, per-track bindings and two circuits at once — because a show was a table of
+decisions with a couple of graphs in it. A show is a library and a wheel now, so it rolls the
+two things a library is made of: **looks and colourways**.
+
+A rolled look walks a **shape** — a picture, a few things done to it, a colour operation or
+two — and randomises what fills each slot. A random walk over the whole vocabulary produces
+garbage nine times in ten; the shape is what makes it a look and the fill is what makes it a
+different one every time.
+
+Three constraints are worth stating because they are what make a rolled one read as
+*something*:
+
+- **It reaches for the set more often than not.** A rolled look that ignored whoever is
+  playing is a screensaver, and this rig is not one.
+- **It never wires the four expensive effects.** `bloom`, `smear`, `edge` and `shift` each
+  read their input several times, so nesting two of them multiplies the shader. A hand
+  reaches for one knowing what it costs; a roll would stack three.
+- **Colours are a harmony, not four hues.** A base, one of five relationships to it, one
+  member kept near white so a busy frame has something to read edges against — and all of it
+  kept light, because a cheap projector has no black to work against and a dark colourway is
+  a dark screen.
+
+**Nothing about the songs is rolled.** A song entry is an override, and rolling one would be
+the machine writing down an exception nobody asked for — which is exactly the noise the
+cascade used to generate.
+
+### It deals only what you leave switched on
+
+Three chips beside the button — `colours`, `looks`, `rotation` — all on by default. By the
+second evening the colourways are the part you have settled and the looks are the part you
+are still fishing for, and a button that deals both is a button you stop pressing.
+
+**Every part is rolled and only the wanted ones land.** Drawing from the generator in the same
+order regardless of what is kept is what makes a seed mean one show: keeping only the colours
+has to give the same colours rolling everything would have, or a seed written on a hand is
+worth nothing.
+
+Clearing "what the last roll wired" means **only** that: a rolled look carries `rolled: true`,
+so a look you built by hand survives instead of being deleted as a side effect of a button
+whose whole promise is that one level of undo covers it.
+
+**Undo covers the roll you just did; the seed covers the one from last Tuesday.** One level is
+the right number — a roll replaces a library, so the thing you want back is always the thing
+you had a moment ago. Anything older is better served by a seed, which is two words and a
+number, survives a reload, and can be written on a hand.
+
+## What is deliberately absent
+
+**Notes.** The LOM exposes no played-note event and the bridge device is an audio effect that
+never sees MIDI, so notes cost a small MIDI Effect on each track you want them from. The
+meter approximates it — a track making sound moves — but it cannot tell you *which* note.
+It would arrive as one more `signal` mode.
+
+**Per-clip visuals as files.** Nothing here can point at a video. That brings a whole question
+about where media lives.
+
+**More than one scheme, named and switchable.** `BSV_VISUALS_SCHEME` already points at
+whichever is live, so this is mostly a picker.

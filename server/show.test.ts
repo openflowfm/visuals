@@ -2,15 +2,20 @@ import { describe, expect, it } from 'vitest';
 import type { Scheme } from '../protocol.ts';
 import { emptySet, type SetState } from './bridge.ts';
 import type { LinkFrame } from './link.ts';
-import { BUILT_IN, merge, type SchemeSource } from './scheme.ts';
-import { buildShow } from './show.ts';
+import { merge, type SchemeSource } from './scheme.ts';
+import { buildShow, noTurning } from './show.ts';
+import { atTurn, poolsOf, turnsAt, whatIsUp } from '../resolve.ts';
 
 /**
- * The cascade, which is the part of this that is worth being sure about.
+ * What is on screen, and why.
  *
- * Every bug this file guards against looked like a rendering fault from the
- * front of house: a layer missing for a whole verse, a pad drawing as a drum, a
- * chorus that never got louder. None of them were in a shader.
+ * The cascade this file used to guard is gone: what a track draws is wired in a
+ * graph now, so there is no per-track resolution left to get wrong. What
+ * replaced it is a **wheel**, and the bugs a wheel has are the ones worth being
+ * sure about — a pool that reads empty as "nothing", a cycle that repeats across
+ * a lap, a trigger that fires on every scene launch, and an override that black
+ * screens a song because it names a look somebody deleted. Every one of those
+ * looks like a rendering fault from the front of house and none of them is.
  */
 
 const track = (i: number, name: string, isGroup = false) =>
@@ -80,137 +85,174 @@ function setOf(names: string[], sceneName: string, clips: Record<number, string>
   return state;
 }
 
-const show = (state: SetState, scheme: Scheme) => buildShow(state, LINK, sourceOf(scheme));
 
-describe('the cascade', () => {
-  it('takes colour from the song and never from the clip', () => {
-    // The rule Ryan set: clip colours are how you find your place in the grid
-    // during a show, and driving the picture from them would force a choice
-    // between a set you can navigate and a set that looks right.
-    const scheme = merge({ songs: { sandstorm: { colorway: 'ember' } } });
-    const drawn = show(setOf(['Bass'], '[VERSE] one', { 0: 'anything' }), scheme);
-    expect(drawn.colorway).toBe('ember');
-    expect(drawn.layers[0].color).toBe(0xff5a3c);
+const show = (state: SetState, scheme: Scheme, turning = noTurning()) =>
+  buildShow(state, LINK, sourceOf(scheme), turning);
+
+/** A scheme with two named looks and two colourways, and nothing else said. */
+const twoOf = (over: Partial<Scheme> = {}): Scheme =>
+  merge({
+    looks: {
+      a: { name: 'A', circuit: { nodes: [], cords: [] } },
+      b: { name: 'B', circuit: { nodes: [], cords: [] } },
+    },
+    colorways: { one: ['#111111'], two: ['#222222'] },
+    rotation: { looks: ['a', 'b'], colorways: ['one', 'two'], bars: 4, onClip: true, colorEvery: 4 },
+    ...over,
   });
 
-  it('falls back rather than going dark for a song nobody assigned', () => {
-    const drawn = show(setOf(['Bass'], '[VERSE] one'), BUILT_IN);
-    expect(drawn.colorway).toBe(BUILT_IN.defaults.colorway);
+describe('what is up', () => {
+  it('turns through the pool rather than picking each time', () => {
+    // A shuffled cycle, not independent picks. Independent picks feel random and
+    // read as broken: the same look twice in a row looks like the change failed,
+    // and one of five never appearing looks like it is unwired.
+    const scheme = twoOf();
+    const seen = new Set<string>();
+    for (let turn = 0; turn < 6; turn++) {
+      seen.add(atTurn(['a', 'b', 'c'], turn) ?? '');
+    }
+    expect(seen).toEqual(new Set(['a', 'b', 'c']));
+    // And it is the same answer every time it is asked, so the server and the
+    // editor cannot disagree about what is on screen.
+    expect(atTurn(['a', 'b', 'c'], 4)).toBe(atTurn(['a', 'b', 'c'], 4));
+    expect(whatIsUp(scheme, null, { look: 0, color: 0 }).look).toBeTruthy();
   });
 
-  it('lets a song say how hard it plays its own sections', () => {
-    const plain = show(setOf(['Bass'], '[VERSE] one'), BUILT_IN);
-    const harder = show(
-      setOf(['Bass'], '[VERSE] one'),
-      merge({ songs: { sandstorm: { bias: 0.3 } } }),
-    );
-    expect(harder.energy).toBeCloseTo(plain.energy + 0.3);
+  it('shows all of them before it shows any of them twice', () => {
+    const pool = ['a', 'b', 'c', 'd', 'e'];
+    const lap = [0, 1, 2, 3, 4].map((turn) => atTurn(pool, turn));
+    expect(new Set(lap).size).toBe(5);
   });
 
-  it('guesses an unbound track from its name', () => {
-    const drawn = show(setOf(['Drums', 'Sparkle Pad'], '[VERSE] one'), BUILT_IN);
-    expect(drawn.layers[0].looks[0].id).toBe('strobe');
-    expect(drawn.layers[1].looks[0].id).toBe('noise');
+  it('never repeats across the join between two laps', () => {
+    // The one repeat a shuffled cycle can still make, and the one that reads as
+    // the wheel having jammed rather than as chance.
+    const pool = ['a', 'b', 'c', 'd'];
+    for (let lap = 0; lap < 6; lap++) {
+      const last = atTurn(pool, lap * 4 + 3);
+      const first = atTurn(pool, lap * 4 + 4);
+      expect(first).not.toBe(last);
+    }
   });
 
-  it('lets a binding change one field and leave the hint the rest', () => {
-    // The reason bindings are field-by-field. Saying "this drum track is calmer"
-    // must not also throw away "this drum track is a drum".
-    const drawn = show(
-      setOf(['Drums'], '[VERSE] one'),
-      merge({ layers: { Drums: { bias: -0.2 } } }),
-    );
-    expect(drawn.layers[0].looks[0].id).toBe('strobe');
-    expect(drawn.layers[0].energy).toBeCloseTo(0.35 - 0.2);
+  it('treats an empty pool as everything rather than as nothing', () => {
+    // The state a fresh install is in. Reading a blank field as "draw nothing"
+    // would be a black screen for the thing nobody filled in.
+    const scheme = twoOf({ rotation: { looks: [], colorways: [], bars: 4, onClip: true, colorEvery: 4 } });
+    const pools = poolsOf(scheme, undefined);
+    expect(pools.looks.length).toBeGreaterThan(1);
+    expect(pools.colorways.length).toBeGreaterThan(1);
   });
 
-  it("lets a clip be the exception, and adds its bias to the track's", () => {
-    const scheme = merge({
-      layers: { Lead: { bias: 0.1, looks: ['rings'] } },
-      clips: { 'quiet one': { bias: -0.3, looks: ['noise'] } },
+  it('lets a song pin one look and stop the wheel', () => {
+    const scheme = twoOf({ songs: { sandstorm: { looks: ['b'], colorway: 'two' } } });
+    const drawn = show(setOf(['Bass'], '[VERSE] one'), scheme);
+    expect(drawn.look).toBe('b');
+    expect(drawn.colorway).toBe('two');
+    expect(drawn.pinned).toBe(true);
+  });
+
+  it('lets a song name three and still turn through those three', () => {
+    // A shorter rotation is still a rotation. That is what makes the override
+    // cheap to reach for: "these three, for this song" should not need a second
+    // concept to express.
+    const scheme = twoOf({ songs: { sandstorm: { looks: ['a', 'b'] } } });
+    const pools = poolsOf(scheme, scheme.songs.sandstorm);
+    expect(pools.looks).toEqual(['a', 'b']);
+    expect(whatIsUp(scheme, 'sandstorm', { look: 0, color: 0 }).pinned).toBe(false);
+  });
+
+  it('drops a song pin that names a look nobody has any more', () => {
+    // A stale id must not black the screen for a whole song.
+    const scheme = twoOf({ songs: { sandstorm: { looks: ['gone'] } } });
+    const drawn = show(setOf(['Bass'], '[VERSE] one'), scheme);
+    expect(drawn.look).toBeTruthy();
+    expect(scheme.looks[drawn.look!]).toBeDefined();
+  });
+});
+
+describe('turning on musical time', () => {
+  it('counts bars, not seconds', () => {
+    const rotation = twoOf().rotation;
+    expect(turnsAt(rotation, 0, 4, 0).look).toBe(0);
+    expect(turnsAt(rotation, 15.9, 4, 0).look).toBe(0);
+    expect(turnsAt(rotation, 16, 4, 0).look).toBe(1);
+  });
+
+  it('holds whatever is up when the wheel is stopped', () => {
+    const rotation = { ...twoOf().rotation, bars: 0, colorEvery: 0 };
+    expect(turnsAt(rotation, 400, 4, 0).look).toBe(0);
+  });
+
+  it('turns when a clip is fired out of band, and not when a scene is', () => {
+    // A scene launch moves every track at once; a clip launch moves one. Scenes
+    // fire constantly, so a picture that changed with every one would never
+    // settle — and reaching past the grid for one clip is already the "and now
+    // something else" gesture of a live set.
+    const turning = noTurning();
+    const scheme = twoOf();
+    const set = setOf(['Drums', 'Bass', 'Keys'], '[VERSE] one');
+    show(set, scheme, turning);
+    expect(turning.bumps).toBe(0);
+
+    // Everything moves to scene 1: a scene launch.
+    set.scenes = [set.scenes[0], scene(1, '[CHORUS] one')];
+    set.play = set.play.map(() => ({ playing: 1, fired: -1 }) as BSV.TrackPlayState);
+    show(set, scheme, turning);
+    expect(turning.bumps).toBe(0);
+
+    // One track departs: a clip launch.
+    set.play[2] = { playing: 0, fired: -1 } as BSV.TrackPlayState;
+    show(set, scheme, turning);
+    expect(turning.bumps).toBe(1);
+  });
+
+  it('does not count the first read as a change', () => {
+    // Otherwise the wheel would advance every time a browser connected, which
+    // is the sort of thing that looks like a haunted rig.
+    const turning = noTurning();
+    const set = setOf(['Drums', 'Bass'], '[VERSE] one');
+    set.play[1] = { playing: 3, fired: -1 } as BSV.TrackPlayState;
+    show(set, twoOf(), turning);
+    expect(turning.bumps).toBe(0);
+  });
+
+  it('ignores an out-of-band clip when the rotation was told to', () => {
+    const scheme = twoOf({
+      rotation: { looks: [], colorways: [], bars: 4, onClip: false, colorEvery: 4 },
     });
-    const drawn = show(setOf(['Lead'], '[VERSE] one', { 0: 'quiet one' }), scheme);
-    expect(drawn.layers[0].looks[0].id).toBe('noise');
-    expect(drawn.layers[0].energy).toBeCloseTo(0.35 + 0.1 - 0.3);
+    const turning = noTurning();
+    const set = setOf(['Drums', 'Bass'], '[VERSE] one');
+    show(set, scheme, turning);
+    set.play[1] = { playing: 5, fired: -1 } as BSV.TrackPlayState;
+    show(set, scheme, turning);
+    expect(turning.bumps).toBe(0);
+  });
+});
+
+describe('the tracks', () => {
+  it('takes colour from the colourway and never from the clip', () => {
+    // Clip colour is navigation — how you find your place in the grid during a
+    // show — and driving the picture from it would force a choice between a set
+    // you can read and a set that looks right.
+    const scheme = twoOf({ songs: { sandstorm: { colorway: 'one' } } });
+    const drawn = show(setOf(['Bass', 'Lead'], '[VERSE] one', { 0: 'red one' }), scheme);
+    expect(drawn.tracks[0].color).toBe(0x111111);
+    expect(drawn.colors[0]).toBe(0x111111);
   });
 
-  it('adds effects across the levels rather than replacing them', () => {
-    // "The chorus should mix in more frenetic effects" is additive by
-    // construction: the section contributes its character, the track its own,
-    // and both survive.
-    const scheme = merge({
-      layers: { Lead: { looks: ['shift'] } },
-      defaults: { ...BUILT_IN.defaults, maxLooks: 3 },
-    });
-    const drawn = show(setOf(['Lead'], '[CHORUS] one'), scheme);
-    // The base leads, because a stack has to start with something that draws.
-    // Everything after it is what the levels contributed, in the order they did.
-    expect(drawn.layers[0].offers).toEqual(['rings', 'kaleido', 'ripple', 'shift']);
-  });
-
-  it('caps the pile and dials the survivors in by energy', () => {
-    const loud = show(setOf(['Lead'], '[CHORUS] one'), BUILT_IN).layers[0];
-    const quiet = show(setOf(['Lead'], '[INTRO] one'), BUILT_IN).layers[0];
-    // A base and two on top of it, which is what `maxLooks: 3` means now that
-    // the base counts toward the cap.
-    expect(loud.looks).toHaveLength(3);
-    // The base always draws at full. Energy thins the stack above it and the
-    // floor gate decides whether the layer is in at all — dimming the base as
-    // well would be dimming the same thing twice.
-    expect(loud.looks[0].amount).toBeCloseTo(1);
-    expect(loud.looks[1].amount).toBeGreaterThan(0.5);
-    // An intro keeps its base and barely opens anything over it.
-    expect(quiet.looks.length).toBeLessThanOrEqual(2);
-    expect(quiet.looks[0].amount).toBeCloseTo(1);
-  });
-
-  it('drops an id naming a look that no longer exists', () => {
-    // Deleting a look strips its references, but a hand-edited file can still
-    // name one. A missing look must cost that pass and not the show — and the
-    // base survives it, so the layer still draws something.
-    const scheme = merge({
-      archetypes: { VERSE: { energy: 0.9, looks: ['ghost'] } },
-    });
-    expect(show(setOf(['Lead'], '[VERSE] one'), scheme).layers[0].offers).toEqual(['rings']);
-  });
-
-  it('gates presence on the section, not on the layer', () => {
-    // The bug this assertion exists for. A pad carrying a negative bias is
-    // asking to be *calmer*; tested against its own biased energy it went
-    // *absent* for the whole of every verse instead.
-    const scheme = merge({ layers: { Pad: { bias: -0.3, floor: 0.3 } } });
-    const drawn = show(setOf(['Bass', 'Pad'], '[VERSE] one'), scheme);
-    const pad = drawn.layers[1];
-    expect(pad.energy).toBeLessThan(drawn.energy);
-    expect(pad.opacity).toBeGreaterThan(0);
-  });
-
-  it('hides a layer that asked to be hidden, and still lists it', () => {
-    // Listed because it is still a track, and a layer you cannot see in the
-    // editor is a layer you cannot turn back on.
-    const drawn = show(
-      setOf(['Bass', 'Click'], '[VERSE] one'),
-      merge({ layers: { Click: { hide: true } } }),
-    );
-    expect(drawn.layers).toHaveLength(2);
-    expect(drawn.layers[1].hidden).toBe(true);
-    expect(drawn.layers[1].opacity).toBe(0);
-    expect(drawn.layers[1].looks).toEqual([]);
-  });
-
-  it('does not make a layer out of a group track', () => {
-    // A group carries no clips of its own, so drawing one would double every
-    // layer inside it.
-    const state = setOf(['Bass', 'Drums'], '[VERSE] one');
-    state.tracks = [track(0, 'Bass'), track(1, 'Band', true), track(2, 'Drums')];
-    expect(show(state, BUILT_IN).layers.map((l) => l.name)).toEqual(['Bass', 'Drums']);
+  it('does not make a track out of a group track', () => {
+    // A group carries no clips of its own, so drawing one would double
+    // everything inside it.
+    const set = setOf(['Drums', 'Bass'], '[VERSE] one');
+    set.tracks = [track(0, 'Drums'), track(1, 'Group', true), track(2, 'Bass')];
+    set.play = [0, 1, 2].map(() => ({ playing: 0, fired: -1 }) as BSV.TrackPlayState);
+    expect(show(set, twoOf()).tracks.map((t) => t.name)).toEqual(['Drums', 'Bass']);
   });
 
   it('offers the set its own roles and songs, for an editor to pick from', () => {
-    const state = setOf(['Bass'], '[CHORUS] one');
-    state.scenes = [scene(0, '[CHORUS] one'), scene(1, '[VERSE] two'), scene(2, 'untitled')];
-    const drawn = show(state, BUILT_IN);
-    expect(drawn.roles).toEqual(['CHORUS', 'VERSE']);
+    const drawn = show(setOf(['Bass'], '[VERSE] one'), twoOf());
+    expect(drawn.roles).toEqual(['VERSE']);
     expect(drawn.songs).toEqual(['sandstorm']);
   });
 });

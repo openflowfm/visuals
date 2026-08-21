@@ -1,21 +1,34 @@
 import type { Blend, LookDef, Scheme, Show } from '../../protocol.ts';
-import { lookShader, namedTracks, paramsOf, signatureOf, trackBank } from './look.ts';
+import { hint } from '../../hints.ts';
+import { flatten } from './circuit.ts';
+import {
+  buildLook,
+  namedEnergies,
+  namedTracks,
+  paramsOf,
+  signatureOf,
+  trackBank,
+} from './look.ts';
 import { compile, createTarget, drawFullscreen, rgb, type Program } from './gl.ts';
 import { columns, warpFor, OUTPUT_SHADER, SQUARE, type Corners } from './output.ts';
+import { TRACK_SHADERS } from './shaders.ts';
 
 /**
- * The layer stack, drawn once a frame.
+ * Two passes and an output stage, where there used to be a stack of them.
  *
- * This is Resolume's model and Ableton's at the same time, because they turn out
- * to be the same shape: a composition is layers stacked bottom to top, each
- * showing one clip, each with a blend mode and a fader. That is a session grid
- * read down a column — Live's tracks are the layers and Live's scenes are the
- * columns — which is why nothing here invents a transport or a launcher.
+ * The renderer is a graph now, and a graph of colours needs no buffers — a
+ * colour is an expression evaluated at a point, so a whole look compiles to one
+ * fragment shader. See `circuit.ts`.
  *
- * **Blending is fixed-function**, so there is no accumulator buffer. Every
- * shader writes premultiplied alpha, which lets one `blendFunc` per layer give
- * the four modes below, and leaves an offscreen target needed only by a layer
- * that actually carries effects.
+ * The one thing that cannot be an expression is the **set**. A `tracks` node
+ * draws the same picture once per playing Live track with a different colour,
+ * meter and fader each time, and a fragment shader cannot loop over a varying
+ * number of those cheaply. So it stays a pass: every playing track drawn into
+ * one target, which the look then reads as a texture.
+ *
+ * **Blending is fixed-function** in that pass, so there is no accumulator
+ * buffer. Every track shader writes premultiplied alpha, which lets one
+ * `blendFunc` per track give the four modes below.
  */
 const BLENDS: Record<Blend, [number, number]> = {
   // Premultiplied "over" — the ordinary stacking that something has to do.
@@ -26,22 +39,7 @@ const BLENDS: Record<Blend, [number, number]> = {
 };
 
 export interface Compositor {
-  /**
-   * The scheme comes in per frame because effects now live in it.
-   *
-   * A layer's effects are ids, and what an id *is* — six lines of handwritten
-   * GLSL or a canvas full of nodes — is the scheme's to say. Resolving that on
-   * the server would mean shipping a shader down the wire on every edit; doing
-   * it here means an effect recompiles the moment its wiring changes and never
-   * when only a knob moved.
-   */
   frame(show: Show, scheme: Scheme | null, beat: number, seconds: number, dt: number): void;
-  /**
-   * How the picture leaves, which is a property of the projector and the room
-   * rather than of the show — see `output.ts`. Set on a change rather than
-   * passed per frame: it moves when someone drags a corner, not sixty times a
-   * second.
-   */
   setOutput(output: Output | null): void;
   resize(): void;
   free(): void;
@@ -50,34 +48,29 @@ export interface Compositor {
 
 export interface Output {
   corners: Corners;
-  /** Master brightness. 1 is what the layers asked for. */
+  /** Master brightness. 1 is what the look asked for. */
   gain: number;
   /** Overlay a grid, in source space, so it arrives on the wall already warped. */
   test: boolean;
 }
 
 /** A built look, and enough about it to know when it stopped being current. */
-interface BuiltLook {
+interface Built {
   program: Program | null;
   /** What it was compiled from. Structure only — a knob's value is a uniform. */
   signature: string;
   error: string | null;
   params: Float32Array;
-  /**
-   * The tracks this look named, in `uTracks` order, or empty when it named
-   * none. Cached beside the program because it is a function of the circuit's
-   * structure — the same thing the signature is — and recomputing it per layer
-   * per frame would walk every node sixty times a second to learn nothing.
-   */
   tracks: string[];
+  energies: { name: string; smooth: number }[];
+  /** How each Live track draws, or null when the look never asked for the set. */
+  draws: string | null;
 }
 
 export function createCompositor(canvas: HTMLCanvasElement): Compositor {
   const gl = canvas.getContext('webgl2', {
     alpha: false,
     antialias: false,
-    // The renderer is the only thing on this machine that matters, and a
-    // compositor that quietly drops to software is worse than one that says so.
     powerPreference: 'high-performance',
     preserveDrawingBuffer: false,
   });
@@ -93,26 +86,12 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
   }
 
   let error: string | null = null;
-  const looks = new Map<string, BuiltLook>();
+  const looks = new Map<string, Built>();
+  const sources = new Map<string, Program | null>();
 
-  /**
-   * Two targets, ping-ponged, because a layer can carry more than one effect.
-   *
-   * A chain is what makes energy *additive* rather than a switch — a chorus can
-   * contribute a kaleidoscope while the drum track contributes a ripple, and
-   * both have to survive. Two is the cap (`maxEffects`), which is why there are
-   * exactly two here and no pool.
-   */
-  const targets = [createTarget(gl), createTarget(gl)];
-
-  /**
-   * Where the stack lands, before the output stage takes it to the screen.
-   *
-   * The pass used to be skipped while the corners were square, which was right
-   * when all it did was a keystone. It does the shoulder now — the thing that
-   * stops five bright layers arriving as a white rectangle — and that is wanted
-   * on every rig whether or not its projector is straight, so it always runs.
-   */
+  /** Where the set's own picture lands, for the look to read. */
+  const live = createTarget(gl);
+  /** Where the look lands, before the output stage takes it to the screen. */
   const out = createTarget(gl);
   let warp = columns(warpFor(SQUARE));
   let gain = 1;
@@ -120,44 +99,69 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
   let stage: Program | null = null;
 
   /**
-   * Where each layer's opacity currently is, as against where the show says it
-   * should be.
+   * Where each track's opacity currently is, as against where the show says.
    *
-   * Section changes move energy, energy moves the floor gate, and the gate moves
-   * opacity — so without this a chorus arriving would pop three layers into
-   * existence on one frame. Eased, it reads as the picture opening up, which is
-   * what the section actually did. Keyed by track index because that is a
-   * layer's identity across every reshuffle of the set.
+   * Without this, a scene change would pop tracks into existence on one frame.
+   * Eased, it reads as the picture opening up, which is what the scene actually
+   * did. Keyed by track index because that is a track's identity across every
+   * reshuffle of the set.
    */
   const shown = new Map<number, number>();
 
-  const lookProgram = (id: string, def: LookDef): BuiltLook => {
-    const signature = signatureOf(def);
+  /**
+   * Smoothed meters, one per name an `energy` node asked for.
+   *
+   * On the CPU because an envelope follower has to remember what it saw last
+   * frame, and a fragment shader cannot. This is the whole implementation of
+   * "energy means whatever you decide it means": a meter, an attack and a
+   * release, and the name is yours.
+   */
+  const followed = new Map<string, number>();
+
+  const sourceProgram = (mode: string): Program | null => {
+    const held = sources.get(mode);
+    if (held !== undefined) return held;
+    const glsl = TRACK_SHADERS.get(mode) ?? TRACK_SHADERS.get('plasma')!;
+    let built: Program | null = null;
+    try {
+      built = compile(gl, glsl, `source:${mode}`);
+    } catch (err) {
+      error = `${mode}: ${(err as Error).message}`;
+    }
+    sources.set(mode, built);
+    return built;
+  };
+
+  const lookProgram = (scheme: Scheme, id: string): Built => {
+    const signature = signatureOf(scheme.looks, id);
     const held = looks.get(id);
+    const { circuit } = flatten(scheme.looks, id);
     if (held && held.signature === signature) {
-      held.params = paramsOf(def);
+      held.params = paramsOf(circuit);
       return held;
     }
     if (held?.program) gl.deleteProgram(held.program.program);
 
-    const built: BuiltLook = {
+    const compiled = buildLook(scheme.looks, id);
+    const built: Built = {
       program: null,
       signature,
-      error: null,
-      params: paramsOf(def),
-      tracks: namedTracks(def),
+      error: compiled.error,
+      params: paramsOf(circuit),
+      tracks: namedTracks(circuit),
+      energies: namedEnergies(circuit),
+      draws: compiled.draws,
     };
-    const { source, error: why } = lookShader(def);
-    if (!source) {
-      built.error = why ?? 'no shader';
-    } else {
+    if (compiled.source) {
       try {
-        built.program = compile(gl, source, `look:${id}`);
+        built.program = compile(gl, compiled.source, `look:${id}`);
+        built.error = null;
       } catch (err) {
         built.error = (err as Error).message;
       }
     }
-    if (built.error) error = `${def.name || id}: ${built.error}`;
+    if (built.error) error = `${scheme.looks[id]?.name || id}: ${built.error}`;
+    else error = null;
     looks.set(id, built);
     return built;
   };
@@ -165,15 +169,12 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
   /**
    * The drawing buffer, capped at `MAX_EDGE` on its longest side.
    *
-   * Every layer is a full-screen pass and every effect is another, so fill rate
-   * is the single number that decides whether the rig holds 60. Left to the
-   * display it is ruinous: a Retina laptop reports a device pixel ratio of 2,
-   * which on an ordinary window asks for 3728x2006 — 7.5 megapixels, times the
-   * layers, times their effects, times sixty a second.
-   *
-   * A projector is 1080p, and the output of this is a projector. So the cap is
-   * the honest resolution of the destination rather than of the screen someone
-   * happens to be previewing on.
+   * Fill rate is the single number that decides whether the rig holds 60. Left
+   * to the display it is ruinous: a Retina laptop reports a device pixel ratio
+   * of 2, which on an ordinary window asks for 7.5 megapixels sixty times a
+   * second. A projector is 1080p, and the output of this is a projector — so the
+   * cap is the honest resolution of the destination rather than of whatever
+   * screen someone happens to be previewing on.
    */
   const MAX_EDGE = Number(new URLSearchParams(location.search).get('maxEdge')) || 1920;
 
@@ -190,37 +191,25 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       canvas.width = width;
       canvas.height = height;
     }
-    for (const target of targets) target.resize(width, height);
+    live.resize(width, height);
     out.resize(width, height);
   };
 
   resize();
 
-  const setCommon = (
+  const clock = (
     program: Program,
     show: Show,
     scheme: Scheme | null,
-    index: number,
-    opacity: number,
     beat: number,
     seconds: number,
   ) => {
-    const layer = show.layers[index];
     const quantum = show.quantum || 4;
     gl.uniform2f(program.uniform('uRes'), canvas.width, canvas.height);
     gl.uniform1f(program.uniform('uTime'), seconds);
     gl.uniform1f(program.uniform('uBeat'), beat);
     gl.uniform1f(program.uniform('uPhase'), ((beat % quantum) + quantum) % quantum);
     gl.uniform1f(program.uniform('uQuantum'), quantum);
-    gl.uniform1f(program.uniform('uLevel'), layer.level);
-    gl.uniform1f(program.uniform('uEnergy'), layer.energy);
-    gl.uniform1f(program.uniform('uOpacity'), opacity);
-    gl.uniform3fv(program.uniform('uColor'), rgb(layer.color));
-    // Per layer and stable, so two layers drawing the same source out of the
-    // same colourway don't draw the identical picture on top of each other.
-    // It is also what spreads the stack across the division ladder — see
-    // `rate()` in the preamble.
-    gl.uniform1f(program.uniform('uSeed'), layer.t * 37.13);
     gl.uniform1f(program.uniform('uPace'), scheme?.defaults.pace ?? 0);
   };
 
@@ -235,109 +224,114 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       warp = columns(warpFor(output?.corners ?? SQUARE));
     },
     free() {
+      live.free();
       out.free();
       if (stage) gl.deleteProgram(stage.program);
-      for (const target of targets) target.free();
-      for (const built of looks.values()) {
-        if (built.program) gl.deleteProgram(built.program.program);
-      }
+      for (const built of looks.values()) if (built.program) gl.deleteProgram(built.program.program);
+      for (const program of sources.values()) if (program) gl.deleteProgram(program.program);
     },
     frame(show, scheme, beat, seconds, dt) {
       resize();
       gl.viewport(0, 0, canvas.width, canvas.height);
       gl.disable(gl.DEPTH_TEST);
 
-      // Everything lands offscreen; the output stage takes it to the screen.
-      const screen = out.framebuffer;
-      gl.bindFramebuffer(gl.FRAMEBUFFER, screen);
-      gl.clearColor(0, 0, 0, 1);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.enable(gl.BLEND);
-
-      // Roughly a 200ms glide however fast the display runs, so a section change
-      // looks the same on 60 Hz and 144 Hz.
+      const room = show.master;
+      // Roughly a 200ms glide however fast the display runs, so a change looks
+      // the same on 60 Hz and 144 Hz.
       const glide = 1 - Math.exp(-dt / 0.2);
 
-      for (let i = 0; i < show.layers.length; i++) {
-        const layer = show.layers[i];
-        // Nothing playing means nothing drawn — not the last thing that played.
-        // A layer holding its previous clip after the scene changed is the
-        // failure that looks most like the renderer having crashed. The target
-        // is taken to zero rather than skipped so it fades out on its way.
-        const target = layer.playing < 0 ? 0 : layer.opacity;
-        const was = shown.get(layer.t) ?? 0;
-        const opacity = was + (target - was) * glide;
-        shown.set(layer.t, opacity);
-        if (opacity <= 0.002) continue;
+      const id = show.look;
+      const built = scheme && id ? lookProgram(scheme, id) : null;
 
-        const [src, dst] = BLENDS[layer.blend] ?? BLENDS.over;
+      // --- the set's own picture, when the look asked for it ---------------
+      gl.bindFramebuffer(gl.FRAMEBUFFER, live.framebuffer);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      if (built?.draws) {
+        gl.enable(gl.BLEND);
+        for (const track of show.tracks) {
+          // Nothing playing means nothing drawn — not the last thing that
+          // played. A track holding its previous clip after the scene changed
+          // is the failure that looks most like the renderer having crashed.
+          const target = track.playing < 0 ? 0 : track.opacity;
+          const was = shown.get(track.t) ?? 0;
+          const opacity = was + (target - was) * glide;
+          shown.set(track.t, opacity);
+          if (opacity <= 0.002) continue;
 
-        // The stack, bottom first. A look that failed to build drops out of it
-        // rather than taking the layer with it, and one naming a look the
-        // scheme no longer has is dropped in `show.ts` before it ever gets here.
-        const stack = layer.looks.flatMap((applied) => {
-          const def = scheme?.looks[applied.id];
-          if (!def) return [];
-          const built = lookProgram(applied.id, def);
-          return built.program ? [{ applied, built, program: built.program }] : [];
-        });
-        if (stack.length === 0) continue;
+          const mode = built.draws === 'by name' ? hint(track.name) : built.draws;
+          const program = sourceProgram(mode);
+          if (!program) continue;
 
-        // One loop where there used to be a source pass and then an effect
-        // chain. Collapsing the noun collapsed this with it: every pass reads
-        // the frame beneath it and writes the frame above, and whether a given
-        // one *uses* what it read is the shader's business rather than the
-        // compositor's.
-        let read = 0;
-        for (let step = 0; step < stack.length; step++) {
-          const { applied, built, program } = stack[step];
-          const first = step === 0;
-          const last = step === stack.length - 1;
-          const write = 1 - read;
-
-          if (last) {
-            gl.bindFramebuffer(gl.FRAMEBUFFER, screen);
-            gl.enable(gl.BLEND);
-            gl.blendFunc(src, dst);
-          } else {
-            gl.bindFramebuffer(gl.FRAMEBUFFER, targets[write].framebuffer);
-            gl.disable(gl.BLEND);
-            gl.clearColor(0, 0, 0, 0);
-            gl.clear(gl.COLOR_BUFFER_BIT);
-          }
-
+          const [src, dst] = BLENDS[trackBlend(track.t)] ?? BLENDS.screen;
+          gl.blendFunc(src, dst);
           gl.useProgram(program.program);
-          // The fader is applied exactly once, by the bottom of the stack.
-          // `OUT` multiplies by it and `MIXED` does not, so a pass that mixes
-          // preserves whatever alpha arrived — applying it again at every step
-          // would raise it to the power of the stack's depth.
-          setCommon(program, show, scheme, i, first ? opacity : 1, beat, seconds);
-          gl.uniform1f(program.uniform('uAmount'), applied.amount);
-          gl.uniform1fv(program.uniform('uParams'), built.params);
-          // Only for a circuit that named a track. `tracks` is empty for a
-          // built-in and for every look that reads only the layer it draws, so
-          // the common case costs one array lookup and no uniform upload.
-          if (built.tracks.some(Boolean)) {
-            gl.uniform1fv(
-              program.uniform('uTracks'),
-              trackBank(built.tracks, (name) =>
-                name === 'master'
-                  ? show.master
-                  : (show.layers.find((l) => l.name === name)?.level ?? 0),
-              ),
-            );
-          }
-          // A generator ignores this; a transformer reads it. Bound either way,
-          // because the compositor no longer knows which it has.
-          gl.activeTexture(gl.TEXTURE0);
-          gl.bindTexture(gl.TEXTURE_2D, targets[read].texture);
-          gl.uniform1i(program.uniform('uTex'), 0);
+          clock(program, show, scheme, beat, seconds);
+          gl.uniform1f(program.uniform('uLevel'), track.level);
+          gl.uniform1f(program.uniform('uEnergy'), room);
+          gl.uniform1f(program.uniform('uOpacity'), opacity);
+          gl.uniform3fv(program.uniform('uColor'), rgb(track.color));
+          // Per track and stable, so two tracks drawing the same picture out of
+          // the same colourway do not draw the identical thing on top of each
+          // other. It is also what spreads them across the division ladder.
+          gl.uniform1f(program.uniform('uSeed'), track.t * 37.13);
           drawFullscreen(gl);
-
-          read = write;
         }
       }
 
+      // --- the look --------------------------------------------------------
+      gl.bindFramebuffer(gl.FRAMEBUFFER, out.framebuffer);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.disable(gl.BLEND);
+
+      if (built?.program) {
+        const program = built.program;
+        gl.useProgram(program.program);
+        clock(program, show, scheme, beat, seconds);
+        gl.uniform1f(program.uniform('uLevel'), room);
+        gl.uniform1f(program.uniform('uEnergy'), room);
+        gl.uniform1f(program.uniform('uOpacity'), 1);
+        gl.uniform1f(program.uniform('uSeed'), 3.71);
+        gl.uniform3fv(program.uniform('uColor'), rgb(show.colors[0] ?? 0xffffff));
+        gl.uniform1f(program.uniform('uSongSeed'), seedOf(show.song));
+        gl.uniform1f(program.uniform('uSongTempo'), show.tempo);
+        // A half for a set that states no key, which is the convention every
+        // other song fact here already follows: no answer sits in the middle.
+        gl.uniform1f(program.uniform('uSongKey'), show.key ?? 0.5);
+        gl.uniform1f(program.uniform('uSection'), sectionOf(show));
+        gl.uniform1f(program.uniform('uSections'), show.roles.length / 8);
+        gl.uniform1fv(program.uniform('uParams'), built.params);
+
+        const meter = (name: string) =>
+          name === 'master' ? show.master : (show.tracks.find((t) => t.name === name)?.level ?? 0);
+
+        if (built.tracks.some(Boolean)) {
+          gl.uniform1fv(program.uniform('uTracks'), trackBank(built.tracks, meter));
+        }
+        if (built.energies.some((each) => each.name)) {
+          const bank = new Float32Array(8);
+          built.energies.forEach((each, i) => {
+            if (!each.name) return;
+            // Fast up, slow down. An envelope that fell as quickly as it rose
+            // would be the meter again, and the meter is already a node.
+            const now = meter(each.name);
+            const was = followed.get(each.name) ?? 0;
+            const fall = 1 - Math.exp(-dt / (0.05 + each.smooth * 1.95));
+            const value = now > was ? now : was + (now - was) * fall;
+            followed.set(each.name, value);
+            bank[i] = value;
+          });
+          gl.uniform1fv(program.uniform('uEnergies'), bank);
+        }
+
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, live.texture);
+        gl.uniform1i(program.uniform('uTracksTex'), 0);
+        drawFullscreen(gl);
+      }
+
+      // --- to the wall -----------------------------------------------------
       if (!stage) {
         try {
           stage = compile(gl, OUTPUT_SHADER, 'output');
@@ -361,4 +355,40 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       drawFullscreen(gl);
     },
   };
+}
+
+/**
+ * How a track stacks on the ones drawn before it.
+ *
+ * `screen` for everything above the bottom, because it saturates at white rather
+ * than climbing past it. An even pick over the four modes puts a quarter of a
+ * tall stack on `add`, and a quarter is enough to white out the frame before the
+ * tracks that were meant to be seen have drawn. The bottom one is `over` because
+ * something has to be opaque.
+ *
+ * A fixed rule rather than a bound one, and that is the trade this whole change
+ * makes: per-track blend was a field on a binding that no longer exists. If it
+ * needs to vary, it varies inside the graph — a `blend` node is right there.
+ */
+function trackBlend(t: number): Blend {
+  return t === 0 ? 'over' : 'screen';
+}
+
+/** A stable 0–1 per song name, so `song.seed` is a different number per song. */
+function seedOf(name: string | null): number {
+  if (!name) return 0.5;
+  let h = 1779033703 ^ name.length;
+  for (let i = 0; i < name.length; i++) {
+    h = Math.imul(h ^ name.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  h = Math.imul(h ^ (h >>> 16), 2246822507);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+/** Where the playing section sits among the ones the set uses, 0–1. */
+function sectionOf(show: Show): number {
+  if (!show.role || show.roles.length < 2) return 0.5;
+  const at = show.roles.indexOf(show.role);
+  return at < 0 ? 0.5 : at / (show.roles.length - 1);
 }

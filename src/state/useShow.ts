@@ -36,12 +36,14 @@ const RESTING: Show = {
   beat: 0,
   at: 0,
   master: 0,
-  layers: [],
-  song: null,
-  role: null,
-  archetype: null,
+  tracks: [],
+  look: null,
+  pinned: false,
   colorway: null,
-  energy: 0.4,
+  colors: [0xffffff],
+  song: null,
+  key: null,
+  role: null,
   schemeError: null,
   roles: [],
   songs: [],
@@ -120,10 +122,10 @@ export function useShow(): {
           // Levels and faders ride the anchor rather than waking a full push,
           // so patch them into the held show in place. Nothing re-renders.
           const next: Show = { ...held.current, playing: message.playing, master: message.master };
-          next.layers = next.layers.map((layer, i) => ({
-            ...layer,
-            level: message.levels[i] ?? layer.level,
-            opacity: message.opacity[i] ?? layer.opacity,
+          next.tracks = next.tracks.map((track, i) => ({
+            ...track,
+            level: message.levels[i] ?? track.level,
+            opacity: message.opacity[i] ?? track.opacity,
           }));
           held.current = next;
           return;

@@ -1,12 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Archetype, LayerSpec, LookDef, Scheme, SongSpec } from '../protocol.ts';
-
+import type { Circuit, CircuitNode, LookDef, Scheme, SongSpec } from '../protocol.ts';
+import { repaired } from '../src/render/circuit.ts';
 
 /**
- * The scheme: what a song looks like, what a section feels like, what a track
- * does. Read from `visuals/scheme.json`, hot-reloaded, and entirely optional.
+ * The scheme: every look there is, the colours they draw from, and the wheel
+ * that turns through them. Read from `visuals/scheme.json`, hot-reloaded, and
+ * entirely optional.
  *
  * **Everything here has a default that works**, which is the rule the file is
  * designed around. A rig that draws nothing until it has been configured is a
@@ -14,87 +15,268 @@ import type { Archetype, LayerSpec, LookDef, Scheme, SongSpec } from '../protoco
  * file only ever overrides parts of it. Delete `scheme.json` and the picture
  * changes; it does not stop.
  *
- * It is a file rather than device state on purpose, for now. Archetypes belong
- * beside roles eventually — roles are already set-owned, they travel in the
- * `.als`, and a show that looked different on the gig laptop would be a bug.
- * But that costs a protocol change through `lom.ts`, `bridge.ts` and `ui/`, and
- * committing to a shape before it has met a real set is how you get a protocol
- * you regret. So: a file, shaped so it can move without changing.
+ * ## What is not in it any more
+ *
+ * `layers`, `clips` and `archetypes` are gone, and with them the cascade. All
+ * three existed to answer "how do two pictures combine", and a graph answers
+ * that once — so what a track draws, what a section feels like and what a clip
+ * makes an exception of are all things you wire rather than things you bind.
+ *
+ * What is left above the graph is deliberately small enough to read in one
+ * screen: the looks, the colourways, which of them the rotation turns through,
+ * and the handful of songs that want to say otherwise.
  */
 
+/**
+ * A look, spelled compactly, because a graph written as JSON is unreadable.
+ *
+ * **Laid out from the wiring rather than from the order it was typed.** These
+ * are the four graphs anyone opens first, so where the nodes sit is part of what
+ * they teach: a column per step along the signal, so the picture reads left to
+ * right and the cords do not cross. A row-major grid put a knob between two
+ * links in a chain and made a six-node look need untangling before it could be
+ * read, which for the library that *is* the manual is the wrong first sight.
+ */
+function wire(
+  name: string,
+  nodes: [string, string, string?, Record<string, number>?, number?, string?][],
+  cords: string[],
+): LookDef {
+  const wired = cords.map((each) => {
+    const [from, to] = each.split(' -> ');
+    return { from, to };
+  });
+  const at = columnsOf(
+    nodes.map(([id]) => id),
+    wired,
+  );
+  const row = new Map<number, number>();
+  return {
+    name,
+    circuit: {
+      nodes: nodes.map(([id, kind, op, knobs, value, label]): CircuitNode => {
+        const column = at.get(id) ?? 0;
+        const depth = row.get(column) ?? 0;
+        row.set(column, depth + 1);
+        return {
+          id,
+          kind: kind as CircuitNode['kind'],
+          x: 40 + column * 210,
+          y: 40 + depth * 175,
+          ...(op ? { op } : {}),
+          ...(knobs ? { knobs } : {}),
+          ...(value !== undefined ? { value } : {}),
+          ...(label ? { label } : {}),
+        };
+      }),
+      cords: wired,
+    },
+  };
+}
+
+/**
+ * How far along the signal each node sits: one past the furthest thing feeding
+ * it, and zero for anything nothing feeds.
+ *
+ * Guarded against a graph that feeds itself even though none of these do, since
+ * the only thing worse than a badly laid out built-in is a server that will not
+ * start.
+ */
+function columnsOf(ids: readonly string[], cords: readonly { from: string; to: string }[]): Map<string, number> {
+  const node = (address: string) => address.slice(0, address.lastIndexOf('/'));
+  const feeders = new Map<string, string[]>();
+  for (const cord of cords) {
+    const to = node(cord.to);
+    feeders.set(to, [...(feeders.get(to) ?? []), node(cord.from)]);
+  }
+  const at = new Map<string, number>();
+  const walk = (id: string, seen: readonly string[]): number => {
+    const held = at.get(id);
+    if (held !== undefined) return held;
+    if (seen.includes(id)) return 0;
+    const column = (feeders.get(id) ?? []).reduce(
+      (most, from) => Math.max(most, walk(from, [...seen, id]) + 1),
+      0,
+    );
+    at.set(id, column);
+    return column;
+  };
+  for (const id of ids) walk(id, []);
+  return at;
+}
+
+/**
+ * Four looks that are a show, and are the manual.
+ *
+ * Deliberately a spread rather than four variations: one that is **only** the
+ * set, one that **moves the point** the set is read at, one that puts the set
+ * **inside** a picture that ships, and one that ignores the set entirely and
+ * builds a picture **out of a number**. Between them they use every family in
+ * the vocabulary, which matters more than it usually would — nobody reads a node
+ * reference, and everybody takes a working example apart.
+ *
+ * Two rules they all keep, both learned the hard way.
+ *
+ * **Nothing here is only alive when the room is loud.** `master` is zero with no
+ * Live connected, which is most of the time anyone is building one of these, and
+ * a look whose every motion came off a meter is a still frame at a desk and
+ * indistinguishable from one that is wired wrong. So the motion comes off the
+ * clock — `phase`, `beat`, a `wave` — and the meter *adds*.
+ *
+ * **Nothing here is wired to something that cannot move it.** The old `Weather`
+ * drove a `hue` from `song seed`, and a set with no song names holds that at a
+ * half, which is exactly the rotation that does nothing: a cord drawn across the
+ * canvas into a node that visibly never changed. A number that idles at a half
+ * belongs on an inlet where a half means something.
+ *
+ * And one thing they teach by shape rather than by rule: **a number that goes to
+ * one inlet is set on that inlet**, not wired in from a knob node parked beside
+ * it. Four of these used to be knob nodes and are now numbers on a face, which
+ * is four fewer cords across the four graphs anyone opens first. The one knob
+ * node left is in `Weather`, feeding two places, which is what that node is for.
+ */
 const BUILT_IN: Scheme = {
+  looks: {
+    // One node. The floor of the vocabulary, and the claim the rig is built on:
+    // point it at a Live set and it draws the Live set.
+    live: wire(
+      'The set',
+      [
+        ['live', 'tracks', 'by name'],
+        ['o', 'out'],
+      ],
+      ['live/c -> o/c'],
+    ),
+    // A colour is a function of a point. The set is read through a swirl that
+    // sways once a bar, and the kaleidoscope folds the whole chain rather than
+    // an image of it — which is the one idea the rest of the model falls out of.
+    folded: wire(
+      'Folded',
+      [
+        ['pt', 'point'],
+        ['bar', 'signal', 'phase'],
+        ['sway', 'wave', 'sine'],
+        ['half', 'math', 'average'],
+        ['turn', 'swirl'],
+        ['live', 'tracks', 'by name'],
+        ['e', 'energy', 'master', undefined, 0.35],
+        // The wedge count is set on the effect's own face rather than wired in
+        // from a knob node. One number, one place, no cord across the canvas.
+        ['fold', 'effect', 'kaleido', { segments: 0.3 }],
+        ['o', 'out'],
+      ],
+      [
+        'bar/n -> sway/phase',
+        // `b` is left at its own half, which halves the swing about centre —
+        // an unwired inlet's answer, doing real work.
+        'sway/n -> half/a',
+        'pt/p -> turn/p',
+        'half/n -> turn/turn',
+        'turn/p -> live/p',
+        'live/c -> fold/c',
+        'e/n -> fold/energy',
+        'fold/c -> o/c',
+      ],
+    ),
+    // Two pictures, one of them the room's. The set is wobbled by how loud the
+    // room is — still when it is quiet — and screened into a corridor, then
+    // graded. The blend node is what every layer stack this replaced was for.
+    deep: wire(
+      'Deep',
+      [
+        ['e', 'energy', 'master', undefined, 0.4],
+        ['pt', 'point'],
+        ['tun', 'source', 'tunnel'],
+        ['wob', 'wobble'],
+        ['live', 'tracks', 'by name'],
+        // How much of the set is in the picture, and how hard the grade is:
+        // both are numbers you turn while looking at the wall, and both live on
+        // the node they belong to.
+        ['mix', 'blend', 'screen', { amount: 0.75 }],
+        ['grade', 'levels', undefined, { gain: 0.62 }],
+        ['o', 'out'],
+      ],
+      [
+        'e/n -> tun/energy',
+        'pt/p -> wob/p',
+        'e/n -> wob/amount',
+        'wob/p -> live/p',
+        'tun/c -> mix/base',
+        'live/c -> mix/top',
+        'mix/c -> grade/c',
+        'grade/c -> o/c',
+      ],
+    ),
+    // No set at all, and no picture that ships either: `polar` turns a position
+    // into two numbers, `paint` turns one of them into the colourway, and `hue`
+    // turns the other into every colour there is. The song moves the grain, so
+    // one set of files is a different weather per song.
+    //
+    // It is also the one that still has a `value` node in it, doing the job
+    // that node is now for: **one number in two places**. `weight` says how
+    // heavy the weather is, and thickening the grain without hardening the glow
+    // under it would be two dials for one idea.
+    weather: wire(
+      'Weather',
+      [
+        ['pt', 'point'],
+        ['pol', 'polar'],
+        ['weight', 'value', undefined, undefined, 0.75, 'weight'],
+        // A full `a`, so the subtraction is one minus the radius — a disc that
+        // fades from the middle out. Set on the node, since nothing else in the
+        // graph has any business knowing that number.
+        ['fade', 'math', 'subtract', { a: 1 }],
+        ['grain', 'source', 'noise'],
+        ['glow', 'paint'],
+        ['tint', 'hue'],
+        ['song', 'song', 'seed'],
+        ['mix', 'blend', 'screen'],
+        ['o', 'out'],
+      ],
+      [
+        'pt/p -> pol/p',
+        'pol/radius -> fade/b',
+        'fade/n -> glow/amount',
+        'glow/c -> tint/c',
+        'pol/angle -> tint/shift',
+        'weight/n -> grain/energy',
+        'weight/n -> glow/energy',
+        'tint/c -> mix/base',
+        'grain/c -> mix/top',
+        'song/n -> mix/amount',
+        'mix/c -> o/c',
+      ],
+    ),
+  },
   colorways: {
-    aurora: ['#3cc8ff', '#6ee7a0', '#9b5aff', '#3cff9b', '#e8f4ff'],
-    ember: ['#ff5a3c', '#ffd23c', '#ff2d6f', '#ff9b3c', '#fff0c8'],
-    dusk: ['#9b5aff', '#ff2d6f', '#3c6eff', '#ffd23c', '#f0e8ff'],
-    mono: ['#ffffff', '#b7b7be', '#5e5e66', '#ececed', '#8b8b93'],
+    // Kept light on purpose: a cheap projector has no black to work against, so
+    // a dark colourway is a dark screen.
+    ember: ['#ffb347', '#ff6b6b', '#ffe9c4', '#c44536'],
+    cold: ['#7ec8e3', '#c3f0ff', '#4a7fa5', '#eaf6ff'],
+    acid: ['#c9f299', '#f2f27a', '#7ad7a0', '#ffffff'],
+    dusk: ['#c792ea', '#f78fb3', '#ffd6e0', '#6c5b7b'],
+  },
+  rotation: {
+    // Empty pools mean "everything", so a fresh clone turns through all four
+    // looks and all four colourways without anyone filling anything in.
+    looks: [],
+    colorways: [],
+    // Eight bars. Long enough to read as a section and short enough that a
+    // four-minute song is not one picture.
+    bars: 8,
+    onClip: true,
+    // The palette turns half as often as the look, so a change is usually one
+    // thing moving rather than everything at once.
+    colorEvery: 16,
   },
   songs: {},
-  archetypes: {
-    INTRO: { energy: 0.2, looks: ['smear'] },
-    VERSE: { energy: 0.35, looks: [] },
-    // A build is the ramp into something, so it sits between a verse and a
-    // chorus and reaches for the effect that moves the whole frame.
-    BUILD: { energy: 0.65, looks: ['ripple'] },
-    CHORUS: { energy: 0.9, looks: ['kaleido', 'ripple'] },
-    // A bridge is a contrast rather than a peak: different, not louder.
-    BRIDGE: { energy: 0.45, looks: ['mirror'] },
-    JAM1: { energy: 0.75, looks: ['shift', 'smear'] },
-    JAM2: { energy: 0.8, looks: ['mirror', 'kaleido'] },
-    ENDING: { energy: 0.3, looks: ['smear'] },
-    PRACTICE: { energy: 0.15, looks: [] },
-  },
-  layers: {},
-  clips: {},
-  // Ids are what an archetype or a layer names, so the built-ins claim their own
-  // spelling and a circuit gets a fresh one. Parameters are deliberately absent:
-  // each built-in declares its own defaults in `src/render/shaders.ts`, and a
-  // value only lands here once someone has actually moved it.
-  //
-  // Generators and transformers in one map, because they are one noun now. The
-  // only thing that still tells them apart is `isGenerator`, and it asks the
-  // look rather than reading which list it came out of.
-  looks: {
-    solid: { name: 'Solid', builtin: 'solid' },
-    bars: { name: 'Bars', builtin: 'bars' },
-    rings: { name: 'Rings', builtin: 'rings' },
-    noise: { name: 'Noise', builtin: 'noise' },
-    strobe: { name: 'Strobe', builtin: 'strobe' },
-    grid: { name: 'Grid', builtin: 'grid' },
-    tunnel: { name: 'Tunnel', builtin: 'tunnel' },
-    plasma: { name: 'Plasma', builtin: 'plasma' },
-    spiral: { name: 'Spiral', builtin: 'spiral' },
-    scan: { name: 'Scan', builtin: 'scan' },
-    sparks: { name: 'Sparks', builtin: 'sparks' },
-    mirror: { name: 'Mirror', builtin: 'mirror' },
-    kaleido: { name: 'Kaleido', builtin: 'kaleido' },
-    shift: { name: 'Shift', builtin: 'shift' },
-    pixelate: { name: 'Pixelate', builtin: 'pixelate' },
-    ripple: { name: 'Ripple', builtin: 'ripple' },
-    smear: { name: 'Smear', builtin: 'smear' },
-    bloom: { name: 'Bloom', builtin: 'bloom' },
-    slice: { name: 'Slice', builtin: 'slice' },
-    edge: { name: 'Edge', builtin: 'edge' },
-    posterize: { name: 'Posterize', builtin: 'posterize' },
-    twist: { name: 'Twist', builtin: 'twist' },
-    invert: { name: 'Invert', builtin: 'invert' },
-  },
   defaults: {
-    colorway: 'aurora',
-    energy: 0.4,
-    // Weighted toward `screen`, which saturates at white rather than climbing
-    // past it. Half the cycle used to be `add`, which on a set of twenty-seven
-    // tracks is a white rectangle by the fourth layer however good each of them
-    // looks alone. `add` is still here, because nothing else has its bite.
-    blend: ['over', 'screen', 'add', 'screen', 'multiply', 'screen'],
-    looks: ['plasma', 'bars', 'rings', 'grid', 'spiral', 'noise', 'scan', 'strobe', 'sparks'],
-    // One more than the old cap, because the base now counts toward it: two
-    // transformers on top of a base is what `maxEffects: 2` used to mean.
-    maxLooks: 3,
+    colorway: 'ember',
+    look: 'live',
     pace: 0,
+    draws: 'by name',
   },
 };
-
 const here = path.dirname(fileURLToPath(import.meta.url));
 const FILE = process.env.BSV_VISUALS_SCHEME ?? path.resolve(here, '../scheme.json');
 
@@ -235,10 +417,18 @@ export function openScheme(): SchemeSource {
 /**
  * A file overrides the built-in scheme one section at a time.
  *
- * Shallow per section, deliberately. Naming one archetype should not delete the
- * other six, and naming one colourway should not leave every other song
- * unstyled. `layers` and `clips` merge the same way, because they are keyed by a
- * name the set owns: an entry for one track has nothing to say about another.
+ * Shallow per section, deliberately. Naming one colourway should not delete the
+ * other three, and registering one look should not remove the four that ship.
+ *
+ * **This is the one door**, and it is why every graph is repaired here. A scheme
+ * reaches the renderer exactly two ways — read off disk, or sent up by an editor
+ * that gets it straight back down again — and both of them come through this
+ * function. So a look that arrived without an `out`, with two of them, or with a
+ * cord addressed to a port that is not there leaves here as a look, once, and is
+ * written back in that shape the next time anything saves. The alternative was
+ * repairing where the damage shows: in the compiler, which would silently redo
+ * the same fix on every frame and never write it down, or in the editor, which
+ * would need it in four places and would not cover the file at all.
  */
 export function merge(raw: Partial<Scheme>): Scheme {
   const file = carried(raw);
@@ -246,94 +436,119 @@ export function merge(raw: Partial<Scheme>): Scheme {
     // Carried rather than rebuilt, so a rolled show can still say where it came
     // from after a reload. Without it the seed lived exactly as long as the tab.
     ...(file.seed ? { seed: file.seed } : {}),
+    looks: whole({ ...BUILT_IN.looks, ...(file.looks ?? {}) }),
     colorways: { ...BUILT_IN.colorways, ...(file.colorways ?? {}) },
+    rotation: { ...BUILT_IN.rotation, ...(file.rotation ?? {}) },
     songs: songsOf(file.songs),
-    archetypes: { ...BUILT_IN.archetypes, ...(file.archetypes ?? {}) },
-    layers: { ...BUILT_IN.layers, ...(file.layers ?? {}) },
-    clips: { ...BUILT_IN.clips, ...(file.clips ?? {}) },
-    looks: { ...BUILT_IN.looks, ...(file.looks ?? {}) },
     defaults: { ...BUILT_IN.defaults, ...(file.defaults ?? {}) },
   };
 }
 
 /**
- * A scheme written before source and effect became one noun.
+ * Every look, as the model requires one.
  *
- * The split was real on disk for months, so a file out there says `effects`,
- * `source`, `sources` and `maxEffects` — including the one rolled last night
- * and committed. Refusing it would mean losing a show to a rename, which is the
- * wrong answer at any time and an unthinkable one before a gig.
- *
- * Carried rather than migrated in place: the file is not rewritten until
- * someone saves, and then it is written in the new spelling. Reading an old
- * file and writing a new one is the whole migration.
+ * `repaired` is the whole of it and it is cheap — a walk of the nodes and a walk
+ * of the cords per look, once per file change and once per save. It returns the
+ * same graph untouched for anything the editor made, which is nearly everything.
  */
-function carried(file: Partial<Scheme> & LegacyScheme): Partial<Scheme> {
-  const out: Partial<Scheme> & LegacyScheme = { ...file };
+function whole(looks: Record<string, LookDef>): Record<string, LookDef> {
+  const out: Record<string, LookDef> = {};
+  for (const [id, def] of Object.entries(looks)) out[id] = { ...def, circuit: repaired(def.circuit) };
+  return out;
+}
 
-  if (!out.looks && out.effects) out.looks = out.effects;
-  delete out.effects;
+/**
+ * A scheme written when the cascade existed.
+ *
+ * Most of an old file describes things that no longer have anywhere to live —
+ * `layers`, `clips` and `archetypes` are all answers to a question a graph
+ * answers now — so they are dropped rather than translated. Inventing a graph
+ * out of a layer binding would produce something nobody wrote and nobody wants
+ * to debug.
+ *
+ * **What is carried is what a person made**: the colourways, which song draws
+ * from which, and any look that was a graph. A look that was a built-in is not
+ * carried, because a built-in is a node mode now and a library full of
+ * twenty-three entries called "Ripple" that are one node each is worse than an
+ * empty one.
+ *
+ * Carried rather than migrated in place: the file is not rewritten until someone
+ * saves, and then it is written in the new spelling.
+ */
+function carried(file: Partial<Scheme> & Legacy): Partial<Scheme> {
+  const out: Partial<Scheme> = { ...file };
+  delete (out as Legacy).layers;
+  delete (out as Legacy).clips;
+  delete (out as Legacy).archetypes;
+  delete (out as Legacy).effects;
 
-  const fold = (spec: (LayerSpec & LegacyLayer) | undefined): LayerSpec | undefined => {
-    if (!spec) return spec;
-    const { source, effects, ...rest } = spec;
-    if (!source && !effects) return rest;
-    // The base first, which is exactly where a source always sat.
-    return { ...rest, looks: [...(source ? [source] : []), ...(effects ?? [])] };
-  };
-  const foldAll = (record: Record<string, LayerSpec & LegacyLayer> | undefined) =>
-    record &&
-    (Object.fromEntries(
-      Object.entries(record).map(([key, spec]) => [key, fold(spec)]),
-    ) as Record<string, LayerSpec>);
-
-  out.layers = foldAll(out.layers as Record<string, LayerSpec & LegacyLayer> | undefined);
-  out.clips = foldAll(out.clips as Record<string, LayerSpec & LegacyLayer> | undefined);
-
-  if (out.archetypes) {
-    out.archetypes = Object.fromEntries(
-      Object.entries(out.archetypes).map(([role, arch]) => {
-        const { effects: was, ...rest } = arch as Archetype & { effects?: string[] };
-        return [role, was && !rest.looks ? { ...rest, looks: was } : rest];
-      }),
-    );
+  const looks = file.looks ?? (file as Legacy).effects;
+  if (looks) {
+    const kept: Record<string, LookDef> = {};
+    for (const [id, def] of Object.entries(looks)) {
+      const circuit = (def as LookDef & { builtin?: string }).circuit;
+      if (!circuit) continue;
+      kept[id] = { ...def, circuit: reword(circuit) };
+    }
+    out.looks = kept;
   }
 
-  if (out.defaults) {
-    const { sources, maxEffects, ...rest } = out.defaults as Scheme['defaults'] & LegacyDefaults;
-    out.defaults = {
-      ...rest,
-      ...(rest.looks || !sources ? {} : { looks: sources }),
-      ...(rest.maxLooks || maxEffects === undefined ? {} : { maxLooks: maxEffects + 1 }),
-    };
-  }
+  const old = (file as Legacy).defaults;
+  if (old) out.defaults = { ...BUILT_IN.defaults, pace: old.pace ?? 0, colorway: old.colorway ?? BUILT_IN.defaults.colorway, look: BUILT_IN.defaults.look, draws: BUILT_IN.defaults.draws };
 
   return out;
 }
 
-/** The shapes a file written before the collapse can still be in. */
-interface LegacyScheme {
+/**
+ * A graph written against the old vocabulary.
+ *
+ * Two node kinds changed meaning rather than disappearing. `sample` read "the
+ * frame that arrived", which was the layer underneath in a stack — the nearest
+ * thing to that now is the set's own picture, so it becomes `tracks`. And two
+ * `signal` modes went: `energy` is a node of its own and `amount` described how
+ * far a look was dialled into a stack, which is not a thing any more. Both fall
+ * back to the meter, which is the signal they were most often standing in for.
+ */
+function reword(circuit: Circuit): Circuit {
+  return {
+    ...circuit,
+    nodes: circuit.nodes.map((node) => {
+      if (node.kind === ('sample' as CircuitNode['kind'])) {
+        return { ...node, kind: 'tracks' as const, op: 'by name' };
+      }
+      if (node.kind === 'signal' && (node.op === 'energy' || node.op === 'amount')) {
+        return { ...node, op: 'level' };
+      }
+      return node;
+    }),
+  };
+}
+
+interface Legacy {
   effects?: Record<string, LookDef>;
-}
-interface LegacyLayer {
-  source?: string;
-  effects?: string[];
-}
-interface LegacyDefaults {
-  sources?: string[];
-  maxEffects?: number;
+  layers?: unknown;
+  clips?: unknown;
+  archetypes?: unknown;
+  defaults?: { colorway?: string; pace?: number };
 }
 
 /**
  * A song used to be assigned a colourway and nothing else, so its whole entry
- * was the colourway's name. It owns a second thing now — how hard it plays its
- * own sections — and a bare string still means what it always did rather than
- * quietly unstyling every song in a file written last week.
+ * was the colourway's name. A bare string still means what it always did rather
+ * than quietly unstyling every song in a file written last week. Everything else
+ * is passed through whole, minus the fields that no longer exist.
  */
 function songsOf(songs: Record<string, SongSpec | string> | undefined): Record<string, SongSpec> {
   const out: Record<string, SongSpec> = { ...BUILT_IN.songs };
   for (const [name, spec] of Object.entries(songs ?? {})) {
-    out[name] = typeof spec === 'string' ? { colorway: spec } : spec;
+    if (typeof spec === 'string') {
+      out[name] = { colorway: spec };
+      continue;
+    }
+    const kept: SongSpec = {};
+    if (spec.colorway) kept.colorway = spec.colorway;
+    if (spec.looks?.length) kept.looks = spec.looks;
+    if (Object.keys(kept).length > 0) out[name] = kept;
   }
   return out;
 }

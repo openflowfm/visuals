@@ -141,10 +141,11 @@ the unit being cascaded becomes a **look** rather than a source-plus-effect-list
 
 ## What exists today
 
-A working engine and a first-pass interface, both usable, neither designed. There is a
-status panel; a four-pane editor split by cascade level; a node canvas for building an
-effect, with a live bench that runs on the real musical clock; and a keystone overlay for
-lining up the projector. This is a redesign of the front end, not a rewrite of the engine.
+*This paragraph is the state at the time the brief was written; see the correction at the
+end for where it went.* A working engine and a first-pass interface, both usable, neither
+designed. There is a status panel; a four-pane editor split by cascade level; a node canvas
+for building an effect, with a live bench that runs on the real musical clock; and a keystone
+overlay for lining up the projector.
 
 ## Not in v1
 
@@ -163,3 +164,55 @@ of them is cheaper now than after the screens exist.
 - Where this work actually happens: desk, rehearsal room, backstage.
 - What a night-before session mostly is — adding new material, or fixing what did not read
   right last time.
+
+---
+
+## The correction: it is one graph
+
+*Recorded after the fact, because the brief above is what was believed at the start and the
+disagreement is the useful part.*
+
+The brief bet everything on **derivation**: "a well-mapped Live set should produce a
+distinct, usable, interesting identity for every song with no per-song authoring at all",
+and "the work is binding, not designing." Four levels of cascade were built to make that
+true.
+
+It was wrong in one specific way, and the way is worth naming: **the cascade was four
+answers to one question.** A song contributing looks, a section contributing looks, a track
+binding a source, a clip making an exception — every one of them was a rule about how two
+pictures combine, expressed as a table because a table was the shape already there. A graph
+answers that question once, and answers it better, because a table can say "add this on top"
+and cannot say "fold this one and blend it into that one at whatever the bass is doing."
+
+So the model is one graph, and the graph is the look. The evidence that this was right rather
+than merely different is what fell out with no work: two sources in one picture, an effect on
+a *part* of the frame, a look inside a look. None of those were features anyone built; they
+are things a graph can say and a stack cannot.
+
+### What survived the correction
+
+- **Derivation is still the default.** The wheel turns through everything you made with
+  nothing configured, and `tracks` draws the set with nothing wired. A rig you point at a
+  strange set still puts on a show — that claim was right and is unchanged.
+- **A Live track is a layer.** It is a node now rather than the model, but the observation
+  that Live's mixer is a visual mixer is what the `tracks` node *is*.
+- **Live signals are not a level.** They thread through as nodes, which is what "not a level"
+  always meant.
+- **Improv is normal.** A new track draws the moment it exists.
+- **Hands-off during the show.** Still true, and more so: the wheel is the thing that makes
+  it true without configuration.
+
+### What it cost
+
+- **Binding at four scopes.** "This clip only" is not expressible any more. The nearest thing
+  is a song pin, and a genuinely one-off moment has nowhere to live.
+- **The gap-finder.** Coverage's asymmetry — you author one song at a time and the failure is
+  set-wide — was real. There is much less to be missing now, but "much less" is not "none".
+- **The A/B.** Nothing lands unseen was a good rule and it is not enforced anywhere.
+
+### The naming problem, resolved
+
+The brief flagged that "effect" already means something in a DAW. It is resolved by being a
+**node mode** rather than a noun: nothing in the model is called an effect, and the only
+place the word appears is on the face of a node. `AGENTS.md` rule 8 also rules out `scene`,
+which settles the other half — the thing that holds a graph is a **look**, at every scale.

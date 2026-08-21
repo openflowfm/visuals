@@ -1,25 +1,19 @@
-import type { Circuit, LookDef } from '../../protocol.ts';
+import type { Circuit } from '../../protocol.ts';
 import { NODE_SPECS } from '../render/circuit.ts';
 
 /**
- * The circuit as it stands at one node's outlet — what that node has made.
+ * The graph as it stands at one node's outlet — what that node has made.
  *
- * This is what a picture on every node actually *is*. A node face showing a
- * thumbnail of the finished effect would be the same image a dozen times over
- * and would teach nothing; one showing what has been built *so far* turns the
- * canvas into a series of steps you can read along the chain, which is how
- * anyone reasons about signal flow anyway.
- *
- * Only `out` takes a colour, so a number or a point has to be brought back to
- * one before it can be looked at. `paint` and `sample` are exactly the two
- * crossings the vocabulary already has, so the bridge is the circuit's own
- * rather than a rendering trick: a number is shown the way `paint` would show
- * it, which is how it will look if you wire it that way yourself.
+ * This is what a picture on every node actually *is*. Only `out` takes a colour,
+ * so a number or a point has to be brought back to one before it can be looked
+ * at, and the bridge is the vocabulary's own rather than a rendering trick: a
+ * number is shown the way `paint` would show it, and a point the way a picture
+ * read at it would look. Which is how it will look if you wire it that way.
  */
 export function probeAt(circuit: Circuit, nodeId: string): Circuit | null {
   const node = circuit.nodes.find((n) => n.id === nodeId);
   if (!node) return null;
-  // `out` has no outlet of its own, so its picture is the whole circuit's.
+  // `out` has no outlet of its own, so its picture is the whole graph's.
   if (node.kind === 'out') return circuit;
 
   const outlet = NODE_SPECS[node.kind].outlets[0];
@@ -39,21 +33,21 @@ export function probeAt(circuit: Circuit, nodeId: string): Circuit | null {
   if (outlet.kind === 'c') {
     return { nodes, cords: [...cords, { from, to: `${END}/c` }] };
   }
-  const bridge = outlet.kind === 'n' ? ('paint' as const) : ('sample' as const);
+
+  // A number becomes brightness; a point becomes somewhere to read a picture.
+  // `plasma` rather than the set, because a point's whole job is to move a
+  // picture about and a picture with structure in it is one you can see moving.
+  const bridge =
+    outlet.kind === 'n'
+      ? { id: BRIDGE, kind: 'paint' as const, x: node.x + 100, y: node.y }
+      : { id: BRIDGE, kind: 'source' as const, op: 'plasma', x: node.x + 100, y: node.y };
   const inlet = outlet.kind === 'n' ? 'amount' : 'p';
   return {
-    nodes: [...nodes, { id: BRIDGE, kind: bridge, x: node.x + 100, y: node.y }],
+    nodes: [...nodes, bridge],
     cords: [
       ...cords,
       { from, to: `${BRIDGE}/${inlet}` },
       { from: `${BRIDGE}/c`, to: `${END}/c` },
     ],
   };
-}
-
-/** That circuit, as something the bench can draw. */
-export function probeDef(def: LookDef, nodeId: string): LookDef | null {
-  if (!def.circuit) return null;
-  const circuit = probeAt(def.circuit, nodeId);
-  return circuit ? { name: def.name, circuit } : null;
 }

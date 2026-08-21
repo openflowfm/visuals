@@ -1,37 +1,27 @@
-import { FAMILIES, familyOf } from './hints.ts';
-import { isGenerator } from './resolve.ts';
-import type {
-  Blend,
-  Circuit,
-  CircuitNode,
-  LayerSpec,
-  Scheme,
-  Show,
-} from './protocol.ts';
-import { GENERATORS } from './protocol.ts';
+import type { Circuit, CircuitNode, Scheme, Show } from './protocol.ts';
+import { EFFECTS, SOURCES } from './protocol.ts';
 
 /**
- * A whole show, rolled.
+ * A library, rolled.
  *
- * Not a scatter of random numbers over a scheme. A random show is easy and
- * always looks like noise; what makes a rolled one *look like a show* is that
- * the constraints a hand-made scheme obeys are still obeyed:
+ * It used to roll a *show*: colourways, song assignments, section energies,
+ * per-track bindings and two circuits at once, because a show was a table of
+ * decisions with a couple of graphs in it. A show is a library of graphs and a
+ * wheel now, so this rolls the two things a library is made of — **looks and
+ * colourways** — and the wheel turns through whatever it made.
  *
- * - **One source per family, not per track.** Every arp in the set draws the
- *   same way, because four arps scattered across four unrelated sources read as
- *   four unrelated things when they are one family. The families come from the
- *   same name hints the resolver falls back to, which is why they live in
- *   `hints.ts` rather than in `server/`.
- * - **A song keeps its shape.** An intro is quieter than its chorus in every
- *   roll, because the energies are drawn from a range per role rather than from
- *   nothing. What varies is where in that range, and how far apart.
- * - **Colours are a harmony, not five random hues.** A base hue and one of five
- *   relationships to it, kept light enough to survive a projector — a cheap lamp
- *   has no black to work against, so a dark colourway is a dark screen.
+ * Not a scatter of random numbers. A random graph is easy and always looks like
+ * noise; what makes a rolled one look like something is that it walks a
+ * **shape** — a picture, a few things done to it, a colour operation or two —
+ * and randomises what fills each slot. The shape is what makes it a look; the
+ * fill is what makes it a different one every time.
+ *
+ * Colours are a harmony rather than four hues: a base, one of five
+ * relationships to it, kept light enough to survive a projector. A cheap lamp
+ * has no black to work against, so a dark colourway is a dark screen.
  *
  * Deterministic in its seed, which is the whole reason there is a seed: undo
- * covers the roll you just did, and a seed covers the one from last Tuesday that
- * you should not have rolled away.
+ * covers the roll you just did, and a seed covers the one from last Tuesday.
  */
 
 /** xmur3 into mulberry32: short, fast, and identical everywhere it runs. */
@@ -122,71 +112,6 @@ function palette(rng: Rng): string[] {
   );
 }
 
-/**
- * How loud a section is allowed to be.
- *
- * The shape of a song is not up for grabs. A roll that made an intro louder than
- * its chorus would not be a different show, it would be a broken one — so what
- * varies is where in the range each lands, not the ordering between them.
- *
- * **The four that are actually ordered have disjoint bands**, and that is the
- * whole mechanism: `INTRO < VERSE < BUILD < CHORUS` holds for every seed because
- * the ranges cannot reach each other. Ranges that merely *tended* the right way
- * put an intro above a verse about one roll in thirty, which is exactly often
- * enough to happen on stage and never while you are looking. The rest —
- * a bridge, a jam, an ending — are not in that chain and may overlap freely,
- * because nothing says a bridge is louder than a verse.
- *
- * A role nobody here knows about gets the widest range there is.
- */
-const SHAPE: Record<string, readonly [number, number]> = {
-  PRACTICE: [0.05, 0.22],
-  INTRO: [0.1, 0.24],
-  VERSE: [0.26, 0.46],
-  BUILD: [0.52, 0.74],
-  CHORUS: [0.8, 1],
-  ENDING: [0.16, 0.38],
-  BRIDGE: [0.34, 0.58],
-  JAM1: [0.58, 0.84],
-  JAM2: [0.62, 0.9],
-};
-
-/** Bases a percussive family can wear, and ones a wash can. */
-const PERCUSSIVE: readonly string[] = ['strobe', 'sparks', 'scan', 'bars', 'grid'];
-const WASH: readonly string[] = ['plasma', 'noise', 'solid', 'tunnel'];
-
-/**
- * Blend modes to draw from, weighted toward `screen`.
- *
- * `screen` saturates at white rather than climbing past it. An even pick over
- * the four puts a quarter of a tall stack on `add`, and a quarter is enough to
- * white out the frame before the layers that were meant to be seen have drawn.
- * `add` stays in the bag because nothing else has its bite — it is just no
- * longer the house style.
- */
-const BLEND_BAG: readonly Blend[] = [
-  'screen',
-  'screen',
-  'over',
-  'add',
-  'multiply',
-  'screen',
-  'over',
-];
-
-/**
- * What a wash may be blended with, which is anything but `over`.
- *
- * `solid`, `plasma` and `noise` fill the frame. On `over` — and layer order is
- * Live's track order, which a roll cannot change — one of them landing near the
- * top of the stack is a curtain drawn across the show. Every other mode lets
- * what is underneath through, so the wash becomes what it is for: a ground for
- * the rest of the stack to sit on rather than a replacement for it.
- */
-const THROUGH: readonly Blend[] = ['screen', 'add', 'multiply', 'screen'];
-
-// --- circuits ------------------------------------------------------------
-
 /** The geometry nodes a roll wires, and the inlet each one drives. */
 const GEOMETRY: readonly (readonly [CircuitNode['kind'], string])[] = [
   ['fold', 'sides'],
@@ -196,17 +121,29 @@ const GEOMETRY: readonly (readonly [CircuitNode['kind'], string])[] = [
   ['tile', 'count'],
 ];
 
-const SIGNALS = ['level', 'energy', 'beat', 'phase', 'pulse'] as const;
+const SIGNALS = ['level', 'beat', 'phase', 'pulse'] as const;
 const WAVES = ['sine', 'saw', 'ramp', 'pulse'] as const;
 
 /**
- * A circuit that always compiles and usually looks like something.
+ * Effects cheap enough to wire blind.
  *
- * A random walk over the whole vocabulary produces garbage nine times in ten.
- * This walks a **shape** instead — a point, a few things done to it, a sample,
- * a few things done to the colour — and randomises what fills each slot. The
- * shape is the part that makes it an effect; the fill is the part that makes it
- * a different one every time.
+ * `bloom`, `smear`, `edge` and `shift` are missing on purpose: each reads its
+ * input several times, so nesting two of them multiplies the shader. A hand
+ * reaches for one knowing what it costs; a roll would stack three and hand the
+ * driver something that takes a second to compile. See `MAX_LINES`.
+ */
+const CHEAP_EFFECTS = EFFECTS.filter(
+  (name) => !['bloom', 'smear', 'edge', 'shift'].includes(name),
+);
+
+/**
+ * A look that always compiles and usually looks like something.
+ *
+ * The shape: **a picture, moved about, then worked on.** Where it used to end
+ * with a `sample` — the frame that arrived, which only meant anything inside a
+ * stack — it now starts with either the Live set or one of the pictures that
+ * ship, which is the difference between a look that needs a context and a look
+ * that is one.
  */
 export function rollCircuit(rng: Rng): Circuit {
   const nodes: CircuitNode[] = [];
@@ -220,10 +157,10 @@ export function rollCircuit(rng: Rng): Circuit {
   const wire = (from: string, to: string) => cords.push({ from, to });
 
   let knobs = 0;
-  /** Whatever drives a geometry node's amount: a knob, a meter, or a shape on one. */
+  /** Whatever drives an amount: a knob, an envelope, a meter, or a shape on one. */
   const drive = (x: number, y: number, into: string) => {
     const roll = rng();
-    if (roll < 0.4 && knobs < 4) {
+    if (roll < 0.35 && knobs < 4) {
       knobs += 1;
       const from = add({
         kind: 'value',
@@ -235,7 +172,21 @@ export function rollCircuit(rng: Rng): Circuit {
       wire(`${from}/n`, into);
       return;
     }
-    if (roll < 0.75) {
+    if (roll < 0.55) {
+      // An envelope rather than a bare meter about a fifth of the time, because
+      // a picture driven by the raw meter twitches and one driven by an
+      // envelope breathes — and breathing is what makes a rig look designed.
+      const from = add({
+        kind: 'energy',
+        op: 'master',
+        x,
+        y,
+        value: round2(between(rng, 0.2, 0.7)),
+      });
+      wire(`${from}/n`, into);
+      return;
+    }
+    if (roll < 0.8) {
       const from = add({ kind: 'signal', op: pick(rng, SIGNALS), x, y });
       wire(`${from}/n`, into);
       return;
@@ -247,34 +198,51 @@ export function rollCircuit(rng: Rng): Circuit {
   };
 
   let column = 0;
-  const at = () => 20 + column++ * 155;
+  const at = () => 20 + column++ * 185;
 
-  let carry = `${add({ kind: 'point', x: at(), y: 20 })}/p`;
+  const point = `${add({ kind: 'point', x: at(), y: 20 })}/p`;
+  let carry = point;
   const steps = 1 + Math.floor(rng() * 3);
   for (const [kind, inlet] of shuffled(rng, GEOMETRY).slice(0, steps)) {
     const x = at();
     const node = add({ kind, x, y: 20 });
     wire(carry, `${node}/p`);
-    drive(x, 150 + (next % 2) * 120, `${node}/${inlet}`);
+    drive(x, 210 + (next % 2) * 150, `${node}/${inlet}`);
     carry = `${node}/p`;
   }
 
-  const sample = add({ kind: 'sample', x: at(), y: 20 });
-  wire(carry, `${sample}/p`);
-  carry = `${sample}/c`;
+  // The Live set more often than not. A rolled look that ignored whoever is
+  // playing is a screensaver, and this rig is not one.
+  const picture = chance(rng, 0.6)
+    ? add({ kind: 'tracks', op: 'by name', x: at(), y: 20 })
+    : add({ kind: 'source', op: pick(rng, SOURCES), x: at(), y: 20 });
+  wire(carry, `${picture}/p`);
+  carry = `${picture}/c`;
 
-  if (chance(rng, 0.55)) {
+  if (chance(rng, 0.6)) {
+    const node = add({ kind: 'effect', op: pick(rng, CHEAP_EFFECTS), x: at(), y: 20 });
+    wire(carry, `${node}/c`);
+    carry = `${node}/c`;
+  }
+
+  // A second picture, screened over the first, about half the time. Two
+  // pictures inside one look is the thing the old model could not say at all.
+  if (chance(rng, 0.5)) {
+    const x = at();
+    const other = add({ kind: 'source', op: pick(rng, SOURCES), x, y: 250 });
+    wire(point, `${other}/p`);
+    const mix = add({ kind: 'blend', op: chance(rng, 0.7) ? 'screen' : 'add', x: at(), y: 20 });
+    wire(carry, `${mix}/base`);
+    wire(`${other}/c`, `${mix}/top`);
+    drive(x, 430, `${mix}/amount`);
+    carry = `${mix}/c`;
+  }
+
+  if (chance(rng, 0.5)) {
     const x = at();
     const node = add({ kind: 'hue', x, y: 20 });
     wire(carry, `${node}/c`);
-    drive(x, 150, `${node}/shift`);
-    carry = `${node}/c`;
-  }
-  if (chance(rng, 0.4)) {
-    const x = at();
-    const node = add({ kind: 'levels', x, y: 20 });
-    wire(carry, `${node}/c`);
-    drive(x, 150, `${node}/gain`);
+    drive(x, 210, `${node}/shift`);
     carry = `${node}/c`;
   }
 
@@ -286,108 +254,99 @@ export function rollCircuit(rng: Rng): Circuit {
 // --- the roll ------------------------------------------------------------
 
 /**
- * A whole new scheme, from a seed and whatever the set actually contains.
+ * Which part of the library a roll is allowed to touch.
  *
- * Everything it names comes from the set — its songs, its roles, its tracks — so
- * a rolled scheme is one the editor can show you and you can then take apart.
- * Nothing here is hidden state: the result is an ordinary scheme, written to
- * `scheme.json` like any other, and the seed is the only thing that remembers
- * where it came from.
+ * All-or-nothing is the wrong shape for how this gets used: by the second
+ * evening the colourways are the part you have settled and the looks are the
+ * part you are still fishing for, and a button that deals both is a button you
+ * stop pressing.
  */
-export function rollScheme(seed: string, show: Show, base: Scheme): Scheme {
+export type RollPart = 'colours' | 'looks' | 'rotation';
+
+export const ROLL_PARTS: readonly RollPart[] = ['colours', 'looks', 'rotation'];
+
+/** What each part is, for a control that has one line to say it in. */
+export const ROLL_ABOUT: Record<RollPart, string> = {
+  colours: 'four fresh colourways, as a harmony rather than four hues',
+  looks: 'four freshly wired looks, replacing the last four it wired',
+  rotation: 'how often the wheel turns, and how fast the whole show moves',
+};
+
+/**
+ * A library, from a seed and from whatever the set contains.
+ *
+ * **Every part is rolled and then only the wanted ones land.** Drawing from the
+ * generator in the same order regardless of what is kept is what makes a seed
+ * mean one show: keeping only the colours has to give the same colours rolling
+ * everything would have, or a seed written on a hand is worth nothing.
+ *
+ * Nothing about the songs is rolled. A song entry is an override now, and
+ * rolling one would be the machine writing down an exception nobody asked for —
+ * which is exactly the noise the cascade used to generate.
+ */
+export function rollScheme(
+  seed: string,
+  _show: Show,
+  base: Scheme,
+  parts: readonly RollPart[] = ROLL_PARTS,
+): Scheme {
   const rng = seeded(seed);
+  const rolling = (part: RollPart) => parts.includes(part);
 
   const names = shuffled(rng, WORDS).slice(0, 4);
-  const colorways: Record<string, string[]> = {};
-  for (const name of names) colorways[name] = palette(rng);
-
-  // Spread rather than scattered: a shuffled cycle gives every colourway roughly
-  // the same number of songs, where independent picks would leave one unused and
-  // another on half the set.
-  const wheel = shuffled(rng, names);
-  const songs: Scheme['songs'] = {};
-  show.songs.forEach((song, i) => {
-    songs[song] = { colorway: wheel[i % wheel.length] };
-    if (chance(rng, 0.35)) songs[song].bias = round2(between(rng, -0.12, 0.14));
-  });
+  const rolledColorways: Record<string, string[]> = {};
+  for (const name of names) rolledColorways[name] = palette(rng);
+  const colorways = rolling('colours') ? rolledColorways : base.colorways;
 
   const looks: Scheme['looks'] = { ...base.looks };
-  // Anything rolled last time goes, or a roll a week in would be forty looks
-  // deep and every archetype would be pointing at a ghost.
-  for (const [id, def] of Object.entries(looks)) if (def.circuit) delete looks[id];
+  if (rolling('looks')) {
+    // Only what a previous roll wired. A look someone built by hand is work
+    // rather than scaffolding, and deleting it as a side effect of this button
+    // is not something one level of undo makes acceptable.
+    for (const [id, def] of Object.entries(looks)) if (def.rolled) delete looks[id];
+  }
   const wired: string[] = [];
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < 4; i++) {
     const id = `roll${i + 1}`;
     const [a, b] = shuffled(rng, WORDS);
-    looks[id] = {
-      name: `${a[0].toUpperCase()}${a.slice(1)} ${b}`,
-      circuit: rollCircuit(rng),
-    };
+    const circuit = rollCircuit(rng);
+    if (!rolling('looks')) continue;
+    looks[id] = { name: `${a[0].toUpperCase()}${a.slice(1)} ${b}`, circuit, rolled: true };
     wired.push(id);
   }
 
-  // Only transformers go in the character pool. A rolled section that dealt
-  // itself a generator would replace every layer's base at once, which is a
-  // legal thing to *say* and a terrible thing to roll by accident.
-  const pool = Object.keys(looks).filter((id) => !isGenerator({ ...base, looks }, id));
-  const roles = [...new Set([...show.roles, ...Object.keys(base.archetypes)])].sort();
-  const archetypes: Scheme['archetypes'] = {};
-  for (const role of roles) {
-    const [lo, hi] = SHAPE[role] ?? [0.3, 0.8];
-    const energy = round2(between(rng, lo, hi));
-    // A loud section reaches for more, which is the additive half of the cascade
-    // doing what it is for rather than a rule about randomness.
-    const count = energy > 0.7 ? 1 + Math.floor(rng() * 2) : rng() < energy + 0.3 ? 1 : 0;
-    archetypes[role] = { energy, looks: shuffled(rng, pool).slice(0, count) };
-  }
+  const bars = pick(rng, [4, 8, 8, 16]);
+  const rotation: Scheme['rotation'] = {
+    // Emptied rather than filled: an empty pool means "everything there is",
+    // which is what you want the moment after a roll has just made four things.
+    looks: [],
+    colorways: [],
+    bars,
+    onClip: true,
+    // The palette on a longer wheel than the look, so a change is usually one
+    // thing moving rather than everything at once.
+    colorEvery: bars * pick(rng, [1, 2, 2, 3]),
+  };
 
-  const bases = shuffled(rng, GENERATORS);
-  const byFamily: Record<string, string> = {};
-  for (const family of FAMILIES) {
-    const wanted: readonly string[] =
-      family === 'drums' ? PERCUSSIVE : family === 'pad' ? WASH : GENERATORS;
-    // Prefer one nothing else took, so a five-track set is five different
-    // pictures rather than the same one drawn five times.
-    byFamily[family] = bases.find((s) => wanted.includes(s)) ?? pick(rng, wanted);
-    const at = bases.indexOf(byFamily[family] as never);
-    if (at >= 0) bases.splice(at, 1);
-  }
-
-  const layers: Scheme['layers'] = {};
-  for (const layer of show.layers) {
-    const base_ = byFamily[familyOf(layer.name)];
-    const spec: LayerSpec = { looks: [base_] };
-    const wash = (WASH as readonly string[]).includes(base_);
-    // A wash always gets a blend rather than sometimes, because leaving it to
-    // the depth-cycled default is leaving it a one-in-six chance of `over`.
-    if (wash) spec.blend = pick(rng, THROUGH);
-    else if (chance(rng, 0.4)) spec.blend = pick(rng, BLEND_BAG);
-    if (chance(rng, 0.5)) spec.bias = round2(between(rng, -0.18, 0.18));
-    if (chance(rng, 0.3)) spec.looks = [base_, pick(rng, pool)];
-    layers[layer.name] = spec;
-  }
-
-  // `over` first, because something at the bottom of the stack has to be opaque.
-  const blend: Blend[] = ['over', ...shuffled(rng, BLEND_BAG)];
+  const pace = Math.round(between(rng, -1, 1));
 
   return {
     seed,
-    colorways,
-    songs,
-    archetypes,
-    layers,
-    clips: {},
     looks,
+    colorways,
+    rotation: rolling('rotation') ? rotation : base.rotation,
+    songs: base.songs,
     defaults: {
-      colorway: pick(rng, names),
-      energy: round2(between(rng, 0.32, 0.5)),
-      blend,
-      looks: shuffled(rng, GENERATORS),
-      maxLooks: chance(rng, 0.35) ? 4 : 3,
-      // A whole rung either way. Two rolls of the same set should not only look
-      // different, they should *move* differently — and a rung is a big enough
-      // step that you can feel it without any of them landing off the grid.
-      pace: Math.round(between(rng, -1, 1)),
+      ...base.defaults,
+      // A fallback that names something that exists, whichever way round the
+      // parts were rolled.
+      colorway: colorways[base.defaults.colorway]
+        ? base.defaults.colorway
+        : (Object.keys(colorways)[0] ?? base.defaults.colorway),
+      look: looks[base.defaults.look]
+        ? base.defaults.look
+        : (wired[0] ?? Object.keys(looks)[0] ?? base.defaults.look),
+      pace: rolling('rotation') ? pace : base.defaults.pace,
     },
   };
 }

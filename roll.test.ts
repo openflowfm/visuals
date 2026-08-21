@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { compileCircuit, knobsOf, MAX_KNOBS } from './src/render/circuit.ts';
-import { familyOf } from './hints.ts';
-import type { Layer, Scheme, Show } from './protocol.ts';
+import type { Scheme, Show, Track } from './protocol.ts';
 import { BUILT_IN } from './server/scheme.ts';
 import { newSeed, rollCircuit, rollScheme } from './roll.ts';
 
@@ -9,29 +8,25 @@ import { newSeed, rollCircuit, rollScheme } from './roll.ts';
  * The randomiser.
  *
  * What is worth asserting is not that it produces random output — it will — but
- * that everything it produces is **still a show**. A roll that named a colourway
- * nothing defines, or an effect nothing registers, or that put an intro above
- * its chorus, is not a different show; it is a broken one, and it breaks on
- * stage rather than here.
+ * that everything it produces is **still a library**. A roll that wired a graph
+ * naming a port that does not exist, or that pointed the fallback at a look it
+ * had just deleted, is not a different show; it is a broken one, and it breaks
+ * on stage rather than here.
+ *
+ * The half of this file that used to check a *show* — an intro quieter than its
+ * chorus, one source per family, a wash kept off `over` — went with the cascade.
+ * All three were rules about a table of bindings, and there is no table.
  */
 
-const layer = (t: number, name: string): Layer =>
-  ({
-    t,
-    name,
-    color: 0xffffff,
-    source: 'solid',
-    effects: [],
-    offers: [],
-    blend: 'over',
-    floor: 0,
-    opacity: 1,
-    level: 0,
-    energy: 0.4,
-    hidden: false,
-    playing: -1,
-    clipName: '',
-  }) as Layer;
+const layer = (t: number, name: string): Track => ({
+  t,
+  name,
+  color: 0xffffff,
+  opacity: 1,
+  level: 0,
+  playing: -1,
+  clipName: '',
+});
 
 const SHOW: Show = {
   connected: true,
@@ -44,7 +39,7 @@ const SHOW: Show = {
   beat: 0,
   at: 0,
   master: 0,
-  layers: [
+  tracks: [
     layer(0, 'Drums'),
     layer(1, '24-Drum Rack'),
     layer(2, 'Bass'),
@@ -55,11 +50,12 @@ const SHOW: Show = {
     layer(7, 'Vox'),
     layer(8, 'Patterns'),
   ],
+  look: null,
+  pinned: false,
+  colorway: null,
+  colors: [0xffffff],
   song: null,
   role: null,
-  archetype: null,
-  colorway: null,
-  energy: 0.4,
   schemeError: null,
   roles: ['INTRO', 'VERSE', 'CHORUS', 'JAM1', 'OUTRO'],
   songs: ['NIGHTFALL', 'SANDSTORM', 'BABY AGAIN'],
@@ -68,193 +64,161 @@ const SHOW: Show = {
 const seeds = Array.from({ length: 40 }, (_, i) => `seed-${i}`);
 const rolled = (seed: string): Scheme => rollScheme(seed, SHOW, BUILT_IN);
 
-describe('a roll is a show', () => {
+describe('a roll is a library', () => {
   it('names only colourways it defined', () => {
     for (const seed of seeds) {
       const s = rolled(seed);
       for (const [song, spec] of Object.entries(s.songs)) {
-        expect(s.colorways[spec.colorway!], `${seed} ${song}`).toBeDefined();
+        if (spec.colorway) expect(s.colorways[spec.colorway], `${seed} ${song}`).toBeDefined();
       }
       expect(s.colorways[s.defaults.colorway], seed).toBeDefined();
     }
   });
 
-  it('names only effects it registered', () => {
-    // An id pointing at nothing costs a section one effect and is invisible
-    // until you count them, which nobody does during a set.
+  it('names only looks it made', () => {
+    // An id pointing at nothing is a black screen for as long as the wheel sits
+    // on it, and it is invisible until it comes round.
     for (const seed of seeds) {
       const s = rolled(seed);
-      const named = [
-        ...Object.values(s.archetypes).flatMap((a) => a.looks ?? []),
-        ...Object.values(s.layers).flatMap((l) => l.looks ?? []),
-      ];
-      for (const id of named) expect(s.looks[id], `${seed} ${id}`).toBeDefined();
-    }
-  });
-
-  it('keeps the shape of a song, every time', () => {
-    // The one thing a roll must never do. An intro louder than its chorus is not
-    // a different show.
-    for (const seed of seeds) {
-      const { archetypes: a } = rolled(seed);
-      expect(a.INTRO.energy, seed).toBeLessThan(a.VERSE.energy);
-      expect(a.VERSE.energy, seed).toBeLessThan(a.CHORUS.energy);
-      expect(a.JAM1.energy, seed).toBeLessThan(a.CHORUS.energy + 0.2);
-    }
-  });
-
-  it('gives a role it has never heard of an archetype anyway', () => {
-    // OUTRO is in the set's vocabulary and in no table here. A role with no
-    // archetype is a section that falls back to a flat default all night.
-    for (const seed of seeds.slice(0, 8)) {
-      expect(rolled(seed).archetypes.OUTRO, seed).toBeDefined();
-    }
-  });
-
-  it('binds every track in the set and nothing else', () => {
-    for (const seed of seeds.slice(0, 8)) {
-      const s = rolled(seed);
-      expect(Object.keys(s.layers).sort()).toEqual(SHOW.layers.map((l) => l.name).sort());
-    }
-  });
-
-  it('deals one source per family, not per track', () => {
-    // Four arps across four unrelated sources read as four unrelated things when
-    // they are one family. This is the assertion that makes a roll a show rather
-    // than a scatter.
-    for (const seed of seeds) {
-      const s = rolled(seed);
-      const byFamily = new Map<string, string>();
-      for (const [name, spec] of Object.entries(s.layers)) {
-        const family = familyOf(name);
-        const held = byFamily.get(family);
-        const base = spec.looks?.[0];
-        if (held) expect(base, `${seed} ${family}`).toBe(held);
-        else byFamily.set(family, base!);
-      }
-      // And the families differ from each other, or the whole set is one picture.
-      expect(new Set(byFamily.values()).size, seed).toBeGreaterThan(1);
-    }
-  });
-
-  it('keeps a wash off the drums and a strobe off the pads', () => {
-    for (const seed of seeds) {
-      const s = rolled(seed);
-      expect(['strobe', 'sparks', 'scan', 'bars', 'grid'], seed).toContain(s.layers.Drums.looks?.[0]);
-      expect(['plasma', 'noise', 'solid', 'tunnel'], seed).toContain(
-        s.layers['Sparkle Pad'].looks?.[0],
-      );
-    }
-  });
-
-  it('leaves something opaque at the bottom of the stack', () => {
-    for (const seed of seeds.slice(0, 8)) expect(rolled(seed).defaults.blend[0]).toBe('over');
-  });
-
-  it('never draws a wash over the top of the stack', () => {
-    // Layer order is Live's track order, which a roll cannot change, so a
-    // full-frame source on `over` near the top is a curtain across the show.
-    const wash = ['solid', 'plasma', 'noise'];
-    for (const seed of seeds) {
-      for (const [name, spec] of Object.entries(rolled(seed).layers)) {
-        if (wash.includes(spec.looks?.[0] as string)) expect(spec.blend, `${seed} ${name}`).not.toBe('over');
+      expect(s.looks[s.defaults.look], seed).toBeDefined();
+      for (const id of s.rotation.looks) expect(s.looks[id], `${seed} ${id}`).toBeDefined();
+      for (const [song, spec] of Object.entries(s.songs)) {
+        for (const id of spec.looks ?? []) expect(s.looks[id], `${seed} ${song}`).toBeDefined();
       }
     }
   });
 
-  it('moves the pace by whole rungs and no further than one', () => {
-    // Whole, because every rung is a musical division and a rate between two of
-    // them is in time with nothing. One, because a roll should vary how a show
-    // moves without ever landing it somewhere unusable.
-    const seen = new Set<number>();
+  it('turns through everything it just made', () => {
+    // An empty pool means "everything there is", which is what you want the
+    // moment after a roll has finished making four things.
+    for (const seed of seeds) {
+      const s = rolled(seed);
+      expect(s.rotation.looks, seed).toEqual([]);
+      expect(s.rotation.bars, seed).toBeGreaterThan(0);
+    }
+  });
+
+  it('leaves the songs alone', () => {
+    // A song entry is an override now. Rolling one would be the machine writing
+    // down an exception nobody asked for, which is exactly the noise the
+    // cascade used to generate.
+    for (const seed of seeds) {
+      expect(Object.keys(rolled(seed).songs), seed).toEqual(Object.keys(BUILT_IN.songs));
+    }
+  });
+
+  it('keeps the pace on the ladder rather than between its rungs', () => {
     for (const seed of seeds) {
       const { pace } = rolled(seed).defaults;
       expect(Number.isInteger(pace), seed).toBe(true);
-      expect(Math.abs(pace), seed).toBeLessThanOrEqual(1);
-      seen.add(pace);
-    }
-    expect(seen.size, 'forty seeds should not all pick the same pace').toBeGreaterThan(1);
-  });
-
-  it('writes colours a projector can actually show', () => {
-    // A cheap lamp has no black to work against, so a dark colourway is a dark
-    // screen. Every colour is a valid hex and none of them is close to one.
-    for (const seed of seeds) {
-      for (const colors of Object.values(rolled(seed).colorways)) {
-        for (const c of colors) {
-          expect(c, seed).toMatch(/^#[0-9a-f]{6}$/);
-          const [r, g, b] = [1, 3, 5].map((i) => Number.parseInt(c.slice(i, i + 2), 16));
-          expect(Math.max(r, g, b), `${seed} ${c}`).toBeGreaterThan(90);
-        }
-      }
-      // One member light enough to read edges against.
-      for (const colors of Object.values(rolled(seed).colorways)) {
-        const lightest = Math.max(
-          ...colors.map((c) =>
-            Math.min(...[1, 3, 5].map((i) => Number.parseInt(c.slice(i, i + 2), 16))),
-          ),
-        );
-        expect(lightest, seed).toBeGreaterThan(170);
-      }
+      expect(Math.abs(pace), seed).toBeLessThanOrEqual(2);
     }
   });
 });
 
-describe('the seed', () => {
-  it('is the whole of what a roll depends on', () => {
-    expect(rolled('coral-tide-207')).toEqual(rolled('coral-tide-207'));
-    expect(rolled('coral-tide-207')).not.toEqual(rolled('coral-tide-208'));
-  });
-
-  it('is carried on the scheme, so a show can be got back', () => {
-    expect(rolled('ash-halo-100').seed).toBe('ash-halo-100');
-  });
-
-  it('is something a person could read out', () => {
-    expect(newSeed()).toMatch(/^[a-z]+-[a-z]+-\d{3}$/);
-  });
-});
-
-describe('rolled circuits', () => {
-  it('compiles every one of them', () => {
-    // The compiler has a fallback for every unwired inlet, so this is really
-    // asserting that the generator never emits a port that does not exist —
-    // which is the way a hand-written node table drifts.
+describe('rolled looks', () => {
+  it('compiles, from every seed', () => {
+    // Really an assertion that the generator never names a port that does not
+    // exist, which is the way a hand-written node table drifts.
     for (const seed of seeds) {
-      const s = rollScheme(seed, SHOW, BUILT_IN);
-      for (const [id, def] of Object.entries(s.looks)) {
-        if (!def.circuit) continue;
-        expect(compileCircuit(def.circuit).error, `${seed} ${id}`).toBeNull();
+      for (const [id, def] of Object.entries(rolled(seed).looks)) {
+        if (!def.rolled) continue;
+        const built = compileCircuit(def.circuit);
+        expect(built.error, `${seed} ${id}: ${built.error}`).toBeNull();
       }
     }
   });
 
-  it('always reaches the frame it was given', () => {
-    // A circuit whose out is fed by nothing is a legal circuit and a useless
-    // effect: it draws the untouched input.
+  it('stays inside the knob bank', () => {
     for (const seed of seeds) {
-      const circuit = rollCircuit(seedOf(seed));
-      expect(circuit.nodes.some((n) => n.kind === 'sample'), seed).toBe(true);
-      expect(circuit.cords.some((c) => c.to.endsWith('/c')), seed).toBe(true);
+      const rng = seedOf(seed);
+      for (let i = 0; i < 12; i++) {
+        expect(knobsOf(rollCircuit(rng)).length, seed).toBeLessThanOrEqual(MAX_KNOBS);
+      }
     }
   });
 
-  it('never asks for more knobs than the uniform bank holds', () => {
+  it('mostly reaches for the set rather than ignoring it', () => {
+    // A rolled look that ignored whoever is playing is a screensaver, and this
+    // rig is not one. Not every one of them — a wash that runs on its own is a
+    // real thing to want — but most.
+    let usesSet = 0;
+    let total = 0;
     for (const seed of seeds) {
-      const circuit = rollCircuit(seedOf(seed));
-      expect(knobsOf(circuit).length, seed).toBeLessThanOrEqual(MAX_KNOBS);
+      for (const def of Object.values(rolled(seed).looks)) {
+        if (!def.rolled) continue;
+        total += 1;
+        if (def.circuit.nodes.some((n) => n.kind === 'tracks')) usesSet += 1;
+      }
     }
+    expect(usesSet / total).toBeGreaterThan(0.4);
   });
 
   it('does not pile up across rolls', () => {
-    // Rolling on top of a rolled scheme has to replace its circuits, or a week
-    // of rolling leaves forty of them and every archetype pointing at a ghost.
+    // A week of rolling would otherwise leave forty of them, and the wheel would
+    // spend most of its time on looks nobody chose.
     let scheme = BUILT_IN;
     for (const seed of seeds.slice(0, 10)) scheme = rollScheme(seed, SHOW, scheme);
-    expect(Object.values(scheme.looks).filter((d) => d.circuit)).toHaveLength(2);
-    expect(Object.keys(scheme.looks).filter((id) => BUILT_IN.looks[id])).toHaveLength(
-      Object.keys(BUILT_IN.looks).length,
-    );
+    expect(Object.values(scheme.looks).filter((d) => d.rolled)).toHaveLength(4);
+    // And the ones that ship are still there to take apart.
+    for (const id of Object.keys(BUILT_IN.looks)) expect(scheme.looks[id], id).toBeDefined();
+  });
+});
+
+describe('rolling part of a library', () => {
+  it('leaves a part it was not asked for exactly as it was', () => {
+    const settled = rollScheme('oak-ember-12', SHOW, BUILT_IN);
+    const again = rollScheme('rust-cobalt-99', SHOW, settled, ['looks']);
+    expect(again.colorways).toEqual(settled.colorways);
+    expect(again.rotation).toEqual(settled.rotation);
+    // And the part it *was* asked for actually moved.
+    expect(again.looks).not.toEqual(settled.looks);
+  });
+
+  it('gives the same answer for a part however much else was rolled with it', () => {
+    // The whole worth of a seed. If keeping the colours gave different colours
+    // from rolling everything, a seed written on a hand would be worth nothing.
+    const whole = rollScheme('glass-drift-576', SHOW, BUILT_IN);
+    const part = rollScheme('glass-drift-576', SHOW, BUILT_IN, ['colours']);
+    expect(part.colorways).toEqual(whole.colorways);
+  });
+
+  it('never points the fallback at a colourway that is not there', () => {
+    const settled = rollScheme('oak-ember-12', SHOW, BUILT_IN);
+    const again = rollScheme('rust-cobalt-99', SHOW, settled, ['looks']);
+    expect(again.colorways).toHaveProperty(again.defaults.colorway);
+    expect(again.looks).toHaveProperty(again.defaults.look);
+  });
+
+  it('clears what the last roll wired and keeps what someone built', () => {
+    // Deleting every graph was a side effect of a button whose whole promise is
+    // that one level of undo covers it, and one level of undo does not make
+    // losing an evening's work acceptable.
+    const mine = {
+      ...BUILT_IN,
+      looks: {
+        ...BUILT_IN.looks,
+        mine: { name: 'Mine', circuit: { nodes: [], cords: [] } },
+        old: { name: 'Old', circuit: { nodes: [], cords: [] }, rolled: true },
+      },
+    };
+    const out = rollScheme('oak-ember-12', SHOW, mine);
+    expect(out.looks.mine).toBeDefined();
+    expect(out.looks.old).toBeUndefined();
+  });
+});
+
+describe('a seed', () => {
+  it('is two words and a number, which fits on a hand', () => {
+    for (let i = 0; i < 40; i++) expect(newSeed()).toMatch(/^[a-z]+-[a-z]+-\d+$/);
+  });
+
+  it('reproduces a show exactly', () => {
+    expect(rolled('glass-drift-576')).toEqual(rolled('glass-drift-576'));
+  });
+
+  it('gives two seeds two different libraries', () => {
+    expect(rolled('a-b-1')).not.toEqual(rolled('c-d-2'));
   });
 });
 

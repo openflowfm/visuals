@@ -1,126 +1,179 @@
 # The console
 
-`src/ui/Console.tsx`, `Coverage.tsx`, `Bind.tsx`, `Looks.tsx`. Three views over one show.
+`src/ui/Console.tsx`, `Designer.tsx`, `SetView.tsx`. Two views over one show.
 
-## Why three, and why these
+## Why two, and why these
 
-They are not tabs over a settings screen. Each is a different **distance** to stand at from
-the same set, and the three are the whole job of configuring one:
-
-| view | the question it answers | the scale |
+| view | the question | the scale |
 |---|---|---|
-| **design** | what is worth putting on a wall | one look, and a stack of them |
-| **coverage** | what have I not decided about | the set, all of it at once |
-| **bind** | is this right, and how far should the fix reach | one moment |
+| **design** | what is worth putting on a wall | one look |
+| **set** | what turns through them, and what says otherwise | the set |
 
-**Design is first, and that ordering is the correction.** The console was built
-binding-first, so a look only existed in relation to a track and the only way to see one
-was to have Ableton running with the right clip playing. You cannot build a library that
-way; you can only tweak whatever happens to be on screen. Make things, then decide what
-drives them. The designer is [its own doc](looks.md).
+Design is the product. Everything else this app does is arrangements of what gets made
+there, which is why it opens on it and why it has the whole screen. The **vocabulary** is
+documented in [looks](looks.md), because it is about what a look *is* rather than about
+where anything sits; the shell it is edited in is below.
 
-This replaced a four-pane editor whose panes were the four levels of the cascade. That was
-the right first shape and the wrong second one: it was organised by *where a value lives*
-rather than by *what you are trying to do*, so the commonest job — "this song reads wrong,
-fix it" — was spread across three panes and none of them showed the picture.
+Set is the small remainder: [the wheel](wheel.md), the colourways, and the handful of songs
+that want to say otherwise.
 
-## Coverage exists because of an asymmetry
+## What went, and why deleting it was the point
 
-You author one song at a time. The failure is set-wide.
+There used to be three views. **Coverage** drew every song against every track and asked
+which cell nobody had decided about; **bind** held a four-level address and asked how far a
+fix should reach, with an A/B stager so nothing landed unseen.
 
-A track nobody bound draws whatever its name suggested, which is fine almost everywhere —
-that is what the backstop is *for* — right up until the one song where it reads wrong.
-There is no way to find that song by playing them one at a time, which is exactly how you
-would find it.
+Both were navigation for a cascade. The cascade existed to answer how two pictures combine,
+and a graph answers that — so there are no cells to be missing and no scope to choose. What
+a track draws is something you wire.
 
-So the matrix is every row against every track, and **the interesting colour is the pale
-one**. A view that showed how much was configured would be a progress bar; this shows what
-is left. The four cell states are the cascade seen from outside:
+**Keeping them would have meant keeping the cascade alive underneath**, which is exactly the
+complexity the collapse was for. Two models coexisting is the shape where neither gets
+simple, and where every new feature has to be built twice.
 
-| state | means |
-|---|---|
-| **said here** | a clip in this row carries an exception — the most specific thing there is |
-| **inherited** | the track is bound, and this row gets it along with every other |
-| **backstop** | nothing is bound; the name hint and the defaults are drawing it |
-| **not in this row** | the row never uses this track, so there is nothing here to decide |
+Three things they did that were genuinely good are worth naming, because losing them is a
+real cost rather than a tidy-up:
 
-The last one earns its own state rather than being drawn as a gap. A gap you cannot fill is
-not a gap, and colouring it like one would make the to-do list mostly noise.
+- **The gap-finder.** Coverage's whole insight was an asymmetry: you author one song at a
+  time and the failure is set-wide. There is much less to be missing now — a rig with nothing
+  configured turns through everything and every track draws — so the question is smaller, but
+  it is not zero.
+- **The A/B.** Bind drew the live scheme and a staged one side by side on one clock, so
+  nothing landed unseen. The designer's bench is honest about the look you are editing but it
+  does not show you the one you are replacing.
+- **The reach readout.** "This lands on every song with a pad" was a warning worth having.
+  There is nothing to warn about at the wheel, and a song pin says its own scope.
 
-**Rows and columns are both cuts of one question.** Songs against tracks finds the song
-nobody styled; sections against tracks finds the track configured for the verses and
-forgotten for the choruses. Neither is primary and the toolbar refuses to imply one is.
+## The design page's shell
 
-## Bind puts the output first
+What a look *is* belongs to [looks](looks.md). What is around it is the column you build
+from and the panel you judge in.
 
-You are not setting a value, you are judging a picture. A form with a small preview in the
-corner makes you do the judging in the corner, so the output *is* the screen and the
-inspector is what fits beside it.
+### The node browser lists nodes, and presets sit under them
 
-### Nothing lands until it has been seen next to what it replaces
+It listed the **modes** — `plasma`, `kaleido`, `sparks`, twenty-three of them flat — and
+never mentioned the node they were. That was solving something real, and the replacement has
+to keep solving it: browsing nineteen node kinds and then discovering that two of them
+contain another twenty-three between them is how a graph editor stays unusable, and nobody
+should have to know that `plasma` is a `source` with a mode set in order to find it.
 
-The two panels are the same show on the same clock against two schemes — the live one, and
-the one your staged edits would make. That is why an edit is a **value** rather than a
-mutation (`pending.ts`): a mutation would have already destroyed the thing you needed to
-compare against.
+What it got wrong is what it made the list *mean*. Eleven entries that are all one node,
+each dropping that node with a mode already chosen, is a browser of presets wearing a
+browser of things' clothes — so what lands on the canvas is a node you never picked, and the
+list implies that `plasma` is a kind of node when the model is clear that it is not.
 
-The comparison is only honest if both sides are the **same instant**. Two reactive pictures
-sampled a second apart differ because the music moved, and you would read that as your
-edit. Hence one clock — `Stage` reads it and never advances it, because `App` owns the
-advance and a second advancing stage would run the beat at double tempo. Hence also `hold`
-and `loop 4 bars`, which are the two ways to stop the music being the variable.
+So it is Ableton's shape. **The row is the node**, the way a device is; its **presets** open
+under it, a mode and the values that make that mode read. Dropping the row gives you a
+default node and dropping a preset gives you a configured one. Now that an inlet can hold a
+number, that second half is real: a preset is a mode *plus* a set of values, which is why
+this and settable inlets are one change. `posterize` is the preset that proves it — the
+middle of its one knob is eight steps, which on a projector is invisible, so the preset
+carries the number that makes it a poster. Most presets carry none, because a knob's middle
+is where these were tuned to sit and a preset setting everything to a half would say nothing.
 
-### The hard part of an override is its scope
+**Not every list under a node is a preset list.** A `track` names a track in the set and a
+`look` names a look in the library, and those are **targets** — instances of something that
+exists elsewhere, not ways of being a node. They stay where they were, one row each, because
+folding "Bass meter" under a generic `track` node is the same mistake in reverse.
 
-The same annoyance can be fixed at the song, the section, the track or the clip, and
-picking the wrong one is how a show quietly drifts. So the scope selector does not *change*
-what you are pointing at — the `Aim` holds the whole address, and the scope chooses which
-part of it the edit lands on.
+**Search is what pays for the folding.** Typing `spark` gives one row: `source`, open, with
+`sparks` alone under it. A node's own name keeps everything under it, because "show me the
+effects" is a real thing to type. And the search terms carry the *kind* as well as the mode,
+so `sine wave` and `song key` still find rows that now read just `sine` and just `key`.
+Anything a search turned up is drawn open — a preset found behind a closed drawer has not
+been found — and the drawers you opened by hand stay as you left them when the box clears.
 
-The reach readout beside it is deliberately unflattering. A track binding is **global** —
-the scheme keys layers by track name, not by song and track — so "make the pad calmer" said
-at track level makes it calmer in every song with a pad. The readout says so, in songs and
-clips. The level that means *this song's pad* is the clip, which is what makes the clip the
-exception.
+Presets are **built in**. A user-saved one needs somewhere in the scheme to live and a name
+to be saved under, and that decision is better made once these have been used.
 
-## Design is documented separately
+### The picture is the point, so it floats
 
-The look designer, the stack rules, the addressing drawers and the picture-per-node all
-live in [looks](looks.md), because they are about **what a look is** rather than about how
-the three views fit together. This file is the shell and the two binding views.
+Two decisions, and both came from the same complaint: the picture was the smallest thing on
+a screen devoted to making pictures.
 
-## It is built from `widgets`, and that was a correction too
+**The bench floats.** It was a fixed column on the right, and a fixed column takes its width
+from the narrowest thing in it — a caption, a list of three lines — so the one thing you are
+judging got 236 pixels while the graph kept the rest of the monitor. It is a panel over the
+canvas now: drag it by its header, stretch it by its corner, park it where the graph is
+empty. A panel costs nothing where you are not working, which a column cannot say.
 
-The first pass of this console imported **no widgets at all**. The tab bar was raw
-buttons, the segmented controls were hand-rolled five times across two stylesheets, and
-`console.css` carried a blanket `button` rule to prop it all up — a rule that outranked
-`.wdg-toggle-body` on specificity and would quietly have redrawn any widget dropped near
-it.
+Its place is in `localStorage`, not in `scheme.json`, for the reason the projector corners
+are — see [the renderer](render.md). The scheme is a document you carry to the gig laptop and
+everything in it is a decision about the show; where somebody parked a preview is a decision
+about their screen, and it would put a diff in `git` for every nudge.
 
-Everything that is a control is now the widget for it: `Segmented` for the tabs, the
-row/column cuts, the A/B mode and the scope; `Toggle` for hold and loop; `Button` for every
-action; `Knob`, `Slider`, `NumberField`, `Meter` for values. What stayed hand-written is
-what is genuinely not a control — a matrix cell, a list row, a layer chip — and those now
-name themselves in CSS rather than claiming every `button` on the page.
+Its **shape** is yours rather than pinned to 16:9, which is honest rather than lax. Points
+are centred and aspect-corrected, so a wider bench shows more of the same plane with circles
+still round — exactly what a wider wall does, through exactly the same code.
 
-Two widgets came out of the exercise rather than going into it: `Button` and `Meter`. Both
-are in [the catalogue](../../widgets/docs/catalogue.md) with the reasoning.
+**It will show one node instead.** Clicking a node's small face promotes it: the bench draws
+what that node has made, at whatever size the panel is. See [looks](looks.md) for what the
+picture is and why it is the same `probeAt` graph the face was already showing; what belongs
+here is the two things the console has to get right about it.
 
-## What is deliberately absent
+The first is **saying so**. Somebody clicks a node, walks away, and comes back to a big
+picture that is not what the look draws — and the next thing that happens is a bug report
+about a look that is fine. So the header names the node, says plainly that it is one node,
+and turns amber, because a reader who has stopped reading still sees a colour. A `p` or an
+`n` outlet gets a clause of its own: those have no picture, so `probeAt` brings a number back
+through `paint` and a point back through a `plasma` source, and what is on screen is a
+**diagram** of a signal rather than a frame. At 104 by 34 nobody was going to mistake one;
+at 600 wide they would. The node reads as chosen on the canvas too, by an `outline` rather
+than a border, so lighting it cannot move the face a pixel.
 
-**A device parameter as a source.** "Crossfade driven by a filter cutoff" is the second of
-the two worked examples this was designed against, and it needs the bridge to watch device
-parameters, which it does not. Meters and the clock are what a look can read today; the
-drawer says so rather than offering something that would go quiet.
+The second is the **cache**. The compositor keeps one compiled program per *look id* and
+swaps it — old one deleted, new one compiled — whenever that id's signature changes. So the
+promoted graph is parked under one reused throwaway id, and clicking through forty nodes
+leaves one probe program alive. An id per node would compile just as correctly and leak one
+program each, because nothing would ever come back to delete them.
 
-**Notes and velocity.** Same shape of problem, worse: the LOM exposes no played-note event
-and the bridge device is an audio effect, so notes cost a small MIDI Effect on every track
-you want them from. See [the cascade](mapping.md).
+**The room is one group.** The designer already ran on [its own clock](clock.md), and that
+argument does not stop at the beat: if *Ableton running* must not be a precondition for
+drawing a picture, neither must a chorus being played in F# minor with the third colourway
+up. Each of those is a number a node reads, each changes what a look does, and each used to
+be reachable only by waiting for a rehearsal to arrive at it. So tempo, the play button,
+energy, section, colourway and key sit together under one caption, and `useRoom` hands the
+compositor the `Show` they add up to.
 
-**A song-and-track binding.** The scheme keys layers by track name alone, so "the pad in
-*this* song" is said with a clip exception rather than at track level. The reach readout is
-honest about it. A fifth level would be the alternative and it has not earned itself yet.
+**One switch, not one per fact.** `follow the room` is the transport's own `following`,
+widened from the clock to everything beside it. A half-followed room is a state that exists
+nowhere — the stage's beat under a desk's section, or the real colourway with an invented
+key — so judging a look against one teaches you nothing about either. Two switches would
+also be two things to leave in the wrong position. If it ever turns out that following the
+beat alone is worth having, the transport still holds the flag on its own and the split is
+small; nothing has been designed to prevent it.
 
-**Undo.** The scheme is replaced whole on every save and the file is the record, so `git
-diff` is the undo. Staged edits are the thing you can back out of, and that is on purpose —
-they are the ones you have not seen the consequences of.
+The section list is **the set's own `[ROLE]` names** whenever there is a set, because neither
+view ever asks you to type a name. The stand-ins for a desk are alphabetical, which looks
+like a mistake and is not: `sectionOf` reports where a role sits in a sorted list, so a
+stand-in ordered intro-to-outro would give the number a different meaning here from the one
+it has on stage.
+
+## The set page
+
+Three panes, and the sizes are the argument.
+
+**The wheel** is first because it is what plays when nobody has said anything, which is the
+normal case. An empty pool reads as *everything* and says so — that is the state a fresh
+install is in, and reading a blank field as "draw nothing" would be a black screen for the
+one thing nobody filled in. A pool's first click means "only this one" rather than "all but
+this one", because turning a thing off when nothing was chosen is how you say what you want.
+
+**Songs that say otherwise** is deliberately framed as an exception rather than a checklist.
+Most songs should have nothing in it, and every entry you add is a thing that stops turning.
+A song whose last field is cleared is dropped from the file entirely, because an entry left
+behind would claim a decision nobody made and would keep the wheel from ever reaching it.
+
+**Colourways** is unchanged and was always a good pane.
+
+## It is built from `widgets`
+
+Everything that is a control is the widget for it: `Segmented` for the tabs, `Select` for a
+pick, `Toggle` for a boolean, `NumberField` for bars and pace, `Button` for an action.
+
+The exceptions are deliberate and there are three: a **list row**, a **palette chip** and a
+**node's own picture**, all of which are buttons that are not parameters — the third is a
+picture you click to promote it, which reports that it happened and leaves no value behind.
+`console.css` names those three selectors rather than carrying a blanket rule on `button` —
+a blanket rule outranks `.wdg-toggle-body` on specificity and would quietly redraw any widget
+dropped near it.

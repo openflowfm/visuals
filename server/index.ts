@@ -7,7 +7,7 @@ import { VISUALS_PORT, VISUALS_WS_PATH, type Up } from '../protocol.ts';
 import { followBridge } from './bridge.ts';
 import { openLink } from './link.ts';
 import { openScheme } from './scheme.ts';
-import { buildShow } from './show.ts';
+import { buildShow, noTurning } from './show.ts';
 import { buildGrid } from './grid.ts';
 
 /**
@@ -103,6 +103,15 @@ const gridStamp = () =>
 
 let lastGrid = '';
 
+/**
+ * What the rotation remembers between ticks.
+ *
+ * One per server rather than per client, because the wheel is a property of the
+ * show rather than of who is watching it — two browsers open on the same rig
+ * have to be looking at the same picture.
+ */
+const turning = noTurning();
+
 const sendGrid = (socket: WebSocket) => {
   socket.send(JSON.stringify({ kind: 'grid', grid: buildGrid(bridge.state) }));
 };
@@ -113,7 +122,9 @@ sockets.on('connection', (socket) => {
   socket.on('error', () => clients.delete(socket));
   sendScheme(socket);
   sendGrid(socket);
-  socket.send(JSON.stringify({ kind: 'show', ...buildShow(bridge.state, link.sample(), scheme) }));
+  socket.send(
+    JSON.stringify({ kind: 'show', ...buildShow(bridge.state, link.sample(), scheme, turning) }),
+  );
 
   socket.on('message', (raw) => {
     let message: Up;
@@ -176,9 +187,12 @@ setInterval(() => {
       if (socket.readyState === socket.OPEN) socket.send(gridWire);
     }
   }
-  const show = buildShow(bridge.state, link.sample(), scheme);
+  const show = buildShow(bridge.state, link.sample(), scheme, turning);
   show.clock = link.live;
-  const schemeStamp = `${show.colorway}|${show.archetype}|${show.energy}|${show.schemeError}`;
+  // The look and the colourway are in it because the rotation moves them, and a
+  // wheel that turned without the renderer being told would be a wheel that
+  // never turned: the anchor carries meters, not decisions.
+  const schemeStamp = `${show.look}|${show.colorway}|${show.song}|${show.schemeError}`;
   const reloaded = schemeStamp !== lastScheme;
   lastScheme = schemeStamp;
   const wire = JSON.stringify(
@@ -202,10 +216,50 @@ function anchorOf(show: ReturnType<typeof buildShow>) {
     at: show.at,
     playing: show.playing,
     master: show.master,
-    levels: show.layers.map((layer) => layer.level),
-    opacity: show.layers.map((layer) => layer.opacity),
+    levels: show.tracks.map((track) => track.level),
+    opacity: show.tracks.map((track) => track.opacity),
   };
 }
+
+/**
+ * A port already taken says so, rather than throwing a stack trace.
+ *
+ * `npm run dev` runs eight things under `concurrently -k`, so **one of them
+ * dying takes the session down with it** — which is right, and which makes the
+ * message that death produces the only thing anyone reads. An unhandled
+ * `EADDRINUSE` is fourteen lines of Node internals ending in `listenInCluster`,
+ * printed in the middle of seven other processes' startup output, and it does
+ * not mention this file, this port, or the visuals server at all.
+ *
+ * The usual cause is the one thing worth naming: a `dev:visuals` left running
+ * from an earlier session, holding 17900 while the rest of the rig comes up.
+ */
+let dying = false;
+const cannotListen = (err: NodeJS.ErrnoException) => {
+  // Both the HTTP server and the socket server emit this one: `ws` attaches to
+  // the HTTP server and re-emits, so a handler on only one of them still leaves
+  // the other throwing. Whichever arrives first says it, and the second is
+  // ignored rather than printing the same thing twice on the way out.
+  if (dying) return;
+  dying = true;
+  if (err.code === 'EADDRINUSE') {
+    console.error(
+      `visuals: port ${PORT} is already in use — something else is on it.\n` +
+        `visuals: usually a dev:visuals or npm run dev left running from an earlier session.\n` +
+        `visuals: find it with  lsof -nP -iTCP:${PORT} -sTCP:LISTEN\n` +
+        `visuals: or run this one elsewhere with  BSV_VISUALS_PORT=17901 npm run dev:visuals`,
+    );
+  } else {
+    console.error(`visuals: could not listen on ${HOST}:${PORT} — ${err.message}`);
+  }
+  link.stop();
+  scheme.stop();
+  bridge.close();
+  process.exit(1);
+};
+
+server.on('error', cannotListen);
+sockets.on('error', cannotListen);
 
 server.listen(PORT, HOST, () => {
   console.log(`visuals: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);

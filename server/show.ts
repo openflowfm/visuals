@@ -1,45 +1,19 @@
-import type { AppliedLook, Layer, Scheme, Show } from '../protocol.ts';
+import type { Scheme, Show, Track } from '../protocol.ts';
 import type { SetState } from './bridge.ts';
 import type { LinkFrame } from './link.ts';
-import { liveOffers, resolveLayer } from '../resolve.ts';
+import { turnsAt, whatIsUp } from '../resolve.ts';
 import type { SchemeSource } from './scheme.ts';
 
 /**
- * Resolving a Live set into a show, through a cascade.
+ * A Live set into a show.
  *
- * Four levels, each owning what it is actually in a position to know, and each
- * more specific than the last:
+ * This used to be a cascade: four levels, resolved per track, sixty times a
+ * minute. It is two questions now — **which look is up**, and **what are the
+ * tracks doing** — because everything the cascade decided is decided in a graph
+ * instead.
  *
- * | level | owns | because |
- * |---|---|---|
- * | **song** | the colours, and how hard it plays | a song has an identity that outlives any one section of it |
- * | **archetype** | energy and character | a section is a feeling, and the same chorus should differ between two songs |
- * | **track** | what a layer does with content | a track is an instrument; its layer should stay recognisable across a whole song |
- * | **clip** | the exception | the most specific thing there is, and the only level that can say "not this time" |
- *
- * **Live signals are not a level.** The meter, the beat, the phase and the
- * tempo thread through everything as uniforms rather than being resolved at one
- * step, because they are not a description of what the picture should be — they
- * are what makes it move once it has been decided. Anything can be modulated by
- * them, and nothing in the cascade has to know they exist.
- *
- * ## What the levels do to each other
- *
- * Scalars — `source`, `blend`, `floor`, `bias`, `hide` — are **overridden**,
- * most specific winning, field by field. That is what "a clip is an exception"
- * has to mean, and it is also why binding one field of a track leaves the rest
- * to the name hint: an entry saying `{ bias: 0.2 }` on a drum track is asking
- * for one change, not for everything else to be forgotten.
- *
- * `effects` are **added**, and that is the difference between this and a lookup
- * table. "The chorus should mix in more frenetic effects" is additive by
- * construction: the archetype contributes the section's character, the track
- * contributes what that instrument always does, and both survive. `maxEffects`
- * caps the pile, and energy decides how many of them actually reach the picture.
- *
- * `bias` **accumulates** down the levels, which is what makes energy per layer
- * rather than per show. A drum track can run hotter than the pad under it in the
- * same chorus — the thing a single global number cannot say.
+ * What is left here is what only a *running* set can supply: the mixer, the
+ * meters, the scene, and the two events the rotation turns on.
  */
 
 /** Hex, `#rrggbb` or `#rgb`, to the packed integer the renderer wants. */
@@ -62,6 +36,33 @@ export function roleOf(name: string): string | null {
   return match ? match[1].trim().toUpperCase() : null;
 }
 
+/** Semitones above C, for the seven letters a key can be named with. */
+const PITCH: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+
+/**
+ * A key label into a pitch class, 0–1. Null when the label states no key.
+ *
+ * The bridge hands keys over as **names** — `Bm`, `F#m`, `Db` — because that is
+ * what the set is written with, and a song whose scenes disagree renders as the
+ * collection `Bm / D`. So this takes the first key stated: a song that modulates
+ * is in the first one when it starts, and there is no honest way to average two
+ * tonics.
+ *
+ * **The mode is deliberately dropped.** A minor key is not a *position* between
+ * two other keys, and a 0–1 number is a position — squeezing a boolean into the
+ * continuum would put `Cm` between `C` and `C#` and make a look wired key → hue
+ * jump a semitone when a song went minor. Chromatic rather than the circle of
+ * fifths for the same reason: adjacent numbers should be adjacent pitches, so
+ * the picture moves by a semitone when the music does.
+ */
+function pitchOf(label: string | null | undefined): number | null {
+  const first = (label ?? '').split('/')[0].trim();
+  const match = /^([A-G])([#b]?)/.exec(first);
+  if (!match) return null;
+  const shift = match[2] === '#' ? 1 : match[2] === 'b' ? -1 : 0;
+  return ((((PITCH[match[1]] + shift) % 12) + 12) % 12) / 12;
+}
+
 function positionOf(p: BSV.MixerParameterState | null | undefined): number {
   if (!p) return 1;
   const span = p.max - p.min;
@@ -69,114 +70,119 @@ function positionOf(p: BSV.MixerParameterState | null | undefined): number {
   return Math.max(0, Math.min(1, (p.value - p.min) / span));
 }
 
-function clamp01(value: number): number {
-  return Math.max(0, Math.min(1, value));
+/**
+ * What the rotation has to remember between frames.
+ *
+ * A wheel that turns on *events* needs somewhere to count them, and a show built
+ * from scratch every second has nowhere. Two fields: what was playing last time,
+ * and how many times a player has done something the rig should react to.
+ *
+ * Held by the server and handed in, rather than a module-level variable, because
+ * a module-level one is a second place the truth lives and the tests would have
+ * to reach into it to reset.
+ */
+export interface Turning {
+  /** Per track, the scene index that was playing when we last looked. */
+  was: number[];
+  /** Out-of-band clip launches so far. Only ever goes up. */
+  bumps: number;
 }
+
+export const noTurning = (): Turning => ({ was: [], bumps: 0 });
 
 /**
- * How much of the offered stack actually lands, and how hard.
+ * The scene most of the set is playing, and whether anyone has departed from it.
  *
- * The base is always in. Above it, the first transformer fades in across the
- * bottom half of the energy range and the second across the top, so a section
- * never acquires two at once — it grows into them. Below a tenth a pass is
- * dropped rather than drawn, because one that changes nothing visible still
- * costs a full-screen draw.
+ * A **scene** launch moves every track at once; a **clip** launch moves one. So
+ * the dominant playing index is the scene, and a track that has moved to some
+ * other index on its own is somebody reaching past the grid — which is already
+ * the "and now something else" gesture of a live set, and the only one the rig
+ * can hear without being told.
+ *
+ * A scene change is deliberately not a trigger. Scenes fire constantly and a
+ * picture that changed with every one of them would never settle into anything.
  */
-function dialStack(ids: string[], energy: number, max: number): AppliedLook[] {
-  if (ids.length === 0) return [];
-  // The base always draws at full. It is what the layer *is*, and a section
-  // being quiet should thin the stack rather than fade the thing underneath it
-  // — that is what the floor gate is for, and doing both would dim twice.
-  const applied: AppliedLook[] = [{ id: ids[0], amount: 1 }];
-  for (let i = 1; i < Math.min(ids.length, max); i++) {
-    const opensAt = (i - 1) * 0.45;
-    const amount = clamp01((energy - opensAt) / 0.45);
-    if (amount > 0.1) applied.push({ id: ids[i], amount });
+function readPlaying(set: SetState, turning: Turning): { scene: number; bumped: boolean } {
+  const counts = new Map<number, number>();
+  const now: number[] = [];
+  for (const track of set.tracks) {
+    const playing = set.play[track.i]?.playing ?? -1;
+    now[track.i] = playing;
+    if (playing >= 0) counts.set(playing, (counts.get(playing) ?? 0) + 1);
   }
-  return applied;
+  let scene = -1;
+  let most = 0;
+  for (const [at, count] of counts) {
+    if (count > most) {
+      most = count;
+      scene = at;
+    }
+  }
+
+  // Something moved, and it did not move with everything else. A first read has
+  // nothing to compare against and must not count as a change, or the wheel
+  // would advance every time a browser connected.
+  let bumped = false;
+  if (turning.was.length > 0) {
+    for (let t = 0; t < now.length; t++) {
+      const before = turning.was[t] ?? -1;
+      const after = now[t] ?? -1;
+      if (before === after) continue;
+      if (after >= 0 && after !== scene) bumped = true;
+    }
+  }
+  turning.was = now;
+  return { scene, bumped };
 }
 
-export function buildShow(set: SetState, link: LinkFrame, source: SchemeSource): Show {
+export function buildShow(
+  set: SetState,
+  link: LinkFrame,
+  source: SchemeSource,
+  turning: Turning = noTurning(),
+): Show {
   const scheme: Scheme = source.current();
   const strips = new Map((set.mixer?.tracks ?? []).map((strip) => [strip.t, strip]));
 
-  // Group tracks are not layers: they carry no clips of their own, and drawing
-  // one would double every layer inside it.
+  // Group tracks carry no clips of their own, so drawing one would double
+  // everything inside it.
   const tracks = set.tracks.filter((track) => !track.isGroup);
 
-  const scene = set.play.find((p) => p && p.playing >= 0)?.playing ?? -1;
+  const { scene, bumped } = readPlaying(set, turning);
+  if (bumped && scheme.rotation.onClip) turning.bumps += 1;
+
   const songKey = scene >= 0 ? (set.model?.songByScene[String(scene)] ?? null) : null;
   const role = scene >= 0 ? roleOf(set.scenes[scene]?.name ?? '') : null;
 
-  const archetypeName = role && scheme.archetypes[role] ? role : null;
-  const archetype = archetypeName ? scheme.archetypes[archetypeName] : null;
-  const song = songKey ? scheme.songs[songKey] : undefined;
+  // The playing scene's own key before the song's, because a scene states one
+  // exactly when it disagrees with the song — which is where a song modulates,
+  // and the only moment the distinction is worth anything.
+  const stated =
+    (scene >= 0 ? set.model?.factsByScene?.[String(scene)]?.key : null) ??
+    set.model?.songs?.find((entry) => entry.songKey === songKey)?.key;
 
-  // The song's bias is part of the *section's* energy rather than of any one
-  // layer's, so a song that plays hard brings the whole picture up with it —
-  // including the floor gate, which is what decides how much of the stack is in.
-  const baseEnergy = clamp01((archetype?.energy ?? scheme.defaults.energy) + (song?.bias ?? 0));
+  const turns = turnsAt(scheme.rotation, link.beat, link.quantum, turning.bumps);
+  const up = whatIsUp(scheme, songKey, turns);
 
-  // A song with no assignment still gets colours: an unstyled song would be a
+  // A colourway nobody assigned still has colours: an unstyled song would be a
   // black screen for the one thing nobody remembered to configure.
-  const named = song?.colorway;
-  const colorwayName =
-    (named && scheme.colorways[named] ? named : undefined) ??
-    (scheme.colorways[scheme.defaults.colorway] ? scheme.defaults.colorway : undefined) ??
-    Object.keys(scheme.colorways)[0] ??
-    null;
-  const colors = (colorwayName ? scheme.colorways[colorwayName] : null) ?? ['#ffffff'];
+  const hex = (up.colorway ? scheme.colorways[up.colorway] : null) ?? ['#ffffff'];
+  const colors = hex.map(packColor);
 
-  const layers: Layer[] = tracks.map((track, depth): Layer => {
+  const drawn: Track[] = tracks.map((track, depth): Track => {
     const play = set.play[track.i];
     const playing = play?.playing ?? -1;
     const clip = playing >= 0 ? set.clips.get(`${track.i}:${playing}`) : undefined;
     const strip = strips.get(track.i);
-
-    // The cascade itself lives in `resolve.ts`, shared with the editor. What is
-    // left here is what only a *running* set can supply: the mixer, the meter,
-    // and the energy gate — the parts of a layer that are facts about now
-    // rather than decisions about the show.
-    const r = resolveLayer(scheme, {
-      name: track.name,
-      depth,
-      count: tracks.length,
-      section: archetype?.looks,
-      clip: clip?.name ?? null,
-    });
-
-    const energy = clamp01(baseEnergy + r.bias);
-
-    // Energy thinning the stack, as a fade rather than a cut: a layer just under
-    // its floor is dim, not absent, so a quiet section reads as the picture
-    // closing down rather than as something having failed.
-    //
-    // **Tested against the section's energy, not the layer's.** They are
-    // different questions and conflating them was a real bug: a pad track with
-    // `bias: -0.15` is asking to be *calmer*, and the biased value made it
-    // *absent* for the whole verse instead. Presence belongs to the section —
-    // "the chorus brings everything in" is a fact about the chorus — while the
-    // bias only ever describes how frenetic a layer is once it is there.
-    const admitted = r.floor <= 0 ? 1 : clamp01((baseEnergy - r.floor) / 0.2 + 1);
-    const fader = strip && !strip.active ? 0 : positionOf(strip?.volume);
-
-    const live = liveOffers(scheme, r.offers);
-
     return {
       t: track.i,
       name: track.name,
-      // By depth out of the song's colourway, so the stack reads as one scheme.
-      // Never from the clip — that colour is navigation and belongs to whoever
-      // is reading the grid to find their place.
-      color: packColor(colors[depth % colors.length]),
-      looks: r.hidden ? [] : dialStack(live, energy, scheme.defaults.maxLooks),
-      offers: live,
-      blend: r.blend,
-      floor: r.floor,
-      opacity: r.hidden ? 0 : fader * admitted,
+      // By position in the set out of the colourway, so the picture reads as one
+      // scheme. Never from the clip — that colour is navigation, and belongs to
+      // whoever is reading the grid to find their place.
+      color: colors[depth % colors.length],
+      opacity: strip && !strip.active ? 0 : positionOf(strip?.volume),
       level: set.levels.get(track.i) ?? 0,
-      energy,
-      hidden: r.hidden,
       playing,
       clipName: clip?.name ?? '',
     };
@@ -199,16 +205,17 @@ export function buildShow(set: SetState, link: LinkFrame, source: SchemeSource):
     beat: link.beat,
     at: link.at,
     master: set.masterLevel,
-    layers,
+    tracks: drawn,
+    look: up.look,
+    pinned: up.pinned,
+    colorway: up.colorway,
+    colors,
     song: songKey,
+    key: pitchOf(stated),
     role,
-    archetype: archetypeName,
-    colorway: colorwayName,
-    energy: baseEnergy,
     schemeError: source.error(),
     // What the set actually contains, so the editor can offer it rather than
-    // asking anyone to type it. Track names arrive on the layers themselves,
-    // which is also where their resolved answer is.
+    // asking anyone to type it.
     roles: [
       ...new Set(set.scenes.map((s) => roleOf(s.name)).filter((r): r is string => !!r)),
     ].sort(),

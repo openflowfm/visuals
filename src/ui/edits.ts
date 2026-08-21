@@ -1,36 +1,20 @@
-import type { AppliedLook, Circuit, LookDef, LayerSpec, Scheme } from '../../protocol.ts';
-import { starterCircuit } from '../render/circuit.ts';
+import type { Circuit, LookDef, Scheme } from '../../protocol.ts';
+import { bareCircuit, inletsOf, keepKnobs, splitPort, starterCircuit } from '../render/circuit.ts';
 
 /**
- * What every pane needs from a scheme: how to read one, and how to change it.
+ * How a scheme gets changed.
  *
- * The changes all return a whole new scheme rather than mutating one, because
- * that is what goes on the wire: the editor sends the scheme entire, the server
+ * Every change returns a whole new scheme rather than mutating one, because that
+ * is what goes on the wire: the editor sends the scheme entire, the server
  * writes it, and the resolved answer comes back. See `protocol.ts` on why it is
  * whole rather than a patch.
  */
 
-/**
- * An effect as anything reading a layer spells it.
- *
- * Its name — an id is a key and never shown — and its amount when that is worth
- * the room. A column of "100"s says nothing and pushes the useful columns off
- * the edge. Shared between the panel and the layers pane so a layer reads the
- * same in both.
- */
-export function lookLabel(scheme: Scheme | null, look: AppliedLook): string {
-  const name = scheme?.looks[look.id]?.name ?? look.id;
-  return look.amount > 0.95 ? name : `${name} ${Math.round(look.amount * 100)}`;
-}
-
-/** An effect id and what to call it, built-ins first and each group by name. */
+/** Every look, by id, in the order a browser should list them. */
 export function lookList(scheme: Scheme): { id: string; def: LookDef }[] {
   return Object.entries(scheme.looks)
     .map(([id, def]) => ({ id, def }))
-    .sort((a, b) => {
-      const kind = Number(Boolean(a.def.circuit)) - Number(Boolean(b.def.circuit));
-      return kind !== 0 ? kind : (a.def.name || a.id).localeCompare(b.def.name || b.id);
-    });
+    .sort((a, b) => (a.def.name || a.id).localeCompare(b.def.name || b.id));
 }
 
 /** Add or remove one id, keeping the order the rest were already in. */
@@ -39,118 +23,205 @@ export function toggleId(list: readonly string[] | undefined, id: string, on: bo
   return on ? (held.includes(id) ? [...held] : [...held, id]) : held.filter((x) => x !== id);
 }
 
-/**
- * A spec with one field changed, or dropped entirely once it says nothing.
- *
- * The dropping matters more than it looks. A binding is what makes the editor
- * legible — a track that appears in `layers` has been *decided about* — so a
- * binding left behind after its last field was cleared would claim a decision
- * nobody made, and would keep the name hint from applying ever again.
- */
-export function setLayer(
-  layers: Record<string, LayerSpec>,
-  name: string,
-  next: Partial<LayerSpec>,
-): Record<string, LayerSpec> {
-  const merged: LayerSpec = { ...layers[name], ...next };
-  for (const key of Object.keys(merged) as (keyof LayerSpec)[]) {
-    const value = merged[key];
-    if (value === undefined || (Array.isArray(value) && value.length === 0)) delete merged[key];
-  }
-  const out = { ...layers };
-  if (Object.keys(merged).length === 0) delete out[name];
-  else out[name] = merged;
-  return out;
-}
-
-/** The next free `fx*` id. Ids are stable and never shown; names are neither. */
+/** The next free `look*` id. Ids are stable and never shown; names are neither. */
 export function freeLookId(scheme: Scheme): string {
   for (let n = 1; ; n++) {
-    const id = `fx${n}`;
+    const id = `look${n}`;
     if (!scheme.looks[id]) return id;
   }
 }
 
-export function addCircuit(scheme: Scheme): { scheme: Scheme; id: string } {
+/**
+ * A new look, and which of the two starts it gets.
+ *
+ * Neither is an empty canvas. An empty canvas asks you to know the vocabulary
+ * before you have seen it work, and the first thing anyone wants is to move one
+ * knob and watch the frame change.
+ *
+ * Both start with the **set** in them, which is a claim about what this rig is
+ * for: the picture should already be reacting to whoever is playing before you
+ * have decided anything, and taking the tracks node out should be a deliberate
+ * act rather than the default state.
+ */
+export function addLook(scheme: Scheme, shape: 'full' | 'bare' = 'full'): {
+  scheme: Scheme;
+  id: string;
+} {
   const id = freeLookId(scheme);
   const used = new Set(Object.values(scheme.looks).map((def) => def.name));
-  let name = 'New effect';
-  for (let n = 2; used.has(name); n++) name = `New effect ${n}`;
+  let name = 'New look';
+  for (let n = 2; used.has(name); n++) name = `New look ${n}`;
+  const circuit = shape === 'bare' ? bareCircuit() : starterCircuit();
+  return { id, scheme: { ...scheme, looks: { ...scheme.looks, [id]: { name, circuit } } } };
+}
+
+/** A copy, to take apart without losing the one it came from. */
+export function forkLook(scheme: Scheme, from: string): { scheme: Scheme; id: string } {
+  const def = scheme.looks[from];
+  if (!def) return addLook(scheme);
+  const id = freeLookId(scheme);
+  const used = new Set(Object.values(scheme.looks).map((each) => each.name));
+  let name = `${def.name} copy`;
+  for (let n = 2; used.has(name); n++) name = `${def.name} copy ${n}`;
   return {
     id,
     scheme: {
       ...scheme,
-      looks: { ...scheme.looks, [id]: { name, circuit: starterCircuit() } },
+      looks: {
+        ...scheme.looks,
+        // Deep enough that editing the copy cannot reach the original. A shallow
+        // one shares the node array, and the first drag moves both.
+        [id]: {
+          name,
+          circuit: {
+            // The values as well as the node, because a spread is one level
+            // deep and the map they live in would otherwise be the same object
+            // in both looks — one knob turning two graphs.
+            nodes: def.circuit.nodes.map((node) => ({
+              ...node,
+              ...(node.knobs ? { knobs: { ...node.knobs } } : {}),
+            })),
+            cords: def.circuit.cords.map((cord) => ({ ...cord })),
+          },
+        },
+      },
     },
   };
 }
 
 /**
- * Delete an effect, and every reference to it.
+ * Delete a look, and every reference to it.
  *
- * Leaving the references would be survivable — the resolver drops an id it
- * cannot find — but it would also mean a chorus quietly carrying a ghost, and
- * an effect list that could never tell you what an archetype actually does.
+ * References are in two places now: the rotation's pool and any song that pinned
+ * it — and, since a look can contain a look, in other graphs. A `look` node
+ * pointing at nothing draws nothing rather than failing, so those are left
+ * where they are and the node says so on its face. Deleting them would silently
+ * rewire somebody's graph.
  */
 export function dropLook(scheme: Scheme, id: string): Scheme {
-  const without = (list: string[] | undefined) => list?.filter((x) => x !== id);
   const looks = { ...scheme.looks };
   delete looks[id];
-  const strip = <T extends { looks?: string[] }>(record: Record<string, T>) =>
-    Object.fromEntries(
-      Object.entries(record).map(([key, value]) => [key, { ...value, looks: without(value.looks) }]),
-    ) as Record<string, T>;
+  const songs: Scheme['songs'] = {};
+  for (const [name, spec] of Object.entries(scheme.songs)) {
+    const kept = { ...spec };
+    if (kept.looks) kept.looks = kept.looks.filter((each) => each !== id);
+    if (kept.looks?.length === 0) delete kept.looks;
+    if (Object.keys(kept).length > 0) songs[name] = kept;
+  }
   return {
     ...scheme,
     looks,
-    archetypes: strip(scheme.archetypes),
-    layers: strip(scheme.layers),
-    clips: strip(scheme.clips),
+    songs,
+    rotation: { ...scheme.rotation, looks: scheme.rotation.looks.filter((each) => each !== id) },
+    defaults: {
+      ...scheme.defaults,
+      look: scheme.defaults.look === id ? (Object.keys(looks)[0] ?? id) : scheme.defaults.look,
+    },
   };
 }
 
-/** One node moved, or its op or value changed. */
+/** Replace one look's graph. */
+export function setCircuit(scheme: Scheme, id: string, circuit: Circuit): Scheme {
+  const def = scheme.looks[id];
+  if (!def) return scheme;
+  return { ...scheme, looks: { ...scheme.looks, [id]: { ...def, circuit } } };
+}
+
+/** Rename it. Ids are stable so nothing pointing at it has to be found. */
+export function renameLook(scheme: Scheme, id: string, name: string): Scheme {
+  const def = scheme.looks[id];
+  if (!def) return scheme;
+  return { ...scheme, looks: { ...scheme.looks, [id]: { ...def, name } } };
+}
+
+/** The next free id for a node of this kind, within one graph. */
+export function freeNodeId(circuit: Circuit, kind: string): string {
+  const taken = new Set(circuit.nodes.map((node) => node.id));
+  for (let n = 1; ; n++) {
+    const id = `${kind}${n}`;
+    if (!taken.has(id)) return id;
+  }
+}
+
+/**
+ * Change one node, and cut whatever that leaves hanging.
+ *
+ * **A mode change moves the inlets.** A `ripple` has `waves`, `depth` and
+ * `speed`; a `posterize` has `levels` and nothing else. Nothing used to cut the
+ * cords between them, so switching mode left cords addressed to inlets that no
+ * longer existed — which the compiler ignores and the canvas cannot draw,
+ * because there is no port to draw them to. What that reaches a person as is an
+ * outlet lit up with no wire leaving it, and a node visibly wired to something
+ * that has no effect on the picture. Switching back made them reappear, which
+ * makes it look like the editor rather than the graph.
+ *
+ * Cords are kept **by name**, so the inlets a mode has in common with the one it
+ * replaced stay wired: `bloom` and `smear` both have a `reach`, and it is the
+ * same knob in both. **Values set on an inlet keep the same company** — the same
+ * rule, one step quieter, since a number stranded on an inlet that is not there
+ * cannot even be seen, let alone cleared.
+ */
 export function setNode(
   circuit: Circuit,
   id: string,
   next: Partial<Circuit['nodes'][number]>,
 ): Circuit {
+  const nodes = circuit.nodes.map((node) => (node.id === id ? { ...node, ...next } : node));
+  // Only a mode can move an inlet, and a drag emits on every pointer move, so
+  // this is the one change worth walking the cords for.
+  if (next.op === undefined) return { ...circuit, nodes };
+  const held = nodes.find((node) => node.id === id);
+  if (!held) return { ...circuit, nodes };
+  const ports = new Set(inletsOf(held).map((port) => port.name));
   return {
-    ...circuit,
-    nodes: circuit.nodes.map((n) => (n.id === id ? { ...n, ...next } : n)),
-  };
-}
-
-/** A node and everything that reached it. */
-export function dropNode(circuit: Circuit, id: string): Circuit {
-  return {
-    nodes: circuit.nodes.filter((n) => n.id !== id),
-    cords: circuit.cords.filter((c) => !c.from.startsWith(`${id}/`) && !c.to.startsWith(`${id}/`)),
+    nodes: nodes.map((node) => (node.id === id ? keepKnobs(node) : node)),
+    cords: circuit.cords.filter((cord) => {
+      const to = splitPort(cord.to);
+      return to.node !== id || ports.has(to.port);
+    }),
   };
 }
 
 /**
- * Wire an outlet to an inlet, replacing whatever fed that inlet.
+ * Turn one inlet's own knob.
  *
- * One cord per inlet, because an inlet is one value. Replacing rather than
- * refusing is the behaviour that makes rewiring a gesture instead of a chore:
- * you drag the new cord where you want it and the old one gets out of the way.
+ * Its own edit rather than a `setNode` call, because the value lives in a map
+ * and a caller merging that map by hand is a caller who can drop the rest of
+ * it. A knob emits on every pointer move, so this is on the hot path and does
+ * exactly one thing.
  */
-export function connect(circuit: Circuit, from: string, to: string): Circuit {
+export function setKnob(circuit: Circuit, id: string, inlet: string, value: number): Circuit {
   return {
     ...circuit,
-    cords: [...circuit.cords.filter((c) => c.to !== to), { from, to }],
+    nodes: circuit.nodes.map((node) =>
+      node.id === id ? { ...node, knobs: { ...node.knobs, [inlet]: value } } : node,
+    ),
   };
 }
 
-export function disconnect(circuit: Circuit, to: string): Circuit {
-  return { ...circuit, cords: circuit.cords.filter((c) => c.to !== to) };
+/**
+ * Take a node off the canvas, with everything it was wired to.
+ *
+ * **Except `out`.** Every look has exactly one and it is not optional: it is
+ * what leaves, and a look without one is not a smaller look, it is not a look.
+ * The faceplate has no delete button on it for that reason, and the rule lives
+ * here as well so that it is the model's rather than the button's.
+ */
+export function dropNode(circuit: Circuit, id: string): Circuit {
+  if (circuit.nodes.find((node) => node.id === id)?.kind === 'out') return circuit;
+  return {
+    nodes: circuit.nodes.filter((node) => node.id !== id),
+    cords: circuit.cords.filter(
+      (cord) => splitPort(cord.from).node !== id && splitPort(cord.to).node !== id,
+    ),
+  };
 }
 
-/** A node id nothing in this circuit is using. */
-export function freeNodeId(circuit: Circuit, kind: string): string {
-  for (let n = 1; ; n++) {
-    const id = `${kind}${n}`;
-    if (!circuit.nodes.some((node) => node.id === id)) return id;
-  }
+/** One cord in. An inlet takes one thing, so an existing one is replaced. */
+export function connect(circuit: Circuit, from: string, to: string): Circuit {
+  return { ...circuit, cords: [...circuit.cords.filter((cord) => cord.to !== to), { from, to }] };
+}
+
+export function disconnect(circuit: Circuit, to: string): Circuit {
+  return { ...circuit, cords: circuit.cords.filter((cord) => cord.to !== to) };
 }

@@ -16,24 +16,29 @@ Live ─ SessionBridge :17800 ─WS─> visuals server :17900 ─WS─> browser 
 | doc | read it before touching | source |
 |---|---|---|
 | [the clock](docs/clock.md) | Link, tempo, the beat, why the browser extrapolates, the native addon | `server/link.ts`, `src/state/useShow.ts`, `tools/build-link.ts` |
-| [the cascade](docs/mapping.md) | archetypes, energy, colourways, layer bindings, the scheme file | `server/show.ts`, `server/scheme.ts`, `resolve.ts`, `scheme.json` |
-| [looks](docs/looks.md) | the one noun, stacks and compositions, the designer and its own clock | `protocol.ts`, `resolve.ts`, `src/ui/Designer.tsx`, `stack.ts` |
-| [the console](docs/console.md) | the three views, the override gesture, the A/B, the addressing drawers | `src/ui/Console.tsx`, `Designer.tsx`, `Coverage.tsx`, `Bind.tsx` |
-| [circuits](docs/circuit.md) | building an effect out of nodes, the node vocabulary, the bench | `src/render/circuit.ts`, `src/ui/Circuit.tsx` |
-| [the renderer](docs/render.md) | layers, blending, sources, effects, fill rate, **pointing a projector** | `src/render/*` |
+| [looks](docs/looks.md) | **the one noun**, the node vocabulary, the compiler, the designer | `protocol.ts`, `src/render/circuit.ts`, `src/ui/Designer.tsx` |
+| [the wheel](docs/wheel.md) | what is on screen and why, song overrides, the scheme file, the roll | `resolve.ts`, `server/show.ts`, `server/scheme.ts`, `roll.ts` |
+| [the console](docs/console.md) | the two views, and what the three views before them were for | `src/ui/Console.tsx`, `Designer.tsx`, `SetView.tsx` |
+| [the renderer](docs/render.md) | the two passes, blending, fill rate, **pointing a projector** | `src/render/*` |
 | [the harness](docs/harness.md) | working on this with no Ableton, and the Link safety rule | `tools/fake-live.ts` |
 
 ## The one idea
 
-**A Live track is a layer. A Live scene is a column. Live's mixer is the visual mixer.**
+**Everything is one graph, and that graph is a look.**
 
-Resolume's composition model — layers stacked bottom to top, each showing one clip, each
-with a blend mode and a fader, fired in columns — is the same shape as a Session View
-grid rotated. So there is no second transport, no second launcher and no second grid here:
-Live already has all three, and this draws the consequence. Firing a scene in Live fires a
-column of visuals because it *is* firing a column of visuals.
+A look has one output — a frame — and everything that goes into it is a node: the pictures
+that ship, the effects that work on them, the meters, the song, the Live set's own layer
+mix, and *other looks*. There is no stack, no cascade, no per-track binding and no clip
+exception, because each of those was a different answer to "how do two pictures combine"
+and a graph answers it once.
 
-The corollary is that this app has almost no state of its own, which is the point.
+The Live set is in there as a node. `tracks` draws every playing track and mixes them down,
+so firing a scene still changes the picture with nothing authored — which is what keeps this
+a rig that reads a set rather than a screensaver. Everything else about it is wired.
+
+Above the graph there is one thing, and it is deliberately tiny: a **wheel** that turns
+through the looks and colourways you have made, on musical time. Nothing has to be
+configured for it to draw a show.
 
 ## Running it
 
@@ -85,28 +90,26 @@ without the bridge noticing.
 
 ## Customising it
 
-Press **`e`** in the app for the console, over the picture so you can tune a chorus while
-one is on screen. Its three views are three **distances** to stand at from the same set:
+Press **`e`** in the app for the console, over the picture so you can work on a look while
+one is on screen. Two views:
 
 | view | the question | the scale |
 |---|---|---|
-| **design** | what is worth putting on a wall | one look, and a stack of them |
-| **coverage** | what have I not decided about | the set, all of it at once |
-| **bind** | is this right, and how far should the fix reach | one moment |
+| **design** | what is worth putting on a wall | one look |
+| **set** | what turns through them, and what says otherwise | the set |
 
-Design comes first because that is the order the work goes in: **build a library of looks
-with nothing playing, and bind it to the set afterwards.** The designer runs on its own
-clock and needs no bridge, no set and no Link — a library you can only see during a
-rehearsal is a library nobody builds.
+**Design is the product.** A canvas, a library of the looks you have made, and a browser of
+every node there is — the node is the row and its presets open under it, the way a device
+browser lists one, with a search box that reaches inside. It runs on its own clock and needs
+no bridge, no set and no Link: a library you can only see during a rehearsal is a library
+nobody builds.
 
-Two rules the binding half rests on. **Nothing lands until it has been seen next to what it
-replaces**: bind draws the live scheme and your staged one side by side, on one clock, so
-the only thing that differs is the edit. And **the hard part of an override is its scope**,
-so the same address can be fixed at the song, the section, the track or the clip, with a
-readout that tells you how many songs the fix is about to reach.
+**Set is what is left above the graph.** The wheel that turns through your looks and
+colourways, and the handful of songs that want to pin one instead. Most songs should have
+nothing there.
 
-Everything it offers — roles, songs, tracks, the playing clip — comes from **the set**, so
-it never asks you to type a name.
+Every name either view offers — songs, tracks, looks — comes from **the set** or from what
+you made, so it never asks you to type one.
 
 It writes `visuals/scheme.json`, which stays the record — hot-reloaded, readable, and
 **entirely optional**: delete it and the built-in scheme is a complete show. Edit either.
@@ -117,19 +120,20 @@ and a merge conflict for every roll. It is gitignored, and a fresh clone draws t
 show until you make one of your own. Loading *between* saved shows is a thing this will
 want and does not have yet.
 
-Everything that draws is a **look** — one noun, whether it paints its own picture or works
-on the one underneath. A stack of looks is a **composition**, which is what the renderer is
-showing. See [looks](docs/looks.md).
+Everything that draws is a **look**, and a look is a **graph** — see [looks](docs/looks.md).
+The eleven pictures and twelve effects that ship are node *modes*, so nothing in the model
+knows they exist except the node that draws them, and one look can hold as many as you like
+wired however you like.
 
-The resolution is a cascade: **song → archetype → track → clip**, with live signals
-threading through all of it as shader uniforms rather than being a level of their own. A
-generator replaces the base, transformers add up, bias accumulates. Energy is the
-load-bearing idea — one number per section that drives effect intensity, reaction speed,
-brightness and how many layers draw at all, which is what makes an archetype dynamic
-instead of a preset.
+The trick that makes that possible is that **a colour is a function of a point**, not a
+value in a buffer: `kaleido` asks its input for the colour at a folded point and the input
+re-evaluates itself there, so a whole look compiles to one fragment shader with no render
+targets at all. The one exception is `tracks`, which is a pass because it draws once per
+playing Live track.
 
-Full reasoning in [the cascade](docs/mapping.md), and [circuits](docs/circuit.md) for
-building an effect out of nodes.
+What is on screen is [the wheel](docs/wheel.md): a rotation through your looks and
+colourways, advancing every N bars and when somebody launches a clip out of band. A song may
+pin either instead. That is the whole of the model above the graph.
 
 ## What is not built
 
@@ -139,5 +143,8 @@ choice between a set you can read and a set that looks right.
 
 **No note reactivity.** The LOM has no played-note event and the bridge device is an audio
 effect, so notes cost a small MIDI Effect on each track you want them from. Meters and the
-beat carry it for now; a note would thread through as one more uniform, which is precisely
-why signals are not a cascade level.
+beat carry it for now; a note would arrive as one more `signal` mode and nothing else would
+have to change.
+
+**One track's picture as another's input.** A look reaches a track's *meter* and not its
+*frame*. That needs a render target per track, which the renderer does not keep.

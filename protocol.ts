@@ -10,64 +10,119 @@
  * The scheme types live here rather than in `server/` because the editor edits
  * them and the server resolves them — two consumers, one definition, the same
  * argument `protocol/README.md` makes about not keeping a second copy.
+ *
+ * ## There is one noun, and it is a graph
+ *
+ * A **look** is a graph that produces a frame. Not a graph plus a stack plus a
+ * cascade: one graph. Everything that used to be a level of something is a node
+ * in it — the pictures that ship, the effects that work on them, the Live set's
+ * own layer mix, the meters, the song, and other looks.
+ *
+ * That collapse deleted four concepts. There is no layer binding, no clip
+ * exception, no archetype and no per-track stack, because each of them was a
+ * different answer to "how do two pictures combine" and a graph answers it once.
+ * What is left above the graph is deliberately tiny: which look is up, and which
+ * colours it draws from.
  */
 
-/** How a layer combines with everything already drawn beneath it. */
+/** How two pictures combine. Used by `blend`, and by how the tracks node stacks. */
 export type Blend = 'over' | 'add' | 'screen' | 'multiply';
 
-/**
- * One of the looks that ship as handwritten shaders.
- *
- * **There is only one noun here, and that is the point.** These used to be two
- * lists — eleven "sources" that drew a picture and twelve "effects" that changed
- * one — and the split was never real. A shader either reads the frame that
- * arrived or it ignores it, which is a property of the shader rather than a
- * category of thing, and the circuit compiler had already worked that out: a
- * graph with `paint` and no `sample` was called a generator and drew a source,
- * while the source slot could not be pointed at one.
- *
- * Collapsing them costs nothing and buys three things. Custom sources fall out
- * for free — the feature three docs listed as "not built". The compositor stops
- * having two kinds of pass. And the designer has exactly one kind of object to
- * author, which is what makes a library of looks a thing you can build before
- * deciding what drives it.
- */
-export type BuiltinLook =
-  // generators: they ignore what arrived and draw their own picture
-  | 'solid'
-  | 'bars'
-  | 'rings'
-  | 'noise'
-  | 'strobe'
-  | 'grid'
-  | 'tunnel'
-  | 'plasma'
-  | 'spiral'
-  | 'scan'
-  | 'sparks'
-  // transformers: they read the frame underneath and change it
-  | 'mirror'
-  | 'kaleido'
-  | 'shift'
-  | 'pixelate'
-  | 'ripple'
-  | 'smear'
-  | 'bloom'
-  | 'slice'
-  | 'edge'
-  | 'posterize'
-  | 'twist'
-  | 'invert';
+export const BLENDS: readonly Blend[] = ['over', 'add', 'screen', 'multiply'];
+
+// --- the graph -----------------------------------------------------------
 
 /**
- * Every built-in, in the order an editor should offer them.
+ * The node vocabulary a look is wired from.
  *
- * Generators first, because a stack has to start with something that draws.
- * That ordering is a hint to whoever is picking, not a rule the renderer keeps:
- * a generator anywhere in a stack replaces what is under it, which is exactly
- * what "ignores what arrived" has to mean.
+ * Three signals move between them and the whole design follows from that:
+ * a **point** (`p`, where in the frame you are looking), a **number** (`n`), and
+ * a **colour** (`c`).
+ *
+ * The important thing about this list is what is *not* beside it. There is no
+ * separate registry of sources and no separate registry of effects: `source`
+ * and `effect` are nodes with modes, the way `math` and `wave` always were.
+ * A picture that ships and a picture you wired are the same kind of thing, in
+ * the same list, reachable from the same drawer.
  */
-export const BUILTIN_LOOKS: readonly BuiltinLook[] = [
+export type NodeKind =
+  // where you are, and what the room is doing
+  | 'point'
+  | 'signal'
+  | 'value'
+  | 'track'
+  | 'song'
+  | 'energy'
+  // pictures
+  | 'source'
+  | 'tracks'
+  | 'look'
+  | 'paint'
+  // geometry: point in, point out
+  | 'fold'
+  | 'swirl'
+  | 'zoom'
+  | 'wobble'
+  | 'tile'
+  | 'polar'
+  // colour
+  | 'effect'
+  | 'hue'
+  | 'levels'
+  | 'blend'
+  // arithmetic
+  | 'math'
+  | 'wave'
+  // the end
+  | 'out';
+
+/**
+ * The families a node browser groups by.
+ *
+ * Ordered the way the drawer should read: what draws, what moves a point, what
+ * works on a colour, what the room is doing, and the arithmetic between them.
+ * A family is a fact about the vocabulary rather than about the editor, which
+ * is why it is here — two editors listing these differently would be two
+ * different vocabularies.
+ */
+export const NODE_FAMILIES: readonly { name: string; about: string; kinds: NodeKind[] }[] = [
+  {
+    name: 'pictures',
+    about: 'Everything that makes a colour out of nothing',
+    kinds: ['source', 'tracks', 'look', 'paint'],
+  },
+  {
+    name: 'colour',
+    about: 'Everything that takes a picture and gives one back',
+    kinds: ['effect', 'blend', 'hue', 'levels'],
+  },
+  {
+    name: 'geometry',
+    about: 'Moving the point a picture is read at',
+    kinds: ['point', 'fold', 'swirl', 'zoom', 'wobble', 'tile', 'polar'],
+  },
+  {
+    name: 'the room',
+    about: 'What the music is doing right now',
+    kinds: ['signal', 'track', 'song', 'energy'],
+  },
+  {
+    name: 'numbers',
+    about: 'Knobs and the arithmetic between them',
+    kinds: ['value', 'math', 'wave'],
+  },
+  { name: 'the end', about: 'What leaves the look', kinds: ['out'] },
+];
+
+/**
+ * The pictures that ship, as `source` node modes.
+ *
+ * These were eleven separate shaders, then eleven `BuiltinLook` values that a
+ * scheme registered under their own ids and a cascade could name. They are
+ * modes now, which is the point: nothing in the model knows they exist except
+ * the one node that draws them.
+ */
+export const SOURCES: readonly string[] = [
   'solid',
   'bars',
   'rings',
@@ -79,6 +134,10 @@ export const BUILTIN_LOOKS: readonly BuiltinLook[] = [
   'spiral',
   'scan',
   'sparks',
+];
+
+/** The effects that ship, as `effect` node modes. The other half of the old split. */
+export const EFFECTS: readonly string[] = [
   'mirror',
   'kaleido',
   'shift',
@@ -93,88 +152,85 @@ export const BUILTIN_LOOKS: readonly BuiltinLook[] = [
   'invert',
 ];
 
-/** The ones that draw their own picture, for an editor that wants to say so. */
-export const GENERATORS: readonly BuiltinLook[] = BUILTIN_LOOKS.slice(0, 11);
-
-export const BLENDS: readonly Blend[] = ['over', 'add', 'screen', 'multiply'];
-
-// --- circuits: an effect built out of nodes ------------------------------
-
 /**
- * The node vocabulary a circuit is wired from.
+ * Which live signal a `signal` node reads. All of them are 0–1 except `beat`.
  *
- * Three signals move between them and the whole design follows from that:
- * a **point** (`p`, where in the frame you are looking), a **number** (`n`), and
- * a **colour** (`c`). Geometry nodes move points about, `sample` turns a point
- * into a colour by reading the picture that arrived, colour nodes work on
- * colours, and `out` takes the one that leaves. Everything a shader does to a
- * frame is one of those four moves.
- *
- * Points are in **centred, aspect-corrected** space — zero in the middle, a
- * circle round — because every geometric operation wants that and nothing else
- * does. `sample` is the only node that converts back, so no other node has to
- * know the frame's shape.
+ * `energy` is deliberately **not** here any more. It was a uniform every shader
+ * read and every archetype set, and that made it one thing the whole show had
+ * to agree about — where in practice "energy" means whatever you decide it
+ * means, and the useful one is often a particular track's. It is a node now.
  */
-export type NodeKind =
-  // sources of signal
-  | 'point'
-  | 'signal'
-  | 'value'
-  | 'track'
-  // geometry: point in, point out
-  | 'fold'
-  | 'swirl'
-  | 'zoom'
-  | 'wobble'
-  | 'tile'
-  | 'polar'
-  // the crossing
-  | 'sample'
-  | 'paint'
-  // colour
-  | 'hue'
-  | 'levels'
-  | 'blend'
-  // arithmetic
-  | 'math'
-  | 'wave'
-  // the end
-  | 'out';
-
-/** Which live signal a `signal` node reads. All of them are 0–1 except `beat`. */
-export type SignalName =
-  'level' | 'energy' | 'beat' | 'phase' | 'pulse' | 'time' | 'amount' | 'random';
+export type SignalName = 'level' | 'beat' | 'phase' | 'pulse' | 'time' | 'random';
 
 export const SIGNAL_NAMES: readonly SignalName[] = [
   'level',
-  'energy',
   'beat',
   'phase',
   'pulse',
   'time',
-  'amount',
   'random',
 ];
+
+/**
+ * What a `song` node can tell you about the song that is playing.
+ *
+ * `key` is the musical one — the tonic as a pitch class over twelve — and not
+ * `seed`, which is a hash of the name. Two songs in the same key get the same
+ * number on purpose: it is the one song fact that is *about the music* rather
+ * than about the entry, so a look wired key → hue turns a set into a picture
+ * that modulates with it.
+ */
+export const SONG_FACTS: readonly string[] = ['seed', 'tempo', 'key', 'section', 'sections'];
 
 export const MATH_OPS = ['add', 'subtract', 'multiply', 'min', 'max', 'average'] as const;
 export const WAVE_SHAPES = ['sine', 'saw', 'ramp', 'square', 'pulse', 'noise'] as const;
 
+/** How a `tracks` node decides what each Live track draws. */
+export const TRACK_DRAWS: readonly string[] = ['by name', ...SOURCES];
+
 export interface CircuitNode {
-  /** Unique within its circuit. Cords name ports as `nodeId/portName`. */
+  /** Unique within its look. Cords name ports as `nodeId/portName`. */
   id: string;
   kind: NodeKind;
   /** Canvas position, in graph units. The editor's, never the compiler's. */
   x: number;
   y: number;
   /**
-   * The mode of a node that has one: a signal name, a maths op, a wave shape.
+   * The mode of a node that has one: a source name, an effect name, a maths op,
+   * a wave shape, a signal name, a track name, a look id.
    *
-   * A `track` node's mode is the **exact name of a track**, or `master`. That
-   * is what makes it the absolute half of addressing: it names something and
-   * stays put, where a `signal` node always means the layer it is drawing.
+   * One field for all of them because the compiler treats them identically —
+   * it is the string that picks which of a node kind's behaviours you meant.
    */
   op?: string;
-  /** A `value` node's amount, 0–1. Rides a uniform, so turning it never recompiles. */
+  /**
+   * What each unwired number inlet holds, by inlet name, 0–1.
+   *
+   * An inlet with nothing wired to it used to get a fallback written into the
+   * shader; now it gets a number you can turn on the node's own face, and the
+   * fallback is only what that number *starts* as. That is what makes a
+   * `posterize` something you drop and dial rather than something you have to
+   * build a knob for.
+   *
+   * These ride `uParams` exactly as a `value` node does — never interpolated
+   * into the GLSL — so turning one never recompiles a shader. Setting one for
+   * the first time does, once, because it changes how big the bank is.
+   *
+   * A value stays here while the inlet is wired, dormant rather than lost:
+   * wiring and then unwiring gives the number back, so a cord is not a
+   * destructive gesture. Only *number* inlets are in here — a point and a
+   * colour have no single control shape and no useful constant.
+   */
+  knobs?: Record<string, number>;
+  /**
+   * A `value` node's amount, or an `energy` node's fall. 0–1 either way.
+   *
+   * Not folded into `knobs`, and the reason is that neither node has an inlet:
+   * `knobs` is keyed by inlet name and is trimmed against the inlets a node
+   * actually has, so a number parked under a name no port answers to would be
+   * dropped the first time anything came through `merge`. An `energy` node's
+   * fall is not even a shader number — the envelope runs on the CPU.
+   */
   value?: number;
   /** A `value` node's name, which is what it is called in the editor. */
   label?: string;
@@ -193,200 +249,158 @@ export interface Circuit {
 }
 
 /**
- * One look, however it is built.
+ * One look: a name and a graph.
  *
- * A built-in has GLSL and a handful of named parameters; a circuit has nodes
- * and its `value` nodes are its parameters. Both are addressed by the same id
- * wherever a look is named, so nothing that *uses* one has to know which kind
- * it got — which is the point, and the reason a circuit is worth having rather
- * than a twenty-fourth hard-coded shader.
- *
- * A look is the base unit of visual work: the thing you make in the designer
- * before you have decided what drives it. Stacking looks is how a picture gets
- * complicated, and that stack is a **composition**.
+ * That is the whole type now. There is no `builtin` variant, because a built-in
+ * is a node mode rather than a kind of look — which is what makes the library
+ * a list of things you made rather than a list of things you made mixed in with
+ * twenty-three you did not.
  */
 export interface LookDef {
   /** What it is called in the editor. Ids are stable; names are not. */
   name: string;
-  builtin?: BuiltinLook;
-  /** Values for the parameters a built-in declares, by name. */
-  params?: Record<string, number>;
-  circuit?: Circuit;
+  circuit: Circuit;
+  /** The randomiser wired this one, so the next roll may clear it. */
+  rolled?: boolean;
+}
+
+/** Every look a graph reaches from this one, in the order its nodes appear. */
+export function looksUsedBy(circuit: Circuit): string[] {
+  return circuit.nodes.filter((node) => node.kind === 'look' && node.op).map((node) => node.op!);
+}
+
+/**
+ * Whether `id` can be dropped into `into` without the graph eating itself.
+ *
+ * A look inside a look is the whole reason this vocabulary can express anything
+ * complicated, and it is also the one way to write a program that never
+ * terminates. Refusing by name at the moment of wiring is much better than
+ * refusing at compile time, because at compile time the honest message is "one
+ * of these seven looks contains itself" and nobody can act on that.
+ */
+export function wouldLoop(
+  looks: Record<string, LookDef>,
+  into: string,
+  id: string,
+): boolean {
+  if (into === id) return true;
+  const seen = new Set<string>();
+  const walk = (at: string): boolean => {
+    if (at === into) return true;
+    if (seen.has(at)) return false;
+    seen.add(at);
+    const def = looks[at];
+    return def ? looksUsedBy(def.circuit).some(walk) : false;
+  };
+  return walk(id);
 }
 
 // --- the scheme, which is what the editor edits -------------------------
 
 /**
- * What one track's layer does, wherever it is bound.
+ * What a song may override, and it is deliberately almost nothing.
  *
- * The same shape binds to a track and to a clip, because they are the same
- * question asked at two specificities — "what does this instrument look like"
- * and "except this time".
+ * A song used to own a colourway, a bias, and a set of looks resolved through
+ * four levels of cascade. The cascade is gone: what is on screen is decided by
+ * the rotation, and a song entry is how you say "not for this one". Two fields,
+ * both optional, both meaning *pin this instead of letting it turn*.
  */
-export interface LayerSpec {
-  /**
-   * Look ids, bottom of the stack first, **added** to whatever the section
-   * contributes rather than replacing it.
-   *
-   * The first one that draws its own picture is where the layer starts; the
-   * rest work on what is already there. There is no separate source slot,
-   * because a source was only ever the first look in the stack.
-   */
-  looks?: string[];
-  blend?: Blend;
-  /** Added to the section's energy, then clamped. Negative calms a layer. */
-  bias?: number;
-  /**
-   * The energy at which this layer joins the picture, 0–1.
-   *
-   * How energy thins the stack. A layer below its floor fades out rather than
-   * cutting, so a section change reads as the picture opening up instead of
-   * something failing. Unset derives one from the layer's depth.
-   */
-  floor?: number;
-  /** Never draw it. For the tracks that are utilities rather than instruments. */
-  hide?: boolean;
-}
-
-/** What a song owns, which is its identity rather than its shape. */
 export interface SongSpec {
+  /** Draw this song from one colourway rather than whatever is up. */
   colorway?: string;
-  /**
-   * Added to every section's energy in this song.
-   *
-   * The thing that makes "the same chorus should differ between two songs" true
-   * rather than merely intended: the archetype says what a chorus is, and this
-   * says how hard this song plays one.
-   */
-  bias?: number;
+  /** Draw this song from these looks rather than the rotation's pool. */
+  looks?: string[];
 }
 
-export interface Archetype {
-  /** 0–1. The one number a section is really described by. */
-  energy: number;
+/**
+ * What is on screen when nobody has said anything, which is the normal case.
+ *
+ * **The rotation is the default and binding is the exception**, which is the
+ * reverse of how this worked and the reason most of the model could go. A rig
+ * that draws nothing until it is configured is a rig nobody configures; a rig
+ * that keeps turning through everything you have made is one you can point at a
+ * set you have never seen.
+ */
+export interface Rotation {
+  /** The looks it turns through. Empty means every look there is. */
+  looks: string[];
+  /** The colourways it turns through. Empty means every colourway there is. */
+  colorways: string[];
   /**
-   * Look ids. The character of the section, dialled in by energy, not switched
-   * on. Usually transformers — but a section naming a generator replaces every
-   * layer's base, which is how "in the drop, everything becomes strobe" is said.
+   * Bars between changes. Zero holds whatever is up.
+   *
+   * Bars rather than seconds because everything else here is musical, and a
+   * picture that changes at 11.4 seconds changes in the middle of a phrase.
    */
-  looks?: string[];
+  bars: number;
+  /**
+   * Also change when a clip is fired **out of band** — one clip launched on its
+   * own rather than a whole scene.
+   *
+   * That gesture is already the "and now something else" of a live set, and it
+   * is the only one a player makes that the rig can hear without being told.
+   * A scene change is deliberately *not* a trigger: scenes fire constantly and
+   * the picture would never settle.
+   */
+  onClip: boolean;
+  /**
+   * Turn the colourway on its own schedule rather than with the look.
+   *
+   * Two wheels rather than one pair, because a look and a palette are different
+   * lengths of idea — the same look in three colourways still reads as three
+   * things, and changing both every time makes every change total.
+   */
+  colorEvery: number;
 }
 
 export interface Scheme {
-  /** Named colour sets, as `#rrggbb`. A song is assigned one. */
-  colorways: Record<string, string[]>;
-  /** Song name (the set's own) to what that song owns. */
-  songs: Record<string, SongSpec>;
-  /** Role name to its archetype. Roles come from the set's own vocabulary. */
-  archetypes: Record<string, Archetype>;
-  /**
-   * By **exact track name**, which is the set's vocabulary rather than a pattern
-   * language.
-   *
-   * This used to be a list of regular expressions, and the flexibility was real
-   * but nobody could read it: a rule was a string you typed, matched against
-   * names you had to remember, in an order that silently decided the answer.
-   * Binding to the names the set already has means the editor can list every
-   * layer, show what each one resolved to, and never ask anyone to type a name
-   * they could typo. A track with no entry falls back to the name hints in
-   * `server/scheme.ts`, so an unconfigured set still draws.
-   */
-  layers: Record<string, LayerSpec>;
-  /** By exact clip name: the exception, made from the clip that is playing. */
-  clips: Record<string, LayerSpec>;
-  /** Every look there is, by id. Built-ins are pre-registered under their own names. */
+  /** Every look, by id. All of them are graphs; none of them ship. */
   looks: Record<string, LookDef>;
-  /**
-   * What the randomiser was rolled from, when it was.
-   *
-   * Kept so a show you liked can be got back — one level of undo covers the roll
-   * you just did, and a seed covers the one from last week. Absent on a scheme
-   * nobody rolled, which is most of them.
-   */
+  /** Named colour sets, as `#rrggbb`. */
+  colorways: Record<string, string[]>;
+  rotation: Rotation;
+  /** By the set's own song name. Overrides only — most sets have none. */
+  songs: Record<string, SongSpec>;
+  /** What the randomiser was rolled from, when it was. */
   seed?: string;
   defaults: {
     colorway: string;
-    energy: number;
-    /** By depth, cycled. Something has to be opaque at the bottom. */
-    blend: Blend[];
-    /** A first look by depth, for a track whose name says nothing. */
-    looks: string[];
-    /** Longest stack a layer may carry, however many the cascade offers it. */
-    maxLooks: number;
+    /** Drawn when the rotation has nothing to turn through. */
+    look: string;
     /**
-     * A shift, in rungs, along the ladder of divisions a layer may react on.
+     * A shift, in rungs, along the ladder of divisions a look may react on.
      *
      * Whole rungs rather than a multiplier, because every rung is a musical
-     * division and a rate *between* two of them is in time with nothing. Zero
-     * leaves the show where energy and the per-layer spread put it; -2 takes
-     * everything down to a bar or slower; +2 pushes it to eighths and up.
+     * division and a rate *between* two of them is in time with nothing.
      *
      * Not called speed: a DAW already means playback rate by that.
      */
     pace: number;
+    /** How each Live track draws inside a `tracks` node that does not say. */
+    draws: string;
   };
 }
 
 // --- what is on screen --------------------------------------------------
 
 /**
- * An effect and how far it is dialled in.
+ * One Live track, as the renderer needs it.
  *
- * `amount` rather than presence is what makes energy continuous. An effect that
- * could only be on or off would make a chorus a step change; at 0.3 it is a
- * suggestion and at 0.95 it has taken the picture over, and the archetype's
- * energy is what moves between them.
+ * Much smaller than the `Layer` it replaces, and the difference is the whole
+ * point: a layer carried a resolved stack, a blend, a floor, a bias and an
+ * energy, all decided by a cascade. A track carries facts about a track. What
+ * is *drawn* is the graph's business now.
  */
-export interface AppliedLook {
-  /** A key into `Scheme.looks`. The renderer looks up how to draw it. */
-  id: string;
-  /**
-   * 0–1, and how far this pass has taken the frame.
-   *
-   * A look that **reads** what arrived mixes against it by this, so energy can
-   * dial one in rather than switch it on. A look that ignores what arrived — a
-   * generator — writes the frame outright and this means nothing to it, which
-   * is why the bottom of a stack always draws at full whatever the number says.
-   */
-  amount: number;
-}
-
-export interface Layer {
-  /** Live's track index, and the layer's identity. */
+export interface Track {
+  /** Live's track index, and the track's identity. */
   t: number;
   name: string;
-  /**
-   * Resolved from the song's colourway by depth — **not** from the clip.
-   *
-   * Clip colour belongs to whoever is reading the grid to find their place in
-   * the show, and driving the picture from it would mean choosing between a set
-   * you can navigate and a set that looks right.
-   */
+  /** From the colourway, by position in the set. */
   color: number;
-  /**
-   * The stack this layer draws, bottom first. Already capped by energy.
-   *
-   * One list where there used to be a source and a list of effects, because
-   * that split was never real — see `BuiltinLook`.
-   */
-  looks: AppliedLook[];
-  /**
-   * Every look id the cascade offered, before `maxLooks` and energy cut it
-   * down. The editor shows this: what a layer *would* carry explains what it
-   * carries far better than the survivors do.
-   */
-  offers: string[];
-  blend: Blend;
-  /** The energy this layer joins the picture at, derived or bound. */
-  floor: number;
-  /** 0–1, from the track's fader, already gated by this layer's energy floor. */
+  /** 0–1, from the track's fader. */
   opacity: number;
-  /** 0–1 output meter, for anything that should move with the sound. */
+  /** 0–1 output meter. */
   level: number;
-  /** The archetype's energy, biased by the song, the track and the clip. */
-  energy: number;
-  /** Turned off in the scheme rather than by the set. Drawn nowhere, listed everywhere. */
-  hidden: boolean;
   /** The scene index playing in this track, or -1. */
   playing: number;
   clipName: string;
@@ -407,89 +421,51 @@ export interface Show {
   /** `Date.now()` when `beat` was sampled. */
   at: number;
   master: number;
-  layers: Layer[];
+  tracks: Track[];
+  /**
+   * The look that is up, and why it is.
+   *
+   * `pinned` when a song named it, so an editor can say whether it is watching
+   * the rotation turn or looking at an override.
+   */
+  look: string | null;
+  pinned: boolean;
+  colorway: string | null;
+  /** The colourway's colours, packed, so nothing downstream parses hex. */
+  colors: number[];
   /** The song the set's names describe, when they describe one. */
   song: string | null;
+  /**
+   * The musical key, as a pitch class over twelve. Null when nothing states one.
+   *
+   * A number rather than the `F#m` the set spells, because everything a node
+   * reads is 0–1 and the mapping is a fact about music rather than about a
+   * renderer — the browser should no more parse a key label than it parses a
+   * scene name. Resolved in `server/show.ts`, beside the rest of the reading.
+   */
+  key: number | null;
   /** The role the playing scene names. */
   role: string | null;
-  /** Which archetype answered. Null when the role has none defined. */
-  archetype: string | null;
-  colorway: string | null;
-  /** The section's own energy, after the song's bias and before any layer's. */
-  energy: number;
   schemeError: string | null;
-  /**
-   * Every role and song the set contains, so the editor can offer them.
-   *
-   * Sent with the show rather than fetched, because an editor that made you
-   * type a role name is an editor that lets you typo one — and a rule matching
-   * nothing is invisible until the section it was for arrives on stage.
-   */
+  /** Every role and song the set contains, so the editor can offer them. */
   roles: string[];
   songs: string[];
 }
 
-// --- the set's own shape, for reading coverage ---------------------------
-
-/**
- * One row of the coverage matrix — a song, or a section.
- *
- * The same shape for both because the matrix asks the same question either way:
- * *for this slice of the set, on this track, who decided what the layer is.*
- * A song slices by name and a section slices by role, and the only thing that
- * differs is which scenes end up in the slice.
- *
- * The clip names are what make that answerable. The cascade's most specific
- * level is keyed by them, so whether a slice has said anything of its own about
- * a track is a question only the names can answer. Distinct rather than every
- * occurrence: firing one clip in four scenes is one decision, not four.
- */
-export interface GridRow {
-  /** The set's own spelling — a song's name, or the role itself. */
-  name: string;
-  /** Identity: `songKey` for a song, the role for a section. */
-  key: string;
-  /** Already rendered by the bridge — `128`, or `128 / 130`. Songs only. */
-  bpm?: string;
-  /** The musical key, likewise rendered. Songs only. */
-  tonality?: string;
-  /** The roles this row covers: a song's sections, or a section's own name. */
-  roles: string[];
-  /**
-   * By track index: the distinct clip names this row holds on that track.
-   *
-   * Absent for a track the row never uses, which is a cell state of its own.
-   * A gap you cannot fill is not a gap, and colouring it like one would make
-   * the night-before to-do list mostly noise.
-   */
-  clips: Record<number, string[]>;
-}
+// --- the set's own shape, for the set view -------------------------------
 
 /**
  * The set's shape, sent apart from the show and rarely.
  *
- * The show goes out every second and is a couple of kilobytes; this is tens of
- * kilobytes for a real set and changes only when the set does. Riding the show
- * with it would put a full grid on the wire sixty times a minute to say nothing.
- *
- * Both cuts are built here rather than one being derived in the browser,
- * because deriving the section cut needs the scene-to-role reading and that
- * reading belongs to the server — the same argument `SetModel` makes about not
- * parsing a name twice.
+ * Far smaller than it was: the coverage matrix wanted every distinct clip name
+ * on every track of every row, which for a real set is tens of kilobytes. There
+ * is nothing left that asks a question at that resolution — a song owns a
+ * colourway and a list of looks, and neither is a fact about a track.
  */
 export interface SetGrid {
-  /**
-   * The matrix columns: every track that can carry a layer, in composite order.
-   *
-   * `group` is the immediate parent group's name, which is what the *groups*
-   * cut collapses on. Sent rather than inferred from track order, because Live
-   * allows groups inside groups and order alone cannot tell you which.
-   */
   tracks: { t: number; name: string; group: string | null }[];
-  /** Rows in the set's running order. */
-  songs: GridRow[];
-  /** The same tracks, sliced by role instead. */
-  sections: GridRow[];
+  /** The set's running order, with what the bridge already rendered about each. */
+  songs: { name: string; key: string; bpm?: string; tonality?: string; roles: string[] }[];
 }
 
 // --- the wire -----------------------------------------------------------
@@ -507,7 +483,7 @@ export type Down =
       at: number;
       playing: boolean;
       master: number;
-      /** By layer, in the order the last `show` gave them. */
+      /** By track, in the order the last `show` gave them. */
       levels: number[];
       opacity: number[];
     }

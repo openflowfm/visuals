@@ -1,7 +1,7 @@
 import { useEffect, useRef, type ReactNode } from 'react';
-import type { LookDef } from '../../protocol.ts';
+import type { Circuit, LookDef } from '../../protocol.ts';
 import { createPreview } from '../render/preview.ts';
-import { probeDef } from './probe.ts';
+import { probeAt } from './probe.ts';
 import type { Clock } from '../state/useShow.ts';
 
 /**
@@ -26,13 +26,16 @@ import type { Clock } from '../state/useShow.ts';
  * here, and the two should not have to know each other.
  */
 export function NodePictures({
-  def,
+  circuit,
+  looks,
   transport,
   energy,
   level,
   children,
 }: {
-  def: LookDef;
+  circuit: Circuit;
+  /** The library, so a face showing a `look` node is not black. See `preview.ts`. */
+  looks: Record<string, LookDef>;
   transport: Clock;
   energy: number;
   /** A held meter, or undefined to run the beat envelope the bench runs. */
@@ -41,8 +44,8 @@ export function NodePictures({
 }) {
   const offscreen = useRef<HTMLCanvasElement | null>(null);
   const faces = useRef(new Map<string, HTMLCanvasElement>());
-  const now = useRef({ def, transport, energy, level });
-  now.current = { def, transport, energy, level };
+  const now = useRef({ circuit, looks, transport, energy, level });
+  now.current = { circuit, looks, transport, energy, level };
 
   useEffect(() => {
     const canvas = offscreen.current;
@@ -53,13 +56,13 @@ export function NodePictures({
     const loop = () => {
       raf = requestAnimationFrame(loop);
       const at = now.current;
-      if (!at.def.circuit) return;
       const beat = at.transport.beat();
       for (const [id, face] of faces.current) {
-        const probed = probeDef(at.def, id);
+        const probed = probeAt(at.circuit, id);
         if (!probed) continue;
         preview.frame({
-          stack: [{ def: probed, amount: 1 }],
+          circuit: probed,
+          looks: at.looks,
           energy: at.energy,
           level: at.level ?? 0.25 + 0.75 * (1 - (beat % 1)) ** 3,
           color: 0xffb347,

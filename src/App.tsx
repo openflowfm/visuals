@@ -3,7 +3,6 @@ import { createCompositor, type Compositor } from './render/compositor.ts';
 import { useOutput } from './state/useOutput.ts';
 import { useShow } from './state/useShow.ts';
 import { Align } from './ui/Align.tsx';
-import { lookLabel } from './ui/edits.ts';
 import { Console } from './ui/Console.tsx';
 import './app.css';
 
@@ -107,7 +106,7 @@ export function App() {
     stage.current?.setOutput({ ...output, test: aligning });
   }, [output, aligning]);
 
-  const drawing = show.layers.filter((l) => l.playing >= 0 && l.opacity > 0.001);
+  const drawing = show.tracks.filter((t) => t.playing >= 0 && t.opacity > 0.001);
 
   return (
     <>
@@ -138,52 +137,51 @@ export function App() {
             <dd>{clockText(show.quantum)}</dd>
             <dt>song</dt>
             <dd>{show.song ?? '—'}</dd>
+            <dt>section</dt>
+            <dd>{show.role ?? '—'}</dd>
+            <dt>look</dt>
+            <dd>
+              {show.look ? (scheme?.looks[show.look]?.name ?? show.look) : '—'}
+              {show.pinned ? ' (pinned)' : ''}
+            </dd>
             <dt>colourway</dt>
             <dd>{show.colorway ?? '—'}</dd>
-            <dt>section</dt>
-            <dd>{show.role ?? '—'}{show.role && !show.archetype ? ' (no archetype)' : ''}</dd>
-            <dt>energy</dt>
-            <dd>{Math.round(show.energy * 100)}</dd>
             <dt>fps</dt>
             <dd>{fps}</dd>
           </dl>
 
+          {/* The tracks, not the layers. A track is a fact about the set now;
+              what it *draws* is the graph's business, so there is nothing here
+              to say about a stack, a blend or an energy — those were four
+              columns explaining a cascade that no longer runs. */}
           <table>
             <thead>
               <tr>
-                <th>layer</th>
+                <th>track</th>
                 <th>clip</th>
-                <th>looks</th>
-                <th>nrg</th>
-                <th>blend</th>
                 <th>fader</th>
                 <th>level</th>
               </tr>
             </thead>
             <tbody>
-              {show.layers.map((layer) => (
-                <tr key={layer.t} className={layer.playing < 0 ? 'silent' : undefined}>
+              {show.tracks.map((track) => (
+                <tr key={track.t} className={track.playing < 0 ? 'silent' : undefined}>
                   <td>
-                    <i style={{ background: hex(layer.color) }} />
-                    {layer.name}
+                    <i style={{ background: hex(track.color) }} />
+                    {track.name}
                   </td>
-                  <td className="clip" title={layer.clipName}>
-                    {layer.playing < 0 ? '—' : layer.clipName || `scene ${layer.playing}`}
+                  <td className="clip" title={track.clipName}>
+                    {track.playing < 0 ? '—' : track.clipName || `scene ${track.playing}`}
                   </td>
-                  <td className="fx">
-                    {layer.looks.map((l) => lookLabel(scheme, l)).join(' → ') || '—'}
-                  </td>
-                  <td>{Math.round(layer.energy * 100)}</td>
-                  <td>{layer.blend}</td>
-                  <td>{Math.round(layer.opacity * 100)}</td>
+                  <td>{Math.round(track.opacity * 100)}</td>
                   <td>
-                    <b style={{ width: `${Math.round(layer.level * 100)}%` }} />
+                    <b style={{ width: `${Math.round(track.level * 100)}%` }} />
                   </td>
                 </tr>
               ))}
-              {show.layers.length === 0 && (
+              {show.tracks.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="empty">
+                  <td colSpan={4} className="empty">
                     {show.connected ? 'the set has no tracks yet' : 'waiting for the bridge'}
                   </td>
                 </tr>
@@ -191,7 +189,7 @@ export function App() {
             </tbody>
           </table>
           <p className="hint">
-            {drawing.length} of {show.layers.length} layers drawing · <kbd>i</kbd> panel ·{' '}
+            {drawing.length} of {show.tracks.length} tracks playing · <kbd>i</kbd> panel ·{' '}
             <kbd>e</kbd> edit · <kbd>k</kbd> align · <kbd>f</kbd> fullscreen
           </p>
         </div>

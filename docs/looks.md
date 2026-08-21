@@ -1,118 +1,441 @@
 # Looks
 
-`protocol.ts`, `resolve.ts`, `src/ui/Designer.tsx`, `src/ui/stack.ts`. The unit of visual
-work, and the designer it gets made in.
+`protocol.ts`, `src/render/circuit.ts`, `src/render/shaders.ts`, `src/ui/Designer.tsx`.
+The one noun, the vocabulary it is wired from, and the compiler underneath.
 
-## One noun
+## One noun, and it is a graph
 
-A **look** is a graph that produces a frame. That is the whole type.
+A **look** is a graph that produces a frame. Not a graph plus a stack plus a cascade: one
+graph. `LookDef` is a name and a circuit, and that is the whole type.
 
-There used to be two: eleven *sources* that drew a picture and twelve *effects* that
-changed one. The split was never real. A shader either reads the frame that arrived or it
-ignores it, which is a property of the shader rather than a category of thing — and the
-circuit compiler had already worked this out, calling a graph with `paint` and no `sample`
-a generator while the source slot could not be pointed at one.
+Everything that used to be a *level of something* is a node in it — the pictures that ship,
+the effects that work on them, the Live set's own layer mix, the meters, the song, and
+other looks. That collapse deleted four concepts:
 
-Collapsing them cost one preamble and bought three things:
+| gone | it was | it is now |
+|---|---|---|
+| the layer stack | a base plus two transformers, ping-ponged | a chain you draw, in one shader |
+| `Scheme.layers` | what each track draws, bound by name | a `tracks` node |
+| `Scheme.clips` | the exception, keyed by clip name | a graph, or a song override |
+| `Scheme.archetypes` | energy and character per section | an `energy` node and a `song` node |
 
-- **Custom sources**, the feature three docs listed as *not built*. A look you draw is a
-  source now, because there is nothing else it could be.
-- **One kind of pass** in the compositor. It used to run a source and then a chain; it now
-  runs a stack, and whether a given pass *uses* what it read is the shader's business.
-- **One kind of object** in the designer, which is what makes a library of looks something
-  you can build before deciding what drives any of it.
+Each of them was a different answer to **how do two pictures combine**, and a graph answers
+that once. What is left above the graph is [the wheel](wheel.md), which is deliberately tiny.
 
-The one thing that still tells the halves apart is [`isGenerator`](../resolve.ts), and it
-asks the look rather than reading which list it came from: a built-in by name, a circuit by
-whether it ever samples the frame.
+## A colour is a function of a point, not a value
 
-## A stack is a composition
+This is the change that let the stack go away, and it is unusual enough to state plainly.
 
-A stack has one thing at the bottom that draws its own picture and anything above it works
-on what is already there. That is a **composition**, and it is what the renderer shows.
+The obvious way to build a node compositor is to give every colour node a render target:
+draw node A into a texture, let node B sample it. That is what the old renderer did with two
+ping-ponged buffers, and it is *why* an effect could only ever work on "the frame that
+arrived" — a linear chain, because a chain is all two buffers can express.
 
-The rules are in [`stack.ts`](../src/ui/stack.ts) and there are only two:
+Here a colour outlet compiles to an **expression evaluated at a point**, and the point is
+threaded through resolution. `kaleido` does not sample a buffer; it asks its input for the
+colour at a *folded* point, and the input re-evaluates itself there:
 
-- **A generator replaces the base.** Two of them in a stack means drawing one and then
-  painting entirely over it — a full-screen pass that produces nothing.
-- **A transformer appends**, because that is what a stack is *for*: a kaleidoscope over a
-  ripple is a different picture from either.
+```glsl
+vec4 v0 = laid(gen_plasma(fxKaleido(centred(), 0.5, 0.5, uEnergy), uEnergy), uEnergy);
+```
 
-The cascade keeps the same distinction for the same reason. A more specific level naming a
-generator *replaces* the base — that is what "a clip is an exception" has to mean — while a
-transformer is *added*, so a section's character and a track's own character both survive.
+Everything composes for free from that. Two sources can be folded differently and blended,
+a look can be dropped inside another look, and none of it needs a buffer or a second pass.
 
-`maxLooks` caps the whole stack, base included, which is why the built-in default went from
-two to three when the noun collapsed: two on top of a base is what `maxEffects: 2` meant.
+**The `point` node emits the point being asked about**, not `centred()`. That one line is
+what makes the threading compose: a graph reading `point → fold → source`, evaluated at a
+remapped point, folds the remapped point rather than starting over from the fragment.
 
-## Energy dials the top, never the base
+### What it costs, which is worth knowing
 
-The base always draws at full. Energy thins what is above it, and the floor gate decides
-whether the layer is in the picture at all — dimming the base as well would be dimming the
-same thing twice, and a quiet section would read as a broken layer rather than a calm one.
+A **multi-tap** effect evaluates its whole input once per tap. `bloom` is eight taps plus
+the centre, `smear` is six, `edge` is four, `shift` is three. Nesting two of them multiplies.
+`MAX_LINES` is the backstop and it refuses by name rather than handing the driver a shader
+that takes a second to compile — the number is high enough that no sane graph reaches it,
+and [the roll](wheel.md) deliberately never wires those four.
 
-## The designer runs on its own clock
+## Three signals
 
-This is the change that makes a library possible.
+| signal | is | `data-kind` |
+|---|---|---|
+| **point** | where in the frame you are looking, `vec2` | `p` |
+| **number** | anything scalar — a knob, a meter, the beat, `float` | `n` |
+| **colour** | a premultiplied `vec4` | `c` |
 
-Everything here used to read Link through the show, which is right on stage and exactly
-wrong at a desk: it made *Ableton running* a precondition for drawing a picture. You cannot
-build a library of looks you can only see during a rehearsal.
+Having exactly three types is what keeps the canvas legible: a cord's colour tells you what
+it carries, and the editor refuses a cord it cannot type rather than inventing a conversion.
 
-So [`useTransport`](../src/state/useTransport.ts) free-runs — a tempo, a play button, a
-restart — and can be told to follow the room when there is a room. Following is the option,
-not the fallback. It is a `Clock`, the same shape the compositor and the bench already
-take, so nothing downstream can tell whether the beat came from a laptop or from a stage.
-That is the point: what you build at a desk is what will play.
+Points are **centred and aspect-corrected** — zero in the middle, a circle round. `uncentred`
+and `recentred` are the pair that convert, and only the handful of effects whose maths was
+written in screen space ever touch them.
 
-The signals a look reads are hand-drivable too. Energy is a knob; the meter is either a
-held value or the beat envelope, and when it is generated a `Meter` shows it — a
-hand-driven signal can be a slider because you can see where you put it, and a generated
-one cannot.
+### Numbers are 0–1
 
-## The bench draws a stack, and it has to
+Every number a node produces is 0–1 unless it is `beat` or `time`, and every number a node
+*consumes* is read as 0–1 and mapped internally to whatever that node's useful range is.
 
-Not a nicety. Once the noun collapsed, **a transformer previewed on its own shows nothing**:
-it mixes against the black frame underneath and comes back black. Selecting one and seeing
-nothing would read as a broken look rather than as a look with nothing under it.
+This is the rule that makes the vocabulary composable: any outlet can go into any inlet and
+mean something, so wiring a meter straight into a kaleidoscope's segment count works without
+anyone having built a scaling node first. The cost is real — a node's internal range is its
+own business and is not visible on the canvas. The alternative is a patch bay of converters,
+which is how these things usually die.
 
-So the bench holds a stack, and the designer puts a base under a transformer for you. The
-stack is not a *preview of* a composition — it **is** one, drawn by the renderer the stage
-uses. Composition preview fell out of the collapse rather than being built beside it, which
-is usually the sign the collapse was right.
+It is also what lets **one control** serve every number inlet there is. `KNOB` in
+[`param.ts`](../src/ui/param.ts) is that control, and nothing has to declare a range to get
+one.
+
+### Unconnected inlets have answers, and a number's answer is yours
+
+Every inlet has an answer, so a half-wired graph still compiles and still draws. An unwired
+`point` inlet is **the point being asked about** and an unwired colour is transparent. An
+unwired **number** is a number — and it is a knob on the node's own face.
+
+That last one used to be a constant nobody could reach. A `posterize` has one inlet and one
+useful thing to say about it, and saying it meant dropping a `value` node, naming it and
+drawing a cord across the canvas to set a number that went nowhere else — a node and a wire
+to say *four steps*. The number is on the node now. It starts wherever the fallback
+already was, so nothing changes until you turn it, and a cord is what you draw when the
+number should come from somewhere rather than what you draw to have a number at all.
+
+Only what `out` can reach is emitted, so a node parked on the canvas while you decide where
+it goes costs nothing. That is not politeness, it is how these get built: you drop a node,
+look at what it did, and wire the next one. A compiler that treated an unfinished graph as
+an error would make the canvas unusable for exactly the way it gets used.
+
+**A set value rides a uniform, never the source.** Knob values are deliberately left out of
+the shader cache's signature so that dragging one does not recompile sixty times a second;
+a number written into the GLSL would hand that back at every inlet on the canvas, and what
+it reaches a person as is a knob that stalls the picture. So every set value gets a slot in
+`uParams` — the same bank a `value` node rides — and the **bank is cut to the graph**,
+because the shader is generated and can declare exactly the size this one needs. Giving an
+inlet a value for the first time recompiles once, since that is a change to the shader's
+shape. Turning it after that recompiles nothing. A look with no knobs at all still declares
+one float, because GLSL rejects a zero-length array.
+
+**Wiring is not a destructive gesture.** A wired inlet's number stays on the node, out of
+the bank while a cord is on top of it and back on the face the moment the cord goes. An
+inlet that snapped to its default when you unwired it would be one you stop experimenting
+with.
+
+**Only numbers are settable.** A point has no single control and a colour has no useful
+constant, so those two keep the answers they always had.
+
+**Two number inlets have no knob either**, and they are the two whose answer is already
+alive: an `energy` inlet reads the room, and a `wave`'s `phase` reads the beat. A knob there
+would offer to replace something moving with something that is not, which is a worse default
+than the one it replaced. Wire them, or leave them running.
+
+**A mode's inlets carry their values with them.** See below — it is the same rule cords get,
+one step quieter, and it matters more: a stray cord at least lights an outlet up, where a
+number stranded under a name no port answers to cannot be seen at all until the mode comes
+back and the picture changes for no reason. `setNode` drops those when a mode moves under
+them and `merge` drops them at the door, exactly as it does for a cord.
+
+**An unwired colour inlet is a no-op, in every mode.** `blend`'s `multiply` was the one
+exception and it did not survive: on premultiplied colour a plain `a * b` multiplies the
+coverages as well as the colours, so an empty `top` — `vec4(0.0)` — took the base out.
+All four modes are now written as the `blendFunc` the track pass gets them from, which also
+keeps the graph and the set agreeing about what `screen` means. See [the renderer](render.md).
+
+**A graph with nothing wired to `out` still compiles**, and draws transparent black, because
+that is the state every graph passes through on the way to being one. What it must not do is
+be *silent* about it: a canvas full of nodes drawing black is indistinguishable from a canvas
+full of nodes that is broken, and the difference is one cord. So the canvas says
+`nothing reaches out` under the graph and refuses nothing.
+
+## The vocabulary
+
+Grouped the way the browser groups them, which is `NODE_FAMILIES` in `protocol.ts` — two
+editors listing these differently would be two different vocabularies.
+
+### pictures — everything that makes a colour out of nothing
+
+| node | in | out | |
+|---|---|---|---|
+| `tracks` | `p` | `c` | **the Live set**: every playing track, drawn and mixed. Fire a scene, it changes |
+| `source` | `p` `energy` | `c` | one of eleven: `solid` `bars` `rings` `noise` `strobe` `grid` `tunnel` `plasma` `spiral` `scan` `sparks` |
+| `look` | `p` | `c` | another look, whole, as one node |
+| `paint` | `amount` `energy` | `c` | the colourway's colour at a brightness |
+
+### colour — everything that takes a picture and gives one back
+
+| node | in | out | |
+|---|---|---|---|
+| `effect` | `c` `energy` + its own knobs | `c` | one of twelve: `mirror` `kaleido` `shift` `pixelate` `ripple` `smear` `bloom` `slice` `edge` `posterize` `twist` `invert` |
+| `blend` | `base` `top` `amount` | `c` | `over` `add` `screen` `multiply` |
+| `hue` | `c` `shift` | `c` | rotate the colour without touching the shape |
+| `levels` | `c` `gain` `lift` | `c` | contrast and brightness; a half of each is neutral |
+
+### geometry — moving the point a picture is read at
+
+`point`, `fold`, `swirl`, `zoom`, `wobble`, `tile`, `polar`. Point in, point out, except
+`polar`, which is how a position becomes a number.
+
+### the room — what the music is doing
+
+| node | out | |
+|---|---|---|
+| `signal` | `n` | `level` `beat` `phase` `pulse` `time` `random` |
+| `track` | `level` | another track's meter, **by name**. Absolute: it breaks if the track is renamed |
+| `energy` | `n` | a meter, smoothed. See below |
+| `song` | `n` | `seed` `tempo` `key` `section` `sections` |
+
+`song key` is the musical one — the tonic as a pitch class over twelve, chromatic, with the
+mode dropped. Two songs in the same key get the same number on purpose, which is what makes
+it different from `seed`: it is the one song fact that is about *the music*, so a set wired
+key → hue draws a picture that modulates with it. The mode is dropped because a 0–1 number
+is a **position**, and there is nowhere honest to put a boolean in one — `Cm` between `C`
+and `C#` would jump the picture a semitone every time a song went minor. Chromatic rather
+than the circle of fifths for the matching reason: adjacent numbers should be adjacent
+pitches.
+
+The set states it as a name (`Bm`, `F#m`, `Db`), and a song whose scenes disagree renders as
+the collection `Bm / D`. `server/show.ts` reads that — the playing **scene's** key first,
+because a scene states one exactly when it departs from its song — and the first of a
+collection, because a song that modulates is in the first key when it starts.
+
+### numbers
+
+`math`, `wave`, and `value`.
+
+**`value` means one number in several places.** Every inlet has its own knob now, so a
+`value` node wired to exactly one of them is the long way round — it says nothing the number
+on the face does not, and costs a cord across the canvas to say it. What it still does, and
+nothing else can, is put *the same* number on two inlets at once: turn it and both move.
+`Weather` in the built-in library is wired that way on purpose, and it is the only knob node
+left in the four looks that ship.
+
+## `out` is one, required, and not in the browser
+
+Every look has **exactly one** `out`. It arrives with the look, it can be moved anywhere on
+the canvas, and it cannot be deleted — the faceplate has no `×` and `dropNode` refuses it, so
+the rule is the model's rather than the button's.
+
+It is also **not in the node browser**, which it used to be. The browser is built from the
+vocabulary and `out` is part of the vocabulary, but being part of the vocabulary and being
+something you *add* are different questions and only the second one a drawer answers.
+Dropping a second one was the single thing you could do from that browser that made a look
+stop compiling: a trap wearing a feature's clothes.
+
+**Where the rule is enforced is `merge` in `server/scheme.ts`**, and nowhere else. A scheme
+reaches the renderer exactly two ways — read off `scheme.json`, or sent up by an editor that
+gets it straight back down — and both come through that one function. So a look that arrived
+without an `out`, or with two, leaves it as a look and is written back that way the next time
+anything saves. The compiler keeps its two error messages as a backstop for a circuit nobody
+built, which is what a probe and a test are.
+
+The other thing repaired at the same door is a **cord addressed to a port that is not there**.
+See below.
+
+## A mode moves the inlets
+
+An `effect` node's inlets are its *mode's*: a `ripple` has `waves`, `depth` and `speed`; a
+`posterize` has `levels` and nothing else. Changing a mode therefore changes the shape of the
+node under whatever was already wired to it, and the cords that have nowhere to go are cut.
+
+They used not to be, and the symptom was not the cord — the canvas cannot draw a cord to a
+port that is not mounted, and the compiler ignores one addressed to an inlet that does not
+exist. What you saw was **an outlet lit up with no wire leaving it**, and a node visibly
+connected to something with no effect on the picture. Switching the mode back made the wire
+reappear, which makes it look like the editor rather than the graph.
+
+Cords are kept **by name**, so an inlet the new mode shares with the old one stays wired:
+`bloom` and `smear` both have a `reach`, and it is the same knob in both. The **values set
+on those inlets** are kept by name too, and dropped by name — a number left behind on an
+inlet the new mode does not have is invisible, and comes back to change the picture the next
+time somebody switches the mode back.
+
+## Energy is a node, not a level
+
+It used to be the one number the whole show agreed about: an archetype set it, a cascade
+biased it, and every shader read `uEnergy` without being asked. That made "energy" mean
+exactly one thing forever — where in practice it means whatever you decide, and the useful
+one is often a particular track's. **Bass energy** is a different picture from master energy
+and neither is more correct.
+
+So it is a node: a meter, an envelope, and a name that is yours. `rate`, `beatPulse`,
+`charge` and every generator take it as a **parameter**, and every `source` and `effect` has
+an `energy` inlet.
+
+It is computed on the CPU and banked into `uEnergies`, because an envelope follower has to
+remember what it saw last frame and a fragment shader cannot. Fast up, slow down — an
+envelope that fell as quickly as it rose would be the meter again, and the meter is already
+a node.
+
+`uEnergy` survives as **the room's** energy, a smoothed master meter, which is what an
+unwired energy inlet falls back to. A default, not a level.
+
+### It has no floor, and should not get one
+
+With nothing playing, `Show.master` is zero — so an `energy` node reading `master` is zero,
+`charge` takes about a fifth off the brightness, and `rate` picks the slowest rung it has.
+That is **right**: energy is a meter, and a meter with a floor under it cannot say *silence*,
+which is the one thing a section break needs it to say.
+
+What is not right is a look that is only alive when the room is loud, because most of the
+hours anyone spends in the designer are hours with no Live attached. The fix is in the wiring
+rather than in the number: **take the motion off the clock and let the meter add to it.**
+`phase`, `beat`, `pulse` and a `wave` all run whether or not anything is playing, since Link
+free-runs. The four looks that ship keep that rule, and it is the difference between a
+library that reads as calm at a desk and one that reads as broken.
+
+The bench and the node faces are already fed a hand-driven energy rather than the room's, for
+the same reason and from the other end.
+
+## The set is a pass, and it is the only one
+
+A `tracks` node draws the same picture once per playing Live track, with that track's colour,
+meter and fader each time. A fragment shader cannot loop over a varying number of those
+cheaply, so it stays a pass: every playing track into one target, which the look reads as a
+texture. It is the last surviving piece of the compositor this replaced, and the whole reason
+there is more than one pass left. See [the renderer](render.md).
+
+What each track draws is the node's mode: `by name` uses the [name hints](../hints.ts), and
+anything else draws every track the same way.
+
+**One `tracks` texture per frame.** Two `tracks` nodes with different modes in one look share
+the first one's, because a target per mode is a target per node and the win is small. Not
+built.
+
+## A look inside a look
+
+The graph a `look` node names is **pasted in around the node** before the compiler runs, with
+every id prefixed so two copies of one look cannot collide. Expanding rather than teaching
+the compiler about sub-looks is what keeps the compiler one thing: knobs, named tracks and
+energies all get their bank slots from the expanded graph without a second pass to gather
+them.
+
+**Around the node, not in place of it**, and that is the whole of why a `look` node has a
+point inlet that works. The sub-look's own `out` becomes a junction held on a reserved inlet
+— `~inner`, which the canvas hides because the flattener writes it and nobody else — and the
+node's one job is to read that junction at whatever point is wired into `p`. So a nested look
+can be folded, zoomed or tiled from outside exactly as a `source` can, and with nothing wired
+it is read where it is asked, which is identical to having pasted its nodes in by hand.
+
+Splicing the node out instead left the `p` cord addressed to a node that no longer existed:
+drawn across the canvas, looked up by nothing, changing nothing on the wall.
+
+A **loop is refused at the moment of wiring**, by `wouldLoop`, not at compile time. At
+compile time the honest message is "one of these seven looks contains itself", which nobody
+can act on; at the moment of dropping, the message is about the thing you just clicked. The
+compiler refuses one too, because a file can be hand-edited.
+
+**A cord that would loop inside one graph is refused the same way**, by `wouldFeedItself`.
+The compiler's guard is keyed by the node alone rather than by the node *and the point it is
+being read at* — a node is only ever reachable from its own inlets by going round a loop, and
+a loop with a geometry effect in it arrives at a different point every trip, so keying it by
+the pair caught nothing at all and the resolver descended until the stack gave out. What that
+reaches a person as is a page that has stopped rather than a sentence about their wiring.
+
+A look that has been deleted makes the node draw nothing rather than failing. A look you
+deleted should make the thing that used it go quiet, not stop the show.
+
+## The designer is the product
+
+Everything else this app does is arrangements of what gets made here.
+
+**Two browsers**, and the second is the change. The library lists your looks; the **node
+browser** lists the vocabulary. It is a device browser: the row is the **node**, and its
+**presets** open underneath it. See [the console](console.md) for the shape and what search
+has to keep reaching.
+
+A faceplate shows the **mode** rather than the kind, which is the same idea one step later:
+a node reading `source` above a dropdown reading `plasma` makes you read two things to learn
+one. Below that it shows a knob for every number inlet with nothing wired to it, which is
+what makes a node something you drop and dial rather than something you have to build a
+knob for.
+
+**The bench is a `Compositor`**, not a second renderer. There used to be one and it was a
+standing risk: a bench that could disagree with the stage about brightness or blend is worse
+than no bench, because those are exactly what you come here to judge. With no bridge it gets
+**stand-in tracks** driven off the beat, so a look built on the set is not black at a desk —
+which is precisely the situation the designer exists to work in.
+
+**It floats over the canvas** rather than sitting in a column beside it, which is a layout
+question with a real answer: a fixed sidebar takes its width from the narrowest thing in it,
+and the thing you are actually judging was getting 236 pixels while the graph kept the rest.
+See [the console](console.md) for that and for the group of controls above it.
+
+**It runs on its own room.** `useTransport` free-runs — a tempo, a play button, a restart —
+and `useRoom` invents the rest of the conditions a look reads: energy, section, colourway
+and key. Both can be told to take the real thing when there is one, and following is the
+option rather than the fallback. What comes out is a `Clock` and a `Show`, the same two
+shapes the compositor already takes, so nothing downstream can tell whether the beat came
+from a laptop or a stage or whether the chorus is really happening. That is the point: what
+you build at a desk is what will play.
 
 ## A picture on every node
 
 Each node face shows what *that node* has made, not a thumbnail of the finished look.
-[`probe.ts`](../src/ui/probe.ts) builds it by cutting the circuit off at one outlet and
-bringing the result back to a colour through `paint` or `sample` — the vocabulary's own two
-crossings — so a number is shown the way `paint` would show it.
+[`probe.ts`](../src/ui/probe.ts) builds it by cutting the graph off at one outlet and
+bringing the result back to a colour: a number through `paint`, a point through a `plasma`
+source, because a point's whole job is to move a picture and a picture with structure in it
+is one you can see moving.
 
-All of them come out of **one** GL context, blitted into a small 2D canvas per node.
-A context each is the obvious build and the wrong one: browsers keep about sixteen alive
-and start evicting the oldest, and this page already has a bench. That is also why
-`preview.ts` caches programs by signature in a map rather than one slot — one context
-cycling through a dozen defs a frame would otherwise recompile every one of them, every
-frame.
+All of them come out of **one** GL context, blitted into a small 2D canvas per node. A
+context each is the obvious build and the wrong one: browsers keep about sixteen alive and
+start evicting the oldest, and this page already has the stage and the bench. That is also
+why `preview.ts` caches programs by signature in a map rather than one slot.
 
-## Reading a file written before the collapse
+A node picture uses a **stand-in** for the Live set rather than the real one. It is a
+diagram — it answers "what does this node do to what it was given" — and threading the
+actual set through twelve tiny canvases would make every face flicker with whatever happened
+to be playing. The bench is where you judge the real thing.
 
-`server/scheme.ts` carries the old spelling forward: `effects` becomes `looks`, a layer's
-`source` and `effects` fold into one stack with the source first, and `maxEffects` gains
-one. Nothing is rewritten until someone saves, and then it is written in the new spelling.
-Reading old and writing new is the whole migration — refusing the file would mean losing a
-show to a rename.
+**A face gets the library, not just the graph.** A nested look is a *different* graph, so a
+`preview.ts` handed only a circuit had nothing to expand a `look` node against — which made
+that node's face black, and every face downstream of it black too, in a graph that drew
+perfectly well on the wall. A run of black diagrams down the middle of a working look is
+exactly the thing a node face exists to prevent.
+
+So the probe graph is parked under a reserved id and expanded by the **same** `flatten` the
+stage uses, rather than given an expander of its own. A face that disagreed with the bench
+about what a nested look draws would be worse than one that showed nothing, because it would
+be believed.
+
+**Clicking a face promotes it to the bench**, which is the other half of the same idea: 104
+by 34 pixels is enough to see *that* something is happening and nowhere near enough to see
+what. The only way to look properly used to be to wire the node into `out`, look, and wire it
+back — an edit, made to answer a question, on a graph that is the record.
+
+The two are not quite the same picture, and the difference is the point. The face runs on
+`preview.ts` with a stand-in set, a fixed colour and no pace, because a face is a diagram;
+promoted, the same `probeAt` graph runs on the **`Compositor`**, on the room and the
+colourway the bench is on. So a `tracks` node's face shows you what the node does and its
+promotion shows you what it is doing right now.
+
+`probeAt` is shared rather than reimplemented, so what gets bigger is the picture and not the
+reading of the node. It is [the console](console.md) that has to say which of the two you are
+looking at, and it does: a number and a point have no picture of their own, so what you get
+big is still a diagram, and a big diagram implies otherwise unless it says.
+
+## Reading a file written when the cascade existed
+
+`server/scheme.ts` carries forward what a **person made** and drops what the cascade decided.
+The colourways, which song draws from which, and any look that was a graph all survive.
+`layers`, `clips` and `archetypes` do not — inventing a graph out of a layer binding would
+produce something nobody wrote and nobody wants to debug.
+
+A look that was only a built-in is not carried either: a built-in is a node mode now, and a
+library full of twenty-three entries called "Ripple" that are one node each is worse than an
+empty one.
+
+Two node kinds changed meaning rather than disappearing. `sample` meant "the frame that
+arrived", which was the layer underneath in a stack — the nearest thing to that now is the
+set's own picture, so it becomes `tracks`. The `signal` modes `energy` and `amount` are gone
+and fall back to the meter, which is the signal they were most often standing in for.
 
 ## What is not built
 
-**A device parameter as a source.** A `track` node reaches another track's meter because
-the meter is already on the wire; a filter cutoff is not. The drawer says so rather than
-offering something that would silently read zero.
+**A device parameter as a source.** A `track` node reaches another track's meter because the
+meter is already on the wire; a filter cutoff is not. It needs the bridge to watch device
+parameters.
 
 **Notes and velocity.** The LOM exposes no played-note event and the bridge device is an
-audio effect. See [the cascade](mapping.md).
+audio effect. See [the wheel](wheel.md).
 
-**Saving a composition.** A stack lives in the designer and is not yet a thing you can name
-and recall. Where it goes is the open question — see the [brief](brief.md) on binding: the
-composition is what the renderer is showing, built by a cascade of looks, and it may never
-need to be an artifact of its own.
+**One track's picture as another's input.** A look reaches a track's *meter* and not its
+*frame*. That needs a render target per track, which the compositor does not keep.
+
+**Undo.** The scheme is replaced whole on every edit and the file is the record, so `git
+diff` is the undo — and the roll keeps one level of its own.

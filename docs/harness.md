@@ -49,6 +49,5 @@ real machine:
   outright in a background tab, so an automated screenshot reports 0 fps however well it is
   running.
 - **Link against Live**, including whether the tempo and the transport actually follow.
-- **Whether a real set derives well** — the track-name and role tables in
-  [the mapping](mapping.md) are guesses about how people name things until they meet a set
-  nobody wrote them for.
+- **Whether a real set draws well** — the track-name table in [`hints.ts`](../hints.ts) is a
+  guess about how people name things until it meets a set nobody wrote it for.
