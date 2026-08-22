@@ -86,9 +86,15 @@ describe('CPU number evaluation', () => {
     );
 
     expect(sample.outlet('v/n')).toBe(0.7);
-    expect(sample.inlet('m/a')).toBe(0.6);
+    // 0.3 + 1 × 0.6. A cord scales and offsets its inlet rather than replacing
+    // it, so the number under the cord is the floor the signal is carried up
+    // from. A raw circuit is read exactly as written; a *file* has been through
+    // `ranged` in `scheme.ts`, which puts an old dormant number at zero so the
+    // look drawn before any of this existed still draws the same.
+    expect(sample.inlet('m/a')).toBeCloseTo(0.9);
     expect(sample.inlet('m/b')).toBe(0.1);
-    expect(sample.outlet('m/n')).toBeCloseTo(0.7);
+    // 0.9 and 0.1, and `add` clamps.
+    expect(sample.outlet('m/n')).toBeCloseTo(1);
   });
 
   it('matches every playback uniform, including quantum phase and a seeded random hold', () => {

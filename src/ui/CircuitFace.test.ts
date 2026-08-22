@@ -24,6 +24,7 @@ function face(
       onSwap: noop,
       onChange: noop,
       onTurn: noop,
+      onRange: noop,
       onCut: noop,
       onDrop: noop,
     }),
@@ -54,7 +55,7 @@ describe('the node face anatomy', () => {
     expect(source).toContain('class="node-outlet-name">c</span>');
   });
 
-  it('keeps a driven number row and names its driver instead of its dormant value', () => {
+  it('leaves a driven number row live, because the number under a cord is its floor', () => {
     const circuit: Circuit = {
       nodes: [
         { id: 'w', kind: 'wave', op: 'pulse', x: 0, y: 0 },
@@ -65,9 +66,30 @@ describe('the node face anatomy', () => {
     const html = face(circuit.nodes[1], circuit, {
       'l/depth': { value: 0.73, display: '73 %' },
     });
-    expect(html).toContain('data-disabled=""');
+    // Not disabled. A cord used to replace the number under it, which made the
+    // row a control for something nobody could see; it carries the inlet *from*
+    // that number now, so the row is where you set the floor and the range.
+    expect(html).not.toContain('data-disabled=""');
     expect(html).toContain('<span class="wdg-readout">pulse · 73 %</span>');
+    // The floor it holds, not the live reading — that has the readout.
+    expect(html).toContain('aria-valuenow="81"');
     expect(html).toContain('aria-label="depth"');
+  });
+
+  it('draws a range only where a cord could use one', () => {
+    const wired: Circuit = {
+      nodes: [
+        { id: 'w', kind: 'wave', op: 'pulse', x: 0, y: 0 },
+        { id: 'l', kind: 'lens', op: 'ripple', values: { depth: 0.2 }, depths: { depth: 0.3 }, x: 1, y: 0 },
+      ],
+      cords: [{ from: 'w/n', to: 'l/depth' }],
+    };
+    expect(face(wired.nodes[1], wired)).toContain('wdg-slider-span');
+
+    // The same node with nothing wired in has no span and no mark: a range is
+    // a thing a signal is carried through, and there is no signal.
+    const bare: Circuit = { nodes: [wired.nodes[1]], cords: [] };
+    expect(face(bare.nodes[0], bare)).not.toContain('wdg-slider-span');
   });
 
   it('keeps a per-fragment driver honest without inventing a value or fill', () => {
@@ -79,10 +101,12 @@ describe('the node face anatomy', () => {
       cords: [{ from: 'p/angle', to: 'm/a' }],
     };
     const html = face(circuit.nodes[1], circuit, { 'm/a': {} });
-    expect(html).toContain('node-number-unreadable');
+    // `polar` is per-fragment, so no CPU reading exists. The readout names the
+    // driver and stops there rather than inventing a number, and the row still
+    // shows the floor, which is a number that genuinely is set.
     expect(html).toContain('<span class="wdg-readout">polar·angle</span>');
     expect(html).not.toContain('polar·angle ·');
-    expect(html).not.toContain('81 %');
+    expect(html).toContain('aria-valuenow="81"');
   });
 
   it('puts a fixed mode on the title and offers hot-swap there', () => {

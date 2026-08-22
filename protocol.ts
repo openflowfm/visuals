@@ -323,6 +323,24 @@ export interface CircuitNode {
    * `server/scheme.ts` carries those across.
    */
   values?: Record<string, number>;
+  /**
+   * How far a cord is allowed to move each inlet, signed. Keyed as `values` is.
+   *
+   * A cord used to *replace* the number under it, so a meter wired into an
+   * inlet swung it across the whole range and there was no way to say "pulse
+   * between a fifth and a half". With a depth the number stays where it was
+   * set and the signal moves it from there: `value + depth × signal`, clamped
+   * when it read.
+   *
+   * **Signed, because the sign is the polarity.** A positive depth carries the
+   * inlet up from its value, a negative one carries it down, and the same cord
+   * drives a lens one way or the other without a `math` node to invert it.
+   *
+   * Absent means one, which with a value of zero is exactly the replacement it
+   * replaced — that is what lets a look written before any of this existed draw
+   * the same picture.
+   */
+  depths?: Record<string, number>;
   /** A `value` node's number, 0–1. Spelled `value` because that is what the node is. */
   value?: number;
   /**

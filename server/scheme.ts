@@ -826,10 +826,42 @@ function swapValue(
  * **`smooth`**, because `value` is the number held by the node of that name.
  * Both run before the kind branches that reach for the new spellings.
  */
+/**
+ * A number that was sleeping under a cord, told that it is now the floor.
+ *
+ * Before a cord carried a range it simply replaced its inlet, and the number
+ * underneath was dormant — kept only so that unwiring gave it back. It is
+ * load-bearing now: a cord reads `value + depth × signal`, so the number that
+ * used to be ignored would quietly become an offset and a look written last
+ * month would draw differently this month.
+ *
+ * So a wired inlet arriving without a depth is written down as the replacement
+ * it was: floor at zero, depth of one. The dormant number is what that costs,
+ * and it is the right thing to spend — it was never on screen, and every other
+ * reading of it changes a picture somebody already made.
+ *
+ * Untouched once a depth exists, because then the file is already speaking the
+ * new language and its numbers mean what they say.
+ */
+function ranged(node: Was, wired: ReadonlySet<string>): Was {
+  if (!node.values) return node;
+  let values = node.values;
+  let depths = node.depths;
+  for (const name of Object.keys(node.values)) {
+    if (!wired.has(`${node.id}/${name}`)) continue;
+    if (depths?.[name] !== undefined) continue;
+    values = { ...values, [name]: 0 };
+    depths = { ...depths, [name]: 1 };
+  }
+  if (values === node.values) return node;
+  return { ...node, values, ...(depths ? { depths } : {}) };
+}
+
 function reword(circuit: Circuit): Circuit {
   const renamed = new Set<string>();
+  const wired = new Set(circuit.cords.map((cord) => cord.to));
   const nodes = circuit.nodes.map((raw): CircuitNode => {
-    const node = resmoothed(revalued(raw as Was));
+    const node = ranged(resmoothed(revalued(raw as Was)), wired);
     if (node.kind === 'sample') return { ...node, kind: 'tracks', op: 'by name' };
     if (node.kind === 'signal') {
       const op = node.op === 'energy' || node.op === 'amount' ? 'level' : node.op;

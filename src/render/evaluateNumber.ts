@@ -234,8 +234,19 @@ export function createNumberEvaluator(): NumberEvaluator {
 
         const from = feeds.get(id);
         let value: number | undefined;
-        if (from) value = readOutlet(from);
-        else if (port.at !== undefined) {
+        if (from) {
+          const signal = readOutlet(from);
+          // The same arithmetic the shader does, because a reading that
+          // disagreed with the picture would be worse than no reading: the row
+          // is what you set the range on, so it has to show where the range
+          // actually put the inlet. See `readAt` in `circuit.ts`.
+          if (signal === undefined) value = undefined;
+          else {
+            const base = node.values?.[name] ?? 0;
+            const depth = node.depths?.[name] ?? 1;
+            value = Math.max(0, Math.min(1, base + depth * signal));
+          }
+        } else if (port.at !== undefined) {
           value = inputs.params?.[id] ?? node.values?.[name] ?? port.at;
         } else if (port.fallback === 'uEnergy') value = inputs.show.master;
         else if (port.fallback === 'uBeat') value = inputs.beat;

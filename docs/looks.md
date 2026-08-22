@@ -113,15 +113,48 @@ inlet a number for the first time recompiles once, since that is a change to the
 shape. Turning it after that recompiles nothing. A look that sets nothing at all still
 declares one float, because GLSL rejects a zero-length array.
 
-**Wiring is not a destructive gesture.** A wired inlet's number stays on the node, out of
-the bank while a cord is on top of it and back on the face the moment the cord goes. An
-inlet that snapped to its default when you unwired it would be one you stop experimenting
-with. Its row stays too: the control is disabled and names the node driving it instead of
-showing the dormant number underneath. Keeping a stale reading visible would make the face
-look authoritative exactly when it is not.
+**Wiring is not a destructive gesture.** A wired inlet's number stays on the node and its
+row stays on the face. An inlet that snapped to its default when you unwired it would be
+one you stop experimenting with.
 
 **Only numbers are settable.** A point has no single control and a colour has no useful
 constant, so those two keep the answers they always had.
+
+### A cord carries an inlet; it does not replace it
+
+A cord into a number used to *be* the number: whatever arrived was what the inlet became,
+and the number underneath went dormant. So a meter wired into an inlet swung it across the
+whole range and there was no way to say *pulse between a fifth and a half* — the only way
+to narrow it was a `math` node, and the only way to invert it was another one.
+
+An inlet holds a **depth** as well as a value now, and a cord reads
+
+```
+value + depth × signal
+```
+
+clamped when it is read. The value is where the inlet sits; the depth is how far the signal
+may carry it, **signed**, so the sign is the polarity — a negative depth runs the same cord
+the other way with nothing wired in to do it.
+
+**A depth of one over a value of zero is exactly the replacement it replaced**, which is
+what a missing depth means, so a look written before any of this draws the same picture and
+costs the same slots. A wired inlet at that default takes no room in `uParams` at all;
+give it either half of a range and it takes a pair, both riding the bank so that turning
+one is never a recompile.
+
+Both are set on the row: drag for the value, **shift-drag for the range**, and the span is
+drawn from the value in the direction of the sign, so which side of the mark it falls on is
+the polarity you set. That is also why the row is no longer disabled under a cord. It was,
+on the argument that the number underneath was dormant and showing it would make the face
+look authoritative exactly when it was not — a good argument for what was true then. The
+number is load-bearing now, so the row is honest again, and the live reading moved to the
+readout where a number nobody can drag belongs.
+
+The reinterpretation is real enough to need a migration: a number sleeping under a cord in
+an older file is written down as a floor of zero with a depth of one, in `ranged` in
+`server/scheme.ts`. It costs that dormant number, which was never on screen — and every
+other reading of it would change a picture somebody already made.
 
 ### It was called a knob, and the word had to go
 

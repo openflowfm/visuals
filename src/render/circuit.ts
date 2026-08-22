@@ -995,6 +995,19 @@ export const tracksOf = (circuit: Circuit): CircuitTrack[] =>
  * reads, so the stored number is dormant — kept on the node so unwiring gives
  * it back, but costing no slot while a cord is on top of it.
  */
+/**
+ * Where an inlet's depth rides, given where its value rides.
+ *
+ * A suffix rather than a second map, so one list still describes the whole
+ * bank and everything downstream of it — the size, the writes, the trimming —
+ * keeps working without learning that some entries come in pairs. `/` is
+ * already the separator inside a port address, so nothing a person can type
+ * collides with this.
+ */
+export function depthId(port: string): string {
+  return `${port}/~depth`;
+}
+
 export function valuesOf(circuit: Circuit): CircuitValue[] {
   const wired = new Set(circuit.cords.map((cord) => cord.to));
   const values: CircuitValue[] = [];
@@ -1008,13 +1021,30 @@ export function valuesOf(circuit: Circuit): CircuitValue[] {
       });
       continue;
     }
-    if (!node.values) continue;
     for (const port of inletsOf(node)) {
-      const held = node.values[port.name];
-      if (port.at === undefined || held === undefined) continue;
+      if (port.at === undefined) continue;
       const id = portId(node.id, port.name);
-      if (wired.has(id)) continue;
-      values.push({ id, label: port.name, index: values.length, value: held });
+      const held = node.values?.[port.name];
+      if (!wired.has(id)) {
+        if (held === undefined) continue;
+        values.push({ id, label: port.name, index: values.length, value: held });
+        continue;
+      }
+      // A wired inlet sitting at zero with a full depth *is* a cord that
+      // replaces its inlet, so it costs no slot and compiles to what it always
+      // compiled to. Give it either half of a range and it takes a pair, both
+      // riding `uParams` so that turning one is never a recompile — and both
+      // together, so the pair a shader was built around cannot half-vanish.
+      const base = held ?? 0;
+      const depth = node.depths?.[port.name] ?? 1;
+      if (base === 0 && depth === 1) continue;
+      values.push({ id, label: port.name, index: values.length, value: base });
+      values.push({
+        id: depthId(id),
+        label: `${port.name} depth`,
+        index: values.length,
+        value: depth,
+      });
     }
   }
   return values;
@@ -1033,19 +1063,37 @@ export function valuesOf(circuit: Circuit): CircuitValue[] {
  * share a `reach`, and it is the same number in both.
  */
 export function keepValues(node: CircuitNode): CircuitNode {
-  if (!node.values) return node;
   const settable = new Map(inletsOf(node).map((port) => [port.name, port.at]));
+  let out = trimmed(node, 'values', settable);
+  out = trimmed(out, 'depths', settable);
+  return out;
+}
+
+/**
+ * One of a node's number maps, with every name no inlet answers to dropped.
+ *
+ * Both maps are keyed by inlet name and both go stale the same way — a mode
+ * change moves the inlets out from under them — so they are trimmed by the
+ * same walk rather than by two that could drift apart.
+ */
+function trimmed(
+  node: CircuitNode,
+  field: 'values' | 'depths',
+  settable: Map<string, number | undefined>,
+): CircuitNode {
+  const held = node[field];
+  if (!held) return node;
   const kept: Record<string, number> = {};
-  for (const [name, value] of Object.entries(node.values)) {
+  for (const [name, value] of Object.entries(held)) {
     if (settable.get(name) !== undefined) kept[name] = value;
   }
-  if (Object.keys(kept).length === Object.keys(node.values).length) return node;
-  if (Object.keys(kept).length > 0) return { ...node, values: kept };
+  if (Object.keys(kept).length === Object.keys(held).length) return node;
+  if (Object.keys(kept).length > 0) return { ...node, [field]: kept };
   // The field goes rather than emptying, because `scheme.json` is a file
   // somebody reads and diffs, and an empty map on every node it ever touched
   // is a page of noise saying nothing.
   const bare = { ...node };
-  delete bare.values;
+  delete bare[field];
   return bare;
 }
 
@@ -1240,10 +1288,25 @@ export function compileCircuit(circuit: Circuit): Compiled {
     const readAt = (inlet: string, where: string): string => {
       const wanted = inletsOf(node).find((p) => p.name === inlet);
       if (!wanted) return '0.0';
-      const from = feeds.get(portId(nodeId, inlet));
+      const id = portId(nodeId, inlet);
+      const from = feeds.get(id);
       if (!from) return answer(wanted, where);
       const source = splitPort(from);
-      return resolve(source.node, source.port, wanted.kind, where) ?? answer(wanted, where);
+      const signal = resolve(source.node, source.port, wanted.kind, where);
+      if (signal === null) return answer(wanted, where);
+      // A cord into a number is scaled and offset by the pair the inlet holds,
+      // rather than replacing it. A point and a colour have no such pair —
+      // there is no one control shape for either and nothing sensible to
+      // multiply — so they arrive as they left.
+      if (wanted.kind !== 'n') return signal;
+      const base = slot.get(id);
+      const depth = slot.get(depthId(id));
+      if (base === undefined || depth === undefined) return signal;
+      // Clamped here rather than where it is set, so a depth can be carried
+      // past the end of the range and still mean something when the value
+      // moves back under it. Bitwig's rule, and it is the one that makes a
+      // range you set once survive being slid around.
+      return `clamp(uParams[${base}] + uParams[${depth}] * ${signal}, 0.0, 1.0)`;
     };
 
     const ctx: Emitting = {

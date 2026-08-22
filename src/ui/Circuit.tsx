@@ -20,7 +20,7 @@ import {
   signalOf,
   wouldFeedItself,
 } from '../render/circuit.ts';
-import { connect, disconnect, dropNode, setValue, setNode } from './edits.ts';
+import { connect, disconnect, dropNode, setDepth, setValue, setNode } from './edits.ts';
 import { VALUE, PERCENT } from './param.ts';
 import { previewOutletOf } from './probe.ts';
 
@@ -140,6 +140,7 @@ export function CircuitEditor({
                 onSwap={onSwap}
                 onChange={(next) => onChange(setNode(circuit, node.id, next))}
                 onTurn={(inlet, value) => onChange(setValue(circuit, node.id, inlet, value))}
+                onRange={(inlet, depth) => onChange(setDepth(circuit, node.id, inlet, depth))}
                 onCut={(inlet) => onChange(disconnect(circuit, inlet))}
                 onDrop={() => onChange(dropNode(circuit, node.id))}
               />
@@ -188,6 +189,7 @@ export function NodeFace({
   onSwap,
   onChange,
   onTurn,
+  onRange,
   onCut,
   onDrop,
 }: {
@@ -202,6 +204,7 @@ export function NodeFace({
   onSwap?(id: string, kind: NodeKind): void;
   onChange(next: Partial<CircuitNode>): void;
   onTurn(inlet: string, value: number): void;
+  onRange(inlet: string, depth: number): void;
   onCut(inlet: string): void;
   onDrop(): void;
 }) {
@@ -352,27 +355,26 @@ export function NodeFace({
         ) : (
           <Slider
             param={VALUE}
-            value={PERCENT.to(
-              driver !== undefined && reading?.value !== undefined
-                ? reading.value
-                : (node.values?.[port.name] ?? port.at),
-            )}
+            // The number this inlet holds, wired or not. It used to show the
+            // live reading under a cord and go dead, on the argument that the
+            // number underneath was dormant and showing it would be a lie. A
+            // cord carries the inlet *from* this number now rather than
+            // replacing it, so it is not dormant, and the row is the only place
+            // the range can be set — the reading moved to the readout, where a
+            // number that is not yours to drag belongs.
+            value={PERCENT.to(node.values?.[port.name] ?? port.at)}
             onChange={(v) => onTurn(port.name, PERCENT.from(v))}
+            depth={driver === undefined ? undefined : (node.depths?.[port.name] ?? 1)}
+            onDepth={driver === undefined ? undefined : (d: number) => onRange(port.name, d)}
             name={port.name}
             orientation="horizontal"
             layout="inside"
-            disabled={driver !== undefined}
             display={
               driver === undefined
                 ? undefined
                 : reading?.display
                   ? `${driver} · ${reading.display}`
                   : driver
-            }
-            className={
-              driver !== undefined && reading?.value === undefined
-                ? 'node-number-unreadable'
-                : undefined
             }
           />
         ),

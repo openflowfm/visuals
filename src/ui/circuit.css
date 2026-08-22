@@ -155,8 +155,6 @@
   white-space: nowrap;
 }
 
-.node-number-unreadable .wdg-slider-fill,
-.node-number-unreadable .wdg-slider-thumb,
 .node-number-unreadable .wdg-meter-level {
   display: none;
 }

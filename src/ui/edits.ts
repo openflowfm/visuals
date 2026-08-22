@@ -190,6 +190,24 @@ export function setNode(
  * it. The control emits on every pointer move, so this is on the hot path and does
  * exactly one thing.
  */
+/**
+ * How far a cord may carry one inlet, signed.
+ *
+ * Beside `setValue` and not folded into it, because they are two numbers on one
+ * inlet and a caller always means exactly one of them. A depth of one is the
+ * default and the way a cord behaved before there were ranges, so it is written
+ * down rather than dropped — an absent depth and a depth of one mean the same
+ * thing to the compiler, and leaving the file to say which is how the two drift.
+ */
+export function setDepth(circuit: Circuit, id: string, inlet: string, depth: number): Circuit {
+  return {
+    ...circuit,
+    nodes: circuit.nodes.map((node) =>
+      node.id === id ? { ...node, depths: { ...node.depths, [inlet]: depth } } : node,
+    ),
+  };
+}
+
 export function setValue(circuit: Circuit, id: string, inlet: string, value: number): Circuit {
   return {
     ...circuit,
