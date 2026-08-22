@@ -271,6 +271,14 @@ export interface CircuitNode {
   x: number;
   y: number;
   /**
+   * Which outlet the node's picture and promoted bench show.
+   *
+   * Only meaningful on a node with more than one. Absent, or an outlet name a
+   * hand-edited file got wrong, falls back to the wiring-aware choice in
+   * `ui/probe.ts`, so adding this field changes no existing look.
+   */
+  previewOutlet?: string;
+  /**
    * The mode of a node that has one: a source name, an effect name, a maths op,
    * a wave shape, a signal name, a track name, a look id.
    *

@@ -465,10 +465,10 @@ describe('a file written when the cascade existed', () => {
   it('leaves a file already written in the new spelling alone', () => {
     const circuit = {
       nodes: [
-        { id: 'g', kind: 'source' as const, op: 'spiral', x: 0, y: 0 },
+        { id: 'p', kind: 'polar' as const, previewOutlet: 'angle', x: 0, y: 0 },
         { id: 'o', kind: 'out' as const, x: 200, y: 0 },
       ],
-      cords: [{ from: 'g/c', to: 'o/c' }],
+      cords: [],
     };
     const now = merge({
       looks: { mine: { name: 'Mine', circuit } },

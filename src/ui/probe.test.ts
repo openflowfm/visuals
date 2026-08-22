@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Circuit } from '../../protocol.ts';
-import { probeAt } from './probe.ts';
+import { previewOutletOf, probeAt } from './probe.ts';
 
 /**
  * The graph as it stands at one node's outlet.
@@ -42,6 +42,78 @@ describe('which outlet a face is a picture of', () => {
     // Through `paint`, because a number has no picture of its own — but of the
     // angle rather than the radius.
     expect(shownBy(circuit, 'pol')).toBe('~probe-bridge/c');
+    expect(probeAt(circuit, 'pol')?.cords).toContainEqual({
+      from: 'pol/angle',
+      to: '~probe-bridge/amount',
+    });
+  });
+
+  it('takes an explicit polar outlet even when the other one is wired', () => {
+    const circuit = wire(
+      [
+        { id: 'pol', kind: 'polar', previewOutlet: 'radius', x: 0, y: 0 },
+        { id: 'pa', kind: 'paint', x: 1, y: 0 },
+        { id: 'o', kind: 'out', x: 2, y: 0 },
+      ],
+      [
+        { from: 'pol/angle', to: 'pa/amount' },
+        { from: 'pa/c', to: 'o/c' },
+      ],
+    );
+    expect(previewOutletOf(circuit, 'pol')?.name).toBe('radius');
+    expect(probeAt(circuit, 'pol')?.cords).toContainEqual({
+      from: 'pol/radius',
+      to: '~probe-bridge/amount',
+    });
+  });
+
+  it('takes an explicit lens point even when its colour is wired', () => {
+    const circuit = wire(
+      [
+        { id: 's', kind: 'source', op: 'plasma', x: 0, y: 0 },
+        { id: 'l', kind: 'lens', op: 'zoom', previewOutlet: 'p', x: 1, y: 0 },
+        { id: 'o', kind: 'out', x: 2, y: 0 },
+      ],
+      [
+        { from: 's/c', to: 'l/c' },
+        { from: 'l/c', to: 'o/c' },
+      ],
+    );
+    expect(previewOutletOf(circuit, 'l')).toMatchObject({ name: 'p', kind: 'p' });
+    expect(probeAt(circuit, 'l')?.cords).toContainEqual({
+      from: 'l/p',
+      to: '~probe-bridge/p',
+    });
+  });
+
+  it('prefers a wired colour when more than one outlet is in use', () => {
+    const circuit = wire(
+      [
+        { id: 'l', kind: 'lens', op: 'zoom', x: 0, y: 0 },
+        { id: 's', kind: 'source', op: 'plasma', x: 1, y: 0 },
+        { id: 'o', kind: 'out', x: 2, y: 0 },
+      ],
+      [
+        { from: 'l/p', to: 's/p' },
+        { from: 'l/c', to: 'o/c' },
+      ],
+    );
+    expect(previewOutletOf(circuit, 'l')).toMatchObject({ name: 'c', kind: 'c' });
+  });
+
+  it('falls back harmlessly from an invalid explicit outlet', () => {
+    const circuit = wire(
+      [
+        { id: 'pol', kind: 'polar', previewOutlet: 'depth', x: 0, y: 0 },
+        { id: 'pa', kind: 'paint', x: 1, y: 0 },
+        { id: 'o', kind: 'out', x: 2, y: 0 },
+      ],
+      [
+        { from: 'pol/angle', to: 'pa/amount' },
+        { from: 'pa/c', to: 'o/c' },
+      ],
+    );
+    expect(previewOutletOf(circuit, 'pol')?.name).toBe('angle');
     expect(probeAt(circuit, 'pol')?.cords).toContainEqual({
       from: 'pol/angle',
       to: '~probe-bridge/amount',

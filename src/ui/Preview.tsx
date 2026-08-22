@@ -7,12 +7,11 @@ import {
 } from 'react';
 import type { Circuit, CircuitNode, Scheme, Show } from '../../protocol.ts';
 import { Button } from '../../../widgets/src/controls/Button.tsx';
-import { NODE_SPECS } from '../render/circuit.ts';
 import { createCompositor } from '../render/compositor.ts';
 import { inside, usePlace, type Place } from '../state/usePlace.ts';
 import { withStandIns } from '../state/useRoom.ts';
 import type { Clock } from '../state/useShow.ts';
-import { probeAt } from './probe.ts';
+import { previewOutletOf, probeAt } from './probe.ts';
 
 /**
  * The bench: the look you are editing, drawn by the renderer the wall uses.
@@ -133,8 +132,8 @@ const EMPTY: Circuit = { nodes: [], cords: [] };
  * **diagram** of a signal rather than a frame. A big one implies otherwise
  * unless it says.
  */
-function showing(node: CircuitNode): string {
-  const outlet = NODE_SPECS[node.kind].outlets[0]?.kind;
+function showing(circuit: Circuit, node: CircuitNode): string {
+  const outlet = previewOutletOf(circuit, node.id)?.kind;
   return [
     'one node',
     // Kind and mode both, the way a faceplate shows them: a header reading
@@ -304,7 +303,9 @@ export function FloatingBench({
         onPointerDown={grab(false)}
         title="Drag to move the picture"
       >
-        <span className="cap">{probing ? showing(probing) : 'the picture'}</span>
+        <span className="cap">
+          {probing ? showing(scheme.looks[look]?.circuit ?? EMPTY, probing) : 'the picture'}
+        </span>
         <span className="gap" />
         <span className="cap">{aside}</span>
         {probing && (

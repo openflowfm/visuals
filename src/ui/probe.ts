@@ -1,5 +1,34 @@
 import type { Circuit } from '../../protocol.ts';
-import { NODE_SPECS, splitPort } from '../render/circuit.ts';
+import { NODE_SPECS, splitPort, type PortSpec } from '../render/circuit.ts';
+
+/**
+ * Which outlet a node's picture shows.
+ *
+ * An explicit, valid choice always wins. A node saved before there was one
+ * keeps the previous behaviour: a wired colour first, then the first wired
+ * outlet in declaration order, then the first outlet. An invalid explicit
+ * name is treated exactly like an absent one, which makes a hand-edited file
+ * visibly useful rather than silently black.
+ */
+export function previewOutletOf(circuit: Circuit, nodeId: string): PortSpec | undefined {
+  const node = circuit.nodes.find((each) => each.id === nodeId);
+  if (!node) return undefined;
+  const outlets = NODE_SPECS[node.kind].outlets;
+  const explicit = outlets.find((port) => port.name === node.previewOutlet);
+  if (explicit) return explicit;
+
+  const wired = new Set(
+    circuit.cords
+      .map((cord) => splitPort(cord.from))
+      .filter((port) => port.node === nodeId)
+      .map((port) => port.port),
+  );
+  return (
+    outlets.find((port) => port.kind === 'c' && wired.has(port.name)) ??
+    outlets.find((port) => wired.has(port.name)) ??
+    outlets[0]
+  );
+}
 
 /**
  * The graph as it stands at one node's outlet — what that node has made.
@@ -16,24 +45,7 @@ export function probeAt(circuit: Circuit, nodeId: string): Circuit | null {
   // `out` has no outlet of its own, so its picture is the whole graph's.
   if (node.kind === 'out') return circuit;
 
-  // The outlet somebody is **using**, not the first one declared.
-  //
-  // `polar` has two — a radius and an angle — and a face that always showed the
-  // radius would be showing the wrong number for half the graphs that contain
-  // one, silently, with no way to tell from the picture. Colour first when two
-  // are wired, because a colour has a picture of its own and a number only ever
-  // gets a diagram of one.
-  const outlets = NODE_SPECS[node.kind].outlets;
-  const wired = new Set(
-    circuit.cords
-      .map((cord) => splitPort(cord.from))
-      .filter((port) => port.node === nodeId)
-      .map((port) => port.port),
-  );
-  const outlet =
-    outlets.find((port) => port.kind === 'c' && wired.has(port.name)) ??
-    outlets.find((port) => wired.has(port.name)) ??
-    outlets[0];
+  const outlet = previewOutletOf(circuit, nodeId);
   if (!outlet) return null;
 
   const from = `${nodeId}/${outlet.name}`;
