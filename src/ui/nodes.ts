@@ -58,7 +58,7 @@ export interface Pick {
   /** Which thing in the set, for a row that names one. See `CircuitNode.of`. */
   of?: string;
   /** What a preset sets on the node's own inlets. */
-  knobs?: Record<string, number>;
+  values?: Record<string, number>;
   about: string;
   family: string;
   /** For the search box: everything worth matching on, lowercased. */
@@ -126,14 +126,14 @@ const ABOUT: Record<string, string> = {
 /**
  * The presets that are more than a mode.
  *
- * Most are not, and that is honest rather than lazy: a knob's middle is where
+ * Most are not, and that is honest rather than lazy: the middle is where
  * these were tuned to sit, so a preset that set every one of them to a half
  * would be a preset that said nothing. `posterize` is the one where the middle
  * is plainly wrong — eight steps is invisible on a projector, and the effect is
  * named after the poster — and it is also the example that started this: an
  * effect you should be able to drop and have *do* something.
  */
-const PRESET_KNOBS: Record<string, Record<string, number>> = {
+const PRESET_VALUES: Record<string, Record<string, number>> = {
   posterize: { steps: 0.78 },
 };
 
@@ -162,14 +162,14 @@ export function palette(scheme: Scheme, tracks: readonly string[]): Entry[] {
     op: string | undefined,
     label: string,
     about: string,
-    knobs?: Record<string, number>,
+    values?: Record<string, number>,
     of?: string,
   ): Pick => ({
     label,
     kind,
     op,
     ...(of ? { of } : {}),
-    ...(knobs ? { knobs } : {}),
+    ...(values ? { values } : {}),
     about,
     family: family(kind),
     // The kind is in here as well as the mode, so `sine wave` and `song key`
@@ -189,12 +189,12 @@ export function palette(scheme: Scheme, tracks: readonly string[]): Entry[] {
 
   // Values only here, because only a *mode* is a preset. A track called
   // `posterize` is a target that happens to spell one, and handing it a set of
-  // knobs an inlet has never heard of is the kind of coincidence that survives
+  // numbers an inlet has never heard of is the kind of coincidence that survives
   // into a file.
   const modes = (kind: NodeKind, label: string, ops: readonly string[]) => {
     out.push({
       node: pick(kind, undefined, label, NODE_SPECS[kind].about),
-      presets: ops.map((op) => pick(kind, op, op, ABOUT[op] ?? '', PRESET_KNOBS[op])),
+      presets: ops.map((op) => pick(kind, op, op, ABOUT[op] ?? '', PRESET_VALUES[op])),
     });
   };
 
@@ -247,7 +247,7 @@ export function palette(scheme: Scheme, tracks: readonly string[]): Entry[] {
   modes('song', 'song', SONG_FACTS);
 
   // Numbers.
-  node('value', undefined, 'knob', NODE_SPECS.value.about);
+  node('value', undefined, 'value', NODE_SPECS.value.about);
   modes('math', 'math', MATH_OPS);
   modes('wave', 'wave', WAVE_SHAPES);
 
@@ -284,10 +284,10 @@ export function drop(circuit: Circuit, pick: Pick): Circuit {
         kind: pick.kind,
         ...(op ? { op } : {}),
         // Copied, or every node dropped from that preset would share one map
-        // and turning a knob on one would turn it on all of them.
-        ...(pick.knobs ? { knobs: { ...pick.knobs } } : {}),
+        // and turning one of them would turn it on all of them.
+        ...(pick.values ? { values: { ...pick.values } } : {}),
         ...(pick.of ? { of: pick.of } : {}),
-        ...(pick.kind === 'value' ? { value: 0.5, label: 'knob' } : {}),
+        ...(pick.kind === 'value' ? { value: 0.5, label: 'value' } : {}),
         x: 60 + (at % 4) * 200,
         y: 60 + Math.floor(at / 4) * 220,
       },

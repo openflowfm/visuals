@@ -177,7 +177,7 @@ export function useShow(): {
   // all. A meter arriving on an anchor updates the ref and nothing re-renders,
   // which is the whole reason levels don't wake a diff on the server either.
   const save = useRef((next: Scheme) => {
-    // Optimistic, so a knob follows the pointer rather than the round trip.
+    // Optimistic, so a control follows the pointer rather than the round trip.
     // The server answers with what it resolved, which is what finally sticks.
     setScheme(next);
     const socket = live.current;

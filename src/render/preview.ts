@@ -87,7 +87,7 @@ interface Built {
 /**
  * How many probe shaders to keep before dropping the oldest.
  *
- * A face is cached by what it was compiled from, so turning a knob costs
+ * A face is cached by what it was compiled from, so turning a number costs
  * nothing and every structural edit costs one more entry — which over an
  * evening's building is thousands. Far above a canvas's worth of nodes, so the
  * only thing ever evicted is a graph that no longer exists.

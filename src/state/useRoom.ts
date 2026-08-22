@@ -152,7 +152,7 @@ export function useRoom(show: Show, scheme: Scheme, transport: Transport): Room 
       tempo: transport.bpm,
       quantum: transport.quantum,
       // `uEnergy` is the room's energy — the default an unwired energy inlet
-      // falls back to — so the knob is the master meter rather than a fifth
+      // falls back to — so the control is the master meter rather than a fifth
       // signal beside it.
       master: energy,
       colorway: way || null,

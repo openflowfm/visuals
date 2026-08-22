@@ -116,11 +116,11 @@ function palette(rng: Rng): string[] {
  * The `lens` modes a roll wires, and the inlet each one drives.
  *
  * This was a hand-written table of five node kinds, because the five geometry
- * kinds were five kinds with five different knob names and nothing in the
+ * kinds were five kinds with five different inlet names and nothing in the
  * vocabulary said they were a set. They are one node's modes now, so what is
- * left here is only the part a roll actually needs: which knob to reach for.
+ * left here is only the part a roll actually needs: which number to reach for.
  */
-const LENS_KNOB: Record<string, string> = {
+const LENS_VALUE: Record<string, string> = {
   zoom: 'by',
   swirl: 'turn',
   fold: 'sides',
@@ -134,8 +134,8 @@ const LENS_KNOB: Record<string, string> = {
   pixelate: 'blocks',
 };
 
-/** The knob a rolled `grade` drives, one per mode. */
-const GRADE_KNOB: Record<string, string> = {
+/** The number a rolled `grade` drives, one per mode. */
+const GRADE_VALUE: Record<string, string> = {
   levels: 'gain',
   hue: 'shift',
   posterize: 'steps',
@@ -176,12 +176,12 @@ export function rollCircuit(rng: Rng): Circuit {
   };
   const wire = (from: string, to: string) => cords.push({ from, to });
 
-  let knobs = 0;
-  /** Whatever drives an amount: a knob, an envelope, a meter, or a shape on one. */
+  let values = 0;
+  /** Whatever drives an amount: a `value` node, an envelope, a meter, or a shape. */
   const drive = (x: number, y: number, into: string) => {
     const roll = rng();
-    if (roll < 0.35 && knobs < 4) {
-      knobs += 1;
+    if (roll < 0.35 && values < 4) {
+      values += 1;
       const from = add({
         kind: 'value',
         x,
@@ -230,7 +230,7 @@ export function rollCircuit(rng: Rng): Circuit {
     const x = at();
     const node = add({ kind: 'lens', op, x, y: 20 });
     wire(carry, `${node}/p`);
-    drive(x, 210 + (next % 2) * 150, `${node}/${LENS_KNOB[op]}`);
+    drive(x, 210 + (next % 2) * 150, `${node}/${LENS_VALUE[op]}`);
     carry = `${node}/p`;
   }
 
@@ -266,7 +266,7 @@ export function rollCircuit(rng: Rng): Circuit {
     const op = pick(rng, GRADE_MODES);
     const node = add({ kind: 'grade', op, x, y: 20 });
     wire(carry, `${node}/c`);
-    drive(x, 210, `${node}/${GRADE_KNOB[op]}`);
+    drive(x, 210, `${node}/${GRADE_VALUE[op]}`);
     carry = `${node}/c`;
   }
 

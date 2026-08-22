@@ -66,15 +66,15 @@ varies inside the graph — a `blend` node is right there.
 **The look reads the scheme every frame**, because a look is a graph and what a graph
 compiles to is the scheme's to say. Resolving that on the server would mean shipping a shader
 down the wire on every edit; doing it here means a look recompiles the moment its wiring
-changes and never when only a knob moved. The cache signature walks the **expanded** graph,
+changes and never when only a number moved. The cache signature walks the **expanded** graph,
 so editing a look changes the signature of every look that contains it.
 
-`uParams` is the bank the knobs ride in — a `value` node's amount and every number set on an
+`uParams` is the bank the numbers ride in — a `value` node's amount and every number set on an
 inlet — and it is **declared at the size the graph needs**, since the shader is generated.
 Giving an inlet a number for the first time is a change to the shader's shape and recompiles
-once; every turn of it after that recompiles nothing, which is the whole reason a knob is a
-uniform. `uTracks` is a second bank, of eight, filled only for a look that **named** a track — and
-filled on the CPU, both because a name has to be resolved against the set and because a
+once; every turn of it after that recompiles nothing, which is the whole reason a set number
+is a uniform. `uTracks` is a second bank, of eight, filled only for a look that **named** a
+track — and filled on the CPU, both because a name has to be resolved against the set and because a
 `track` node's smoothing is an envelope follower, which has to remember what it saw last
 frame. There used to be a third bank for those; `track` and `energy` are one node now, so
 what goes in a slot is that node's business and the shader reads a number without learning
@@ -134,7 +134,7 @@ a node draws cannot drift.
 
 Adding a *way to work on one* means picking which of the three it is, and that choice is now
 the node it goes in rather than a shape hidden inside a twelve-entry table. A `lens` mode is
-a row in `LENS_KNOBS` and a one-line function of a point in `LENS_POINT`. A `grade` is the
+a row in `LENS_VALUES` and a one-line function of a point in `LENS_POINT`. A `grade` is the
 same, one line of colour. A `spread` needs the compiler's `readAt`, which is exactly what
 makes it the family that can run out of budget.
 
@@ -294,7 +294,7 @@ a dropped frame at the worst possible moment. So each look compiles the first ti
 asked for and is held for the life of the page.
 
 A look is held against a **signature** of what it was built from — the node kinds, modes and
-cords of the **expanded** graph, sub-looks included. Node positions and knob values are
+cords of the **expanded** graph, sub-looks included. Node positions and set numbers are
 deliberately absent, or dragging a node would rebuild a shader sixty times a second.
 Expanding first is what makes a nested edit visible: signing only the top graph would leave
 an edit to a look-inside-a-look invisible until something else forced a rebuild.
@@ -324,7 +324,8 @@ face to see it bigger gave you a different picture and no way to know why.
 gain; a node face gets neither. Everything above that line is one list.
 
 The banks are re-read **every frame** rather than kept beside the program, and that is what
-`banksOf` is for. Two of the three change without the shader changing: a knob's value is a
+`banksOf` is for. Two of the three change without the shader changing: a number set on an
+inlet is a
 uniform, and so is a `track` node's smoothing — which, held from compile time, left that
 one control doing nothing until something else forced a rebuild.
 
@@ -347,7 +348,7 @@ are the frame's own edges in both axes on any window.
 
 The plane is `vUv - 0.5` with the x scaled by the aspect, so a 16:9 frame runs ±0.5 up and
 down and about ±0.89 across. A hand-written `(n - 0.5) * 2.0` therefore overshoots — the
-whole picture is in the middle *half* of the knob's travel vertically and the middle 89% of
+whole picture is in the middle *half* of the control's travel vertically and the middle 89% of
 it horizontally, and those two are not the same fraction, so the same turn of `x` and of `y`
 moves a different distance. `recentred` is the helper that already knows the frame's shape,
 and using it means the ends of the travel are the ends of the picture. See [looks](looks.md).

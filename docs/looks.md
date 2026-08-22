@@ -59,7 +59,7 @@ and [the roll](wheel.md) deliberately never wires those four.
 | signal | is | `data-kind` |
 |---|---|---|
 | **point** | where in the frame you are looking, `vec2` | `p` |
-| **number** | anything scalar — a knob, a meter, the beat, `float` | `n` |
+| **number** | anything scalar — one you set, a meter, the beat, `float` | `n` |
 | **colour** | a premultiplied `vec4` | `c` |
 
 Having exactly three types is what keeps the canvas legible: a cord's colour tells you what
@@ -80,7 +80,7 @@ anyone having built a scaling node first. The cost is real — a node's internal
 own business and is not visible on the canvas. The alternative is a patch bay of converters,
 which is how these things usually die.
 
-It is also what lets **one control** serve every number inlet there is. `KNOB` in
+It is also what lets **one control** serve every number inlet there is. `VALUE` in
 [`param.ts`](../src/ui/param.ts) is that control, and nothing has to declare a range to get
 one.
 
@@ -88,7 +88,7 @@ one.
 
 Every inlet has an answer, so a half-wired graph still compiles and still draws. An unwired
 `point` inlet is **the point being asked about** and an unwired colour is transparent. An
-unwired **number** is a number — and it is a knob on the node's own face.
+unwired **number** is a number — and it is on the node's own face.
 
 That last one used to be a constant nobody could reach. A `posterize` has one inlet and one
 useful thing to say about it, and saying it meant dropping a `value` node, naming it and
@@ -102,15 +102,15 @@ it goes costs nothing. That is not politeness, it is how these get built: you dr
 look at what it did, and wire the next one. A compiler that treated an unfinished graph as
 an error would make the canvas unusable for exactly the way it gets used.
 
-**A set value rides a uniform, never the source.** Knob values are deliberately left out of
+**A set number rides a uniform, never the source.** These are deliberately left out of
 the shader cache's signature so that dragging one does not recompile sixty times a second;
 a number written into the GLSL would hand that back at every inlet on the canvas, and what
-it reaches a person as is a knob that stalls the picture. So every set value gets a slot in
+it reaches a person as is a control that stalls the picture. So every set number gets a slot in
 `uParams` — the same bank a `value` node rides — and the **bank is cut to the graph**,
 because the shader is generated and can declare exactly the size this one needs. Giving an
-inlet a value for the first time recompiles once, since that is a change to the shader's
-shape. Turning it after that recompiles nothing. A look with no knobs at all still declares
-one float, because GLSL rejects a zero-length array.
+inlet a number for the first time recompiles once, since that is a change to the shader's
+shape. Turning it after that recompiles nothing. A look that sets nothing at all still
+declares one float, because GLSL rejects a zero-length array.
 
 **Wiring is not a destructive gesture.** A wired inlet's number stays on the node, out of
 the bank while a cord is on top of it and back on the face the moment the cord goes. An
@@ -120,10 +120,33 @@ with.
 **Only numbers are settable.** A point has no single control and a colour has no useful
 constant, so those two keep the answers they always had.
 
-**Two number inlets have no knob either**, and they are the two whose answer is already
-alive: an `energy` inlet reads the room, and a `wave`'s `phase` reads the beat. A knob there
-would offer to replace something moving with something that is not, which is a worse default
-than the one it replaced. Wire them, or leave them running.
+### It was called a knob, and the word had to go
+
+The number a node holds on one of its inlets was a **knob** — `CircuitNode.knobs`, `KNOB_AT`,
+`LENS_KNOBS`, a `value` node the browser listed as *knob*. It is **`values`** now, everywhere.
+
+A knob is the shape of a control. It is a fine name for the thing `widgets` draws — that
+component is still `Knob` and should be — but it is the wrong name for what a look *holds*,
+because the same number is a knob on a face, a float in `uParams`, a key in a JSON file and,
+the moment a cord lands on it, nothing you can see at all. Naming the stored number after
+one of the four places it shows up made the other three read as exceptions, and it put a
+noun from the front end into the file format.
+
+The one thing to know reading the code is that **`CircuitNode.value` and
+`CircuitNode.values` are one letter apart and are not the same idea.** `values` is keyed by
+inlet name and trimmed against the inlets a node has; `value` is a `value` node's amount or a
+`track` node's smoothing, neither of which is an inlet at all. They are different types as
+well as different fields, so confusing them is a compile error rather than a quiet wrong
+number.
+
+Every file already written says `knobs`, so `reword` in `server/scheme.ts` carries them
+across at the one door every scheme comes through, and drops the old spelling rather than
+leaving both — see below on reading an old file.
+
+**Two number inlets have nothing to set either**, and they are the two whose answer is
+already alive: an `energy` inlet reads the room, and a `wave`'s `phase` reads the beat. A
+number there would offer to replace something moving with something that is not, which is a
+worse default than the one it replaced. Wire them, or leave them running.
 
 **A mode's inlets carry their values with them.** See below — it is the same rule cords get,
 one step quieter, and it matters more: a stray cord at least lights an outlet up, where a
@@ -161,8 +184,8 @@ editors listing these differently would be two different vocabularies.
 
 | node | in | out | |
 |---|---|---|---|
-| `grade` | `c` + its mode's knobs | `c` | `levels` `hue` `posterize` `invert` |
-| `spread` | `c` `energy` + its mode's knobs | `c` | `bloom` `smear` `edge` `shift` |
+| `grade` | `c` + its mode's numbers | `c` | `levels` `hue` `posterize` `invert` |
+| `spread` | `c` `energy` + its mode's numbers | `c` | `bloom` `smear` `edge` `shift` |
 | `blend` | `base` `top` `amount` | `c` | `over` `add` `screen` `multiply` |
 
 ### geometry — moving the point a picture is read at
@@ -171,7 +194,7 @@ editors listing these differently would be two different vocabularies.
 |---|---|---|---|
 | `point` | — | `p` | where this fragment is being read |
 | `place` | `x` `y` | `p` | how two numbers become a position |
-| `lens` | `p` `c` `energy` + its mode's knobs | `p` `c` | `zoom` `swirl` `fold` `wobble` `tile` `mirror` `kaleido` `twist` `ripple` `slice` `pixelate` |
+| `lens` | `p` `c` `energy` + its mode's numbers | `p` `c` | `zoom` `swirl` `fold` `wobble` `tile` `mirror` `kaleido` `twist` `ripple` `slice` `pixelate` |
 | `polar` | `p` | `radius` `angle` | how a position becomes a number |
 
 ### `place` is the other direction, and it was missing
@@ -201,7 +224,7 @@ node's own face is a flat square.
 genuine second answer, and the substitution rule is what says it cannot be a mode of this
 one: *would you flick between these two with the picture up and no cords moving?* No — `x`
 and `y` are the only inlets there are, so a flick to `radius`/`angle` cuts **every cord on
-the node**. That is what separates it from `lens`, where eleven modes rename their knobs
+the node**. That is what separates it from `lens`, where eleven modes rename their numbers
 freely and the picture and the point stay wired throughout. A mode moving the trim is the
 rule working; a mode moving the whole signal path is a change of wiring wearing a dropdown.
 
@@ -260,8 +283,8 @@ the seam was in the wrong place twice.
 
 `energy` was `track` with an envelope on it: same signature, same bank, named the same way,
 differing by one number that happened to be computed on a CPU. Two rows in a browser for one
-question, and two uniform banks for what is almost always two floats. It is a **knob** now,
-and at zero it is the number itself.
+question, and two uniform banks for what is almost always two floats. It is a **number on
+`track`** now, and at zero it is the meter itself.
 
 `signal` sat next to `song`, which was also, unhelpfully, a signal. What separates them is
 not where the number comes from but what you are asking: `playback` is where the music *is*,
@@ -292,12 +315,12 @@ collection, because a song that modulates is in the first key when it starts.
 
 `math`, `wave`, and `value`.
 
-**`value` means one number in several places.** Every inlet has its own knob now, so a
+**`value` means one number in several places.** Every inlet holds its own number now, so a
 `value` node wired to exactly one of them is the long way round — it says nothing the number
 on the face does not, and costs a cord across the canvas to say it. What it still does, and
 nothing else can, is put *the same* number on two inlets at once: turn it and both move.
-`Weather` in the built-in library is wired that way on purpose, and it is the only knob node
-left in the ten looks that ship.
+`Weather` in the built-in library is wired that way on purpose, and it is the only `value`
+node left in the ten looks that ship.
 
 ## `out` is one, required, and not in the browser
 
@@ -334,7 +357,7 @@ connected to something with no effect on the picture. Switching the mode back ma
 reappear, which makes it look like the editor rather than the graph.
 
 Cords are kept **by name**, so an inlet the new mode shares with the old one stays wired:
-`bloom` and `smear` both have a `reach`, and it is the same knob in both. The **values set
+`bloom` and `smear` both have a `reach`, and it is the same number in both. The **numbers set
 on those inlets** are kept by name too, and dropped by name — a number left behind on an
 inlet the new mode does not have is invisible, and comes back to change the picture the next
 time somebody switches the mode back.
@@ -347,18 +370,18 @@ exactly one thing forever — where in practice it means whatever you decide, an
 one is often a particular track's. **Bass energy** is a different picture from master energy
 and neither is more correct.
 
-So it is a node — and then it stopped being one. It is a **knob on `track`**, because a
+So it is a node — and then it stopped being one. It is a **number on `track`**, because a
 meter with an envelope on it is a `track` node with its smoothing turned up, and a node whose
-only difference from another node is one number is a mode of that node. At zero the knob is
-the number itself, which is exactly what `track` always did.
+only difference from another node is one number is a mode of that node. At zero it is the
+number itself, which is exactly what `track` always did.
 
 `rate`, `beatPulse`, `charge` and every generator take an energy as a **parameter**, and
 every mode that reads one has an `energy` inlet — so what you wire in is yours.
 
 The envelope is computed on the CPU and banked into `uTracks`, because an envelope follower
 has to remember what it saw last frame and a fragment shader cannot. Fast up, slow down — one
-that fell as quickly as it rose would be the meter again, and the meter is the same knob at
-zero.
+that fell as quickly as it rose would be the meter again, and the meter is that same number
+at zero.
 
 `uEnergy` survives as **the room's** energy, a smoothed master meter, which is what an
 unwired energy inlet falls back to. A default, not a level.
@@ -377,7 +400,7 @@ rather than in the number: **take the motion off the clock and let the meter add
 free-runs. The ten looks that ship keep that rule, and it is the difference between a
 library that reads as calm at a desk and one that reads as broken.
 
-The bench and the node faces are both fed the **room's** energy — the knob on the designer's
+The bench and the node faces are both fed the **room's** energy — the control on the designer's
 own bar — for the same reason and from the other end: it is a condition you can dial rather
 than one you have to wait for.
 
@@ -400,7 +423,7 @@ built.
 
 The graph a `look` node names is **pasted in around the node** before the compiler runs, with
 every id prefixed so two copies of one look cannot collide. Expanding rather than teaching
-the compiler about sub-looks is what keeps the compiler one thing: knobs, named tracks and
+the compiler about sub-looks is what keeps the compiler one thing: set numbers, named tracks and
 energies all get their bank slots from the expanded graph without a second pass to gather
 them.
 
@@ -445,9 +468,9 @@ has to keep reaching.
 
 A faceplate shows the **mode** rather than the kind, which is the same idea one step later:
 a node reading `source` above a dropdown reading `plasma` makes you read two things to learn
-one. Below that it shows a knob for every number inlet with nothing wired to it, which is
-what makes a node something you drop and dial rather than something you have to build a
-knob for.
+one. Below that it shows a control for every number inlet with nothing wired to it, which is
+what makes a node something you drop and dial rather than something you have to wire a
+number into.
 
 **The bench is a `Compositor`**, not a second renderer. There used to be one and it was a
 standing risk: a bench that could disagree with the stage about brightness or blend is worse
@@ -546,6 +569,18 @@ Two node kinds changed meaning rather than disappearing. `sample` meant "the fra
 arrived", which was the layer underneath in a stack — the nearest thing to that now is the
 set's own picture, so it becomes `tracks`. The `playback` modes `energy` and `amount` are gone
 and fall back to the meter, which is the signal they were most often standing in for.
+
+And one field changed its **name** rather than its meaning: a node's `knobs` are its
+`values`. That one runs on every node before any of the kinds are read, since a node of any
+kind can carry them and every branch after it reaches for the new name — a `posterize` that
+arrives as an `effect` has to have its `levels` renamed to `steps` in the map it is already
+holding. The old key is deleted rather than left beside the new one, because `scheme.json`
+is a file somebody reads and diffs and two spellings of one map in it is a question nobody
+should have to answer.
+
+Nothing else is affected: a number that failed to come across would not be a parse error, it
+would be a look that opens with its inlets quietly back at their defaults, which is the kind
+of thing you find out about on stage.
 
 ## What is not built
 

@@ -68,11 +68,11 @@ import { lookPreamble } from './shaders.ts';
  * would make the canvas unusable for exactly the way it gets used.
  *
  * For a **number** inlet that answer starts at the number in its `PortSpec` and
- * is then a knob on the node's face, held in `CircuitNode.knobs`. Wiring a knob
- * node into a `posterize` to set its one number was work nobody should have to
- * do, and the graph that came out said nothing that the number on the face does
- * not. What a set value must never be is *inlined*: it rides `uParams` like
- * every other knob, so turning it recompiles nothing.
+ * is then a number on the node's face, held in `CircuitNode.values`. Wiring a
+ * `value` node into a `posterize` to set its one number was work nobody should
+ * have to do, and the graph that came out said nothing that the number on the
+ * face does not. What a set number must never be is *inlined*: it rides
+ * `uParams` like every other one, so turning it recompiles nothing.
  *
  * The exceptions are the two number inlets whose answer is already alive —
  * `energy` reads the room and a `wave`'s `phase` reads the beat. There is no
@@ -88,8 +88,8 @@ export interface PortSpec {
   /** The GLSL used when nothing is wired here and nothing is set. */
   fallback?: string;
   /**
-   * The number this inlet holds when nothing is wired, and therefore the one a
-   * knob on the node's face starts at.
+   * The number this inlet holds when nothing is wired, and therefore where the
+   * control on the node's face starts.
    *
    * Present exactly when the inlet is **settable**. A point and a colour have
    * none — there is no one control for a position and no useful constant for a
@@ -127,7 +127,7 @@ export interface NodeSpec {
   /**
    * The inlets, which for `source` and `effect` depend on the mode.
    *
-   * A function rather than a list because a kaleidoscope's knobs are not a
+   * A function rather than a list because a kaleidoscope's numbers are not a
    * ripple's, and giving every effect two inlets called `a` and `b` would make
    * the canvas unreadable to buy a simpler type here.
    */
@@ -156,8 +156,8 @@ const C = (name: string, fallback = 'vec4(0.0)'): PortSpec => ({ name, kind: 'c'
  * A settable number inlet, and the number it sits at until someone turns it.
  *
  * The fallback is that number as GLSL rather than a string written twice, so
- * the knob on the face and the constant in a shader with nothing set cannot
- * drift apart.
+ * what the face shows and what a shader with nothing set compiles cannot drift
+ * apart.
  */
 const N = (name: string, at = 0.5): PortSpec => ({ name, kind: 'n', at, fallback: asFloat(at) });
 
@@ -165,10 +165,10 @@ const N = (name: string, at = 0.5): PortSpec => ({ name, kind: 'n', at, fallback
  * A number inlet whose unwired answer is a **signal** rather than a setting.
  *
  * There are two, and both are the reason this rig is not a screensaver:
- * `energy` reads the room and a `wave`'s `phase` reads the beat. Putting a knob
- * on either would offer to replace something already moving with a number that
- * is not, which is a worse default than the one it would be replacing — so
- * these are wired or left alone, and there is nothing on the face to turn.
+ * `energy` reads the room and a `wave`'s `phase` reads the beat. Setting either
+ * would offer to replace something already moving with a number that is not,
+ * which is a worse default than the one it would be replacing — so these are
+ * wired or left alone, and there is nothing on the face to turn.
  */
 const ALIVE = (name: string, from: string): PortSpec => ({ name, kind: 'n', fallback: from });
 
@@ -258,19 +258,19 @@ const MIXES: Record<string, (a: string, b: string) => string> = {
  * One reading, used by both the inlets and the emit. They used to answer this
  * differently — the inlets took `op` at its word and the emit fell back to the
  * first effect — so a mode nobody recognises, which is a thing a hand-edited
- * file can say, produced a node with no knob inlets at all whose shader was
- * calling for knobs that were therefore always zero.
+ * file can say, produced a node with no settable inlets at all whose shader was
+ * calling for numbers that were therefore always zero.
  */
 const modeOf = (node: CircuitNode, modes: readonly string[]): string =>
   modes.includes(node.op ?? '') ? node.op! : modes[0];
 
 /**
- * Every mode's knobs, by the family that owns it.
+ * Which numbers each mode takes, by the family that owns it.
  *
- * Kept as three tables rather than one because the split is the point: a knob
- * list is the shape of a *mode*, and a mode belongs to exactly one kind now.
+ * Kept as three tables rather than one because the split is the point: the list
+ * is the shape of a *mode*, and a mode belongs to exactly one kind now.
  */
-const LENS_KNOBS: Record<string, string[]> = {
+const LENS_VALUES: Record<string, string[]> = {
   zoom: ['by'],
   swirl: ['turn'],
   fold: ['sides'],
@@ -284,17 +284,17 @@ const LENS_KNOBS: Record<string, string[]> = {
   pixelate: ['blocks', 'resolve'],
 };
 
-const GRADE_KNOBS: Record<string, string[]> = {
+const GRADE_VALUES: Record<string, string[]> = {
   levels: ['gain', 'lift'],
   hue: ['shift'],
   // `steps`, where it was `levels` — which is now the name of the mode beside
-  // it. A knob and a sibling mode sharing a word is the kind of collision that
-  // only shows up when somebody reads the dropdown out loud.
+  // it. An inlet and a sibling mode sharing a word is the kind of collision
+  // that only shows up when somebody reads the dropdown out loud.
   posterize: ['steps'],
   invert: ['hold', 'rate'],
 };
 
-const SPREAD_KNOBS: Record<string, string[]> = {
+const SPREAD_VALUES: Record<string, string[]> = {
   bloom: ['reach', 'floor'],
   smear: ['reach', 'drive'],
   edge: ['width', 'gain'],
@@ -302,8 +302,8 @@ const SPREAD_KNOBS: Record<string, string[]> = {
   shift: ['split', 'drive'],
 };
 
-/** Where a knob sits when nobody has turned it. A half unless it says. */
-const KNOB_AT: Record<string, number> = { sides: 0.2, amount: 0.3, count: 0.3 };
+/** Where a number starts when nobody has turned it. A half unless it says. */
+const VALUE_AT: Record<string, number> = { sides: 0.2, amount: 0.3, count: 0.3 };
 
 /** The modes that read an energy. The rest have no such inlet to leave unwired. */
 const NEEDS_ENERGY = new Set([
@@ -317,9 +317,9 @@ const NEEDS_ENERGY = new Set([
   'shift',
 ]);
 
-const knobPorts = (knobs: readonly string[], op: string): PortSpec[] => [
+const valuePorts = (names: readonly string[], op: string): PortSpec[] => [
   ...(NEEDS_ENERGY.has(op) ? [E()] : []),
-  ...knobs.map((name) => N(name, KNOB_AT[name] ?? 0.5)),
+  ...names.map((name) => N(name, VALUE_AT[name] ?? 0.5)),
 ];
 
 /**
@@ -447,11 +447,11 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
 
   value: {
     name: 'value',
-    about: 'One number, in every place you wire it. An inlet on its own has its own knob.',
+    about: 'One number, in every place you wire it. An inlet on its own already has one.',
     inlets: [],
     outlets: [N('n')],
     // The index is assigned by the compiler, which is the only thing that knows
-    // how many knobs came before this one.
+    // how many numbers came before this one.
     emit: () => ({ n: 'uParams[0]' }),
   },
 
@@ -537,7 +537,7 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     // be two nodes again.
     inlets: (node) => {
       const op = modeOf(node, LENS_MODES);
-      return [P('p'), C('c'), ...knobPorts(LENS_KNOBS[op], op)];
+      return [P('p'), C('c'), ...valuePorts(LENS_VALUES[op], op)];
     },
     outlets: [P('p'), C('c')],
     ops: LENS_MODES,
@@ -550,9 +550,9 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     },
     emit: (c) => {
       const op = modeOf(c.node, LENS_MODES);
-      const knobs = LENS_KNOBS[op];
+      const names = LENS_VALUES[op];
       const moved = LENS_POINT[op](c, c.read('energy'), (i) =>
-        knobs[i] ? c.read(knobs[i]) : '0.0',
+        names[i] ? c.read(names[i]) : '0.0',
       );
       // One outlet, and only the one asked for. Emitting the colour to fill a
       // cache slot nobody wanted sends the resolver back round a graph that was
@@ -605,15 +605,15 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     about: 'The colour where it already is. Nothing here moves anything.',
     inlets: (node) => {
       const op = modeOf(node, GRADE_MODES);
-      return [C('c'), ...knobPorts(GRADE_KNOBS[op], op)];
+      return [C('c'), ...valuePorts(GRADE_VALUES[op], op)];
     },
     outlets: [C('c')],
     ops: GRADE_MODES,
     emit: (c) => {
       const op = modeOf(c.node, GRADE_MODES);
-      const knobs = GRADE_KNOBS[op];
+      const names = GRADE_VALUES[op];
       return {
-        c: GRADE_EMIT[op](c, c.read('energy'), (i) => (knobs[i] ? c.read(knobs[i]) : '0.0')),
+        c: GRADE_EMIT[op](c, c.read('energy'), (i) => (names[i] ? c.read(names[i]) : '0.0')),
       };
     },
   },
@@ -623,15 +623,15 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     about: 'Reads its input several times, all round where it is. The only expensive family.',
     inlets: (node) => {
       const op = modeOf(node, SPREAD_MODES);
-      return [C('c'), ...knobPorts(SPREAD_KNOBS[op], op)];
+      return [C('c'), ...valuePorts(SPREAD_VALUES[op], op)];
     },
     outlets: [C('c')],
     ops: SPREAD_MODES,
     emit: (c) => {
       const op = modeOf(c.node, SPREAD_MODES);
-      const knobs = SPREAD_KNOBS[op];
+      const names = SPREAD_VALUES[op];
       return {
-        c: SPREAD_EMIT[op](c, c.read('energy'), (i) => (knobs[i] ? c.read(knobs[i]) : '0.0')),
+        c: SPREAD_EMIT[op](c, c.read('energy'), (i) => (names[i] ? c.read(names[i]) : '0.0')),
       };
     },
   },
@@ -750,9 +750,9 @@ const TYPES: Record<Signal, string> = { p: 'vec2', n: 'float', c: 'vec4' };
  * Both are the same thing to the shader and to the cache — a float in
  * `uParams` that can be turned without recompiling — so they are one list and
  * one bank rather than two of each. What tells them apart is the `id`: a node
- * id for a `value` node, a `nodeId/inlet` address for an inlet's own knob.
+ * id for a `value` node, a `nodeId/inlet` address for a number set on an inlet.
  */
-export interface CircuitKnob {
+export interface CircuitValue {
   id: string;
   label: string;
   /** Which slot of `uParams` it rides in. */
@@ -775,23 +775,23 @@ export interface CircuitTrack {
 export interface Compiled {
   source: string | null;
   error: string | null;
-  knobs: CircuitKnob[];
+  values: CircuitValue[];
   tracks: CircuitTrack[];
   /** How each Live track should draw, if this look asked for the set at all. */
   draws: string | null;
 }
 
 /**
- * How many knobs one look may have.
+ * How many numbers one look may set.
  *
  * Not the size of the bank — the bank is cut to fit the graph, because the
  * shader is generated. This is the backstop, and what it is protecting is the
  * driver: a bank is a uniform array, a fragment shader has a floor on how many
  * uniform vectors it is guaranteed, and a float array is the packing that eats
- * them fastest. Sixty-four is far more knobs than a graph anyone can read has,
+ * them fastest. Sixty-four is far more numbers than a graph anyone can read has,
  * and well under what the smallest WebGL2 implementation promises.
  */
-export const MAX_KNOBS = 64;
+export const MAX_VALUES = 64;
 
 /** At most eight named tracks: the bank is a fixed-size uniform array. */
 export const MAX_TRACKS = 8;
@@ -909,7 +909,7 @@ export function wouldFeedItself(circuit: Circuit, from: string, to: string): boo
  * telling anyone.
  *
  * A cord to a port that is not there is the other half, and it is the one a
- * *file this app wrote* can contain: an `effect` node's knobs are its mode's, so
+ * *file this app wrote* can contain: an `effect` node's inlets are its mode's, so
  * a scheme saved before a mode was changed can carry a cord addressed to an
  * inlet that no longer exists. The compiler ignores those, which is worse than
  * it sounds — the canvas cannot draw a cord to a port that is not mounted, so
@@ -929,7 +929,7 @@ export function repaired(circuit: Circuit): Circuit {
     keep
       ? circuit.nodes.filter((node) => node.kind !== 'out' || node.id === keep.id)
       : [...circuit.nodes, madeOut(circuit)]
-  ).map(keepKnobs);
+  ).map(keepValues);
 
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const kept = new Map<string, CircuitCordLike>();
@@ -988,36 +988,36 @@ export const tracksOf = (circuit: Circuit): CircuitTrack[] =>
  * Walked in node order and, within a node, in inlet order, so the bank a graph
  * produces is a function of the graph rather than of the order somebody
  * happened to turn things. `paramsOf` and the compiler both call this, which is
- * what keeps the slot a knob was compiled into and the slot its value is
- * written to the same number.
+ * what keeps the slot a number was compiled into and the slot it is written to
+ * the same one.
  *
  * **A wired inlet's value is not in here.** The cord decides what that inlet
  * reads, so the stored number is dormant — kept on the node so unwiring gives
  * it back, but costing no slot while a cord is on top of it.
  */
-export function knobsOf(circuit: Circuit): CircuitKnob[] {
+export function valuesOf(circuit: Circuit): CircuitValue[] {
   const wired = new Set(circuit.cords.map((cord) => cord.to));
-  const knobs: CircuitKnob[] = [];
+  const values: CircuitValue[] = [];
   for (const node of circuit.nodes) {
     if (node.kind === 'value') {
-      knobs.push({
+      values.push({
         id: node.id,
-        label: node.label || `knob ${knobs.length + 1}`,
-        index: knobs.length,
+        label: node.label || `value ${values.length + 1}`,
+        index: values.length,
         value: node.value ?? 0.5,
       });
       continue;
     }
-    if (!node.knobs) continue;
+    if (!node.values) continue;
     for (const port of inletsOf(node)) {
-      const held = node.knobs[port.name];
+      const held = node.values[port.name];
       if (port.at === undefined || held === undefined) continue;
       const id = portId(node.id, port.name);
       if (wired.has(id)) continue;
-      knobs.push({ id, label: port.name, index: knobs.length, value: held });
+      values.push({ id, label: port.name, index: values.length, value: held });
     }
   }
-  return knobs;
+  return values;
 }
 
 /**
@@ -1030,22 +1030,22 @@ export function knobsOf(circuit: Circuit): CircuitKnob[] {
  * where a value is invisible until the mode comes back and it silently returns.
  *
  * Kept **by name**, which is the same kindness cords get: `bloom` and `smear`
- * share a `reach`, and it is the same knob in both.
+ * share a `reach`, and it is the same number in both.
  */
-export function keepKnobs(node: CircuitNode): CircuitNode {
-  if (!node.knobs) return node;
+export function keepValues(node: CircuitNode): CircuitNode {
+  if (!node.values) return node;
   const settable = new Map(inletsOf(node).map((port) => [port.name, port.at]));
   const kept: Record<string, number> = {};
-  for (const [name, value] of Object.entries(node.knobs)) {
+  for (const [name, value] of Object.entries(node.values)) {
     if (settable.get(name) !== undefined) kept[name] = value;
   }
-  if (Object.keys(kept).length === Object.keys(node.knobs).length) return node;
-  if (Object.keys(kept).length > 0) return { ...node, knobs: kept };
+  if (Object.keys(kept).length === Object.keys(node.values).length) return node;
+  if (Object.keys(kept).length > 0) return { ...node, values: kept };
   // The field goes rather than emptying, because `scheme.json` is a file
   // somebody reads and diffs, and an empty map on every node it ever touched
   // is a page of noise saying nothing.
   const bare = { ...node };
-  delete bare.knobs;
+  delete bare.values;
   return bare;
 }
 
@@ -1055,7 +1055,7 @@ export function keepKnobs(node: CircuitNode): CircuitNode {
  * The graph a `look` node names is **pasted in around it**, with every id
  * prefixed so two copies of the same look cannot collide. Expanding before
  * compiling rather than teaching the compiler about sub-looks is what keeps the
- * compiler one thing: knobs and named tracks both get their bank slots
+ * compiler one thing: set numbers and named tracks both get their bank slots
  * from the expanded graph without anyone writing a second pass to gather them.
  *
  * **Around it, not in place of it.** The node survives, holding the sub-graph on
@@ -1130,7 +1130,7 @@ export function compileLook(looks: Record<string, LookDef>, id: string): Compile
   const empty: Compiled = {
     source: null,
     error: expanded.error,
-    knobs: [],
+    values: [],
     tracks: [],
     draws: null,
   };
@@ -1139,14 +1139,14 @@ export function compileLook(looks: Record<string, LookDef>, id: string): Compile
 }
 
 export function compileCircuit(circuit: Circuit): Compiled {
-  const knobs = knobsOf(circuit);
+  const values = valuesOf(circuit);
   const tracks = tracksOf(circuit);
   const drawn = circuit.nodes.find((node) => node.kind === 'tracks');
   const draws = drawn ? (drawn.op ?? TRACK_DRAWS[0]) : null;
-  const bare: Compiled = { source: null, error: null, knobs, tracks, draws };
+  const bare: Compiled = { source: null, error: null, values, tracks, draws };
 
   const byId = new Map(circuit.nodes.map((node) => [node.id, node]));
-  const slot = new Map(knobs.map((knob) => [knob.id, knob.index]));
+  const slot = new Map(values.map((each) => [each.id, each.index]));
   const trackSlot = new Map(tracks.map((track) => [track.id, track.index]));
 
   // Exactly one, and the backstop rather than the rule. `out` is not in the node
@@ -1157,8 +1157,8 @@ export function compileCircuit(circuit: Circuit): Compiled {
   const ends = circuit.nodes.filter((node) => node.kind === 'out');
   if (ends.length === 0) return { ...bare, error: 'no out node — nothing leaves this look' };
   if (ends.length > 1) return { ...bare, error: 'more than one out node' };
-  if (knobs.length > MAX_KNOBS) {
-    return { ...bare, error: `more than ${MAX_KNOBS} knobs` };
+  if (values.length > MAX_VALUES) {
+    return { ...bare, error: `more than ${MAX_VALUES} numbers set` };
   }
   if (circuit.nodes.filter((n) => n.kind === 'track').length > MAX_TRACKS) {
     return { ...bare, error: `more than ${MAX_TRACKS} named tracks` };
@@ -1226,10 +1226,10 @@ export function compileCircuit(circuit: Circuit): Compiled {
      * or the answer its spec came with.
      *
      * A set value is a **slot**, never the number itself. Writing `0.62` into
-     * the source would make every knob a recompile — `signatureOf` leaves knob
-     * values out precisely so that dragging one does not rebuild the shader
-     * sixty times a second, and an inlined constant hands that back at every
-     * inlet on the canvas.
+     * the source would make every one of these a recompile — `signatureOf`
+     * leaves the values out precisely so that dragging one does not rebuild the
+     * shader sixty times a second, and an inlined constant hands that back at
+     * every inlet on the canvas.
      */
     const answer = (port: PortSpec, where: string): string => {
       const held = slot.get(portId(nodeId, port.name));
@@ -1284,7 +1284,7 @@ export function compileCircuit(circuit: Circuit): Compiled {
   }
   if (failed) return { ...bare, error: failed };
 
-  const source = `${lookPreamble(knobs.length)}${HELPERS}
+  const source = `${lookPreamble(values.length)}${HELPERS}
 void main() {
 ${lines.join('\n')}
   fragColor = ${result};
@@ -1296,7 +1296,7 @@ ${lines.join('\n')}
  * What a new look starts as.
  *
  * Not an empty canvas. An empty canvas asks you to know the vocabulary before
- * you have seen it work, and the first thing anyone wants is to move one knob
+ * you have seen it work, and the first thing anyone wants is to turn one number
  * and watch the frame change.
  *
  * It starts with the **set** in it, which is a claim about what this rig is for:

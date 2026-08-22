@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Circuit, Scheme } from '../../protocol.ts';
 import { BUILT_IN } from '../../server/scheme.ts';
 import { inletsOf, starterCircuit } from '../render/circuit.ts';
-import { dropNode, forkLook, setKnob, setNode } from './edits.ts';
+import { dropNode, forkLook, setValue, setNode } from './edits.ts';
 import { palette } from './nodes.ts';
 
 /**
@@ -34,7 +34,7 @@ describe('changing a node’s mode', () => {
 
   it('cuts the cords the new mode has nowhere to put', () => {
     // What this looked like from the front of house: switch a `ripple` to a
-    // `posterize` and the knob's outlet stays lit with no wire leaving it,
+    // `posterize` and the source's outlet stays lit with no wire leaving it,
     // because the canvas cannot draw a cord to a port that is not mounted and
     // the compiler ignores one addressed to an inlet that is not there. Switch
     // back and the wire returns, which makes it look like the editor is broken
@@ -44,7 +44,7 @@ describe('changing a node’s mode', () => {
   });
 
   it('keeps a cord on an inlet the new mode has as well', () => {
-    // `bloom` and `smear` both have a `reach`, and it is the same knob in both.
+    // `bloom` and `smear` both have a `reach`, and it is the same number in both.
     const bloomed = setNode(rippled(), 'e', { kind: 'spread', op: 'bloom' });
     const rewired = setNode(
       { ...bloomed, cords: [...bloomed.cords, { from: 'k/n', to: 'e/reach' }] },
@@ -101,7 +101,7 @@ describe('a value set on an inlet', () => {
     wire(
       [
         { id: 'g', kind: 'source', op: 'plasma', x: 0, y: 0 },
-        { id: 'e', kind: 'lens', op: 'ripple', x: 1, y: 0, knobs: { waves: 0.8, depth: 0.2 } },
+        { id: 'e', kind: 'lens', op: 'ripple', x: 1, y: 0, values: { waves: 0.8, depth: 0.2 } },
         { id: 'o', kind: 'out', x: 2, y: 0 },
       ],
       [
@@ -111,8 +111,8 @@ describe('a value set on an inlet', () => {
     );
 
   it('turns without touching anything else on the node', () => {
-    const next = setKnob(posterized(), 'e', 'waves', 0.4);
-    expect(next.nodes.find((node) => node.id === 'e')?.knobs).toEqual({ waves: 0.4, depth: 0.2 });
+    const next = setValue(posterized(), 'e', 'waves', 0.4);
+    expect(next.nodes.find((node) => node.id === 'e')?.values).toEqual({ waves: 0.4, depth: 0.2 });
     expect(next.cords).toEqual(posterized().cords);
   });
 
@@ -122,24 +122,25 @@ describe('a value set on an inlet', () => {
     // mode and switching back brought a number nobody could see back with it —
     // the picture changed and the only thing that had happened was a dropdown.
     const next = setNode(posterized(), 'e', { op: 'zoom' });
-    expect(next.nodes.find((node) => node.id === 'e')?.knobs).toBeUndefined();
-    // `bloom` and `smear` both have a `reach`, and it is the same knob in both.
+    expect(next.nodes.find((node) => node.id === 'e')?.values).toBeUndefined();
+    // `bloom` and `smear` both have a `reach`, and it is the same number in both.
     const bloomed = posterized();
     const at = bloomed.nodes.findIndex((node) => node.id === 'e');
-    bloomed.nodes[at] = { ...bloomed.nodes[at], kind: 'spread', op: 'bloom', knobs: { reach: 0.9 } };
+    const now = { kind: 'spread' as const, op: 'bloom', values: { reach: 0.9 } };
+    bloomed.nodes[at] = { ...bloomed.nodes[at], ...now };
     const kept = setNode(bloomed, 'e', { op: 'smear' });
-    expect(kept.nodes.find((node) => node.id === 'e')?.knobs).toEqual({ reach: 0.9 });
+    expect(kept.nodes.find((node) => node.id === 'e')?.values).toEqual({ reach: 0.9 });
   });
 
   it('belongs to the copy rather than to both looks', () => {
     // A spread is one level deep, so the two graphs shared one map: turning a
-    // knob on the fork turned it on the look it came from, which reads as the
+    // number on the fork turned it on the look it came from, which reads as the
     // original having been edited by a copy nobody had opened yet.
     const one = { ...(BUILT_IN as Scheme), looks: { one: { name: 'One', circuit: posterized() } } };
     const made = forkLook(one, 'one');
     const copy = made.scheme.looks[made.id].circuit;
-    const turned = setKnob(copy, 'e', 'waves', 0.1);
-    expect(turned.nodes.find((n) => n.id === 'e')?.knobs?.waves).toBe(0.1);
-    expect(made.scheme.looks.one.circuit.nodes.find((n) => n.id === 'e')?.knobs?.waves).toBe(0.8);
+    const turned = setValue(copy, 'e', 'waves', 0.1);
+    expect(turned.nodes.find((n) => n.id === 'e')?.values?.waves).toBe(0.1);
+    expect(made.scheme.looks.one.circuit.nodes.find((n) => n.id === 'e')?.values?.waves).toBe(0.8);
   });
 });

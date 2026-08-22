@@ -44,7 +44,7 @@ export interface Output {
 /** A built look, and enough about it to know when it stopped being current. */
 interface Built {
   program: Program | null;
-  /** What it was compiled from. Structure only — a knob's value is a uniform. */
+  /** What it was compiled from. Structure only — a set number is a uniform. */
   signature: string;
   error: string | null;
   /** Re-read every frame, because a value is a uniform. See `banksOf`. */

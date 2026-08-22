@@ -261,7 +261,7 @@ export function createFeed(gl: WebGL2RenderingContext): Feed {
       gl.uniform1fv(program.uniform('uParams'), banks.params);
 
       // One bank, filled per slot with whatever that node asked for. What used
-      // to be two — raw meters and smoothed ones — is one question with a knob
+      // to be two — raw meters and smoothed ones — is one question with a control
       // on it now, so the shader reads a number without learning which.
       if (banks.tracks.some((each) => each.name)) {
         const bank = new Float32Array(8);
@@ -274,7 +274,7 @@ export function createFeed(gl: WebGL2RenderingContext): Feed {
           }
           // Fast up, slow down. An envelope that fell as quickly as it rose
           // would be the number again, and the number is already the node
-          // with its knob at zero. Keyed by name *and* reading, so a fader and
+          // with its smoothing at zero. Keyed by name *and* reading, so a fader and
           // a meter off the same track do not share one follower.
           const key = `${each.name}/${each.read}`;
           const was = followed.get(key) ?? 0;

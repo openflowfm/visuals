@@ -348,27 +348,27 @@ vec4 fxInvert(vec4 c, float hold, float speed, float e) {
 /**
  * The preamble a compiled look gets, sized to the graph it is for.
  *
- * `uParams` is the bank every knob rides in — a `value` node's amount and every
+ * `uParams` is the bank every number rides in — a `value` node's amount and every
  * number set on an inlet's own face. A bank rather than a uniform each because
- * which knobs a graph has is discovered from its nodes and cannot be declared
+ * which numbers a graph has is discovered from its nodes and cannot be declared
  * ahead of time, and a value in a uniform is one you can turn without
  * recompiling. That last part is the whole point: `signatureOf` deliberately
- * leaves knob values out, so dragging one does not rebuild a shader sixty times
+ * leaves those values out, so dragging one does not rebuild a shader sixty times
  * a second.
  *
  * **The size is a parameter because the shader is generated.** Every inlet
  * carrying a number would be a fixed bank of hundreds, most of them unread; a
  * bank cut to fit costs one recompile the first time an inlet is given a value
  * and nothing at all afterwards. One floor: GLSL rejects a zero-length array,
- * so a look with no knobs at all still declares one.
+ * so a look that sets nothing at all still declares one.
  *
  * `uTracksTex` is the Live set's own picture, drawn by the pass a `tracks` node
  * stands for. It is the one texture a look reads, and the only reason there is
  * still more than one pass in this renderer.
  */
-export const lookPreamble = (knobs: number): string => `${PREAMBLE}
+export const lookPreamble = (values: number): string => `${PREAMBLE}
 uniform sampler2D uTracksTex;
-uniform float uParams[${Math.max(1, knobs)}];
+uniform float uParams[${Math.max(1, values)}];
 // Meters of tracks a look NAMED, in the order its track nodes appear, and
 // energies computed on the CPU for its energy nodes. Banks rather than a
 // uniform each, for the same reason uParams is one.

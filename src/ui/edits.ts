@@ -1,5 +1,5 @@
 import type { Circuit, LookDef, Scheme } from '../../protocol.ts';
-import { bareCircuit, inletsOf, keepKnobs, splitPort, starterCircuit } from '../render/circuit.ts';
+import { bareCircuit, inletsOf, keepValues, splitPort, starterCircuit } from '../render/circuit.ts';
 
 /**
  * How a scheme gets changed.
@@ -36,7 +36,7 @@ export function freeLookId(scheme: Scheme): string {
  *
  * Neither is an empty canvas. An empty canvas asks you to know the vocabulary
  * before you have seen it work, and the first thing anyone wants is to move one
- * knob and watch the frame change.
+ * number and watch the frame change.
  *
  * Both start with the **set** in them, which is a claim about what this rig is
  * for: the picture should already be reacting to whoever is playing before you
@@ -76,10 +76,10 @@ export function forkLook(scheme: Scheme, from: string): { scheme: Scheme; id: st
           circuit: {
             // The values as well as the node, because a spread is one level
             // deep and the map they live in would otherwise be the same object
-            // in both looks — one knob turning two graphs.
+            // in both looks — one control turning two graphs.
             nodes: def.circuit.nodes.map((node) => ({
               ...node,
-              ...(node.knobs ? { knobs: { ...node.knobs } } : {}),
+              ...(node.values ? { values: { ...node.values } } : {}),
             })),
             cords: def.circuit.cords.map((cord) => ({ ...cord })),
           },
@@ -157,9 +157,9 @@ export function freeNodeId(circuit: Circuit, kind: string): string {
  *
  * Cords are kept **by name**, so the inlets a mode has in common with the one it
  * replaced stay wired: `bloom` and `smear` both have a `reach`, and it is the
- * same knob in both. **Values set on an inlet keep the same company** — the same
- * rule, one step quieter, since a number stranded on an inlet that is not there
- * cannot even be seen, let alone cleared.
+ * same number in both. **Numbers set on an inlet keep the same company** — the
+ * same rule, one step quieter, since a number stranded on an inlet that is not
+ * there cannot even be seen, let alone cleared.
  */
 export function setNode(
   circuit: Circuit,
@@ -174,7 +174,7 @@ export function setNode(
   if (!held) return { ...circuit, nodes };
   const ports = new Set(inletsOf(held).map((port) => port.name));
   return {
-    nodes: nodes.map((node) => (node.id === id ? keepKnobs(node) : node)),
+    nodes: nodes.map((node) => (node.id === id ? keepValues(node) : node)),
     cords: circuit.cords.filter((cord) => {
       const to = splitPort(cord.to);
       return to.node !== id || ports.has(to.port);
@@ -183,18 +183,18 @@ export function setNode(
 }
 
 /**
- * Turn one inlet's own knob.
+ * Set one inlet's own number.
  *
  * Its own edit rather than a `setNode` call, because the value lives in a map
  * and a caller merging that map by hand is a caller who can drop the rest of
- * it. A knob emits on every pointer move, so this is on the hot path and does
+ * it. The control emits on every pointer move, so this is on the hot path and does
  * exactly one thing.
  */
-export function setKnob(circuit: Circuit, id: string, inlet: string, value: number): Circuit {
+export function setValue(circuit: Circuit, id: string, inlet: string, value: number): Circuit {
   return {
     ...circuit,
     nodes: circuit.nodes.map((node) =>
-      node.id === id ? { ...node, knobs: { ...node.knobs, [inlet]: value } } : node,
+      node.id === id ? { ...node, values: { ...node.values, [inlet]: value } } : node,
     ),
   };
 }

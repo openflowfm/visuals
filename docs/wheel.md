@@ -159,7 +159,7 @@ A parse error **keeps the scheme that was already working** and reports the mess
 panel. Losing the show to a trailing comma is the wrong answer at any time and an unthinkable
 one during a set.
 
-The file lags an edit by 200ms. A knob turning and a node being dragged both emit on every
+The file lags an edit by 200ms. A control turning and a node being dragged both emit on every
 pointer move, so what the server *holds* updates immediately — the picture has to follow the
 pointer — while the write is debounced.
 

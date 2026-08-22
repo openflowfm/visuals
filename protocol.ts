@@ -116,7 +116,7 @@ export const NODE_FAMILIES: readonly { name: string; about: string; kinds: NodeK
   },
   {
     name: 'numbers',
-    about: 'Knobs and the arithmetic between them',
+    about: 'Numbers, and the arithmetic between them',
     kinds: ['value', 'math', 'wave'],
   },
   { name: 'the end', about: 'What leaves the look', kinds: ['out'] },
@@ -241,7 +241,7 @@ export const PLAYBACK_NAMES: readonly PlaybackName[] = [
  *
  * All three go through the same smoothing, which is what folded `energy` in
  * here: an envelope follower on a meter is an energy, and one on a gate is a
- * fade-in. It is a knob on the node's face rather than an inlet because the
+ * fade-in. It is a control on the node's face rather than an inlet because the
  * envelope runs on the CPU and a cord cannot reach it.
  */
 export const TRACK_READS: readonly string[] = ['level', 'fader', 'playing'];
@@ -300,27 +300,32 @@ export interface CircuitNode {
    * shader; now it gets a number you can turn on the node's own face, and the
    * fallback is only what that number *starts* as. That is what makes a
    * `posterize` something you drop and dial rather than something you have to
-   * build a knob for.
+   * wire a number into.
    *
    * These ride `uParams` exactly as a `value` node does — never interpolated
    * into the GLSL — so turning one never recompiles a shader. Setting one for
    * the first time does, once, because it changes how big the bank is.
    *
-   * A value stays here while the inlet is wired, dormant rather than lost:
-   * wiring and then unwiring gives the number back, so a cord is not a
-   * destructive gesture. Only *number* inlets are in here — a point and a
-   * colour have no single control shape and no useful constant.
+   * A number stays here while the inlet is wired, dormant rather than lost:
+   * wiring and then unwiring gives it back, so a cord is not a destructive
+   * gesture. Only *number* inlets are in here — a point and a colour have no
+   * single control shape and no useful constant.
+   *
+   * Spelled `knobs` in a file written before the word went; `reword` in
+   * `server/scheme.ts` carries those across.
    */
-  knobs?: Record<string, number>;
+  values?: Record<string, number>;
   /**
    * A `value` node's amount, or a `track` node's smoothing. 0–1 either way.
    *
-   * Not folded into `knobs`, and the reason is that neither is an inlet:
-   * `knobs` is keyed by inlet name and is trimmed against the inlets a node
-   * actually has, so a number parked under a name no port answers to would be
-   * dropped the first time anything came through `merge`. A track's smoothing
-   * is not even a shader number — the envelope runs on the CPU, because it has
-   * to remember what it saw last frame and a fragment shader cannot.
+   * **One letter from `values` and deliberately not part of it.** Neither of
+   * these is an inlet, and `values` is keyed by inlet name and trimmed against
+   * the inlets a node actually has — so a number parked under a name no port
+   * answers to would be dropped the first time anything came through `merge`.
+   * A track's smoothing is not even a shader number: the envelope runs on the
+   * CPU, because it has to remember what it saw last frame and a fragment
+   * shader cannot. The two are different types as well as different fields, so
+   * confusing them is a compile error rather than a quiet wrong number.
    */
   value?: number;
   /** A `value` node's name, which is what it is called in the editor. */

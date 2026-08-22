@@ -4,8 +4,8 @@ import type { Param } from '../../../widgets/src/param/param.ts';
  * The one adapter between `widgets/` and this app.
  *
  * `widgets/` knows nothing about Live and nothing about a show — it takes a
- * `Param` and a number, and that boundary is what makes the same knob usable in
- * a device chain and in a visuals editor. `ui/` has exactly one file doing this
+ * `Param` and a number, and that boundary is what makes the same control
+ * usable in a device chain and in a visuals editor. `ui/` has exactly one file doing this
  * job (`lib/liveParam.ts`); this is its opposite number, and it should stay the
  * only place in `visuals/` that mentions the widget parameter model.
  *
@@ -113,20 +113,20 @@ export const BPM: Param = {
 };
 
 /**
- * A circuit's own knob.
+ * A number inside a circuit: a `value` node's own, or one set on an inlet.
  *
- * Every number inside a circuit is 0–1 by construction, so every `value` node
- * gets the same control and nothing has to declare a range. That uniformity is
- * what makes the vocabulary composable — see `render/circuit.ts`.
+ * Every number inside a circuit is 0–1 by construction, so all of them get the
+ * same control and nothing has to declare a range. That uniformity is what
+ * makes the vocabulary composable — see `render/circuit.ts`.
  */
-export const KNOB: Param = {
+export const VALUE: Param = {
   kind: 'float',
   min: 0,
   max: 100,
   defaultValue: 50,
   unit: 'percent',
-  name: 'Knob',
-  shortName: 'Knob',
+  name: 'Value',
+  shortName: 'Value',
 };
 
 

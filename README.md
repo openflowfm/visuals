@@ -118,7 +118,7 @@ It writes `visuals/scheme.json`, which stays the record — hot-reloaded, readab
 **entirely optional**: delete it and the built-in scheme is a complete show. Edit either.
 
 **It is not in the repo.** The file is yours the way `bridge/roles.json` is yours — it is
-rewritten every time a knob moves, so source control was carrying a diff for every gesture
+rewritten every time a number moves, so source control was carrying a diff for every gesture
 and a merge conflict for every roll. It is gitignored, and a fresh clone draws the built-in
 show until you make one of your own. Loading *between* saved shows is a thing this will
 want and does not have yet.

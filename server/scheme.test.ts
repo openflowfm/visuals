@@ -291,12 +291,52 @@ describe('a file written when the cascade existed', () => {
     expect(kindOf('p')).toBe('grade');
     expect(kindOf('s')).toBe('spread');
     expect(kept.cords).toHaveLength(5);
-    // Two knobs collided with a name beside them once the families existed:
+    // Two of them collided with a name beside them once the families existed:
     // posterize's `levels` with the mode next to it, shift's `spread` with the
-    // kind it landed in. A knob that kept a stale name would be trimmed away by
-    // `repaired` and the look would quietly revert to a default.
-    expect(kept.nodes.find((n) => n.id === 'p')?.knobs).toEqual({ steps: 0.8 });
-    expect(kept.nodes.find((n) => n.id === 's')?.knobs).toEqual({ split: 0.4 });
+    // kind it landed in. A number that kept a stale name would be trimmed away by
+    // `repaired` and the look would quietly revert to a default. The file spells
+    // the map `knobs`, as a file of that vintage would, so this covers the
+    // rename and the split arriving together.
+    expect(kept.nodes.find((n) => n.id === 'p')?.values).toEqual({ steps: 0.8 });
+    expect(kept.nodes.find((n) => n.id === 's')?.values).toEqual({ split: 0.4 });
+  });
+
+  it('reads the numbers on a node whichever of the two names the file uses', () => {
+    // `knobs` is what `values` was called. A file written before the word went
+    // is every file anybody already has, and a number that failed to come
+    // across is not a parse error — it is a look that opens with its inlets
+    // quietly back at their defaults, on the night it mattered.
+    const kept = merge({
+      looks: {
+        mine: {
+          name: 'Mine',
+          circuit: {
+            nodes: [
+              { id: 'g', kind: 'source', op: 'plasma', x: 0, y: 0 },
+              {
+                id: 'r',
+                kind: 'lens',
+                op: 'ripple',
+                x: 1,
+                y: 0,
+                knobs: { waves: 0.72, depth: 0.4 },
+              },
+              { id: 'o', kind: 'out', x: 2, y: 0 },
+            ],
+            cords: [
+              { from: 'g/c', to: 'r/c' },
+              { from: 'r/c', to: 'o/c' },
+            ],
+          },
+        },
+      },
+    } as never).looks.mine.circuit;
+    const ripple = kept.nodes.find((n) => n.id === 'r');
+    expect(ripple?.values).toEqual({ waves: 0.72, depth: 0.4 });
+    // And the old spelling is gone rather than sitting beside the new one:
+    // `scheme.json` is read and diffed by hand, and two names for one map in it
+    // is a question nobody should have to answer.
+    expect((ripple as { knobs?: unknown }).knobs).toBeUndefined();
   });
 
   it('makes the five geometry kinds modes of the lens they always were', () => {
@@ -325,7 +365,7 @@ describe('a file written when the cascade existed', () => {
     const fold = kept.nodes.find((n) => n.id === 'f');
     expect(fold?.kind).toBe('lens');
     expect(fold?.op).toBe('fold');
-    expect(fold?.knobs).toEqual({ sides: 0.4 });
+    expect(fold?.values).toEqual({ sides: 0.4 });
     expect(kept.nodes.find((n) => n.id === 'h')?.kind).toBe('grade');
     // `p` in and `p` out on the lens, `c` on the grade — every port kept its
     // name, so every cord survived.

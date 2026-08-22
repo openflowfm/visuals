@@ -14,8 +14,8 @@ import {
   signalOf,
   wouldFeedItself,
 } from '../render/circuit.ts';
-import { connect, disconnect, dropNode, setKnob, setNode } from './edits.ts';
-import { KNOB, PERCENT } from './param.ts';
+import { connect, disconnect, dropNode, setValue, setNode } from './edits.ts';
+import { VALUE, PERCENT } from './param.ts';
 
 /**
  * An effect, wired.
@@ -105,7 +105,7 @@ export function CircuitEditor({
                 looks={looks}
                 picture={picture}
                 onChange={(next) => onChange(setNode(circuit, node.id, next))}
-                onTurn={(inlet, value) => onChange(setKnob(circuit, node.id, inlet, value))}
+                onTurn={(inlet, value) => onChange(setValue(circuit, node.id, inlet, value))}
                 onCut={(inlet) => onChange(disconnect(circuit, inlet))}
                 onDrop={() => onChange(dropNode(circuit, node.id))}
               />
@@ -168,12 +168,12 @@ function NodeFace({
   const feeding = new Set(circuit.cords.map((cord) => cord.from));
 
   /**
-   * The inlets with a knob on the face: settable, and nothing wired to them.
+   * The inlets with a control on the face: settable, and nothing wired to them.
    *
    * Only while unwired, because a cord already answers the inlet and two
    * controls for one number is a face that lies about one of them. The value is
    * kept on the node either way, so a cord is not a destructive gesture: unwire
-   * it and the knob comes back where it was rather than at the default.
+   * it and the control comes back where it was rather than at the default.
    */
   const turnable = inletsOf(node).filter(
     (port) => port.at !== undefined && !fed.has(portId(node.id, port.name)),
@@ -258,13 +258,13 @@ function NodeFace({
           width={120}
         />
       ) : node.kind === 'track' ? (
-        // Two pickers and a knob, because a track node answers two questions
+        // Two pickers and a control, because a track node answers two questions
         // and neither is the other's mode: **which** track, out of a list only
         // this set has, and **which of its numbers**, out of a list this
-        // codebase writes down. The knob is how much envelope to put on
+        // codebase writes down. The control is how much envelope to put on
         // whichever — at zero it is the number itself, which is what folded the
         // old `energy` node in here.
-        <div className="knobface">
+        <div className="valueface">
           <div className="stack">
             <Select
               items={tracks.length > 0 ? tracks : ['master']}
@@ -282,20 +282,20 @@ function NodeFace({
             />
           </div>
           <Knob
-            param={KNOB}
+            param={VALUE}
             value={PERCENT.to(node.value ?? 0)}
             onChange={(v) => onChange({ value: PERCENT.from(v) })}
             name="smooth"
           />
         </div>
       ) : node.kind === 'value' ? (
-        <div className="knobface">
+        <div className="valueface">
           <Knob
-            param={KNOB}
+            param={VALUE}
             value={PERCENT.to(node.value ?? 0.5)}
             onChange={(v) => onChange({ value: PERCENT.from(v) })}
             // The node's own title bar already carries the name, and a caption
-            // reading "Knob" above every one of them is the sort of label that
+            // reading "Value" above every one of them is the sort of label that
             // makes a canvas harder to read rather than easier.
             name=""
           />
@@ -303,7 +303,7 @@ function NodeFace({
             className="field"
             value={node.label ?? ''}
             spellCheck={false}
-            aria-label="Knob name"
+            aria-label="Value name"
             onChange={(e) => onChange({ label: e.target.value })}
           />
         </div>
@@ -317,12 +317,12 @@ function NodeFace({
       ) : null}
 
       {turnable.length > 0 && (
-        <div className="knobs">
+        <div className="values">
           {turnable.map((port) => (
             <Knob
               key={port.name}
-              param={KNOB}
-              value={PERCENT.to(node.knobs?.[port.name] ?? port.at!)}
+              param={VALUE}
+              value={PERCENT.to(node.values?.[port.name] ?? port.at!)}
               onChange={(v) => onTurn(port.name, PERCENT.from(v))}
               name={port.name}
             />
@@ -346,7 +346,7 @@ function faceName(
   fallback: string,
   looks?: readonly { id: string; def: LookDef }[],
 ): string {
-  if (node.kind === 'value') return node.label || 'knob';
+  if (node.kind === 'value') return node.label || 'value';
   if (node.kind === 'look') return looks?.find((each) => each.id === node.op)?.def.name ?? 'look';
   // The track's name and not the reading, because the name is the part nobody
   // could guess from the canvas and the reading is on a dropdown an inch below.

@@ -20,7 +20,7 @@ export function App() {
   const { show, showRef, scheme, grid, save, downbeat, clock, online } = useShow();
   // The render loop reads the scheme every frame because effects live in it, and
   // reads it through a ref for the same reason it reads the show through one:
-  // rebuilding the loop whenever a knob moved would drop a frame per edit.
+  // rebuilding the loop whenever a number moved would drop a frame per edit.
   const schemeRef = useRef(scheme);
   schemeRef.current = scheme;
   const { output, moveCorner, setGain, reset } = useOutput();

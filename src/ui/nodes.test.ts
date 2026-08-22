@@ -118,27 +118,27 @@ describe('finding one', () => {
 describe('dropping one', () => {
   it('gives a bare node its defaults and a preset its values', () => {
     // A preset is a mode *and* the values that make that mode read. Posterize
-    // at the middle of its knob is eight steps, which on a projector is
+    // at the middle of its one number is eight steps, which on a projector is
     // invisible — an effect you drop should do the thing it is named after.
     const grade = find(browser(), 'grade')!;
     const plain = drop(bareCircuit(), grade.node).nodes.at(-1)!;
     // Spelled out rather than implied, so the face and its dropdown agree.
     expect(plain.op).toBe(GRADE_MODES[0]);
-    expect(plain.knobs).toBeUndefined();
+    expect(plain.values).toBeUndefined();
 
     const poster = grade.presets.find((each) => each.op === 'posterize')!;
     const dropped = drop(bareCircuit(), poster).nodes.at(-1)!;
     expect(dropped.op).toBe('posterize');
-    expect(dropped.knobs?.steps).toBeGreaterThan(0.5);
+    expect(dropped.values?.steps).toBeGreaterThan(0.5);
   });
 
   it('gives each dropped preset its own values', () => {
-    // Two nodes off one preset sharing a map is one knob turning both of them,
+    // Two nodes off one preset sharing a map is one control turning both of them,
     // which reads as the canvas editing a node nobody has touched.
     const poster = find(browser(), 'grade')!.presets.find((each) => each.op === 'posterize')!;
     const once = drop(bareCircuit(), poster);
     const twice = drop(once, poster);
     const [a, b] = twice.nodes.filter((node) => node.kind === 'grade');
-    expect(a.knobs).not.toBe(b.knobs);
+    expect(a.values).not.toBe(b.values);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compileCircuit, knobsOf, MAX_KNOBS } from './src/render/circuit.ts';
+import { compileCircuit, valuesOf, MAX_VALUES } from './src/render/circuit.ts';
 import type { Scheme, Show, Track } from './protocol.ts';
 import { BUILT_IN } from './server/scheme.ts';
 import { newSeed, rollCircuit, rollScheme } from './roll.ts';
@@ -129,11 +129,11 @@ describe('rolled looks', () => {
     }
   });
 
-  it('stays inside the knob bank', () => {
+  it('stays inside the number bank', () => {
     for (const seed of seeds) {
       const rng = seedOf(seed);
       for (let i = 0; i < 12; i++) {
-        expect(knobsOf(rollCircuit(rng)).length, seed).toBeLessThanOrEqual(MAX_KNOBS);
+        expect(valuesOf(rollCircuit(rng)).length, seed).toBeLessThanOrEqual(MAX_VALUES);
       }
     }
   });

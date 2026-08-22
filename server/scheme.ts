@@ -33,15 +33,15 @@ import { repaired, splitPort } from '../src/render/circuit.ts';
  * **Laid out from the wiring rather than from the order it was typed.** These
  * are the four graphs anyone opens first, so where the nodes sit is part of what
  * they teach: a column per step along the signal, so the picture reads left to
- * right and the cords do not cross. A row-major grid put a knob between two
- * links in a chain and made a six-node look need untangling before it could be
- * read, which for the library that *is* the manual is the wrong first sight.
+ * right and the cords do not cross. A row-major grid put a `value` node between
+ * two links in a chain and made a six-node look need untangling before it could
+ * be read, which for the library that *is* the manual is the wrong first sight.
  */
 /**
  * How far apart two nodes in one column are laid out.
  *
  * Tall enough for the tallest faceplate there is, which is a `track`: a picture,
- * two pickers and a knob. Nodes grew when their pictures went to 16:9 and grew
+ * two pickers and a control. Nodes grew when their pictures went to 16:9 and grew
  * again when `track` took on a second dropdown, and a spacing left at the old
  * height put the second row of every built-in through the first one.
  */
@@ -64,7 +64,7 @@ function wire(
   return {
     name,
     circuit: {
-      nodes: nodes.map(([id, kind, op, knobs, value, label, of]): CircuitNode => {
+      nodes: nodes.map(([id, kind, op, values, value, label, of]): CircuitNode => {
         const column = at.get(id) ?? 0;
         const depth = row.get(column) ?? 0;
         row.set(column, depth + 1);
@@ -75,7 +75,7 @@ function wire(
           y: 40 + depth * ROW,
           ...(op ? { op } : {}),
           ...(of ? { of } : {}),
-          ...(knobs ? { knobs } : {}),
+          ...(values ? { values } : {}),
           ...(value !== undefined ? { value } : {}),
           ...(label ? { label } : {}),
         };
@@ -141,10 +141,10 @@ function columnsOf(ids: readonly string[], cords: readonly { from: string; to: s
  * belongs on an inlet where a half means something.
  *
  * And one thing they teach by shape rather than by rule: **a number that goes to
- * one inlet is set on that inlet**, not wired in from a knob node parked beside
- * it. Four of these used to be knob nodes and are now numbers on a face, which
- * is four fewer cords across the four graphs anyone opens first. The one knob
- * node left is in `Weather`, feeding two places, which is what that node is for.
+ * one inlet is set on that inlet**, not wired in from a `value` node parked
+ * beside it. Four of these used to be `value` nodes and are now numbers on a
+ * face, which is four fewer cords across the four graphs anyone opens first. The
+ * one left is in `Weather`, feeding two places, which is what that node is for.
  */
 const BUILT_IN: Scheme = {
   looks: {
@@ -172,7 +172,7 @@ const BUILT_IN: Scheme = {
         ['live', 'tracks', 'by name'],
         ['e', 'track', 'level', undefined, 0.35, undefined, 'master'],
         // The wedge count is set on the effect's own face rather than wired in
-        // from a knob node. One number, one place, no cord across the canvas.
+        // from a `value` node. One number, one place, no cord across the canvas.
         ['fold', 'lens', 'kaleido', { segments: 0.3 }],
         ['o', 'out'],
       ],
@@ -523,7 +523,7 @@ export function openScheme(): SchemeSource {
   /**
    * The file lags the edit by a moment, deliberately.
    *
-   * A knob turning and a node being dragged both emit on every pointer move, so
+   * A control turning and a node being dragged both emit on every pointer move, so
    * an editor mid-gesture sends sixty schemes a second. What it holds is
    * published immediately — the show must follow the pointer — but writing the
    * file that often would put a synchronous write in the middle of a drag for
@@ -606,7 +606,7 @@ export function openScheme(): SchemeSource {
     // Written over whatever the file already held rather than in place of it,
     // and indented rather than minified. The file is meant to be read, edited
     // by hand and committed — the editor is a way of writing the record, not a
-    // second place the truth lives. Without this, the first turn of a knob
+    // second place the truth lives. Without this, the first turn of a control
     // flattens it to one line and silently drops the `_` block explaining what
     // every key means.
     let held: Record<string, unknown> = {};
@@ -710,8 +710,15 @@ function carried(file: Partial<Scheme> & Legacy): Partial<Scheme> {
   return out;
 }
 
-/** A kind that used to exist, for a file that still spells one. */
+/**
+ * A kind that used to exist, for a file that still spells one — and the one
+ * field that changed its name rather than its meaning.
+ *
+ * `knobs` is what `values` was called, back when the word for a number set on
+ * an inlet was the shape of the control that set it.
+ */
 type Was = Omit<CircuitNode, 'kind'> & {
+  knobs?: Record<string, number>;
   kind:
     | CircuitNode['kind']
     | 'sample'
@@ -746,14 +753,31 @@ const WAS_EFFECT: Record<string, CircuitNode['kind']> = {
   shift: 'spread',
 };
 
-/** A knob renamed out of a collision with a mode or a kind beside it. */
-function swapKnob(
-  knobs: Record<string, number> | undefined,
+/**
+ * `knobs`, under the name it has now.
+ *
+ * The field is dropped rather than left beside its replacement, because
+ * `scheme.json` is a file somebody reads and diffs and two spellings of one map
+ * in it is a question nobody should have to answer. A node that already says
+ * `values` comes back untouched, which is nearly every node in nearly every
+ * file — and one that somehow says both keeps `values`, since that is the one
+ * anything since the rename has been writing.
+ */
+function revalued(node: Was): Was {
+  if (!node.knobs) return node;
+  const next: Was = { ...node, values: { ...node.knobs, ...node.values } };
+  delete next.knobs;
+  return next;
+}
+
+/** An inlet renamed out of a collision with a mode or a kind beside it. */
+function swapValue(
+  values: Record<string, number> | undefined,
   was: string,
   now: string,
 ): Record<string, number> | undefined {
-  if (!knobs || knobs[was] === undefined) return knobs;
-  const next = { ...knobs, [now]: knobs[was] };
+  if (!values || values[was] === undefined) return values;
+  const next = { ...values, [now]: values[was] };
   delete next[was];
   return next;
 }
@@ -780,11 +804,17 @@ function swapKnob(
  * has to say which track *and* which of its numbers; its outlet goes from
  * `level` to the `n` every other number outlet in the vocabulary already used,
  * which is why the cords are walked too.
+ *
+ * And one that is a spelling rather than a meaning: the numbers a node holds on
+ * its own inlets were `knobs` and are **`values`**, because a knob is the shape
+ * of a control and this is a number. That one runs on every node before the
+ * kinds are read, since a node of any kind can carry them and the branches
+ * below all reach for the new name.
  */
 function reword(circuit: Circuit): Circuit {
   const renamed = new Set<string>();
-  const nodes = circuit.nodes.map((old): CircuitNode => {
-    const node = old as Was;
+  const nodes = circuit.nodes.map((raw): CircuitNode => {
+    const node = revalued(raw as Was);
     if (node.kind === 'sample') return { ...node, kind: 'tracks', op: 'by name' };
     if (node.kind === 'signal') {
       const op = node.op === 'energy' || node.op === 'amount' ? 'level' : node.op;
@@ -803,13 +833,13 @@ function reword(circuit: Circuit): Circuit {
     // split could be done to a library people already have.
     if (node.kind === 'effect') {
       const kind = WAS_EFFECT[node.op ?? ''] ?? 'lens';
-      const knobs =
+      const values =
         node.op === 'posterize'
-          ? swapKnob(node.knobs, 'levels', 'steps')
+          ? swapValue(node.values, 'levels', 'steps')
           : node.op === 'shift'
-            ? swapKnob(node.knobs, 'spread', 'split')
-            : node.knobs;
-      return { ...node, kind, op: node.op ?? 'mirror', ...(knobs ? { knobs } : {}) };
+            ? swapValue(node.values, 'spread', 'split')
+            : node.values;
+      return { ...node, kind, op: node.op ?? 'mirror', ...(values ? { values } : {}) };
     }
     // The five that were kinds of their own are the same eleven functions the
     // six above are: `fold` **is** `kaleido`'s wedge fold, written twice.
@@ -823,7 +853,7 @@ function reword(circuit: Circuit): Circuit {
       renamed.add(node.id);
       return { ...node, kind: 'track', of: node.op ?? 'master', op: 'level', value: node.value ?? 0 };
     }
-    return old;
+    return node as CircuitNode;
   });
   return {
     nodes,

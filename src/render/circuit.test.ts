@@ -7,8 +7,8 @@ import {
   compileLook,
   flatten,
   inletsOf,
-  knobsOf,
-  MAX_KNOBS,
+  valuesOf,
+  MAX_VALUES,
   reachesOut,
   repaired,
   signalOf,
@@ -53,10 +53,10 @@ describe('compiling a look', () => {
     expect(compileCircuit(bareCircuit()).draws).toBe('by name');
   });
 
-  it('gives a new look one knob, already named', () => {
-    const knobs = knobsOf(starterCircuit());
-    expect(knobs).toHaveLength(1);
-    expect(knobs[0]).toMatchObject({ label: 'wash', index: 0 });
+  it('gives a new look one number of its own, already named', () => {
+    const values = valuesOf(starterCircuit());
+    expect(values).toHaveLength(1);
+    expect(values[0]).toMatchObject({ label: 'wash', index: 0 });
   });
 
   it('draws nothing rather than failing when nothing is wired to out', () => {
@@ -162,10 +162,10 @@ describe('compiling a look', () => {
     expect(reachesOut(starterCircuit())).toBe(true);
   });
 
-  it('gives a mode nobody has heard of the knobs it will be compiled with', () => {
+  it('gives a mode nobody has heard of the values it will be compiled with', () => {
     // The inlets took `op` at its word and the emit fell back to the first
-    // mode, so one out of a hand-edited file drew a faceplate with no knobs on
-    // it and a shader whose knobs were all zero — a lens folded hard left with
+    // mode, so one out of a hand-edited file drew a faceplate with no values on
+    // it and a shader whose values were all zero — a lens folded hard left with
     // nothing on the canvas to say why.
     const node = { id: 'e', kind: 'lens' as const, op: 'lasers', x: 0, y: 0 };
     expect(inletsOf(node).map((port) => port.name)).toEqual(['p', 'c', 'by']);
@@ -361,11 +361,11 @@ describe('a place is two numbers made into a point', () => {
 
   it('holds a number on each inlet, riding the bank like every other', () => {
     const built = compileCircuit(placed([], []));
-    expect(built.knobs).toHaveLength(0);
+    expect(built.values).toHaveLength(0);
     const set = compileCircuit(
       wire(
         [
-          { id: 'pl', kind: 'place', x: 0, y: 0, knobs: { x: 0.2, y: 0.9 } },
+          { id: 'pl', kind: 'place', x: 0, y: 0, values: { x: 0.2, y: 0.9 } },
           { id: 'g', kind: 'source', op: 'plasma', x: 1, y: 0 },
           { id: 'o', kind: 'out', x: 2, y: 0 },
         ],
@@ -375,7 +375,7 @@ describe('a place is two numbers made into a point', () => {
         ],
       ),
     );
-    expect(set.knobs.map((each) => each.id)).toEqual(['pl/x', 'pl/y']);
+    expect(set.values.map((each) => each.id)).toEqual(['pl/x', 'pl/y']);
     // Never written into the source, or every turn of it would recompile.
     expect(bodyOf(set.source!)).toContain('recentred(vec2(uParams[0], uParams[1]))');
   });
@@ -410,12 +410,12 @@ describe('an inlet holds a number of its own', () => {
   /** The size the shader declared its bank at, which is what the CPU must match. */
   const bankOf = (source: string) => Number(/uniform float uParams\[(\d+)\]/.exec(source)?.[1]);
 
-  const posterize = (knobs?: Record<string, number>, cords: Circuit['cords'] = []): Circuit =>
+  const posterize = (values?: Record<string, number>, cords: Circuit['cords'] = []): Circuit =>
     wire(
       [
         { id: 'g', kind: 'source', op: 'plasma', x: 0, y: 0 },
         { id: 'k', kind: 'value', x: 0, y: 1, value: 0.25, label: 'dial' },
-        { id: 'e', kind: 'grade', op: 'posterize', x: 1, y: 0, ...(knobs ? { knobs } : {}) },
+        { id: 'e', kind: 'grade', op: 'posterize', x: 1, y: 0, ...(values ? { values } : {}) },
         { id: 'o', kind: 'out', x: 2, y: 0 },
       ],
       [{ from: 'g/c', to: 'e/c' }, { from: 'e/c', to: 'o/c' }, ...cords],
@@ -426,10 +426,10 @@ describe('an inlet holds a number of its own', () => {
   });
 
   it('rides a uniform rather than being written into the shader', () => {
-    // The whole bargain. Knob values are deliberately out of `signatureOf`, so
+    // The whole bargain. Set numbers are deliberately out of `signatureOf`, so
     // dragging one does not rebuild a shader sixty times a second — a value
     // interpolated into the GLSL hands that back at every inlet on the canvas,
-    // and what it reaches a person as is a knob that stalls the picture.
+    // and what it reaches a person as is a control that stalls the picture.
     const built = compileCircuit(posterize({ steps: 0.78 }));
     expect(built.error).toBeNull();
     expect(bodyOf(built.source!)).not.toContain('0.78');
@@ -437,7 +437,7 @@ describe('an inlet holds a number of its own', () => {
   });
 
   it('cuts the bank to the graph, and never to nothing', () => {
-    // GLSL rejects a zero-length array, so a look with no knobs at all still
+    // GLSL rejects a zero-length array, so a look with no values at all still
     // declares one float — and a look with two declares two, because a fixed
     // bank big enough for every inlet would be hundreds of unread uniforms.
     expect(bankOf(compileCircuit(bareCircuit()).source!)).toBe(1);
@@ -448,15 +448,15 @@ describe('an inlet holds a number of its own', () => {
   it('hands the CPU a bank exactly as long as the shader declared', () => {
     // Shorter and the tail reads zero; longer and `uniform1fv` is an
     // INVALID_OPERATION, which on a node face is a black picture and no
-    // message. Both come off `knobsOf` so that neither can happen.
+    // message. Both come off `valuesOf` so that neither can happen.
     for (const circuit of [bareCircuit(), starterCircuit(), posterize({ levels: 0.4 })]) {
       expect(paramsOf(circuit).length).toBe(bankOf(compileCircuit(circuit).source!));
     }
   });
 
   it('gives the slots out in the order the graph reads', () => {
-    const knobs = knobsOf(posterize({ steps: 0.78 }));
-    expect(knobs.map((each) => each.id)).toEqual(['k', 'e/steps']);
+    const values = valuesOf(posterize({ steps: 0.78 }));
+    expect(values.map((each) => each.id)).toEqual(['k', 'e/steps']);
     expect(paramsOf(posterize({ steps: 0.78 }))).toEqual(new Float32Array([0.25, 0.78]));
   });
 
@@ -466,28 +466,28 @@ describe('an inlet holds a number of its own', () => {
     // where it was when the cord goes. Snapping to the default on unwiring is
     // the sort of thing that makes people stop experimenting with a canvas.
     const wired = posterize({ levels: 0.78 }, [{ from: 'k/n', to: 'e/steps' }]);
-    expect(knobsOf(wired).map((each) => each.id)).toEqual(['k']);
-    // The knob node's slot, read through the cord — not the number on the face.
+    expect(valuesOf(wired).map((each) => each.id)).toEqual(['k']);
+    // The `value` node's slot, read through the cord — not the number on the face.
     expect(bodyOf(compileCircuit(wired).source!)).toContain('float v1 = uParams[0]');
     expect(bodyOf(compileCircuit(wired).source!)).toContain('fxPosterize(v0, v1)');
-    expect(wired.nodes.find((node) => node.id === 'e')?.knobs).toEqual({ levels: 0.78 });
+    expect(wired.nodes.find((node) => node.id === 'e')?.values).toEqual({ levels: 0.78 });
   });
 
   it('is offered on every number inlet whose answer is not already alive', () => {
-    // `energy` reads the room and a wave's `phase` reads the beat. A knob on
+    // `energy` reads the room and a wave's `phase` reads the beat. A number on
     // either offers to replace something moving with a number that is not,
     // which is a worse default than the one it would replace.
-    const knobs = (node: Circuit['nodes'][number]) =>
+    const values = (node: Circuit['nodes'][number]) =>
       inletsOf(node)
         .filter((port) => port.at !== undefined)
         .map((port) => port.name);
-    expect(knobs({ id: 'e', kind: 'lens', op: 'ripple', x: 0, y: 0 })).toEqual([
+    expect(values({ id: 'e', kind: 'lens', op: 'ripple', x: 0, y: 0 })).toEqual([
       'waves',
       'depth',
       'speed',
     ]);
-    expect(knobs({ id: 'w', kind: 'wave', op: 'sine', x: 0, y: 0 })).toEqual([]);
-    expect(knobs({ id: 'b', kind: 'blend', op: 'over', x: 0, y: 0 })).toEqual(['amount']);
+    expect(values({ id: 'w', kind: 'wave', op: 'sine', x: 0, y: 0 })).toEqual([]);
+    expect(values({ id: 'b', kind: 'blend', op: 'over', x: 0, y: 0 })).toEqual(['amount']);
   });
 
   it('gives a nested look its own slots', () => {
@@ -497,7 +497,7 @@ describe('an inlet holds a number of its own', () => {
         circuit: wire(
           [
             { id: 'g', kind: 'source', op: 'rings', x: 0, y: 0 },
-            { id: 'p', kind: 'grade', op: 'posterize', x: 1, y: 0, knobs: { steps: 0.9 } },
+            { id: 'p', kind: 'grade', op: 'posterize', x: 1, y: 0, values: { steps: 0.9 } },
             { id: 'o', kind: 'out', x: 2, y: 0 },
           ],
           [
@@ -511,7 +511,7 @@ describe('an inlet holds a number of its own', () => {
         circuit: wire(
           [
             { id: 'sub', kind: 'look', op: 'inner', x: 0, y: 0 },
-            { id: 'h', kind: 'grade', op: 'hue', x: 1, y: 0, knobs: { shift: 0.3 } },
+            { id: 'h', kind: 'grade', op: 'hue', x: 1, y: 0, values: { shift: 0.3 } },
             { id: 'o', kind: 'out', x: 2, y: 0 },
           ],
           [
@@ -523,12 +523,12 @@ describe('an inlet holds a number of its own', () => {
     };
     const built = compileLook(looks, 'outer');
     expect(built.error).toBeNull();
-    expect(built.knobs.map((each) => each.id)).toEqual(['sub~p/steps', 'h/shift']);
+    expect(built.values.map((each) => each.id)).toEqual(['sub~p/steps', 'h/shift']);
     expect(bankOf(built.source!)).toBe(2);
   });
 
-  it('refuses a graph with more knobs than the bank may hold', () => {
-    const many = Array.from({ length: MAX_KNOBS + 1 }, (_, i) => ({
+  it('refuses a graph with more values than the bank may hold', () => {
+    const many = Array.from({ length: MAX_VALUES + 1 }, (_, i) => ({
       id: `k${i}`,
       kind: 'value' as const,
       x: 0,
@@ -537,7 +537,7 @@ describe('an inlet holds a number of its own', () => {
     }));
     const built = compileCircuit(wire([...many, { id: 'o', kind: 'out', x: 1, y: 0 }], []));
     expect(built.source).toBeNull();
-    expect(built.error).toMatch(/knobs/);
+    expect(built.error).toMatch(/numbers set/);
   });
 });
 
@@ -783,26 +783,26 @@ describe('exactly one out, and it is not optional', () => {
             op: 'posterize',
             x: 0,
             y: 0,
-            knobs: { steps: 0.8, waves: 0.3 },
+            values: { steps: 0.8, waves: 0.3 },
           },
           { id: 'o', kind: 'out', x: 1, y: 0 },
         ],
         [{ from: 'e/c', to: 'o/c' }],
       ),
     );
-    expect(fixed.nodes[0].knobs).toEqual({ steps: 0.8 });
+    expect(fixed.nodes[0].values).toEqual({ steps: 0.8 });
     // And a node whose values were all strays loses the field rather than
     // keeping an empty map in every save of the file from then on.
     const bare = repaired(
       wire(
         [
-          { id: 'h', kind: 'grade', op: 'hue', x: 0, y: 0, knobs: { reach: 0.4 } },
+          { id: 'h', kind: 'grade', op: 'hue', x: 0, y: 0, values: { reach: 0.4 } },
           { id: 'o', kind: 'out', x: 1, y: 0 },
         ],
         [{ from: 'h/c', to: 'o/c' }],
       ),
     );
-    expect(bare.nodes[0].knobs).toBeUndefined();
+    expect(bare.nodes[0].values).toBeUndefined();
   });
 
   it('leaves a graph the editor made exactly as it was', () => {
@@ -818,7 +818,7 @@ describe('a look inside a look', () => {
       circuit: wire(
         [
           { id: 'g', kind: 'source', op: 'rings', x: 0, y: 0 },
-          { id: 'k', kind: 'value', x: 0, y: 1, value: 0.3, label: 'inner knob' },
+          { id: 'k', kind: 'value', x: 0, y: 1, value: 0.3, label: 'inner number' },
           { id: 'o', kind: 'out', x: 1, y: 0 },
         ],
         [{ from: 'g/c', to: 'o/c' }],
@@ -870,13 +870,13 @@ describe('a look inside a look', () => {
     expect(bodyOf(compileLook(library(), 'outer').source!)).toContain('gen_rings(fxTwist(');
   });
 
-  it('gives a nested knob a slot of its own', () => {
+  it('gives a nested number a slot of its own', () => {
     // Flattening before compiling rather than teaching the compiler about
     // sub-looks is what keeps the compiler one thing: the banks fall out of the
     // expanded graph without a second pass to gather them.
     const built = compileLook(library(), 'outer');
-    expect(built.knobs).toHaveLength(1);
-    expect(built.knobs[0].label).toBe('inner knob');
+    expect(built.values).toHaveLength(1);
+    expect(built.values[0].label).toBe('inner number');
   });
 
   it('prefixes ids so two copies of one look cannot collide', () => {

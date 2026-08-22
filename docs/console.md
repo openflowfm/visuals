@@ -67,8 +67,8 @@ under it, a mode and the values that make that mode read. Dropping the row gives
 default node and dropping a preset gives you a configured one. Now that an inlet can hold a
 number, that second half is real: a preset is a mode *plus* a set of values, which is why
 this and settable inlets are one change. `posterize` is the preset that proves it — the
-middle of its one knob is eight steps, which on a projector is invisible, so the preset
-carries the number that makes it a poster. Most presets carry none, because a knob's middle
+middle of its one number is eight steps, which on a projector is invisible, so the preset
+carries the number that makes it a poster. Most presets carry none, because the middle
 is where these were tuned to sit and a preset setting everything to a half would say nothing.
 
 **Not every list under a node is a preset list.** A `track` names a track in the set and a
