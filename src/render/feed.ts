@@ -1,9 +1,14 @@
 import type { Blend, Scheme, Show } from '../../protocol.ts';
 import { hint } from '../../hints.ts';
+import { sectionOf, seedOf, smoothTrack, trackReading } from './evaluateNumber.ts';
 import { compile, drawFullscreen, rgb, type Program } from './gl.ts';
 import type { TrackAsk } from './look.ts';
 import { OUTPUT_SHADER, SQUARE, columns, warpFor } from './output.ts';
 import { TRACK_SHADERS } from './shaders.ts';
+
+// Kept as exports here for callers that got these renderer facts from `feed`
+// before the CPU evaluator became their shared pure home.
+export { sectionOf, seedOf } from './evaluateNumber.ts';
 
 /**
  * What a look is fed, and the two passes that do the feeding.
@@ -72,25 +77,6 @@ const BLENDS: Record<Blend, [number, number]> = {
  */
 function trackBlend(t: number): Blend {
   return t === 0 ? 'over' : 'screen';
-}
-
-/** A stable 0–1 per song name, so `song.seed` is a different number per song. */
-export function seedOf(name: string | null): number {
-  if (!name) return 0.5;
-  let h = 1779033703 ^ name.length;
-  for (let i = 0; i < name.length; i++) {
-    h = Math.imul(h ^ name.charCodeAt(i), 3432918353);
-    h = (h << 13) | (h >>> 19);
-  }
-  h = Math.imul(h ^ (h >>> 16), 2246822507);
-  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
-}
-
-/** Where the playing section sits among the ones the set uses, 0–1. */
-export function sectionOf(show: Show): number {
-  if (!show.role || show.roles.length < 2) return 0.5;
-  const at = show.roles.indexOf(show.role);
-  return at < 0 ? 0.5 : at / (show.roles.length - 1);
 }
 
 export interface Feed {
@@ -180,26 +166,6 @@ export function createFeed(gl: WebGL2RenderingContext): Feed {
     gl.uniform1f(program.uniform('uPace'), at.scheme?.defaults.pace ?? 0);
   };
 
-  /**
-   * One number out of the set, by track name and by which number was asked for.
-   *
-   * A name nobody can resolve reads zero rather than throwing — a look pointed
-   * at a track that has since been renamed should go quiet, not take the
-   * picture down with it. `master` is the room rather than a track, so the two
-   * readings it has no answer for are answered by the transport instead: it is
-   * always up, and it is playing when the set is.
-   */
-  const readOf = (show: Show, name: string, read: string): number => {
-    if (name === 'master') {
-      return read === 'level' ? show.master : read === 'fader' ? 1 : show.playing ? 1 : 0;
-    }
-    const track = show.tracks.find((t) => t.name === name);
-    if (!track) return 0;
-    if (read === 'fader') return track.opacity;
-    if (read === 'playing') return track.playing >= 0 ? 1 : 0;
-    return track.level;
-  };
-
   return {
     get error() {
       return error;
@@ -267,7 +233,7 @@ export function createFeed(gl: WebGL2RenderingContext): Feed {
         const bank = new Float32Array(8);
         banks.tracks.forEach((each, i) => {
           if (!each.name) return;
-          const now = readOf(show, each.name, each.read);
+          const now = trackReading(show, each.name, each.read);
           if (each.smooth <= 0) {
             bank[i] = now;
             return;
@@ -278,8 +244,7 @@ export function createFeed(gl: WebGL2RenderingContext): Feed {
           // a meter off the same track do not share one follower.
           const key = `${each.name}/${each.read}`;
           const was = followed.get(key) ?? 0;
-          const fall = 1 - Math.exp(-at.dt / (0.05 + each.smooth * 1.95));
-          const value = now > was ? now : was + (now - was) * fall;
+          const value = smoothTrack(was, now, each.smooth, at.dt);
           followed.set(key, value);
           bank[i] = value;
         });
