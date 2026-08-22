@@ -61,6 +61,7 @@ export type NodeKind =
   // geometry: it moves the point, and hands back what it found there
   | 'lens'
   | 'polar'
+  | 'place'
   // colour
   | 'grade'
   | 'spread'
@@ -98,7 +99,10 @@ export const NODE_FAMILIES: readonly { name: string; about: string; kinds: NodeK
   {
     name: 'geometry',
     about: 'Moving the point a picture is read at',
-    kinds: ['point', 'lens', 'polar'],
+    // In the order a point travels: where you are, a place you named, moving
+    // one, and taking one apart. `place` and `polar` are the two directions
+    // between the two signals — numbers into a point, and a point into numbers.
+    kinds: ['point', 'place', 'lens', 'polar'],
   },
   {
     // The one heading that names something outside this program, and it should:

@@ -341,6 +341,17 @@ is the same picture with less of it. Every other effect was already in plane uni
 `uRes` in `shift` and in the source shaders is aspect correction, which is a different thing
 and is right.
 
+**A `place` is the same rule from the other end.** It is the one node whose whole output is a
+coordinate — two 0–1 numbers into a point — and it builds one through `recentred`, so 0 and 1
+are the frame's own edges in both axes on any window.
+
+The plane is `vUv - 0.5` with the x scaled by the aspect, so a 16:9 frame runs ±0.5 up and
+down and about ±0.89 across. A hand-written `(n - 0.5) * 2.0` therefore overshoots — the
+whole picture is in the middle *half* of the knob's travel vertically and the middle 89% of
+it horizontally, and those two are not the same fraction, so the same turn of `x` and of `y`
+moves a different distance. `recentred` is the helper that already knows the frame's shape,
+and using it means the ends of the travel are the ends of the picture. See [looks](looks.md).
+
 ## What is not built
 
 - **Video clips.** Every picture is procedural. A `<video>` texture is one more `source` mode

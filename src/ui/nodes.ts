@@ -220,8 +220,11 @@ export function palette(scheme: Scheme, tracks: readonly string[]): Entry[] {
   modes('spread', 'spread', SPREAD_MODES);
   modes('blend', 'blend', BLENDS);
 
-  // Geometry.
+  // Geometry. `place` sits next to `point` rather than next to `polar`,
+  // because the two of them are what a canvas gets a point *from* and `polar`
+  // is what it turns one back into.
   node('point', undefined, 'point', NODE_SPECS.point.about);
+  node('place', undefined, NODE_SPECS.place.name, NODE_SPECS.place.about);
   modes('lens', 'lens', LENS_MODES);
   node('polar', undefined, NODE_SPECS.polar.name, NODE_SPECS.polar.about);
 

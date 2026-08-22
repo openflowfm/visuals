@@ -564,6 +564,31 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     },
   },
 
+  place: {
+    name: 'place',
+    about: 'Two numbers into a point: 0 to 1 across the frame, a half in the middle.',
+    // The one node in the vocabulary that makes a point out of nothing you were
+    // handed, which is why it has no `p` inlet. `polar` takes a point apart and
+    // this puts one together, so a pair of `wave`s or a pair of meters can name
+    // somewhere to read a picture — which nothing could say before.
+    //
+    // **Cartesian, and no polar mode.** Two numbers read as `radius` and
+    // `angle` is a real second answer, but it is not a *mode* of this one: a
+    // mode moves the inlets, and these two are the only inlets there are, so
+    // flicking would cut every cord on the node. That is a change of wiring
+    // rather than a change of mind, which is the line between a kind and a
+    // mode here. See `docs/looks.md`.
+    inlets: [N('x'), N('y')],
+    outlets: [P('p')],
+    // `recentred` and not a hand-written `(n - 0.5) * 2.0`, because the plane
+    // is `vUv - 0.5` with the x scaled by the aspect — ±0.5 up and down, ±0.89
+    // across on 16:9. Doubling about the middle overshoots both, by different
+    // amounts, so the picture would sit in the middle half of the travel one
+    // way and the middle 89% of it the other. Through the helper that already
+    // knows the frame's shape, 0 and 1 are its own edges in both axes.
+    emit: (c) => ({ p: `recentred(vec2(${c.read('x')}, ${c.read('y')}))` }),
+  },
+
   polar: {
     name: 'polar',
     about: 'A point as distance from the centre and angle around it.',

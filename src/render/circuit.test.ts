@@ -302,6 +302,110 @@ describe('a lens has two outlets and they are not the same node twice', () => {
   });
 });
 
+describe('a place is two numbers made into a point', () => {
+  /** A picture read wherever the place says, which is the whole of the node. */
+  const placed = (nodes: Circuit['nodes'] = [], cords: Circuit['cords'] = []): Circuit =>
+    wire(
+      [
+        { id: 'pl', kind: 'place', x: 0, y: 0 },
+        { id: 'g', kind: 'source', op: 'plasma', x: 1, y: 0 },
+        { id: 'o', kind: 'out', x: 2, y: 0 },
+        ...nodes,
+      ],
+      [{ from: 'pl/p', to: 'g/p' }, { from: 'g/c', to: 'o/c' }, ...cords],
+    );
+
+  it('makes a point out of two numbers and hands it downstream', () => {
+    const built = compileCircuit(placed());
+    expect(built.error).toBeNull();
+    const at = /vec2 (v\d+) = recentred\(/.exec(bodyOf(built.source!))?.[1];
+    expect(at).toBeTruthy();
+    expect(bodyOf(built.source!)).toContain(`gen_plasma(${at}`);
+  });
+
+  it('sits in the middle with nothing wired and nothing set', () => {
+    // The one default that has to be obvious: an untouched place is the centre,
+    // so dropping one changes nothing until you turn it. A half in each is the
+    // middle of the frame because `recentred` takes 0–1 across the picture.
+    expect(bodyOf(compileCircuit(placed()).source!)).toContain('recentred(vec2(0.5, 0.5))');
+  });
+
+  it('spans the frame rather than a square of it', () => {
+    // Through `recentred`, which is aspect-corrected, so a full `x` is the
+    // frame's own edge on any window. A hand-written `(n - 0.5) * 2.0` would
+    // land short of it on a wide one and past it on a tall one.
+    expect(compileCircuit(placed()).source).toContain('vec2 recentred(vec2 uv)');
+  });
+
+  it('is a point a pair of moving numbers can name', () => {
+    // The thing nothing could say before: a graph could take a point apart and
+    // never put one together, so two waves — or two meters — had nowhere to go.
+    const built = compileCircuit(
+      placed(
+        [
+          { id: 'b', kind: 'playback', op: 'beat', x: 0, y: 1 },
+          { id: 'wx', kind: 'wave', op: 'sine', x: 0, y: 2 },
+          { id: 'wy', kind: 'wave', op: 'saw', x: 0, y: 3 },
+        ],
+        [
+          { from: 'b/n', to: 'wx/phase' },
+          { from: 'b/n', to: 'wy/phase' },
+          { from: 'wx/n', to: 'pl/x' },
+          { from: 'wy/n', to: 'pl/y' },
+        ],
+      ),
+    );
+    expect(built.error).toBeNull();
+    expect(bodyOf(built.source!)).toMatch(/recentred\(vec2\(v\d+, v\d+\)\)/);
+  });
+
+  it('holds a number on each inlet, riding the bank like every other', () => {
+    const built = compileCircuit(placed([], []));
+    expect(built.knobs).toHaveLength(0);
+    const set = compileCircuit(
+      wire(
+        [
+          { id: 'pl', kind: 'place', x: 0, y: 0, knobs: { x: 0.2, y: 0.9 } },
+          { id: 'g', kind: 'source', op: 'plasma', x: 1, y: 0 },
+          { id: 'o', kind: 'out', x: 2, y: 0 },
+        ],
+        [
+          { from: 'pl/p', to: 'g/p' },
+          { from: 'g/c', to: 'o/c' },
+        ],
+      ),
+    );
+    expect(set.knobs.map((each) => each.id)).toEqual(['pl/x', 'pl/y']);
+    // Never written into the source, or every turn of it would recompile.
+    expect(bodyOf(set.source!)).toContain('recentred(vec2(uParams[0], uParams[1]))');
+  });
+
+  it('goes round to a number and back through polar', () => {
+    // The two directions between a point and a pair of numbers, in one graph:
+    // there is nothing clever about it, but a vocabulary where only one of them
+    // exists is one where half the graphs you reach for cannot be drawn.
+    const built = compileCircuit(
+      wire(
+        [
+          { id: 'pl', kind: 'place', x: 0, y: 0 },
+          { id: 'po', kind: 'polar', x: 1, y: 0 },
+          { id: 'pa', kind: 'paint', x: 2, y: 0 },
+          { id: 'o', kind: 'out', x: 3, y: 0 },
+        ],
+        [
+          { from: 'pl/p', to: 'po/p' },
+          { from: 'po/radius', to: 'pa/amount' },
+          { from: 'pa/c', to: 'o/c' },
+        ],
+      ),
+    );
+    expect(built.error).toBeNull();
+    const at = /vec2 (v\d+) = recentred\(vec2\(0\.5, 0\.5\)\);/.exec(bodyOf(built.source!))?.[1];
+    expect(at).toBeTruthy();
+    expect(bodyOf(built.source!)).toContain(`length(${at})`);
+  });
+});
+
 describe('an inlet holds a number of its own', () => {
   /** The size the shader declared its bank at, which is what the CPU must match. */
   const bankOf = (source: string) => Number(/uniform float uParams\[(\d+)\]/.exec(source)?.[1]);

@@ -138,6 +138,19 @@ describe('rolled looks', () => {
     }
   });
 
+  it('never starts a graph from a place, because a place is one colour', () => {
+    // A `place` is the same point for every fragment, so a picture read at one
+    // is the whole frame in a single colour — moving, but flat. That is a real
+    // thing to reach for deliberately and a terrible thing to be dealt: the
+    // roll always begins at `point`, so what it makes has structure in it.
+    for (const seed of seeds) {
+      const rng = seedOf(seed);
+      for (let i = 0; i < 12; i++) {
+        expect(rollCircuit(rng).nodes.some((n) => n.kind === 'place'), seed).toBe(false);
+      }
+    }
+  });
+
   it('mostly reaches for the set rather than ignoring it', () => {
     // A rolled look that ignored whoever is playing is a screensaver, and this
     // rig is not one. Not every one of them — a wash that runs on its own is a

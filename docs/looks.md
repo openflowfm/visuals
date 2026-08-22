@@ -170,8 +170,46 @@ editors listing these differently would be two different vocabularies.
 | node | in | out | |
 |---|---|---|---|
 | `point` | — | `p` | where this fragment is being read |
+| `place` | `x` `y` | `p` | how two numbers become a position |
 | `lens` | `p` `c` `energy` + its mode's knobs | `p` `c` | `zoom` `swirl` `fold` `wobble` `tile` `mirror` `kaleido` `twist` `ripple` `slice` `pixelate` |
 | `polar` | `p` | `radius` `angle` | how a position becomes a number |
+
+### `place` is the other direction, and it was missing
+
+`polar` took a point apart and nothing put one back together. A graph could read a position
+as two numbers and never write two numbers as a position, so a point built from a pair of
+`wave`s, or from two Ableton track levels, was a sentence the vocabulary could not say.
+
+`place` says it. Two 0–1 numbers, `x` and `y`, through `recentred` — the same helper the
+handful of screen-space effects come back through — so **0 to 1 spans the frame and a half
+is the middle**. The aspect correction comes with it, which is the reason it is that helper
+and not a hand-written `(n - 0.5) * 2.0`: doubling about the middle overshoots the plane in
+both axes and by different amounts, so the ends of the travel would be off the picture and
+a turn of `x` would not move as far as the same turn of `y`. See [render](render.md).
+
+An untouched one is the **centre**, because both inlets start at the half every number inlet
+starts at. So dropping a `place` in front of a picture changes nothing until you turn
+something, which is the same bargain every other unwired inlet makes.
+
+**A place is one colour.** It is the same point for every fragment, so a picture read at one
+fills the whole frame with whatever is at that spot — moving, if the numbers move, but flat.
+That is a real thing to reach for: it is how you take a colour *out* of a picture and blend
+it under something. It is also why [the roll](wheel.md) never wires one, and why a `place`
+node's own face is a flat square.
+
+**Cartesian, and there is no polar mode.** Two numbers read as a radius and an angle is a
+genuine second answer, and the substitution rule is what says it cannot be a mode of this
+one: *would you flick between these two with the picture up and no cords moving?* No — `x`
+and `y` are the only inlets there are, so a flick to `radius`/`angle` cuts **every cord on
+the node**. That is what separates it from `lens`, where eleven modes rename their knobs
+freely and the picture and the point stay wired throughout. A mode moving the trim is the
+rule working; a mode moving the whole signal path is a change of wiring wearing a dropdown.
+
+And it is not a second *kind* either, because two node kinds differing only by a coordinate
+system is two rows in a browser for one idea — the exact complaint that merged `energy` into
+`track`. So building a point from a radius and an angle is not expressible, `wave` and `math`
+cannot fake it (`math`'s `subtract` clamps at zero, so there is no way to make a bipolar
+cosine out of a unipolar sine), and it is in **what is not built** below where it belongs.
 
 ## `effect` was three things wearing one name
 
@@ -520,6 +558,16 @@ audio effect. See [the wheel](wheel.md).
 
 **One track's picture as another's input.** A look reaches a track's *meter* and not its
 *frame*. That needs a render target per track, which the compositor does not keep.
+
+**A point from a radius and an angle.** `place` builds one from `x` and `y`, and the
+substitution rule says the polar reading cannot be a mode of it — see above. Whether it
+wants a kind of its own is a question to answer after somebody has missed it.
+
+**Arithmetic on a point.** `math` takes two numbers; there is nothing that adds two points,
+so a `place` cannot be used as an *offset* to the point being asked about. The lens modes
+displace a point in eleven fixed shapes and none of them takes a vector. It is the obvious
+next node and it was deliberately not smuggled into `place`, whose whole claim is that it
+makes a point out of two numbers rather than out of two numbers and a point.
 
 **Undo.** The scheme is replaced whole on every edit and the file is the record, so `git
 diff` is the undo — and the roll keeps one level of its own.
