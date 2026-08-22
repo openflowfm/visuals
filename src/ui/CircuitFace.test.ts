@@ -2,7 +2,7 @@ import { createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { Circuit, CircuitNode } from '../../protocol.ts';
-import { NodeFace, type NumberReading } from './Circuit.tsx';
+import { NodeFace, rowsHeldOpen, type NumberReading } from './Circuit.tsx';
 import { readingsOf, sameDisplayedReadings } from './Designer.tsx';
 
 const noop = () => {};
@@ -43,10 +43,15 @@ describe('the node face anatomy', () => {
     const polar = face({ id: 'p', kind: 'polar', previewOutlet: 'angle', x: 0, y: 0 });
     expect(polar).toContain('title="Show radius in this node&#x27;s picture"');
     expect(polar).toContain('title="Show angle in this node&#x27;s picture"');
-    expect(polar).toContain('class="node-outlet-choice" data-on=""');
+    // The picked one carries the mark, and it is on the button rather than a
+    // wrapper: an outlet is a row like any other now, so there is nothing left
+    // between the row and its name to hang a state on.
+    expect(polar).toContain('aria-pressed="true" data-on=""');
 
     const source = face({ id: 's', kind: 'source', op: 'plasma', x: 0, y: 0 });
     expect(source).not.toContain('node-outlet-preview');
+    // With one outlet the name is still printed, just not as something to press.
+    expect(source).toContain('class="node-outlet-name">c</span>');
   });
 
   it('keeps a driven number row and names its driver instead of its dormant value', () => {
@@ -125,5 +130,31 @@ describe('display-clock readings', () => {
         { 'm/a': { value: 0.626, display: '63 %' } },
       ),
     ).toBe(false);
+  });
+});
+
+describe('how much room a face holds open', () => {
+  it('reserves the widest mode of this kind, so a mode change never reflows', () => {
+    // `zoom` takes one number and `ripple` takes three, plus the point, the
+    // colour and an energy. Both faces hold the taller shape open, so flicking
+    // the dropdown moves nothing on the canvas.
+    const zoom = rowsHeldOpen({ id: 'l', kind: 'lens', op: 'zoom', x: 0, y: 0 });
+    const ripple = rowsHeldOpen({ id: 'l', kind: 'lens', op: 'ripple', x: 0, y: 0 });
+    expect(zoom).toEqual(ripple);
+    expect(zoom.ports).toBeGreaterThan(3);
+  });
+
+  it('does not make a small node as tall as the biggest one on the canvas', () => {
+    // The whole reason this is per kind. `point` has no inlets at all; holding
+    // a lens's six rows open on it would be most of a node of empty frame.
+    const point = rowsHeldOpen({ id: 'p', kind: 'point', x: 0, y: 0 });
+    const lens = rowsHeldOpen({ id: 'l', kind: 'lens', op: 'ripple', x: 0, y: 0 });
+    expect(point.ports).toBe(0);
+    expect(point.ports).toBeLessThan(lens.ports);
+  });
+
+  it('counts the row a kind draws for itself', () => {
+    // A `value` has no inlets and still draws one control: its own amount.
+    expect(rowsHeldOpen({ id: 'v', kind: 'value', x: 0, y: 0 }).ports).toBe(1);
   });
 });

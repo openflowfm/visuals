@@ -289,12 +289,18 @@ export function NodeFace({
       </Button>
     );
 
+  const held = rowsHeldOpen(node);
+
   return (
     <Device
       name={title}
       className={`node node-${node.kind}`}
+      vars={{
+        '--wdg-device-port-rows': held.ports,
+        '--wdg-device-outlet-rows': held.outlets,
+      }}
       title={spec.about}
-      overlay={picture?.(node.id)}
+      screen={picture?.(node.id)}
       chooser={chooser}
       onHotSwap={spec.ops && onSwap ? () => onSwap(node.id, node.kind) : undefined}
       headerEnd={
@@ -305,24 +311,17 @@ export function NodeFace({
           </>
         ) : undefined
       }
+      // An outlet is a row too, so the face has one visual language top to
+      // bottom: a port on its own edge, its name on the inside. The name is a
+      // button only when there is a choice to make — with one outlet there is
+      // nothing to pick and a chip that cannot be pressed is a lie.
       outlets={spec.outlets.map((port) => {
         const id = portId(node.id, port.name);
-        if (spec.outlets.length > 1) {
-          return (
-            <span
-              key={id}
-              className="node-outlet-choice"
-              {...(previewed === port.name ? { 'data-on': '' } : {})}
-            >
-              <button
-                type="button"
-                className="node-outlet-preview"
-                aria-pressed={previewed === port.name}
-                title={`Show ${port.name} in this node's picture`}
-                onClick={() => onChange({ previewOutlet: port.name })}
-              >
-                {port.name}
-              </button>
+        const picked = previewed === port.name;
+        return (
+          <DevicePortRow
+            key={id}
+            outlet={
               <Port
                 id={id}
                 side="out"
@@ -331,18 +330,23 @@ export function NodeFace({
                 kind={port.kind}
                 connected={feeding.has(id)}
               />
-            </span>
-          );
-        }
-        return (
-          <Port
-            key={id}
-            id={id}
-            side="out"
-            label={port.name}
-            kind={port.kind}
-            connected={feeding.has(id)}
-          />
+            }
+          >
+            {spec.outlets.length > 1 ? (
+              <button
+                type="button"
+                className="node-outlet-preview"
+                aria-pressed={picked}
+                {...(picked ? { 'data-on': '' } : {})}
+                title={`Show ${port.name} in this node's picture`}
+                onClick={() => onChange({ previewOutlet: port.name })}
+              >
+                {port.name}
+              </button>
+            ) : (
+              <span className="node-outlet-name">{port.name}</span>
+            )}
+          </DevicePortRow>
         );
       })}
       portRows={
@@ -476,6 +480,30 @@ function AliveMeter({
  * Split on the **last** slash, because a port address is `nodeId/port` and the
  * flattener's ids carry slashes of their own.
  */
+/**
+ * How many rows a face of this kind holds open, whatever mode it is in.
+ *
+ * The **kind's** maximum across its own modes, not one number for the whole
+ * canvas. Reserving the tallest node's shape on every node was the first
+ * attempt at stopping the reflow, and it makes a `point` — no inlets, one
+ * outlet — exactly as tall as a `ripple` with six, so most of the canvas is
+ * empty frame. Per kind still stops the reflow that matters, because a mode
+ * change is the only thing that alters a node's rows without a person moving
+ * something.
+ *
+ * `track` and `value` carry one row of their own that is nobody's inlet: a
+ * smoothing and an amount. They are counted here because the face draws them.
+ */
+export function rowsHeldOpen(node: CircuitNode): { ports: number; outlets: number } {
+  const spec = NODE_SPECS[node.kind];
+  const own = node.kind === 'track' || node.kind === 'value' ? 1 : 0;
+  const widest = (spec.ops ?? [node.op]).reduce((most, op) => {
+    const named = inletsOf({ ...node, op }).filter((port) => !port.name.startsWith('~'));
+    return Math.max(most, named.length);
+  }, 0);
+  return { ports: widest + own, outlets: spec.outlets.length };
+}
+
 export function driverOf(
   circuit: Circuit,
   id: string,
