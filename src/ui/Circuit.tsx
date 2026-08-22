@@ -293,8 +293,8 @@ function NodeFace({
           </div>
           <Knob
             param={VALUE}
-            value={PERCENT.to(node.value ?? 0)}
-            onChange={(v) => onChange({ value: PERCENT.from(v) })}
+            value={PERCENT.to(node.smooth ?? 0)}
+            onChange={(v) => onChange({ smooth: PERCENT.from(v) })}
             name="smooth"
           />
         </div>

@@ -138,6 +138,30 @@ describe('rolled looks', () => {
     }
   });
 
+  it('writes smoothing only on track nodes and values only on value nodes', () => {
+    let tracks = 0;
+    let values = 0;
+    for (const seed of seeds) {
+      const rng = seedOf(seed);
+      for (let i = 0; i < 12; i++) {
+        for (const node of rollCircuit(rng).nodes) {
+          if (node.kind === 'track') {
+            tracks += 1;
+            expect(node.smooth).toBeDefined();
+            expect(node.value).toBeUndefined();
+          }
+          if (node.kind === 'value') {
+            values += 1;
+            expect(node.value).toBeDefined();
+            expect(node.smooth).toBeUndefined();
+          }
+        }
+      }
+    }
+    expect(tracks).toBeGreaterThan(0);
+    expect(values).toBeGreaterThan(0);
+  });
+
   it('never starts a graph from a place, because a place is one colour', () => {
     // A `place` is the same point for every fragment, so a picture read at one
     // is the whole frame in a single colour — moving, but flat. That is a real

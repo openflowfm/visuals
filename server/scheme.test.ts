@@ -102,6 +102,22 @@ describe('the built-in scheme', () => {
     }
   });
 
+  it('keeps values on value nodes and smoothing on track nodes', () => {
+    const nodes = Object.values(BUILT_IN.looks).flatMap((def) => def.circuit.nodes);
+    const tracks = nodes.filter((node) => node.kind === 'track');
+    const values = nodes.filter((node) => node.kind === 'value');
+    expect(tracks.length).toBeGreaterThan(0);
+    expect(values.length).toBeGreaterThan(0);
+    for (const node of tracks) {
+      expect(node.smooth).toBeDefined();
+      expect(node.value).toBeUndefined();
+    }
+    for (const node of values) {
+      expect(node.value).toBeDefined();
+      expect(node.smooth).toBeUndefined();
+    }
+  });
+
   it('ships nothing that draws nothing', () => {
     // A shipped look with a node parked off to one side is fine; a shipped look
     // with nothing wired to `out` is a black frame with a library entry's name
@@ -250,9 +266,47 @@ describe('a file written when the cascade existed', () => {
     expect(node?.kind).toBe('track');
     expect(node?.of).toBe('Bass');
     expect(node?.op).toBe('level');
-    expect(node?.value).toBe(0.4);
+    expect(node?.smooth).toBe(0.4);
+    expect(node?.value).toBeUndefined();
     // Its outlet was already `n`, so the cord is untouched.
     expect(merged.cords).toContainEqual({ from: 'e/n', to: 'p/amount' });
+  });
+
+  it('moves a track smoothing from value to smooth, with the new spelling winning', () => {
+    const merged = merge({
+      looks: {
+        mine: {
+          name: 'Mine',
+          circuit: {
+            nodes: [
+              { id: 'old', kind: 'track', of: 'Bass', op: 'level', x: 0, y: 0, value: 0.6 },
+              {
+                id: 'both',
+                kind: 'track',
+                of: 'Drums',
+                op: 'level',
+                x: 0,
+                y: 1,
+                value: 0.8,
+                smooth: 0.25,
+              },
+              { id: 'dial', kind: 'value', x: 0, y: 2, value: 0.7 },
+              { id: 'o', kind: 'out', x: 1, y: 0 },
+            ],
+            cords: [],
+          },
+        },
+      },
+    }).looks.mine.circuit;
+    const old = merged.nodes.find((node) => node.id === 'old');
+    const both = merged.nodes.find((node) => node.id === 'both');
+    const dial = merged.nodes.find((node) => node.id === 'dial');
+    expect(old?.smooth).toBe(0.6);
+    expect(old?.value).toBeUndefined();
+    expect(both?.smooth).toBe(0.25);
+    expect(both?.value).toBeUndefined();
+    expect(dial?.value).toBe(0.7);
+    expect(dial?.smooth).toBeUndefined();
   });
 
   it('splits effect three ways without moving a single cord', () => {

@@ -202,7 +202,7 @@ export function rollCircuit(rng: Rng): Circuit {
         op: 'level',
         x,
         y,
-        value: round2(between(rng, 0.2, 0.7)),
+        smooth: round2(between(rng, 0.2, 0.7)),
       });
       wire(`${from}/n`, into);
       return;

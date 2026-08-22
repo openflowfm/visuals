@@ -75,7 +75,7 @@ Giving an inlet a number for the first time is a change to the shader's shape an
 once; every turn of it after that recompiles nothing, which is the whole reason a set number
 is a uniform. `uTracks` is a second bank, of eight, filled only for a look that **named** a
 track — and filled on the CPU, both because a name has to be resolved against the set and because a
-`track` node's smoothing is an envelope follower, which has to remember what it saw last
+`track` node's `smooth` is an envelope follower, which has to remember what it saw last
 frame. There used to be a third bank for those; `track` and `energy` are one node now, so
 what goes in a slot is that node's business and the shader reads a number without learning
 which.
@@ -326,7 +326,7 @@ gain; a node face gets neither. Everything above that line is one list.
 The banks are re-read **every frame** rather than kept beside the program, and that is what
 `banksOf` is for. Two of the three change without the shader changing: a number set on an
 inlet is a
-uniform, and so is a `track` node's smoothing — which, held from compile time, left that
+uniform, and so is a `track` node's `smooth` — which, held from compile time, left that
 one control doing nothing until something else forced a rebuild.
 
 ## An effect must not measure itself in pixels

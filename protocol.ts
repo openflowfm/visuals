@@ -315,19 +315,17 @@ export interface CircuitNode {
    * `server/scheme.ts` carries those across.
    */
   values?: Record<string, number>;
-  /**
-   * A `value` node's amount, or a `track` node's smoothing. 0–1 either way.
-   *
-   * **One letter from `values` and deliberately not part of it.** Neither of
-   * these is an inlet, and `values` is keyed by inlet name and trimmed against
-   * the inlets a node actually has — so a number parked under a name no port
-   * answers to would be dropped the first time anything came through `merge`.
-   * A track's smoothing is not even a shader number: the envelope runs on the
-   * CPU, because it has to remember what it saw last frame and a fragment
-   * shader cannot. The two are different types as well as different fields, so
-   * confusing them is a compile error rather than a quiet wrong number.
-   */
+  /** A `value` node's number, 0–1. Spelled `value` because that is what the node is. */
   value?: number;
+  /**
+   * A `track` node's smoothing, 0–1.
+   *
+   * Not an inlet value and not a shader number: the envelope runs on the CPU,
+   * because it has to remember what it saw last frame and a fragment shader
+   * cannot. Spelled `value` in an older file; `reword` in `server/scheme.ts`
+   * carries it across at the one door every scheme comes through.
+   */
+  smooth?: number;
   /** A `value` node's name, which is what it is called in the editor. */
   label?: string;
 }

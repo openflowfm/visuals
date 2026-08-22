@@ -201,7 +201,7 @@ describe('compiling a look', () => {
     const circuit = wire(
       [
         { id: 't1', kind: 'track', of: 'Bass', op: 'fader', x: 0, y: 0 },
-        { id: 't2', kind: 'track', of: 'Drums', x: 0, y: 1, value: 0.6 },
+        { id: 't2', kind: 'track', of: 'Drums', x: 0, y: 1, smooth: 0.6 },
       ],
       [],
     );

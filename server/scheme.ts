@@ -49,7 +49,7 @@ const ROW = 220;
 
 function wire(
   name: string,
-  nodes: [string, string, string?, Record<string, number>?, number?, string?, string?][],
+  nodes: [string, string, string?, Record<string, number>?, number?, string?, string?, number?][],
   cords: string[],
 ): LookDef {
   const wired = cords.map((each) => {
@@ -64,7 +64,7 @@ function wire(
   return {
     name,
     circuit: {
-      nodes: nodes.map(([id, kind, op, values, value, label, of]): CircuitNode => {
+      nodes: nodes.map(([id, kind, op, values, value, label, of, smooth]): CircuitNode => {
         const column = at.get(id) ?? 0;
         const depth = row.get(column) ?? 0;
         row.set(column, depth + 1);
@@ -77,6 +77,7 @@ function wire(
           ...(of ? { of } : {}),
           ...(values ? { values } : {}),
           ...(value !== undefined ? { value } : {}),
+          ...(smooth !== undefined ? { smooth } : {}),
           ...(label ? { label } : {}),
         };
       }),
@@ -170,7 +171,7 @@ const BUILT_IN: Scheme = {
         ['half', 'math', 'average'],
         ['turn', 'lens', 'swirl'],
         ['live', 'tracks', 'by name'],
-        ['e', 'track', 'level', undefined, 0.35, undefined, 'master'],
+        ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.35],
         // The wedge count is set on the effect's own face rather than wired in
         // from a `value` node. One number, one place, no cord across the canvas.
         ['fold', 'lens', 'kaleido', { segments: 0.3 }],
@@ -195,7 +196,7 @@ const BUILT_IN: Scheme = {
     deep: wire(
       'Deep',
       [
-        ['e', 'track', 'level', undefined, 0.4, undefined, 'master'],
+        ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.4],
         ['pt', 'point'],
         ['tun', 'source', 'tunnel'],
         ['wob', 'lens', 'wobble'],
@@ -275,7 +276,7 @@ const BUILT_IN: Scheme = {
         ['slow', 'math', 'multiply', { b: 0.12 }],
         ['sway', 'wave', 'sine'],
         ['wob', 'lens', 'wobble'],
-        ['e', 'track', 'level', undefined, 0.55, undefined, 'master'],
+        ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.55],
         ['surf', 'source', 'plasma'],
         ['rip', 'lens', 'ripple', { waves: 0.72, depth: 0.4, speed: 0.22 }],
         ['soft', 'spread', 'smear', { reach: 0.2, drive: 0.35 }],
@@ -309,7 +310,7 @@ const BUILT_IN: Scheme = {
         ['pt', 'point'],
         ['hit', 'playback', 'pulse'],
         ['zm', 'lens', 'zoom'],
-        ['e', 'track', 'level', undefined, 0.3, undefined, 'master'],
+        ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.3],
         ['sp', 'source', 'spiral'],
         ['tw', 'lens', 'twist', { turn: 0.68, sway: 0.4 }],
         // A short reach and a floor high enough that only the arms bloom. Wide
@@ -340,7 +341,7 @@ const BUILT_IN: Scheme = {
       [
         ['pt', 'point'],
         ['fld', 'lens', 'fold', { sides: 0.45 }],
-        ['e', 'track', 'level', undefined, 0.35, undefined, 'master'],
+        ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.35],
         ['tun', 'source', 'tunnel'],
         ['rng', 'source', 'rings'],
         ['mix', 'blend', 'add', { amount: 0.6 }],
@@ -434,7 +435,7 @@ const BUILT_IN: Scheme = {
       'Glitch',
       [
         ['live', 'tracks', 'by name'],
-        ['e', 'track', 'level', undefined, 0.12, undefined, 'master'],
+        ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.12],
         ['cut', 'lens', 'slice', { bands: 0.5, throw: 0.45 }],
         ['px', 'lens', 'pixelate', { blocks: 0.22, resolve: 0.8 }],
         ['rgb', 'spread', 'shift', { split: 0.45, drive: 0.7 }],
@@ -711,8 +712,8 @@ function carried(file: Partial<Scheme> & Legacy): Partial<Scheme> {
 }
 
 /**
- * A kind that used to exist, for a file that still spells one — and the one
- * field that changed its name rather than its meaning.
+ * A kind that used to exist, for a file that still spells one — and the fields
+ * that changed their names rather than their meanings.
  *
  * `knobs` is what `values` was called, back when the word for a number set on
  * an inlet was the shape of the control that set it.
@@ -770,6 +771,20 @@ function revalued(node: Was): Was {
   return next;
 }
 
+/**
+ * A `track` node's old `value`, under the one name it has now.
+ *
+ * A file that already says `smooth` wins if it somehow says both. The old key
+ * is deleted rather than left beside the new one, both because `value` now has
+ * exactly one meaning and because the saved scheme is meant to be read.
+ */
+function resmoothed(node: Was): Was {
+  if (node.kind !== 'track' || node.value === undefined) return node;
+  const next: Was = { ...node, smooth: node.smooth ?? node.value };
+  delete next.value;
+  return next;
+}
+
 /** An inlet renamed out of a collision with a mode or a kind beside it. */
 function swapValue(
   values: Record<string, number> | undefined,
@@ -805,16 +820,16 @@ function swapValue(
  * `level` to the `n` every other number outlet in the vocabulary already used,
  * which is why the cords are walked too.
  *
- * And one that is a spelling rather than a meaning: the numbers a node holds on
- * its own inlets were `knobs` and are **`values`**, because a knob is the shape
- * of a control and this is a number. That one runs on every node before the
- * kinds are read, since a node of any kind can carry them and the branches
- * below all reach for the new name.
+ * Two are spellings rather than meanings. The numbers a node holds on its own
+ * inlets were `knobs` and are **`values`**, because a knob is the shape of a
+ * control and this is a number. A `track` node's smoothing was `value` and is
+ * **`smooth`**, because `value` is the number held by the node of that name.
+ * Both run before the kind branches that reach for the new spellings.
  */
 function reword(circuit: Circuit): Circuit {
   const renamed = new Set<string>();
   const nodes = circuit.nodes.map((raw): CircuitNode => {
-    const node = revalued(raw as Was);
+    const node = resmoothed(revalued(raw as Was));
     if (node.kind === 'sample') return { ...node, kind: 'tracks', op: 'by name' };
     if (node.kind === 'signal') {
       const op = node.op === 'energy' || node.op === 'amount' ? 'level' : node.op;
@@ -824,7 +839,15 @@ function reword(circuit: Circuit): Circuit {
       // A fall of nothing written down was 0.4, and the merged node's nothing
       // is zero — so an unstated fall has to be written down rather than
       // inherited, or every rolled look would lose its breathing.
-      return { ...node, kind: 'track', op: 'level', of: node.op ?? 'master', value: node.value ?? 0.4 };
+      const next: Was = {
+        ...node,
+        kind: 'track',
+        op: 'level',
+        of: node.op ?? 'master',
+        smooth: node.smooth ?? node.value ?? 0.4,
+      };
+      delete next.value;
+      return next as CircuitNode;
     }
     // `effect` was three things wearing one name, and the compiler said so: six
     // of its modes moved the point, two changed the colour where it was, and
@@ -851,7 +874,7 @@ function reword(circuit: Circuit): Circuit {
     }
     if (node.kind === 'track' && node.of === undefined) {
       renamed.add(node.id);
-      return { ...node, kind: 'track', of: node.op ?? 'master', op: 'level', value: node.value ?? 0 };
+      return { ...node, kind: 'track', of: node.op ?? 'master', op: 'level' };
     }
     return node as CircuitNode;
   });

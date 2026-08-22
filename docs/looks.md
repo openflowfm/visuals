@@ -133,11 +133,10 @@ one of the four places it shows up made the other three read as exceptions, and 
 noun from the front end into the file format.
 
 The one thing to know reading the code is that **`CircuitNode.value` and
-`CircuitNode.values` are one letter apart and are not the same idea.** `values` is keyed by
-inlet name and trimmed against the inlets a node has; `value` is a `value` node's amount or a
-`track` node's smoothing, neither of which is an inlet at all. They are different types as
-well as different fields, so confusing them is a compile error rather than a quiet wrong
-number.
+`CircuitNode.values` are one letter apart because they are related, but not interchangeable.**
+`value` is the number held by a `value` node; `values` is the map of numbers held by a node's
+settable inlets, keyed and trimmed against the inlets it actually has. A `track` node's CPU
+envelope is neither, so it is `smooth`.
 
 Every file already written says `knobs`, so `reword` in `server/scheme.ts` carries them
 across at the one door every scheme comes through, and drops the old spelling rather than
@@ -570,13 +569,13 @@ arrived", which was the layer underneath in a stack — the nearest thing to tha
 set's own picture, so it becomes `tracks`. The `playback` modes `energy` and `amount` are gone
 and fall back to the meter, which is the signal they were most often standing in for.
 
-And one field changed its **name** rather than its meaning: a node's `knobs` are its
-`values`. That one runs on every node before any of the kinds are read, since a node of any
-kind can carry them and every branch after it reaches for the new name — a `posterize` that
-arrives as an `effect` has to have its `levels` renamed to `steps` in the map it is already
-holding. The old key is deleted rather than left beside the new one, because `scheme.json`
-is a file somebody reads and diffs and two spellings of one map in it is a question nobody
-should have to answer.
+Two fields changed their **names** rather than their meanings. A node's `knobs` are its
+`values`; that pass runs on every node before any kind is read, since a node of any kind can
+carry them and an old `effect` may still need one of their keys renamed. A `track` node's
+old `value` is its `smooth`; the new spelling wins if a hand-edited file somehow carries
+both, while a `value` node's `value` stays exactly where it was. The old keys are deleted
+rather than left beside the new ones, because `scheme.json` is a file somebody reads and
+diffs and two spellings of one field is a question nobody should have to answer.
 
 Nothing else is affected: a number that failed to come across would not be a parse error, it
 would be a look that opens with its inlets quietly back at their defaults, which is the kind

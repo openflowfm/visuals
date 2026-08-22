@@ -979,7 +979,7 @@ export const tracksOf = (circuit: Circuit): CircuitTrack[] =>
       // Zero, so a `track` that never asked for one is the number itself. The
       // default belongs here rather than at the reader, which cannot tell a
       // node that wants none from a node that has not said.
-      smooth: node.value ?? 0,
+      smooth: node.smooth ?? 0,
     }));
 
 /**
