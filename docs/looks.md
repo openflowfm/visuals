@@ -65,9 +65,10 @@ and [the roll](wheel.md) deliberately never wires those four.
 Having exactly three types is what keeps the canvas legible: a cord's colour tells you what
 it carries, and the editor refuses a cord it cannot type rather than inventing a conversion.
 
-Points are **centred and aspect-corrected** — zero in the middle, a circle round. `uncentred`
-and `recentred` are the pair that convert, and only the handful of effects whose maths was
-written in screen space ever touch them.
+Points are **centred and aspect-corrected** — zero in the middle, a circle round. Their
+vertical range is ±0.5; on a 16:9 frame the horizontal range is about ±0.89. They are not
+±1. `uncentred` and `recentred` are the pair that convert, and only the handful of effects
+whose maths was written in screen space ever touch them.
 
 ### Numbers are 0–1
 
@@ -115,7 +116,9 @@ declares one float, because GLSL rejects a zero-length array.
 **Wiring is not a destructive gesture.** A wired inlet's number stays on the node, out of
 the bank while a cord is on top of it and back on the face the moment the cord goes. An
 inlet that snapped to its default when you unwired it would be one you stop experimenting
-with.
+with. Its row stays too: the control is disabled and names the node driving it instead of
+showing the dormant number underneath. Keeping a stale reading visible would make the face
+look authoritative exactly when it is not.
 
 **Only numbers are settable.** A point has no single control and a colour has no useful
 constant, so those two keep the answers they always had.
@@ -145,7 +148,8 @@ leaving both — see below on reading an old file.
 **Two number inlets have nothing to set either**, and they are the two whose answer is
 already alive: an `energy` inlet reads the room, and a `wave`'s `phase` reads the beat. A
 number there would offer to replace something moving with something that is not, which is a
-worse default than the one it replaced. Wire them, or leave them running.
+worse default than the one it replaced. They get a meter rather than a handle, so the live
+answer is visible without pretending it is yours to turn. Wire them, or leave them running.
 
 **A mode's inlets carry their values with them.** See below — it is the same rule cords get,
 one step quieter, and it matters more: a stray cord at least lights an outlet up, where a
@@ -314,6 +318,12 @@ collection, because a song that modulates is in the first key when it starts.
 
 `math`, `wave`, and `value`.
 
+**`math` is deliberately asymmetric at the edge of the 0–1 convention.** `add` and
+`subtract` clamp their answers to 0–1; `multiply` does not, while `min`, `max` and `average`
+need no extra clamp for ordinary 0–1 inputs. The unclamped multiply is load-bearing:
+`Water` uses it to amplify a number beyond one. It also means subtraction cannot make a
+bipolar cosine from a unipolar wave, because its negative half stops at zero.
+
 **`value` means one number in several places.** Every inlet holds its own number now, so a
 `value` node wired to exactly one of them is the long way round — it says nothing the number
 on the face does not, and costs a cord across the canvas to say it. What it still does, and
@@ -467,9 +477,32 @@ has to keep reaching.
 
 A faceplate shows the **mode** rather than the kind, which is the same idea one step later:
 a node reading `source` above a dropdown reading `plasma` makes you read two things to learn
-one. Below that it shows a control for every number inlet with nothing wired to it, which is
-what makes a node something you drop and dial rather than something you have to wire a
-number into.
+one. The kind sits quietly beside the mode, and the hot-swap button opens that kind's modes
+in the same browser that created it. Choosing one changes the node already on the canvas;
+it does not drop a replacement. A target from outside the vocabulary — the track a `track`
+reads or the look a `look` draws — stays in the one chooser band below the title.
+
+**Every node has one anatomy.** Its fixed-size picture is an overlay above the frame, then
+the title, two reserved outlet lines, one chooser band and six reserved inlet lines. Empty
+space is real here: reserving the largest face means changing a mode, wiring a cord or
+renaming a value gives the graph's port observer nothing to report. Each inlet is one row,
+with its dot on the same centre as the thing it governs. A point or colour prints one name;
+an alive number gets a meter; a settable number gets one horizontal filled control with its
+name and reading inside it. A driven number keeps that control disabled, names its driver
+and moves its fill and reading with the number arriving there, preserving the stored value
+until the cord comes off. Alive and driven rows are sampled on a ten-hertz display clock,
+not the render loop, and React is updated only when the formatted reading changes.
+
+The CPU can follow `value`, `playback`, `track`, `song`, `math` and `wave` chains. A
+`polar` outlet is different: its radius or angle changes per fragment, so there is no one
+number to report. A row driven by one names `polar·radius` or `polar·angle` but deliberately
+shows no number or fill rather than inventing a misleading value.
+
+The outlet band is usually just a label and a dot. `lens` and `polar` are the two exceptions
+because each has two honest answers to “what did this node make?” Their outlet labels are
+buttons, with the selected one marked, and that explicit choice drives both the small face
+and a promoted bench. Old graphs with no choice retain the wiring-aware fallback, so this
+adds a decision without changing an existing picture.
 
 **The bench is a `Compositor`**, not a second renderer. There used to be one and it was a
 standing risk: a bench that could disagree with the stage about brightness or blend is worse
@@ -504,6 +537,15 @@ All of them come out of **one** GL context, blitted into a small 2D canvas per n
 context each is the obvious build and the wrong one: browsers keep about sixteen alive and
 start evicting the oldest, and this page already has the stage and the bench. That is also
 why `preview.ts` caches programs by signature in a map rather than one slot.
+
+One context does not make every draw free. Only visible faces draw, at most ten per frame;
+the promoted node and `out` take the first slots. Zoom below a half, exceed the budget or
+turn **live pictures** off and the affected faces keep their last frame with `paused` written
+on it. The browser reports `live / visible` beside the switch, so saving work never looks
+like a broken preview. The switch is a machine preference in `localStorage`, not part of the
+scheme: projector and authoring laptop can make different performance choices without
+changing a look. Graph zoom stays owned by `Graph`; the budget reads it through a stable ref
+so a wheel gesture does not become a React update through every node.
 
 A node picture is fed **exactly what the bench is fed**, and that is a correction. It used
 to be stand-ins — the set as one grid shader in a hardcoded orange, every meter banked at a

@@ -79,6 +79,7 @@ export interface Entry {
 
 /** What each mode is, one line each, because a browser is where you learn these. */
 const ABOUT: Record<string, string> = {
+  'by name': 'Draw each playing track from what its name says it is',
   solid: 'The colour, breathing on the bar and brightening with the sound',
   bars: 'Vertical bars whose heights are a bar of music, swept by the playhead',
   rings: 'Rings launched on the beat, expanding outward',
@@ -110,6 +111,8 @@ const ABOUT: Record<string, string> = {
   multiply: 'The base seen through the top. The only one that darkens',
 
   level: 'The room\'s own meter — everything, as loud as it is',
+  fader: 'Where the track\'s volume control is set',
+  playing: 'One while that track has a playing clip, zero while it does not',
   beat: 'Continuous beats. Wire it into a wave',
   phase: 'Where you are in the bar, 0 to 1',
   pulse: 'One on the beat, decaying across it',
@@ -200,9 +203,8 @@ export function palette(scheme: Scheme, tracks: readonly string[]): Entry[] {
 
   // Pictures. The set first, because a rig that reads a Live set should offer
   // the Live set before it offers a plasma. It has modes and no presets: `by
-  // name` is the answer this rig is for, and the other eleven are one dropdown
-  // away on the face rather than eleven rows here saying "all of them as a
-  // tunnel".
+  // name` is the answer this rig is for, and the other eleven are one hot-swap
+  // away rather than eleven rows here saying "all of them as a tunnel".
   node('tracks', 'by name', 'every playing track', NODE_SPECS.tracks.about);
   modes('source', 'source', SOURCES);
   node('paint', undefined, 'paint', NODE_SPECS.paint.about);
@@ -239,7 +241,7 @@ export function palette(scheme: Scheme, tracks: readonly string[]): Entry[] {
   // chip that does exactly what the first one does, under the same key.
   //
   // The row drops a **meter**, because that is what anybody reaching for a track
-  // wants first. Which of its numbers is a dropdown on the face rather than
+  // wants first. Which of its numbers is the mode in the title rather than
   // three rows per track here, which for a real set would be seventy-eight.
   for (const name of new Set(tracks)) {
     node('track', TRACK_READS[0], `${name} meter`, "That track's own numbers, by name", name);
@@ -317,4 +319,33 @@ export function matching(all: readonly Entry[], typed: string): Entry[] {
     if (hits.length > 0) out.push({ node: entry.node, presets: hits });
   }
   return out;
+}
+
+/**
+ * One kind's modes, for the hot-swap button on a face.
+ *
+ * This is deliberately not the ordinary palette filtered by kind. A `track`
+ * row there is a target — one per name in the set — while hot-swap changes the
+ * fixed reading on the node and must offer `level`, `fader` and `playing` once.
+ * `tracks` has the inverse wrinkle: its alternative drawings stay folded out
+ * of the add browser, but have to be reachable now that the face has no mode
+ * dropdown of its own.
+ */
+export function swapEntry(kind: NodeKind): Entry | null {
+  const spec = NODE_SPECS[kind];
+  if (!spec.ops || spec.ops.length === 0) return null;
+  const family = NODE_FAMILIES.find((each) => each.kinds.includes(kind))?.name ?? 'other';
+  const pick = (op: string, label: string, values?: Record<string, number>): Pick => ({
+    label,
+    kind,
+    op,
+    ...(values ? { values } : {}),
+    about: ABOUT[op] ?? spec.about,
+    family,
+    terms: `${label} ${kind} ${op} ${ABOUT[op] ?? spec.about}`.toLowerCase(),
+  });
+  return {
+    node: pick(spec.ops[0], spec.name),
+    presets: spec.ops.map((op) => pick(op, op, PRESET_VALUES[op])),
+  };
 }

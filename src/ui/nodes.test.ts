@@ -3,7 +3,7 @@ import type { Scheme } from '../../protocol.ts';
 import { GRADE_MODES, NODE_FAMILIES } from '../../protocol.ts';
 import { BUILT_IN } from '../../server/scheme.ts';
 import { bareCircuit } from '../render/circuit.ts';
-import { drop, keyOf, matching, palette, type Entry } from './nodes.ts';
+import { drop, keyOf, matching, palette, swapEntry, type Entry } from './nodes.ts';
 
 /**
  * The node browser.
@@ -112,6 +112,28 @@ describe('finding one', () => {
 
   it('says nothing rather than everything when nothing matches', () => {
     expect(matching(browser(), 'trombone')).toEqual([]);
+  });
+});
+
+describe('hot-swapping one', () => {
+  it('offers a track reading once rather than repeating every track target', () => {
+    const entry = swapEntry('track')!;
+    expect(entry.node.label).toBe('track');
+    expect(entry.presets.map((each) => each.op)).toEqual(['level', 'fader', 'playing']);
+    expect(entry.presets.every((each) => each.of === undefined)).toBe(true);
+  });
+
+  it('offers the modes deliberately folded out of the add browser', () => {
+    expect(swapEntry('tracks')?.presets.map((each) => each.op)).toContain('plasma');
+  });
+
+  it('keeps a preset value with the mode that owns it', () => {
+    const poster = swapEntry('grade')?.presets.find((each) => each.op === 'posterize');
+    expect(poster?.values?.steps).toBeGreaterThan(0.5);
+  });
+
+  it('has nothing to swap on a kind with no modes', () => {
+    expect(swapEntry('point')).toBeNull();
   });
 });
 

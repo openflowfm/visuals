@@ -67,12 +67,6 @@
   color: var(--alarm);
 }
 
-.valueface .stack {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
 .picks {
   display: flex;
   flex-wrap: wrap;
@@ -111,6 +105,8 @@
 
 .node {
   --wdg-space: 5px;
+  --wdg-device-outlet-rows: 2;
+  --wdg-device-port-rows: 6;
   width: 168px;
   font-size: 10px;
 }
@@ -130,24 +126,72 @@
   --wdg-plate-head: #2a2113;
 }
 
-.node .values {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 2px 4px;
-  margin-top: 4px;
+.node-kind {
+  overflow: hidden;
+  color: var(--idle);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.node-value .valueface {
+.node .wdg-device-outlets {
+  gap: 0;
+}
+
+.node .wdg-device-chooser .wdg-select-body,
+.node .wdg-device-chooser .field {
+  width: 100%;
+}
+
+.node-name {
+  text-align: left;
+}
+
+.node-inlet-name {
+  overflow: hidden;
+  color: var(--ui);
+  font-size: 9px;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-number-unreadable .wdg-slider-fill,
+.node-number-unreadable .wdg-slider-thumb,
+.node-number-unreadable .wdg-meter-level {
+  display: none;
+}
+
+.node-outlet-choice {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 4px;
+  justify-content: flex-end;
+  min-height: var(--wdg-port-row-height);
 }
 
-.node-value .field {
-  width: 70px;
-  text-align: center;
+.node-outlet-preview {
+  overflow: hidden;
+  padding: 1px 3px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--caption);
+  font: inherit;
+  font-size: 9px;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.node-outlet-preview:hover,
+.node-outlet-choice[data-on] .node-outlet-preview {
+  color: var(--amber);
+}
+
+.node-outlet-preview:focus-visible {
+  outline: 1px solid var(--focus);
+  outline-offset: -1px;
 }
 
 .wire {
@@ -225,7 +269,10 @@
   background: #000;
   border: 1px solid var(--bd);
   border-radius: 1px;
-  margin-bottom: 3px;
+}
+
+.nodeshot[data-picture-state='paused'] {
+  filter: saturate(0.35) brightness(0.75);
 }
 
 .probe-canvas {

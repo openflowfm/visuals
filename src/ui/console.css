@@ -237,12 +237,6 @@
   color: var(--alarm);
 }
 
-.console .inspect .values {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
 .console .flat {
   text-transform: none;
   letter-spacing: 0;
@@ -440,14 +434,6 @@
   width: 190px;
 }
 
-.designer .values {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  padding: 8px 10px 0;
-  flex-wrap: wrap;
-}
-
 .designer .circuit {
   display: flex;
   flex-direction: column;
@@ -603,8 +589,42 @@
 /* --- the node browser -------------------------------------------------- */
 
 .designer .find {
+  flex: 1;
+  min-width: 0;
   width: 100%;
+}
+
+.designer .node-browser-head,
+.designer .find-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.designer .node-browser-head h4 {
+  margin-right: auto;
+}
+
+.designer .pictures-toggle {
+  padding: 1px 4px;
+  font-size: 9px;
+}
+
+.designer .picture-status {
+  overflow: hidden;
+  color: var(--idle);
+  font-size: 9px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.designer .find-row {
   margin-bottom: 6px;
+}
+
+.designer .find-row[data-swapping] .find {
+  border-color: var(--amber);
 }
 
 .designer .palette {

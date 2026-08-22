@@ -21,9 +21,8 @@ describe('naming what drives an inlet', () => {
   });
 
   it('names the source the way its own faceplate does, not by id', () => {
-    // `faceName` titles a `track` by the track it reads, so a face saying it is
-    // driven by `Drums` matches the title bar you can see upstream. `track1`
-    // would be a lookup rather than a sentence.
+    // Modes are the title now, so a track's level reads exactly as the title
+    // upstream does. `track1` would be a lookup rather than a sentence.
     const circuit = wire(
       [
         { id: 'track1', kind: 'track', of: 'Drums', op: 'level', x: 0, y: 0 },
@@ -31,15 +30,12 @@ describe('naming what drives an inlet', () => {
       ],
       [{ from: 'track1/n', to: 'l/depth' }],
     );
-    expect(driverOf(circuit, 'l/depth')).toBe('Drums');
+    expect(driverOf(circuit, 'l/depth')).toBe('level');
   });
 
-  it('falls back to the kind for the kinds whose face does', () => {
-    // Not every mode-carrying kind is titled by its mode: `source`, `lens`,
-    // `grade`, `spread` and `playback` are, while `wave`, `math` and `blend`
-    // keep their kind — `add` is a mode of two different kinds, so a canvas
-    // that titled both by mode would have two unrelated nodes called `add`.
-    // Whatever the face says, this says the same.
+  it('uses the mode for every fixed-mode kind', () => {
+    // The kind sits beside the title now, so the title itself can say the
+    // chosen answer consistently even when another kind has one spelled alike.
     const circuit = wire(
       [
         { id: 'wave1', kind: 'wave', op: 'pulse', x: 0, y: 0 },
@@ -47,7 +43,7 @@ describe('naming what drives an inlet', () => {
       ],
       [{ from: 'wave1/n', to: 'l/depth' }],
     );
-    expect(driverOf(circuit, 'l/depth')).toBe('wave');
+    expect(driverOf(circuit, 'l/depth')).toBe('pulse');
   });
 
   it('adds the outlet only when the source has more than one', () => {

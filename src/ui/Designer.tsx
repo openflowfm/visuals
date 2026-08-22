@@ -1,22 +1,75 @@
-import { useMemo, useState } from 'react';
-import type { Circuit, Scheme, Show } from '../../protocol.ts';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { Circuit, NodeKind, Scheme, Show } from '../../protocol.ts';
 import { wouldLoop } from '../../protocol.ts';
+import type { GraphView } from '../../../widgets/src/chrome/Graph.tsx';
+import { format } from '../../../widgets/src/param/format.ts';
 import { Button } from '../../../widgets/src/controls/Button.tsx';
 import { Knob } from '../../../widgets/src/controls/Knob.tsx';
 import { NumberField } from '../../../widgets/src/controls/NumberField.tsx';
 import { Select } from '../../../widgets/src/controls/Select.tsx';
 import { Toggle } from '../../../widgets/src/controls/Toggle.tsx';
-import { CircuitEditor } from './Circuit.tsx';
-import { addLook, dropLook, forkLook, lookList, renameLook, setCircuit } from './edits.ts';
-import { drop, keyOf, matching, palette, type Entry, type Pick } from './nodes.ts';
-import { NodePictures } from './NodePictures.tsx';
+import { CircuitEditor, type NumberReading } from './Circuit.tsx';
+import {
+  addLook,
+  dropLook,
+  forkLook,
+  lookList,
+  renameLook,
+  setCircuit,
+  setNode,
+} from './edits.ts';
+import { drop, keyOf, matching, palette, swapEntry, type Entry, type Pick } from './nodes.ts';
+import { NodePictures, type NodePictureStatus } from './NodePictures.tsx';
+import { createNumberEvaluator, type NumberSample } from '../render/evaluateNumber.ts';
+import { inletsOf, portId } from '../render/circuit.ts';
 import { FloatingBench } from './Preview.tsx';
-import { BPM, ENERGY, PERCENT } from './param.ts';
-import { KEYS, useRoom, type Room } from '../state/useRoom.ts';
+import { BPM, ENERGY, PERCENT, VALUE } from './param.ts';
+import { KEYS, useRoom, withStandIns, type Room } from '../state/useRoom.ts';
 import { useTransport, type Transport } from '../state/useTransport.ts';
 import type { Clock } from '../state/useShow.ts';
 import './circuit.css';
 import './console.css';
+
+const PICTURES_KEY = 'bsv.visuals.live-node-pictures';
+const DISPLAY_RATE_MS = 100;
+
+const EMPTY_PICTURE_STATUS: NodePictureStatus = {
+  mounted: 0,
+  visible: 0,
+  live: 0,
+  paused: 0,
+  culled: 0,
+  reason: null,
+};
+
+function displayNumber(value: number): string {
+  if (value >= 0 && value <= 1) return format(VALUE, PERCENT.to(value));
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
+/** One display-rate reading for every number row, including unsupported ones. */
+export function readingsOf(circuit: Circuit, sample: NumberSample): Record<string, NumberReading> {
+  const readings: Record<string, NumberReading> = {};
+  for (const node of circuit.nodes) {
+    for (const port of inletsOf(node)) {
+      if (port.kind !== 'n' || port.name.startsWith('~')) continue;
+      const id = portId(node.id, port.name);
+      const value = sample.inlet(id);
+      readings[id] = value === undefined ? {} : { value, display: displayNumber(value) };
+    }
+  }
+  return readings;
+}
+
+/** Keep React asleep while a signal moves inside the same printed value. */
+export function sameDisplayedReadings(
+  left: Readonly<Record<string, NumberReading>>,
+  right: Readonly<Record<string, NumberReading>>,
+): boolean {
+  const keys = Object.keys(left);
+  if (keys.length !== Object.keys(right).length) return false;
+  return keys.every((key) => key in right && left[key]?.display === right[key]?.display);
+}
 
 /**
  * The look builder, which is the whole product.
@@ -78,6 +131,22 @@ export function Designer({
   const [typed, setTyped] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [promoted, setPromoted] = useState<string | null>(null);
+  const [swapping, setSwapping] = useState<{
+    look: string;
+    node: string;
+    kind: NodeKind;
+  } | null>(null);
+  const [pictures, setPictures] = useState(() => {
+    try {
+      return localStorage.getItem(PICTURES_KEY) !== 'off';
+    } catch {
+      return true;
+    }
+  });
+  const [pictureStatus, setPictureStatus] = useState<NodePictureStatus>(EMPTY_PICTURE_STATUS);
+  const [numberReadings, setNumberReadings] = useState<Readonly<Record<string, NumberReading>>>({});
+  const graphView = useRef<GraphView | null>(null);
+  const graphScale = useCallback(() => graphView.current?.scale() ?? 1, []);
   /**
    * Which nodes have their presets open, by kind.
    *
@@ -94,6 +163,12 @@ export function Designer({
 
   const id = look && scheme.looks[look] ? look : (list[0]?.id ?? null);
   const def = id ? scheme.looks[id] : null;
+  const activeSwap =
+    swapping &&
+    swapping.look === id &&
+    def?.circuit.nodes.some((node) => node.id === swapping.node && node.kind === swapping.kind)
+      ? swapping
+      : null;
 
   /**
    * The names a `track` or `energy` node may point at, **distinct**.
@@ -111,6 +186,67 @@ export function Designer({
   );
   const all = useMemo(() => palette(scheme, trackNames), [scheme, trackNames]);
   const found = useMemo(() => matching(all, typed), [all, typed]);
+  const swap = activeSwap ? swapEntry(activeSwap.kind) : null;
+  const browsed = swap ? matching([swap], typed) : found;
+
+  const evaluator = useRef<ReturnType<typeof createNumberEvaluator> | null>(null);
+  if (!evaluator.current) evaluator.current = createNumberEvaluator();
+  const numberSource = useRef({
+    circuit: def?.circuit ?? null,
+    show: room.show,
+    beat: transport.beat,
+    seconds: transport.seconds,
+    pace: scheme.defaults.pace,
+  });
+  numberSource.current = {
+    circuit: def?.circuit ?? null,
+    show: room.show,
+    beat: transport.beat,
+    seconds: transport.seconds,
+    pace: scheme.defaults.pace,
+  };
+
+  useEffect(() => {
+    evaluator.current?.reset();
+    setNumberReadings({});
+    setSwapping(null);
+  }, [id]);
+
+  useEffect(() => {
+    let last = performance.now();
+    const latch = () => {
+      const now = performance.now();
+      const source = numberSource.current;
+      const held = evaluator.current;
+      if (!source.circuit || !held) {
+        setNumberReadings((was) => (Object.keys(was).length === 0 ? was : {}));
+        last = now;
+        return;
+      }
+      const beat = source.beat();
+      const sample = held.sample(source.circuit, {
+        show: withStandIns(source.show, beat),
+        beat,
+        seconds: source.seconds(),
+        dt: Math.min((now - last) / 1000, 0.25),
+        pace: source.pace,
+      });
+      last = now;
+      const next = readingsOf(source.circuit, sample);
+      setNumberReadings((was) => (sameDisplayedReadings(was, next) ? was : next));
+    };
+    latch();
+    const timer = window.setInterval(latch, DISPLAY_RATE_MS);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(PICTURES_KEY, pictures ? 'on' : 'off');
+    } catch {
+      // A blocked store changes only whether this preference survives a reload.
+    }
+  }, [pictures]);
 
   const wire = (next: Circuit) => {
     if (!id) return;
@@ -154,6 +290,23 @@ export function Designer({
     }
     setError(null);
     wire(drop(def.circuit, pick));
+  };
+
+  const choose = (pick: Pick) => {
+    if (!activeSwap || !def) {
+      add(pick);
+      return;
+    }
+    const held = def.circuit.nodes.find((node) => node.id === activeSwap.node);
+    if (!held) return;
+    wire(
+      setNode(def.circuit, held.id, {
+        op: pick.op,
+        ...(pick.values ? { values: { ...held.values, ...pick.values } } : {}),
+      }),
+    );
+    setSwapping(null);
+    setTyped('');
   };
 
   return (
@@ -208,26 +361,61 @@ export function Designer({
             )}
           </div>
 
-          <h4>nodes</h4>
-          <input
-            className="field find"
-            value={typed}
-            spellCheck={false}
-            placeholder="find a node"
-            aria-label="Find a node"
-            onChange={(e) => setTyped(e.target.value)}
-          />
+          <div className="node-browser-head">
+            <h4>nodes</h4>
+            <button
+              type="button"
+              className="tick pictures-toggle"
+              data-on={pictures ? '' : undefined}
+              aria-pressed={pictures}
+              onClick={() => setPictures((on) => !on)}
+            >
+              live pictures
+            </button>
+          </div>
+          <span className="picture-status">
+            {pictureStatus.live} live / {pictureStatus.visible} visible
+            {pictureStatus.reason === 'off'
+              ? ' · off'
+              : pictureStatus.reason === 'zoom'
+                ? ' · paused at this zoom'
+                : pictureStatus.reason === 'budget'
+                  ? ` · ${pictureStatus.paused} paused`
+                  : ''}
+          </span>
+          <div className="find-row" {...(activeSwap ? { 'data-swapping': '' } : {})}>
+            <input
+              className="field find"
+              value={typed}
+              spellCheck={false}
+              placeholder={activeSwap ? `swap ${activeSwap.kind} mode` : 'find a node'}
+              aria-label={activeSwap ? `Find a ${activeSwap.kind} mode` : 'Find a node'}
+              onChange={(e) => setTyped(e.target.value)}
+            />
+            {activeSwap && (
+              <Button
+                tone="quiet"
+                label="Close mode browser"
+                onPress={() => {
+                  setSwapping(null);
+                  setTyped('');
+                }}
+              >
+                ×
+              </Button>
+            )}
+          </div>
           <NodeBrowser
-            entries={found}
+            entries={browsed}
             // Everything a search turned up is drawn open, because a preset
             // found behind a closed drawer has not been found.
-            opened={typed.trim() ? null : opened}
+            opened={activeSwap || typed.trim() ? null : opened}
             onOpen={(kind) =>
               setOpened((was) =>
                 was.includes(kind) ? was.filter((each) => each !== kind) : [...was, kind],
               )
             }
-            onAdd={add}
+            onAdd={choose}
           />
         </aside>
 
@@ -254,6 +442,10 @@ export function Designer({
               show={room.show}
               scheme={scheme}
               transport={transport}
+              enabled={pictures}
+              scale={graphScale}
+              promoted={promoted}
+              onStatus={setPictureStatus}
             >
               {(picture) => (
                 <CircuitEditor
@@ -261,6 +453,14 @@ export function Designer({
                   onChange={wire}
                   tracks={trackNames}
                   looks={list}
+                  viewRef={graphView}
+                  energy={room.show.master}
+                  beat={transport.beat}
+                  numberReadings={numberReadings}
+                  onSwap={(nodeId, kind) => {
+                    if (id) setSwapping({ look: id, node: nodeId, kind });
+                    setTyped('');
+                  }}
                   // The picture stays a picture and the click is wrapped round
                   // it, because which node is promoted is a fact about *this*
                   // page rather than about drawing a node. `NodePictures` hands
