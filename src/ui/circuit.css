@@ -105,7 +105,10 @@
 
 .node {
   --wdg-space: 5px;
-  width: 168px;
+  --wdg-port-row-height: 22px;
+  --wdg-inside-height: 18px;
+  --wdg-port-size: 11px;
+  width: 176px;
   font-size: 10px;
 }
 
