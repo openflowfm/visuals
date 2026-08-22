@@ -168,16 +168,26 @@ function NodeFace({
   const feeding = new Set(circuit.cords.map((cord) => cord.from));
 
   /**
-   * The inlets with a control on the face: settable, and nothing wired to them.
+   * The inlets with a control on the face: every settable one, wired or not.
    *
-   * Only while unwired, because a cord already answers the inlet and two
-   * controls for one number is a face that lies about one of them. The value is
-   * kept on the node either way, so a cord is not a destructive gesture: unwire
-   * it and the control comes back where it was rather than at the default.
+   * **A wired inlet keeps its control.** Dropping it was the obvious reading of
+   * "a cord already answers the inlet", and it cost more than it saved. The
+   * face lost a whole row the moment a cord landed and the rail gained a cut
+   * button in the same beat, so the node changed size in two directions at
+   * once and every cord touching it moved. Worse, the one inlet whose number
+   * was actually alive became the one inlet you could not see.
+   *
+   * A driven control is disabled and reads out **what is driving it** rather
+   * than the number underneath — which says *this is not yours to turn*
+   * without pretending the inlet has gone. Showing the stale number instead is
+   * the near miss: a control that looks readable but is not is worse than one
+   * that is plainly inert.
+   *
+   * The stored number is untouched either way, so a cord is still not a
+   * destructive gesture: unwire it and the control is live again where it was.
    */
-  const turnable = inletsOf(node).filter(
-    (port) => port.at !== undefined && !fed.has(portId(node.id, port.name)),
-  );
+  const turnable = inletsOf(node).filter((port) => port.at !== undefined);
+
 
   /**
    * The library, minus the look being edited.
@@ -318,15 +328,20 @@ function NodeFace({
 
       {turnable.length > 0 && (
         <div className="values">
-          {turnable.map((port) => (
-            <Knob
-              key={port.name}
-              param={VALUE}
-              value={PERCENT.to(node.values?.[port.name] ?? port.at!)}
-              onChange={(v) => onTurn(port.name, PERCENT.from(v))}
-              name={port.name}
-            />
-          ))}
+          {turnable.map((port) => {
+            const driver = driverOf(circuit, portId(node.id, port.name), looks);
+            return (
+              <Knob
+                key={port.name}
+                param={VALUE}
+                value={PERCENT.to(node.values?.[port.name] ?? port.at!)}
+                onChange={(v) => onTurn(port.name, PERCENT.from(v))}
+                name={port.name}
+                disabled={driver !== undefined}
+                display={driver}
+              />
+            );
+          })}
         </div>
       )}
     </Device>
@@ -341,6 +356,38 @@ function NodeFace({
  * the browser you dropped it from called it `plasma`. A faceplate that disagrees
  * with the drawer it came out of is a faceplate you stop trusting.
  */
+/**
+ * What is driving an inlet, named the way that node's own faceplate is.
+ *
+ * A driven control reads this out in place of its number, so the name has to be
+ * the one on the source's own title bar — a face saying it is driven by
+ * `plasma` when the node upstream is titled `plasma` is a sentence; one saying
+ * `source1` is a lookup.
+ *
+ * The outlet too, but only when the source has more than one — `polar` and
+ * `lens` are the only nodes where *which* port a cord left by is a real
+ * question, and printing one on everything else is noise on a face that has no
+ * room for it.
+ *
+ * Split on the **last** slash, because a port address is `nodeId/port` and the
+ * flattener's ids carry slashes of their own.
+ */
+export function driverOf(
+  circuit: Circuit,
+  id: string,
+  looks?: readonly { id: string; def: LookDef }[],
+): string | undefined {
+  const from = circuit.cords.find((cord) => cord.to === id)?.from;
+  if (from === undefined) return undefined;
+  const cut = from.lastIndexOf('/');
+  const outlet = from.slice(cut + 1);
+  const source = circuit.nodes.find((each) => each.id === from.slice(0, cut));
+  if (!source) return outlet;
+  const spec = NODE_SPECS[source.kind];
+  const named = faceName(source, spec.name, looks);
+  return spec.outlets.length > 1 ? `${named}·${outlet}` : named;
+}
+
 function faceName(
   node: CircuitNode,
   fallback: string,
