@@ -254,30 +254,47 @@ export function NodeFace({
       />
     ) : undefined;
 
-  const ownRows =
-    node.kind === 'track' ? (
-      <DevicePortRow>
-        <Slider
-          param={VALUE}
-          value={PERCENT.to(node.smooth ?? 0)}
-          onChange={(v) => onChange({ smooth: PERCENT.from(v) })}
-          name="smooth"
-          orientation="horizontal"
-          layout="inside"
-        />
-      </DevicePortRow>
-    ) : node.kind === 'value' ? (
-      <DevicePortRow>
-        <Slider
-          param={VALUE}
-          value={PERCENT.to(node.value ?? 0.5)}
-          onChange={(v) => onChange({ value: PERCENT.from(v) })}
-          name="value"
-          orientation="horizontal"
-          layout="inside"
-        />
-      </DevicePortRow>
-    ) : null;
+  /**
+   * The one line a kind draws for itself, belonging to no port.
+   *
+   * A `track`'s smoothing and a `value`'s amount. Both are numbers the node
+   * holds rather than reads, so they take a line like an inlet does and no
+   * port sits beside them.
+   */
+  const ownRow =
+    node.kind === 'track'
+      ? {
+          key: 'smooth',
+          wide: true,
+          inlet: undefined,
+          control: (
+            <Slider
+              param={VALUE}
+              value={PERCENT.to(node.smooth ?? 0)}
+              onChange={(v) => onChange({ smooth: PERCENT.from(v) })}
+              name="smooth"
+              orientation="horizontal"
+              layout="inside"
+            />
+          ),
+        }
+      : node.kind === 'value'
+        ? {
+            key: 'amount',
+            wide: true,
+            inlet: undefined,
+            control: (
+              <Slider
+                param={VALUE}
+                value={PERCENT.to(node.value ?? 0.5)}
+                onChange={(v) => onChange({ value: PERCENT.from(v) })}
+                name="value"
+                orientation="horizontal"
+                layout="inside"
+              />
+            ),
+          }
+        : null;
 
   const kindLabel = title === spec.name ? null : <span className="node-kind">{spec.name}</span>;
   const deleteButton =
@@ -289,16 +306,149 @@ export function NodeFace({
       </Button>
     );
 
+  /** One line per inlet: the port on its own edge, and what it puts on the row. */
+  const inletCells = inlets.map((port) => {
+    const id = portId(node.id, port.name);
+    const driver = driverOf(circuit, id, looks);
+    const reading = numberReadings[id];
+    return {
+      key: id,
+      // `wide` is a number's claim on the whole line. A bare name shares it
+      // with an outlet on the far side; a fader cannot, and a name squeezed
+      // against a moving reading is worse than a coloured dot with a tooltip.
+      wide: port.kind === 'n',
+      inlet: (
+        <span className="wire">
+          <Port
+            id={id}
+            side="in"
+            label={port.name}
+            showLabel={false}
+            kind={port.kind}
+            connected={fed.has(id)}
+          />
+          {fed.has(id) && (
+            <Button
+              tone="quiet"
+              className="cut"
+              label={`Unwire ${port.name}`}
+              onPress={() => onCut(id)}
+            >
+              ×
+            </Button>
+          )}
+        </span>
+      ),
+      control:
+        port.kind !== 'n' ? (
+          <span className="node-inlet-name">{port.name}</span>
+        ) : port.at === undefined ? (
+          <AliveMeter
+            name={port.name}
+            fallback={port.name === 'energy' ? energy : beat()}
+            reading={reading}
+            driver={driver}
+          />
+        ) : (
+          <Slider
+            param={VALUE}
+            value={PERCENT.to(
+              driver !== undefined && reading?.value !== undefined
+                ? reading.value
+                : (node.values?.[port.name] ?? port.at),
+            )}
+            onChange={(v) => onTurn(port.name, PERCENT.from(v))}
+            name={port.name}
+            orientation="horizontal"
+            layout="inside"
+            disabled={driver !== undefined}
+            display={
+              driver === undefined
+                ? undefined
+                : reading?.display
+                  ? `${driver} · ${reading.display}`
+                  : driver
+            }
+            className={
+              driver !== undefined && reading?.value === undefined
+                ? 'node-number-unreadable'
+                : undefined
+            }
+          />
+        ),
+    };
+  });
+
+  const outletCells = spec.outlets.map((port) => {
+    const id = portId(node.id, port.name);
+    const picked = previewed === port.name;
+    return {
+      key: id,
+      outlet: (
+        <Port
+          id={id}
+          side="out"
+          label={port.name}
+          showLabel={false}
+          kind={port.kind}
+          connected={feeding.has(id)}
+        />
+      ),
+      // A button only where there is a choice to make: with one outlet there is
+      // nothing to pick and a chip that cannot be pressed is a lie.
+      name:
+        spec.outlets.length > 1 ? (
+          <button
+            type="button"
+            className="node-outlet-preview"
+            aria-pressed={picked}
+            {...(picked ? { 'data-on': '' } : {})}
+            title={`Show ${port.name} in this node's picture`}
+            onClick={() => onChange({ previewOutlet: port.name })}
+          >
+            {port.name}
+          </button>
+        ) : (
+          <span className="node-outlet-name">{port.name}</span>
+        ),
+    };
+  });
+
+  /**
+   * The face's lines, with an inlet and an outlet sharing each one.
+   *
+   * Outlets used to have a band of their own above the inlets, which spends a
+   * row of a small node on one port and leaves the other end of that row empty.
+   * A port belongs to its own edge, and a row is a line across the face — so a
+   * node with six inlets and two outlets is six lines, not eight.
+   */
+  const lines = [...inletCells, ...(ownRow ? [ownRow] : [])];
+  const paired = Array.from(
+    { length: Math.max(lines.length, outletCells.length) },
+    (_unused, at) => {
+      const left = lines[at];
+      const right = outletCells[at];
+      return {
+        key: left?.key ?? right?.key ?? `line${at}`,
+        inlet: left?.inlet,
+        outlet: right?.outlet,
+        control: (
+          <>
+            {left?.control}
+            {right !== undefined && left?.wide !== true && right.name}
+          </>
+        ),
+      };
+    },
+  );
+
   const held = rowsHeldOpen(node);
 
   return (
     <Device
       name={title}
       className={`node node-${node.kind}`}
-      vars={{
-        '--wdg-device-port-rows': held.ports,
-        '--wdg-device-outlet-rows': held.outlets,
-      }}
+      vars={{ '--wdg-device-port-rows': held.ports }}
       title={spec.about}
       screen={picture?.(node.id)}
       chooser={chooser}
@@ -311,118 +461,11 @@ export function NodeFace({
           </>
         ) : undefined
       }
-      // An outlet is a row too, so the face has one visual language top to
-      // bottom: a port on its own edge, its name on the inside. The name is a
-      // button only when there is a choice to make — with one outlet there is
-      // nothing to pick and a chip that cannot be pressed is a lie.
-      outlets={spec.outlets.map((port) => {
-        const id = portId(node.id, port.name);
-        const picked = previewed === port.name;
-        return (
-          <DevicePortRow
-            key={id}
-            outlet={
-              <Port
-                id={id}
-                side="out"
-                label={port.name}
-                showLabel={false}
-                kind={port.kind}
-                connected={feeding.has(id)}
-              />
-            }
-          >
-            {spec.outlets.length > 1 ? (
-              <button
-                type="button"
-                className="node-outlet-preview"
-                aria-pressed={picked}
-                {...(picked ? { 'data-on': '' } : {})}
-                title={`Show ${port.name} in this node's picture`}
-                onClick={() => onChange({ previewOutlet: port.name })}
-              >
-                {port.name}
-              </button>
-            ) : (
-              <span className="node-outlet-name">{port.name}</span>
-            )}
-          </DevicePortRow>
-        );
-      })}
-      portRows={
-        <>
-          {inlets.map((port) => {
-            const id = portId(node.id, port.name);
-            const driver = driverOf(circuit, id, looks);
-            const reading = numberReadings[id];
-            return (
-              <DevicePortRow
-                key={id}
-                inlet={
-                  <span className="wire">
-                    <Port
-                      id={id}
-                      side="in"
-                      label={port.name}
-                      showLabel={false}
-                      kind={port.kind}
-                      connected={fed.has(id)}
-                    />
-                    {fed.has(id) && (
-                      <Button
-                        tone="quiet"
-                        className="cut"
-                        label={`Unwire ${port.name}`}
-                        onPress={() => onCut(id)}
-                      >
-                        ×
-                      </Button>
-                    )}
-                  </span>
-                }
-              >
-                {port.kind !== 'n' ? (
-                  <span className="node-inlet-name">{port.name}</span>
-                ) : port.at === undefined ? (
-                  <AliveMeter
-                    name={port.name}
-                    fallback={port.name === 'energy' ? energy : beat()}
-                    reading={reading}
-                    driver={driver}
-                  />
-                ) : (
-                  <Slider
-                    param={VALUE}
-                    value={PERCENT.to(
-                      driver !== undefined && reading?.value !== undefined
-                        ? reading.value
-                        : (node.values?.[port.name] ?? port.at),
-                    )}
-                    onChange={(v) => onTurn(port.name, PERCENT.from(v))}
-                    name={port.name}
-                    orientation="horizontal"
-                    layout="inside"
-                    disabled={driver !== undefined}
-                    display={
-                      driver === undefined
-                        ? undefined
-                        : reading?.display
-                          ? `${driver} · ${reading.display}`
-                          : driver
-                    }
-                    className={
-                      driver !== undefined && reading?.value === undefined
-                        ? 'node-number-unreadable'
-                        : undefined
-                    }
-                  />
-                )}
-              </DevicePortRow>
-            );
-          })}
-          {ownRows}
-        </>
-      }
+      portRows={paired.map((row) => (
+        <DevicePortRow key={row.key} inlet={row.inlet} outlet={row.outlet}>
+          {row.control}
+        </DevicePortRow>
+      ))}
     />
   );
 }
@@ -494,14 +537,17 @@ function AliveMeter({
  * `track` and `value` carry one row of their own that is nobody's inlet: a
  * smoothing and an amount. They are counted here because the face draws them.
  */
-export function rowsHeldOpen(node: CircuitNode): { ports: number; outlets: number } {
+export function rowsHeldOpen(node: CircuitNode): { ports: number } {
   const spec = NODE_SPECS[node.kind];
   const own = node.kind === 'track' || node.kind === 'value' ? 1 : 0;
   const widest = (spec.ops ?? [node.op]).reduce((most, op) => {
     const named = inletsOf({ ...node, op }).filter((port) => !port.name.startsWith('~'));
     return Math.max(most, named.length);
   }, 0);
-  return { ports: widest + own, outlets: spec.outlets.length };
+  // Outlets share these lines rather than sitting above them, so a node with
+  // more outlets than inlets — `polar` has one of each way round — is still as
+  // tall as its longer side.
+  return { ports: Math.max(widest + own, spec.outlets.length) };
 }
 
 export function driverOf(

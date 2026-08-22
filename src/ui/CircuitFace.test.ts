@@ -145,16 +145,25 @@ describe('how much room a face holds open', () => {
   });
 
   it('does not make a small node as tall as the biggest one on the canvas', () => {
-    // The whole reason this is per kind. `point` has no inlets at all; holding
-    // a lens's six rows open on it would be most of a node of empty frame.
+    // The whole reason this is per kind. `point` has no inlets and one outlet,
+    // so it is one line; holding a lens's six open on it would be most of a
+    // node of empty frame.
     const point = rowsHeldOpen({ id: 'p', kind: 'point', x: 0, y: 0 });
     const lens = rowsHeldOpen({ id: 'l', kind: 'lens', op: 'ripple', x: 0, y: 0 });
-    expect(point.ports).toBe(0);
+    expect(point.ports).toBe(1);
     expect(point.ports).toBeLessThan(lens.ports);
   });
 
   it('counts the row a kind draws for itself', () => {
-    // A `value` has no inlets and still draws one control: its own amount.
+    // A `value` has no inlets and still draws one control: its own amount. It
+    // shares that line with its one outlet, so the face is a single row.
     expect(rowsHeldOpen({ id: 'v', kind: 'value', x: 0, y: 0 }).ports).toBe(1);
+  });
+
+  it('is as tall as its longer side when the outlets outnumber the inlets', () => {
+    // `polar` takes one point and gives back two numbers. Pairing the rows
+    // means the face is two lines, and the second has an outlet with nothing
+    // opposite it.
+    expect(rowsHeldOpen({ id: 'p', kind: 'polar', x: 0, y: 0 }).ports).toBe(2);
   });
 });

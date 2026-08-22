@@ -132,10 +132,6 @@
   white-space: nowrap;
 }
 
-.node .wdg-device-outlets {
-  gap: 0;
-}
-
 .node .wdg-device-chooser .wdg-select-body,
 .node .wdg-device-chooser .field {
   width: 100%;
@@ -146,6 +142,8 @@
 }
 
 .node-inlet-name {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   color: var(--ui);
   font-size: 9px;
@@ -162,8 +160,9 @@
 
 .node-outlet-name,
 .node-outlet-preview {
-  display: block;
-  width: 100%;
+  flex: none;
+  margin-left: auto;
+  max-width: 60%;
   overflow: hidden;
   color: var(--ui);
   font-size: 9px;
