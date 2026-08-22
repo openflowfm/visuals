@@ -2,8 +2,19 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import type { Circuit, Scheme, Show } from '../../protocol.ts';
 import { createPreview } from '../render/preview.ts';
 import { probeAt } from './probe.ts';
+import {
+  budgetPictures,
+  LIVE_PICTURE_ZOOM_FLOOR,
+  type PictureBudget,
+} from './pictureBudget.ts';
 import type { Clock } from '../state/useShow.ts';
 import { withStandIns } from '../state/useRoom.ts';
+
+const FULL_SCALE = () => 1;
+
+export type NodePictureStatus = PictureBudget['counts'] & {
+  reason: 'off' | 'zoom' | 'budget' | null;
+};
 
 /**
  * A picture per node, out of one GL context.
@@ -15,12 +26,12 @@ import { withStandIns } from '../state/useRoom.ts';
  * outlet and bringing the result back to a colour through the vocabulary's own
  * two crossings.
  *
- * **One context, blitted per node.** A context each is the obvious build and the
- * wrong one: browsers keep about sixteen alive and start evicting the oldest,
- * and this page already has a bench and, on the binding side, two more stages.
- * So one offscreen context draws every node in turn and each frame is copied
- * into that node's own small 2D canvas — one texture copy per node and no extra
- * contexts at all.
+ * **One context, blitted per live node.** A context each is the obvious build
+ * and the wrong one: browsers keep about sixteen alive and start evicting the
+ * oldest, and this page already has a bench and, on the binding side, two more
+ * stages. So one offscreen context draws the visible nodes that fit the budget
+ * and each frame is copied into that node's own small 2D canvas. The others
+ * keep their last frame, visibly paused, without another context or GL draw.
  *
  * It renders through a child function rather than owning the canvas, because
  * what a node *is* belongs to the graph and what a node *looks like* belongs
@@ -38,18 +49,60 @@ export function NodePictures({
   show,
   scheme,
   transport,
+  enabled = true,
+  scale = FULL_SCALE,
+  promoted = null,
+  onStatus,
   children,
 }: {
   circuit: Circuit;
   show: Show;
   scheme: Scheme;
   transport: Clock;
+  /** One switch for every small picture. The shared preview stays allocated. */
+  enabled?: boolean;
+  /** Read the graph's current scale without making wheel movement React state. */
+  scale?: () => number;
+  /** The node shown in the large bench, which keeps one of the live slots. */
+  promoted?: string | null;
+  /** Called only when the aggregate state changes, never once per frame. */
+  onStatus?(status: NodePictureStatus): void;
   children(picture: (nodeId: string) => ReactNode): ReactNode;
 }) {
   const offscreen = useRef<HTMLCanvasElement | null>(null);
   const faces = useRef(new Map<string, HTMLCanvasElement>());
-  const now = useRef({ circuit, show, scheme, transport });
-  now.current = { circuit, show, scheme, transport };
+  const faceRefs = useRef(new Map<string, (element: HTMLCanvasElement | null) => void>());
+  const faceIds = useRef(new WeakMap<HTMLCanvasElement, string>());
+  const visible = useRef(new Set<string>());
+  const observer = useRef<IntersectionObserver | null>(null);
+  const now = useRef({ circuit, show, scheme, transport, enabled, scale, promoted, onStatus });
+  const lastStatus = useRef<NodePictureStatus | undefined>(undefined);
+  now.current = { circuit, show, scheme, transport, enabled, scale, promoted, onStatus };
+
+  useEffect(() => {
+    const first = faces.current.values().next().value;
+    const root = first?.closest('.wdg-graph') ?? null;
+    if (!root || typeof IntersectionObserver === 'undefined') return;
+
+    const watch = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const id = faceIds.current.get(entry.target as HTMLCanvasElement);
+          if (!id) continue;
+          if (entry.isIntersecting) visible.current.add(id);
+          else visible.current.delete(id);
+        }
+      },
+      { root },
+    );
+    observer.current = watch;
+    for (const face of faces.current.values()) watch.observe(face);
+
+    return () => {
+      watch.disconnect();
+      observer.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     const canvas = offscreen.current;
@@ -63,6 +116,35 @@ export function NodePictures({
       const dt = Math.min((stamp - last) / 1000, 0.1);
       last = stamp;
       const at = now.current;
+      const ids = at.circuit.nodes.map((node) => node.id).filter((id) => faces.current.has(id));
+      const zoom = at.scale();
+      const budget = budgetPictures({
+        ids,
+        visible: visible.current,
+        promoted: at.promoted,
+        out: at.circuit.nodes.find((node) => node.kind === 'out')?.id,
+        enabled: at.enabled,
+        scale: zoom,
+      });
+      const live = new Set(budget.live);
+      const paused = new Set(budget.paused);
+      for (const [id, face] of faces.current) {
+        markFace(face, live.has(id) ? 'live' : paused.has(id) ? 'paused' : 'culled');
+      }
+      publishStatus(lastStatus, at.onStatus, {
+        ...budget.counts,
+        reason: !at.enabled
+          ? 'off'
+          : zoom < LIVE_PICTURE_ZOOM_FLOOR
+            ? 'zoom'
+            : budget.counts.paused > 0
+              ? 'budget'
+              : null,
+      });
+
+      // Every gate is before the feed, the graph probe and the GL draw. One
+      // empty frame therefore costs one small schedule and nothing in WebGL.
+      if (budget.live.length === 0) return;
       const beat = at.transport.beat();
       preview.begin({
         circuit: at.circuit,
@@ -74,7 +156,9 @@ export function NodePictures({
         seconds: at.transport.seconds(),
         dt,
       });
-      for (const [id, face] of faces.current) {
+      for (const id of budget.live) {
+        const face = faces.current.get(id);
+        if (!face) continue;
         const probed = probeAt(at.circuit, id);
         if (!probed) continue;
         preview.draw(probed);
@@ -96,10 +180,8 @@ export function NodePictures({
       className="nodeshot"
       width={FACE.w}
       height={FACE.h}
-      ref={(el) => {
-        if (el) faces.current.set(id, el);
-        else faces.current.delete(id);
-      }}
+      data-picture-state="live"
+      ref={refFor(id, faces, faceRefs, faceIds, visible, observer)}
     />
   );
 
@@ -109,6 +191,81 @@ export function NodePictures({
       <canvas ref={offscreen} className="probe-canvas" width={SHOT.w} height={SHOT.h} aria-hidden />
     </>
   );
+}
+
+type FaceState = 'live' | 'paused' | 'culled';
+
+/** Mark a frozen frame once; a resumed GL blit replaces the label completely. */
+function markFace(face: HTMLCanvasElement, state: FaceState): void {
+  if (face.dataset.pictureState === state) return;
+  face.dataset.pictureState = state;
+  if (state !== 'paused') return;
+  const ctx = face.getContext('2d');
+  if (!ctx) return;
+  const width = 58;
+  const height = 18;
+  const x = (face.width - width) / 2;
+  const y = (face.height - height) / 2;
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.72)';
+  ctx.fillRect(x, y, width, height);
+  ctx.fillStyle = '#fff';
+  ctx.font = '600 12px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('paused', face.width / 2, face.height / 2);
+}
+
+function refFor(
+  id: string,
+  faces: { current: Map<string, HTMLCanvasElement> },
+  refs: { current: Map<string, (element: HTMLCanvasElement | null) => void> },
+  ids: { current: WeakMap<HTMLCanvasElement, string> },
+  visible: { current: Set<string> },
+  observer: { current: IntersectionObserver | null },
+): (element: HTMLCanvasElement | null) => void {
+  let ref = refs.current.get(id);
+  if (ref) return ref;
+  ref = (element) => {
+    const before = faces.current.get(id);
+    if (before) {
+      observer.current?.unobserve(before);
+      ids.current.delete(before);
+    }
+    if (element) {
+      faces.current.set(id, element);
+      ids.current.set(element, id);
+      // Fail open until an observer reports otherwise, and forever in a
+      // browser without IntersectionObserver.
+      visible.current.add(id);
+      observer.current?.observe(element);
+    } else {
+      faces.current.delete(id);
+      visible.current.delete(id);
+    }
+  };
+  refs.current.set(id, ref);
+  return ref;
+}
+
+function publishStatus(
+  last: { current: NodePictureStatus | undefined },
+  callback: ((status: NodePictureStatus) => void) | undefined,
+  status: NodePictureStatus,
+): void {
+  const before = last.current;
+  if (
+    before &&
+    before.mounted === status.mounted &&
+    before.visible === status.visible &&
+    before.live === status.live &&
+    before.paused === status.paused &&
+    before.culled === status.culled &&
+    before.reason === status.reason
+  ) {
+    return;
+  }
+  last.current = status;
+  callback?.(status);
 }
 
 /**
