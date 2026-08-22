@@ -73,7 +73,7 @@ it, so a hidden renderer stops drawing and its measured fps reads 0. That is hon
 than broken, and the snap is what makes the picture correct again on the first frame after
 it comes back.
 
-## The native addon, and its two repairs
+## The native addon, and its three repairs
 
 `@ktamas77/abletonlink` vendors Ableton's own C++ Link library and wraps it with
 node-addon-api. That is the right dependency to have — implementing Link's protocol from
@@ -89,8 +89,14 @@ any space in the checkout's path splits it into two arguments and clang reports 
 as a missing directory. This repo lives under `The Source`. The fix is to rewrite the
 include as a path relative to the `.gyp` file, which has no absolute prefix to split.
 
-Both repairs are idempotent, and the build is skipped when the binary is newer than the
-gyp.
+**`binding.gyp` defines macOS at the target level as well as in its macOS condition.** On
+Linux that leaves both the macOS and Linux platform defines set, Darwin wins in Link's
+platform header, and the build asks Ubuntu for `mach/mach_time.h`. The repair removes the
+unconditional define and leaves platform selection to the existing macOS, Windows and
+Linux conditions.
+
+All three repairs are idempotent, and the build is skipped when the binary is newer than
+the gyp.
 
 **Everything except the clock runs without it.** A missing addon logs a warning and
 `openLink` returns a peer that answers from the wall clock at a fixed tempo, so the show

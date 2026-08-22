@@ -8,8 +8,9 @@
 // "constexpr if is a C++17 extension" and six template errors after it.
 //
 // So the package installs with `--ignore-scripts` and this repairs the one
-// wrong flag and builds it. Idempotent: it rewrites nothing already correct,
-// and skips the build entirely when the binary is newer than the gyp.
+// wrong flag, removes a platform define the package applies on every OS, and
+// builds it. Idempotent: it rewrites nothing already correct, and skips the
+// build entirely when the binary is newer than the gyp.
 //
 // This is the whole reason `visuals/` has a `node_modules` of its own, the way
 // `bridge/` does for `ws`.
@@ -36,6 +37,15 @@ if (!fs.existsSync(gyp)) {
 const before = fs.readFileSync(gyp, 'utf8');
 let after = before.replaceAll('c++14', 'c++17');
 
+// The package declares macOS twice: once unconditionally and once inside its
+// OS=='mac' condition. On Linux the unconditional define wins beside the Linux
+// one, so Ableton's Config.hpp selects Darwin and asks for mach/mach_time.h.
+// Leave platform selection entirely to the three existing OS conditions.
+after = after.replace(
+  /([ \t]*"NAPI_DISABLE_CPP_EXCEPTIONS",\r?\n)[ \t]*"LINK_PLATFORM_MACOSX=1",\r?\n/,
+  '$1',
+);
+
 // The second repair, and the one that is this repo's fault rather than the
 // package's: `binding.gyp` asks node for node-addon-api's absolute include
 // path, and node-gyp writes it into the Makefile unquoted. Any space in the
@@ -57,7 +67,7 @@ after = after
 
 if (after !== before) {
   fs.writeFileSync(gyp, after);
-  console.log('link: binding.gyp repaired (C++17, and paths that survive a space)');
+  console.log('link: binding.gyp repaired (C++17, platform selection, and paths with spaces)');
 }
 
 if (fs.existsSync(built) && fs.statSync(built).mtimeMs > fs.statSync(gyp).mtimeMs) {
@@ -73,7 +83,7 @@ try {
     '\nlink: the addon did not build.\n' +
       '      On macOS this usually means the Command Line Tools are missing:\n' +
       '        xcode-select --install\n' +
-      '      Everything except the clock still runs without it — see visuals/docs/link.md.',
+      '      Everything except the clock still runs without it — see visuals/docs/clock.md.',
   );
   process.exit(1);
 }
