@@ -324,6 +324,14 @@ longest edge**, overridable with `?maxEdge=`. The output of this is a projector 
 projector is 1080p; a preview on a 5K panel is very slightly soft in exchange for the frame
 rate that actually matters.
 
+**A second window is a second render, and there is no way for it not to be.** A GL context
+belongs to one document, so nothing can be drawn once and shown twice — the browser has no
+way to hand a finished frame to another window that is cheaper than drawing it again, and
+reading one back to send it would cost half a gigabyte a second. What there is instead is the
+cap, which is per window: the moment a wall opens, the console stops being a destination and
+drops to **960**, a quarter of the pixels. So the pair costs a little over one 1080p render
+rather than two, and the one that is being projected is the one drawn at full size.
+
 Two smaller choices in the same direction. The full-screen pass is **one oversized triangle,
 not two**, so there is no diagonal seam where interpolation is discontinuous. And a track
 that is silent or faded out is skipped before its shader is ever bound, which is why an

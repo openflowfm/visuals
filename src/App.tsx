@@ -128,6 +128,15 @@ export function App() {
     stage.current?.setOutput({ ...output, test: aligning });
   }, [output, aligning]);
 
+  // With a wall up this window stops being the destination and starts being a
+  // preview of one, which is worth a quarter of the pixels rather than all of
+  // them. There is no sharing the render itself: a GL context belongs to one
+  // document, so two windows is two draws, and the only lever is how big the
+  // one nobody is projecting has to be.
+  useEffect(() => {
+    stage.current?.preview(walled);
+  }, [walled]);
+
   const drawing = show.tracks.filter((t) => t.playing >= 0 && t.opacity > 0.001);
   const bars = scheme?.rotation.bars ?? 0;
 

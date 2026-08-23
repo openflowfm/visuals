@@ -28,6 +28,8 @@ import { columns, warpFor, SQUARE, type Corners } from './output.ts';
 export interface Compositor {
   frame(show: Show, scheme: Scheme | null, beat: number, seconds: number, dt: number): void;
   setOutput(output: Output | null): void;
+  /** Draw for a window somebody is looking *at*, rather than for a projector. */
+  preview(on: boolean): void;
   resize(): void;
   free(): void;
   readonly error: string | null;
@@ -65,6 +67,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
     return {
       frame() {},
       setOutput() {},
+      preview() {},
       resize() {},
       free() {},
       error: 'WebGL2 is not available in this browser.',
@@ -124,14 +127,22 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
    * second. A projector is 1080p, and the output of this is a projector — so the
    * cap is the honest resolution of the destination rather than of whatever
    * screen someone happens to be previewing on.
+   *
+   * **A console with a wall open is not a destination**, and drawing it as if it
+   * were is the one way this rig can cost twice what it should: the same graph,
+   * the same shader, at the same 1920, for a picture nobody is projecting. So a
+   * preview draws at `PREVIEW_EDGE` — a quarter of the pixels, which is a tenth
+   * of the frame's cost and a picture you can still judge a look on.
    */
   const MAX_EDGE = Number(new URLSearchParams(location.search).get('maxEdge')) || 1920;
+  const PREVIEW_EDGE = 960;
+  let edge = MAX_EDGE;
 
   const resize = () => {
     const ratio = Math.min(window.devicePixelRatio || 1, 2);
     let width = Math.max(1, Math.floor(canvas.clientWidth * ratio));
     let height = Math.max(1, Math.floor(canvas.clientHeight * ratio));
-    const over = Math.max(width, height) / MAX_EDGE;
+    const over = Math.max(width, height) / edge;
     if (over > 1) {
       width = Math.max(1, Math.round(width / over));
       height = Math.max(1, Math.round(height / over));
@@ -151,6 +162,13 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       return error ?? feed.error;
     },
     resize,
+    preview(on) {
+      // `?maxEdge` still wins. Someone who asked for 800 asked for 800.
+      const next = on ? Math.min(MAX_EDGE, PREVIEW_EDGE) : MAX_EDGE;
+      if (next === edge) return;
+      edge = next;
+      resize();
+    },
     setOutput(output) {
       test = output?.test ?? false;
       gain = output?.gain ?? 1;
