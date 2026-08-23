@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { SQUARE, type Corner, type CornerName, type Corners } from '../render/output.ts';
+import { hear, say } from './useWall.ts';
 
 /**
  * How bright, and where it lands. Both belong to the projector and the room.
@@ -22,6 +23,13 @@ export interface Output {
  * room, so one that travelled would be wrong everywhere except where it was set.
  * `localStorage` is the right scope — it belongs to this browser on this machine
  * and survives a restart, which is what a rig left powered on overnight needs.
+ *
+ * **One projector, one keystone**, so both windows read this: the wall, which is
+ * warped by it, and the console, whose picture is the same picture and shows the
+ * same trapezoid. What the console adds is the four handles — which is why the
+ * *aligning* flag is here too rather than in the component that draws them. It
+ * is not a piece of interface state, it is "the test grid is up", and it has to
+ * be up in the room and not on the laptop. See [the wall](./useWall.ts).
  */
 const KEY = 'bsv.visuals.output';
 
@@ -55,6 +63,12 @@ function load(): Output {
 
 export function useOutput() {
   const [output, setOutput] = useState<Output>(load);
+  const [aligning, setAligning] = useState(false);
+  // The other end has to be told what is current the moment it appears, and it
+  // appears at a moment nothing here caused — so this is read rather than closed
+  // over, the same reason the render loop reads the show through one.
+  const now = useRef({ output, aligning });
+  now.current = { output, aligning };
 
   useEffect(() => {
     try {
@@ -65,27 +79,62 @@ export function useOutput() {
     }
   }, [output]);
 
-  const moveCorner = useCallback((name: CornerName, to: Corner) => {
-    // Clamped to the frame: a corner pushed outside it is a corner the projector
-    // has already cropped, so the handle would leave the screen and never come
-    // back.
-    const clamp = (v: number) => Math.max(0, Math.min(1, v));
-    setOutput((held) => ({
-      ...held,
-      corners: { ...held.corners, [name]: [clamp(to[0]), clamp(to[1])] as Corner },
-    }));
+  // **Applying a word must not answer it.** Everything below says what it just
+  // changed, and a receiver that went through those setters would be two windows
+  // agreeing with each other forever.
+  useEffect(
+    () =>
+      hear((word) => {
+        if (word.kind === 'output') {
+          setOutput(word.output);
+          setAligning(word.aligning);
+        }
+        // A wall that has just opened has whatever was in storage when it
+        // loaded, which is right unless a corner moved since.
+        if (word.kind === 'wall') say({ kind: 'output', ...now.current });
+      }),
+    [],
+  );
+
+  const change = useCallback((next: Output) => {
+    setOutput(next);
+    say({ kind: 'output', output: next, aligning: now.current.aligning });
   }, []);
 
-  const setGain = useCallback((gain: number) => {
-    setOutput((held) => ({
-      ...held,
-      gain: Math.max(GAIN_RANGE.min, Math.min(GAIN_RANGE.max, gain)),
-    }));
-  }, []);
+  const moveCorner = useCallback(
+    (name: CornerName, to: Corner) => {
+      // Clamped to the frame: a corner pushed outside it is a corner the projector
+      // has already cropped, so the handle would leave the screen and never come
+      // back.
+      const clamp = (v: number) => Math.max(0, Math.min(1, v));
+      const held = now.current.output;
+      change({
+        ...held,
+        corners: { ...held.corners, [name]: [clamp(to[0]), clamp(to[1])] as Corner },
+      });
+    },
+    [change],
+  );
+
+  const setGain = useCallback(
+    (gain: number) => {
+      change({
+        ...now.current.output,
+        gain: Math.max(GAIN_RANGE.min, Math.min(GAIN_RANGE.max, gain)),
+      });
+    },
+    [change],
+  );
 
   // Only the corners: brightness is a room, and squaring a projector should not
   // also undo an hour of finding the right level for the hall it is in.
-  const reset = useCallback(() => setOutput((held) => ({ ...held, corners: SQUARE })), []);
+  const reset = useCallback(() => change({ ...now.current.output, corners: SQUARE }), [change]);
 
-  return { output, moveCorner, setGain, reset };
+  /** Handles here, grid on the wall. One flag, because they are one gesture. */
+  const align = useCallback((on: boolean) => {
+    setAligning(on);
+    say({ kind: 'output', output: now.current.output, aligning: on });
+  }, []);
+
+  return { output, aligning, align, moveCorner, setGain, reset };
 }

@@ -266,6 +266,49 @@ is the correct scope: this machine, surviving a restart, going nowhere.
 `k` opens it. Drag a corner or arrow it, hold shift for a single pixel; the brightness sits
 on the same bar.
 
+## The wall is a window, because an output is not a thing
+
+Nothing renders to an HDMI port. The port is a **display**, and the only way pixels reach it
+is a window on that desktop — so the question was never whether this rig has a second window,
+it is whether anybody has to *touch* one. Dragging a browser onto a projector and
+fullscreening it is a thing you do in the dark with a band waiting, every single time.
+
+`state/useWall.ts` opens it instead. Chrome's window management API lets a page enumerate the
+displays and open a window on the one it names, so `w` puts a chrome-less window on the
+projector and the console keeps the panel, the editor and the picture it already had. Which
+display it went to is remembered per machine, for the same reason the keystone is.
+
+**The wall is an ordinary second client** — rule 5 in [`AGENTS.md`](../../AGENTS.md). It opens
+its own socket, asks for a snapshot and extrapolates its own clock exactly as a second machine
+would, which is what makes one machine and two the same code. Both windows read the show from
+the server and the beat from Link, so they agree about the look, the colourway and the bar.
+They do not agree about `uTime`, which is seconds since *that page* loaded — so `noise`'s
+weather drifts differently in the two and nothing that is in time does.
+
+**What the two ends have to agree about does not go through the server.** The keystone, the
+master gain and whether the test grid is up all describe this projector in this room, which is
+the one class of thing the scheme is deliberately not told. They ride a `BroadcastChannel`
+between the windows instead: the console says what it just changed, the wall applies it and
+answers nothing — a receiver that went back through those setters would be two windows
+agreeing with each other forever — and a wall that opens later asks and is told. So dragging a
+corner moves the picture on the wall while you are looking at the wall, which is the only way
+a keystone was ever set.
+
+**The console keeps its own output stage** rather than dropping it while a wall is up. There
+is one projector, so there is one keystone and one gain, and a preview that disagreed with the
+wall in either direction is the thing this file spends the rest of its length avoiding.
+
+**The first `w` of a browser's life may take two presses.** Enumerating displays needs the
+window-management permission and asking for it needs a gesture, so the first press spends its
+gesture on the prompt and the next one opens the window; every press after that is one press.
+Where the permission is refused, or the browser has no such API, `w` opens a plain popup you
+place yourself — worse than the automatic one and better than the alternative, which is
+nothing.
+
+`?wall` in the URL is what makes a page the wall, read once and fixed for its lifetime. A
+query rather than a route because the dev server and the built server both serve it with no
+help, and because it is the same idiom as `?maxEdge`.
+
 ## Fill rate is the only performance number
 
 Cost is `pixels × passes × 60`, and there are far fewer passes than there were: one per

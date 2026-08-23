@@ -55,10 +55,16 @@ Open `http://localhost:17900` for the built renderer, or `:5473` while working o
 `npm run dev` runs both alongside the bridge and `ui/`. It uses `concurrently -k`, so a
 port already in use here takes the whole dev session down with it — if `npm run dev` dies
 on startup, look for a `dev:visuals` you left running.
-`i` toggles the panel, `e` the editor, `k` the output stage, `f` fullscreen. **`1` says
+`i` toggles the panel, `e` the editor, `k` the output stage, `w` the wall, `f` fullscreen. **`1` says
 "here is the one"** — it re-phases the rotation so changes land on the top of a phrase
 without changing what is on screen. Live's transport starting does the same thing by itself,
 so the key is for a set that never stops. See [the wheel](docs/wheel.md).
+
+**`w` sends the picture to the projector.** There is no such thing as rendering to an HDMI
+port — the port is a display, and something has to own a window on it — so this opens one for
+you: chrome-less, fullscreen, on the display you pick, remembered for next time. The browser
+you are working in stays the console, and the two ends keep the keystone and the test grid in
+step between them. See [the renderer](docs/render.md).
 
 **`k` opens the output stage** — corner pinning and master brightness. Drag the four corners
 until the test grid is square *on the wall*; that corrects an angled throw in a way two

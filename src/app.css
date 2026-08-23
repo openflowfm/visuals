@@ -98,3 +98,32 @@ kbd {
   border-radius: 2px;
   background: #151517;
 }
+
+.panel dd.wall {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 20ch;
+}
+
+.panel dd.wall span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.panel dd.wall button {
+  padding: 0 4px;
+  border: 1px solid #2c2c31;
+  border-radius: 2px;
+  background: #151517;
+  color: #b7b7be;
+  font: inherit;
+  cursor: pointer;
+}
+
+.panel dd.wall button:hover {
+  border-color: #45454d;
+  color: #ececed;
+}
+
+[data-wall] { cursor: none; }

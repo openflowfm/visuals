@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createCompositor, type Compositor } from './render/compositor.ts';
 import { useOutput } from './state/useOutput.ts';
 import { useShow, type Clock } from './state/useShow.ts';
+import { ON_WALL, useOnWall, useWall } from './state/useWall.ts';
 import { Align } from './ui/Align.tsx';
 import { Console } from './ui/Console.tsx';
 import './app.css';
@@ -13,6 +14,13 @@ import './app.css';
  * gives you no way to tell *which* thing is wrong — the set, the bridge, the
  * clock, or the shaders. Press `i` to toggle it, and it starts open because the
  * first thing anyone does with this is find out whether it connected.
+ *
+ * **This is also the wall**, when the URL says so — the same component with the
+ * panel, the console and the handles taken away, drawing on the projector in a
+ * window opened for it. One component rather than two because the loop that
+ * advances the clock and feeds the compositor is the thing that must not exist
+ * twice; what a front end gets to decide is only the destination. See
+ * [the wall](./state/useWall.ts).
  */
 export function App() {
   const canvas = useRef<HTMLCanvasElement | null>(null);
@@ -23,10 +31,12 @@ export function App() {
   // rebuilding the loop whenever a number moved would drop a frame per edit.
   const schemeRef = useRef(scheme);
   schemeRef.current = scheme;
-  const { output, moveCorner, setGain, reset } = useOutput();
+  const { output, aligning, align, moveCorner, setGain, reset } = useOutput();
+  const wall = useWall(!ON_WALL);
+  const { open: walled, send, shut } = wall;
+  useOnWall(ON_WALL);
   const [panel, setPanel] = useState(true);
   const [editing, setEditing] = useState(false);
-  const [aligning, setAligning] = useState(false);
   const [fps, setFps] = useState(0);
   const [glError, setGlError] = useState<string | null>(null);
 
@@ -40,21 +50,28 @@ export function App() {
       // which has no `matches` and threw, taking every shortcut down with it.
       const target = e.target;
       if (target instanceof HTMLElement && target.matches('input, textarea, select')) return;
+      if (e.key === 'f') void document.documentElement.requestFullscreen?.().catch(() => {});
+      // The wall is a picture and not a control surface. `f` is above this line
+      // because a window that failed to fill its screen needs one way to.
+      if (ON_WALL) return;
       // The one. A digit rather than a letter because it *is* the count, and
       // because the four letters worth having are already shortcuts.
       if (e.key === '1') downbeat();
       if (e.key === 'i') setPanel((on) => !on);
       if (e.key === 'e') setEditing((on) => !on);
-      if (e.key === 'k') setAligning((on) => !on);
+      if (e.key === 'k') align(!aligning);
+      if (e.key === 'w') {
+        if (walled) shut();
+        else send();
+      }
       if (e.key === 'Escape') {
         setEditing(false);
-        setAligning(false);
+        align(false);
       }
-      if (e.key === 'f') void document.documentElement.requestFullscreen?.().catch(() => {});
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
-  }, [downbeat]);
+  }, [downbeat, align, aligning, walled, send, shut]);
 
   useEffect(() => {
     if (!canvas.current) return;
@@ -84,7 +101,9 @@ export function App() {
 
       frames += 1;
       if (now - since >= 500) {
-        setFps(Math.round((frames * 1000) / (now - since)));
+        // Nobody reads a frame rate off a projector, and a wall re-rendering
+        // twice a second for a number it does not draw is two renders too many.
+        if (!ON_WALL) setFps(Math.round((frames * 1000) / (now - since)));
         frames = 0;
         since = now;
         if (compositor.error) setGlError(compositor.error);
@@ -115,7 +134,7 @@ export function App() {
   return (
     <>
       <canvas ref={canvas} className="stage" />
-      {panel && (
+      {panel && !ON_WALL && (
         <div className="panel">
           <h1>
             visuals
@@ -132,6 +151,7 @@ export function App() {
           </h1>
 
           {glError && <p className="bad-line">{glError}</p>}
+          {wall.trouble && <p className="bad-line">{wall.trouble}</p>}
           {show.schemeError && <p className="bad-line">scheme.json: {show.schemeError}</p>}
 
           <dl>
@@ -155,22 +175,43 @@ export function App() {
             <dd className="wide">{show.colorway ?? '—'}</dd>
             <dt>fps</dt>
             <dd>{fps}</dd>
+            <dt>wall</dt>
+            <dd className="wall">
+              {walled ? (
+                <>
+                  <span>{wall.where ?? 'open'}</span>
+                  <button type="button" onClick={shut}>
+                    close
+                  </button>
+                </>
+              ) : wall.displays.length ? (
+                wall.displays.map((display) => (
+                  <button key={display.name} type="button" onClick={() => send(display)}>
+                    {display.name}
+                  </button>
+                ))
+              ) : (
+                <button type="button" onClick={() => send()}>
+                  send
+                </button>
+              )}
+            </dd>
           </dl>
 
           <p className="hint">
             <kbd>1</kbd> the one · <kbd>i</kbd> panel · <kbd>e</kbd> edit · <kbd>k</kbd> align ·{' '}
-            <kbd>f</kbd> fullscreen
+            <kbd>w</kbd> wall · <kbd>f</kbd> fullscreen
           </p>
         </div>
       )}
-      {aligning && (
+      {aligning && !ON_WALL && (
         <Align
           corners={output.corners}
           gain={output.gain}
           moveCorner={moveCorner}
           setGain={setGain}
           reset={reset}
-          onClose={() => setAligning(false)}
+          onClose={() => align(false)}
         />
       )}
       {editing && scheme && (
