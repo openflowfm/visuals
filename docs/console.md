@@ -96,10 +96,12 @@ The letters are painted in the same blue, amber and purple the **ports and cords
 canvas** carry, which is what turns three letters from a code you have to be told into a
 legend for the thing beside it. You match the colour; the letter is there for when you have.
 
-**And you can filter by them.** Six switches under the search box, in the same six positions
-and the same three colours as the block on every row — so the control needs no label beyond
-`takes` and `gives`: what you press is a picture of what you are asking for, and the rows
-that survive are the ones lit in the same places. The search box answers *what is it called*
+**And you can filter by them.** Six switches under the search box, in the same three
+colours as the block on every row — so the control needs no label beyond `takes` and
+`gives`: what you press is a picture of what you are asking for, and the rows that survive
+are the ones lit in the same places. `takes` hugs the left edge and `gives` the right, the
+same geometry as a node's own face — signals enter on the left and leave on the right — so
+the gap between them says what an arrow used to. The search box answers *what is it called*
 and this answers *what will connect*, which is the other half of finding a node and the half
 nothing could ask before. Selected signals are required rather than allowed, so ticking
 *takes p* and *gives c* narrows to nodes that do both — the question somebody with a point in

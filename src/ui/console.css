@@ -497,16 +497,12 @@
 .designer .port-filter {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 3px;
   margin-bottom: 2px;
   padding: 0 2px;
   font-size: 9px;
   color: var(--idle);
-}
-
-.designer .port-filter > i {
-  font-style: normal;
-  color: var(--bd3);
 }
 
 .designer .port-filter-side {
@@ -555,10 +551,6 @@
 .designer .port-filter button[data-on][data-signal='c'] {
   border-color: var(--signal-c);
   color: var(--signal-c);
-}
-
-.designer .port-filter-clear {
-  margin-left: auto;
 }
 
 .designer .port-filter-clear:disabled {

@@ -858,8 +858,6 @@ function PortFilter({ want, onChange }: { want: PortSet; onChange(next: PortSet)
   return (
     <div className="port-filter" data-on={on ? '' : undefined}>
       {side('takes')}
-      <i>→</i>
-      {side('gives')}
       <button
         type="button"
         className="port-filter-clear"
@@ -869,6 +867,7 @@ function PortFilter({ want, onChange }: { want: PortSet; onChange(next: PortSet)
       >
         ×
       </button>
+      {side('gives')}
     </div>
   );
 }
