@@ -366,16 +366,18 @@ export function NodeFace({
             onChange={(v) => onTurn(port.name, PERCENT.from(v))}
             depth={driver === undefined ? undefined : (node.depths?.[port.name] ?? 1)}
             onDepth={driver === undefined ? undefined : (d: number) => onRange(port.name, d)}
+            live={driver === undefined ? undefined : reading?.value}
             name={port.name}
             orientation="horizontal"
             layout="inside"
-            display={
-              driver === undefined
-                ? undefined
-                : reading?.display
-                  ? `${driver} · ${reading.display}`
-                  : driver
-            }
+            // The number, never the name of what is driving it. The name used
+            // to go here and there is no room for one: `pulse · 73 %` in a
+            // 140px row ellipsised to `pulse…`, which cost the reading to say
+            // something the cord on the canvas already says. It is the title
+            // now, and what a cord is *doing* — the only thing nothing else
+            // shows — has the readout to itself.
+            display={driver === undefined ? undefined : (reading?.display ?? '—')}
+            title={driver === undefined ? port.name : `${port.name} ← ${driver}`}
           />
         ),
     };
@@ -490,13 +492,11 @@ function AliveMeter({
       name={name}
       layout="inside"
       showValue
-      display={
-        driver
-          ? reading?.display
-            ? `${driver} · ${reading.display}`
-            : driver
-          : reading?.display
-      }
+      // The reading, as on a number row, with the driver in the title. A meter
+      // has no value of its own to fall back to, so a driver nothing can be
+      // read from says so with a dash.
+      display={driver && !reading?.display ? '—' : reading?.display}
+      title={driver ? `${name} ← ${driver}` : name}
       className={driver && reading?.value === undefined ? 'node-number-unreadable' : undefined}
     />
   );

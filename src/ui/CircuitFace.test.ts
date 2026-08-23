@@ -70,8 +70,11 @@ describe('the node face anatomy', () => {
     // row a control for something nobody could see; it carries the inlet *from*
     // that number now, so the row is where you set the floor and the range.
     expect(html).not.toContain('data-disabled=""');
-    expect(html).toContain('<span class="wdg-readout">pulse · 73 %</span>');
-    // The floor it holds, not the live reading — that has the readout.
+    // The reading, and only the reading. `pulse · 73 %` used to go here and
+    // ellipsised to `pulse…`, spending the number to name a cord you can see.
+    expect(html).toContain('<span class="wdg-readout">73 %</span>');
+    expect(html).toContain('depth ← pulse');
+    // The row still holds the floor, which is what a drag on it sets.
     expect(html).toContain('aria-valuenow="81"');
     expect(html).toContain('aria-label="depth"');
   });
@@ -101,11 +104,11 @@ describe('the node face anatomy', () => {
       cords: [{ from: 'p/angle', to: 'm/a' }],
     };
     const html = face(circuit.nodes[1], circuit, { 'm/a': {} });
-    // `polar` is per-fragment, so no CPU reading exists. The readout names the
-    // driver and stops there rather than inventing a number, and the row still
-    // shows the floor, which is a number that genuinely is set.
-    expect(html).toContain('<span class="wdg-readout">polar·angle</span>');
-    expect(html).not.toContain('polar·angle ·');
+    // `polar` is per-fragment, so no CPU reading exists. The readout says so
+    // with a dash rather than inventing a number or falling back to the floor,
+    // which would read as the live value and be wrong.
+    expect(html).toContain('<span class="wdg-readout">—</span>');
+    expect(html).toContain('a ← polar·angle');
     expect(html).toContain('aria-valuenow="81"');
   });
 
