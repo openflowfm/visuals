@@ -108,19 +108,27 @@ float fieldMetaballDensity(vec2 p, float e, float balls, float apart) {
   float total = 0.0;
   int activeBalls = min(${METABALL_MAX}, ${METABALL_MIN} +
     int(floor(clamp(balls, 0.0, 1.0) * ${METABALL_LEVELS}.0)));
-  float colonyRadius = mix(0.08, 0.55, apart);
+  float apart01 = clamp(apart, 0.0, 1.0);
+  float separated = smoothstep(0.55, 1.0, apart01);
+  float colonyRadius = mix(0.08, 0.64, apart01);
   for (int i = 0; i < ${METABALL_MAX}; i++) {
     if (i >= activeBalls) continue;
     ivec2 key = ivec2(i * 13 + 5, i * 29 + 11);
     float direction = fieldHash(key + ivec2(7, 3)) < 0.5 ? -1.0 : 1.0;
     float speed = mix(0.07, 0.22, fieldHash(key + ivec2(17, 23))) * direction;
-    float angle = fieldHash(key) * 6.28318530718 + uBeat * speed;
-    float orbit = colonyRadius * mix(0.35, 1.0, fieldHash(key + ivec2(31, 19)));
-    float ellipse = mix(0.65, 1.25, fieldHash(key + ivec2(43, 37)));
+    float looseAngle = fieldHash(key) * 6.28318530718 + uBeat * speed;
+    float ringAngle = 6.28318530718 * (float(i) + 0.5) / float(activeBalls) +
+                      uBeat * 0.08;
+    float angle = mix(looseAngle, ringAngle, separated);
+    float looseOrbit = mix(0.35, 1.0, fieldHash(key + ivec2(31, 19)));
+    float orbit = colonyRadius * mix(looseOrbit, 1.0, separated);
+    float looseEllipse = mix(0.65, 1.25, fieldHash(key + ivec2(43, 37)));
+    float ellipse = mix(looseEllipse, 0.58, separated);
     vec2 centre = vec2(cos(angle), sin(angle) * ellipse) * orbit;
     vec2 delta = p - centre;
     float hardness = mix(18.0, 32.0, e) *
-                     mix(0.72, 1.28, fieldHash(key + ivec2(59, 41)));
+                     mix(0.72, 1.28, fieldHash(key + ivec2(59, 41))) *
+                     mix(1.0, 5.0, separated);
     total += exp(-dot(delta, delta) * hardness);
   }
   return total;

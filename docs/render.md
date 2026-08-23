@@ -130,10 +130,12 @@ five new pictures. The GLSL independently implements the same definitions, while
 ensure every mode reaches the graph compiler and every genuinely lightweight source reaches the
 per-track shader path.
 
-Metaballs expose `balls`, which selects two through seven active fields, and `apart`, which
-moves their independently sized, phased and directed orbits away from the centre. Their
-Gaussian fields are summed before the implicit threshold rather than averaged, so adding a
-ball preserves the characteristic separate-touch-merge motion instead of dimming every ball.
+Metaballs expose `balls`, which selects two through seven active fields, and `apart`. The
+latter starts as loose independently sized and directed orbits, then widens into an evenly
+spaced elliptical ring at its maximum. The kernels tighten only through that last part of the
+range, so all seven complete bodies can be visibly separate without losing their soft merging
+through the rest of the control. Their Gaussian fields are summed before the implicit threshold
+rather than averaged, so adding a ball does not dim every ball.
 
 The `field` split is a GPU boundary. A `source` may run once per playing track, so only the
 constant-work checker and rays belong there. A field is never offered as a per-track picture,

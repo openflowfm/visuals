@@ -444,7 +444,7 @@ const VALUE_DESCRIPTION: Record<ValueInlet, string> = {
   detail: 'How many bounded orbit steps are used to reveal fine structure.',
   shape: 'Which Julia-set seed is traced around the useful connected region.',
   balls: 'How many metaballs are active, from two through the bounded ceiling of seven.',
-  apart: 'How far the metaballs orbit from the centre before their fields merge.',
+  apart: 'How far the metaballs separate, ending in a fully spaced elliptical ring.',
 };
 
 /** Where a number starts when nobody has turned it. A half unless it says. */

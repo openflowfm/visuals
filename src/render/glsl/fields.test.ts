@@ -31,6 +31,10 @@ const feature = (x: number, y: number, seed = 3.71): Point => [
 
 const fract = (value: number): number => value - Math.floor(value);
 const clamp = (value: number): number => Math.max(0, Math.min(1, value));
+const smoothstep = (lower: number, upper: number, value: number): number => {
+  const amount = clamp((value - lower) / (upper - lower));
+  return amount * amount * (3 - 2 * amount);
+};
 
 /** Independent scalar form of the shader's fixed 3x3 Worley F1 search. */
 const worley = ([px, py]: Point, seed = 3.71): number => {
@@ -106,14 +110,26 @@ const activeBalls = (value: number): number =>
   );
 
 /** Independent form of one seeded elliptical orbit from the shader. */
-const metaballCentre = (index: number, beat: number, apart: number, seed = 3.71): Point => {
+const metaballCentre = (
+  index: number,
+  beat: number,
+  apart: number,
+  active = METABALL_MAX,
+  seed = 3.71,
+): Point => {
   const key: Point = [index * 13 + 5, index * 29 + 11];
   const direction = hash(key[0] + 7, key[1] + 3, seed) < 0.5 ? -1 : 1;
   const speed = lerp(0.07, 0.22, hash(key[0] + 17, key[1] + 23, seed)) * direction;
-  const angle = hash(key[0], key[1], seed) * Math.PI * 2 + beat * speed;
-  const colonyRadius = lerp(0.08, 0.55, clamp(apart));
-  const orbit = colonyRadius * lerp(0.35, 1, hash(key[0] + 31, key[1] + 19, seed));
-  const ellipse = lerp(0.65, 1.25, hash(key[0] + 43, key[1] + 37, seed));
+  const apart01 = clamp(apart);
+  const separated = smoothstep(0.55, 1, apart01);
+  const looseAngle = hash(key[0], key[1], seed) * Math.PI * 2 + beat * speed;
+  const ringAngle = (Math.PI * 2 * (index + 0.5)) / active + beat * 0.08;
+  const angle = lerp(looseAngle, ringAngle, separated);
+  const colonyRadius = lerp(0.08, 0.64, apart01);
+  const looseOrbit = lerp(0.35, 1, hash(key[0] + 31, key[1] + 19, seed));
+  const orbit = colonyRadius * lerp(looseOrbit, 1, separated);
+  const looseEllipse = lerp(0.65, 1.25, hash(key[0] + 43, key[1] + 37, seed));
+  const ellipse = lerp(looseEllipse, 0.58, separated);
   return [Math.cos(angle) * orbit, Math.sin(angle) * ellipse * orbit];
 };
 
@@ -236,6 +252,33 @@ describe('finite Gaussian metaballs', () => {
     for (let index = 0; index < METABALL_MAX; index++) {
       expect(Math.hypot(...far[index])).toBeGreaterThan(Math.hypot(...near[index]));
       expect(metaballCentre(index, 13.5, 0.9)).not.toEqual(far[index]);
+    }
+  });
+
+  it('puts all seven complete bodies into distinct slots at maximum apart', () => {
+    const centres = Array.from({ length: METABALL_MAX }, (_, index) =>
+      metaballCentre(index, 12.5, 1),
+    );
+    const distances = centres.flatMap((centre, index) =>
+      centres.slice(index + 1).map((other) =>
+        Math.hypot(centre[0] - other[0], centre[1] - other[1]),
+      ),
+    );
+    const softestHardness = 18 * 0.72 * 5;
+    const halfThresholdRadius = Math.sqrt(-Math.log(0.45 / 2) / softestHardness);
+    expect(Math.min(...distances)).toBeGreaterThan(halfThresholdRadius * 2);
+    const saddleDensities = centres.map((centre, index) => {
+      const next = centres[(index + 1) % centres.length];
+      const midpoint: Point = [(centre[0] + next[0]) / 2, (centre[1] + next[1]) / 2];
+      return centres.reduce((density, other) => {
+        const distance = Math.hypot(midpoint[0] - other[0], midpoint[1] - other[1]);
+        return density + Math.exp(-(distance * distance) * softestHardness);
+      }, 0);
+    });
+    expect(Math.max(...saddleDensities)).toBeLessThan(0.45);
+    for (const [x, y] of centres) {
+      expect(Math.abs(x)).toBeLessThanOrEqual(0.64);
+      expect(Math.abs(y)).toBeLessThanOrEqual(0.64 * 0.58);
     }
   });
 });
