@@ -55,12 +55,13 @@ the centre, `smear` is six, `edge` is four, `shift` is three. Nesting two of the
 that takes a second to compile — the number is high enough that no sane graph reaches it,
 and [the roll](wheel.md) deliberately never wires those four.
 
-An iterative node needs a second answer, because a loop of thirty-two orbit steps is still
-one GLSL statement. `fractal` therefore declares its worst-case work separately and the
-compiler charges it every time the graph asks for the picture at another point. Two direct
-fractals fit; putting one under any `spread` does not. `detail` may stop the loop earlier,
-but it is a uniform that can be turned after compilation, so the budget is always the hard
-ceiling rather than the number it happens to be showing now.
+A bounded procedural node needs a second answer, because a loop or repeated kernel may still
+be one GLSL statement. `field` charges 9, 16, or 4 primitive visits for cells, clouds, or
+metaballs; `fractal` charges its thirty-two-step orbit ceiling. The compiler adds that work
+every time the graph asks for the picture at another point, so a three-tap colour shift over
+clouds fits while a nine-tap bloom is refused. Two direct fractals fit; putting one under any
+`spread` does not. A control may stop work sooner, but controls can turn after compilation,
+so the budget is always the hard ceiling rather than what happens to be visible now.
 
 ## Three signals
 
@@ -249,7 +250,8 @@ editors listing these differently would be two different vocabularies.
 | node | in | out | |
 |---|---|---|---|
 | `tracks` | `p` | `c` | **the Live set**: every playing track, drawn and mixed. Fire a scene, it changes |
-| `source` | `p` `energy` | `c` | one of eleven: `solid` `bars` `rings` `noise` `strobe` `grid` `tunnel` `plasma` `spiral` `scan` `sparks` |
+| `source` | `p` `energy` | `c` | one of thirteen, including `checker` and `rays`; all are safe as per-track pictures |
+| `field` | `p` `energy` | `c` | `cells` `clouds` `metaballs`; fixed work, charged per graph sample and never offered per track |
 | `fractal` | `p` `energy` + its mode's numbers | `c` | `mandelbrot` or `julia`, with bounded zoom, detail and iterative work |
 | `flow` | `p` | `c` | another flow, whole, as one node |
 | `paint` | `amount` `energy` | `c` | the colourway's colour at a brightness |
@@ -571,8 +573,9 @@ fastest way to find out what nesting costs.
 Everything else this app does is arrangements of what gets made here.
 
 **Two shelves under one search box**, and the split is the change. The **flow shelf** lists
-your library, marked `◈`, each row saying how many nodes are inside it and carrying two
-verbs — open it, or place it in the flow you have open. The **node browser** below lists the
+your library, marked `◈`, each row saying how many nodes are inside it and carrying three
+verbs — open it, place it in the flow you have open, or delete it (armed on the row, and
+committed by a second press). The **node browser** below lists the
 vocabulary, one kind per row with its signature (`p → c`) on the right. A flow used to
 appear in both, and in the second one it was a chip identical to `source` — which is how a
 flow that was a single `tracks` node came to read as a kind of node. See

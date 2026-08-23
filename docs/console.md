@@ -153,19 +153,29 @@ So the sidebar is **two shelves under one search box**:
 
 | | the row is | it says | the verbs |
 |---|---|---|---|
-| **flows** | one flow in the library | `◈`, its name, and `9 nodes · reads the set` | **open** it to edit, `⤵` to **place** it |
+| **flows** | one flow in the library | `◈`, its name, and `9 nodes · reads the set` | **open** it to edit, `⤵` to **place** it, `×` to **delete** it |
 | **nodes** | one kind in the vocabulary | its name and its signature | drop it, or open its presets |
 
 The node count is the differentiator and it is a fact rather than a style: a `source` has no
 answer to "how many nodes are inside", and a row that says `9 nodes` cannot be mistaken for
 a primitive. `1 flow inside` is the only warning that opening one flow is opening several.
 
-**Two verbs where a node has one.** Opening a flow and placing a flow were previously the
+**Three verbs where a node has one.** Opening a flow and placing a flow were previously the
 same click in two different lists, which is precisely how you end up asking what kind of
-node `The set` is. They are now two controls on one row, and `⤵` is simply absent where it
+node `The set` is. They are now controls on one row, and `⤵` is simply absent where it
 would be refused — the model still refuses a flow that would contain itself, but a button
 that exists only to produce an error message teaches the wrong thing about what nesting can
 do. Same argument as the missing delete on `out`.
+
+**Delete lives on the row, and asks on the row.** It was in the shelf head, deleting the
+*open* flow — so deleting anything meant opening it first, losing your place to lose the
+thing, and the one destructive control in the column acted on something other than what it
+sat beside. Now `×` appears on hover like `⤵` does, its tooltip says what the delete
+orphans (`placed inside 2 flows, pinned by 1 song`), and the first press only arms it: the
+button turns to `sure?` in alarm and a second press commits. Leaving the row disarms. An
+inline confirm rather than a dialog because the scheme has no undo — and rather than
+nothing because a library is where misclicks live. The head keeps the verbs that really are
+about the open flow: `new` and `fork`. The last flow cannot be deleted, same as `out`.
 
 **One box, both shelves.** Pulling flows out of the node palette would otherwise have made
 them *harder* to find than they were, which is the opposite of the point. Typing `outl`
@@ -180,8 +190,9 @@ mark that only appears in one of the two places it matters is a mark nobody lear
 The two shelves were designed apart and it showed. A flow name was larger than a node name;
 a flow was two lines against a node's one; only two of the five node families had a coloured
 left edge, so the shared margin looked broken rather than meaningful; and there were three
-button weights in one column — outlined boxes for `＋ fork ×`, a filled amber box for `live
-pictures` that was the brightest thing on the page, and a quiet chip for a preset count.
+button weights in one column — outlined boxes for the shelf-head actions, a filled amber
+box for `live pictures` that was the brightest thing on the page, and a quiet chip for a
+preset count.
 
 Every row is now the same sentence: **a rail, a name, and one fact on the right.** A node's
 fact is its signature; a flow's is what is inside it. What tells them apart is the `◈`, the
@@ -197,6 +208,20 @@ Three rules fell out of that:
 - **The fact gives way before the name does.** A signature always fits; `12 nodes · reads
   the set` beside a flow somebody called something long does not, and half a name is worse
   than half a description.
+
+### One scroll, and the headings hold
+
+The flows shelf scrolled inside a column that also scrolled the palette — two scrollbars
+in 248px, and the pale default bars were the brightest thing in the column. The shelves
+now stack in **one scroll container**; each shelf head is sticky, so `flows` and `nodes`
+hold at the top with their controls while their rows pass under — the way any browser
+holds the category you are in. The one scrollbar is an inset dark pill that only shows
+while the pointer is over the column.
+
+An emptied column says why. Both shelves answer one search box *and* the port filter, so
+"nothing by that name" was a lie whenever the filter was the reason — the empty state now
+says `no flow matches` / `no node matches` and offers **show everything**, one press that
+clears the box and the filter together. Escape in the box does the box.
 
 ### The canvas is a way in
 

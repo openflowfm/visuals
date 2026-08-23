@@ -205,6 +205,13 @@ export function Designer({
    * question about ports, not about names.
    */
   const [filter, setFilter] = useState<PortSet>(NO_FILTER);
+  /**
+   * Which flow's delete is armed. The first press arms it, the second one on
+   * the same row commits — an inline confirm, in place of the modal this
+   * column has nowhere to put and the undo the scheme does not have. Leaving
+   * the row disarms it, so a stale "sure?" can never fire from muscle memory.
+   */
+  const [arming, setArming] = useState<string | null>(null);
 
   const canFollow = show.clock && show.connected;
   const transport = useTransport(clock, canFollow);
@@ -254,6 +261,13 @@ export function Designer({
     [scheme, typed, filter],
   );
   const swap = activeSwap ? swapEntry(activeSwap.kind) : null;
+  // "Nothing by that name" lies when it was the port filter that emptied the
+  // column, so the empty states share one verb that clears both narrowings.
+  const narrowed = typed.trim() !== '' || filter.takes.length > 0 || filter.gives.length > 0;
+  const widen = () => {
+    setTyped('');
+    setFilter(NO_FILTER);
+  };
   const browsed = swap ? matching([swap], typed) : found;
 
   const evaluator = useRef<ReturnType<typeof createNumberEvaluator> | null>(null);
@@ -383,6 +397,31 @@ export function Designer({
   /** Place a flow in the open one, as a node. The refusal in `add` still applies. */
   const place = (row: FlowRow) => add(pickOf(row));
 
+  const erase = (row: FlowRow) => {
+    save(dropFlow(scheme, row.id));
+    setArming(null);
+    setTrail((was) => was.filter((each) => each !== row.id));
+    if (row.id === id) {
+      setTrail([]);
+      setFlow(null);
+    }
+  };
+
+  /** What a delete would orphan, said on the button rather than after the fact. */
+  const costOf = (row: FlowRow) => {
+    const inside = Object.values(scheme.flows).filter((each) =>
+      each.circuit.nodes.some((node) => node.kind === 'flow' && node.op === row.id),
+    ).length;
+    const pinned = Object.values(scheme.songs).filter((spec) =>
+      spec.flows?.includes(row.id),
+    ).length;
+    const costs = [
+      inside > 0 ? `placed inside ${inside} flow${inside === 1 ? '' : 's'}` : null,
+      pinned > 0 ? `pinned by ${pinned} song${pinned === 1 ? '' : 's'}` : null,
+    ].filter(Boolean);
+    return `Delete ${row.name}${costs.length > 0 ? ` — ${costs.join(', ')}` : ''}`;
+  };
+
   const choose = (pick: Pick) => {
     if (!activeSwap || !def) {
       add(pick);
@@ -414,7 +453,17 @@ export function Designer({
               placeholder={activeSwap ? `swap ${activeSwap.kind} mode` : 'find a flow or a node'}
               aria-label={activeSwap ? `Find a ${activeSwap.kind} mode` : 'Find a flow or a node'}
               onChange={(e) => setTyped(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== 'Escape') return;
+                if (activeSwap) setSwapping(null);
+                setTyped('');
+              }}
             />
+            {!activeSwap && typed !== '' && (
+              <Button tone="quiet" label="Clear the search" onPress={() => setTyped('')}>
+                ×
+              </Button>
+            )}
             {activeSwap && (
               <Button
                 tone="quiet"
@@ -433,6 +482,7 @@ export function Designer({
             <PortFilter want={filter} onChange={setFilter} />
           )}
 
+          <div className="stacks">
           {!activeSwap && (
             <div className="shelf shelf-flows">
               <div className="shelf-head">
@@ -446,12 +496,12 @@ export function Designer({
                     open(made.id);
                   }}
                 >
-                  ＋
+                  new
                 </Button>
                 {id && (
                   <Button
                     className="act"
-                    title="A copy, to take apart without losing this one"
+                    title="A copy of the open flow, to take apart without losing it"
                     onPress={() => {
                       const made = forkFlow(scheme, id);
                       save(made.scheme);
@@ -461,22 +511,13 @@ export function Designer({
                     fork
                   </Button>
                 )}
-                {id && list.length > 1 && (
-                  <Button
-                    className="act"
-                    tone="danger"
-                    title={`Delete ${def?.name || id}`}
-                    onPress={() => {
-                      save(dropFlow(scheme, id));
-                      setTrail([]);
-                      setFlow(null);
-                    }}
-                  >
-                    ×
-                  </Button>
-                )}
               </div>
-              {shelf.length === 0 && <p className="cap flat">no flow by that name</p>}
+              {shelf.length === 0 && <p className="cap flat">no flow matches</p>}
+              {shelf.length === 0 && narrowed && (
+                <button type="button" className="tick reset" onClick={widen}>
+                  show everything
+                </button>
+              )}
               {shelf.map((row) => {
                 // Not offered where it would be refused. `add` still refuses it
                 // — the model is the authority — but a button that exists only
@@ -484,8 +525,14 @@ export function Designer({
                 // wrong thing about what nesting can do. Same argument as the
                 // missing delete on `out`.
                 const placeable = id !== null && !wouldLoop(scheme.flows, id, row.id);
+                const armed = arming === row.id;
                 return (
-                  <div key={row.id} className="flow-row" data-on={row.id === id ? '' : undefined}>
+                  <div
+                    key={row.id}
+                    className="flow-row"
+                    data-on={row.id === id ? '' : undefined}
+                    onMouseLeave={() => armed && setArming(null)}
+                  >
                     <span className="twist mark" aria-hidden="true">
                       ◈
                     </span>
@@ -512,6 +559,17 @@ export function Designer({
                         ⤵
                       </Button>
                     )}
+                    {list.length > 1 && (
+                      <Button
+                        tone="quiet"
+                        className={armed ? 'flow-x armed' : 'flow-x'}
+                        label={armed ? `Really delete ${row.name}` : costOf(row)}
+                        title={armed ? 'Press again to delete' : costOf(row)}
+                        onPress={() => (armed ? erase(row) : setArming(row.id))}
+                      >
+                        {armed ? 'sure?' : '×'}
+                      </Button>
+                    )}
                   </div>
                 );
               })}
@@ -531,16 +589,16 @@ export function Designer({
                 live pictures
               </button>
             </div>
-            <span className="picture-status">
-              {pictureStatus.live} live / {pictureStatus.visible} visible
-              {pictureStatus.reason === 'off'
-                ? ' · off'
-                : pictureStatus.reason === 'zoom'
+            {pictures && (
+              <span className="picture-status">
+                {pictureStatus.live} live / {pictureStatus.visible} visible
+                {pictureStatus.reason === 'zoom'
                   ? ' · paused at this zoom'
                   : pictureStatus.reason === 'budget'
                     ? ` · ${pictureStatus.paused} paused`
                     : ''}
-            </span>
+              </span>
+            )}
             <NodeBrowser
               entries={browsed}
               // Everything a search turned up is drawn open, because a preset
@@ -552,7 +610,9 @@ export function Designer({
                 )
               }
               onAdd={choose}
+              onWiden={narrowed ? widen : undefined}
             />
+          </div>
           </div>
         </aside>
 
@@ -883,17 +943,25 @@ function NodeBrowser({
   opened,
   onOpen,
   onAdd,
+  onWiden,
 }: {
   entries: readonly Entry[];
   /** Which kinds are open, or null for "everything shown is open". */
   opened: readonly string[] | null;
   onOpen(kind: string): void;
   onAdd(pick: Pick): void;
+  /** Clear whatever narrowed the list to nothing, when something did. */
+  onWiden?: () => void;
 }) {
   const families = [...new Set(entries.map((each) => each.node.family))];
   return (
     <div className="palette">
-      {entries.length === 0 && <p className="cap flat">nothing by that name</p>}
+      {entries.length === 0 && <p className="cap flat">no node matches</p>}
+      {entries.length === 0 && onWiden && (
+        <button type="button" className="tick reset" onClick={onWiden}>
+          show everything
+        </button>
+      )}
       {families.map((family) => (
         <div key={family} className="group">
           <h5>{family}</h5>

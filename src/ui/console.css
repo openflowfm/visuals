@@ -291,43 +291,38 @@
   gap: 8px;
 }
 
+.designer .stacks {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--bd3) transparent;
+}
+
 .designer .shelf {
   display: flex;
   flex-direction: column;
-  min-height: 0;
-}
-
-.designer .shelf-flows {
-  flex: 0 1 auto;
-  max-height: 38vh;
-  overflow: auto;
-}
-
-.designer .shelf-nodes {
-  flex: 1 1 auto;
+  flex: none;
 }
 
 .designer .shelf-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: 3px;
-  margin-bottom: 4px;
+  padding-bottom: 4px;
+  background: var(--bg);
 }
 
 .designer .shelf-head h4 {
   margin: 0 auto 0 0;
 }
 
-/*
- * One control treatment for the whole column.
- *
- * There were three: `＋ fork ×` were outlined boxes, `live pictures` was a
- * filled amber box loud enough to be the brightest thing on the page, and a
- * preset count was a quiet chip. Three weights for three things of the same
- * importance is most of what made this column read as assembled rather than
- * designed. They are all quiet now and all the same size; the amber is spent
- * on state — a flow that is open, a toggle that is on — rather than on a label.
- */
 .designer .shelf-head .act .wdg-button-body {
   padding: 1px 5px;
   font-size: 9px;
@@ -360,46 +355,31 @@
   border-color: var(--bd3);
 }
 
-/* A dark, thin scrollbar. The default was a wide light-grey bar — the only
-   pale element anywhere in the column, and the first thing your eye went to. */
-.designer .library ::-webkit-scrollbar {
-  width: 6px;
+.designer .stacks::-webkit-scrollbar {
+  width: 11px;
 }
 
-.designer .library ::-webkit-scrollbar-track {
+.designer .stacks::-webkit-scrollbar-track {
   background: none;
 }
 
-.designer .library ::-webkit-scrollbar-thumb {
+.designer .stacks::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 6px;
+  background: var(--bd);
+  background-clip: padding-box;
+}
+
+.designer .stacks:hover::-webkit-scrollbar-thumb {
   background: var(--bd3);
-  border-radius: 3px;
+  background-clip: padding-box;
 }
 
-.designer .library ::-webkit-scrollbar-thumb:hover {
+.designer .stacks::-webkit-scrollbar-thumb:active {
   background: var(--idle);
+  background-clip: padding-box;
 }
 
-/* `scrollbar-width` does not inherit, so it goes on the two things that scroll. */
-.designer .shelf-flows,
-.designer .palette {
-  scrollbar-width: thin;
-  scrollbar-color: var(--bd3) transparent;
-}
-
-/*
- * One row rhythm, both shelves.
- *
- * These were designed apart and read like two columns bolted together: a flow
- * name was larger than a node name, a flow was two lines against a node's one,
- * and only two of the five node families had a coloured edge — so the shared
- * left margin looked broken rather than meaningful.
- *
- * Every row is now the same sentence: a rail, a name, and one fact on the
- * right. What tells a flow from a node is the `◈`, the amber rail, and the fact
- * itself being `12 nodes · reads the set` where a node's is `p n → c`. That is
- * information doing the work rather than typography, which is what lets the two
- * shelves sit under one search box and look like one thing.
- */
 .designer .shelf-flows .flow-row {
   display: flex;
   align-items: center;
@@ -431,9 +411,6 @@
   color: var(--fg);
 }
 
-/* Which one is open. The `◈` already says composite, so the open row is told
-   by the same selected-row treatment any list uses rather than by a second
-   colour of its own. */
 .designer .flow-row[data-on] .flow-open {
   border-left-color: var(--amber);
   background: var(--surface-control);
@@ -449,18 +426,6 @@
   white-space: nowrap;
 }
 
-/*
- * One gutter down the left of every row, holding one glyph.
- *
- * A disclosure control belongs on the left of the thing it discloses — Finder,
- * the VS Code explorer, Ableton's own browser, every file tree anyone has used.
- * It was a `+11` chip on the *right*, sharing that side with the signature, so
- * the right-hand column held two unrelated things and the one that looked most
- * like a button read as "add eleven of these".
- *
- * A leaf row gets the gutter and leaves it empty, which is the same convention:
- * it is what keeps every label on one left edge whether or not it opens.
- */
 .designer .twist {
   flex: none;
   width: 13px;
@@ -499,17 +464,6 @@
   white-space: nowrap;
 }
 
-/*
- * Six fixed positions, and a letter is either lit or it is not.
- *
- * A signature that only drew what a node had gave every row a different width —
- * `→ p` over `p n → c` over `c n → c` — so nothing lined up and the column read
- * as noise. Six slots read as a table: the `c` column either lights or it does
- * not, and you scan down it.
- *
- * The colours are the ones the ports and cords wear on the canvas, which is
- * what makes three letters a legend rather than a code.
- */
 .designer .node-sig {
   display: inline-flex;
   gap: 1px;
@@ -540,8 +494,6 @@
   color: var(--signal-c);
 }
 
-/* The filter is a picture of the column it filters: same six positions, same
-   three colours, so `takes` and `gives` are the only words it needs. */
 .designer .port-filter {
   display: flex;
   align-items: center;
@@ -614,9 +566,6 @@
   cursor: default;
 }
 
-/* The fact gives way before the name does. A signature is short enough to
-   always fit; `12 nodes · reads the set` beside a flow somebody called
-   something long is not, and half a name is worse than half a description. */
 .designer .flow-about,
 .designer .node-about {
   flex: 0 1 auto;
@@ -629,19 +578,41 @@
   min-width: 4em;
 }
 
-.designer .flow-place {
+.designer .flow-place,
+.designer .flow-x {
   flex: none;
   opacity: 0;
 }
 
 .designer .flow-row:hover .flow-place,
-.designer .flow-row:focus-within .flow-place {
+.designer .flow-row:focus-within .flow-place,
+.designer .flow-row:hover .flow-x,
+.designer .flow-row:focus-within .flow-x,
+.designer .flow-x.armed {
   opacity: 1;
 }
 
-.designer .flow-place .wdg-button-body {
+.designer .flow-place .wdg-button-body,
+.designer .flow-x .wdg-button-body {
   padding: 0 4px;
   font-size: 10px;
+}
+
+.designer .flow-x.armed .wdg-button-body {
+  border-color: var(--alarm);
+  color: var(--alarm);
+}
+
+.designer .flow-open:focus-visible,
+.designer .node-pick:focus-visible,
+.designer button.twist:focus-visible {
+  outline: 1px solid var(--focus);
+  outline-offset: -1px;
+}
+
+.designer .shelf .reset {
+  align-self: flex-start;
+  margin: 0 0 4px 13px;
 }
 
 .designer .trail {
@@ -924,9 +895,6 @@
   gap: 4px;
 }
 
-/* Under the toggle it belongs to rather than across the column: it was a
-   full-width line at the family headings' own size, sitting between `NODES`
-   and `DRAW` and reading like a third heading. */
 .designer .picture-status {
   overflow: hidden;
   color: var(--idle);
@@ -943,10 +911,8 @@
 }
 
 .designer .palette {
-  overflow: auto;
-  flex: 1;
-  min-height: 0;
-  padding-right: 2px;
+  display: flex;
+  flex-direction: column;
 }
 
 .designer .palette .group {
