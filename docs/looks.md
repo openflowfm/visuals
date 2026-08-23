@@ -436,11 +436,27 @@ That is **right**: energy is a meter, and a meter with a floor under it cannot s
 which is the one thing a section break needs it to say.
 
 What is not right is a look that is only alive when the room is loud, because most of the
-hours anyone spends in the designer are hours with no Live attached. The fix is in the wiring
-rather than in the number: **take the motion off the clock and let the meter add to it.**
-`phase`, `beat`, `pulse` and a `wave` all run whether or not anything is playing, since Link
-free-runs. The thirteen looks that ship keep that rule, and it is the difference between a
-library that reads as calm at a desk and one that reads as broken.
+hours anyone spends in the designer are hours with no Live attached — and because a set
+between songs is a click and nothing else. The fix is in the wiring rather than in the
+number: **take the motion off the clock and let the meter add to it.** `phase`, `beat`,
+`pulse` and a `wave` all run whether or not anything is playing, since Link free-runs.
+
+The shape that says it is **`max` of a clock and a meter**, with the clock arriving on a
+range:
+
+```
+wave pulse ─────> a ┐                    a: value 0.3, depth 0.4
+                    ├ max ──> energy     so the clock walks 0.3 → 0.7
+track master ────> b ┘                   and the meter wins above that
+```
+
+`max` rather than `average`, because an average with a silent meter halves everything the
+clock is doing — which is how a floor becomes a ceiling. The range on `a` is what keeps the
+floor off the ground without pinning the top: an energy at 0.3 is a picture, an energy at 0
+is the same picture at its dullest setting, and the difference between those two is most of
+what "it looks dead at a desk" ever meant. The thirteen looks that ship keep that rule, a
+test asserts it, and it is the difference between a library that reads as calm at a desk and
+one that reads as broken.
 
 The bench and the node faces are both fed the **room's** energy — the control on the designer's
 own bar — for the same reason and from the other end: it is a condition you can dial rather

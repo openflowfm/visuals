@@ -188,15 +188,15 @@ default, they are also the show a fresh clone puts on.
 | look | what it is for |
 |---|---|
 | **The set** | one node. The floor of the vocabulary, and the claim the rig is built on |
-| **Folded** | a colour is a function of a point: the set read through a swirl, folded by a kaleidoscope that moves the whole chain |
+| **Folded** | a colour is a function of a point: the set and a ring of its own, read through a swirl and folded by a kaleidoscope that moves the whole chain |
 | **Deep** | two pictures, one of them the room's — a corridor with the set screened into it and graded |
 | **Weather** | no set and no shipped picture: `polar` makes two numbers out of a position, `paint` makes a colour out of one and `hue` makes every colour out of the other |
 | **Water** | refraction. A surface that displaces what you see *through* it, and the one drift here deliberately not in time |
 | **Vortex** | a portal that turns rather than recedes: `zoom` on the beat pulse, so the whole spiral punches inward on every hit |
 | **Gateway** | geometry happens *before* the picture — `fold` and a bare point feed two sources that never meet until the blend |
-| **Outline** | the set as a diagram. `edge` keeps the outline and throws the fill away, over a ghost of the same set |
-| **Poster** | flat bands, and the one look that changes with the *music*: `posterize` to four steps, hue rotated by the song's key |
-| **Glitch** | two lenses, a spread and two grades in a row and nothing else — the other end of the vocabulary from `The set` |
+| **Outline** | the set as a diagram. `edge` keeps the outline and throws the fill away — over a grid, so there are always edges to find, and over a ghost of the same junction |
+| **Poster** | flat bands, and the one look that changes with the *music* rather than the playing: `posterize` to four steps over a wash, hue rotated by the song's key |
+| **Glitch** | two lenses, a spread and two grades in a row and nothing else, over a scan pattern there is always something to break in — the other end of the vocabulary from `The set` |
 | **Lava** | a threshold walked slowly off `time` rather than the beat, and a cord run backwards by a negative depth |
 | **Storm** | a `wave` snapped to the beat times a squared `random`, gating a contour cut out of a noise field — a strike that is rarely big and never the same size twice |
 | **The lot** | three of the others as three nodes, one of them folded by a kaleidoscope that never touches its insides |
@@ -208,10 +208,32 @@ one example of it would have taught that a portal is a source rather than a way 
 Between them they use every family in `NODE_FAMILIES`, which a test pins, and they keep two
 rules that were learned the hard way.
 
-**Nothing is only alive when the room is loud.** `master` is zero with no Live attached,
-which is most of the hours anyone spends building one of these, and a look whose every motion
-came off a meter is a still frame at a desk and indistinguishable from one that is wired
-wrong. The motion comes off the clock and the meter adds to it.
+**Nothing is only alive when the room is loud, and the shape of that is `max`.** `master` is
+zero with no Live attached and near it when all that is running is a click between songs —
+so a meter wired straight into an energy holds a generator at its dullest: fewest arms,
+slowest rung on the division ladder, least charge. Every one of these now floors that with
+something on the clock:
+
+```
+wave / playback ──> a ┐
+                      ├ max ──> energy
+track (master) ────> b ┘
+```
+
+The `a` inlet carries a **range** rather than the whole swing — `{ a: [0.3, 0.4] }` is a
+floor of three tenths that the clock lifts by four — so the picture sits somewhere useful with
+the room silent and the meter takes over the moment it is louder than that. Which clock is
+the look's own business, and it is most of the character: `Vortex` floors on the same pulse
+that punches its zoom, `Gateway` on a saw so it ramps rather than twitches, `Water` on the
+slow sine already moving its surface, and `Glitch` on a per-beat pulse because it is the one
+that should twitch.
+
+**And a look that reads the set carries a picture underneath it.** With no clip playing a
+`tracks` node draws nothing, which used to mean five of these went black between songs. There
+is a ring under `Folded`, a grid under `Outline`, a wash under `Poster` and a scan pattern
+under `Glitch` — each blended so a playing set is what you see, and each there when it is not.
+`The set` is the one exception, and deliberately: it is one node, and what it draws is what
+is playing.
 
 **Nothing is wired to something that cannot move it.** `Weather` used to drive a `hue` from
 `song seed`, and a set with no song names holds that at a half — which is exactly the
@@ -249,10 +271,19 @@ Three constraints are worth stating because they are what make a rolled one read
   several times, so nesting two of them multiplies the shader. A hand reaches for one knowing
   what it costs; a roll would stack three. This used to be a list of four names kept beside
   the roll and maintained by hand — it is a node kind now, so there is nothing to keep.
-- **Colours are a harmony, not four hues.** A base, one of five relationships to it, one
-  member kept near white so a busy frame has something to read edges against — and all of it
-  kept light, because a cheap projector has no black to work against and a dark colourway is
-  a dark screen.
+- **Colours are a harmony, not five hues**, and the harmony always contains an opposite. A
+  base, one of five relationships to it, **two members taken loud** — the base and whatever
+  sits furthest from it — and one kept as a **tint** so a busy frame has something to read
+  edges against. Two of the five relationships used to be a spread of neighbours, and a set
+  drawn out of one of those is a wall in a single colour: harmonious, and indistinguishable
+  from a gel over the lamp.
+
+  **Saturated is not the same as bright, and confusing the two is what made these pastel.**
+  The old range topped out at 70% lightness, where a hue has given away most of itself
+  whatever its saturation says. The new one sits where a colour is loudest — and is then
+  **evened out by hue**, because a yellow and a blue at the same lightness are not the same
+  brightness at all, and the ones that vanish on a cheap lamp are always the blues. What the
+  projector argument actually asks for is *not dark*; it never asked for pale.
 
 **Nothing about the songs is rolled.** A song entry is an override, and rolling one would be
 the machine writing down an exception nobody asked for — which is exactly the noise the

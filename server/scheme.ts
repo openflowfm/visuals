@@ -153,13 +153,31 @@ function columnsOf(ids: readonly string[], cords: readonly { from: string; to: s
  * it usually would — nobody reads a node reference, and everybody takes a working
  * example apart.
  *
- * Two rules they all keep, both learned the hard way.
+ * Three rules they all keep, all learned the hard way.
  *
- * **Nothing here is only alive when the room is loud.** `master` is zero with no
- * Live connected, which is most of the time anyone is building one of these, and
- * a look whose every motion came off a meter is a still frame at a desk and
- * indistinguishable from one that is wired wrong. So the motion comes off the
- * clock — `phase`, `beat`, a `wave` — and the meter *adds*.
+ * **Nothing here is only alive when the room is loud, and the shape of that is
+ * `max`.** `master` is zero with no Live connected — most of the hours anyone
+ * spends building one of these — and it is near zero between songs, when all
+ * that is running is a click. A meter wired straight into an energy therefore
+ * holds a generator at its dullest: fewest arms, slowest rung on the division
+ * ladder, least charge. So every meter that reaches an energy arrives through
+ *
+ *     wave or playback ─> a ┐
+ *                           ├ max ─> energy
+ *     track master ──────> b ┘
+ *
+ * with the clock on a **range** — `{ a: [0.3, 0.4] }` is a floor of three tenths
+ * that the clock lifts by four — and the meter taking over the moment it is
+ * louder than that. `max` and not `average`, because an average with a silent
+ * meter halves everything the clock is doing, which is how a floor becomes a
+ * ceiling. Which clock is each look's own business and is most of its character.
+ *
+ * **A look that reads the set carries a picture underneath it.** A `tracks` node
+ * draws nothing with no clip playing, so five of these went black between songs.
+ * There is a ring under `Folded`, a grid under `Outline`, a wash under `Poster`
+ * and a scan pattern under `Glitch`, each blended so a playing set is what you
+ * see and each there when it is not. `The set` is the exception on purpose: it is
+ * one node, and what it draws is what is playing.
  *
  * **Nothing here is wired to something that cannot move it.** The old `Weather`
  * drove a `hue` from `song seed`, and a set with no song names holds that at a
@@ -198,6 +216,14 @@ const BUILT_IN: Scheme = {
         ['turn', 'lens', 'swirl'],
         ['live', 'tracks', 'by name'],
         ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.35],
+        // The floor under the meter, and the shape every look here now uses:
+        // `max` of something on the clock and something on the room. See the
+        // note above about a set that is only the click.
+        ['lift', 'math', 'max', { a: [0.3, 0.35] }],
+        // Rings, read at the *swirled* point, so what the kaleidoscope folds is
+        // the set and a picture that is there when the set is not.
+        ['rings', 'source', 'rings'],
+        ['mix', 'blend', 'screen', { amount: 0.7 }],
         // The wedge count is set on the effect's own face rather than wired in
         // from a `value` node. One number, one place, no cord across the canvas.
         ['fold', 'lens', 'kaleido', { segments: 0.3 }],
@@ -211,8 +237,14 @@ const BUILT_IN: Scheme = {
         'pt/p -> turn/p',
         'half/n -> turn/turn',
         'turn/p -> live/p',
-        'live/c -> fold/c',
-        'e/n -> fold/energy',
+        'turn/p -> rings/p',
+        'sway/n -> lift/a',
+        'e/n -> lift/b',
+        'lift/n -> rings/energy',
+        'rings/c -> mix/base',
+        'live/c -> mix/top',
+        'mix/c -> fold/c',
+        'lift/n -> fold/energy',
         'fold/c -> o/c',
       ],
     ),
@@ -223,9 +255,16 @@ const BUILT_IN: Scheme = {
       'Deep',
       [
         ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.4],
+        // A snap on every beat, floored under the meter: the corridor gains
+        // arms and rushes harder on the hit, and does it with nothing playing.
+        ['beat', 'wave', 'pulse'],
+        ['lift', 'math', 'max', { a: [0.32, 0.4] }],
         ['pt', 'point'],
         ['tun', 'source', 'tunnel'],
-        ['wob', 'lens', 'wobble'],
+        // A wobble that sits at a sixth with the room silent rather than at
+        // nothing, and the meter carries it up from there. `cWobble` runs on the
+        // beat, so a constant amount is still a moving picture.
+        ['wob', 'lens', 'wobble', { amount: [0.16, 0.45] }],
         ['live', 'tracks', 'by name'],
         // How much of the set is in the picture, and how hard the grade is:
         // both are numbers you turn while looking at the wall, and both live on
@@ -235,7 +274,9 @@ const BUILT_IN: Scheme = {
         ['o', 'out'],
       ],
       [
-        'e/n -> tun/energy',
+        'beat/n -> lift/a',
+        'e/n -> lift/b',
+        'lift/n -> tun/energy',
         'pt/p -> wob/p',
         'e/n -> wob/amount',
         'wob/p -> live/p',
@@ -303,6 +344,9 @@ const BUILT_IN: Scheme = {
         ['sway', 'wave', 'sine'],
         ['wob', 'lens', 'wobble'],
         ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.55],
+        // The same sine that moves the surface is the floor under the meter, so
+        // the water is finer and quicker on the swell and never flat calm.
+        ['lift', 'math', 'max', { a: [0.3, 0.3] }],
         ['surf', 'source', 'plasma'],
         ['rip', 'lens', 'ripple', { waves: 0.72, depth: 0.4, speed: 0.22 }],
         ['soft', 'spread', 'smear', { reach: 0.2, drive: 0.35 }],
@@ -318,9 +362,11 @@ const BUILT_IN: Scheme = {
         'pt/p -> wob/p',
         'sway/n -> wob/amount',
         'wob/p -> surf/p',
-        'e/n -> surf/energy',
+        'sway/n -> lift/a',
+        'e/n -> lift/b',
+        'lift/n -> surf/energy',
         'surf/c -> rip/c',
-        'e/n -> rip/energy',
+        'lift/n -> rip/energy',
         'rip/c -> soft/c',
         'soft/c -> milk/c',
         'milk/c -> o/c',
@@ -337,6 +383,10 @@ const BUILT_IN: Scheme = {
         ['hit', 'playback', 'pulse'],
         ['zm', 'lens', 'zoom'],
         ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.3],
+        // The pulse that punches the zoom is also the floor under the meter, so
+        // the spiral grows arms and turns harder on the same hit rather than
+        // sitting at two arms all night in a quiet room.
+        ['lift', 'math', 'max', { a: [0.3, 0.45] }],
         ['sp', 'source', 'spiral'],
         ['tw', 'lens', 'twist', { turn: 0.68, sway: 0.4 }],
         // A short reach and a floor high enough that only the arms bloom. Wide
@@ -349,12 +399,14 @@ const BUILT_IN: Scheme = {
       [
         'pt/p -> zm/p',
         'hit/n -> zm/by',
+        'hit/n -> lift/a',
+        'e/n -> lift/b',
         'zm/p -> sp/p',
-        'e/n -> sp/energy',
+        'lift/n -> sp/energy',
         'sp/c -> tw/c',
-        'e/n -> tw/energy',
+        'lift/n -> tw/energy',
         'tw/c -> glow/c',
-        'e/n -> glow/energy',
+        'lift/n -> glow/energy',
         'glow/c -> o/c',
       ],
     ),
@@ -368,6 +420,10 @@ const BUILT_IN: Scheme = {
         ['pt', 'point'],
         ['fld', 'lens', 'fold', { sides: 0.45 }],
         ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.35],
+        // A saw rather than a pulse: the corridor and the rings ramp up across
+        // each beat and drop, so the gate breathes instead of twitching.
+        ['ramp', 'wave', 'saw'],
+        ['lift', 'math', 'max', { a: [0.28, 0.4] }],
         ['tun', 'source', 'tunnel'],
         ['rng', 'source', 'rings'],
         ['mix', 'blend', 'add', { amount: 0.6 }],
@@ -376,10 +432,12 @@ const BUILT_IN: Scheme = {
       ],
       [
         'pt/p -> fld/p',
+        'ramp/n -> lift/a',
+        'e/n -> lift/b',
         'fld/p -> tun/p',
-        'e/n -> tun/energy',
+        'lift/n -> tun/energy',
         'pt/p -> rng/p',
-        'e/n -> rng/energy',
+        'lift/n -> rng/energy',
         'tun/c -> mix/base',
         'rng/c -> mix/top',
         'mix/c -> mir/c',
@@ -390,30 +448,43 @@ const BUILT_IN: Scheme = {
     // which is the one effect here that makes a busy frame *less* busy — and a
     // wall full of outlines is legible at a distance no filled picture is.
     //
-    // Two `tracks` nodes, one texture. The set is drawn once a frame and read
-    // twice: once for the outline and once, dimmed, as the ghost underneath, so
-    // the shapes still have somewhere to sit.
+    // **A grid under the set, and one junction read twice.** With no clip
+    // playing there is nothing to outline, and a look whose whole job is edges
+    // had none between songs. The grid supplies them — cells lighting on their
+    // own beats, which an outline detector turns into a wireframe — and the set
+    // lands `over` it, so a playing set is what you see and the grid is what is
+    // there when it is not. The blend is then read twice, once for the outline
+    // and once, dimmed, as the ghost underneath, so the shapes have somewhere to
+    // sit. That is one `tracks` node where there were two, and one fewer thing
+    // to keep in step.
     outline: wire(
       'Outline',
       [
+        ['beat', 'wave', 'sine'],
+        ['breath', 'math', 'average'],
+        ['grid', 'source', 'grid'],
         ['ink', 'tracks', 'by name'],
+        ['bed', 'blend', 'over'],
         // A wide tap and a hard gain. The gradient of a soft picture is a very
         // small number, so an outline drawn at the effect's own middle is one
         // you can only see in a dark room — which is the whole point of the
         // look and the one thing it was failing at.
         ['cut', 'spread', 'edge', { width: 0.72, gain: 0.85 }],
-        ['lift', 'grade', 'levels', { gain: 0.6, lift: 0.74 }],
-        ['fill', 'tracks', 'by name'],
+        ['pale', 'grade', 'levels', { gain: 0.6, lift: 0.74 }],
         ['ghost', 'grade', 'levels', { gain: 0.34, lift: 0.46 }],
         ['mix', 'blend', 'screen', { amount: 0.85 }],
         ['o', 'out'],
       ],
       [
-        'ink/c -> cut/c',
-        'cut/c -> lift/c',
-        'fill/c -> ghost/c',
+        'beat/n -> breath/a',
+        'breath/n -> grid/energy',
+        'grid/c -> bed/base',
+        'ink/c -> bed/top',
+        'bed/c -> cut/c',
+        'cut/c -> pale/c',
+        'bed/c -> ghost/c',
         'ghost/c -> mix/base',
-        'lift/c -> mix/top',
+        'pale/c -> mix/top',
         'mix/c -> o/c',
       ],
     ),
@@ -425,7 +496,19 @@ const BUILT_IN: Scheme = {
     poster: wire(
       'Poster',
       [
+        // A wash under the set, so there is something to cut bands out of when
+        // nothing is playing. Its energy is a sine on the beat, which for a
+        // picture about to be quantised to four steps is not a frequency change
+        // you watch — it is the bands themselves breathing.
+        ['swell', 'wave', 'sine'],
+        // Halved about a half, the way `Folded` halves its swirl: `b` left at
+        // its own middle turns a full swing into a quarter either side, which
+        // for a spatial frequency is the difference between breathing and
+        // lurching.
+        ['breath', 'math', 'average'],
+        ['wash', 'source', 'plasma'],
         ['live', 'tracks', 'by name'],
+        ['bed', 'blend', 'screen', { amount: 0.75 }],
         // Lifted *before* the quantise, not after. Four steps taken out of a
         // dark picture are four dark steps, and no amount of grading afterwards
         // puts back a band that was never cut.
@@ -442,7 +525,11 @@ const BUILT_IN: Scheme = {
         ['o', 'out'],
       ],
       [
-        'live/c -> punch/c',
+        'swell/n -> breath/a',
+        'breath/n -> wash/energy',
+        'wash/c -> bed/base',
+        'live/c -> bed/top',
+        'bed/c -> punch/c',
         'punch/c -> flat/c',
         'flat/c -> tint/c',
         'key/n -> centre/a',
@@ -460,8 +547,17 @@ const BUILT_IN: Scheme = {
     glitch: wire(
       'Glitch',
       [
+        // Lines to throw about when the set is not playing any. `scan` is the
+        // one source that looks like a machine rather than like weather, which
+        // is the right thing to find underneath a broken picture.
+        ['scan', 'source', 'scan'],
         ['live', 'tracks', 'by name'],
+        ['bed', 'blend', 'over'],
         ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.12],
+        ['twitch', 'wave', 'pulse'],
+        // A low floor and a wide reach: this is the one that should still be
+        // twitching on the click, and the one that should go off in a loud room.
+        ['lift', 'math', 'max', { a: [0.25, 0.5] }],
         ['cut', 'lens', 'slice', { bands: 0.5, throw: 0.45 }],
         ['px', 'lens', 'pixelate', { blocks: 0.22, resolve: 0.8 }],
         ['rgb', 'spread', 'shift', { split: 0.45, drive: 0.7 }],
@@ -473,14 +569,19 @@ const BUILT_IN: Scheme = {
         ['o', 'out'],
       ],
       [
-        'live/c -> cut/c',
-        'e/n -> cut/energy',
+        'scan/c -> bed/base',
+        'live/c -> bed/top',
+        'twitch/n -> lift/a',
+        'e/n -> lift/b',
+        'lift/n -> scan/energy',
+        'bed/c -> cut/c',
+        'lift/n -> cut/energy',
         'cut/c -> px/c',
-        'e/n -> px/energy',
+        'lift/n -> px/energy',
         'px/c -> rgb/c',
-        'e/n -> rgb/energy',
+        'lift/n -> rgb/energy',
         'rgb/c -> flip/c',
-        'e/n -> flip/energy',
+        'lift/n -> flip/energy',
         'flip/c -> up/c',
         'up/c -> o/c',
       ],
@@ -525,7 +626,12 @@ const BUILT_IN: Scheme = {
         // as a halo with nothing playing at all. Most of the hours spent making
         // one of these are spent in a quiet room.
         ['glow', 'spread', 'bloom', { reach: 0.42, floor: 0.3 }],
-        ['melt', 'grade', 'levels', { gain: 0.54, lift: 0.62 }],
+        // The one thing here in time, and it is the bulb rather than the wax: a
+        // snap of contrast on each beat, sixteen hundredths deep. Lava that
+        // moved on the beat would stop being lava, but a lamp with a band on the
+        // other side of the room is allowed to flicker with them.
+        ['throb', 'wave', 'pulse'],
+        ['melt', 'grade', 'levels', { gain: [0.5, 0.16], lift: 0.62 }],
         ['pol', 'polar'],
         ['lamp', 'paint', undefined, { amount: [1, -1] }],
         ['mix', 'blend', 'screen', { amount: 0.9 }],
@@ -543,6 +649,7 @@ const BUILT_IN: Scheme = {
         'wax/c -> glow/c',
         'heat/n -> glow/energy',
         'glow/c -> melt/c',
+        'throb/n -> melt/gain',
         'pt/p -> pol/p',
         'pol/radius -> lamp/amount',
         'heat/n -> lamp/energy',
@@ -575,12 +682,13 @@ const BUILT_IN: Scheme = {
     // `rate` picked, so at one strike every eight beats it is a swell four beats
     // long rather than a flash. A `wave` normalises to the beat and stays sharp.
     //
-    // **Two energies are left unwired**, and both are the point. The field's is
-    // the room's, because a fine field is a frame full of contours and the strike
-    // wired into it lit half the wall white; left alone, a quiet room gets a few
-    // thin cracks and a loud one gets a web. The slice's is the room's too, so
-    // the rows re-throw on a musical division of their own and no two strikes
-    // break the same way.
+    // **The field's energy is floored, not gated.** How fine the noise is decides
+    // how many contours there are to crack, and the strike wired straight into it
+    // lit half the wall white; a narrow range off the same beat gives a sky that
+    // boils a little and a few more cracks on the hit, and the meter takes it
+    // further in a loud room. The slice's energy is **left unwired** — the room's
+    // — so the rows re-throw on a musical division of their own and no two
+    // strikes break the same way.
     storm: wire(
       'Storm',
       [
@@ -588,6 +696,12 @@ const BUILT_IN: Scheme = {
         ['cloud', 'source', 'noise'],
         ['hit', 'wave', 'pulse'],
         ['dice', 'playback', 'random'],
+        ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.3],
+        // A narrow range on purpose. The field's energy is how many contours
+        // there are to crack, and a full swing wired here lit half the wall
+        // white — a fifth of the way up, on the beat, is a sky that boils a
+        // little and a bolt with somewhere to go.
+        ['bank', 'math', 'max', { a: [0.12, 0.26] }],
         // The same outlet into both inlets: a number multiplied by itself, which
         // is the cheapest way to make a chance rare rather than even.
         ['odds', 'math', 'multiply'],
@@ -609,6 +723,10 @@ const BUILT_IN: Scheme = {
         'dice/n -> odds/b',
         'hit/n -> strike/a',
         'odds/n -> strike/b',
+        'hit/n -> bank/a',
+        'e/n -> bank/b',
+        'bank/n -> sky/energy',
+        'bank/n -> cloud/energy',
         'cloud/c -> bolt/c',
         'bolt/c -> jag/c',
         'strike/n -> jag/throw',
@@ -668,12 +786,23 @@ const BUILT_IN: Scheme = {
     ),
   },
   colorways: {
-    // Kept light on purpose: a cheap projector has no black to work against, so
-    // a dark colourway is a dark screen.
-    ember: ['#ffb347', '#ff6b6b', '#ffe9c4', '#c44536'],
-    cold: ['#7ec8e3', '#c3f0ff', '#4a7fa5', '#eaf6ff'],
-    acid: ['#c9f299', '#f2f27a', '#7ad7a0', '#ffffff'],
-    dusk: ['#c792ea', '#f78fb3', '#ffd6e0', '#6c5b7b'],
+    // Five each, and **saturated is not the same as bright**, which is what the
+    // old four confused. They were kept pale on the true argument that a cheap
+    // projector has no black to work against — and pale is not what that
+    // argument asks for. A colour at 90% lightness has given away almost all of
+    // its hue whatever its saturation says, so a wall lit from one of those was
+    // four shades of off-white with a tint on them.
+    //
+    // These sit where a hue is loudest and stay clear of the dark end. Each is
+    // built the way [the roll](../roll.ts) builds one: **the first is the
+    // loudest**, because a look that ignores the set draws every generator from
+    // `colors[0]`; one member answers it from across the wheel, so nothing is a
+    // wall in a single colour; and one is a **tint** rather than a white, light
+    // enough to read edges against and coloured enough to belong.
+    ember: ['#ff5a1f', '#ffb703', '#00c4ff', '#ff2d55', '#ffe3c2'],
+    cold: ['#00a2ff', '#00e5d0', '#ff7a29', '#6a5cff', '#d8f1ff'],
+    acid: ['#b4ff00', '#00ffa8', '#c400ff', '#ffe600', '#eaffc2'],
+    dusk: ['#b026ff', '#ff2d95', '#ffe600', '#2ee6ff', '#f6d6ff'],
   },
   rotation: {
     // Empty pools mean "everything", so a fresh clone turns through all four

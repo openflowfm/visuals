@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { hint } from '../hints.ts';
 import { NODE_FAMILIES, looksUsedBy } from '../protocol.ts';
-import { compileLook, reachesOut, repaired } from '../src/render/circuit.ts';
+import { compileLook, inletsOf, portId, reachesOut, repaired, splitPort } from '../src/render/circuit.ts';
 import { BUILT_IN, merge } from './scheme.ts';
 
 /**
@@ -86,6 +86,28 @@ describe('the built-in scheme', () => {
     expect(BUILT_IN.colorways[BUILT_IN.defaults.colorway]).toBeDefined();
   });
 
+  it('ships colourways that are five long, loud, and led by the loudest', () => {
+    // Saturation on its own says nothing — a pale tint and a fire engine both
+    // read 100% — so chroma is the one that means loud. The first is asserted
+    // because a look that ignores the set draws every generator from `colors[0]`,
+    // and one light member is asserted because a set of five loud hues has
+    // nothing in it to read an edge against.
+    const read = (hex: string) => {
+      const n = parseInt(hex.slice(1), 16);
+      const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => v / 255);
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      return { chroma: max - min, l: (max + min) / 2 };
+    };
+    for (const [name, hexes] of Object.entries(BUILT_IN.colorways)) {
+      expect(hexes, name).toHaveLength(5);
+      const each = hexes.map(read);
+      expect(each[0].chroma, `${name} leads with the loudest`).toBeGreaterThanOrEqual(0.6);
+      expect(each.filter((c) => c.chroma >= 0.6).length, `${name} loud`).toBeGreaterThanOrEqual(2);
+      expect(each.filter((c) => c.l >= 0.8).length, `${name} tint`).toBe(1);
+    }
+  });
+
   it('turns through everything, because nothing is narrowed', () => {
     expect(BUILT_IN.rotation.looks).toEqual([]);
     expect(BUILT_IN.rotation.colorways).toEqual([]);
@@ -158,6 +180,61 @@ describe('the built-in scheme', () => {
         expect(BUILT_IN.looks[used], `${def.name} uses ${used}`).toBeDefined();
       }
       expect(compileLook(BUILT_IN.looks, id).error, def.name).toBeNull();
+    }
+  });
+
+  it('draws something with no set playing, except the one that is only the set', () => {
+    // Sometimes all that is running is the click. A wheel that turns through
+    // thirteen looks and goes black on five of them between songs is a wheel
+    // nobody leaves running, so every look but `The set` carries a picture of its
+    // own underneath whatever the set is doing.
+    //
+    // `The set` is exempt because it *is* the claim: one node, and what it draws
+    // is what is playing. A picture wired under that one would be a different
+    // promise.
+    for (const [id, def] of Object.entries(BUILT_IN.looks)) {
+      if (id === 'live') continue;
+      const kinds = new Set(def.circuit.nodes.map((node) => node.kind));
+      const draws = kinds.has('source') || kinds.has('paint') || kinds.has('look');
+      expect(draws, `${def.name} has nothing to draw without the set`).toBe(true);
+    }
+  });
+
+  it('never hangs an energy on the meter alone', () => {
+    // `master` is zero with no Live attached and close to it with only a click
+    // running, so an energy fed by a meter and nothing else holds a generator at
+    // its dullest all night: fewest arms, slowest rung on the division ladder,
+    // least charge. The fix is in the wiring rather than in the number — every
+    // meter that reaches an energy is floored by something on the clock — and
+    // this is the assertion that keeps it there.
+    const feeding = (def: (typeof BUILT_IN.looks)[string], inlet: string): Set<string> => {
+      const byId = new Map(def.circuit.nodes.map((node) => [node.id, node]));
+      const feeds = new Map(def.circuit.cords.map((cord) => [cord.to, cord.from]));
+      const kinds = new Set<string>();
+      const seen = new Set<string>();
+      const walk = (at: string) => {
+        const from = feeds.get(at);
+        if (!from || seen.has(from)) return;
+        seen.add(from);
+        const node = byId.get(splitPort(from).node);
+        if (!node) return;
+        kinds.add(node.kind);
+        for (const port of inletsOf(node)) walk(portId(node.id, port.name));
+      };
+      walk(inlet);
+      return kinds;
+    };
+
+    for (const def of Object.values(BUILT_IN.looks)) {
+      for (const node of def.circuit.nodes) {
+        for (const port of inletsOf(node)) {
+          if (port.name !== 'energy') continue;
+          const kinds = feeding(def, portId(node.id, port.name));
+          if (!kinds.has('track')) continue;
+          const clocked = kinds.has('wave') || kinds.has('playback');
+          expect(clocked, `${def.name}: ${node.id} energy is only a meter`).toBe(true);
+        }
+      }
     }
   });
 

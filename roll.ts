@@ -16,9 +16,11 @@ import { GRADE_MODES, LENS_MODES, SOURCES } from './protocol.ts';
  * and randomises what fills each slot. The shape is what makes it a look; the
  * fill is what makes it a different one every time.
  *
- * Colours are a harmony rather than four hues: a base, one of five
- * relationships to it, kept light enough to survive a projector. A cheap lamp
- * has no black to work against, so a dark colourway is a dark screen.
+ * Colours are a harmony rather than five hues: a base, one of five relationships
+ * to it — each of which contains an opposite — and two members taken loud. Kept
+ * light rather than dark, because a cheap lamp has no black to work against and
+ * a dark colourway is a dark screen. **Saturated is not the same as dark**, and
+ * confusing the two is what made these pastel.
  *
  * Deterministic in its seed, which is the whole reason there is a seed: undo
  * covers the roll you just did, and a seed covers the one from last Tuesday.
@@ -87,29 +89,99 @@ function hex(h: number, s: number, l: number): string {
 }
 
 /**
- * Five colours in one relationship, with one of them near white.
+ * Five colours in one relationship, and **every relationship contains an
+ * opposite**.
  *
- * The near-white is not decoration. Layers take a colour by depth, so a stack of
- * five saturated hues has nothing in it to read edges against; one light member
- * is what stops a busy frame turning to mud on a wall.
+ * That is the part that changed. Two of these were a spread of neighbours —
+ * analogous over 44 degrees, near-mono over 16 — and a set drawn entirely out of
+ * one of those is a wall in a single colour: harmonious, and indistinguishable
+ * from a projector with a gel on it. Each now carries its counterpoint as the
+ * fourth and fifth member, so there is always something in the palette that is
+ * *not* the base to read the base against.
+ *
+ * The offsets are still one relationship each rather than five hues picked
+ * apart, because five random hues is what a colour picker gives you and it never
+ * looks like anything.
  */
 const HARMONIES: readonly (readonly number[])[] = [
-  [0, 22, 44, 14, 32], // analogous
+  [0, 24, 48, 204, 180], // neighbours, answered
   [0, 120, 240, 60, 300], // triadic
-  [0, 180, 15, 195, 165], // complementary
+  [0, 180, 20, 200, 160], // complementary
   [0, 150, 210, 30, 180], // split complement
-  [0, 6, 350, 12, 344], // near mono
+  [0, 12, 348, 168, 192], // near mono, answered
 ];
 
+/** How far round the wheel two hues are, the short way. */
+function apart(a: number, b: number): number {
+  const gap = Math.abs(a - b) % 360;
+  return gap > 180 ? 360 - gap : gap;
+}
+
+/** What a hue at full saturation is worth in light. Green nearly all of it. */
+function luma(hue: number): number {
+  const h = ((((hue % 360) + 360) % 360) / 60);
+  const x = 1 - Math.abs((h % 2) - 1);
+  const [r, g, b] =
+    h < 1 ? [1, x, 0] : h < 2 ? [x, 1, 0] : h < 3 ? [0, 1, x]
+    : h < 4 ? [0, x, 1] : h < 5 ? [x, 0, 1] : [1, 0, x];
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/**
+ * A lightness that reads the same the whole way round the wheel.
+ *
+ * Hue and brightness are not independent: a yellow at half lightness is a bright
+ * colour and a blue at half lightness is nearly black, because the eye takes
+ * most of its luminance from green. A palette rolled at one lightness therefore
+ * has members that punch and members that vanish, and the ones that vanish are
+ * always the blues and violets — which on a lamp with no black to work against
+ * is a colour nobody in the room can see.
+ *
+ * So the number is a **target** and the hue's own luma says how far above it the
+ * colour has to sit. It costs one multiply and it is the difference between five
+ * colours and three colours and two smudges.
+ */
+function evenly(hue: number, l: number): number {
+  return Math.min(0.94, l + (1 - luma(hue)) * 0.12);
+}
+
+/**
+ * A palette: five colours, two of them loud, one of them light.
+ *
+ * **The two loud ones are the base and whatever sits furthest from it**, which
+ * is the pair that decides whether a palette reads across a room. They are taken
+ * near the top of the saturation range and at the lightness where a hue is
+ * strongest — a colour at 70% lightness has given most of its saturation away
+ * whatever the number says, which is why the old range topping out there came
+ * back as pastel however high the saturation went.
+ *
+ * **The light one is not decoration.** Tracks take a colour by position, so a
+ * set drawn entirely out of loud hues has nothing in it to read edges against
+ * and turns to mud on a wall. It is a tint rather than the near-white it was —
+ * enough colour in it to belong to the palette, light enough to do its job — and
+ * it is never one of the two loud ones, so a palette cannot lose both its
+ * anchors to one dice roll.
+ *
+ * The first colour is the base on purpose: a look's `paint`, `source` and every
+ * generator draw from `colors[0]`, so the palette's loudest member is the one a
+ * look that ignores the set is made of.
+ */
 function palette(rng: Rng): string[] {
   const base = rng() * 360;
   const harmony = pick(rng, HARMONIES);
-  const light = Math.floor(rng() * harmony.length);
-  return harmony.map((offset, i) =>
-    i === light
-      ? hex(base + offset, between(rng, 0.1, 0.3), between(rng, 0.86, 0.95))
-      : hex(base + offset, between(rng, 0.62, 1), between(rng, 0.48, 0.7)),
+  const far = harmony.reduce(
+    (most, offset, i) => (apart(offset, 0) > apart(harmony[most], 0) ? i : most),
+    0,
   );
+  const rest = harmony.map((_, i) => i).filter((i) => i !== 0 && i !== far);
+  const light = pick(rng, rest);
+  return harmony.map((offset, i) => {
+    const hue = base + offset;
+    const at = (s: number, lo: number, hi: number) => hex(hue, s, evenly(hue, between(rng, lo, hi)));
+    if (i === 0 || i === far) return at(between(rng, 0.92, 1), 0.46, 0.54);
+    if (i === light) return at(between(rng, 0.3, 0.46), 0.83, 0.9);
+    return at(between(rng, 0.7, 0.9), 0.48, 0.6);
+  });
 }
 
 /**
@@ -291,7 +363,7 @@ export const ROLL_PARTS: readonly RollPart[] = ['colours', 'looks', 'rotation'];
 
 /** What each part is, for a control that has one line to say it in. */
 export const ROLL_ABOUT: Record<RollPart, string> = {
-  colours: 'four fresh colourways, as a harmony rather than four hues',
+  colours: 'four fresh colourways: five each, two of them loud, one a tint',
   looks: 'four freshly wired looks, replacing the last four it wired',
   rotation: 'how often the wheel turns, and how fast the whole show moves',
 };

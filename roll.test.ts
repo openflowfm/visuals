@@ -116,6 +116,83 @@ describe('a roll is a library', () => {
   });
 });
 
+/**
+ * A colour, taken apart, so a palette can be asserted about rather than looked
+ * at. Saturation on its own says nothing — a pale tint and a fire engine can
+ * both read 100% — so **chroma** is the one that means loud.
+ */
+function taken(hex: string) {
+  const n = parseInt(hex.slice(1), 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => v / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const chroma = max - min;
+  const s = chroma === 0 ? 0 : chroma / (1 - Math.abs(2 * l - 1));
+  const hue =
+    chroma === 0
+      ? 0
+      : max === r
+        ? (60 * (((g - b) / chroma) % 6) + 360) % 360
+        : max === g
+          ? 60 * ((b - r) / chroma + 2)
+          : 60 * ((r - g) / chroma + 4);
+  return { hue, s, l, chroma, luma: 0.2126 * r + 0.7152 * g + 0.0722 * b };
+}
+
+const apart = (a: number, b: number) => {
+  const gap = Math.abs(a - b) % 360;
+  return gap > 180 ? 360 - gap : gap;
+};
+
+describe('a rolled colourway', () => {
+  const rolled = seeds.flatMap((seed) =>
+    Object.entries(rollScheme(seed, SHOW, BUILT_IN, ['colours']).colorways).map(
+      ([name, colours]) => [`${seed} ${name}`, colours] as const,
+    ),
+  );
+
+  it('is always five colours', () => {
+    // Tracks take a colour by position and a look draws from the first, so a
+    // palette that was sometimes four and sometimes five is a set that changes
+    // which track is which colour when the wheel turns.
+    for (const [where, colours] of rolled) expect(colours, where).toHaveLength(5);
+  });
+
+  it('always contains two loud ones and exactly one light one', () => {
+    // The two loud ones are what makes it read across a room; the light one is
+    // what a busy frame reads its edges against. Neither can be left to a dice
+    // roll, so the roll assigns them rather than hoping for them.
+    for (const [where, colours] of rolled) {
+      const taken_ = colours.map(taken);
+      const loud = taken_.filter((c) => c.s >= 0.85 && c.chroma >= 0.5);
+      const light = taken_.filter((c) => c.l >= 0.8);
+      expect(loud.length, `${where} loud`).toBeGreaterThanOrEqual(2);
+      expect(light.length, `${where} light`).toBe(1);
+      // And they are never the same colour wearing both hats.
+      expect(loud.some((c) => c.l >= 0.8), `${where} overlap`).toBe(false);
+    }
+  });
+
+  it('always answers its base from across the wheel', () => {
+    // Every harmony carries its opposite, because a palette of neighbours is a
+    // wall in one colour — harmonious, and indistinguishable from a gel.
+    for (const [where, colours] of rolled) {
+      const hues = colours.map((each) => taken(each).hue);
+      const widest = Math.max(...hues.map((a) => Math.max(...hues.map((b) => apart(a, b)))));
+      expect(widest, where).toBeGreaterThanOrEqual(120);
+    }
+  });
+
+  it('never rolls a colour too dark to see on a cheap lamp', () => {
+    // The reason lightness is evened out by hue: a blue at the same number as a
+    // yellow is nearly black, and a projector has no black to work against.
+    for (const [where, colours] of rolled) {
+      for (const each of colours) expect(taken(each).luma, `${where} ${each}`).toBeGreaterThan(0.15);
+    }
+  });
+});
+
 describe('rolled looks', () => {
   it('compiles, from every seed', () => {
     // Really an assertion that the generator never names a port that does not
