@@ -138,6 +138,29 @@ gives the `Outline` flow; typing `spark` gives `source`, open, with `sparks` und
 the canvas, because what a person has to tell at a glance is *composite or primitive*, and a
 mark that only appears in one of the two places it matters is a mark nobody learns.
 
+### One row rhythm, or it reads as two columns bolted together
+
+The two shelves were designed apart and it showed. A flow name was larger than a node name;
+a flow was two lines against a node's one; only two of the five node families had a coloured
+left edge, so the shared margin looked broken rather than meaningful; and there were three
+button weights in one column — outlined boxes for `＋ fork ×`, a filled amber box for `live
+pictures` that was the brightest thing on the page, and a quiet chip for a preset count.
+
+Every row is now the same sentence: **a rail, a name, and one fact on the right.** A node's
+fact is its signature; a flow's is what is inside it. What tells them apart is the `◈`, the
+amber rail, and the fact itself — information doing the work rather than typography, which
+is exactly what lets two shelves sit under one search box and look like one thing.
+
+Three rules fell out of that:
+
+- **The rail says composite or primitive and nothing else.** Colouring it by family too was
+  a second answer to a question the family heading already answers.
+- **Amber is spent on state, not on labels** — a flow that is open, a toggle that is on.
+  Every control is quiet at the same size until you hover it.
+- **The fact gives way before the name does.** A signature always fits; `12 nodes · reads
+  the set` beside a flow somebody called something long does not, and half a name is worse
+  than half a description.
+
 ### The canvas is a way in
 
 A `flow` node names a graph, and until now the only way to open that graph was to find its

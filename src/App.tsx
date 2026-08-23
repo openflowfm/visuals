@@ -56,11 +56,14 @@ export function App() {
       if (ON_WALL) return;
       // The one. A digit rather than a letter because it *is* the count.
       if (e.key === '1') downbeat();
-      // Flow, next. One press is one turn; holding the key must not race through
-      // a whole library before the key-up arrives. Modifiers stay available to
-      // the browser (`cmd-L` still focuses its location bar), and the colourway
-      // does not move.
-      if (e.key === 'l' && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) nextFlow();
+      // Flow, next. `n` rather than the `l` it was, because the noun changed and
+      // a mnemonic for a word nobody uses any more is worse than no mnemonic.
+      // `f` was the obvious first choice and is fullscreen.
+      //
+      // One press is one turn; holding the key must not race through a whole
+      // library before the key-up arrives. Modifiers stay available to the
+      // browser (`cmd-N` still opens a window), and the colourway does not move.
+      if (e.key === 'n' && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) nextFlow();
       if (e.key === 'i') setPanel((on) => !on);
       if (e.key === 'e') setEditing((on) => !on);
       if (e.key === 'k') align(!aligning);

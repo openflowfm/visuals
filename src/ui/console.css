@@ -300,6 +300,7 @@
 .designer .shelf-flows {
   flex: 0 1 auto;
   max-height: 38vh;
+  overflow: auto;
 }
 
 .designer .shelf-nodes {
@@ -317,42 +318,124 @@
   margin: 0 auto 0 0;
 }
 
+/*
+ * One control treatment for the whole column.
+ *
+ * There were three: `＋ fork ×` were outlined boxes, `live pictures` was a
+ * filled amber box loud enough to be the brightest thing on the page, and a
+ * preset count was a quiet chip. Three weights for three things of the same
+ * importance is most of what made this column read as assembled rather than
+ * designed. They are all quiet now and all the same size; the amber is spent
+ * on state — a flow that is open, a toggle that is on — rather than on a label.
+ */
 .designer .shelf-head .act .wdg-button-body {
   padding: 1px 5px;
   font-size: 9px;
 }
 
+.designer .shelf-head .act .wdg-button-body,
+.designer .pictures-toggle {
+  border-color: transparent;
+  background: none;
+}
+
+.designer .shelf-head .act:hover .wdg-button-body,
+.designer .pictures-toggle:hover:not(:disabled) {
+  border-color: var(--bd3);
+  background: var(--surface-control);
+}
+
+.designer .pictures-toggle {
+  padding: 1px 5px;
+  font-size: 9px;
+  color: var(--caption);
+}
+
+.designer .pictures-toggle[data-on] {
+  border-color: transparent;
+  color: var(--amber);
+}
+
+.designer .pictures-toggle[data-on]:hover {
+  border-color: var(--bd3);
+}
+
+/* A dark, thin scrollbar. The default was a wide light-grey bar — the only
+   pale element anywhere in the column, and the first thing your eye went to. */
+.designer .library ::-webkit-scrollbar {
+  width: 6px;
+}
+
+.designer .library ::-webkit-scrollbar-track {
+  background: none;
+}
+
+.designer .library ::-webkit-scrollbar-thumb {
+  background: var(--bd3);
+  border-radius: 3px;
+}
+
+.designer .library ::-webkit-scrollbar-thumb:hover {
+  background: var(--idle);
+}
+
+/* `scrollbar-width` does not inherit, so it goes on the two things that scroll. */
+.designer .shelf-flows,
+.designer .palette {
+  scrollbar-width: thin;
+  scrollbar-color: var(--bd3) transparent;
+}
+
+/*
+ * One row rhythm, both shelves.
+ *
+ * These were designed apart and read like two columns bolted together: a flow
+ * name was larger than a node name, a flow was two lines against a node's one,
+ * and only two of the five node families had a coloured edge — so the shared
+ * left margin looked broken rather than meaningful.
+ *
+ * Every row is now the same sentence: a rail, a name, and one fact on the
+ * right. What tells a flow from a node is the `◈`, the amber rail, and the fact
+ * itself being `12 nodes · reads the set` where a node's is `p n → c`. That is
+ * information doing the work rather than typography, which is what lets the two
+ * shelves sit under one search box and look like one thing.
+ */
 .designer .shelf-flows .flow-row {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   gap: 2px;
-  border-radius: var(--radius-xs);
 }
 
-.designer .shelf-flows {
-  overflow: auto;
-}
-
-.designer .flow-open {
+.designer .flow-open,
+.designer .node-pick {
   flex: 1;
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  gap: 1px;
+  align-items: baseline;
+  gap: 6px;
   border: 0;
   border-left: 2px solid transparent;
+  border-radius: var(--radius-xs);
   background: none;
   color: var(--ui);
   font: inherit;
+  font-size: 10px;
   text-align: left;
-  padding: 3px 4px 3px 5px;
+  padding: 2px 4px 2px 5px;
   cursor: pointer;
-  border-radius: var(--radius-xs);
 }
 
-.designer .flow-open:hover {
+.designer .flow-open:hover,
+.designer .node-pick:hover {
   background: var(--surface-control);
   color: var(--fg);
+}
+
+/* The rail says composite or primitive, and nothing else. The family heading
+   already names the family, so colouring the rail by family too was a second
+   answer to a question already answered — on seven rows out of nineteen. */
+.designer .flow-open {
+  border-left-color: color-mix(in srgb, var(--amber) 55%, transparent);
 }
 
 .designer .flow-row[data-on] .flow-open {
@@ -361,11 +444,10 @@
   color: var(--fg);
 }
 
-.designer .flow-name {
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-  font-size: 11px;
+.designer .flow-name,
+.designer .node-label {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -373,26 +455,43 @@
 
 .designer .flow-name .mark {
   color: var(--amber);
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 400;
+  margin-right: 3px;
 }
 
 .designer .flow-name i {
   font-style: normal;
   color: var(--idle);
+  margin-left: 4px;
 }
 
-.designer .flow-about {
+.designer .flow-about,
+.designer .node-sig,
+.designer .node-about {
+  flex: none;
   color: var(--idle);
   font-size: 9px;
-  line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* The fact gives way before the name does. A signature is short enough to
+   always fit; `12 nodes · reads the set` beside a flow somebody called
+   something long is not, and half a name is worse than half a description. */
+.designer .flow-about,
+.designer .node-about {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.designer .flow-name {
+  min-width: 4em;
+}
+
 .designer .flow-place {
-  align-self: center;
+  flex: none;
   opacity: 0;
 }
 
@@ -402,8 +501,8 @@
 }
 
 .designer .flow-place .wdg-button-body {
-  padding: 2px 5px;
-  font-size: 11px;
+  padding: 0 4px;
+  font-size: 10px;
 }
 
 .designer .trail {
@@ -676,6 +775,8 @@
   flex: 1;
   min-width: 0;
   width: 100%;
+  font-size: 10px;
+  padding: 3px 6px;
 }
 
 .designer .find-row {
@@ -684,16 +785,16 @@
   gap: 4px;
 }
 
-.designer .pictures-toggle {
-  padding: 1px 4px;
-  font-size: 9px;
-}
-
+/* Under the toggle it belongs to rather than across the column: it was a
+   full-width line at the family headings' own size, sitting between `NODES`
+   and `DRAW` and reading like a third heading. */
 .designer .picture-status {
   overflow: hidden;
   color: var(--idle);
-  font-size: 9px;
+  font-size: 8px;
   line-height: 1.2;
+  text-align: right;
+  margin: -2px 0 7px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -735,64 +836,6 @@
   gap: 2px;
 }
 
-.designer .node-pick {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  border: 0;
-  border-left: 2px solid transparent;
-  border-radius: var(--radius-xs);
-  background: none;
-  color: var(--ui);
-  font: inherit;
-  font-size: 10px;
-  text-align: left;
-  padding: 2px 4px 2px 5px;
-  cursor: pointer;
-}
-
-.designer .node-pick:hover {
-  background: var(--surface-control);
-  color: var(--fg);
-}
-
-.designer .node-label {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.designer .node-sig,
-.designer .node-about {
-  flex: none;
-  color: var(--idle);
-  font-size: 9px;
-  white-space: nowrap;
-}
-
-.designer .node-about {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.designer .node-pick[data-kind='source'],
-.designer .node-pick[data-kind='tracks'],
-.designer .node-pick[data-kind='paint'] {
-  border-left-color: color-mix(in srgb, var(--amber) 55%, transparent);
-}
-
-.designer .node-pick[data-kind='grade'],
-.designer .node-pick[data-kind='spread'],
-.designer .node-pick[data-kind='blend'] {
-  border-left-color: color-mix(in srgb, var(--focus) 55%, transparent);
-}
-
 .designer .node-entry .under {
   margin: 0 0 4px 11px;
   padding-left: 6px;
@@ -805,9 +848,16 @@
 }
 
 .designer .more .wdg-button-body {
-  padding: 2px 4px;
+  padding: 1px 5px;
   font-size: 9px;
   line-height: 1.2;
+  border-color: transparent;
+  background: none;
+}
+
+.designer .more:hover .wdg-button-body {
+  border-color: var(--bd3);
+  background: var(--surface-control);
 }
 
 .designer .promote {

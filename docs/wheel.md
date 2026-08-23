@@ -58,7 +58,7 @@ one. So the dominant playing index is the scene, and a track that has moved some
 its own is somebody reaching past the grid — which is already the "and now something else" of
 a live set, and the only gesture the rig can hear without being told.
 
-**The `l` key.** This turns only the flow wheel once and leaves the colourway where it is.
+**The `n` key.** This turns only the flow wheel once and leaves the colourway where it is.
 The turn belongs to the server, not the browser that received the key, so the console and the
 projector change together. Key repeat is ignored: one press is one flow.
 

@@ -458,7 +458,7 @@ export function Designer({
                     <button
                       type="button"
                       className="flow-open"
-                      title={`Open ${row.name}`}
+                      title={`Open ${row.name} — ${row.about}`}
                       onClick={() => open(row.id)}
                     >
                       <span className="flow-name">
