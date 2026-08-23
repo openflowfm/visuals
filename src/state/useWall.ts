@@ -67,10 +67,10 @@ interface ScreenDetails extends EventTarget {
 }
 type WithScreens = Window & { getScreenDetails?: () => Promise<ScreenDetails> };
 
-const CHANNEL = 'bsv.visuals.wall';
+const CHANNEL = 'openflow.visuals.wall';
 
 /** The display the wall went to last. Per machine, like everything else here. */
-const KEY = 'bsv.visuals.wall';
+const KEY = 'openflow.visuals.wall';
 
 let channel: BroadcastChannel | null = null;
 
@@ -238,7 +238,7 @@ export function useWall(active: boolean): {
       const place = to
         ? `popup=1,left=${to.left},top=${to.top},width=${to.width},height=${to.height}`
         : 'popup=1,width=1280,height=720';
-      const child = window.open(url.toString(), 'bsvWall', place);
+      const child = window.open(url.toString(), 'openflowWall', place);
       if (!child) {
         setTrouble('the browser blocked the window — allow pop-ups for this page');
         return;

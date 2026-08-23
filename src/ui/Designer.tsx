@@ -47,7 +47,7 @@ import type { Clock } from '../state/useShow.ts';
 import './circuit.css';
 import './console.css';
 
-const PICTURES_KEY = 'bsv.visuals.live-node-pictures';
+const PICTURES_KEY = 'openflow.visuals.live-node-pictures';
 const DISPLAY_RATE_MS = 100;
 
 const EMPTY_PICTURE_STATUS: NodePictureStatus = {

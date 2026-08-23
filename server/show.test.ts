@@ -28,7 +28,7 @@ const track = (i: number, name: string, isGroup = false) =>
     isGroup,
     isGrouped: false,
     group: -1,
-  }) as unknown as BSV.Track;
+  }) as unknown as OpenFlow.Track;
 
 const scene = (i: number, name: string) =>
   ({
@@ -38,7 +38,7 @@ const scene = (i: number, name: string) =>
     colorIndex: -1,
     tempo: -1,
     timeSignature: '',
-  }) as unknown as BSV.Scene;
+  }) as unknown as OpenFlow.Scene;
 
 const clip = (t: number, s: number, name: string) =>
   ({
@@ -49,7 +49,7 @@ const clip = (t: number, s: number, name: string) =>
     color: 0,
     length: 4,
     isMidi: true,
-  }) as unknown as BSV.Clip;
+  }) as unknown as OpenFlow.Clip;
 
 const LINK: LinkFrame = {
   tempo: 120,
@@ -73,7 +73,7 @@ function setOf(names: string[], sceneName: string, clips: Record<number, string>
   state.playing = true;
   state.tracks = names.map((name, i) => track(i, name));
   state.scenes = [scene(0, sceneName)];
-  state.play = names.map(() => ({ playing: 0, fired: -1 }) as BSV.TrackPlayState);
+  state.play = names.map(() => ({ playing: 0, fired: -1 }) as OpenFlow.TrackPlayState);
   for (const [t, name] of Object.entries(clips)) {
     state.clips.set(`${t}:0`, clip(Number(t), 0, name));
   }
@@ -81,7 +81,7 @@ function setOf(names: string[], sceneName: string, clips: Record<number, string>
     rev: 1,
     songs: [],
     songByScene: { '0': 'sandstorm' },
-  } as unknown as BSV.SetModel;
+  } as unknown as OpenFlow.SetModel;
   return state;
 }
 
@@ -205,12 +205,12 @@ describe('turning on musical time', () => {
 
     // Everything moves to scene 1: a scene launch.
     set.scenes = [set.scenes[0], scene(1, '[CHORUS] one')];
-    set.play = set.play.map(() => ({ playing: 1, fired: -1 }) as BSV.TrackPlayState);
+    set.play = set.play.map(() => ({ playing: 1, fired: -1 }) as OpenFlow.TrackPlayState);
     show(set, scheme, turning);
     expect(turning.wheel.turned.flow).toBe(0);
 
     // One track departs: a clip launch.
-    set.play[2] = { playing: 0, fired: -1 } as BSV.TrackPlayState;
+    set.play[2] = { playing: 0, fired: -1 } as OpenFlow.TrackPlayState;
     show(set, scheme, turning);
     expect(turning.wheel.turned.flow).toBe(1);
   });
@@ -226,7 +226,7 @@ describe('turning on musical time', () => {
     // is the sort of thing that looks like a haunted rig.
     const turning = noTurning();
     const set = setOf(['Drums', 'Bass'], '[VERSE] one');
-    set.play[1] = { playing: 3, fired: -1 } as BSV.TrackPlayState;
+    set.play[1] = { playing: 3, fired: -1 } as OpenFlow.TrackPlayState;
     show(set, twoOf(), turning);
     expect(turning.wheel.turned.flow).toBe(0);
   });
@@ -318,7 +318,7 @@ describe('turning on musical time', () => {
     const turning = noTurning();
     const set = setOf(['Drums', 'Bass'], '[VERSE] one');
     show(set, scheme, turning);
-    set.play[1] = { playing: 5, fired: -1 } as BSV.TrackPlayState;
+    set.play[1] = { playing: 5, fired: -1 } as OpenFlow.TrackPlayState;
     show(set, scheme, turning);
     expect(turning.wheel.turned.flow).toBe(0);
   });
@@ -340,7 +340,7 @@ describe('the tracks', () => {
     // everything inside it.
     const set = setOf(['Drums', 'Bass'], '[VERSE] one');
     set.tracks = [track(0, 'Drums'), track(1, 'Group', true), track(2, 'Bass')];
-    set.play = [0, 1, 2].map(() => ({ playing: 0, fired: -1 }) as BSV.TrackPlayState);
+    set.play = [0, 1, 2].map(() => ({ playing: 0, fired: -1 }) as OpenFlow.TrackPlayState);
     expect(show(set, twoOf()).tracks.map((t) => t.name)).toEqual(['Drums', 'Bass']);
   });
 

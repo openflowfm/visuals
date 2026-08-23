@@ -1,6 +1,6 @@
 # Node graph design prompt
 
-Design a dramatically simpler node-graph experience for Better Session View's visuals
+Design a dramatically simpler node-graph experience for visual[flow]'s node
 editor.
 
 Your primary goal is not to expose every graph feature. Your goal is:

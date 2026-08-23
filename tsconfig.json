@@ -20,6 +20,6 @@
     "server",
     "mcp",
     "tools",
-    "../protocol"
+    "../protocol/global.d.ts"
   ]
 }

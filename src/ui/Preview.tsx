@@ -89,7 +89,7 @@ export function Bench({
 /** How small the panel may be dragged before it stops being worth looking at. */
 const LEAST = 180;
 
-const WHERE = 'bsv.visuals.bench';
+const WHERE = 'openflow.visuals.bench';
 
 /**
  * Where it opens before anybody has moved it: top right, clear of the name row.

@@ -19,14 +19,14 @@ export interface SetState {
   lomReady: boolean;
   rev: number;
   tempo: number;
-  tracks: BSV.Track[];
-  scenes: BSV.Scene[];
+  tracks: OpenFlow.Track[];
+  scenes: OpenFlow.Scene[];
   /** Keyed `t:s`, because the renderer only ever asks about one cell at a time. */
-  clips: Map<string, BSV.Clip>;
-  model: BSV.SetModel | null;
+  clips: Map<string, OpenFlow.Clip>;
+  model: OpenFlow.SetModel | null;
   /** Live's own transport, which is the answer Link cannot give on joining. */
   playing: boolean;
-  play: BSV.TrackPlayState[];
+  play: OpenFlow.TrackPlayState[];
   levels: Map<number, number>;
   masterLevel: number;
   /**
@@ -37,7 +37,7 @@ export interface SetState {
    * layer stack composited with a level per layer is what a mixer is. It
    * arrives on `watchMeters` alongside the levels.
    */
-  mixer: BSV.MixerState | null;
+  mixer: OpenFlow.MixerState | null;
 }
 
 export function emptySet(): SetState {
@@ -93,9 +93,9 @@ export function followBridge(url: string, onChange: () => void): BridgeLink {
     });
 
     socket.on('message', (raw) => {
-      let event: BSV.Event;
+      let event: OpenFlow.Event;
       try {
-        event = JSON.parse(String(raw)) as BSV.Event;
+        event = JSON.parse(String(raw)) as OpenFlow.Event;
       } catch {
         return;
       }
@@ -127,7 +127,7 @@ export function followBridge(url: string, onChange: () => void): BridgeLink {
     }, 1000);
   };
 
-  const send = (request: BSV.Request) => {
+  const send = (request: OpenFlow.Request) => {
     if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(request));
   };
 
@@ -157,7 +157,7 @@ export function followBridge(url: string, onChange: () => void): BridgeLink {
   };
 
   /** Returns whether anything a renderer cares about actually moved. */
-  const take = (event: BSV.Event): boolean => {
+  const take = (event: OpenFlow.Event): boolean => {
     switch (event.type) {
       case 'status':
         state.lomReady = event.lomReady;

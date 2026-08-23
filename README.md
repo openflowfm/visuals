@@ -3,8 +3,8 @@
 The visuals module of **open[flow]**. A VJ rig that reads a Live set: its own Node server,
 its own browser app, its own `node_modules` — and an ordinary client of the bridge.
 
-The directory is still `visuals/` and the package is still `bsv-visuals`, because a name is
-a thing you read and an import path is a thing that breaks. `visual[flow]` is what the app
+The directory is still `visuals/`, because a name is a thing you read and an import path
+is a thing that breaks; the package is `@openflow/visuals`. `visual[flow]` is what the app
 calls itself; the paths are what the compiler calls it.
 
 ```
@@ -81,10 +81,10 @@ because they describe this projector in this room and would be wrong everywhere 
 
 | | | |
 |---|---|---|
-| server | 17900 | `BSV_VISUALS_PORT`, `BSV_VISUALS_HOST` |
-| renderer (dev) | UI + 300 | `BSV_VISUALS_UI_PORT` |
-| bridge it follows | `ws://127.0.0.1:17800/ws` | `BSV_BRIDGE_WS` |
-| fake bridge | 17801 | `BSV_FAKE_PORT` |
+| server | 17900 | `OPENFLOW_VISUALS_PORT`, `OPENFLOW_VISUALS_HOST` |
+| renderer (dev) | UI + 300 | `OPENFLOW_VISUALS_UI_PORT` |
+| bridge it follows | `ws://127.0.0.1:17800/ws` | `OPENFLOW_BRIDGE_WS` |
+| fake bridge | 17801 | `OPENFLOW_FAKE_PORT` |
 
 ## Why it is a separate process
 

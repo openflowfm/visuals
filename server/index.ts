@@ -31,9 +31,9 @@ import { buildGrid } from './grid.ts';
  */
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const HOST = process.env.BSV_VISUALS_HOST ?? '0.0.0.0';
-const PORT = Number(process.env.BSV_VISUALS_PORT) || VISUALS_PORT;
-const BRIDGE = process.env.BSV_BRIDGE_WS ?? 'ws://127.0.0.1:17800/ws';
+const HOST = process.env.OPENFLOW_VISUALS_HOST ?? '0.0.0.0';
+const PORT = Number(process.env.OPENFLOW_VISUALS_PORT) || VISUALS_PORT;
+const BRIDGE = process.env.OPENFLOW_BRIDGE_WS ?? 'ws://127.0.0.1:17800/ws';
 const ROOT = path.resolve(here, '../dist');
 
 /**
@@ -43,7 +43,7 @@ const ROOT = path.resolve(here, '../dist');
  * machine. This one's client is a renderer on another machine by design, so
  * loopback would defeat the point. It is still a deliberate exposure: the
  * server has no authentication and answers anyone who can reach the port, so
- * it belongs on a show LAN and not on a hotel network. `BSV_VISUALS_HOST`
+ * it belongs on a show LAN and not on a hotel network. `OPENFLOW_VISUALS_HOST`
  * takes it back to `127.0.0.1` for anyone who wants that.
  */
 
@@ -266,7 +266,7 @@ const cannotListen = (err: NodeJS.ErrnoException) => {
       `visuals: port ${PORT} is already in use — something else is on it.\n` +
         `visuals: usually a dev:visuals or npm run dev left running from an earlier session.\n` +
         `visuals: find it with  lsof -nP -iTCP:${PORT} -sTCP:LISTEN\n` +
-        `visuals: or run this one elsewhere with  BSV_VISUALS_PORT=17901 npm run dev:visuals`,
+        `visuals: or run this one elsewhere with  OPENFLOW_VISUALS_PORT=17901 npm run dev:visuals`,
     );
   } else {
     console.error(`visuals: could not listen on ${HOST}:${PORT} — ${err.message}`);

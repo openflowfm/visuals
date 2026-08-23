@@ -817,7 +817,7 @@ const BUILT_IN: Scheme = {
   },
 };
 const here = path.dirname(fileURLToPath(import.meta.url));
-const FILE = process.env.BSV_VISUALS_SCHEME ?? path.resolve(here, '../scheme.json');
+const FILE = process.env.OPENFLOW_VISUALS_SCHEME ?? path.resolve(here, '../scheme.json');
 
 export interface SchemeSource {
   current(): Scheme;

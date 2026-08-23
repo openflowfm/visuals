@@ -114,7 +114,7 @@ describe('the MCP boundary', () => {
       command: process.execPath,
       args: ['--disable-warning=ExperimentalWarning', 'mcp/index.ts'],
       cwd: fileURLToPath(new URL('../', import.meta.url)),
-      env: { BSV_VISUALS_SCHEME: path.join(directory, 'scheme.json') },
+      env: { OPENFLOW_VISUALS_SCHEME: path.join(directory, 'scheme.json') },
       stderr: 'pipe',
     });
     await client.connect(transport);

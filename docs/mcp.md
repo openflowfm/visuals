@@ -30,7 +30,7 @@ An MCP host can configure it with an absolute repository path:
 }
 ```
 
-Set `BSV_VISUALS_SCHEME` in that process when the record lives somewhere other than
+Set `OPENFLOW_VISUALS_SCHEME` in that process when the record lives somewhere other than
 `visuals/scheme.json`. Nothing except JSON-RPC is written to stdout; diagnostics go to stderr,
 because one ordinary log line on stdout corrupts a stdio MCP session.
 

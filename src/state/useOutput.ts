@@ -31,7 +31,7 @@ export interface Output {
  * is not a piece of interface state, it is "the test grid is up", and it has to
  * be up in the room and not on the laptop. See [the wall](./useWall.ts).
  */
-const KEY = 'bsv.visuals.output';
+const KEY = 'openflow.visuals.output';
 
 /** Enough headroom to drive a dim hall, and enough travel to tame a dark room. */
 export const GAIN_RANGE = { min: 0.2, max: 1.5 } as const;

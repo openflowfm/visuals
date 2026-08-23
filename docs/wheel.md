@@ -323,5 +323,5 @@ It would arrive as one more `playback` mode.
 **Per-clip visuals as files.** Nothing here can point at a video. That brings a whole question
 about where media lives.
 
-**More than one scheme, named and switchable.** `BSV_VISUALS_SCHEME` already points at
+**More than one scheme, named and switchable.** `OPENFLOW_VISUALS_SCHEME` already points at
 whichever is live, so this is mostly a picker.

@@ -5,7 +5,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { createVisualFlowServer } from './server.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const schemeFile = process.env.BSV_VISUALS_SCHEME ?? path.resolve(here, '../scheme.json');
+const schemeFile = process.env.OPENFLOW_VISUALS_SCHEME ?? path.resolve(here, '../scheme.json');
 const server = createVisualFlowServer({ schemeFile });
 
 const transport = new StdioServerTransport();

@@ -20,7 +20,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
  *
  * ```sh
  * npm run dev:fake-live                     # :17801
- * BSV_BRIDGE_WS=ws://127.0.0.1:17801/ws npm run dev:visuals
+ * OPENFLOW_BRIDGE_WS=ws://127.0.0.1:17801/ws npm run dev:visuals
  * ```
  *
  * Port 17801 and not 17800, deliberately: the real device may well be running,
@@ -28,15 +28,15 @@ import { WebSocketServer, type WebSocket } from 'ws';
  * every time.
  */
 
-const PORT = Number(process.env.BSV_FAKE_PORT) || 17801;
-const BPM = Number(process.env.BSV_FAKE_BPM) || 120;
+const PORT = Number(process.env.OPENFLOW_FAKE_PORT) || 17801;
+const BPM = Number(process.env.OPENFLOW_FAKE_BPM) || 120;
 
 const ROLES = ['INTRO', 'VERSE', 'CHORUS', 'VERSE', 'CHORUS', 'JAM1', 'JAM2', 'ENDING'];
 const TRACKS = ['Drums', 'Bass', 'Keys', 'Lead', 'Pads'];
 /** Slots in Live's palette, spread far enough apart to be told apart on screen. */
 const COLORS = [0xff5a3c, 0x3cc8ff, 0xffd23c, 0x9b5aff, 0x3cff9b];
 
-const scenes: BSV.Scene[] = ROLES.map((role, i) => ({
+const scenes: OpenFlow.Scene[] = ROLES.map((role, i) => ({
   i,
   name: `[${role}] @${BPM}-Am NIGHTFALL - THE AVIATORS`,
   color: COLORS[i % COLORS.length],
@@ -45,7 +45,7 @@ const scenes: BSV.Scene[] = ROLES.map((role, i) => ({
   tempo: -1,
 }));
 
-const tracks: BSV.Track[] = TRACKS.map((name, i) => ({
+const tracks: OpenFlow.Track[] = TRACKS.map((name, i) => ({
   i,
   name,
   color: COLORS[i % COLORS.length],
@@ -57,7 +57,7 @@ const tracks: BSV.Track[] = TRACKS.map((name, i) => ({
   isFolded: false,
 }));
 
-const clips: BSV.Clip[] = [];
+const clips: OpenFlow.Clip[] = [];
 for (const track of tracks) {
   for (const scene of scenes) {
     // A few holes, because a real set has them and a layer with nothing playing
@@ -83,7 +83,7 @@ for (const track of tracks) {
 // the fields a cast used to paper over are exactly the ones a client would then
 // be written against wrongly. `bpm` really is a rendered string, and a song
 // really does carry a tag whether or not this one has anything to say in it.
-const song: BSV.SongEntry = {
+const song: OpenFlow.SongEntry = {
   songKey: 'nightfall',
   name: 'NIGHTFALL',
   scenes: scenes.map((s) => s.i),
@@ -102,7 +102,7 @@ const song: BSV.SongEntry = {
   tempoScenes: [],
 };
 
-const model: BSV.SetModel = {
+const model: OpenFlow.SetModel = {
   rev: 1,
   songs: [song],
   songByScene: Object.fromEntries(scenes.map((s) => [String(s.i), song.songKey])),
@@ -112,10 +112,10 @@ const model: BSV.SetModel = {
   unmapped: [],
 };
 
-const snapshot: BSV.Snapshot = {
+const snapshot: OpenFlow.Snapshot = {
   rev: 1,
   ms: 0,
-  timings: { tracks: 0, scenes: 0, slots: 0, clips: 0, slotsScanned: 0, elapsed: 0 } as BSV.SnapshotTimings,
+  timings: { tracks: 0, scenes: 0, slots: 0, clips: 0, slotsScanned: 0, elapsed: 0 } as OpenFlow.SnapshotTimings,
   tempo: BPM,
   masterColor: 0x2c2c31,
   trackCount: tracks.length,
@@ -126,7 +126,7 @@ const snapshot: BSV.Snapshot = {
   clips,
 };
 
-const parameter = (value: number, min = 0, max = 1): BSV.MixerParameterState => ({
+const parameter = (value: number, min = 0, max = 1): OpenFlow.MixerParameterState => ({
   value,
   min,
   max,
@@ -149,9 +149,9 @@ server.on('connection', (socket) => {
   socket.send(JSON.stringify({ type: 'status', lomReady: true }));
 
   socket.on('message', (raw) => {
-    let request: BSV.Request;
+    let request: OpenFlow.Request;
     try {
-      request = JSON.parse(String(raw)) as BSV.Request;
+      request = JSON.parse(String(raw)) as OpenFlow.Request;
     } catch {
       return;
     }
@@ -203,9 +203,9 @@ const PROGRESSION = [
   [55, 59, 62],
 ];
 
-function notesFor(t: number, s: number): BSV.ClipNotes {
+function notesFor(t: number, s: number): OpenFlow.ClipNotes {
   const name = TRACKS[t % TRACKS.length] ?? '';
-  const notes: BSV.ClipNote[] = [];
+  const notes: OpenFlow.ClipNote[] = [];
 
   if (name === 'Drums') {
     for (let beat = 0; beat < 16; beat++) {

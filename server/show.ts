@@ -63,7 +63,7 @@ function pitchOf(label: string | null | undefined): number | null {
   return ((((PITCH[match[1]] + shift) % 12) + 12) % 12) / 12;
 }
 
-function positionOf(p: BSV.MixerParameterState | null | undefined): number {
+function positionOf(p: OpenFlow.MixerParameterState | null | undefined): number {
   if (!p) return 1;
   const span = p.max - p.min;
   if (Math.abs(span) < 1e-9) return 1;
