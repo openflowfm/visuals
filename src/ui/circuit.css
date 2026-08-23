@@ -1,5 +1,5 @@
 /*
- * What the look canvas is made of.
+ * What the flow canvas is made of.
  *
  * This was the editor's stylesheet. The editor it dressed is gone — three views
  * replaced its four panes — and what survived is the part that was never about
@@ -133,6 +133,16 @@
   font-size: 8px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.node-kind.is-flow {
+  color: var(--amber);
+  letter-spacing: 0.04em;
+}
+
+.node .enter .wdg-button-body {
+  padding: 1px 4px;
+  font-size: 10px;
 }
 
 .node .wdg-device-chooser .wdg-select-body,

@@ -1,7 +1,7 @@
 import { SOURCES } from '../../protocol.ts';
 
 /**
- * The GLSL every look is built out of.
+ * The GLSL every flow is built out of.
  *
  * **The clock is a uniform, not a timer.** Nothing here reads a wall clock or
  * counts frames: `uBeat` and `uPhase` come from Link, so a shape that grows over
@@ -18,7 +18,7 @@ import { SOURCES } from '../../protocol.ts';
  * whatever you decide — often a particular track's, often the bass.
  *
  * So `rate`, `beatPulse`, `charge` and every generator take it as a parameter,
- * and a look decides where it comes from by wiring an `energy` node. `uEnergy`
+ * and a flow decides where it comes from by wiring an `energy` node. `uEnergy`
  * survives as **the room's** energy — a smoothed master meter — which is what an
  * unwired energy inlet falls back to. A default, not a level.
  */
@@ -259,7 +259,7 @@ const GENERATOR_BODIES: Record<string, string> = {
 };
 
 /**
- * All of them as GLSL, compiled into every look.
+ * All of them as GLSL, compiled into every flow.
  *
  * Every shader carries all eleven whether or not it calls one, because the
  * alternative — emitting only what a graph reached — makes the shader a function
@@ -346,7 +346,7 @@ vec4 fxInvert(vec4 c, float hold, float speed, float e) {
 `;
 
 /**
- * The preamble a compiled look gets, sized to the graph it is for.
+ * The preamble a compiled flow gets, sized to the graph it is for.
  *
  * `uParams` is the bank every number rides in — a `value` node's amount and every
  * number set on an inlet's own face. A bank rather than a uniform each because
@@ -360,16 +360,16 @@ vec4 fxInvert(vec4 c, float hold, float speed, float e) {
  * carrying a number would be a fixed bank of hundreds, most of them unread; a
  * bank cut to fit costs one recompile the first time an inlet is given a value
  * and nothing at all afterwards. One floor: GLSL rejects a zero-length array,
- * so a look that sets nothing at all still declares one.
+ * so a flow that sets nothing at all still declares one.
  *
  * `uTracksTex` is the Live set's own picture, drawn by the pass a `tracks` node
- * stands for. It is the one texture a look reads, and the only reason there is
+ * stands for. It is the one texture a flow reads, and the only reason there is
  * still more than one pass in this renderer.
  */
-export const lookPreamble = (values: number): string => `${PREAMBLE}
+export const flowPreamble = (values: number): string => `${PREAMBLE}
 uniform sampler2D uTracksTex;
 uniform float uParams[${Math.max(1, values)}];
-// Meters of tracks a look NAMED, in the order its track nodes appear, and
+// Meters of tracks a flow NAMED, in the order its track nodes appear, and
 // energies computed on the CPU for its energy nodes. Banks rather than a
 // uniform each, for the same reason uParams is one.
 uniform float uTracks[8];

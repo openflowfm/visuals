@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { VISUALS_PORT, VISUALS_WS_PATH, type Up } from '../protocol.ts';
-import { reOne } from '../resolve.ts';
+import { nextFlow, reOne } from '../resolve.ts';
 import { followBridge } from './bridge.ts';
 import { openLink } from './link.ts';
 import { openScheme } from './scheme.ts';
@@ -144,6 +144,14 @@ sockets.on('connection', (socket) => {
       dirty = true;
       return;
     }
+    // A flow-only turn, owned by the server for the same reason the one is:
+    // the console and the wall are two views of one show, not two wheels that
+    // happen to start together. The colourway deliberately stays where it is.
+    if (message.kind === 'next-flow') {
+      turning.wheel = nextFlow(turning.wheel);
+      dirty = true;
+      return;
+    }
     if (message.kind !== 'scheme' || !message.scheme) return;
     scheme.replace(message.scheme);
     dirty = true;
@@ -200,10 +208,10 @@ setInterval(() => {
   }
   const show = buildShow(bridge.state, link.sample(), scheme, turning);
   show.clock = link.live;
-  // The look and the colourway are in it because the rotation moves them, and a
+  // The flow and the colourway are in it because the rotation moves them, and a
   // wheel that turned without the renderer being told would be a wheel that
   // never turned: the anchor carries meters, not decisions.
-  const schemeStamp = `${show.look}|${show.colorway}|${show.song}|${show.schemeError}`;
+  const schemeStamp = `${show.flow}|${show.colorway}|${show.song}|${show.schemeError}`;
   const reloaded = schemeStamp !== lastScheme;
   lastScheme = schemeStamp;
   const wire = JSON.stringify(

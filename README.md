@@ -1,7 +1,11 @@
-# visuals/
+# visual[flow]
 
-A VJ rig that reads a Live set. Its own Node server, its own browser app, its own
-`node_modules` — and an ordinary client of the bridge.
+The visuals module of **open[flow]**. A VJ rig that reads a Live set: its own Node server,
+its own browser app, its own `node_modules` — and an ordinary client of the bridge.
+
+The directory is still `visuals/` and the package is still `bsv-visuals`, because a name is
+a thing you read and an import path is a thing that breaks. `visual[flow]` is what the app
+calls itself; the paths are what the compiler calls it.
 
 ```
 Live ─ SessionBridge :17800 ─WS─> visuals server :17900 ─WS─> browser (WebGL2)
@@ -16,7 +20,7 @@ Live ─ SessionBridge :17800 ─WS─> visuals server :17900 ─WS─> browser 
 | doc | read it before touching | source |
 |---|---|---|
 | [the clock](docs/clock.md) | Link, tempo, the beat, why the browser extrapolates, the native addon | `server/link.ts`, `src/state/useShow.ts`, `tools/build-link.ts` |
-| [looks](docs/looks.md) | **the one noun**, the node vocabulary, the compiler, the designer | `protocol.ts`, `src/render/circuit.ts`, `src/ui/Designer.tsx` |
+| [flows](docs/flows.md) | **the one noun**, the node vocabulary, the compiler, the designer | `protocol.ts`, `src/render/circuit.ts`, `src/ui/Designer.tsx` |
 | [the wheel](docs/wheel.md) | what is on screen and why, song overrides, the scheme file, the roll | `resolve.ts`, `server/show.ts`, `server/scheme.ts`, `roll.ts` |
 | [the console](docs/console.md) | the two views, and what the three views before them were for | `src/ui/Console.tsx`, `Designer.tsx`, `SetView.tsx` |
 | [the renderer](docs/render.md) | the two passes, blending, fill rate, **pointing a projector** | `src/render/*` |
@@ -24,11 +28,11 @@ Live ─ SessionBridge :17800 ─WS─> visuals server :17900 ─WS─> browser 
 
 ## The one idea
 
-**Everything is one graph, and that graph is a look.**
+**Everything is one graph, and that graph is a flow.**
 
-A look has one output — a frame — and everything that goes into it is a node: the pictures
+A flow has one output — a frame — and everything that goes into it is a node: the pictures
 that ship, the effects that work on them, the meters, the song, the Live set's own layer
-mix, and *other looks*. There is no stack, no cascade, no per-track binding and no clip
+mix, and *other flows*. There is no stack, no cascade, no per-track binding and no clip
 exception, because each of those was a different answer to "how do two pictures combine"
 and a graph answers it once.
 
@@ -37,7 +41,7 @@ so firing a scene still changes the picture with nothing authored — which is w
 a rig that reads a set rather than a screensaver. Everything else about it is wired.
 
 Above the graph there is one thing, and it is deliberately tiny: a **wheel** that turns
-through the looks and colourways you have made, on musical time. Nothing has to be
+through the flows and colourways you have made, on musical time. Nothing has to be
 configured for it to draw a show.
 
 ## Running it
@@ -55,7 +59,8 @@ Open `http://localhost:17900` for the built renderer, or `:5473` while working o
 `npm run dev` runs both alongside the bridge and `ui/`. It uses `concurrently -k`, so a
 port already in use here takes the whole dev session down with it — if `npm run dev` dies
 on startup, look for a `dev:visuals` you left running.
-`i` toggles the panel, `e` the editor, `k` the output stage, `w` the wall, `f` fullscreen. **`1` says
+`i` toggles the panel, `e` the editor, `k` the output stage, `w` the wall, `f` fullscreen, and
+`l` turns to the next flow without changing the colourway. **`1` says
 "here is the one"** — it re-phases the rotation so changes land on the top of a phrase
 without changing what is on screen. Live's transport starting does the same thing by itself,
 so the key is for a set that never stops. See [the wheel](docs/wheel.md).
@@ -99,25 +104,25 @@ without the bridge noticing.
 
 ## Customising it
 
-Press **`e`** in the app for the console, over the picture so you can work on a look while
+Press **`e`** in the app for the console, over the picture so you can work on a flow while
 one is on screen. Two views:
 
 | view | the question | the scale |
 |---|---|---|
-| **design** | what is worth putting on a wall | one look |
+| **design** | what is worth putting on a wall | one flow |
 | **set** | what turns through them, and what says otherwise | the set |
 
-**Design is the product.** A canvas, a library of the looks you have made, and a browser of
+**Design is the product.** A canvas, a library of the flows you have made, and a browser of
 every node there is — the node is the row and its presets open under it, the way a device
 browser lists one, with a search box that reaches inside. It runs on its own clock and needs
 no bridge, no set and no Link: a library you can only see during a rehearsal is a library
 nobody builds.
 
-**Set is what is left above the graph.** The wheel that turns through your looks and
+**Set is what is left above the graph.** The wheel that turns through your flows and
 colourways, and the handful of songs that want to pin one instead. Most songs should have
 nothing there.
 
-Every name either view offers — songs, tracks, looks — comes from **the set** or from what
+Every name either view offers — songs, tracks, flows — comes from **the set** or from what
 you made, so it never asks you to type one.
 
 It writes `visuals/scheme.json`, which stays the record — hot-reloaded, readable, and
@@ -129,18 +134,18 @@ and a merge conflict for every roll. It is gitignored, and a fresh clone draws t
 show until you make one of your own. Loading *between* saved shows is a thing this will
 want and does not have yet.
 
-Everything that draws is a **look**, and a look is a **graph** — see [looks](docs/looks.md).
+Everything that draws is a **flow**, and a flow is a **graph** — see [flows](docs/flows.md).
 The eleven pictures and twelve effects that ship are node *modes*, so nothing in the model
-knows they exist except the node that draws them, and one look can hold as many as you like
+knows they exist except the node that draws them, and one flow can hold as many as you like
 wired however you like.
 
 The trick that makes that possible is that **a colour is a function of a point**, not a
 value in a buffer: `kaleido` asks its input for the colour at a folded point and the input
-re-evaluates itself there, so a whole look compiles to one fragment shader with no render
+re-evaluates itself there, so a whole flow compiles to one fragment shader with no render
 targets at all. The one exception is `tracks`, which is a pass because it draws once per
 playing Live track.
 
-What is on screen is [the wheel](docs/wheel.md): a rotation through your looks and
+What is on screen is [the wheel](docs/wheel.md): a rotation through your flows and
 colourways, advancing every N bars and when somebody launches a clip out of band. A song may
 pin either instead. That is the whole of the model above the graph.
 
@@ -155,5 +160,5 @@ effect, so notes cost a small MIDI Effect on each track you want them from. Mete
 beat carry it for now; a note would arrive as one more `playback` mode and nothing else would
 have to change.
 
-**One track's picture as another's input.** A look reaches a track's *meter* and not its
+**One track's picture as another's input.** A flow reaches a track's *meter* and not its
 *frame*. That needs a render target per track, which the renderer does not keep.

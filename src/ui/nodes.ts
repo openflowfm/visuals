@@ -11,10 +11,12 @@ import {
   WAVE_SHAPES,
   BLENDS,
   type Circuit,
+  type CircuitNode,
   type NodeKind,
+  type FlowDef,
   type Scheme,
 } from '../../protocol.ts';
-import { NODE_SPECS } from '../render/circuit.ts';
+import { NODE_SPECS, inletsOf, type PortSpec } from '../render/circuit.ts';
 import { freeNodeId } from './edits.ts';
 
 /**
@@ -41,7 +43,7 @@ import { freeNodeId } from './edits.ts';
  * `source` whether or not you knew where it lived.
  *
  * **Not every list under a node is a preset list.** A `track` names a track in
- * the set and a `look` names a look in the library, and those are *targets*
+ * the set and a `flow` names a flow in the library, and those are *targets*
  * rather than presets — instances of something that exists elsewhere. They stay
  * where they were, one entry each, because collapsing "Bass meter" under a
  * generic `track` node is the same mistake in reverse.
@@ -63,18 +65,56 @@ export interface Pick {
   family: string;
   /** For the search box: everything worth matching on, lowercased. */
   terms: string;
+  /**
+   * What it takes and what it gives, in the three signals — `p → c`.
+   *
+   * The metadata column, and it is this rather than a category because it is
+   * the one fact you need *before* you drop a node: whether the thing you are
+   * holding a cord from can reach it. A browser that made you drop a node to
+   * find out its inlets is a browser that costs an undo per question.
+   */
+  signature: string;
 }
 
 /**
  * One row of the browser: a node, and whatever sits under it.
  *
  * A target is an entry with nothing under it rather than a third kind of thing,
- * which is what keeps `track` and `look` reading as a flat run of names without
+ * which is what keeps a track's meter reading as a flat run of names without
  * anything here having to know they are special.
  */
 export interface Entry {
   node: Pick;
   presets: Pick[];
+}
+
+/**
+ * One row of the **flow** shelf, which is a different shelf on purpose.
+ *
+ * Flows used to sit in this list as `flow` node rows under `draw`, in the same
+ * chip with the same border as `source` and `paint` — so a graph of sixteen
+ * nodes and a single shipped shader were the same object to anyone reading the
+ * column. That is the mistake every node editor that has one has already made
+ * and undone: Blender keeps node groups in their own `Group` submenu, Unreal
+ * keeps functions in a panel of their own, and Figma marks an instance with a
+ * badge it never takes off.
+ *
+ * So a flow is not a `Pick`. It has a different row, a different mark and two
+ * verbs where a node has one — **open** it to edit, or **place** it as a node
+ * in the flow you already have open. Those were previously the same click in
+ * two different lists, which is how you end up asking what kind of node `The
+ * set` is.
+ */
+export interface FlowRow {
+  id: string;
+  name: string;
+  /** `9 nodes · reads the set`, which is the whole of why it is not a node. */
+  about: string;
+  /** How many nodes are inside. A primitive has no answer to this. */
+  size: number;
+  /** Wired by a roll, and the next roll replaces it. */
+  rolled: boolean;
+  terms: string;
 }
 
 /** What each mode is, one line each, because a browser is where you learn these. */
@@ -154,8 +194,99 @@ export function keyOf(pick: Pick): string {
   return `${pick.kind}:${pick.op ?? ''}:${pick.of ?? ''}`;
 }
 
+/**
+ * What a kind takes and what it gives, as `p n → c`.
+ *
+ * Deduplicated and in port order, because `n n → n` says nothing `n → n` does
+ * not: what you are reading off this is which cords will land, not how many.
+ * Ports whose name starts with a tilde are the flattener's own and are hidden
+ * here for the same reason the canvas hides them.
+ */
+export function signatureOf(kind: NodeKind): string {
+  const spec = NODE_SPECS[kind];
+  // Three kinds grow their inlets from their own mode, so the row is asked
+  // about a default one — the same node the row drops.
+  const bare: CircuitNode = { id: kind, kind, x: 0, y: 0, ...(spec.ops ? { op: spec.ops[0] } : {}) };
+  const side = (ports: readonly PortSpec[]) => [
+    ...new Set(ports.filter((port) => !port.name.startsWith('~')).map((port) => port.kind)),
+  ];
+  return `${side(inletsOf(bare)).join(' ')} → ${side(spec.outlets).join(' ')}`.trim();
+}
+
+/**
+ * The flow library as browser rows.
+ *
+ * Built here rather than in the page for the reason the node list is: the two
+ * shelves share a search box, and a search that reached one of them through a
+ * `terms` string and the other through an ad-hoc `includes` would drift the
+ * first time either grew a field.
+ */
+export function flowShelf(scheme: Scheme): FlowRow[] {
+  return Object.entries(scheme.flows).map(([id, def]) => {
+    const name = def.name || id;
+    const nodes = def.circuit.nodes;
+    const about = aboutFlow(def);
+    return {
+      id,
+      name,
+      about,
+      size: nodes.length,
+      rolled: def.rolled === true,
+      terms: `${name} ${id} flow ${about}`.toLowerCase(),
+    };
+  });
+}
+
+/**
+ * One line about what a flow is made of, which is more useful than its id.
+ *
+ * The node count leads because it is the whole of the difference between a flow
+ * and a primitive: a `source` has no answer to "how many nodes", and a row that
+ * says `9 nodes` cannot be mistaken for one. Whether it reads the set is the
+ * next thing anyone asks, and how many flows are inside is the only warning
+ * that opening this one is opening several.
+ */
+export function aboutFlow(def: FlowDef): string {
+  const nodes = def.circuit.nodes;
+  const inside = nodes.filter((node) => node.kind === 'flow').length;
+  return [
+    `${nodes.length} node${nodes.length === 1 ? '' : 's'}`,
+    nodes.some((node) => node.kind === 'tracks') ? 'reads the set' : null,
+    inside > 0 ? `${inside} flow${inside === 1 ? '' : 's'} inside` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+/**
+ * A flow shelf row as the thing that gets dropped on a canvas.
+ *
+ * Here rather than in the page because `drop` takes a `Pick` and there should be
+ * exactly one place that knows a flow becomes a `flow` node whose `op` is its
+ * id — the shelf row deliberately does not carry node fields, so that fact has
+ * to live somewhere and this is the only somewhere that already knows both.
+ */
+export function pickOf(row: FlowRow): Pick {
+  return {
+    label: row.name,
+    kind: 'flow',
+    op: row.id,
+    about: row.about,
+    family: NODE_FAMILIES.find((each) => each.kinds.includes('flow'))?.name ?? 'other',
+    terms: row.terms,
+    signature: signatureOf('flow'),
+  };
+}
+
+/** The flow shelf, filtered by what somebody typed. One box, two shelves. */
+export function matchingFlows(all: readonly FlowRow[], typed: string): FlowRow[] {
+  const want = typed.trim().toLowerCase();
+  if (!want) return [...all];
+  return all.filter((row) => row.terms.includes(want));
+}
+
 /** The whole browser, built from the vocabulary rather than typed out beside it. */
-export function palette(scheme: Scheme, tracks: readonly string[]): Entry[] {
+export function palette(tracks: readonly string[]): Entry[] {
   const out: Entry[] = [];
   const family = (kind: NodeKind) =>
     NODE_FAMILIES.find((each) => each.kinds.includes(kind))?.name ?? 'other';
@@ -178,6 +309,7 @@ export function palette(scheme: Scheme, tracks: readonly string[]): Entry[] {
     // The kind is in here as well as the mode, so `sine wave` and `song key`
     // find what is now labelled just `sine` and just `key` under their node.
     terms: `${label} ${kind} ${op ?? ''} ${about}`.toLowerCase(),
+    signature: signatureOf(kind),
   });
 
   const node = (
@@ -208,11 +340,10 @@ export function palette(scheme: Scheme, tracks: readonly string[]): Entry[] {
   node('tracks', 'by name', 'every playing track', NODE_SPECS.tracks.about);
   modes('source', 'source', SOURCES);
   node('paint', undefined, 'paint', NODE_SPECS.paint.about);
-  // A look is a target, not a preset — an instance of something in the library,
-  // which is why each one is its own row and searchable by its own name.
-  for (const [id, def] of Object.entries(scheme.looks)) {
-    node('look', id, def.name || id, 'Another look, whole, as one node');
-  }
+  // No flows. Every flow in the library used to be a row here, in the same chip
+  // as `source` and `paint`, which put a graph of sixteen nodes and a shipped
+  // shader side by side under one heading as if they were the same sort of
+  // thing. They have a shelf of their own now — see `flowShelf`.
 
   // Colour, and only what is actually colour: `grade` changes it where it is
   // and `spread` reads around it. The six modes that used to sit beside them
@@ -253,9 +384,9 @@ export function palette(scheme: Scheme, tracks: readonly string[]): Entry[] {
   modes('math', 'math', MATH_OPS);
   modes('wave', 'wave', WAVE_SHAPES);
 
-  // No `out`. Every look has exactly one, it arrives with the look, and it
+  // No `out`. Every flow has exactly one, it arrives with the flow, and it
   // cannot be deleted — so a browser offering another one is offering the only
-  // node in the vocabulary that makes a look refuse to compile. It was there
+  // node in the vocabulary that makes a flow refuse to compile. It was there
   // because the browser is built from the vocabulary and `out` is part of it;
   // being part of the vocabulary and being something you add are different
   // questions, and only the second one a drawer answers.
@@ -343,6 +474,7 @@ export function swapEntry(kind: NodeKind): Entry | null {
     about: ABOUT[op] ?? spec.about,
     family,
     terms: `${label} ${kind} ${op} ${ABOUT[op] ?? spec.about}`.toLowerCase(),
+    signature: signatureOf(kind),
   });
   return {
     node: pick(spec.ops[0], spec.name),

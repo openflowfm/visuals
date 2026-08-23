@@ -184,7 +184,7 @@ export function useWall(active: boolean): {
     if (!active) return;
     let gone = false;
     let watched: ScreenDetails | null = null;
-    const look = () => {
+    const flow = () => {
       void survey(false).then((found) => {
         if (gone) return;
         setDisplays(found);
@@ -193,16 +193,16 @@ export function useWall(active: boolean): {
         // arrives later. Only the browser knows, and only once it has told us
         // anything at all is there an object to hear it on.
         if (seen && seen !== watched) {
-          watched?.removeEventListener('screenschange', look);
+          watched?.removeEventListener('screenschange', flow);
           watched = seen;
-          watched.addEventListener('screenschange', look);
+          watched.addEventListener('screenschange', flow);
         }
       });
     };
-    look();
+    flow();
     return () => {
       gone = true;
-      watched?.removeEventListener('screenschange', look);
+      watched?.removeEventListener('screenschange', flow);
     };
   }, [active]);
 

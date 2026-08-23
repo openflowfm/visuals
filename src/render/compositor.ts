@@ -1,7 +1,7 @@
 import type { Scheme, Show } from '../../protocol.ts';
 import { flatten } from './circuit.ts';
 import { createFeed, type Banks } from './feed.ts';
-import { banksOf, buildLook, signatureOf } from './look.ts';
+import { banksOf, buildFlow, signatureOf } from './flow.ts';
 import { compile, createTarget, drawFullscreen, type Program } from './gl.ts';
 import { columns, warpFor, SQUARE, type Corners } from './output.ts';
 
@@ -9,18 +9,18 @@ import { columns, warpFor, SQUARE, type Corners } from './output.ts';
  * Two passes and an output stage, where there used to be a stack of them.
  *
  * The renderer is a graph now, and a graph of colours needs no buffers — a
- * colour is an expression evaluated at a point, so a whole look compiles to one
+ * colour is an expression evaluated at a point, so a whole flow compiles to one
  * fragment shader. See `circuit.ts`.
  *
  * The one thing that cannot be an expression is the **set**. A `tracks` node
  * draws the same picture once per playing Live track with a different colour,
  * meter and fader each time, and a fragment shader cannot loop over a varying
  * number of those cheaply. So it stays a pass: every playing track drawn into
- * one target, which the look then reads as a texture.
+ * one target, which the flow then reads as a texture.
  *
  * **What each pass is fed is [not this file's](./feed.ts)**, and the split is
  * recent. The node faces on the canvas are the other front end, they were
- * feeding their own looks a different set of numbers, and the two lists drifted
+ * feeding their own flows a different set of numbers, and the two lists drifted
  * until the small picture and the big one could not be compared. What is left
  * here is what a *wall* adds: a target to draw into, a keystone and a gain.
  */
@@ -37,13 +37,13 @@ export interface Compositor {
 
 export interface Output {
   corners: Corners;
-  /** Master brightness. 1 is what the look asked for. */
+  /** Master brightness. 1 is what the flow asked for. */
   gain: number;
   /** Overlay a grid, in source space, so it arrives on the wall already warped. */
   test: boolean;
 }
 
-/** A built look, and enough about it to know when it stopped being current. */
+/** A built flow, and enough about it to know when it stopped being current. */
 interface Built {
   program: Program | null;
   /** What it was compiled from. Structure only — a set number is a uniform. */
@@ -51,7 +51,7 @@ interface Built {
   error: string | null;
   /** Re-read every frame, because a value is a uniform. See `banksOf`. */
   banks: Banks;
-  /** How each Live track draws, or null when the look never asked for the set. */
+  /** How each Live track draws, or null when the flow never asked for the set. */
   draws: string | null;
 }
 
@@ -75,28 +75,28 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
   }
 
   let error: string | null = null;
-  const looks = new Map<string, Built>();
+  const flows = new Map<string, Built>();
   const feed = createFeed(gl);
 
-  /** Where the set's own picture lands, for the look to read. */
+  /** Where the set's own picture lands, for the flow to read. */
   const live = createTarget(gl);
-  /** Where the look lands, before the output stage takes it to the screen. */
+  /** Where the flow lands, before the output stage takes it to the screen. */
   const out = createTarget(gl);
   let warp = columns(warpFor(SQUARE));
   let gain = 1;
   let test = false;
 
-  const lookProgram = (scheme: Scheme, id: string): Built => {
-    const signature = signatureOf(scheme.looks, id);
-    const held = looks.get(id);
-    const { circuit } = flatten(scheme.looks, id);
+  const flowProgram = (scheme: Scheme, id: string): Built => {
+    const signature = signatureOf(scheme.flows, id);
+    const held = flows.get(id);
+    const { circuit } = flatten(scheme.flows, id);
     if (held && held.signature === signature) {
       held.banks = banksOf(circuit);
       return held;
     }
     if (held?.program) gl.deleteProgram(held.program.program);
 
-    const compiled = buildLook(scheme.looks, id);
+    const compiled = buildFlow(scheme.flows, id);
     const built: Built = {
       program: null,
       signature,
@@ -106,15 +106,15 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
     };
     if (compiled.source) {
       try {
-        built.program = compile(gl, compiled.source, `look:${id}`);
+        built.program = compile(gl, compiled.source, `flow:${id}`);
         built.error = null;
       } catch (err) {
         built.error = (err as Error).message;
       }
     }
-    if (built.error) error = `${scheme.looks[id]?.name || id}: ${built.error}`;
+    if (built.error) error = `${scheme.flows[id]?.name || id}: ${built.error}`;
     else error = null;
-    looks.set(id, built);
+    flows.set(id, built);
     return built;
   };
 
@@ -132,7 +132,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
    * were is the one way this rig can cost twice what it should: the same graph,
    * the same shader, at the same 1920, for a picture nobody is projecting. So a
    * preview draws at `PREVIEW_EDGE` — a quarter of the pixels, which is a tenth
-   * of the frame's cost and a picture you can still judge a look on.
+   * of the frame's cost and a picture you can still judge a flow on.
    */
   const MAX_EDGE = Number(new URLSearchParams(location.search).get('maxEdge')) || 1920;
   const PREVIEW_EDGE = 960;
@@ -178,7 +178,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       live.free();
       out.free();
       feed.free();
-      for (const built of looks.values()) if (built.program) gl.deleteProgram(built.program.program);
+      for (const built of flows.values()) if (built.program) gl.deleteProgram(built.program.program);
     },
     frame(show, scheme, beat, seconds, dt) {
       resize();
@@ -186,16 +186,16 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       gl.disable(gl.DEPTH_TEST);
 
       const at = { show, scheme, beat, seconds, dt, width: canvas.width, height: canvas.height };
-      const id = show.look;
-      const built = scheme && id ? lookProgram(scheme, id) : null;
+      const id = show.flow;
+      const built = scheme && id ? flowProgram(scheme, id) : null;
 
-      // --- the set's own picture, when the look asked for it ---------------
+      // --- the set's own picture, when the flow asked for it ---------------
       gl.bindFramebuffer(gl.FRAMEBUFFER, live.framebuffer);
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       if (built?.draws) feed.drawSet(at, built.draws);
 
-      // --- the look --------------------------------------------------------
+      // --- the flow --------------------------------------------------------
       gl.bindFramebuffer(gl.FRAMEBUFFER, out.framebuffer);
       gl.clearColor(0, 0, 0, 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
@@ -203,7 +203,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
 
       if (built?.program) {
         gl.useProgram(built.program.program);
-        feed.look(built.program, at, built.banks);
+        feed.flow(built.program, at, built.banks);
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, live.texture);
         gl.uniform1i(built.program.uniform('uTracksTex'), 0);

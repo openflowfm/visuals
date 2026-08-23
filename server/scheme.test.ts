@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { hint } from '../hints.ts';
-import { NODE_FAMILIES, looksUsedBy } from '../protocol.ts';
-import { compileLook, inletsOf, portId, reachesOut, repaired, splitPort } from '../src/render/circuit.ts';
+import { NODE_FAMILIES, flowsUsedBy } from '../protocol.ts';
+import { compileFlow, inletsOf, portId, reachesOut, repaired, splitPort } from '../src/render/circuit.ts';
 import { BUILT_IN, merge } from './scheme.ts';
 
 /**
@@ -80,16 +80,16 @@ describe('the built-in scheme', () => {
   it('is a show on its own, with nothing configured', () => {
     // The rule the file is designed around. A rig that draws nothing until it
     // has been configured is a rig nobody configures.
-    expect(Object.keys(BUILT_IN.looks).length).toBeGreaterThan(1);
+    expect(Object.keys(BUILT_IN.flows).length).toBeGreaterThan(1);
     expect(Object.keys(BUILT_IN.colorways).length).toBeGreaterThan(1);
-    expect(BUILT_IN.looks[BUILT_IN.defaults.look]).toBeDefined();
+    expect(BUILT_IN.flows[BUILT_IN.defaults.flow]).toBeDefined();
     expect(BUILT_IN.colorways[BUILT_IN.defaults.colorway]).toBeDefined();
   });
 
   it('ships colourways that are five long, loud, and led by the loudest', () => {
     // Saturation on its own says nothing — a pale tint and a fire engine both
     // read 100% — so chroma is the one that means loud. The first is asserted
-    // because a look that ignores the set draws every generator from `colors[0]`,
+    // because a flow that ignores the set draws every generator from `colors[0]`,
     // and one light member is asserted because a set of five loud hues has
     // nothing in it to read an edge against.
     const read = (hex: string) => {
@@ -109,23 +109,23 @@ describe('the built-in scheme', () => {
   });
 
   it('turns through everything, because nothing is narrowed', () => {
-    expect(BUILT_IN.rotation.looks).toEqual([]);
+    expect(BUILT_IN.rotation.flows).toEqual([]);
     expect(BUILT_IN.rotation.colorways).toEqual([]);
     expect(BUILT_IN.rotation.bars).toBeGreaterThan(0);
   });
 
-  it('every look it ships compiles', () => {
+  it('every flow it ships compiles', () => {
     // The library is the only documentation of the vocabulary anyone will read,
     // so one of them failing to build is four-quarters of the manual gone.
-    for (const [id, def] of Object.entries(BUILT_IN.looks)) {
-      const built = compileLook(BUILT_IN.looks, id);
+    for (const [id, def] of Object.entries(BUILT_IN.flows)) {
+      const built = compileFlow(BUILT_IN.flows, id);
       expect(built.error, `${def.name}: ${built.error}`).toBeNull();
       expect(built.source).toContain('void main()');
     }
   });
 
   it('keeps values on value nodes and smoothing on track nodes', () => {
-    const nodes = Object.values(BUILT_IN.looks).flatMap((def) => def.circuit.nodes);
+    const nodes = Object.values(BUILT_IN.flows).flatMap((def) => def.circuit.nodes);
     const tracks = nodes.filter((node) => node.kind === 'track');
     const values = nodes.filter((node) => node.kind === 'value');
     expect(tracks.length).toBeGreaterThan(0);
@@ -141,10 +141,10 @@ describe('the built-in scheme', () => {
   });
 
   it('ships nothing that draws nothing', () => {
-    // A shipped look with a node parked off to one side is fine; a shipped look
+    // A shipped flow with a node parked off to one side is fine; a shipped flow
     // with nothing wired to `out` is a black frame with a library entry's name
     // on it, and it is the first thing anyone opens.
-    for (const [id, def] of Object.entries(BUILT_IN.looks)) {
+    for (const [id, def] of Object.entries(BUILT_IN.flows)) {
       expect(reachesOut(def.circuit), def.name).toBe(true);
       expect(repaired(def.circuit), `${id} needs no repair`).toEqual(def.circuit);
     }
@@ -156,45 +156,45 @@ describe('the built-in scheme', () => {
     // half that makes this model unusual — geometry, and numbers becoming
     // colours — invisible to everyone who learns it by taking these apart.
     const kinds = new Set(
-      Object.values(BUILT_IN.looks).flatMap((def) => def.circuit.nodes.map((node) => node.kind)),
+      Object.values(BUILT_IN.flows).flatMap((def) => def.circuit.nodes.map((node) => node.kind)),
     );
     for (const family of NODE_FAMILIES) {
       expect(family.kinds.some((kind) => kinds.has(kind)), family.name).toBe(true);
     }
   });
 
-  it('ships one look built out of the others, and it names looks that exist', () => {
-    // A look inside a look is the claim the vocabulary makes about itself, and a
+  it('ships one flow built out of the others, and it names flows that exist', () => {
+    // A flow inside a flow is the claim the vocabulary makes about itself, and a
     // claim with no example in the library is one nobody believes.
     //
-    // The names are the fragile part and the reason this is pinned: a `look` node
-    // holds an **id**, and a shipped look whose id changed would make the graph
-    // that used it go quiet rather than fail — which is right for a look somebody
+    // The names are the fragile part and the reason this is pinned: a `flow` node
+    // holds an **id**, and a shipped flow whose id changed would make the graph
+    // that used it go quiet rather than fail — which is right for a flow somebody
     // deleted and wrong for one that ships beside it.
-    const nested = Object.entries(BUILT_IN.looks).filter(
-      ([, def]) => looksUsedBy(def.circuit).length > 0,
+    const nested = Object.entries(BUILT_IN.flows).filter(
+      ([, def]) => flowsUsedBy(def.circuit).length > 0,
     );
     expect(nested.length).toBeGreaterThan(0);
     for (const [id, def] of nested) {
-      for (const used of looksUsedBy(def.circuit)) {
-        expect(BUILT_IN.looks[used], `${def.name} uses ${used}`).toBeDefined();
+      for (const used of flowsUsedBy(def.circuit)) {
+        expect(BUILT_IN.flows[used], `${def.name} uses ${used}`).toBeDefined();
       }
-      expect(compileLook(BUILT_IN.looks, id).error, def.name).toBeNull();
+      expect(compileFlow(BUILT_IN.flows, id).error, def.name).toBeNull();
     }
   });
 
   it('draws something with no set playing', () => {
     // Sometimes all that is running is the click. A wheel that turns through
-    // twelve looks and goes black on five of them between songs is a wheel
-    // nobody leaves running, so every look carries a picture of its own
+    // twelve flows and goes black on five of them between songs is a wheel
+    // nobody leaves running, so every flow carries a picture of its own
     // underneath whatever the set is doing.
     //
     // There used to be an exemption here for `The set`, which was one `tracks`
-    // node and nothing else. It went, and so did the exemption: a look that is
+    // node and nothing else. It went, and so did the exemption: a flow that is
     // a single node is a node, and the node browser already offers it.
-    for (const [, def] of Object.entries(BUILT_IN.looks)) {
+    for (const [, def] of Object.entries(BUILT_IN.flows)) {
       const kinds = new Set(def.circuit.nodes.map((node) => node.kind));
-      const draws = kinds.has('source') || kinds.has('paint') || kinds.has('look');
+      const draws = kinds.has('source') || kinds.has('paint') || kinds.has('flow');
       expect(draws, `${def.name} has nothing to draw without the set`).toBe(true);
     }
   });
@@ -206,7 +206,7 @@ describe('the built-in scheme', () => {
     // least charge. The fix is in the wiring rather than in the number — every
     // meter that reaches an energy is floored by something on the clock — and
     // this is the assertion that keeps it there.
-    const feeding = (def: (typeof BUILT_IN.looks)[string], inlet: string): Set<string> => {
+    const feeding = (def: (typeof BUILT_IN.flows)[string], inlet: string): Set<string> => {
       const byId = new Map(def.circuit.nodes.map((node) => [node.id, node]));
       const feeds = new Map(def.circuit.cords.map((cord) => [cord.to, cord.from]));
       const kinds = new Set<string>();
@@ -224,7 +224,7 @@ describe('the built-in scheme', () => {
       return kinds;
     };
 
-    for (const def of Object.values(BUILT_IN.looks)) {
+    for (const def of Object.values(BUILT_IN.flows)) {
       for (const node of def.circuit.nodes) {
         for (const port of inletsOf(node)) {
           if (port.name !== 'energy') continue;
@@ -237,14 +237,14 @@ describe('the built-in scheme', () => {
     }
   });
 
-  it('ships a look that reads the set, and one that does not', () => {
+  it('ships a flow that reads the set, and one that does not', () => {
     // Both halves have to exist in the library or half the vocabulary is
     // invisible to anyone who learns it by taking these apart.
-    const reads = Object.values(BUILT_IN.looks).filter((def) =>
+    const reads = Object.values(BUILT_IN.flows).filter((def) =>
       def.circuit.nodes.some((n) => n.kind === 'tracks'),
     );
     expect(reads.length).toBeGreaterThan(0);
-    expect(reads.length).toBeLessThan(Object.keys(BUILT_IN.looks).length);
+    expect(reads.length).toBeLessThan(Object.keys(BUILT_IN.flows).length);
   });
 });
 
@@ -255,12 +255,12 @@ describe('reading a file', () => {
     expect(Object.keys(merged.colorways).length).toBeGreaterThan(1);
   });
 
-  it('keeps the looks that ship alongside one the file adds', () => {
+  it('keeps the flows that ship alongside one the file adds', () => {
     const merged = merge({
-      looks: { mine: { name: 'Mine', circuit: { nodes: [], cords: [] } } },
+      flows: { mine: { name: 'Mine', circuit: { nodes: [], cords: [] } } },
     });
-    expect(merged.looks.mine).toBeDefined();
-    expect(Object.keys(merged.looks).length).toBeGreaterThan(1);
+    expect(merged.flows.mine).toBeDefined();
+    expect(Object.keys(merged.flows).length).toBeGreaterThan(1);
   });
 
   it('reads a song written as a bare colourway name', () => {
@@ -276,7 +276,14 @@ describe('reading a file', () => {
 });
 
 describe('a file written when the cascade existed', () => {
-  /** Most of a real scheme.json from before the collapse. */
+  /**
+   * Most of a real scheme.json from before the collapse.
+   *
+   * Spelled the way that file was spelled, which means `looks` throughout — the
+   * word this vocabulary used before a graph was called a flow. A fixture
+   * updated to the current spelling would be a fixture that stopped testing the
+   * thing it is named after.
+   */
   const old = {
     colorways: { rust: ['#aa4422'] },
     songs: { sandstorm: { colorway: 'rust', bias: 0.2 } },
@@ -307,25 +314,25 @@ describe('a file written when the cascade existed', () => {
   it('keeps what a person made and drops what the cascade decided', () => {
     // Inventing a graph out of a layer binding would produce something nobody
     // wrote and nobody wants to debug, so the bindings go. The colourways, the
-    // song assignments and any look that was a graph are work, so they stay.
+    // song assignments and any flow that was a graph are work, so they stay.
     const merged = merge(old as never);
     expect(merged.colorways.rust).toEqual(['#aa4422']);
     expect(merged.songs.sandstorm).toEqual({ colorway: 'rust' });
-    expect(merged.looks.mine).toBeDefined();
+    expect(merged.flows.mine).toBeDefined();
     expect((merged as unknown as Record<string, unknown>).layers).toBeUndefined();
     expect((merged as unknown as Record<string, unknown>).archetypes).toBeUndefined();
   });
 
-  it('does not carry a look that was only a built-in', () => {
+  it('does not carry a flow that was only a built-in', () => {
     // A built-in is a node mode now. A library full of twenty-three entries
     // that are one node each is worse than an empty one.
-    expect(merge(old as never).looks.strobe).toBeUndefined();
+    expect(merge(old as never).flows.strobe).toBeUndefined();
   });
 
   it('rewords a graph written against the old vocabulary', () => {
     // `sample` meant "the frame that arrived", which was the layer underneath in
     // a stack. The nearest thing to that now is the set's own picture.
-    const kept = merge(old as never).looks.mine.circuit;
+    const kept = merge(old as never).flows.mine.circuit;
     expect(kept.nodes.find((n) => n.id === 's')?.kind).toBe('tracks');
     expect(kept.nodes.find((n) => n.id === 's')?.op).toBe('by name');
     // `energy` and `amount` were signal modes and are not any more.
@@ -341,7 +348,7 @@ describe('a file written when the cascade existed', () => {
     // fall is written down at the value it used to mean rather than inheriting
     // the merged node's zero.
     const merged = merge({
-      looks: {
+      flows: {
         mine: {
           name: 'Mine',
           circuit: {
@@ -357,7 +364,7 @@ describe('a file written when the cascade existed', () => {
           },
         },
       },
-    } as never).looks.mine.circuit;
+    } as never).flows.mine.circuit;
     const node = merged.nodes.find((n) => n.id === 'e');
     expect(node?.kind).toBe('track');
     expect(node?.of).toBe('Bass');
@@ -370,7 +377,7 @@ describe('a file written when the cascade existed', () => {
 
   it('moves a track smoothing from value to smooth, with the new spelling winning', () => {
     const merged = merge({
-      looks: {
+      flows: {
         mine: {
           name: 'Mine',
           circuit: {
@@ -393,7 +400,7 @@ describe('a file written when the cascade existed', () => {
           },
         },
       },
-    }).looks.mine.circuit;
+    }).flows.mine.circuit;
     const old = merged.nodes.find((node) => node.id === 'old');
     const both = merged.nodes.find((node) => node.id === 'both');
     const dial = merged.nodes.find((node) => node.id === 'dial');
@@ -412,7 +419,7 @@ describe('a file written when the cascade existed', () => {
     // because all twelve kept their `c` inlet and their `c` outlet: only the
     // kind changes, and a cord names ports rather than kinds.
     const kept = merge({
-      looks: {
+      flows: {
         mine: {
           name: 'Mine',
           circuit: {
@@ -434,7 +441,7 @@ describe('a file written when the cascade existed', () => {
           },
         },
       },
-    } as never).looks.mine.circuit;
+    } as never).flows.mine.circuit;
     const kindOf = (id: string) => kept.nodes.find((n) => n.id === id)?.kind;
     expect(kindOf('k')).toBe('lens');
     expect(kindOf('b')).toBe('spread');
@@ -444,7 +451,7 @@ describe('a file written when the cascade existed', () => {
     // Two of them collided with a name beside them once the families existed:
     // posterize's `levels` with the mode next to it, shift's `spread` with the
     // kind it landed in. A number that kept a stale name would be trimmed away by
-    // `repaired` and the look would quietly revert to a default. The file spells
+    // `repaired` and the flow would quietly revert to a default. The file spells
     // the map `knobs`, as a file of that vintage would, so this covers the
     // rename and the split arriving together.
     expect(kept.nodes.find((n) => n.id === 'p')?.values).toEqual({ steps: 0.8 });
@@ -454,10 +461,10 @@ describe('a file written when the cascade existed', () => {
   it('reads the numbers on a node whichever of the two names the file uses', () => {
     // `knobs` is what `values` was called. A file written before the word went
     // is every file anybody already has, and a number that failed to come
-    // across is not a parse error — it is a look that opens with its inlets
+    // across is not a parse error — it is a flow that opens with its inlets
     // quietly back at their defaults, on the night it mattered.
     const kept = merge({
-      looks: {
+      flows: {
         mine: {
           name: 'Mine',
           circuit: {
@@ -480,7 +487,7 @@ describe('a file written when the cascade existed', () => {
           },
         },
       },
-    } as never).looks.mine.circuit;
+    } as never).flows.mine.circuit;
     const ripple = kept.nodes.find((n) => n.id === 'r');
     expect(ripple?.values).toEqual({ waves: 0.72, depth: 0.4 });
     // And the old spelling is gone rather than sitting beside the new one:
@@ -491,7 +498,7 @@ describe('a file written when the cascade existed', () => {
 
   it('makes the five geometry kinds modes of the lens they always were', () => {
     const kept = merge({
-      looks: {
+      flows: {
         mine: {
           name: 'Mine',
           circuit: {
@@ -511,7 +518,7 @@ describe('a file written when the cascade existed', () => {
           },
         },
       },
-    } as never).looks.mine.circuit;
+    } as never).flows.mine.circuit;
     const fold = kept.nodes.find((n) => n.id === 'f');
     expect(fold?.kind).toBe('lens');
     expect(fold?.op).toBe('fold');
@@ -528,7 +535,7 @@ describe('a file written when the cascade existed', () => {
     // `level` was the only number outlet in the vocabulary not called `n`, and
     // a cord addressed to a port that is not there is one `repaired` deletes.
     const merged = merge({
-      looks: {
+      flows: {
         mine: {
           name: 'Mine',
           circuit: {
@@ -544,7 +551,7 @@ describe('a file written when the cascade existed', () => {
           },
         },
       },
-    } as never).looks.mine.circuit;
+    } as never).flows.mine.circuit;
     const node = merged.nodes.find((n) => n.id === 't');
     expect(node?.of).toBe('Drums');
     expect(node?.op).toBe('level');
@@ -555,7 +562,7 @@ describe('a file written when the cascade existed', () => {
     const merged = merge(old as never);
     expect(merged.defaults.pace).toBe(1);
     expect(merged.defaults.colorway).toBe('rust');
-    expect(merged.looks[merged.defaults.look]).toBeDefined();
+    expect(merged.flows[merged.defaults.flow]).toBeDefined();
   });
 
   it('leaves a file already written in the new spelling alone', () => {
@@ -567,21 +574,21 @@ describe('a file written when the cascade existed', () => {
       cords: [],
     };
     const now = merge({
-      looks: { mine: { name: 'Mine', circuit } },
-      rotation: { looks: ['mine'], colorways: [], bars: 16, onClip: false, colorEvery: 32 },
+      flows: { mine: { name: 'Mine', circuit } },
+      rotation: { flows: ['mine'], colorways: [], bars: 16, onClip: false, colorEvery: 32 },
     });
     expect(now.rotation.bars).toBe(16);
-    expect(now.rotation.looks).toEqual(['mine']);
-    expect(now.looks.mine.circuit).toEqual(circuit);
+    expect(now.rotation.flows).toEqual(['mine']);
+    expect(now.flows.mine.circuit).toEqual(circuit);
   });
 
-  it('gives a look somewhere to leave from, whatever the file says', () => {
+  it('gives a flow somewhere to leave from, whatever the file says', () => {
     // This is the one door: a scheme reaches the renderer off disk or off the
-    // wire and both come through `merge`. A look with no `out` is a compile
+    // wire and both come through `merge`. A flow with no `out` is a compile
     // error and a black wall, and the message is about a file nobody has open —
     // so it is repaired here, once, and written back that way.
     const now = merge({
-      looks: {
+      flows: {
         empty: { name: 'Empty', circuit: { nodes: [], cords: [] } },
         two: {
           name: 'Two',
@@ -597,11 +604,83 @@ describe('a file written when the cascade existed', () => {
       },
     });
     for (const id of ['empty', 'two']) {
-      const ends = now.looks[id].circuit.nodes.filter((node) => node.kind === 'out');
+      const ends = now.flows[id].circuit.nodes.filter((node) => node.kind === 'out');
       expect(ends, id).toHaveLength(1);
-      expect(compileLook(now.looks, id).error, id).toBeNull();
+      expect(compileFlow(now.flows, id).error, id).toBeNull();
     }
     // The one that was drawing survives, not the one that was written first.
-    expect(now.looks.two.circuit.nodes.filter((n) => n.kind === 'out')[0].id).toBe('b');
+    expect(now.flows.two.circuit.nodes.filter((n) => n.kind === 'out')[0].id).toBe('b');
+  });
+});
+
+describe('a file written when a flow was called a look', () => {
+  /**
+   * The whole of the rename, in one file.
+   *
+   * Five keys carried the word and every one of them is here, because a file
+   * that migrated its library but not its wheel comes back with a rotation
+   * pointing at ids nothing has — and the failure of that is a wheel that turns
+   * through nothing, at a gig, with no message about why.
+   */
+  const was = {
+    looks: {
+      mine: {
+        name: 'Mine',
+        circuit: {
+          nodes: [
+            { id: 'inner', kind: 'look', op: 'outline', x: 0, y: 0 },
+            { id: 'o', kind: 'out', x: 200, y: 0 },
+          ],
+          cords: [{ from: 'inner/c', to: 'o/c' }],
+        },
+      },
+    },
+    rotation: { looks: ['mine', 'outline'], bars: 4 },
+    songs: { sandstorm: { colorway: 'ember', looks: ['mine'] } },
+    defaults: { colorway: 'ember', look: 'mine', pace: 1, draws: 'by name' },
+  };
+
+  it('reads the library, the wheel, the pins and the default', () => {
+    const now = merge(was as never);
+    expect(now.flows.mine).toBeDefined();
+    expect(now.rotation.flows).toEqual(['mine', 'outline']);
+    expect(now.rotation.bars).toBe(4);
+    expect(now.songs.sandstorm.flows).toEqual(['mine']);
+    expect(now.defaults.flow).toBe('mine');
+    // The old spellings leave, or the next save writes a file that says both.
+    const bare = now as unknown as Record<string, unknown>;
+    expect(bare.looks).toBeUndefined();
+    expect((now.rotation as unknown as Record<string, unknown>).looks).toBeUndefined();
+  });
+
+  it('renames the node kind without moving a cord', () => {
+    // `op` was a flow id under both spellings, so this is the word and nothing
+    // else — which is why it can be done to a library people already have.
+    const now = merge(was as never);
+    const inner = now.flows.mine.circuit.nodes.find((node) => node.id === 'inner');
+    expect(inner?.kind).toBe('flow');
+    expect(inner?.op).toBe('outline');
+    expect(now.flows.mine.circuit.cords).toEqual([{ from: 'inner/c', to: 'o/c' }]);
+    expect(compileFlow(now.flows, 'mine').error).toBeNull();
+  });
+
+  it('sends a file that defaulted to The set back to the built-in default', () => {
+    // `The set` was one `tracks` node and is gone. A file that named it is a
+    // file naming a flow nobody has, and the only honest answer to that is the
+    // default everyone has.
+    const now = merge({ defaults: { look: 'live', colorway: 'ember', pace: 0 } } as never);
+    expect(now.defaults.flow).toBe(BUILT_IN.defaults.flow);
+    expect(now.flows[now.defaults.flow]).toBeDefined();
+  });
+
+  it('leaves a file that already says flow alone', () => {
+    // The bug this replaced rebuilt `defaults` out of `colorway` and `pace` and
+    // dropped the rest, so a default flow set in the editor was reset on the
+    // next read. It never showed because the only value anyone had was the
+    // built-in one.
+    const now = merge({ defaults: { flow: 'outline', colorway: 'cold', pace: 2, draws: 'by name' } } as never);
+    expect(now.defaults.flow).toBe('outline');
+    expect(now.defaults.colorway).toBe('cold');
+    expect(now.defaults.pace).toBe(2);
   });
 });

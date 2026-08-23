@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import type { Clock } from './useShow.ts';
 
 /**
- * A clock of the designer's own, so a look can be built with nothing playing.
+ * A clock of the designer's own, so a flow can be built with nothing playing.
  *
  * This is the change that makes the library-first workflow possible. Everything
  * in here used to read Link through the show — which is right on stage and
  * exactly wrong at a desk, because it made *Ableton running* a precondition for
- * drawing a picture. You cannot build a library of looks you can only see during
+ * drawing a picture. You cannot build a library of flows you can only see during
  * a rehearsal.
  *
  * So the designer free-runs by default and can be told to follow the room when

@@ -37,7 +37,7 @@ const RESTING: Show = {
   at: 0,
   master: 0,
   tracks: [],
-  look: null,
+  flow: null,
   pinned: false,
   colorway: null,
   colors: [0xffffff],
@@ -68,6 +68,8 @@ export function useShow(): {
   save(next: Scheme): void;
   /** "The one is here." Nothing to carry: when it arrives is the message. */
   downbeat(): void;
+  /** Turn only the flow wheel once, for every screen attached to the server. */
+  nextFlow(): void;
   clock: Clock;
   online: boolean;
 } {
@@ -191,7 +193,12 @@ export function useShow(): {
     if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ kind: 'downbeat' }));
   }).current;
 
-  return { show, showRef: held, scheme, grid, save, downbeat, clock, online };
+  const nextFlow = useRef(() => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ kind: 'next-flow' }));
+  }).current;
+
+  return { show, showRef: held, scheme, grid, save, downbeat, nextFlow, clock, online };
 }
 
 export { RESTING };

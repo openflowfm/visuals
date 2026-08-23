@@ -1,4 +1,4 @@
-import type { Circuit, LookDef, Scheme } from '../../protocol.ts';
+import type { Circuit, FlowDef, Scheme } from '../../protocol.ts';
 import { bareCircuit, inletsOf, keepValues, splitPort, starterCircuit } from '../render/circuit.ts';
 
 /**
@@ -10,9 +10,9 @@ import { bareCircuit, inletsOf, keepValues, splitPort, starterCircuit } from '..
  * whole rather than a patch.
  */
 
-/** Every look, by id, in the order a browser should list them. */
-export function lookList(scheme: Scheme): { id: string; def: LookDef }[] {
-  return Object.entries(scheme.looks)
+/** Every flow, by id, in the order a browser should list them. */
+export function flowList(scheme: Scheme): { id: string; def: FlowDef }[] {
+  return Object.entries(scheme.flows)
     .map(([id, def]) => ({ id, def }))
     .sort((a, b) => (a.def.name || a.id).localeCompare(b.def.name || b.id));
 }
@@ -23,16 +23,16 @@ export function toggleId(list: readonly string[] | undefined, id: string, on: bo
   return on ? (held.includes(id) ? [...held] : [...held, id]) : held.filter((x) => x !== id);
 }
 
-/** The next free `look*` id. Ids are stable and never shown; names are neither. */
-export function freeLookId(scheme: Scheme): string {
+/** The next free `flow*` id. Ids are stable and never shown; names are neither. */
+export function freeFlowId(scheme: Scheme): string {
   for (let n = 1; ; n++) {
-    const id = `look${n}`;
-    if (!scheme.looks[id]) return id;
+    const id = `flow${n}`;
+    if (!scheme.flows[id]) return id;
   }
 }
 
 /**
- * A new look, and which of the two starts it gets.
+ * A new flow, and which of the two starts it gets.
  *
  * Neither is an empty canvas. An empty canvas asks you to know the vocabulary
  * before you have seen it work, and the first thing anyone wants is to move one
@@ -43,32 +43,32 @@ export function freeLookId(scheme: Scheme): string {
  * have decided anything, and taking the tracks node out should be a deliberate
  * act rather than the default state.
  */
-export function addLook(scheme: Scheme, shape: 'full' | 'bare' = 'full'): {
+export function addFlow(scheme: Scheme, shape: 'full' | 'bare' = 'full'): {
   scheme: Scheme;
   id: string;
 } {
-  const id = freeLookId(scheme);
-  const used = new Set(Object.values(scheme.looks).map((def) => def.name));
-  let name = 'New look';
-  for (let n = 2; used.has(name); n++) name = `New look ${n}`;
+  const id = freeFlowId(scheme);
+  const used = new Set(Object.values(scheme.flows).map((def) => def.name));
+  let name = 'New flow';
+  for (let n = 2; used.has(name); n++) name = `New flow ${n}`;
   const circuit = shape === 'bare' ? bareCircuit() : starterCircuit();
-  return { id, scheme: { ...scheme, looks: { ...scheme.looks, [id]: { name, circuit } } } };
+  return { id, scheme: { ...scheme, flows: { ...scheme.flows, [id]: { name, circuit } } } };
 }
 
 /** A copy, to take apart without losing the one it came from. */
-export function forkLook(scheme: Scheme, from: string): { scheme: Scheme; id: string } {
-  const def = scheme.looks[from];
-  if (!def) return addLook(scheme);
-  const id = freeLookId(scheme);
-  const used = new Set(Object.values(scheme.looks).map((each) => each.name));
+export function forkFlow(scheme: Scheme, from: string): { scheme: Scheme; id: string } {
+  const def = scheme.flows[from];
+  if (!def) return addFlow(scheme);
+  const id = freeFlowId(scheme);
+  const used = new Set(Object.values(scheme.flows).map((each) => each.name));
   let name = `${def.name} copy`;
   for (let n = 2; used.has(name); n++) name = `${def.name} copy ${n}`;
   return {
     id,
     scheme: {
       ...scheme,
-      looks: {
-        ...scheme.looks,
+      flows: {
+        ...scheme.flows,
         // Deep enough that editing the copy cannot reach the original. A shallow
         // one shares the node array, and the first drag moves both.
         [id]: {
@@ -76,7 +76,7 @@ export function forkLook(scheme: Scheme, from: string): { scheme: Scheme; id: st
           circuit: {
             // The values as well as the node, because a spread is one level
             // deep and the map they live in would otherwise be the same object
-            // in both looks — one control turning two graphs.
+            // in both flows — one control turning two graphs.
             nodes: def.circuit.nodes.map((node) => ({
               ...node,
               ...(node.values ? { values: { ...node.values } } : {}),
@@ -90,48 +90,48 @@ export function forkLook(scheme: Scheme, from: string): { scheme: Scheme; id: st
 }
 
 /**
- * Delete a look, and every reference to it.
+ * Delete a flow, and every reference to it.
  *
  * References are in two places now: the rotation's pool and any song that pinned
- * it — and, since a look can contain a look, in other graphs. A `look` node
+ * it — and, since a flow can contain a flow, in other graphs. A `flow` node
  * pointing at nothing draws nothing rather than failing, so those are left
  * where they are and the node says so on its face. Deleting them would silently
  * rewire somebody's graph.
  */
-export function dropLook(scheme: Scheme, id: string): Scheme {
-  const looks = { ...scheme.looks };
-  delete looks[id];
+export function dropFlow(scheme: Scheme, id: string): Scheme {
+  const flows = { ...scheme.flows };
+  delete flows[id];
   const songs: Scheme['songs'] = {};
   for (const [name, spec] of Object.entries(scheme.songs)) {
     const kept = { ...spec };
-    if (kept.looks) kept.looks = kept.looks.filter((each) => each !== id);
-    if (kept.looks?.length === 0) delete kept.looks;
+    if (kept.flows) kept.flows = kept.flows.filter((each) => each !== id);
+    if (kept.flows?.length === 0) delete kept.flows;
     if (Object.keys(kept).length > 0) songs[name] = kept;
   }
   return {
     ...scheme,
-    looks,
+    flows,
     songs,
-    rotation: { ...scheme.rotation, looks: scheme.rotation.looks.filter((each) => each !== id) },
+    rotation: { ...scheme.rotation, flows: scheme.rotation.flows.filter((each) => each !== id) },
     defaults: {
       ...scheme.defaults,
-      look: scheme.defaults.look === id ? (Object.keys(looks)[0] ?? id) : scheme.defaults.look,
+      flow: scheme.defaults.flow === id ? (Object.keys(flows)[0] ?? id) : scheme.defaults.flow,
     },
   };
 }
 
-/** Replace one look's graph. */
+/** Replace one flow's graph. */
 export function setCircuit(scheme: Scheme, id: string, circuit: Circuit): Scheme {
-  const def = scheme.looks[id];
+  const def = scheme.flows[id];
   if (!def) return scheme;
-  return { ...scheme, looks: { ...scheme.looks, [id]: { ...def, circuit } } };
+  return { ...scheme, flows: { ...scheme.flows, [id]: { ...def, circuit } } };
 }
 
 /** Rename it. Ids are stable so nothing pointing at it has to be found. */
-export function renameLook(scheme: Scheme, id: string, name: string): Scheme {
-  const def = scheme.looks[id];
+export function renameFlow(scheme: Scheme, id: string, name: string): Scheme {
+  const def = scheme.flows[id];
   if (!def) return scheme;
-  return { ...scheme, looks: { ...scheme.looks, [id]: { ...def, name } } };
+  return { ...scheme, flows: { ...scheme.flows, [id]: { ...def, name } } };
 }
 
 /** The next free id for a node of this kind, within one graph. */
@@ -220,8 +220,8 @@ export function setValue(circuit: Circuit, id: string, inlet: string, value: num
 /**
  * Take a node off the canvas, with everything it was wired to.
  *
- * **Except `out`.** Every look has exactly one and it is not optional: it is
- * what leaves, and a look without one is not a smaller look, it is not a look.
+ * **Except `out`.** Every flow has exactly one and it is not optional: it is
+ * what leaves, and a flow without one is not a smaller flow, it is not a flow.
  * The faceplate has no delete button on it for that reason, and the rule lives
  * here as well so that it is the model's rather than the button's.
  */

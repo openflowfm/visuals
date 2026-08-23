@@ -55,7 +55,7 @@ real machine:
 ## It answers `clipNotes` and `clipStatus` too
 
 Both were added for `chart/`, and both are the difference between a client that can be
-worked on without Ableton and one that only *looks* implemented. `clipStatus` drives the
+worked on without Ableton and one that only *flows* implemented. `clipStatus` drives the
 loop wheels and the roll's playhead; without it a chart connects, shows the song, and draws
 neither — indistinguishable from broken.
 

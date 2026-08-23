@@ -14,37 +14,37 @@ import type { Clock } from '../state/useShow.ts';
 import { previewOutletOf, probeAt } from './probe.ts';
 
 /**
- * The bench: the look you are editing, drawn by the renderer the wall uses.
+ * The bench: the flow you are editing, drawn by the renderer the wall uses.
  *
  * Not a preview *of* the stage — the same `Compositor`, on a smaller canvas.
  * There used to be a second renderer here and it was a standing risk: a bench
- * that could disagree with the stage about what a look looks like is worse than
+ * that could disagree with the stage about what a flow looks like is worse than
  * no bench, because brightness and blend are exactly what you come here to
  * judge. One renderer means the disagreement cannot happen.
  *
  * It runs on the **designer's** transport and the designer's [room](
  * ../state/useRoom.ts) rather than the stage's, so a wave wired to the beat is
- * in time and a look wired to the chorus is in the chorus while you build it,
+ * in time and a flow wired to the chorus is in the chorus while you build it,
  * whether or not Ableton is open. That is the whole reason a library is
  * something you can build.
  */
 export function Bench({
   show,
   scheme,
-  look,
+  flow,
   clock,
   onError,
 }: {
   show: Show;
   scheme: Scheme;
-  /** The look to draw, which is the one being edited rather than the one that is up. */
-  look: string;
+  /** The flow to draw, which is the one being edited rather than the one that is up. */
+  flow: string;
   clock: Clock;
   onError(message: string | null): void;
 }) {
   const canvas = useRef<HTMLCanvasElement | null>(null);
-  const now = useRef({ show, scheme, look, clock, onError });
-  now.current = { show, scheme, look, clock, onError };
+  const now = useRef({ show, scheme, flow, clock, onError });
+  now.current = { show, scheme, flow, clock, onError };
 
   useEffect(() => {
     const el = canvas.current;
@@ -61,11 +61,11 @@ export function Bench({
       const held = now.current;
       const beat = held.clock.beat();
       compositor.frame(
-        // The look is the one being **edited** rather than the one the wheel has
+        // The flow is the one being **edited** rather than the one the wheel has
         // landed on, or the bench would show you something else while you
         // worked. The stand-in set is the room's, shared with the node faces —
         // see [`withStandIns`](../state/useRoom.ts).
-        { ...withStandIns(held.show, beat), look: held.look },
+        { ...withStandIns(held.show, beat), flow: held.flow },
         held.scheme,
         beat,
         held.clock.seconds(),
@@ -97,32 +97,32 @@ const WHERE = 'bsv.visuals.bench';
  * `x` is deliberately past any screen. `inside` pins it to the right edge on the
  * first frame whatever the window is, and the pinned number is what gets stored,
  * so this stays a one-off rather than a rule. Top *left* would be worse than
- * arbitrary — it is where a new look's nodes are dropped.
+ * arbitrary — it is where a new flow's nodes are dropped.
  */
 const OPENS_AT: Place = { x: 1e4, y: 40, w: 560, h: 340 };
 
 /**
  * The id a promoted node is drawn under, and there is deliberately only one.
  *
- * The compositor caches a compiled program per **look id** and swaps it — old
+ * The compositor caches a compiled program per **flow id** and swaps it — old
  * program deleted, new one compiled — whenever that id's signature changes. So
  * one reused id means one probe program alive at a time, however many nodes you
  * click through. A `~probe:${nodeId}` scheme would compile just as correctly and
  * leak a GL program per node ever selected, because nothing would ever come back
- * to delete them. A tilde for the same reason `probe.ts` uses one: a look id is
+ * to delete them. A tilde for the same reason `probe.ts` uses one: a flow id is
  * something a person can make, and this must never be one of theirs.
  */
 const PROBE = '~probe';
 
-/** A look that was deleted out from under the panel still has to draw nothing. */
+/** A flow that was deleted out from under the panel still has to draw nothing. */
 const EMPTY: Circuit = { nodes: [], cords: [] };
 
 /**
  * What the header says while a node is up, and it has one job.
  *
  * Somebody clicks a node, walks away, and comes back to a big picture that is
- * not what the look draws. Without a line saying so the next thing that happens
- * is a bug report about a look that is fine — so the panel names the node, says
+ * not what the flow draws. Without a line saying so the next thing that happens
+ * is a bug report about a flow that is fine — so the panel names the node, says
  * plainly that it is one node, and [tints its header](./console.css) as well,
  * because a reader who has stopped reading still sees a colour.
  *
@@ -166,14 +166,14 @@ function showing(circuit: Circuit, node: CircuitNode): string {
  * The shape is yours rather than pinned to 16:9, and that is honest rather than
  * lax — points are centred and aspect-corrected, so a wider bench shows more of
  * the same plane with circles still round, which is exactly what a wider wall
- * does. Nothing about the look changes; the framing does, in the same way and
+ * does. Nothing about the flow changes; the framing does, in the same way and
  * through the same code.
  *
  * ## It will draw one node instead
  *
  * A node's own face is about a hundred pixels across, which is enough to tell
  * you *that* something is happening and not nearly enough to tell you what. The only way to
- * look properly used to be to rewire the node into `out`, look, and rewire it
+ * flow properly used to be to rewire the node into `out`, flow, and rewire it
  * back — an edit, to answer a question. Clicking the face promotes it here
  * instead, at whatever size the panel is, and nothing about the graph changes.
  *
@@ -186,7 +186,7 @@ function showing(circuit: Circuit, node: CircuitNode): string {
 export function FloatingBench({
   show,
   scheme,
-  look,
+  flow,
   clock,
   onError,
   aside,
@@ -195,12 +195,12 @@ export function FloatingBench({
 }: {
   show: Show;
   scheme: Scheme;
-  look: string;
+  flow: string;
   clock: Clock;
   onError(message: string | null): void;
   /** A word for the right of the header — what the picture is being driven by. */
   aside: string;
-  /** A node of `look` to draw instead of the whole thing, or null for the look. */
+  /** A node of `flow` to draw instead of the whole thing, or null for the flow. */
   probing: CircuitNode | null;
   onProbe(id: string | null): void;
 }) {
@@ -211,18 +211,18 @@ export function FloatingBench({
   // halves of it allocate: `probeAt` rebuilds the graph and the scheme is copied
   // to park it. Neither is expensive once; sixty times a second, both are.
   const drawn = useMemo(() => {
-    const circuit = probing ? probeAt(scheme.looks[look]?.circuit ?? EMPTY, probing.id) : null;
-    if (!circuit) return { scheme, look };
+    const circuit = probing ? probeAt(scheme.flows[flow]?.circuit ?? EMPTY, probing.id) : null;
+    if (!circuit) return { scheme, flow };
     // The whole library goes with it, because a probed graph can still contain a
-    // `look` node and the flattener resolves those out of `scheme.looks`. It is
+    // `flow` node and the flattener resolves those out of `scheme.flows`. It is
     // named rather than left blank because the compositor prefixes a compile
-    // error with the look's name, and `~probe: too many lines` names nothing a
+    // error with the flow's name, and `~probe: too many lines` names nothing a
     // person can act on.
     return {
-      scheme: { ...scheme, looks: { ...scheme.looks, [PROBE]: { name: 'one node', circuit } } },
-      look: PROBE,
+      scheme: { ...scheme, flows: { ...scheme.flows, [PROBE]: { name: 'one node', circuit } } },
+      flow: PROBE,
     };
-  }, [scheme, look, probing]);
+  }, [scheme, flow, probing]);
 
   /** The box the panel floats over, which is whatever it was put inside. */
   const over = useCallback(() => {
@@ -304,20 +304,20 @@ export function FloatingBench({
         title="Drag to move the picture"
       >
         <span className="cap">
-          {probing ? showing(scheme.looks[look]?.circuit ?? EMPTY, probing) : 'the picture'}
+          {probing ? showing(scheme.flows[flow]?.circuit ?? EMPTY, probing) : 'the picture'}
         </span>
         <span className="gap" />
         <span className="cap">{aside}</span>
         {probing && (
-          <Button tone="quiet" onPress={() => onProbe(null)} title="Back to the finished look">
-            whole look
+          <Button tone="quiet" onPress={() => onProbe(null)} title="Back to the finished flow">
+            whole flow
           </Button>
         )}
       </div>
       <Bench
         show={show}
         scheme={drawn.scheme}
-        look={drawn.look}
+        flow={drawn.flow}
         clock={clock}
         onError={onError}
       />

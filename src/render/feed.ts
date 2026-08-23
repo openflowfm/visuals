@@ -2,7 +2,7 @@ import type { Blend, Scheme, Show } from '../../protocol.ts';
 import { hint } from '../../hints.ts';
 import { sectionOf, seedOf, smoothTrack, trackReading } from './evaluateNumber.ts';
 import { compile, drawFullscreen, rgb, type Program } from './gl.ts';
-import type { TrackAsk } from './look.ts';
+import type { TrackAsk } from './flow.ts';
 import { OUTPUT_SHADER, SQUARE, columns, warpFor } from './output.ts';
 import { TRACK_SHADERS } from './shaders.ts';
 
@@ -11,7 +11,7 @@ import { TRACK_SHADERS } from './shaders.ts';
 export { sectionOf, seedOf } from './evaluateNumber.ts';
 
 /**
- * What a look is fed, and the two passes that do the feeding.
+ * What a flow is fed, and the two passes that do the feeding.
  *
  * There are two front ends in this app — the stage, which is what a wall gets,
  * and the node faces on the canvas — and for a while they disagreed about
@@ -29,7 +29,7 @@ export { sectionOf, seedOf } from './evaluateNumber.ts';
  * keystone and a master gain, a node face gets neither — and nothing else.
  */
 
-/** Everything about *right now* that is not about a particular look. */
+/** Everything about *right now* that is not about a particular flow. */
 export interface Feeding {
   show: Show;
   scheme: Scheme | null;
@@ -42,7 +42,7 @@ export interface Feeding {
   height: number;
 }
 
-/** What a compiled look needs banked, cut to its own graph. */
+/** What a compiled flow needs banked, cut to its own graph. */
 export interface Banks {
   params: Float32Array;
   tracks: readonly TrackAsk[];
@@ -89,8 +89,8 @@ export interface Feed {
    * cheaply. So it stays a pass.
    */
   drawSet(at: Feeding, draws: string): void;
-  /** Every uniform a compiled look reads, out of one show. */
-  look(program: Program, at: Feeding, banks: Banks): void;
+  /** Every uniform a compiled flow reads, out of one show. */
+  flow(program: Program, at: Feeding, banks: Banks): void;
   /**
    * The last pass: a picture on a texture, onto the screen.
    *
@@ -99,16 +99,16 @@ export interface Feed {
    * that is the point of it being here — it is the difference between a bench
    * that tells you what the wall will look like and one that flatters.
    */
-  grade(texture: WebGLTexture, at: { width: number; height: number }, look?: Wall): void;
+  grade(texture: WebGLTexture, at: { width: number; height: number }, flow?: Wall): void;
   readonly error: string | null;
   free(): void;
 }
 
-/** What the destination does to the picture, as against what the look asked for. */
+/** What the destination does to the picture, as against what the flow asked for. */
 export interface Wall {
   /** Column-major, as `columns` leaves it — the caller keeps it, not this. */
   warp?: Float32Array;
-  /** Master brightness. 1 is what the look asked for. */
+  /** Master brightness. 1 is what the flow asked for. */
   gain?: number;
   /** Overlay a grid, in source space, so it arrives on the wall already warped. */
   test?: boolean;
@@ -173,14 +173,14 @@ export function createFeed(gl: WebGL2RenderingContext): Feed {
 
     drawSet(at, draws) {
       const { show } = at;
-      // Roughly a 200ms glide however fast the display runs, so a change looks
+      // Roughly a 200ms glide however fast the display runs, so a change flows
       // the same on 60 Hz and 144 Hz.
       const glide = 1 - Math.exp(-at.dt / 0.2);
       gl.enable(gl.BLEND);
       for (const track of show.tracks) {
         // Nothing playing means nothing drawn — not the last thing that played.
         // A track holding its previous clip after the scene changed is the
-        // failure that looks most like the renderer having crashed.
+        // failure that flows most like the renderer having crashed.
         const target = track.playing < 0 ? 0 : track.opacity;
         const was = shown.get(track.t) ?? 0;
         const opacity = was + (target - was) * glide;
@@ -208,7 +208,7 @@ export function createFeed(gl: WebGL2RenderingContext): Feed {
       gl.disable(gl.BLEND);
     },
 
-    look(program, at, banks) {
+    flow(program, at, banks) {
       const { show } = at;
       const room = show.master;
       clock(program, at);

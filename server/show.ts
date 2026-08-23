@@ -8,7 +8,7 @@ import type { SchemeSource } from './scheme.ts';
  * A Live set into a show.
  *
  * This used to be a cascade: four levels, resolved per track, sixty times a
- * minute. It is two questions now — **which look is up**, and **what are the
+ * minute. It is two questions now — **which flow is up**, and **what are the
  * tracks doing** — because everything the cascade decided is decided in a graph
  * instead.
  *
@@ -50,7 +50,7 @@ const PITCH: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 1
  *
  * **The mode is deliberately dropped.** A minor key is not a *position* between
  * two other keys, and a 0–1 number is a position — squeezing a boolean into the
- * continuum would put `Cm` between `C` and `C#` and make a look wired key → hue
+ * continuum would put `Cm` between `C` and `C#` and make a flow wired key → hue
  * jump a semitone when a song went minor. Chromatic rather than the circle of
  * fifths for the same reason: adjacent numbers should be adjacent pitches, so
  * the picture moves by a semitone when the music does.
@@ -253,7 +253,7 @@ export function buildShow(
     at: link.at,
     master: set.masterLevel,
     tracks: drawn,
-    look: up.look,
+    flow: up.flow,
     pinned: up.pinned,
     colorway: up.colorway,
     colors,

@@ -12,7 +12,7 @@ import { roleOf } from './show.ts';
  *
  * Nothing asks that question any more. What a track draws is wired rather than
  * bound, so there is no per-track-per-song cell to be missing, and the only
- * thing a song can say is which colourway and which looks. Both are facts about
+ * thing a song can say is which colourway and which flows. Both are facts about
  * a song, so the songs are all this needs to carry.
  *
  * **Nothing here reads the scheme**, which is what keeps it rare on the wire:

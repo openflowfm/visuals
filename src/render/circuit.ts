@@ -11,13 +11,13 @@ import {
   WAVE_SHAPES,
   type Circuit,
   type CircuitNode,
-  type LookDef,
+  type FlowDef,
   type NodeKind,
 } from '../../protocol.ts';
-import { lookPreamble } from './shaders.ts';
+import { flowPreamble } from './shaders.ts';
 
 /**
- * A look, compiled to a fragment shader.
+ * A flow, compiled to a fragment shader.
  *
  * ## Three signals, and everything follows from them
  *
@@ -42,8 +42,8 @@ import { lookPreamble } from './shaders.ts';
  * the point is threaded through resolution. So `kaleido` does not sample a
  * buffer; it asks its input for the colour at a *folded* point, and the input
  * re-evaluates itself there. Everything downstream of that composes for free:
- * two sources can be folded differently and blended, a look can be dropped
- * inside another look, and none of it needs a buffer.
+ * two sources can be folded differently and blended, a flow can be dropped
+ * inside another flow, and none of it needs a buffer.
  *
  * What it costs is honest and worth knowing: a **multi-tap** effect — `bloom`,
  * `smear`, `edge`, `shift` — evaluates its whole input once per tap. Nesting two
@@ -113,7 +113,7 @@ export interface Emitting {
    * both its numbers come off the same decomposition — and wrong for `lens`,
    * whose colour outlet *reads its input* while its point outlet does not.
    * Emitting the colour when somebody only wanted the point sends the resolver
-   * back round a graph that was never circular, and it refuses a legal look.
+   * back round a graph that was never circular, and it refuses a legal flow.
    */
   outlet: string;
   node: CircuitNode;
@@ -145,7 +145,7 @@ export interface NodeSpec {
    */
   reads?(node: CircuitNode, outlet: string): readonly string[];
   /** True when the modes are names from the set rather than a fixed list. */
-  named?: 'track' | 'look';
+  named?: 'track' | 'flow';
   emit(ctx: Emitting): Record<string, string>;
 }
 
@@ -183,7 +183,7 @@ const asFloat = (n: number): string => (Number.isInteger(n) ? n.toFixed(1) : Str
  *
  * A tilde, because a node id is `kind` plus a number and a port name comes off
  * a spec, so neither can ever collide with one. The canvas hides these; see
- * `look` below for the only one there is.
+ * `flow` below for the only one there is.
  */
 export const INNER = '~inner';
 
@@ -499,9 +499,9 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     emit: (c) => ({ c: `fromTracks(${c.read('p')})` }),
   },
 
-  look: {
-    name: 'look',
-    about: 'Another look, whole, as one node. This is where it gets complicated.',
+  flow: {
+    name: 'flow',
+    about: 'Another flow, whole, as one node. This is where it gets complicated.',
     // `INNER` is the flattener's inlet, never a person's: `flatten` wires the
     // graph this node names into it, and the canvas hides any port whose name
     // starts with a tilde. It has to be a real inlet rather than a lookup on
@@ -510,10 +510,10 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     // silently ignored, which is the worst thing a canvas can do.
     inlets: [P('p'), C(INNER)],
     outlets: [C('c')],
-    named: 'look',
+    named: 'flow',
     // The whole node, and it is one line: read that graph, over there. An
     // unwired `p` falls back to the point being asked about, which is what
-    // makes a nested look with nothing wired into it behave exactly as if its
+    // makes a nested flow with nothing wired into it behave exactly as if its
     // nodes had been pasted in.
     emit: (c) => ({ c: c.readAt(INNER, c.read('p')) }),
   },
@@ -577,7 +577,7 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     // mode moves the inlets, and these two are the only inlets there are, so
     // flicking would cut every cord on the node. That is a change of wiring
     // rather than a change of mind, which is the line between a kind and a
-    // mode here. See `docs/looks.md`.
+    // mode here. See `docs/flows.md`.
     inlets: [N('x'), N('y')],
     outlets: [P('p')],
     // `recentred` and not a hand-written `(n - 0.5) * 2.0`, because the plane
@@ -674,7 +674,7 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
 
   out: {
     name: 'out',
-    about: 'What leaves this look.',
+    about: 'What leaves this flow.',
     inlets: [C('c')],
     outlets: [],
     emit: () => ({}),
@@ -777,12 +777,12 @@ export interface Compiled {
   error: string | null;
   values: CircuitValue[];
   tracks: CircuitTrack[];
-  /** How each Live track should draw, if this look asked for the set at all. */
+  /** How each Live track should draw, if this flow asked for the set at all. */
   draws: string | null;
 }
 
 /**
- * How many numbers one look may set.
+ * How many numbers one flow may set.
  *
  * Not the size of the bank — the bank is cut to fit the graph, because the
  * shader is generated. This is the backstop, and what it is protecting is the
@@ -797,7 +797,7 @@ export const MAX_VALUES = 64;
 export const MAX_TRACKS = 8;
 
 /**
- * How many GLSL statements a look may emit.
+ * How many GLSL statements a flow may emit.
  *
  * The backstop on multi-tap nesting. A `bloom` over a `smear` evaluates its
  * input forty-eight times, and two more of those is a shader that takes a
@@ -839,7 +839,7 @@ export function signalOf(circuit: Circuit, id: string): Signal | null {
 /**
  * Whether anything at all is wired to `out`.
  *
- * A look that has nothing on it compiles, and deliberately: it draws transparent
+ * A flow that has nothing on it compiles, and deliberately: it draws transparent
  * black, which is the state every graph passes through on the way to being one.
  * What was missing was **saying so**. A canvas full of nodes that produces a
  * black frame looks identical to a canvas full of nodes that produces a black
@@ -856,10 +856,10 @@ export function reachesOut(circuit: Circuit): boolean {
 /**
  * Whether wiring this outlet into that inlet would make the graph eat itself.
  *
- * The same argument [`wouldLoop`](../../protocol.ts) makes about a look inside a
- * look, one level down. The compiler refuses a loop by name, but the honest
+ * The same argument [`wouldLoop`](../../protocol.ts) makes about a flow inside a
+ * flow, one level down. The compiler refuses a loop by name, but the honest
  * message it can give is about a node rather than about the cord you were
- * holding — and by then the whole look has gone black. Refusing at the moment of
+ * holding — and by then the whole flow has gone black. Refusing at the moment of
  * dropping is a sentence about the thing just clicked.
  */
 export function wouldFeedItself(circuit: Circuit, from: string, to: string): boolean {
@@ -963,7 +963,7 @@ function madeOut(circuit: Circuit): CircuitNode {
  * One bank rather than two, which is what merging `energy` into `track` bought:
  * the CPU fills each slot with whatever that node asked for — a meter, a fader,
  * a gate, any of them through an envelope — and the shader reads a number
- * without learning which. Two banks meant a look could name eight tracks *and*
+ * without learning which. Two banks meant a flow could name eight tracks *and*
  * eight energies and a shader declaring sixteen floats to hold what is almost
  * always two.
  */
@@ -1098,31 +1098,31 @@ function trimmed(
 }
 
 /**
- * A look and everything it contains, as one graph.
+ * A flow and everything it contains, as one graph.
  *
- * The graph a `look` node names is **pasted in around it**, with every id
- * prefixed so two copies of the same look cannot collide. Expanding before
- * compiling rather than teaching the compiler about sub-looks is what keeps the
+ * The graph a `flow` node names is **pasted in around it**, with every id
+ * prefixed so two copies of the same flow cannot collide. Expanding before
+ * compiling rather than teaching the compiler about sub-flows is what keeps the
  * compiler one thing: set numbers and named tracks both get their bank slots
  * from the expanded graph without anyone writing a second pass to gather them.
  *
  * **Around it, not in place of it.** The node survives, holding the sub-graph on
- * its reserved inlet, because a look node has a point inlet and a point inlet
- * has to be able to do something: reading a whole sub-look somewhere other than
+ * its reserved inlet, because a flow node has a point inlet and a point inlet
+ * has to be able to do something: reading a whole sub-flow somewhere other than
  * here is only expressible if there is still a node to do the reading. Splicing
  * the node out left that cord pointing at an address nothing looked up, so it
  * drew on the canvas and changed nothing on the wall.
  *
- * A look that cannot be found is dropped rather than refused — a look you
+ * A flow that cannot be found is dropped rather than refused — a flow you
  * deleted should make the thing that used it go quiet, not stop the show.
  */
 export function flatten(
-  looks: Record<string, LookDef>,
+  flows: Record<string, FlowDef>,
   id: string,
   prefix = '',
   seen: readonly string[] = [],
 ): { circuit: Circuit; error: string | null } {
-  const def = looks[id];
+  const def = flows[id];
   if (!def) return { circuit: { nodes: [], cords: [] }, error: null };
   if (seen.includes(id)) {
     return { circuit: { nodes: [], cords: [] }, error: `${def.name || id} contains itself` };
@@ -1135,11 +1135,11 @@ export function flatten(
   for (const node of def.circuit.nodes) {
     const here = `${prefix}${node.id}`;
     nodes.push({ ...node, id: here });
-    if (node.kind !== 'look') continue;
+    if (node.kind !== 'flow') continue;
 
-    const inner = flatten(looks, node.op ?? '', `${here}~`, [...seen, id]);
+    const inner = flatten(flows, node.op ?? '', `${here}~`, [...seen, id]);
     error ??= inner.error;
-    // The sub-look's own `out` is not an out any more; it is the junction this
+    // The sub-flow's own `out` is not an out any more; it is the junction this
     // node reads, so whatever fed it lands on the reserved inlet instead.
     const end = inner.circuit.nodes.find((n) => n.kind === 'out');
     const from = end ? feedOf(inner.circuit, portId(end.id, 'c')) : null;
@@ -1166,15 +1166,15 @@ function feedOf(circuit: Circuit, inlet: string): string | null {
 }
 
 /**
- * A look to a fragment shader, or the reason it isn't one.
+ * A flow to a fragment shader, or the reason it isn't one.
  *
  * Only what `out` can reach is emitted. A node wired to nothing costs nothing,
  * which matters more than it sounds: building one of these means dropping a node
  * and looking at it, and a compiler that treated an unwired node as an error
  * would make the canvas unusable for exactly the way it gets used.
  */
-export function compileLook(looks: Record<string, LookDef>, id: string): Compiled {
-  const expanded = flatten(looks, id);
+export function compileFlow(flows: Record<string, FlowDef>, id: string): Compiled {
+  const expanded = flatten(flows, id);
   const empty: Compiled = {
     source: null,
     error: expanded.error,
@@ -1203,7 +1203,7 @@ export function compileCircuit(circuit: Circuit): Compiled {
   // through. What is left is a `compileCircuit` called on a graph nobody built
   // — a probe, a test — and for that a sentence beats a broken shader.
   const ends = circuit.nodes.filter((node) => node.kind === 'out');
-  if (ends.length === 0) return { ...bare, error: 'no out node — nothing leaves this look' };
+  if (ends.length === 0) return { ...bare, error: 'no out node — nothing leaves this flow' };
   if (ends.length > 1) return { ...bare, error: 'more than one out node' };
   if (values.length > MAX_VALUES) {
     return { ...bare, error: `more than ${MAX_VALUES} numbers set` };
@@ -1246,7 +1246,7 @@ export function compileCircuit(circuit: Circuit): Compiled {
     if (held) return held;
     // The **outlet**, not the node, and not the node at this point.
     //
-    // By the node was right until `lens` had two outlets: its point never looks
+    // By the node was right until `lens` had two outlets: its point never flows
     // at its colour, so a lens feeding a picture that feeds the lens back is a
     // graph that terminates, and a node-wide guard refused it. By outlet the
     // set is still finite — two entries for a lens — so it still terminates,
@@ -1260,7 +1260,7 @@ export function compileCircuit(circuit: Circuit): Compiled {
     // about their wiring.
     const here = portId(nodeId, port);
     if (open.has(here)) {
-      failed ??= `${spec.name} feeds itself — a look cannot loop`;
+      failed ??= `${spec.name} feeds itself — a flow cannot loop`;
       return null;
     }
     if (lines.length > MAX_LINES) {
@@ -1347,7 +1347,7 @@ export function compileCircuit(circuit: Circuit): Compiled {
   }
   if (failed) return { ...bare, error: failed };
 
-  const source = `${lookPreamble(values.length)}${HELPERS}
+  const source = `${flowPreamble(values.length)}${HELPERS}
 void main() {
 ${lines.join('\n')}
   fragColor = ${result};
@@ -1356,7 +1356,7 @@ ${lines.join('\n')}
 }
 
 /**
- * What a new look starts as.
+ * What a new flow starts as.
  *
  * Not an empty canvas. An empty canvas asks you to know the vocabulary before
  * you have seen it work, and the first thing anyone wants is to turn one number

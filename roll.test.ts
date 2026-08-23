@@ -9,7 +9,7 @@ import { newSeed, rollCircuit, rollScheme } from './roll.ts';
  *
  * What is worth asserting is not that it produces random output — it will — but
  * that everything it produces is **still a library**. A roll that wired a graph
- * naming a port that does not exist, or that pointed the fallback at a look it
+ * naming a port that does not exist, or that pointed the fallback at a flow it
  * had just deleted, is not a different show; it is a broken one, and it breaks
  * on stage rather than here.
  *
@@ -50,7 +50,7 @@ const SHOW: Show = {
     layer(7, 'Vox'),
     layer(8, 'Patterns'),
   ],
-  look: null,
+  flow: null,
   pinned: false,
   colorway: null,
   colors: [0xffffff],
@@ -75,15 +75,15 @@ describe('a roll is a library', () => {
     }
   });
 
-  it('names only looks it made', () => {
+  it('names only flows it made', () => {
     // An id pointing at nothing is a black screen for as long as the wheel sits
     // on it, and it is invisible until it comes round.
     for (const seed of seeds) {
       const s = rolled(seed);
-      expect(s.looks[s.defaults.look], seed).toBeDefined();
-      for (const id of s.rotation.looks) expect(s.looks[id], `${seed} ${id}`).toBeDefined();
+      expect(s.flows[s.defaults.flow], seed).toBeDefined();
+      for (const id of s.rotation.flows) expect(s.flows[id], `${seed} ${id}`).toBeDefined();
       for (const [song, spec] of Object.entries(s.songs)) {
-        for (const id of spec.looks ?? []) expect(s.looks[id], `${seed} ${song}`).toBeDefined();
+        for (const id of spec.flows ?? []) expect(s.flows[id], `${seed} ${song}`).toBeDefined();
       }
     }
   });
@@ -93,7 +93,7 @@ describe('a roll is a library', () => {
     // moment after a roll has finished making four things.
     for (const seed of seeds) {
       const s = rolled(seed);
-      expect(s.rotation.looks, seed).toEqual([]);
+      expect(s.rotation.flows, seed).toEqual([]);
       expect(s.rotation.bars, seed).toBeGreaterThan(0);
     }
   });
@@ -153,7 +153,7 @@ describe('a rolled colourway', () => {
   );
 
   it('is always five colours', () => {
-    // Tracks take a colour by position and a look draws from the first, so a
+    // Tracks take a colour by position and a flow draws from the first, so a
     // palette that was sometimes four and sometimes five is a set that changes
     // which track is which colour when the wheel turns.
     for (const [where, colours] of rolled) expect(colours, where).toHaveLength(5);
@@ -193,12 +193,12 @@ describe('a rolled colourway', () => {
   });
 });
 
-describe('rolled looks', () => {
+describe('rolled flows', () => {
   it('compiles, from every seed', () => {
     // Really an assertion that the generator never names a port that does not
     // exist, which is the way a hand-written node table drifts.
     for (const seed of seeds) {
-      for (const [id, def] of Object.entries(rolled(seed).looks)) {
+      for (const [id, def] of Object.entries(rolled(seed).flows)) {
         if (!def.rolled) continue;
         const built = compileCircuit(def.circuit);
         expect(built.error, `${seed} ${id}: ${built.error}`).toBeNull();
@@ -253,13 +253,13 @@ describe('rolled looks', () => {
   });
 
   it('mostly reaches for the set rather than ignoring it', () => {
-    // A rolled look that ignored whoever is playing is a screensaver, and this
+    // A rolled flow that ignored whoever is playing is a screensaver, and this
     // rig is not one. Not every one of them — a wash that runs on its own is a
     // real thing to want — but most.
     let usesSet = 0;
     let total = 0;
     for (const seed of seeds) {
-      for (const def of Object.values(rolled(seed).looks)) {
+      for (const def of Object.values(rolled(seed).flows)) {
         if (!def.rolled) continue;
         total += 1;
         if (def.circuit.nodes.some((n) => n.kind === 'tracks')) usesSet += 1;
@@ -270,23 +270,23 @@ describe('rolled looks', () => {
 
   it('does not pile up across rolls', () => {
     // A week of rolling would otherwise leave forty of them, and the wheel would
-    // spend most of its time on looks nobody chose.
+    // spend most of its time on flows nobody chose.
     let scheme = BUILT_IN;
     for (const seed of seeds.slice(0, 10)) scheme = rollScheme(seed, SHOW, scheme);
-    expect(Object.values(scheme.looks).filter((d) => d.rolled)).toHaveLength(4);
+    expect(Object.values(scheme.flows).filter((d) => d.rolled)).toHaveLength(4);
     // And the ones that ship are still there to take apart.
-    for (const id of Object.keys(BUILT_IN.looks)) expect(scheme.looks[id], id).toBeDefined();
+    for (const id of Object.keys(BUILT_IN.flows)) expect(scheme.flows[id], id).toBeDefined();
   });
 });
 
 describe('rolling part of a library', () => {
   it('leaves a part it was not asked for exactly as it was', () => {
     const settled = rollScheme('oak-ember-12', SHOW, BUILT_IN);
-    const again = rollScheme('rust-cobalt-99', SHOW, settled, ['looks']);
+    const again = rollScheme('rust-cobalt-99', SHOW, settled, ['flows']);
     expect(again.colorways).toEqual(settled.colorways);
     expect(again.rotation).toEqual(settled.rotation);
     // And the part it *was* asked for actually moved.
-    expect(again.looks).not.toEqual(settled.looks);
+    expect(again.flows).not.toEqual(settled.flows);
   });
 
   it('gives the same answer for a part however much else was rolled with it', () => {
@@ -299,9 +299,9 @@ describe('rolling part of a library', () => {
 
   it('never points the fallback at a colourway that is not there', () => {
     const settled = rollScheme('oak-ember-12', SHOW, BUILT_IN);
-    const again = rollScheme('rust-cobalt-99', SHOW, settled, ['looks']);
+    const again = rollScheme('rust-cobalt-99', SHOW, settled, ['flows']);
     expect(again.colorways).toHaveProperty(again.defaults.colorway);
-    expect(again.looks).toHaveProperty(again.defaults.look);
+    expect(again.flows).toHaveProperty(again.defaults.flow);
   });
 
   it('clears what the last roll wired and keeps what someone built', () => {
@@ -310,15 +310,15 @@ describe('rolling part of a library', () => {
     // losing an evening's work acceptable.
     const mine = {
       ...BUILT_IN,
-      looks: {
-        ...BUILT_IN.looks,
+      flows: {
+        ...BUILT_IN.flows,
         mine: { name: 'Mine', circuit: { nodes: [], cords: [] } },
         old: { name: 'Old', circuit: { nodes: [], cords: [] }, rolled: true },
       },
     };
     const out = rollScheme('oak-ember-12', SHOW, mine);
-    expect(out.looks.mine).toBeDefined();
-    expect(out.looks.old).toBeUndefined();
+    expect(out.flows.mine).toBeDefined();
+    expect(out.flows.old).toBeUndefined();
   });
 });
 

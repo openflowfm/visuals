@@ -1,11 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Circuit, CircuitNode, LookDef, Scheme, SongSpec } from '../protocol.ts';
+import type { Circuit, CircuitNode, FlowDef, Scheme, SongSpec } from '../protocol.ts';
 import { repaired, splitPort } from '../src/render/circuit.ts';
 
 /**
- * The scheme: every look there is, the colours they draw from, and the wheel
+ * The scheme: every flow there is, the colours they draw from, and the wheel
  * that turns through them. Read from `visuals/scheme.json`, hot-reloaded, and
  * entirely optional.
  *
@@ -23,18 +23,18 @@ import { repaired, splitPort } from '../src/render/circuit.ts';
  * makes an exception of are all things you wire rather than things you bind.
  *
  * What is left above the graph is deliberately small enough to read in one
- * screen: the looks, the colourways, which of them the rotation turns through,
+ * screen: the flows, the colourways, which of them the rotation turns through,
  * and the handful of songs that want to say otherwise.
  */
 
 /**
- * A look, spelled compactly, because a graph written as JSON is unreadable.
+ * A flow, spelled compactly, because a graph written as JSON is unreadable.
  *
  * **Laid out from the wiring rather than from the order it was typed.** These
  * are the four graphs anyone opens first, so where the nodes sit is part of what
  * they teach: a column per step along the signal, so the picture reads left to
  * right and the cords do not cross. A row-major grid put a `value` node between
- * two links in a chain and made a six-node look need untangling before it could
+ * two links in a chain and made a six-node flow need untangling before it could
  * be read, which for the library that *is* the manual is the wrong first sight.
  */
 /**
@@ -76,7 +76,7 @@ function wire(
   name: string,
   nodes: [string, string, string?, Values?, number?, string?, string?, number?][],
   cords: string[],
-): LookDef {
+): FlowDef {
   const wired = cords.map((each) => {
     const [from, to] = each.split(' -> ');
     return { from, to };
@@ -170,14 +170,14 @@ function columnsOf(ids: readonly string[], cords: readonly { from: string; to: s
  * that the clock lifts by four — and the meter taking over the moment it is
  * louder than that. `max` and not `average`, because an average with a silent
  * meter halves everything the clock is doing, which is how a floor becomes a
- * ceiling. Which clock is each look's own business and is most of its character.
+ * ceiling. Which clock is each flow's own business and is most of its character.
  *
- * **A look that reads the set carries a picture underneath it.** A `tracks` node
+ * **A flow that reads the set carries a picture underneath it.** A `tracks` node
  * draws nothing with no clip playing, so five of these went black between songs.
  * There is a ring under `Folded`, a grid under `Outline`, a wash under `Poster`
  * and a scan pattern under `Glitch`, each blended so a playing set is what you
  * see and each there when it is not. There is no exception: `The set` was one,
- * a lone `tracks` node that went black between songs, and a look that is one
+ * a lone `tracks` node that went black between songs, and a flow that is one
  * node is a node — the browser already offers it under `draw`.
  *
  * **Nothing here is wired to something that cannot move it.** The old `Weather`
@@ -193,7 +193,7 @@ function columnsOf(ids: readonly string[], cords: readonly { from: string; to: s
  * one left is in `Weather`, feeding two places, which is what that node is for.
  */
 const BUILT_IN: Scheme = {
-  looks: {
+  flows: {
     // A colour is a function of a point. The set is read through a swirl that
     // sways once a bar, and the kaleidoscope folds the whole chain rather than
     // an image of it — which is the one idea the rest of the model falls out of.
@@ -207,7 +207,7 @@ const BUILT_IN: Scheme = {
         ['turn', 'lens', 'swirl'],
         ['live', 'tracks', 'by name'],
         ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.35],
-        // The floor under the meter, and the shape every look here now uses:
+        // The floor under the meter, and the shape every flow here now uses:
         // `max` of something on the clock and something on the room. See the
         // note above about a set that is only the click.
         ['lift', 'math', 'max', { a: [0.3, 0.35] }],
@@ -382,7 +382,7 @@ const BUILT_IN: Scheme = {
         ['tw', 'lens', 'twist', { turn: 0.68, sway: 0.4 }],
         // A short reach and a floor high enough that only the arms bloom. Wide
         // open it welds the spiral into two flat colours, which is the failure
-        // this effect always has: it is the cheapest way to look expensive and
+        // this effect always has: it is the cheapest way to flow expensive and
         // the cheapest way to lose every edge you had.
         ['glow', 'spread', 'bloom', { reach: 0.34, floor: 0.34 }],
         ['o', 'out'],
@@ -440,7 +440,7 @@ const BUILT_IN: Scheme = {
     // wall full of outlines is legible at a distance no filled picture is.
     //
     // **A grid under the set, and one junction read twice.** With no clip
-    // playing there is nothing to outline, and a look whose whole job is edges
+    // playing there is nothing to outline, and a flow whose whole job is edges
     // had none between songs. The grid supplies them — cells lighting on their
     // own beats, which an outline detector turns into a wireframe — and the set
     // lands `over` it, so a playing set is what you see and the grid is what is
@@ -459,7 +459,7 @@ const BUILT_IN: Scheme = {
         // A wide tap and a hard gain. The gradient of a soft picture is a very
         // small number, so an outline drawn at the effect's own middle is one
         // you can only see in a dark room — which is the whole point of the
-        // look and the one thing it was failing at.
+        // flow and the one thing it was failing at.
         ['cut', 'spread', 'edge', { width: 0.72, gain: 0.85 }],
         ['pale', 'grade', 'levels', { gain: 0.6, lift: 0.74 }],
         ['ghost', 'grade', 'levels', { gain: 0.34, lift: 0.46 }],
@@ -479,7 +479,7 @@ const BUILT_IN: Scheme = {
         'mix/c -> o/c',
       ],
     ),
-    // Flat bands of colour, and the one look that changes with the *music*
+    // Flat bands of colour, and the one flow that changes with the *music*
     // rather than with the playing. `posterize` quantises the set to four steps
     // — its own middle is fourteen, which is invisible, so the number is set on
     // the node — and `song key` rotates the hue, so two songs a fifth apart are
@@ -734,18 +734,18 @@ const BUILT_IN: Scheme = {
       ],
     ),
     // Three of the others, as three nodes. The claim the vocabulary makes about
-    // itself — a look is a picture, so a look goes wherever a picture goes — and
+    // itself — a flow is a picture, so a flow goes wherever a picture goes — and
     // the only one of these you cannot read without believing it.
     //
     // `Water` is the wash, `Vortex` is folded into a window by a kaleidoscope
     // that never touches its insides, and `Outline` puts the set's own edges on
-    // top. The fold is wired **point first**: `kaleido`'s `p` outlet into the look
+    // top. The fold is wired **point first**: `kaleido`'s `p` outlet into the flow
     // node's own point inlet, which is the whole reason that inlet exists. The
     // sub-graph is evaluated at the folded point rather than folded afterwards,
     // so the spiral bends into the wedges instead of being a picture of a spiral
     // cut into pieces.
     //
-    // It is also the most expensive look here by some way, and worth knowing why:
+    // It is also the most expensive flow here by some way, and worth knowing why:
     // `Vortex` ends in a `bloom` and `Water` in a `smear`, so one frame of this
     // is nine evaluations of that spiral plus six of that plasma. Nesting does
     // not add, it multiplies — which is the thing `MAX_LINES` is watching for.
@@ -754,9 +754,9 @@ const BUILT_IN: Scheme = {
       [
         ['pt', 'point'],
         ['fold', 'lens', 'kaleido', { segments: 0.24, spin: 0.62 }],
-        ['wheel', 'look', 'vortex'],
-        ['tide', 'look', 'water'],
-        ['ink', 'look', 'outline'],
+        ['wheel', 'flow', 'vortex'],
+        ['tide', 'flow', 'water'],
+        ['ink', 'flow', 'outline'],
         ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.4],
         // Open enough to see with nothing playing, and the meter brings the
         // window up over the wash rather than switching it on.
@@ -786,7 +786,7 @@ const BUILT_IN: Scheme = {
     //
     // These sit where a hue is loudest and stay clear of the dark end. Each is
     // built the way [the roll](../roll.ts) builds one: **the first is the
-    // loudest**, because a look that ignores the set draws every generator from
+    // loudest**, because a flow that ignores the set draws every generator from
     // `colors[0]`; one member answers it from across the wheel, so nothing is a
     // wall in a single colour; and one is a **tint** rather than a white, light
     // enough to read edges against and coloured enough to belong.
@@ -797,21 +797,21 @@ const BUILT_IN: Scheme = {
   },
   rotation: {
     // Empty pools mean "everything", so a fresh clone turns through all four
-    // looks and all four colourways without anyone filling anything in.
-    looks: [],
+    // flows and all four colourways without anyone filling anything in.
+    flows: [],
     colorways: [],
     // Eight bars. Long enough to read as a section and short enough that a
     // four-minute song is not one picture.
     bars: 8,
     onClip: true,
-    // The palette turns half as often as the look, so a change is usually one
+    // The palette turns half as often as the flow, so a change is usually one
     // thing moving rather than everything at once.
     colorEvery: 16,
   },
   songs: {},
   defaults: {
     colorway: 'ember',
-    look: 'folded',
+    flow: 'folded',
     pace: 0,
     draws: 'by name',
   },
@@ -957,13 +957,13 @@ export function openScheme(): SchemeSource {
  * A file overrides the built-in scheme one section at a time.
  *
  * Shallow per section, deliberately. Naming one colourway should not delete the
- * other three, and registering one look should not remove the four that ship.
+ * other three, and registering one flow should not remove the four that ship.
  *
  * **This is the one door**, and it is why every graph is repaired here. A scheme
  * reaches the renderer exactly two ways — read off disk, or sent up by an editor
  * that gets it straight back down again — and both of them come through this
- * function. So a look that arrived without an `out`, with two of them, or with a
- * cord addressed to a port that is not there leaves here as a look, once, and is
+ * function. So a flow that arrived without an `out`, with two of them, or with a
+ * cord addressed to a port that is not there leaves here as a flow, once, and is
  * written back in that shape the next time anything saves. The alternative was
  * repairing where the damage shows: in the compiler, which would silently redo
  * the same fix on every frame and never write it down, or in the editor, which
@@ -975,7 +975,7 @@ export function merge(raw: Partial<Scheme>): Scheme {
     // Carried rather than rebuilt, so a rolled show can still say where it came
     // from after a reload. Without it the seed lived exactly as long as the tab.
     ...(file.seed ? { seed: file.seed } : {}),
-    looks: whole({ ...BUILT_IN.looks, ...(file.looks ?? {}) }),
+    flows: whole({ ...BUILT_IN.flows, ...(file.flows ?? {}) }),
     colorways: { ...BUILT_IN.colorways, ...(file.colorways ?? {}) },
     rotation: { ...BUILT_IN.rotation, ...(file.rotation ?? {}) },
     songs: songsOf(file.songs),
@@ -984,15 +984,15 @@ export function merge(raw: Partial<Scheme>): Scheme {
 }
 
 /**
- * Every look, as the model requires one.
+ * Every flow, as the model requires one.
  *
  * `repaired` is the whole of it and it is cheap — a walk of the nodes and a walk
- * of the cords per look, once per file change and once per save. It returns the
+ * of the cords per flow, once per file change and once per save. It returns the
  * same graph untouched for anything the editor made, which is nearly everything.
  */
-function whole(looks: Record<string, LookDef>): Record<string, LookDef> {
-  const out: Record<string, LookDef> = {};
-  for (const [id, def] of Object.entries(looks)) out[id] = { ...def, circuit: repaired(def.circuit) };
+function whole(flows: Record<string, FlowDef>): Record<string, FlowDef> {
+  const out: Record<string, FlowDef> = {};
+  for (const [id, def] of Object.entries(flows)) out[id] = { ...def, circuit: repaired(def.circuit) };
   return out;
 }
 
@@ -1006,7 +1006,7 @@ function whole(looks: Record<string, LookDef>): Record<string, LookDef> {
  * to debug.
  *
  * **What is carried is what a person made**: the colourways, which song draws
- * from which, and any look that was a graph. A look that was a built-in is not
+ * from which, and any flow that was a graph. A flow that was a built-in is not
  * carried, because a built-in is a node mode now and a library full of
  * twenty-three entries called "Ripple" that are one node each is worse than an
  * empty one.
@@ -1021,19 +1021,44 @@ function carried(file: Partial<Scheme> & Legacy): Partial<Scheme> {
   delete (out as Legacy).archetypes;
   delete (out as Legacy).effects;
 
-  const looks = file.looks ?? (file as Legacy).effects;
-  if (looks) {
-    const kept: Record<string, LookDef> = {};
-    for (const [id, def] of Object.entries(looks)) {
-      const circuit = (def as LookDef & { builtin?: string }).circuit;
+  delete (out as Legacy).looks;
+
+  const flows = file.flows ?? (file as Legacy).looks ?? (file as Legacy).effects;
+  if (flows) {
+    const kept: Record<string, FlowDef> = {};
+    for (const [id, def] of Object.entries(flows)) {
+      const circuit = (def as FlowDef & { builtin?: string }).circuit;
       if (!circuit) continue;
       kept[id] = { ...def, circuit: reword(circuit) };
     }
-    out.looks = kept;
+    out.flows = kept;
   }
 
+  // The wheel's pool, which is a list of ids under a key that changed its name.
+  // Carried whole rather than merged, or a file that narrowed the wheel to two
+  // flows would silently widen to everything the first time it was opened.
+  const pool = (file as Legacy).rotation?.looks;
+  if (pool && !file.rotation?.flows) {
+    out.rotation = { ...BUILT_IN.rotation, ...file.rotation, flows: pool };
+    delete (out.rotation as Legacy['rotation'])!.looks;
+  }
+
+  // Spread rather than enumerated, which is the fix to a bug this function had
+  // for as long as `defaults` has had more than two fields: it rebuilt the block
+  // out of `colorway` and `pace` and dropped everything else, so a file's own
+  // default flow and draw mode were reset on every load. It never showed,
+  // because the only values anyone had were the built-in ones — but deleting the
+  // default flow repoints it in `edits.ts`, and that repoint was being thrown
+  // away the next time the file was read.
   const old = (file as Legacy).defaults;
-  if (old) out.defaults = { ...BUILT_IN.defaults, pace: old.pace ?? 0, colorway: old.colorway ?? BUILT_IN.defaults.colorway, look: BUILT_IN.defaults.look, draws: BUILT_IN.defaults.draws };
+  if (old) {
+    const { look, ...rest } = old;
+    const defaults = { ...BUILT_IN.defaults, ...rest };
+    // `The set` is gone, so a file that named it as its default names nothing;
+    // the built-in default is the only honest answer to that.
+    if (!file.defaults?.flow && look && look !== 'live') defaults.flow = look;
+    out.defaults = defaults;
+  }
 
   return out;
 }
@@ -1053,6 +1078,7 @@ type Was = Omit<CircuitNode, 'kind'> & {
     | 'signal'
     | 'energy'
     | 'effect'
+    | 'look'
     | 'hue'
     | 'levels'
     | 'fold'
@@ -1133,7 +1159,7 @@ function swapValue(
  * `sample` read "the frame that arrived", which was the layer underneath in a
  * stack — the nearest thing to that now is the set's own picture, so it becomes
  * `tracks`. Two `signal` modes went with the cascade: `energy` is its own
- * question and `amount` described how far a look was dialled into a stack,
+ * question and `amount` described how far a flow was dialled into a stack,
  * which is not a thing any more. Both fall back to the meter.
  *
  * `signal` is **`playback`**, unchanged but for the word: it is where the music
@@ -1159,7 +1185,7 @@ function swapValue(
  * Before a cord carried a range it simply replaced its inlet, and the number
  * underneath was dormant — kept only so that unwiring gave it back. It is
  * load-bearing now: a cord reads `value + depth × signal`, so the number that
- * used to be ignored would quietly become an offset and a look written last
+ * used to be ignored would quietly become an offset and a flow written last
  * month would draw differently this month.
  *
  * So a wired inlet arriving without a depth is written down as the replacement
@@ -1189,6 +1215,9 @@ function reword(circuit: Circuit): Circuit {
   const wired = new Set(circuit.cords.map((cord) => cord.to));
   const nodes = circuit.nodes.map((raw): CircuitNode => {
     const node = ranged(resmoothed(revalued(raw as Was)), wired);
+    // The word, and nothing else: a `look` node named another graph and a `flow`
+    // node names the same one. `op` is a flow id either way, so no cord moves.
+    if (node.kind === 'look') return { ...node, kind: 'flow' };
     if (node.kind === 'sample') return { ...node, kind: 'tracks', op: 'by name' };
     if (node.kind === 'signal') {
       const op = node.op === 'energy' || node.op === 'amount' ? 'level' : node.op;
@@ -1197,7 +1226,7 @@ function reword(circuit: Circuit): Circuit {
     if (node.kind === 'energy') {
       // A fall of nothing written down was 0.4, and the merged node's nothing
       // is zero — so an unstated fall has to be written down rather than
-      // inherited, or every rolled look would lose its breathing.
+      // inherited, or every rolled flow would lose its breathing.
       const next: Was = {
         ...node,
         kind: 'track',
@@ -1249,11 +1278,22 @@ function reword(circuit: Circuit): Circuit {
 }
 
 interface Legacy {
-  effects?: Record<string, LookDef>;
+  effects?: Record<string, FlowDef>;
   layers?: unknown;
   clips?: unknown;
   archetypes?: unknown;
-  defaults?: { colorway?: string; pace?: number };
+  /**
+   * What `flows` was called, back when a graph was a *look*.
+   *
+   * The word went because it described the output and the thing is the wiring:
+   * a flow is a group of nodes joined together, which is what you are actually
+   * making. Five fields spelled it and all five are here, because a file that
+   * migrated its library but not its wheel would come back with an empty
+   * rotation and no message about why.
+   */
+  looks?: Record<string, FlowDef>;
+  rotation?: { looks?: string[] } & Partial<Scheme['rotation']>;
+  defaults?: { colorway?: string; pace?: number; look?: string; draws?: string };
 }
 
 /**
@@ -1271,7 +1311,8 @@ function songsOf(songs: Record<string, SongSpec | string> | undefined): Record<s
     }
     const kept: SongSpec = {};
     if (spec.colorway) kept.colorway = spec.colorway;
-    if (spec.looks?.length) kept.looks = spec.looks;
+    const pinned = spec.flows ?? (spec as { looks?: string[] }).looks;
+    if (pinned?.length) kept.flows = pinned;
     if (Object.keys(kept).length > 0) out[name] = kept;
   }
   return out;

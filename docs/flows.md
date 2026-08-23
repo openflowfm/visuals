@@ -1,16 +1,16 @@
-# Looks
+# Flows
 
 `protocol.ts`, `src/render/circuit.ts`, `src/render/shaders.ts`, `src/ui/Designer.tsx`.
 The one noun, the vocabulary it is wired from, and the compiler underneath.
 
 ## One noun, and it is a graph
 
-A **look** is a graph that produces a frame. Not a graph plus a stack plus a cascade: one
-graph. `LookDef` is a name and a circuit, and that is the whole type.
+A **flow** is a graph that produces a frame. Not a graph plus a stack plus a cascade: one
+graph. `FlowDef` is a name and a circuit, and that is the whole type.
 
 Everything that used to be a *level of something* is a node in it — the pictures that ship,
 the effects that work on them, the Live set's own layer mix, the meters, the song, and
-other looks. That collapse deleted four concepts:
+other flows. That collapse deleted four concepts:
 
 | gone | it was | it is now |
 |---|---|---|
@@ -40,7 +40,7 @@ vec4 v0 = laid(gen_plasma(fxKaleido(centred(), 0.5, 0.5, uEnergy), uEnergy), uEn
 ```
 
 Everything composes for free from that. Two sources can be folded differently and blended,
-a look can be dropped inside another look, and none of it needs a buffer or a second pass.
+a flow can be dropped inside another flow, and none of it needs a buffer or a second pass.
 
 **The `point` node emits the point being asked about**, not `centred()`. That one line is
 what makes the threading compose: a graph reading `point → fold → source`, evaluated at a
@@ -110,7 +110,7 @@ it reaches a person as is a control that stalls the picture. So every set number
 `uParams` — the same bank a `value` node rides — and the **bank is cut to the graph**,
 because the shader is generated and can declare exactly the size this one needs. Giving an
 inlet a number for the first time recompiles once, since that is a change to the shader's
-shape. Turning it after that recompiles nothing. A look that sets nothing at all still
+shape. Turning it after that recompiles nothing. A flow that sets nothing at all still
 declares one float, because GLSL rejects a zero-length array.
 
 **Wiring is not a destructive gesture.** A wired inlet's number stays on the node and its
@@ -138,7 +138,7 @@ may carry it, **signed**, so the sign is the polarity — a negative depth runs 
 the other way with nothing wired in to do it.
 
 **A depth of one over a value of zero is exactly the replacement it replaced**, which is
-what a missing depth means, so a look written before any of this draws the same picture and
+what a missing depth means, so a flow written before any of this draws the same picture and
 costs the same slots. A wired inlet at that default takes no room in `uParams` at all;
 give it either half of a range and it takes a pair, both riding the bank so that turning
 one is never a recompile.
@@ -147,7 +147,7 @@ Both are set on the row: drag for the value, **shift-drag for the range**, and t
 drawn from the value in the direction of the sign, so which side of the mark it falls on is
 the polarity you set. That is also why the row is no longer disabled under a cord. It was,
 on the argument that the number underneath was dormant and showing it would make the face
-look authoritative exactly when it was not — a good argument for what was true then. The
+flow authoritative exactly when it was not — a good argument for what was true then. The
 number is load-bearing now, so the row is honest again, and the live reading moved to the
 readout where a number nobody can drag belongs.
 
@@ -162,7 +162,7 @@ The number a node holds on one of its inlets was a **knob** — `CircuitNode.kno
 `LENS_KNOBS`, a `value` node the browser listed as *knob*. It is **`values`** now, everywhere.
 
 A knob is the shape of a control. It is a fine name for the thing `widgets` draws — that
-component is still `Knob` and should be — but it is the wrong name for what a look *holds*,
+component is still `Knob` and should be — but it is the wrong name for what a flow *holds*,
 because the same number is a knob on a face, a float in `uParams`, a key in a JSON file and,
 the moment a cord lands on it, nothing you can see at all. Naming the stored number after
 one of the four places it shows up made the other three read as exceptions, and it put a
@@ -213,7 +213,7 @@ editors listing these differently would be two different vocabularies.
 |---|---|---|---|
 | `tracks` | `p` | `c` | **the Live set**: every playing track, drawn and mixed. Fire a scene, it changes |
 | `source` | `p` `energy` | `c` | one of eleven: `solid` `bars` `rings` `noise` `strobe` `grid` `tunnel` `plasma` `spiral` `scan` `sparks` |
-| `look` | `p` | `c` | another look, whole, as one node |
+| `flow` | `p` | `c` | another flow, whole, as one node |
 | `paint` | `amount` `energy` | `c` | the colourway's colour at a brightness |
 
 ### transform — everything that gives a picture back where it already is
@@ -362,24 +362,28 @@ bipolar cosine from a unipolar wave, because its negative half stops at zero.
 on the face does not, and costs a cord across the canvas to say it. What it still does, and
 nothing else can, is put *the same* number on two inlets at once: turn it and both move.
 `Weather` in the built-in library is wired that way on purpose, and it is the only `value`
-node left in the twelve looks that ship.
+node left in the twelve flows that ship.
 
 ## `out` is one, required, and not in the browser
 
-Every look has **exactly one** `out`. It arrives with the look, it can be moved anywhere on
+Every flow has **exactly one** `out`. It arrives with the flow, it can be moved anywhere on
 the canvas, and it cannot be deleted — the faceplate has no `×` and `dropNode` refuses it, so
 the rule is the model's rather than the button's.
 
 It is also **not in the node browser**, which it used to be. The browser is built from the
 vocabulary and `out` is part of the vocabulary, but being part of the vocabulary and being
 something you *add* are different questions and only the second one a drawer answers.
-Dropping a second one was the single thing you could do from that browser that made a look
+Dropping a second one was the single thing you could do from that browser that made a flow
 stop compiling: a trap wearing a feature's clothes.
+
+`flow` is the other kind the node browser leaves out, for a different reason: it is not
+missing, it is upstairs. Every flow in the library is a row on the flow shelf, and one of
+those rows placed on a canvas *is* a `flow` node.
 
 **Where the rule is enforced is `merge` in `server/scheme.ts`**, and nowhere else. A scheme
 reaches the renderer exactly two ways — read off `scheme.json`, or sent up by an editor that
-gets it straight back down — and both come through that one function. So a look that arrived
-without an `out`, or with two, leaves it as a look and is written back that way the next time
+gets it straight back down — and both come through that one function. So a flow that arrived
+without an `out`, or with two, leaves it as a flow and is written back that way the next time
 anything saves. The compiler keeps its two error messages as a backstop for a circuit nobody
 built, which is what a probe and a test are.
 
@@ -435,7 +439,7 @@ With nothing playing, `Show.master` is zero — so a `track` node reading `maste
 That is **right**: energy is a meter, and a meter with a floor under it cannot say *silence*,
 which is the one thing a section break needs it to say.
 
-What is not right is a look that is only alive when the room is loud, because most of the
+What is not right is a flow that is only alive when the room is loud, because most of the
 hours anyone spends in the designer are hours with no Live attached — and because a set
 between songs is a click and nothing else. The fix is in the wiring rather than in the
 number: **take the motion off the clock and let the meter add to it.** `phase`, `beat`,
@@ -454,7 +458,7 @@ track master ────> b ┘                   and the meter wins above that
 clock is doing — which is how a floor becomes a ceiling. The range on `a` is what keeps the
 floor off the ground without pinning the top: an energy at 0.3 is a picture, an energy at 0
 is the same picture at its dullest setting, and the difference between those two is most of
-what "it looks dead at a desk" ever meant. The twelve looks that ship keep that rule, a
+what "it looks dead at a desk" ever meant. The twelve flows that ship keep that rule, a
 test asserts it, and it is the difference between a library that reads as calm at a desk and
 one that reads as broken.
 
@@ -466,29 +470,29 @@ than one you have to wait for.
 
 A `tracks` node draws the same picture once per playing Live track, with that track's colour,
 meter and fader each time. A fragment shader cannot loop over a varying number of those
-cheaply, so it stays a pass: every playing track into one target, which the look reads as a
+cheaply, so it stays a pass: every playing track into one target, which the flow reads as a
 texture. It is the last surviving piece of the compositor this replaced, and the whole reason
 there is more than one pass left. See [the renderer](render.md).
 
 What each track draws is the node's mode: `by name` uses the [name hints](../hints.ts), and
 anything else draws every track the same way.
 
-**One `tracks` texture per frame.** Two `tracks` nodes with different modes in one look share
+**One `tracks` texture per frame.** Two `tracks` nodes with different modes in one flow share
 the first one's, because a target per mode is a target per node and the win is small. Not
 built.
 
-## A look inside a look
+## A flow inside a flow
 
-The graph a `look` node names is **pasted in around the node** before the compiler runs, with
-every id prefixed so two copies of one look cannot collide. Expanding rather than teaching
-the compiler about sub-looks is what keeps the compiler one thing: set numbers, named tracks and
+The graph a `flow` node names is **pasted in around the node** before the compiler runs, with
+every id prefixed so two copies of one flow cannot collide. Expanding rather than teaching
+the compiler about sub-flows is what keeps the compiler one thing: set numbers, named tracks and
 energies all get their bank slots from the expanded graph without a second pass to gather
 them.
 
-**Around the node, not in place of it**, and that is the whole of why a `look` node has a
-point inlet that works. The sub-look's own `out` becomes a junction held on a reserved inlet
+**Around the node, not in place of it**, and that is the whole of why a `flow` node has a
+point inlet that works. The sub-flow's own `out` becomes a junction held on a reserved inlet
 — `~inner`, which the canvas hides because the flattener writes it and nobody else — and the
-node's one job is to read that junction at whatever point is wired into `p`. So a nested look
+node's one job is to read that junction at whatever point is wired into `p`. So a nested flow
 can be folded, zoomed or tiled from outside exactly as a `source` can, and with nothing wired
 it is read where it is asked, which is identical to having pasted its nodes in by hand.
 
@@ -496,7 +500,7 @@ Splicing the node out instead left the `p` cord addressed to a node that no long
 drawn across the canvas, looked up by nothing, changing nothing on the wall.
 
 A **loop is refused at the moment of wiring**, by `wouldLoop`, not at compile time. At
-compile time the honest message is "one of these seven looks contains itself", which nobody
+compile time the honest message is "one of these seven flows contains itself", which nobody
 can act on; at the moment of dropping, the message is about the thing you just clicked. The
 compiler refuses one too, because a file can be hand-edited.
 
@@ -512,14 +516,14 @@ stack gives out. What that reaches a person as is a page that has stopped rather
 sentence about their wiring. By outlet the set is finite, so it terminates, and a colour that
 comes back round still reaches an outlet that is already open.
 
-A look that has been deleted makes the node draw nothing rather than failing. A look you
+A flow that has been deleted makes the node draw nothing rather than failing. A flow you
 deleted should make the thing that used it go quiet, not stop the show.
 
 **`The lot` is the shipped example**, and it is in the library rather than in this document
 because a paragraph about nesting convinces nobody. It is `Water` as a wash, `Vortex` folded
-by a kaleidoscope wired **point first** — the lens's `p` outlet into the look node's own point
+by a kaleidoscope wired **point first** — the lens's `p` outlet into the flow node's own point
 inlet, so the spiral bends into the wedges instead of being a picture of a spiral cut into
-pieces — and `Outline` adding the set's own edges on top. It is also the most expensive look
+pieces — and `Outline` adding the set's own edges on top. It is also the most expensive flow
 that ships, and for the reason above: `Vortex` ends in a `bloom` and `Water` in a `smear`, so
 one frame is nine evaluations of that spiral and six of that plasma. Taking it apart is the
 fastest way to find out what nesting costs.
@@ -528,17 +532,21 @@ fastest way to find out what nesting costs.
 
 Everything else this app does is arrangements of what gets made here.
 
-**Two browsers**, and the second is the change. The library lists your looks; the **node
-browser** lists the vocabulary. It is a device browser: the row is the **node**, and its
-**presets** open underneath it. See [the console](console.md) for the shape and what search
-has to keep reaching.
+**Two shelves under one search box**, and the split is the change. The **flow shelf** lists
+your library, marked `◈`, each row saying how many nodes are inside it and carrying two
+verbs — open it, or place it in the flow you have open. The **node browser** below lists the
+vocabulary, one kind per row with its signature (`p → c`) on the right. A flow used to
+appear in both, and in the second one it was a chip identical to `source` — which is how a
+flow that was a single `tracks` node came to read as a kind of node. See
+[the console](console.md) for the shape, the four tools that solved this the same way, and
+what the search box has to keep reaching.
 
 A faceplate shows the **mode** rather than the kind, which is the same idea one step later:
 a node reading `source` above a dropdown reading `plasma` makes you read two things to learn
 one. The kind sits quietly beside the mode, and the hot-swap button opens that kind's modes
 in the same browser that created it. Choosing one changes the node already on the canvas;
 it does not drop a replacement. A target from outside the vocabulary — the track a `track`
-reads or the look a `look` draws — stays in the one chooser band below the title.
+reads or the flow a `flow` draws — stays in the one chooser band below the title.
 
 **Every node has one anatomy.** Its fixed-size picture is an overlay above the frame, then
 the title, two reserved outlet lines, one chooser band and six reserved inlet lines. Empty
@@ -565,7 +573,7 @@ adds a decision without changing an existing picture.
 **The bench is a `Compositor`**, not a second renderer. There used to be one and it was a
 standing risk: a bench that could disagree with the stage about brightness or blend is worse
 than no bench, because those are exactly what you come here to judge. With no bridge it gets
-**stand-in tracks** driven off the beat, so a look built on the set is not black at a desk —
+**stand-in tracks** driven off the beat, so a flow built on the set is not black at a desk —
 which is precisely the situation the designer exists to work in. Those are `withStandIns` and
 belong to the room rather than to the bench, because the node faces need the same four or
 they are black while the bench beside them is lit.
@@ -576,7 +584,7 @@ and the thing you are actually judging was getting 236 pixels while the graph ke
 See [the console](console.md) for that and for the group of controls above it.
 
 **It runs on its own room.** `useTransport` free-runs — a tempo, a play button, a restart —
-and `useRoom` invents the rest of the conditions a look reads: energy, section, colourway
+and `useRoom` invents the rest of the conditions a flow reads: energy, section, colourway
 and key. Both can be told to take the real thing when there is one, and following is the
 option rather than the fallback. What comes out is a `Clock` and a `Show`, the same two
 shapes the compositor already takes, so nothing downstream can tell whether the beat came
@@ -585,7 +593,7 @@ you build at a desk is what will play.
 
 ## A picture on every node
 
-Each node face shows what *that node* has made, not a thumbnail of the finished look.
+Each node face shows what *that node* has made, not a thumbnail of the finished flow.
 [`probe.ts`](../src/ui/probe.ts) builds it by cutting the graph off at one outlet and
 bringing the result back to a colour: a number through `paint`, a point through a `plasma`
 source, because a point's whole job is to move a picture and a picture with structure in it
@@ -602,7 +610,7 @@ turn **live pictures** off and the affected faces keep their last frame with `pa
 on it. The browser reports `live / visible` beside the switch, so saving work never looks
 like a broken preview. The switch is a machine preference in `localStorage`, not part of the
 scheme: projector and authoring laptop can make different performance choices without
-changing a look. Graph zoom stays owned by `Graph`; the budget reads it through a stable ref
+changing a flow. Graph zoom stays owned by `Graph`; the budget reads it through a stable ref
 so a wheel gesture does not become a React update through every node.
 
 A node picture is fed **exactly what the bench is fed**, and that is a correction. It used
@@ -622,20 +630,20 @@ The faces get the same [`Show`](../src/state/useRoom.ts) the bench does, which a
 the room, dialled, and therefore steady anyway — including the same stand-in set when there
 is no Live attached, which is `withStandIns` and is shared for the same reason.
 
-**A face gets the library, not just the graph.** A nested look is a *different* graph, so a
-`preview.ts` handed only a circuit had nothing to expand a `look` node against — which made
+**A face gets the library, not just the graph.** A nested flow is a *different* graph, so a
+`preview.ts` handed only a circuit had nothing to expand a `flow` node against — which made
 that node's face black, and every face downstream of it black too, in a graph that drew
-perfectly well on the wall. A run of black diagrams down the middle of a working look is
+perfectly well on the wall. A run of black diagrams down the middle of a working flow is
 exactly the thing a node face exists to prevent.
 
 So the probe graph is parked under a reserved id and expanded by the **same** `flatten` the
 stage uses, rather than given an expander of its own. A face that disagreed with the bench
-about what a nested look draws would be worse than one that showed nothing, because it would
+about what a nested flow draws would be worse than one that showed nothing, because it would
 be believed.
 
 **Clicking a face promotes it to the bench**, which is the other half of the same idea: a
 hundred pixels across is enough to see *that* something is happening and nowhere near enough
-to see what. The only way to look properly used to be to wire the node into `out`, look, and wire it
+to see what. The only way to flow properly used to be to wire the node into `out`, flow, and wire it
 back — an edit, made to answer a question, on a graph that is the record.
 
 The two are now the same picture at two sizes, which is what makes the click worth making.
@@ -656,11 +664,11 @@ big is still a diagram, and a big diagram implies otherwise unless it says.
 ## Reading a file written when the cascade existed
 
 `server/scheme.ts` carries forward what a **person made** and drops what the cascade decided.
-The colourways, which song draws from which, and any look that was a graph all survive.
+The colourways, which song draws from which, and any flow that was a graph all survive.
 `layers`, `clips` and `archetypes` do not — inventing a graph out of a layer binding would
 produce something nobody wrote and nobody wants to debug.
 
-A look that was only a built-in is not carried either: a built-in is a node mode now, and a
+A flow that was only a built-in is not carried either: a built-in is a node mode now, and a
 library full of twenty-three entries called "Ripple" that are one node each is worse than an
 empty one.
 
@@ -678,7 +686,7 @@ rather than left beside the new ones, because `scheme.json` is a file somebody r
 diffs and two spellings of one field is a question nobody should have to answer.
 
 Nothing else is affected: a number that failed to come across would not be a parse error, it
-would be a look that opens with its inlets quietly back at their defaults, which is the kind
+would be a flow that opens with its inlets quietly back at their defaults, which is the kind
 of thing you find out about on stage.
 
 ## What is not built
@@ -690,7 +698,7 @@ parameters.
 **Notes and velocity.** The LOM exposes no played-note event and the bridge device is an
 audio effect. See [the wheel](wheel.md).
 
-**One track's picture as another's input.** A look reaches a track's *meter* and not its
+**One track's picture as another's input.** A flow reaches a track's *meter* and not its
 *frame*. That needs a render target per track, which the compositor does not keep.
 
 **A point from a radius and an angle.** `place` builds one from `x` and `y`, and the

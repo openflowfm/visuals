@@ -31,7 +31,7 @@ const SHOW: Show = {
       clipName: 'Verse',
     },
   ],
-  look: null,
+  flow: null,
   pinned: false,
   colorway: null,
   colors: [0xffffff],
@@ -90,7 +90,7 @@ describe('CPU number evaluation', () => {
     // it, so the number under the cord is the floor the signal is carried up
     // from. A raw circuit is read exactly as written; a *file* has been through
     // `ranged` in `scheme.ts`, which puts an old dormant number at zero so the
-    // look drawn before any of this existed still draws the same.
+    // flow drawn before any of this existed still draws the same.
     expect(sample.inlet('m/a')).toBeCloseTo(0.9);
     expect(sample.inlet('m/b')).toBe(0.1);
     // 0.9 and 0.1, and `add` clamps.

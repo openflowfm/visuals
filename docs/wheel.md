@@ -5,26 +5,26 @@
 ## It replaced a cascade
 
 This file used to be called *the cascade* and described four levels — song, archetype, track,
-clip — each overriding the last, with additive look lists, accumulating bias, and a `Said`
+clip — each overriding the last, with additive flow lists, accumulating bias, and a `Said`
 for every scalar so the editor could explain which level had answered.
 
-All of it existed to combine pictures. [A graph combines pictures](looks.md), so it is gone,
-and what replaced it is one question with one answer: **which look, and which colours.**
+All of it existed to combine pictures. [A graph combines pictures](flows.md), so it is gone,
+and what replaced it is one question with one answer: **which flow, and which colours.**
 
 ## The rotation is the default and binding is the exception
 
 That inversion is why most of the model could go, and it is the whole design.
 
 A rig that draws nothing until it is configured is a rig nobody configures. This one turns
-through everything you have made — a wheel of looks and a wheel of colourways, advancing on
+through everything you have made — a wheel of flows and a wheel of colourways, advancing on
 musical time — so a set it has never seen still gets a show. A song entry is how you say
 "not for this one".
 
 ```
 Rotation {
-  looks: []        // empty means EVERY look there is
+  flows: []        // empty means EVERY flow there is
   colorways: []    // empty means EVERY colourway there is
-  bars: 8          // turn the look every 8 bars. 0 holds
+  bars: 8          // turn the flow every 8 bars. 0 holds
   colorEvery: 16   // turn the palette on a longer wheel
   onClip: true     // and turn when a clip is fired out of band
 }
@@ -39,7 +39,7 @@ draw a show.
 `atTurn` walks a shuffled cycle rather than picking independently each time, so a pool of
 five shows all five before it shows any of them twice.
 
-Independent picks *feel* random and *read* as broken: the same look twice in a row looks like
+Independent picks *feel* random and *read* as broken: the same flow twice in a row looks like
 the change failed, and two of five never appearing at all looks like they are unwired.
 
 The shuffle is deterministic in the pool and the lap, so the server and the editor agree
@@ -48,7 +48,7 @@ rather than the same one again. The join between two laps is fixed up too — th
 lap and the first of the next are never the same thing, which is the one repeat a shuffled
 cycle can still make and the one that reads as the wheel having jammed.
 
-## Two triggers, and the second is a gesture
+## Three triggers, and two are gestures
 
 **Bars, not seconds.** Everything here is musical, and a picture that changes 11.4 seconds in
 changes in the middle of a phrase.
@@ -57,6 +57,10 @@ changes in the middle of a phrase.
 one. So the dominant playing index is the scene, and a track that has moved somewhere else on
 its own is somebody reaching past the grid — which is already the "and now something else" of
 a live set, and the only gesture the rig can hear without being told.
+
+**The `l` key.** This turns only the flow wheel once and leaves the colourway where it is.
+The turn belongs to the server, not the browser that received the key, so the console and the
+projector change together. Key repeat is ignored: one press is one flow.
 
 A **scene change is deliberately not a trigger.** Scenes fire constantly and the picture would
 never settle into anything.
@@ -127,16 +131,16 @@ Two fields, both optional, both meaning *pin this instead of letting it turn*.
 ```ts
 interface SongSpec {
   colorway?: string;
-  looks?: string[];
+  flows?: string[];
 }
 ```
 
-A song naming exactly **one** look is the only case that stops the wheel. A song naming three
+A song naming exactly **one** flow is the only case that stops the wheel. A song naming three
 is still a rotation, just a shorter one — which is what makes the override cheap to reach
 for, because "these three, for this song" is a normal thing to want and should not need a
 second concept.
 
-A pin naming a look nobody has any more is dropped rather than obeyed. A stale id must not
+A pin naming a flow nobody has any more is dropped rather than obeyed. A stale id must not
 black the screen for a whole song.
 
 ## Colours come from the wheel, never from the clip
@@ -153,7 +157,7 @@ between a set you can navigate and a set that looks right.
 scheme in `server/scheme.ts` is a complete show and the file only ever overrides parts of it.
 
 Overrides are shallow per section: naming one colourway does not delete the other three, and
-registering one look does not remove the twelve that ship.
+registering one flow does not remove the twelve that ship.
 
 A parse error **keeps the scheme that was already working** and reports the message in the
 panel. Losing the show to a trailing comma is the wrong answer at any time and an unthinkable
@@ -165,13 +169,13 @@ pointer — while the write is debounced.
 
 **`merge` is the one door, so it is where a graph gets repaired.** A scheme reaches the
 renderer exactly two ways — read off disk, or sent up by an editor that gets it straight back
-down again — and both come through that function. Every look that passes through it comes out
+down again — and both come through that function. Every flow that passes through it comes out
 with exactly one `out` and with no cord addressed to a port that is not there, which are the
 two things a *file* can say and the editor cannot. Repairing here means the repair is written
 back the next time anything saves; repairing in the compiler would mean silently redoing the
-same fix sixty times a second and never telling anyone. See [looks](looks.md).
+same fix sixty times a second and never telling anyone. See [flows](flows.md).
 
-**A saved file holds a copy of every look that ships**, because the editor sends the whole
+**A saved file holds a copy of every flow that ships**, because the editor sends the whole
 scheme and the server writes the whole scheme. So improving a built-in does not reach a
 machine that has already saved once — its `scheme.json` shadows the new one under the same
 id, and a built-in *added* since that save does arrive, because there is nothing in the file
@@ -180,12 +184,12 @@ knowing before wondering why an updated library did not arrive.
 
 ## The twelve that ship
 
-`BUILT_IN.looks` in `server/scheme.ts`, and they are the manual: nobody reads a node
+`BUILT_IN.flows` in `server/scheme.ts`, and they are the manual: nobody reads a node
 reference and everybody takes a working example apart. So they are a **spread** rather than
 twelve variations, one lesson each — and because the wheel turns through everything by
 default, they are also the show a fresh clone puts on.
 
-| look | what it is for |
+| flow | what it is for |
 |---|---|
 | **Folded** | a colour is a function of a point: the set and a ring of its own, read through a swirl and folded by a kaleidoscope that moves the whole chain |
 | **Deep** | two pictures, one of them the room's — a corridor with the set screened into it and graded |
@@ -194,7 +198,7 @@ default, they are also the show a fresh clone puts on.
 | **Vortex** | a portal that turns rather than recedes: `zoom` on the beat pulse, so the whole spiral punches inward on every hit |
 | **Gateway** | geometry happens *before* the picture — `fold` and a bare point feed two sources that never meet until the blend |
 | **Outline** | the set as a diagram. `edge` keeps the outline and throws the fill away — over a grid, so there are always edges to find, and over a ghost of the same junction |
-| **Poster** | flat bands, and the one look that changes with the *music* rather than the playing: `posterize` to four steps over a wash, hue rotated by the song's key |
+| **Poster** | flat bands, and the one flow that changes with the *music* rather than the playing: `posterize` to four steps over a wash, hue rotated by the song's key |
 | **Glitch** | two lenses, a spread and two grades in a row and nothing else, over a scan pattern there is always something to break in — the busiest thing here, and the one that teaches how far a chain of small steps gets |
 | **Lava** | a threshold walked slowly off `time` rather than the beat, and a cord run backwards by a negative depth |
 | **Storm** | a `wave` snapped to the beat times a squared `random`, gating a contour cut out of a noise field — a strike that is rarely big and never the same size twice |
@@ -222,17 +226,17 @@ track (master) ────> b ┘
 The `a` inlet carries a **range** rather than the whole swing — `{ a: [0.3, 0.4] }` is a
 floor of three tenths that the clock lifts by four — so the picture sits somewhere useful with
 the room silent and the meter takes over the moment it is louder than that. Which clock is
-the look's own business, and it is most of the character: `Vortex` floors on the same pulse
+the flow's own business, and it is most of the character: `Vortex` floors on the same pulse
 that punches its zoom, `Gateway` on a saw so it ramps rather than twitches, `Water` on the
 slow sine already moving its surface, and `Glitch` on a per-beat pulse because it is the one
 that should twitch.
 
-**And a look that reads the set carries a picture underneath it.** With no clip playing a
+**And a flow that reads the set carries a picture underneath it.** With no clip playing a
 `tracks` node draws nothing, which used to mean five of these went black between songs. There
 is a ring under `Folded`, a grid under `Outline`, a wash under `Poster` and a scan pattern
 under `Glitch` — each blended so a playing set is what you see, and each there when it is not.
 There is no exception. There was one, `The set`, a lone `tracks` node that drew what was
-playing and nothing when nothing was; it is gone, because a look that is a single node is
+playing and nothing when nothing was; it is gone, because a flow that is a single node is
 that node, and the browser already offers `tracks` under `draw`.
 
 **Nothing is wired to something that cannot move it.** `Weather` used to drive a `hue` from
@@ -243,7 +247,7 @@ number that idles at a half belongs on an inlet where a half means something, wh
 now drives a blend amount instead.
 
 **One of them costs what nesting costs, on purpose.** `The lot` ends up nine evaluations of
-`Vortex`'s spiral and six of `Water`'s plasma in one frame, because both of those looks end
+`Vortex`'s spiral and six of `Water`'s plasma in one frame, because both of those flows end
 in a `spread` and a spread reads its input once per tap. Nesting does not add, it multiplies,
 and the library should contain one honest example of that rather than only the cheap kind.
 
@@ -255,17 +259,17 @@ the first thing anyone opens reads left to right instead of needing untangling.
 `roll` deals a new one from a seed. It used to roll a *show* — colourways, song assignments,
 section energies, per-track bindings and two circuits at once — because a show was a table of
 decisions with a couple of graphs in it. A show is a library and a wheel now, so it rolls the
-two things a library is made of: **looks and colourways**.
+two things a library is made of: **flows and colourways**.
 
-A rolled look walks a **shape** — a picture, a few things done to it, a colour operation or
+A rolled flow walks a **shape** — a picture, a few things done to it, a colour operation or
 two — and randomises what fills each slot. A random walk over the whole vocabulary produces
-garbage nine times in ten; the shape is what makes it a look and the fill is what makes it a
+garbage nine times in ten; the shape is what makes it a flow and the fill is what makes it a
 different one every time.
 
 Three constraints are worth stating because they are what make a rolled one read as
 *something*:
 
-- **It reaches for the set more often than not.** A rolled look that ignored whoever is
+- **It reaches for the set more often than not.** A rolled flow that ignored whoever is
   playing is a screensaver, and this rig is not one.
 - **It never wires a `spread`.** `bloom`, `smear`, `edge` and `shift` each read their input
   several times, so nesting two of them multiplies the shader. A hand reaches for one knowing
@@ -291,8 +295,8 @@ cascade used to generate.
 
 ### It deals only what you leave switched on
 
-Three chips beside the button — `colours`, `looks`, `rotation` — all on by default. By the
-second evening the colourways are the part you have settled and the looks are the part you
+Three chips beside the button — `colours`, `flows`, `rotation` — all on by default. By the
+second evening the colourways are the part you have settled and the flows are the part you
 are still fishing for, and a button that deals both is a button you stop pressing.
 
 **Every part is rolled and only the wanted ones land.** Drawing from the generator in the same
@@ -300,8 +304,8 @@ order regardless of what is kept is what makes a seed mean one show: keeping onl
 has to give the same colours rolling everything would have, or a seed written on a hand is
 worth nothing.
 
-Clearing "what the last roll wired" means **only** that: a rolled look carries `rolled: true`,
-so a look you built by hand survives instead of being deleted as a side effect of a button
+Clearing "what the last roll wired" means **only** that: a rolled flow carries `rolled: true`,
+so a flow you built by hand survives instead of being deleted as a side effect of a button
 whose whole promise is that one level of undo covers it.
 
 **Undo covers the roll you just did; the seed covers the one from last Tuesday.** One level is

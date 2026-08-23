@@ -74,8 +74,8 @@ export const MAX_LOOKS: Param = {
   max: 4,
   defaultValue: 2,
   unit: 'int',
-  name: 'Max looks',
-  shortName: 'Max looks',
+  name: 'Max flows',
+  shortName: 'Max flows',
 };
 
 /**
@@ -98,7 +98,7 @@ export const PACE: Param = {
 /**
  * The designer's own tempo, when it is not following a room.
  *
- * A float rather than an int because Live's tempo is one, and a look built at
+ * A float rather than an int because Live's tempo is one, and a flow built at
  * 128.5 should be judged at 128.5. Live's own range, so nothing here refuses a
  * number Ableton would accept.
  */

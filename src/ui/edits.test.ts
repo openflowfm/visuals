@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Circuit, Scheme } from '../../protocol.ts';
 import { BUILT_IN } from '../../server/scheme.ts';
 import { inletsOf, starterCircuit } from '../render/circuit.ts';
-import { dropNode, forkLook, setValue, setNode } from './edits.ts';
+import { dropNode, forkFlow, setValue, setNode } from './edits.ts';
 import { palette } from './nodes.ts';
 
 /**
@@ -59,7 +59,7 @@ describe('changing a node’s mode', () => {
     // so a dropdown could turn a remap that costs one read into a tap that
     // costs nine. It cannot: the mode is not one this kind has, so the node
     // holds the first one it does rather than compiling something nobody asked
-    // for. Changing the cost of a look is a different node now.
+    // for. Changing the cost of a flow is a different node now.
     const next = setNode(rippled(), 'e', { op: 'bloom' });
     const node = next.nodes.find((each) => each.id === 'e')!;
     expect(inletsOf(node).map((port) => port.name)).not.toContain('reach');
@@ -73,7 +73,7 @@ describe('changing a node’s mode', () => {
 
 describe('out is the one node that is not optional', () => {
   it('refuses to take it off the canvas', () => {
-    // A look without an `out` does not draw a smaller picture; it refuses to
+    // A flow without an `out` does not draw a smaller picture; it refuses to
     // compile, and the message is about a file rather than about the thing that
     // was just clicked. The faceplate has no delete button for the same reason,
     // and this is the half that means the rule is the model's.
@@ -84,9 +84,8 @@ describe('out is the one node that is not optional', () => {
 
   it('is not something the node browser offers', () => {
     // It was, and dropping a second one is the one thing in the vocabulary that
-    // makes a look stop compiling — a trap rather than a feature.
-    const scheme = BUILT_IN as Scheme;
-    const entries = palette(scheme, ['Bass', 'master']);
+    // makes a flow stop compiling — a trap rather than a feature.
+    const entries = palette(['Bass', 'master']);
     expect(entries.some((entry) => entry.node.kind === 'out')).toBe(false);
     // And the rest of the vocabulary is still all there to be found.
     expect(entries.some((entry) => entry.node.kind === 'tracks')).toBe(true);
@@ -132,15 +131,15 @@ describe('a value set on an inlet', () => {
     expect(kept.nodes.find((node) => node.id === 'e')?.values).toEqual({ reach: 0.9 });
   });
 
-  it('belongs to the copy rather than to both looks', () => {
+  it('belongs to the copy rather than to both flows', () => {
     // A spread is one level deep, so the two graphs shared one map: turning a
-    // number on the fork turned it on the look it came from, which reads as the
+    // number on the fork turned it on the flow it came from, which reads as the
     // original having been edited by a copy nobody had opened yet.
-    const one = { ...(BUILT_IN as Scheme), looks: { one: { name: 'One', circuit: posterized() } } };
-    const made = forkLook(one, 'one');
-    const copy = made.scheme.looks[made.id].circuit;
+    const one = { ...(BUILT_IN as Scheme), flows: { one: { name: 'One', circuit: posterized() } } };
+    const made = forkFlow(one, 'one');
+    const copy = made.scheme.flows[made.id].circuit;
     const turned = setValue(copy, 'e', 'waves', 0.1);
     expect(turned.nodes.find((n) => n.id === 'e')?.values?.waves).toBe(0.1);
-    expect(made.scheme.looks.one.circuit.nodes.find((n) => n.id === 'e')?.values?.waves).toBe(0.8);
+    expect(made.scheme.flows.one.circuit.nodes.find((n) => n.id === 'e')?.values?.waves).toBe(0.8);
   });
 });

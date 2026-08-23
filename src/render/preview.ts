@@ -1,17 +1,17 @@
-import { TRACK_DRAWS, type Circuit, type LookDef, type Scheme, type Show } from '../../protocol.ts';
+import { TRACK_DRAWS, type Circuit, type FlowDef, type Scheme, type Show } from '../../protocol.ts';
 import { compileCircuit, flatten } from './circuit.ts';
 import { createFeed } from './feed.ts';
-import { banksOf, signatureOfCircuit } from './look.ts';
+import { banksOf, signatureOfCircuit } from './flow.ts';
 import { compile, createTarget, drawFullscreen, type Program } from './gl.ts';
 
 /**
  * A small picture of what one node has made.
  *
  * Not the bench. The bench is a whole `Compositor` on its own canvas, drawing
- * the look exactly the way the wall will. This is the other thing: the face of
+ * the flow exactly the way the wall will. This is the other thing: the face of
  * every node on the canvas, showing what *that* node produced.
  *
- * A node face showing a thumbnail of the finished look would be the same image
+ * A node face showing a thumbnail of the finished flow would be the same image
  * a dozen times over and would teach nothing. One showing what has been built so
  * far turns the canvas into a series of steps you can read along, which is how
  * anyone reasons about signal flow anyway.
@@ -47,7 +47,7 @@ export interface PreviewRoom {
    * The graph the faces are all probes of.
    *
    * Here so the set's own pass is drawn **once** for the whole canvas rather
-   * than once per face: every probe of one look reads the same `tracks` node,
+   * than once per face: every probe of one flow reads the same `tracks` node,
    * and drawing twenty-six Live tracks a dozen times over for one frame is the
    * kind of cost that only shows up on somebody else's laptop.
    */
@@ -56,10 +56,10 @@ export interface PreviewRoom {
   /**
    * The whole scheme, for the same reason the compositor takes one.
    *
-   * Its library is what a face showing a `look` node is expanded against —
+   * Its library is what a face showing a `flow` node is expanded against —
    * without it that face is black, and so is every face downstream of one, since
-   * `compileCircuit` alone cannot expand a nested look. The bench and the wall
-   * never had the problem because they go through `compileLook`, which has the
+   * `compileCircuit` alone cannot expand a nested flow. The bench and the wall
+   * never had the problem because they go through `compileFlow`, which has the
    * library; this is the one path that was handed a bare circuit.
    */
   scheme: Scheme;
@@ -114,15 +114,15 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
   let height = 1;
 
   /**
-   * The probe graph with every nested look spliced in.
+   * The probe graph with every nested flow spliced in.
    *
    * Parked under a reserved id and expanded by the same `flatten` the stage
    * uses, rather than given a second expander of its own — a face that disagreed
-   * with the bench about what a nested look draws would be worse than a face
+   * with the bench about what a nested flow draws would be worse than a face
    * that showed nothing, because it would be believed.
    */
-  const whole = (circuit: Circuit, looks: Record<string, LookDef>): Circuit =>
-    flatten({ ...looks, [FACE]: { name: 'face', circuit } }, FACE).circuit;
+  const whole = (circuit: Circuit, flows: Record<string, FlowDef>): Circuit =>
+    flatten({ ...flows, [FACE]: { name: 'face', circuit } }, FACE).circuit;
 
   const programFor = (circuit: Circuit): Built => {
     const signature = signatureOfCircuit(circuit);
@@ -183,18 +183,18 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
       gl.bindFramebuffer(gl.FRAMEBUFFER, live.framebuffer);
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
-      // The op off the look's own `tracks` node, expanded, so a look that only
+      // The op off the flow's own `tracks` node, expanded, so a flow that only
       // reads the set through a nested one still gets the right picture. Read
       // off the graph rather than out of `compileCircuit`, which would emit a
       // whole shader's worth of GLSL to answer one question, sixty times a
       // second.
-      const drawn = whole(room.circuit, room.scheme.looks).nodes.find((n) => n.kind === 'tracks');
+      const drawn = whole(room.circuit, room.scheme.flows).nodes.find((n) => n.kind === 'tracks');
       if (drawn) feed.drawSet({ ...room, width, height }, drawn.op ?? TRACK_DRAWS[0]);
     },
 
     draw(circuit) {
       if (!at) return;
-      const graph = whole(circuit, at.scheme.looks);
+      const graph = whole(circuit, at.scheme.flows);
       const made = programFor(graph);
       const feeding = { ...at, width, height };
 
@@ -204,7 +204,7 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
       gl.disable(gl.BLEND);
       if (made.program) {
         gl.useProgram(made.program.program);
-        feed.look(made.program, feeding, banksOf(graph));
+        feed.flow(made.program, feeding, banksOf(graph));
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, live.texture);
         gl.uniform1i(made.program.uniform('uTracksTex'), 0);
@@ -212,7 +212,7 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
       }
 
       // Through the same output stage the wall gets, minus the keystone and the
-      // gain — which describe a projector rather than a look. The shoulder is
+      // gain — which describe a projector rather than a flow. The shoulder is
       // not one of those: a face that skipped it would show highlights the
       // bench beside it has already rolled off.
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -221,5 +221,5 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
   };
 }
 
-/** An id nobody can type, because a look called `face` is perfectly legal. */
+/** An id nobody can type, because a flow called `face` is perfectly legal. */
 const FACE = '~face';

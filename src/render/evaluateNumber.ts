@@ -10,7 +10,7 @@ export interface NumberInputs {
   dt: number;
   /** The same global pace the shader reads. Zero when the scheme says nothing. */
   pace?: number;
-  /** The look pass's seed. Its renderer default is 3.71. */
+  /** The flow pass's seed. Its renderer default is 3.71. */
   seed?: number;
   /**
    * Latest numbers by the ids `valuesOf` gives them: a value node's id, or a
@@ -123,7 +123,7 @@ export function smoothTrack(
   return previous + (current - previous) * fall;
 }
 
-/** A playback node, under the same uniforms the look pass receives. */
+/** A playback node, under the same uniforms the flow pass receives. */
 function playback(node: CircuitNode, at: NumberInputs): number {
   const seed = at.seed ?? 3.71;
   switch (node.op ?? 'level') {

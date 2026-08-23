@@ -61,7 +61,7 @@ describe('naming what drives an inlet', () => {
   });
 
   it('splits on the last slash, so a flattened id keeps its own', () => {
-    // The flattener parks a nested look's nodes under ids carrying slashes.
+    // The flattener parks a nested flow's nodes under ids carrying slashes.
     // Splitting on the first one would look up a node that does not exist and
     // read out a fragment of an id.
     const circuit = wire(

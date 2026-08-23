@@ -20,7 +20,7 @@ export type NodePictureStatus = PictureBudget['counts'] & {
  * A picture per node, out of one GL context.
  *
  * Each face shows what *that node* has made, not a thumbnail of the finished
- * look — a dozen copies of the same image would teach nothing, while a picture
+ * flow — a dozen copies of the same image would teach nothing, while a picture
  * per step turns the canvas into something you can read along the chain.
  * [`probe.ts`](./probe.ts) builds each one by cutting the circuit off at an
  * outlet and bringing the result back to a colour through the vocabulary's own
@@ -148,7 +148,7 @@ export function NodePictures({
       const beat = at.transport.beat();
       preview.begin({
         circuit: at.circuit,
-        // The same stand-in set the bench uses, so a look built on the set is
+        // The same stand-in set the bench uses, so a flow built on the set is
         // not black here and lit there. See [`withStandIns`](../state/useRoom.ts).
         show: withStandIns(at.show, beat),
         scheme: at.scheme,

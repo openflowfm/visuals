@@ -1,5 +1,5 @@
 import { useState, type ReactNode, type Ref } from 'react';
-import type { Circuit, CircuitNode, LookDef, NodeKind } from '../../protocol.ts';
+import type { Circuit, CircuitNode, FlowDef, NodeKind } from '../../protocol.ts';
 import {
   Graph,
   GraphNode,
@@ -51,29 +51,30 @@ export function CircuitEditor({
   circuit,
   onChange,
   tracks = [],
-  looks = [],
+  flows = [],
   picture,
   energy = 0,
   beat = () => 0,
   numberReadings = {},
   onSwap,
+  onEnter,
   viewRef,
 }: {
   circuit: Circuit;
   onChange(next: Circuit): void;
   /**
    * Every name a `track` node may point at, which is **the set's** — the same
-   * rule the rest of the editor keeps. A name you can typo is a look that goes
+   * rule the rest of the editor keeps. A name you can typo is a flow that goes
    * quiet on the one night it mattered.
    */
   tracks?: readonly string[];
   /**
-   * Every look a `look` node may point at, which is the library minus this one.
+   * Every flow a `flow` node may point at, which is the library minus this one.
    *
    * Handed in rather than read, for the same reason the track names are: what a
    * node may name comes from something the canvas has no business knowing about.
    */
-  looks?: readonly { id: string; def: LookDef }[];
+  flows?: readonly { id: string; def: FlowDef }[];
   /** A small picture of what a node has made, when the host can draw one. */
   picture?: (nodeId: string) => ReactNode;
   /** The room's current energy, for an unwired alive inlet. */
@@ -84,6 +85,8 @@ export function CircuitEditor({
   numberReadings?: Readonly<Record<string, NumberReading>>;
   /** Open this node's kind in the host's mode browser. */
   onSwap?(id: string, kind: NodeKind): void;
+  /** Open the flow a `flow` node names, so the canvas is a way in as well as out. */
+  onEnter?(flow: string): void;
   /** Publish a stable read-only view without lifting wheel zoom into state. */
   viewRef?: Ref<GraphView>;
 }) {
@@ -104,9 +107,9 @@ export function CircuitEditor({
       return;
     }
     // Refused where it is dropped rather than where it fails, the same bargain
-    // a look inside a look gets. The compiler will say "blend feeds itself",
+    // a flow inside a flow gets. The compiler will say "blend feeds itself",
     // which is true and is about a node; this is about the cord in your hand,
-    // and it happens before the whole look goes black.
+    // and it happens before the whole flow goes black.
     if (wouldFeedItself(circuit, from, to)) {
       setRefused('that would feed this back into itself');
       return;
@@ -132,12 +135,13 @@ export function CircuitEditor({
                 node={node}
                 circuit={circuit}
                 tracks={tracks}
-                looks={looks}
+                flows={flows}
                 picture={picture}
                 energy={energy}
                 beat={beat}
                 numberReadings={numberReadings}
                 onSwap={onSwap}
+                onEnter={onEnter}
                 onChange={(next) => onChange(setNode(circuit, node.id, next))}
                 onTurn={(inlet, value) => onChange(setValue(circuit, node.id, inlet, value))}
                 onRange={(inlet, depth) => onChange(setDepth(circuit, node.id, inlet, depth))}
@@ -150,16 +154,16 @@ export function CircuitEditor({
       </div>
 
       {/*
-        A look with nothing wired to `out` compiles, on purpose — it draws
+        A flow with nothing wired to `out` compiles, on purpose — it draws
         transparent black, which is the state every graph passes through on the
-        way to being one. What it must not do is look identical to a look that
+        way to being one. What it must not do is look identical to a flow that
         is broken. So the canvas says it, in the one place a canvas can say
         anything, and it is not an error: nothing is refused, nothing stops, and
         the moment a cord lands the line goes away.
       */}
       {!reachesOut(circuit) && (
         <p className="hits bad">
-          nothing reaches out — this look draws nothing until something does
+          nothing reaches out — this flow draws nothing until something does
         </p>
       )}
       {refused && <p className="hits bad">{refused}</p>}
@@ -181,12 +185,13 @@ export function NodeFace({
   node,
   circuit,
   tracks,
-  looks,
+  flows,
   picture,
   energy,
   beat,
   numberReadings = {},
   onSwap,
+  onEnter,
   onChange,
   onTurn,
   onRange,
@@ -196,12 +201,13 @@ export function NodeFace({
   node: CircuitNode;
   circuit: Circuit;
   tracks: readonly string[];
-  looks?: readonly { id: string; def: LookDef }[];
+  flows?: readonly { id: string; def: FlowDef }[];
   picture?: (nodeId: string) => ReactNode;
   energy: number;
   beat: () => number;
   numberReadings?: Readonly<Record<string, NumberReading>>;
   onSwap?(id: string, kind: NodeKind): void;
+  onEnter?(flow: string): void;
   onChange(next: Partial<CircuitNode>): void;
   onTurn(inlet: string, value: number): void;
   onRange(inlet: string, depth: number): void;
@@ -213,24 +219,24 @@ export function NodeFace({
   const feeding = new Set(circuit.cords.map((cord) => cord.from));
 
   /**
-   * The library, minus the look being edited.
+   * The library, minus the flow being edited.
    *
    * Which is the one holding *this* graph — the canvas is handed a circuit
    * rather than an id, and the entry whose circuit is this one is the only
-   * honest way to name it. It used to compare a look id against a **node** id,
-   * which are different things that occasionally spell the same: drop a look
+   * honest way to name it. It used to compare a flow id against a **node** id,
+   * which are different things that occasionally spell the same: drop a flow
    * node on a canvas and it is called `look1`, and `look1` is also the first id
-   * a hand-made look gets. When they collided the list lost an entry while the
+   * a hand-made flow gets. When they collided the list lost an entry while the
    * selected index was still counted against the full one, so the dropdown
-   * named the wrong look and picking one wired a different look again.
+   * named the wrong flow and picking one wired a different flow again.
    */
-  const others = (looks ?? []).filter((each) => each.def.circuit !== circuit);
+  const others = (flows ?? []).filter((each) => each.def.circuit !== circuit);
   const inlets = inletsOf(node).filter((port) => !port.name.startsWith('~'));
-  const title = faceName(node, spec.name, looks);
+  const title = faceName(node, spec.name, flows);
   const previewed = previewOutletOf(circuit, node.id)?.name;
   const targets = tracks.length > 0 ? tracks : ['master'];
   const chooser =
-    node.kind === 'look' ? (
+    node.kind === 'flow' ? (
       <Select
         items={others.map((each) => each.def.name || each.id)}
         index={Math.max(
@@ -238,7 +244,7 @@ export function NodeFace({
           others.findIndex((each) => each.id === node.op),
         )}
         onChange={(i) => onChange({ op: others[i]?.id })}
-        label="Look this draws"
+        label="Flow this draws"
       />
     ) : node.kind === 'track' ? (
       <Select
@@ -299,9 +305,47 @@ export function NodeFace({
           }
         : null;
 
-  const kindLabel = title === spec.name ? null : <span className="node-kind">{spec.name}</span>;
+  /**
+   * The kind, and for a flow the mark that says it is one.
+   *
+   * `◈` follows a flow everywhere it appears — this face, its row in the
+   * browser — because the thing a person has to be able to tell at a glance is
+   * *composite or primitive*, and a mark that only shows in one of the two
+   * places it matters is a mark you never learn. It is Figma's rule about an
+   * instance badge, and it is the answer to a `flow` node having been
+   * indistinguishable from a `source` in the drawer it used to share.
+   */
+  const kindLabel =
+    node.kind === 'flow' ? (
+      <span className="node-kind is-flow">◈ flow</span>
+    ) : title === spec.name ? null : (
+      <span className="node-kind">{spec.name}</span>
+    );
+
+  /**
+   * The way *in*, which the canvas has never had.
+   *
+   * A flow node names a graph and the only way to open that graph was to find
+   * its name again in the sidebar — so the containment the model is built on
+   * was invisible on the one screen that draws it. Every node editor with
+   * groups has this gesture (Blender's `Tab`, Nuke's ctrl-enter) and it is
+   * always on the node rather than in a menu, because the node is where you are
+   * when you want it.
+   */
+  const enterButton =
+    node.kind === 'flow' && node.op && onEnter ? (
+      <Button
+        tone="quiet"
+        className="enter"
+        label={`Open ${title}`}
+        title={`Open ${title} — the flow this node draws`}
+        onPress={() => onEnter(node.op!)}
+      >
+        ⤢
+      </Button>
+    ) : null;
   const deleteButton =
-    // No delete on `out`. Every look has exactly one and it is what leaves;
+    // No delete on `out`. Every flow has exactly one and it is what leaves;
     // the model refuses the deletion too, but the face should not offer it.
     node.kind === 'out' ? null : (
       <Button tone="quiet" label={`Delete ${spec.name}`} onPress={onDrop}>
@@ -312,7 +356,7 @@ export function NodeFace({
   /** One line per inlet: the port on its own edge, and what it puts on the row. */
   const inletCells = inlets.map((port) => {
     const id = portId(node.id, port.name);
-    const driver = driverOf(circuit, id, looks);
+    const driver = driverOf(circuit, id, flows);
     const reading = numberReadings[id];
     return {
       key: id,
@@ -458,9 +502,10 @@ export function NodeFace({
       chooser={chooser}
       onHotSwap={spec.ops && onSwap ? () => onSwap(node.id, node.kind) : undefined}
       headerEnd={
-        kindLabel || deleteButton ? (
+        kindLabel || enterButton || deleteButton ? (
           <>
             {kindLabel}
+            {enterButton}
             {deleteButton}
           </>
         ) : undefined
@@ -555,7 +600,7 @@ export function rowsHeldOpen(node: CircuitNode): { ports: number } {
 export function driverOf(
   circuit: Circuit,
   id: string,
-  looks?: readonly { id: string; def: LookDef }[],
+  flows?: readonly { id: string; def: FlowDef }[],
 ): string | undefined {
   const from = circuit.cords.find((cord) => cord.to === id)?.from;
   if (from === undefined) return undefined;
@@ -564,17 +609,17 @@ export function driverOf(
   const source = circuit.nodes.find((each) => each.id === from.slice(0, cut));
   if (!source) return outlet;
   const spec = NODE_SPECS[source.kind];
-  const named = faceName(source, spec.name, looks);
+  const named = faceName(source, spec.name, flows);
   return spec.outlets.length > 1 ? `${named}·${outlet}` : named;
 }
 
 function faceName(
   node: CircuitNode,
   fallback: string,
-  looks?: readonly { id: string; def: LookDef }[],
+  flows?: readonly { id: string; def: FlowDef }[],
 ): string {
   if (node.kind === 'value') return node.label || 'value';
-  if (node.kind === 'look') return looks?.find((each) => each.id === node.op)?.def.name ?? 'look';
+  if (node.kind === 'flow') return flows?.find((each) => each.id === node.op)?.def.name ?? 'flow';
   const modes = NODE_SPECS[node.kind].ops;
   if (modes) return node.op || modes[0] || fallback;
   return fallback;

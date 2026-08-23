@@ -11,7 +11,7 @@ import './console.css';
 /**
  * One app, two views, and it used to be three.
  *
- * **Design** is the product: a canvas, a library of looks, and a browser of
+ * **Design** is the product: a canvas, a library of flows, and a browser of
  * every node there is. **Set** is the small remainder — the wheel that turns
  * through what you built, and the handful of songs that want to say otherwise.
  *
@@ -41,7 +41,7 @@ export type View = (typeof VIEWS)[number];
 
 export function Console({ show, scheme, grid, save, clock, onClose }: ConsoleProps) {
   const [view, setView] = useState<View>('design');
-  const [look, setLook] = useState<string | null>(null);
+  const [flow, setFlow] = useState<string | null>(null);
 
   return (
     <div className="console wdg">
@@ -53,7 +53,7 @@ export function Console({ show, scheme, grid, save, clock, onClose }: ConsolePro
           label="View"
           className="views"
         />
-        <span className="context">{contextOf(view, show, scheme, look)}</span>
+        <span className="context">{contextOf(view, show, scheme, flow)}</span>
         <Button tone="quiet" label="Close console" onPress={onClose}>
           ×
         </Button>
@@ -65,8 +65,8 @@ export function Console({ show, scheme, grid, save, clock, onClose }: ConsolePro
           scheme={scheme}
           save={save}
           clock={clock}
-          look={look}
-          setLook={setLook}
+          flow={flow}
+          setFlow={setFlow}
         />
       )}
 
@@ -78,11 +78,11 @@ export function Console({ show, scheme, grid, save, clock, onClose }: ConsolePro
 /**
  * The line on the right of the tab bar, which says where you are.
  *
- * Different per view on purpose: inside a look the useful fact is what it is
+ * Different per view on purpose: inside a flow the useful fact is what it is
  * made of, and at set scale it is what the wheel is doing. One universal status
  * line would be wrong in one of the two places.
  */
-function contextOf(view: View, show: Show, scheme: Scheme, look: string | null): string {
+function contextOf(view: View, show: Show, scheme: Scheme, flow: string | null): string {
   if (view === 'set') {
     const songs = show.songs.length;
     const pinned = Object.keys(scheme.songs).length;
@@ -90,9 +90,9 @@ function contextOf(view: View, show: Show, scheme: Scheme, look: string | null):
       show.connected ? '' : ' · no bridge'
     }`;
   }
-  const made = Object.keys(scheme.looks).length;
-  const def = look ? scheme.looks[look] : null;
-  if (!def) return `${made} look${made === 1 ? '' : 's'}`;
+  const made = Object.keys(scheme.flows).length;
+  const def = flow ? scheme.flows[flow] : null;
+  if (!def) return `${made} flow${made === 1 ? '' : 's'}`;
   const nodes = def.circuit.nodes.length;
   return `${def.name} · ${nodes} node${nodes === 1 ? '' : 's'} · ${made} in the library`;
 }

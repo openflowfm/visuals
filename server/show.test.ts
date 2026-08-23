@@ -4,7 +4,7 @@ import { emptySet, type SetState } from './bridge.ts';
 import type { LinkFrame } from './link.ts';
 import { merge, type SchemeSource } from './scheme.ts';
 import { buildShow, noTurning, type Turning } from './show.ts';
-import { atOne, atTurn, poolsOf, reOne, turnsAt, whatIsUp } from '../resolve.ts';
+import { atOne, atTurn, nextFlow, poolsOf, reOne, turnsAt, whatIsUp } from '../resolve.ts';
 
 /**
  * What is on screen, and why.
@@ -14,7 +14,7 @@ import { atOne, atTurn, poolsOf, reOne, turnsAt, whatIsUp } from '../resolve.ts'
  * replaced it is a **wheel**, and the bugs a wheel has are the ones worth being
  * sure about — a pool that reads empty as "nothing", a cycle that repeats across
  * a lap, a trigger that fires on every scene launch, and an override that black
- * screens a song because it names a look somebody deleted. Every one of those
+ * screens a song because it names a flow somebody deleted. Every one of those
  * looks like a rendering fault from the front of house and none of them is.
  */
 
@@ -97,22 +97,22 @@ const at = (
   link: Partial<LinkFrame>,
 ) => buildShow(state, { ...LINK, ...link }, sourceOf(scheme), turning);
 
-/** A scheme with two named looks and two colourways, and nothing else said. */
+/** A scheme with two named flows and two colourways, and nothing else said. */
 const twoOf = (over: Partial<Scheme> = {}): Scheme =>
   merge({
-    looks: {
+    flows: {
       a: { name: 'A', circuit: { nodes: [], cords: [] } },
       b: { name: 'B', circuit: { nodes: [], cords: [] } },
     },
     colorways: { one: ['#111111'], two: ['#222222'] },
-    rotation: { looks: ['a', 'b'], colorways: ['one', 'two'], bars: 4, onClip: true, colorEvery: 4 },
+    rotation: { flows: ['a', 'b'], colorways: ['one', 'two'], bars: 4, onClip: true, colorEvery: 4 },
     ...over,
   });
 
 describe('what is up', () => {
   it('turns through the pool rather than picking each time', () => {
     // A shuffled cycle, not independent picks. Independent picks feel random and
-    // read as broken: the same look twice in a row looks like the change failed,
+    // read as broken: the same flow twice in a row looks like the change failed,
     // and one of five never appearing looks like it is unwired.
     const scheme = twoOf();
     const seen = new Set<string>();
@@ -123,7 +123,7 @@ describe('what is up', () => {
     // And it is the same answer every time it is asked, so the server and the
     // editor cannot disagree about what is on screen.
     expect(atTurn(['a', 'b', 'c'], 4)).toBe(atTurn(['a', 'b', 'c'], 4));
-    expect(whatIsUp(scheme, null, { look: 0, color: 0 }).look).toBeTruthy();
+    expect(whatIsUp(scheme, null, { flow: 0, color: 0 }).flow).toBeTruthy();
   });
 
   it('shows all of them before it shows any of them twice', () => {
@@ -146,16 +146,16 @@ describe('what is up', () => {
   it('treats an empty pool as everything rather than as nothing', () => {
     // The state a fresh install is in. Reading a blank field as "draw nothing"
     // would be a black screen for the thing nobody filled in.
-    const scheme = twoOf({ rotation: { looks: [], colorways: [], bars: 4, onClip: true, colorEvery: 4 } });
+    const scheme = twoOf({ rotation: { flows: [], colorways: [], bars: 4, onClip: true, colorEvery: 4 } });
     const pools = poolsOf(scheme, undefined);
-    expect(pools.looks.length).toBeGreaterThan(1);
+    expect(pools.flows.length).toBeGreaterThan(1);
     expect(pools.colorways.length).toBeGreaterThan(1);
   });
 
-  it('lets a song pin one look and stop the wheel', () => {
-    const scheme = twoOf({ songs: { sandstorm: { looks: ['b'], colorway: 'two' } } });
+  it('lets a song pin one flow and stop the wheel', () => {
+    const scheme = twoOf({ songs: { sandstorm: { flows: ['b'], colorway: 'two' } } });
     const drawn = show(setOf(['Bass'], '[VERSE] one'), scheme);
-    expect(drawn.look).toBe('b');
+    expect(drawn.flow).toBe('b');
     expect(drawn.colorway).toBe('two');
     expect(drawn.pinned).toBe(true);
   });
@@ -164,32 +164,32 @@ describe('what is up', () => {
     // A shorter rotation is still a rotation. That is what makes the override
     // cheap to reach for: "these three, for this song" should not need a second
     // concept to express.
-    const scheme = twoOf({ songs: { sandstorm: { looks: ['a', 'b'] } } });
+    const scheme = twoOf({ songs: { sandstorm: { flows: ['a', 'b'] } } });
     const pools = poolsOf(scheme, scheme.songs.sandstorm);
-    expect(pools.looks).toEqual(['a', 'b']);
-    expect(whatIsUp(scheme, 'sandstorm', { look: 0, color: 0 }).pinned).toBe(false);
+    expect(pools.flows).toEqual(['a', 'b']);
+    expect(whatIsUp(scheme, 'sandstorm', { flow: 0, color: 0 }).pinned).toBe(false);
   });
 
-  it('drops a song pin that names a look nobody has any more', () => {
+  it('drops a song pin that names a flow nobody has any more', () => {
     // A stale id must not black the screen for a whole song.
-    const scheme = twoOf({ songs: { sandstorm: { looks: ['gone'] } } });
+    const scheme = twoOf({ songs: { sandstorm: { flows: ['gone'] } } });
     const drawn = show(setOf(['Bass'], '[VERSE] one'), scheme);
-    expect(drawn.look).toBeTruthy();
-    expect(scheme.looks[drawn.look!]).toBeDefined();
+    expect(drawn.flow).toBeTruthy();
+    expect(scheme.flows[drawn.flow!]).toBeDefined();
   });
 });
 
 describe('turning on musical time', () => {
   it('counts bars, not seconds', () => {
     const rotation = twoOf().rotation;
-    expect(turnsAt(rotation, 0, 4, atOne()).look).toBe(0);
-    expect(turnsAt(rotation, 15.9, 4, atOne()).look).toBe(0);
-    expect(turnsAt(rotation, 16, 4, atOne()).look).toBe(1);
+    expect(turnsAt(rotation, 0, 4, atOne()).flow).toBe(0);
+    expect(turnsAt(rotation, 15.9, 4, atOne()).flow).toBe(0);
+    expect(turnsAt(rotation, 16, 4, atOne()).flow).toBe(1);
   });
 
   it('holds whatever is up when the wheel is stopped', () => {
     const rotation = { ...twoOf().rotation, bars: 0, colorEvery: 0 };
-    expect(turnsAt(rotation, 400, 4, atOne()).look).toBe(0);
+    expect(turnsAt(rotation, 400, 4, atOne()).flow).toBe(0);
   });
 
   it('turns when a clip is fired out of band, and not when a scene is', () => {
@@ -201,18 +201,24 @@ describe('turning on musical time', () => {
     const scheme = twoOf();
     const set = setOf(['Drums', 'Bass', 'Keys'], '[VERSE] one');
     show(set, scheme, turning);
-    expect(turning.wheel.turned.look).toBe(0);
+    expect(turning.wheel.turned.flow).toBe(0);
 
     // Everything moves to scene 1: a scene launch.
     set.scenes = [set.scenes[0], scene(1, '[CHORUS] one')];
     set.play = set.play.map(() => ({ playing: 1, fired: -1 }) as BSV.TrackPlayState);
     show(set, scheme, turning);
-    expect(turning.wheel.turned.look).toBe(0);
+    expect(turning.wheel.turned.flow).toBe(0);
 
     // One track departs: a clip launch.
     set.play[2] = { playing: 0, fired: -1 } as BSV.TrackPlayState;
     show(set, scheme, turning);
-    expect(turning.wheel.turned.look).toBe(1);
+    expect(turning.wheel.turned.flow).toBe(1);
+  });
+
+  it('turns only the flow when asked for the next one by hand', () => {
+    const before = { one: 12, turned: { flow: 4, color: 2 } };
+    expect(nextFlow(before)).toEqual({ one: 12, turned: { flow: 5, color: 2 } });
+    expect(before.turned).toEqual({ flow: 4, color: 2 });
   });
 
   it('does not count the first read as a change', () => {
@@ -222,7 +228,7 @@ describe('turning on musical time', () => {
     const set = setOf(['Drums', 'Bass'], '[VERSE] one');
     set.play[1] = { playing: 3, fired: -1 } as BSV.TrackPlayState;
     show(set, twoOf(), turning);
-    expect(turning.wheel.turned.look).toBe(0);
+    expect(turning.wheel.turned.flow).toBe(0);
   });
 
   it('counts the phrase from the one, not from Link\'s zero', () => {
@@ -230,16 +236,16 @@ describe('turning on musical time', () => {
     // in the building opened a laptop, so a 32-bar wheel counted from its zero
     // turns on a boundary with nothing to do with the music — and stays there.
     const rotation = twoOf().rotation;
-    const wheel = { one: 8, turned: { look: 0, color: 0 } };
+    const wheel = { one: 8, turned: { flow: 0, color: 0 } };
     // 16 beats is four bars, so the first turn is now at 24 rather than at 16.
-    expect(turnsAt(rotation, 23.9, 4, wheel).look).toBe(0);
-    expect(turnsAt(rotation, 24, 4, wheel).look).toBe(1);
+    expect(turnsAt(rotation, 23.9, 4, wheel).flow).toBe(0);
+    expect(turnsAt(rotation, 24, 4, wheel).flow).toBe(1);
   });
 
   it('re-phases without turning, so saying "here is the one" changes nothing', () => {
     // The gesture is made when the picture is right and the timing is not. A
     // reset lands on a downbeat, which is exactly where a naive count snaps the
-    // wheel back to the start of its cycle — so it would change the look every
+    // wheel back to the start of its cycle — so it would change the flow every
     // single time, which is the opposite of what was asked for.
     const rotation = twoOf().rotation;
     const before = turnsAt(rotation, 100, 4, atOne());
@@ -248,8 +254,8 @@ describe('turning on musical time', () => {
     expect(turnsAt(rotation, 100, 4, moved)).toEqual(before);
     // What *does* change is when the next one happens: sixteen beats from here
     // rather than from wherever Link happened to start.
-    expect(turnsAt(rotation, 115.9, 4, moved).look).toBe(before.look);
-    expect(turnsAt(rotation, 116, 4, moved).look).toBe(before.look + 1);
+    expect(turnsAt(rotation, 115.9, 4, moved).flow).toBe(before.flow);
+    expect(turnsAt(rotation, 116, 4, moved).flow).toBe(before.flow + 1);
   });
 
   it('takes the one off the bar line Link draws, not off a whole beat', () => {
@@ -307,14 +313,14 @@ describe('turning on musical time', () => {
 
   it('ignores an out-of-band clip when the rotation was told to', () => {
     const scheme = twoOf({
-      rotation: { looks: [], colorways: [], bars: 4, onClip: false, colorEvery: 4 },
+      rotation: { flows: [], colorways: [], bars: 4, onClip: false, colorEvery: 4 },
     });
     const turning = noTurning();
     const set = setOf(['Drums', 'Bass'], '[VERSE] one');
     show(set, scheme, turning);
     set.play[1] = { playing: 5, fired: -1 } as BSV.TrackPlayState;
     show(set, scheme, turning);
-    expect(turning.wheel.turned.look).toBe(0);
+    expect(turning.wheel.turned.flow).toBe(0);
   });
 });
 

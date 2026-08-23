@@ -107,23 +107,23 @@ the clip, and picking the wrong one is how a show quietly drifts into inconsiste
 far does this change reach* should be a fast, obvious part of the gesture, not a consequence
 discovered later.
 
-Override, mixin and "a specific look" are one concept, not three: a more specific level
+Override, mixin and "a specific flow" are one concept, not three: a more specific level
 saying something the levels above it did not.
 
 ## Where binding is going
 
 Recorded because it is the shape the data model has to leave room for, not because it is
 next. **The composition is simply what the renderer is showing** — it is the output, not an
-artifact you save and recall. What builds it is a cascade of looks:
+artifact you save and recall. What builds it is a cascade of flows:
 
-- A look per song is already enough to make the set read as dynamic and distinct, and that
+- A flow per song is already enough to make the set read as dynamic and distinct, and that
   alone is the first useful version.
 - Per-track overrides go on top, so improvising on one instrument changes the picture in a
   way that belongs to that instrument.
 
-So a composition is never bound *as a thing*; it is what a cascade of looks resolves to at
+So a composition is never bound *as a thing*; it is what a cascade of flows resolves to at
 a moment. That is the same shape the existing cascade already has — the difference is that
-the unit being cascaded becomes a **look** rather than a source-plus-effect-list.
+the unit being cascaded becomes a **flow** rather than a source-plus-effect-list.
 
 ## Constraints
 
@@ -178,15 +178,15 @@ and "the work is binding, not designing." Four levels of cascade were built to m
 true.
 
 It was wrong in one specific way, and the way is worth naming: **the cascade was four
-answers to one question.** A song contributing looks, a section contributing looks, a track
+answers to one question.** A song contributing flows, a section contributing flows, a track
 binding a source, a clip making an exception — every one of them was a rule about how two
 pictures combine, expressed as a table because a table was the shape already there. A graph
 answers that question once, and answers it better, because a table can say "add this on top"
 and cannot say "fold this one and blend it into that one at whatever the bass is doing."
 
-So the model is one graph, and the graph is the look. The evidence that this was right rather
+So the model is one graph, and the graph is the flow. The evidence that this was right rather
 than merely different is what fell out with no work: two sources in one picture, an effect on
-a *part* of the frame, a look inside a look. None of those were features anyone built; they
+a *part* of the frame, a flow inside a flow. None of those were features anyone built; they
 are things a graph can say and a stack cannot.
 
 ### What survived the correction
@@ -215,4 +215,4 @@ are things a graph can say and a stack cannot.
 The brief flagged that "effect" already means something in a DAW. It is resolved by being a
 **node mode** rather than a noun: nothing in the model is called an effect, and the only
 place the word appears is on the face of a node. `AGENTS.md` rule 8 also rules out `scene`,
-which settles the other half — the thing that holds a graph is a **look**, at every scale.
+which settles the other half — the thing that holds a graph is a **flow**, at every scale.

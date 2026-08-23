@@ -37,7 +37,7 @@ export function previewOutletOf(circuit: Circuit, nodeId: string): PortSpec | un
  * so a number or a point has to be brought back to one before it can be looked
  * at, and the bridge is the vocabulary's own rather than a rendering trick: a
  * number is shown the way `paint` would show it, and a point the way a picture
- * read at it would look. Which is how it will look if you wire it that way.
+ * read at it would flow. Which is how it will flow if you wire it that way.
  */
 export function probeAt(circuit: Circuit, nodeId: string): Circuit | null {
   const node = circuit.nodes.find((n) => n.id === nodeId);

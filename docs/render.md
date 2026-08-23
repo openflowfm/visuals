@@ -5,13 +5,13 @@
 ## The frame
 
 ```
-the set's picture (only if the look asked for it)
+the set's picture (only if the flow asked for it)
   clear transparent
   for each playing Live track:
     ease its opacity toward the target; below 0.002 -> skip entirely
     draw its picture, blended, into one target
 
-the look
+the flow
   one full-screen pass, one compiled fragment shader
   reading that target wherever a `tracks` node appears
 
@@ -20,8 +20,8 @@ the output stage
 ```
 
 **There used to be a pass per layer and a pass per effect on it**, ping-ponged through two
-targets. That is gone, because [a colour is a function of a point](looks.md): a whole look —
-however many sources, effects and nested looks it contains — compiles to one shader, and
+targets. That is gone, because [a colour is a function of a point](flows.md): a whole flow —
+however many sources, effects and nested flows it contains — compiles to one shader, and
 composition happens in the expression rather than in a buffer.
 
 **The set is the one thing that cannot be an expression.** A `tracks` node draws the same
@@ -30,11 +30,11 @@ a fragment shader cannot loop over a varying number of those cheaply. So it stay
 it is the last surviving piece of the compositor this replaced.
 
 **Opacity is eased, not set.** Without it, a scene change would pop tracks into existence on
-one frame. The glide is ~200ms expressed against `dt`, so it looks the same at 60 Hz and
+one frame. The glide is ~200ms expressed against `dt`, so it flows the same at 60 Hz and
 144 Hz, and a track whose clip stopped fades out on its way rather than vanishing.
 
 **A track with nothing playing draws nothing** — not the last thing it played. A track that
-held its previous clip after the scene changed is the failure that looks most like the
+held its previous clip after the scene changed is the failure that flows most like the
 renderer having crashed.
 
 **Blending in that pass is fixed-function.** Every track shader writes *premultiplied* alpha,
@@ -57,23 +57,23 @@ that were meant to be seen have drawn.
 and it has to stay that way: two answers to how two pictures combine is the thing the graph
 exists to have one of. It is also why `multiply` is not a multiply — on premultiplied colour
 `a * b` multiplies the coverages as well, which took the base out entirely whenever the top
-was less than opaque and made an unwired `top` a black frame. See [looks](looks.md).
+was less than opaque and made an unwired `top` a black frame. See [flows](flows.md).
 
 It is a **fixed rule rather than a bound one**, and that is the trade this change makes:
 per-track blend was a field on a binding that no longer exists. If it needs to vary, it
 varies inside the graph — a `blend` node is right there.
 
-**The look reads the scheme every frame**, because a look is a graph and what a graph
+**The flow reads the scheme every frame**, because a flow is a graph and what a graph
 compiles to is the scheme's to say. Resolving that on the server would mean shipping a shader
-down the wire on every edit; doing it here means a look recompiles the moment its wiring
+down the wire on every edit; doing it here means a flow recompiles the moment its wiring
 changes and never when only a number moved. The cache signature walks the **expanded** graph,
-so editing a look changes the signature of every look that contains it.
+so editing a flow changes the signature of every flow that contains it.
 
 `uParams` is the bank the numbers ride in — a `value` node's amount and every number set on an
 inlet — and it is **declared at the size the graph needs**, since the shader is generated.
 Giving an inlet a number for the first time is a change to the shader's shape and recompiles
 once; every turn of it after that recompiles nothing, which is the whole reason a set number
-is a uniform. `uTracks` is a second bank, of eight, filled only for a look that **named** a
+is a uniform. `uTracks` is a second bank, of eight, filled only for a flow that **named** a
 track — and filled on the CPU, both because a name has to be resolved against the set and because a
 `track` node's `smooth` is an envelope follower, which has to remember what it saw last
 frame. There used to be a third bank for those; `track` and `energy` are one node now, so
@@ -138,7 +138,7 @@ a row in `LENS_VALUES` and a one-line function of a point in `LENS_POINT`. A `gr
 same, one line of colour. A `spread` needs the compiler's `readAt`, which is exactly what
 makes it the family that can run out of budget.
 
-Nothing has to be registered in a scheme, because a mode is not a look.
+Nothing has to be registered in a scheme, because a mode is not a flow.
 
 ## The clock is a uniform, and so is energy
 
@@ -161,7 +161,7 @@ whatever you decide and the useful one is often a particular track's.
 So `rate`, `beatPulse`, `charge` and every generator take it as a parameter, and every
 mode that reads one has an `energy` inlet. `uEnergy` survives as **the room's** energy
 — a smoothed master meter — which is what an unwired inlet falls back to. A default, not a
-level. See [looks](looks.md).
+level. See [flows](flows.md).
 
 Two things about those that were wrong for a while, and are worth stating because both
 failed in the same direction — *everything at once*:
@@ -281,7 +281,7 @@ display it went to is remembered per machine, for the same reason the keystone i
 **The wall is an ordinary second client** — rule 5 in [`AGENTS.md`](../../AGENTS.md). It opens
 its own socket, asks for a snapshot and extrapolates its own clock exactly as a second machine
 would, which is what makes one machine and two the same code. Both windows read the show from
-the server and the beat from Link, so they agree about the look, the colourway and the bar.
+the server and the beat from Link, so they agree about the flow, the colourway and the bar.
 They do not agree about `uTime`, which is seconds since *that page* loaded — so `noise`'s
 weather drifts differently in the two and nothing that is in time does.
 
@@ -312,7 +312,7 @@ help, and because it is the same idiom as `?maxEdge`.
 ## Fill rate is the only performance number
 
 Cost is `pixels × passes × 60`, and there are far fewer passes than there were: one per
-playing track plus one for the look, where it used to be up to three per track. What
+playing track plus one for the flow, where it used to be up to three per track. What
 replaced them is **instruction count inside one shader**, which is cheaper per pixel but no
 longer free to grow — a multi-tap effect over a deep graph is the way to make a single pass
 expensive, and `MAX_LINES` is the backstop.
@@ -335,26 +335,26 @@ rather than two, and the one that is being projected is the one drawn at full si
 Two smaller choices in the same direction. The full-screen pass is **one oversized triangle,
 not two**, so there is no diagonal seam where interpolation is discontinuous. And a track
 that is silent or faded out is skipped before its shader is ever bound, which is why an
-eight-track set with two clips playing costs two passes and not eight. A look with no
+eight-track set with two clips playing costs two passes and not eight. A flow with no
 `tracks` node in it skips the whole set pass.
 
 ## Programs are compiled on demand and kept
 
-The wheel changes which look is up on a musical boundary, and compiling a shader mid-set is
-a dropped frame at the worst possible moment. So each look compiles the first time it is
+The wheel changes which flow is up on a musical boundary, and compiling a shader mid-set is
+a dropped frame at the worst possible moment. So each flow compiles the first time it is
 asked for and is held for the life of the page.
 
-A look is held against a **signature** of what it was built from — the node kinds, modes and
-cords of the **expanded** graph, sub-looks included. Node positions and set numbers are
+A flow is held against a **signature** of what it was built from — the node kinds, modes and
+cords of the **expanded** graph, sub-flows included. Node positions and set numbers are
 deliberately absent, or dragging a node would rebuild a shader sixty times a second.
 Expanding first is what makes a nested edit visible: signing only the top graph would leave
-an edit to a look-inside-a-look invisible until something else forced a rebuild.
+an edit to a flow-inside-a-flow invisible until something else forced a rebuild.
 
 A build that fails is remembered as a failure, for the same reason: retrying it every frame
 calls the driver's compiler sixty times a second for as long as it stays broken, which is a
 stall rather than an error message.
 
-`src/render/look.ts` holds what both the stage and the node faces need — the shader, the
+`src/render/flow.ts` holds what both the stage and the node faces need — the shader, the
 banks, the signature. **The bench is not in that list**, because the bench is a whole
 `Compositor` on its own canvas rather than a second renderer. There used to be one and it
 was a standing risk: a bench that could disagree with the stage about brightness or blend is
@@ -362,8 +362,8 @@ worse than no bench.
 
 ## One list of uniforms, because two of them drifted
 
-`src/render/feed.ts` is what a look is *fed*: the clock, the set's own pass, every uniform a
-compiled look reads, and the output stage. The stage and the node faces both call it.
+`src/render/feed.ts` is what a flow is *fed*: the clock, the set's own pass, every uniform a
+compiled flow reads, and the output stage. The stage and the node faces both call it.
 
 It was two lists, in two files, and they had drifted apart in fourteen places — the faces
 drew the set as one grid shader in a hardcoded orange, banked every meter at a half, ran the
@@ -383,7 +383,7 @@ one control doing nothing until something else forced a rebuild.
 ## An effect must not measure itself in pixels
 
 `edge` did. Its tap was a count of output pixels, which is what an edge detector normally
-wants and is wrong here: a look is authored on a 320-pixel node face, judged on an
+wants and is wrong here: a flow is authored on a 320-pixel node face, judged on an
 800-pixel bench and projected at 1920, and one output pixel is three different thicknesses
 in those three places. The one node you could not trust a preview of was the one whose whole
 job is a line.
@@ -402,15 +402,15 @@ down and about ±0.89 across. A hand-written `(n - 0.5) * 2.0` therefore oversho
 whole picture is in the middle *half* of the control's travel vertically and the middle 89% of
 it horizontally, and those two are not the same fraction, so the same turn of `x` and of `y`
 moves a different distance. `recentred` is the helper that already knows the frame's shape,
-and using it means the ends of the travel are the ends of the picture. See [looks](looks.md).
+and using it means the ends of the travel are the ends of the picture. See [flows](flows.md).
 
 ## What is not built
 
 - **Video clips.** Every picture is procedural. A `<video>` texture is one more `source` mode
   and no change to the pipeline, but it brings a whole question about where files live.
-- **One track's picture as another's input.** A look reaches a track's *meter* and not its
+- **One track's picture as another's input.** A flow reaches a track's *meter* and not its
   *frame*. That needs a render target per track, which this does not keep.
-- **A `tracks` texture per mode.** Two `tracks` nodes with different modes in one look share
+- **A `tracks` texture per mode.** Two `tracks` nodes with different modes in one flow share
   the first one's, because a target per mode is a target per node and the win is small.
 - **More than one output.** Corner pinning is one quad over the whole frame. Resolume slices
   a composition across several projectors with a warp each, which is the same maths repeated

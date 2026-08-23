@@ -7,13 +7,13 @@ import { GRADE_MODES, LENS_MODES, SOURCES } from './protocol.ts';
  * It used to roll a *show*: colourways, song assignments, section energies,
  * per-track bindings and two circuits at once, because a show was a table of
  * decisions with a couple of graphs in it. A show is a library of graphs and a
- * wheel now, so this rolls the two things a library is made of — **looks and
+ * wheel now, so this rolls the two things a library is made of — **flows and
  * colourways** — and the wheel turns through whatever it made.
  *
  * Not a scatter of random numbers. A random graph is easy and always looks like
  * noise; what makes a rolled one look like something is that it walks a
  * **shape** — a picture, a few things done to it, a colour operation or two —
- * and randomises what fills each slot. The shape is what makes it a look; the
+ * and randomises what fills each slot. The shape is what makes it a flow; the
  * fill is what makes it a different one every time.
  *
  * Colours are a harmony rather than five hues: a base, one of five relationships
@@ -162,9 +162,9 @@ function evenly(hue: number, l: number): number {
  * it is never one of the two loud ones, so a palette cannot lose both its
  * anchors to one dice roll.
  *
- * The first colour is the base on purpose: a look's `paint`, `source` and every
+ * The first colour is the base on purpose: a flow's `paint`, `source` and every
  * generator draw from `colors[0]`, so the palette's loudest member is the one a
- * look that ignores the set is made of.
+ * flow that ignores the set is made of.
  */
 function palette(rng: Rng): string[] {
   const base = rng() * 360;
@@ -229,12 +229,12 @@ const WAVES = ['sine', 'saw', 'ramp', 'pulse'] as const;
  */
 
 /**
- * A look that always compiles and usually looks like something.
+ * A flow that always compiles and usually looks like something.
  *
  * The shape: **a picture, moved about, then worked on.** Where it used to end
  * with a `sample` — the frame that arrived, which only meant anything inside a
  * stack — it now starts with either the Live set or one of the pictures that
- * ship, which is the difference between a look that needs a context and a look
+ * ship, which is the difference between a flow that needs a context and a flow
  * that is one.
  */
 export function rollCircuit(rng: Rng): Circuit {
@@ -267,7 +267,7 @@ export function rollCircuit(rng: Rng): Circuit {
     if (roll < 0.55) {
       // An envelope rather than a bare meter about a fifth of the time, because
       // a picture driven by the raw meter twitches and one driven by an
-      // envelope breathes — and breathing is what makes a rig look designed.
+      // envelope breathes — and breathing is what makes a rig flow designed.
       const from = add({
         kind: 'track',
         of: 'master',
@@ -306,7 +306,7 @@ export function rollCircuit(rng: Rng): Circuit {
     carry = `${node}/p`;
   }
 
-  // The Live set more often than not. A rolled look that ignored whoever is
+  // The Live set more often than not. A rolled flow that ignored whoever is
   // playing is a screensaver, and this rig is not one.
   const picture = chance(rng, 0.6)
     ? add({ kind: 'tracks', op: 'by name', x: at(), y: 20 })
@@ -321,7 +321,7 @@ export function rollCircuit(rng: Rng): Circuit {
   }
 
   // A second picture, screened over the first, about half the time. Two
-  // pictures inside one look is the thing the old model could not say at all.
+  // pictures inside one flow is the thing the old model could not say at all.
   if (chance(rng, 0.5)) {
     const x = at();
     const other = add({ kind: 'source', op: pick(rng, SOURCES), x, y: 250 });
@@ -353,18 +353,18 @@ export function rollCircuit(rng: Rng): Circuit {
  * Which part of the library a roll is allowed to touch.
  *
  * All-or-nothing is the wrong shape for how this gets used: by the second
- * evening the colourways are the part you have settled and the looks are the
+ * evening the colourways are the part you have settled and the flows are the
  * part you are still fishing for, and a button that deals both is a button you
  * stop pressing.
  */
-export type RollPart = 'colours' | 'looks' | 'rotation';
+export type RollPart = 'colours' | 'flows' | 'rotation';
 
-export const ROLL_PARTS: readonly RollPart[] = ['colours', 'looks', 'rotation'];
+export const ROLL_PARTS: readonly RollPart[] = ['colours', 'flows', 'rotation'];
 
 /** What each part is, for a control that has one line to say it in. */
 export const ROLL_ABOUT: Record<RollPart, string> = {
   colours: 'four fresh colourways: five each, two of them loud, one a tint',
-  looks: 'four freshly wired looks, replacing the last four it wired',
+  flows: 'four freshly wired flows, replacing the last four it wired',
   rotation: 'how often the wheel turns, and how fast the whole show moves',
 };
 
@@ -394,20 +394,20 @@ export function rollScheme(
   for (const name of names) rolledColorways[name] = palette(rng);
   const colorways = rolling('colours') ? rolledColorways : base.colorways;
 
-  const looks: Scheme['looks'] = { ...base.looks };
-  if (rolling('looks')) {
-    // Only what a previous roll wired. A look someone built by hand is work
+  const flows: Scheme['flows'] = { ...base.flows };
+  if (rolling('flows')) {
+    // Only what a previous roll wired. A flow someone built by hand is work
     // rather than scaffolding, and deleting it as a side effect of this button
     // is not something one level of undo makes acceptable.
-    for (const [id, def] of Object.entries(looks)) if (def.rolled) delete looks[id];
+    for (const [id, def] of Object.entries(flows)) if (def.rolled) delete flows[id];
   }
   const wired: string[] = [];
   for (let i = 0; i < 4; i++) {
     const id = `roll${i + 1}`;
     const [a, b] = shuffled(rng, WORDS);
     const circuit = rollCircuit(rng);
-    if (!rolling('looks')) continue;
-    looks[id] = { name: `${a[0].toUpperCase()}${a.slice(1)} ${b}`, circuit, rolled: true };
+    if (!rolling('flows')) continue;
+    flows[id] = { name: `${a[0].toUpperCase()}${a.slice(1)} ${b}`, circuit, rolled: true };
     wired.push(id);
   }
 
@@ -415,11 +415,11 @@ export function rollScheme(
   const rotation: Scheme['rotation'] = {
     // Emptied rather than filled: an empty pool means "everything there is",
     // which is what you want the moment after a roll has just made four things.
-    looks: [],
+    flows: [],
     colorways: [],
     bars,
     onClip: true,
-    // The palette on a longer wheel than the look, so a change is usually one
+    // The palette on a longer wheel than the flow, so a change is usually one
     // thing moving rather than everything at once.
     colorEvery: bars * pick(rng, [1, 2, 2, 3]),
   };
@@ -428,7 +428,7 @@ export function rollScheme(
 
   return {
     seed,
-    looks,
+    flows,
     colorways,
     rotation: rolling('rotation') ? rotation : base.rotation,
     songs: base.songs,
@@ -439,9 +439,9 @@ export function rollScheme(
       colorway: colorways[base.defaults.colorway]
         ? base.defaults.colorway
         : (Object.keys(colorways)[0] ?? base.defaults.colorway),
-      look: looks[base.defaults.look]
-        ? base.defaults.look
-        : (wired[0] ?? Object.keys(looks)[0] ?? base.defaults.look),
+      flow: flows[base.defaults.flow]
+        ? base.defaults.flow
+        : (wired[0] ?? Object.keys(flows)[0] ?? base.defaults.flow),
       pace: rolling('rotation') ? pace : base.defaults.pace,
     },
   };

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { Circuit, LookDef } from '../../protocol.ts';
+import type { Circuit, FlowDef } from '../../protocol.ts';
 import { wouldLoop } from '../../protocol.ts';
 import {
   bareCircuit,
   compileCircuit,
-  compileLook,
+  compileFlow,
   flatten,
   inletsOf,
   valuesOf,
@@ -16,7 +16,7 @@ import {
   tracksOf,
   wouldFeedItself,
 } from './circuit.ts';
-import { paramsOf } from './look.ts';
+import { paramsOf } from './flow.ts';
 
 /**
  * The compiler.
@@ -38,14 +38,14 @@ const wire = (nodes: Circuit['nodes'], cords: Circuit['cords']): Circuit => ({ n
 /** Just `main`, so an assertion about what runs isn't fooled by a declaration. */
 const bodyOf = (source: string) => source.slice(source.indexOf('void main()'));
 
-describe('compiling a look', () => {
-  it('compiles what a new look starts as', () => {
+describe('compiling a flow', () => {
+  it('compiles what a new flow starts as', () => {
     const built = compileCircuit(starterCircuit());
     expect(built.error).toBeNull();
     expect(bodyOf(built.source!)).toContain('fragColor =');
   });
 
-  it('starts a new look with the set already in it', () => {
+  it('starts a new flow with the set already in it', () => {
     // A claim about what this rig is for: the picture should be reacting to
     // whoever is playing before anyone has decided anything, so taking the
     // tracks node out is a deliberate act rather than the default state.
@@ -53,7 +53,7 @@ describe('compiling a look', () => {
     expect(compileCircuit(bareCircuit()).draws).toBe('by name');
   });
 
-  it('gives a new look one number of its own, already named', () => {
+  it('gives a new flow one number of its own, already named', () => {
     const values = valuesOf(starterCircuit());
     expect(values).toHaveLength(1);
     expect(values[0]).toMatchObject({ label: 'wash', index: 0 });
@@ -178,7 +178,7 @@ describe('compiling a look', () => {
     expect(signalOf(circuit, 't/n')).toBe('n');
   });
 
-  it('banks the tracks a look names, positionally', () => {
+  it('banks the tracks a flow names, positionally', () => {
     // Positional rather than keyed by name, so two nodes naming one track keep a
     // slot each — deduplicating them would make deleting one silently change
     // what the other read.
@@ -195,7 +195,7 @@ describe('compiling a look', () => {
   it('banks a reading and a smoothing, not just a name', () => {
     // One bank rather than two, which is what merging `energy` into `track`
     // bought: the CPU fills each slot with whatever that node asked for, and
-    // the shader reads a number without learning which. Two banks meant a look
+    // the shader reads a number without learning which. Two banks meant a flow
     // could name eight tracks *and* eight energies, and a shader declaring
     // sixteen floats to hold what is almost always two.
     const circuit = wire(
@@ -437,8 +437,8 @@ describe('an inlet holds a number of its own', () => {
   });
 
   it('cuts the bank to the graph, and never to nothing', () => {
-    // GLSL rejects a zero-length array, so a look with no values at all still
-    // declares one float — and a look with two declares two, because a fixed
+    // GLSL rejects a zero-length array, so a flow with no values at all still
+    // declares one float — and a flow with two declares two, because a fixed
     // bank big enough for every inlet would be hundreds of unread uniforms.
     expect(bankOf(compileCircuit(bareCircuit()).source!)).toBe(1);
     expect(bankOf(compileCircuit(posterize()).source!)).toBe(1);
@@ -490,8 +490,8 @@ describe('an inlet holds a number of its own', () => {
     expect(values({ id: 'b', kind: 'blend', op: 'over', x: 0, y: 0 })).toEqual(['amount']);
   });
 
-  it('gives a nested look its own slots', () => {
-    const looks: Record<string, LookDef> = {
+  it('gives a nested flow its own slots', () => {
+    const flows: Record<string, FlowDef> = {
       inner: {
         name: 'Inner',
         circuit: wire(
@@ -510,7 +510,7 @@ describe('an inlet holds a number of its own', () => {
         name: 'Outer',
         circuit: wire(
           [
-            { id: 'sub', kind: 'look', op: 'inner', x: 0, y: 0 },
+            { id: 'sub', kind: 'flow', op: 'inner', x: 0, y: 0 },
             { id: 'h', kind: 'grade', op: 'hue', x: 1, y: 0, values: { shift: 0.3 } },
             { id: 'o', kind: 'out', x: 2, y: 0 },
           ],
@@ -521,7 +521,7 @@ describe('an inlet holds a number of its own', () => {
         ),
       },
     };
-    const built = compileLook(looks, 'outer');
+    const built = compileFlow(flows, 'outer');
     expect(built.error).toBeNull();
     expect(built.values.map((each) => each.id)).toEqual(['sub~p/steps', 'h/shift']);
     expect(bankOf(built.source!)).toBe(2);
@@ -811,8 +811,8 @@ describe('exactly one out, and it is not optional', () => {
   });
 });
 
-describe('a look inside a look', () => {
-  const library = (): Record<string, LookDef> => ({
+describe('a flow inside a flow', () => {
+  const library = (): Record<string, FlowDef> => ({
     inner: {
       name: 'Inner',
       circuit: wire(
@@ -828,7 +828,7 @@ describe('a look inside a look', () => {
       name: 'Outer',
       circuit: wire(
         [
-          { id: 'sub', kind: 'look', op: 'inner', x: 0, y: 0 },
+          { id: 'sub', kind: 'flow', op: 'inner', x: 0, y: 0 },
           { id: 'fx', kind: 'lens', op: 'twist', x: 1, y: 0 },
           { id: 'o', kind: 'out', x: 2, y: 0 },
         ],
@@ -841,52 +841,52 @@ describe('a look inside a look', () => {
   });
 
   it('replaces the node with the graph it names', () => {
-    const built = compileLook(library(), 'outer');
+    const built = compileFlow(library(), 'outer');
     expect(built.error).toBeNull();
     expect(bodyOf(built.source!)).toContain('gen_rings(');
     expect(bodyOf(built.source!)).toContain('fxTwist(');
   });
 
-  it('reads the whole sub-look at the point wired into the node', () => {
+  it('reads the whole sub-flow at the point wired into the node', () => {
     // The node advertised a point inlet, the canvas let you wire one, and the
     // expansion spliced the node out — so the cord was drawn across the screen
     // and addressed to a node that no longer existed. Nothing looked it up and
     // nothing on the wall moved, which is the worst thing an editor can do.
-    const looks = library();
-    looks.outer.circuit.nodes.push(
+    const flows = library();
+    flows.outer.circuit.nodes.push(
       { id: 'pt', kind: 'point', x: 0, y: 2 },
       { id: 'z', kind: 'lens', op: 'zoom', x: 0, y: 3 },
     );
-    looks.outer.circuit.cords.push({ from: 'pt/p', to: 'z/p' }, { from: 'z/p', to: 'sub/p' });
-    const built = compileLook(looks, 'outer');
+    flows.outer.circuit.cords.push({ from: 'pt/p', to: 'z/p' }, { from: 'z/p', to: 'sub/p' });
+    const built = compileFlow(flows, 'outer');
     expect(built.error).toBeNull();
-    // The sub-look's generator is evaluated at the zoomed point rather than at
+    // The sub-flow's generator is evaluated at the zoomed point rather than at
     // the fragment's own, exactly as it would be inside one graph.
     expect(bodyOf(built.source!)).toMatch(/gen_rings\(v\d+,/);
     expect(bodyOf(built.source!)).toContain('cZoom(');
   });
 
   it('reads it where it is asked when nothing is wired into the node', () => {
-    expect(bodyOf(compileLook(library(), 'outer').source!)).toContain('gen_rings(fxTwist(');
+    expect(bodyOf(compileFlow(library(), 'outer').source!)).toContain('gen_rings(fxTwist(');
   });
 
   it('gives a nested number a slot of its own', () => {
     // Flattening before compiling rather than teaching the compiler about
-    // sub-looks is what keeps the compiler one thing: the banks fall out of the
+    // sub-flows is what keeps the compiler one thing: the banks fall out of the
     // expanded graph without a second pass to gather them.
-    const built = compileLook(library(), 'outer');
+    const built = compileFlow(library(), 'outer');
     expect(built.values).toHaveLength(1);
     expect(built.values[0].label).toBe('inner number');
   });
 
-  it('prefixes ids so two copies of one look cannot collide', () => {
-    const looks = library();
-    looks.two = {
+  it('prefixes ids so two copies of one flow cannot collide', () => {
+    const flows = library();
+    flows.two = {
       name: 'Two',
       circuit: wire(
         [
-          { id: 'a', kind: 'look', op: 'inner', x: 0, y: 0 },
-          { id: 'b', kind: 'look', op: 'inner', x: 0, y: 1 },
+          { id: 'a', kind: 'flow', op: 'inner', x: 0, y: 0 },
+          { id: 'b', kind: 'flow', op: 'inner', x: 0, y: 1 },
           { id: 'm', kind: 'blend', op: 'add', x: 1, y: 0 },
           { id: 'o', kind: 'out', x: 2, y: 0 },
         ],
@@ -897,34 +897,34 @@ describe('a look inside a look', () => {
         ],
       ),
     };
-    const { circuit } = flatten(looks, 'two');
+    const { circuit } = flatten(flows, 'two');
     expect(new Set(circuit.nodes.map((n) => n.id)).size).toBe(circuit.nodes.length);
-    expect(compileLook(looks, 'two').error).toBeNull();
+    expect(compileFlow(flows, 'two').error).toBeNull();
   });
 
-  it('draws nothing rather than failing when the look it names is gone', () => {
-    // A look you deleted should make the thing that used it go quiet, not stop
+  it('draws nothing rather than failing when the flow it names is gone', () => {
+    // A flow you deleted should make the thing that used it go quiet, not stop
     // the show.
-    const looks = library();
-    delete looks.inner;
-    const built = compileLook(looks, 'outer');
+    const flows = library();
+    delete flows.inner;
+    const built = compileFlow(flows, 'outer');
     expect(built.error).toBeNull();
   });
 
   it('refuses a loop before it is wired, not when it fails to compile', () => {
-    // At compile time the honest message is "one of these seven looks contains
+    // At compile time the honest message is "one of these seven flows contains
     // itself", which nobody can act on. At the moment of dropping, the message
     // is about the thing you just clicked.
-    const looks = library();
-    expect(wouldLoop(looks, 'inner', 'outer')).toBe(true);
-    expect(wouldLoop(looks, 'outer', 'inner')).toBe(false);
-    expect(wouldLoop(looks, 'inner', 'inner')).toBe(true);
+    const flows = library();
+    expect(wouldLoop(flows, 'inner', 'outer')).toBe(true);
+    expect(wouldLoop(flows, 'outer', 'inner')).toBe(false);
+    expect(wouldLoop(flows, 'inner', 'inner')).toBe(true);
   });
 
   it('says so rather than hanging when a loop got into a file anyway', () => {
-    const looks = library();
-    looks.inner.circuit.nodes.push({ id: 'back', kind: 'look', op: 'outer', x: 2, y: 2 });
-    looks.inner.circuit.cords.push({ from: 'back/c', to: 'o/c' });
-    expect(compileLook(looks, 'outer').error).toMatch(/contains itself/);
+    const flows = library();
+    flows.inner.circuit.nodes.push({ id: 'back', kind: 'flow', op: 'outer', x: 2, y: 2 });
+    flows.inner.circuit.cords.push({ from: 'back/c', to: 'o/c' });
+    expect(compileFlow(flows, 'outer').error).toMatch(/contains itself/);
   });
 });

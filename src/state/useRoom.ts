@@ -3,13 +3,13 @@ import type { Scheme, Show, Track } from '../../protocol.ts';
 import type { Transport } from './useTransport.ts';
 
 /**
- * The room, faked — so a look can be judged against conditions that are not
+ * The room, faked — so a flow can be judged against conditions that are not
  * happening.
  *
  * The designer already ran on [its own clock](./useTransport.ts), and the
  * argument generalises: if *Ableton running* must not be a precondition for
  * drawing a picture, then neither must **a chorus being played in F# minor with
- * the third colourway up**. Every one of those is a condition a look behaves
+ * the third colourway up**. Every one of those is a condition a flow behaves
  * differently under, every one of them is a fact a node can read, and waiting
  * for a rehearsal to reach one is not a way to build a library.
  *
@@ -25,7 +25,7 @@ import type { Transport } from './useTransport.ts';
  * the room* and now means *take the room from the room*, because a half-followed
  * room is a state that exists nowhere: the stage's beat under a desk's section,
  * or the real colourway with an invented key, is neither what you are building
- * nor what will play, and judging a look against it teaches nothing. Two
+ * nor what will play, and judging a flow against it teaches nothing. Two
  * switches would also be two things to leave in the wrong position.
  */
 export interface Room {
@@ -97,8 +97,8 @@ function packColor(text: string): number {
  * runs off the beat, so it changes sixty times a second and belongs in whatever
  * loop is drawing rather than in React state.
  *
- * Exported because **both** things that draw a look at a desk need it — the
- * bench and the node faces — and a look built on the set would otherwise be
+ * Exported because **both** things that draw a flow at a desk need it — the
+ * bench and the node faces — and a flow built on the set would otherwise be
  * black in one of them. The stand-ins are deliberately obvious rather than
  * convincing, they take their colours from whatever colourway is up, and they
  * disappear the moment a real set arrives.
@@ -157,10 +157,10 @@ export function useRoom(show: Show, scheme: Scheme, transport: Transport): Room 
       master: energy,
       colorway: way || null,
       colors,
-      // A colourway reaches two places: the look pass takes the first colour,
+      // A colourway reaches two places: the flow pass takes the first colour,
       // and the set's own pass takes one per track. Recolouring here by position
       // in the set — the rule `server/show.ts` follows — is what makes picking a
-      // colourway change a look that draws the set, which is most of them.
+      // colourway change a flow that draws the set, which is most of them.
       tracks: show.tracks.map((track, depth) => ({
         ...track,
         color: colors[depth % colors.length],

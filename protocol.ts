@@ -13,15 +13,15 @@
  *
  * ## There is one noun, and it is a graph
  *
- * A **look** is a graph that produces a frame. Not a graph plus a stack plus a
+ * A **flow** is a graph that produces a frame. Not a graph plus a stack plus a
  * cascade: one graph. Everything that used to be a level of something is a node
  * in it — the pictures that ship, the effects that work on them, the Live set's
- * own layer mix, the meters, the song, and other looks.
+ * own layer mix, the meters, the song, and other flows.
  *
  * That collapse deleted four concepts. There is no layer binding, no clip
  * exception, no archetype and no per-track stack, because each of them was a
  * different answer to "how do two pictures combine" and a graph answers it once.
- * What is left above the graph is deliberately tiny: which look is up, and which
+ * What is left above the graph is deliberately tiny: which flow is up, and which
  * colours it draws from.
  */
 
@@ -33,7 +33,7 @@ export const BLENDS: readonly Blend[] = ['over', 'add', 'screen', 'multiply'];
 // --- the graph -----------------------------------------------------------
 
 /**
- * The node vocabulary a look is wired from.
+ * The node vocabulary a flow is wired from.
  *
  * Three signals move between them and the whole design follows from that:
  * a **point** (`p`, where in the frame you are looking), a **number** (`n`), and
@@ -56,7 +56,7 @@ export type NodeKind =
   // pictures
   | 'source'
   | 'tracks'
-  | 'look'
+  | 'flow'
   | 'paint'
   // geometry: it moves the point, and hands back what it found there
   | 'lens'
@@ -85,7 +85,7 @@ export const NODE_FAMILIES: readonly { name: string; about: string; kinds: NodeK
   {
     name: 'draw',
     about: 'Everything that makes a colour out of nothing',
-    kinds: ['source', 'tracks', 'look', 'paint'],
+    kinds: ['source', 'tracks', 'flow', 'paint'],
   },
   {
     // Not `colour`, which it was: half of what `effect` contained never touched
@@ -119,13 +119,13 @@ export const NODE_FAMILIES: readonly { name: string; about: string; kinds: NodeK
     about: 'Numbers, and the arithmetic between them',
     kinds: ['value', 'math', 'wave'],
   },
-  { name: 'the end', about: 'What leaves the look', kinds: ['out'] },
+  { name: 'the end', about: 'What leaves the flow', kinds: ['out'] },
 ];
 
 /**
  * The pictures that ship, as `source` node modes.
  *
- * These were eleven separate shaders, then eleven `BuiltinLook` values that a
+ * These were eleven separate shaders, then eleven `BuiltinFlow` values that a
  * scheme registered under their own ids and a cascade could name. They are
  * modes now, which is the point: nothing in the model knows they exist except
  * the one node that draws them.
@@ -252,7 +252,7 @@ export const TRACK_READS: readonly string[] = ['level', 'fader', 'playing'];
  * `key` is the musical one — the tonic as a pitch class over twelve — and not
  * `seed`, which is a hash of the name. Two songs in the same key get the same
  * number on purpose: it is the one song fact that is *about the music* rather
- * than about the entry, so a look wired key → hue turns a set into a picture
+ * than about the entry, so a flow wired key → hue turns a set into a picture
  * that modulates with it.
  */
 export const SONG_FACTS: readonly string[] = ['seed', 'tempo', 'key', 'section', 'sections'];
@@ -264,7 +264,7 @@ export const WAVE_SHAPES = ['sine', 'saw', 'ramp', 'square', 'pulse', 'noise'] a
 export const TRACK_DRAWS: readonly string[] = ['by name', ...SOURCES];
 
 export interface CircuitNode {
-  /** Unique within its look. Cords name ports as `nodeId/portName`. */
+  /** Unique within its flow. Cords name ports as `nodeId/portName`. */
   id: string;
   kind: NodeKind;
   /** Canvas position, in graph units. The editor's, never the compiler's. */
@@ -275,12 +275,12 @@ export interface CircuitNode {
    *
    * Only meaningful on a node with more than one. Absent, or an outlet name a
    * hand-edited file got wrong, falls back to the wiring-aware choice in
-   * `ui/probe.ts`, so adding this field changes no existing look.
+   * `ui/probe.ts`, so adding this field changes no existing flow.
    */
   previewOutlet?: string;
   /**
    * The mode of a node that has one: a source name, an effect name, a maths op,
-   * a wave shape, a signal name, a track name, a look id.
+   * a wave shape, a signal name, a track name, a flow id.
    *
    * One field for all of them because the compiler treats them identically —
    * it is the string that picks which of a node kind's behaviours you meant.
@@ -337,7 +337,7 @@ export interface CircuitNode {
    * drives a lens one way or the other without a `math` node to invert it.
    *
    * Absent means one, which with a value of zero is exactly the replacement it
-   * replaced — that is what lets a look written before any of this existed draw
+   * replaced — that is what lets a flow written before any of this existed draw
    * the same picture.
    */
   depths?: Record<string, number>;
@@ -369,14 +369,14 @@ export interface Circuit {
 }
 
 /**
- * One look: a name and a graph.
+ * One flow: a name and a graph.
  *
  * That is the whole type now. There is no `builtin` variant, because a built-in
- * is a node mode rather than a kind of look — which is what makes the library
+ * is a node mode rather than a kind of flow — which is what makes the library
  * a list of things you made rather than a list of things you made mixed in with
  * twenty-three you did not.
  */
-export interface LookDef {
+export interface FlowDef {
   /** What it is called in the editor. Ids are stable; names are not. */
   name: string;
   circuit: Circuit;
@@ -384,22 +384,22 @@ export interface LookDef {
   rolled?: boolean;
 }
 
-/** Every look a graph reaches from this one, in the order its nodes appear. */
-export function looksUsedBy(circuit: Circuit): string[] {
-  return circuit.nodes.filter((node) => node.kind === 'look' && node.op).map((node) => node.op!);
+/** Every flow a graph reaches from this one, in the order its nodes appear. */
+export function flowsUsedBy(circuit: Circuit): string[] {
+  return circuit.nodes.filter((node) => node.kind === 'flow' && node.op).map((node) => node.op!);
 }
 
 /**
  * Whether `id` can be dropped into `into` without the graph eating itself.
  *
- * A look inside a look is the whole reason this vocabulary can express anything
+ * A flow inside a flow is the whole reason this vocabulary can express anything
  * complicated, and it is also the one way to write a program that never
  * terminates. Refusing by name at the moment of wiring is much better than
  * refusing at compile time, because at compile time the honest message is "one
- * of these seven looks contains itself" and nobody can act on that.
+ * of these seven flows contains itself" and nobody can act on that.
  */
 export function wouldLoop(
-  looks: Record<string, LookDef>,
+  flows: Record<string, FlowDef>,
   into: string,
   id: string,
 ): boolean {
@@ -409,8 +409,8 @@ export function wouldLoop(
     if (at === into) return true;
     if (seen.has(at)) return false;
     seen.add(at);
-    const def = looks[at];
-    return def ? looksUsedBy(def.circuit).some(walk) : false;
+    const def = flows[at];
+    return def ? flowsUsedBy(def.circuit).some(walk) : false;
   };
   return walk(id);
 }
@@ -420,7 +420,7 @@ export function wouldLoop(
 /**
  * What a song may override, and it is deliberately almost nothing.
  *
- * A song used to own a colourway, a bias, and a set of looks resolved through
+ * A song used to own a colourway, a bias, and a set of flows resolved through
  * four levels of cascade. The cascade is gone: what is on screen is decided by
  * the rotation, and a song entry is how you say "not for this one". Two fields,
  * both optional, both meaning *pin this instead of letting it turn*.
@@ -428,8 +428,8 @@ export function wouldLoop(
 export interface SongSpec {
   /** Draw this song from one colourway rather than whatever is up. */
   colorway?: string;
-  /** Draw this song from these looks rather than the rotation's pool. */
-  looks?: string[];
+  /** Draw this song from these flows rather than the rotation's pool. */
+  flows?: string[];
 }
 
 /**
@@ -442,8 +442,8 @@ export interface SongSpec {
  * set you have never seen.
  */
 export interface Rotation {
-  /** The looks it turns through. Empty means every look there is. */
-  looks: string[];
+  /** The flows it turns through. Empty means every flow there is. */
+  flows: string[];
   /** The colourways it turns through. Empty means every colourway there is. */
   colorways: string[];
   /**
@@ -464,18 +464,18 @@ export interface Rotation {
    */
   onClip: boolean;
   /**
-   * Turn the colourway on its own schedule rather than with the look.
+   * Turn the colourway on its own schedule rather than with the flow.
    *
-   * Two wheels rather than one pair, because a look and a palette are different
-   * lengths of idea — the same look in three colourways still reads as three
+   * Two wheels rather than one pair, because a flow and a palette are different
+   * lengths of idea — the same flow in three colourways still reads as three
    * things, and changing both every time makes every change total.
    */
   colorEvery: number;
 }
 
 export interface Scheme {
-  /** Every look, by id. All of them are graphs; none of them ship. */
-  looks: Record<string, LookDef>;
+  /** Every flow, by id. All of them are graphs; none of them ship. */
+  flows: Record<string, FlowDef>;
   /** Named colour sets, as `#rrggbb`. */
   colorways: Record<string, string[]>;
   rotation: Rotation;
@@ -486,9 +486,9 @@ export interface Scheme {
   defaults: {
     colorway: string;
     /** Drawn when the rotation has nothing to turn through. */
-    look: string;
+    flow: string;
     /**
-     * A shift, in rungs, along the ladder of divisions a look may react on.
+     * A shift, in rungs, along the ladder of divisions a flow may react on.
      *
      * Whole rungs rather than a multiplier, because every rung is a musical
      * division and a rate *between* two of them is in time with nothing.
@@ -543,12 +543,12 @@ export interface Show {
   master: number;
   tracks: Track[];
   /**
-   * The look that is up, and why it is.
+   * The flow that is up, and why it is.
    *
    * `pinned` when a song named it, so an editor can say whether it is watching
    * the rotation turn or looking at an override.
    */
-  look: string | null;
+  flow: string | null;
   pinned: boolean;
   colorway: string | null;
   /** The colourway's colours, packed, so nothing downstream parses hex. */
@@ -588,7 +588,7 @@ export interface Show {
  * Far smaller than it was: the coverage matrix wanted every distinct clip name
  * on every track of every row, which for a real set is tens of kilobytes. There
  * is nothing left that asks a question at that resolution — a song owns a
- * colourway and a list of looks, and neither is a fact about a track.
+ * colourway and a list of flows, and neither is a fact about a track.
  */
 export interface SetGrid {
   tracks: { t: number; name: string; group: string | null }[];
@@ -619,18 +619,25 @@ export type Down =
   | { kind: 'grid'; grid: SetGrid };
 
 /**
- * Browser to server. Two messages, and the first is the whole scheme, replaced.
+ * Browser to server. Three messages, and the first is the whole scheme, replaced.
  *
  * Whole rather than a patch because the scheme is a few kilobytes and an editor
  * that sent deltas would need every one of them to be reversible to be
  * undoable. The server writes it to `scheme.json`, which stays the record.
  *
- * `downbeat` is the other one, and it carries nothing: *when* it arrives is the
+ * `downbeat` carries nothing: *when* it arrives is the
  * whole message. It goes to the server rather than being handled in the browser
  * because the wheel belongs to the show and not to whoever is watching it —
  * two screens on one rig have to be counting the same phrase.
+ *
+ * `next-flow` is the same kind of gesture: it turns only the flow wheel, leaving
+ * the colourway where it is, and lands on the server so every screen moves
+ * together.
  */
-export type Up = { kind: 'scheme'; scheme: Scheme } | { kind: 'downbeat' };
+export type Up =
+  | { kind: 'scheme'; scheme: Scheme }
+  | { kind: 'downbeat' }
+  | { kind: 'next-flow' };
 
 export const VISUALS_PORT = 17900;
 export const VISUALS_WS_PATH = '/ws';

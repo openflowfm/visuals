@@ -3,7 +3,18 @@ import type { Scheme } from '../../protocol.ts';
 import { GRADE_MODES, NODE_FAMILIES } from '../../protocol.ts';
 import { BUILT_IN } from '../../server/scheme.ts';
 import { bareCircuit } from '../render/circuit.ts';
-import { drop, keyOf, matching, palette, swapEntry, type Entry } from './nodes.ts';
+import {
+  drop,
+  flowShelf,
+  keyOf,
+  matching,
+  matchingFlows,
+  palette,
+  pickOf,
+  signatureOf,
+  swapEntry,
+  type Entry,
+} from './nodes.ts';
 
 /**
  * The node browser.
@@ -17,8 +28,7 @@ import { drop, keyOf, matching, palette, swapEntry, type Entry } from './nodes.t
  */
 
 const scheme = BUILT_IN as Scheme;
-const browser = (tracks: readonly string[] = ['Bass', 'Drums', 'master']) =>
-  palette(scheme, tracks);
+const browser = (tracks: readonly string[] = ['Bass', 'Drums', 'master']) => palette(tracks);
 const find = (entries: readonly Entry[], kind: string, op?: string) =>
   entries.find((each) => each.node.kind === kind && (op === undefined || each.node.op === op));
 
@@ -53,7 +63,7 @@ describe('what the browser lists', () => {
     expect(sources[0].presets.length).toBeGreaterThan(10);
   });
 
-  it('leaves a track and a look expanded, because those are targets', () => {
+  it('leaves a track expanded, because a track name is a target', () => {
     // Collapsing "Bass meter" under a generic `track` node is the same mistake
     // in reverse: a track name is an instance of something in the set rather
     // than a way of being a node, and it is the one thing in this browser that
@@ -65,19 +75,79 @@ describe('what the browser lists', () => {
       'master meter',
     ]);
     for (const each of tracks) expect(each.presets).toEqual([]);
-    const looks = browser().filter((each) => each.node.kind === 'look');
-    expect(looks.length).toBe(Object.keys(scheme.looks).length);
   });
 
-  it('offers every kind in the vocabulary except the one that is a trap', () => {
+  it('lists no flows, because a flow is not one of these', () => {
+    // Every flow in the library used to be a row here, under `draw`, in the
+    // same chip as `source` and `paint` — so a graph of sixteen nodes and a
+    // shipped shader were the same object to anyone reading the column. That is
+    // the whole of what this browser got wrong, and it is why `The set`, a flow
+    // that was one `tracks` node, read as a kind of node.
+    expect(browser().filter((each) => each.node.kind === 'flow')).toEqual([]);
+  });
+
+  it('says what each node takes and gives, so a cord can be aimed', () => {
+    // The metadata column, and it is this rather than a category because it is
+    // the question you have *before* you drop something.
+    expect(signatureOf('point')).toBe('→ p');
+    expect(signatureOf('source')).toBe('p n → c');
+    expect(signatureOf('math')).toBe('n → n');
+    expect(signatureOf('out')).toBe('c →');
+    // The flattener's own inlet is hidden here exactly as the canvas hides it.
+    expect(signatureOf('flow')).toBe('p → c');
+  });
+
+  it('offers every kind in the vocabulary except the two that are not rows', () => {
     // The browser is built from the vocabulary, so a kind that fell out of it
     // in a restructure is a node nobody can reach and nothing else would say.
+    // `out` arrives with the flow and cannot be deleted; `flow` has a shelf.
     const reachable = new Set(browser().map((each) => each.node.kind));
+    const shelved = new Set(['out', 'flow']);
     for (const family of NODE_FAMILIES) {
       for (const kind of family.kinds) {
-        expect(reachable.has(kind), kind).toBe(kind !== 'out');
+        expect(reachable.has(kind), kind).toBe(!shelved.has(kind));
       }
     }
+  });
+});
+
+describe('the flow shelf', () => {
+  /**
+   * The second shelf, and the reason there are two.
+   *
+   * A flow is a composite and a node is a primitive, and the browser has to say
+   * which is which before you drop one — which is exactly what it did not do
+   * when both were chips in one list.
+   */
+  it('lists every flow in the library, once each', () => {
+    const rows = flowShelf(scheme);
+    expect(rows.map((each) => each.id).sort()).toEqual(Object.keys(scheme.flows).sort());
+    expect(new Set(rows.map((each) => each.id)).size).toBe(rows.length);
+  });
+
+  it('says how many nodes are inside, which is what a primitive cannot', () => {
+    const folded = flowShelf(scheme).find((each) => each.id === 'folded')!;
+    expect(folded.size).toBe(scheme.flows.folded.circuit.nodes.length);
+    expect(folded.about).toMatch(/^\d+ nodes/);
+    expect(folded.about).toContain('reads the set');
+    // `The lot` is three flows in a trench coat, and the row has to warn you.
+    expect(flowShelf(scheme).find((each) => each.id === 'lot')!.about).toContain('flows inside');
+  });
+
+  it('answers the same search box the nodes do', () => {
+    // Pulling flows out of the node palette would have made them harder to find
+    // than they were, which is the opposite of the point, so one box reaches
+    // both shelves.
+    expect(matchingFlows(flowShelf(scheme), 'outl').map((each) => each.id)).toEqual(['outline']);
+    expect(matchingFlows(flowShelf(scheme), 'trombone')).toEqual([]);
+    expect(matchingFlows(flowShelf(scheme), '')).toHaveLength(Object.keys(scheme.flows).length);
+  });
+
+  it('becomes a flow node when placed, pointing at itself by id', () => {
+    const row = flowShelf(scheme).find((each) => each.id === 'outline')!;
+    const dropped = drop(bareCircuit(), pickOf(row)).nodes.at(-1)!;
+    expect(dropped.kind).toBe('flow');
+    expect(dropped.op).toBe('outline');
   });
 });
 

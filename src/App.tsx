@@ -25,7 +25,7 @@ import './app.css';
 export function App() {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const stage = useRef<Compositor | null>(null);
-  const { show, showRef, scheme, grid, save, downbeat, clock, online } = useShow();
+  const { show, showRef, scheme, grid, save, downbeat, nextFlow, clock, online } = useShow();
   // The render loop reads the scheme every frame because effects live in it, and
   // reads it through a ref for the same reason it reads the show through one:
   // rebuilding the loop whenever a number moved would drop a frame per edit.
@@ -54,9 +54,13 @@ export function App() {
       // The wall is a picture and not a control surface. `f` is above this line
       // because a window that failed to fill its screen needs one way to.
       if (ON_WALL) return;
-      // The one. A digit rather than a letter because it *is* the count, and
-      // because the four letters worth having are already shortcuts.
+      // The one. A digit rather than a letter because it *is* the count.
       if (e.key === '1') downbeat();
+      // Flow, next. One press is one turn; holding the key must not race through
+      // a whole library before the key-up arrives. Modifiers stay available to
+      // the browser (`cmd-L` still focuses its location bar), and the colourway
+      // does not move.
+      if (e.key === 'l' && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) nextFlow();
       if (e.key === 'i') setPanel((on) => !on);
       if (e.key === 'e') setEditing((on) => !on);
       if (e.key === 'k') align(!aligning);
@@ -71,7 +75,7 @@ export function App() {
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
-  }, [downbeat, align, aligning, walled, send, shut]);
+  }, [downbeat, nextFlow, align, aligning, walled, send, shut]);
 
   useEffect(() => {
     if (!canvas.current) return;
@@ -146,7 +150,7 @@ export function App() {
       {panel && !ON_WALL && (
         <div className="panel">
           <h1>
-            visuals
+            visual[flow]
             <span className={online ? 'ok' : 'bad'}>{online ? 'server' : 'no server'}</span>
             <span className={show.connected ? 'ok' : 'bad'}>
               {show.connected ? 'bridge' : 'no bridge'}
@@ -175,9 +179,9 @@ export function App() {
             <dd className="wide">{show.song ?? '—'}</dd>
             <dt>section</dt>
             <dd>{show.role ?? '—'}</dd>
-            <dt>look</dt>
+            <dt>flow</dt>
             <dd className="wide">
-              {show.look ? (scheme?.looks[show.look]?.name ?? show.look) : '—'}
+              {show.flow ? (scheme?.flows[show.flow]?.name ?? show.flow) : '—'}
               {show.pinned ? '*' : ''}
             </dd>
             <dt>colours</dt>
@@ -208,8 +212,8 @@ export function App() {
           </dl>
 
           <p className="hint">
-            <kbd>1</kbd> the one · <kbd>i</kbd> panel · <kbd>e</kbd> edit · <kbd>k</kbd> align ·{' '}
-            <kbd>w</kbd> wall · <kbd>f</kbd> fullscreen
+            <kbd>1</kbd> the one · <kbd>l</kbd> next flow · <kbd>i</kbd> panel · <kbd>e</kbd>{' '}
+            edit · <kbd>k</kbd> align · <kbd>w</kbd> wall · <kbd>f</kbd> fullscreen
           </p>
         </div>
       )}
@@ -266,7 +270,7 @@ function Phrase({
   quantum: number;
   /** The Link beat the phrase starts on, as the server counts it. */
   one: number;
-  /** How many bars the look wheel runs for. Zero when it is held. */
+  /** How many bars the flow wheel runs for. Zero when it is held. */
   bars: number;
 }) {
   const [at, setAt] = useState({ beat: 1, bar: 1 });

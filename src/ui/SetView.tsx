@@ -5,7 +5,7 @@ import { NumberField } from '../../../widgets/src/controls/NumberField.tsx';
 import { Select } from '../../../widgets/src/controls/Select.tsx';
 import { Toggle } from '../../../widgets/src/controls/Toggle.tsx';
 import { Colorways } from './Colorways.tsx';
-import { lookList, toggleId } from './edits.ts';
+import { flowList, toggleId } from './edits.ts';
 import { newSeed, ROLL_ABOUT, ROLL_PARTS, rollScheme, type RollPart } from '../../roll.ts';
 import { BARS, PACE } from './param.ts';
 
@@ -19,7 +19,7 @@ import { BARS, PACE } from './param.ts';
  * A graph combines pictures.
  *
  * So what a song can say is two things, both of them overrides: which colourway,
- * and which looks. Everything else is the **wheel**: a rig with nothing
+ * and which flows. Everything else is the **wheel**: a rig with nothing
  * configured turns through everything you have made, which is what makes it
  * something you can point at a set you have never seen.
  */
@@ -44,7 +44,7 @@ export function SetView({
    */
   const [before, setBefore] = useState<Scheme | null>(null);
 
-  const looks = lookList(scheme);
+  const flows = flowList(scheme);
   const ways = Object.keys(scheme.colorways);
   const songs = grid?.songs ?? show.songs.map((name) => ({ name, key: name, roles: [] }));
 
@@ -119,7 +119,7 @@ export function SetView({
         )}
         <span className="gap" />
         <span className="cap">
-          {show.look ? `${scheme.looks[show.look]?.name ?? show.look} up` : 'nothing up'}
+          {show.flow ? `${scheme.flows[show.flow]?.name ?? show.flow} up` : 'nothing up'}
           {show.pinned ? ' · pinned' : ''}
           {show.colorway ? ` · ${show.colorway}` : ''}
         </span>
@@ -134,7 +134,7 @@ export function SetView({
           </p>
           <div className="fields">
             <label>
-              <span>look every</span>
+              <span>flow every</span>
               <NumberField
                 param={BARS}
                 value={scheme.rotation.bars}
@@ -173,11 +173,11 @@ export function SetView({
             </label>
           </div>
 
-          <h5>looks it turns through</h5>
+          <h5>flows it turns through</h5>
           <Pool
-            all={looks.map((each) => ({ id: each.id, name: each.def.name || each.id }))}
-            chosen={scheme.rotation.looks}
-            onChange={(next) => rotate({ looks: next })}
+            all={flows.map((each) => ({ id: each.id, name: each.def.name || each.id }))}
+            chosen={scheme.rotation.flows}
+            onChange={(next) => rotate({ flows: next })}
           />
           <h5>colourways it turns through</h5>
           <Pool
@@ -219,7 +219,7 @@ export function SetView({
           <div className="songs">
             {songs.map((song) => {
               const spec = scheme.songs[song.name] ?? {};
-              const pinned = spec.looks ?? [];
+              const pinned = spec.flows ?? [];
               return (
                 <div
                   key={song.key}
@@ -239,19 +239,19 @@ export function SetView({
                     width={104}
                   />
                   <Select
-                    items={['turning', ...looks.map((each) => each.def.name || each.id)]}
+                    items={['turning', ...flows.map((each) => each.def.name || each.id)]}
                     index={Math.max(
                       0,
-                      looks.findIndex((each) => each.id === pinned[0]) + 1,
+                      flows.findIndex((each) => each.id === pinned[0]) + 1,
                     )}
                     onChange={(i) =>
                       save(
                         setSong(scheme, song.name, {
-                          looks: i === 0 ? undefined : [looks[i - 1].id],
+                          flows: i === 0 ? undefined : [flows[i - 1].id],
                         }),
                       )
                     }
-                    label={`${song.name} look`}
+                    label={`${song.name} flow`}
                     width={132}
                   />
                 </div>

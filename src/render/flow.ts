@@ -1,26 +1,26 @@
-import { TRACK_READS, type Circuit, type LookDef } from '../../protocol.ts';
-import { compileLook, flatten, valuesOf, tracksOf, type Compiled } from './circuit.ts';
+import { TRACK_READS, type Circuit, type FlowDef } from '../../protocol.ts';
+import { compileFlow, flatten, valuesOf, tracksOf, type Compiled } from './circuit.ts';
 
 /**
- * What a look *is*, independent of who is drawing it.
+ * What a flow *is*, independent of who is drawing it.
  *
- * The stage and the bench both take a look id and need the same things out of
+ * The stage and the bench both take a flow id and need the same things out of
  * it — the shader, the banks its numbers and meters ride in, and whether the
  * shader it has is still the right one. Keeping those here is what stops the
  * bench from being a second, subtly different renderer: two things that
- * disagreed about what a look looks like would be worse than one preview.
+ * disagreed about what a flow looks like would be worse than one preview.
  */
 
 /**
- * Everything a look compiles to, cached by its structure.
+ * Everything a flow compiles to, cached by its structure.
  *
- * A look is compiled from **the whole library**, not from its own graph, because
- * a `look` node is replaced by the graph it names. That means a look's shader
- * changes when a look it contains changes, which is exactly right and is the
+ * A flow is compiled from **the whole library**, not from its own graph, because
+ * a `flow` node is replaced by the graph it names. That means a flow's shader
+ * changes when a flow it contains changes, which is exactly right and is the
  * reason the signature below walks the same expansion.
  */
-export function buildLook(looks: Record<string, LookDef>, id: string): Compiled {
-  return compileLook(looks, id);
+export function buildFlow(flows: Record<string, FlowDef>, id: string): Compiled {
+  return compileFlow(flows, id);
 }
 
 /**
@@ -35,13 +35,13 @@ export function buildLook(looks: Record<string, LookDef>, id: string): Compiled 
  * setting a number for the first time recompiles once and every turn of it
  * afterwards recompiles nothing, which is the whole bargain.
  *
- * It walks the **expanded** graph, so editing a look changes the signature of
- * every look that contains it. Signing only the top graph would leave a nested
+ * It walks the **expanded** graph, so editing a flow changes the signature of
+ * every flow that contains it. Signing only the top graph would leave a nested
  * edit invisible until something else forced a rebuild, which is the kind of
  * bug that looks like the editor having stopped working.
  */
-export function signatureOf(looks: Record<string, LookDef>, id: string): string {
-  const { circuit, error } = flatten(looks, id);
+export function signatureOf(flows: Record<string, FlowDef>, id: string): string {
+  const { circuit, error } = flatten(flows, id);
   if (error) return `broken:${error}`;
   return signatureOfCircuit(circuit);
 }
@@ -53,11 +53,11 @@ export function signatureOfCircuit(circuit: Circuit): string {
     .map((n) => `${n.id}:${n.kind}:${n.op ?? ''}:${Object.keys(n.values ?? {}).sort().join('+')}`)
     .join(',');
   const cords = circuit.cords.map((c) => `${c.from}>${c.to}`).join(',');
-  return `look:${nodes}|${cords}`;
+  return `flow:${nodes}|${cords}`;
 }
 
 /**
- * Every bank a compiled look reads, cut to its own graph.
+ * Every bank a compiled flow reads, cut to its own graph.
  *
  * Computed **per frame** rather than kept beside the program, and that is the
  * whole reason it is one function: two of the three change without the shader
@@ -76,7 +76,7 @@ export function banksOf(circuit: Circuit): { params: Float32Array; tracks: Track
  * Cut to the graph, because the shader declares `uParams` at the size this
  * returns. A bank shorter than the array leaves the tail reading zero; a bank
  * longer than it is an `INVALID_OPERATION` and a black picture. Both come from
- * `valuesOf` so that neither can happen — and a look that sets nothing at all
+ * `valuesOf` so that neither can happen — and a flow that sets nothing at all
  * still gets one float, because GLSL rejects a zero-length array.
  */
 export function paramsOf(circuit: Circuit): Float32Array {
@@ -97,11 +97,11 @@ export interface TrackAsk {
 }
 
 /**
- * What a look's `track` nodes are asking for, in bank order.
+ * What a flow's `track` nodes are asking for, in bank order.
  *
- * Every slot empty for a look that reads no named track, which is most of them
+ * Every slot empty for a flow that reads no named track, which is most of them
  * and is the cheap case this exists to keep cheap: a bank with nothing claimed
- * is never uploaded at all, so a look that names nothing travels.
+ * is never uploaded at all, so a flow that names nothing travels.
  */
 export function namedTracks(circuit: Circuit): TrackAsk[] {
   const out: TrackAsk[] = Array.from({ length: 8 }, () => ({

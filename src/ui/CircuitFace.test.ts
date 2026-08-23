@@ -17,7 +17,7 @@ function face(
       node,
       circuit,
       tracks: [],
-      looks: [],
+      flows: [],
       energy: 0.62,
       beat: () => 0.5,
       numberReadings,
