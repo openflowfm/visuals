@@ -891,25 +891,22 @@ const SIGNAL_NAMES: Record<Signal, string> = {
  * each a different width, and nothing lining up. A fixed grid scans as a table —
  * the `c` column either lights up or it does not, and you read down it.
  */
-function Ports({ of }: { of: PortSet }) {
-  const side = (held: readonly Signal[], which: 'takes' | 'gives') =>
-    SIGNALS.map((signal) => (
-      <span
-        key={`${which}${signal}`}
-        data-signal={signal}
-        {...(held.includes(signal) ? { 'data-on': '' } : {})}
-      >
-        {signal}
-      </span>
-    ));
+function Ports({ of, side }: { of: PortSet; side: 'takes' | 'gives' }) {
+  const held = of[side];
   return (
     <span
       className="node-sig"
-      aria-label={`takes ${of.takes.join(' ') || 'nothing'}, gives ${of.gives.join(' ') || 'nothing'}`}
+      aria-label={`${side} ${held.join(' ') || 'nothing'}`}
     >
-      {side(of.takes, 'takes')}
-      <i>→</i>
-      {side(of.gives, 'gives')}
+      {SIGNALS.map((signal) => (
+        <span
+          key={signal}
+          data-signal={signal}
+          {...(held.includes(signal) ? { 'data-on': '' } : {})}
+        >
+          {signal}
+        </span>
+      ))}
     </span>
   );
 }
@@ -924,10 +921,11 @@ function Ports({ of }: { of: PortSet }) {
  *
  * **One node per row.** These were chips wrapping into a paragraph, which packs
  * a lot of names into a short column and gives every one of them the same
- * nothing to say for itself. A row has a right-hand side, and what goes there is
- * the node's signature — `p → c`, `n → n` — because the question you have
- * before you drop a node is whether the cord in your hand can reach it, and a
- * browser that makes you drop one to find out costs an undo per question.
+ * nothing to say for itself. A row wears its ports the way the node itself
+ * does — what it takes before the name, what it gives at the right edge —
+ * because the question you have before you drop a node is whether the cord in
+ * your hand can reach it, and a browser that makes you drop one to find out
+ * costs an undo per question.
  *
  * The count beside a row opens its presets, each of which drops that node
  * already configured, with its one-line description in the same right-hand
@@ -996,8 +994,9 @@ function NodeBrowser({
                       title={entry.node.about}
                       onClick={() => onAdd(entry.node)}
                     >
+                      <Ports of={entry.node.ports} side="takes" />
                       <span className="node-label">{entry.node.label}</span>
-                      <Ports of={entry.node.ports} />
+                      <Ports of={entry.node.ports} side="gives" />
                     </button>
                   </div>
                   {on && entry.presets.length > 0 && (

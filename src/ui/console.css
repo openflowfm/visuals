@@ -476,12 +476,6 @@
   color: var(--bd3);
 }
 
-.designer .node-sig i {
-  font-style: normal;
-  margin: 0 2px;
-  color: var(--bd3);
-}
-
 .designer .node-sig [data-on][data-signal='p'] {
   color: var(--signal-p);
 }
@@ -934,7 +928,7 @@
 }
 
 .designer .node-entry .under {
-  margin: 0 0 4px 18px;
+  margin: 0 0 4px 35px;
   padding-left: 8px;
   border-left: 1px solid var(--rule);
 }
