@@ -3,6 +3,7 @@ import type { Scheme } from '../../protocol.ts';
 import {
   FIELD_MODES,
   FRACTAL_MODES,
+  LIGHT_MODES,
   GRADE_MODES,
   NODE_FAMILIES,
   SOURCES,
@@ -112,6 +113,10 @@ describe('what the browser lists', () => {
     const fractals = browser().filter((each) => each.node.kind === 'fractal');
     expect(fractals).toHaveLength(1);
     expect(fractals[0].presets.map((each) => each.op)).toEqual(FRACTAL_MODES);
+
+    const lights = browser().filter((each) => each.node.kind === 'light');
+    expect(lights).toHaveLength(1);
+    expect(lights[0].presets.map((each) => each.op)).toEqual(LIGHT_MODES);
   });
 
   it('does not offer an iterative fractal once per playing track', () => {
@@ -121,6 +126,7 @@ describe('what the browser lists', () => {
     expect(TRACK_DRAWS).not.toContain('mandelbrot');
     expect(TRACK_DRAWS).not.toContain('julia');
     for (const mode of FIELD_MODES) expect(TRACK_DRAWS).not.toContain(mode);
+    for (const mode of LIGHT_MODES) expect(TRACK_DRAWS).not.toContain(mode);
   });
 
   it('lists no flows, because a flow is not one of these', () => {
@@ -138,6 +144,7 @@ describe('what the browser lists', () => {
     expect(portsOf('point')).toEqual({ takes: [], gives: ['p'] });
     expect(portsOf('source')).toEqual({ takes: ['p', 'n'], gives: ['c'] });
     expect(portsOf('fractal')).toEqual({ takes: ['p', 'n'], gives: ['c'] });
+    expect(portsOf('light')).toEqual({ takes: ['p', 'n'], gives: ['c'] });
     expect(portsOf('math')).toEqual({ takes: ['n'], gives: ['n'] });
     expect(portsOf('out')).toEqual({ takes: ['c'], gives: [] });
     // The flattener's own inlet is hidden here exactly as the canvas hides it.

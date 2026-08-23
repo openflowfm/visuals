@@ -57,6 +57,7 @@ export type NodeKind =
   | 'source'
   | 'field'
   | 'fractal'
+  | 'light'
   | 'tracks'
   | 'flow'
   | 'paint'
@@ -87,7 +88,7 @@ export const NODE_FAMILIES: readonly { name: string; about: string; kinds: NodeK
   {
     name: 'draw',
     about: 'Everything that makes a colour out of nothing',
-    kinds: ['source', 'field', 'fractal', 'tracks', 'flow', 'paint'],
+    kinds: ['source', 'field', 'fractal', 'light', 'tracks', 'flow', 'paint'],
   },
   {
     // Not `colour`, which it was: half of what `effect` contained never touched
@@ -166,6 +167,15 @@ export const FIELD_MODES = ['cells', 'clouds', 'metaballs'] as const;
  * accidental GPU load this node exists to prevent.
  */
 export const FRACTAL_MODES = ['mandelbrot', 'julia'] as const;
+
+/**
+ * The four bounded 2D lights the dedicated `light` node hangs in a frame.
+ *
+ * Deliberately not `SOURCES`, for the reason `fractal` is not: every source is
+ * also offered once per playing track, and a light is priced for a flow. Each
+ * mode declares its fixed work in the renderer the way a `field` mode does.
+ */
+export const LIGHT_MODES = ['lamp', 'beam', 'shafts', 'caustics'] as const;
 
 /** The effects that ship, as `effect` node modes. The other half of the old split. */
 /**

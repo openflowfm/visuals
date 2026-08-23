@@ -5,7 +5,8 @@
 Shader source is split by responsibility under `src/render/glsl/`: `common.ts`
 owns the uniforms and shared coordinate/clock helpers, `sources.ts` owns the
 lightweight generators, `fields.ts` owns fixed-work procedural fields,
-`fractal.ts` owns bounded iterative pictures,
+`fractal.ts` owns bounded iterative pictures, `light.ts` owns fixed-work 2D
+lights built on the field lattice,
 `effects.ts` owns single-read image operations, and `circuit.ts` owns helpers
 used only by graph expressions. `src/render/shaders.ts` is the assembly boundary
 for full flow and per-track fragment shaders; `src/render/circuit.ts` compiles a
@@ -92,7 +93,8 @@ which.
 
 ## What there is to look at
 
-Thirteen lightweight sources, three bounded procedural fields, one bounded fractal node and
+Thirteen lightweight sources, three bounded procedural fields, four bounded 2D lights, one
+bounded fractal node and
 nineteen ways to work on a picture, all of them **node modes** rather than parallel registries
 of their own. They are deliberately unlike each other rather than variations on a theme —
 five sources all drawing soft noise is one picture, however many of them there are.
@@ -149,6 +151,18 @@ full bloom with one unit to spare.
 | `mandelbrot` | the classic connected escape-time set; its main cardioid and large bulb skip the orbit loop entirely |
 | `julia` | the related family, with `shape` moving its seed around a bounded useful region |
 
+| `light` — one node, four fixed-work 2D lights | |
+|---|---|
+| `lamp` | a hot Gaussian core over an inverse-square halo, windowed to a finite reach so it composes |
+| `beam` | a soft-edged spotlight cone swung about straight down, two gradient-noise octaves of dust inside it |
+| `shafts` | crepuscular rays: one fBm read over the angle around a hanging point, its seam parked behind the fan window |
+| `caustics` | sunlight through water: two counter-drifting Worley layers, bright where either nears a feature and flashing where both do |
+
+Each light hangs where its `from` inlet says — wire a `place` to move it — except
+`caustics`, which is a surface the frame is under rather than a point in it. Their motion
+rides `uTime` on purpose: haze, dust and water are the things that should not dance in
+tempo, so `energy` drives brightness alone and the physics never wobbles with the beat.
+
 Both modes share one orbit implementation with a hard ceiling of thirty-two steps and no
 supersampling. `detail` chooses a lower stopping point from eight to thirty-two; `zoom` is
 logarithmic but stops at 1/64 scale, where a WebGL `highp` float can still tell the truth.
@@ -189,7 +203,8 @@ and a literal name in `SOURCES`:
 the same body serves the `source` node and the track pass, so what a built-in draws and what
 a node draws cannot drift, and TypeScript refuses a name without a body or description. Anything
 with a fixed loop or repeated samples belongs in a dedicated kind with an explicit work cost, as
-`field` and `fractal` do, so the compiler can see cost that GLSL line counting cannot.
+`field`, `light` and `fractal` do, so the compiler can see cost that GLSL line counting
+cannot.
 
 Adding a *way to work on one* means picking which of the three it is, and that choice is now
 the node it goes in rather than a shape hidden inside a twelve-entry table. A `lens` mode is

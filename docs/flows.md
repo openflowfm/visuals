@@ -57,7 +57,8 @@ and [the roll](wheel.md) deliberately never wires those four.
 
 A bounded procedural node needs a second answer, because a loop or repeated kernel may still
 be one GLSL statement. `field` charges 9, 16, or 7 primitive visits for cells, clouds, or
-metaballs; `fractal` charges its thirty-two-step orbit ceiling. The compiler adds that work
+metaballs; `light` charges 1, 8, 16, or 18 for its lamp, beam, shafts, or
+caustics; `fractal` charges its thirty-two-step orbit ceiling. The compiler adds that work
 every time the graph asks for the picture at another point, so a three-tap colour shift over
 clouds fits while a nine-tap bloom is refused. Two direct fractals fit; putting one under any
 `spread` does not. A seven-ball metaball under the same nine-tap bloom costs 63 of 64 and fits.
@@ -254,6 +255,7 @@ editors listing these differently would be two different vocabularies.
 | `source` | `p` `energy` | `c` | one of thirteen, including `checker` and `rays`; all are safe as per-track pictures |
 | `field` | `p` `energy`, plus `balls` `apart` on metaballs | `c` | `cells` `clouds` `metaballs`; fixed work, charged per graph sample and never offered per track |
 | `fractal` | `p` `energy` + its mode's numbers | `c` | `mandelbrot` or `julia`, with bounded zoom, detail and iterative work |
+| `light` | `p` `energy` + its mode's numbers, and `from` on the hung three | `c` | `lamp` `beam` `shafts` `caustics`; 2D lights with fixed work, drifting in seconds rather than beats |
 | `flow` | `p` | `c` | another flow, whole, as one node |
 | `paint` | `amount` `energy` | `c` | the colourway's colour at a brightness |
 

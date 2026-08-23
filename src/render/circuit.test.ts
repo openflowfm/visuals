@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Circuit, FlowDef } from '../../protocol.ts';
-import { FIELD_MODES, SOURCES, TRACK_DRAWS, wouldLoop } from '../../protocol.ts';
+import { FIELD_MODES, LIGHT_MODES, SOURCES, TRACK_DRAWS, wouldLoop } from '../../protocol.ts';
 import {
   bareCircuit,
   compileCircuit,
@@ -804,6 +804,77 @@ describe('the bounded fractal node', () => {
         ],
         [
           { from: 'f/c', to: 's/c' },
+          { from: 's/c', to: 'o/c' },
+        ],
+      ),
+    );
+    expect(multiplied.source).toBeNull();
+    expect(multiplied.error).toMatch(/costly picture.*sampled too many times/);
+  });
+});
+
+describe('the bounded light node', () => {
+  const light = (op: string): Circuit =>
+    wire(
+      [
+        { id: 'l', kind: 'light', op, x: 0, y: 0 },
+        { id: 'o', kind: 'out', x: 1, y: 0 },
+      ],
+      [{ from: 'l/c', to: 'o/c' }],
+    );
+
+  it('compiles every mode to its own bounded function', () => {
+    for (const op of LIGHT_MODES) {
+      const built = compileCircuit(light(op));
+      expect(built.error).toBeNull();
+      expect(bodyOf(built.source!)).toContain(`light_${op}(`);
+    }
+  });
+
+  it('hangs where a cord says, and caustics nowhere at all', () => {
+    const lamp = compileCircuit(light('lamp'));
+    expect(bodyOf(lamp.source!)).toContain('light_lamp(centred(), vec2(0.0),');
+    const caustics = compileCircuit(light('caustics'));
+    expect(bodyOf(caustics.source!)).toContain('light_caustics(centred(),');
+    expect(bodyOf(caustics.source!)).not.toContain('light_caustics(centred(), vec2(');
+  });
+
+  it('keeps a turned value in the uniform bank instead of recompiling', () => {
+    const circuit = light('lamp');
+    circuit.nodes[0].values = { carry: 0.8 };
+    const built = compileCircuit(circuit);
+    expect(built.error).toBeNull();
+    expect(bodyOf(built.source!)).toContain('uParams[0]');
+    expect(bodyOf(built.source!)).not.toContain('0.8');
+  });
+
+  it('lets three lights blend but refuses a bloom that multiplies the water', () => {
+    const trio = compileCircuit(
+      wire(
+        [
+          { id: 'a', kind: 'light', op: 'caustics', x: 0, y: 0 },
+          { id: 'b', kind: 'light', op: 'shafts', x: 0, y: 1 },
+          { id: 'm', kind: 'blend', op: 'screen', x: 1, y: 0 },
+          { id: 'o', kind: 'out', x: 2, y: 0 },
+        ],
+        [
+          { from: 'a/c', to: 'm/base' },
+          { from: 'b/c', to: 'm/top' },
+          { from: 'm/c', to: 'o/c' },
+        ],
+      ),
+    );
+    expect(trio.error).toBeNull();
+
+    const multiplied = compileCircuit(
+      wire(
+        [
+          { id: 'a', kind: 'light', op: 'caustics', x: 0, y: 0 },
+          { id: 's', kind: 'spread', op: 'bloom', x: 1, y: 0 },
+          { id: 'o', kind: 'out', x: 2, y: 0 },
+        ],
+        [
+          { from: 'a/c', to: 's/c' },
           { from: 's/c', to: 'o/c' },
         ],
       ),

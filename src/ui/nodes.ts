@@ -339,6 +339,7 @@ export function palette(): Entry[] {
   modes('source', 'source');
   modes('field', 'field');
   modes('fractal', 'fractal');
+  modes('light', 'light');
   node('paint', undefined, 'paint', NODE_SPECS.paint.description);
   // No flows. Every flow in the library used to be a row here, in the same chip
   // as `source` and `paint`, which put a graph of sixteen nodes and a shipped

@@ -9,6 +9,7 @@ import {
   SOURCES,
   FIELD_MODES,
   FRACTAL_MODES,
+  LIGHT_MODES,
   TRACK_DRAWS,
   WAVE_SHAPES,
   BLENDS,
@@ -19,6 +20,7 @@ import {
 } from '../../protocol.ts';
 import { CIRCUIT_HELPERS } from './glsl/circuit.ts';
 import { FIELD_WORK } from './glsl/fields.ts';
+import { LIGHT_WORK } from './glsl/light.ts';
 import { FRACTAL_ITERATIONS, flowPreamble } from './shaders.ts';
 
 /**
@@ -398,12 +400,33 @@ const FIELD_VALUES = {
   metaballs: ['balls', 'apart'],
 } as const satisfies Record<string, readonly string[]>;
 
+const LIGHT_VALUES = {
+  lamp: ['carry', 'soft'],
+  beam: ['aim', 'spread'],
+  shafts: ['blades', 'haze'],
+  caustics: ['weave', 'glint'],
+} as const satisfies Record<string, readonly string[]>;
+
+/**
+ * Where each hung light hangs until a cord moves it, in centred space.
+ *
+ * `caustics` has no entry and no `from` inlet: water light is a surface the
+ * frame is under, not a point in it, and an inlet that moved nothing would
+ * teach the wrong physics.
+ */
+const LIGHT_HUNG: Partial<Record<(typeof LIGHT_MODES)[number], string>> = {
+  lamp: 'vec2(0.0)',
+  beam: 'vec2(0.0, 0.45)',
+  shafts: 'vec2(0.0, 0.45)',
+};
+
 type ValueInlet =
   | (typeof LENS_VALUES)[keyof typeof LENS_VALUES][number]
   | (typeof GRADE_VALUES)[keyof typeof GRADE_VALUES][number]
   | (typeof SPREAD_VALUES)[keyof typeof SPREAD_VALUES][number]
   | (typeof FRACTAL_VALUES)[keyof typeof FRACTAL_VALUES][number]
-  | (typeof FIELD_VALUES)[keyof typeof FIELD_VALUES][number];
+  | (typeof FIELD_VALUES)[keyof typeof FIELD_VALUES][number]
+  | (typeof LIGHT_VALUES)[keyof typeof LIGHT_VALUES][number];
 
 /**
  * Every mode-dependent control, by the port name the graph saves.
@@ -445,6 +468,14 @@ const VALUE_DESCRIPTION: Record<ValueInlet, string> = {
   shape: 'Which Julia-set seed is traced around the useful connected region.',
   balls: 'How many metaballs are active, from two through the bounded ceiling of seven.',
   apart: 'How far the metaballs separate, ending in a fully spaced elliptical ring.',
+  carry: 'How far the light carries before it dies away.',
+  soft: 'How much of the light is hot core against outer halo.',
+  aim: 'Which way the beam points, swung about straight down.',
+  spread: 'How wide the cone opens.',
+  blades: 'How many distinct rays streak the fan.',
+  haze: 'How far the rays carry through the air.',
+  weave: 'How tightly the water pattern is woven.',
+  glint: 'How sharply the bright crossings flash.',
 };
 
 /** Where a number starts when nobody has turned it. A half unless it says. */
@@ -456,6 +487,9 @@ const VALUE_AT: Record<string, number> = {
   detail: 0.35,
   balls: 0.4,
   apart: 0.5,
+  soft: 0.4,
+  spread: 0.35,
+  glint: 0.6,
 };
 
 /** The modes that read an energy. The rest have no such inlet to leave unwired. */
@@ -473,6 +507,10 @@ const NEEDS_ENERGY = new Set([
   'cells',
   'clouds',
   'metaballs',
+  'lamp',
+  'beam',
+  'shafts',
+  'caustics',
 ]);
 
 const valuePorts = (names: readonly ValueInlet[], op: string): PortSpec[] => [
@@ -631,6 +669,13 @@ const FIELD_MODE_DOCUMENTATION = documentedModes(FIELD_MODES, {
 const FRACTAL_MODE_DOCUMENTATION = documentedModes(FRACTAL_MODES, {
   mandelbrot: 'The classic connected escape-time set, bounded to a safe amount of detail.',
   julia: 'A related escape-time set whose shape control moves through useful Julia seeds.',
+});
+
+const LIGHT_MODE_DOCUMENTATION = documentedModes(LIGHT_MODES, {
+  lamp: 'A soft point of light in haze — a hot core over an inverse-square halo.',
+  beam: 'A stage spotlight cone with dust drifting through it, aimed about straight down.',
+  shafts: 'Crepuscular rays fanning down from a hanging point, streaked and slowly marching.',
+  caustics: 'Sunlight through water: two drifting cellular layers whose crossings glint.',
 });
 
 const TRACK_DRAW_MODES = documentedModes(TRACK_DRAWS, {
@@ -823,6 +868,34 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
           ? `fractalJulia(${common}, ${value('shape')}, ${c.read('energy')})`
           : `fractalMandelbrot(${common}, ${c.read('energy')})`;
       return { c: `laid(${expression}, ${c.read('energy')})` };
+    },
+  },
+
+  light: {
+    name: 'light',
+    description:
+      'A bounded 2D light hung in the frame — a lamp, a beam, shafts, or caustics — priced like a field.',
+    inlets: (node) => {
+      const op = modeOf(node, LIGHT_MODES);
+      const hung = LIGHT_HUNG[op];
+      return [
+        P('p', 'Where in the frame the light is read.'),
+        ...(hung ? [P('from', 'Where the light hangs.', hung)] : []),
+        ...valuePorts(LIGHT_VALUES[op], op),
+      ];
+    },
+    outlets: [C('c', 'The light, as a picture.')],
+    modes: LIGHT_MODE_DOCUMENTATION,
+    work: (node) => LIGHT_WORK[modeOf(node, LIGHT_MODES)],
+    emit: (c) => {
+      const op = modeOf(c.node, LIGHT_MODES);
+      const args = [
+        c.read('p'),
+        ...(LIGHT_HUNG[op] ? [c.read('from')] : []),
+        c.read('energy'),
+        ...LIGHT_VALUES[op].map((name) => c.read(name)),
+      ];
+      return { c: `laid(light_${op}(${args.join(', ')}), ${c.read('energy')})` };
     },
   },
 
