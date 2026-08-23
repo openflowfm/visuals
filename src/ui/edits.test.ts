@@ -85,7 +85,7 @@ describe('out is the one node that is not optional', () => {
   it('is not something the node browser offers', () => {
     // It was, and dropping a second one is the one thing in the vocabulary that
     // makes a flow stop compiling — a trap rather than a feature.
-    const entries = palette(['Bass', 'master']);
+    const entries = palette();
     expect(entries.some((entry) => entry.node.kind === 'out')).toBe(false);
     // And the rest of the vocabulary is still all there to be found.
     expect(entries.some((entry) => entry.node.kind === 'tracks')).toBe(true);

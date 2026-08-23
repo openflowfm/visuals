@@ -38,12 +38,17 @@ describe('the node face anatomy', () => {
     expect(html).toContain('aria-label="energy"');
     expect(html).not.toContain('<span class="wdg-port-label">energy</span>');
     expect(html).toContain('class="wdg-caption">energy</span>');
+    expect(html).toContain('How strongly the room drives this movement or brightness.');
   });
 
   it('shows a selector only when choosing among several outlets means something', () => {
     const polar = face({ id: 'p', kind: 'polar', previewOutlet: 'angle', x: 0, y: 0 });
-    expect(polar).toContain('title="Show radius in this node&#x27;s picture"');
-    expect(polar).toContain('title="Show angle in this node&#x27;s picture"');
+    expect(polar).toContain(
+      'title="Show radius in this node&#x27;s picture — The distance from the centre, from zero to one."',
+    );
+    expect(polar).toContain(
+      'title="Show angle in this node&#x27;s picture — The direction around the centre, wrapped from zero to one."',
+    );
     // The picked one carries the mark, and it is on the button rather than a
     // wrapper: an outlet is a row like any other now, so there is nothing left
     // between the row and its name to hang a state on.
@@ -52,7 +57,7 @@ describe('the node face anatomy', () => {
     const source = face({ id: 's', kind: 'source', op: 'plasma', x: 0, y: 0 });
     expect(source).not.toContain('node-outlet-preview');
     // With one outlet the name is still printed, just not as something to press.
-    expect(source).toContain('class="node-outlet-name">c</span>');
+    expect(source).toContain('class="node-outlet-name" title="The generated picture.">c</span>');
   });
 
   it('leaves a driven number row live, because the number under a cord is its floor', () => {

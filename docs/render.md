@@ -82,9 +82,10 @@ which.
 
 ## What there is to look at
 
-Eleven pictures and nineteen ways to work on one, all of them **node modes** rather than a
-parallel registry of their own. They are deliberately unlike each other rather than variations on a
-theme — five sources all drawing soft noise is one picture, however many of them there are.
+Eleven lightweight sources, one bounded fractal node and nineteen ways to work on a picture,
+all of them **node modes** rather than parallel registries of their own. They are deliberately
+unlike each other rather than variations on a theme — five sources all drawing soft noise is
+one picture, however many of them there are.
 
 | source | |
 |---|---|
@@ -99,6 +100,18 @@ theme — five sources all drawing soft noise is one picture, however many of th
 | `spiral` | arms winding out and turning on the beat. The only one with a direction |
 | `scan` | lines, with a bar's sweep passing down them. The one that looks like a machine |
 | `sparks` | a cell per spark, each firing on its own beat and drifting as it dies |
+
+| `fractal` — one iterative node, two modes | |
+|---|---|
+| `mandelbrot` | the classic connected escape-time set; its main cardioid and large bulb skip the orbit loop entirely |
+| `julia` | the related family, with `shape` moving its seed around a bounded useful region |
+
+Both modes share one orbit implementation with a hard ceiling of thirty-two steps and no
+supersampling. `detail` chooses a lower stopping point from eight to thirty-two; `zoom` is
+logarithmic but stops at 1/64 scale, where a WebGL `highp` float can still tell the truth.
+The beat turns the palette rather than adding work. The node is deliberately **not** a
+`source` mode: every source is also a possible per-track draw, and an iterative shader once
+per playing track is the GPU failure this boundary prevents.
 
 | `lens` — eleven functions of a point | |
 |---|---|
@@ -128,9 +141,10 @@ theme — five sources all drawing soft noise is one picture, however many of th
 | `edge` | four taps, a fraction of the frame apart. The one that makes a busy frame *less* busy |
 | `shift` | three taps, one per channel, opening with the level so it bites on transients |
 
-Adding a picture is a body in `GENERATOR_BODIES` and a name in `SOURCES`, and nothing else:
+Adding a lightweight picture is a body in `GENERATOR_BODIES` and a name in `SOURCES`, and nothing else:
 the same body serves the `source` node and the track pass, so what a built-in draws and what
-a node draws cannot drift.
+a node draws cannot drift. An iterative picture belongs in a dedicated kind with an explicit
+work cost, as `fractal` does, so the compiler can see cost that GLSL line counting cannot.
 
 Adding a *way to work on one* means picking which of the three it is, and that choice is now
 the node it goes in rather than a shape hidden inside a twelve-entry table. A `lens` mode is
@@ -315,7 +329,9 @@ Cost is `pixels × passes × 60`, and there are far fewer passes than there were
 playing track plus one for the flow, where it used to be up to three per track. What
 replaced them is **instruction count inside one shader**, which is cheaper per pixel but no
 longer free to grow — a multi-tap effect over a deep graph is the way to make a single pass
-expensive, and `MAX_LINES` is the backstop.
+expensive, and `MAX_LINES` is the backstop. Iterative nodes also declare worst-case work:
+`fractal` costs its full thirty-two-step ceiling at every point it is read, which allows two
+direct fractals but refuses one under a multi-tap `spread` before WebGL sees the shader.
 
 Resolution is still the decision that matters. Left to the display it is ruinous: a Retina
 laptop reports `devicePixelRatio` 2, which on an ordinary window asks for **3728×2006** —

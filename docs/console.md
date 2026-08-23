@@ -76,13 +76,50 @@ that is a **target** — an instance of something that exists elsewhere, not a w
 node. Those stay flat, one row each, because folding "Bass meter" under a generic `track`
 node is the same mistake in reverse.
 
-**One node per row, with its signature on the right.** These were chips wrapping into a
-paragraph, which fits a lot of names into a short column and gives every one of them the
-same nothing to say for itself. A row has a right-hand side, and what goes there is `p → c`,
-`n → n`, `→ p` — what the node takes and what it gives, in the three signals the whole model
-is built on. That is the question you have *before* you drop something: whether the cord in
-your hand can reach it. A browser that makes you drop a node to find out its inlets costs an
-undo per question.
+**One node per row, and the disclosure is a triangle on the left.** These were chips
+wrapping into a paragraph, which fits a lot of names into a short column and gives every one
+of them the same nothing to say for itself. A row has two ends now, and the convention for
+which end is which is not ours to invent: a disclosure control goes on the *left* of the
+thing it discloses — Finder, the VS Code explorer, Ableton's own browser, every file tree
+anyone has used. It was a `+11` chip on the right, sharing that side with the ports, so the
+right-hand column held two unrelated things and the one that looked most like a button read
+as "add eleven of these". A leaf row keeps the gutter and leaves it empty, which is the same
+convention: it is what holds every label on one left edge whether or not it opens.
+
+**The right-hand side is the ports, and it draws all six positions on every row.** `p n c →
+p n c`, with the ones a node has not got dimmed to the rule colour. It used to draw only
+what a node had — `→ p` over `p n → c` over `c n → c` — which is six silhouettes down one
+column, each a different width, nothing lining up, and it scanned as noise. Six fixed slots
+scan as a table: the `c` column either lights up or it does not, and you read down it.
+
+The letters are painted in the same blue, amber and purple the **ports and cords on the
+canvas** carry, which is what turns three letters from a code you have to be told into a
+legend for the thing beside it. You match the colour; the letter is there for when you have.
+
+**And you can filter by them.** Six switches under the search box, in the same six positions
+and the same three colours as the block on every row — so the control needs no label beyond
+`takes` and `gives`: what you press is a picture of what you are asking for, and the rows
+that survive are the ones lit in the same places. The search box answers *what is it called*
+and this answers *what will connect*, which is the other half of finding a node and the half
+nothing could ask before. Selected signals are required rather than allowed, so ticking
+*takes p* and *gives c* narrows to nodes that do both — the question somebody with a point in
+one hand and an `out` in the other is actually asking. The flow shelf answers it too, since
+every flow compiles to a `flow` node and has that node's ports.
+
+**One `track` row, not one per track in the set.** It was one each, on the argument that a
+name from the set is the one thing in this browser nobody could guess. That is true, and it
+is the search box's job rather than the list's: a set with twenty-six tracks put twenty-six
+near-identical rows under one heading and buried `playback` and `song` beneath them, and the
+node has carried a chooser for which track the whole time. So the row drops a meter and you
+pick the track on its face, the way you pick a flow on a `flow` node.
+
+That chooser offers **groups first, then tracks**. A group is usually the better question —
+a set with five kick tracks under a `DRUMS` group has one number worth driving a flow from
+and it is the group's — but both are there, because somebody wanting the one snare should
+have it and the rig has no business deciding which of the two a person meant. Groups reach
+the browser on `Show.groups` rather than in `Show.tracks`, and that separation is load
+bearing: a `tracks` node draws everything in `tracks`, and a group carries no clips of its
+own, so drawing one would paint everything inside it a second time. Read, never drawn.
 
 **Search is what pays for the folding.** Typing `spark` gives one row: `source`, open, with
 `sparks` alone under it. A node's own name keeps everything under it, because "show me the

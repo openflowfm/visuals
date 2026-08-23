@@ -37,6 +37,7 @@ const RESTING: Show = {
   at: 0,
   master: 0,
   tracks: [],
+  groups: [],
   flow: null,
   pinned: false,
   colorway: null,

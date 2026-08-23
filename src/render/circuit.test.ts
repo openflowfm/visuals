@@ -17,6 +17,7 @@ import {
   wouldFeedItself,
 } from './circuit.ts';
 import { paramsOf } from './flow.ts';
+import { FRACTAL_ITERATIONS } from './shaders.ts';
 
 /**
  * The compiler.
@@ -640,6 +641,74 @@ describe('a colour is a function of a point', () => {
     expect(built.error).toBeNull();
     expect(bodyOf(built.source!)).not.toContain('gen_lasers');
     expect(bodyOf(built.source!)).toMatch(/gen_\w+\(/);
+  });
+});
+
+describe('the bounded fractal node', () => {
+  const fractal = (op: 'mandelbrot' | 'julia'): Circuit =>
+    wire(
+      [
+        { id: 'f', kind: 'fractal', op, x: 0, y: 0 },
+        { id: 'o', kind: 'out', x: 1, y: 0 },
+      ],
+      [{ from: 'f/c', to: 'o/c' }],
+    );
+
+  it('compiles both modes through one hard-capped orbit implementation', () => {
+    const mandelbrot = compileCircuit(fractal('mandelbrot'));
+    const julia = compileCircuit(fractal('julia'));
+
+    expect(mandelbrot.error).toBeNull();
+    expect(julia.error).toBeNull();
+    expect(bodyOf(mandelbrot.source!)).toContain('fractalMandelbrot(');
+    expect(bodyOf(julia.source!)).toContain('fractalJulia(');
+    expect(mandelbrot.source).toContain(`i < ${FRACTAL_ITERATIONS}`);
+    expect(mandelbrot.source).toContain('if (i >= steps) break');
+  });
+
+  it('keeps detail in the uniform bank instead of recompiling the loop', () => {
+    const circuit = fractal('mandelbrot');
+    circuit.nodes[0].values = { detail: 0.8 };
+    const built = compileCircuit(circuit);
+
+    expect(built.error).toBeNull();
+    expect(bodyOf(built.source!)).toContain('fractalMandelbrot(centred(), 0.0, 0.5, uParams[0]');
+    expect(bodyOf(built.source!)).not.toContain('0.8');
+  });
+
+  it('allows two direct fractals but refuses a spread that multiplies their loop', () => {
+    const two = compileCircuit(
+      wire(
+        [
+          { id: 'a', kind: 'fractal', op: 'mandelbrot', x: 0, y: 0 },
+          { id: 'b', kind: 'fractal', op: 'julia', x: 0, y: 1 },
+          { id: 'mix', kind: 'blend', op: 'screen', x: 1, y: 0 },
+          { id: 'o', kind: 'out', x: 2, y: 0 },
+        ],
+        [
+          { from: 'a/c', to: 'mix/base' },
+          { from: 'b/c', to: 'mix/top' },
+          { from: 'mix/c', to: 'o/c' },
+        ],
+      ),
+    );
+    expect(two.error).toBeNull();
+
+    const multiplied = compileCircuit(
+      wire(
+        [
+          { id: 'f', kind: 'fractal', op: 'mandelbrot', x: 0, y: 0 },
+          { id: 's', kind: 'spread', op: 'shift', x: 1, y: 0 },
+          { id: 'o', kind: 'out', x: 2, y: 0 },
+        ],
+        [
+          { from: 'f/c', to: 's/c' },
+          { from: 's/c', to: 'o/c' },
+        ],
+      ),
+    );
+    expect(multiplied.source).toBeNull();
+    expect(multiplied.error).toMatch(/fractal.*sampled too many times/);
   });
 });
 

@@ -5,10 +5,13 @@
   "type": "module",
   "description": "visual[flow]: an Ableton Link peer that renders a Live set from a node graph.",
   "scripts": {
-    "build:link": "node --disable-warning=ExperimentalWarning tools/build-link.ts"
+    "build:link": "node --disable-warning=ExperimentalWarning tools/build-link.ts",
+    "mcp": "node --disable-warning=ExperimentalWarning mcp/index.ts"
   },
   "dependencies": {
     "@ktamas77/abletonlink": "^1.2.3",
-    "ws": "^8.18.0"
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "ws": "^8.18.0",
+    "zod": "^4.4.3"
   }
 }

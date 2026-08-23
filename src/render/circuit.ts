@@ -7,14 +7,16 @@ import {
   TRACK_READS,
   SONG_FACTS,
   SOURCES,
+  FRACTAL_MODES,
   TRACK_DRAWS,
   WAVE_SHAPES,
+  BLENDS,
   type Circuit,
   type CircuitNode,
   type FlowDef,
   type NodeKind,
 } from '../../protocol.ts';
-import { flowPreamble } from './shaders.ts';
+import { FRACTAL_ITERATIONS, flowPreamble } from './shaders.ts';
 
 /**
  * A flow, compiled to a fragment shader.
@@ -82,7 +84,13 @@ import { flowPreamble } from './shaders.ts';
 /** Which of the three things a port carries. Surfaced as `data-kind` on the canvas. */
 export type Signal = 'p' | 'n' | 'c';
 
-export interface PortSpec {
+/** Documentation every real port is required to carry into the app. */
+export interface PortDocumentation {
+  /** One plain-language sentence about what arrives or leaves here. */
+  description: string;
+}
+
+export interface PortSpec extends PortDocumentation {
   name: string;
   kind: Signal;
   /** The GLSL used when nothing is wired here and nothing is set. */
@@ -119,13 +127,27 @@ export interface Emitting {
   node: CircuitNode;
 }
 
-export interface NodeSpec {
+/** One documented way a node can behave. */
+export interface NodeModeDocumentation {
+  /** The value written to `CircuitNode.op`. */
+  name: string;
+  /** What choosing this mode does, in user language rather than shader language. */
+  description: string;
+}
+
+/** Documentation common to the renderer, browser, faceplate, and search. */
+export interface NodeDocumentation {
+  /** What the node does regardless of its current mode. */
+  description: string;
+  /** Every fixed mode, in the order the app offers them. */
+  modes?: readonly NodeModeDocumentation[];
+}
+
+export interface NodeSpec extends NodeDocumentation {
   /** What it is called on the canvas. */
   name: string;
-  /** One line, shown when the node is selected. */
-  about: string;
   /**
-   * The inlets, which for `source` and `effect` depend on the mode.
+   * The inlets, which for `lens`, `grade`, and `spread` depend on the mode.
    *
    * A function rather than a list because a kaleidoscope's numbers are not a
    * ripple's, and giving every effect two inlets called `a` and `b` would make
@@ -133,8 +155,6 @@ export interface NodeSpec {
    */
   inlets: readonly PortSpec[] | ((node: CircuitNode) => readonly PortSpec[]);
   outlets: readonly PortSpec[];
-  /** The modes this node has, if it has any. The first is the default. */
-  ops?: readonly string[];
   /**
    * Which inlets an outlet actually reads. Absent means all of them.
    *
@@ -146,11 +166,29 @@ export interface NodeSpec {
   reads?(node: CircuitNode, outlet: string): readonly string[];
   /** True when the modes are names from the set rather than a fixed list. */
   named?: 'track' | 'flow';
+  /**
+   * Worst-case iterative work each evaluation adds to the shader budget.
+   *
+   * Most nodes are straight expressions and cost nothing here. An iterative
+   * node names its loop ceiling, so reading it at nine bloom taps costs nine
+   * times what reading it once does even though both are only a few GLSL lines.
+   */
+  work?: number;
   emit(ctx: Emitting): Record<string, string>;
 }
 
-const P = (name: string, fallback?: string): PortSpec => ({ name, kind: 'p', fallback });
-const C = (name: string, fallback = 'vec4(0.0)'): PortSpec => ({ name, kind: 'c', fallback });
+const P = (name: string, description: string, fallback?: string): PortSpec => ({
+  name,
+  kind: 'p',
+  description,
+  fallback,
+});
+const C = (name: string, description: string, fallback = 'vec4(0.0)'): PortSpec => ({
+  name,
+  kind: 'c',
+  description,
+  fallback,
+});
 
 /**
  * A settable number inlet, and the number it sits at until someone turns it.
@@ -159,7 +197,13 @@ const C = (name: string, fallback = 'vec4(0.0)'): PortSpec => ({ name, kind: 'c'
  * what the face shows and what a shader with nothing set compiles cannot drift
  * apart.
  */
-const N = (name: string, at = 0.5): PortSpec => ({ name, kind: 'n', at, fallback: asFloat(at) });
+const N = (name: string, description: string, at = 0.5): PortSpec => ({
+  name,
+  kind: 'n',
+  description,
+  at,
+  fallback: asFloat(at),
+});
 
 /**
  * A number inlet whose unwired answer is a **signal** rather than a setting.
@@ -170,10 +214,44 @@ const N = (name: string, at = 0.5): PortSpec => ({ name, kind: 'n', at, fallback
  * which is a worse default than the one it would be replacing — so these are
  * wired or left alone, and there is nothing on the face to turn.
  */
-const ALIVE = (name: string, from: string): PortSpec => ({ name, kind: 'n', fallback: from });
+const ALIVE = (name: string, description: string, from: string): PortSpec => ({
+  name,
+  kind: 'n',
+  description,
+  fallback: from,
+});
 
-/** Every effect gets one, so `rate` and `charge` have something to run on. */
-const E = () => ALIVE('energy', 'uEnergy');
+/** Every room-reactive mode gets one, so `rate` and `charge` have something to run on. */
+const E = () =>
+  ALIVE('energy', 'How strongly the room drives this movement or brightness.', 'uEnergy');
+
+/**
+ * Turn a fixed vocabulary into documented modes without allowing a missing row.
+ *
+ * The mapped type is the enforcement: add a string to `SOURCES`, `MATH_OPS`,
+ * or another protocol list and TypeScript points here until its description is
+ * written. The app receives the ordered array, so it never keeps a second copy.
+ */
+function documentedModes<const Names extends readonly string[]>(
+  names: Names,
+  descriptions: { readonly [Name in Names[number]]: string },
+): readonly NodeModeDocumentation[] {
+  return names.map((name) => ({
+    name,
+    description: descriptions[name as Names[number]],
+  }));
+}
+
+/** The names of a node's documented modes, for code that only needs `op`. */
+export function modesOf(kind: NodeKind): readonly string[] {
+  return NODE_SPECS[kind].modes?.map((mode) => mode.name) ?? [];
+}
+
+/** The node or mode description the browser and faceplate should show. */
+export function descriptionOf(kind: NodeKind, op?: string): string {
+  const spec = NODE_SPECS[kind];
+  return spec.modes?.find((mode) => mode.name === op)?.description ?? spec.description;
+}
 
 /** A number as GLSL. `1` has to be spelled `1.0` or the shader will not compile. */
 const asFloat = (n: number): string => (Number.isInteger(n) ? n.toFixed(1) : String(n));
@@ -261,8 +339,11 @@ const MIXES: Record<string, (a: string, b: string) => string> = {
  * file can say, produced a node with no settable inlets at all whose shader was
  * calling for numbers that were therefore always zero.
  */
-const modeOf = (node: CircuitNode, modes: readonly string[]): string =>
-  modes.includes(node.op ?? '') ? node.op! : modes[0];
+const modeOf = <const Modes extends readonly string[]>(
+  node: CircuitNode,
+  modes: Modes,
+): Modes[number] =>
+  (modes.includes(node.op ?? '') ? node.op! : modes[0]) as Modes[number];
 
 /**
  * Which numbers each mode takes, by the family that owns it.
@@ -270,7 +351,7 @@ const modeOf = (node: CircuitNode, modes: readonly string[]): string =>
  * Kept as three tables rather than one because the split is the point: the list
  * is the shape of a *mode*, and a mode belongs to exactly one kind now.
  */
-const LENS_VALUES: Record<string, string[]> = {
+const LENS_VALUES = {
   zoom: ['by'],
   swirl: ['turn'],
   fold: ['sides'],
@@ -282,9 +363,9 @@ const LENS_VALUES: Record<string, string[]> = {
   ripple: ['waves', 'depth', 'speed'],
   slice: ['bands', 'throw'],
   pixelate: ['blocks', 'resolve'],
-};
+} as const satisfies Record<string, readonly string[]>;
 
-const GRADE_VALUES: Record<string, string[]> = {
+const GRADE_VALUES = {
   levels: ['gain', 'lift'],
   hue: ['shift'],
   // `steps`, where it was `levels` — which is now the name of the mode beside
@@ -292,18 +373,75 @@ const GRADE_VALUES: Record<string, string[]> = {
   // that only shows up when somebody reads the dropdown out loud.
   posterize: ['steps'],
   invert: ['hold', 'rate'],
-};
+} as const satisfies Record<string, readonly string[]>;
 
-const SPREAD_VALUES: Record<string, string[]> = {
+const SPREAD_VALUES = {
   bloom: ['reach', 'floor'],
   smear: ['reach', 'drive'],
   edge: ['width', 'gain'],
   // `split`, where it was `spread` — same collision, this time with the kind.
   shift: ['split', 'drive'],
+} as const satisfies Record<string, readonly string[]>;
+
+const FRACTAL_VALUES = {
+  mandelbrot: ['zoom', 'turn', 'detail'],
+  julia: ['zoom', 'turn', 'detail', 'shape'],
+} as const satisfies Record<string, readonly string[]>;
+
+type ValueInlet =
+  | (typeof LENS_VALUES)[keyof typeof LENS_VALUES][number]
+  | (typeof GRADE_VALUES)[keyof typeof GRADE_VALUES][number]
+  | (typeof SPREAD_VALUES)[keyof typeof SPREAD_VALUES][number]
+  | (typeof FRACTAL_VALUES)[keyof typeof FRACTAL_VALUES][number];
+
+/**
+ * Every mode-dependent control, by the port name the graph saves.
+ *
+ * Derived from the executable inlet tables above, so adding a control is a
+ * type error until the sentence the faceplate will show has been written.
+ */
+const VALUE_DESCRIPTION: Record<ValueInlet, string> = {
+  by: 'How far the picture is zoomed in or out.',
+  turn: 'How far, and in which direction, the picture rotates.',
+  sides: 'How many mirrored sides the point is folded into.',
+  amount: 'How strongly the point or colour is changed.',
+  count: 'How many times the picture repeats across the frame.',
+  line: 'Where the mirror line crosses the frame.',
+  angle: 'The angle of the mirror line around the frame.',
+  segments: 'How many mirrored wedges make up the kaleidoscope.',
+  spin: 'How much the kaleidoscope turns with the beat.',
+  sway: 'How much the twist rocks back and forth with the beat.',
+  waves: 'How many wave fronts cross the picture.',
+  depth: 'How far the ripple displaces the picture beneath it.',
+  speed: 'How quickly each ripple travels away from the centre.',
+  bands: 'How many horizontal bands the picture is cut into.',
+  throw: 'How far each sliced band is pushed sideways.',
+  blocks: 'How large the pixel blocks become.',
+  resolve: 'How far the blocks resolve back into the picture.',
+  gain: 'How strongly the resulting colour or edge is amplified.',
+  lift: 'How much brightness is added to the darkest colours.',
+  shift: 'How far every hue rotates around the colour wheel.',
+  steps: 'How aggressively the colours are reduced to flat bands.',
+  hold: 'How long the inverted state is held.',
+  rate: 'Which musical division drives the change.',
+  reach: 'How far from this point the surrounding picture is sampled.',
+  floor: 'How bright something must be before it blooms.',
+  drive: 'How strongly the room energy drives the effect.',
+  width: 'How far apart the samples used to find an edge are.',
+  split: 'How far the colour channels separate.',
+  zoom: 'How deeply the fractal is magnified, on a bounded logarithmic scale.',
+  detail: 'How many bounded orbit steps are used to reveal fine structure.',
+  shape: 'Which Julia-set seed is traced around the useful connected region.',
 };
 
 /** Where a number starts when nobody has turned it. A half unless it says. */
-const VALUE_AT: Record<string, number> = { sides: 0.2, amount: 0.3, count: 0.3 };
+const VALUE_AT: Record<string, number> = {
+  sides: 0.2,
+  amount: 0.3,
+  count: 0.3,
+  zoom: 0,
+  detail: 0.35,
+};
 
 /** The modes that read an energy. The rest have no such inlet to leave unwired. */
 const NEEDS_ENERGY = new Set([
@@ -315,11 +453,13 @@ const NEEDS_ENERGY = new Set([
   'invert',
   'bloom',
   'shift',
+  'mandelbrot',
+  'julia',
 ]);
 
-const valuePorts = (names: readonly string[], op: string): PortSpec[] => [
+const valuePorts = (names: readonly ValueInlet[], op: string): PortSpec[] => [
   ...(NEEDS_ENERGY.has(op) ? [E()] : []),
-  ...names.map((name) => N(name, VALUE_AT[name] ?? 0.5)),
+  ...names.map((name) => N(name, VALUE_DESCRIPTION[name], VALUE_AT[name] ?? 0.5)),
 ];
 
 /**
@@ -425,12 +565,123 @@ const SPREAD_EMIT: Record<string, (ctx: Emitting, e: string, k: (i: number) => s
     },
   };
 
+const PLAYBACK_MODES = documentedModes(PLAYBACK_NAMES, {
+  level: "The room's master meter, from silence to its current loudness.",
+  beat: 'Continuous musical beats. Feed it through a wave when you need a repeating shape.',
+  phase: 'The current position through the bar, from its first beat to its last.',
+  pulse: 'A hit at the start of each beat that decays before the next one.',
+  time: 'Seconds since the renderer opened, for motion that should not lock to the music.',
+  random: 'A stable random number that changes once on every beat.',
+});
+
+const TRACK_MODES = documentedModes(TRACK_READS, {
+  level: "The track's output meter, with the node's smoothing applied.",
+  fader: "The current position of the track's volume fader.",
+  playing: 'One while this track has a playing clip, and zero while it does not.',
+});
+
+const SONG_MODES = documentedModes(SONG_FACTS, {
+  seed: 'A stable different number for every song, for free per-song variation.',
+  tempo: "The song's stated tempo, normalized to a number the graph can use.",
+  key: "The song's musical key as a position around the chromatic scale.",
+  section: 'Where the playing section sits among the sections used by this set.',
+  sections: 'How many distinct sections the current set uses.',
+});
+
+const SOURCE_MODES = documentedModes(SOURCES, {
+  solid: 'The active colour, breathing over the bar and brightening with the room.',
+  bars: 'Vertical bars whose heights form a bar of music, swept by the playhead.',
+  rings: 'Rings launched on the beat and expanding away from the centre.',
+  noise: 'A drifting field that thickens with the room. Weather rather than a metronome.',
+  strobe: 'Whole-frame flashes on the beat, with no shape competing for attention.',
+  grid: 'A field of cells, each lighting on its own beat.',
+  tunnel: 'A corridor rushing toward the viewer on the beat.',
+  plasma: 'A full-frame wash made by crossing four moving sine fields.',
+  spiral: 'Arms winding out of the centre and turning on the beat.',
+  scan: 'Horizontal lines with a bar of light sweeping down them.',
+  sparks: 'A field of cells that fire on their own beats and drift as they fade.',
+});
+
+const FRACTAL_MODE_DOCUMENTATION = documentedModes(FRACTAL_MODES, {
+  mandelbrot: 'The classic connected escape-time set, bounded to a safe amount of detail.',
+  julia: 'A related escape-time set whose shape control moves through useful Julia seeds.',
+});
+
+const TRACK_DRAW_MODES = documentedModes(TRACK_DRAWS, {
+  'by name': 'Draw every playing track from the visual hint in that track’s name.',
+  solid: 'Draw every playing track as a breathing field of its assigned colour.',
+  bars: 'Draw every playing track as vertical musical bars.',
+  rings: 'Draw every playing track as expanding rings.',
+  noise: 'Draw every playing track as a drifting noise field.',
+  strobe: 'Draw every playing track as a full-frame beat flash.',
+  grid: 'Draw every playing track as a pulsing grid.',
+  tunnel: 'Draw every playing track as a rushing tunnel.',
+  plasma: 'Draw every playing track as a moving plasma wash.',
+  spiral: 'Draw every playing track as a turning spiral.',
+  scan: 'Draw every playing track as sweeping scan lines.',
+  sparks: 'Draw every playing track as a drifting field of sparks.',
+});
+
+const LENS_MODE_DOCUMENTATION = documentedModes(LENS_MODES, {
+  zoom: 'Read the picture closer to or farther from its centre.',
+  swirl: 'Rotate the picture increasingly as it moves away from the centre.',
+  fold: 'Mirror the picture into repeated sides around the centre.',
+  wobble: 'Displace the picture with crossing waves.',
+  tile: 'Repeat the picture across the frame.',
+  mirror: 'Reflect the picture across a movable line.',
+  kaleido: 'Fold the picture into wedges and rotate them with the beat.',
+  twist: 'Turn the picture more strongly toward its edges and sway it with the beat.',
+  ripple: 'Send a wave from the centre that displaces the picture as it passes.',
+  slice: 'Cut the picture into horizontal bands and throw them sideways.',
+  pixelate: 'Break the picture into blocks that resolve across the bar.',
+});
+
+const GRADE_MODE_DOCUMENTATION = documentedModes(GRADE_MODES, {
+  levels: 'Raise or lower the picture’s brightness and its darkest colours.',
+  hue: 'Rotate every colour while leaving the picture in place.',
+  posterize: 'Reduce continuous colour into a small number of flat bands.',
+  invert: 'Turn the colours into their opposites on a musical pulse.',
+});
+
+const SPREAD_MODE_DOCUMENTATION = documentedModes(SPREAD_MODES, {
+  bloom: 'Add nearby copies of bright areas back over the picture.',
+  smear: 'Blend nearby samples into a short radial blur.',
+  edge: 'Keep the changes between nearby samples and throw the fill away.',
+  shift: 'Separate the colour channels, opening on transients and closing in gaps.',
+});
+
+const BLEND_MODES = documentedModes(BLENDS, {
+  over: 'Place the top picture over the base according to its opacity.',
+  add: 'Sum both pictures, making overlaps brighter.',
+  screen: 'Combine both pictures while rolling bright overlaps toward white.',
+  multiply: 'See the base through the top, making overlaps darker.',
+});
+
+const MATH_MODES = documentedModes(MATH_OPS, {
+  add: 'Add both numbers and stop at one.',
+  subtract: 'Subtract the second number from the first and stop at zero.',
+  multiply: 'Multiply both numbers. The result may be greater than one.',
+  min: 'Use whichever of the two numbers is lower.',
+  max: 'Use whichever of the two numbers is higher.',
+  average: 'Use the midpoint between both numbers.',
+});
+
+const WAVE_MODES = documentedModes(WAVE_SHAPES, {
+  sine: 'Rise and fall smoothly once per phase cycle.',
+  saw: 'Rise steadily and jump back to zero at the end of the cycle.',
+  ramp: 'Fall steadily and jump back to one at the end of the cycle.',
+  square: 'Switch between zero and one halfway through the cycle.',
+  pulse: 'Start at one and decay quickly toward zero.',
+  noise: 'Produce a smoothly changing irregular value from the phase.',
+});
+
 export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
   point: {
     name: 'point',
-    about: 'Where this fragment is being read: zero in the middle, a circle round.',
+    description:
+      'The position currently being drawn: zero in the middle, with distance and direction around it.',
     inlets: [],
-    outlets: [P('p')],
+    outlets: [P('p', 'The current position in the frame.')],
     // Not `centred()`. It is wherever the thing downstream is *asking* about,
     // which is what lets an effect move a whole subgraph rather than itself.
     emit: (c) => ({ p: c.at }),
@@ -438,18 +689,18 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
 
   playback: {
     name: 'playback',
-    about: 'Where the music is right now. The reason any of this moves.',
+    description: 'Live numbers describing where the music is right now.',
     inlets: [],
-    outlets: [N('n')],
-    ops: PLAYBACK_NAMES,
+    outlets: [N('n', 'The selected playback reading.')],
+    modes: PLAYBACK_MODES,
     emit: (c) => ({ n: SIGNALS[c.node.op ?? 'level'] ?? 'uLevel' }),
   },
 
   value: {
     name: 'value',
-    about: 'One number, in every place you wire it. An inlet on its own already has one.',
+    description: 'One reusable number that changes every inlet it is wired to.',
     inlets: [],
-    outlets: [N('n')],
+    outlets: [N('n', 'The number set on this node.')],
     // The index is assigned by the compiler, which is the only thing that knows
     // how many numbers came before this one.
     emit: () => ({ n: 'uParams[0]' }),
@@ -457,10 +708,11 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
 
   track: {
     name: 'track',
-    about: 'One track in the set: pick which, and which of its numbers. Named, so a rename breaks it.',
+    description:
+      'One named track in the set, read as a meter, fader position, or playing gate.',
     inlets: [],
-    outlets: [N('n')],
-    ops: TRACK_READS,
+    outlets: [N('n', 'The selected live reading from this track.')],
+    modes: TRACK_MODES,
     named: 'track',
     // The slot is assigned by the compiler; what goes *in* it is decided on the
     // CPU, because the smoothing is an envelope follower and one of those has
@@ -470,30 +722,62 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
 
   song: {
     name: 'song',
-    about: 'Facts about the song that is playing. `seed` is a different number per song.',
+    description: 'A musical or structural fact about the song that is playing.',
     inlets: [],
-    outlets: [N('n')],
-    ops: SONG_FACTS,
+    outlets: [N('n', 'The selected fact about the current song.')],
+    modes: SONG_MODES,
     emit: (c) => ({ n: FACTS[c.node.op ?? 'seed'] ?? 'uSongSeed' }),
   },
 
   source: {
     name: 'source',
-    about: 'One of the pictures that ship, drawn wherever you point it.',
-    inlets: [P('p'), E()],
-    outlets: [C('c')],
-    ops: SOURCES,
+    description: 'A generated picture, drawn at a point and animated by the room.',
+    inlets: [P('p', 'Where in the generated picture to read.'), E()],
+    outlets: [C('c', 'The generated picture.')],
+    modes: SOURCE_MODES,
     emit: (c) => ({
       c: `laid(gen_${SOURCES.includes(c.node.op ?? '') ? c.node.op : SOURCES[0]}(${c.read('p')}, ${c.read('energy')}), ${c.read('energy')})`,
     }),
   },
 
+  fractal: {
+    name: 'fractal',
+    description:
+      'A bounded iterative picture with an explicit GPU budget, offered as Mandelbrot or Julia.',
+    inlets: (node) => {
+      const op = modeOf(node, FRACTAL_MODES);
+      const values = FRACTAL_VALUES[op];
+      return [
+        P('p', 'Where in the fractal plane to read.'),
+        ...valuePorts(values, op),
+      ];
+    },
+    outlets: [C('c', 'The generated fractal picture.')],
+    modes: FRACTAL_MODE_DOCUMENTATION,
+    // Charged at the hard ceiling rather than at the current detail setting.
+    // Detail is a uniform and may move without recompiling; accepting a graph
+    // that is safe only while its control happens to be low would not be safe.
+    work: FRACTAL_ITERATIONS,
+    emit: (c) => {
+      const op = modeOf(c.node, FRACTAL_MODES);
+      const names = FRACTAL_VALUES[op];
+      const value = (name: (typeof names)[number]) => c.read(name);
+      const common = `${c.read('p')}, ${value('zoom')}, ${value('turn')}, ${value('detail')}`;
+      const expression =
+        op === 'julia'
+          ? `fractalJulia(${common}, ${value('shape')}, ${c.read('energy')})`
+          : `fractalMandelbrot(${common}, ${c.read('energy')})`;
+      return { c: `laid(${expression}, ${c.read('energy')})` };
+    },
+  },
+
   tracks: {
     name: 'tracks',
-    about: 'The Live set itself: every playing track, drawn and mixed. Fire a scene, it changes.',
-    inlets: [P('p')],
-    outlets: [C('c')],
-    ops: TRACK_DRAWS,
+    description:
+      'Every playing track in the Live set, drawn in its assigned colour and mixed into one picture.',
+    inlets: [P('p', 'Where in the combined set picture to read.')],
+    outlets: [C('c', 'The combined picture of every playing track.')],
+    modes: TRACK_DRAW_MODES,
     // A pass rather than an expression — see `shaders.ts`. All this does is
     // read the picture that pass left.
     emit: (c) => ({ c: `fromTracks(${c.read('p')})` }),
@@ -501,15 +785,18 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
 
   flow: {
     name: 'flow',
-    about: 'Another flow, whole, as one node. This is where it gets complicated.',
+    description: 'Another saved flow, used whole as one picture inside this graph.',
     // `INNER` is the flattener's inlet, never a person's: `flatten` wires the
     // graph this node names into it, and the canvas hides any port whose name
     // starts with a tilde. It has to be a real inlet rather than a lookup on
     // the side, because reading it is how the point wired into `p` gets to act
     // on the whole sub-graph — without it the `p` cord was drawn and then
     // silently ignored, which is the worst thing a canvas can do.
-    inlets: [P('p'), C(INNER)],
-    outlets: [C('c')],
+    inlets: [
+      P('p', 'Where in the nested flow to read.'),
+      C(INNER, 'The nested flow output supplied internally by the compiler.'),
+    ],
+    outlets: [C('c', 'The picture produced by the nested flow.')],
     named: 'flow',
     // The whole node, and it is one line: read that graph, over there. An
     // unwired `p` falls back to the point being asked about, which is what
@@ -520,9 +807,9 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
 
   paint: {
     name: 'paint',
-    about: "The colourway's own colour, at a brightness. How a number becomes a picture.",
-    inlets: [N('amount'), E()],
-    outlets: [C('c')],
+    description: "The active colourway's colour at an adjustable brightness.",
+    inlets: [N('amount', 'The brightness and opacity of the painted colour.'), E()],
+    outlets: [C('c', 'A frame filled with the active colour.')],
     emit: (c) => ({
       c: `vec4(charge(uColor, ${c.read('energy')}) * clamp(${c.read('amount')}, 0.0, 1.0), clamp(${c.read('amount')}, 0.0, 1.0))`,
     }),
@@ -530,17 +817,26 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
 
   lens: {
     name: 'lens',
-    about: 'Move the point, and hand back what is there. Geometry, and the effects that are geometry.',
+    description:
+      'Move the point a picture is read at, or apply a geometry effect at that moved point.',
     // `c` on a node somebody is using as geometry, and `p` on one somebody is
     // using as an effect. Neither is dead weight: which outlet you take is the
     // whole difference between the two, and a node with only one of them would
     // be two nodes again.
     inlets: (node) => {
       const op = modeOf(node, LENS_MODES);
-      return [P('p'), C('c'), ...valuePorts(LENS_VALUES[op], op)];
+      const values = LENS_VALUES[op as keyof typeof LENS_VALUES];
+      return [
+        P('p', 'The position to transform.'),
+        C('c', 'The picture to read through the transformed position.'),
+        ...valuePorts(values, op),
+      ];
     },
-    outlets: [P('p'), C('c')],
-    ops: LENS_MODES,
+    outlets: [
+      P('p', 'The transformed position.'),
+      C('c', 'The input picture read at the transformed position.'),
+    ],
+    modes: LENS_MODE_DOCUMENTATION,
     // The `p` outlet cannot see the `c` inlet, and saying so is what makes a
     // lens feeding a picture that feeds the lens back a **legal** graph rather
     // than a refused one. See `wouldFeedItself`.
@@ -550,7 +846,7 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     },
     emit: (c) => {
       const op = modeOf(c.node, LENS_MODES);
-      const names = LENS_VALUES[op];
+      const names = LENS_VALUES[op as keyof typeof LENS_VALUES];
       const moved = LENS_POINT[op](c, c.read('energy'), (i) =>
         names[i] ? c.read(names[i]) : '0.0',
       );
@@ -566,7 +862,7 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
 
   place: {
     name: 'place',
-    about: 'Two numbers into a point: 0 to 1 across the frame, a half in the middle.',
+    description: 'Turn horizontal and vertical numbers into one position in the frame.',
     // The one node in the vocabulary that makes a point out of nothing you were
     // handed, which is why it has no `p` inlet. `polar` takes a point apart and
     // this puts one together, so a pair of `wave`s or a pair of meters can name
@@ -578,8 +874,11 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     // flicking would cut every cord on the node. That is a change of wiring
     // rather than a change of mind, which is the line between a kind and a
     // mode here. See `docs/flows.md`.
-    inlets: [N('x'), N('y')],
-    outlets: [P('p')],
+    inlets: [
+      N('x', 'The horizontal position: zero at the left, one at the right.'),
+      N('y', 'The vertical position: zero at the bottom, one at the top.'),
+    ],
+    outlets: [P('p', 'The position described by x and y.')],
     // `recentred` and not a hand-written `(n - 0.5) * 2.0`, because the plane
     // is `vUv - 0.5` with the x scaled by the aspect — ±0.5 up and down, ±0.89
     // across on 16:9. Doubling about the middle overshoots both, by different
@@ -591,9 +890,12 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
 
   polar: {
     name: 'polar',
-    about: 'A point as distance from the centre and angle around it.',
-    inlets: [P('p')],
-    outlets: [N('radius'), N('angle')],
+    description: 'Split a position into its distance from the centre and direction around it.',
+    inlets: [P('p', 'The position to measure from the centre.')],
+    outlets: [
+      N('radius', 'The distance from the centre, from zero to one.'),
+      N('angle', 'The direction around the centre, wrapped from zero to one.'),
+    ],
     emit: (c) => ({
       radius: `clamp(length(${c.read('p')}) * 1.6, 0.0, 1.0)`,
       angle: `(atan(${c.read('p')}.y, ${c.read('p')}.x) / 6.28318 + 0.5)`,
@@ -602,16 +904,17 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
 
   grade: {
     name: 'grade',
-    about: 'The colour where it already is. Nothing here moves anything.',
+    description: 'Change the colour already at this point without moving the picture.',
     inlets: (node) => {
       const op = modeOf(node, GRADE_MODES);
-      return [C('c'), ...valuePorts(GRADE_VALUES[op], op)];
+      const values = GRADE_VALUES[op as keyof typeof GRADE_VALUES];
+      return [C('c', 'The picture whose colours will be changed.'), ...valuePorts(values, op)];
     },
-    outlets: [C('c')],
-    ops: GRADE_MODES,
+    outlets: [C('c', 'The colour-adjusted picture.')],
+    modes: GRADE_MODE_DOCUMENTATION,
     emit: (c) => {
       const op = modeOf(c.node, GRADE_MODES);
-      const names = GRADE_VALUES[op];
+      const names = GRADE_VALUES[op as keyof typeof GRADE_VALUES];
       return {
         c: GRADE_EMIT[op](c, c.read('energy'), (i) => (names[i] ? c.read(names[i]) : '0.0')),
       };
@@ -620,16 +923,18 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
 
   spread: {
     name: 'spread',
-    about: 'Reads its input several times, all round where it is. The only expensive family.',
+    description:
+      'Read the picture several times around each point to blur, bloom, outline, or split it.',
     inlets: (node) => {
       const op = modeOf(node, SPREAD_MODES);
-      return [C('c'), ...valuePorts(SPREAD_VALUES[op], op)];
+      const values = SPREAD_VALUES[op as keyof typeof SPREAD_VALUES];
+      return [C('c', 'The picture to sample around each point.'), ...valuePorts(values, op)];
     },
-    outlets: [C('c')],
-    ops: SPREAD_MODES,
+    outlets: [C('c', 'The picture made from the surrounding samples.')],
+    modes: SPREAD_MODE_DOCUMENTATION,
     emit: (c) => {
       const op = modeOf(c.node, SPREAD_MODES);
-      const names = SPREAD_VALUES[op];
+      const names = SPREAD_VALUES[op as keyof typeof SPREAD_VALUES];
       return {
         c: SPREAD_EMIT[op](c, c.read('energy'), (i) => (names[i] ? c.read(names[i]) : '0.0')),
       };
@@ -638,10 +943,14 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
 
   blend: {
     name: 'blend',
-    about: 'Two pictures into one. The mixer everything else used to be built out of.',
-    inlets: [C('base'), C('top'), N('amount', 1)],
-    outlets: [C('c')],
-    ops: Object.keys(MIXES),
+    description: 'Combine a base picture and a top picture into one frame.',
+    inlets: [
+      C('base', 'The picture underneath.'),
+      C('top', 'The picture placed over or combined with the base.'),
+      N('amount', 'How much of the blended result replaces the base.', 1),
+    ],
+    outlets: [C('c', 'The combined picture.')],
+    modes: BLEND_MODES,
     emit: (c) => {
       const mix = MIXES[c.node.op ?? 'over'] ?? MIXES.over;
       return { c: `mix(${c.read('base')}, ${mix(c.read('base'), c.read('top'))}, ${c.read('amount')})` };
@@ -650,10 +959,13 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
 
   math: {
     name: 'math',
-    about: 'Arithmetic on two numbers.',
-    inlets: [N('a'), N('b')],
-    outlets: [N('n')],
-    ops: MATH_OPS,
+    description: 'Combine two numbers with one arithmetic operation.',
+    inlets: [
+      N('a', 'The first number in the operation.'),
+      N('b', 'The second number in the operation.'),
+    ],
+    outlets: [N('n', 'The result of the selected operation.')],
+    modes: MATH_MODES,
     emit: (c) => {
       const op = MATH[c.node.op ?? 'add'] ?? MATH.add;
       return { n: op(c.read('a'), c.read('b')) };
@@ -662,10 +974,16 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
 
   wave: {
     name: 'wave',
-    about: 'A shape over a phase. Wire the beat into it and it is in time.',
-    inlets: [ALIVE('phase', 'uBeat')],
-    outlets: [N('n')],
-    ops: WAVE_SHAPES,
+    description: 'Turn a repeating phase into a useful motion shape.',
+    inlets: [
+      ALIVE(
+        'phase',
+        'The position through the wave cycle. It follows the beat when unwired.',
+        'uBeat',
+      ),
+    ],
+    outlets: [N('n', 'The selected wave shape at the current phase.')],
+    modes: WAVE_MODES,
     emit: (c) => {
       const shape = WAVES[c.node.op ?? 'sine'] ?? WAVES.sine;
       return { n: shape(c.read('phase')) };
@@ -674,8 +992,8 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
 
   out: {
     name: 'out',
-    about: 'What leaves this flow.',
-    inlets: [C('c')],
+    description: 'The finished picture that leaves this flow for the wall or another flow.',
+    inlets: [C('c', 'The finished picture this flow produces.')],
     outlets: [],
     emit: () => ({}),
   },
@@ -806,6 +1124,15 @@ export const MAX_TRACKS = 8;
  * reaches it.
  */
 export const MAX_LINES = 2000;
+
+/**
+ * Worst-case iterative steps a fragment may be asked to perform.
+ *
+ * Two full-detail fractals may be blended. A spread over either is refused:
+ * its three-to-nine reads would multiply the orbit loop while still looking
+ * like only a handful of generated GLSL statements to `MAX_LINES`.
+ */
+export const MAX_ITERATIVE_WORK = FRACTAL_ITERATIONS * 2;
 
 /** The outlets of this node that depend on that inlet. */
 function outletsReading(node: CircuitNode, inlet: string): string[] {
@@ -1221,6 +1548,7 @@ export function compileCircuit(circuit: Circuit): Compiled {
   const open = new Set<string>();
   let failed: string | null = null;
   let serial = 0;
+  let iterativeWork = 0;
 
   /**
    * The GLSL variable an outlet lives in **at a point**, emitting whatever it
@@ -1265,6 +1593,12 @@ export function compileCircuit(circuit: Circuit): Compiled {
     }
     if (lines.length > MAX_LINES) {
       failed ??= 'too big to draw — an effect that takes many samples is nested too deep';
+      return null;
+    }
+    iterativeWork += spec.work ?? 0;
+    if (iterativeWork > MAX_ITERATIVE_WORK) {
+      failed ??=
+        'too expensive to draw — a fractal is being sampled too many times by this graph';
       return null;
     }
     open.add(here);

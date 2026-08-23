@@ -431,13 +431,9 @@
   color: var(--fg);
 }
 
-/* The rail says composite or primitive, and nothing else. The family heading
-   already names the family, so colouring the rail by family too was a second
-   answer to a question already answered — on seven rows out of nineteen. */
-.designer .flow-open {
-  border-left-color: color-mix(in srgb, var(--amber) 55%, transparent);
-}
-
+/* Which one is open. The `◈` already says composite, so the open row is told
+   by the same selected-row treatment any list uses rather than by a second
+   colour of its own. */
 .designer .flow-row[data-on] .flow-open {
   border-left-color: var(--amber);
   background: var(--surface-control);
@@ -453,11 +449,39 @@
   white-space: nowrap;
 }
 
-.designer .flow-name .mark {
-  color: var(--amber);
+/*
+ * One gutter down the left of every row, holding one glyph.
+ *
+ * A disclosure control belongs on the left of the thing it discloses — Finder,
+ * the VS Code explorer, Ableton's own browser, every file tree anyone has used.
+ * It was a `+11` chip on the *right*, sharing that side with the signature, so
+ * the right-hand column held two unrelated things and the one that looked most
+ * like a button read as "add eleven of these".
+ *
+ * A leaf row gets the gutter and leaves it empty, which is the same convention:
+ * it is what keeps every label on one left edge whether or not it opens.
+ */
+.designer .twist {
+  flex: none;
+  width: 13px;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--idle);
+  font: inherit;
   font-size: 8px;
-  font-weight: 400;
-  margin-right: 3px;
+  line-height: 1;
+  text-align: center;
+  cursor: pointer;
+}
+
+.designer button.twist:hover {
+  color: var(--fg);
+}
+
+.designer .twist.mark {
+  color: var(--amber);
+  cursor: default;
 }
 
 .designer .flow-name i {
@@ -473,6 +497,121 @@
   color: var(--idle);
   font-size: 9px;
   white-space: nowrap;
+}
+
+/*
+ * Six fixed positions, and a letter is either lit or it is not.
+ *
+ * A signature that only drew what a node had gave every row a different width —
+ * `→ p` over `p n → c` over `c n → c` — so nothing lined up and the column read
+ * as noise. Six slots read as a table: the `c` column either lights or it does
+ * not, and you scan down it.
+ *
+ * The colours are the ones the ports and cords wear on the canvas, which is
+ * what makes three letters a legend rather than a code.
+ */
+.designer .node-sig {
+  display: inline-flex;
+  gap: 1px;
+  letter-spacing: 0.04em;
+}
+
+.designer .node-sig span {
+  width: 6px;
+  text-align: center;
+  color: var(--bd3);
+}
+
+.designer .node-sig i {
+  font-style: normal;
+  margin: 0 2px;
+  color: var(--bd3);
+}
+
+.designer .node-sig [data-on][data-signal='p'] {
+  color: var(--signal-p);
+}
+
+.designer .node-sig [data-on][data-signal='n'] {
+  color: var(--signal-n);
+}
+
+.designer .node-sig [data-on][data-signal='c'] {
+  color: var(--signal-c);
+}
+
+/* The filter is a picture of the column it filters: same six positions, same
+   three colours, so `takes` and `gives` are the only words it needs. */
+.designer .port-filter {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-bottom: 2px;
+  padding: 0 2px;
+  font-size: 9px;
+  color: var(--idle);
+}
+
+.designer .port-filter > i {
+  font-style: normal;
+  color: var(--bd3);
+}
+
+.designer .port-filter-side {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.designer .port-filter-side b {
+  margin-right: 3px;
+  font-weight: 400;
+  color: var(--caption);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-size: 8px;
+}
+
+.designer .port-filter button {
+  width: 13px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: none;
+  color: var(--bd3);
+  font: inherit;
+  font-size: 9px;
+  line-height: 1.5;
+  padding: 0;
+  cursor: pointer;
+}
+
+.designer .port-filter button:hover:not(:disabled) {
+  border-color: var(--bd3);
+  color: var(--ui);
+}
+
+.designer .port-filter button[data-on][data-signal='p'] {
+  border-color: var(--signal-p);
+  color: var(--signal-p);
+}
+
+.designer .port-filter button[data-on][data-signal='n'] {
+  border-color: var(--signal-n);
+  color: var(--signal-n);
+}
+
+.designer .port-filter button[data-on][data-signal='c'] {
+  border-color: var(--signal-c);
+  color: var(--signal-c);
+}
+
+.designer .port-filter-clear {
+  margin-left: auto;
+}
+
+.designer .port-filter-clear:disabled {
+  opacity: 0;
+  cursor: default;
 }
 
 /* The fact gives way before the name does. A signature is short enough to
@@ -837,27 +976,14 @@
 }
 
 .designer .node-entry .under {
-  margin: 0 0 4px 11px;
-  padding-left: 6px;
+  margin: 0 0 4px 18px;
+  padding-left: 8px;
   border-left: 1px solid var(--rule);
 }
 
 .designer .node-entry .under .node-pick {
   padding-left: 3px;
   border-left: 0;
-}
-
-.designer .more .wdg-button-body {
-  padding: 1px 5px;
-  font-size: 9px;
-  line-height: 1.2;
-  border-color: transparent;
-  background: none;
-}
-
-.designer .more:hover .wdg-button-body {
-  border-color: var(--bd3);
-  background: var(--surface-control);
 }
 
 .designer .promote {

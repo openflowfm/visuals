@@ -31,6 +31,17 @@ const SHOW: Show = {
       clipName: 'Verse',
     },
   ],
+  groups: [
+    {
+      t: 4,
+      name: 'DRUMS',
+      color: 0,
+      opacity: 0.5,
+      level: 0.3,
+      playing: -1,
+      clipName: '',
+    },
+  ],
   flow: null,
   pinned: false,
   colorway: null,

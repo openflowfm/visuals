@@ -14,6 +14,7 @@ import { Select } from '../../../widgets/src/controls/Select.tsx';
 import { Slider } from '../../../widgets/src/controls/Slider.tsx';
 import {
   inletsOf,
+  modesOf,
   NODE_SPECS,
   portId,
   reachesOut,
@@ -388,10 +389,13 @@ export function NodeFace({
       ),
       control:
         port.kind !== 'n' ? (
-          <span className="node-inlet-name">{port.name}</span>
+          <span className="node-inlet-name" title={port.description}>
+            {port.name}
+          </span>
         ) : port.at === undefined ? (
           <AliveMeter
             name={port.name}
+            description={port.description}
             fallback={port.name === 'energy' ? energy : beat()}
             reading={reading}
             driver={driver}
@@ -421,7 +425,11 @@ export function NodeFace({
             // now, and what a cord is *doing* — the only thing nothing else
             // shows — has the readout to itself.
             display={driver === undefined ? undefined : (reading?.display ?? '—')}
-            title={driver === undefined ? port.name : `${port.name} ← ${driver}`}
+            title={
+              driver === undefined
+                ? port.description
+                : `${port.description} — ${port.name} ← ${driver}`
+            }
           />
         ),
     };
@@ -451,13 +459,15 @@ export function NodeFace({
             className="node-outlet-preview"
             aria-pressed={picked}
             {...(picked ? { 'data-on': '' } : {})}
-            title={`Show ${port.name} in this node's picture`}
+            title={`Show ${port.name} in this node's picture — ${port.description}`}
             onClick={() => onChange({ previewOutlet: port.name })}
           >
             {port.name}
           </button>
         ) : (
-          <span className="node-outlet-name">{port.name}</span>
+          <span className="node-outlet-name" title={port.description}>
+            {port.name}
+          </span>
         ),
     };
   });
@@ -497,10 +507,10 @@ export function NodeFace({
       name={title}
       className={`node node-${node.kind}`}
       vars={{ '--wdg-device-port-rows': held.ports }}
-      title={spec.about}
+      title={spec.description}
       screen={picture?.(node.id)}
       chooser={chooser}
-      onHotSwap={spec.ops && onSwap ? () => onSwap(node.id, node.kind) : undefined}
+      onHotSwap={spec.modes && onSwap ? () => onSwap(node.id, node.kind) : undefined}
       headerEnd={
         kindLabel || enterButton || deleteButton ? (
           <>
@@ -521,11 +531,13 @@ export function NodeFace({
 
 function AliveMeter({
   name,
+  description,
   fallback,
   reading,
   driver,
 }: {
   name: string;
+  description: string;
   fallback: number;
   reading?: NumberReading;
   driver?: string;
@@ -541,7 +553,7 @@ function AliveMeter({
       // has no value of its own to fall back to, so a driver nothing can be
       // read from says so with a dash.
       display={driver && !reading?.display ? '—' : reading?.display}
-      title={driver ? `${name} ← ${driver}` : name}
+      title={driver ? `${description} — ${name} ← ${driver}` : description}
       className={driver && reading?.value === undefined ? 'node-number-unreadable' : undefined}
     />
   );
@@ -587,7 +599,8 @@ function AliveMeter({
 export function rowsHeldOpen(node: CircuitNode): { ports: number } {
   const spec = NODE_SPECS[node.kind];
   const own = node.kind === 'track' || node.kind === 'value' ? 1 : 0;
-  const widest = (spec.ops ?? [node.op]).reduce((most, op) => {
+  const modes = modesOf(node.kind);
+  const widest = (modes.length > 0 ? modes : [node.op]).reduce((most, op) => {
     const named = inletsOf({ ...node, op }).filter((port) => !port.name.startsWith('~'));
     return Math.max(most, named.length);
   }, 0);
@@ -620,7 +633,7 @@ function faceName(
 ): string {
   if (node.kind === 'value') return node.label || 'value';
   if (node.kind === 'flow') return flows?.find((each) => each.id === node.op)?.def.name ?? 'flow';
-  const modes = NODE_SPECS[node.kind].ops;
-  if (modes) return node.op || modes[0] || fallback;
+  const modes = modesOf(node.kind);
+  if (modes.length > 0) return node.op || modes[0] || fallback;
   return fallback;
 }

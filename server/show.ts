@@ -158,8 +158,9 @@ export function buildShow(
   const strips = new Map((set.mixer?.tracks ?? []).map((strip) => [strip.t, strip]));
 
   // Group tracks carry no clips of their own, so drawing one would double
-  // everything inside it.
+  // everything inside it. They are read rather than drawn — see `Show.groups`.
   const tracks = set.tracks.filter((track) => !track.isGroup);
+  const grouping = set.tracks.filter((track) => track.isGroup);
 
   const { scene, bumped: departed } = readPlaying(set, turning);
   if (departed && scheme.rotation.onClip) turning.wheel = bumped(turning.wheel);
@@ -216,7 +217,7 @@ export function buildShow(
   const hex = (up.colorway ? scheme.colorways[up.colorway] : null) ?? ['#ffffff'];
   const colors = hex.map(packColor);
 
-  const drawn: Track[] = tracks.map((track, depth): Track => {
+  const read = (track: (typeof set.tracks)[number], depth: number): Track => {
     const play = set.play[track.i];
     const playing = play?.playing ?? -1;
     const clip = playing >= 0 ? set.clips.get(`${track.i}:${playing}`) : undefined;
@@ -233,7 +234,13 @@ export function buildShow(
       playing,
       clipName: clip?.name ?? '',
     };
-  });
+  };
+
+  const drawn: Track[] = tracks.map(read);
+  // A group's colour is never used — nothing draws one — but it is read the
+  // same way otherwise, so one function does both rather than two that could
+  // disagree about what `fader` means on a muted strip.
+  const grouped: Track[] = grouping.map(read);
 
   return {
     connected: set.connected,
@@ -253,6 +260,7 @@ export function buildShow(
     at: link.at,
     master: set.masterLevel,
     tracks: drawn,
+    groups: grouped,
     flow: up.flow,
     pinned: up.pinned,
     colorway: up.colorway,

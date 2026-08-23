@@ -25,12 +25,16 @@ import {
   keyOf,
   matching,
   matchingFlows,
+  NO_FILTER,
   palette,
   pickOf,
+  SIGNALS,
   swapEntry,
   type Entry,
   type FlowRow,
   type Pick,
+  type Ports as PortSet,
+  type Signal,
 } from './nodes.ts';
 import { NodePictures, type NodePictureStatus } from './NodePictures.tsx';
 import { createNumberEvaluator, type NumberSample } from '../render/evaluateNumber.ts';
@@ -192,6 +196,15 @@ export function Designer({
    * same flow from the shelf tomorrow and you did not come from anywhere.
    */
   const [trail, setTrail] = useState<readonly string[]>([]);
+  /**
+   * Narrow the browser to what a cord in your hand can reach.
+   *
+   * The search box answers "what is it called" and this answers "what will
+   * connect", which is the other half of finding a node and the half nothing
+   * could ask before. Holding a `p` outlet and wanting somewhere to put it is a
+   * question about ports, not about names.
+   */
+  const [filter, setFilter] = useState<PortSet>(NO_FILTER);
 
   const canFollow = show.clock && show.connected;
   const transport = useTransport(clock, canFollow);
@@ -207,25 +220,39 @@ export function Designer({
       : null;
 
   /**
-   * The names a `track` or `energy` node may point at, **distinct**.
+   * The names a `track` node may point at, **groups first and distinct**.
    *
-   * A real set has five tracks called `MIDI`, and a `track` node addresses a
-   * track by *name* — so five of them are five chips that do exactly the same
-   * thing, five identical rows in a Select, and five React children under one
-   * key. The last of those is the one that shouts: the browser rebuilds
-   * whenever the show does, so it warned about once a second for as long as the
-   * designer was open.
+   * Groups lead because they are usually the better question. A set with five
+   * kick tracks under a `DRUMS` group has one number worth driving a flow from
+   * and it is the group's — but the choice stays open, because somebody wanting
+   * the one snare should have it, and the rig has no business deciding which of
+   * those two a person meant.
+   *
+   * Distinct, because a real set has five tracks called `MIDI` and a `track`
+   * node addresses a track by *name* — so five of them are five identical rows
+   * in a Select and five React children under one key. That last one shouts:
+   * the browser rebuilds whenever the show does, so it warned about once a
+   * second for as long as the designer was open.
    */
   const trackNames = useMemo(
-    () => [...new Set([...show.tracks.map((t) => t.name), 'master'])],
-    [show.tracks],
+    () => [
+      ...new Set([
+        'master',
+        ...show.groups.map((each) => each.name),
+        ...show.tracks.map((each) => each.name),
+      ]),
+    ],
+    [show.groups, show.tracks],
   );
-  const all = useMemo(() => palette(trackNames), [trackNames]);
-  const found = useMemo(() => matching(all, typed), [all, typed]);
+  const all = useMemo(() => palette(), []);
+  const found = useMemo(() => matching(all, typed, filter), [all, typed, filter]);
   // One box, two shelves. The flow shelf has to answer the search too, or
   // pulling flows out of the node palette would have made them harder to find
   // than they were — which is the opposite of the point.
-  const shelf = useMemo(() => matchingFlows(flowShelf(scheme), typed), [scheme, typed]);
+  const shelf = useMemo(
+    () => matchingFlows(flowShelf(scheme), typed, filter),
+    [scheme, typed, filter],
+  );
   const swap = activeSwap ? swapEntry(activeSwap.kind) : null;
   const browsed = swap ? matching([swap], typed) : found;
 
@@ -403,6 +430,10 @@ export function Designer({
           </div>
 
           {!activeSwap && (
+            <PortFilter want={filter} onChange={setFilter} />
+          )}
+
+          {!activeSwap && (
             <div className="shelf shelf-flows">
               <div className="shelf-head">
                 <h4>flows</h4>
@@ -455,6 +486,9 @@ export function Designer({
                 const placeable = id !== null && !wouldLoop(scheme.flows, id, row.id);
                 return (
                   <div key={row.id} className="flow-row" data-on={row.id === id ? '' : undefined}>
+                    <span className="twist mark" aria-hidden="true">
+                      ◈
+                    </span>
                     <button
                       type="button"
                       className="flow-open"
@@ -462,7 +496,6 @@ export function Designer({
                       onClick={() => open(row.id)}
                     >
                       <span className="flow-name">
-                        <b className="mark">◈</b>
                         {row.name}
                         {row.rolled && <i title="wired by a roll — the next roll replaces it">◇</i>}
                       </span>
@@ -722,6 +755,107 @@ function TheRoom({
 }
 
 /**
+ * The signal filter, drawn as the column it filters.
+ *
+ * Six switches in the same six positions, in the same three colours, as the
+ * block on every row — so it needs no label beyond `takes` and `gives`: what
+ * you are pressing is a picture of what you are asking for, and the rows that
+ * survive are the ones lit in the same places.
+ *
+ * Selected signals are required rather than allowed. Ticking *takes p* and
+ * *gives c* narrows to nodes that do both, which is the question somebody with
+ * a point in one hand and an `out` in the other is actually asking.
+ */
+function PortFilter({ want, onChange }: { want: PortSet; onChange(next: PortSet): void }) {
+  const on = Object.keys(want).some((side) => want[side as 'takes' | 'gives'].length > 0);
+  const toggle = (side: 'takes' | 'gives', signal: Signal) => {
+    const held = want[side];
+    onChange({
+      ...want,
+      [side]: held.includes(signal)
+        ? held.filter((each) => each !== signal)
+        : SIGNALS.filter((each) => each === signal || held.includes(each)),
+    });
+  };
+  const side = (which: 'takes' | 'gives') => (
+    <span className="port-filter-side">
+      <b>{which}</b>
+      {SIGNALS.map((signal) => (
+        <button
+          key={`${which}${signal}`}
+          type="button"
+          data-signal={signal}
+          aria-pressed={want[which].includes(signal)}
+          {...(want[which].includes(signal) ? { 'data-on': '' } : {})}
+          title={`Only what ${which} a ${SIGNAL_NAMES[signal]}`}
+          onClick={() => toggle(which, signal)}
+        >
+          {signal}
+        </button>
+      ))}
+    </span>
+  );
+  return (
+    <div className="port-filter" data-on={on ? '' : undefined}>
+      {side('takes')}
+      <i>→</i>
+      {side('gives')}
+      <button
+        type="button"
+        className="port-filter-clear"
+        disabled={!on}
+        title="Show everything again"
+        onClick={() => onChange(NO_FILTER)}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+const SIGNAL_NAMES: Record<Signal, string> = {
+  p: 'point',
+  n: 'number',
+  c: 'colour',
+};
+
+/**
+ * A node's ports: all six positions, always, with the ones it has not got dim.
+ *
+ * Two decisions, and they are the same decision. The letters are painted in the
+ * blue, amber and purple the ports and cords on the canvas carry, so three
+ * letters are a legend for the thing beside them rather than a code you have to
+ * be told — you match the colour, and the letter is there for when you have.
+ *
+ * And **every row draws all six**. It used to draw only what a node had, which
+ * meant `→ p` over `p n → c` over `c n → c`: six silhouettes down one column,
+ * each a different width, and nothing lining up. A fixed grid scans as a table —
+ * the `c` column either lights up or it does not, and you read down it.
+ */
+function Ports({ of }: { of: PortSet }) {
+  const side = (held: readonly Signal[], which: 'takes' | 'gives') =>
+    SIGNALS.map((signal) => (
+      <span
+        key={`${which}${signal}`}
+        data-signal={signal}
+        {...(held.includes(signal) ? { 'data-on': '' } : {})}
+      >
+        {signal}
+      </span>
+    ));
+  return (
+    <span
+      className="node-sig"
+      aria-label={`takes ${of.takes.join(' ') || 'nothing'}, gives ${of.gives.join(' ') || 'nothing'}`}
+    >
+      {side(of.takes, 'takes')}
+      <i>→</i>
+      {side(of.gives, 'gives')}
+    </span>
+  );
+}
+
+/**
  * The vocabulary, grouped and searchable — a device browser, not a list of modes.
  *
  * Grouped by family rather than by node kind, and the families are declared in
@@ -774,6 +908,20 @@ function NodeBrowser({
                   data-open={on && entry.presets.length > 0 ? '' : undefined}
                 >
                   <div className="node-row">
+                    {entry.presets.length > 0 ? (
+                      <button
+                        type="button"
+                        className="twist"
+                        aria-expanded={on}
+                        aria-label={`${on ? 'Hide' : 'Show'} the ${entry.presets.length} presets of ${entry.node.label}`}
+                        title={`${entry.presets.length} presets`}
+                        onClick={() => onOpen(entry.node.kind)}
+                      >
+                        {on ? '▾' : '▸'}
+                      </button>
+                    ) : (
+                      <span className="twist" />
+                    )}
                     <button
                       type="button"
                       className="node-pick"
@@ -782,19 +930,8 @@ function NodeBrowser({
                       onClick={() => onAdd(entry.node)}
                     >
                       <span className="node-label">{entry.node.label}</span>
-                      <span className="node-sig">{entry.node.signature}</span>
+                      <Ports of={entry.node.ports} />
                     </button>
-                    {entry.presets.length > 0 && (
-                      <Button
-                        tone="quiet"
-                        className="more"
-                        label={`${on ? 'Hide' : 'Show'} the presets of ${entry.node.label}`}
-                        title={`${entry.presets.length} presets`}
-                        onPress={() => onOpen(entry.node.kind)}
-                      >
-                        {on ? '–' : `+${entry.presets.length}`}
-                      </Button>
-                    )}
                   </div>
                   {on && entry.presets.length > 0 && (
                     <div className="under">

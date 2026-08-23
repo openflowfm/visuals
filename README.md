@@ -25,6 +25,7 @@ Live ─ SessionBridge :17800 ─WS─> visuals server :17900 ─WS─> browser 
 | [the console](docs/console.md) | the two views, and what the three views before them were for | `src/ui/Console.tsx`, `Designer.tsx`, `SetView.tsx` |
 | [the renderer](docs/render.md) | the two passes, blending, fill rate, **pointing a projector** | `src/render/*` |
 | [the harness](docs/harness.md) | working on this with no Ableton, and the Link safety rule | `tools/fake-live.ts` |
+| [agent authoring](docs/mcp.md) | the MCP tools for reading nodes, validating and saving flows, and reviewing node designs | `mcp/*` |
 
 ## The one idea
 
@@ -52,6 +53,7 @@ npm run dev:visuals      # the server alone: Link peer + bridge client + host, :
 npm run dev:visuals-ui   # the renderer with HMR, :5473, proxying /ws to the server
 npm run build:visuals    # the renderer into visuals/dist, which the server serves
 npm run dev:fake-live    # a bridge that isn't one, for working without Ableton
+npm --prefix visuals run mcp  # local stdio server for agent-authored flows and nodes
 ```
 
 Open `http://localhost:17900` for the built renderer, or `:5473` while working on it.
@@ -135,9 +137,9 @@ show until you make one of your own. Loading *between* saved shows is a thing th
 want and does not have yet.
 
 Everything that draws is a **flow**, and a flow is a **graph** — see [flows](docs/flows.md).
-The eleven pictures and twelve effects that ship are node *modes*, so nothing in the model
-knows they exist except the node that draws them, and one flow can hold as many as you like
-wired however you like.
+The lightweight pictures, the bounded fractals and the effects that ship are node *modes*,
+so nothing in the model knows their individual names except the node that draws them, and
+one flow can hold them wired however you like.
 
 The trick that makes that possible is that **a colour is a function of a point**, not a
 value in a buffer: `kaleido` asks its input for the colour at a folded point and the input

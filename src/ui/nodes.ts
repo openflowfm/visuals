@@ -1,22 +1,19 @@
 import {
-  GRADE_MODES,
-  LENS_MODES,
-  SPREAD_MODES,
-  MATH_OPS,
   NODE_FAMILIES,
-  PLAYBACK_NAMES,
   TRACK_READS,
-  SONG_FACTS,
-  SOURCES,
-  WAVE_SHAPES,
-  BLENDS,
   type Circuit,
   type CircuitNode,
   type NodeKind,
   type FlowDef,
   type Scheme,
 } from '../../protocol.ts';
-import { NODE_SPECS, inletsOf, type PortSpec } from '../render/circuit.ts';
+import {
+  NODE_SPECS,
+  descriptionOf,
+  inletsOf,
+  modesOf,
+  type PortSpec,
+} from '../render/circuit.ts';
 import { freeNodeId } from './edits.ts';
 
 /**
@@ -52,6 +49,19 @@ import { freeNodeId } from './edits.ts';
  * to live and a name to be saved under, and that decision is better made once
  * these have been used; nothing below is in the way of it.
  */
+/** The three signals a cord may carry, in the order everything lists them. */
+export type Signal = 'p' | 'n' | 'c';
+export const SIGNALS: readonly Signal[] = ['p', 'n', 'c'];
+
+/** What a node takes and what it gives, each a subset of `SIGNALS` in that order. */
+export interface Ports {
+  takes: readonly Signal[];
+  gives: readonly Signal[];
+}
+
+/** Nothing asked. The filter's resting state, and what `passes` lets through. */
+export const NO_FILTER: Ports = { takes: [], gives: [] };
+
 export interface Pick {
   /** What it is called in the browser, and the only name anyone sees. */
   label: string;
@@ -66,14 +76,21 @@ export interface Pick {
   /** For the search box: everything worth matching on, lowercased. */
   terms: string;
   /**
-   * What it takes and what it gives, in the three signals — `p → c`.
+   * What it takes and what it gives, in the three signals.
    *
    * The metadata column, and it is this rather than a category because it is
    * the one fact you need *before* you drop a node: whether the thing you are
    * holding a cord from can reach it. A browser that made you drop a node to
    * find out its inlets is a browser that costs an undo per question.
+   *
+   * Structured rather than the `p n → c` string it was, because the browser
+   * draws **all three letters on both sides of every row** and dims the ones a
+   * node has not got. A signature that changed shape row to row — `→ p` over
+   * `p n → c` over `c n → c` — is six silhouettes in one column and scans as
+   * noise; six fixed positions scan as a table. It is also what the filter
+   * needs: "show me what takes a point" is a question about this.
    */
-  signature: string;
+  ports: Ports;
 }
 
 /**
@@ -117,55 +134,6 @@ export interface FlowRow {
   terms: string;
 }
 
-/** What each mode is, one line each, because a browser is where you learn these. */
-const ABOUT: Record<string, string> = {
-  'by name': 'Draw each playing track from what its name says it is',
-  solid: 'The colour, breathing on the bar and brightening with the sound',
-  bars: 'Vertical bars whose heights are a bar of music, swept by the playhead',
-  rings: 'Rings launched on the beat, expanding outward',
-  noise: 'A drifting field that thickens with the sound. Weather, not a metronome',
-  strobe: 'Whole-frame flashes on the beat. No shape at all, which is the point',
-  grid: 'Cells, each lighting on its own beat. Structure rather than motion',
-  tunnel: 'A corridor rushing toward you, on the beat',
-  plasma: 'Four sines crossed. The best full-frame wash there is',
-  spiral: 'Arms winding out of the centre and turning on the beat',
-  scan: 'Lines with a bar of sweep passing down them. A machine, not weather',
-  sparks: 'A cell per spark, each firing on its own beat and drifting as it dies',
-
-  mirror: 'Fold the picture about a line, at any angle',
-  kaleido: 'Fold it into wedges around the centre, rotating on the beat',
-  shift: 'Separate the colour channels. Bites on transients, closes in the gaps',
-  pixelate: 'Blocks that resolve across the bar',
-  ripple: 'A wave leaving the centre on each beat, displacing what it crosses',
-  smear: 'A short radial blur. Softens a picture into whatever it is over',
-  bloom: 'Only what is already bright gets added back. Builds highlights',
-  slice: 'Rows thrown sideways, re-diced on each beat',
-  edge: 'Keep the outline and throw away the fill. Makes a busy frame less busy',
-  posterize: 'Colour flattened to four steps. Turn levels up for fewer',
-  twist: 'Rotation that grows with radius, swaying on the beat',
-  invert: 'On the beat and off again. A switch rather than a shape',
-
-  over: 'The ordinary stacking: the top where it is opaque',
-  add: 'Both, summed. Bright and it stays bright',
-  screen: 'Both, saturating at white rather than climbing past it',
-  multiply: 'The base seen through the top. The only one that darkens',
-
-  level: 'The room\'s own meter — everything, as loud as it is',
-  fader: 'Where the track\'s volume control is set',
-  playing: 'One while that track has a playing clip, zero while it does not',
-  beat: 'Continuous beats. Wire it into a wave',
-  phase: 'Where you are in the bar, 0 to 1',
-  pulse: 'One on the beat, decaying across it',
-  time: 'Seconds — for drift that should specifically not be in time',
-  random: 'A new number every beat',
-
-  seed: 'A different number for every song. Free per-song variation',
-  tempo: 'The tempo, as a number you can drive something with',
-  key: 'The song\'s musical key, as a pitch class. Two songs in the same key agree',
-  section: 'Where the playing section sits among the ones the set uses',
-  sections: 'How many sections the set has',
-};
-
 /**
  * The presets that are more than a mode.
  *
@@ -183,34 +151,52 @@ const PRESET_VALUES: Record<string, Record<string, number>> = {
 /**
  * A row's identity, which is what React keys it by.
  *
- * The **name** is in here as well as the mode, and it has to be: a `track` row
- * carries a mode now — every one of them drops a meter — so three tracks would
- * be three rows spelling `track:level`, and children under one key may be
- * duplicated or dropped. That is not a cosmetic bug; it is a node you cannot
- * add. A test pins it, because a real set is where it shows up and a two-track
- * fixture is where it does not.
+ * The **name** is in here as well as the mode, and it stays: nothing in the add
+ * browser sets `of` any more, but `swapEntry` builds picks the same way and a
+ * key that quietly stopped covering a field is a key that goes wrong the next
+ * time something uses it. It cost one interpolation.
  */
 export function keyOf(pick: Pick): string {
   return `${pick.kind}:${pick.op ?? ''}:${pick.of ?? ''}`;
 }
 
 /**
- * What a kind takes and what it gives, as `p n → c`.
+ * What a kind takes and what it gives, each a subset of `p n c` in that order.
  *
- * Deduplicated and in port order, because `n n → n` says nothing `n → n` does
- * not: what you are reading off this is which cords will land, not how many.
- * Ports whose name starts with a tilde are the flattener's own and are hidden
- * here for the same reason the canvas hides them.
+ * Deduplicated, because `n n` says nothing `n` does not: what you read off this
+ * is which cords will land, not how many. Always in `p n c` order and never in
+ * port order, because the browser draws all three positions on every row and a
+ * column whose letters moved about would be unreadable as a column. Ports whose
+ * name starts with a tilde are the flattener's own and are hidden here for the
+ * same reason the canvas hides them.
  */
-export function signatureOf(kind: NodeKind): string {
+export function portsOf(kind: NodeKind): Ports {
   const spec = NODE_SPECS[kind];
+  const modes = modesOf(kind);
   // Three kinds grow their inlets from their own mode, so the row is asked
   // about a default one — the same node the row drops.
-  const bare: CircuitNode = { id: kind, kind, x: 0, y: 0, ...(spec.ops ? { op: spec.ops[0] } : {}) };
-  const side = (ports: readonly PortSpec[]) => [
-    ...new Set(ports.filter((port) => !port.name.startsWith('~')).map((port) => port.kind)),
-  ];
-  return `${side(inletsOf(bare)).join(' ')} → ${side(spec.outlets).join(' ')}`.trim();
+  const bare: CircuitNode = { id: kind, kind, x: 0, y: 0, ...(modes[0] ? { op: modes[0] } : {}) };
+  const side = (ports: readonly PortSpec[]): Signal[] => {
+    const held = new Set(
+      ports.filter((port) => !port.name.startsWith('~')).map((port) => port.kind),
+    );
+    return SIGNALS.filter((signal) => held.has(signal));
+  };
+  return { takes: side(inletsOf(bare)), gives: side(spec.outlets) };
+}
+
+/**
+ * Whether a row survives the filter. An empty side is a side nobody asked about.
+ *
+ * Every selected signal has to be present rather than any of them, so ticking
+ * *takes p* and *gives c* narrows to nodes that do both — which is the question
+ * somebody with a point in one hand and an `out` in the other is asking.
+ */
+export function passes(ports: Ports, want: Ports): boolean {
+  return (
+    want.takes.every((signal) => ports.takes.includes(signal)) &&
+    want.gives.every((signal) => ports.gives.includes(signal))
+  );
 }
 
 /**
@@ -274,19 +260,28 @@ export function pickOf(row: FlowRow): Pick {
     about: row.about,
     family: NODE_FAMILIES.find((each) => each.kinds.includes('flow'))?.name ?? 'other',
     terms: row.terms,
-    signature: signatureOf('flow'),
+    ports: portsOf('flow'),
   };
 }
 
 /** The flow shelf, filtered by what somebody typed. One box, two shelves. */
-export function matchingFlows(all: readonly FlowRow[], typed: string): FlowRow[] {
-  const want = typed.trim().toLowerCase();
-  if (!want) return [...all];
-  return all.filter((row) => row.terms.includes(want));
+export function matchingFlows(
+  all: readonly FlowRow[],
+  typed: string,
+  want: Ports = NO_FILTER,
+): FlowRow[] {
+  // Every flow compiles to a `flow` node, so every flow has that node's ports.
+  // The shelf answers the signal filter for the same reason it answers the
+  // search box: two shelves under one set of controls, or the controls are
+  // lying about what they cover.
+  if (!passes(portsOf('flow'), want)) return [];
+  const typing = typed.trim().toLowerCase();
+  if (!typing) return [...all];
+  return all.filter((row) => row.terms.includes(typing));
 }
 
 /** The whole browser, built from the vocabulary rather than typed out beside it. */
-export function palette(tracks: readonly string[]): Entry[] {
+export function palette(): Entry[] {
   const out: Entry[] = [];
   const family = (kind: NodeKind) =>
     NODE_FAMILIES.find((each) => each.kinds.includes(kind))?.name ?? 'other';
@@ -309,7 +304,7 @@ export function palette(tracks: readonly string[]): Entry[] {
     // The kind is in here as well as the mode, so `sine wave` and `song key`
     // find what is now labelled just `sine` and just `key` under their node.
     terms: `${label} ${kind} ${op ?? ''} ${about}`.toLowerCase(),
-    signature: signatureOf(kind),
+    ports: portsOf(kind),
   });
 
   const node = (
@@ -326,10 +321,13 @@ export function palette(tracks: readonly string[]): Entry[] {
   // `posterize` is a target that happens to spell one, and handing it a set of
   // numbers an inlet has never heard of is the kind of coincidence that survives
   // into a file.
-  const modes = (kind: NodeKind, label: string, ops: readonly string[]) => {
+  const modes = (kind: NodeKind, label: string) => {
+    const spec = NODE_SPECS[kind];
     out.push({
-      node: pick(kind, undefined, label, NODE_SPECS[kind].about),
-      presets: ops.map((op) => pick(kind, op, op, ABOUT[op] ?? '', PRESET_VALUES[op])),
+      node: pick(kind, undefined, label, spec.description),
+      presets: (spec.modes ?? []).map((mode) =>
+        pick(kind, mode.name, mode.name, mode.description, PRESET_VALUES[mode.name]),
+      ),
     });
   };
 
@@ -337,9 +335,10 @@ export function palette(tracks: readonly string[]): Entry[] {
   // the Live set before it offers a plasma. It has modes and no presets: `by
   // name` is the answer this rig is for, and the other eleven are one hot-swap
   // away rather than eleven rows here saying "all of them as a tunnel".
-  node('tracks', 'by name', 'every playing track', NODE_SPECS.tracks.about);
-  modes('source', 'source', SOURCES);
-  node('paint', undefined, 'paint', NODE_SPECS.paint.about);
+  node('tracks', 'by name', 'every playing track', NODE_SPECS.tracks.description);
+  modes('source', 'source');
+  modes('fractal', 'fractal');
+  node('paint', undefined, 'paint', NODE_SPECS.paint.description);
   // No flows. Every flow in the library used to be a row here, in the same chip
   // as `source` and `paint`, which put a graph of sixteen nodes and a shipped
   // shader side by side under one heading as if they were the same sort of
@@ -349,40 +348,34 @@ export function palette(tracks: readonly string[]): Entry[] {
   // and `spread` reads around it. The six modes that used to sit beside them
   // under `effect` never touched a colour at all — they are `lens` now, down in
   // geometry with the five kinds they were already the same functions as.
-  modes('grade', 'grade', GRADE_MODES);
-  modes('spread', 'spread', SPREAD_MODES);
-  modes('blend', 'blend', BLENDS);
+  modes('grade', 'grade');
+  modes('spread', 'spread');
+  modes('blend', 'blend');
 
   // Geometry. `place` sits next to `point` rather than next to `polar`,
   // because the two of them are what a canvas gets a point *from* and `polar`
   // is what it turns one back into.
-  node('point', undefined, 'point', NODE_SPECS.point.about);
-  node('place', undefined, NODE_SPECS.place.name, NODE_SPECS.place.about);
-  modes('lens', 'lens', LENS_MODES);
-  node('polar', undefined, NODE_SPECS.polar.name, NODE_SPECS.polar.about);
+  node('point', undefined, 'point', NODE_SPECS.point.description);
+  node('place', undefined, NODE_SPECS.place.name, NODE_SPECS.place.description);
+  modes('lens', 'lens');
+  node('polar', undefined, NODE_SPECS.polar.name, NODE_SPECS.polar.description);
 
   // The room: three questions you can ask the set, and nothing else can answer.
-  modes('playback', 'playback', PLAYBACK_NAMES);
-  // Targets again, and the reason the search box has to reach them: a name from
-  // the set is the one thing in this browser nobody could guess.
-  //
-  // Distinct, and not merely because the caller ought to hand them over that
-  // way. A `track` node addresses a track by *name*, so two tracks called `MIDI`
-  // are one target however many of them the set has — a second row would offer a
-  // chip that does exactly what the first one does, under the same key.
-  //
-  // The row drops a **meter**, because that is what anybody reaching for a track
-  // wants first. Which of its numbers is the mode in the title rather than
-  // three rows per track here, which for a real set would be seventy-eight.
-  for (const name of new Set(tracks)) {
-    node('track', TRACK_READS[0], `${name} meter`, "That track's own numbers, by name", name);
-  }
-  modes('song', 'song', SONG_FACTS);
+  modes('playback', 'playback');
+  // **One `track` row**, not one per name in the set. It was one each, on the
+  // argument that a name from the set is the thing in this browser nobody could
+  // guess — which is true and is the search box's job, not the list's. A set
+  // with twenty-six tracks put twenty-six near-identical rows under one heading
+  // and buried `playback` and `song` beneath them, and the node has carried a
+  // chooser for which track the whole time. So the row drops a meter and you
+  // pick the track on its face, the way you pick a flow on a `flow` node.
+  node('track', TRACK_READS[0], 'track', NODE_SPECS.track.description);
+  modes('song', 'song');
 
   // Numbers.
-  node('value', undefined, 'value', NODE_SPECS.value.about);
-  modes('math', 'math', MATH_OPS);
-  modes('wave', 'wave', WAVE_SHAPES);
+  node('value', undefined, 'value', NODE_SPECS.value.description);
+  modes('math', 'math');
+  modes('wave', 'wave');
 
   // No `out`. Every flow has exactly one, it arrives with the flow, and it
   // cannot be deleted — so a browser offering another one is offering the only
@@ -407,7 +400,7 @@ export function drop(circuit: Circuit, pick: Pick): Circuit {
   // off would put a node on the canvas whose title said `source` and whose
   // dropdown said `solid`, which is the two-things-to-learn-one the faceplate
   // spent its own rule getting rid of.
-  const op = pick.op ?? NODE_SPECS[pick.kind].ops?.[0];
+  const op = pick.op ?? modesOf(pick.kind)[0];
   return {
     ...circuit,
     nodes: [
@@ -437,16 +430,24 @@ export function drop(circuit: Circuit, pick: Pick): Circuit {
  * `source` you then have to go looking inside. Either way the entry that comes
  * back is drawn open, which is the whole of how search reaches a preset.
  */
-export function matching(all: readonly Entry[], typed: string): Entry[] {
-  const want = typed.trim().toLowerCase();
-  if (!want) return [...all];
+export function matching(
+  all: readonly Entry[],
+  typed: string,
+  want: Ports = NO_FILTER,
+): Entry[] {
+  const typing = typed.trim().toLowerCase();
+  // The signal filter runs on the **node** rather than on each preset, because
+  // a mode never changes what a kind takes or gives — the ports come off the
+  // spec, and every preset under a row shares them.
+  const all2 = all.filter((entry) => passes(entry.node.ports, want));
+  if (!typing) return all2;
   const out: Entry[] = [];
-  for (const entry of all) {
-    if (entry.node.terms.includes(want)) {
+  for (const entry of all2) {
+    if (entry.node.terms.includes(typing)) {
       out.push(entry);
       continue;
     }
-    const hits = entry.presets.filter((each) => each.terms.includes(want));
+    const hits = entry.presets.filter((each) => each.terms.includes(typing));
     if (hits.length > 0) out.push({ node: entry.node, presets: hits });
   }
   return out;
@@ -464,20 +465,20 @@ export function matching(all: readonly Entry[], typed: string): Entry[] {
  */
 export function swapEntry(kind: NodeKind): Entry | null {
   const spec = NODE_SPECS[kind];
-  if (!spec.ops || spec.ops.length === 0) return null;
+  if (!spec.modes || spec.modes.length === 0) return null;
   const family = NODE_FAMILIES.find((each) => each.kinds.includes(kind))?.name ?? 'other';
   const pick = (op: string, label: string, values?: Record<string, number>): Pick => ({
     label,
     kind,
     op,
     ...(values ? { values } : {}),
-    about: ABOUT[op] ?? spec.about,
+    about: descriptionOf(kind, op),
     family,
-    terms: `${label} ${kind} ${op} ${ABOUT[op] ?? spec.about}`.toLowerCase(),
-    signature: signatureOf(kind),
+    terms: `${label} ${kind} ${op} ${descriptionOf(kind, op)}`.toLowerCase(),
+    ports: portsOf(kind),
   });
   return {
-    node: pick(spec.ops[0], spec.name),
-    presets: spec.ops.map((op) => pick(op, op, PRESET_VALUES[op])),
+    node: pick(spec.modes[0].name, spec.name),
+    presets: spec.modes.map((mode) => pick(mode.name, mode.name, PRESET_VALUES[mode.name])),
   };
 }

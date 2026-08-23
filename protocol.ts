@@ -55,6 +55,7 @@ export type NodeKind =
   | 'song'
   // pictures
   | 'source'
+  | 'fractal'
   | 'tracks'
   | 'flow'
   | 'paint'
@@ -85,7 +86,7 @@ export const NODE_FAMILIES: readonly { name: string; about: string; kinds: NodeK
   {
     name: 'draw',
     about: 'Everything that makes a colour out of nothing',
-    kinds: ['source', 'tracks', 'flow', 'paint'],
+    kinds: ['source', 'fractal', 'tracks', 'flow', 'paint'],
   },
   {
     // Not `colour`, which it was: half of what `effect` contained never touched
@@ -143,6 +144,15 @@ export const SOURCES: readonly string[] = [
   'scan',
   'sparks',
 ];
+
+/**
+ * The two bounded escape-time pictures the dedicated `fractal` node draws.
+ *
+ * Deliberately not `SOURCES`: every source is also offered as a per-track draw,
+ * and repeating an iterative shader once per playing track is exactly the
+ * accidental GPU load this node exists to prevent.
+ */
+export const FRACTAL_MODES = ['mandelbrot', 'julia'] as const;
 
 /** The effects that ship, as `effect` node modes. The other half of the old split. */
 /**
@@ -542,6 +552,20 @@ export interface Show {
   at: number;
   master: number;
   tracks: Track[];
+  /**
+   * The set's group tracks, which are **read but never drawn**.
+   *
+   * They are not in `tracks` and must not be: a `tracks` node draws every entry
+   * there, and a group carries no clips of its own, so drawing one would paint
+   * everything inside it a second time.
+   *
+   * Reading one is the opposite — it is usually the *better* question. A set
+   * with five kick tracks under a `DRUMS` group has one number worth driving a
+   * flow from, and it is the group's. A `track` node resolves a name against
+   * this list as well as `tracks`, so pointing one at a group needs nothing
+   * from the person beyond picking it.
+   */
+  groups: Track[];
   /**
    * The flow that is up, and why it is.
    *

@@ -54,6 +54,13 @@ the centre, `smear` is six, `edge` is four, `shift` is three. Nesting two of the
 that takes a second to compile — the number is high enough that no sane graph reaches it,
 and [the roll](wheel.md) deliberately never wires those four.
 
+An iterative node needs a second answer, because a loop of thirty-two orbit steps is still
+one GLSL statement. `fractal` therefore declares its worst-case work separately and the
+compiler charges it every time the graph asks for the picture at another point. Two direct
+fractals fit; putting one under any `spread` does not. `detail` may stop the loop earlier,
+but it is a uniform that can be turned after compilation, so the budget is always the hard
+ceiling rather than the number it happens to be showing now.
+
 ## Three signals
 
 | signal | is | `data-kind` |
@@ -202,6 +209,35 @@ be *silent* about it: a canvas full of nodes drawing black is indistinguishable 
 full of nodes that is broken, and the difference is one cord. So the canvas says
 `nothing reaches out` under the graph and refuses nothing.
 
+## The vocabulary documents itself
+
+The node reference is executable data in `NODE_SPECS`, not prose copied into the browser.
+Three interfaces make that a rule rather than a convention:
+
+- `NodeDocumentation.description` is the plain-language account of a node regardless of its
+  mode.
+- `NodeModeDocumentation` gives every fixed mode its name and its own description. Bare mode
+  strings are not part of a `NodeSpec` any more.
+- `PortDocumentation.description` is required by `PortSpec`, so an inlet or outlet cannot be
+  added to the compiler without also saying what arrives or leaves there.
+
+`documentedModes` takes the protocol's fixed mode list and a mapped description object. Adding
+one member to `SOURCES`, `LENS_MODES`, `MATH_OPS`, or another vocabulary is therefore a type
+error until its description exists. The mode-dependent inlet tables derive a `ValueInlet`
+union in the same way, so adding a control such as `ripple/depth` is a type error until that
+port has a description too.
+
+The app and the agent-authoring server read those same objects. Node descriptions feed browser
+search and faceplate help; mode descriptions are the visible preset explanations; port
+descriptions sit on the control or port row they explain; and `visual-flow://nodes` serializes
+the whole registry for an MCP client. There is no UI-only or agent-only table to drift from the
+renderer.
+
+A completeness test still walks every node under every mode and checks every real inlet and
+outlet. The types catch a missing field where it is authored; the test catches a dynamic port
+that a mode assembled incorrectly. That is why this is both documentation and coverage of the
+actual headless vocabulary.
+
 ## The vocabulary
 
 Grouped the way the browser groups them, which is `NODE_FAMILIES` in `protocol.ts` — two
@@ -213,6 +249,7 @@ editors listing these differently would be two different vocabularies.
 |---|---|---|---|
 | `tracks` | `p` | `c` | **the Live set**: every playing track, drawn and mixed. Fire a scene, it changes |
 | `source` | `p` `energy` | `c` | one of eleven: `solid` `bars` `rings` `noise` `strobe` `grid` `tunnel` `plasma` `spiral` `scan` `sparks` |
+| `fractal` | `p` `energy` + its mode's numbers | `c` | `mandelbrot` or `julia`, with bounded zoom, detail and iterative work |
 | `flow` | `p` | `c` | another flow, whole, as one node |
 | `paint` | `amount` `energy` | `c` | the colourway's colour at a brightness |
 

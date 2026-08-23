@@ -8,6 +8,20 @@
  * shell went with it.
  */
 
+/*
+ * The three signals, as one colour each.
+ *
+ * Named here rather than spelled six times below, because the browser paints a
+ * node's signature in them too — `p n → c` reading in the same blue, amber and
+ * purple as the ports and cords is what turns three letters from a code into a
+ * legend for the canvas beside it.
+ */
+:root {
+  --signal-p: #3cc8ff;
+  --signal-n: #f0b23c;
+  --signal-c: #9b5aff;
+}
+
 .tick {
   padding: 3px 7px;
   border: 1px solid var(--bd3);
@@ -235,39 +249,39 @@
 }
 
 .wdg-graph-cord[data-kind='p'] {
-  stroke: #3cc8ff;
+  stroke: var(--signal-p);
 }
 
 .wdg-graph-cord[data-kind='n'] {
-  stroke: #f0b23c;
+  stroke: var(--signal-n);
 }
 
 .wdg-graph-cord[data-kind='c'] {
-  stroke: #9b5aff;
+  stroke: var(--signal-c);
 }
 
 .wdg-port[data-kind='p'] {
-  border-color: #3cc8ff;
+  border-color: var(--signal-p);
 }
 
 .wdg-port[data-kind='n'] {
-  border-color: #f0b23c;
+  border-color: var(--signal-n);
 }
 
 .wdg-port[data-kind='c'] {
-  border-color: #9b5aff;
+  border-color: var(--signal-c);
 }
 
 .wdg-port[data-kind='p'][data-connected] {
-  background: #3cc8ff;
+  background: var(--signal-p);
 }
 
 .wdg-port[data-kind='n'][data-connected] {
-  background: #f0b23c;
+  background: var(--signal-n);
 }
 
 .wdg-port[data-kind='c'][data-connected] {
-  background: #9b5aff;
+  background: var(--signal-c);
 }
 
 .nodeshot {

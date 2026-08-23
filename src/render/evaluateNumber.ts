@@ -104,7 +104,14 @@ export function trackReading(show: Show, name: string, read: string): number {
   if (name === 'master') {
     return read === 'level' ? show.master : read === 'fader' ? 1 : show.playing ? 1 : 0;
   }
-  const track = show.tracks.find((each) => each.name === name);
+  // Groups after tracks, because a `tracks` node draws the first list and a
+  // person naming something that appears in both meant the drawable one. Both
+  // are searched, so a `track` node pointed at a group bus reads it — usually
+  // the better question, since a set with five kicks under `DRUMS` has one
+  // number worth driving a flow from and it is the group's.
+  const track =
+    show.tracks.find((each) => each.name === name) ??
+    show.groups.find((each) => each.name === name);
   if (!track) return 0;
   if (read === 'fader') return track.opacity;
   if (read === 'playing') return track.playing >= 0 ? 1 : 0;
