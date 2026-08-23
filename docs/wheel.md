@@ -153,7 +153,7 @@ between a set you can navigate and a set that looks right.
 scheme in `server/scheme.ts` is a complete show and the file only ever overrides parts of it.
 
 Overrides are shallow per section: naming one colourway does not delete the other three, and
-registering one look does not remove the ten that ship.
+registering one look does not remove the thirteen that ship.
 
 A parse error **keeps the scheme that was already working** and reports the message in the
 panel. Losing the show to a trailing comma is the wrong answer at any time and an unthinkable
@@ -171,18 +171,19 @@ two things a *file* can say and the editor cannot. Repairing here means the repa
 back the next time anything saves; repairing in the compiler would mean silently redoing the
 same fix sixty times a second and never telling anyone. See [looks](looks.md).
 
-**A saved file holds a copy of the ten that ship**, because the editor sends the whole
+**A saved file holds a copy of every look that ships**, because the editor sends the whole
 scheme and the server writes the whole scheme. So improving a built-in does not reach a
 machine that has already saved once — its `scheme.json` shadows the new one under the same
-id. Deleting those four entries from the file is the whole fix, and it is worth knowing
-before wondering why an updated library did not arrive.
+id, and a built-in *added* since that save does arrive, because there is nothing in the file
+to shadow it. Deleting the shipped entries from the file is the whole fix, and it is worth
+knowing before wondering why an updated library did not arrive.
 
-## The ten that ship
+## The thirteen that ship
 
 `BUILT_IN.looks` in `server/scheme.ts`, and they are the manual: nobody reads a node
 reference and everybody takes a working example apart. So they are a **spread** rather than
-ten variations, one lesson each — and because the wheel turns through everything by default,
-they are also the show a fresh clone puts on.
+thirteen variations, one lesson each — and because the wheel turns through everything by
+default, they are also the show a fresh clone puts on.
 
 | look | what it is for |
 |---|---|
@@ -196,6 +197,9 @@ they are also the show a fresh clone puts on.
 | **Outline** | the set as a diagram. `edge` keeps the outline and throws the fill away, over a ghost of the same set |
 | **Poster** | flat bands, and the one look that changes with the *music*: `posterize` to four steps, hue rotated by the song's key |
 | **Glitch** | two lenses, a spread and two grades in a row and nothing else — the other end of the vocabulary from `The set` |
+| **Lava** | a threshold walked slowly off `time` rather than the beat, and a cord run backwards by a negative depth |
+| **Storm** | a `wave` snapped to the beat times a squared `random`, gating a contour cut out of a noise field — a strike that is rarely big and never the same size twice |
+| **The lot** | three of the others as three nodes, one of them folded by a kaleidoscope that never touches its insides |
 
 Three of them are **portals**, and that is deliberate rather than repetition: `Deep` recedes,
 `Vortex` turns and `Gateway` opens. It is the shape this kind of rig reaches for most, and
@@ -215,6 +219,11 @@ rotation that does nothing. A cord drawn right across the canvas into a node tha
 never changed is worse than no cord: it teaches the wrong thing about the vocabulary. A
 number that idles at a half belongs on an inlet where a half means something, which is why it
 now drives a blend amount instead.
+
+**One of them costs what nesting costs, on purpose.** `The lot` ends up nine evaluations of
+`Vortex`'s spiral and six of `Water`'s plasma in one frame, because both of those looks end
+in a `spread` and a spread reads its input once per tap. Nesting does not add, it multiplies,
+and the library should contain one honest example of that rather than only the cheap kind.
 
 They are also **laid out from their own wiring** — a column per step along the signal — so
 the first thing anyone opens reads left to right instead of needing untangling.

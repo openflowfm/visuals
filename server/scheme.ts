@@ -47,9 +47,34 @@ import { repaired, splitPort } from '../src/render/circuit.ts';
  */
 const ROW = 220;
 
+/**
+ * What a node holds on its number inlets, and how far a cord may carry each.
+ *
+ * A bare number is where the control sits: `{ segments: 0.3 }`. A pair is that
+ * number **and** the range a cord moves it through, signed — `{ amount: [1, -1] }`
+ * is an inlet sitting at one that a signal carries down to nothing, which is a
+ * `subtract` node's worth of graph written as the polarity of a cord. One map
+ * rather than two, because on the node's face they are one row.
+ */
+type Values = Record<string, number | [number, number]>;
+
+/** That map, split into the two the node format keeps it in. */
+function numbers(held?: Values): Pick<CircuitNode, 'values' | 'depths'> {
+  const values: Record<string, number> = {};
+  const depths: Record<string, number> = {};
+  for (const [name, each] of Object.entries(held ?? {})) {
+    values[name] = Array.isArray(each) ? each[0] : each;
+    if (Array.isArray(each)) depths[name] = each[1];
+  }
+  return {
+    ...(Object.keys(values).length ? { values } : {}),
+    ...(Object.keys(depths).length ? { depths } : {}),
+  };
+}
+
 function wire(
   name: string,
-  nodes: [string, string, string?, Record<string, number>?, number?, string?, string?, number?][],
+  nodes: [string, string, string?, Values?, number?, string?, string?, number?][],
   cords: string[],
 ): LookDef {
   const wired = cords.map((each) => {
@@ -75,7 +100,7 @@ function wire(
           y: 40 + depth * ROW,
           ...(op ? { op } : {}),
           ...(of ? { of } : {}),
-          ...(values ? { values } : {}),
+          ...numbers(values),
           ...(value !== undefined ? { value } : {}),
           ...(smooth !== undefined ? { smooth } : {}),
           ...(label ? { label } : {}),
@@ -118,14 +143,15 @@ function columnsOf(ids: readonly string[], cords: readonly { from: string; to: s
 }
 
 /**
- * Four looks that are a show, and are the manual.
+ * The library, which is a show on its own and is also the manual.
  *
- * Deliberately a spread rather than four variations: one that is **only** the
- * set, one that **moves the point** the set is read at, one that puts the set
- * **inside** a picture that ships, and one that ignores the set entirely and
- * builds a picture **out of a number**. Between them they use every family in
- * the vocabulary, which matters more than it usually would — nobody reads a node
- * reference, and everybody takes a working example apart.
+ * Deliberately a spread rather than variations on one idea: one that is **only**
+ * the set, one that **moves the point** the set is read at, one that puts the set
+ * **inside** a picture that ships, one that ignores the set entirely and builds a
+ * picture **out of a number**, and one built **out of three of the others**.
+ * Between them they use every family in the vocabulary, which matters more than
+ * it usually would — nobody reads a node reference, and everybody takes a working
+ * example apart.
  *
  * Two rules they all keep, both learned the hard way.
  *
@@ -457,6 +483,187 @@ const BUILT_IN: Scheme = {
         'e/n -> flip/energy',
         'flip/c -> up/c',
         'up/c -> o/c',
+      ],
+    ),
+    // A lamp, and the one picture here that keeps no time at all. `noise` is a
+    // field with a threshold on it, so what decides whether it reads as fog or as
+    // blobs is where that threshold sits — and `heat` walks it, slowly, off
+    // `time` rather than off the beat, because wax does not know what a bar is.
+    //
+    // The meter is the other half of `heat` and it only ever adds: at a desk the
+    // lamp still rises and falls on its own, and a loud room fattens the wax until
+    // the blobs run together. A long envelope on it, because lava has weight.
+    //
+    // `paint` is the bulb behind the glass, and it is the one wired with a
+    // **negative depth**: the inlet sits at one and the distance from the centre
+    // carries it down to nothing, which is a `subtract` node's worth of graph
+    // written as the polarity of a cord. `Weather` fades the same disc the older
+    // way, one node heavier, and both are worth having in front of somebody.
+    lava: wire(
+      'Lava',
+      [
+        ['pt', 'point'],
+        ['t', 'playback', 'time'],
+        // A cycle every seventeen seconds or so. The same unclamped multiply
+        // `Water` drifts on, slower, and for the same reason.
+        ['slow', 'math', 'multiply', { b: 0.06 }],
+        ['rise', 'wave', 'sine'],
+        ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.7],
+        // `max`, and the rise arrives on a range rather than whole: the wax sits
+        // between a seventh and a third of the frame all on its own, and the
+        // meter only shows up when the room is louder than that. Wired to the
+        // full swing it emptied the glass at the bottom of every cycle, which is
+        // a lamp that keeps switching itself off.
+        ['heat', 'math', 'max', { a: [0.38, 0.28] }],
+        // Magnified, and breathing with the same number: the blobs swell as they
+        // fatten and shrink back as they thin.
+        ['swell', 'lens', 'zoom', { by: [0.6, -0.1] }],
+        ['wax', 'source', 'noise'],
+        // Bloom rather than smear, and the reason is the desk. Both scale their
+        // reach with the meter, and a smear shrunk to three hundredths of the
+        // frame is a softening nobody can see — where a bloom's ring still reads
+        // as a halo with nothing playing at all. Most of the hours spent making
+        // one of these are spent in a quiet room.
+        ['glow', 'spread', 'bloom', { reach: 0.42, floor: 0.3 }],
+        ['melt', 'grade', 'levels', { gain: 0.54, lift: 0.62 }],
+        ['pol', 'polar'],
+        ['lamp', 'paint', undefined, { amount: [1, -1] }],
+        ['mix', 'blend', 'screen', { amount: 0.9 }],
+        ['o', 'out'],
+      ],
+      [
+        't/n -> slow/a',
+        'slow/n -> rise/phase',
+        'rise/n -> heat/a',
+        'e/n -> heat/b',
+        'heat/n -> wax/energy',
+        'pt/p -> swell/p',
+        'rise/n -> swell/by',
+        'swell/p -> wax/p',
+        'wax/c -> glow/c',
+        'heat/n -> glow/energy',
+        'glow/c -> melt/c',
+        'pt/p -> pol/p',
+        'pol/radius -> lamp/amount',
+        'heat/n -> lamp/energy',
+        'lamp/c -> mix/base',
+        'melt/c -> mix/top',
+        'mix/c -> o/c',
+      ],
+    ),
+    // Lightning, which is two things: something jagged and bright, and the
+    // waiting. `random` is a new number every beat and a `wave` on `pulse` snaps
+    // to one on each beat and is gone inside a fifth of it, so their product is a
+    // strike that is a different size every time.
+    //
+    // **The random is squared**, which is the whole of the waiting. Uniform, it
+    // strikes hard every other beat and reads as a flicker; multiplied by itself,
+    // most beats get almost nothing and about one in three is a real hit — and
+    // nothing about that is a threshold anyone has to tune.
+    //
+    // The strike then does three things and no more: it opens the blend the
+    // crackle arrives through, it throws the broken pieces further apart, and it
+    // lights the whole room through `paint`.
+    //
+    // A bolt is an `edge` of a noise field — the contour where the noise crosses
+    // its threshold, kept, with the field itself thrown away — and `slice` throws
+    // rows of that contour sideways, which is what makes it read as forked rather
+    // than as an outline.
+    //
+    // **`playback pulse` is deliberately not what fires it**, and this is worth
+    // knowing before wiring one: that signal decays across whatever division
+    // `rate` picked, so at one strike every eight beats it is a swell four beats
+    // long rather than a flash. A `wave` normalises to the beat and stays sharp.
+    //
+    // **Two energies are left unwired**, and both are the point. The field's is
+    // the room's, because a fine field is a frame full of contours and the strike
+    // wired into it lit half the wall white; left alone, a quiet room gets a few
+    // thin cracks and a loud one gets a web. The slice's is the room's too, so
+    // the rows re-throw on a musical division of their own and no two strikes
+    // break the same way.
+    storm: wire(
+      'Storm',
+      [
+        ['sky', 'source', 'plasma'],
+        ['cloud', 'source', 'noise'],
+        ['hit', 'wave', 'pulse'],
+        ['dice', 'playback', 'random'],
+        // The same outlet into both inlets: a number multiplied by itself, which
+        // is the cheapest way to make a chance rare rather than even.
+        ['odds', 'math', 'multiply'],
+        ['strike', 'math', 'multiply'],
+        // A wide tap and a hard gain, for the same reason `Outline` needs them:
+        // the gradient of a soft picture is a very small number.
+        ['bolt', 'spread', 'edge', { width: 0.52, gain: 0.88 }],
+        // The throw sits low and the strike carries it up, so the segments only
+        // fly apart on the hit and the sky is still between them.
+        ['jag', 'lens', 'slice', { bands: 0.66, throw: [0.24, 0.4] }],
+        ['dim', 'grade', 'levels', { gain: 0.32, lift: 0.4 }],
+        ['crack', 'blend', 'add'],
+        ['glare', 'paint'],
+        ['lit', 'blend', 'screen', { amount: 0.55 }],
+        ['o', 'out'],
+      ],
+      [
+        'dice/n -> odds/a',
+        'dice/n -> odds/b',
+        'hit/n -> strike/a',
+        'odds/n -> strike/b',
+        'cloud/c -> bolt/c',
+        'bolt/c -> jag/c',
+        'strike/n -> jag/throw',
+        'sky/c -> dim/c',
+        'dim/c -> crack/base',
+        'jag/c -> crack/top',
+        // Nothing set under this cord, which is the older reading and still the
+        // right one here: between strikes the crackle should not be there at all.
+        'strike/n -> crack/amount',
+        'strike/n -> glare/amount',
+        'crack/c -> lit/base',
+        'glare/c -> lit/top',
+        'lit/c -> o/c',
+      ],
+    ),
+    // Three of the others, as three nodes. The claim the vocabulary makes about
+    // itself — a look is a picture, so a look goes wherever a picture goes — and
+    // the only one of these you cannot read without believing it.
+    //
+    // `Water` is the wash, `Vortex` is folded into a window by a kaleidoscope
+    // that never touches its insides, and `Outline` puts the set's own edges on
+    // top. The fold is wired **point first**: `kaleido`'s `p` outlet into the look
+    // node's own point inlet, which is the whole reason that inlet exists. The
+    // sub-graph is evaluated at the folded point rather than folded afterwards,
+    // so the spiral bends into the wedges instead of being a picture of a spiral
+    // cut into pieces.
+    //
+    // It is also the most expensive look here by some way, and worth knowing why:
+    // `Vortex` ends in a `bloom` and `Water` in a `smear`, so one frame of this
+    // is nine evaluations of that spiral plus six of that plasma. Nesting does
+    // not add, it multiplies — which is the thing `MAX_LINES` is watching for.
+    lot: wire(
+      'The lot',
+      [
+        ['pt', 'point'],
+        ['fold', 'lens', 'kaleido', { segments: 0.24, spin: 0.62 }],
+        ['wheel', 'look', 'vortex'],
+        ['tide', 'look', 'water'],
+        ['ink', 'look', 'outline'],
+        ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.4],
+        // Open enough to see with nothing playing, and the meter brings the
+        // window up over the wash rather than switching it on.
+        ['mix', 'blend', 'screen', { amount: [0.55, 0.35] }],
+        ['over', 'blend', 'add', { amount: 0.7 }],
+        ['o', 'out'],
+      ],
+      [
+        'pt/p -> fold/p',
+        'fold/p -> wheel/p',
+        'tide/c -> mix/base',
+        'wheel/c -> mix/top',
+        'e/n -> mix/amount',
+        'mix/c -> over/base',
+        'ink/c -> over/top',
+        'over/c -> o/c',
       ],
     ),
   },

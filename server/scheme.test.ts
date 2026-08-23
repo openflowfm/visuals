@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { hint } from '../hints.ts';
-import { NODE_FAMILIES } from '../protocol.ts';
+import { NODE_FAMILIES, looksUsedBy } from '../protocol.ts';
 import { compileLook, reachesOut, repaired } from '../src/render/circuit.ts';
 import { BUILT_IN, merge } from './scheme.ts';
 
@@ -138,6 +138,26 @@ describe('the built-in scheme', () => {
     );
     for (const family of NODE_FAMILIES) {
       expect(family.kinds.some((kind) => kinds.has(kind)), family.name).toBe(true);
+    }
+  });
+
+  it('ships one look built out of the others, and it names looks that exist', () => {
+    // A look inside a look is the claim the vocabulary makes about itself, and a
+    // claim with no example in the library is one nobody believes.
+    //
+    // The names are the fragile part and the reason this is pinned: a `look` node
+    // holds an **id**, and a shipped look whose id changed would make the graph
+    // that used it go quiet rather than fail — which is right for a look somebody
+    // deleted and wrong for one that ships beside it.
+    const nested = Object.entries(BUILT_IN.looks).filter(
+      ([, def]) => looksUsedBy(def.circuit).length > 0,
+    );
+    expect(nested.length).toBeGreaterThan(0);
+    for (const [id, def] of nested) {
+      for (const used of looksUsedBy(def.circuit)) {
+        expect(BUILT_IN.looks[used], `${def.name} uses ${used}`).toBeDefined();
+      }
+      expect(compileLook(BUILT_IN.looks, id).error, def.name).toBeNull();
     }
   });
 

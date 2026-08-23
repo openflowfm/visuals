@@ -362,7 +362,7 @@ bipolar cosine from a unipolar wave, because its negative half stops at zero.
 on the face does not, and costs a cord across the canvas to say it. What it still does, and
 nothing else can, is put *the same* number on two inlets at once: turn it and both move.
 `Weather` in the built-in library is wired that way on purpose, and it is the only `value`
-node left in the ten looks that ship.
+node left in the thirteen looks that ship.
 
 ## `out` is one, required, and not in the browser
 
@@ -439,7 +439,7 @@ What is not right is a look that is only alive when the room is loud, because mo
 hours anyone spends in the designer are hours with no Live attached. The fix is in the wiring
 rather than in the number: **take the motion off the clock and let the meter add to it.**
 `phase`, `beat`, `pulse` and a `wave` all run whether or not anything is playing, since Link
-free-runs. The ten looks that ship keep that rule, and it is the difference between a
+free-runs. The thirteen looks that ship keep that rule, and it is the difference between a
 library that reads as calm at a desk and one that reads as broken.
 
 The bench and the node faces are both fed the **room's** energy — the control on the designer's
@@ -498,6 +498,15 @@ comes back round still reaches an outlet that is already open.
 
 A look that has been deleted makes the node draw nothing rather than failing. A look you
 deleted should make the thing that used it go quiet, not stop the show.
+
+**`The lot` is the shipped example**, and it is in the library rather than in this document
+because a paragraph about nesting convinces nobody. It is `Water` as a wash, `Vortex` folded
+by a kaleidoscope wired **point first** — the lens's `p` outlet into the look node's own point
+inlet, so the spiral bends into the wedges instead of being a picture of a spiral cut into
+pieces — and `Outline` adding the set's own edges on top. It is also the most expensive look
+that ships, and for the reason above: `Vortex` ends in a `bloom` and `Water` in a `smear`, so
+one frame is nine evaluations of that spiral and six of that plasma. Taking it apart is the
+fastest way to find out what nesting costs.
 
 ## The designer is the product
 
