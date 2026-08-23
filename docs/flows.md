@@ -1,6 +1,7 @@
 # Flows
 
-`protocol.ts`, `src/render/circuit.ts`, `src/render/shaders.ts`, `src/ui/Designer.tsx`.
+`protocol.ts`, `src/render/circuit.ts`, `src/render/glsl/*`,
+`src/render/shaders.ts`, `src/ui/Designer.tsx`.
 The one noun, the vocabulary it is wired from, and the compiler underneath.
 
 ## One noun, and it is a graph

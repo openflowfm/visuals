@@ -2,6 +2,15 @@
 
 `src/render/`. WebGL2, two passes and an output stage.
 
+Shader source is split by responsibility under `src/render/glsl/`: `common.ts`
+owns the uniforms and shared coordinate/clock helpers, `sources.ts` owns the
+lightweight generators, `fractal.ts` owns bounded iterative pictures,
+`effects.ts` owns single-read image operations, and `circuit.ts` owns helpers
+used only by graph expressions. `src/render/shaders.ts` is the assembly boundary
+for full flow and per-track fragment shaders; `src/render/circuit.ts` compiles a
+graph against that boundary. The final projector pass stays in
+`src/render/output.ts`, because it is a separate program with separate uniforms.
+
 ## The frame
 
 ```
@@ -141,7 +150,8 @@ per playing track is the GPU failure this boundary prevents.
 | `edge` | four taps, a fraction of the frame apart. The one that makes a busy frame *less* busy |
 | `shift` | three taps, one per channel, opening with the level so it bites on transients |
 
-Adding a lightweight picture is a body in `GENERATOR_BODIES` and a name in `SOURCES`, and nothing else:
+Adding a lightweight picture is a body in `glsl/sources.ts`'s `GENERATOR_BODIES`
+and a name in `SOURCES`, and nothing else:
 the same body serves the `source` node and the track pass, so what a built-in draws and what
 a node draws cannot drift. An iterative picture belongs in a dedicated kind with an explicit
 work cost, as `fractal` does, so the compiler can see cost that GLSL line counting cannot.
