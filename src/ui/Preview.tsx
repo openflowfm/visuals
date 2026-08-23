@@ -6,7 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import type { Circuit, CircuitNode, Scheme, Show } from '../../protocol.ts';
-import { Button } from '../../../widgets/src/controls/Button.tsx';
+import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { createCompositor } from '../render/compositor.ts';
 import { inside, usePlace, type Place } from '../state/usePlace.ts';
 import { withStandIns } from '../state/useRoom.ts';

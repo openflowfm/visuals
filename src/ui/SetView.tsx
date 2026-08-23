@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import type { Scheme, SetGrid, Show } from '../../protocol.ts';
-import { Button } from '../../../widgets/src/controls/Button.tsx';
-import { NumberField } from '../../../widgets/src/controls/NumberField.tsx';
-import { Select } from '../../../widgets/src/controls/Select.tsx';
-import { Toggle } from '../../../widgets/src/controls/Toggle.tsx';
+import { Button } from '@openflow/widgets/controls/Button.tsx';
+import { NumberField } from '@openflow/widgets/controls/NumberField.tsx';
+import { Select } from '@openflow/widgets/controls/Select.tsx';
+import { Toggle } from '@openflow/widgets/controls/Toggle.tsx';
 import { Colorways } from './Colorways.tsx';
 import { flowList, toggleId } from './edits.ts';
 import { newSeed, ROLL_ABOUT, ROLL_PARTS, rollScheme, type RollPart } from '../../roll.ts';

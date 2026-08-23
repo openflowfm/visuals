@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Circuit, NodeKind, Scheme, Show } from '../../protocol.ts';
 import { wouldLoop } from '../../protocol.ts';
-import type { GraphView } from '../../../widgets/src/chrome/Graph.tsx';
-import { format } from '../../../widgets/src/param/format.ts';
-import { Button } from '../../../widgets/src/controls/Button.tsx';
-import { Knob } from '../../../widgets/src/controls/Knob.tsx';
-import { NumberField } from '../../../widgets/src/controls/NumberField.tsx';
-import { Select } from '../../../widgets/src/controls/Select.tsx';
-import { Toggle } from '../../../widgets/src/controls/Toggle.tsx';
+import type { GraphView } from '@openflow/widgets/chrome/Graph.tsx';
+import { format } from '@openflow/widgets/param/format.ts';
+import { Button } from '@openflow/widgets/controls/Button.tsx';
+import { Knob } from '@openflow/widgets/controls/Knob.tsx';
+import { NumberField } from '@openflow/widgets/controls/NumberField.tsx';
+import { Select } from '@openflow/widgets/controls/Select.tsx';
+import { Toggle } from '@openflow/widgets/controls/Toggle.tsx';
 import { CircuitEditor, type NumberReading } from './Circuit.tsx';
 import {
   addFlow,

@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import type { Scheme, SetGrid, Show } from '../../protocol.ts';
-import '../../../widgets/src/tokens.css';
-import { Button } from '../../../widgets/src/controls/Button.tsx';
-import { Segmented } from '../../../widgets/src/controls/Segmented.tsx';
+import '@openflow/widgets/tokens.css';
+import { Button } from '@openflow/widgets/controls/Button.tsx';
+import { Segmented } from '@openflow/widgets/controls/Segmented.tsx';
 import { Designer } from './Designer.tsx';
 import { SetView } from './SetView.tsx';
 import type { Clock } from '../state/useShow.ts';

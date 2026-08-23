@@ -20,7 +20,6 @@
     "server",
     "mcp",
     "tools",
-    "../protocol",
-    "../widgets/src"
+    "../protocol"
   ]
 }

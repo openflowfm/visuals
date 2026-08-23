@@ -1,5 +1,5 @@
 import type { Scheme } from '../../protocol.ts';
-import { Button } from '../../../widgets/src/controls/Button.tsx';
+import { Button } from '@openflow/widgets/controls/Button.tsx';
 
 /**
  * The colours a song can be assigned, and how to author one.

@@ -5,13 +5,13 @@ import {
   GraphNode,
   type GraphCord,
   type GraphView,
-} from '../../../widgets/src/chrome/Graph.tsx';
-import { Port } from '../../../widgets/src/chrome/Port.tsx';
-import { Device, DevicePortRow } from '../../../widgets/src/chrome/Device.tsx';
-import { Button } from '../../../widgets/src/controls/Button.tsx';
-import { Meter } from '../../../widgets/src/controls/Meter.tsx';
-import { Select } from '../../../widgets/src/controls/Select.tsx';
-import { Slider } from '../../../widgets/src/controls/Slider.tsx';
+} from '@openflow/widgets/chrome/Graph.tsx';
+import { Port } from '@openflow/widgets/chrome/Port.tsx';
+import { Device, DevicePortRow } from '@openflow/widgets/chrome/Device.tsx';
+import { Button } from '@openflow/widgets/controls/Button.tsx';
+import { Meter } from '@openflow/widgets/controls/Meter.tsx';
+import { Select } from '@openflow/widgets/controls/Select.tsx';
+import { Slider } from '@openflow/widgets/controls/Slider.tsx';
 import {
   inletsOf,
   modesOf,

@@ -1,4 +1,4 @@
-import type { Param } from '../../../widgets/src/param/param.ts';
+import type { Param } from '@openflow/widgets/param/param.ts';
 
 /**
  * The one adapter between `widgets/` and this app.
