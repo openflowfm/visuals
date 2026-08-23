@@ -176,8 +176,9 @@ function columnsOf(ids: readonly string[], cords: readonly { from: string; to: s
  * draws nothing with no clip playing, so five of these went black between songs.
  * There is a ring under `Folded`, a grid under `Outline`, a wash under `Poster`
  * and a scan pattern under `Glitch`, each blended so a playing set is what you
- * see and each there when it is not. `The set` is the exception on purpose: it is
- * one node, and what it draws is what is playing.
+ * see and each there when it is not. There is no exception: `The set` was one,
+ * a lone `tracks` node that went black between songs, and a look that is one
+ * node is a node — the browser already offers it under `draw`.
  *
  * **Nothing here is wired to something that cannot move it.** The old `Weather`
  * drove a `hue` from `song seed`, and a set with no song names holds that at a
@@ -193,16 +194,6 @@ function columnsOf(ids: readonly string[], cords: readonly { from: string; to: s
  */
 const BUILT_IN: Scheme = {
   looks: {
-    // One node. The floor of the vocabulary, and the claim the rig is built on:
-    // point it at a Live set and it draws the Live set.
-    live: wire(
-      'The set',
-      [
-        ['live', 'tracks', 'by name'],
-        ['o', 'out'],
-      ],
-      ['live/c -> o/c'],
-    ),
     // A colour is a function of a point. The set is read through a swirl that
     // sways once a bar, and the kaleidoscope folds the whole chain rather than
     // an image of it — which is the one idea the rest of the model falls out of.
@@ -820,7 +811,7 @@ const BUILT_IN: Scheme = {
   songs: {},
   defaults: {
     colorway: 'ember',
-    look: 'live',
+    look: 'folded',
     pace: 0,
     draws: 'by name',
   },

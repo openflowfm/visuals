@@ -153,7 +153,7 @@ between a set you can navigate and a set that looks right.
 scheme in `server/scheme.ts` is a complete show and the file only ever overrides parts of it.
 
 Overrides are shallow per section: naming one colourway does not delete the other three, and
-registering one look does not remove the thirteen that ship.
+registering one look does not remove the twelve that ship.
 
 A parse error **keeps the scheme that was already working** and reports the message in the
 panel. Losing the show to a trailing comma is the wrong answer at any time and an unthinkable
@@ -178,16 +178,15 @@ id, and a built-in *added* since that save does arrive, because there is nothing
 to shadow it. Deleting the shipped entries from the file is the whole fix, and it is worth
 knowing before wondering why an updated library did not arrive.
 
-## The thirteen that ship
+## The twelve that ship
 
 `BUILT_IN.looks` in `server/scheme.ts`, and they are the manual: nobody reads a node
 reference and everybody takes a working example apart. So they are a **spread** rather than
-thirteen variations, one lesson each — and because the wheel turns through everything by
+twelve variations, one lesson each — and because the wheel turns through everything by
 default, they are also the show a fresh clone puts on.
 
 | look | what it is for |
 |---|---|
-| **The set** | one node. The floor of the vocabulary, and the claim the rig is built on |
 | **Folded** | a colour is a function of a point: the set and a ring of its own, read through a swirl and folded by a kaleidoscope that moves the whole chain |
 | **Deep** | two pictures, one of them the room's — a corridor with the set screened into it and graded |
 | **Weather** | no set and no shipped picture: `polar` makes two numbers out of a position, `paint` makes a colour out of one and `hue` makes every colour out of the other |
@@ -196,7 +195,7 @@ default, they are also the show a fresh clone puts on.
 | **Gateway** | geometry happens *before* the picture — `fold` and a bare point feed two sources that never meet until the blend |
 | **Outline** | the set as a diagram. `edge` keeps the outline and throws the fill away — over a grid, so there are always edges to find, and over a ghost of the same junction |
 | **Poster** | flat bands, and the one look that changes with the *music* rather than the playing: `posterize` to four steps over a wash, hue rotated by the song's key |
-| **Glitch** | two lenses, a spread and two grades in a row and nothing else, over a scan pattern there is always something to break in — the other end of the vocabulary from `The set` |
+| **Glitch** | two lenses, a spread and two grades in a row and nothing else, over a scan pattern there is always something to break in — the busiest thing here, and the one that teaches how far a chain of small steps gets |
 | **Lava** | a threshold walked slowly off `time` rather than the beat, and a cord run backwards by a negative depth |
 | **Storm** | a `wave` snapped to the beat times a squared `random`, gating a contour cut out of a noise field — a strike that is rarely big and never the same size twice |
 | **The lot** | three of the others as three nodes, one of them folded by a kaleidoscope that never touches its insides |
@@ -232,8 +231,9 @@ that should twitch.
 `tracks` node draws nothing, which used to mean five of these went black between songs. There
 is a ring under `Folded`, a grid under `Outline`, a wash under `Poster` and a scan pattern
 under `Glitch` — each blended so a playing set is what you see, and each there when it is not.
-`The set` is the one exception, and deliberately: it is one node, and what it draws is what
-is playing.
+There is no exception. There was one, `The set`, a lone `tracks` node that drew what was
+playing and nothing when nothing was; it is gone, because a look that is a single node is
+that node, and the browser already offers `tracks` under `draw`.
 
 **Nothing is wired to something that cannot move it.** `Weather` used to drive a `hue` from
 `song seed`, and a set with no song names holds that at a half — which is exactly the

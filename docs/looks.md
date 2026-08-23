@@ -362,7 +362,7 @@ bipolar cosine from a unipolar wave, because its negative half stops at zero.
 on the face does not, and costs a cord across the canvas to say it. What it still does, and
 nothing else can, is put *the same* number on two inlets at once: turn it and both move.
 `Weather` in the built-in library is wired that way on purpose, and it is the only `value`
-node left in the thirteen looks that ship.
+node left in the twelve looks that ship.
 
 ## `out` is one, required, and not in the browser
 
@@ -454,7 +454,7 @@ track master ────> b ┘                   and the meter wins above that
 clock is doing — which is how a floor becomes a ceiling. The range on `a` is what keeps the
 floor off the ground without pinning the top: an energy at 0.3 is a picture, an energy at 0
 is the same picture at its dullest setting, and the difference between those two is most of
-what "it looks dead at a desk" ever meant. The thirteen looks that ship keep that rule, a
+what "it looks dead at a desk" ever meant. The twelve looks that ship keep that rule, a
 test asserts it, and it is the difference between a library that reads as calm at a desk and
 one that reads as broken.
 

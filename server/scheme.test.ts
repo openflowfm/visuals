@@ -183,17 +183,16 @@ describe('the built-in scheme', () => {
     }
   });
 
-  it('draws something with no set playing, except the one that is only the set', () => {
+  it('draws something with no set playing', () => {
     // Sometimes all that is running is the click. A wheel that turns through
-    // thirteen looks and goes black on five of them between songs is a wheel
-    // nobody leaves running, so every look but `The set` carries a picture of its
-    // own underneath whatever the set is doing.
+    // twelve looks and goes black on five of them between songs is a wheel
+    // nobody leaves running, so every look carries a picture of its own
+    // underneath whatever the set is doing.
     //
-    // `The set` is exempt because it *is* the claim: one node, and what it draws
-    // is what is playing. A picture wired under that one would be a different
-    // promise.
-    for (const [id, def] of Object.entries(BUILT_IN.looks)) {
-      if (id === 'live') continue;
+    // There used to be an exemption here for `The set`, which was one `tracks`
+    // node and nothing else. It went, and so did the exemption: a look that is
+    // a single node is a node, and the node browser already offers it.
+    for (const [, def] of Object.entries(BUILT_IN.looks)) {
       const kinds = new Set(def.circuit.nodes.map((node) => node.kind));
       const draws = kinds.has('source') || kinds.has('paint') || kinds.has('look');
       expect(draws, `${def.name} has nothing to draw without the set`).toBe(true);
