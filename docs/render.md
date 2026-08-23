@@ -117,7 +117,7 @@ five sources all drawing soft noise is one picture, however many of them there a
 |---|---:|
 | `cells` | jittered cellular F1: nine neighbouring feature checks |
 | `clouds` | four octaves of gradient noise: sixteen lattice-corner visits |
-| `metaballs` | four summed Gaussian densities |
+| `metaballs` | two to seven summed Gaussian densities: seven visits at the hard ceiling |
 
 These names are algorithm contracts rather than visual approximations. `cells` is the bounded
 one-feature-per-cell GPU form of [Worley F1](https://doi.org/10.1145/237170.237267);
@@ -130,11 +130,17 @@ five new pictures. The GLSL independently implements the same definitions, while
 ensure every mode reaches the graph compiler and every genuinely lightweight source reaches the
 per-track shader path.
 
+Metaballs expose `balls`, which selects two through seven active fields, and `apart`, which
+moves their independently sized, phased and directed orbits away from the centre. Their
+Gaussian fields are summed before the implicit threshold rather than averaged, so adding a
+ball preserves the characteristic separate-touch-merge motion instead of dimming every ball.
+
 The `field` split is a GPU boundary. A `source` may run once per playing track, so only the
 constant-work checker and rays belong there. A field is never offered as a per-track picture,
-and its 9/16/4 work charge is counted every time a graph samples it. Four direct cloud samples
+and its 9/16/7 work charge is counted every time a graph samples it. Four direct cloud samples
 exactly fill the 64-unit graph ceiling; a nine-tap bloom over one is refused before the shader
-reaches the driver.
+reaches the driver. A seven-ball metaball bloom costs 63, so that specific showcase retains its
+full bloom with one unit to spare.
 
 | `fractal` — one iterative node, two modes | |
 |---|---|

@@ -1,3 +1,8 @@
+/** The controllable bounds for the metaball colony's static loop. */
+export const METABALL_MIN = 2;
+export const METABALL_MAX = 7;
+const METABALL_LEVELS = METABALL_MAX - METABALL_MIN + 1;
+
 /**
  * Fixed work performed by one evaluation of each bounded field.
  *
@@ -9,7 +14,7 @@
 export const FIELD_WORK = {
   cells: 9,
   clouds: 16,
-  metaballs: 4,
+  metaballs: METABALL_MAX,
 } as const;
 
 export type FieldMode = keyof typeof FIELD_WORK;
@@ -95,21 +100,30 @@ float fieldFbm(vec2 p) {
   return clamp(0.5 + 0.5 * total / (normalizer * 1.41421356237), 0.0, 1.0);
 }
 
-// Four Gaussian densities. Gaussian kernels stay finite at their centres,
-// unlike inverse-square metaballs, and their sum is normalized to 0..1.
-float fieldMetaballDensity(vec2 p, float e) {
+// Two to seven Gaussian densities. Gaussian kernels stay finite at their
+// centres, unlike inverse-square metaballs. The fields are deliberately summed
+// rather than averaged: two nearby balls cross the implicit threshold together
+// and visibly merge instead of merely dimming as the count rises.
+float fieldMetaballDensity(vec2 p, float e, float balls, float apart) {
   float total = 0.0;
-  float spread = mix(8.0, 18.0, e);
-  for (int i = 0; i < 4; i++) {
+  int activeBalls = min(${METABALL_MAX}, ${METABALL_MIN} +
+    int(floor(clamp(balls, 0.0, 1.0) * ${METABALL_LEVELS}.0)));
+  float colonyRadius = mix(0.08, 0.55, apart);
+  for (int i = 0; i < ${METABALL_MAX}; i++) {
+    if (i >= activeBalls) continue;
     ivec2 key = ivec2(i * 13 + 5, i * 29 + 11);
-    float angle = fieldHash(key) * 6.28318530718 +
-                  uBeat * mix(-0.16, 0.16, fieldHash(key + ivec2(7, 3)));
-    float orbit = mix(0.12, 0.48, fieldHash(key + ivec2(17, 23)));
-    vec2 centre = vec2(cos(angle), sin(angle)) * orbit;
+    float direction = fieldHash(key + ivec2(7, 3)) < 0.5 ? -1.0 : 1.0;
+    float speed = mix(0.07, 0.22, fieldHash(key + ivec2(17, 23))) * direction;
+    float angle = fieldHash(key) * 6.28318530718 + uBeat * speed;
+    float orbit = colonyRadius * mix(0.35, 1.0, fieldHash(key + ivec2(31, 19)));
+    float ellipse = mix(0.65, 1.25, fieldHash(key + ivec2(43, 37)));
+    vec2 centre = vec2(cos(angle), sin(angle) * ellipse) * orbit;
     vec2 delta = p - centre;
-    total += exp(-dot(delta, delta) * spread);
+    float hardness = mix(18.0, 32.0, e) *
+                     mix(0.72, 1.28, fieldHash(key + ivec2(59, 41)));
+    total += exp(-dot(delta, delta) * hardness);
   }
-  return clamp(total * 0.25, 0.0, 1.0);
+  return total;
 }
 
 vec4 field_cells(vec2 p, float e) {
@@ -128,10 +142,10 @@ vec4 field_clouds(vec2 p, float e) {
   return vec4(colour, coverage);
 }
 
-vec4 field_metaballs(vec2 p, float e) {
-  float density = fieldMetaballDensity(p, e);
-  float coverage = smoothstep(0.07, 0.23, density);
-  float rim = 1.0 - smoothstep(0.0, 0.04, abs(density - 0.16));
+vec4 field_metaballs(vec2 p, float e, float balls, float apart) {
+  float density = fieldMetaballDensity(p, e, balls, apart);
+  float coverage = smoothstep(0.45, 0.85, density);
+  float rim = 1.0 - smoothstep(0.0, 0.10, abs(density - 0.62));
   vec3 colour = mix(uColor, vec3(1.0) - uColor, rim * 0.45);
   return vec4(colour, clamp(coverage + rim * 0.25, 0.0, 1.0));
 }

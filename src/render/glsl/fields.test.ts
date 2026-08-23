@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { FIELD_LIB, FIELD_MAX_WORK, FIELD_WORK } from './fields.ts';
+import {
+  FIELD_LIB,
+  FIELD_MAX_WORK,
+  FIELD_WORK,
+  METABALL_MAX,
+  METABALL_MIN,
+} from './fields.ts';
 
 type Point = readonly [number, number];
 
@@ -83,19 +89,37 @@ const fbm = ([startX, startY]: Point, seed = 3.71): number => {
   return clamp(0.5 + 0.5 * total / (normalizer * Math.SQRT2));
 };
 
-/** Four finite Gaussian densities, with explicit centres for invariant tests. */
+/** Finite summed Gaussian densities, with explicit centres for invariant tests. */
 const metaballs = (point: Point, centres: readonly Point[], spread: number): number => {
-  const total = centres.reduce((sum, centre) => {
+  return centres.reduce((sum, centre) => {
     const dx = point[0] - centre[0];
     const dy = point[1] - centre[1];
     return sum + Math.exp(-(dx * dx + dy * dy) * spread);
   }, 0);
-  return clamp(total / centres.length);
+};
+
+/** The shader's 0–1 control mapped to an integer colony size. */
+const activeBalls = (value: number): number =>
+  Math.min(
+    METABALL_MAX,
+    METABALL_MIN + Math.floor(clamp(value) * (METABALL_MAX - METABALL_MIN + 1)),
+  );
+
+/** Independent form of one seeded elliptical orbit from the shader. */
+const metaballCentre = (index: number, beat: number, apart: number, seed = 3.71): Point => {
+  const key: Point = [index * 13 + 5, index * 29 + 11];
+  const direction = hash(key[0] + 7, key[1] + 3, seed) < 0.5 ? -1 : 1;
+  const speed = lerp(0.07, 0.22, hash(key[0] + 17, key[1] + 23, seed)) * direction;
+  const angle = hash(key[0], key[1], seed) * Math.PI * 2 + beat * speed;
+  const colonyRadius = lerp(0.08, 0.55, clamp(apart));
+  const orbit = colonyRadius * lerp(0.35, 1, hash(key[0] + 31, key[1] + 19, seed));
+  const ellipse = lerp(0.65, 1.25, hash(key[0] + 43, key[1] + 37, seed));
+  return [Math.cos(angle) * orbit, Math.sin(angle) * ellipse * orbit];
 };
 
 describe('bounded field work', () => {
   it('charges every primitive visit and exposes the worst single field', () => {
-    expect(FIELD_WORK).toEqual({ cells: 9, clouds: 16, metaballs: 4 });
+    expect(FIELD_WORK).toEqual({ cells: 9, clouds: 16, metaballs: 7 });
     expect(FIELD_MAX_WORK).toBe(16);
   });
 
@@ -103,14 +127,17 @@ describe('bounded field work', () => {
     expect(FIELD_LIB).toContain('for (int y = -1; y <= 1; y++)');
     expect(FIELD_LIB).toContain('for (int x = -1; x <= 1; x++)');
     expect(FIELD_LIB).toContain('for (int octave = 0; octave < 4; octave++)');
-    expect(FIELD_LIB).toContain('for (int i = 0; i < 4; i++)');
+    expect(FIELD_LIB).toContain('for (int i = 0; i < 7; i++)');
     expect(FIELD_LIB).not.toMatch(/\bwhile\s*\(/);
   });
 
   it('offers one generator-shaped entry point for every charged mode', () => {
     for (const mode of Object.keys(FIELD_WORK)) {
-      expect(FIELD_LIB).toContain(`vec4 field_${mode}(vec2 p, float e)`);
+      expect(FIELD_LIB).toContain(`vec4 field_${mode}(vec2 p, float e`);
     }
+    expect(FIELD_LIB).toContain(
+      'vec4 field_metaballs(vec2 p, float e, float balls, float apart)',
+    );
   });
 });
 
@@ -167,11 +194,48 @@ describe('finite Gaussian metaballs', () => {
     );
   });
 
-  it('falls as a point moves away from every centre and remains normalized', () => {
+  it('sums rather than averages, so another nearby ball strengthens the implicit field', () => {
+    const point: Point = [0.12, -0.08];
+    const one = metaballs(point, centres.slice(0, 1), 12);
+    const colony = metaballs(point, centres, 12);
+    expect(colony).toBeGreaterThan(one);
+    expect(colony).toBeCloseTo(
+      centres.reduce((sum, centre) => sum + metaballs(point, [centre], 12), 0),
+      14,
+    );
+  });
+
+  it('falls as a point moves away from every centre and remains non-negative', () => {
     const near = metaballs([0, 0], centres, 12);
     const far = metaballs([2, 2], centres, 12);
     expect(near).toBeGreaterThan(far);
     expect(near).toBeGreaterThanOrEqual(0);
-    expect(near).toBeLessThanOrEqual(1);
+  });
+
+  it('maps the full control range onto two through seven active balls', () => {
+    expect([0, 1 / 6, 0.5, 5 / 6, 1].map(activeBalls)).toEqual([2, 3, 5, 7, 7]);
+    for (let value = 0; value <= 1; value += 0.01) {
+      expect(activeBalls(value)).toBeGreaterThanOrEqual(METABALL_MIN);
+      expect(activeBalls(value)).toBeLessThanOrEqual(METABALL_MAX);
+    }
+  });
+
+  it('gives every ball a deterministic orbit that moves farther out with apart', () => {
+    const near = Array.from({ length: METABALL_MAX }, (_, index) =>
+      metaballCentre(index, 12.5, 0.1),
+    );
+    const far = Array.from({ length: METABALL_MAX }, (_, index) =>
+      metaballCentre(index, 12.5, 0.9),
+    );
+    expect(near).toEqual(
+      Array.from({ length: METABALL_MAX }, (_, index) => metaballCentre(index, 12.5, 0.1)),
+    );
+    expect(new Set(near.map(([x, y]) => `${x.toFixed(8)},${y.toFixed(8)}`)).size).toBe(
+      METABALL_MAX,
+    );
+    for (let index = 0; index < METABALL_MAX; index++) {
+      expect(Math.hypot(...far[index])).toBeGreaterThan(Math.hypot(...near[index]));
+      expect(metaballCentre(index, 13.5, 0.9)).not.toEqual(far[index]);
+    }
   });
 });

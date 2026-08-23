@@ -56,12 +56,13 @@ that takes a second to compile — the number is high enough that no sane graph 
 and [the roll](wheel.md) deliberately never wires those four.
 
 A bounded procedural node needs a second answer, because a loop or repeated kernel may still
-be one GLSL statement. `field` charges 9, 16, or 4 primitive visits for cells, clouds, or
+be one GLSL statement. `field` charges 9, 16, or 7 primitive visits for cells, clouds, or
 metaballs; `fractal` charges its thirty-two-step orbit ceiling. The compiler adds that work
 every time the graph asks for the picture at another point, so a three-tap colour shift over
 clouds fits while a nine-tap bloom is refused. Two direct fractals fit; putting one under any
-`spread` does not. A control may stop work sooner, but controls can turn after compilation,
-so the budget is always the hard ceiling rather than what happens to be visible now.
+`spread` does not. A seven-ball metaball under the same nine-tap bloom costs 63 of 64 and fits.
+A control may stop work sooner, but controls can turn after compilation, so the budget is
+always the hard ceiling rather than what happens to be visible now.
 
 ## Three signals
 
@@ -251,7 +252,7 @@ editors listing these differently would be two different vocabularies.
 |---|---|---|---|
 | `tracks` | `p` | `c` | **the Live set**: every playing track, drawn and mixed. Fire a scene, it changes |
 | `source` | `p` `energy` | `c` | one of thirteen, including `checker` and `rays`; all are safe as per-track pictures |
-| `field` | `p` `energy` | `c` | `cells` `clouds` `metaballs`; fixed work, charged per graph sample and never offered per track |
+| `field` | `p` `energy`, plus `balls` `apart` on metaballs | `c` | `cells` `clouds` `metaballs`; fixed work, charged per graph sample and never offered per track |
 | `fractal` | `p` `energy` + its mode's numbers | `c` | `mandelbrot` or `julia`, with bounded zoom, detail and iterative work |
 | `flow` | `p` | `c` | another flow, whole, as one node |
 | `paint` | `amount` `energy` | `c` | the colourway's colour at a brightness |

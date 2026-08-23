@@ -352,7 +352,7 @@ const modeOf = <const Modes extends readonly string[]>(
 /**
  * Which numbers each mode takes, by the family that owns it.
  *
- * Kept as three tables rather than one because the split is the point: the list
+ * Kept as separate tables rather than one because the split is the point: the list
  * is the shape of a *mode*, and a mode belongs to exactly one kind now.
  */
 const LENS_VALUES = {
@@ -392,11 +392,18 @@ const FRACTAL_VALUES = {
   julia: ['zoom', 'turn', 'detail', 'shape'],
 } as const satisfies Record<string, readonly string[]>;
 
+const FIELD_VALUES = {
+  cells: [],
+  clouds: [],
+  metaballs: ['balls', 'apart'],
+} as const satisfies Record<string, readonly string[]>;
+
 type ValueInlet =
   | (typeof LENS_VALUES)[keyof typeof LENS_VALUES][number]
   | (typeof GRADE_VALUES)[keyof typeof GRADE_VALUES][number]
   | (typeof SPREAD_VALUES)[keyof typeof SPREAD_VALUES][number]
-  | (typeof FRACTAL_VALUES)[keyof typeof FRACTAL_VALUES][number];
+  | (typeof FRACTAL_VALUES)[keyof typeof FRACTAL_VALUES][number]
+  | (typeof FIELD_VALUES)[keyof typeof FIELD_VALUES][number];
 
 /**
  * Every mode-dependent control, by the port name the graph saves.
@@ -436,6 +443,8 @@ const VALUE_DESCRIPTION: Record<ValueInlet, string> = {
   zoom: 'How deeply the fractal is magnified, on a bounded logarithmic scale.',
   detail: 'How many bounded orbit steps are used to reveal fine structure.',
   shape: 'Which Julia-set seed is traced around the useful connected region.',
+  balls: 'How many metaballs are active, from two through the bounded ceiling of seven.',
+  apart: 'How far the metaballs orbit from the centre before their fields merge.',
 };
 
 /** Where a number starts when nobody has turned it. A half unless it says. */
@@ -445,6 +454,8 @@ const VALUE_AT: Record<string, number> = {
   count: 0.3,
   zoom: 0,
   detail: 0.35,
+  balls: 0.4,
+  apart: 0.5,
 };
 
 /** The modes that read an energy. The rest have no such inlet to leave unwired. */
@@ -459,6 +470,9 @@ const NEEDS_ENERGY = new Set([
   'shift',
   'mandelbrot',
   'julia',
+  'cells',
+  'clouds',
+  'metaballs',
 ]);
 
 const valuePorts = (names: readonly ValueInlet[], op: string): PortSpec[] => [
@@ -611,7 +625,7 @@ const SOURCE_MODES = documentedModes(SOURCES, {
 const FIELD_MODE_DOCUMENTATION = documentedModes(FIELD_MODES, {
   cells: 'Distance to the nearest jittered feature point in a bounded cellular field.',
   clouds: 'Four fixed octaves of gradient noise drifting as one continuous field.',
-  metaballs: 'Four moving Gaussian fields that merge into soft implicit shapes.',
+  metaballs: 'Two to seven independently orbiting Gaussian fields that merge into soft shapes.',
 });
 
 const FRACTAL_MODE_DOCUMENTATION = documentedModes(FRACTAL_MODES, {
@@ -761,14 +775,22 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     name: 'field',
     description:
       'A bounded procedural picture whose fixed work is charged before the graph reaches the GPU.',
-    inlets: [P('p', 'Where in the procedural field to read.'), E()],
+    inlets: (node) => {
+      const op = modeOf(node, FIELD_MODES);
+      return [
+        P('p', 'Where in the procedural field to read.'),
+        ...valuePorts(FIELD_VALUES[op], op),
+      ];
+    },
     outlets: [C('c', 'The generated field picture.')],
     modes: FIELD_MODE_DOCUMENTATION,
     work: (node) => FIELD_WORK[modeOf(node, FIELD_MODES)],
     emit: (c) => {
       const op = modeOf(c.node, FIELD_MODES);
+      const values = FIELD_VALUES[op];
+      const args = [c.read('p'), c.read('energy'), ...values.map((name) => c.read(name))];
       return {
-        c: `laid(field_${op}(${c.read('p')}, ${c.read('energy')}), ${c.read('energy')})`,
+        c: `laid(field_${op}(${args.join(', ')}), ${c.read('energy')})`,
       };
     },
   },

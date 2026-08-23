@@ -49,6 +49,12 @@ describe('the agent-facing node catalog', () => {
     });
     expect(
       catalog
+        .find((node) => node.kind === 'field')
+        ?.variants.find((variant) => variant.mode === 'metaballs')
+        ?.inlets.map((port) => port.name),
+    ).toEqual(['p', 'energy', 'balls', 'apart']);
+    expect(
+      catalog
         .find((node) => node.kind === 'wave')
         ?.variants[0].inlets.find((port) => port.name === 'phase')?.liveDefault,
     ).toBe('beat');

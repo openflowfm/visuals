@@ -259,6 +259,22 @@ describe('the bounded procedural field node', () => {
     }
   });
 
+  it('offers colony controls only on metaballs and passes both into its shader entry point', () => {
+    expect(
+      inletsOf({ id: 'cells', kind: 'field', op: 'cells', x: 0, y: 0 }).map(
+        (port) => port.name,
+      ),
+    ).toEqual(['p', 'energy']);
+    expect(
+      inletsOf({ id: 'metaballs', kind: 'field', op: 'metaballs', x: 0, y: 0 }).map(
+        (port) => port.name,
+      ),
+    ).toEqual(['p', 'energy', 'balls', 'apart']);
+
+    const built = compileCircuit(field('metaballs'));
+    expect(bodyOf(built.source!)).toMatch(/field_metaballs\([^,]+, [^,]+, [^,]+, [^)]+\)/);
+  });
+
   it('allows bounded sampling and refuses a multiplication beyond the work budget', () => {
     const sampled = (spread: 'shift' | 'bloom') =>
       compileCircuit(
@@ -278,6 +294,25 @@ describe('the bounded procedural field node', () => {
     expect(sampled('shift').error).toBeNull();
     expect(sampled('bloom').source).toBeNull();
     expect(sampled('bloom').error).toMatch(/costly picture.*sampled too many times/);
+  });
+
+  it('keeps a seven-ball nine-tap bloom one work unit below the ceiling', () => {
+    const bloomed = compileCircuit(
+      wire(
+        [
+          { id: 'f', kind: 'field', op: 'metaballs', x: 0, y: 0 },
+          { id: 's', kind: 'spread', op: 'bloom', x: 1, y: 0 },
+          { id: 'o', kind: 'out', x: 2, y: 0 },
+        ],
+        [
+          { from: 'f/c', to: 's/c' },
+          { from: 's/c', to: 'o/c' },
+        ],
+      ),
+    );
+
+    expect(FIELD_WORK.metaballs * 9).toBe(63);
+    expect(bloomed.error).toBeNull();
   });
 });
 
