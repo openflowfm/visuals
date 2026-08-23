@@ -7,6 +7,7 @@ import {
   TRACK_READS,
   SONG_FACTS,
   SOURCES,
+  FIELD_MODES,
   FRACTAL_MODES,
   TRACK_DRAWS,
   WAVE_SHAPES,
@@ -17,6 +18,7 @@ import {
   type NodeKind,
 } from '../../protocol.ts';
 import { CIRCUIT_HELPERS } from './glsl/circuit.ts';
+import { FIELD_WORK } from './glsl/fields.ts';
 import { FRACTAL_ITERATIONS, flowPreamble } from './shaders.ts';
 
 /**
@@ -168,13 +170,14 @@ export interface NodeSpec extends NodeDocumentation {
   /** True when the modes are names from the set rather than a fixed list. */
   named?: 'track' | 'flow';
   /**
-   * Worst-case iterative work each evaluation adds to the shader budget.
+   * Worst-case fixed work each evaluation adds to the shader budget.
    *
    * Most nodes are straight expressions and cost nothing here. An iterative
-   * node names its loop ceiling, so reading it at nine bloom taps costs nine
-   * times what reading it once does even though both are only a few GLSL lines.
+   * node names its loop or sample ceiling, so reading it at nine bloom taps
+   * costs nine times what reading it once does even though both are only a few
+   * GLSL lines. A function may charge modes with different fixed bounds.
    */
-  work?: number;
+  work?: number | ((node: CircuitNode) => number);
   emit(ctx: Emitting): Record<string, string>;
 }
 
@@ -601,6 +604,14 @@ const SOURCE_MODES = documentedModes(SOURCES, {
   spiral: 'Arms winding out of the centre and turning on the beat.',
   scan: 'Horizontal lines with a bar of light sweeping down them.',
   sparks: 'A field of cells that fire on their own beats and drift as they fade.',
+  checker: 'Alternating square tiles that flip on a musical division.',
+  rays: 'Alternating angular beams turning around the centre on the beat.',
+});
+
+const FIELD_MODE_DOCUMENTATION = documentedModes(FIELD_MODES, {
+  cells: 'Distance to the nearest jittered feature point in a bounded cellular field.',
+  clouds: 'Four fixed octaves of gradient noise drifting as one continuous field.',
+  metaballs: 'Four moving Gaussian fields that merge into soft implicit shapes.',
 });
 
 const FRACTAL_MODE_DOCUMENTATION = documentedModes(FRACTAL_MODES, {
@@ -621,6 +632,8 @@ const TRACK_DRAW_MODES = documentedModes(TRACK_DRAWS, {
   spiral: 'Draw every playing track as a turning spiral.',
   scan: 'Draw every playing track as sweeping scan lines.',
   sparks: 'Draw every playing track as a drifting field of sparks.',
+  checker: 'Draw every playing track as alternating square tiles.',
+  rays: 'Draw every playing track as rotating angular beams.',
 });
 
 const LENS_MODE_DOCUMENTATION = documentedModes(LENS_MODES, {
@@ -736,9 +749,28 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     inlets: [P('p', 'Where in the generated picture to read.'), E()],
     outlets: [C('c', 'The generated picture.')],
     modes: SOURCE_MODES,
-    emit: (c) => ({
-      c: `laid(gen_${SOURCES.includes(c.node.op ?? '') ? c.node.op : SOURCES[0]}(${c.read('p')}, ${c.read('energy')}), ${c.read('energy')})`,
-    }),
+    emit: (c) => {
+      const op = modeOf(c.node, SOURCES);
+      return {
+        c: `laid(gen_${op}(${c.read('p')}, ${c.read('energy')}), ${c.read('energy')})`,
+      };
+    },
+  },
+
+  field: {
+    name: 'field',
+    description:
+      'A bounded procedural picture whose fixed work is charged before the graph reaches the GPU.',
+    inlets: [P('p', 'Where in the procedural field to read.'), E()],
+    outlets: [C('c', 'The generated field picture.')],
+    modes: FIELD_MODE_DOCUMENTATION,
+    work: (node) => FIELD_WORK[modeOf(node, FIELD_MODES)],
+    emit: (c) => {
+      const op = modeOf(c.node, FIELD_MODES);
+      return {
+        c: `laid(field_${op}(${c.read('p')}, ${c.read('energy')}), ${c.read('energy')})`,
+      };
+    },
   },
 
   fractal: {
@@ -1073,13 +1105,17 @@ export const MAX_TRACKS = 8;
 export const MAX_LINES = 2000;
 
 /**
- * Worst-case iterative steps a fragment may be asked to perform.
+ * Worst-case fixed shader work a fragment may be asked to perform.
  *
- * Two full-detail fractals may be blended. A spread over either is refused:
- * its three-to-nine reads would multiply the orbit loop while still looking
- * like only a handful of generated GLSL statements to `MAX_LINES`.
+ * Two full-detail fractals may be blended. Bounded procedural fields share the
+ * same budget. A spread over an expensive picture is refused when its
+ * three-to-nine reads would multiply hidden loops or samples while still
+ * looking like only a handful of generated GLSL statements to `MAX_LINES`.
  */
-export const MAX_ITERATIVE_WORK = FRACTAL_ITERATIONS * 2;
+export const MAX_SHADER_WORK = FRACTAL_ITERATIONS * 2;
+
+/** Compatibility name for callers that predate bounded procedural fields. */
+export const MAX_ITERATIVE_WORK = MAX_SHADER_WORK;
 
 /** The outlets of this node that depend on that inlet. */
 function outletsReading(node: CircuitNode, inlet: string): string[] {
@@ -1495,7 +1531,7 @@ export function compileCircuit(circuit: Circuit): Compiled {
   const open = new Set<string>();
   let failed: string | null = null;
   let serial = 0;
-  let iterativeWork = 0;
+  let shaderWork = 0;
 
   /**
    * The GLSL variable an outlet lives in **at a point**, emitting whatever it
@@ -1542,10 +1578,9 @@ export function compileCircuit(circuit: Circuit): Compiled {
       failed ??= 'too big to draw — an effect that takes many samples is nested too deep';
       return null;
     }
-    iterativeWork += spec.work ?? 0;
-    if (iterativeWork > MAX_ITERATIVE_WORK) {
-      failed ??=
-        'too expensive to draw — a fractal is being sampled too many times by this graph';
+    shaderWork += typeof spec.work === 'function' ? spec.work(node) : (spec.work ?? 0);
+    if (shaderWork > MAX_SHADER_WORK) {
+      failed ??= 'too expensive to draw — a costly picture is being sampled too many times';
       return null;
     }
     open.add(here);

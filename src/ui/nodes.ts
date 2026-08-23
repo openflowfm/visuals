@@ -33,11 +33,11 @@ import { freeNodeId } from './edits.ts';
  * where the browser implied plasma was a kind of node.
  *
  * So it is Ableton's shape: **the browser lists the device and the presets sit
- * under it.** One `source` entry, eleven pictures beneath it; one `effect`,
- * twelve. Dropping the node gives you a default one, dropping a preset gives
- * you a configured one — a mode, and the values that make that mode read. The
- * search box is what keeps the old virtue: typing `spark` finds `sparks` under
- * `source` whether or not you knew where it lived.
+ * under it.** One `source` entry, thirteen pictures beneath it; one `field`,
+ * three bounded algorithms. Dropping the node gives you a default one, dropping
+ * a preset gives you a configured one — a mode, and the values that make that
+ * mode read. The search box is what keeps the old virtue: typing `spark` finds
+ * `sparks` under `source` whether or not you knew where it lived.
  *
  * **Not every list under a node is a preset list.** A `track` names a track in
  * the set and a `flow` names a flow in the library, and those are *targets*
@@ -333,10 +333,11 @@ export function palette(): Entry[] {
 
   // Pictures. The set first, because a rig that reads a Live set should offer
   // the Live set before it offers a plasma. It has modes and no presets: `by
-  // name` is the answer this rig is for, and the other eleven are one hot-swap
-  // away rather than eleven rows here saying "all of them as a tunnel".
+  // name` is the answer this rig is for, and the other source modes are one
+  // hot-swap away rather than rows here saying "all of them as a tunnel".
   node('tracks', 'by name', 'every playing track', NODE_SPECS.tracks.description);
   modes('source', 'source');
+  modes('field', 'field');
   modes('fractal', 'fractal');
   node('paint', undefined, 'paint', NODE_SPECS.paint.description);
   // No flows. Every flow in the library used to be a row here, in the same chip

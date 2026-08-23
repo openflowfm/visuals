@@ -3,6 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { FlowDef } from '../protocol.ts';
+import { FIELD_MODES } from '../protocol.ts';
+import { FIELD_WORK } from '../src/render/glsl/fields.ts';
 import {
   FlowAuthoringStore,
   nodeCatalog,
@@ -41,6 +43,10 @@ describe('the agent-facing node catalog', () => {
     const catalog = nodeCatalog();
     expect(catalog.map((node) => node.kind)).toContain('out');
     expect(catalog.find((node) => node.kind === 'lens')?.variants).toHaveLength(11);
+    expect(catalog.find((node) => node.kind === 'field')).toMatchObject({
+      work: 16,
+      variants: FIELD_MODES.map((mode) => ({ mode, work: FIELD_WORK[mode] })),
+    });
     expect(
       catalog
         .find((node) => node.kind === 'wave')

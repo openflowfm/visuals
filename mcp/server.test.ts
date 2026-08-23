@@ -71,7 +71,10 @@ describe('the MCP boundary', () => {
       const resource = await client.readResource({ uri: 'visual-flow://nodes' });
       expect(resource.contents[0]).toMatchObject({ mimeType: 'application/json' });
       expect(JSON.parse('text' in resource.contents[0] ? resource.contents[0].text : '').nodes).toEqual(
-        expect.arrayContaining([expect.objectContaining({ kind: 'source' })]),
+        expect.arrayContaining([
+          expect.objectContaining({ kind: 'source' }),
+          expect.objectContaining({ kind: 'field', work: 16 }),
+        ]),
       );
 
       const listed = await client.callTool({ name: 'list_flows', arguments: {} });

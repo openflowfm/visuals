@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Circuit, FlowDef } from '../../protocol.ts';
-import { wouldLoop } from '../../protocol.ts';
+import { FIELD_MODES, SOURCES, TRACK_DRAWS, wouldLoop } from '../../protocol.ts';
 import {
   bareCircuit,
   compileCircuit,
@@ -17,7 +17,8 @@ import {
   wouldFeedItself,
 } from './circuit.ts';
 import { paramsOf } from './flow.ts';
-import { FRACTAL_ITERATIONS } from './shaders.ts';
+import { FIELD_WORK } from './glsl/fields.ts';
+import { FRACTAL_ITERATIONS, TRACK_SHADERS } from './shaders.ts';
 
 /**
  * The compiler.
@@ -212,6 +213,71 @@ describe('compiling a flow', () => {
       // envelope behaves exactly as it did before there was one to ask for.
       { id: 't2', name: 'Drums', read: 'level', index: 1, smooth: 0.6 },
     ]);
+  });
+});
+
+describe('the lightweight source registry', () => {
+  it('compiles every source through both graph and per-track paths', () => {
+    for (const op of SOURCES) {
+      const built = compileCircuit(
+        wire(
+          [
+            { id: 'g', kind: 'source', op, x: 0, y: 0 },
+            { id: 'o', kind: 'out', x: 1, y: 0 },
+          ],
+          [{ from: 'g/c', to: 'o/c' }],
+        ),
+      );
+      expect(built.error, op).toBeNull();
+      expect(bodyOf(built.source!), op).toContain(`gen_${op}(`);
+      expect(TRACK_SHADERS.has(op), op).toBe(true);
+    }
+
+    expect([...TRACK_SHADERS.keys()]).toEqual(SOURCES);
+    expect(TRACK_DRAWS.slice(1)).toEqual(SOURCES);
+  });
+});
+
+describe('the bounded procedural field node', () => {
+  const field = (op: (typeof FIELD_MODES)[number]): Circuit =>
+    wire(
+      [
+        { id: 'f', kind: 'field', op, x: 0, y: 0 },
+        { id: 'o', kind: 'out', x: 1, y: 0 },
+      ],
+      [{ from: 'f/c', to: 'o/c' }],
+    );
+
+  it('compiles every published fixed-work mode without offering it per track', () => {
+    for (const op of FIELD_MODES) {
+      const built = compileCircuit(field(op));
+      expect(built.error, op).toBeNull();
+      expect(bodyOf(built.source!), op).toContain(`field_${op}(`);
+      expect(FIELD_WORK[op], op).toBeGreaterThan(0);
+      expect(TRACK_DRAWS, op).not.toContain(op);
+      expect(TRACK_SHADERS.has(op), op).toBe(false);
+    }
+  });
+
+  it('allows bounded sampling and refuses a multiplication beyond the work budget', () => {
+    const sampled = (spread: 'shift' | 'bloom') =>
+      compileCircuit(
+        wire(
+          [
+            { id: 'f', kind: 'field', op: 'clouds', x: 0, y: 0 },
+            { id: 's', kind: 'spread', op: spread, x: 1, y: 0 },
+            { id: 'o', kind: 'out', x: 2, y: 0 },
+          ],
+          [
+            { from: 'f/c', to: 's/c' },
+            { from: 's/c', to: 'o/c' },
+          ],
+        ),
+      );
+
+    expect(sampled('shift').error).toBeNull();
+    expect(sampled('bloom').source).toBeNull();
+    expect(sampled('bloom').error).toMatch(/costly picture.*sampled too many times/);
   });
 });
 
@@ -708,7 +774,7 @@ describe('the bounded fractal node', () => {
       ),
     );
     expect(multiplied.source).toBeNull();
-    expect(multiplied.error).toMatch(/fractal.*sampled too many times/);
+    expect(multiplied.error).toMatch(/costly picture.*sampled too many times/);
   });
 });
 

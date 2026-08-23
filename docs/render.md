@@ -4,7 +4,8 @@
 
 Shader source is split by responsibility under `src/render/glsl/`: `common.ts`
 owns the uniforms and shared coordinate/clock helpers, `sources.ts` owns the
-lightweight generators, `fractal.ts` owns bounded iterative pictures,
+lightweight generators, `fields.ts` owns fixed-work procedural fields,
+`fractal.ts` owns bounded iterative pictures,
 `effects.ts` owns single-read image operations, and `circuit.ts` owns helpers
 used only by graph expressions. `src/render/shaders.ts` is the assembly boundary
 for full flow and per-track fragment shaders; `src/render/circuit.ts` compiles a
@@ -91,10 +92,10 @@ which.
 
 ## What there is to look at
 
-Eleven lightweight sources, one bounded fractal node and nineteen ways to work on a picture,
-all of them **node modes** rather than parallel registries of their own. They are deliberately
-unlike each other rather than variations on a theme — five sources all drawing soft noise is
-one picture, however many of them there are.
+Thirteen lightweight sources, three bounded procedural fields, one bounded fractal node and
+nineteen ways to work on a picture, all of them **node modes** rather than parallel registries
+of their own. They are deliberately unlike each other rather than variations on a theme —
+five sources all drawing soft noise is one picture, however many of them there are.
 
 | source | |
 |---|---|
@@ -109,6 +110,31 @@ one picture, however many of them there are.
 | `spiral` | arms winding out and turning on the beat. The only one with a direction |
 | `scan` | lines, with a bar's sweep passing down them. The one that looks like a machine |
 | `sparks` | a cell per spark, each firing on its own beat and drifting as it dies |
+| `checker` | square-lattice parity, drifting sideways on a musical division |
+| `rays` | alternating angular sectors turning around an explicitly empty centre |
+
+| `field` — published procedural algorithms with charged fixed work | work |
+|---|---:|
+| `cells` | jittered cellular F1: nine neighbouring feature checks |
+| `clouds` | four octaves of gradient noise: sixteen lattice-corner visits |
+| `metaballs` | four summed Gaussian densities |
+
+These names are algorithm contracts rather than visual approximations. `cells` is the bounded
+one-feature-per-cell GPU form of [Worley F1](https://doi.org/10.1145/237170.237267);
+`clouds` follows the fixed octave construction in
+[Perlin's image synthesizer](https://doi.org/10.1145/325334.325247), with lacunarity two and
+gain one half; and `metaballs` uses the summed Gaussian densities from
+[Blinn's implicit surfaces](https://www.microsoft.com/en-us/research/publication/a-generalization-of-algebraic-surface-drawing/).
+Pure TypeScript reference kernels pin deterministic probes and mathematical invariants for all
+five new pictures. The GLSL independently implements the same definitions, while registry tests
+ensure every mode reaches the graph compiler and every genuinely lightweight source reaches the
+per-track shader path.
+
+The `field` split is a GPU boundary. A `source` may run once per playing track, so only the
+constant-work checker and rays belong there. A field is never offered as a per-track picture,
+and its 9/16/4 work charge is counted every time a graph samples it. Four direct cloud samples
+exactly fill the 64-unit graph ceiling; a nine-tap bloom over one is refused before the shader
+reaches the driver.
 
 | `fractal` — one iterative node, two modes | |
 |---|---|
@@ -150,11 +176,12 @@ per playing track is the GPU failure this boundary prevents.
 | `edge` | four taps, a fraction of the frame apart. The one that makes a busy frame *less* busy |
 | `shift` | three taps, one per channel, opening with the level so it bites on transients |
 
-Adding a lightweight picture is a body in `glsl/sources.ts`'s `GENERATOR_BODIES`
-and a name in `SOURCES`, and nothing else:
+Adding a lightweight picture is a typed body in `glsl/sources.ts`'s `GENERATOR_BODIES`
+and a literal name in `SOURCES`:
 the same body serves the `source` node and the track pass, so what a built-in draws and what
-a node draws cannot drift. An iterative picture belongs in a dedicated kind with an explicit
-work cost, as `fractal` does, so the compiler can see cost that GLSL line counting cannot.
+a node draws cannot drift, and TypeScript refuses a name without a body or description. Anything
+with a fixed loop or repeated samples belongs in a dedicated kind with an explicit work cost, as
+`field` and `fractal` do, so the compiler can see cost that GLSL line counting cannot.
 
 Adding a *way to work on one* means picking which of the three it is, and that choice is now
 the node it goes in rather than a shape hidden inside a twelve-entry table. A `lens` mode is

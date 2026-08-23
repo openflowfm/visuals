@@ -1,4 +1,5 @@
-import { SOURCES } from '../../../protocol.ts';
+import { SOURCES, type Source } from '../../../protocol.ts';
+import { PATTERN_BODIES } from './patterns.ts';
 
 /**
  * Each picture as a **function of a point and an energy**.
@@ -13,7 +14,7 @@ import { SOURCES } from '../../../protocol.ts';
  * hands it to `OUT`; a `source` node hands it to `laid`. Doing it here would do
  * it twice.
  */
-const GENERATOR_BODIES: Record<string, string> = {
+export const GENERATOR_BODIES = {
   solid: `
   // The plainest picture there is: the colour, breathing on the bar and
   // brightening with the sound. The one source that fills the frame at full
@@ -141,12 +142,14 @@ const GENERATOR_BODIES: Record<string, string> = {
   vec2 drift = (vec2(hash(id + 3.7), hash(id + 9.1)) - 0.5) * 0.7;
   float spark = smoothstep(0.02 + 0.18 * pop, 0.0, length(f - drift * life));
   return vec4(mix(uColor, vec3(1.0), 0.35), spark * pop * (0.35 + uLevel * 0.9));`,
-};
+
+  ...PATTERN_BODIES,
+} satisfies Record<Source, string>;
 
 /**
  * All of them as GLSL, compiled into every flow.
  *
- * Every shader carries all eleven whether or not it calls one, because the
+ * Every shader carries every lightweight source whether or not it calls one,
  * alternative — emitting only what a graph reached — makes the shader a function
  * of the wiring in a second way and gives the cache signature a second thing to
  * get wrong. A driver drops an uncalled function.

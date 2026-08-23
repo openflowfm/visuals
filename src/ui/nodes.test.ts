@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { Scheme } from '../../protocol.ts';
-import { FRACTAL_MODES, GRADE_MODES, NODE_FAMILIES, TRACK_DRAWS } from '../../protocol.ts';
+import {
+  FIELD_MODES,
+  FRACTAL_MODES,
+  GRADE_MODES,
+  NODE_FAMILIES,
+  SOURCES,
+  TRACK_DRAWS,
+} from '../../protocol.ts';
 import { BUILT_IN } from '../../server/scheme.ts';
 import {
   NODE_SPECS,
@@ -96,8 +103,11 @@ describe('what the browser lists', () => {
     const sources = browser().filter((each) => each.node.kind === 'source');
     expect(sources).toHaveLength(1);
     expect(sources[0].node.op).toBeUndefined();
-    expect(sources[0].presets.map((each) => each.op)).toContain('plasma');
-    expect(sources[0].presets.length).toBeGreaterThan(10);
+    expect(sources[0].presets.map((each) => each.op)).toEqual(SOURCES);
+
+    const fields = browser().filter((each) => each.node.kind === 'field');
+    expect(fields).toHaveLength(1);
+    expect(fields[0].presets.map((each) => each.op)).toEqual(FIELD_MODES);
 
     const fractals = browser().filter((each) => each.node.kind === 'fractal');
     expect(fractals).toHaveLength(1);
@@ -110,6 +120,7 @@ describe('what the browser lists', () => {
     // preference: an eight-track set must not turn one orbit into eight.
     expect(TRACK_DRAWS).not.toContain('mandelbrot');
     expect(TRACK_DRAWS).not.toContain('julia');
+    for (const mode of FIELD_MODES) expect(TRACK_DRAWS).not.toContain(mode);
   });
 
   it('lists no flows, because a flow is not one of these', () => {

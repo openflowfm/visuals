@@ -55,6 +55,7 @@ export type NodeKind =
   | 'song'
   // pictures
   | 'source'
+  | 'field'
   | 'fractal'
   | 'tracks'
   | 'flow'
@@ -86,7 +87,7 @@ export const NODE_FAMILIES: readonly { name: string; about: string; kinds: NodeK
   {
     name: 'draw',
     about: 'Everything that makes a colour out of nothing',
-    kinds: ['source', 'fractal', 'tracks', 'flow', 'paint'],
+    kinds: ['source', 'field', 'fractal', 'tracks', 'flow', 'paint'],
   },
   {
     // Not `colour`, which it was: half of what `effect` contained never touched
@@ -131,7 +132,7 @@ export const NODE_FAMILIES: readonly { name: string; about: string; kinds: NodeK
  * modes now, which is the point: nothing in the model knows they exist except
  * the one node that draws them.
  */
-export const SOURCES: readonly string[] = [
+export const SOURCES = [
   'solid',
   'bars',
   'rings',
@@ -143,7 +144,19 @@ export const SOURCES: readonly string[] = [
   'spiral',
   'scan',
   'sparks',
-];
+  'checker',
+  'rays',
+] as const;
+
+export type Source = (typeof SOURCES)[number];
+
+/**
+ * Fixed-work procedural fields that are safe in a flow but not once per track.
+ *
+ * Each mode declares its primitive work in the renderer, so multi-tap effects
+ * cannot multiply it past the graph budget without being refused first.
+ */
+export const FIELD_MODES = ['cells', 'clouds', 'metaballs'] as const;
 
 /**
  * The two bounded escape-time pictures the dedicated `fractal` node draws.
@@ -271,7 +284,7 @@ export const MATH_OPS = ['add', 'subtract', 'multiply', 'min', 'max', 'average']
 export const WAVE_SHAPES = ['sine', 'saw', 'ramp', 'square', 'pulse', 'noise'] as const;
 
 /** How a `tracks` node decides what each Live track draws. */
-export const TRACK_DRAWS: readonly string[] = ['by name', ...SOURCES];
+export const TRACK_DRAWS = ['by name', ...SOURCES] as const;
 
 export interface CircuitNode {
   /** Unique within its flow. Cords name ports as `nodeId/portName`. */

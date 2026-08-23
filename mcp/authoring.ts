@@ -543,16 +543,22 @@ export function nodeCatalog() {
   return NODE_KINDS.map((kind) => {
     const spec = NODE_SPECS[kind];
     const family = NODE_FAMILIES.find((entry) => entry.kinds.includes(kind));
+    const workOf = (mode?: string): number => {
+      if (typeof spec.work !== 'function') return spec.work ?? 0;
+      return spec.work({ id: kind, kind, ...(mode ? { op: mode } : {}), x: 0, y: 0 });
+    };
     const variants = spec.modes?.length
       ? spec.modes.map((mode) => ({
           mode: mode.name,
           description: mode.description,
+          work: workOf(mode.name),
           inlets: inletsOf({ id: kind, kind, op: mode.name, x: 0, y: 0 }).map(documentedPort),
         }))
       : [
           {
             mode: null,
             description: spec.description,
+            work: workOf(),
             inlets: inletsOf({ id: kind, kind, x: 0, y: 0 }).map(documentedPort),
           },
         ];
@@ -563,8 +569,8 @@ export function nodeCatalog() {
       familyDescription: family?.about ?? '',
       description: spec.description,
       target: spec.named ?? null,
-      /** Worst-case iterative work per evaluation; zero is an ordinary expression. */
-      work: spec.work ?? 0,
+      /** Worst-case fixed work across its modes; each variant carries its exact charge. */
+      work: Math.max(...variants.map((variant) => variant.work)),
       defaultMode: spec.modes?.[0]?.name ?? null,
       variants,
       outlets: spec.outlets.map(documentedPort),

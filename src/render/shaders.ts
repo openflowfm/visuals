@@ -1,11 +1,13 @@
 import { SOURCES } from '../../protocol.ts';
 import { PREAMBLE } from './glsl/common.ts';
 import { EFFECT_LIB } from './glsl/effects.ts';
+import { FIELD_LIB } from './glsl/fields.ts';
 import { FRACTAL_LIB } from './glsl/fractal.ts';
 import { GENERATOR_LIB } from './glsl/sources.ts';
 
 export { PREAMBLE } from './glsl/common.ts';
 export { EFFECT_LIB } from './glsl/effects.ts';
+export { FIELD_LIB, FIELD_MAX_WORK, FIELD_WORK } from './glsl/fields.ts';
 export { FRACTAL_ITERATIONS, FRACTAL_LIB } from './glsl/fractal.ts';
 export { GENERATOR_LIB } from './glsl/sources.ts';
 
@@ -46,6 +48,8 @@ uniform float uSection;
 uniform float uSections;
 
 ${GENERATOR_LIB}
+
+${FIELD_LIB}
 
 ${FRACTAL_LIB}
 
