@@ -86,25 +86,20 @@ right-hand column held two unrelated things and the one that looked most like a 
 as "add eleven of these". A leaf row keeps the gutter and leaves it empty, which is the same
 convention: it is what holds every label on one left edge whether or not it opens.
 
-**The ports flank the name, and every row draws all six positions.** What a node takes
-sits before its name and what it gives sits at the row's right edge, with the ones it has
-not got dimmed to the rule colour — the row *is* the node, read left to right, the same
-geometry as its face on the canvas. The ports used to be one block on the right drawing
-only what a node had — `→ p` over `p n → c` over `c n → c` — six silhouettes of different
-widths that scanned as noise, with an arrow carrying all the meaning. Six fixed slots in
-two columns scan as a table: the `c` column either lights up or it does not, and you read
-down it.
+**The right-hand side is the ports, and it draws all six positions on every row.** `p n c →
+p n c`, with the ones a node has not got dimmed to the rule colour. It used to draw only
+what a node had — `→ p` over `p n → c` over `c n → c` — which is six silhouettes down one
+column, each a different width, nothing lining up, and it scanned as noise. Six fixed slots
+scan as a table: the `c` column either lights up or it does not, and you read down it.
 
 The letters are painted in the same blue, amber and purple the **ports and cords on the
 canvas** carry, which is what turns three letters from a code you have to be told into a
 legend for the thing beside it. You match the colour; the letter is there for when you have.
 
-**And you can filter by them.** Six switches under the search box, in the same six
-positions and the same three colours as every row below — `takes` at the left edge,
-`gives` at the right, signals entering where they enter a node and leaving where they
-leave, the gap saying what an arrow used to. The control needs no label beyond `takes`
-and `gives`: what you press is a picture of what you are asking for, and the rows that
-survive are lit in the same places. The search box answers *what is it called*
+**And you can filter by them.** Six switches under the search box, in the same six positions
+and the same three colours as the block on every row — so the control needs no label beyond
+`takes` and `gives`: what you press is a picture of what you are asking for, and the rows
+that survive are the ones lit in the same places. The search box answers *what is it called*
 and this answers *what will connect*, which is the other half of finding a node and the half
 nothing could ask before. Selected signals are required rather than allowed, so ticking
 *takes p* and *gives c* narrows to nodes that do both — the question somebody with a point in

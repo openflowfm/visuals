@@ -476,6 +476,12 @@
   color: var(--bd3);
 }
 
+.designer .node-sig i {
+  font-style: normal;
+  margin: 0 2px;
+  color: var(--bd3);
+}
+
 .designer .node-sig [data-on][data-signal='p'] {
   color: var(--signal-p);
 }
@@ -491,12 +497,16 @@
 .designer .port-filter {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 3px;
   margin-bottom: 2px;
   padding: 0 2px;
   font-size: 9px;
   color: var(--idle);
+}
+
+.designer .port-filter > i {
+  font-style: normal;
+  color: var(--bd3);
 }
 
 .designer .port-filter-side {
@@ -545,6 +555,10 @@
 .designer .port-filter button[data-on][data-signal='c'] {
   border-color: var(--signal-c);
   color: var(--signal-c);
+}
+
+.designer .port-filter-clear {
+  margin-left: auto;
 }
 
 .designer .port-filter-clear:disabled {
@@ -928,7 +942,7 @@
 }
 
 .designer .node-entry .under {
-  margin: 0 0 4px 35px;
+  margin: 0 0 4px 18px;
   padding-left: 8px;
   border-left: 1px solid var(--rule);
 }
