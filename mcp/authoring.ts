@@ -244,8 +244,10 @@ export function validateFlow(
     }
 
     const inlets = inletsOf(node);
+    // Every number inlet, the live ones included: a held `energy` is a real
+    // setting now, taking the inlet over until it is cleared.
     const settable = new Set(
-      inlets.filter((port) => port.kind === 'n' && port.at !== undefined).map((port) => port.name),
+      inlets.filter((port) => port.kind === 'n').map((port) => port.name),
     );
     for (const [name, value] of Object.entries(node.values ?? {})) {
       if (!settable.has(name)) {
@@ -552,7 +554,9 @@ const documentedPort = (port: PortSpec): DocumentedPort => ({
   name: port.name,
   signal: port.kind,
   description: port.description,
-  settable: port.at !== undefined,
+  // Every number is settable. One with a `liveDefault` and no `default` reads
+  // that signal until a value is held on it.
+  settable: port.kind === 'n',
   ...(port.at !== undefined ? { default: port.at } : {}),
   ...(port.kind === 'n' && port.at === undefined
     ? { liveDefault: port.fallback === 'uEnergy' ? ('energy' as const) : ('beat' as const) }

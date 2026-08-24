@@ -179,8 +179,13 @@
   white-space: nowrap;
 }
 
-.node-number-unreadable .wdg-meter-level {
-  display: none;
+.alive-row {
+  display: contents;
+}
+
+.alive-row[data-running] .wdg-readout {
+  color: var(--caption);
+  font-style: italic;
 }
 
 .node-outlet-name,

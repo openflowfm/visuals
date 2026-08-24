@@ -9,7 +9,6 @@ import {
 import { Port } from '@openflow/widgets/chrome/Port.tsx';
 import { Device, DevicePortRow } from '@openflow/widgets/chrome/Device.tsx';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
-import { Meter } from '@openflow/widgets/controls/Meter.tsx';
 import { Select } from '@openflow/widgets/controls/Select.tsx';
 import { Slider } from '@openflow/widgets/controls/Slider.tsx';
 import {
@@ -21,7 +20,7 @@ import {
   signalOf,
   wouldFeedItself,
 } from '../render/circuit.ts';
-import { connect, disconnect, dropNode, setDepth, setValue, setNode } from './edits.ts';
+import { clearValue, connect, disconnect, dropNode, setDepth, setValue, setNode } from './edits.ts';
 import { VALUE, PERCENT } from './param.ts';
 import { previewOutletOf } from './probe.ts';
 
@@ -150,6 +149,7 @@ export function CircuitEditor({
                 onChange={(next) => onChange(setNode(circuit, node.id, next))}
                 onTurn={(inlet, value) => onChange(setValue(circuit, node.id, inlet, value))}
                 onRange={(inlet, depth) => onChange(setDepth(circuit, node.id, inlet, depth))}
+                onFree={(inlet) => onChange(clearValue(circuit, node.id, inlet))}
                 onCut={(inlet) => onChange(disconnect(circuit, inlet))}
                 onDrop={() => onChange(dropNode(circuit, node.id))}
               />
@@ -201,6 +201,7 @@ export function NodeFace({
   onChange,
   onTurn,
   onRange,
+  onFree,
   onCut,
   onDrop,
 }: {
@@ -218,6 +219,8 @@ export function NodeFace({
   onChange(next: Partial<CircuitNode>): void;
   onTurn(inlet: string, value: number): void;
   onRange(inlet: string, depth: number): void;
+  /** Take the held number off a live inlet, giving it its signal back. */
+  onFree(inlet: string): void;
   onCut(inlet: string): void;
   onDrop(): void;
 }) {
@@ -379,6 +382,59 @@ export function NodeFace({
     const id = portId(node.id, port.name);
     const driver = driverOf(circuit, id, flows);
     const reading = numberReadings[id];
+    const held = node.values?.[port.name];
+    // A live inlet has no `at`: left alone it reads a signal, not a setting.
+    const alive = port.kind === 'n' && port.at === undefined;
+    // Nothing wired, nothing held — the row is showing that signal move.
+    const running = alive && held === undefined && driver === undefined;
+    const number =
+      port.kind !== 'n' ? null : (
+        <Slider
+          param={VALUE}
+          // The number this inlet holds, wired or not. It used to show the
+          // live reading under a cord and go dead, on the argument that the
+          // number underneath was dormant and showing it would be a lie. A
+          // cord carries the inlet *from* this number now rather than
+          // replacing it, so it is not dormant, and the row is the only place
+          // the range can be set — the reading moved to the readout, where a
+          // number that is not yours to drag belongs.
+          //
+          // A live inlet holds no number until somebody sets one, so its row
+          // shows the signal itself — and a drag catches that signal wherever
+          // it was and holds it there, which is the gesture the moving fill
+          // was always offering.
+          value={PERCENT.to(
+            held ??
+              port.at ??
+              (driver === undefined
+                ? (reading?.value ?? (port.name === 'energy' ? energy : beat()))
+                : 0),
+          )}
+          onChange={(v) => onTurn(port.name, PERCENT.from(v))}
+          depth={driver === undefined ? undefined : (node.depths?.[port.name] ?? 1)}
+          onDepth={driver === undefined ? undefined : (d: number) => onRange(port.name, d)}
+          live={driver === undefined ? undefined : reading?.value}
+          name={port.name}
+          orientation="horizontal"
+          layout="inside"
+          // The number, never the name of what is driving it. The name used
+          // to go here and there is no room for one: `pulse · 73 %` in a
+          // 140px row ellipsised to `pulse…`, which cost the reading to say
+          // something the cord on the canvas already says. It is the title
+          // now, and what a cord is *doing* — the only thing nothing else
+          // shows — has the readout to itself.
+          display={driver === undefined ? undefined : (reading?.display ?? '—')}
+          title={
+            driver !== undefined
+              ? `${port.description} — ${port.name} ← ${driver}`
+              : running
+                ? `${port.description} — live; drag to hold it at a number`
+                : alive
+                  ? `${port.description} — held; double-click to let it run live again`
+                  : port.description
+          }
+        />
+      );
     return {
       key: id,
       // `wide` is a number's claim on the whole line. A bare name shares it
@@ -405,6 +461,16 @@ export function NodeFace({
               ×
             </Button>
           )}
+          {!fed.has(id) && alive && held !== undefined && (
+            <Button
+              tone="quiet"
+              className="cut"
+              label={`Let ${port.name} run live`}
+              onPress={() => onFree(port.name)}
+            >
+              ∿
+            </Button>
+          )}
         </span>
       ),
       control:
@@ -412,45 +478,23 @@ export function NodeFace({
           <span className="node-inlet-name" title={port.description}>
             {port.name}
           </span>
-        ) : port.at === undefined ? (
-          <AliveMeter
-            name={port.name}
-            description={port.description}
-            fallback={port.name === 'energy' ? energy : beat()}
-            reading={reading}
-            driver={driver}
-          />
+        ) : alive ? (
+          <span
+            className="alive-row"
+            {...(running ? { 'data-running': '' } : {})}
+            // Double-click frees a live inlet rather than resetting it: the
+            // default here is the signal, not a number, and the fader's own
+            // return-to-default would hold the row at fifty.
+            onDoubleClickCapture={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              onFree(port.name);
+            }}
+          >
+            {number}
+          </span>
         ) : (
-          <Slider
-            param={VALUE}
-            // The number this inlet holds, wired or not. It used to show the
-            // live reading under a cord and go dead, on the argument that the
-            // number underneath was dormant and showing it would be a lie. A
-            // cord carries the inlet *from* this number now rather than
-            // replacing it, so it is not dormant, and the row is the only place
-            // the range can be set — the reading moved to the readout, where a
-            // number that is not yours to drag belongs.
-            value={PERCENT.to(node.values?.[port.name] ?? port.at)}
-            onChange={(v) => onTurn(port.name, PERCENT.from(v))}
-            depth={driver === undefined ? undefined : (node.depths?.[port.name] ?? 1)}
-            onDepth={driver === undefined ? undefined : (d: number) => onRange(port.name, d)}
-            live={driver === undefined ? undefined : reading?.value}
-            name={port.name}
-            orientation="horizontal"
-            layout="inside"
-            // The number, never the name of what is driving it. The name used
-            // to go here and there is no room for one: `pulse · 73 %` in a
-            // 140px row ellipsised to `pulse…`, which cost the reading to say
-            // something the cord on the canvas already says. It is the title
-            // now, and what a cord is *doing* — the only thing nothing else
-            // shows — has the readout to itself.
-            display={driver === undefined ? undefined : (reading?.display ?? '—')}
-            title={
-              driver === undefined
-                ? port.description
-                : `${port.description} — ${port.name} ← ${driver}`
-            }
-          />
+          number
         ),
     };
   });
@@ -545,36 +589,6 @@ export function NodeFace({
           {row.control}
         </DevicePortRow>
       ))}
-    />
-  );
-}
-
-function AliveMeter({
-  name,
-  description,
-  fallback,
-  reading,
-  driver,
-}: {
-  name: string;
-  description: string;
-  fallback: number;
-  reading?: NumberReading;
-  driver?: string;
-}) {
-  const value = reading?.value ?? fallback;
-  return (
-    <Meter
-      value={value}
-      name={name}
-      layout="inside"
-      showValue
-      // The reading, as on a number row, with the driver in the title. A meter
-      // has no value of its own to fall back to, so a driver nothing can be
-      // read from says so with a dash.
-      display={driver && !reading?.display ? '—' : reading?.display}
-      title={driver ? `${description} — ${name} ← ${driver}` : description}
-      className={driver && reading?.value === undefined ? 'node-number-unreadable' : undefined}
     />
   );
 }

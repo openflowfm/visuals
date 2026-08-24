@@ -253,10 +253,15 @@ export function createNumberEvaluator(): NumberEvaluator {
             const depth = node.depths?.[name] ?? 1;
             value = Math.max(0, Math.min(1, base + depth * signal));
           }
-        } else if (port.at !== undefined) {
-          value = inputs.params?.[id] ?? node.values?.[name] ?? port.at;
-        } else if (port.fallback === 'uEnergy') value = inputs.show.master;
-        else if (port.fallback === 'uBeat') value = inputs.beat;
+        } else {
+          // The same order the shader answers in: a gesture in flight, then the
+          // held number, then the spec's default — and only a live inlet with
+          // none of those falls through to its signal.
+          const held = inputs.params?.[id] ?? node.values?.[name] ?? port.at;
+          if (held !== undefined) value = held;
+          else if (port.fallback === 'uEnergy') value = inputs.show.master;
+          else if (port.fallback === 'uBeat') value = inputs.beat;
+        }
         inlets.set(id, value);
         return value;
       };

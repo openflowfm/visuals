@@ -625,21 +625,44 @@ describe('an inlet holds a number of its own', () => {
     expect(wired.nodes.find((node) => node.id === 'e')?.values).toEqual({ levels: 0.78 });
   });
 
-  it('is offered on every number inlet whose answer is not already alive', () => {
-    // `energy` reads the room and a wave's `phase` reads the beat. A number on
-    // either offers to replace something moving with a number that is not,
-    // which is a worse default than the one it would replace.
-    const values = (node: Circuit['nodes'][number]) =>
+  it('starts a live inlet on its signal, with no number of its own', () => {
+    // `energy` reads the room and a wave's `phase` reads the beat, so neither
+    // carries an `at`: their resting answer is a signal, and a default number
+    // here would replace something moving with something that is not.
+    const starting = (node: Circuit['nodes'][number]) =>
       inletsOf(node)
         .filter((port) => port.at !== undefined)
         .map((port) => port.name);
-    expect(values({ id: 'e', kind: 'lens', op: 'ripple', x: 0, y: 0 })).toEqual([
+    expect(starting({ id: 'e', kind: 'lens', op: 'ripple', x: 0, y: 0 })).toEqual([
       'waves',
       'depth',
       'speed',
     ]);
-    expect(values({ id: 'w', kind: 'wave', op: 'sine', x: 0, y: 0 })).toEqual([]);
-    expect(values({ id: 'b', kind: 'blend', op: 'over', x: 0, y: 0 })).toEqual(['amount']);
+    expect(starting({ id: 'w', kind: 'wave', op: 'sine', x: 0, y: 0 })).toEqual([]);
+    expect(starting({ id: 'b', kind: 'blend', op: 'over', x: 0, y: 0 })).toEqual(['amount']);
+  });
+
+  it('can still hold a number on a live inlet, which takes the signal over', () => {
+    // The face draws the energy row exactly like every other number row, so
+    // the drag it offers has to mean something: a held `energy` reads the
+    // held number, and clearing it hands the room back.
+    const plasma = (values?: Record<string, number>): Circuit =>
+      wire(
+        [
+          { id: 'g', kind: 'source', op: 'plasma', x: 0, y: 0, ...(values ? { values } : {}) },
+          { id: 'o', kind: 'out', x: 1, y: 0 },
+        ],
+        [{ from: 'g/c', to: 'o/c' }],
+      );
+    expect(valuesOf(plasma()).map((each) => each.id)).toEqual([]);
+    expect(bodyOf(compileCircuit(plasma()).source!)).toMatch(/gen_plasma\(.*uEnergy/);
+
+    const held = plasma({ energy: 0.8 });
+    expect(valuesOf(held).map((each) => each.id)).toEqual(['g/energy']);
+    expect(paramsOf(held)).toEqual(new Float32Array([0.8]));
+    const source = bodyOf(compileCircuit(held).source!);
+    expect(source).toMatch(/gen_plasma\(.*uParams\[0\]/);
+    expect(source).not.toMatch(/gen_plasma\(.*uEnergy/);
   });
 
   it('gives a nested flow its own slots', () => {

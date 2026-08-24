@@ -209,11 +209,15 @@ Every file already written says `knobs`, so `reword` in `server/scheme.ts` carri
 across at the one door every scheme comes through, and drops the old spelling rather than
 leaving both — see below on reading an old file.
 
-**Two number inlets have nothing to set either**, and they are the two whose answer is
-already alive: an `energy` inlet reads the room, and a `wave`'s `phase` reads the beat. A
-number there would offer to replace something moving with something that is not, which is a
-worse default than the one it replaced. They get a meter rather than a handle, so the live
-answer is visible without pretending it is yours to turn. Wire them, or leave them running.
+**Two number inlets start on a signal rather than a setting**, and they are the two whose
+answer is already alive: an `energy` inlet reads the room, and a `wave`'s `phase` reads the
+beat. Neither carries a default number — a default there would replace something moving with
+something that is not, which is a worse default than the one it replaced. But the row is the
+same fader as every other number row, and a drag on it catches the signal wherever it was
+and holds it there. Held, it is an ordinary set value; double-click (or the `∿` beside the
+port) lets it run live again. It used to be a meter — visibly identical to the faders below
+it, taking no gesture, and a press on it dragged the whole node, which read as the first
+parameter on the face being broken.
 
 **A mode's inlets carry their values with them.** See below — it is the same rule cords get,
 one step quieter, and it matters more: a stray cord at least lights an outlet up, where a
@@ -634,10 +638,11 @@ the title, two reserved outlet lines, one chooser band and six reserved inlet li
 space is real here: reserving the largest face means changing a mode, wiring a cord or
 renaming a value gives the graph's port observer nothing to report. Each inlet is one row,
 with its dot on the same centre as the thing it governs. A point or colour prints one name;
-an alive number gets a meter; a settable number gets one horizontal filled control with its
-name and reading inside it. A driven number keeps that control disabled, names its driver
-and moves its fill and reading with the number arriving there, preserving the stored value
-until the cord comes off. Alive and driven rows are sampled on a ten-hertz display clock,
+every number — the alive ones included — gets one horizontal filled control with its
+name and reading inside it. A driven number stays a control, because the number under the
+cord is the floor the cord carries the inlet from: the row names its driver in its tooltip,
+prints the arriving number in its readout, and holds the fill at the floor a drag on it
+sets. Alive and driven rows are sampled on a ten-hertz display clock,
 not the render loop, and React is updated only when the formatted reading changes.
 
 The CPU can follow `value`, `playback`, `track`, `song`, `math` and `wave` chains. A

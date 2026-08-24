@@ -27,6 +27,7 @@ function face(
       onChange: noop,
       onTurn: noop,
       onRange: noop,
+      onFree: noop,
       onCut: noop,
       onDrop: noop,
     }),
@@ -41,6 +42,33 @@ describe('the node face anatomy', () => {
     expect(html).not.toContain('<span class="wdg-port-label">energy</span>');
     expect(html).toContain('class="wdg-caption">energy</span>');
     expect(html).toContain('How strongly the room drives this movement or brightness.');
+  });
+
+  it('draws a live number as a fader you can catch, never a meter you cannot', () => {
+    // The row under the ports used to be a `Meter`: drawn exactly like the
+    // sliders beneath it, taking no gesture, and a press on it dragged the
+    // whole node. It is the same `Slider` as every other number row now —
+    // running, it shows the signal moving; caught, it holds where you put it.
+    const running = face({ id: 's', kind: 'source', op: 'plasma', x: 0, y: 0 });
+    expect(running).not.toContain('wdg-meter');
+    expect(running).toContain('data-running');
+    // The helper's room energy, 0.62, is the value the fader is showing.
+    expect(running).toContain('aria-valuenow="62');
+    expect(running).toContain('live; drag to hold it at a number');
+
+    const held = face({
+      id: 's',
+      kind: 'source',
+      op: 'plasma',
+      values: { energy: 0.3 },
+      x: 0,
+      y: 0,
+    });
+    expect(held).not.toContain('data-running');
+    expect(held).toContain('aria-valuenow="30');
+    // The way back to the signal, spelled on the face rather than remembered.
+    expect(held).toContain('Let energy run live');
+    expect(held).toContain('double-click to let it run live again');
   });
 
   it('shows a selector only when choosing among several outlets means something', () => {

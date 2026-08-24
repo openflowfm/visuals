@@ -106,9 +106,11 @@ export interface PortSpec extends PortDocumentation {
    * The number this inlet holds when nothing is wired, and therefore where the
    * control on the node's face starts.
    *
-   * Present exactly when the inlet is **settable**. A point and a colour have
-   * none — there is no one control for a position and no useful constant for a
-   * picture — and neither have the two numbers whose answer is a live signal.
+   * A point and a colour have none — there is no one control for a position and
+   * no useful constant for a picture. A live number (`ALIVE`) has none either,
+   * but for the opposite reason: its resting answer is a signal, not a number.
+   * Every `n` inlet is settable — one without an `at` simply starts live and
+   * only holds a number once somebody sets one.
    */
   at?: number;
 }
@@ -219,10 +221,15 @@ const N = (name: string, description: string, at = 0.5): PortSpec => ({
  * A number inlet whose unwired answer is a **signal** rather than a setting.
  *
  * There are two, and both are the reason this rig is not a screensaver:
- * `energy` reads the room and a `wave`'s `phase` reads the beat. Setting either
- * would offer to replace something already moving with a number that is not,
- * which is a worse default than the one it would be replacing — so these are
- * wired or left alone, and there is nothing on the face to turn.
+ * `energy` reads the room and a `wave`'s `phase` reads the beat. Neither has an
+ * `at`, because their resting state is the signal — a default number here would
+ * replace something already moving with a number that is not, which is a worse
+ * default than the one it would be replacing.
+ *
+ * They can still be **held**. A number set on one of these goes into
+ * `node.values` like any other and takes the inlet over until it is cleared,
+ * which is what makes the row on the face a control rather than a reading. The
+ * live signal is the default, not the law.
  */
 const ALIVE = (name: string, description: string, from: string): PortSpec => ({
   name,
@@ -1445,7 +1452,10 @@ export function valuesOf(circuit: Circuit): CircuitValue[] {
       continue;
     }
     for (const port of inletsOf(node)) {
-      if (port.at === undefined) continue;
+      // Every number inlet, the live ones included: an unwired `energy` with a
+      // held number reads that number from the bank, and without one it stays
+      // on its live fallback and costs nothing.
+      if (port.kind !== 'n') continue;
       const id = portId(node.id, port.name);
       const held = node.values?.[port.name];
       if (!wired.has(id)) {
@@ -1486,9 +1496,13 @@ export function valuesOf(circuit: Circuit): CircuitValue[] {
  * share a `reach`, and it is the same number in both.
  */
 export function keepValues(node: CircuitNode): CircuitNode {
-  const settable = new Map(inletsOf(node).map((port) => [port.name, port.at]));
-  let out = trimmed(node, 'values', settable);
-  out = trimmed(out, 'depths', settable);
+  const numbered = new Set(
+    inletsOf(node)
+      .filter((port) => port.kind === 'n')
+      .map((port) => port.name),
+  );
+  let out = trimmed(node, 'values', numbered);
+  out = trimmed(out, 'depths', numbered);
   return out;
 }
 
@@ -1502,13 +1516,13 @@ export function keepValues(node: CircuitNode): CircuitNode {
 function trimmed(
   node: CircuitNode,
   field: 'values' | 'depths',
-  settable: Map<string, number | undefined>,
+  numbered: ReadonlySet<string>,
 ): CircuitNode {
   const held = node[field];
   if (!held) return node;
   const kept: Record<string, number> = {};
   for (const [name, value] of Object.entries(held)) {
-    if (settable.get(name) !== undefined) kept[name] = value;
+    if (numbered.has(name)) kept[name] = value;
   }
   if (Object.keys(kept).length === Object.keys(held).length) return node;
   if (Object.keys(kept).length > 0) return { ...node, [field]: kept };

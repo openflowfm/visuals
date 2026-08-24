@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Circuit, Scheme } from '../../protocol.ts';
 import { BUILT_IN } from '../../server/scheme.ts';
 import { inletsOf, starterCircuit } from '../render/circuit.ts';
-import { dropNode, forkFlow, setValue, setNode } from './edits.ts';
+import { clearValue, dropNode, forkFlow, setValue, setNode } from './edits.ts';
 import { palette } from './nodes.ts';
 
 /**
@@ -129,6 +129,36 @@ describe('a value set on an inlet', () => {
     bloomed.nodes[at] = { ...bloomed.nodes[at], ...now };
     const kept = setNode(bloomed, 'e', { op: 'smear' });
     expect(kept.nodes.find((node) => node.id === 'e')?.values).toEqual({ reach: 0.9 });
+  });
+
+  it('keeps a held live inlet across modes that share it, like any other number', () => {
+    // `kaleido` and `twist` both take the room's energy; `zoom` does not. A
+    // number held on `energy` follows the same keep-by-name rule every value
+    // does, so a mode change never quietly revives or strands one.
+    const kaleido = wire(
+      [
+        { id: 'g', kind: 'source', op: 'plasma', x: 0, y: 0 },
+        { id: 'e', kind: 'lens', op: 'kaleido', x: 1, y: 0, values: { energy: 0.7 } },
+        { id: 'o', kind: 'out', x: 2, y: 0 },
+      ],
+      [
+        { from: 'g/c', to: 'e/c' },
+        { from: 'e/c', to: 'o/c' },
+      ],
+    );
+    const twisted = setNode(kaleido, 'e', { op: 'twist' });
+    expect(twisted.nodes.find((node) => node.id === 'e')?.values).toEqual({ energy: 0.7 });
+    const zoomed = setNode(kaleido, 'e', { op: 'zoom' });
+    expect(zoomed.nodes.find((node) => node.id === 'e')?.values).toBeUndefined();
+  });
+
+  it('comes off with clearValue, and the last one takes the map with it', () => {
+    const held = posterized();
+    const freed = clearValue(clearValue(held, 'e', 'waves'), 'e', 'depth');
+    expect(freed.nodes.find((node) => node.id === 'e')?.values).toBeUndefined();
+    // Clearing what is not held changes nothing, so a double-click on a live
+    // row that is already running is a no-op rather than an edit.
+    expect(clearValue(freed, 'e', 'waves')).toEqual(freed);
   });
 
   it('belongs to the copy rather than to both flows', () => {

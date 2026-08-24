@@ -218,6 +218,29 @@ export function setValue(circuit: Circuit, id: string, inlet: string, value: num
 }
 
 /**
+ * Take a held number off an inlet.
+ *
+ * The undo for `setValue`, and the only way a **live** inlet gets its signal
+ * back: an `energy` holding a number stays where it was put until this. The
+ * map goes rather than emptying, for the reason `keepValues` gives — the file
+ * is read by people.
+ */
+export function clearValue(circuit: Circuit, id: string, inlet: string): Circuit {
+  return {
+    ...circuit,
+    nodes: circuit.nodes.map((node) => {
+      if (node.id !== id || node.values?.[inlet] === undefined) return node;
+      const values = { ...node.values };
+      delete values[inlet];
+      if (Object.keys(values).length > 0) return { ...node, values };
+      const bare = { ...node };
+      delete bare.values;
+      return bare;
+    }),
+  };
+}
+
+/**
  * Take a node off the canvas, with everything it was wired to.
  *
  * **Except `out`.** Every flow has exactly one and it is not optional: it is
