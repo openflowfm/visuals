@@ -73,6 +73,7 @@ export type View = (typeof VIEWS)[number];
 
 export function Console({
   show,
+  showRef,
   scheme,
   library,
   media,
@@ -176,6 +177,10 @@ export function Console({
 
       {view === 'review' && (
         <ReviewView
+          show={show}
+          showRef={showRef}
+          clock={clock}
+          canFollow={canFollow}
           scheme={scheme}
           lab={lab}
           labOpen={labOpen}

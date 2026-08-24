@@ -33,6 +33,7 @@ export function Bench({
   scheme,
   flow,
   clock,
+  live,
   onError,
 }: {
   show: Show;
@@ -40,11 +41,18 @@ export function Bench({
   /** The flow to draw, which is the one being edited rather than the one that is up. */
   flow: string;
   clock: Clock;
+  /**
+   * Read the show from here each frame instead of `show` — the stage's own.
+   * A ref rather than a value because meter levels ride the anchors into a ref
+   * and never through React state; a live picture drawn from a prop would hold
+   * every fader at wherever the last structural push left it.
+   */
+  live?: { readonly current: Show } | null;
   onError(message: string | null): void;
 }) {
   const canvas = useRef<HTMLCanvasElement | null>(null);
-  const now = useRef({ show, scheme, flow, clock, onError });
-  now.current = { show, scheme, flow, clock, onError };
+  const now = useRef({ show, scheme, flow, clock, live: live ?? null, onError });
+  now.current = { show, scheme, flow, clock, live: live ?? null, onError };
 
   useEffect(() => {
     const el = canvas.current;
@@ -65,7 +73,7 @@ export function Bench({
         // landed on, or the bench would show you something else while you
         // worked. The stand-in set is the room's, shared with the node faces —
         // see [`withStandIns`](../state/useRoom.ts).
-        { ...withStandIns(held.show, beat), flow: held.flow },
+        { ...withStandIns(held.live ? held.live.current : held.show, beat), flow: held.flow },
         held.scheme,
         beat,
         held.clock.seconds(),

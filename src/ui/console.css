@@ -138,13 +138,13 @@
 }
 
 .console-head .preview-controls > .wdg > .wdg-caption,
-.console-head .room-source > .wdg-caption {
+.room-source > .wdg-caption {
   font-size: 7.5px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
-.console-head .room-source {
+.room-source {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -153,14 +153,14 @@
   border-left: 1px solid var(--rule);
 }
 
-.console-head .room-source-body {
+.room-source-body {
   display: inline-flex;
   border: 1px solid var(--bd3);
   border-radius: var(--radius-xs);
   overflow: hidden;
 }
 
-.console-head .room-source button {
+.room-source button {
   height: calc(var(--wdg-field-height) - 2px);
   border: 0;
   background: transparent;
@@ -170,20 +170,20 @@
   cursor: pointer;
 }
 
-.console-head .room-source button + button {
+.room-source button + button {
   border-left: 1px solid var(--bd3);
 }
 
-.console-head .room-source button[data-on] {
+.room-source button[data-on] {
   background: var(--surface-control);
   color: var(--amber);
 }
 
-.console-head .room-source button:hover:not(:disabled):not([data-on]) {
+.room-source button:hover:not(:disabled):not([data-on]) {
   color: var(--fg);
 }
 
-.console-head .room-source button:disabled {
+.room-source button:disabled {
   color: var(--idle);
   cursor: default;
 }

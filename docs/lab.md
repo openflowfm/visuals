@@ -32,7 +32,10 @@ review view ──WS, three gestures──> server ── LabStore ──> ~/.op
 - **`server/fresh.ts`** is the first methodology, deliberately plain: deal from
   `rollCircuit`, validate that it compiles, queue it. It exists to prove the boundary.
 - **`ReviewView.tsx`** draws the candidate through the same `Bench` the designer uses, on
-  its own clock, needing no Ableton, no Link and no bridge.
+  its own clock, needing no Ableton, no Link and no bridge — and when a bridge *is*
+  connected, its source switch judges the candidate against the live set instead: real
+  beat, real meters, real section and colourway. A live judgment freezes the set as a
+  room, sampled at submit, palette by value, with `live` where a dealt room's seed goes.
 
 ## Reviews are facts; scores are derived
 

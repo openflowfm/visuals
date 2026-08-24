@@ -21,7 +21,7 @@ import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { NumberField } from '@openflow/widgets/controls/NumberField.tsx';
 import { Select } from '@openflow/widgets/controls/Select.tsx';
 import { KEYS, packColor } from '../state/useRoom.ts';
-import { RESTING } from '../state/useShow.ts';
+import { RESTING, type Clock } from '../state/useShow.ts';
 import { useTransport } from '../state/useTransport.ts';
 import { BPM, ENERGY, PERCENT } from './param.ts';
 import { Bench } from './Preview.tsx';
@@ -41,11 +41,46 @@ import { Bench } from './Preview.tsx';
  * adjustable before scoring; whatever room is actually on screen rides the
  * submission, palette by value.
  *
+ * **Or the room is the set.** The dealt room proves a candidate under
+ * conditions nobody has to stage, but the litmus test is the real music — so
+ * when a bridge is connected the source switch hands the stage to the live
+ * show: the Link beat, the real meters riding the anchors, the section, the
+ * key, the colourway that is actually up. The same rule as always decides
+ * what a judgment freezes — the room on screen rides the submission — which
+ * for the set means a sample taken at the moment of submit, palette by value,
+ * with `live` where a dealt room carries its seed.
+ *
  * Closing the view unmounts the `Bench`, which frees its compositor — the one
  * GL context this view owns. Nothing renders, and nothing is dealt, while the
  * view is closed.
  */
+/** The renderer's packed colour back to the `#rrggbb` a `LabRoom` stores. */
+const hexOf = (packed: number) => `#${(packed & 0xffffff).toString(16).padStart(6, '0')}`;
+
+/**
+ * The set as a room, sampled at one moment — what a live judgment freezes.
+ *
+ * Everything by value, the way a dealt room already rides the submission: the
+ * challenge this lands in must stay legible years after tonight's set is gone.
+ * `seed: 'live'` where a dealt room carries its seed, which is honest — this
+ * room cannot be re-dealt, only re-staged from the values stored here.
+ */
+const heardRoom = (heard: Show): LabRoom => ({
+  tempo: Math.round(heard.tempo * 10) / 10,
+  quantum: heard.quantum,
+  energy: Math.round(heard.master * 100) / 100,
+  section: heard.role ?? '',
+  sections: [...heard.roles],
+  key: heard.key === null ? null : Math.round(heard.key * 12) % 12,
+  colors: heard.colors.map(hexOf),
+  seed: 'live',
+});
+
 export function ReviewView({
+  show,
+  showRef,
+  clock,
+  canFollow,
   scheme,
   lab,
   labOpen,
@@ -53,6 +88,11 @@ export function ReviewView({
   labSkip,
   edit,
 }: {
+  show: Show;
+  showRef: { readonly current: Show };
+  clock: Clock;
+  /** Whether there is a live show to judge against: a Link clock and a set. */
+  canFollow: boolean;
   scheme: Scheme;
   lab: LabState | null;
   labOpen(): void;
@@ -77,7 +117,9 @@ export function ReviewView({
   const [search, setSearch] = useState('');
   const [benchError, setBenchError] = useState<string | null>(null);
 
-  const transport = useTransport(null, false);
+  const transport = useTransport(clock, canFollow);
+  /** Judging against the set rather than the dealt room. Masked by `canFollow`. */
+  const live = transport.following;
 
   useEffect(() => {
     labOpen();
@@ -155,7 +197,8 @@ export function ReviewView({
     if (!candidate || !room || judging.score === null || problems.length > 0) return;
     labReview({
       candidateId: candidate.id,
-      room,
+      // The room actually judged: the set as heard right now, or the dealt one.
+      room: live ? heardRoom(showRef.current) : room,
       score: judging.score,
       tags: judging.tags,
       note: judging.note.trim() || undefined,
@@ -214,6 +257,24 @@ export function ReviewView({
     }
   };
 
+  // The row shows the room being judged: the set's own numbers while
+  // following — disabled, because the set owns them — and the dealt room's
+  // controls otherwise. The same derivation the designer's header makes.
+  const tempo = live ? show.tempo : room.tempo;
+  const bpm = Number.isInteger(tempo) ? tempo.toFixed(0) : tempo.toFixed(1);
+  const energy = live ? show.master : room.energy;
+  const sections = live ? (show.roles.length ? show.roles : ['—']) : room.sections;
+  const section = live ? (show.role ?? '—') : room.section;
+  const keyAt = live
+    ? show.key === null
+      ? 0
+      : (Math.round(show.key * 12) % 12) + 1
+    : room.key === null
+      ? 0
+      : room.key + 1;
+  const palette = live ? show.colors.map(hexOf) : room.colors;
+  const playing = live ? show.playing : transport.playing;
+
   return (
     <div className="review">
       <div className="review-stage">
@@ -223,6 +284,7 @@ export function ReviewView({
             scheme={parked!}
             flow="~candidate"
             clock={transport}
+            live={live ? showRef : null}
             onError={setBenchError}
           />
         </div>
@@ -237,56 +299,104 @@ export function ReviewView({
         <div className="review-room wdg">
           <Button
             tone="quiet"
-            label={transport.playing ? 'Hold the clock' : 'Run the clock'}
+            label={playing ? 'Hold the clock' : 'Run the clock'}
+            title={live ? 'The set owns the clock' : undefined}
+            disabled={live}
             onPress={() => transport.setPlaying(!transport.playing)}
           >
-            {transport.playing ? '■' : '▶'}
+            {playing ? '■' : '▶'}
           </Button>
-          <Button tone="quiet" label="Back to the top of the bar" onPress={transport.restart}>
+          <Button
+            tone="quiet"
+            label="Back to the top of the bar"
+            onPress={transport.restart}
+            disabled={live}
+          >
             ↺
           </Button>
           <NumberField
             param={BPM}
-            value={room.tempo}
+            value={tempo}
             onChange={(bpm) => {
               setRoom({ tempo: bpm });
               transport.setBpm(bpm);
             }}
             name="tempo"
             label="Room tempo"
-            display={`${room.tempo.toFixed(0)} bpm`}
+            display={`${bpm} bpm`}
             width={62}
+            disabled={live}
           />
           <NumberField
             param={ENERGY}
-            value={PERCENT.to(room.energy)}
+            value={PERCENT.to(energy)}
             onChange={(value) => setRoom({ energy: PERCENT.from(value) })}
             name="energy"
             width={48}
+            disabled={live}
           />
           <Select
-            items={[...room.sections]}
-            index={Math.max(0, room.sections.indexOf(room.section))}
+            items={[...sections]}
+            index={Math.max(0, sections.indexOf(section))}
             onChange={(at) => setRoom({ section: room.sections[at] })}
             name="section"
             width={104}
+            disabled={live}
           />
           <Select
             items={['—', ...KEYS]}
-            index={room.key === null ? 0 : room.key + 1}
+            index={keyAt}
             onChange={(at) => setRoom({ key: at === 0 ? null : at - 1 })}
             name="key"
             width={58}
+            disabled={live}
             title="What a `song key` node reports; — states none"
           />
-          <span className="review-palette" title={`room ${room.seed}`}>
-            {room.colors.map((hex, at) => (
+          <span
+            className="review-palette"
+            title={live ? 'the palette that is up' : `room ${room.seed}`}
+          >
+            {palette.map((hex, at) => (
               <i key={`${hex}${at}`} style={{ background: hex }} />
             ))}
           </span>
-          <Button tone="quiet" onPress={reroom} title="Deal a different room for the same candidate">
+          <Button
+            tone="quiet"
+            onPress={reroom}
+            disabled={live}
+            title="Deal a different room for the same candidate"
+          >
             another room
           </Button>
+          <div className="room-source">
+            <span className="wdg-caption">source</span>
+            <div className="room-source-body" role="radiogroup" aria-label="Judging source">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={!live}
+                data-on={!live ? '' : undefined}
+                onClick={() => transport.setFollowing(false)}
+              >
+                room
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={live}
+                data-on={live ? '' : undefined}
+                disabled={!canFollow}
+                title={
+                  canFollow
+                    ? 'The real music, as it plays'
+                    : 'Nothing to follow — no bridge is connected'
+                }
+                onClick={() => transport.setFollowing(true)}
+              >
+                set
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
