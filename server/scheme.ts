@@ -1,13 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { Circuit, CircuitNode, FlowDef, Scheme, SongSpec } from '../protocol.ts';
 import { repaired, splitPort } from '../src/render/circuit.ts';
+import { schemeFile, shown } from './home.ts';
 
 /**
  * The scheme: every flow there is, the colours they draw from, and the wheel
- * that turns through them. Read from `visuals/scheme.json`, hot-reloaded, and
- * entirely optional.
+ * that turns through them. Read from `~/.openflow/visuals/scheme.json` — see
+ * `home.ts` for how that path is chosen — hot-reloaded, and entirely optional.
  *
  * **Everything here has a default that works**, which is the rule the file is
  * designed around. A rig that draws nothing until it has been configured is a
@@ -816,8 +816,7 @@ const BUILT_IN: Scheme = {
     draws: 'by name',
   },
 };
-const here = path.dirname(fileURLToPath(import.meta.url));
-const FILE = process.env.OPENFLOW_VISUALS_SCHEME ?? path.resolve(here, '../scheme.json');
+const FILE = schemeFile();
 
 export interface SchemeSource {
   current(): Scheme;
@@ -886,7 +885,7 @@ export function openScheme(): SchemeSource {
       const parsed = JSON.parse(text) as Partial<Scheme>;
       scheme = merge(parsed);
       error = null;
-      console.log(`visuals: scheme loaded from ${path.relative(process.cwd(), FILE)}`);
+      console.log(`visuals: scheme loaded from ${shown(FILE)}`);
     } catch (err) {
       error = (err as Error).message;
       console.warn(`visuals: scheme not reloaded — ${error}`);
@@ -945,9 +944,17 @@ export function openScheme(): SchemeSource {
     }
     // Ours, so the watcher ignores the change it is about to see.
     written = JSON.stringify({ ...held, ...next }, null, 2);
+    // A temporary file renamed over the target, never a write in place. The
+    // file is the only record of every flow ever edited — there is no git
+    // history behind it — so a crash mid-write must not be able to leave half
+    // of one. The watcher already watches the directory precisely because
+    // renaming-over is how editors save.
+    const temporary = `${FILE}.${process.pid}.tmp`;
     try {
-      fs.writeFileSync(FILE, `${written}\n`);
+      fs.writeFileSync(temporary, `${written}\n`);
+      fs.renameSync(temporary, FILE);
     } catch (err) {
+      if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
       error = `could not write ${path.basename(FILE)}: ${(err as Error).message}`;
     }
   }

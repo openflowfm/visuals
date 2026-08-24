@@ -127,14 +127,17 @@ nothing there.
 Every name either view offers — songs, tracks, flows — comes from **the set** or from what
 you made, so it never asks you to type one.
 
-It writes `visuals/scheme.json`, which stays the record — hot-reloaded, readable, and
-**entirely optional**: delete it and the built-in scheme is a complete show. Edit either.
+It writes `~/.openflow/visuals/scheme.json`, which stays the record — hot-reloaded,
+readable, and **entirely optional**: delete it and the built-in scheme is a complete show.
+Edit either.
 
 **It is not in the repo.** The file is yours the way `bridge/roles.json` is yours — it is
 rewritten every time a number moves, so source control was carrying a diff for every gesture
-and a merge conflict for every roll. It is gitignored, and a fresh clone draws the built-in
-show until you make one of your own. Loading *between* saved shows is a thing this will
-want and does not have yet.
+and a merge conflict for every roll. It lives under `~/.openflow` (`OPENFLOW_HOME` moves
+that root; `OPENFLOW_VISUALS_SCHEME` names an exact file instead), a scheme from before the
+move is adopted from `visuals/scheme.json` on first start, and a fresh machine draws the
+built-in show until you make one of your own. Loading *between* saved shows is a thing this
+will want and does not have yet.
 
 Everything that draws is a **flow**, and a flow is a **graph** — see [flows](docs/flows.md).
 The lightweight pictures, the bounded fractals and the effects that ship are node *modes*,

@@ -8,7 +8,7 @@ writes one flow without guessing at the file format.
 
 The server is a local **stdio** MCP server. It does not bind a port, join Ableton Link or
 connect to the bridge. Its one external effect is `save_flow`, which writes the same
-`visuals/scheme.json` the app watches. A running visuals server sees that file change and
+`~/.openflow/visuals/scheme.json` the app watches. A running visuals server sees that file change and
 publishes the result to its browsers in the ordinary way.
 
 Run it from the repository root:
@@ -31,7 +31,7 @@ An MCP host can configure it with an absolute repository path:
 ```
 
 Set `OPENFLOW_VISUALS_SCHEME` in that process when the record lives somewhere other than
-`visuals/scheme.json`. Nothing except JSON-RPC is written to stdout; diagnostics go to stderr,
+`~/.openflow/visuals/scheme.json`. Nothing except JSON-RPC is written to stdout; diagnostics go to stderr,
 because one ordinary log line on stdout corrupts a stdio MCP session.
 
 ## What an agent gets

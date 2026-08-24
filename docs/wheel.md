@@ -153,8 +153,11 @@ between a set you can navigate and a set that looks right.
 
 ## The scheme file
 
-`visuals/scheme.json`, hot-reloaded, **gitignored**, and **entirely optional** — the built-in
+`~/.openflow/visuals/scheme.json`, hot-reloaded and **entirely optional** — the built-in
 scheme in `server/scheme.ts` is a complete show and the file only ever overrides parts of it.
+The path is `home.ts`'s business: `OPENFLOW_HOME` moves the `~/.openflow` root wholesale,
+`OPENFLOW_VISUALS_SCHEME` names an exact file instead, and a scheme from before the move is
+adopted from `visuals/scheme.json` — copied, once — the first time anything resolves it.
 
 Overrides are shallow per section: naming one colourway does not delete the other three, and
 registering one flow does not remove the twelve that ship.
