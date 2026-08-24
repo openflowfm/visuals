@@ -7,9 +7,11 @@ writes one flow without guessing at the file format.
 ## The boundary
 
 The server is a local **stdio** MCP server. It does not bind a port, join Ableton Link or
-connect to the bridge. Its one external effect is `save_flow`, which writes the same
-`~/.openflow/visuals/scheme.json` the app watches. A running visuals server sees that file change and
-publishes the result to its browsers in the ordinary way.
+connect to the bridge. Its one external effect is `save_flow`, which writes the open scheme in the library —
+`~/.openflow/visuals/schemes/<id>.json` — the same file the app watches. A running visuals
+server sees that file change and publishes the result to its browsers in the ordinary way,
+unless the screen holds unsaved edits: then the server keeps them, says the file moved, and
+leaves the choice — save overwrites, load takes it — to a person.
 
 Run it from the repository root:
 
@@ -30,8 +32,8 @@ An MCP host can configure it with an absolute repository path:
 }
 ```
 
-Set `OPENFLOW_VISUALS_SCHEME` in that process when the record lives somewhere other than
-`~/.openflow/visuals/scheme.json`. Nothing except JSON-RPC is written to stdout; diagnostics go to stderr,
+Set `OPENFLOW_VISUALS_SCHEME` in that process to pin one exact file instead of the
+library's open scheme. Nothing except JSON-RPC is written to stdout; diagnostics go to stderr,
 because one ordinary log line on stdout corrupts a stdio MCP session.
 
 ## What an agent gets

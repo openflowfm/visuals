@@ -144,14 +144,14 @@ export function sameDisplayedReadings(
 export function Designer({
   show,
   scheme,
-  save,
+  edit,
   clock,
   flow,
   setFlow,
 }: {
   show: Show;
   scheme: Scheme;
-  save(next: Scheme): void;
+  edit(next: Scheme): void;
   /** The room's clock, when there is a room. The transport may follow it. */
   clock: Clock;
   /** Which flow is open, held above so the tab bar can name it. */
@@ -331,7 +331,7 @@ export function Designer({
 
   const wire = (next: Circuit) => {
     if (!id) return;
-    save(setCircuit(scheme, id, next));
+    edit(setCircuit(scheme, id, next));
   };
 
   /**
@@ -398,7 +398,7 @@ export function Designer({
   const place = (row: FlowRow) => add(pickOf(row));
 
   const erase = (row: FlowRow) => {
-    save(dropFlow(scheme, row.id));
+    edit(dropFlow(scheme, row.id));
     setArming(null);
     setTrail((was) => was.filter((each) => each !== row.id));
     if (row.id === id) {
@@ -492,7 +492,7 @@ export function Designer({
                   title="A new flow, empty but for its out"
                   onPress={() => {
                     const made = addFlow(scheme);
-                    save(made.scheme);
+                    edit(made.scheme);
                     open(made.id);
                   }}
                 >
@@ -504,7 +504,7 @@ export function Designer({
                     title="A copy of the open flow, to take apart without losing it"
                     onPress={() => {
                       const made = forkFlow(scheme, id);
-                      save(made.scheme);
+                      edit(made.scheme);
                       open(made.id);
                     }}
                   >
@@ -640,7 +640,7 @@ export function Designer({
                 value={def.name}
                 spellCheck={false}
                 aria-label="Flow name"
-                onChange={(e) => save(renameFlow(scheme, id, e.target.value))}
+                onChange={(e) => edit(renameFlow(scheme, id, e.target.value))}
               />
               <span className="cap">{def ? aboutFlow(def) : ''}</span>
               <Uses scheme={scheme} show={show} id={id} />

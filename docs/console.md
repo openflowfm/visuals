@@ -303,6 +303,21 @@ like a mistake and is not: `sectionOf` reports where a role sits in a sorted lis
 stand-in ordered intro-to-outro would give the number a different meaning here from the one
 it has on stage.
 
+### The scheme shelf is the header's, because saving is neither view's business
+
+The header names the open scheme, and the name wears an amber dot when the screen holds
+edits its file does not — that distance is the whole subject. `save` sits beside it, lit
+only while there is something to write; the name opens the shelf: every saved scheme, the
+open one marked, and a field that saves under a new name. It is in the header rather than
+in either view because a scheme spans both — the flows are design, the wheel is set — and
+because the fact it shows is global: *this* show, saved or not.
+
+Anything that would drop unsaved edits asks by arming, the same way delete does — the first
+press turns the row into the question, the second answers it. That covers loading another
+scheme, reopening the current one (which is the revert gesture), and saving over a name
+that already exists. `⌘S` saves from anywhere, field focus included, because it is a
+command rather than a letter aimed at a field.
+
 ## The set page
 
 Three panes, and the sizes are the argument.

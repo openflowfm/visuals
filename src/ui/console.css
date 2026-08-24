@@ -1081,3 +1081,98 @@
   gap: 8px;
   margin: 8px 0;
 }
+
+.console .schemes {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.console .schemes .which {
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-xs);
+  background: var(--surface-control);
+  color: var(--fg);
+  font: inherit;
+  padding: 3px 9px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.console .schemes .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--amber);
+}
+
+.console .schemes .shelf {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--panel);
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-md);
+  padding: 4px;
+}
+
+.console .schemes .row {
+  border: 0;
+  background: none;
+  color: var(--ui);
+  font: inherit;
+  text-align: left;
+  padding: 4px 8px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+
+.console .schemes .row:hover {
+  background: var(--sel);
+}
+
+.console .schemes .row.here {
+  color: var(--fg);
+  background: var(--sel);
+}
+
+.console .schemes .asking {
+  color: var(--amber);
+}
+
+.console .schemes .shelf form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.console .schemes input {
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-xs);
+  background: var(--well);
+  color: var(--fg);
+  font: inherit;
+  padding: 4px 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.console .schemes .shelf .asking {
+  font-size: 9.5px;
+  padding: 0 8px 4px;
+}
+
+.console .schemes .notice {
+  color: var(--alarm);
+  font-size: 9.5px;
+  max-width: 260px;
+}

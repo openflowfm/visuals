@@ -25,7 +25,21 @@ import './app.css';
 export function App() {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const stage = useRef<Compositor | null>(null);
-  const { show, showRef, scheme, grid, save, downbeat, nextFlow, clock, online } = useShow();
+  const {
+    show,
+    showRef,
+    scheme,
+    library,
+    grid,
+    edit,
+    saveScheme,
+    saveSchemeAs,
+    loadScheme,
+    downbeat,
+    nextFlow,
+    clock,
+    online,
+  } = useShow();
   // The render loop reads the scheme every frame because effects live in it, and
   // reads it through a ref for the same reason it reads the show through one:
   // rebuilding the loop whenever a number moved would drop a frame per edit.
@@ -48,6 +62,15 @@ export function App() {
       // `instanceof` rather than a truthiness check, because a keydown's target
       // is not always an element — on a synthetic event it can be `window`,
       // which has no `matches` and threw, taking every shortcut down with it.
+      // Above the field guard, because ⌘S is a command and not a letter aimed
+      // at a field — saving must work mid-typing. The browser's own save
+      // dialog is eaten either way, wall included: nobody wants a webpage
+      // download of the renderer mid-show.
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key === 's') {
+        e.preventDefault();
+        if (!ON_WALL) saveScheme();
+        return;
+      }
       const target = e.target;
       if (target instanceof HTMLElement && target.matches('input, textarea, select')) return;
       if (e.key === 'f') void document.documentElement.requestFullscreen?.().catch(() => {});
@@ -78,7 +101,7 @@ export function App() {
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
-  }, [downbeat, nextFlow, align, aligning, walled, send, shut]);
+  }, [downbeat, nextFlow, saveScheme, align, aligning, walled, send, shut]);
 
   useEffect(() => {
     if (!canvas.current) return;
@@ -168,7 +191,8 @@ export function App() {
 
           {glError && <p className="bad-line">{glError}</p>}
           {wall.trouble && <p className="bad-line">{wall.trouble}</p>}
-          {show.schemeError && <p className="bad-line">scheme.json: {show.schemeError}</p>}
+          {show.schemeError && <p className="bad-line">scheme: {show.schemeError}</p>}
+          {library?.notice && <p className="bad-line">{library.notice}</p>}
 
           <dl>
             <dt>tempo</dt>
@@ -182,6 +206,10 @@ export function App() {
             <dd className="wide">{show.song ?? '—'}</dd>
             <dt>section</dt>
             <dd>{show.role ?? '—'}</dd>
+            <dt>scheme</dt>
+            <dd className="wide">
+              {library ? `${library.current}${library.dirty ? ' *' : ''}` : '—'}
+            </dd>
             <dt>flow</dt>
             <dd className="wide">
               {show.flow ? (scheme?.flows[show.flow]?.name ?? show.flow) : '—'}
@@ -235,8 +263,12 @@ export function App() {
           show={show}
           showRef={showRef}
           scheme={scheme}
+          library={library}
           grid={grid}
-          save={save}
+          edit={edit}
+          saveScheme={saveScheme}
+          saveSchemeAs={saveSchemeAs}
+          loadScheme={loadScheme}
           clock={clock}
           onClose={() => setEditing(false)}
         />

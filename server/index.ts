@@ -7,7 +7,7 @@ import { VISUALS_PORT, VISUALS_WS_PATH, type Up } from '../protocol.ts';
 import { nextFlow, reOne } from '../resolve.ts';
 import { followBridge } from './bridge.ts';
 import { openLink } from './link.ts';
-import { openScheme } from './scheme.ts';
+import { openLibrary } from './library.ts';
 import { buildShow, noTurning } from './show.ts';
 import { buildGrid } from './grid.ts';
 
@@ -48,7 +48,7 @@ const ROOT = path.resolve(here, '../dist');
  */
 
 const link = openLink(120, 4);
-const scheme = openScheme();
+const scheme = openLibrary();
 let dirty = true;
 const bridge = followBridge(BRIDGE, () => {
   dirty = true;
@@ -91,6 +91,10 @@ const sendScheme = (socket: WebSocket) => {
   socket.send(JSON.stringify({ kind: 'scheme', scheme: scheme.current() }));
 };
 
+const sendLibrary = (socket: WebSocket) => {
+  socket.send(JSON.stringify({ kind: 'library', ...scheme.library() }));
+};
+
 /**
  * A cheap stand-in for "the set changed shape".
  *
@@ -122,6 +126,7 @@ sockets.on('connection', (socket) => {
   socket.on('close', () => clients.delete(socket));
   socket.on('error', () => clients.delete(socket));
   sendScheme(socket);
+  sendLibrary(socket);
   sendGrid(socket);
   socket.send(
     JSON.stringify({ kind: 'show', ...buildShow(bridge.state, link.sample(), scheme, turning) }),
@@ -152,6 +157,23 @@ sockets.on('connection', (socket) => {
       dirty = true;
       return;
     }
+    // Persistence is its own gesture now. An edit changes what every screen
+    // draws; only these three touch the library on disk. None of them answer
+    // inline — the heartbeat notices the revision and the library move within
+    // a tick, which is faster than a finger leaves a button.
+    if (message.kind === 'save-scheme') {
+      scheme.save();
+      return;
+    }
+    if (message.kind === 'save-scheme-as') {
+      scheme.saveAs(message.id);
+      return;
+    }
+    if (message.kind === 'load-scheme') {
+      scheme.load(message.id);
+      dirty = true;
+      return;
+    }
     if (message.kind !== 'scheme' || !message.scheme) return;
     scheme.replace(message.scheme);
     dirty = true;
@@ -160,6 +182,9 @@ sockets.on('connection', (socket) => {
     // to what was sent, and an editor showing its own guess rather than the
     // resolved truth is an editor that drifts.
     for (const other of clients) if (other.readyState === other.OPEN) sendScheme(other);
+    // The broadcast above already carried this revision; without this the
+    // heartbeat would send every gesture a second time, one tick late.
+    lastRevision = scheme.revision();
   });
 });
 
@@ -182,10 +207,14 @@ sockets.on('connection', (socket) => {
 const ANCHOR_MS = 100;
 const SHOW_MS = 1000;
 
-// The scheme is a file someone edits with the picture on screen beside them, so
-// a save has to reach the renderer without a reconnect. Nothing here diffs it —
-// the heartbeat is a second away at worst, and the whole show is ~2 kB.
-let lastScheme = '';
+// A scheme can change without any client sending one — a file edited with the
+// picture on screen beside it, a flow saved by the MCP server, a load. The
+// revision is the store saying "what I hold moved"; the heartbeat carries it to
+// every screen without a reconnect. The library line moves for less — a dirty
+// flag, a save-as — so it is stamped separately and costs a readdir per tick.
+let lastRevision = -1;
+let lastShown = '';
+let lastLibrary = '';
 
 let sinceShow = 0;
 setInterval(() => {
@@ -211,17 +240,24 @@ setInterval(() => {
   // The flow and the colourway are in it because the rotation moves them, and a
   // wheel that turned without the renderer being told would be a wheel that
   // never turned: the anchor carries meters, not decisions.
-  const schemeStamp = `${show.flow}|${show.colorway}|${show.song}|${show.schemeError}`;
-  const reloaded = schemeStamp !== lastScheme;
-  lastScheme = schemeStamp;
+  const showStamp = `${show.flow}|${show.colorway}|${show.song}|${show.schemeError}`;
+  const moved = showStamp !== lastShown;
+  lastShown = showStamp;
+  const reloaded = scheme.revision() !== lastRevision;
+  lastRevision = scheme.revision();
   const wire = JSON.stringify(
-    due || reloaded ? { kind: 'show' as const, ...show } : anchorOf(show),
+    due || moved || reloaded ? { kind: 'show' as const, ...show } : anchorOf(show),
   );
-  // A file edited on disk has to reach the editor too, not just the renderer.
+  // A scheme that moved without a client sending it — a file edited on disk, a
+  // load — has to reach the editor too, not just the renderer.
   const schemeWire = reloaded ? JSON.stringify({ kind: 'scheme', scheme: scheme.current() }) : null;
+  const libraryWire = JSON.stringify({ kind: 'library', ...scheme.library() });
+  const shelf = libraryWire !== lastLibrary ? libraryWire : null;
+  lastLibrary = libraryWire;
   for (const socket of clients) {
     if (socket.readyState !== socket.OPEN) continue;
     if (schemeWire) socket.send(schemeWire);
+    if (shelf) socket.send(shelf);
     socket.send(wire);
   }
 }, ANCHOR_MS);

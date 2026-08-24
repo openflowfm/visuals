@@ -151,13 +151,26 @@ Each track takes a colour by its position in the set out of whatever colourway i
 your place in the grid during a show, and driving the picture from them would force a choice
 between a set you can navigate and a set that looks right.
 
-## The scheme file
+## The scheme library
 
-`~/.openflow/visuals/scheme.json`, hot-reloaded and **entirely optional** — the built-in
-scheme in `server/scheme.ts` is a complete show and the file only ever overrides parts of it.
-The path is `home.ts`'s business: `OPENFLOW_HOME` moves the `~/.openflow` root wholesale,
-`OPENFLOW_VISUALS_SCHEME` names an exact file instead, and a scheme from before the move is
-adopted from `visuals/scheme.json` — copied, once — the first time anything resolves it.
+`~/.openflow/visuals/schemes/<id>.json`, one saved scheme per file, **entirely optional** —
+the built-in scheme in `server/scheme.ts` is a complete show and a file only ever overrides
+parts of it. `state.json` beside the library remembers which scheme is open, so a restart
+reopens the show you were in. The paths are `home.ts`'s business: `OPENFLOW_HOME` moves the
+`~/.openflow` root wholesale, `OPENFLOW_VISUALS_SCHEME` pins one exact file and turns the
+library off, and a scheme from before the library — the single
+`~/.openflow/visuals/scheme.json`, or the `visuals/scheme.json` beside the code before
+that — is adopted as `main`, copied once, the first time anything resolves it.
+
+**An edit is not a save.** Every gesture in the editor reaches every screen immediately —
+the picture has to follow the pointer — and all of it lands in server memory only. The file
+changes when you press save, and the distance between the two is the dirty mark in the
+console. That is what makes it safe to tear a scheme apart during a set: the saved one is
+exactly as good as it was when you last meant it. The cost is honest too — unsaved edits
+live in the server process, and stopping it takes them along. Save writes the open scheme's
+file, save-as writes it under a new id and stays there, load opens a saved one — the
+console asks before dropping unsaved edits, the server does not. `server/library.ts` holds
+all of this.
 
 Overrides are shallow per section: naming one colourway does not delete the other three, and
 registering one flow does not remove the twelve that ship.
@@ -166,9 +179,10 @@ A parse error **keeps the scheme that was already working** and reports the mess
 panel. Losing the show to a trailing comma is the wrong answer at any time and an unthinkable
 one during a set.
 
-The file lags an edit by 200ms. A control turning and a node being dragged both emit on every
-pointer move, so what the server *holds* updates immediately — the picture has to follow the
-pointer — while the write is debounced.
+The open file is still watched. Edited clean — by hand, or by the MCP server — it reloads
+onto every screen. Edited while the screen holds unsaved work, it does not: the console says
+the file moved, and saving overwrites it while loading takes it. Nothing silently discards
+either side.
 
 **`merge` is the one door, so it is where a graph gets repaired.** A scheme reaches the
 renderer exactly two ways — read off disk, or sent up by an editor that gets it straight back
@@ -180,7 +194,7 @@ same fix sixty times a second and never telling anyone. See [flows](flows.md).
 
 **A saved file holds a copy of every flow that ships**, because the editor sends the whole
 scheme and the server writes the whole scheme. So improving a built-in does not reach a
-machine that has already saved once — its `scheme.json` shadows the new one under the same
+machine that has already saved once — its saved scheme shadows the new one under the same
 id, and a built-in *added* since that save does arrive, because there is nothing in the file
 to shadow it. Deleting the shipped entries from the file is the whole fix, and it is worth
 knowing before wondering why an updated library did not arrive.

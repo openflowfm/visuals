@@ -646,8 +646,23 @@ export interface SetGrid {
 // --- the wire -----------------------------------------------------------
 
 /**
- * Server to browser. Three kinds, discriminated, and the split is what keeps
- * the renderer smooth — see `docs/clock.md`.
+ * The scheme library, as the console shows it: every saved scheme, which one
+ * is open, and whether the open one holds edits its file does not have.
+ */
+export interface Library {
+  /** Every saved scheme by id — the filename without `.json`, sorted. */
+  schemes: string[];
+  /** The one that is open. */
+  current: string;
+  /** True when the open scheme has been edited since it was last saved. */
+  dirty: boolean;
+  /** One sentence the console should show — a refusal, a file moved under us — or null. */
+  notice: string | null;
+}
+
+/**
+ * Server to browser, discriminated by kind, and the show/anchor split is what
+ * keeps the renderer smooth — see `docs/clock.md`.
  */
 export type Down =
   | ({ kind: 'show' } & Show)
@@ -663,14 +678,18 @@ export type Down =
       opacity: number[];
     }
   | { kind: 'scheme'; scheme: Scheme }
+  | ({ kind: 'library' } & Library)
   | { kind: 'grid'; grid: SetGrid };
 
 /**
- * Browser to server. Three messages, and the first is the whole scheme, replaced.
+ * Browser to server. An edit is the whole scheme, replaced.
  *
  * Whole rather than a patch because the scheme is a few kilobytes and an editor
  * that sent deltas would need every one of them to be reversible to be
- * undoable. The server writes it to `scheme.json`, which stays the record.
+ * undoable. The server holds it in memory and every screen follows; **nothing
+ * reaches disk until `save-scheme` says so**. `save-scheme-as` writes the open
+ * scheme under a new id and stays there; `load-scheme` opens a saved one,
+ * dropping unsaved edits — the console asks first, the server does not.
  *
  * `downbeat` carries nothing: *when* it arrives is the
  * whole message. It goes to the server rather than being handled in the browser
@@ -683,6 +702,9 @@ export type Down =
  */
 export type Up =
   | { kind: 'scheme'; scheme: Scheme }
+  | { kind: 'save-scheme' }
+  | { kind: 'save-scheme-as'; id: string }
+  | { kind: 'load-scheme'; id: string }
   | { kind: 'downbeat' }
   | { kind: 'next-flow' };
 

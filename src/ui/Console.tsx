@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Scheme, SetGrid, Show } from '../../protocol.ts';
+import type { Library, Scheme, SetGrid, Show } from '../../protocol.ts';
 import '@openflow/widgets/tokens.css';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { Segmented } from '@openflow/widgets/controls/Segmented.tsx';
@@ -30,8 +30,13 @@ export interface ConsoleProps {
   show: Show;
   showRef: { readonly current: Show };
   scheme: Scheme;
+  library: Library | null;
   grid: SetGrid | null;
-  save(next: Scheme): void;
+  /** Publish an edit to every screen. Disk is `saveScheme`'s business. */
+  edit(next: Scheme): void;
+  saveScheme(): void;
+  saveSchemeAs(id: string): void;
+  loadScheme(id: string): void;
   clock: Clock;
   onClose(): void;
 }
@@ -39,7 +44,18 @@ export interface ConsoleProps {
 const VIEWS = ['design', 'set'] as const;
 export type View = (typeof VIEWS)[number];
 
-export function Console({ show, scheme, grid, save, clock, onClose }: ConsoleProps) {
+export function Console({
+  show,
+  scheme,
+  library,
+  grid,
+  edit,
+  saveScheme,
+  saveSchemeAs,
+  loadScheme,
+  clock,
+  onClose,
+}: ConsoleProps) {
   const [view, setView] = useState<View>('design');
   const [flow, setFlow] = useState<string | null>(null);
 
@@ -54,6 +70,12 @@ export function Console({ show, scheme, grid, save, clock, onClose }: ConsolePro
           className="views"
         />
         <span className="context">{contextOf(view, show, scheme, flow)}</span>
+        <Schemes
+          library={library}
+          saveScheme={saveScheme}
+          saveSchemeAs={saveSchemeAs}
+          loadScheme={loadScheme}
+        />
         <Button tone="quiet" label="Close console" onPress={onClose}>
           ×
         </Button>
@@ -63,14 +85,14 @@ export function Console({ show, scheme, grid, save, clock, onClose }: ConsolePro
         <Designer
           show={show}
           scheme={scheme}
-          save={save}
+          edit={edit}
           clock={clock}
           flow={flow}
           setFlow={setFlow}
         />
       )}
 
-      {view === 'set' && <SetView show={show} scheme={scheme} grid={grid} save={save} />}
+      {view === 'set' && <SetView show={show} scheme={scheme} grid={grid} edit={edit} />}
     </div>
   );
 }
@@ -95,4 +117,116 @@ function contextOf(view: View, show: Show, scheme: Scheme, flow: string | null):
   if (!def) return `${made} flow${made === 1 ? '' : 's'}`;
   const nodes = def.circuit.nodes.length;
   return `${def.name} · ${nodes} node${nodes === 1 ? '' : 's'} · ${made} in the library`;
+}
+
+/**
+ * The scheme shelf: which show this is, whether it is saved, and the way to
+ * another one.
+ *
+ * The name is a button that opens the library; the save sits beside it and is
+ * lit only when there is a distance between the screen and the file — that
+ * distance is the whole reason the button exists. Anything that would discard
+ * unsaved edits asks by arming: the first press turns the row into the
+ * question, the second answers it. A dialog would ask harder and be worse —
+ * this is furniture inside a console, not an event.
+ */
+function Schemes({
+  library,
+  saveScheme,
+  saveSchemeAs,
+  loadScheme,
+}: {
+  library: Library | null;
+  saveScheme(): void;
+  saveSchemeAs(id: string): void;
+  loadScheme(id: string): void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [arming, setArming] = useState<string | null>(null);
+  const [naming, setNaming] = useState('');
+  if (!library) return null;
+
+  const pick = (id: string) => {
+    // Loading the open scheme is a revert, so it asks the same way a switch
+    // does: both throw away the edits on screen.
+    if (library.dirty && arming !== id) {
+      setArming(id);
+      return;
+    }
+    loadScheme(id);
+    setOpen(false);
+    setArming(null);
+  };
+
+  const saveAs = () => {
+    const id = naming
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, '-')
+      .replace(/^[^a-z]+/, '');
+    if (!id) return;
+    // Onto a scheme that already exists is an overwrite, and arms like one.
+    if (id !== library.current && library.schemes.includes(id) && arming !== `as:${id}`) {
+      setArming(`as:${id}`);
+      return;
+    }
+    saveSchemeAs(id);
+    setNaming('');
+    setOpen(false);
+    setArming(null);
+  };
+
+  return (
+    <div className="schemes">
+      <button
+        type="button"
+        className="which"
+        aria-expanded={open}
+        onClick={() => {
+          setOpen((on) => !on);
+          setArming(null);
+        }}
+      >
+        {library.current}
+        {library.dirty ? <span className="dot" /> : null}
+      </button>
+      <Button tone="quiet" label="Save scheme" onPress={saveScheme} disabled={!library.dirty}>
+        save
+      </Button>
+      {open && (
+        <div className="shelf">
+          {library.schemes.map((id) => (
+            <button
+              key={id}
+              type="button"
+              className={`row${id === library.current ? ' here' : ''}${arming === id ? ' asking' : ''}`}
+              onClick={() => pick(id)}
+            >
+              {arming === id ? (id === library.current ? 'discard edits?' : 'discard edits, open?') : id}
+            </button>
+          ))}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              saveAs();
+            }}
+          >
+            <input
+              value={naming}
+              onChange={(e) => {
+                setNaming(e.target.value);
+                setArming(null);
+              }}
+              placeholder="save as…"
+              aria-label="Save the open scheme under a new name"
+            />
+            {arming?.startsWith('as:') && (
+              <span className="asking">overwrites {arming.slice(3)} — again to mean it</span>
+            )}
+          </form>
+        </div>
+      )}
+      {library.notice && <span className="notice">{library.notice}</span>}
+    </div>
+  );
 }

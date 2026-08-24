@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Down, Scheme, SetGrid, Show } from '../../protocol.ts';
+import type { Down, Library, Scheme, SetGrid, Show } from '../../protocol.ts';
 
 /**
  * The connection to the visuals server, and the clock the renderer runs on.
@@ -65,8 +65,20 @@ export function useShow(): {
    * records a clip, not when one fires.
    */
   grid: SetGrid | null;
-  /** Send a whole scheme back. The server writes it to `scheme.json`. */
-  save(next: Scheme): void;
+  /** The library: every saved scheme, the open one, and whether it is dirty. */
+  library: Library | null;
+  /**
+   * Publish an edit. Every screen follows it immediately; nothing reaches
+   * disk — that is `saveScheme`'s job, and the distance between the two is
+   * what the library's dirty flag shows.
+   */
+  edit(next: Scheme): void;
+  /** Write the open scheme to its file. */
+  saveScheme(): void;
+  /** Write the open scheme under a new id and be on that id from now on. */
+  saveSchemeAs(id: string): void;
+  /** Open a saved scheme, dropping unsaved edits. Ask before calling. */
+  loadScheme(id: string): void;
   /** "The one is here." Nothing to carry: when it arrives is the message. */
   downbeat(): void;
   /** Turn only the flow wheel once, for every screen attached to the server. */
@@ -76,6 +88,7 @@ export function useShow(): {
 } {
   const [show, setShow] = useState<Show>(RESTING);
   const [scheme, setScheme] = useState<Scheme | null>(null);
+  const [library, setLibrary] = useState<Library | null>(null);
   const [grid, setGrid] = useState<SetGrid | null>(null);
   const [online, setOnline] = useState(false);
   const live = useRef<WebSocket | null>(null);
@@ -115,6 +128,11 @@ export function useShow(): {
         const t = timing.current;
         if (message.kind === 'scheme') {
           setScheme(message.scheme);
+          return;
+        }
+        if (message.kind === 'library') {
+          const { kind: _, ...state } = message;
+          setLibrary(state);
           return;
         }
         if (message.kind === 'grid') {
@@ -179,13 +197,32 @@ export function useShow(): {
   // render loop reads the ref sixty times a second without involving React at
   // all. A meter arriving on an anchor updates the ref and nothing re-renders,
   // which is the whole reason levels don't wake a diff on the server either.
-  const save = useRef((next: Scheme) => {
+  const edit = useRef((next: Scheme) => {
     // Optimistic, so a control follows the pointer rather than the round trip.
     // The server answers with what it resolved, which is what finally sticks.
     setScheme(next);
     const socket = live.current;
     if (socket?.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ kind: 'scheme', scheme: next }));
+    }
+  }).current;
+
+  const saveScheme = useRef(() => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ kind: 'save-scheme' }));
+  }).current;
+
+  const saveSchemeAs = useRef((id: string) => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'save-scheme-as', id }));
+    }
+  }).current;
+
+  const loadScheme = useRef((id: string) => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'load-scheme', id }));
     }
   }).current;
 
@@ -199,7 +236,21 @@ export function useShow(): {
     if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ kind: 'next-flow' }));
   }).current;
 
-  return { show, showRef: held, scheme, grid, save, downbeat, nextFlow, clock, online };
+  return {
+    show,
+    showRef: held,
+    scheme,
+    library,
+    grid,
+    edit,
+    saveScheme,
+    saveSchemeAs,
+    loadScheme,
+    downbeat,
+    nextFlow,
+    clock,
+    online,
+  };
 }
 
 export { RESTING };

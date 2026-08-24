@@ -127,17 +127,21 @@ nothing there.
 Every name either view offers — songs, tracks, flows — comes from **the set** or from what
 you made, so it never asks you to type one.
 
-It writes `~/.openflow/visuals/scheme.json`, which stays the record — hot-reloaded,
-readable, and **entirely optional**: delete it and the built-in scheme is a complete show.
-Edit either.
+Schemes are saved in `~/.openflow/visuals/schemes/`, one readable file per scheme, and the
+library is **entirely optional**: with nothing saved, the built-in scheme is a complete
+show. Edit a saved file by hand if you like — the open one is watched, and a clean reload
+reaches the screen.
 
-**It is not in the repo.** The file is yours the way `bridge/roles.json` is yours — it is
-rewritten every time a number moves, so source control was carrying a diff for every gesture
-and a merge conflict for every roll. It lives under `~/.openflow` (`OPENFLOW_HOME` moves
-that root; `OPENFLOW_VISUALS_SCHEME` names an exact file instead), a scheme from before the
-move is adopted from `visuals/scheme.json` on first start, and a fresh machine draws the
-built-in show until you make one of your own. Loading *between* saved shows is a thing this
-will want and does not have yet.
+**An edit is not a save.** Every gesture follows the pointer onto every screen, but nothing
+reaches disk until you press save (or `⌘S`). The console's header names the open scheme,
+marks unsaved edits, and opens the shelf: save, save under a new name, or load another —
+loading asks before it drops unsaved work. A restart reopens the scheme you were in.
+
+**None of it is in the repo.** The library is yours the way `bridge/roles.json` is yours.
+It lives under `~/.openflow` (`OPENFLOW_HOME` moves that root; `OPENFLOW_VISUALS_SCHEME`
+pins one exact file and turns the library off), a scheme from before the library is adopted
+as `main` on first start, and a fresh machine draws the built-in show until you save one of
+your own. See [the wheel](docs/wheel.md).
 
 Everything that draws is a **flow**, and a flow is a **graph** — see [flows](docs/flows.md).
 The lightweight pictures, the bounded fractals and the effects that ship are node *modes*,

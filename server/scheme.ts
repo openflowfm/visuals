@@ -1,19 +1,17 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import type { Circuit, CircuitNode, FlowDef, Scheme, SongSpec } from '../protocol.ts';
 import { repaired, splitPort } from '../src/render/circuit.ts';
-import { schemeFile, shown } from './home.ts';
 
 /**
  * The scheme: every flow there is, the colours they draw from, and the wheel
- * that turns through them. Read from `~/.openflow/visuals/scheme.json` — see
- * `home.ts` for how that path is chosen — hot-reloaded, and entirely optional.
+ * that turns through them. Saved schemes live in `~/.openflow/visuals/schemes/`
+ * and are held, watched and written by `library.ts`; this module is the
+ * built-in scheme and the door every file comes through.
  *
  * **Everything here has a default that works**, which is the rule the file is
  * designed around. A rig that draws nothing until it has been configured is a
  * rig nobody configures, so the built-in scheme below is a complete show and the
- * file only ever overrides parts of it. Delete `scheme.json` and the picture
- * changes; it does not stop.
+ * file only ever overrides parts of it. Delete every saved scheme and the
+ * picture changes; it does not stop.
  *
  * ## What is not in it any more
  *
@@ -816,148 +814,15 @@ const BUILT_IN: Scheme = {
     draws: 'by name',
   },
 };
-const FILE = schemeFile();
-
+/**
+ * What the show builder needs from the scheme: what it is right now, and
+ * whether the last attempt to change it went wrong. Holding one, saving it,
+ * and the library it is saved into are `library.ts`'s business.
+ */
 export interface SchemeSource {
   current(): Scheme;
-  /**
-   * Replace it wholesale and write it back to disk.
-   *
-   * The file stays the record — the editor is a way of writing it, not a second
-   * place the truth lives. Which also means a scheme edited in the browser is
-   * one you can read, diff and commit afterwards.
-   */
-  replace(next: Scheme): void;
-  /** The last parse failure, or null. Shown in the panel rather than logged away. */
+  /** The last parse or write failure, or null. Shown in the panel rather than logged away. */
   error(): string | null;
-  stop(): void;
-}
-
-/**
- * Loads the scheme and follows the file.
- *
- * Watched rather than read once because the whole point of a file is that you
- * edit it with the picture on screen next to you. A parse failure **keeps the
- * scheme that was already working** and reports the message — losing the show
- * because of a trailing comma is the wrong answer at any time and an unthinkable
- * one during a set.
- */
-export function openScheme(): SchemeSource {
-  let scheme = BUILT_IN;
-  let error: string | null = null;
-  let watcher: fs.FSWatcher | null = null;
-  let debounce: NodeJS.Timeout | null = null;
-  /**
-   * The file lags the edit by a moment, deliberately.
-   *
-   * A control turning and a node being dragged both emit on every pointer move, so
-   * an editor mid-gesture sends sixty schemes a second. What it holds is
-   * published immediately — the show must follow the pointer — but writing the
-   * file that often would put a synchronous write in the middle of a drag for
-   * no benefit, since nobody reads the file until the gesture is over.
-   */
-  let pending: NodeJS.Timeout | null = null;
-  /**
-   * The last thing we wrote ourselves.
-   *
-   * Saving from the editor changes the file, which wakes the watcher, which
-   * would re-read and re-publish what the editor already has — harmless but for
-   * one thing: the re-read lands a render or two later and would yank a control
-   * out from under a drag. Recognising our own write is what stops that.
-   */
-  let written: string | null = null;
-
-  const load = () => {
-    if (!fs.existsSync(FILE)) {
-      scheme = BUILT_IN;
-      error = null;
-      return;
-    }
-    let text: string;
-    try {
-      text = fs.readFileSync(FILE, 'utf8');
-    } catch {
-      return;
-    }
-    if (written !== null && text.trim() === written.trim()) return;
-    written = null;
-    try {
-      const parsed = JSON.parse(text) as Partial<Scheme>;
-      scheme = merge(parsed);
-      error = null;
-      console.log(`visuals: scheme loaded from ${shown(FILE)}`);
-    } catch (err) {
-      error = (err as Error).message;
-      console.warn(`visuals: scheme not reloaded — ${error}`);
-    }
-  };
-
-  load();
-
-  try {
-    // The directory, not the file: editors write by renaming a temp file over
-    // the target, which breaks a watch on the inode and would silently stop
-    // reloading after the first save.
-    watcher = fs.watch(path.dirname(FILE), (_event, name) => {
-      if (name && name !== path.basename(FILE)) return;
-      if (debounce) clearTimeout(debounce);
-      debounce = setTimeout(load, 120);
-    });
-  } catch {
-    // A platform without directory watching still runs; it just needs a restart.
-  }
-
-  return {
-    current: () => scheme,
-    error: () => error,
-    replace(next) {
-      scheme = merge(next);
-      error = null;
-      if (pending) clearTimeout(pending);
-      pending = setTimeout(() => {
-        pending = null;
-        write(next);
-      }, 200);
-    },
-    stop() {
-      if (debounce) clearTimeout(debounce);
-      if (pending) {
-        clearTimeout(pending);
-        write(scheme);
-      }
-      watcher?.close();
-    },
-  };
-
-  function write(next: Scheme) {
-    // Written over whatever the file already held rather than in place of it,
-    // and indented rather than minified. The file is meant to be read, edited
-    // by hand and committed — the editor is a way of writing the record, not a
-    // second place the truth lives. Without this, the first turn of a control
-    // flattens it to one line and silently drops the `_` block explaining what
-    // every key means.
-    let held: Record<string, unknown> = {};
-    try {
-      held = JSON.parse(fs.readFileSync(FILE, 'utf8')) as Record<string, unknown>;
-    } catch {
-      // No file yet, or an unparseable one we are about to replace anyway.
-    }
-    // Ours, so the watcher ignores the change it is about to see.
-    written = JSON.stringify({ ...held, ...next }, null, 2);
-    // A temporary file renamed over the target, never a write in place. The
-    // file is the only record of every flow ever edited — there is no git
-    // history behind it — so a crash mid-write must not be able to leave half
-    // of one. The watcher already watches the directory precisely because
-    // renaming-over is how editors save.
-    const temporary = `${FILE}.${process.pid}.tmp`;
-    try {
-      fs.writeFileSync(temporary, `${written}\n`);
-      fs.renameSync(temporary, FILE);
-    } catch (err) {
-      if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
-      error = `could not write ${path.basename(FILE)}: ${(err as Error).message}`;
-    }
-  }
 }
 
 /**

@@ -16,11 +16,11 @@ import { Button } from '@openflow/widgets/controls/Button.tsx';
  */
 export function Colorways({
   scheme,
-  save,
+  edit,
   current,
 }: {
   scheme: Scheme;
-  save(next: Scheme): void;
+  edit(next: Scheme): void;
   /** The one the show is using, so it can be marked. */
   current: string | null;
 }) {
@@ -30,7 +30,7 @@ export function Colorways({
     const colorways = { ...scheme.colorways };
     if (colors === null) delete colorways[name];
     else colorways[name] = colors;
-    save({ ...scheme, colorways });
+    edit({ ...scheme, colorways });
   };
 
   const renameWay = (from: string, to: string) => {
@@ -48,7 +48,7 @@ export function Colorways({
     );
     const defaults =
       scheme.defaults.colorway === from ? { ...scheme.defaults, colorway: name } : scheme.defaults;
-    save({ ...scheme, colorways, songs, defaults });
+    edit({ ...scheme, colorways, songs, defaults });
   };
 
   const add = () => {

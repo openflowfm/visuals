@@ -27,12 +27,12 @@ export function SetView({
   show,
   scheme,
   grid,
-  save,
+  edit,
 }: {
   show: Show;
   scheme: Scheme;
   grid: SetGrid | null;
-  save(next: Scheme): void;
+  edit(next: Scheme): void;
 }) {
   const [typed, setTyped] = useState<string | null>(null);
   const [parts, setParts] = useState<RollPart[]>([...ROLL_PARTS]);
@@ -52,11 +52,11 @@ export function SetView({
     if (parts.length === 0) return;
     setBefore(scheme);
     setTyped(null);
-    save(rollScheme(seed, show, scheme, parts));
+    edit(rollScheme(seed, show, scheme, parts));
   };
 
   const rotate = (next: Partial<Scheme['rotation']>) =>
-    save({ ...scheme, rotation: { ...scheme.rotation, ...next } });
+    edit({ ...scheme, rotation: { ...scheme.rotation, ...next } });
 
   return (
     <div className="setview wdg">
@@ -110,7 +110,7 @@ export function SetView({
         {before && (
           <Button
             onPress={() => {
-              save(before);
+              edit(before);
               setBefore(null);
             }}
           >
@@ -167,7 +167,7 @@ export function SetView({
               <NumberField
                 param={PACE}
                 value={scheme.defaults.pace}
-                onChange={(pace) => save({ ...scheme, defaults: { ...scheme.defaults, pace } })}
+                onChange={(pace) => edit({ ...scheme, defaults: { ...scheme.defaults, pace } })}
                 name="rungs"
               />
             </label>
@@ -209,7 +209,7 @@ export function SetView({
                   thirty-five dropdowns. */}
               <Button
                 title="Let every song turn with the wheel again"
-                onPress={() => save({ ...scheme, songs: {} })}
+                onPress={() => edit({ ...scheme, songs: {} })}
               >
                 let them all turn
               </Button>
@@ -233,7 +233,7 @@ export function SetView({
                     items={['turning', ...ways]}
                     index={Math.max(0, ways.indexOf(spec.colorway ?? '') + 1)}
                     onChange={(i) =>
-                      save(setSong(scheme, song.name, { colorway: i === 0 ? undefined : ways[i - 1] }))
+                      edit(setSong(scheme, song.name, { colorway: i === 0 ? undefined : ways[i - 1] }))
                     }
                     label={`${song.name} colourway`}
                     width={104}
@@ -245,7 +245,7 @@ export function SetView({
                       flows.findIndex((each) => each.id === pinned[0]) + 1,
                     )}
                     onChange={(i) =>
-                      save(
+                      edit(
                         setSong(scheme, song.name, {
                           flows: i === 0 ? undefined : [flows[i - 1].id],
                         }),
@@ -261,7 +261,7 @@ export function SetView({
         </section>
 
         <section className="pane">
-          <Colorways scheme={scheme} save={save} current={show.colorway} />
+          <Colorways scheme={scheme} edit={edit} current={show.colorway} />
         </section>
       </div>
     </div>

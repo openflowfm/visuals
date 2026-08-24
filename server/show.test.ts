@@ -62,7 +62,7 @@ const LINK: LinkFrame = {
 };
 
 function sourceOf(scheme: Scheme): SchemeSource {
-  return { current: () => scheme, replace() {}, error: () => null, stop() {} };
+  return { current: () => scheme, error: () => null };
 }
 
 /** A two-track set with one scene playing, which is the smallest real show. */
