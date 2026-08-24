@@ -10,6 +10,7 @@ import { openLink } from './link.ts';
 import { openLibrary } from './library.ts';
 import { buildShow, noTurning } from './show.ts';
 import { buildGrid } from './grid.ts';
+import { listMedia, mediaRoot, serveMedia } from './media.ts';
 
 /**
  * The visuals server: a Link peer, a bridge client, and an HTTP host for the
@@ -35,6 +36,7 @@ const HOST = process.env.OPENFLOW_VISUALS_HOST ?? '0.0.0.0';
 const PORT = Number(process.env.OPENFLOW_VISUALS_PORT) || VISUALS_PORT;
 const BRIDGE = process.env.OPENFLOW_BRIDGE_WS ?? 'ws://127.0.0.1:17800/ws';
 const ROOT = path.resolve(here, '../dist');
+const MEDIA_ROOT = mediaRoot();
 
 /**
  * Binding to every interface rather than to loopback, unlike the device.
@@ -65,6 +67,12 @@ const TYPES: Record<string, string> = {
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
+  if (url.pathname.startsWith('/media/')) {
+    if (serveMedia(req, res, MEDIA_ROOT, url.pathname.slice('/media/'.length))) return;
+    res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+    res.end('video not found');
+    return;
+  }
   let rel = url.pathname === '/' ? '/index.html' : url.pathname;
 
   // Every unknown path is the app, because the renderer is a single page.
@@ -93,6 +101,10 @@ const sendScheme = (socket: WebSocket) => {
 
 const sendLibrary = (socket: WebSocket) => {
   socket.send(JSON.stringify({ kind: 'library', ...scheme.library() }));
+};
+
+const sendMedia = (socket: WebSocket) => {
+  socket.send(JSON.stringify({ kind: 'media', assets: listMedia(MEDIA_ROOT) }));
 };
 
 /**
@@ -127,6 +139,7 @@ sockets.on('connection', (socket) => {
   socket.on('error', () => clients.delete(socket));
   sendScheme(socket);
   sendLibrary(socket);
+  sendMedia(socket);
   sendGrid(socket);
   socket.send(
     JSON.stringify({ kind: 'show', ...buildShow(bridge.state, link.sample(), scheme, turning) }),
@@ -215,6 +228,7 @@ const SHOW_MS = 1000;
 let lastRevision = -1;
 let lastShown = '';
 let lastLibrary = '';
+let lastMedia = '';
 
 let sinceShow = 0;
 setInterval(() => {
@@ -254,10 +268,18 @@ setInterval(() => {
   const libraryWire = JSON.stringify({ kind: 'library', ...scheme.library() });
   const shelf = libraryWire !== lastLibrary ? libraryWire : null;
   lastLibrary = libraryWire;
+  // Disk discovery is structural, so it belongs at the one-second show rate,
+  // not on the 100ms clock anchor. A dropped file appears without a restart.
+  const mediaWire = due
+    ? JSON.stringify({ kind: 'media' as const, assets: listMedia(MEDIA_ROOT) })
+    : lastMedia;
+  const mediaMoved = due && mediaWire !== lastMedia ? mediaWire : null;
+  if (due) lastMedia = mediaWire;
   for (const socket of clients) {
     if (socket.readyState !== socket.OPEN) continue;
     if (schemeWire) socket.send(schemeWire);
     if (shelf) socket.send(shelf);
+    if (mediaMoved) socket.send(mediaMoved);
     socket.send(wire);
   }
 }, ANCHOR_MS);
@@ -319,6 +341,7 @@ sockets.on('error', cannotListen);
 server.listen(PORT, HOST, () => {
   console.log(`visuals: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);
   console.log(`visuals: bridge ${BRIDGE}`);
+  console.log(`visuals: media ${MEDIA_ROOT}`);
   console.log(`visuals: link ${link.live ? 'on' : 'MISSING — running on the wall clock'}`);
 });
 

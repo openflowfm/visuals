@@ -39,6 +39,7 @@ export interface FlowValidation {
     cords: number;
     values: number;
     tracks: number;
+    videos: number;
     draws: string | null;
   };
 }
@@ -168,6 +169,15 @@ export function validateFlow(
         node.id,
       );
     }
+    if (!spec.asset && node.asset) {
+      issue(
+        diagnostics,
+        'error',
+        'node.asset.unused',
+        `Only a video node can name a media asset; '${node.asset}' would do nothing here.`,
+        node.id,
+      );
+    }
     if (node.kind !== 'value' && (node.value !== undefined || node.label !== undefined)) {
       issue(
         diagnostics,
@@ -193,6 +203,15 @@ export function validateFlow(
         'warning',
         'node.track.unset',
         'This track node does not name a Live track, so it will read zero.',
+        node.id,
+      );
+    }
+    if (spec.asset && !node.asset?.trim()) {
+      issue(
+        diagnostics,
+        'warning',
+        'node.video.unset',
+        'This video node has no file selected, so it will draw transparent black.',
         node.id,
       );
     }
@@ -403,6 +422,7 @@ export function validateFlow(
     cords: circuit.cords.length,
     values: 0,
     tracks: 0,
+    videos: 0,
     draws: null,
   };
   if (!diagnostics.some((entry) => entry.severity === 'error')) {
@@ -412,6 +432,7 @@ export function validateFlow(
       cords: circuit.cords.length,
       values: compiled.values.length,
       tracks: compiled.tracks.length,
+      videos: compiled.videos.length,
       draws: compiled.draws,
     };
     if (compiled.error) {
@@ -568,7 +589,7 @@ export function nodeCatalog() {
       family: definition.family,
       familyDescription: NODE_FAMILY_DETAILS[definition.family],
       description: spec.description,
-      target: spec.named ?? null,
+      target: spec.asset ? 'media' : (spec.named ?? null),
       /** Worst-case fixed work across its modes; each variant carries its exact charge. */
       work: Math.max(...variants.map((variant) => variant.work)),
       defaultMode: spec.modes?.[0]?.name ?? null,
@@ -834,8 +855,8 @@ export function reviewNodeDesign(proposal: NodeProposal): NodeDesignReview {
   }
 
   const implementationPlan = [
-    'Add the kind and any fixed mode vocabulary to protocol.ts; keep saved wire names stable.',
-    'Add its documented NodeSpec, every port description, mode descriptions, and emitter in src/render/circuit.ts.',
+    'Add src/nodes/<kind>/node.ts; the generated manifest derives NodeKind, family placement, browser order, validation, and MCP discovery from that folder.',
+    'Keep its documented NodeSpec, every port and mode description, and runtime-specific emitter beside the descriptor; add shared protocol vocabulary only when another subsystem consumes it.',
     proposal.runtime === 'render-pass'
       ? 'Design the extra render pass and its budget in src/render; expression nodes are the default, so justify this boundary.'
       : proposal.runtime === 'cpu-state' || proposal.runtime === 'set-data'

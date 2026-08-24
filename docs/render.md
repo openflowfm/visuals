@@ -25,6 +25,7 @@ the set's picture (only if the flow asked for it)
 the flow
   one full-screen pass, one compiled fragment shader
   reading that target wherever a `tracks` node appears
+  and up to two persistent decoded-video textures where `video` nodes appear
 
 the output stage
   keystone, shoulder, master gain -> the screen
@@ -145,6 +146,22 @@ and its 9/16/7 work charge is counted every time a graph samples it. Four direct
 exactly fill the 64-unit graph ceiling; a nine-tap bloom over one is refused before the shader
 reaches the driver. A seven-ball metaball bloom costs 63, so that specific showcase retains its
 full bloom with one unit to spare.
+
+| `video` — disk-backed decoded frames | |
+|---|---|
+| `loop` | play continuously and return to the first frame at the end |
+| `once` | play once and hold the final frame until the flow leaves the renderer |
+
+Video is not put through the procedural source path. The server discovers safe relative
+assets and serves HTTP ranges; the browser's `<video>` decoder updates one persistent WebGL
+texture only when a decoded frame arrives. A 120 Hz render loop therefore does not upload a
+30 fps file four times. The texture is sampled through the same point expression as every
+other colour node, with aspect-correct cover framing, so all ordinary lenses and effects
+compose over it. Two reachable video nodes are the hard per-flow ceiling; parked nodes own no
+decoder, leaving a flow releases its decoder, and audio is always muted.
+The tiny per-node face renderer binds video transparent because one shared context cycles
+through as many as ten different probe graphs each frame; starting decoders for those would
+thrash. Promoting the node into the large bench uses the full compositor and plays it.
 
 | `fractal` — one iterative node, two modes | |
 |---|---|
@@ -485,8 +502,8 @@ and using it means the ends of the travel are the ends of the picture. See [flow
 
 ## What is not built
 
-- **Video clips.** Every picture is procedural. A `<video>` texture is one more `source` mode
-  and no change to the pipeline, but it brings a whole question about where files live.
+- **Beat-locked video.** `pace` changes ordinary playback rate; it does not seek on every frame.
+  A transport-locked mode needs its own discontinuity and resynchronisation rules.
 - **One track's picture as another's input.** A flow reaches a track's *meter* and not its
   *frame*. That needs a render target per track, which this does not keep.
 - **A `tracks` texture per mode.** Two `tracks` nodes with different modes in one flow share

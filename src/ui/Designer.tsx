@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Circuit, NodeKind, Scheme, Show } from '../../protocol.ts';
+import type { Circuit, MediaAsset, NodeKind, Scheme, Show } from '../../protocol.ts';
 import { wouldLoop } from '../../protocol.ts';
 import type { GraphView } from '@openflow/widgets/chrome/Graph.tsx';
 import { format } from '@openflow/widgets/param/format.ts';
@@ -137,6 +137,7 @@ export function sameDisplayedReadings(
 export function Designer({
   show,
   scheme,
+  media,
   edit,
   flow,
   setFlow,
@@ -147,6 +148,7 @@ export function Designer({
 }: {
   show: Show;
   scheme: Scheme;
+  media: readonly MediaAsset[];
   edit(next: Scheme): void;
   /** Which flow is open, held above so the one header can name it. */
   flow: string | null;
@@ -611,6 +613,7 @@ export function Designer({
                   onChange={wire}
                   tracks={trackNames}
                   flows={list}
+                  media={media}
                   viewRef={graphView}
                   energy={room.show.master}
                   beat={transport.beat}
@@ -872,4 +875,3 @@ function NodeBrowser({
     </div>
   );
 }
-

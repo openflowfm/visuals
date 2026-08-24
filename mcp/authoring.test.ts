@@ -47,6 +47,12 @@ describe('the agent-facing node catalog', () => {
       work: 16,
       variants: FIELD_MODES.map((mode) => ({ mode, work: FIELD_WORK[mode] })),
     });
+    const video = catalog.find((node) => node.kind === 'video');
+    expect(video).toMatchObject({ target: 'media', defaultMode: 'loop' });
+    expect(video?.variants.map((variant) => variant.mode)).toEqual(['loop', 'once']);
+    for (const variant of video?.variants ?? []) {
+      expect(variant.inlets.find((port) => port.name === 'pace')).toMatchObject({ default: 0.5 });
+    }
     expect(
       catalog
         .find((node) => node.kind === 'field')
@@ -105,6 +111,23 @@ describe('strict flow validation', () => {
     expect(codes).toContain('cord.signal');
     expect(codes).toContain('cord.source.node');
     expect(codes).toContain('cord.target.duplicate');
+  });
+
+  it('keeps an unselected video drawable but warns about its transparent result', () => {
+    const draft: FlowDef = {
+      name: 'Video',
+      circuit: {
+        nodes: [
+          { id: 'video', kind: 'video', op: 'loop', x: 0, y: 0 },
+          { id: 'out', kind: 'out', x: 200, y: 0 },
+        ],
+        cords: [{ from: 'video/c', to: 'out/c' }],
+      },
+    };
+    const result = validateFlow('video', draft, {});
+    expect(result.valid).toBe(true);
+    expect(result.diagnostics.map((entry) => entry.code)).toContain('node.video.unset');
+    expect(result.stats.videos).toBe(1);
   });
 
   it('refuses a nested flow that contains itself', () => {
@@ -174,8 +197,8 @@ describe('node design review', () => {
     expect(review.ready).toBe(true);
     expect(review.implementationPlan).toEqual(
       expect.arrayContaining([
-        expect.stringContaining('protocol.ts'),
-        expect.stringContaining('src/render/circuit.ts'),
+        expect.stringContaining('src/nodes/<kind>/node.ts'),
+        expect.stringContaining('NodeSpec'),
         expect.stringContaining('docs/flows.md'),
       ]),
     );

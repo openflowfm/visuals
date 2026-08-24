@@ -216,6 +216,56 @@ describe('compiling a flow', () => {
   });
 });
 
+describe('video nodes', () => {
+  const videoCircuit = (count: number, connected = count): Circuit => {
+    const nodes: Circuit['nodes'] = Array.from({ length: count }, (_, index) => ({
+      id: `v${index}`,
+      kind: 'video',
+      op: index % 2 ? 'once' : 'loop',
+      asset: `loops/${index}.mp4`,
+      x: 0,
+      y: index,
+    }));
+    if (connected > 1) nodes.push({ id: 'mix', kind: 'blend', op: 'add', x: 1, y: 0 });
+    nodes.push({ id: 'o', kind: 'out', x: 2, y: 0 });
+    const cords: Circuit['cords'] = [];
+    if (connected === 1) cords.push({ from: 'v0/c', to: 'o/c' });
+    if (connected > 1) {
+      cords.push({ from: 'v0/c', to: 'mix/base' }, { from: 'v1/c', to: 'mix/top' });
+      // A third reachable video replaces the top, matching the compiler's
+      // last-cord-wins inlet rule while still forcing all three through a chain.
+      if (connected > 2) {
+        nodes.splice(nodes.length - 1, 0, { id: 'mix2', kind: 'blend', op: 'add', x: 2, y: 1 });
+        cords.push(
+          { from: 'mix/c', to: 'mix2/base' },
+          { from: 'v2/c', to: 'mix2/top' },
+          { from: 'mix2/c', to: 'o/c' },
+        );
+      } else cords.push({ from: 'mix/c', to: 'o/c' });
+    }
+    return { nodes, cords };
+  };
+
+  it('assigns stable sampler slots to reachable videos', () => {
+    const built = compileCircuit(videoCircuit(2, 2));
+    expect(built.error).toBeNull();
+    expect(bodyOf(built.source!)).toContain('fromVideo0(');
+    expect(bodyOf(built.source!)).toContain('fromVideo1(');
+    expect(built.videos.map(({ asset, mode, index }) => ({ asset, mode, index }))).toEqual([
+      { asset: 'loops/0.mp4', mode: 'loop', index: 0 },
+      { asset: 'loops/1.mp4', mode: 'once', index: 1 },
+    ]);
+  });
+
+  it('does not create a decoder slot for a parked video', () => {
+    expect(compileCircuit(videoCircuit(3, 1)).videos).toHaveLength(1);
+  });
+
+  it('refuses more than two reachable decoders before reaching WebGL', () => {
+    expect(compileCircuit(videoCircuit(3, 3)).error).toBe('more than 2 reachable video nodes');
+  });
+});
+
 describe('the lightweight source registry', () => {
   it('compiles every source through both graph and per-track paths', () => {
     for (const op of SOURCES) {

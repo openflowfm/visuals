@@ -62,6 +62,26 @@ caustics; `fractal` charges its thirty-two-step orbit ceiling. The compiler adds
 every time the graph asks for the picture at another point, so a three-tap colour shift over
 clouds fits while a nine-tap bloom is refused. Two direct fractals fit; putting one under any
 `spread` does not. A seven-ball metaball under the same nine-tap bloom costs 63 of 64 and fits.
+
+A **video** is the deliberate stateful exception to expression-only pictures. The graph still
+samples it as a colour at a point, so lenses, grades, spreads, blends, and nested flows work
+unchanged, but a browser decoder and persistent WebGL texture own the current frame. Only
+reachable video nodes start decoders, and a flattened flow may reach at most two. Texture
+uploads happen when the browser reports a newly decoded frame, never merely because another
+render frame began. That keeps a 30 fps clip at roughly 30 uploads even on a 120 Hz display.
+
+The node has `loop` and `once` modes. `once` holds its final decoded frame; leaving the flow
+releases the decoder, so returning starts it from the beginning. Its `pace` inlet maps a
+centred 0–1 control exponentially from 0.5× through 1× to 2× and is CPU-evaluated from the
+same number graph the faceplate reads. Video audio is always muted. An absent or undecodable
+asset draws transparent and reports a visible renderer error instead of taking the flow down.
+Small node-face thumbnails leave video transparent to avoid decoder churn; the large bench
+and wall play it.
+
+Files are ids below `OPENFLOW_VISUALS_MEDIA`, defaulting to
+`~/.openflow/visuals/media/`. The server lists only supported video extensions, follows no
+symlinks, rejects absolute paths and traversal, and serves byte ranges for decoder seeking.
+The selected relative id travels with the scheme; the media file does not.
 A control may stop work sooner, but controls can turn after compilation, so the budget is
 always the hard ceiling rather than what happens to be visible now.
 
@@ -226,7 +246,9 @@ manifest test make a forgotten generated update fail rather than silently hiding
 `NodeKind`, the family lists, browser placement, browser order, protocol validation, and the
 MCP catalog all derive from that manifest. Adding a kind to a union or to a hand-maintained
 palette is no longer part of adding a node. `NodeSpec` remains the executable compiler
-contract — ports, documentation, fixed work, and emission — rather than the registry.
+contract — ports, documentation, fixed work, and emission — rather than the registry. New
+runtime-specific contracts live beside their descriptor (`video/spec.ts` is the first), so
+adding a node does not make the historical compiler table grow another implementation block.
 
 ## The vocabulary documents itself
 

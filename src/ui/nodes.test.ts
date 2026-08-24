@@ -145,6 +145,7 @@ describe('what the browser lists', () => {
     expect(portsOf('source')).toEqual({ takes: ['p', 'n'], gives: ['c'] });
     expect(portsOf('fractal')).toEqual({ takes: ['p', 'n'], gives: ['c'] });
     expect(portsOf('light')).toEqual({ takes: ['p', 'n'], gives: ['c'] });
+    expect(portsOf('video')).toEqual({ takes: ['p', 'n'], gives: ['c'] });
     expect(portsOf('math')).toEqual({ takes: ['n'], gives: ['n'] });
     expect(portsOf('out')).toEqual({ takes: ['c'], gives: [] });
     // The flattener's own inlet is hidden here exactly as the canvas hides it.

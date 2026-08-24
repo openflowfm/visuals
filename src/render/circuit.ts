@@ -10,6 +10,7 @@ import {
   FIELD_MODES,
   FRACTAL_MODES,
   LIGHT_MODES,
+  VIDEO_MODES,
   TRACK_DRAWS,
   WAVE_SHAPES,
   BLENDS,
@@ -22,6 +23,7 @@ import { CIRCUIT_HELPERS } from './glsl/circuit.ts';
 import { FIELD_WORK } from './glsl/fields.ts';
 import { LIGHT_WORK } from './glsl/light.ts';
 import { FRACTAL_ITERATIONS, flowPreamble } from './shaders.ts';
+import { VIDEO_NODE_SPEC } from '../nodes/video/spec.ts';
 
 /**
  * A flow, compiled to a fragment shader.
@@ -171,6 +173,8 @@ export interface NodeSpec extends NodeDocumentation {
   reads?(node: CircuitNode, outlet: string): readonly string[];
   /** True when the modes are names from the set rather than a fixed list. */
   named?: 'track' | 'flow';
+  /** True when the node names a server media-library asset. */
+  asset?: true;
   /**
    * Worst-case fixed work each evaluation adds to the shader budget.
    *
@@ -899,6 +903,8 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     },
   },
 
+  video: VIDEO_NODE_SPEC,
+
   tracks: {
     name: 'tracks',
     description:
@@ -1164,11 +1170,20 @@ export interface CircuitTrack {
   smooth: number;
 }
 
+export interface CircuitVideo {
+  id: string;
+  asset: string;
+  mode: (typeof VIDEO_MODES)[number];
+  index: number;
+}
+
 export interface Compiled {
   source: string | null;
   error: string | null;
   values: CircuitValue[];
   tracks: CircuitTrack[];
+  /** Reachable disk videos, in their fixed two texture slots. */
+  videos: CircuitVideo[];
   /** How each Live track should draw, if this flow asked for the set at all. */
   draws: string | null;
 }
@@ -1187,6 +1202,9 @@ export const MAX_VALUES = 64;
 
 /** At most eight named tracks: the bank is a fixed-size uniform array. */
 export const MAX_TRACKS = 8;
+
+/** Two decoders/textures is the initial hard ceiling for one flattened flow. */
+export const MAX_VIDEOS = 2;
 
 /**
  * How many GLSL statements a flow may emit.
@@ -1585,6 +1603,7 @@ export function compileFlow(flows: Record<string, FlowDef>, id: string): Compile
     error: expanded.error,
     values: [],
     tracks: [],
+    videos: [],
     draws: null,
   };
   if (expanded.error) return empty;
@@ -1596,11 +1615,13 @@ export function compileCircuit(circuit: Circuit): Compiled {
   const tracks = tracksOf(circuit);
   const drawn = circuit.nodes.find((node) => node.kind === 'tracks');
   const draws = drawn ? (drawn.op ?? TRACK_DRAWS[0]) : null;
-  const bare: Compiled = { source: null, error: null, values, tracks, draws };
+  const bare: Compiled = { source: null, error: null, values, tracks, videos: [], draws };
 
   const byId = new Map(circuit.nodes.map((node) => [node.id, node]));
   const slot = new Map(values.map((each) => [each.id, each.index]));
   const trackSlot = new Map(tracks.map((track) => [track.id, track.index]));
+  const videoSlot = new Map<string, number>();
+  const usedVideos: CircuitVideo[] = [];
 
   // Exactly one, and the backstop rather than the rule. `out` is not in the node
   // browser and the model refuses to delete it, so neither of these can be
@@ -1733,6 +1754,29 @@ export function compileCircuit(circuit: Circuit): Compiled {
         ? { n: `uParams[${slot.get(node.id) ?? 0}]` }
         : node.kind === 'track'
           ? { n: `uTracks[${trackSlot.get(node.id) ?? 0}]` }
+          : node.kind === 'video'
+            ? (() => {
+                let index = videoSlot.get(node.id);
+                if (index === undefined) {
+                  index = usedVideos.length;
+                  if (index >= MAX_VIDEOS) {
+                    failed ??= `more than ${MAX_VIDEOS} reachable video nodes`;
+                    return { c: 'vec4(0.0)' };
+                  }
+                  videoSlot.set(node.id, index);
+                  usedVideos.push({
+                    id: node.id,
+                    asset: node.asset ?? '',
+                    mode: VIDEO_MODES.includes(
+                      (node.op ?? '') as (typeof VIDEO_MODES)[number],
+                    )
+                      ? ((node.op ?? VIDEO_MODES[0]) as (typeof VIDEO_MODES)[number])
+                      : VIDEO_MODES[0],
+                    index,
+                  });
+                }
+                return { c: `fromVideo${index}(${ctx.read('p')})` };
+              })()
           : spec.emit(ctx);
     open.delete(here);
 
@@ -1763,7 +1807,12 @@ void main() {
 ${lines.join('\n')}
   fragColor = ${result};
 }`;
-  return { ...bare, source, error: null };
+  return {
+    ...bare,
+    source,
+    videos: usedVideos,
+    error: null,
+  };
 }
 
 /**

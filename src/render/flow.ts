@@ -50,7 +50,10 @@ export function signatureOfCircuit(circuit: Circuit): string {
   // Sorted, because two files with the same inlets set in a different order
   // compile to the same shader and should not throw the cache away.
   const nodes = circuit.nodes
-    .map((n) => `${n.id}:${n.kind}:${n.op ?? ''}:${Object.keys(n.values ?? {}).sort().join('+')}`)
+    .map(
+      (n) =>
+        `${n.id}:${n.kind}:${n.op ?? ''}:${n.asset ?? ''}:${Object.keys(n.values ?? {}).sort().join('+')}`,
+    )
     .join(',');
   const cords = circuit.cords.map((c) => `${c.from}>${c.to}`).join(',');
   return `flow:${nodes}|${cords}`;

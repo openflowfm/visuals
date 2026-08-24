@@ -39,6 +39,7 @@ export default defineConfig({
     // and is the only thing holding the Link peer.
     proxy: {
       '/ws': { target: SERVER.replace('http', 'ws'), ws: true },
+      '/media': { target: SERVER },
     },
   },
 });

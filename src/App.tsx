@@ -30,6 +30,7 @@ export function App() {
     showRef,
     scheme,
     library,
+    media,
     grid,
     edit,
     saveScheme,
@@ -264,6 +265,7 @@ export function App() {
           showRef={showRef}
           scheme={scheme}
           library={library}
+          media={media}
           grid={grid}
           edit={edit}
           saveScheme={saveScheme}

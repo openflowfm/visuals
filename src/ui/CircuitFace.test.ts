@@ -1,7 +1,7 @@
 import { createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import type { Circuit, CircuitNode } from '../../protocol.ts';
+import type { Circuit, CircuitNode, MediaAsset } from '../../protocol.ts';
 import { NodeFace, rowsHeldOpen, type NumberReading } from './Circuit.tsx';
 import { readingsOf, sameDisplayedReadings } from './Designer.tsx';
 
@@ -11,6 +11,7 @@ function face(
   node: CircuitNode,
   circuit: Circuit = { nodes: [node], cords: [] },
   numberReadings: Readonly<Record<string, NumberReading>> = {},
+  media: readonly MediaAsset[] = [],
 ): string {
   return renderToStaticMarkup(
     h(NodeFace, {
@@ -18,6 +19,7 @@ function face(
       circuit,
       tracks: [],
       flows: [],
+      media,
       energy: 0.62,
       beat: () => 0.5,
       numberReadings,
@@ -124,6 +126,22 @@ describe('the node face anatomy', () => {
 
     const plain = face({ id: 'p', kind: 'point', x: 0, y: 0 });
     expect(plain).not.toContain('wdg-device-swap');
+  });
+
+  it('offers only server-approved media ids on a video face', () => {
+    const html = face(
+      { id: 'v', kind: 'video', op: 'loop', asset: 'loops/one.mp4', x: 0, y: 0 },
+      undefined,
+      undefined,
+      [
+        { id: 'loops/one.mp4', name: 'one.mp4', bytes: 10 },
+        { id: 'two.webm', name: 'two.webm', bytes: 20 },
+      ],
+    );
+    expect(html).toContain('aria-label="Video file"');
+    expect(html).toContain('loops/one.mp4');
+    expect(html).toContain('two.webm');
+    expect(html).not.toContain('/Users/');
   });
 });
 

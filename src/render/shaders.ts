@@ -36,6 +36,9 @@ export { GENERATOR_LIB } from './glsl/sources.ts';
  */
 export const flowPreamble = (values: number): string => `${PREAMBLE}
 uniform sampler2D uTracksTex;
+uniform sampler2D uVideo0;
+uniform sampler2D uVideo1;
+uniform vec2 uVideoSize[2];
 uniform float uParams[${Math.max(1, values)}];
 // Meters of tracks a flow NAMED, in the order its track nodes appear, and
 // energies computed on the CPU for its energy nodes. Banks rather than a
@@ -70,6 +73,25 @@ vec4 laid(vec4 g, float e) {
 // The Live set's own picture, at a point.
 vec4 fromTracks(vec2 p) {
   return texture(uTracksTex, clamp(uncentred(p), 0.0, 1.0));
+}
+
+vec2 videoUv(vec2 p, vec2 size) {
+  vec2 uv = uncentred(p);
+  float frameAspect = uRes.x / max(uRes.y, 1.0);
+  float sourceAspect = size.x / max(size.y, 1.0);
+  if (sourceAspect > frameAspect) uv.x = (uv.x - 0.5) * frameAspect / sourceAspect + 0.5;
+  else uv.y = (uv.y - 0.5) * sourceAspect / frameAspect + 0.5;
+  return clamp(uv, 0.0, 1.0);
+}
+
+vec4 fromVideo0(vec2 p) {
+  vec4 c = texture(uVideo0, videoUv(p, uVideoSize[0]));
+  return vec4(c.rgb * c.a, c.a);
+}
+
+vec4 fromVideo1(vec2 p) {
+  vec4 c = texture(uVideo1, videoUv(p, uVideoSize[1]));
+  return vec4(c.rgb * c.a, c.a);
 }
 `;
 

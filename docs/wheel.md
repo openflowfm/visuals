@@ -337,8 +337,9 @@ never sees MIDI, so notes cost a small MIDI Effect on each track you want them f
 meter approximates it — a track making sound moves — but it cannot tell you *which* note.
 It would arrive as one more `playback` mode.
 
-**Per-clip visuals as files.** Nothing here can point at a video. That brings a whole question
-about where media lives.
+**Per-clip video assignment.** A flow can contain a `video` node pointed at the safe media
+folder, but a Live clip does not select a file directly. Clip names still move the wheel; the
+graph decides what that flow draws.
 
 **More than one scheme, named and switchable.** `OPENFLOW_VISUALS_SCHEME` already points at
 whichever is live, so this is mostly a picker.

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Library, Scheme, SetGrid, Show } from '../../protocol.ts';
+import type { Library, MediaAsset, Scheme, SetGrid, Show } from '../../protocol.ts';
 import '@openflow/widgets/tokens.css';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { NumberField } from '@openflow/widgets/controls/NumberField.tsx';
@@ -37,6 +37,7 @@ export interface ConsoleProps {
   showRef: { readonly current: Show };
   scheme: Scheme;
   library: Library | null;
+  media: readonly MediaAsset[];
   grid: SetGrid | null;
   /** Publish an edit to every screen. Disk is `saveScheme`'s business. */
   edit(next: Scheme): void;
@@ -54,6 +55,7 @@ export function Console({
   show,
   scheme,
   library,
+  media,
   grid,
   edit,
   saveScheme,
@@ -129,6 +131,7 @@ export function Console({
         <Designer
           show={show}
           scheme={scheme}
+          media={media}
           edit={edit}
           flow={flow}
           setFlow={setFlow}

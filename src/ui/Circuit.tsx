@@ -1,5 +1,5 @@
 import { useState, type ReactNode, type Ref } from 'react';
-import type { Circuit, CircuitNode, FlowDef, NodeKind } from '../../protocol.ts';
+import type { Circuit, CircuitNode, FlowDef, MediaAsset, NodeKind } from '../../protocol.ts';
 import {
   Graph,
   GraphNode,
@@ -53,6 +53,7 @@ export function CircuitEditor({
   onChange,
   tracks = [],
   flows = [],
+  media = [],
   picture,
   energy = 0,
   beat = () => 0,
@@ -76,6 +77,8 @@ export function CircuitEditor({
    * node may name comes from something the canvas has no business knowing about.
    */
   flows?: readonly { id: string; def: FlowDef }[];
+  /** Server-approved disk videos. The node stores the stable relative id. */
+  media?: readonly MediaAsset[];
   /** A small picture of what a node has made, when the host can draw one. */
   picture?: (nodeId: string) => ReactNode;
   /** The room's current energy, for an unwired alive inlet. */
@@ -137,6 +140,7 @@ export function CircuitEditor({
                 circuit={circuit}
                 tracks={tracks}
                 flows={flows}
+                media={media}
                 picture={picture}
                 energy={energy}
                 beat={beat}
@@ -187,6 +191,7 @@ export function NodeFace({
   circuit,
   tracks,
   flows,
+  media = [],
   picture,
   energy,
   beat,
@@ -203,6 +208,7 @@ export function NodeFace({
   circuit: Circuit;
   tracks: readonly string[];
   flows?: readonly { id: string; def: FlowDef }[];
+  media?: readonly MediaAsset[];
   picture?: (nodeId: string) => ReactNode;
   energy: number;
   beat: () => number;
@@ -236,6 +242,9 @@ export function NodeFace({
   const title = faceName(node, spec.name, flows);
   const previewed = previewOutletOf(circuit, node.id)?.name;
   const targets = tracks.length > 0 ? tracks : ['master'];
+  const mediaIds = media.map((asset) => asset.id);
+  const videoChoices =
+    node.asset && !mediaIds.includes(node.asset) ? [node.asset, ...mediaIds] : mediaIds;
   const chooser =
     node.kind === 'flow' ? (
       <Select
@@ -254,6 +263,17 @@ export function NodeFace({
         onChange={(i) => onChange({ of: targets[i] })}
         label="Track this reads"
       />
+    ) : node.kind === 'video' ? (
+      videoChoices.length > 0 ? (
+        <Select
+          items={['choose video', ...videoChoices]}
+          index={Math.max(0, videoChoices.indexOf(node.asset ?? '') + 1)}
+          onChange={(i) => onChange({ asset: i > 0 ? videoChoices[i - 1] : undefined })}
+          label="Video file"
+        />
+      ) : (
+        <span className="node-empty">no videos</span>
+      )
     ) : node.kind === 'value' ? (
       <input
         className="field node-name"

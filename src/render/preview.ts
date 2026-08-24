@@ -3,6 +3,7 @@ import { compileCircuit, flatten } from './circuit.ts';
 import { createFeed } from './feed.ts';
 import { banksOf, signatureOfCircuit } from './flow.ts';
 import { compile, createTarget, drawFullscreen, type Program } from './gl.ts';
+import { createVideoBank } from './video.ts';
 
 /**
  * A small picture of what one node has made.
@@ -102,6 +103,7 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
 
   let error: string | null = null;
   const feed = createFeed(gl);
+  const video = createVideoBank(gl);
   const built = new Map<string, Built>();
 
   /** Where the set's own picture lands, for every face to read. */
@@ -167,6 +169,7 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
       live.free();
       out.free();
       feed.free();
+      video.free();
       for (const made of built.values()) if (made.program) gl.deleteProgram(made.program.program);
     },
 
@@ -208,6 +211,11 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, live.texture);
         gl.uniform1i(made.program.uniform('uTracksTex'), 0);
+        // One shared context cycles through up to ten different probe graphs in
+        // a frame. Starting and tearing down decoders per thumbnail would be
+        // worse than hiding the thumbnail, so small faces bind transparent;
+        // promotion into the bench uses the full compositor and plays it.
+        video.bind(made.program, [], () => 0.5);
         drawFullscreen(gl);
       }
 

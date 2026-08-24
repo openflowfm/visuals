@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Down, Library, Scheme, SetGrid, Show } from '../../protocol.ts';
+import type { Down, Library, MediaAsset, Scheme, SetGrid, Show } from '../../protocol.ts';
 
 /**
  * The connection to the visuals server, and the clock the renderer runs on.
@@ -67,6 +67,8 @@ export function useShow(): {
   grid: SetGrid | null;
   /** The library: every saved scheme, the open one, and whether it is dirty. */
   library: Library | null;
+  /** Server-approved video files below the configured media root. */
+  media: MediaAsset[];
   /**
    * Publish an edit. Every screen follows it immediately; nothing reaches
    * disk — that is `saveScheme`'s job, and the distance between the two is
@@ -89,6 +91,7 @@ export function useShow(): {
   const [show, setShow] = useState<Show>(RESTING);
   const [scheme, setScheme] = useState<Scheme | null>(null);
   const [library, setLibrary] = useState<Library | null>(null);
+  const [media, setMedia] = useState<MediaAsset[]>([]);
   const [grid, setGrid] = useState<SetGrid | null>(null);
   const [online, setOnline] = useState(false);
   const live = useRef<WebSocket | null>(null);
@@ -137,6 +140,10 @@ export function useShow(): {
         }
         if (message.kind === 'grid') {
           setGrid(message.grid);
+          return;
+        }
+        if (message.kind === 'media') {
+          setMedia(message.assets);
           return;
         }
         if (message.kind === 'anchor') {
@@ -241,6 +248,7 @@ export function useShow(): {
     showRef: held,
     scheme,
     library,
+    media,
     grid,
     edit,
     saveScheme,

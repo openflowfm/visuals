@@ -1,9 +1,11 @@
-import type { Scheme, Show } from '../../protocol.ts';
-import { flatten } from './circuit.ts';
+import type { Circuit, Scheme, Show } from '../../protocol.ts';
+import { flatten, portId, type CircuitVideo } from './circuit.ts';
+import { createNumberEvaluator, type NumberEvaluator } from './evaluateNumber.ts';
 import { createFeed, type Banks } from './feed.ts';
 import { banksOf, buildFlow, signatureOf } from './flow.ts';
 import { compile, createTarget, drawFullscreen, type Program } from './gl.ts';
 import { columns, warpFor, SQUARE, type Corners } from './output.ts';
+import { createVideoBank } from './video.ts';
 
 /**
  * Two passes and an output stage, where there used to be a stack of them.
@@ -53,6 +55,9 @@ interface Built {
   banks: Banks;
   /** How each Live track draws, or null when the flow never asked for the set. */
   draws: string | null;
+  circuit: Circuit;
+  videos: CircuitVideo[];
+  numbers: NumberEvaluator;
 }
 
 export function createCompositor(canvas: HTMLCanvasElement): Compositor {
@@ -77,6 +82,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
   let error: string | null = null;
   const flows = new Map<string, Built>();
   const feed = createFeed(gl);
+  const video = createVideoBank(gl);
 
   /** Where the set's own picture lands, for the flow to read. */
   const live = createTarget(gl);
@@ -92,6 +98,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
     const { circuit } = flatten(scheme.flows, id);
     if (held && held.signature === signature) {
       held.banks = banksOf(circuit);
+      held.circuit = circuit;
       return held;
     }
     if (held?.program) gl.deleteProgram(held.program.program);
@@ -103,6 +110,9 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       error: compiled.error,
       banks: banksOf(circuit),
       draws: compiled.draws,
+      circuit,
+      videos: compiled.videos,
+      numbers: createNumberEvaluator(),
     };
     if (compiled.source) {
       try {
@@ -159,7 +169,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
 
   return {
     get error() {
-      return error ?? feed.error;
+      return error ?? feed.error ?? video.error;
     },
     resize,
     preview(on) {
@@ -178,6 +188,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       live.free();
       out.free();
       feed.free();
+      video.free();
       for (const built of flows.values()) if (built.program) gl.deleteProgram(built.program.program);
     },
     frame(show, scheme, beat, seconds, dt) {
@@ -207,8 +218,21 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, live.texture);
         gl.uniform1i(built.program.uniform('uTracksTex'), 0);
+        const sample = built.numbers.sample(built.circuit, {
+          show,
+          beat,
+          seconds,
+          dt,
+          pace: scheme?.defaults.pace,
+        });
+        video.bind(
+          built.program,
+          built.videos,
+          (binding) => sample.inlet(portId(binding.id, 'pace')) ?? 0.5,
+          id ?? '',
+        );
         drawFullscreen(gl);
-      }
+      } else video.clear();
 
       // --- to the wall -----------------------------------------------------
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);

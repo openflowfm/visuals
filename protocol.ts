@@ -100,6 +100,9 @@ export const FRACTAL_MODES = ['mandelbrot', 'julia'] as const;
  */
 export const LIGHT_MODES = ['lamp', 'beam', 'shafts', 'caustics'] as const;
 
+/** Disk-backed video playback: continuous looping or one pass held on its final frame. */
+export const VIDEO_MODES = ['loop', 'once'] as const;
+
 /** The effects that ship, as `effect` node modes. The other half of the old split. */
 /**
  * The three that `effect` split into, and why it had to.
@@ -257,6 +260,8 @@ export interface CircuitNode {
    * silently repoints the node at somebody else's part.
    */
   of?: string;
+  /** A server-approved path below the visuals media root, for a `video` node. */
+  asset?: string;
   /**
    * What each unwired number inlet holds, by inlet name, 0–1.
    *
@@ -583,6 +588,15 @@ export interface Library {
   notice: string | null;
 }
 
+/** One server-approved video file below the configured media root. */
+export interface MediaAsset {
+  /** POSIX relative path below that root, used by a video node and the media endpoint. */
+  id: string;
+  /** Basename for compact selectors; `id` disambiguates matching names in folders. */
+  name: string;
+  bytes: number;
+}
+
 /**
  * Server to browser, discriminated by kind, and the show/anchor split is what
  * keeps the renderer smooth — see `docs/clock.md`.
@@ -602,6 +616,7 @@ export type Down =
     }
   | { kind: 'scheme'; scheme: Scheme }
   | ({ kind: 'library' } & Library)
+  | { kind: 'media'; assets: MediaAsset[] }
   | { kind: 'grid'; grid: SetGrid };
 
 /**
