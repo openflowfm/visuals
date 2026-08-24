@@ -239,16 +239,41 @@ describe('rolled flows', () => {
     expect(values).toBeGreaterThan(0);
   });
 
-  it('never starts a graph from a place, because a place is one colour', () => {
+  it('hangs lights from a place but never reads a picture at one', () => {
     // A `place` is the same point for every fragment, so a picture read at one
     // is the whole frame in a single colour — moving, but flat. That is a real
-    // thing to reach for deliberately and a terrible thing to be dealt: the
-    // roll always begins at `point`, so what it makes has structure in it.
+    // thing to reach for deliberately and a terrible thing to be dealt. A
+    // light's `from` is the opposite case: the place says where the lamp
+    // hangs, and driving it is what makes a dealt light wander.
     for (const seed of seeds) {
       const rng = seedOf(seed);
       for (let i = 0; i < 12; i++) {
-        expect(rollCircuit(rng).nodes.some((n) => n.kind === 'place'), seed).toBe(false);
+        const circuit = rollCircuit(rng);
+        const places = new Set(
+          circuit.nodes.filter((n) => n.kind === 'place').map((n) => n.id),
+        );
+        for (const cord of circuit.cords) {
+          if (!places.has(cord.from.split('/')[0])) continue;
+          expect(cord.to.endsWith('/from'), `${seed}: ${cord.to}`).toBe(true);
+        }
       }
+    }
+  });
+
+  it('deals every shape, and every priced picture family, across a deck', () => {
+    // The widening was the point: a dealer that can never open with a fractal,
+    // a field, a light or a spread caps the taste corpus at one family
+    // resemblance. Forty seeds of four deals is plenty for every family to
+    // appear at least once — a missing one means a shape was wired wrong.
+    const kinds = new Set<string>();
+    for (const seed of seeds) {
+      const rng = seedOf(seed);
+      for (let i = 0; i < 12; i++) {
+        for (const node of rollCircuit(rng).nodes) kinds.add(node.kind);
+      }
+    }
+    for (const kind of ['fractal', 'field', 'light', 'spread', 'song', 'math', 'paint']) {
+      expect(kinds.has(kind), kind).toBe(true);
     }
   });
 

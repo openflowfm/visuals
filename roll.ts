@@ -1,5 +1,12 @@
 import type { Circuit, CircuitNode, Scheme, Show } from './protocol.ts';
-import { GRADE_MODES, LENS_MODES, SOURCES } from './protocol.ts';
+import {
+  FIELD_MODES,
+  FRACTAL_MODES,
+  GRADE_MODES,
+  LENS_MODES,
+  SOURCES,
+  SPREAD_MODES,
+} from './protocol.ts';
 
 /**
  * A library, rolled.
@@ -214,8 +221,47 @@ const GRADE_VALUE: Record<string, string> = {
   invert: 'hold',
 };
 
+/** The number a rolled `field` drives, one per mode. */
+const FIELD_VALUE: Record<string, string> = {
+  cells: 'weave',
+  clouds: 'weave',
+  metaballs: 'balls',
+};
+
+/**
+ * The number a rolled `fractal` drives — the one that is *always* visible.
+ * Never `zoom`: a meter resting near zero parks it at one end of its range,
+ * and a parked zoom is a flat frame of fractal interior.
+ */
+const FRACTAL_VALUE: Record<string, string> = {
+  mandelbrot: 'turn',
+  julia: 'shape',
+};
+
+/**
+ * The lights a roll may hang, and the two numbers that shape each one.
+ *
+ * `caustics` has no `from` — sunlight through water arrives from everywhere —
+ * so it is the one light a roll never gives a `place`.
+ */
+const LIGHT_VALUE: Record<string, [string, string]> = {
+  lamp: ['carry', 'soft'],
+  beam: ['aim', 'spread'],
+  shafts: ['blades', 'haze'],
+  caustics: ['weave', 'glint'],
+};
+
+/** The number a rolled `spread` drives, one per mode. */
+const SPREAD_VALUE: Record<string, string> = {
+  bloom: 'reach',
+  smear: 'reach',
+  edge: 'width',
+  shift: 'split',
+};
+
 const SIGNALS = ['level', 'beat', 'phase', 'pulse'] as const;
 const WAVES = ['sine', 'saw', 'ramp', 'pulse'] as const;
+const MATHS = ['add', 'multiply', 'average'] as const;
 
 /**
  * Everything a roll may wire blind, which is everything that is not `spread`.
@@ -231,11 +277,23 @@ const WAVES = ['sine', 'saw', 'ramp', 'pulse'] as const;
 /**
  * A flow that always compiles and usually looks like something.
  *
- * The shape: **a picture, moved about, then worked on.** Where it used to end
- * with a `sample` — the frame that arrived, which only meant anything inside a
- * stack — it now starts with either the Live set or one of the pictures that
- * ship, which is the difference between a flow that needs a context and a flow
- * that is one.
+ * It deals one of **five shapes**, where it used to deal one: the classic
+ * chain, a priced feature, a hung light, a spread finish, and a flow that
+ * listens to the song's key. A single shape kept every deal inside one family
+ * resemblance — radial, one texture, one overlay — and left half the priced
+ * vocabulary (`field`, `fractal`, `light`, `spread`) unreachable, which a
+ * contact sheet of twenty-four deals made undeniable.
+ *
+ * What keeps a shape rather than a scatter is unchanged: each one walks a
+ * structure a person might wire — a picture, moved about, then worked on — and
+ * randomises what fills the slots. And the budget rules are constructive
+ * rather than checked: one `spread` at most, and never over a `fractal`,
+ * `field` or `light`, so a deal cannot wire the multiplication the compiler
+ * would refuse.
+ *
+ * `video` and `flow` stay out on purpose — one depends on files a machine may
+ * not have, the other on a library the deal must not assume — and `polar` is
+ * an authoring tool, not a thing to be dealt.
  */
 export function rollCircuit(rng: Rng): Circuit {
   const nodes: CircuitNode[] = [];
@@ -249,10 +307,10 @@ export function rollCircuit(rng: Rng): Circuit {
   const wire = (from: string, to: string) => cords.push({ from, to });
 
   let values = 0;
-  /** Whatever drives an amount: a `value` node, an envelope, a meter, or a shape. */
+  /** Whatever drives an amount: a value, an envelope, a signal, or arithmetic on two. */
   const drive = (x: number, y: number, into: string) => {
     const roll = rng();
-    if (roll < 0.35 && values < 4) {
+    if (roll < 0.3 && values < 4) {
       values += 1;
       const from = add({
         kind: 'value',
@@ -264,10 +322,10 @@ export function rollCircuit(rng: Rng): Circuit {
       wire(`${from}/n`, into);
       return;
     }
-    if (roll < 0.55) {
-      // An envelope rather than a bare meter about a fifth of the time, because
-      // a picture driven by the raw meter twitches and one driven by an
-      // envelope breathes — and breathing is what makes a rig flow designed.
+    if (roll < 0.5) {
+      // An envelope rather than a bare meter, because a picture driven by the
+      // raw meter twitches and one driven by an envelope breathes — and
+      // breathing is what makes a rolled flow read designed.
       const from = add({
         kind: 'track',
         of: 'master',
@@ -279,72 +337,201 @@ export function rollCircuit(rng: Rng): Circuit {
       wire(`${from}/n`, into);
       return;
     }
-    if (roll < 0.8) {
+    if (roll < 0.72) {
       const from = add({ kind: 'playback', op: pick(rng, SIGNALS), x, y });
       wire(`${from}/n`, into);
       return;
     }
-    const source = add({ kind: 'playback', op: pick(rng, SIGNALS), x: x - 150, y });
-    const shape = add({ kind: 'wave', op: pick(rng, WAVES), x, y });
-    wire(`${source}/n`, `${shape}/phase`);
-    wire(`${shape}/n`, into);
+    if (roll < 0.8) {
+      // A song fact: steady through a song, different in the next one, which
+      // is a kind of motion no meter can supply.
+      const from = add({ kind: 'song', op: chance(rng, 0.6) ? 'key' : 'section', x, y });
+      wire(`${from}/n`, into);
+      return;
+    }
+    if (roll < 0.92) {
+      const source = add({ kind: 'playback', op: pick(rng, SIGNALS), x: x - 150, y });
+      const shape = add({ kind: 'wave', op: pick(rng, WAVES), x, y });
+      wire(`${source}/n`, `${shape}/phase`);
+      wire(`${shape}/n`, into);
+      return;
+    }
+    const a = add({ kind: 'playback', op: pick(rng, SIGNALS), x: x - 150, y });
+    const b = add({
+      kind: 'track',
+      of: 'master',
+      op: 'level',
+      x: x - 150,
+      y: y + 130,
+      smooth: round2(between(rng, 0.2, 0.6)),
+    });
+    const sum = add({ kind: 'math', op: pick(rng, MATHS), x, y });
+    wire(`${a}/n`, `${sum}/a`);
+    wire(`${b}/n`, `${sum}/b`);
+    wire(`${sum}/n`, into);
   };
 
   let column = 0;
   const at = () => 20 + column++ * 185;
 
   const point = `${add({ kind: 'point', x: at(), y: 20 })}/p`;
-  let carry = point;
-  const steps = 1 + Math.floor(rng() * 3);
-  // Point form, so what comes out is a place rather than a picture: the lens
-  // is in front of the picture here, and its colour outlet is unwired.
-  for (const op of shuffled(rng, [...LENS_MODES]).slice(0, steps)) {
+
+  /** The point, bent through driven lenses. The front half of most shapes. */
+  const bent = (least: number, most: number): string => {
+    let carry = point;
+    const steps = least + Math.floor(rng() * (most - least + 1));
+    for (const op of shuffled(rng, [...LENS_MODES]).slice(0, steps)) {
+      const x = at();
+      const node = add({ kind: 'lens', op, x, y: 20 });
+      wire(carry, `${node}/p`);
+      drive(x, 210 + (next % 2) * 150, `${node}/${LENS_VALUE[op]}`);
+      carry = `${node}/p`;
+    }
+    return carry;
+  };
+
+  /** The Live set more often than not: a rolled screensaver is not this rig. */
+  const lead = (setChance: number, carry: string): string => {
+    const picture = chance(rng, setChance)
+      ? add({ kind: 'tracks', op: 'by name', x: at(), y: 20 })
+      : add({ kind: 'source', op: pick(rng, SOURCES), x: at(), y: 20 });
+    wire(carry, `${picture}/p`);
+    return `${picture}/c`;
+  };
+
+  /** A second picture over the first, its amount driven. */
+  const over = (carry: string, top: string, op?: string): string => {
     const x = at();
-    const node = add({ kind: 'lens', op, x, y: 20 });
-    wire(carry, `${node}/p`);
-    drive(x, 210 + (next % 2) * 150, `${node}/${LENS_VALUE[op]}`);
-    carry = `${node}/p`;
-  }
-
-  // The Live set more often than not. A rolled flow that ignored whoever is
-  // playing is a screensaver, and this rig is not one.
-  const picture = chance(rng, 0.6)
-    ? add({ kind: 'tracks', op: 'by name', x: at(), y: 20 })
-    : add({ kind: 'source', op: pick(rng, SOURCES), x: at(), y: 20 });
-  wire(carry, `${picture}/p`);
-  carry = `${picture}/c`;
-
-  if (chance(rng, 0.6)) {
-    const node = add({ kind: 'lens', op: pick(rng, LENS_MODES), x: at(), y: 20 });
-    wire(carry, `${node}/c`);
-    carry = `${node}/c`;
-  }
-
-  // A second picture, screened over the first, about half the time. Two
-  // pictures inside one flow is the thing the old model could not say at all.
-  if (chance(rng, 0.5)) {
-    const x = at();
-    const other = add({ kind: 'source', op: pick(rng, SOURCES), x, y: 250 });
-    wire(point, `${other}/p`);
-    const mix = add({ kind: 'blend', op: chance(rng, 0.7) ? 'screen' : 'add', x: at(), y: 20 });
+    const mix = add({ kind: 'blend', op: op ?? (chance(rng, 0.7) ? 'screen' : 'add'), x, y: 20 });
     wire(carry, `${mix}/base`);
-    wire(`${other}/c`, `${mix}/top`);
+    wire(top, `${mix}/top`);
     drive(x, 430, `${mix}/amount`);
-    carry = `${mix}/c`;
-  }
+    return `${mix}/c`;
+  };
 
-  if (chance(rng, 0.5)) {
+  const graded = (carry: string, p: number): string => {
+    if (!chance(rng, p)) return carry;
     const x = at();
     const op = pick(rng, GRADE_MODES);
     const node = add({ kind: 'grade', op, x, y: 20 });
     wire(carry, `${node}/c`);
     drive(x, 210, `${node}/${GRADE_VALUE[op]}`);
-    carry = `${node}/c`;
+    return `${node}/c`;
+  };
+
+  const done = (carry: string): Circuit => {
+    const out = add({ kind: 'out', x: at(), y: 20 });
+    wire(carry, `${out}/c`);
+    return { nodes, cords };
+  };
+
+  const shape = rng();
+
+  // --- the classic chain: a picture, moved about, then worked on -----------
+  if (shape < 0.35) {
+    let carry = lead(0.6, bent(1, 3));
+    if (chance(rng, 0.6)) {
+      const node = add({ kind: 'lens', op: pick(rng, LENS_MODES), x: at(), y: 20 });
+      wire(carry, `${node}/c`);
+      carry = `${node}/c`;
+    }
+    if (chance(rng, 0.5)) {
+      const other = add({ kind: 'source', op: pick(rng, SOURCES), x: at(), y: 250 });
+      wire(point, `${other}/p`);
+      carry = over(carry, `${other}/c`);
+    }
+    return done(graded(carry, 0.5));
   }
 
-  const out = add({ kind: 'out', x: at(), y: 20 });
-  wire(carry, `${out}/c`);
-  return { nodes, cords };
+  // --- a priced feature: a fractal or a field carries the frame ------------
+  if (shape < 0.55) {
+    const kind = chance(rng, 0.5) ? 'fractal' : 'field';
+    // A fractal reads the raw point. It is exquisitely sensitive to where the
+    // plane is, and a driven bender in front of one mostly lands the whole
+    // frame in flat interior; its own turn and shape carry the motion.
+    const carry = kind === 'fractal' ? point : bent(0, 2);
+    const op = kind === 'fractal' ? pick(rng, FRACTAL_MODES) : pick(rng, FIELD_MODES);
+    const x = at();
+    const feature = add({ kind, op, x, y: 20 });
+    wire(carry, `${feature}/p`);
+    drive(x, 210, `${feature}/${kind === 'fractal' ? FRACTAL_VALUE[op] : FIELD_VALUE[op]}`);
+    let held = `${feature}/c`;
+    if (chance(rng, 0.5)) {
+      const set = add({ kind: 'tracks', op: 'by name', x: at(), y: 250 });
+      wire(point, `${set}/p`);
+      held = over(held, `${set}/c`, 'screen');
+    }
+    return done(graded(held, 0.4));
+  }
+
+  // --- a hung light: a lamp somewhere, over a wash or the set --------------
+  if (shape < 0.7) {
+    const base = chance(rng, 0.5)
+      ? lead(1, bent(0, 1))
+      : chance(rng, 0.55)
+        ? (() => {
+            // Dimmed, because this wash exists to be lit: a screened light
+            // over a mid-bright flat colour is invisible, and the whole deal
+            // rides on the light reading.
+            const wash = add({
+              kind: 'paint',
+              x: at(),
+              y: 20,
+              values: { amount: round2(between(rng, 0.12, 0.35)) },
+            });
+            return `${wash}/c`;
+          })()
+        : (() => {
+            const cloud = add({ kind: 'field', op: 'clouds', x: at(), y: 20 });
+            wire(point, `${cloud}/p`);
+            return `${cloud}/c`;
+          })();
+    const op = pick(rng, Object.keys(LIGHT_VALUE));
+    const x = at();
+    const light = add({ kind: 'light', op, x, y: 250 });
+    wire(point, `${light}/p`);
+    if (op !== 'caustics') {
+      // The light hangs where the place says, and the place is driven — which
+      // is what makes a dealt lamp wander instead of sitting in the middle.
+      const spotX = at();
+      const spot = add({ kind: 'place', x: spotX, y: 430 });
+      drive(spotX - 185, 430, `${spot}/x`);
+      drive(spotX - 185, 560, `${spot}/y`);
+      wire(`${spot}/p`, `${light}/from`);
+    }
+    drive(x, 430, `${light}/${LIGHT_VALUE[op][Math.floor(rng() * 2)]}`);
+    return done(graded(over(base, `${light}/c`), 0.4));
+  }
+
+  // --- a spread finish: the one multiplying family, over a cheap chain -----
+  if (shape < 0.9) {
+    let carry = lead(0.6, bent(1, 2));
+    if (chance(rng, 0.5)) {
+      const node = add({ kind: 'lens', op: pick(rng, LENS_MODES), x: at(), y: 20 });
+      wire(carry, `${node}/c`);
+      carry = `${node}/c`;
+    }
+    const x = at();
+    const op = pick(rng, SPREAD_MODES);
+    const finish = add({ kind: 'spread', op, x, y: 20 });
+    wire(carry, `${finish}/c`);
+    drive(x, 210, `${finish}/${SPREAD_VALUE[op]}`);
+    return done(graded(`${finish}/c`, 0.3));
+  }
+
+  // --- keyed: the song's key turns the colour, so a set modulates ----------
+  let carry = lead(0.7, bent(1, 2));
+  if (chance(rng, 0.5)) {
+    const node = add({ kind: 'lens', op: pick(rng, LENS_MODES), x: at(), y: 20 });
+    wire(carry, `${node}/c`);
+    carry = `${node}/c`;
+  }
+  const x = at();
+  const hue = add({ kind: 'grade', op: 'hue', x, y: 20 });
+  wire(carry, `${hue}/c`);
+  const key = add({ kind: 'song', op: 'key', x, y: 210 });
+  wire(`${key}/n`, `${hue}/shift`);
+  return done(`${hue}/c`);
 }
 
 // --- the roll ------------------------------------------------------------

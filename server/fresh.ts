@@ -7,14 +7,15 @@ import { WORDS, rollCircuit } from '../roll.ts';
  * parent is mutated, and that is the point — `fresh` exists to prove the
  * `LabMethod` boundary before any method worth arguing about arrives behind it.
  *
- * Version 1 names the grammar this method dealt from. Widening `rollCircuit`
+ * The version names the grammar this method dealt from. Widening `rollCircuit`
  * changes what the same seed deals, so a widened grammar is a version bump —
- * old candidates keep saying which deck they came from.
+ * old candidates keep saying which deck they came from. Version 1 was the
+ * single classic shape; version 2 is the five-shape deck.
  */
 export function freshMethod(): LabMethod<null> {
   return {
     id: 'fresh',
-    version: 1,
+    version: 2,
     start: () => null,
     next(_state, _evidence, budget, rng) {
       const drafts: CandidateDraft[] = [];

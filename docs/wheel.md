@@ -278,20 +278,26 @@ section energies, per-track bindings and two circuits at once — because a show
 decisions with a couple of graphs in it. A show is a library and a wheel now, so it rolls the
 two things a library is made of: **flows and colourways**.
 
-A rolled flow walks a **shape** — a picture, a few things done to it, a colour operation or
-two — and randomises what fills each slot. A random walk over the whole vocabulary produces
-garbage nine times in ten; the shape is what makes it a flow and the fill is what makes it a
-different one every time.
+A rolled flow walks a **shape** — a structure a person might wire — and randomises what
+fills each slot. A random walk over the whole vocabulary produces garbage nine times in
+ten; the shape is what makes it a flow and the fill is what makes it a different one every
+time. There are **five shapes** now, where one deck of judged deals showed a single shape
+kept everything inside one family resemblance: the classic chain (a picture, moved about,
+then worked on), a priced feature (a fractal or field carrying the frame), a hung light (a
+lamp at a driven `place`, over the set or a dimmed wash), a spread finish, and a keyed flow
+whose colour turns with the song's key. `video`, `flow` and `polar` stay out on purpose —
+files a machine may not have, a library a deal must not assume, and an authoring tool.
 
 Three constraints are worth stating because they are what make a rolled one read as
 *something*:
 
 - **It reaches for the set more often than not.** A rolled flow that ignored whoever is
   playing is a screensaver, and this rig is not one.
-- **It never wires a `spread`.** `bloom`, `smear`, `edge` and `shift` each read their input
-  several times, so nesting two of them multiplies the shader. A hand reaches for one knowing
-  what it costs; a roll would stack three. This used to be a list of four names kept beside
-  the roll and maintained by hand — it is a node kind now, so there is nothing to keep.
+- **It wires at most one `spread`, and only over a cheap chain.** `bloom`, `smear`, `edge`
+  and `shift` each read their input several times, so nesting two — or putting one over a
+  fractal, field or light — multiplies the shader. A hand reaches for one knowing what it
+  costs; a roll follows the rule constructively, so it can never wire the multiplication
+  the compiler would refuse.
 - **Colours are a harmony, not five hues**, and the harmony always contains an opposite. A
   base, one of five relationships to it, **two members taken loud** — the base and whatever
   sits furthest from it — and one kept as a **tint** so a busy frame has something to read
