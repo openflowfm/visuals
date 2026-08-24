@@ -1,12 +1,11 @@
 import {
-  NODE_FAMILIES,
-  TRACK_READS,
   type Circuit,
   type CircuitNode,
   type NodeKind,
   type FlowDef,
   type Scheme,
 } from '../../protocol.ts';
+import { BROWSABLE_NODE_DEFINITIONS, NODE_BY_KIND } from '../nodes/generated.ts';
 import {
   NODE_SPECS,
   descriptionOf,
@@ -258,7 +257,7 @@ export function pickOf(row: FlowRow): Pick {
     kind: 'flow',
     op: row.id,
     about: row.about,
-    family: NODE_FAMILIES.find((each) => each.kinds.includes('flow'))?.name ?? 'other',
+    family: NODE_BY_KIND.flow.family,
     terms: row.terms,
     ports: portsOf('flow'),
   };
@@ -283,8 +282,7 @@ export function matchingFlows(
 /** The whole browser, built from the vocabulary rather than typed out beside it. */
 export function palette(): Entry[] {
   const out: Entry[] = [];
-  const family = (kind: NodeKind) =>
-    NODE_FAMILIES.find((each) => each.kinds.includes(kind))?.name ?? 'other';
+  const family = (kind: NodeKind) => NODE_BY_KIND[kind].family;
 
   const pick = (
     kind: NodeKind,
@@ -331,60 +329,15 @@ export function palette(): Entry[] {
     });
   };
 
-  // Pictures. The set first, because a rig that reads a Live set should offer
-  // the Live set before it offers a plasma. It has modes and no presets: `by
-  // name` is the answer this rig is for, and the other source modes are one
-  // hot-swap away rather than rows here saying "all of them as a tunnel".
-  node('tracks', 'by name', 'every playing track', NODE_SPECS.tracks.description);
-  modes('source', 'source');
-  modes('field', 'field');
-  modes('fractal', 'fractal');
-  modes('light', 'light');
-  node('paint', undefined, 'paint', NODE_SPECS.paint.description);
-  // No flows. Every flow in the library used to be a row here, in the same chip
-  // as `source` and `paint`, which put a graph of sixteen nodes and a shipped
-  // shader side by side under one heading as if they were the same sort of
-  // thing. They have a shelf of their own now — see `flowShelf`.
-
-  // Colour, and only what is actually colour: `grade` changes it where it is
-  // and `spread` reads around it. The six modes that used to sit beside them
-  // under `effect` never touched a colour at all — they are `lens` now, down in
-  // geometry with the five kinds they were already the same functions as.
-  modes('grade', 'grade');
-  modes('spread', 'spread');
-  modes('blend', 'blend');
-
-  // Geometry. `place` sits next to `point` rather than next to `polar`,
-  // because the two of them are what a canvas gets a point *from* and `polar`
-  // is what it turns one back into.
-  node('point', undefined, 'point', NODE_SPECS.point.description);
-  node('place', undefined, NODE_SPECS.place.name, NODE_SPECS.place.description);
-  modes('lens', 'lens');
-  node('polar', undefined, NODE_SPECS.polar.name, NODE_SPECS.polar.description);
-
-  // The room: three questions you can ask the set, and nothing else can answer.
-  modes('playback', 'playback');
-  // **One `track` row**, not one per name in the set. It was one each, on the
-  // argument that a name from the set is the thing in this browser nobody could
-  // guess — which is true and is the search box's job, not the list's. A set
-  // with twenty-six tracks put twenty-six near-identical rows under one heading
-  // and buried `playback` and `song` beneath them, and the node has carried a
-  // chooser for which track the whole time. So the row drops a meter and you
-  // pick the track on its face, the way you pick a flow on a `flow` node.
-  node('track', TRACK_READS[0], 'track', NODE_SPECS.track.description);
-  modes('song', 'song');
-
-  // Numbers.
-  node('value', undefined, 'value', NODE_SPECS.value.description);
-  modes('math', 'math');
-  modes('wave', 'wave');
-
-  // No `out`. Every flow has exactly one, it arrives with the flow, and it
-  // cannot be deleted — so a browser offering another one is offering the only
-  // node in the vocabulary that makes a flow refuse to compile. It was there
-  // because the browser is built from the vocabulary and `out` is part of it;
-  // being part of the vocabulary and being something you add are different
-  // questions, and only the second one a drawer answers.
+  // Folder metadata owns inclusion and order. `flow` declares itself a shelf
+  // entry and `out` fixed, so neither can accidentally appear as an addable row.
+  for (const definition of BROWSABLE_NODE_DEFINITIONS) {
+    const kind = definition.kind;
+    const label = 'label' in definition ? definition.label : undefined;
+    const defaultOp = 'defaultOp' in definition ? definition.defaultOp : undefined;
+    if (definition.browser === 'modes') modes(kind, label ?? NODE_SPECS[kind].name);
+    else node(kind, defaultOp, label ?? NODE_SPECS[kind].name, NODE_SPECS[kind].description);
+  }
   return out;
 }
 
@@ -468,7 +421,7 @@ export function matching(
 export function swapEntry(kind: NodeKind): Entry | null {
   const spec = NODE_SPECS[kind];
   if (!spec.modes || spec.modes.length === 0) return null;
-  const family = NODE_FAMILIES.find((each) => each.kinds.includes(kind))?.name ?? 'other';
+  const family = NODE_BY_KIND[kind].family;
   const pick = (op: string, label: string, values?: Record<string, number>): Pick => ({
     label,
     kind,

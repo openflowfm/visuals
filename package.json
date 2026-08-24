@@ -6,7 +6,9 @@
   "description": "visual[flow]: an Ableton Link peer that renders a Live set from a node graph.",
   "scripts": {
     "build:link": "node --disable-warning=ExperimentalWarning tools/build-link.ts",
-    "mcp": "node --disable-warning=ExperimentalWarning mcp/index.ts"
+    "nodes": "node --disable-warning=ExperimentalWarning tools/generate-nodes.ts",
+    "nodes:check": "node --disable-warning=ExperimentalWarning tools/generate-nodes.ts --check",
+    "mcp": "npm run nodes && node --disable-warning=ExperimentalWarning mcp/index.ts"
   },
   "dependencies": {
     "@ktamas77/abletonlink": "^1.2.3",

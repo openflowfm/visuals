@@ -2,8 +2,11 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { generateNodes } from './tools/generate-nodes.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+
+generateNodes();
 
 // The renderer builds to `visuals/dist`, which `server/index.ts` serves. It is
 // a separate build from `ui/` because it is a separate app on a separate

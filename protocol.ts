@@ -24,6 +24,9 @@
  * What is left above the graph is deliberately tiny: which flow is up, and which
  * colours it draws from.
  */
+import { NODE_FAMILIES, type NodeKind } from './src/nodes/generated.ts';
+
+export { NODE_FAMILIES, type NodeKind };
 
 /** How two pictures combine. Used by `blend`, and by how the tracks node stacks. */
 export type Blend = 'over' | 'add' | 'screen' | 'multiply';
@@ -45,86 +48,6 @@ export const BLENDS: readonly Blend[] = ['over', 'add', 'screen', 'multiply'];
  * A picture that ships and a picture you wired are the same kind of thing, in
  * the same list, reachable from the same drawer.
  */
-export type NodeKind =
-  // where you are, and what the room is doing
-  | 'point'
-  | 'value'
-  // the three the set answers
-  | 'playback'
-  | 'track'
-  | 'song'
-  // pictures
-  | 'source'
-  | 'field'
-  | 'fractal'
-  | 'light'
-  | 'tracks'
-  | 'flow'
-  | 'paint'
-  // geometry: it moves the point, and hands back what it found there
-  | 'lens'
-  | 'polar'
-  | 'place'
-  // colour
-  | 'grade'
-  | 'spread'
-  | 'blend'
-  // arithmetic
-  | 'math'
-  | 'wave'
-  // the end
-  | 'out';
-
-/**
- * The families a node browser groups by.
- *
- * Ordered the way the drawer should read: what draws, what moves a point, what
- * works on a colour, what the room is doing, and the arithmetic between them.
- * A family is a fact about the vocabulary rather than about the editor, which
- * is why it is here — two editors listing these differently would be two
- * different vocabularies.
- */
-export const NODE_FAMILIES: readonly { name: string; about: string; kinds: NodeKind[] }[] = [
-  {
-    name: 'draw',
-    about: 'Everything that makes a colour out of nothing',
-    kinds: ['source', 'field', 'fractal', 'light', 'tracks', 'flow', 'paint'],
-  },
-  {
-    // Not `colour`, which it was: half of what `effect` contained never touched
-    // a colour at all. Those six left for `lens`, so the heading is true of
-    // everything under it now — which is the least a heading can do for the one
-    // person who reads headings, who is whoever is here for the first time.
-    name: 'transform',
-    about: 'Everything that takes a picture and gives one back where it is',
-    kinds: ['grade', 'spread', 'blend'],
-  },
-  {
-    name: 'geometry',
-    about: 'Moving the point a picture is read at',
-    // In the order a point travels: where you are, a place you named, moving
-    // one, and taking one apart. `place` and `polar` are the two directions
-    // between the two signals — numbers into a point, and a point into numbers.
-    kinds: ['point', 'place', 'lens', 'polar'],
-  },
-  {
-    // The one heading that names something outside this program, and it should:
-    // this rig reads a Live set and nothing else, and a metaphor over the top of
-    // that — it was `the room` — asks somebody to learn a word for a thing they
-    // already have a word for. If it ever reads a second workstation, the
-    // heading is the smallest part of what would have to change.
-    name: 'Ableton',
-    about: 'Three questions you can ask the set, and nothing else can answer',
-    kinds: ['playback', 'track', 'song'],
-  },
-  {
-    name: 'numbers',
-    about: 'Numbers, and the arithmetic between them',
-    kinds: ['value', 'math', 'wave'],
-  },
-  { name: 'the end', about: 'What leaves the flow', kinds: ['out'] },
-];
-
 /**
  * The pictures that ship, as `source` node modes.
  *

@@ -198,7 +198,10 @@ per playing track is the GPU failure this boundary prevents.
 | `edge` | four taps, a fraction of the frame apart. The one that makes a busy frame *less* busy |
 | `shift` | three taps, one per channel, opening with the level so it bites on transients |
 
-Adding a lightweight picture is a typed body in `glsl/sources.ts`'s `GENERATOR_BODIES`
+Adding a node starts with a `src/nodes/<kind>/node.ts` folder descriptor; the generated
+manifest makes that folder the source of truth for its kind, family, and browser placement.
+See [flows](flows.md). Adding a lightweight picture mode is a typed body in
+`glsl/sources.ts`'s `GENERATOR_BODIES`
 and a literal name in `SOURCES`:
 the same body serves the `source` node and the track pass, so what a built-in draws and what
 a node draws cannot drift, and TypeScript refuses a name without a body or description. Anything

@@ -2,7 +2,6 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  NODE_FAMILIES,
   wouldLoop,
   type FlowDef,
   type NodeKind,
@@ -20,6 +19,8 @@ import {
   type PortSpec,
   type Signal,
 } from '../src/render/circuit.ts';
+import { NODE_BY_KIND, NODE_KINDS } from '../src/nodes/generated.ts';
+import { NODE_FAMILY_DETAILS } from '../src/nodes/descriptor.ts';
 
 export type Severity = 'error' | 'warning';
 
@@ -55,7 +56,6 @@ export interface SaveFlowResult extends FlowValidation {
   flow: FlowDef;
 }
 
-const NODE_KINDS = Object.keys(NODE_SPECS) as NodeKind[];
 const FLOW_ID = /^[a-z][a-z0-9_-]*$/;
 
 const issue = (
@@ -542,7 +542,7 @@ const documentedPort = (port: PortSpec): DocumentedPort => ({
 export function nodeCatalog() {
   return NODE_KINDS.map((kind) => {
     const spec = NODE_SPECS[kind];
-    const family = NODE_FAMILIES.find((entry) => entry.kinds.includes(kind));
+    const definition = NODE_BY_KIND[kind];
     const workOf = (mode?: string): number => {
       if (typeof spec.work !== 'function') return spec.work ?? 0;
       return spec.work({ id: kind, kind, ...(mode ? { op: mode } : {}), x: 0, y: 0 });
@@ -565,8 +565,8 @@ export function nodeCatalog() {
     return {
       kind,
       name: spec.name,
-      family: family?.name ?? 'other',
-      familyDescription: family?.about ?? '',
+      family: definition.family,
+      familyDescription: NODE_FAMILY_DETAILS[definition.family],
       description: spec.description,
       target: spec.named ?? null,
       /** Worst-case fixed work across its modes; each variant carries its exact charge. */

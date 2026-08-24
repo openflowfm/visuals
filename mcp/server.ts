@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as z from 'zod/v4';
 import type { FlowDef } from '../protocol.ts';
-import { NODE_SPECS } from '../src/render/circuit.ts';
+import { NODE_KINDS } from '../src/nodes/generated.ts';
 import {
   FlowAuthoringStore,
   nodeCatalog,
@@ -10,9 +10,8 @@ import {
   type NodeProposal,
 } from './authoring.ts';
 
-const NODE_KINDS = Object.keys(NODE_SPECS) as [string, ...string[]];
 const SignalSchema = z.enum(['p', 'n', 'c']);
-const NodeKindSchema = z.enum(NODE_KINDS);
+const NodeKindSchema = z.enum(NODE_KINDS as [string, ...string[]]);
 const NumberMapSchema = z.record(z.string(), z.number().finite());
 
 const CircuitNodeSchema = z.object({

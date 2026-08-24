@@ -213,9 +213,24 @@ be *silent* about it: a canvas full of nodes drawing black is indistinguishable 
 full of nodes that is broken, and the difference is one cord. So the canvas says
 `nothing reaches out` under the graph and refuses nothing.
 
+## A folder is the registration
+
+Every node kind has one folder under `src/nodes/` and one `node.ts` descriptor in that
+folder. The descriptor owns the stable kind, browser family, order, and whether the node is
+addable, belongs on the flow shelf, or is fixed in every graph. `tools/generate-nodes.ts`
+discovers those folders and writes `src/nodes/generated.ts`, whose static imports work in
+both the Vite browser bundle and the raw Node MCP server. Vite refreshes it at startup,
+`npm --prefix visuals run mcp` refreshes it before serving, and `nodes:check` plus the
+manifest test make a forgotten generated update fail rather than silently hiding a node.
+
+`NodeKind`, the family lists, browser placement, browser order, protocol validation, and the
+MCP catalog all derive from that manifest. Adding a kind to a union or to a hand-maintained
+palette is no longer part of adding a node. `NodeSpec` remains the executable compiler
+contract — ports, documentation, fixed work, and emission — rather than the registry.
+
 ## The vocabulary documents itself
 
-The node reference is executable data in `NODE_SPECS`, not prose copied into the browser.
+The node reference is executable `NodeSpec` data, not prose copied into the browser.
 Three interfaces make that a rule rather than a convention:
 
 - `NodeDocumentation.description` is the plain-language account of a node regardless of its
