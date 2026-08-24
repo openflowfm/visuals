@@ -59,13 +59,15 @@ export type TagCategory =
  * A tag's direction. Category is the *topic* a tag speaks about; polarity is
  * whether it praises, faults, or merely describes. Direction lives on the tag
  * rather than on the shelf so any topic can hold all three — `musical` and
- * `too-fast` are both about motion — and so the submit rules can ask for a
- * praise or a fault without caring which aspect supplied it.
+ * `too-fast` are both about motion.
  *
- * Praise and fault tags carry their effect with them: the review view stamps
- * `helped` or `hurt` on the wire and offers no toggle, because `generic` is
- * never a compliment. Neutral tags keep the reviewer's call — `twitchy`
- * genuinely cuts both ways.
+ * Polarity is reserved for **functional** claims — legibility, stability,
+ * safety, cost, craft — where any judge who accepts the description has
+ * already accepted the verdict: `broken` is never a compliment. Taste stays
+ * neutral, however loaded the word — `funny`, `beautiful` and `generic`
+ * describe, and the reviewer's helped/hurt stamp records what the quality did
+ * *here*. Praise and fault tags carry their effect with them: the review view
+ * stamps `helped` or `hurt` on the wire and offers no toggle.
  */
 export type TagPolarity = 'praise' | 'fault' | 'neutral';
 
@@ -80,8 +82,11 @@ export interface LabTag {
   active: boolean;
 }
 
-/** 2: polarity became a tag property, and `reason` dissolved into `piece`. */
-export const TAGS_VERSION = 2;
+/**
+ * 2: polarity became a tag property, and `reason` dissolved into `piece`.
+ * 3: polarity narrowed to functional claims; `use` gained sections and energy.
+ */
+export const TAGS_VERSION = 3;
 
 export const TAG_CATEGORIES: readonly { category: TagCategory; about: string }[] = [
   { category: 'character', about: 'What kind of thing it is' },
@@ -111,12 +116,12 @@ export const TAGS: readonly LabTag[] = [
   describe('geometric', 'character', 'geometric', 'Lines, tiles, folds; built rather than grown'),
   describe('organic', 'character', 'organic', 'Reads as grown or fluid rather than constructed'),
   describe('textural', 'character', 'textural', 'A surface more than a shape'),
+  describe('funny', 'character', 'funny', 'It has a joke in it, and the joke lands'),
   describe('severe', 'character', 'severe', 'Austere, hard-edged, unsmiling'),
   describe('dreamy', 'character', 'dreamy', 'Soft, slow, half-remembered'),
   describe('chaotic', 'character', 'chaotic', 'Deliberately too much at once'),
   describe('restrained', 'character', 'restrained', 'Does one thing and declines the rest'),
-  praise('funny', 'character', 'funny', 'It has a joke in it, and the joke lands'),
-  praise('hypnotic', 'character', 'hypnotic', 'Rewards staring; the loop is the point'),
+  describe('hypnotic', 'character', 'hypnotic', 'Rewards staring; the loop is the point'),
 
   describe('still', 'motion', 'still', 'Holds; change is the exception'),
   describe('breathing', 'motion', 'breathing', 'Swells and settles on an envelope'),
@@ -124,7 +129,7 @@ export const TAGS: readonly LabTag[] = [
   describe('building', 'motion', 'building', 'Accumulates somewhere rather than cycling'),
   describe('twitchy', 'motion', 'twitchy', 'Follows the raw meter; nervous'),
   describe('repetitive', 'motion', 'repetitive', 'The same gesture past the point of reading as a loop'),
-  praise('musical', 'motion', 'musical', 'Motion that reads as phrasing rather than as a meter'),
+  describe('musical', 'motion', 'musical', 'Motion that reads as phrasing rather than as a meter'),
   fault('too-twitchy', 'motion', 'too twitchy', 'Meter noise passed straight to the eye'),
   fault('too-fast', 'motion', 'too fast', 'Outruns the eye; nothing lands'),
   fault('seizure-risk', 'motion', 'seizure risk', 'Flashing in the photosensitive band; unsafe to put on a wall'),
@@ -147,15 +152,15 @@ export const TAGS: readonly LabTag[] = [
   fault('harsh', 'composition', 'harsh', 'Contrast or strobe past what a room enjoys'),
   fault('too-dark', 'composition', 'too dark', 'Reads as a dark screen on a lamp'),
 
-  praise('distinctive', 'piece', 'distinctive', 'Not a thing the library already has'),
+  describe('distinctive', 'piece', 'distinctive', 'Not a thing the library already has'),
+  describe('surprising', 'piece', 'surprising', 'Did something the recipe did not promise'),
+  describe('beautiful', 'piece', 'beautiful', 'The looks alone would keep it'),
+  describe('generic', 'piece', 'generic', 'Any roll could have made it'),
+  describe('gimmicky', 'piece', 'gimmicky', 'One trick, and the trick is the whole flow'),
   praise('coherent', 'piece', 'coherent', 'Its parts belong to one idea'),
-  praise('surprising', 'piece', 'surprising', 'Did something the recipe did not promise'),
-  praise('beautiful', 'piece', 'beautiful', 'The looks alone would keep it'),
   praise('economical', 'piece', 'economical', 'A small graph doing a lot'),
   praise('versatile', 'piece', 'versatile', 'Would read in most rooms, not just this one'),
   praise('sustains', 'piece', 'sustains', 'Still good on the third minute'),
-  fault('generic', 'piece', 'generic', 'Any roll could have made it'),
-  fault('gimmicky', 'piece', 'gimmicky', 'One trick, and the trick is the whole flow'),
   fault('one-moment', 'piece', 'only one good moment', 'A single alignment carries it'),
   fault('expensive', 'piece', 'too expensive', 'Costs GPU beyond what the picture repays'),
   fault('broken', 'piece', 'broken', 'Not a look; a malfunction'),
@@ -168,6 +173,14 @@ export const TAGS: readonly LabTag[] = [
   describe('interlude', 'use', 'interlude', 'A rest the room can feel'),
   describe('wildcard', 'use', 'wildcard', 'Kept for the moment nobody can plan'),
   describe('nesting', 'use', 'good for nesting', 'Stronger as a part than as a whole'),
+  describe('intro', 'use', 'intro', 'Best while the song is arriving'),
+  describe('verse', 'use', 'verse', 'Carries the verses without stealing them'),
+  describe('chorus', 'use', 'chorus', 'Best when the hook lands'),
+  describe('bridge', 'use', 'bridge', 'For the turn away from home'),
+  describe('jam', 'use', 'jam', 'Best while the players stretch out'),
+  describe('outro', 'use', 'outro', 'Best while the song is leaving'),
+  describe('low-energy', 'use', 'low energy', 'Earns its place when the room is quiet'),
+  describe('high-energy', 'use', 'high energy', 'Earns its place when the room is loud'),
 ];
 
 export const TAG_BY_ID: ReadonlyMap<string, LabTag> = new Map(TAGS.map((t) => [t.id, t]));
@@ -180,9 +193,11 @@ export const TAG_BY_ID: ReadonlyMap<string, LabTag> = new Map(TAGS.map((t) => [t
  * One function for the button and for the server, so the UI can never learn a
  * different rule from the one the store enforces. Evidence without force-fed
  * answers: every review needs a score and two tags that describe rather than
- * judge; what else the score demands depends on which score it is, and only a
- * tag's own polarity satisfies it — a neutral tag stamped `helped` records
- * taste about a quality, never the case for the score.
+ * judge; what else the score demands is a matter of effect. A praise or fault
+ * tag carries its effect in its polarity, a neutral tag carries the
+ * reviewer's stamp — so a 5 can rest on `funny, helped` as squarely as on
+ * `coherent` — and a use tag never gates, because where a flow belongs is not
+ * why it scored.
  */
 export function submissionProblems(submission: {
   score: LabScore | null;
@@ -192,29 +207,35 @@ export function submissionProblems(submission: {
   const { score, tags } = submission;
   if (score === null) problems.push('a review requires a score');
 
-  const known = tags
-    .map((each) => TAG_BY_ID.get(each.id))
-    .filter((each): each is LabTag => each !== undefined);
+  const known = tags.flatMap((each) => {
+    const tag = TAG_BY_ID.get(each.id);
+    return tag ? [{ tag, effect: each.effect }] : [];
+  });
   const describing = known.filter(
-    (each) => each.polarity === 'neutral' && each.category !== 'use',
+    ({ tag }) => tag.polarity === 'neutral' && tag.category !== 'use',
   );
   if (describing.length < 2) {
     problems.push('at least two tags that describe rather than judge');
   }
 
-  const praised = known.some((each) => each.polarity === 'praise');
-  const faulted = known.some((each) => each.polarity === 'fault');
-  const uses = known.some((each) => each.category === 'use');
+  const weighed = known.filter(({ tag }) => tag.category !== 'use');
+  const helped = weighed.some(
+    ({ tag, effect }) => tag.polarity === 'praise' || (tag.polarity === 'neutral' && effect === 'helped'),
+  );
+  const hurt = weighed.some(
+    ({ tag, effect }) => tag.polarity === 'fault' || (tag.polarity === 'neutral' && effect === 'hurt'),
+  );
+  const uses = known.some(({ tag }) => tag.category === 'use');
 
   if (score !== null && score >= 4) {
-    if (!praised) problems.push('a 4 or 5 needs something praised');
+    if (!helped) problems.push('a 4 or 5 needs something that helped');
     if (!uses) problems.push('a 4 or 5 needs an intended use');
   }
-  if (score !== null && score <= 2 && !faulted) {
-    problems.push('a 1 or 2 needs a fault named');
+  if (score !== null && score <= 2 && !hurt) {
+    problems.push('a 1 or 2 needs something that hurt');
   }
-  if (score === 3 && !praised && !faulted) {
-    problems.push('a 3 needs a praise or a fault');
+  if (score === 3 && !helped && !hurt) {
+    problems.push('a 3 needs something that helped or hurt');
   }
   return problems;
 }

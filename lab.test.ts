@@ -139,7 +139,7 @@ describe('the submit rules', () => {
     ).toEqual([]);
   });
 
-  it('a 4 or 5 needs a praise and a use', () => {
+  it('a 4 or 5 needs something that helped and a use', () => {
     const described = tags(['geometric', 'neutral'], ['breathing', 'neutral']);
     expect(submissionProblems({ score: 4 as LabScore, tags: described })).toHaveLength(2);
     expect(
@@ -150,27 +150,33 @@ describe('the submit rules', () => {
     ).toEqual([]);
   });
 
-  it('only polarity satisfies a score, never a stamped effect', () => {
+  it('a stamped taste tag satisfies a score; a use tag never does', () => {
     expect(
       submissionProblems({
         score: 4 as LabScore,
-        tags: tags(['geometric', 'helped'], ['breathing', 'helped'], ['peak', 'neutral']),
+        tags: tags(['geometric', 'neutral'], ['funny', 'helped'], ['peak', 'neutral']),
       }),
-    ).toEqual(['a 4 or 5 needs something praised']);
+    ).toEqual([]);
+    expect(
+      submissionProblems({
+        score: 4 as LabScore,
+        tags: tags(['geometric', 'neutral'], ['breathing', 'neutral'], ['peak', 'helped']),
+      }),
+    ).toEqual(['a 4 or 5 needs something that helped']);
   });
 
-  it('a 1 or 2 needs a fault named', () => {
-    const described = tags(['chaotic', 'neutral'], ['twitchy', 'hurt']);
+  it('a 1 or 2 needs something that hurt', () => {
+    const described = tags(['chaotic', 'neutral'], ['twitchy', 'neutral']);
     expect(submissionProblems({ score: 1 as LabScore, tags: described })).toHaveLength(1);
     expect(
       submissionProblems({
         score: 2 as LabScore,
-        tags: [...described, ...tags(['generic', 'hurt'])],
+        tags: tags(['chaotic', 'neutral'], ['twitchy', 'hurt']),
       }),
     ).toEqual([]);
   });
 
-  it('a 3 needs a praise or a fault', () => {
+  it('a 3 needs something that helped or hurt', () => {
     const described = tags(['organic', 'neutral'], ['breathing', 'neutral']);
     expect(submissionProblems({ score: 3 as LabScore, tags: described })).toHaveLength(1);
     expect(
