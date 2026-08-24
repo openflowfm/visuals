@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import type {
-  LabEffect,
   LabRoom,
   LabScore,
   LabState,
@@ -16,6 +15,7 @@ import {
   dealRoom,
   promoteCandidate,
   submissionProblems,
+  type LabTag,
 } from '../../lab.ts';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { NumberField } from '@openflow/widgets/controls/NumberField.tsx';
@@ -70,7 +70,7 @@ export function ReviewView({
     room: LabRoom | null;
     rooms: number;
     score: LabScore | null;
-    tags: { id: string; effect: LabEffect }[];
+    tags: string[];
     note: string;
     promoted: boolean;
   }>({ id: null, room: null, rooms: 0, score: null, tags: [], note: '', promoted: false });
@@ -140,25 +140,12 @@ export function ReviewView({
     setJudging((held) => (held.room ? { ...held, room: { ...held.room, ...patch } } : held));
   };
 
-  // A praise or fault tag lands already stamped — its polarity is its effect,
-  // and the strip below offers no toggle for it. Only a neutral tag arrives
-  // undecided, waiting on the reviewer's call.
   const toggleTag = (id: string) => {
-    const polarity = TAG_BY_ID.get(id)?.polarity;
-    const stamped: LabEffect =
-      polarity === 'praise' ? 'helped' : polarity === 'fault' ? 'hurt' : 'neutral';
     setJudging((held) => ({
       ...held,
-      tags: held.tags.some((each) => each.id === id)
-        ? held.tags.filter((each) => each.id !== id)
-        : [...held.tags, { id, effect: stamped }],
-    }));
-  };
-
-  const setEffect = (id: string, effect: LabEffect) => {
-    setJudging((held) => ({
-      ...held,
-      tags: held.tags.map((each) => (each.id === id ? { ...each, effect } : each)),
+      tags: held.tags.includes(id)
+        ? held.tags.filter((each) => each !== id)
+        : [...held.tags, id],
     }));
   };
 
@@ -190,9 +177,42 @@ export function ReviewView({
     );
   }
 
-  const chosen = new Set(judging.tags.map((each) => each.id));
+  const chosen = new Set(judging.tags);
   const looking = search.trim().toLowerCase();
   const nodes = candidate.flow.circuit.nodes.length;
+
+  const seeks = (tag: LabTag) =>
+    tag.active &&
+    (!looking ||
+      tag.label.toLowerCase().includes(looking) ||
+      tag.description.toLowerCase().includes(looking));
+  /** What ⏎ would add: the first match in shelf order, shown with a focus ring. */
+  const topMatch = looking ? (TAGS.find(seeks) ?? null) : null;
+
+  const keys = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      submit();
+      return;
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      if (topMatch) {
+        toggleTag(topMatch.id);
+        setSearch('');
+      }
+      return;
+    }
+    if (event.key === 'Escape') {
+      setSearch('');
+      return;
+    }
+    if (search === '' && event.key >= '1' && event.key <= '5') {
+      event.preventDefault();
+      const score = Number(event.key) as LabScore;
+      setJudging((held) => ({ ...held, score }));
+    }
+  };
 
   return (
     <div className="review">
@@ -290,54 +310,38 @@ export function ReviewView({
         {judging.tags.length > 0 && (
           <section className="review-chosen">
             <h3>this review says</h3>
-            {judging.tags.map((each) => {
-              const tag = TAG_BY_ID.get(each.id)!;
-              return (
-                <div key={each.id} className="review-said">
-                  <span className="review-said-label">{tag.label}</span>
-                  {tag.polarity === 'neutral' ? (
-                    <span className="review-effect" role="radiogroup" aria-label={`${tag.label} effect`}>
-                      {(['hurt', 'neutral', 'helped'] as const).map((effect) => (
-                        <button
-                          key={effect}
-                          type="button"
-                          role="radio"
-                          aria-checked={each.effect === effect}
-                          data-on={each.effect === effect ? '' : undefined}
-                          title={effect}
-                          onClick={() => setEffect(each.id, effect)}
-                        >
-                          {effect === 'hurt' ? '−' : effect === 'helped' ? '+' : '·'}
-                        </button>
-                      ))}
-                    </span>
-                  ) : (
-                    <span className="review-effect-fixed" title={tag.polarity}>
-                      {tag.polarity === 'praise' ? '+' : '−'}
-                    </span>
-                  )}
-                </div>
-              );
-            })}
+            <div className="review-chips">
+              {judging.tags.map((id) => {
+                const tag = TAG_BY_ID.get(id)!;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    className="review-chip"
+                    data-on=""
+                    data-polarity={tag.polarity === 'neutral' ? undefined : tag.polarity}
+                    title={tag.description}
+                    onClick={() => toggleTag(id)}
+                  >
+                    {tag.label}
+                  </button>
+                );
+              })}
+            </div>
           </section>
         )}
 
         <section className="review-tags">
           <input
             value={search}
+            autoFocus
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="find a tag…"
+            onKeyDown={keys}
+            placeholder="find a tag — ⏎ adds · 1–5 score · ⌘⏎ submits"
             aria-label="Filter tags"
           />
           {TAG_CATEGORIES.map(({ category, about }) => {
-            const rows = TAGS.filter(
-              (tag) =>
-                tag.active &&
-                tag.category === category &&
-                (!looking ||
-                  tag.label.toLowerCase().includes(looking) ||
-                  tag.description.toLowerCase().includes(looking)),
-            );
+            const rows = TAGS.filter((tag) => tag.category === category && seeks(tag));
             if (rows.length === 0) return null;
             return (
               <div key={category} className="review-shelf">
@@ -349,6 +353,7 @@ export function ReviewView({
                       type="button"
                       className="review-chip"
                       data-on={chosen.has(tag.id) ? '' : undefined}
+                      data-top={topMatch?.id === tag.id ? '' : undefined}
                       data-polarity={tag.polarity === 'neutral' ? undefined : tag.polarity}
                       title={tag.description}
                       onClick={() => toggleTag(tag.id)}

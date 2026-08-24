@@ -131,6 +131,17 @@ const MIGRATIONS: readonly string[] = [
   ALTER TABLE tags ADD COLUMN polarity TEXT NOT NULL DEFAULT 'neutral'
     CHECK (polarity IN ('praise', 'fault', 'neutral'));
   `,
+  `
+  CREATE TABLE review_tags_plain (
+    review_id INTEGER NOT NULL REFERENCES reviews(id),
+    tag_id TEXT NOT NULL REFERENCES tags(id),
+    UNIQUE (review_id, tag_id)
+  );
+  INSERT INTO review_tags_plain (review_id, tag_id)
+    SELECT review_id, tag_id FROM review_tags;
+  DROP TABLE review_tags;
+  ALTER TABLE review_tags_plain RENAME TO review_tags;
+  `,
 ];
 
 export interface StoredCandidate {
@@ -145,7 +156,7 @@ export interface CandidateAggregate {
   mean: number | null;
   /** Reviews per anchored score, 1 through 5. */
   distribution: Record<number, number>;
-  tags: { id: string; helped: number; hurt: number; neutral: number }[];
+  tags: { id: string; count: number }[];
 }
 
 export interface LabStore {
@@ -190,7 +201,7 @@ export interface LabStore {
     note: string | null;
     room: LabRoom;
     rendererVersion: string;
-    tags: { id: string; effect: string }[];
+    tags: string[];
   }[];
   /** Every durable fact as JSONL, render artifacts excepted. */
   exportJsonl(): string;
@@ -266,27 +277,19 @@ export function openLab(file: string): LabStore {
     }
     const tags = db
       .prepare(
-        `SELECT rt.tag_id AS id,
-           SUM(rt.effect = 'helped') AS helped,
-           SUM(rt.effect = 'hurt') AS hurt,
-           SUM(rt.effect = 'neutral') AS neutral
+        `SELECT rt.tag_id AS id, COUNT(*) AS count
          FROM review_tags rt
          JOIN reviews r ON r.id = rt.review_id
          JOIN evaluations e ON e.id = r.evaluation_id
          WHERE e.candidate_id = ?
          GROUP BY rt.tag_id ORDER BY rt.tag_id`,
       )
-      .all(candidateId) as { id: string; helped: number; hurt: number; neutral: number }[];
+      .all(candidateId) as { id: string; count: number }[];
     return {
       count: rows.length,
       mean: rows.length ? total / rows.length : null,
       distribution,
-      tags: tags.map((row) => ({
-        id: row.id,
-        helped: Number(row.helped),
-        hurt: Number(row.hurt),
-        neutral: Number(row.neutral),
-      })),
+      tags: tags.map((row) => ({ id: row.id, count: Number(row.count) })),
     };
   };
 
@@ -396,9 +399,9 @@ export function openLab(file: string): LabStore {
     submit(review, at) {
       const problems = submissionProblems(review);
       if (problems.length > 0) return { ok: false, problem: problems.join('; ') };
-      for (const each of review.tags) {
-        const known = TAG_BY_ID.get(each.id);
-        if (!known) return { ok: false, problem: `no tag called ${each.id}` };
+      for (const id of review.tags) {
+        const known = TAG_BY_ID.get(id);
+        if (!known) return { ok: false, problem: `no tag called ${id}` };
         if (!known.active) return { ok: false, problem: `${known.label} is deprecated` };
       }
       const held = db.prepare('SELECT id FROM candidates WHERE id = ?').get(review.candidateId);
@@ -429,11 +432,9 @@ export function openLab(file: string): LabStore {
             review.note?.trim() ? review.note.trim() : null,
             now(),
           );
-        const tagIn = db.prepare(
-          'INSERT INTO review_tags (review_id, tag_id, effect) VALUES (?, ?, ?)',
-        );
-        for (const each of review.tags) {
-          tagIn.run(Number(wrote.lastInsertRowid), each.id, each.effect);
+        const tagIn = db.prepare('INSERT INTO review_tags (review_id, tag_id) VALUES (?, ?)');
+        for (const id of review.tags) {
+          tagIn.run(Number(wrote.lastInsertRowid), id);
         }
         db.prepare(
           `UPDATE served SET disposition = 'reviewed', decided_at = ?
@@ -492,7 +493,7 @@ export function openLab(file: string): LabStore {
         renderer: string;
       }[];
       const tagsOf = db.prepare(
-        'SELECT tag_id AS id, effect FROM review_tags WHERE review_id = ? ORDER BY tag_id',
+        'SELECT tag_id FROM review_tags WHERE review_id = ? ORDER BY tag_id',
       );
       return rows.map((row) => ({
         score: row.score,
@@ -500,7 +501,7 @@ export function openLab(file: string): LabStore {
         note: row.note,
         room: JSON.parse(row.room) as LabRoom,
         rendererVersion: row.renderer,
-        tags: tagsOf.all(row.id) as { id: string; effect: string }[],
+        tags: (tagsOf.all(row.id) as { tag_id: string }[]).map((tag) => tag.tag_id),
       }));
     },
 

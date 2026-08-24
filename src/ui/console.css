@@ -1429,50 +1429,6 @@
   color: var(--amber);
 }
 
-.review-said {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 2px 0;
-}
-
-.review-said-label {
-  flex: 1;
-  color: var(--fg);
-}
-
-.review-effect {
-  display: inline-flex;
-  border: 1px solid var(--bd3);
-  border-radius: var(--radius-xs);
-  overflow: hidden;
-}
-
-.review-effect button {
-  border: none;
-  background: var(--surface-control);
-  color: var(--caption);
-  font: inherit;
-  width: 22px;
-  padding: 2px 0;
-  cursor: pointer;
-}
-
-.review-effect button + button {
-  border-left: 1px solid var(--bd3);
-}
-
-.review-effect button[data-on] {
-  background: var(--sel);
-  color: var(--amber);
-}
-
-.review-effect-fixed {
-  width: 70px;
-  text-align: center;
-  color: var(--caption);
-}
-
 .review-tags input {
   border: 1px solid var(--bd3);
   border-radius: var(--radius-xs);
@@ -1521,6 +1477,11 @@
 .review-chip[data-on] {
   border-color: var(--amber);
   color: var(--amber);
+}
+
+.review-chip[data-top] {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 1px var(--focus);
 }
 
 .review-note {

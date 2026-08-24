@@ -6,7 +6,7 @@ import {
   promoteCandidate,
   submissionProblems,
 } from './lab.ts';
-import type { FlowDef, LabCandidate, LabEffect, LabScore, Scheme } from './protocol.ts';
+import type { FlowDef, LabCandidate, LabScore, Scheme } from './protocol.ts';
 
 const flow = (name: string, over: Partial<FlowDef['circuit']> = {}): FlowDef => ({
   name,
@@ -113,78 +113,17 @@ describe('the dependency bundle', () => {
 });
 
 describe('the submit rules', () => {
-  const tags = (...ids: [string, LabEffect][]) => ids.map(([id, effect]) => ({ id, effect }));
-
-  it('requires a score and two descriptive tags', () => {
+  it('requires a score and three tags', () => {
     expect(submissionProblems({ score: null, tags: [] })).toHaveLength(2);
     expect(
-      submissionProblems({
-        score: 3 as LabScore,
-        tags: tags(['geometric', 'neutral'], ['breathing', 'neutral'], ['coherent', 'helped']),
-      }),
+      submissionProblems({ score: 3 as LabScore, tags: ['geometric', 'eerie', 'muddy'] }),
     ).toEqual([]);
   });
 
-  it('polar and use tags do not count as descriptive', () => {
-    const problems = submissionProblems({
-      score: 3 as LabScore,
-      tags: tags(['muddy', 'hurt'], ['background', 'neutral'], ['coherent', 'helped']),
-    });
-    expect(problems.some((p) => p.includes('describe'))).toBe(true);
+  it('unknown tags do not count toward the three', () => {
     expect(
-      submissionProblems({
-        score: 3 as LabScore,
-        tags: tags(['layered', 'neutral'], ['immersive', 'neutral'], ['muddy', 'hurt']),
-      }),
-    ).toEqual([]);
-  });
-
-  it('a 4 or 5 needs something that helped and a use', () => {
-    const described = tags(['geometric', 'neutral'], ['breathing', 'neutral']);
-    expect(submissionProblems({ score: 4 as LabScore, tags: described })).toHaveLength(2);
-    expect(
-      submissionProblems({
-        score: 5 as LabScore,
-        tags: [...described, ...tags(['distinctive', 'helped'], ['peak', 'neutral'])],
-      }),
-    ).toEqual([]);
-  });
-
-  it('a stamped taste tag satisfies a score; a use tag never does', () => {
-    expect(
-      submissionProblems({
-        score: 4 as LabScore,
-        tags: tags(['geometric', 'neutral'], ['funny', 'helped'], ['peak', 'neutral']),
-      }),
-    ).toEqual([]);
-    expect(
-      submissionProblems({
-        score: 4 as LabScore,
-        tags: tags(['geometric', 'neutral'], ['breathing', 'neutral'], ['peak', 'helped']),
-      }),
-    ).toEqual(['a 4 or 5 needs something that helped']);
-  });
-
-  it('a 1 or 2 needs something that hurt', () => {
-    const described = tags(['chaotic', 'neutral'], ['twitchy', 'neutral']);
-    expect(submissionProblems({ score: 1 as LabScore, tags: described })).toHaveLength(1);
-    expect(
-      submissionProblems({
-        score: 2 as LabScore,
-        tags: tags(['chaotic', 'neutral'], ['twitchy', 'hurt']),
-      }),
-    ).toEqual([]);
-  });
-
-  it('a 3 needs something that helped or hurt', () => {
-    const described = tags(['organic', 'neutral'], ['breathing', 'neutral']);
-    expect(submissionProblems({ score: 3 as LabScore, tags: described })).toHaveLength(1);
-    expect(
-      submissionProblems({
-        score: 3 as LabScore,
-        tags: [...described, ...tags(['one-moment', 'hurt'])],
-      }),
-    ).toEqual([]);
+      submissionProblems({ score: 3 as LabScore, tags: ['geometric', 'eerie', 'no-such-tag'] }),
+    ).toEqual(['at least three tags']);
   });
 });
 

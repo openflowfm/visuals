@@ -43,8 +43,8 @@ every derived row loses nothing. A **skip** is its own disposition in the `serve
 never a low score; the corpus keeps skips, low scores, and everything else it was shown.
 
 There is deliberately no global leaderboard and no single learned taste. A candidate's
-score is evidence inside whatever regions its tags describe — calm + organic + interlude is
-not competing with chaotic + set-forward + peak.
+score is evidence inside whatever regions its tags describe — serene + organic + drifting is
+not competing with chaotic + set-forward + euphoric.
 
 ## What a judgment freezes
 

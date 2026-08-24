@@ -2,10 +2,8 @@ import type {
   Circuit,
   FlowDef,
   LabCandidate,
-  LabEffect,
   LabRoom,
   LabScore,
-  LabSubmission,
   Scheme,
 } from './protocol.ts';
 import { flowsUsedBy } from './protocol.ts';
@@ -49,11 +47,12 @@ export const LAB_RENDERER_VERSION = 1;
 
 export type TagCategory =
   | 'character'
+  | 'mood'
+  | 'look'
   | 'motion'
   | 'reactivity'
   | 'composition'
-  | 'piece'
-  | 'use';
+  | 'piece';
 
 /**
  * A tag's direction. Category is the *topic* a tag speaks about; polarity is
@@ -63,11 +62,10 @@ export type TagCategory =
  *
  * Polarity is reserved for **functional** claims — legibility, stability,
  * safety, cost, craft — where any judge who accepts the description has
- * already accepted the verdict: `broken` is never a compliment. Taste stays
- * neutral, however loaded the word — `funny`, `beautiful` and `generic`
- * describe, and the reviewer's helped/hurt stamp records what the quality did
- * *here*. Praise and fault tags carry their effect with them: the review view
- * stamps `helped` or `hurt` on the wire and offers no toggle.
+ * already accepted the verdict: `broken` is never a compliment. Everything
+ * else is truly just a tag, however loaded the word — `funny`, `beautiful`
+ * and `generic` describe, and the score says what the description added up
+ * to. Nothing rides on a chosen tag: no stamp, no toggle, no follow-up.
  */
 export type TagPolarity = 'praise' | 'fault' | 'neutral';
 
@@ -85,16 +83,19 @@ export interface LabTag {
 /**
  * 2: polarity became a tag property, and `reason` dissolved into `piece`.
  * 3: polarity narrowed to functional claims; `use` gained sections and energy.
+ * 4: effects gone — a tag is the whole gesture; `use` dropped (where a flow
+ *    belongs is curation, not judgment); `mood` and `look` opened.
  */
-export const TAGS_VERSION = 3;
+export const TAGS_VERSION = 4;
 
 export const TAG_CATEGORIES: readonly { category: TagCategory; about: string }[] = [
   { category: 'character', about: 'What kind of thing it is' },
+  { category: 'mood', about: 'What it feels like' },
+  { category: 'look', about: 'The light and the surface' },
   { category: 'motion', about: 'How it moves' },
   { category: 'reactivity', about: 'How it hears the set that drives it' },
   { category: 'composition', about: 'How the frame reads, and whether a projector agrees' },
   { category: 'piece', about: 'The whole piece — what no single aspect explains' },
-  { category: 'use', about: 'Where in a show it would earn its place' },
 ];
 
 const shape =
@@ -122,6 +123,37 @@ export const TAGS: readonly LabTag[] = [
   describe('chaotic', 'character', 'chaotic', 'Deliberately too much at once'),
   describe('restrained', 'character', 'restrained', 'Does one thing and declines the rest'),
   describe('hypnotic', 'character', 'hypnotic', 'Rewards staring; the loop is the point'),
+  describe('mechanical', 'character', 'mechanical', 'Moves like machinery; parts doing jobs'),
+  describe('cosmic', 'character', 'cosmic', 'Space, stars, the enormous'),
+  describe('architectural', 'character', 'architectural', 'Built space; walls, beams, rooms'),
+  describe('elemental', 'character', 'elemental', 'Fire, water, weather; nature doing physics'),
+  describe('retro', 'character', 'retro', 'Wears an older machine on purpose'),
+
+  describe('euphoric', 'mood', 'euphoric', 'Arms up; the good news arriving'),
+  describe('serene', 'mood', 'serene', 'Untroubled; nothing needs anything'),
+  describe('ominous', 'mood', 'ominous', 'Something is coming, and it is not friendly'),
+  describe('menacing', 'mood', 'menacing', 'The threat is already here'),
+  describe('eerie', 'mood', 'eerie', 'Wrong in a quiet way'),
+  describe('melancholy', 'mood', 'melancholy', 'Beautiful and a little sad'),
+  describe('tense', 'mood', 'tense', 'Held breath; unresolved'),
+  describe('playful', 'mood', 'playful', 'Light on its feet; toys with the room'),
+  describe('solemn', 'mood', 'solemn', 'Weight worn openly; ceremony'),
+  describe('triumphant', 'mood', 'triumphant', 'The arrival itself'),
+
+  describe('glowing', 'look', 'glowing', 'Light comes from inside it'),
+  describe('neon', 'look', 'neon', 'Electric colour against the dark'),
+  describe('pastel', 'look', 'pastel', 'Colour with the volume down'),
+  describe('monochrome', 'look', 'monochrome', 'One colour doing all the work'),
+  describe('saturated', 'look', 'saturated', 'Colour at full throat'),
+  describe('muted', 'look', 'muted', 'Colour held back on purpose'),
+  describe('grainy', 'look', 'grainy', 'Noise worn as texture'),
+  describe('glassy', 'look', 'glassy', 'Hard, clean, specular'),
+  describe('liquid', 'look', 'liquid', 'Wet physics; pour and ripple'),
+  describe('smoky', 'look', 'smoky', 'Soft volumes; edges that breathe'),
+  describe('crystalline', 'look', 'crystalline', 'Facets; light broken into pieces'),
+  describe('metallic', 'look', 'metallic', 'Sheen off a machined surface'),
+  describe('warm', 'look', 'warm', 'Light leaning amber'),
+  describe('cold', 'look', 'cold', 'Light leaning blue'),
 
   describe('still', 'motion', 'still', 'Holds; change is the exception'),
   describe('breathing', 'motion', 'breathing', 'Swells and settles on an envelope'),
@@ -130,6 +162,13 @@ export const TAGS: readonly LabTag[] = [
   describe('twitchy', 'motion', 'twitchy', 'Follows the raw meter; nervous'),
   describe('repetitive', 'motion', 'repetitive', 'The same gesture past the point of reading as a loop'),
   describe('musical', 'motion', 'musical', 'Motion that reads as phrasing rather than as a meter'),
+  describe('drifting', 'motion', 'drifting', 'Travels slowly, and means the travel'),
+  describe('pulsing', 'motion', 'pulsing', 'One heartbeat, felt everywhere'),
+  describe('spinning', 'motion', 'spinning', 'Rotation is the engine'),
+  describe('cascading', 'motion', 'cascading', 'One thing setting off the next'),
+  describe('swarming', 'motion', 'swarming', 'Many small things with one mind'),
+  describe('flickering', 'motion', 'flickering', 'Presence and absence, fast'),
+  describe('zooming', 'motion', 'zooming', 'Depth travel; toward or through'),
   fault('too-twitchy', 'motion', 'too twitchy', 'Meter noise passed straight to the eye'),
   fault('too-fast', 'motion', 'too fast', 'Outruns the eye; nothing lands'),
   fault('seizure-risk', 'motion', 'seizure risk', 'Flashing in the photosensitive band; unsafe to put on a wall'),
@@ -137,6 +176,7 @@ export const TAGS: readonly LabTag[] = [
   describe('set-forward', 'reactivity', 'set-forward', 'The set is the picture; the flow frames it'),
   describe('loosely-reactive', 'reactivity', 'loosely reactive', 'Hears the set without depending on it'),
   describe('autonomous', 'reactivity', 'autonomous', 'Ignores the set, and means to'),
+  describe('section-aware', 'reactivity', 'hears the sections', 'Changes when the song changes shape'),
   praise('reads-energy', 'reactivity', 'reads energy', 'Level changes read on the wall'),
   fault('obscures', 'reactivity', 'obscures the performance', 'Buries what the players are doing'),
   fault('silence-blind', 'reactivity', 'disappears in silence', 'Nothing playing leaves nothing showing'),
@@ -144,6 +184,10 @@ export const TAGS: readonly LabTag[] = [
 
   describe('layered', 'composition', 'layered', 'Depths that read as depths'),
   describe('immersive', 'composition', 'immersive', 'Fills the frame as a field rather than a figure'),
+  describe('symmetrical', 'composition', 'symmetrical', 'Mirrored or tiled around an axis'),
+  describe('radial', 'composition', 'radial', 'Everything argues with the centre'),
+  describe('sparse', 'composition', 'sparse', 'Mostly empty, on purpose'),
+  describe('dense', 'composition', 'dense', 'Full frame, everything talking'),
   praise('clear-focus', 'composition', 'clear focus', 'One thing to look at, found immediately'),
   praise('balanced', 'composition', 'balanced', 'Weight sits where it should'),
   praise('projector-readable', 'composition', 'projector-readable', 'Survives a cheap lamp and ambient light'),
@@ -166,21 +210,6 @@ export const TAGS: readonly LabTag[] = [
   fault('broken', 'piece', 'broken', 'Not a look; a malfunction'),
   fault('fragile', 'piece', 'fragile', 'Works in this room and would break in another'),
   fault('overbuilt', 'piece', 'overbuilt', 'More graph than the idea needs'),
-
-  describe('background', 'use', 'background', 'Runs long behind the music without demanding'),
-  describe('transition', 'use', 'transition', 'A bridge between two things that both read'),
-  describe('peak', 'use', 'peak', 'For the loudest minute in the set'),
-  describe('interlude', 'use', 'interlude', 'A rest the room can feel'),
-  describe('wildcard', 'use', 'wildcard', 'Kept for the moment nobody can plan'),
-  describe('nesting', 'use', 'good for nesting', 'Stronger as a part than as a whole'),
-  describe('intro', 'use', 'intro', 'Best while the song is arriving'),
-  describe('verse', 'use', 'verse', 'Carries the verses without stealing them'),
-  describe('chorus', 'use', 'chorus', 'Best when the hook lands'),
-  describe('bridge', 'use', 'bridge', 'For the turn away from home'),
-  describe('jam', 'use', 'jam', 'Best while the players stretch out'),
-  describe('outro', 'use', 'outro', 'Best while the song is leaving'),
-  describe('low-energy', 'use', 'low energy', 'Earns its place when the room is quiet'),
-  describe('high-energy', 'use', 'high energy', 'Earns its place when the room is loud'),
 ];
 
 export const TAG_BY_ID: ReadonlyMap<string, LabTag> = new Map(TAGS.map((t) => [t.id, t]));
@@ -191,52 +220,22 @@ export const TAG_BY_ID: ReadonlyMap<string, LabTag> = new Map(TAGS.map((t) => [t
  * Why a submission cannot land yet, as sentences, or nothing when it can.
  *
  * One function for the button and for the server, so the UI can never learn a
- * different rule from the one the store enforces. Evidence without force-fed
- * answers: every review needs a score and two tags that describe rather than
- * judge; what else the score demands is a matter of effect. A praise or fault
- * tag carries its effect in its polarity, a neutral tag carries the
- * reviewer's stamp — so a 5 can rest on `funny, helped` as squarely as on
- * `coherent` — and a use tag never gates, because where a flow belongs is not
- * why it scored.
+ * different rule from the one the store enforces. Two rules only: a score,
+ * and three known tags. Everything beyond that was force-fed evidence — a
+ * demanded justification produces an invented one, and a merely dull flow has
+ * no fault to name. With a vocabulary this wide, description is the easy
+ * part; the rules just keep a review from being a bare number.
  */
 export function submissionProblems(submission: {
   score: LabScore | null;
-  tags: readonly { id: string; effect: LabEffect }[];
+  tags: readonly string[];
 }): string[] {
   const problems: string[] = [];
   const { score, tags } = submission;
   if (score === null) problems.push('a review requires a score');
 
-  const known = tags.flatMap((each) => {
-    const tag = TAG_BY_ID.get(each.id);
-    return tag ? [{ tag, effect: each.effect }] : [];
-  });
-  const describing = known.filter(
-    ({ tag }) => tag.polarity === 'neutral' && tag.category !== 'use',
-  );
-  if (describing.length < 2) {
-    problems.push('at least two tags that describe rather than judge');
-  }
-
-  const weighed = known.filter(({ tag }) => tag.category !== 'use');
-  const helped = weighed.some(
-    ({ tag, effect }) => tag.polarity === 'praise' || (tag.polarity === 'neutral' && effect === 'helped'),
-  );
-  const hurt = weighed.some(
-    ({ tag, effect }) => tag.polarity === 'fault' || (tag.polarity === 'neutral' && effect === 'hurt'),
-  );
-  const uses = known.some(({ tag }) => tag.category === 'use');
-
-  if (score !== null && score >= 4) {
-    if (!helped) problems.push('a 4 or 5 needs something that helped');
-    if (!uses) problems.push('a 4 or 5 needs an intended use');
-  }
-  if (score !== null && score <= 2 && !hurt) {
-    problems.push('a 1 or 2 needs something that hurt');
-  }
-  if (score === 3 && !helped && !hurt) {
-    problems.push('a 3 needs something that helped or hurt');
-  }
+  const known = tags.filter((id) => TAG_BY_ID.get(id));
+  if (known.length < 3) problems.push('at least three tags');
   return problems;
 }
 

@@ -56,23 +56,10 @@ const judgment = (candidateId: string, room: LabRoom, score: 1 | 2 | 3 | 4 | 5):
   score,
   tags:
     score >= 4
-      ? [
-          { id: 'geometric', effect: 'neutral' },
-          { id: 'breathing', effect: 'neutral' },
-          { id: 'distinctive', effect: 'helped' },
-          { id: 'peak', effect: 'neutral' },
-        ]
+      ? ['geometric', 'breathing', 'distinctive', 'euphoric']
       : score <= 2
-        ? [
-            { id: 'chaotic', effect: 'neutral' },
-            { id: 'twitchy', effect: 'neutral' },
-            { id: 'generic', effect: 'hurt' },
-          ]
-        : [
-            { id: 'organic', effect: 'neutral' },
-            { id: 'breathing', effect: 'neutral' },
-            { id: 'coherent', effect: 'helped' },
-          ],
+        ? ['chaotic', 'twitchy', 'generic']
+        : ['organic', 'breathing', 'coherent'],
   note: `scored ${score}`,
 });
 
@@ -107,12 +94,7 @@ describe('the store', () => {
     expect(held).toHaveLength(1);
     expect(held[0].score).toBe(4);
     expect(held[0].room).toEqual(room);
-    expect(held[0].tags.map((t) => t.id).sort()).toEqual([
-      'breathing',
-      'distinctive',
-      'geometric',
-      'peak',
-    ]);
+    expect(held[0].tags).toEqual(['breathing', 'distinctive', 'euphoric', 'geometric']);
     expect(again.candidate('c-one')?.flow.name).toBe('Candidate c-one');
     expect(again.counts(again.openExperiment('fresh', 1, 'deck'))).toEqual({
       reviewed: 1,
@@ -163,7 +145,7 @@ describe('the store', () => {
     expect(held.distribution[4]).toBe(1);
     expect(held.distribution[2]).toBe(1);
     const generic = held.tags.find((t) => t.id === 'generic');
-    expect(generic?.hurt).toBe(1);
+    expect(generic?.count).toBe(1);
     expect(store.snapshotRatings('mean', 1)).toBe(1);
   });
 

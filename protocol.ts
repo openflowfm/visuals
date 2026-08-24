@@ -614,8 +614,6 @@ export interface LabCandidate {
   seed: string;
 }
 
-export type LabEffect = 'helped' | 'hurt' | 'neutral';
-
 export type LabScore = 1 | 2 | 3 | 4 | 5;
 
 /** One judgment, exactly as submitted. The raw fact every score derives from. */
@@ -624,7 +622,8 @@ export interface LabSubmission {
   /** The room actually judged — the dealt one, or the dealt one adjusted. */
   room: LabRoom;
   score: LabScore;
-  tags: { id: string; effect: LabEffect }[];
+  /** Tag ids. A tag is the whole gesture — nothing rides on it. */
+  tags: string[];
   note?: string;
 }
 
