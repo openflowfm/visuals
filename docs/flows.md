@@ -219,6 +219,13 @@ port) lets it run live again. It used to be a meter — visibly identical to the
 it, taking no gesture, and a press on it dragged the whole node, which read as the first
 parameter on the face being broken.
 
+The same shape reaches further: every constant a source or field had `e` mixed into — a
+`bars`' columns, a `spiral`'s arms, the weave of a `noise` or a `cells` — is an inlet now,
+**following the energy inlet until somebody takes it**. Unwired and unheld it compiles to
+exactly the coupling it replaced, through a held or wired energy too, so a graph nobody has
+touched draws what it always drew — and every one of those numbers can be caught, or driven
+by anything that makes a number.
+
 **A mode's inlets carry their values with them.** See below — it is the same rule cords get,
 one step quieter, and it matters more: a stray cord at least lights an outlet up, where a
 number stranded under a name no port answers to cannot be seen at all until the mode comes

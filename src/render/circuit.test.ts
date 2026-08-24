@@ -310,11 +310,13 @@ describe('the bounded procedural field node', () => {
   });
 
   it('offers colony controls only on metaballs and passes both into its shader entry point', () => {
+    // `cells` carries a `weave` beside its energy — the promoted lattice
+    // scale, following the energy inlet until somebody takes it.
     expect(
       inletsOf({ id: 'cells', kind: 'field', op: 'cells', x: 0, y: 0 }).map(
         (port) => port.name,
       ),
-    ).toEqual(['p', 'energy']);
+    ).toEqual(['p', 'energy', 'weave']);
     expect(
       inletsOf({ id: 'metaballs', kind: 'field', op: 'metaballs', x: 0, y: 0 }).map(
         (port) => port.name,
@@ -663,6 +665,32 @@ describe('an inlet holds a number of its own', () => {
     const source = bodyOf(compileCircuit(held).source!);
     expect(source).toMatch(/gen_plasma\(.*uParams\[0\]/);
     expect(source).not.toMatch(/gen_plasma\(.*uEnergy/);
+  });
+
+  it('lets a promoted shape number follow energy until somebody takes it', () => {
+    const bars = (values?: Record<string, number>): Circuit =>
+      wire(
+        [
+          { id: 'g', kind: 'source', op: 'bars', x: 0, y: 0, ...(values ? { values } : {}) },
+          { id: 'o', kind: 'out', x: 1, y: 0 },
+        ],
+        [{ from: 'g/c', to: 'o/c' }],
+      );
+    // Untouched, `columns` compiles to the energy coupling it replaced, so
+    // promoting the constant changed nothing anybody had drawn.
+    expect(bodyOf(compileCircuit(bars()).source!)).toMatch(/gen_bars\(.*uEnergy, uEnergy\)/);
+    // A held energy carries its followers with it — one caught number still
+    // moves the whole source together, exactly as the coupling always did.
+    const heldEnergy = bars({ energy: 0.8 });
+    expect(bodyOf(compileCircuit(heldEnergy).source!)).toMatch(
+      /gen_bars\(.*uParams\[0\], uParams\[0\]\)/,
+    );
+    // A caught `columns` pins the shape and leaves the energy live.
+    const heldColumns = bars({ columns: 0.2 });
+    expect(valuesOf(heldColumns).map((each) => each.id)).toEqual(['g/columns']);
+    expect(bodyOf(compileCircuit(heldColumns).source!)).toMatch(
+      /gen_bars\(.*uEnergy, uParams\[0\]\)/,
+    );
   });
 
   it('gives a nested flow its own slots', () => {

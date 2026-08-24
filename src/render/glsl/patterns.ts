@@ -2,15 +2,16 @@
  * Cheap geometric pictures whose definitions are useful to test independently.
  *
  * These are generator bodies rather than complete functions. The source
- * assembler wraps each one in `vec4 gen_NAME(vec2 p, float e)`, alongside the
- * generators that already ship. Both have constant work: no loop, texture read,
- * or data-dependent search.
+ * assembler wraps each one in `vec4 gen_NAME(vec2 p, float e, ...)`, with the
+ * extra floats named by `SOURCE_VALUES`, alongside the generators that already
+ * ship. Both have constant work: no loop, texture read, or data-dependent
+ * search.
  */
 export const PATTERN_BODIES = {
   checker: `
   // The standard square-lattice parity pattern. GLSL's mod is defined in
   // terms of floor, so this stays a checker on the negative half of centred p.
-  float density = mix(7.0, 25.0, e);
+  float density = mix(7.0, 25.0, tiles);
   vec2 q = p * density + vec2(uBeat * rate(e) * 0.2, 0.0);
   vec2 cell = floor(q);
   float parity = mod(cell.x + cell.y, 2.0);
@@ -35,7 +36,7 @@ export const PATTERN_BODIES = {
 
   // An even number of equal angular sectors, alternately dark and bright.
   // Positive radial scaling cannot change the sector: only the angle matters.
-  float sectors = 2.0 * floor(mix(4.0, 16.0, e));
+  float sectors = 2.0 * floor(mix(4.0, 16.0, spokes));
   float angle = atan(p.y, p.x) + PI + uBeat * rate(e) * 0.16;
   float sector = angle * sectors / (2.0 * PI);
   float parity = mod(floor(sector), 2.0);

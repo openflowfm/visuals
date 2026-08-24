@@ -259,6 +259,8 @@ export function createNumberEvaluator(): NumberEvaluator {
           // none of those falls through to its signal.
           const held = inputs.params?.[id] ?? node.values?.[name] ?? port.at;
           if (held !== undefined) value = held;
+          else if (port.fallbackInlet !== undefined)
+            value = readInlet(`${nodeId}/${port.fallbackInlet}`);
           else if (port.fallback === 'uEnergy') value = inputs.show.master;
           else if (port.fallback === 'uBeat') value = inputs.beat;
         }

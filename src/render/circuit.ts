@@ -21,6 +21,7 @@ import {
 } from '../../protocol.ts';
 import { CIRCUIT_HELPERS } from './glsl/circuit.ts';
 import { FIELD_WORK } from './glsl/fields.ts';
+import { SOURCE_VALUES } from './glsl/sources.ts';
 import { LIGHT_WORK } from './glsl/light.ts';
 import { FRACTAL_ITERATIONS, flowPreamble } from './shaders.ts';
 import { VIDEO_NODE_SPEC } from '../nodes/video/spec.ts';
@@ -113,6 +114,15 @@ export interface PortSpec extends PortDocumentation {
    * only holds a number once somebody sets one.
    */
   at?: number;
+  /**
+   * Another inlet on the same node whose answer this one borrows while it has
+   * none of its own — unwired and unheld, it reads whatever that inlet reads.
+   *
+   * This is how a source's shape numbers follow its energy: `columns` on a
+   * `bars` compiles to the energy expression until somebody catches it, so
+   * promoting a constant to an inlet changes nothing until a hand does.
+   */
+  fallbackInlet?: string;
 }
 
 /** What a node's `emit` is handed. */
@@ -241,6 +251,20 @@ const ALIVE = (name: string, description: string, from: string): PortSpec => ({
 /** Every room-reactive mode gets one, so `rate` and `charge` have something to run on. */
 const E = () =>
   ALIVE('energy', 'How strongly the room drives this movement or brightness.', 'uEnergy');
+
+/**
+ * A number inlet that borrows the energy inlet's answer until somebody takes it.
+ *
+ * The promotion path for a constant with `e` mixed into it: as `FOLLOWS`, it
+ * compiles to exactly the coupling it replaced — through a held or wired
+ * energy too — and a graph that never touches it draws what it always drew.
+ */
+const FOLLOWS = (name: string, description: string): PortSpec => ({
+  name,
+  kind: 'n',
+  description,
+  fallbackInlet: 'energy',
+});
 
 /**
  * Turn a fixed vocabulary into documented modes without allowing a missing row.
@@ -406,8 +430,8 @@ const FRACTAL_VALUES = {
 } as const satisfies Record<string, readonly string[]>;
 
 const FIELD_VALUES = {
-  cells: [],
-  clouds: [],
+  cells: ['weave'],
+  clouds: ['weave'],
   metaballs: ['balls', 'apart'],
 } as const satisfies Record<string, readonly string[]>;
 
@@ -437,7 +461,8 @@ type ValueInlet =
   | (typeof SPREAD_VALUES)[keyof typeof SPREAD_VALUES][number]
   | (typeof FRACTAL_VALUES)[keyof typeof FRACTAL_VALUES][number]
   | (typeof FIELD_VALUES)[keyof typeof FIELD_VALUES][number]
-  | (typeof LIGHT_VALUES)[keyof typeof LIGHT_VALUES][number];
+  | (typeof LIGHT_VALUES)[keyof typeof LIGHT_VALUES][number]
+  | (typeof SOURCE_VALUES)[keyof typeof SOURCE_VALUES][number];
 
 /**
  * Every mode-dependent control, by the port name the graph saves.
@@ -485,9 +510,32 @@ const VALUE_DESCRIPTION: Record<ValueInlet, string> = {
   spread: 'How wide the cone opens.',
   blades: 'How many distinct rays streak the fan.',
   haze: 'How far the rays carry through the air.',
-  weave: 'How tightly the water pattern is woven.',
+  weave: 'How tightly the pattern is woven.',
   glint: 'How sharply the bright crossings flash.',
+  columns: 'How many columns divide the bar.',
+  flight: 'How far each ring flies before it dies.',
+  cover: 'How much of the frame the field covers.',
+  pulse: 'Which musical division the flash lands on.',
+  tiles: 'How many tiles divide the frame.',
+  spokes: 'How many spokes fan around the centre.',
+  arms: 'How many arms wind out of the centre.',
+  coil: 'How tightly the arms coil as they leave the centre.',
+  lines: 'How many lines rule the frame.',
+  shower: 'How thickly the sparks fill the frame.',
 };
+
+/**
+ * The numbers that follow the energy inlet until somebody takes them.
+ *
+ * Every promoted constant is in here, because every one of them had `e` mixed
+ * into it — which is what keeps the promotion invisible on a graph nobody has
+ * touched. A name absent from this set sits at `VALUE_AT` instead.
+ */
+const VALUE_FOLLOWS: ReadonlySet<string> = new Set([
+  ...Object.values(SOURCE_VALUES).flat(),
+  ...FIELD_VALUES.cells,
+  ...FIELD_VALUES.clouds,
+]);
 
 /** Where a number starts when nobody has turned it. A half unless it says. */
 const VALUE_AT: Record<string, number> = {
@@ -505,6 +553,7 @@ const VALUE_AT: Record<string, number> = {
 
 /** The modes that read an energy. The rest have no such inlet to leave unwired. */
 const NEEDS_ENERGY = new Set([
+  ...SOURCES,
   'kaleido',
   'twist',
   'ripple',
@@ -526,7 +575,11 @@ const NEEDS_ENERGY = new Set([
 
 const valuePorts = (names: readonly ValueInlet[], op: string): PortSpec[] => [
   ...(NEEDS_ENERGY.has(op) ? [E()] : []),
-  ...names.map((name) => N(name, VALUE_DESCRIPTION[name], VALUE_AT[name] ?? 0.5)),
+  ...names.map((name) =>
+    VALUE_FOLLOWS.has(name)
+      ? FOLLOWS(name, VALUE_DESCRIPTION[name])
+      : N(name, VALUE_DESCRIPTION[name], VALUE_AT[name] ?? 0.5),
+  ),
 ];
 
 /**
@@ -816,13 +869,24 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
   source: {
     name: 'source',
     description: 'A generated picture, drawn at a point and animated by the room.',
-    inlets: [P('p', 'Where in the generated picture to read.'), E()],
+    inlets: (node) => {
+      const op = modeOf(node, SOURCES);
+      return [
+        P('p', 'Where in the generated picture to read.'),
+        ...valuePorts(SOURCE_VALUES[op], op),
+      ];
+    },
     outlets: [C('c', 'The generated picture.')],
     modes: SOURCE_MODES,
     emit: (c) => {
       const op = modeOf(c.node, SOURCES);
+      const args = [
+        c.read('p'),
+        c.read('energy'),
+        ...SOURCE_VALUES[op].map((name) => c.read(name)),
+      ];
       return {
-        c: `laid(gen_${op}(${c.read('p')}, ${c.read('energy')}), ${c.read('energy')})`,
+        c: `laid(gen_${op}(${args.join(', ')}), ${c.read('energy')})`,
       };
     },
   },
@@ -1728,6 +1792,10 @@ export function compileCircuit(circuit: Circuit): Compiled {
     const answer = (port: PortSpec, where: string): string => {
       const held = slot.get(portId(nodeId, port.name));
       if (held !== undefined) return `uParams[${held}]`;
+      // A follower with nothing of its own reads its named sibling — through
+      // that inlet's own cord or held number, so `columns` follows whatever
+      // `energy` is actually doing rather than the raw room uniform.
+      if (port.fallbackInlet !== undefined) return readAt(port.fallbackInlet, where);
       return port.fallback ?? (port.kind === 'p' ? where : '0.0');
     };
 

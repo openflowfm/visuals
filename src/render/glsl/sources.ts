@@ -2,6 +2,36 @@ import { SOURCES, type Source } from '../../../protocol.ts';
 import { PATTERN_BODIES } from './patterns.ts';
 
 /**
+ * The numbers each source takes beyond its point and its energy.
+ *
+ * Every one of these was a constant with `e` mixed into it — "energy adds
+ * columns" — so every one **follows the energy inlet until somebody takes
+ * it**: unwired and unheld they compile to exactly the coupling they replaced,
+ * and a graph that never touches them draws what it always drew. Catching one
+ * pins that shape; wiring one drives it from anything.
+ *
+ * The names are function parameters as well as inlet names, so none may
+ * shadow a preamble function (`rate`, `noise`, `hash`) — which is why the
+ * strobe's division is `pulse` and a scan's count is `lines` read into
+ * `rules`.
+ */
+export const SOURCE_VALUES = {
+  solid: [],
+  bars: ['columns'],
+  rings: ['flight'],
+  noise: ['weave', 'cover'],
+  strobe: ['pulse'],
+  grid: ['tiles'],
+  tunnel: ['spokes'],
+  plasma: ['weave'],
+  spiral: ['arms', 'coil'],
+  scan: ['lines'],
+  sparks: ['shower'],
+  checker: ['tiles'],
+  rays: ['spokes'],
+} as const satisfies Record<Source, readonly string[]>;
+
+/**
  * Each picture as a **function of a point and an energy**.
  *
  * This is what makes "the sources are nodes" true rather than claimed. A
@@ -28,9 +58,9 @@ export const GENERATOR_BODIES = {
   // subdivision, and the playhead sweeps them. Energy adds columns, so the
   // same source is coarse when it is quiet and dense when it is not.
   vec2 uv = uncentred(p);
-  float columns = mix(8.0, 32.0, e);
-  float x = floor(uv.x * columns);
-  float head = floor((uPhase / uQuantum) * columns);
+  float cols = mix(8.0, 32.0, columns);
+  float x = floor(uv.x * cols);
+  float head = floor((uPhase / uQuantum) * cols);
   float lit = step(abs(x - head), 0.5);
   float height = 0.2 + 0.8 * hash(vec2(x, floor(uBeat / uQuantum))) * (0.3 + uLevel);
   float bar = step(uv.y, height);
@@ -44,7 +74,7 @@ export const GENERATOR_BODIES = {
   float speed = rate(e);
   for (int i = 0; i < 4; i++) {
     float age = fract(uBeat * speed - float(i) * 0.25);
-    float radius = age * mix(0.55, 0.95, e);
+    float radius = age * mix(0.55, 0.95, flight);
     total += smoothstep(0.03, 0.0, abs(r - radius)) * (1.0 - age);
   }
   return vec4(uColor, clamp(total * (0.6 + uLevel * 1.4), 0.0, 1.0));`,
@@ -52,11 +82,11 @@ export const GENERATOR_BODIES = {
   noise: `
   // A drifting field that thickens with the sound. The drift is on uTime
   // deliberately — it should feel like weather, not like a metronome.
-  vec2 q = p * mix(2.5, 6.0, e);
+  vec2 q = p * mix(2.5, 6.0, weave);
   float n = noise(q + vec2(uTime * 0.15, uTime * 0.1));
   n += 0.5 * noise(q * 2.3 - uTime * 0.2);
   n /= 1.5;
-  float threshold = mix(0.72, 0.42, e) - uLevel * 0.25;
+  float threshold = mix(0.72, 0.42, cover) - uLevel * 0.25;
   return vec4(uColor * (0.6 + n), smoothstep(threshold, threshold + 0.18, n));`,
 
   strobe: `
@@ -65,14 +95,14 @@ export const GENERATOR_BODIES = {
   // colour rather than on white, and its silent floor is low: a strobe with
   // nothing playing through it flashing at a third of full is the whole frame
   // going off on every beat for no reason at all.
-  float flash = beatPulse(rate(e), e);
+  float flash = beatPulse(rate(pulse), e);
   return vec4(mix(uColor, vec3(1.0), 0.3), flash * (0.1 + uLevel * 0.75));`,
 
   grid: `
   // A grid of cells, each lighting on its own beat. Reads as structure rather
   // than as motion, which is what a busy frame wants under everything else.
   vec2 uv = uncentred(p);
-  vec2 cells = mix(vec2(5.0, 3.0), vec2(12.0, 8.0), e);
+  vec2 cells = mix(vec2(5.0, 3.0), vec2(12.0, 8.0), tiles);
   vec2 id = floor(uv * cells);
   vec2 f = fract(uv * cells);
   float when = hash(id);
@@ -88,9 +118,9 @@ export const GENERATOR_BODIES = {
   float a = atan(p.y, p.x);
   float depth = uBeat * rate(e) * 0.45 + 0.16 / r;
   float rings = smoothstep(0.82, 1.0, abs(fract(depth) * 2.0 - 1.0));
-  float arms = floor(mix(4.0, 12.0, e));
-  float spokes = smoothstep(0.86, 1.0, abs(fract(a / PI * arms) * 2.0 - 1.0));
-  float lit = max(rings, spokes * 0.8);
+  float arms = floor(mix(4.0, 12.0, spokes));
+  float ribs = smoothstep(0.86, 1.0, abs(fract(a / PI * arms) * 2.0 - 1.0));
+  float lit = max(rings, ribs * 0.8);
   // Fades into the vanishing point, where the maths goes to infinity anyway.
   float fade = smoothstep(0.02, 0.3, r);
   return vec4(mix(uColor, vec3(1.0), rings * 0.4), lit * fade * (0.35 + uLevel * 0.9));`,
@@ -99,7 +129,7 @@ export const GENERATOR_BODIES = {
   // Four sines crossed. The oldest trick there is and still the best full-frame
   // wash — it never repeats visibly, it costs nothing, and it takes a colour and
   // its complement rather than a fixed palette.
-  vec2 q = p * mix(2.0, 5.0, e);
+  vec2 q = p * mix(2.0, 5.0, weave);
   float t = uBeat * rate(e) * 0.25;
   float v = sin(q.x + t) + sin(q.y * 1.3 - t) + sin((q.x + q.y) * 0.7 + t * 0.8)
           + sin(length(q) * 2.2 - t * 1.6);
@@ -110,8 +140,8 @@ export const GENERATOR_BODIES = {
   // Arms winding out of the centre and turning on the beat. Reads as motion
   // with a direction, which nothing else here does — rings expand, this rotates.
   float r = length(p);
-  float arms = floor(mix(2.0, 7.0, e));
-  float band = 0.5 + 0.5 * sin(atan(p.y, p.x) * arms + r * mix(7.0, 22.0, e)
+  float count = floor(mix(2.0, 7.0, arms));
+  float band = 0.5 + 0.5 * sin(atan(p.y, p.x) * count + r * mix(7.0, 22.0, coil)
                                - uBeat * rate(e) * PI);
   band = smoothstep(0.45, 0.85, band);
   float fade = 1.0 - smoothstep(0.16, 0.64, r);
@@ -121,8 +151,8 @@ export const GENERATOR_BODIES = {
   // Lines, with a bar's worth of sweep passing down them. The one source that
   // looks like a machine rather than like weather, which a set of them needs.
   vec2 uv = uncentred(p);
-  float lines = mix(40.0, 170.0, e);
-  float line = smoothstep(0.4, 0.5, abs(fract(uv.y * lines) - 0.5));
+  float rules = mix(40.0, 170.0, lines);
+  float line = smoothstep(0.4, 0.5, abs(fract(uv.y * rules) - 0.5));
   float head = 1.0 - uPhase / uQuantum;
   float sweep = pow(1.0 - min(abs(uv.y - head) * 3.5, 1.0), 3.0);
   return vec4(mix(uColor, vec3(1.0), sweep * 0.55),
@@ -133,7 +163,7 @@ export const GENERATOR_BODIES = {
   // aspect correction is on the cell count rather than the coordinates, so a
   // spark stays round on a wide frame.
   vec2 uv = uncentred(p);
-  float density = mix(9.0, 24.0, e);
+  float density = mix(9.0, 24.0, shower);
   vec2 g = uv * vec2(density * uRes.x / uRes.y, density);
   vec2 id = floor(g);
   vec2 f = fract(g) - 0.5;
@@ -154,6 +184,7 @@ export const GENERATOR_BODIES = {
  * of the wiring in a second way and gives the cache signature a second thing to
  * get wrong. A driver drops an uncalled function.
  */
-export const GENERATOR_LIB = SOURCES.map(
-  (name) => `vec4 gen_${name}(vec2 p, float e) {${GENERATOR_BODIES[name]}\n}`,
-).join('\n\n');
+export const GENERATOR_LIB = SOURCES.map((name) => {
+  const params = SOURCE_VALUES[name].map((value) => `, float ${value}`).join('');
+  return `vec4 gen_${name}(vec2 p, float e${params}) {${GENERATOR_BODIES[name]}\n}`;
+}).join('\n\n');

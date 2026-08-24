@@ -4,7 +4,7 @@ import { EFFECT_LIB } from './glsl/effects.ts';
 import { FIELD_LIB } from './glsl/fields.ts';
 import { FRACTAL_LIB } from './glsl/fractal.ts';
 import { LIGHT_LIB } from './glsl/light.ts';
-import { GENERATOR_LIB } from './glsl/sources.ts';
+import { GENERATOR_LIB, SOURCE_VALUES } from './glsl/sources.ts';
 
 export { PREAMBLE } from './glsl/common.ts';
 export { EFFECT_LIB } from './glsl/effects.ts';
@@ -110,7 +110,7 @@ export const TRACK_SHADERS: ReadonlyMap<string, string> = new Map(
     `${PREAMBLE}
 ${GENERATOR_LIB}
 void main() {
-  vec4 g = gen_${name}(centred(), uEnergy);
+  vec4 g = gen_${name}(centred(), uEnergy${', uEnergy'.repeat(SOURCE_VALUES[name].length)});
   OUT(g.rgb, g.a)
 }`,
   ]),

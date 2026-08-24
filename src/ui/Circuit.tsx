@@ -407,7 +407,8 @@ export function NodeFace({
             held ??
               port.at ??
               (driver === undefined
-                ? (reading?.value ?? (port.name === 'energy' ? energy : beat()))
+                ? (reading?.value ??
+                  (port.name === 'energy' || port.fallbackInlet === 'energy' ? energy : beat()))
                 : 0),
           )}
           onChange={(v) => onTurn(port.name, PERCENT.from(v))}

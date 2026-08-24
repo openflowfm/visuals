@@ -56,10 +56,12 @@ describe('the node face anatomy', () => {
     expect(running).toContain('aria-valuenow="62');
     expect(running).toContain('live; drag to hold it at a number');
 
+    // `solid`, because it is the one source with no follower rows — plasma's
+    // `weave` would still be running beside the held energy, which is right.
     const held = face({
       id: 's',
       kind: 'source',
-      op: 'plasma',
+      op: 'solid',
       values: { energy: 0.3 },
       x: 0,
       y: 0,
