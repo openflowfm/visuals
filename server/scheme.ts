@@ -864,7 +864,10 @@ export function merge(raw: Partial<Scheme>): Scheme {
  */
 function whole(flows: Record<string, FlowDef>): Record<string, FlowDef> {
   const out: Record<string, FlowDef> = {};
-  for (const [id, def] of Object.entries(flows)) out[id] = { ...def, circuit: repaired(def.circuit) };
+  // The whole record goes along, because a flow node's door cords can only be
+  // judged against the flow they name.
+  for (const [id, def] of Object.entries(flows))
+    out[id] = { ...def, circuit: repaired(def.circuit, flows) };
   return out;
 }
 

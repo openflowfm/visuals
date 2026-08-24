@@ -6,6 +6,7 @@ import {
   compileCircuit,
   compileFlow,
   flatten,
+  flowDoors,
   inletsOf,
   valuesOf,
   MAX_VALUES,
@@ -69,10 +70,12 @@ describe('compiling a flow', () => {
     expect(bodyOf(built.source!)).toContain('vec4(0.0)');
   });
 
-  it('refuses a graph with no out at all', () => {
+  it('draws nothing rather than refusing a graph with no out at all', () => {
+    // A provider flow has no out on purpose — its doors are `give` nodes — so
+    // an absent out is the honest transparent frame, not an error.
     const built = compileCircuit(wire([{ id: 'p', kind: 'point', x: 0, y: 0 }], []));
-    expect(built.source).toBeNull();
-    expect(built.error).toMatch(/out/);
+    expect(built.error).toBeNull();
+    expect(bodyOf(built.source!)).toContain('vec4(0.0)');
   });
 
   it('falls back on an unconnected inlet rather than refusing', () => {
@@ -1064,10 +1067,12 @@ describe('an effect reads its input where it says it does', () => {
   });
 });
 
-describe('exactly one out, and it is not optional', () => {
-  it('gives a graph that arrived without one somewhere to leave from', () => {
+describe('at most one out, and none is a provider', () => {
+  it('leaves a graph that arrived without one alone, and it still compiles', () => {
+    // Repair used to invent an out here. A flow with none is a provider now —
+    // its doors are `give` nodes — so an absent out is a design, not damage.
     const fixed = repaired(wire([{ id: 'g', kind: 'source', op: 'plasma', x: 200, y: 40 }], []));
-    expect(fixed.nodes.filter((node) => node.kind === 'out')).toHaveLength(1);
+    expect(fixed.nodes.filter((node) => node.kind === 'out')).toHaveLength(0);
     expect(compileCircuit(fixed).error).toBeNull();
   });
 
@@ -1150,6 +1155,146 @@ describe('exactly one out, and it is not optional', () => {
   it('leaves a graph the editor made exactly as it was', () => {
     expect(repaired(starterCircuit())).toEqual(starterCircuit());
     expect(repaired(bareCircuit())).toEqual(bareCircuit());
+  });
+});
+
+describe('a flow with doors', () => {
+  /**
+   * A provider: no `out`, one number taken, one reactive number given. This is
+   * the "pad energy" shape — all the reactivity wired once, inside, and one
+   * named signal handed out for any other flow to use.
+   */
+  const doored = (): Record<string, FlowDef> => ({
+    provider: {
+      name: 'Pad energy',
+      circuit: wire(
+        [
+          { id: 'beat', kind: 'playback', op: 'beat', x: 0, y: 0 },
+          { id: 'amt', kind: 'take', label: 'depth', value: 0.25, x: 0, y: 1 },
+          { id: 'm', kind: 'math', op: 'multiply', x: 1, y: 0 },
+          { id: 'door', kind: 'give', op: 'number', label: 'pad energy', x: 2, y: 0 },
+        ],
+        [
+          { from: 'beat/n', to: 'm/a' },
+          { from: 'amt/n', to: 'm/b' },
+          { from: 'm/n', to: 'door/in' },
+        ],
+      ),
+    },
+    main: {
+      name: 'Main',
+      circuit: wire(
+        [
+          { id: 'sub', kind: 'flow', op: 'provider', x: 0, y: 0, values: { depth: 0.9 } },
+          { id: 'g', kind: 'source', op: 'plasma', x: 0, y: 1 },
+          { id: 'e', kind: 'lens', op: 'ripple', x: 1, y: 0 },
+          { id: 'o', kind: 'out', x: 2, y: 0 },
+        ],
+        [
+          { from: 'g/c', to: 'e/c' },
+          { from: 'sub/pad energy', to: 'e/depth' },
+          { from: 'e/c', to: 'o/c' },
+        ],
+      ),
+    },
+  });
+
+  it('reads the doors off the takes and gives inside', () => {
+    const doors = flowDoors(doored().provider);
+    expect(doors.takes).toEqual([
+      {
+        name: 'depth',
+        kind: 'n',
+        at: 0.25,
+        nodeId: 'amt',
+        description: 'The depth this flow takes.',
+      },
+    ]);
+    expect(doors.gives.map((door) => ({ name: door.name, kind: door.kind }))).toEqual([
+      { name: 'pad energy', kind: 'n' },
+    ]);
+  });
+
+  it('skips a nameless door, a shadowing name, and the second claim on one', () => {
+    const def: FlowDef = {
+      name: 'Odd',
+      circuit: wire(
+        [
+          { id: 'a', kind: 'take', label: '', x: 0, y: 0 },
+          { id: 'b', kind: 'take', label: 'p', x: 0, y: 1 },
+          { id: 'c1', kind: 'take', label: 'rate', value: 0.1, x: 0, y: 2 },
+          { id: 'c2', kind: 'take', label: 'rate', value: 0.9, x: 0, y: 3 },
+          { id: 'd', kind: 'give', op: 'number', label: 'c', x: 1, y: 0 },
+        ],
+        [],
+      ),
+    };
+    const doors = flowDoors(def);
+    expect(doors.takes.map((door) => door.nodeId)).toEqual(['c1']);
+    expect(doors.gives).toEqual([]);
+  });
+
+  it('compiles a provider on its own: no out, an honest empty frame', () => {
+    const built = compileFlow(doored(), 'provider');
+    expect(built.error).toBeNull();
+    expect(bodyOf(built.source!)).toContain('fragColor = vec4(0.0)');
+  });
+
+  it('hands a given signal to the parent, cut through to what feeds it', () => {
+    const built = compileFlow(doored(), 'main');
+    expect(built.error).toBeNull();
+    // The ripple's depth arrives from the provider's own arithmetic — the
+    // door itself has vanished from the flattened graph entirely.
+    const flat = flatten(doored(), 'main').circuit;
+    expect(flat.nodes.some((node) => node.kind === 'give')).toBe(false);
+    expect(flat.cords).toContainEqual({ from: 'sub~m/n', to: 'e/depth' });
+  });
+
+  it('holds a taken number on the flow node, exactly like any inlet', () => {
+    // Nothing wired into `sub/depth`, so the pasted take stands, carrying the
+    // number held on the parent face — 0.9 — over its own resting 0.25.
+    const built = compileFlow(doored(), 'main');
+    expect(built.values.find((each) => each.id === 'sub~amt')?.value).toBe(0.9);
+  });
+
+  it('lets the parent drive a taken number, and the take steps aside', () => {
+    const flows = doored();
+    flows.main.circuit.nodes.push({ id: 'k', kind: 'value', value: 0.5, x: 0, y: 2 });
+    flows.main.circuit.cords.push({ from: 'k/n', to: 'sub/depth' });
+    const flat = flatten(flows, 'main').circuit;
+    expect(flat.nodes.some((node) => node.id === 'sub~amt')).toBe(false);
+    expect(flat.cords).toContainEqual({ from: 'k/n', to: 'sub~m/b' });
+    expect(compileFlow(flows, 'main').error).toBeNull();
+  });
+
+  it('drops the read of a give nothing feeds, so the reader falls back', () => {
+    const flows = doored();
+    flows.provider.circuit.cords = flows.provider.circuit.cords.filter(
+      (cord) => cord.to !== 'door/in',
+    );
+    const flat = flatten(flows, 'main').circuit;
+    expect(flat.cords.some((cord) => cord.to === 'e/depth')).toBe(false);
+    expect(compileFlow(flows, 'main').error).toBeNull();
+  });
+
+  it('answers a door cord at the file door instead of stripping it', () => {
+    const flows = doored();
+    const fixed = repaired(flows.main.circuit, flows);
+    expect(fixed.cords).toContainEqual({ from: 'sub/pad energy', to: 'e/depth' });
+    // Without the record the doors cannot be seen, and the cord is kept on
+    // trust rather than deleted.
+    expect(repaired(flows.main.circuit).cords).toContainEqual({
+      from: 'sub/pad energy',
+      to: 'e/depth',
+    });
+  });
+
+  it('tells the canvas what a door carries, so wiring can be typed', () => {
+    const flows = doored();
+    expect(signalOf(flows.main.circuit, 'sub/pad energy', flows)).toBe('n');
+    expect(signalOf(flows.main.circuit, 'sub/depth', flows)).toBe('n');
+    expect(signalOf(flows.main.circuit, 'sub/p', flows)).toBe('p');
+    expect(signalOf(flows.main.circuit, 'sub/nothing', flows)).toBeNull();
   });
 });
 

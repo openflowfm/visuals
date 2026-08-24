@@ -9,6 +9,7 @@ import { BROWSABLE_NODE_DEFINITIONS, NODE_BY_KIND } from '../nodes/generated.ts'
 import {
   NODE_SPECS,
   descriptionOf,
+  flowDoors,
   inletsOf,
   modesOf,
   type PortSpec,
@@ -130,6 +131,8 @@ export interface FlowRow {
   size: number;
   /** Wired by a roll, and the next roll replaces it. */
   rolled: boolean;
+  /** This flow's own signature, doors included — a provider gives no `c`. */
+  ports: Ports;
   terms: string;
 }
 
@@ -185,6 +188,27 @@ export function portsOf(kind: NodeKind): Ports {
 }
 
 /**
+ * What one particular flow takes and gives, doors included.
+ *
+ * The generic answer (`portsOf('flow')`) says every flow is `p → c`, which
+ * stopped being true the moment a flow could keep doors: a provider with no
+ * `out` gives no picture at all, and its row saying `→ c` would promise a cord
+ * that can never land.
+ */
+export function flowPorts(def: FlowDef): Ports {
+  const doors = flowDoors(def);
+  const takes = new Set<Signal>(['p']);
+  for (const door of doors.takes) takes.add(door.kind);
+  const gives = new Set<Signal>();
+  if (def.circuit.nodes.some((node) => node.kind === 'out')) gives.add('c');
+  for (const door of doors.gives) gives.add(door.kind);
+  return {
+    takes: SIGNALS.filter((signal) => takes.has(signal)),
+    gives: SIGNALS.filter((signal) => gives.has(signal)),
+  };
+}
+
+/**
  * Whether a row survives the filter. An empty side is a side nobody asked about.
  *
  * Every selected signal has to be present rather than any of them, so ticking
@@ -217,6 +241,7 @@ export function flowShelf(scheme: Scheme): FlowRow[] {
       about,
       size: nodes.length,
       rolled: def.rolled === true,
+      ports: flowPorts(def),
       terms: `${name} ${id} flow ${about}`.toLowerCase(),
     };
   });
@@ -234,10 +259,13 @@ export function flowShelf(scheme: Scheme): FlowRow[] {
 export function aboutFlow(def: FlowDef): string {
   const nodes = def.circuit.nodes;
   const inside = nodes.filter((node) => node.kind === 'flow').length;
+  const doors = flowDoors(def);
   return [
     `${nodes.length} node${nodes.length === 1 ? '' : 's'}`,
     nodes.some((node) => node.kind === 'tracks') ? 'reads the set' : null,
     inside > 0 ? `${inside} flow${inside === 1 ? '' : 's'} inside` : null,
+    doors.takes.length > 0 ? `takes ${doors.takes.map((door) => door.name).join(', ')}` : null,
+    doors.gives.length > 0 ? `gives ${doors.gives.map((door) => door.name).join(', ')}` : null,
   ]
     .filter(Boolean)
     .join(' · ');
@@ -259,7 +287,7 @@ export function pickOf(row: FlowRow): Pick {
     about: row.about,
     family: NODE_BY_KIND.flow.family,
     terms: row.terms,
-    ports: portsOf('flow'),
+    ports: row.ports,
   };
 }
 
@@ -269,14 +297,14 @@ export function matchingFlows(
   typed: string,
   want: Ports = NO_FILTER,
 ): FlowRow[] {
-  // Every flow compiles to a `flow` node, so every flow has that node's ports.
-  // The shelf answers the signal filter for the same reason it answers the
-  // search box: two shelves under one set of controls, or the controls are
-  // lying about what they cover.
-  if (!passes(portsOf('flow'), want)) return [];
+  // Per row rather than once for the kind, because a flow's doors are its
+  // own: a provider gives `n` and no `c`, and the signal filter should say
+  // so. The shelf answers it for the same reason it answers the search box:
+  // two shelves under one set of controls, or the controls are lying.
   const typing = typed.trim().toLowerCase();
-  if (!typing) return [...all];
-  return all.filter((row) => row.terms.includes(typing));
+  return all.filter(
+    (row) => passes(row.ports, want) && (!typing || row.terms.includes(typing)),
+  );
 }
 
 /** The whole browser, built from the vocabulary rather than typed out beside it. */

@@ -455,31 +455,56 @@ nothing else can, is put *the same* number on two inlets at once: turn it and bo
 `Weather` in the built-in library is wired that way on purpose, and it is the only `value`
 node left in the twelve flows that ship.
 
-## `out` is one, required, and not in the browser
+## `out` is at most one, and none is a provider
 
-Every flow has **exactly one** `out`. It arrives with the flow, it can be moved anywhere on
-the canvas, and it cannot be deleted — the faceplate has no `×` and `dropNode` refuses it, so
-the rule is the model's rather than the button's.
+`out` is the render target: the picture wired into it is what the wall shows when this flow
+is live, and what a parent flow reads when this one is nested. A flow keeps **at most one**
+— two would be a question about which one shows, which is exactly the question this design
+refuses to invent an answer for — and `merge` in `server/scheme.ts` collapses a file that
+says two down to the one that was drawing.
 
-It is also **not in the node browser**, which it used to be. The browser is built from the
-vocabulary and `out` is part of the vocabulary, but being part of the vocabulary and being
-something you *add* are different questions and only the second one a drawer answers.
-Dropping a second one was the single thing you could do from that browser that made a flow
-stop compiling: a trap wearing a feature's clothes.
+It used to be required and undeletable, and is neither now, because a flow with no `out` is
+a real thing: a **provider**, a flow that hands out signals through `give` doors instead of
+drawing. Deleting `out` is how a flow becomes one, the browser offers `out` back for the
+change of mind, and a flow with no out and no give gets one quiet line on the canvas rather
+than a refusal. A provider asked to draw anyway — the wheel, the bench — shows the honest
+transparent frame.
 
-`flow` is the other kind the node browser leaves out, for a different reason: it is not
-missing, it is upstairs. Every flow in the library is a row on the flow shelf, and one of
-those rows placed on a canvas *is* a `flow` node.
+`flow` is the one kind the node browser leaves out: it is not missing, it is upstairs. Every
+flow in the library is a row on the flow shelf, and one of those rows placed on a canvas
+*is* a `flow` node.
 
-**Where the rule is enforced is `merge` in `server/scheme.ts`**, and nowhere else. A scheme
-reaches the renderer exactly two ways — read off `scheme.json`, or sent up by an editor that
-gets it straight back down — and both come through that one function. So a flow that arrived
-without an `out`, or with two, leaves it as a flow and is written back that way the next time
-anything saves. The compiler keeps its two error messages as a backstop for a circuit nobody
-built, which is what a probe and a test are.
+The other thing repaired at the `merge` door is a **cord addressed to a port that is not
+there** — judged with the whole library in hand, because a cord landing on a flow node's
+door can only be checked against the flow it names. See below.
 
-The other thing repaired at the same door is a **cord addressed to a port that is not there**.
-See below.
+## A flow has doors: `take` and `give`
+
+The browser has always described a node as what it TAKES and what it GIVES. A flow earns the
+same sentence through two door nodes:
+
+- **`take`** is a number the flow asks for. On its own canvas it is a `value` wearing a
+  name — a label field, a fader, an `n` outlet — and inside another flow, that name becomes
+  a real inlet on the `flow` node's face: settable there, wireable from anything that makes
+  a number, falling back to the take's own resting value when the parent says nothing.
+- **`give`** is a signal the flow hands out — a number, a point, or a picture, by mode. Its
+  label becomes an outlet on the `flow` node's face, and a cord from that outlet reads
+  whatever feeds the door inside.
+
+Together they make a flow a **function**. The canonical use is the pre-wired reactive value:
+a `pad energy` flow with all the smoothing and pulse-shaping built once, giving one number —
+and any flow that wants that reactivity wires one outlet instead of rebuilding the chain.
+
+**The compiler never learns any of this.** `flatten` resolves the doors while pasting: a
+read of a give is rewired straight to what feeds it inside; a take supplied by the parent
+vanishes and its readers take the parent's cord; an unsupplied take stands, holding the
+number set on the parent face (or its own), exactly as a `value` does. A door with no label
+is not a door yet, and the validator says so; a label the flow node already owns (`p` in,
+`c` out) is shadowed and skipped; the first door to claim a name keeps it.
+
+One honest limit today: the display clock cannot follow a number *through* a give door, so
+a driven row on the far side reads `—` the way a per-fragment `polar` reading does. The
+picture is right; the readout declines to guess.
 
 ## A mode moves the inlets
 

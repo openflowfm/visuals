@@ -71,22 +71,22 @@ describe('changing a node’s mode', () => {
   });
 });
 
-describe('out is the one node that is not optional', () => {
-  it('refuses to take it off the canvas', () => {
-    // A flow without an `out` does not draw a smaller picture; it refuses to
-    // compile, and the message is about a file rather than about the thing that
-    // was just clicked. The faceplate has no delete button for the same reason,
-    // and this is the half that means the rule is the model's.
+describe('out is optional now, because a provider does not draw', () => {
+  it('comes off the canvas like anything else', () => {
+    // Deleting `out` used to be refused. A flow without one is a provider —
+    // it gives signals through `give` doors instead of drawing — so the
+    // deletion is a design gesture, and the canvas says what leaves instead.
     const held = starterCircuit();
-    expect(dropNode(held, 'o')).toEqual(held);
-    expect(dropNode(held, 'wash').nodes.some((node) => node.kind === 'out')).toBe(true);
+    const bare = dropNode(held, 'o');
+    expect(bare.nodes.some((node) => node.kind === 'out')).toBe(false);
+    expect(bare.cords.some((cord) => cord.to.startsWith('o/'))).toBe(false);
   });
 
-  it('is not something the node browser offers', () => {
-    // It was, and dropping a second one is the one thing in the vocabulary that
-    // makes a flow stop compiling — a trap rather than a feature.
+  it('is offered by the node browser, for the change of mind', () => {
+    // It was banished when it could not be deleted — a second one was a trap.
+    // Now that it can go, the browser has to be the way back.
     const entries = palette();
-    expect(entries.some((entry) => entry.node.kind === 'out')).toBe(false);
+    expect(entries.some((entry) => entry.node.kind === 'out')).toBe(true);
     // And the rest of the vocabulary is still all there to be found.
     expect(entries.some((entry) => entry.node.kind === 'tracks')).toBe(true);
     expect(

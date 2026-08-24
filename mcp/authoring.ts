@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   wouldLoop,
+  type CircuitNode,
   type FlowDef,
   type NodeKind,
   type Scheme,
@@ -10,6 +11,7 @@ import {
 import { merge } from '../server/scheme.ts';
 import {
   compileFlow,
+  flowDoors,
   inletsOf,
   modesOf,
   NODE_SPECS,
@@ -243,12 +245,27 @@ export function validateFlow(
       }
     }
 
+    if ((node.kind === 'take' || node.kind === 'give') && !(node.label ?? '').trim()) {
+      issue(
+        diagnostics,
+        'warning',
+        'door.unnamed',
+        `This ${node.kind} has no name, so it is not a door yet — set its label.`,
+        node.id,
+      );
+    }
+
     const inlets = inletsOf(node);
     // Every number inlet, the live ones included: a held `energy` is a real
-    // setting now, taking the inlet over until it is cleared.
+    // setting now, taking the inlet over until it is cleared. A flow node adds
+    // the takes of the flow it names — numbers held for the doors.
     const settable = new Set(
       inlets.filter((port) => port.kind === 'n').map((port) => port.name),
     );
+    if (node.kind === 'flow') {
+      const named = library[node.op ?? ''];
+      for (const door of named ? flowDoors(named).takes : []) settable.add(door.name);
+    }
     for (const [name, value] of Object.entries(node.values ?? {})) {
       if (!settable.has(name)) {
         issue(
@@ -304,25 +321,50 @@ export function validateFlow(
   }
 
   const ends = circuit.nodes.filter((node) => node.kind === 'out');
-  if (ends.length !== 1) {
+  if (ends.length > 1) {
     issue(
       diagnostics,
       'error',
       'flow.out.count',
-      `A flow needs exactly one out node; this graph has ${ends.length}.`,
+      `A flow may keep at most one out node; this graph has ${ends.length}.`,
+      'nodes',
+    );
+  }
+  // No out is legal — a provider gives signals through its doors instead of
+  // drawing — but a flow with neither is a flow nothing can ever hear from.
+  if (ends.length === 0 && !circuit.nodes.some((node) => node.kind === 'give')) {
+    issue(
+      diagnostics,
+      'warning',
+      'flow.out.missing',
+      'No out node and no give node — nothing leaves this flow.',
       'nodes',
     );
   }
 
   const byId = new Map(circuit.nodes.map((node) => [node.id, node]));
   const fed = new Set<string>();
+  /** The doors of the flow a node names, when it names one the library holds. */
+  const doorsOf = (node: CircuitNode | undefined) =>
+    node?.kind === 'flow' && library[node.op ?? '']
+      ? flowDoors(library[node.op ?? ''])
+      : null;
+  /** A flow node naming a missing flow: its ports cannot be judged at all. */
+  const unknowable = (node: CircuitNode | undefined) =>
+    !!node && node.kind === 'flow' && !library[node.op ?? ''];
   for (const [index, cord] of circuit.cords.entries()) {
     const from = splitPort(cord.from);
     const to = splitPort(cord.to);
     const source = byId.get(from.node);
     const sink = byId.get(to.node);
-    const outlet = source ? NODE_SPECS[source.kind]?.outlets.find((p) => p.name === from.port) : null;
-    const inlet = sink ? inletsOf(sink).find((p) => p.name === to.port) : null;
+    const outlet = source
+      ? (NODE_SPECS[source.kind]?.outlets.find((p) => p.name === from.port) ??
+        doorsOf(source)?.gives.find((door) => door.name === from.port))
+      : null;
+    const inlet = sink
+      ? (inletsOf(sink).find((p) => p.name === to.port) ??
+        doorsOf(sink)?.takes.find((door) => door.name === to.port))
+      : null;
 
     if (!source) {
       issue(
@@ -332,7 +374,7 @@ export function validateFlow(
         `Cord source node '${from.node}' does not exist.`,
         `cords[${index}]`,
       );
-    } else if (!outlet) {
+    } else if (!outlet && !unknowable(source)) {
       issue(
         diagnostics,
         'error',
@@ -349,7 +391,7 @@ export function validateFlow(
         `Cord target node '${to.node}' does not exist.`,
         `cords[${index}]`,
       );
-    } else if (!inlet) {
+    } else if (!inlet && !unknowable(sink)) {
       issue(
         diagnostics,
         'error',

@@ -172,6 +172,11 @@ export function setNode(
   if (next.op === undefined) return { ...circuit, nodes };
   const held = nodes.find((node) => node.id === id);
   if (!held) return { ...circuit, nodes };
+  // A flow node's inlets are the takes of the flow it names, which this walk
+  // cannot see — so retargeting one cuts nothing, and a door cord shared by
+  // name with the new flow simply keeps working. `repaired` trims the rest at
+  // the file door, where the whole library is in hand.
+  if (held.kind === 'flow') return { ...circuit, nodes };
   const ports = new Set(inletsOf(held).map((port) => port.name));
   return {
     nodes: nodes.map((node) => (node.id === id ? keepValues(node) : node)),
@@ -243,13 +248,11 @@ export function clearValue(circuit: Circuit, id: string, inlet: string): Circuit
 /**
  * Take a node off the canvas, with everything it was wired to.
  *
- * **Except `out`.** Every flow has exactly one and it is not optional: it is
- * what leaves, and a flow without one is not a smaller flow, it is not a flow.
- * The faceplate has no delete button on it for that reason, and the rule lives
- * here as well so that it is the model's rather than the button's.
+ * `out` included, now that a flow without one is a thing: a provider gives
+ * signals through `give` doors instead of drawing, and its canvas says so
+ * rather than refusing. The browser offers `out` back for the change of mind.
  */
 export function dropNode(circuit: Circuit, id: string): Circuit {
-  if (circuit.nodes.find((node) => node.id === id)?.kind === 'out') return circuit;
   return {
     nodes: circuit.nodes.filter((node) => node.id !== id),
     cords: circuit.cords.filter(

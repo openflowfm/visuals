@@ -812,6 +812,25 @@ const WAVE_MODES = documentedModes(WAVE_SHAPES, {
   noise: 'Produce a smoothly changing irregular value from the phase.',
 });
 
+/**
+ * The three things a flow can hand out through a `give`, named for what they
+ * are rather than for a letter.
+ */
+const GIVE_MODE_NAMES = ['number', 'point', 'colour'] as const;
+const GIVE_MODES: readonly NodeModeDocumentation[] = [
+  {
+    name: 'number',
+    description: 'Give one number — a reactive value other flows wire like any other signal.',
+  },
+  { name: 'point', description: 'Give a point, for a flow that computes a position.' },
+  { name: 'colour', description: 'Give a picture, without putting it on the wall.' },
+];
+const GIVE_KINDS: Record<(typeof GIVE_MODE_NAMES)[number], Signal> = {
+  number: 'n',
+  point: 'p',
+  colour: 'c',
+};
+
 export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
   point: {
     name: 'point',
@@ -840,6 +859,17 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     outlets: [N('n', 'The number set on this node.')],
     // The index is assigned by the compiler, which is the only thing that knows
     // how many numbers came before this one.
+    emit: () => ({ n: 'uParams[0]' }),
+  },
+
+  take: {
+    name: 'take',
+    description:
+      'A number this flow asks for. Used inside another flow, it becomes a named inlet on that face; here it is the number set on it.',
+    inlets: [],
+    outlets: [N('n', 'The number taken in, or the one set here until something supplies it.')],
+    // A `value` to its own graph: the flattener swaps in whatever the parent
+    // wired or held, and with nothing supplied the number set here stands.
     emit: () => ({ n: 'uParams[0]' }),
   },
 
@@ -1195,6 +1225,26 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     },
   },
 
+  give: {
+    name: 'give',
+    description:
+      'A signal this flow hands out. Used inside another flow, it becomes a named outlet on that face.',
+    inlets: (node) => {
+      const kind = GIVE_KINDS[modeOf(node, GIVE_MODE_NAMES)];
+      return kind === 'n'
+        ? [{ name: 'in', kind, description: 'The number this flow gives.' }]
+        : kind === 'p'
+          ? [P('in', 'The point this flow gives.')]
+          : [C('in', 'The picture this flow gives.')];
+    },
+    outlets: [],
+    modes: GIVE_MODES,
+    // A door, not a picture: nothing inside this flow reads it, so it emits
+    // nothing. The flattener wires the parent's readers straight to whatever
+    // feeds it.
+    emit: () => ({}),
+  },
+
   out: {
     name: 'out',
     description: 'The finished picture that leaves this flow for the wall or another flow.',
@@ -1320,14 +1370,28 @@ export function splitPort(id: string): { node: string; port: string } {
 }
 
 /** What a port carries, for a canvas that colours cords and refuses bad ones. */
-export function signalOf(circuit: Circuit, id: string): Signal | null {
+export function signalOf(
+  circuit: Circuit,
+  id: string,
+  flows?: Readonly<Record<string, FlowDef>>,
+): Signal | null {
   const { node, port } = splitPort(id);
   const held = circuit.nodes.find((n) => n.id === node);
   if (!held) return null;
   const spec = NODE_SPECS[held.kind];
   const found =
     inletsOf(held).find((p) => p.name === port) ?? spec.outlets.find((p) => p.name === port);
-  return found?.kind ?? null;
+  if (found) return found.kind;
+  // A flow node's doors, when the canvas can see the flow it names.
+  if (held.kind === 'flow' && flows) {
+    const def = flows[held.op ?? ''];
+    if (!def) return null;
+    const doors = flowDoors(def);
+    const door =
+      doors.takes.find((d) => d.name === port) ?? doors.gives.find((d) => d.name === port);
+    return door?.kind ?? null;
+  }
+  return null;
 }
 
 /**
@@ -1412,18 +1476,18 @@ export function wouldFeedItself(circuit: Circuit, from: string, to: string): boo
  * A **value** addressed to an inlet that is not there is the same thing one
  * step quieter, and it comes through the same door for the same reason.
  */
-export function repaired(circuit: Circuit): Circuit {
+export function repaired(circuit: Circuit, flows?: Readonly<Record<string, FlowDef>>): Circuit {
   const ends = circuit.nodes.filter((node) => node.kind === 'out');
   // The one with something wired to it, so a file with two of them keeps the
   // one that was drawing rather than the one that happened to be written first.
+  // A file with none keeps none: a flow with no out is a provider, not a
+  // mistake to paper over.
   const fed = new Set(circuit.cords.map((cord) => splitPort(cord.to).node));
   const keep = ends.find((node) => fed.has(node.id)) ?? ends[0];
 
-  const nodes = (
-    keep
-      ? circuit.nodes.filter((node) => node.kind !== 'out' || node.id === keep.id)
-      : [...circuit.nodes, madeOut(circuit)]
-  ).map(keepValues);
+  const nodes = circuit.nodes
+    .filter((node) => node.kind !== 'out' || node.id === keep?.id)
+    .map(keepValues);
 
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const kept = new Map<string, CircuitCordLike>();
@@ -1433,8 +1497,8 @@ export function repaired(circuit: Circuit): Circuit {
     const source = byId.get(from.node);
     const sink = byId.get(to.node);
     if (!source || !sink) continue;
-    if (!NODE_SPECS[source.kind].outlets.some((port) => port.name === from.port)) continue;
-    if (!inletsOf(sink).some((port) => port.name === to.port)) continue;
+    if (signalOfPort(source, from.port, flows, 'out') === null) continue;
+    if (signalOfPort(sink, to.port, flows, 'in') === null) continue;
     // An inlet takes one thing, which is the rule `connect` keeps and the rule
     // the compiler resolves by. A file naming two is saying the later one.
     kept.set(cord.to, { from: cord.from, to: cord.to });
@@ -1442,13 +1506,39 @@ export function repaired(circuit: Circuit): Circuit {
   return { nodes, cords: [...kept.values()] };
 }
 
-/** An `out` for a graph that arrived without one, parked clear of the rest. */
-function madeOut(circuit: Circuit): CircuitNode {
-  const taken = new Set(circuit.nodes.map((node) => node.id));
-  let id = 'out';
-  for (let n = 1; taken.has(id); n++) id = `out${n}`;
-  const right = circuit.nodes.reduce((most, node) => Math.max(most, node.x), 0);
-  return { id, kind: 'out', x: right + 220, y: circuit.nodes[0]?.y ?? 60 };
+/**
+ * What one side of one node's port carries, doors included.
+ *
+ * The one place a flow node's ports are more than its spec: the flow it names
+ * may take and give, and a cord landing on one of those doors is as real as a
+ * cord landing on `p`. Without the flows record the doors cannot be seen, and
+ * a door cord is kept on trust rather than stripped — a cord a repair cannot
+ * check is not a cord it should delete.
+ */
+function signalOfPort(
+  node: CircuitNode,
+  port: string,
+  flows: Readonly<Record<string, FlowDef>> | undefined,
+  side: 'in' | 'out',
+): Signal | null {
+  const spec = NODE_SPECS[node.kind];
+  const found =
+    side === 'in'
+      ? inletsOf(node).find((p) => p.name === port)
+      : spec.outlets.find((p) => p.name === port);
+  if (found) return found.kind;
+  if (node.kind !== 'flow') return null;
+  const def = flows?.[node.op ?? ''];
+  // No record, or a flow that is gone: the doors cannot be seen, so a door
+  // cord is kept on trust — deleting a flow should quiet what used it, not
+  // strip its wiring so it cannot come back.
+  if (!def) return 'n';
+  const doors = flowDoors(def);
+  const door =
+    side === 'in'
+      ? doors.takes.find((d) => d.name === port)
+      : doors.gives.find((d) => d.name === port);
+  return door?.kind ?? null;
 }
 
 /**
@@ -1506,7 +1596,10 @@ export function valuesOf(circuit: Circuit): CircuitValue[] {
   const wired = new Set(circuit.cords.map((cord) => cord.to));
   const values: CircuitValue[] = [];
   for (const node of circuit.nodes) {
-    if (node.kind === 'value') {
+    // A `take` inside its own flow is a `value` wearing a door's name: it
+    // holds a slot so its number can be turned live, until a parent supplies
+    // it and the flattener swaps it out entirely.
+    if (node.kind === 'value' || node.kind === 'take') {
       values.push({
         id: node.id,
         label: node.label || `value ${values.length + 1}`,
@@ -1560,6 +1653,10 @@ export function valuesOf(circuit: Circuit): CircuitValue[] {
  * share a `reach`, and it is the same number in both.
  */
 export function keepValues(node: CircuitNode): CircuitNode {
+  // A flow node's number inlets are the takes of the flow it names, which this
+  // walk cannot see. Its held numbers are kept whole rather than guessed at —
+  // a stale one is dormant and invisible, the same kindness a cord gets.
+  if (node.kind === 'flow') return node;
   const numbered = new Set(
     inletsOf(node)
       .filter((port) => port.kind === 'n')
@@ -1617,6 +1714,62 @@ function trimmed(
  * A flow that cannot be found is dropped rather than refused — a flow you
  * deleted should make the thing that used it go quiet, not stop the show.
  */
+/**
+ * One door on a flow, read as a port for the `flow` node that names it.
+ */
+export interface FlowDoor {
+  /** The door's label, which is the port's name on the parent face. */
+  name: string;
+  kind: Signal;
+  /** A take's resting number, for the parent face's fader. */
+  at?: number;
+  /** The door node's id inside its own flow, for the flattener. */
+  nodeId: string;
+  description: string;
+}
+
+/**
+ * The doors on a flow: the numbers it takes, and the signals it gives.
+ *
+ * These are its `take` and `give` nodes, read as the interface a `flow` node
+ * wears — an inlet per named take, an outlet per named give. The label is the
+ * port name, so a door with no label is no door yet; a name the flow node
+ * already owns (`p` among the takes, `c` among the gives, anything starting
+ * `~`) is shadowed and skipped; and the first door to claim a name keeps it.
+ */
+export function flowDoors(def: FlowDef): { takes: FlowDoor[]; gives: FlowDoor[] } {
+  const takes: FlowDoor[] = [];
+  const gives: FlowDoor[] = [];
+  const claimedIn = new Set<string>();
+  const claimedOut = new Set<string>();
+  for (const node of def.circuit.nodes) {
+    if (node.kind !== 'take' && node.kind !== 'give') continue;
+    const name = (node.label ?? '').trim();
+    if (!name || name.startsWith('~')) continue;
+    if (node.kind === 'take') {
+      if (name === 'p' || claimedIn.has(name)) continue;
+      claimedIn.add(name);
+      takes.push({
+        name,
+        kind: 'n',
+        at: node.value ?? 0.5,
+        nodeId: node.id,
+        description: `The ${name} this flow takes.`,
+      });
+    } else {
+      if (name === 'c' || claimedOut.has(name)) continue;
+      claimedOut.add(name);
+      gives.push({
+        name,
+        kind: GIVE_KINDS[modeOf(node, GIVE_MODE_NAMES)],
+        nodeId: node.id,
+        description: `The ${name} this flow gives.`,
+      });
+    }
+  }
+  return { takes, gives };
+}
+
 export function flatten(
   flows: Record<string, FlowDef>,
   id: string,
@@ -1633,6 +1786,18 @@ export function flatten(
   const cords: CircuitCordLike[] = [];
   let error: string | null = null;
 
+  /** This graph's own cords, prefixed up front so a door can rewrite an end. */
+  const own: CircuitCordLike[] = def.circuit.cords.map((cord) => ({
+    from: `${prefix}${cord.from}`,
+    to: `${prefix}${cord.to}`,
+  }));
+  /**
+   * Reads of a nested flow's gives, redirected to what feeds them inside.
+   * An entry of `null` is a give with nothing behind it: the cord goes, and
+   * the reader falls back exactly as it does on any unwired inlet.
+   */
+  const givenFrom = new Map<string, string | null>();
+
   for (const node of def.circuit.nodes) {
     const here = `${prefix}${node.id}`;
     nodes.push({ ...node, id: here });
@@ -1644,16 +1809,52 @@ export function flatten(
     // node reads, so whatever fed it lands on the reserved inlet instead.
     const end = inner.circuit.nodes.find((n) => n.kind === 'out');
     const from = end ? feedOf(inner.circuit, portId(end.id, 'c')) : null;
-    for (const each of inner.circuit.nodes) if (each.kind !== 'out') nodes.push(each);
+
+    const doors = flows[node.op ?? ''] ? flowDoors(flows[node.op ?? '']) : null;
+    /** A supplied take vanishes; its readers take the parent's cord instead. */
+    const takeFeeds = new Map<string, string>();
+    /** Every door that vanishes here, so its cords vanish with it. */
+    const dropped = new Set<string>();
+    for (const door of doors?.takes ?? []) {
+      const pasted = `${here}~${door.nodeId}`;
+      const source = feedOf({ cords: own }, portId(here, door.name));
+      if (source) {
+        takeFeeds.set(pasted, source);
+        dropped.add(pasted);
+      }
+    }
+    for (const door of doors?.gives ?? []) {
+      const pasted = `${here}~${door.nodeId}`;
+      givenFrom.set(portId(here, door.name), feedOf(inner.circuit, portId(pasted, 'in')));
+      dropped.add(pasted);
+    }
+
+    for (const each of inner.circuit.nodes) {
+      if (each.kind === 'out' || dropped.has(each.id)) continue;
+      if (each.kind === 'take') {
+        // An unsupplied take stands, holding the number the parent face set
+        // on it — or its own, the same order every settable inlet answers in.
+        const door = doors?.takes.find((d) => `${here}~${d.nodeId}` === each.id);
+        if (door) {
+          nodes.push({ ...each, value: node.values?.[door.name] ?? each.value });
+          continue;
+        }
+      }
+      nodes.push(each);
+    }
     for (const cord of inner.circuit.cords) {
       if (end && splitPort(cord.to).node === end.id) continue;
-      cords.push(cord);
+      if (dropped.has(splitPort(cord.to).node)) continue;
+      const source = takeFeeds.get(splitPort(cord.from).node);
+      cords.push(source ? { from: source, to: cord.to } : cord);
     }
     if (from) cords.push({ from, to: portId(here, INNER) });
   }
 
-  for (const cord of def.circuit.cords) {
-    cords.push({ from: `${prefix}${cord.from}`, to: `${prefix}${cord.to}` });
+  for (const cord of own) {
+    const redirected = givenFrom.get(cord.from);
+    if (redirected === null) continue;
+    cords.push(redirected === undefined ? cord : { from: redirected, to: cord.to });
   }
 
   return { circuit: { nodes, cords }, error };
@@ -1661,7 +1862,7 @@ export function flatten(
 
 type CircuitCordLike = { from: string; to: string };
 
-function feedOf(circuit: Circuit, inlet: string): string | null {
+function feedOf(circuit: { cords: readonly CircuitCordLike[] }, inlet: string): string | null {
   for (const cord of circuit.cords) if (cord.to === inlet) return cord.from;
   return null;
 }
@@ -1701,13 +1902,10 @@ export function compileCircuit(circuit: Circuit): Compiled {
   const videoSlot = new Map<string, number>();
   const usedVideos: CircuitVideo[] = [];
 
-  // Exactly one, and the backstop rather than the rule. `out` is not in the node
-  // browser and the model refuses to delete it, so neither of these can be
-  // reached from the editor; `repaired` fixes both at the door a file comes
-  // through. What is left is a `compileCircuit` called on a graph nobody built
-  // — a probe, a test — and for that a sentence beats a broken shader.
+  // At most one. A flow with no `out` at all is legal now — a provider, whose
+  // doors are `give` nodes and whose picture is honestly nothing — so only the
+  // two-out file is refused, and `repaired` collapses that at the door anyway.
   const ends = circuit.nodes.filter((node) => node.kind === 'out');
-  if (ends.length === 0) return { ...bare, error: 'no out node — nothing leaves this flow' };
   if (ends.length > 1) return { ...bare, error: 'more than one out node' };
   if (values.length > MAX_VALUES) {
     return { ...bare, error: `more than ${MAX_VALUES} numbers set` };
@@ -1832,7 +2030,7 @@ export function compileCircuit(circuit: Circuit): Compiled {
     };
 
     const emitted =
-      node.kind === 'value'
+      node.kind === 'value' || node.kind === 'take'
         ? { n: `uParams[${slot.get(node.id) ?? 0}]` }
         : node.kind === 'track'
           ? { n: `uTracks[${trackSlot.get(node.id) ?? 0}]` }
@@ -1876,7 +2074,7 @@ export function compileCircuit(circuit: Circuit): Compiled {
     return named.get(key) ?? null;
   };
 
-  const from = feeds.get(portId(ends[0].id, 'c'));
+  const from = ends[0] ? feeds.get(portId(ends[0].id, 'c')) : undefined;
   let result = 'vec4(0.0)';
   if (from) {
     const source = splitPort(from);

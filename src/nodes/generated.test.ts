@@ -29,6 +29,10 @@ describe('generated node manifest', () => {
     );
     const browsableKinds: readonly string[] = BROWSABLE_NODE_DEFINITIONS.map((node) => node.kind);
     expect(browsableKinds).not.toContain('flow');
-    expect(browsableKinds).not.toContain('out');
+    // `out` is addable again — deleting one is legal now, so the browser is
+    // the way back — and the doors arrive with it.
+    expect(browsableKinds).toContain('out');
+    expect(browsableKinds).toContain('take');
+    expect(browsableKinds).toContain('give');
   });
 });

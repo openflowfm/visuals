@@ -177,12 +177,13 @@ describe('what the browser lists', () => {
     expect(rows[0].node.of).toBeUndefined();
   });
 
-  it('offers every kind in the vocabulary except the two that are not rows', () => {
+  it('offers every kind in the vocabulary except the one with a shelf', () => {
     // The browser is built from the vocabulary, so a kind that fell out of it
     // in a restructure is a node nobody can reach and nothing else would say.
-    // `out` arrives with the flow and cannot be deleted; `flow` has a shelf.
+    // `flow` has a shelf of its own; `out` is a row again now that deleting
+    // it is legal and the browser is the way back.
     const reachable = new Set(browser().map((each) => each.node.kind));
-    const shelved = new Set(['out', 'flow']);
+    const shelved = new Set(['flow']);
     for (const family of NODE_FAMILIES) {
       for (const kind of family.kinds) {
         expect(reachable.has(kind), kind).toBe(!shelved.has(kind));

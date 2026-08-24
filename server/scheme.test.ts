@@ -582,11 +582,11 @@ describe('a file written when the cascade existed', () => {
     expect(now.flows.mine.circuit).toEqual(circuit);
   });
 
-  it('gives a flow somewhere to leave from, whatever the file says', () => {
+  it('collapses two outs to the one that was drawing, and invents none', () => {
     // This is the one door: a scheme reaches the renderer off disk or off the
-    // wire and both come through `merge`. A flow with no `out` is a compile
-    // error and a black wall, and the message is about a file nobody has open —
-    // so it is repaired here, once, and written back that way.
+    // wire and both come through `merge`. A file with two outs is a compile
+    // error and a black wall, so it is collapsed here, once. A file with none
+    // is left alone — a flow with no out is a provider now, not a mistake.
     const now = merge({
       flows: {
         empty: { name: 'Empty', circuit: { nodes: [], cords: [] } },
@@ -604,12 +604,13 @@ describe('a file written when the cascade existed', () => {
       },
     });
     for (const id of ['empty', 'two']) {
-      const ends = now.flows[id].circuit.nodes.filter((node) => node.kind === 'out');
-      expect(ends, id).toHaveLength(1);
       expect(compileFlow(now.flows, id).error, id).toBeNull();
     }
+    expect(now.flows.empty.circuit.nodes).toHaveLength(0);
     // The one that was drawing survives, not the one that was written first.
-    expect(now.flows.two.circuit.nodes.filter((n) => n.kind === 'out')[0].id).toBe('b');
+    expect(now.flows.two.circuit.nodes.filter((n) => n.kind === 'out').map((n) => n.id)).toEqual([
+      'b',
+    ]);
   });
 });
 

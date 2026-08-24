@@ -283,6 +283,7 @@ export function createNumberEvaluator(): NumberEvaluator {
         let value: number | undefined;
         switch (node.kind) {
           case 'value':
+          case 'take':
             value = inputs.params?.[node.id] ?? node.value ?? 0.5;
             break;
           case 'playback':

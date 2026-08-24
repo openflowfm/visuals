@@ -106,7 +106,9 @@ describe('strict flow validation', () => {
       },
     };
     const codes = validateFlow('broken', broken, {}).diagnostics.map((entry) => entry.code);
-    expect(codes).toContain('flow.out.count');
+    // No out is legal now — a provider gives instead — but a flow with neither
+    // an out nor a give is a flow nothing can hear from, and it says so.
+    expect(codes).toContain('flow.out.missing');
     expect(codes).toContain('node.value.unknown');
     expect(codes).toContain('cord.signal');
     expect(codes).toContain('cord.source.node');

@@ -12,6 +12,7 @@ import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { Select } from '@openflow/widgets/controls/Select.tsx';
 import { Slider } from '@openflow/widgets/controls/Slider.tsx';
 import {
+  flowDoors,
   inletsOf,
   modesOf,
   NODE_SPECS,
@@ -19,6 +20,7 @@ import {
   reachesOut,
   signalOf,
   wouldFeedItself,
+  type PortSpec,
 } from '../render/circuit.ts';
 import { clearValue, connect, disconnect, dropNode, setDepth, setValue, setNode } from './edits.ts';
 import { VALUE, PERCENT } from './param.ts';
@@ -95,15 +97,18 @@ export function CircuitEditor({
 }) {
   const [refused, setRefused] = useState<string | null>(null);
 
+  /** The record shape `signalOf` reads doors from, keyed the library's way. */
+  const flowRecord = Object.fromEntries((flows ?? []).map((each) => [each.id, each.def]));
+
   const cords: GraphCord[] = circuit.cords.map((cord) => ({
     from: cord.from,
     to: cord.to,
-    kind: signalOf(circuit, cord.from) ?? undefined,
+    kind: signalOf(circuit, cord.from, flowRecord) ?? undefined,
   }));
 
   const wire = (from: string, to: string) => {
-    const out = signalOf(circuit, from);
-    const into = signalOf(circuit, to);
+    const out = signalOf(circuit, from, flowRecord);
+    const into = signalOf(circuit, to, flowRecord);
     if (!out || !into) return;
     if (out !== into) {
       setRefused(`a ${LONG[out]} does not go into a ${LONG[into]}`);
@@ -165,12 +170,23 @@ export function CircuitEditor({
         is broken. So the canvas says it, in the one place a canvas can say
         anything, and it is not an error: nothing is refused, nothing stops, and
         the moment a cord lands the line goes away.
+
+        A provider is the exception: a flow whose fed `give` doors are the
+        point of it draws nothing on purpose, and saying so every time would
+        be the canvas nagging about the design.
       */}
-      {!reachesOut(circuit) && (
-        <p className="hits bad">
-          nothing reaches out — this flow draws nothing until something does
-        </p>
-      )}
+      {!reachesOut(circuit) &&
+        !circuit.nodes.some(
+          (node) =>
+            node.kind === 'give' &&
+            circuit.cords.some((cord) => cord.to === portId(node.id, 'in')),
+        ) && (
+          <p className="hits bad">
+            {circuit.nodes.some((node) => node.kind === 'out')
+              ? 'nothing reaches out — this flow draws nothing until something does'
+              : 'nothing leaves this flow — wire an out to draw, or a give to hand a signal out'}
+          </p>
+        )}
       {refused && <p className="hits bad">{refused}</p>}
     </div>
   );
@@ -241,7 +257,33 @@ export function NodeFace({
    * named the wrong flow and picking one wired a different flow again.
    */
   const others = (flows ?? []).filter((each) => each.def.circuit !== circuit);
-  const inlets = inletsOf(node).filter((port) => !port.name.startsWith('~'));
+  /**
+   * The doors of the flow this node names, worn as its own ports.
+   *
+   * An inlet per named `take` — settable and wireable like any number row —
+   * and an outlet per named `give`. The face is the only place that needs
+   * them as ports: the compiler meets the doors in `flatten`, where they are
+   * rewired away entirely.
+   */
+  const target = node.kind === 'flow' ? (flows ?? []).find((each) => each.id === node.op)?.def : undefined;
+  const doors = target ? flowDoors(target) : undefined;
+  const inlets = [
+    ...inletsOf(node).filter((port) => !port.name.startsWith('~')),
+    ...(doors?.takes.map(
+      (door): PortSpec => ({
+        name: door.name,
+        kind: door.kind,
+        description: door.description,
+        at: door.at,
+      }),
+    ) ?? []),
+  ];
+  const outlets: readonly PortSpec[] = [
+    ...spec.outlets,
+    ...(doors?.gives.map(
+      (door): PortSpec => ({ name: door.name, kind: door.kind, description: door.description }),
+    ) ?? []),
+  ];
   const title = faceName(node, spec.name, flows);
   const previewed = previewOutletOf(circuit, node.id)?.name;
   const targets = tracks.length > 0 ? tracks : ['master'];
@@ -277,12 +319,17 @@ export function NodeFace({
       ) : (
         <span className="node-empty">no videos</span>
       )
-    ) : node.kind === 'value' ? (
+    ) : node.kind === 'value' || node.kind === 'take' || node.kind === 'give' ? (
+      // A door's label is a port name on the parent face, so a `take` and a
+      // `give` name themselves exactly the way a `value` does.
       <input
         className="field node-name"
         value={node.label ?? ''}
         spellCheck={false}
-        aria-label="Value name"
+        aria-label={
+          node.kind === 'take' ? 'Take name' : node.kind === 'give' ? 'Give name' : 'Value name'
+        }
+        placeholder={node.kind === 'value' ? undefined : `name this ${node.kind}`}
         onChange={(e) => onChange({ label: e.target.value })}
       />
     ) : undefined;
@@ -311,7 +358,7 @@ export function NodeFace({
             />
           ),
         }
-      : node.kind === 'value'
+      : node.kind === 'value' || node.kind === 'take'
         ? {
             key: 'amount',
             wide: true,
@@ -368,14 +415,13 @@ export function NodeFace({
         ⤢
       </Button>
     ) : null;
-  const deleteButton =
-    // No delete on `out`. Every flow has exactly one and it is what leaves;
-    // the model refuses the deletion too, but the face should not offer it.
-    node.kind === 'out' ? null : (
-      <Button tone="quiet" label={`Delete ${spec.name}`} onPress={onDrop}>
-        ×
-      </Button>
-    );
+  const deleteButton = (
+    // `out` too, now that a flow may honestly not draw: deleting it turns the
+    // flow into a provider, and the browser offers `out` back.
+    <Button tone="quiet" label={`Delete ${spec.name}`} onPress={onDrop}>
+      ×
+    </Button>
+  );
 
   /** One line per inlet: the port on its own edge, and what it puts on the row. */
   const inletCells = inlets.map((port) => {
@@ -500,7 +546,7 @@ export function NodeFace({
     };
   });
 
-  const outletCells = spec.outlets.map((port) => {
+  const outletCells = outlets.map((port) => {
     const id = portId(node.id, port.name);
     const picked = previewed === port.name;
     return {
@@ -516,9 +562,10 @@ export function NodeFace({
         />
       ),
       // A button only where there is a choice to make: with one outlet there is
-      // nothing to pick and a chip that cannot be pressed is a lie.
+      // nothing to pick and a chip that cannot be pressed is a lie. A door is
+      // never one — the picture probe reads the node's own outlets only.
       name:
-        spec.outlets.length > 1 ? (
+        spec.outlets.length > 1 && spec.outlets.some((each) => each.name === port.name) ? (
           <button
             type="button"
             className="node-outlet-preview"
@@ -565,7 +612,7 @@ export function NodeFace({
     },
   );
 
-  const held = rowsHeldOpen(node);
+  const held = rowsHeldOpen(node, flows);
 
   return (
     <Device
@@ -631,18 +678,33 @@ export function NodeFace({
  * `track` and `value` carry one row of their own that is nobody's inlet: a
  * smoothing and an amount. They are counted here because the face draws them.
  */
-export function rowsHeldOpen(node: CircuitNode): { ports: number } {
+export function rowsHeldOpen(
+  node: CircuitNode,
+  flows?: readonly { id: string; def: FlowDef }[],
+): { ports: number } {
   const spec = NODE_SPECS[node.kind];
-  const own = node.kind === 'track' || node.kind === 'value' ? 1 : 0;
+  const own =
+    node.kind === 'track' || node.kind === 'value' || node.kind === 'take' ? 1 : 0;
   const modes = modesOf(node.kind);
   const widest = (modes.length > 0 ? modes : [node.op]).reduce((most, op) => {
     const named = inletsOf({ ...node, op }).filter((port) => !port.name.startsWith('~'));
     return Math.max(most, named.length);
   }, 0);
+  // A flow node wears the doors of the flow it names, and they are rows like
+  // any other. Per target rather than per kind: only a retarget moves them,
+  // and a retarget is a person's own gesture.
+  const target =
+    node.kind === 'flow' ? flows?.find((each) => each.id === node.op)?.def : undefined;
+  const doors = target ? flowDoors(target) : undefined;
   // Outlets share these lines rather than sitting above them, so a node with
   // more outlets than inlets — `polar` has one of each way round — is still as
   // tall as its longer side.
-  return { ports: Math.max(widest + own, spec.outlets.length) };
+  return {
+    ports: Math.max(
+      widest + own + (doors?.takes.length ?? 0),
+      spec.outlets.length + (doors?.gives.length ?? 0),
+    ),
+  };
 }
 
 export function driverOf(
@@ -667,6 +729,9 @@ function faceName(
   flows?: readonly { id: string; def: FlowDef }[],
 ): string {
   if (node.kind === 'value') return node.label || 'value';
+  // A door is its name: `pad energy` on the title is what the parent face
+  // will call the port, so the two can never disagree.
+  if (node.kind === 'take' || node.kind === 'give') return node.label || node.kind;
   if (node.kind === 'flow') return flows?.find((each) => each.id === node.op)?.def.name ?? 'flow';
   const modes = modesOf(node.kind);
   if (modes.length > 0) return node.op || modes[0] || fallback;
