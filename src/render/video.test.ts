@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { mediaUrl, videoRate } from './video.ts';
+import { mediaUrl } from './media.ts';
+import { videoRate } from './video.ts';
 
 describe('video playback controls', () => {
   it('maps the centred pace control exponentially from half to double speed', () => {

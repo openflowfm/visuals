@@ -48,11 +48,14 @@ describe('the agent-facing node catalog', () => {
       variants: FIELD_MODES.map((mode) => ({ mode, work: FIELD_WORK[mode] })),
     });
     const video = catalog.find((node) => node.kind === 'video');
-    expect(video).toMatchObject({ target: 'media', defaultMode: 'loop' });
+    expect(video).toMatchObject({ target: 'media:video', defaultMode: 'loop' });
     expect(video?.variants.map((variant) => variant.mode)).toEqual(['loop', 'once']);
     for (const variant of video?.variants ?? []) {
       expect(variant.inlets.find((port) => port.name === 'pace')).toMatchObject({ default: 0.5 });
     }
+    const image = catalog.find((node) => node.kind === 'image');
+    expect(image).toMatchObject({ target: 'media:image', defaultMode: 'cover' });
+    expect(image?.variants.map((variant) => variant.mode)).toEqual(['cover', 'contain']);
     expect(
       catalog
         .find((node) => node.kind === 'field')
@@ -130,6 +133,23 @@ describe('strict flow validation', () => {
     expect(result.valid).toBe(true);
     expect(result.diagnostics.map((entry) => entry.code)).toContain('node.video.unset');
     expect(result.stats.videos).toBe(1);
+  });
+
+  it('keeps an unselected image drawable but warns about its transparent result', () => {
+    const draft: FlowDef = {
+      name: 'Image',
+      circuit: {
+        nodes: [
+          { id: 'image', kind: 'image', op: 'contain', x: 0, y: 0 },
+          { id: 'out', kind: 'out', x: 200, y: 0 },
+        ],
+        cords: [{ from: 'image/c', to: 'out/c' }],
+      },
+    };
+    const result = validateFlow('image', draft, {});
+    expect(result.valid).toBe(true);
+    expect(result.diagnostics.map((entry) => entry.code)).toContain('node.image.unset');
+    expect(result.stats.images).toBe(1);
   });
 
   it('refuses a nested flow that contains itself', () => {

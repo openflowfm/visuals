@@ -5,6 +5,8 @@ import type { MediaAsset } from '../protocol.ts';
 import { openflowHome } from './home.ts';
 
 const VIDEO_EXTENSIONS = new Set(['.mp4', '.m4v', '.mov', '.webm', '.ogv', '.ogg']);
+const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.avif']);
+const MEDIA_EXTENSIONS = new Set([...VIDEO_EXTENSIONS, ...IMAGE_EXTENSIONS]);
 const TYPES: Record<string, string> = {
   '.mp4': 'video/mp4',
   '.m4v': 'video/mp4',
@@ -12,13 +14,18 @@ const TYPES: Record<string, string> = {
   '.webm': 'video/webm',
   '.ogv': 'video/ogg',
   '.ogg': 'video/ogg',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.avif': 'image/avif',
 };
 
 export function mediaRoot(): string {
   return process.env.OPENFLOW_VISUALS_MEDIA ?? path.join(openflowHome(), 'visuals', 'media');
 }
 
-/** The safe, deterministic library visible to a video node. Symlinks are never followed. */
+/** The safe, deterministic library visible to media nodes. Symlinks are never followed. */
 export function listMedia(root = mediaRoot()): MediaAsset[] {
   fs.mkdirSync(root, { recursive: true });
   const assets: MediaAsset[] = [];
@@ -28,8 +35,14 @@ export function listMedia(root = mediaRoot()): MediaAsset[] {
       const id = prefix ? `${prefix}/${entry.name}` : entry.name;
       const file = path.join(dir, entry.name);
       if (entry.isDirectory()) walk(file, id);
-      else if (entry.isFile() && VIDEO_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
-        assets.push({ id, name: entry.name, bytes: fs.statSync(file).size });
+      else if (entry.isFile() && MEDIA_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
+        const extension = path.extname(entry.name).toLowerCase();
+        assets.push({
+          id,
+          name: entry.name,
+          bytes: fs.statSync(file).size,
+          type: IMAGE_EXTENSIONS.has(extension) ? 'image' : 'video',
+        });
       }
     }
   };
@@ -40,7 +53,7 @@ export function listMedia(root = mediaRoot()): MediaAsset[] {
 /** Resolve one asset id without allowing absolute paths, traversal, or symlink escape. */
 export function resolveMedia(root: string, id: string): string | null {
   if (!id || id.includes('\\') || path.posix.isAbsolute(id)) return null;
-  if (!VIDEO_EXTENSIONS.has(path.posix.extname(id).toLowerCase())) return null;
+  if (!MEDIA_EXTENSIONS.has(path.posix.extname(id).toLowerCase())) return null;
   const parts = id.split('/');
   if (parts.some((part) => !part || part === '.' || part === '..')) return null;
   const file = path.join(root, ...parts);
@@ -91,7 +104,7 @@ export function byteRange(header: string | undefined, size: number): ByteRange |
   return { start, end };
 }
 
-/** Serve a local video with the range semantics browser decoders require for seeking. */
+/** Serve local media; byte ranges remain available for video decoder seeking. */
 export function serveMedia(
   req: http.IncomingMessage,
   res: http.ServerResponse,

@@ -10,6 +10,7 @@ import {
   FIELD_MODES,
   FRACTAL_MODES,
   LIGHT_MODES,
+  IMAGE_MODES,
   VIDEO_MODES,
   TRACK_DRAWS,
   WAVE_SHAPES,
@@ -25,6 +26,7 @@ import { SOURCE_VALUES } from './glsl/sources.ts';
 import { LIGHT_WORK } from './glsl/light.ts';
 import { FRACTAL_ITERATIONS, flowPreamble } from './shaders.ts';
 import { VIDEO_NODE_SPEC } from '../nodes/video/spec.ts';
+import { IMAGE_NODE_SPEC } from '../nodes/image/spec.ts';
 
 /**
  * A flow, compiled to a fragment shader.
@@ -185,8 +187,8 @@ export interface NodeSpec extends NodeDocumentation {
   reads?(node: CircuitNode, outlet: string): readonly string[];
   /** True when the modes are names from the set rather than a fixed list. */
   named?: 'track' | 'flow';
-  /** True when the node names a server media-library asset. */
-  asset?: true;
+  /** Which server media-library asset this node names. */
+  asset?: 'image' | 'video';
   /**
    * Worst-case fixed work each evaluation adds to the shader budget.
    *
@@ -1005,6 +1007,7 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
   },
 
   video: VIDEO_NODE_SPEC,
+  image: IMAGE_NODE_SPEC,
 
   tracks: {
     name: 'tracks',
@@ -1298,6 +1301,13 @@ export interface CircuitVideo {
   index: number;
 }
 
+export interface CircuitImage {
+  id: string;
+  asset: string;
+  mode: (typeof IMAGE_MODES)[number];
+  index: number;
+}
+
 export interface Compiled {
   source: string | null;
   error: string | null;
@@ -1305,6 +1315,8 @@ export interface Compiled {
   tracks: CircuitTrack[];
   /** Reachable disk videos, in their fixed two texture slots. */
   videos: CircuitVideo[];
+  /** Reachable still images, in their fixed four texture slots. */
+  images: CircuitImage[];
   /** How each Live track should draw, if this flow asked for the set at all. */
   draws: string | null;
 }
@@ -1326,6 +1338,9 @@ export const MAX_TRACKS = 8;
 
 /** Two decoders/textures is the initial hard ceiling for one flattened flow. */
 export const MAX_VIDEOS = 2;
+
+/** Four persistent textures is the hard ceiling for one flattened flow. */
+export const MAX_IMAGES = 4;
 
 /**
  * How many GLSL statements a flow may emit.
@@ -1883,6 +1898,7 @@ export function compileFlow(flows: Record<string, FlowDef>, id: string): Compile
     values: [],
     tracks: [],
     videos: [],
+    images: [],
     draws: null,
   };
   if (expanded.error) return empty;
@@ -1894,13 +1910,15 @@ export function compileCircuit(circuit: Circuit): Compiled {
   const tracks = tracksOf(circuit);
   const drawn = circuit.nodes.find((node) => node.kind === 'tracks');
   const draws = drawn ? (drawn.op ?? TRACK_DRAWS[0]) : null;
-  const bare: Compiled = { source: null, error: null, values, tracks, videos: [], draws };
+  const bare: Compiled = { source: null, error: null, values, tracks, videos: [], images: [], draws };
 
   const byId = new Map(circuit.nodes.map((node) => [node.id, node]));
   const slot = new Map(values.map((each) => [each.id, each.index]));
   const trackSlot = new Map(tracks.map((track) => [track.id, track.index]));
   const videoSlot = new Map<string, number>();
   const usedVideos: CircuitVideo[] = [];
+  const imageSlot = new Map<string, number>();
+  const usedImages: CircuitImage[] = [];
 
   // At most one. A flow with no `out` at all is legal now — a provider, whose
   // doors are `give` nodes and whose picture is honestly nothing — so only the
@@ -2057,6 +2075,30 @@ export function compileCircuit(circuit: Circuit): Compiled {
                 }
                 return { c: `fromVideo${index}(${ctx.read('p')})` };
               })()
+          : node.kind === 'image'
+            ? (() => {
+                let index = imageSlot.get(node.id);
+                if (index === undefined) {
+                  index = usedImages.length;
+                  if (index >= MAX_IMAGES) {
+                    failed ??= `more than ${MAX_IMAGES} reachable image nodes`;
+                    return { c: 'vec4(0.0)' };
+                  }
+                  imageSlot.set(node.id, index);
+                  usedImages.push({
+                    id: node.id,
+                    asset: node.asset ?? '',
+                    mode: IMAGE_MODES.includes(
+                      (node.op ?? '') as (typeof IMAGE_MODES)[number],
+                    )
+                      ? ((node.op ?? IMAGE_MODES[0]) as (typeof IMAGE_MODES)[number])
+                      : IMAGE_MODES[0],
+                    index,
+                  });
+                }
+                const contain = usedImages[index]?.mode === 'contain' ? 'true' : 'false';
+                return { c: `fromImage${index}(${ctx.read('p')}, ${contain})` };
+              })()
           : spec.emit(ctx);
     open.delete(here);
 
@@ -2091,6 +2133,7 @@ ${lines.join('\n')}
     ...bare,
     source,
     videos: usedVideos,
+    images: usedImages,
     error: null,
   };
 }

@@ -287,8 +287,9 @@ export function NodeFace({
   const title = faceName(node, spec.name, flows);
   const previewed = previewOutletOf(circuit, node.id)?.name;
   const targets = tracks.length > 0 ? tracks : ['master'];
-  const mediaIds = media.map((asset) => asset.id);
-  const videoChoices =
+  const mediaType = spec.asset;
+  const mediaIds = media.filter((asset) => asset.type === mediaType).map((asset) => asset.id);
+  const mediaChoices =
     node.asset && !mediaIds.includes(node.asset) ? [node.asset, ...mediaIds] : mediaIds;
   const chooser =
     node.kind === 'flow' ? (
@@ -308,16 +309,16 @@ export function NodeFace({
         onChange={(i) => onChange({ of: targets[i] })}
         label="Track this reads"
       />
-    ) : node.kind === 'video' ? (
-      videoChoices.length > 0 ? (
+    ) : mediaType ? (
+      mediaChoices.length > 0 ? (
         <Select
-          items={['choose video', ...videoChoices]}
-          index={Math.max(0, videoChoices.indexOf(node.asset ?? '') + 1)}
-          onChange={(i) => onChange({ asset: i > 0 ? videoChoices[i - 1] : undefined })}
-          label="Video file"
+          items={[`choose ${mediaType}`, ...mediaChoices]}
+          index={Math.max(0, mediaChoices.indexOf(node.asset ?? '') + 1)}
+          onChange={(i) => onChange({ asset: i > 0 ? mediaChoices[i - 1] : undefined })}
+          label={`${mediaType === 'video' ? 'Video' : 'Image'} file`}
         />
       ) : (
-        <span className="node-empty">no videos</span>
+        <span className="node-empty">no {mediaType}s</span>
       )
     ) : node.kind === 'value' || node.kind === 'take' || node.kind === 'give' ? (
       // A door's label is a port name on the parent face, so a `take` and a

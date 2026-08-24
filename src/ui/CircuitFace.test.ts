@@ -164,14 +164,31 @@ describe('the node face anatomy', () => {
       undefined,
       undefined,
       [
-        { id: 'loops/one.mp4', name: 'one.mp4', bytes: 10 },
-        { id: 'two.webm', name: 'two.webm', bytes: 20 },
+        { id: 'loops/one.mp4', name: 'one.mp4', bytes: 10, type: 'video' },
+        { id: 'two.webm', name: 'two.webm', bytes: 20, type: 'video' },
+        { id: 'poster.png', name: 'poster.png', bytes: 30, type: 'image' },
       ],
     );
     expect(html).toContain('aria-label="Video file"');
     expect(html).toContain('loops/one.mp4');
     expect(html).toContain('two.webm');
+    expect(html).not.toContain('poster.png');
     expect(html).not.toContain('/Users/');
+  });
+
+  it('offers only server-approved stills on an image face', () => {
+    const html = face(
+      { id: 'i', kind: 'image', op: 'contain', asset: 'art/poster.png', x: 0, y: 0 },
+      undefined,
+      undefined,
+      [
+        { id: 'art/poster.png', name: 'poster.png', bytes: 10, type: 'image' },
+        { id: 'loop.mp4', name: 'loop.mp4', bytes: 20, type: 'video' },
+      ],
+    );
+    expect(html).toContain('aria-label="Image file"');
+    expect(html).toContain('art/poster.png');
+    expect(html).not.toContain('loop.mp4');
   });
 });
 

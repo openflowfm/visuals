@@ -74,7 +74,7 @@ const server = http.createServer((req, res) => {
   if (url.pathname.startsWith('/media/')) {
     if (serveMedia(req, res, MEDIA_ROOT, url.pathname.slice('/media/'.length))) return;
     res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
-    res.end('video not found');
+    res.end('media not found');
     return;
   }
   let rel = url.pathname === '/' ? '/index.html' : url.pathname;

@@ -4,6 +4,7 @@ import { createFeed } from './feed.ts';
 import { banksOf, signatureOfCircuit } from './flow.ts';
 import { compile, createTarget, drawFullscreen, type Program } from './gl.ts';
 import { createVideoBank } from './video.ts';
+import { createImageBank } from './image.ts';
 
 /**
  * A small picture of what one node has made.
@@ -104,6 +105,7 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
   let error: string | null = null;
   const feed = createFeed(gl);
   const video = createVideoBank(gl);
+  const image = createImageBank(gl);
   const built = new Map<string, Built>();
 
   /** Where the set's own picture lands, for every face to read. */
@@ -170,6 +172,7 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
       out.free();
       feed.free();
       video.free();
+      image.free();
       for (const made of built.values()) if (made.program) gl.deleteProgram(made.program.program);
     },
 
@@ -216,6 +219,7 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
         // worse than hiding the thumbnail, so small faces bind transparent;
         // promotion into the bench uses the full compositor and plays it.
         video.bind(made.program, [], () => 0.5);
+        image.bind(made.program, []);
         drawFullscreen(gl);
       }
 

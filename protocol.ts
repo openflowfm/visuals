@@ -103,6 +103,9 @@ export const LIGHT_MODES = ['lamp', 'beam', 'shafts', 'caustics'] as const;
 /** Disk-backed video playback: continuous looping or one pass held on its final frame. */
 export const VIDEO_MODES = ['loop', 'once'] as const;
 
+/** Disk-backed still-image framing: fill the frame, or preserve the whole image. */
+export const IMAGE_MODES = ['cover', 'contain'] as const;
+
 /** The effects that ship, as `effect` node modes. The other half of the old split. */
 /**
  * The three that `effect` split into, and why it had to.
@@ -260,7 +263,7 @@ export interface CircuitNode {
    * silently repoints the node at somebody else's part.
    */
   of?: string;
-  /** A server-approved path below the visuals media root, for a `video` node. */
+  /** A server-approved path below the visuals media root, for a media node. */
   asset?: string;
   /**
    * What each unwired number inlet holds, by inlet name, 0–1.
@@ -661,9 +664,11 @@ export interface Library {
   notice: string | null;
 }
 
-/** One server-approved video file below the configured media root. */
+/** One server-approved file below the configured media root. */
 export interface MediaAsset {
-  /** POSIX relative path below that root, used by a video node and the media endpoint. */
+  /** Which node may select this file. */
+  type: 'image' | 'video';
+  /** POSIX relative path below that root, used by a media node and the media endpoint. */
   id: string;
   /** Basename for compact selectors; `id` disambiguates matching names in folders. */
   name: string;

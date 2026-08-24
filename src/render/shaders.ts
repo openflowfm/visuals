@@ -39,6 +39,11 @@ uniform sampler2D uTracksTex;
 uniform sampler2D uVideo0;
 uniform sampler2D uVideo1;
 uniform vec2 uVideoSize[2];
+uniform sampler2D uImage0;
+uniform sampler2D uImage1;
+uniform sampler2D uImage2;
+uniform sampler2D uImage3;
+uniform vec2 uImageSize[4];
 uniform float uParams[${Math.max(1, values)}];
 // Meters of tracks a flow NAMED, in the order its track nodes appear, and
 // energies computed on the CPU for its energy nodes. Banks rather than a
@@ -93,6 +98,32 @@ vec4 fromVideo1(vec2 p) {
   vec4 c = texture(uVideo1, videoUv(p, uVideoSize[1]));
   return vec4(c.rgb * c.a, c.a);
 }
+
+vec3 imageUv(vec2 p, vec2 size, bool contain) {
+  vec2 uv = uncentred(p);
+  float frameAspect = uRes.x / max(uRes.y, 1.0);
+  float sourceAspect = size.x / max(size.y, 1.0);
+  if (contain) {
+    if (sourceAspect > frameAspect) uv.y = (uv.y - 0.5) * sourceAspect / frameAspect + 0.5;
+    else uv.x = (uv.x - 0.5) * frameAspect / sourceAspect + 0.5;
+  } else {
+    if (sourceAspect > frameAspect) uv.x = (uv.x - 0.5) * frameAspect / sourceAspect + 0.5;
+    else uv.y = (uv.y - 0.5) * sourceAspect / frameAspect + 0.5;
+  }
+  float inside = float(all(greaterThanEqual(uv, vec2(0.0))) && all(lessThanEqual(uv, vec2(1.0))));
+  return vec3(clamp(uv, 0.0, 1.0), inside);
+}
+
+vec4 imageSample(sampler2D source, vec2 p, vec2 size, bool contain) {
+  vec3 framed = imageUv(p, size, contain);
+  vec4 c = texture(source, framed.xy) * framed.z;
+  return vec4(c.rgb * c.a, c.a);
+}
+
+vec4 fromImage0(vec2 p, bool contain) { return imageSample(uImage0, p, uImageSize[0], contain); }
+vec4 fromImage1(vec2 p, bool contain) { return imageSample(uImage1, p, uImageSize[1], contain); }
+vec4 fromImage2(vec2 p, bool contain) { return imageSample(uImage2, p, uImageSize[2], contain); }
+vec4 fromImage3(vec2 p, bool contain) { return imageSample(uImage3, p, uImageSize[3], contain); }
 `;
 
 /**

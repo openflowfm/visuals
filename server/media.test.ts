@@ -21,9 +21,18 @@ describe('media library', () => {
     fs.mkdirSync(path.join(root, 'loops'));
     fs.writeFileSync(path.join(root, 'front.mp4'), 'front');
     fs.writeFileSync(path.join(root, 'loops', 'cloud.webm'), 'cloud');
+    fs.writeFileSync(path.join(root, 'still.png'), 'still');
+    fs.writeFileSync(path.join(root, 'poster.JPEG'), 'poster');
+    fs.writeFileSync(path.join(root, 'animated.gif'), 'no');
+    fs.writeFileSync(path.join(root, 'vector.svg'), 'no');
     fs.writeFileSync(path.join(root, 'notes.txt'), 'no');
     fs.symlinkSync(path.join(root, 'front.mp4'), path.join(root, 'linked.mov'));
-    expect(listMedia(root).map((asset) => asset.id)).toEqual(['front.mp4', 'loops/cloud.webm']);
+    expect(listMedia(root).map(({ id, type }) => ({ id, type }))).toEqual([
+      { id: 'front.mp4', type: 'video' },
+      { id: 'loops/cloud.webm', type: 'video' },
+      { id: 'poster.JPEG', type: 'image' },
+      { id: 'still.png', type: 'image' },
+    ]);
   });
 
   it('keeps every resolved asset inside the root', () => {
@@ -33,6 +42,7 @@ describe('media library', () => {
     expect(resolveMedia(root, '../okay.mp4')).toBeNull();
     expect(resolveMedia(root, '/etc/passwd')).toBeNull();
     expect(resolveMedia(root, 'notes.txt')).toBeNull();
+    expect(resolveMedia(root, 'vector.svg')).toBeNull();
     expect(resolveMedia(root, 'missing.mp4')).toBeNull();
   });
 

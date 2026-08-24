@@ -22,7 +22,7 @@ const CircuitNodeSchema = z.object({
   previewOutlet: z.string().min(1).optional(),
   op: z.string().min(1).optional().describe('Fixed mode, or the contained flow id on a flow node.'),
   of: z.string().min(1).optional().describe('Exact Live track name for a track node.'),
-  asset: z.string().min(1).optional().describe('Relative media-library id for a video node.'),
+  asset: z.string().min(1).optional().describe('Relative media-library id for an image or video node.'),
   values: NumberMapSchema.optional().describe('Held 0–1 values by settable inlet name.'),
   depths: NumberMapSchema.optional().describe('Signed modulation depths, -1–1, by inlet name.'),
   value: z.number().min(0).max(1).optional().describe("A value node's own number."),
@@ -87,6 +87,7 @@ const ValidationOutputSchema = z.object({
     values: z.number(),
     tracks: z.number(),
     videos: z.number(),
+    images: z.number(),
     draws: z.string().nullable(),
   }),
 });

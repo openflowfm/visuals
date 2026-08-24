@@ -156,16 +156,17 @@ The lightweight pictures, the bounded fractals and the effects that ship are nod
 so nothing in the model knows their individual names except the node that draws them, and
 one flow can hold them wired however you like.
 
-Put video files in `~/.openflow/visuals/media/` (or set `OPENFLOW_VISUALS_MEDIA`) and the
-`video` node will offer their relative paths. It has looping and one-shot modes, always mutes
-embedded audio, and keeps at most two reachable decoders alive per flattened flow.
+Put images or video files in `~/.openflow/visuals/media/` (or set
+`OPENFLOW_VISUALS_MEDIA`) and the matching node will offer their relative paths. `image`
+has aspect-correct cover and contain framing and uploads a selected still once; `video` has
+looping and one-shot modes, always mutes embedded audio, and keeps at most two reachable
+decoders alive per flattened flow.
 
 The trick that makes that possible is that **a colour is a function of a point**, not a
 value in a buffer: `kaleido` asks its input for the colour at a folded point and the input
 re-evaluates itself there, so a whole flow compiles to one fragment shader with no render
 targets at all. `tracks` is the one extra render pass because it draws once per playing Live
-track; `video` is the stateful texture input, decoded by the browser and sampled by that same
-flow shader.
+track; `image` and `video` are bounded texture inputs sampled by that same flow shader.
 
 What is on screen is [the wheel](docs/wheel.md): a rotation through your flows and
 colourways, advancing every N bars and when somebody launches a clip out of band. A song may

@@ -25,7 +25,8 @@ the set's picture (only if the flow asked for it)
 the flow
   one full-screen pass, one compiled fragment shader
   reading that target wherever a `tracks` node appears
-  and up to two persistent decoded-video textures where `video` nodes appear
+  up to two persistent decoded-video textures where `video` nodes appear,
+  and up to four persistent still textures where `image` nodes appear
 
 the output stage
   keystone, shoulder, master gain -> the screen
@@ -162,6 +163,19 @@ decoder, leaving a flow releases its decoder, and audio is always muted.
 The tiny per-node face renderer binds video transparent because one shared context cycles
 through as many as ten different probe graphs each frame; starting decoders for those would
 thrash. Promoting the node into the large bench uses the full compositor and plays it.
+
+| `image` — disk-backed still textures | |
+|---|---|
+| `cover` | fill the frame without distortion, cropping the long source edges |
+| `contain` | preserve the complete image, leaving the uncovered frame transparent |
+
+Still images use the same safe relative media ids as video, but have no frame loop. A selected
+PNG, JPEG, WebP, or AVIF is fetched and uploaded once, resampled before upload when its longest
+edge exceeds 4096 pixels or the GPU's own lower limit. The texture persists while that flow is
+active; changing the asset or leaving the flow aborts an in-flight fetch and releases it. Only
+reachable nodes reserve slots, and four is the hard per-flow ceiling. Tiny node-face probes bind
+transparent rather than repeatedly replacing a shared context's still textures; the bench and
+wall use the real image.
 
 | `fractal` — one iterative node, two modes | |
 |---|---|

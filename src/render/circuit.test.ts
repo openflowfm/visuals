@@ -269,6 +269,50 @@ describe('video nodes', () => {
   });
 });
 
+describe('image nodes', () => {
+  const imageCircuit = (count: number, connected = count): Circuit => {
+    const nodes: Circuit['nodes'] = Array.from({ length: count }, (_, index) => ({
+      id: `i${index}`,
+      kind: 'image',
+      op: index % 2 ? 'contain' : 'cover',
+      asset: `stills/${index}.png`,
+      x: 0,
+      y: index,
+    }));
+    const cords: Circuit['cords'] = [];
+    let previous = 'i0/c';
+    for (let index = 1; index < connected; index++) {
+      const mix = `mix${index}`;
+      nodes.push({ id: mix, kind: 'blend', op: 'add', x: index, y: 0 });
+      cords.push({ from: previous, to: `${mix}/base` }, { from: `i${index}/c`, to: `${mix}/top` });
+      previous = `${mix}/c`;
+    }
+    nodes.push({ id: 'o', kind: 'out', x: connected + 1, y: 0 });
+    if (connected > 0) cords.push({ from: previous, to: 'o/c' });
+    return { nodes, cords };
+  };
+
+  it('assigns stable sampler slots and framing to reachable images', () => {
+    const built = compileCircuit(imageCircuit(2));
+    expect(built.error).toBeNull();
+    expect(bodyOf(built.source!)).toContain('fromImage0(');
+    expect(bodyOf(built.source!)).toContain('fromImage1(');
+    expect(bodyOf(built.source!)).toContain(', true)');
+    expect(built.images.map(({ asset, mode, index }) => ({ asset, mode, index }))).toEqual([
+      { asset: 'stills/0.png', mode: 'cover', index: 0 },
+      { asset: 'stills/1.png', mode: 'contain', index: 1 },
+    ]);
+  });
+
+  it('does not reserve a texture for a parked image', () => {
+    expect(compileCircuit(imageCircuit(5, 1)).images).toHaveLength(1);
+  });
+
+  it('refuses more than four reachable still textures before WebGL', () => {
+    expect(compileCircuit(imageCircuit(5)).error).toBe('more than 4 reachable image nodes');
+  });
+});
+
 describe('the lightweight source registry', () => {
   it('compiles every source through both graph and per-track paths', () => {
     for (const op of SOURCES) {

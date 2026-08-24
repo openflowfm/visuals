@@ -42,7 +42,7 @@ Two resources carry context rather than pretending a read is an action:
 
 | resource | contains |
 |---|---|
-| `visual-flow://nodes` | every node, mode, mode-dependent inlet, outlet, signal, description and iterative work ceiling |
+| `visual-flow://nodes` | every node, mode, mode-dependent inlet, outlet, signal, description, media target and iterative work ceiling |
 | `visual-flow://scheme` | the resolved scheme and the exact revision of the file it came from |
 
 Two prompts give a host model the order of work: `build-flow` and `design-node`.
@@ -84,6 +84,9 @@ would hide the most useful feedback from the author. The MCP door therefore repo
 - node-level cycles and recursive nested flows;
 - a missing or repeated `out`, plus a visible warning when nothing reaches it;
 - the compiler's uniform, track-bank and multi-tap size limits.
+
+Media nodes report typed targets (`media:image` or `media:video`) rather than one ambiguous
+media flag, and validation reports reachable image and video counts separately.
 
 Only a graph that passes that list is written. The write is an atomic rename, so the file
 watcher sees either the previous complete scheme or the next complete scheme, never half JSON.

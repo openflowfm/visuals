@@ -79,9 +79,23 @@ Small node-face thumbnails leave video transparent to avoid decoder churn; the l
 and wall play it.
 
 Files are ids below `OPENFLOW_VISUALS_MEDIA`, defaulting to
-`~/.openflow/visuals/media/`. The server lists only supported video extensions, follows no
+`~/.openflow/visuals/media/`. The server groups supported files by media type, follows no
 symlinks, rejects absolute paths and traversal, and serves byte ranges for decoder seeking.
 The selected relative id travels with the scheme; the media file does not.
+
+An **image** crosses the same safe media boundary without a decoder clock. PNG, JPEG, WebP,
+and AVIF files are discovered separately from video, so each node's selector only offers files
+it can use. `cover` fills and crops; `contain` preserves the whole image and makes its unused
+frame transparent, which matters when it is blended. A reachable still is fetched, decoded,
+and uploaded once, then kept as one texture until the flow or selection changes. Its longest
+uploaded edge is capped at 4096 pixels or the GPU's lower texture limit, and no flattened flow
+may reach more than four image nodes. Parked image nodes allocate nothing. Small node-face
+previews bind them transparent for the same anti-thrashing reason as video; the bench and wall
+render the real image.
+
+The server follows no symlinks and refuses traversal for both media types. It deliberately does
+not admit GIF or SVG: the former quietly turns a still node into animation, while the latter
+adds an active/external-resource format to a boundary meant to serve inert files.
 A control may stop work sooner, but controls can turn after compilation, so the budget is
 always the hard ceiling rather than what happens to be visible now.
 

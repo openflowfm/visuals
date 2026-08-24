@@ -1,11 +1,12 @@
 import type { Circuit, Scheme, Show } from '../../protocol.ts';
-import { flatten, portId, type CircuitVideo } from './circuit.ts';
+import { flatten, portId, type CircuitImage, type CircuitVideo } from './circuit.ts';
 import { createNumberEvaluator, type NumberEvaluator } from './evaluateNumber.ts';
 import { createFeed, type Banks } from './feed.ts';
 import { banksOf, buildFlow, signatureOf } from './flow.ts';
 import { compile, createTarget, drawFullscreen, type Program } from './gl.ts';
 import { columns, warpFor, SQUARE, type Corners } from './output.ts';
 import { createVideoBank } from './video.ts';
+import { createImageBank } from './image.ts';
 
 /**
  * Two passes and an output stage, where there used to be a stack of them.
@@ -57,6 +58,7 @@ interface Built {
   draws: string | null;
   circuit: Circuit;
   videos: CircuitVideo[];
+  images: CircuitImage[];
   numbers: NumberEvaluator;
 }
 
@@ -83,6 +85,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
   const flows = new Map<string, Built>();
   const feed = createFeed(gl);
   const video = createVideoBank(gl);
+  const image = createImageBank(gl);
 
   /** Where the set's own picture lands, for the flow to read. */
   const live = createTarget(gl);
@@ -112,6 +115,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       draws: compiled.draws,
       circuit,
       videos: compiled.videos,
+      images: compiled.images,
       numbers: createNumberEvaluator(),
     };
     if (compiled.source) {
@@ -169,7 +173,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
 
   return {
     get error() {
-      return error ?? feed.error ?? video.error;
+      return error ?? feed.error ?? video.error ?? image.error;
     },
     resize,
     preview(on) {
@@ -189,6 +193,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       out.free();
       feed.free();
       video.free();
+      image.free();
       for (const built of flows.values()) if (built.program) gl.deleteProgram(built.program.program);
     },
     frame(show, scheme, beat, seconds, dt) {
@@ -231,8 +236,12 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
           (binding) => sample.inlet(portId(binding.id, 'pace')) ?? 0.5,
           id ?? '',
         );
+        image.bind(built.program, built.images, id ?? '');
         drawFullscreen(gl);
-      } else video.clear();
+      } else {
+        video.clear();
+        image.clear();
+      }
 
       // --- to the wall -----------------------------------------------------
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);

@@ -1,5 +1,6 @@
 import type { CircuitVideo } from './circuit.ts';
 import type { Program } from './gl.ts';
+import { mediaUrl } from './media.ts';
 
 interface HeldVideo {
   key: string;
@@ -26,12 +27,6 @@ export interface VideoBank {
 
 /** A centred control is normal speed; its useful bounded range is 0.5x–2x. */
 export const videoRate = (pace: number): number => 2 ** ((Math.max(0, Math.min(1, pace)) - 0.5) * 2);
-
-export const mediaUrl = (asset: string): string =>
-  `/media/${asset
-    .split('/')
-    .map((part) => encodeURIComponent(part))
-    .join('/')}`;
 
 export function createVideoBank(gl: WebGL2RenderingContext): VideoBank {
   const held = new Map<number, HeldVideo>();

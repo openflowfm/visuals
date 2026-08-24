@@ -34,7 +34,7 @@ export const VIDEO_NODE_SPEC = {
     },
   ],
   modes: VIDEO_MODES.map((name) => ({ name, description: descriptions[name] })),
-  asset: true,
+  asset: 'video',
   // One external texture read per evaluation. Multi-tap effects multiply it
   // just like any other picture, and the ordinary graph budget sees that.
   work: 1,

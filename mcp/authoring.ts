@@ -42,6 +42,7 @@ export interface FlowValidation {
     values: number;
     tracks: number;
     videos: number;
+    images: number;
     draws: string | null;
   };
 }
@@ -176,7 +177,7 @@ export function validateFlow(
         diagnostics,
         'error',
         'node.asset.unused',
-        `Only a video node can name a media asset; '${node.asset}' would do nothing here.`,
+        `Only a media node can name an asset; '${node.asset}' would do nothing here.`,
         node.id,
       );
     }
@@ -212,8 +213,8 @@ export function validateFlow(
       issue(
         diagnostics,
         'warning',
-        'node.video.unset',
-        'This video node has no file selected, so it will draw transparent black.',
+        `node.${spec.asset}.unset`,
+        `This ${spec.asset} node has no file selected, so it will draw transparent black.`,
         node.id,
       );
     }
@@ -467,6 +468,7 @@ export function validateFlow(
     values: 0,
     tracks: 0,
     videos: 0,
+    images: 0,
     draws: null,
   };
   if (!diagnostics.some((entry) => entry.severity === 'error')) {
@@ -477,6 +479,7 @@ export function validateFlow(
       values: compiled.values.length,
       tracks: compiled.tracks.length,
       videos: compiled.videos.length,
+      images: compiled.images.length,
       draws: compiled.draws,
     };
     if (compiled.error) {
@@ -635,7 +638,7 @@ export function nodeCatalog() {
       family: definition.family,
       familyDescription: NODE_FAMILY_DETAILS[definition.family],
       description: spec.description,
-      target: spec.asset ? 'media' : (spec.named ?? null),
+      target: spec.asset ? `media:${spec.asset}` : (spec.named ?? null),
       /** Worst-case fixed work across its modes; each variant carries its exact charge. */
       work: Math.max(...variants.map((variant) => variant.work)),
       defaultMode: spec.modes?.[0]?.name ?? null,
