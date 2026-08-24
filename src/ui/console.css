@@ -32,21 +32,192 @@
   overflow: hidden;
 }
 
-.console header {
+.console-head {
+  position: relative;
+  z-index: 20;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
+  gap: 8px;
+  min-height: 38px;
+  padding: 5px 10px;
   border-bottom: 1px solid var(--edge);
+  background: var(--panel);
   flex: none;
 }
 
-.console .context {
-  margin-left: auto;
+.console-head .views,
+.console-head .schemes,
+.console-head .preview-controls,
+.console-head > .wdg-button {
+  flex: none;
+}
+
+.console-head .head-space {
+  flex: 1;
+}
+
+.console-head .flow-context {
+  display: flex;
+  align-items: center;
+  min-width: 120px;
+  max-width: 560px;
+  flex: 1;
+  overflow: hidden;
+}
+
+.console-head .flow-trail {
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+}
+
+.console-head .flow-trail button {
+  min-width: 0;
+  max-width: 120px;
+  overflow: hidden;
+  border: 0;
+  background: none;
   color: var(--caption);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  font-size: 9.5px;
+  font: inherit;
+  padding: 3px 2px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.console-head .flow-trail button::after {
+  margin-left: 5px;
+  color: var(--idle);
+  content: '›';
+}
+
+.console-head .flow-trail button:hover {
+  color: var(--fg);
+}
+
+.console-head .flow-title {
+  width: 100%;
+  min-width: 72px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 5px;
+}
+
+.console-head .flow-title:hover,
+.console-head .flow-title:focus {
+  border-color: var(--bd3);
+  background: var(--well);
+  outline: none;
+}
+
+.console-head .preview-controls {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.console-head .preview-controls > .wdg-button .wdg-button-body {
+  min-width: 24px;
+  padding-right: 5px;
+  padding-left: 5px;
+}
+
+.console-head .conditions {
+  position: relative;
+}
+
+.console-head .conditions-toggle {
+  height: var(--wdg-field-height);
+  min-width: 58px;
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-xs);
+  background: var(--surface-control);
+  color: var(--ui);
+  font: inherit;
+  padding: 0 7px;
+  cursor: pointer;
+}
+
+.console-head .conditions-toggle:hover,
+.console-head .conditions-toggle[data-on] {
+  border-color: var(--focus);
+  color: var(--fg);
+}
+
+.console-head .conditions-toggle span {
+  margin-left: 3px;
+  color: var(--caption);
+}
+
+.console-head .conditions-panel {
+  position: absolute;
+  top: calc(100% + 7px);
+  right: 0;
+  z-index: 30;
+  width: 300px;
+  padding: 10px;
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  box-shadow: 0 8px 26px rgb(0 0 0 / 55%);
+}
+
+.console-head .condition-source {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.console-head .condition-source > div {
+  display: inline-flex;
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+}
+
+.console-head .condition-source button {
+  height: 21px;
+  border: 0;
+  background: var(--well);
+  color: var(--caption);
+  font: inherit;
+  padding: 0 9px;
+  cursor: pointer;
+}
+
+.console-head .condition-source button + button {
+  border-left: 1px solid var(--bd3);
+}
+
+.console-head .condition-source button[data-on] {
+  background: var(--surface-control);
+  color: var(--amber);
+}
+
+.console-head .condition-source button:disabled {
+  color: var(--idle);
+  cursor: default;
+}
+
+.console-head .condition-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: end;
+  gap: 10px;
+  padding-top: 10px;
+}
+
+.console-head .conditions-panel p {
+  margin: 10px 0 0;
+  color: var(--caption);
+  font: 10px/1.45 var(--sans);
 }
 
 .setview .song .who {
@@ -273,11 +444,6 @@
   display: flex;
   min-height: 0;
   flex: 1;
-}
-
-.designer .room {
-  flex-wrap: wrap;
-  gap: 4px 10px;
 }
 
 .designer .library {
@@ -615,41 +781,6 @@
   margin: 0 0 4px 13px;
 }
 
-.designer .trail {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 0 4px 4px;
-  font-size: 10px;
-  overflow: hidden;
-}
-
-.designer .crumb {
-  border: 0;
-  background: none;
-  color: var(--idle);
-  font: inherit;
-  padding: 1px 3px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.designer .crumb:hover {
-  color: var(--fg);
-}
-
-.designer .crumb + .crumb::before,
-.designer .crumb + .here::before {
-  content: '›';
-  margin-right: 5px;
-  color: var(--rule);
-}
-
-.designer .crumb.here {
-  color: var(--ui);
-  cursor: default;
-}
-
 .designer .group h5 {
   margin: 0 0 4px;
   color: var(--caption);
@@ -720,18 +851,6 @@
   text-transform: uppercase;
   font-size: 9px;
   letter-spacing: 0.06em;
-}
-
-.designer .naming {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 8px;
-  padding: 8px 10px 0;
-}
-
-.designer .naming .field {
-  width: 190px;
 }
 
 .designer .circuit {
@@ -981,10 +1100,18 @@
   background: #000;
 }
 
-.designer .uses em {
-  font-style: normal;
-  color: var(--amber);
-  margin-left: 8px;
+.designer .canvas-error {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  z-index: 4;
+  max-width: min(520px, calc(100% - 24px));
+  padding: 5px 8px;
+  border: 1px solid color-mix(in srgb, var(--alarm) 45%, var(--bd3));
+  border-radius: var(--radius-xs);
+  background: var(--panel);
+  box-shadow: 0 5px 18px rgb(0 0 0 / 45%);
+  transform: translateX(-50%);
 }
 
 /* --- the set page ------------------------------------------------------ */

@@ -2,9 +2,15 @@ import { useState } from 'react';
 import type { Library, Scheme, SetGrid, Show } from '../../protocol.ts';
 import '@openflow/widgets/tokens.css';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
+import { NumberField } from '@openflow/widgets/controls/NumberField.tsx';
+import { Select } from '@openflow/widgets/controls/Select.tsx';
 import { Segmented } from '@openflow/widgets/controls/Segmented.tsx';
 import { Designer } from './Designer.tsx';
 import { SetView } from './SetView.tsx';
+import { flowList, renameFlow } from './edits.ts';
+import { BPM, ENERGY, PERCENT } from './param.ts';
+import { KEYS, useRoom, type Room } from '../state/useRoom.ts';
+import { useTransport, type Transport } from '../state/useTransport.ts';
 import type { Clock } from '../state/useShow.ts';
 import './console.css';
 
@@ -58,10 +64,24 @@ export function Console({
 }: ConsoleProps) {
   const [view, setView] = useState<View>('design');
   const [flow, setFlow] = useState<string | null>(null);
+  const [trail, setTrail] = useState<readonly string[]>([]);
+  const list = flowList(scheme);
+  const id = flow && scheme.flows[flow] ? flow : (list[0]?.id ?? null);
+  const def = id ? scheme.flows[id] : null;
+  const canFollow = show.clock && show.connected;
+  const transport = useTransport(clock, canFollow);
+  const room = useRoom(show, scheme, transport);
+
+  const back = (at: number) => {
+    const to = trail[at];
+    if (!to) return;
+    setTrail(trail.slice(0, at));
+    setFlow(to);
+  };
 
   return (
     <div className="console wdg">
-      <header>
+      <header className="console-head">
         <Segmented
           items={VIEWS as unknown as string[]}
           index={VIEWS.indexOf(view)}
@@ -69,13 +89,37 @@ export function Console({
           label="View"
           className="views"
         />
-        <span className="context">{contextOf(view, show, scheme, flow)}</span>
         <Schemes
           library={library}
           saveScheme={saveScheme}
           saveSchemeAs={saveSchemeAs}
           loadScheme={loadScheme}
         />
+        {view === 'design' && def && id ? (
+          <div className="flow-context">
+            {trail.length > 0 && (
+              <nav className="flow-trail" aria-label="How you got here">
+                {trail.map((each, at) => (
+                  <button key={`${each}${at}`} type="button" onClick={() => back(at)}>
+                    {scheme.flows[each]?.name || each}
+                  </button>
+                ))}
+              </nav>
+            )}
+            <input
+              className="flow-title"
+              value={def.name}
+              spellCheck={false}
+              aria-label="Flow name"
+              onChange={(event) => edit(renameFlow(scheme, id, event.currentTarget.value))}
+            />
+          </div>
+        ) : (
+          <span className="head-space" />
+        )}
+        {view === 'design' && (
+          <PreviewControls room={room} transport={transport} canFollow={canFollow} />
+        )}
         <Button tone="quiet" label="Close console" onPress={onClose}>
           ×
         </Button>
@@ -86,9 +130,12 @@ export function Console({
           show={show}
           scheme={scheme}
           edit={edit}
-          clock={clock}
           flow={flow}
           setFlow={setFlow}
+          room={room}
+          transport={transport}
+          trail={trail}
+          setTrail={setTrail}
         />
       )}
 
@@ -97,26 +144,129 @@ export function Console({
   );
 }
 
-/**
- * The line on the right of the tab bar, which says where you are.
- *
- * Different per view on purpose: inside a flow the useful fact is what it is
- * made of, and at set scale it is what the wheel is doing. One universal status
- * line would be wrong in one of the two places.
- */
-function contextOf(view: View, show: Show, scheme: Scheme, flow: string | null): string {
-  if (view === 'set') {
-    const songs = show.songs.length;
-    const pinned = Object.keys(scheme.songs).length;
-    return `${songs} song${songs === 1 ? '' : 's'} · ${pinned} overridden${
-      show.connected ? '' : ' · no bridge'
-    }`;
-  }
-  const made = Object.keys(scheme.flows).length;
-  const def = flow ? scheme.flows[flow] : null;
-  if (!def) return `${made} flow${made === 1 ? '' : 's'}`;
-  const nodes = def.circuit.nodes.length;
-  return `${def.name} · ${nodes} node${nodes === 1 ? '' : 's'} · ${made} in the library`;
+/** The small part of the invented room worth keeping in reach while wiring. */
+function PreviewControls({
+  room,
+  transport,
+  canFollow,
+}: {
+  room: Room;
+  transport: Transport;
+  canFollow: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const following = room.following;
+  const bpm = Number.isInteger(transport.bpm)
+    ? transport.bpm.toFixed(0)
+    : transport.bpm.toFixed(1);
+
+  return (
+    <div className="preview-controls">
+      <Button
+        tone="quiet"
+        label={transport.playing ? 'Stop the preview clock' : 'Play the preview clock'}
+        title={following ? 'The room owns the clock' : undefined}
+        onPress={() => transport.setPlaying(!transport.playing)}
+        disabled={following}
+      >
+        {transport.playing ? '■' : '▶'}
+      </Button>
+      <Button
+        tone="quiet"
+        label="Back to the top of the bar"
+        onPress={transport.restart}
+        disabled={following}
+      >
+        ↺
+      </Button>
+      <NumberField
+        param={BPM}
+        value={transport.bpm}
+        onChange={transport.setBpm}
+        name=""
+        label="Preview tempo"
+        display={`${bpm} bpm`}
+        width={62}
+        disabled={following}
+      />
+      <div className="conditions">
+        <button
+          type="button"
+          className="conditions-toggle"
+          data-on={open ? '' : undefined}
+          aria-expanded={open}
+          onClick={() => setOpen((was) => !was)}
+        >
+          {following ? 'room' : 'desk'} <span aria-hidden="true">⌄</span>
+        </button>
+        {open && (
+          <div className="conditions-panel">
+            <div className="condition-source">
+              <span className="cap">source</span>
+              <div>
+                <button
+                  type="button"
+                  data-on={!following ? '' : undefined}
+                  onClick={() => transport.setFollowing(false)}
+                >
+                  desk
+                </button>
+                <button
+                  type="button"
+                  data-on={following ? '' : undefined}
+                  disabled={!canFollow}
+                  title={
+                    canFollow ? 'Use the real show' : 'Nothing to follow — no bridge is connected'
+                  }
+                  onClick={() => transport.setFollowing(true)}
+                >
+                  room
+                </button>
+              </div>
+            </div>
+            {following ? (
+              <p>The real show supplies the clock, energy, section, colourway and key.</p>
+            ) : (
+              <div className="condition-fields">
+                <NumberField
+                  param={ENERGY}
+                  value={PERCENT.to(room.energy)}
+                  onChange={(value) => room.setEnergy(PERCENT.from(value))}
+                  name="energy"
+                />
+                <Select
+                  items={room.sections}
+                  index={Math.max(0, room.sections.indexOf(room.section))}
+                  onChange={(at) => room.setSection(room.sections[at])}
+                  name="section"
+                  width={104}
+                  disabled={room.sections.length === 0}
+                  title="What a `song section` node reports"
+                />
+                <Select
+                  items={room.colorways}
+                  index={Math.max(0, room.colorways.indexOf(room.colorway))}
+                  onChange={(at) => room.setColorway(room.colorways[at])}
+                  name="colourway"
+                  width={110}
+                  disabled={room.colorways.length === 0}
+                  title="What `paint` and the set's own tracks draw from"
+                />
+                <Select
+                  items={KEYS}
+                  index={room.keyAt}
+                  onChange={room.setKeyAt}
+                  name="key"
+                  width={58}
+                  title="What a `song key` node reports"
+                />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 /**

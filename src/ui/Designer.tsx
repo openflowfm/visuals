@@ -4,22 +4,16 @@ import { wouldLoop } from '../../protocol.ts';
 import type { GraphView } from '@openflow/widgets/chrome/Graph.tsx';
 import { format } from '@openflow/widgets/param/format.ts';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
-import { Knob } from '@openflow/widgets/controls/Knob.tsx';
-import { NumberField } from '@openflow/widgets/controls/NumberField.tsx';
-import { Select } from '@openflow/widgets/controls/Select.tsx';
-import { Toggle } from '@openflow/widgets/controls/Toggle.tsx';
 import { CircuitEditor, type NumberReading } from './Circuit.tsx';
 import {
   addFlow,
   dropFlow,
   forkFlow,
   flowList,
-  renameFlow,
   setCircuit,
   setNode,
 } from './edits.ts';
 import {
-  aboutFlow,
   drop,
   flowShelf,
   keyOf,
@@ -40,10 +34,9 @@ import { NodePictures, type NodePictureStatus } from './NodePictures.tsx';
 import { createNumberEvaluator, type NumberSample } from '../render/evaluateNumber.ts';
 import { inletsOf, portId } from '../render/circuit.ts';
 import { FloatingBench } from './Preview.tsx';
-import { BPM, ENERGY, PERCENT, VALUE } from './param.ts';
-import { KEYS, useRoom, withStandIns, type Room } from '../state/useRoom.ts';
-import { useTransport, type Transport } from '../state/useTransport.ts';
-import type { Clock } from '../state/useShow.ts';
+import { PERCENT, VALUE } from './param.ts';
+import { withStandIns, type Room } from '../state/useRoom.ts';
+import type { Transport } from '../state/useTransport.ts';
 import './circuit.css';
 import './console.css';
 
@@ -145,18 +138,23 @@ export function Designer({
   show,
   scheme,
   edit,
-  clock,
   flow,
   setFlow,
+  room,
+  transport,
+  trail,
+  setTrail,
 }: {
   show: Show;
   scheme: Scheme;
   edit(next: Scheme): void;
-  /** The room's clock, when there is a room. The transport may follow it. */
-  clock: Clock;
-  /** Which flow is open, held above so the tab bar can name it. */
+  /** Which flow is open, held above so the one header can name it. */
   flow: string | null;
   setFlow(id: string | null): void;
+  room: Room;
+  transport: Transport;
+  trail: readonly string[];
+  setTrail(next: readonly string[] | ((was: readonly string[]) => readonly string[])): void;
 }) {
   const list = flowList(scheme);
   const [typed, setTyped] = useState('');
@@ -188,15 +186,6 @@ export function Designer({
    */
   const [opened, setOpened] = useState<readonly string[]>([]);
   /**
-   * How you got to the flow you are in, so ⤢ has a way back.
-   *
-   * Entering a flow from a node on the canvas is a move *down*, and a move down
-   * with no way up is how a graph editor loses people. The trail is here rather
-   * than beside the open flow because it is a fact about this visit — reopen the
-   * same flow from the shelf tomorrow and you did not come from anywhere.
-   */
-  const [trail, setTrail] = useState<readonly string[]>([]);
-  /**
    * Narrow the browser to what a cord in your hand can reach.
    *
    * The search box answers "what is it called" and this answers "what will
@@ -212,10 +201,6 @@ export function Designer({
    * the row disarms it, so a stale "sure?" can never fire from muscle memory.
    */
   const [arming, setArming] = useState<string | null>(null);
-
-  const canFollow = show.clock && show.connected;
-  const transport = useTransport(clock, canFollow);
-  const room = useRoom(show, scheme, transport);
 
   const id = flow && scheme.flows[flow] ? flow : (list[0]?.id ?? null);
   const def = id ? scheme.flows[id] : null;
@@ -386,14 +371,6 @@ export function Designer({
     setFlow(next);
   };
 
-  /** Back up the trail to a flow you came through, dropping everything under it. */
-  const back = (at: number) => {
-    const to = trail[at];
-    if (!to) return;
-    setTrail(trail.slice(0, at));
-    setFlow(to);
-  };
-
   /** Place a flow in the open one, as a node. The refusal in `add` still applies. */
   const place = (row: FlowRow) => add(pickOf(row));
 
@@ -441,8 +418,6 @@ export function Designer({
 
   return (
     <div className="designer wdg">
-      <TheRoom room={room} transport={transport} canFollow={canFollow} />
-
       <div className="body">
         <aside className="library">
           <div className="find-row" {...(activeSwap ? { 'data-swapping': '' } : {})}>
@@ -617,37 +592,7 @@ export function Designer({
         </aside>
 
         <div className="canvas-wrap">
-          {trail.length > 0 && (
-            <nav className="trail" aria-label="How you got here">
-              {trail.map((each, at) => (
-                <button
-                  key={`${each}${at}`}
-                  type="button"
-                  className="crumb"
-                  onClick={() => back(at)}
-                >
-                  {scheme.flows[each]?.name || each}
-                </button>
-              ))}
-              <span className="crumb here">{def?.name || id}</span>
-            </nav>
-          )}
-
-          {def && id && (
-            <div className="naming">
-              <input
-                className="field"
-                value={def.name}
-                spellCheck={false}
-                aria-label="Flow name"
-                onChange={(e) => edit(renameFlow(scheme, id, e.target.value))}
-              />
-              <span className="cap">{def ? aboutFlow(def) : ''}</span>
-              <Uses scheme={scheme} show={show} id={id} />
-              <span className="gap" />
-              {error && <span className="bad">{error}</span>}
-            </div>
-          )}
+          {error && <span className="canvas-error bad">{error}</span>}
 
           {def && (
             <NodePictures
@@ -711,105 +656,6 @@ export function Designer({
           )}
         </div>
       </div>
-    </div>
-  );
-}
-
-/**
- * Every condition a flow behaves differently under, in one group.
- *
- * The energy knob arrived on its own and made the case for the rest: if you can
- * dial the room's energy without a band in it, there is no reason to wait for a
- * rehearsal to reach a chorus, or for the wheel to land on the third colourway,
- * or for the one song in F# minor. Each of those is a `song` or `paint` node
- * reading a number, and each was previously unreachable at a desk.
- *
- * Grouped rather than scattered because they are one idea — *pretend it is like
- * this* — and because the switch that turns them off has to be visibly attached
- * to all of them. `follow the room` is that switch, and it is the transport's
- * own `following` widened from the clock to everything beside it; the reasoning
- * for one switch rather than six is in [`useRoom`](../state/useRoom.ts).
- */
-function TheRoom({
-  room,
-  transport,
-  canFollow,
-}: {
-  room: Room;
-  transport: Transport;
-  canFollow: boolean;
-}) {
-  const following = room.following;
-  return (
-    <div className="bar room">
-      <span className="cap">the room</span>
-      <Toggle
-        on={transport.playing}
-        onChange={transport.setPlaying}
-        disabled={following}
-        width={46}
-      >
-        {transport.playing ? 'playing' : 'stopped'}
-      </Toggle>
-      <NumberField
-        param={BPM}
-        value={transport.bpm}
-        onChange={transport.setBpm}
-        name="bpm"
-        disabled={following}
-      />
-      <Button onPress={transport.restart} disabled={following}>
-        to the top
-      </Button>
-      <Knob
-        param={ENERGY}
-        value={PERCENT.to(room.energy)}
-        onChange={(v) => room.setEnergy(PERCENT.from(v))}
-        name="energy"
-        disabled={following}
-      />
-      <Select
-        items={room.sections}
-        index={Math.max(0, room.sections.indexOf(room.section))}
-        onChange={(at) => room.setSection(room.sections[at])}
-        name="section"
-        width={104}
-        disabled={following || room.sections.length === 0}
-        title="What a `song section` node reports"
-      />
-      <Select
-        items={room.colorways}
-        index={Math.max(0, room.colorways.indexOf(room.colorway))}
-        onChange={(at) => room.setColorway(room.colorways[at])}
-        name="colourway"
-        width={110}
-        disabled={following || room.colorways.length === 0}
-        title="What `paint` and the set's own tracks draw from"
-      />
-      <Select
-        items={KEYS}
-        index={room.keyAt}
-        onChange={room.setKeyAt}
-        name="key"
-        width={58}
-        disabled={following}
-        title="What a `song key` node reports"
-      />
-      <span className="gap" />
-      <Toggle
-        on={following}
-        onChange={transport.setFollowing}
-        disabled={!canFollow}
-        width={96}
-        title={
-          canFollow
-            ? 'Draw the real show instead — its beat, its energy, its section, its colourway and its key'
-            : 'Nothing to follow — no bridge is connected'
-        }
-      >
-        follow the room
-      </Toggle>
-      <span className="cap">{following ? 'the real show' : 'made up · no set needed'}</span>
     </div>
   );
 }
@@ -1026,46 +872,4 @@ function NodeBrowser({
     </div>
   );
 }
-
-/**
- * Where this flow is reachable from, which is the question the designer used to
- * have no answer to.
- *
- * Deliberately not an editor. The wheel and the song pins live on the set page,
- * and putting a second way to change them here would mean two places that could
- * disagree. What this answers is "if I make this good, will anyone see it" —
- * and the honest answer is usually yes, because an empty pool means everything.
- *
- * One line beside the flow's name rather than a pane of its own. It was a list
- * in the bench's sidebar, which is a lot of furniture for a sentence you read
- * once a session — and the sidebar it was in was costing the picture the width
- * it wanted.
- */
-function Uses({ scheme, show, id }: { scheme: Scheme; show: Show; id: string | null }) {
-  if (!id) return null;
-  const pool = scheme.rotation.flows;
-  const turning = pool.length === 0 || pool.includes(id);
-  const pinned = Object.entries(scheme.songs).filter(([, spec]) => spec.flows?.includes(id));
-  const inside = Object.entries(scheme.flows).filter(
-    ([other, def]) => other !== id && def.circuit.nodes.some((n) => n.kind === 'flow' && n.op === id),
-  );
-  const parts = [
-    turning
-      ? pool.length === 0
-        ? 'in the wheel — nothing narrowed'
-        : 'in the wheel'
-      : 'not in the wheel',
-    pinned.length > 0
-      ? `pinned by ${pinned.length} song${pinned.length === 1 ? '' : 's'}`
-      : null,
-    inside.length > 0 ? `inside ${inside.map(([, def]) => def.name).join(', ')}` : null,
-  ].filter(Boolean);
-  return (
-    <span className="cap uses">
-      {parts.join(' · ')}
-      {show.flow === id && <em>on screen now</em>}
-    </span>
-  );
-}
-
 

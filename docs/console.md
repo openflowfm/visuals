@@ -227,8 +227,8 @@ clears the box and the filter together. Escape in the box does the box.
 
 A `flow` node names a graph, and until now the only way to open that graph was to find its
 name again in the sidebar — so the containment this entire model rests on was invisible on
-the one screen that draws it. `⤢` on a flow node's face opens it, and a trail across the top
-of the canvas is the way back up.
+the one screen that draws it. `⤢` on a flow node's face opens it, and the trail in the one
+header, immediately before the editable flow name, is the way back up.
 
 The trail is state in the page rather than in the scheme, and deliberately: it is a fact
 about this visit. Reopen the same flow from the shelf tomorrow and you did not come from
@@ -281,21 +281,20 @@ promoted graph is parked under one reused throwaway id, and clicking through for
 leaves one probe program alive. An id per node would compile just as correctly and leak one
 program each, because nothing would ever come back to delete them.
 
-**The room is one group.** The designer already ran on [its own clock](clock.md), and that
-argument does not stop at the beat: if *Ableton running* must not be a precondition for
-drawing a picture, neither must a chorus being played in F# minor with the third colourway
-up. Each of those is a number a node reads, each changes what a flow does, and each used to
-be reachable only by waiting for a rehearsal to arrive at it. So tempo, the play button,
-energy, section, colourway and key sit together under one caption, and `useRoom` hands the
-compositor the `Show` they add up to.
+**The room is one group behind one choice.** The designer already ran on [its own
+clock](clock.md), and that argument does not stop at the beat: if *Ableton running* must not be
+a precondition for drawing a picture, neither must a chorus being played in F# minor with the
+third colourway up. Each of those is a number a node reads, each changes what a flow does, and
+each used to be reachable only by waiting for a rehearsal to arrive at it. Play, restart and
+tempo stay in the header because they are used while wiring; **desk** opens energy, section,
+colourway and key without making a second toolbar out of four occasional settings. `useRoom`
+hands the compositor the `Show` they add up to.
 
-**One switch, not one per fact.** `follow the room` is the transport's own `following`,
-widened from the clock to everything beside it. A half-followed room is a state that exists
-nowhere — the stage's beat under a desk's section, or the real colourway with an invented
-key — so judging a flow against one teaches you nothing about either. Two switches would
-also be two things to leave in the wrong position. If it ever turns out that following the
-beat alone is worth having, the transport still holds the flag on its own and the split is
-small; nothing has been designed to prevent it.
+**Desk or room, not one switch per fact.** Choosing **room** is the transport's own
+`following`, widened from the clock to everything beside it. A half-followed room is a state
+that exists nowhere — the stage's beat under a desk's section, or the real colourway with an
+invented key — so judging a flow against one teaches you nothing about either. The real room
+is unavailable when no bridge is connected; the desk remains the complete standalone path.
 
 The section list is **the set's own `[ROLE]` names** whenever there is a set, because neither
 view ever asks you to type a name. The stand-ins for a desk are alphabetical, which looks
@@ -304,6 +303,12 @@ stand-in ordered intro-to-outro would give the number a different meaning here f
 it has on stage.
 
 ### The scheme shelf is the header's, because saving is neither view's business
+
+There is **one header**. View and scheme are global on the left; the design view uses the
+middle for its containment trail and editable flow name, and the right for the compact preview
+clock and desk/room choice. Counts of flows, nodes, songs and overrides are absent: they do not
+identify a place, perform an action or warn about a problem, and giving them header weight made
+the actions harder to find.
 
 The header names the open scheme, and the name wears an amber dot when the screen holds
 edits its file does not — that distance is the whole subject. `save` sits beside it, lit
