@@ -127,6 +127,10 @@ const MIGRATIONS: readonly string[] = [
     calculated_at TEXT NOT NULL
   );
   `,
+  `
+  ALTER TABLE tags ADD COLUMN polarity TEXT NOT NULL DEFAULT 'neutral'
+    CHECK (polarity IN ('praise', 'fault', 'neutral'));
+  `,
 ];
 
 export interface StoredCandidate {
@@ -220,15 +224,18 @@ export function openLab(file: string): LabStore {
   }
 
   // The vocabulary rides the code; the table makes old reviews legible without
-  // it. Labels and descriptions may improve in place — meanings may not, which
-  // is why a changed meaning is a new id and `active = 0` on the old one.
+  // it. Labels, descriptions, shelving and polarity may improve in place —
+  // meanings may not, which is why a changed meaning is a new id and
+  // `active = 0` on the old one.
   const seedTag = db.prepare(
-    `INSERT INTO tags (id, category, label, description, active) VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET label = excluded.label,
+    `INSERT INTO tags (id, category, polarity, label, description, active)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET category = excluded.category,
+       polarity = excluded.polarity, label = excluded.label,
        description = excluded.description, active = excluded.active`,
   );
   for (const tag of TAGS) {
-    seedTag.run(tag.id, tag.category, tag.label, tag.description, tag.active ? 1 : 0);
+    seedTag.run(tag.id, tag.category, tag.polarity, tag.label, tag.description, tag.active ? 1 : 0);
   }
 
   const transaction = <T>(work: () => T): T => {

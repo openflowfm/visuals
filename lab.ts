@@ -50,95 +50,127 @@ export const LAB_RENDERER_VERSION = 1;
 export type TagCategory =
   | 'character'
   | 'motion'
-  | 'relationship'
+  | 'reactivity'
   | 'composition'
-  | 'use'
-  | 'reason';
+  | 'piece'
+  | 'use';
+
+/**
+ * A tag's direction. Category is the *topic* a tag speaks about; polarity is
+ * whether it praises, faults, or merely describes. Direction lives on the tag
+ * rather than on the shelf so any topic can hold all three — `musical` and
+ * `too-fast` are both about motion — and so the submit rules can ask for a
+ * praise or a fault without caring which aspect supplied it.
+ *
+ * Praise and fault tags carry their effect with them: the review view stamps
+ * `helped` or `hurt` on the wire and offers no toggle, because `generic` is
+ * never a compliment. Neutral tags keep the reviewer's call — `twitchy`
+ * genuinely cuts both ways.
+ */
+export type TagPolarity = 'praise' | 'fault' | 'neutral';
 
 export interface LabTag {
   /** Stable semantic id. Labels may improve; meanings must not be repurposed. */
   id: string;
   category: TagCategory;
+  polarity: TagPolarity;
   label: string;
   description: string;
   /** False for a tag whose meaning changed: deprecated, never reused. */
   active: boolean;
 }
 
-export const TAGS_VERSION = 1;
+/** 2: polarity became a tag property, and `reason` dissolved into `piece`. */
+export const TAGS_VERSION = 2;
 
 export const TAG_CATEGORIES: readonly { category: TagCategory; about: string }[] = [
-  { category: 'character', about: 'What kind of thing it is, without praise or blame' },
+  { category: 'character', about: 'What kind of thing it is' },
   { category: 'motion', about: 'How it moves' },
-  { category: 'relationship', about: 'How it sits against the set that drives it' },
+  { category: 'reactivity', about: 'How it hears the set that drives it' },
   { category: 'composition', about: 'How the frame reads, and whether a projector agrees' },
+  { category: 'piece', about: 'The whole piece — what no single aspect explains' },
   { category: 'use', about: 'Where in a show it would earn its place' },
-  { category: 'reason', about: 'Why it received the score it did' },
 ];
 
-const tag = (
-  id: string,
-  category: TagCategory,
-  label: string,
-  description: string,
-): LabTag => ({ id, category, label, description, active: true });
+const shape =
+  (polarity: TagPolarity) =>
+  (id: string, category: TagCategory, label: string, description: string): LabTag => ({
+    id,
+    category,
+    polarity,
+    label,
+    description,
+    active: true,
+  });
+
+const describe = shape('neutral');
+const praise = shape('praise');
+const fault = shape('fault');
 
 export const TAGS: readonly LabTag[] = [
-  tag('geometric', 'character', 'geometric', 'Lines, tiles, folds; built rather than grown'),
-  tag('organic', 'character', 'organic', 'Reads as grown or fluid rather than constructed'),
-  tag('textural', 'character', 'textural', 'A surface more than a shape'),
-  tag('funny', 'character', 'funny', 'It has a joke in it, and the joke lands'),
-  tag('severe', 'character', 'severe', 'Austere, hard-edged, unsmiling'),
-  tag('dreamy', 'character', 'dreamy', 'Soft, slow, half-remembered'),
-  tag('chaotic', 'character', 'chaotic', 'Deliberately too much at once'),
-  tag('restrained', 'character', 'restrained', 'Does one thing and declines the rest'),
-  tag('hypnotic', 'character', 'hypnotic', 'Rewards staring; the loop is the point'),
+  describe('geometric', 'character', 'geometric', 'Lines, tiles, folds; built rather than grown'),
+  describe('organic', 'character', 'organic', 'Reads as grown or fluid rather than constructed'),
+  describe('textural', 'character', 'textural', 'A surface more than a shape'),
+  describe('severe', 'character', 'severe', 'Austere, hard-edged, unsmiling'),
+  describe('dreamy', 'character', 'dreamy', 'Soft, slow, half-remembered'),
+  describe('chaotic', 'character', 'chaotic', 'Deliberately too much at once'),
+  describe('restrained', 'character', 'restrained', 'Does one thing and declines the rest'),
+  praise('funny', 'character', 'funny', 'It has a joke in it, and the joke lands'),
+  praise('hypnotic', 'character', 'hypnotic', 'Rewards staring; the loop is the point'),
 
-  tag('still', 'motion', 'still', 'Holds; change is the exception'),
-  tag('breathing', 'motion', 'breathing', 'Swells and settles on an envelope'),
-  tag('rhythmic', 'motion', 'rhythmic', 'Moves on the beat and says so'),
-  tag('building', 'motion', 'building', 'Accumulates somewhere rather than cycling'),
-  tag('twitchy', 'motion', 'twitchy', 'Follows the raw meter; nervous'),
-  tag('repetitive', 'motion', 'repetitive', 'The same gesture past the point of reading as a loop'),
-  tag('musical', 'motion', 'musical', 'Motion that reads as phrasing rather than as a meter'),
+  describe('still', 'motion', 'still', 'Holds; change is the exception'),
+  describe('breathing', 'motion', 'breathing', 'Swells and settles on an envelope'),
+  describe('rhythmic', 'motion', 'rhythmic', 'Moves on the beat and says so'),
+  describe('building', 'motion', 'building', 'Accumulates somewhere rather than cycling'),
+  describe('twitchy', 'motion', 'twitchy', 'Follows the raw meter; nervous'),
+  describe('repetitive', 'motion', 'repetitive', 'The same gesture past the point of reading as a loop'),
+  praise('musical', 'motion', 'musical', 'Motion that reads as phrasing rather than as a meter'),
+  fault('too-twitchy', 'motion', 'too twitchy', 'Meter noise passed straight to the eye'),
+  fault('too-fast', 'motion', 'too fast', 'Outruns the eye; nothing lands'),
+  fault('seizure-risk', 'motion', 'seizure risk', 'Flashing in the photosensitive band; unsafe to put on a wall'),
 
-  tag('set-forward', 'relationship', 'set-forward', 'The set is the picture; the flow frames it'),
-  tag('loosely-reactive', 'relationship', 'loosely reactive', 'Hears the set without depending on it'),
-  tag('autonomous', 'relationship', 'autonomous', 'Ignores the set, and means to'),
-  tag('reads-energy', 'relationship', 'reads energy', 'Level changes read on the wall'),
-  tag('obscures', 'relationship', 'obscures the performance', 'Buries what the players are doing'),
+  describe('set-forward', 'reactivity', 'set-forward', 'The set is the picture; the flow frames it'),
+  describe('loosely-reactive', 'reactivity', 'loosely reactive', 'Hears the set without depending on it'),
+  describe('autonomous', 'reactivity', 'autonomous', 'Ignores the set, and means to'),
+  praise('reads-energy', 'reactivity', 'reads energy', 'Level changes read on the wall'),
+  fault('obscures', 'reactivity', 'obscures the performance', 'Buries what the players are doing'),
+  fault('silence-blind', 'reactivity', 'disappears in silence', 'Nothing playing leaves nothing showing'),
+  fault('beat-blind', 'reactivity', 'fights the beat', 'Moves against the tempo in a way that reads as wrong'),
 
-  tag('clear-focus', 'composition', 'clear focus', 'One thing to look at, found immediately'),
-  tag('layered', 'composition', 'layered', 'Depths that read as depths'),
-  tag('immersive', 'composition', 'immersive', 'Fills the frame as a field rather than a figure'),
-  tag('balanced', 'composition', 'balanced', 'Weight sits where it should'),
-  tag('muddy', 'composition', 'muddy', 'Mixes to grey; edges lost'),
-  tag('flat', 'composition', 'flat', 'No depth where depth was wanted'),
-  tag('harsh', 'composition', 'harsh', 'Contrast or strobe past what a room enjoys'),
-  tag('projector-readable', 'composition', 'projector-readable', 'Survives a cheap lamp and ambient light'),
+  describe('layered', 'composition', 'layered', 'Depths that read as depths'),
+  describe('immersive', 'composition', 'immersive', 'Fills the frame as a field rather than a figure'),
+  praise('clear-focus', 'composition', 'clear focus', 'One thing to look at, found immediately'),
+  praise('balanced', 'composition', 'balanced', 'Weight sits where it should'),
+  praise('projector-readable', 'composition', 'projector-readable', 'Survives a cheap lamp and ambient light'),
+  fault('muddy', 'composition', 'muddy', 'Mixes to grey; edges lost'),
+  fault('flat', 'composition', 'flat', 'No depth where depth was wanted'),
+  fault('harsh', 'composition', 'harsh', 'Contrast or strobe past what a room enjoys'),
+  fault('too-dark', 'composition', 'too dark', 'Reads as a dark screen on a lamp'),
 
-  tag('background', 'use', 'background', 'Runs long behind the music without demanding'),
-  tag('transition', 'use', 'transition', 'A bridge between two things that both read'),
-  tag('peak', 'use', 'peak', 'For the loudest minute in the set'),
-  tag('interlude', 'use', 'interlude', 'A rest the room can feel'),
-  tag('wildcard', 'use', 'wildcard', 'Kept for the moment nobody can plan'),
-  tag('nesting', 'use', 'good for nesting', 'Stronger as a part than as a whole'),
+  praise('distinctive', 'piece', 'distinctive', 'Not a thing the library already has'),
+  praise('coherent', 'piece', 'coherent', 'Its parts belong to one idea'),
+  praise('surprising', 'piece', 'surprising', 'Did something the recipe did not promise'),
+  praise('beautiful', 'piece', 'beautiful', 'The looks alone would keep it'),
+  praise('economical', 'piece', 'economical', 'A small graph doing a lot'),
+  praise('versatile', 'piece', 'versatile', 'Would read in most rooms, not just this one'),
+  praise('sustains', 'piece', 'sustains', 'Still good on the third minute'),
+  fault('generic', 'piece', 'generic', 'Any roll could have made it'),
+  fault('gimmicky', 'piece', 'gimmicky', 'One trick, and the trick is the whole flow'),
+  fault('one-moment', 'piece', 'only one good moment', 'A single alignment carries it'),
+  fault('expensive', 'piece', 'too expensive', 'Costs GPU beyond what the picture repays'),
+  fault('broken', 'piece', 'broken', 'Not a look; a malfunction'),
+  fault('fragile', 'piece', 'fragile', 'Works in this room and would break in another'),
+  fault('overbuilt', 'piece', 'overbuilt', 'More graph than the idea needs'),
 
-  tag('distinctive', 'reason', 'distinctive', 'Not a thing the library already has'),
-  tag('coherent', 'reason', 'coherent', 'Its parts belong to one idea'),
-  tag('surprising', 'reason', 'surprising', 'Did something the recipe did not promise'),
-  tag('generic', 'reason', 'generic', 'Any roll could have made it'),
-  tag('gimmicky', 'reason', 'gimmicky', 'One trick, and the trick is the whole flow'),
-  tag('too-dark', 'reason', 'too dark', 'Reads as a dark screen on a lamp'),
-  tag('silence-blind', 'reason', 'disappears in silence', 'Nothing playing leaves nothing showing'),
-  tag('one-moment', 'reason', 'only one good moment', 'A single alignment carries it'),
-  tag('expensive', 'reason', 'too expensive', 'Costs GPU beyond what the picture repays'),
+  describe('background', 'use', 'background', 'Runs long behind the music without demanding'),
+  describe('transition', 'use', 'transition', 'A bridge between two things that both read'),
+  describe('peak', 'use', 'peak', 'For the loudest minute in the set'),
+  describe('interlude', 'use', 'interlude', 'A rest the room can feel'),
+  describe('wildcard', 'use', 'wildcard', 'Kept for the moment nobody can plan'),
+  describe('nesting', 'use', 'good for nesting', 'Stronger as a part than as a whole'),
 ];
 
 export const TAG_BY_ID: ReadonlyMap<string, LabTag> = new Map(TAGS.map((t) => [t.id, t]));
-
-/** The categories whose tags describe the thing rather than judge it. */
-const DESCRIPTIVE: readonly TagCategory[] = ['character', 'motion', 'relationship'];
 
 // --- the submit rules -----------------------------------------------------
 
@@ -147,8 +179,10 @@ const DESCRIPTIVE: readonly TagCategory[] = ['character', 'motion', 'relationshi
  *
  * One function for the button and for the server, so the UI can never learn a
  * different rule from the one the store enforces. Evidence without force-fed
- * answers: every review needs a score and two descriptive tags; the reasons a
- * score demands depend on which score it is.
+ * answers: every review needs a score and two tags that describe rather than
+ * judge; what else the score demands depends on which score it is, and only a
+ * tag's own polarity satisfies it — a neutral tag stamped `helped` records
+ * taste about a quality, never the case for the score.
  */
 export function submissionProblems(submission: {
   score: LabScore | null;
@@ -158,28 +192,29 @@ export function submissionProblems(submission: {
   const { score, tags } = submission;
   if (score === null) problems.push('a review requires a score');
 
-  const known = tags.filter((each) => TAG_BY_ID.get(each.id));
-  const describing = known.filter((each) =>
-    DESCRIPTIVE.includes(TAG_BY_ID.get(each.id)!.category),
+  const known = tags
+    .map((each) => TAG_BY_ID.get(each.id))
+    .filter((each): each is LabTag => each !== undefined);
+  const describing = known.filter(
+    (each) => each.polarity === 'neutral' && each.category !== 'use',
   );
   if (describing.length < 2) {
-    problems.push('at least two tags from character, motion or relationship');
+    problems.push('at least two tags that describe rather than judge');
   }
 
-  const reasons = known.filter((each) => TAG_BY_ID.get(each.id)!.category === 'reason');
-  const helped = reasons.some((each) => each.effect === 'helped');
-  const hurt = reasons.some((each) => each.effect === 'hurt');
-  const uses = known.some((each) => TAG_BY_ID.get(each.id)!.category === 'use');
+  const praised = known.some((each) => each.polarity === 'praise');
+  const faulted = known.some((each) => each.polarity === 'fault');
+  const uses = known.some((each) => each.category === 'use');
 
   if (score !== null && score >= 4) {
-    if (!helped) problems.push('a 4 or 5 needs a reason that helped');
+    if (!praised) problems.push('a 4 or 5 needs something praised');
     if (!uses) problems.push('a 4 or 5 needs an intended use');
   }
-  if (score !== null && score <= 2 && !hurt) {
-    problems.push('a 1 or 2 needs a reason it failed');
+  if (score !== null && score <= 2 && !faulted) {
+    problems.push('a 1 or 2 needs a fault named');
   }
-  if (score === 3 && !helped && !hurt) {
-    problems.push('a 3 needs at least one reason, either way');
+  if (score === 3 && !praised && !faulted) {
+    problems.push('a 3 needs a praise or a fault');
   }
   return problems;
 }

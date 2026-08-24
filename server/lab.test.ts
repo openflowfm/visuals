@@ -58,7 +58,7 @@ const judgment = (candidateId: string, room: LabRoom, score: 1 | 2 | 3 | 4 | 5):
     score >= 4
       ? [
           { id: 'geometric', effect: 'neutral' },
-          { id: 'musical', effect: 'neutral' },
+          { id: 'breathing', effect: 'neutral' },
           { id: 'distinctive', effect: 'helped' },
           { id: 'peak', effect: 'neutral' },
         ]
@@ -108,9 +108,9 @@ describe('the store', () => {
     expect(held[0].score).toBe(4);
     expect(held[0].room).toEqual(room);
     expect(held[0].tags.map((t) => t.id).sort()).toEqual([
+      'breathing',
       'distinctive',
       'geometric',
-      'musical',
       'peak',
     ]);
     expect(again.candidate('c-one')?.flow.name).toBe('Candidate c-one');

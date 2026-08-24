@@ -10,6 +10,7 @@ import type {
 } from '../../protocol.ts';
 import {
   SCORES,
+  TAG_BY_ID,
   TAG_CATEGORIES,
   TAGS,
   dealRoom,
@@ -139,12 +140,18 @@ export function ReviewView({
     setJudging((held) => (held.room ? { ...held, room: { ...held.room, ...patch } } : held));
   };
 
+  // A praise or fault tag lands already stamped — its polarity is its effect,
+  // and the strip below offers no toggle for it. Only a neutral tag arrives
+  // undecided, waiting on the reviewer's call.
   const toggleTag = (id: string) => {
+    const polarity = TAG_BY_ID.get(id)?.polarity;
+    const stamped: LabEffect =
+      polarity === 'praise' ? 'helped' : polarity === 'fault' ? 'hurt' : 'neutral';
     setJudging((held) => ({
       ...held,
       tags: held.tags.some((each) => each.id === id)
         ? held.tags.filter((each) => each.id !== id)
-        : [...held.tags, { id, effect: 'neutral' as LabEffect }],
+        : [...held.tags, { id, effect: stamped }],
     }));
   };
 
@@ -284,25 +291,31 @@ export function ReviewView({
           <section className="review-chosen">
             <h3>this review says</h3>
             {judging.tags.map((each) => {
-              const tag = TAGS.find((held) => held.id === each.id)!;
+              const tag = TAG_BY_ID.get(each.id)!;
               return (
                 <div key={each.id} className="review-said">
                   <span className="review-said-label">{tag.label}</span>
-                  <span className="review-effect" role="radiogroup" aria-label={`${tag.label} effect`}>
-                    {(['hurt', 'neutral', 'helped'] as const).map((effect) => (
-                      <button
-                        key={effect}
-                        type="button"
-                        role="radio"
-                        aria-checked={each.effect === effect}
-                        data-on={each.effect === effect ? '' : undefined}
-                        title={effect}
-                        onClick={() => setEffect(each.id, effect)}
-                      >
-                        {effect === 'hurt' ? '−' : effect === 'helped' ? '+' : '·'}
-                      </button>
-                    ))}
-                  </span>
+                  {tag.polarity === 'neutral' ? (
+                    <span className="review-effect" role="radiogroup" aria-label={`${tag.label} effect`}>
+                      {(['hurt', 'neutral', 'helped'] as const).map((effect) => (
+                        <button
+                          key={effect}
+                          type="button"
+                          role="radio"
+                          aria-checked={each.effect === effect}
+                          data-on={each.effect === effect ? '' : undefined}
+                          title={effect}
+                          onClick={() => setEffect(each.id, effect)}
+                        >
+                          {effect === 'hurt' ? '−' : effect === 'helped' ? '+' : '·'}
+                        </button>
+                      ))}
+                    </span>
+                  ) : (
+                    <span className="review-effect-fixed" title={tag.polarity}>
+                      {tag.polarity === 'praise' ? '+' : '−'}
+                    </span>
+                  )}
                 </div>
               );
             })}
@@ -336,6 +349,7 @@ export function ReviewView({
                       type="button"
                       className="review-chip"
                       data-on={chosen.has(tag.id) ? '' : undefined}
+                      data-polarity={tag.polarity === 'neutral' ? undefined : tag.polarity}
                       title={tag.description}
                       onClick={() => toggleTag(tag.id)}
                     >

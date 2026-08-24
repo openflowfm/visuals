@@ -125,16 +125,22 @@ describe('the submit rules', () => {
     ).toEqual([]);
   });
 
-  it('composition and use tags do not count as descriptive', () => {
+  it('polar and use tags do not count as descriptive', () => {
     const problems = submissionProblems({
       score: 3 as LabScore,
       tags: tags(['muddy', 'hurt'], ['background', 'neutral'], ['coherent', 'helped']),
     });
-    expect(problems.some((p) => p.includes('character, motion or relationship'))).toBe(true);
+    expect(problems.some((p) => p.includes('describe'))).toBe(true);
+    expect(
+      submissionProblems({
+        score: 3 as LabScore,
+        tags: tags(['layered', 'neutral'], ['immersive', 'neutral'], ['muddy', 'hurt']),
+      }),
+    ).toEqual([]);
   });
 
-  it('a 4 or 5 needs a helping reason and a use', () => {
-    const described = tags(['geometric', 'neutral'], ['musical', 'helped']);
+  it('a 4 or 5 needs a praise and a use', () => {
+    const described = tags(['geometric', 'neutral'], ['breathing', 'neutral']);
     expect(submissionProblems({ score: 4 as LabScore, tags: described })).toHaveLength(2);
     expect(
       submissionProblems({
@@ -144,7 +150,16 @@ describe('the submit rules', () => {
     ).toEqual([]);
   });
 
-  it('a 1 or 2 needs a reason it failed', () => {
+  it('only polarity satisfies a score, never a stamped effect', () => {
+    expect(
+      submissionProblems({
+        score: 4 as LabScore,
+        tags: tags(['geometric', 'helped'], ['breathing', 'helped'], ['peak', 'neutral']),
+      }),
+    ).toEqual(['a 4 or 5 needs something praised']);
+  });
+
+  it('a 1 or 2 needs a fault named', () => {
     const described = tags(['chaotic', 'neutral'], ['twitchy', 'hurt']);
     expect(submissionProblems({ score: 1 as LabScore, tags: described })).toHaveLength(1);
     expect(
@@ -155,7 +170,7 @@ describe('the submit rules', () => {
     ).toEqual([]);
   });
 
-  it('a 3 needs a reason either way', () => {
+  it('a 3 needs a praise or a fault', () => {
     const described = tags(['organic', 'neutral'], ['breathing', 'neutral']);
     expect(submissionProblems({ score: 3 as LabScore, tags: described })).toHaveLength(1);
     expect(

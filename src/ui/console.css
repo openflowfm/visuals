@@ -1467,6 +1467,12 @@
   color: var(--amber);
 }
 
+.review-effect-fixed {
+  width: 70px;
+  text-align: center;
+  color: var(--caption);
+}
+
 .review-tags input {
   border: 1px solid var(--bd3);
   border-radius: var(--radius-xs);
@@ -1497,6 +1503,19 @@
 
 .review-chip:hover {
   border-color: var(--focus);
+}
+
+.review-chip[data-polarity]::before {
+  margin-right: 4px;
+  color: var(--caption);
+}
+
+.review-chip[data-polarity='praise']::before {
+  content: '+';
+}
+
+.review-chip[data-polarity='fault']::before {
+  content: '−';
 }
 
 .review-chip[data-on] {
