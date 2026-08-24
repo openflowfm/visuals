@@ -281,14 +281,14 @@ promoted graph is parked under one reused throwaway id, and clicking through for
 leaves one probe program alive. An id per node would compile just as correctly and leak one
 program each, because nothing would ever come back to delete them.
 
-**The room is one group behind one choice.** The designer already ran on [its own
-clock](clock.md), and that argument does not stop at the beat: if *Ableton running* must not be
-a precondition for drawing a picture, neither must a chorus being played in F# minor with the
-third colourway up. Each of those is a number a node reads, each changes what a flow does, and
-each used to be reachable only by waiting for a rehearsal to arrive at it. Play, restart and
-tempo stay in the header because they are used while wiring; **desk** opens energy, section,
-colourway and key without making a second toolbar out of four occasional settings. `useRoom`
-hands the compositor the `Show` they add up to.
+**The room is one compact group.** The designer already ran on [its own clock](clock.md), and
+that argument does not stop at the beat: if *Ableton running* must not be a precondition for
+drawing a picture, neither must a chorus being played in F# minor with the third colourway up.
+Each of those is a number a node reads, each changes what a flow does, and each used to be
+reachable only by waiting for a rehearsal to arrive at it. Play, restart, tempo, energy,
+section, colourway and key sit in one aligned run in the header; `useRoom` hands the compositor
+the `Show` they add up to. Nothing is hidden behind another interaction, and nothing makes a
+second toolbar.
 
 **Desk or room, not one switch per fact.** Choosing **room** is the transport's own
 `following`, widened from the clock to everything beside it. A half-followed room is a state
@@ -306,9 +306,9 @@ it has on stage.
 
 There is **one header**. View and scheme are global on the left; the design view uses the
 middle for its containment trail and editable flow name, and the right for the compact preview
-clock and desk/room choice. Counts of flows, nodes, songs and overrides are absent: they do not
-identify a place, perform an action or warn about a problem, and giving them header weight made
-the actions harder to find.
+room and its desk/room source. Counts of flows, nodes, songs and overrides are absent: they do
+not identify a place, perform an action or warn about a problem, and giving them header weight
+made the actions harder to find.
 
 The header names the open scheme, and the name wears an amber dot when the screen holds
 edits its file does not — that distance is the whole subject. `save` sits beside it, lit

@@ -38,7 +38,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 38px;
+  min-height: 42px;
   padding: 5px 10px;
   border-bottom: 1px solid var(--edge);
   background: var(--panel);
@@ -117,107 +117,75 @@
 
 .console-head .preview-controls {
   display: flex;
-  align-items: center;
-  gap: 3px;
+  align-items: flex-end;
+  gap: 6px;
+  padding-left: 9px;
+  border-left: 1px solid var(--rule);
 }
 
-.console-head .preview-controls > .wdg-button .wdg-button-body {
+.console-head .clock-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding-right: 6px;
+  border-right: 1px solid var(--rule);
+}
+
+.console-head .clock-actions .wdg-button-body {
   min-width: 24px;
   padding-right: 5px;
   padding-left: 5px;
 }
 
-.console-head .conditions {
-  position: relative;
+.console-head .preview-controls > .wdg > .wdg-caption,
+.console-head .room-source > .wdg-caption {
+  font-size: 7.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
-.console-head .conditions-toggle {
-  height: var(--wdg-field-height);
-  min-width: 58px;
-  border: 1px solid var(--bd3);
-  border-radius: var(--radius-xs);
-  background: var(--surface-control);
-  color: var(--ui);
-  font: inherit;
-  padding: 0 7px;
-  cursor: pointer;
-}
-
-.console-head .conditions-toggle:hover,
-.console-head .conditions-toggle[data-on] {
-  border-color: var(--focus);
-  color: var(--fg);
-}
-
-.console-head .conditions-toggle span {
-  margin-left: 3px;
-  color: var(--caption);
-}
-
-.console-head .conditions-panel {
-  position: absolute;
-  top: calc(100% + 7px);
-  right: 0;
-  z-index: 30;
-  width: 300px;
-  padding: 10px;
-  border: 1px solid var(--bd3);
-  border-radius: var(--radius-md);
-  background: var(--panel);
-  box-shadow: 0 8px 26px rgb(0 0 0 / 55%);
-}
-
-.console-head .condition-source {
+.console-head .room-source {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding-bottom: 9px;
-  border-bottom: 1px solid var(--rule);
+  gap: var(--wdg-gap);
+  padding-left: 8px;
+  border-left: 1px solid var(--rule);
 }
 
-.console-head .condition-source > div {
+.console-head .room-source-body {
   display: inline-flex;
   border: 1px solid var(--bd3);
   border-radius: var(--radius-xs);
   overflow: hidden;
 }
 
-.console-head .condition-source button {
-  height: 21px;
+.console-head .room-source button {
+  height: calc(var(--wdg-field-height) - 2px);
   border: 0;
-  background: var(--well);
+  background: transparent;
   color: var(--caption);
   font: inherit;
-  padding: 0 9px;
+  padding: 0 7px;
   cursor: pointer;
 }
 
-.console-head .condition-source button + button {
+.console-head .room-source button + button {
   border-left: 1px solid var(--bd3);
 }
 
-.console-head .condition-source button[data-on] {
+.console-head .room-source button[data-on] {
   background: var(--surface-control);
   color: var(--amber);
 }
 
-.console-head .condition-source button:disabled {
+.console-head .room-source button:hover:not(:disabled):not([data-on]) {
+  color: var(--fg);
+}
+
+.console-head .room-source button:disabled {
   color: var(--idle);
   cursor: default;
-}
-
-.console-head .condition-fields {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  align-items: end;
-  gap: 10px;
-  padding-top: 10px;
-}
-
-.console-head .conditions-panel p {
-  margin: 10px 0 0;
-  color: var(--caption);
-  font: 10px/1.45 var(--sans);
 }
 
 .setview .song .who {

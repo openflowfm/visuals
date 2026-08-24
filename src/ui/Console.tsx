@@ -144,7 +144,7 @@ export function Console({
   );
 }
 
-/** The small part of the invented room worth keeping in reach while wiring. */
+/** The whole preview room, one aligned run in the one header. */
 function PreviewControls({
   room,
   transport,
@@ -154,116 +154,111 @@ function PreviewControls({
   transport: Transport;
   canFollow: boolean;
 }) {
-  const [open, setOpen] = useState(false);
   const following = room.following;
-  const bpm = Number.isInteger(transport.bpm)
-    ? transport.bpm.toFixed(0)
-    : transport.bpm.toFixed(1);
+  const tempo = following ? room.show.tempo : transport.bpm;
+  const energy = following ? room.show.master : room.energy;
+  const section = following ? room.show.role : room.section;
+  const colorway = following ? room.show.colorway : room.colorway;
+  const sectionItems = following && section === null ? ['—'] : room.sections;
+  const colorwayItems = following && colorway === null ? ['—'] : room.colorways;
+  const keyItems = following && room.show.key === null ? ['—'] : KEYS;
+  const keyAt =
+    following && room.show.key !== null
+      ? Math.round(room.show.key * KEYS.length) % KEYS.length
+      : room.keyAt;
+  const playing = following ? room.show.playing : transport.playing;
+  const bpm = Number.isInteger(tempo) ? tempo.toFixed(0) : tempo.toFixed(1);
 
   return (
     <div className="preview-controls">
-      <Button
-        tone="quiet"
-        label={transport.playing ? 'Stop the preview clock' : 'Play the preview clock'}
-        title={following ? 'The room owns the clock' : undefined}
-        onPress={() => transport.setPlaying(!transport.playing)}
-        disabled={following}
-      >
-        {transport.playing ? '■' : '▶'}
-      </Button>
-      <Button
-        tone="quiet"
-        label="Back to the top of the bar"
-        onPress={transport.restart}
-        disabled={following}
-      >
-        ↺
-      </Button>
+      <div className="clock-actions">
+        <Button
+          tone="quiet"
+          label={playing ? 'Stop the preview clock' : 'Play the preview clock'}
+          title={following ? 'The room owns the clock' : undefined}
+          onPress={() => transport.setPlaying(!transport.playing)}
+          disabled={following}
+        >
+          {playing ? '■' : '▶'}
+        </Button>
+        <Button
+          tone="quiet"
+          label="Back to the top of the bar"
+          onPress={transport.restart}
+          disabled={following}
+        >
+          ↺
+        </Button>
+      </div>
       <NumberField
         param={BPM}
-        value={transport.bpm}
+        value={tempo}
         onChange={transport.setBpm}
-        name=""
+        name="tempo"
         label="Preview tempo"
         display={`${bpm} bpm`}
         width={62}
         disabled={following}
       />
-      <div className="conditions">
-        <button
-          type="button"
-          className="conditions-toggle"
-          data-on={open ? '' : undefined}
-          aria-expanded={open}
-          onClick={() => setOpen((was) => !was)}
-        >
-          {following ? 'room' : 'desk'} <span aria-hidden="true">⌄</span>
-        </button>
-        {open && (
-          <div className="conditions-panel">
-            <div className="condition-source">
-              <span className="cap">source</span>
-              <div>
-                <button
-                  type="button"
-                  data-on={!following ? '' : undefined}
-                  onClick={() => transport.setFollowing(false)}
-                >
-                  desk
-                </button>
-                <button
-                  type="button"
-                  data-on={following ? '' : undefined}
-                  disabled={!canFollow}
-                  title={
-                    canFollow ? 'Use the real show' : 'Nothing to follow — no bridge is connected'
-                  }
-                  onClick={() => transport.setFollowing(true)}
-                >
-                  room
-                </button>
-              </div>
-            </div>
-            {following ? (
-              <p>The real show supplies the clock, energy, section, colourway and key.</p>
-            ) : (
-              <div className="condition-fields">
-                <NumberField
-                  param={ENERGY}
-                  value={PERCENT.to(room.energy)}
-                  onChange={(value) => room.setEnergy(PERCENT.from(value))}
-                  name="energy"
-                />
-                <Select
-                  items={room.sections}
-                  index={Math.max(0, room.sections.indexOf(room.section))}
-                  onChange={(at) => room.setSection(room.sections[at])}
-                  name="section"
-                  width={104}
-                  disabled={room.sections.length === 0}
-                  title="What a `song section` node reports"
-                />
-                <Select
-                  items={room.colorways}
-                  index={Math.max(0, room.colorways.indexOf(room.colorway))}
-                  onChange={(at) => room.setColorway(room.colorways[at])}
-                  name="colourway"
-                  width={110}
-                  disabled={room.colorways.length === 0}
-                  title="What `paint` and the set's own tracks draw from"
-                />
-                <Select
-                  items={KEYS}
-                  index={room.keyAt}
-                  onChange={room.setKeyAt}
-                  name="key"
-                  width={58}
-                  title="What a `song key` node reports"
-                />
-              </div>
-            )}
-          </div>
-        )}
+      <NumberField
+        param={ENERGY}
+        value={PERCENT.to(energy)}
+        onChange={(value) => room.setEnergy(PERCENT.from(value))}
+        name="energy"
+        width={48}
+        disabled={following}
+      />
+      <Select
+        items={sectionItems}
+        index={Math.max(0, sectionItems.indexOf(section ?? '—'))}
+        onChange={(at) => room.setSection(room.sections[at])}
+        name="section"
+        width={104}
+        disabled={following || room.sections.length === 0}
+        title="What a `song section` node reports"
+      />
+      <Select
+        items={colorwayItems}
+        index={Math.max(0, colorwayItems.indexOf(colorway ?? '—'))}
+        onChange={(at) => room.setColorway(room.colorways[at])}
+        name="colourway"
+        width={110}
+        disabled={following || room.colorways.length === 0}
+        title="What `paint` and the set's own tracks draw from"
+      />
+      <Select
+        items={keyItems}
+        index={keyAt}
+        onChange={room.setKeyAt}
+        name="key"
+        width={58}
+        disabled={following}
+        title="What a `song key` node reports"
+      />
+      <div className="room-source">
+        <span className="wdg-caption">source</span>
+        <div className="room-source-body" role="radiogroup" aria-label="Preview source">
+          <button
+            type="button"
+            role="radio"
+            aria-checked={!following}
+            data-on={!following ? '' : undefined}
+            onClick={() => transport.setFollowing(false)}
+          >
+            desk
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={following}
+            data-on={following ? '' : undefined}
+            disabled={!canFollow}
+            title={canFollow ? 'Use the real show' : 'Nothing to follow — no bridge is connected'}
+            onClick={() => transport.setFollowing(true)}
+          >
+            room
+          </button>
+        </div>
       </div>
     </div>
   );
