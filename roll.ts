@@ -27,7 +27,7 @@ import { GRADE_MODES, LENS_MODES, SOURCES } from './protocol.ts';
  */
 
 /** xmur3 into mulberry32: short, fast, and identical everywhere it runs. */
-function seeded(seed: string): () => number {
+export function seeded(seed: string): () => number {
   let h = 1779033703 ^ seed.length;
   for (let i = 0; i < seed.length; i++) {
     h = Math.imul(h ^ seed.charCodeAt(i), 3432918353);
@@ -166,7 +166,7 @@ function evenly(hue: number, l: number): number {
  * generator draw from `colors[0]`, so the palette's loudest member is the one a
  * flow that ignores the set is made of.
  */
-function palette(rng: Rng): string[] {
+export function palette(rng: Rng): string[] {
   const base = rng() * 360;
   const harmony = pick(rng, HARMONIES);
   const far = harmony.reduce(

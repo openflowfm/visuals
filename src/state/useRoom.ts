@@ -83,7 +83,7 @@ export const KEYS: readonly string[] = [
 export const SECTIONS: readonly string[] = ['BRIDGE', 'CHORUS', 'INTRO', 'JAM', 'OUTRO', 'VERSE'];
 
 /** Hex, `#rrggbb` or `#rgb`, to the packed integer the renderer wants. */
-function packColor(text: string): number {
+export function packColor(text: string): number {
   const clean = text.trim().replace(/^#/, '');
   const full = clean.length === 3 ? clean.replace(/./g, '$&$&') : clean;
   const value = Number.parseInt(full, 16);

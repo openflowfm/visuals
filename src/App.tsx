@@ -38,6 +38,10 @@ export function App() {
     loadScheme,
     downbeat,
     nextFlow,
+    lab,
+    labOpen,
+    labReview,
+    labSkip,
     clock,
     online,
   } = useShow();
@@ -271,6 +275,10 @@ export function App() {
           saveScheme={saveScheme}
           saveSchemeAs={saveSchemeAs}
           loadScheme={loadScheme}
+          lab={lab}
+          labOpen={labOpen}
+          labReview={labReview}
+          labSkip={labSkip}
           clock={clock}
           onClose={() => setEditing(false)}
         />

@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Down, Library, MediaAsset, Scheme, SetGrid, Show } from '../../protocol.ts';
+import type {
+  Down,
+  LabState,
+  LabSubmission,
+  Library,
+  MediaAsset,
+  Scheme,
+  SetGrid,
+  Show,
+} from '../../protocol.ts';
 
 /**
  * The connection to the visuals server, and the clock the renderer runs on.
@@ -85,6 +94,14 @@ export function useShow(): {
   downbeat(): void;
   /** Turn only the flow wheel once, for every screen attached to the server. */
   nextFlow(): void;
+  /** The review queue, or null until the review view has asked for it. */
+  lab: LabState | null;
+  /** Ask for the queue's state. The one thing that makes the server deal. */
+  labOpen(): void;
+  /** One judgment, whole. The server answers with the advanced queue. */
+  labReview(review: LabSubmission): void;
+  /** "I did not judge this." Never a score. */
+  labSkip(candidateId: string): void;
   clock: Clock;
   online: boolean;
 } {
@@ -93,6 +110,7 @@ export function useShow(): {
   const [library, setLibrary] = useState<Library | null>(null);
   const [media, setMedia] = useState<MediaAsset[]>([]);
   const [grid, setGrid] = useState<SetGrid | null>(null);
+  const [lab, setLab] = useState<LabState | null>(null);
   const [online, setOnline] = useState(false);
   const live = useRef<WebSocket | null>(null);
 
@@ -144,6 +162,11 @@ export function useShow(): {
         }
         if (message.kind === 'media') {
           setMedia(message.assets);
+          return;
+        }
+        if (message.kind === 'lab') {
+          const { kind: _, ...state } = message;
+          setLab(state);
           return;
         }
         if (message.kind === 'anchor') {
@@ -243,6 +266,25 @@ export function useShow(): {
     if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ kind: 'next-flow' }));
   }).current;
 
+  const labOpen = useRef(() => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ kind: 'lab-open' }));
+  }).current;
+
+  const labReview = useRef((review: LabSubmission) => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'lab-review', review }));
+    }
+  }).current;
+
+  const labSkip = useRef((candidateId: string) => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'lab-skip', candidateId }));
+    }
+  }).current;
+
   return {
     show,
     showRef: held,
@@ -256,6 +298,10 @@ export function useShow(): {
     loadScheme,
     downbeat,
     nextFlow,
+    lab,
+    labOpen,
+    labReview,
+    labSkip,
     clock,
     online,
   };

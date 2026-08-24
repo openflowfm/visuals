@@ -22,7 +22,8 @@ Live ─ SessionBridge :17800 ─WS─> visuals server :17900 ─WS─> browser 
 | [the clock](docs/clock.md) | Link, tempo, the beat, why the browser extrapolates, the native addon | `server/link.ts`, `src/state/useShow.ts`, `tools/build-link.ts` |
 | [flows](docs/flows.md) | **the one noun**, the node vocabulary, the compiler, the designer | `protocol.ts`, `src/render/circuit.ts`, `src/ui/Designer.tsx` |
 | [the wheel](docs/wheel.md) | what is on screen and why, song overrides, the scheme file, the roll | `resolve.ts`, `server/show.ts`, `server/scheme.ts`, `roll.ts` |
-| [the console](docs/console.md) | the two views, and what the three views before them were for | `src/ui/Console.tsx`, `Designer.tsx`, `SetView.tsx` |
+| [the console](docs/console.md) | the three views, and what the views before them were for | `src/ui/Console.tsx`, `Designer.tsx`, `SetView.tsx` |
+| [the lab](docs/lab.md) | judging generated flows, the taste corpus, the method boundary | `lab.ts`, `server/lab.ts`, `src/ui/ReviewView.tsx` |
 | [the renderer](docs/render.md) | the two passes, blending, fill rate, **pointing a projector** | `src/render/*` |
 | [the harness](docs/harness.md) | working on this with no Ableton, and the Link safety rule | `tools/fake-live.ts` |
 | [agent authoring](docs/mcp.md) | the MCP tools for reading nodes, validating and saving flows, and reviewing node designs | `mcp/*` |
@@ -107,12 +108,13 @@ without the bridge noticing.
 ## Customising it
 
 Press **`e`** in the app for the console, over the picture so you can work on a flow while
-one is on screen. Two views:
+one is on screen. Three views:
 
 | view | the question | the scale |
 |---|---|---|
 | **design** | what is worth putting on a wall | one flow |
 | **set** | what turns through them, and what says otherwise | the set |
+| **review** | is this generated flow any good, and why | one candidate |
 
 **Design is the product.** A canvas, a library of the flows you have made, and a browser of
 every node there is — the node is the row and its presets open under it, the way a device
@@ -123,6 +125,12 @@ nobody builds.
 **Set is what is left above the graph.** The wheel that turns through your flows and
 colourways, and the handful of songs that want to pin one instead. Most songs should have
 nothing there.
+
+**Review is where generated flows get judged.** One candidate at a time through the real
+compositor, under an invented, reproducible room — no Ableton, no Link, no bridge. An
+anchored score, tags that say why, and a corpus that keeps every judgment; promoting a
+keeper copies it into the open scheme through the ordinary edit-and-save path. See
+[the lab](docs/lab.md).
 
 Every name either view offers — songs, tracks, flows — comes from **the set** or from what
 you made, so it never asks you to type one.

@@ -94,6 +94,27 @@ export function schemeFile(legacy?: string): string {
   return schemePlace(legacy).file;
 }
 
+export interface LabPlace {
+  /** The evidence database. */
+  file: string;
+  /** Content-addressed render artifacts, beside it. */
+  artifacts: string;
+}
+
+/**
+ * Where the lab's evidence lives, made ready.
+ *
+ * Under `OPENFLOW_HOME` and deliberately *not* under `OPENFLOW_VISUALS_SCHEME`:
+ * that variable pins one scheme file, and a judgment corpus is not a scheme —
+ * pointing the rig at a scratch scheme must not orphan months of reviews.
+ */
+export function labPlace(): LabPlace {
+  const home = path.join(openflowHome(), 'visuals');
+  const artifacts = path.join(home, 'lab-artifacts');
+  fs.mkdirSync(artifacts, { recursive: true });
+  return { file: path.join(home, 'lab.sqlite3'), artifacts };
+}
+
 /** A path with the home directory spelled `~`, for logs meant to be read. */
 export function shown(file: string): string {
   const home = os.homedir();

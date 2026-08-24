@@ -1,13 +1,23 @@
 # The console
 
-`src/ui/Console.tsx`, `Designer.tsx`, `SetView.tsx`. Two views over one show.
+`src/ui/Console.tsx`, `Designer.tsx`, `SetView.tsx`, `ReviewView.tsx`. Three views over one
+show.
 
-## Why two, and why these
+## Why three, and why these
 
 | view | the question | the scale |
 |---|---|---|
 | **design** | what is worth putting on a wall | one flow |
 | **set** | what turns through them, and what says otherwise | the set |
+| **review** | is this generated flow any good, and why | one candidate |
+
+**Review is not an editor.** It shows one generated candidate at a time through the same
+compositor the wall uses, under an invented room, and turns the judgment into durable
+evidence — the lab underneath it has [a doc of its own](lab.md). It sits in the console
+because it is a view over the same show the other two serve: what it promotes lands in the
+open scheme through the same `edit`, and its context line lives in the same header. Its
+room controls are its own rather than the header's, because the review room comes frozen
+with the candidate and must never read the open scheme's colourways.
 
 Design is the product. Everything else this app does is arrangements of what gets made
 there, which is why it opens on it and why it has the whole screen. The **vocabulary** is

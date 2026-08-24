@@ -5,7 +5,11 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { VISUALS_PORT, VISUALS_WS_PATH, type Up } from '../protocol.ts';
 import { nextFlow, reOne } from '../resolve.ts';
+import { newSeed } from '../roll.ts';
 import { followBridge } from './bridge.ts';
+import { freshMethod } from './fresh.ts';
+import { labPlace } from './home.ts';
+import { labEngine, openLab, type LabEngine } from './lab.ts';
 import { openLink } from './link.ts';
 import { openLibrary } from './library.ts';
 import { buildShow, noTurning } from './show.ts';
@@ -133,6 +137,30 @@ const sendGrid = (socket: WebSocket) => {
   socket.send(JSON.stringify({ kind: 'grid', grid: buildGrid(bridge.state) }));
 };
 
+/**
+ * The lab, opened the first time a review view asks and never before.
+ *
+ * Lazy because of a rule the lab doc spells: no evaluation work happens merely
+ * because a server is running. A rig that never opens the review view never
+ * opens the database, never deals a candidate, and never learns the lab exists.
+ */
+let lab: LabEngine | null = null;
+const ensureLab = (): LabEngine => {
+  if (lab) return lab;
+  const store = openLab(labPlace().file);
+  const method = freshMethod();
+  // Resuming the newest experiment rather than opening one per boot: the seed
+  // is the deck, and a restart should keep dealing from where it stood.
+  const seed = store.experimentSeed(method.id, method.version) ?? newSeed();
+  lab = labEngine(store, method, seed);
+  return lab;
+};
+
+const sendLab = (state: ReturnType<LabEngine['open']>) => {
+  const wire = JSON.stringify({ kind: 'lab', ...state });
+  for (const socket of clients) if (socket.readyState === socket.OPEN) socket.send(wire);
+};
+
 sockets.on('connection', (socket) => {
   clients.add(socket);
   socket.on('close', () => clients.delete(socket));
@@ -168,6 +196,22 @@ sockets.on('connection', (socket) => {
     if (message.kind === 'next-flow') {
       turning.wheel = nextFlow(turning.wheel);
       dirty = true;
+      return;
+    }
+    // The lab's three gestures. Answered inline rather than on the heartbeat,
+    // because a review queue advancing is the one thing the reviewer is
+    // waiting on — and broadcast to every client, because the queue is the
+    // show's the way the wheel is.
+    if (message.kind === 'lab-open') {
+      sendLab(ensureLab().open());
+      return;
+    }
+    if (message.kind === 'lab-review') {
+      sendLab(ensureLab().submit(message.review));
+      return;
+    }
+    if (message.kind === 'lab-skip') {
+      sendLab(ensureLab().skip(message.candidateId));
       return;
     }
     // Persistence is its own gesture now. An edit changes what every screen
@@ -350,6 +394,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     link.stop();
     scheme.stop();
     bridge.close();
+    lab?.close();
     server.close();
     process.exit(0);
   });

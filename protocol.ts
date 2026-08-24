@@ -571,6 +571,79 @@ export interface SetGrid {
   songs: { name: string; key: string; bpm?: string; tonality?: string; roles: string[] }[];
 }
 
+// --- the lab, which is what the review view is one UI over ---------------
+
+/**
+ * The invented room a candidate is judged under.
+ *
+ * **Colours by value, never by colourway name.** A judgment has to keep
+ * describing the thing it judged, and a name resolved against the open scheme
+ * stops doing that the day the colourway is edited — the same argument that
+ * freezes a candidate's dependency bundle. Everything here is the number the
+ * flow actually read.
+ */
+export interface LabRoom {
+  tempo: number;
+  quantum: number;
+  /** 0–1. What the stand-in set pulses at, and what an unwired energy reads. */
+  energy: number;
+  /** The section reported, and the sorted list it is reported against. */
+  section: string;
+  sections: string[];
+  /** Pitch class over twelve, or null for a room that states none. */
+  key: number | null;
+  /** The palette judged, as `#rrggbb`. */
+  colors: string[];
+  /** What the room was dealt from, so it can be dealt again. */
+  seed: string;
+}
+
+/** One frozen candidate, as the review view receives it. */
+export interface LabCandidate {
+  /** A hash of visual behaviour — see `canonicalCandidate` in `lab.ts`. */
+  id: string;
+  flow: FlowDef;
+  /** Every flow the graph reaches, frozen with it, by the id its cords use. */
+  bundle: Record<string, FlowDef>;
+  method: string;
+  methodVersion: number;
+  /** The seed this candidate was dealt from, within its experiment. */
+  seed: string;
+}
+
+export type LabEffect = 'helped' | 'hurt' | 'neutral';
+
+export type LabScore = 1 | 2 | 3 | 4 | 5;
+
+/** One judgment, exactly as submitted. The raw fact every score derives from. */
+export interface LabSubmission {
+  candidateId: string;
+  /** The room actually judged — the dealt one, or the dealt one adjusted. */
+  room: LabRoom;
+  score: LabScore;
+  tags: { id: string; effect: LabEffect }[];
+  note?: string;
+}
+
+/**
+ * What every console shows about the review queue.
+ *
+ * Server-owned for the reason the wheel is: two screens on one rig are two
+ * views of one queue, not two queues that happen to start together.
+ */
+export interface LabState {
+  candidate: LabCandidate | null;
+  /** The room dealt with the candidate. A console may adjust its copy. */
+  room: LabRoom | null;
+  method: string;
+  reviewed: number;
+  skipped: number;
+  /** Dealt and waiting, this candidate included. */
+  pending: number;
+  /** One sentence when a submit was refused, or null. */
+  notice: string | null;
+}
+
 // --- the wire -----------------------------------------------------------
 
 /**
@@ -617,7 +690,8 @@ export type Down =
   | { kind: 'scheme'; scheme: Scheme }
   | ({ kind: 'library' } & Library)
   | { kind: 'media'; assets: MediaAsset[] }
-  | { kind: 'grid'; grid: SetGrid };
+  | { kind: 'grid'; grid: SetGrid }
+  | ({ kind: 'lab' } & LabState);
 
 /**
  * Browser to server. An edit is the whole scheme, replaced.
@@ -644,7 +718,16 @@ export type Up =
   | { kind: 'save-scheme-as'; id: string }
   | { kind: 'load-scheme'; id: string }
   | { kind: 'downbeat' }
-  | { kind: 'next-flow' };
+  | { kind: 'next-flow' }
+  // The lab speaks three coarse gestures and nothing finer. Opening the review
+  // view asks for the queue's state — and is the only thing that makes the
+  // server deal; nothing is generated merely because a server is running.
+  // A submit and a skip both advance the queue, and they are different
+  // messages because they are different facts: a skip is "I did not judge
+  // this" and must never be recordable as a low score.
+  | { kind: 'lab-open' }
+  | { kind: 'lab-review'; review: LabSubmission }
+  | { kind: 'lab-skip'; candidateId: string };
 
 export const VISUALS_PORT = 17900;
 export const VISUALS_WS_PATH = '/ws';

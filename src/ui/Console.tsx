@@ -1,11 +1,20 @@
 import { useState } from 'react';
-import type { Library, MediaAsset, Scheme, SetGrid, Show } from '../../protocol.ts';
+import type {
+  LabState,
+  LabSubmission,
+  Library,
+  MediaAsset,
+  Scheme,
+  SetGrid,
+  Show,
+} from '../../protocol.ts';
 import '@openflow/widgets/tokens.css';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { NumberField } from '@openflow/widgets/controls/NumberField.tsx';
 import { Select } from '@openflow/widgets/controls/Select.tsx';
 import { Segmented } from '@openflow/widgets/controls/Segmented.tsx';
 import { Designer } from './Designer.tsx';
+import { ReviewView } from './ReviewView.tsx';
 import { SetView } from './SetView.tsx';
 import { flowList, renameFlow } from './edits.ts';
 import { BPM, ENERGY, PERCENT } from './param.ts';
@@ -44,11 +53,22 @@ export interface ConsoleProps {
   saveScheme(): void;
   saveSchemeAs(id: string): void;
   loadScheme(id: string): void;
+  lab: LabState | null;
+  labOpen(): void;
+  labReview(review: LabSubmission): void;
+  labSkip(candidateId: string): void;
   clock: Clock;
   onClose(): void;
 }
 
-const VIEWS = ['design', 'set'] as const;
+/**
+ * Three views now. **Review** is the third and it is not an editor: one
+ * generated candidate at a time, judged under an invented room, the judgment
+ * kept as evidence. The lab underneath it is `lab.ts` and `server/lab.ts`;
+ * the view never touches the scheme except when a review promotes a candidate
+ * into it, through the same `edit` the designer uses.
+ */
+const VIEWS = ['design', 'set', 'review'] as const;
 export type View = (typeof VIEWS)[number];
 
 export function Console({
@@ -61,6 +81,10 @@ export function Console({
   saveScheme,
   saveSchemeAs,
   loadScheme,
+  lab,
+  labOpen,
+  labReview,
+  labSkip,
   clock,
   onClose,
 }: ConsoleProps) {
@@ -116,6 +140,12 @@ export function Console({
               onChange={(event) => edit(renameFlow(scheme, id, event.currentTarget.value))}
             />
           </div>
+        ) : view === 'review' ? (
+          <span className="review-context">
+            {lab
+              ? `${lab.method} · ${lab.reviewed} reviewed · ${lab.skipped} skipped · ${lab.pending} waiting`
+              : 'opening the lab…'}
+          </span>
         ) : (
           <span className="head-space" />
         )}
@@ -143,6 +173,17 @@ export function Console({
       )}
 
       {view === 'set' && <SetView show={show} scheme={scheme} grid={grid} edit={edit} />}
+
+      {view === 'review' && (
+        <ReviewView
+          scheme={scheme}
+          lab={lab}
+          labOpen={labOpen}
+          labReview={labReview}
+          labSkip={labSkip}
+          edit={edit}
+        />
+      )}
     </div>
   );
 }

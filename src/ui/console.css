@@ -1271,3 +1271,268 @@
   font-size: 9.5px;
   max-width: 260px;
 }
+
+.console-head .review-context {
+  flex: 1;
+  color: var(--caption);
+  font-size: 10.5px;
+  text-align: right;
+  padding-right: 6px;
+}
+
+.review {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 0;
+}
+
+.review-empty {
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--caption);
+}
+
+.review-stage {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  gap: 8px;
+}
+
+.review-frame {
+  flex: 1;
+  min-height: 0;
+  border: 1px solid var(--bd);
+  border-radius: var(--radius-md);
+  background: #000;
+  overflow: hidden;
+}
+
+.review-frame .bench-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.review-under {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-height: 16px;
+}
+
+.review-name {
+  color: var(--fg);
+  font-size: 12px;
+}
+
+.review-provenance {
+  color: var(--caption);
+  font-size: 10px;
+}
+
+.review-error {
+  color: var(--alarm);
+  font-size: 10px;
+  margin-left: auto;
+}
+
+.review-room {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.review-palette {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.review-palette i {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--bd3);
+}
+
+.review-judgment {
+  flex: none;
+  width: 380px;
+  min-height: 0;
+  overflow-y: auto;
+  border-left: 1px solid var(--edge);
+  background: var(--panel);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.review-judgment h3 {
+  margin: 0 0 6px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--caption);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.review-judgment h4 {
+  margin: 8px 0 4px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--caption);
+}
+
+.review-scores {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.review-score {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 8px;
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-xs);
+  background: var(--surface-control);
+  color: var(--ui);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.review-score b {
+  color: var(--fg);
+  font-weight: 500;
+  width: 10px;
+}
+
+.review-score:hover {
+  border-color: var(--focus);
+}
+
+.review-score[data-on] {
+  border-color: var(--amber);
+  color: var(--fg);
+}
+
+.review-score[data-on] b {
+  color: var(--amber);
+}
+
+.review-said {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.review-said-label {
+  flex: 1;
+  color: var(--fg);
+}
+
+.review-effect {
+  display: inline-flex;
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+}
+
+.review-effect button {
+  border: none;
+  background: var(--surface-control);
+  color: var(--caption);
+  font: inherit;
+  width: 22px;
+  padding: 2px 0;
+  cursor: pointer;
+}
+
+.review-effect button + button {
+  border-left: 1px solid var(--bd3);
+}
+
+.review-effect button[data-on] {
+  background: var(--sel);
+  color: var(--amber);
+}
+
+.review-tags input {
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-xs);
+  background: var(--well);
+  color: var(--fg);
+  font: inherit;
+  padding: 4px 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.review-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.review-chip {
+  border: 1px solid var(--bd3);
+  border-radius: 999px;
+  background: var(--surface-control);
+  color: var(--ui);
+  font: inherit;
+  font-size: 10.5px;
+  padding: 2px 9px;
+  cursor: pointer;
+}
+
+.review-chip:hover {
+  border-color: var(--focus);
+}
+
+.review-chip[data-on] {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
+.review-note {
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-xs);
+  background: var(--well);
+  color: var(--fg);
+  font: inherit;
+  padding: 6px 8px;
+  min-height: 54px;
+  resize: vertical;
+}
+
+.review-notice {
+  margin: 0;
+  color: var(--alarm);
+  font-size: 10.5px;
+}
+
+.review-gate {
+  margin: 0;
+  color: var(--caption);
+  font-size: 10.5px;
+}
+
+.review-verbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.review-verbs .gap {
+  flex: 1;
+}
