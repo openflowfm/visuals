@@ -176,6 +176,64 @@ describe('CPU number evaluation', () => {
     expect(a).not.toBe(other);
   });
 
+  it('runs an LFO from beat or seconds and applies its phase inlet', () => {
+    const synced = node('l', 'lfo', {
+      op: 'saw',
+      values: { rate: 0.5, sync: 1, phase: 0.25 },
+    });
+    expect(one(synced, { beat: 0.125, seconds: 0.25 })).toBeCloseTo(0.375);
+    expect(
+      one(
+        node('l', 'lfo', {
+          op: 'saw',
+          values: { rate: 0.5, sync: 0, phase: 0.25 },
+        }),
+        { beat: 0.125, seconds: 0.25 },
+      ),
+    ).toBeCloseTo(0.5);
+    expect(
+      one(
+        node('l', 'lfo', {
+          op: 'saw',
+          values: { rate: 0.5, sync: 1, phase: 0.5 },
+        }),
+        { beat: 0.125 },
+      ),
+    ).toBeCloseTo(0.625);
+  });
+
+  it('keeps sample-and-hold stable inside one LFO cycle', () => {
+    const held = node('l', 'lfo', {
+      op: 'sample-hold',
+      values: { rate: 0.5, sync: 1, phase: 0 },
+    });
+    expect(one(held, { beat: 4.1 })).toBe(one(held, { beat: 4.9 }));
+    expect(one(held, { beat: 4.1 })).not.toBe(one(held, { beat: 5.1 }));
+  });
+
+  it('lets cords switch the LFO clock and offset its phase', () => {
+    const graph = circuit(
+      [
+        node('sync', 'value', { value: 1 }),
+        node('shift', 'value', { value: 0.25 }),
+        node('l', 'lfo', { op: 'saw', values: { rate: 0.5 } }),
+      ],
+      [
+        { from: 'sync/n', to: 'l/sync' },
+        { from: 'shift/n', to: 'l/phase' },
+      ],
+    );
+    const evaluator = createNumberEvaluator();
+    expect(evaluator.sample(graph, inputs({ beat: 0.125, seconds: 0.75 })).outlet('l/n')).toBeCloseTo(
+      0.375,
+    );
+    expect(
+      evaluator
+        .sample(graph, inputs({ beat: 0.125, seconds: 0.75, params: { sync: 0, shift: 0.5 } }))
+        .outlet('l/n'),
+    ).toBeCloseTo(0.25);
+  });
+
   it('walks a nested number chain and exposes the answer arriving at any row', () => {
     const graph = circuit(
       [

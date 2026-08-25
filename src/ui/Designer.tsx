@@ -33,6 +33,7 @@ import {
 import { NodePictures, type NodePictureStatus } from './NodePictures.tsx';
 import { createNumberEvaluator, type NumberSample } from '../render/evaluateNumber.ts';
 import { inletsOf, portId } from '../render/circuit.ts';
+import { lfoRateLabel } from '../nodes/lfo/algorithm.ts';
 import { FloatingBench } from './Preview.tsx';
 import { PERCENT, VALUE } from './param.ts';
 import { withStandIns, type Room } from '../state/useRoom.ts';
@@ -65,7 +66,16 @@ export function readingsOf(circuit: Circuit, sample: NumberSample): Record<strin
       if (port.kind !== 'n' || port.name.startsWith('~')) continue;
       const id = portId(node.id, port.name);
       const value = sample.inlet(id);
-      readings[id] = value === undefined ? {} : { value, display: displayNumber(value) };
+      if (value === undefined) readings[id] = {};
+      else {
+        const display =
+          port.display === 'lfo-rate'
+            ? lfoRateLabel(value, (sample.inlet(portId(node.id, 'sync')) ?? 1) >= 0.5)
+            : port.display === 'phase'
+              ? `${Math.round(value * 360)}°`
+              : displayNumber(value);
+        readings[id] = { value, display };
+      }
     }
   }
   return readings;

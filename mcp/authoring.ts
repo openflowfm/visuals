@@ -593,6 +593,8 @@ export interface DocumentedPort {
   settable: boolean;
   default?: number;
   liveDefault?: 'beat' | 'energy';
+  control?: 'toggle';
+  display?: 'lfo-rate' | 'phase';
 }
 
 const documentedPort = (port: PortSpec): DocumentedPort => ({
@@ -606,6 +608,8 @@ const documentedPort = (port: PortSpec): DocumentedPort => ({
   ...(port.kind === 'n' && port.at === undefined
     ? { liveDefault: port.fallback === 'uEnergy' ? ('energy' as const) : ('beat' as const) }
     : {}),
+  ...(port.control ? { control: port.control } : {}),
+  ...(port.display ? { display: port.display } : {}),
 });
 
 /** The complete headless vocabulary, including every mode-dependent inlet. */

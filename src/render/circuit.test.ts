@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Circuit, FlowDef } from '../../protocol.ts';
-import { FIELD_MODES, LIGHT_MODES, SOURCES, TRACK_DRAWS, wouldLoop } from '../../protocol.ts';
+import { FIELD_MODES, LFO_SHAPES, LIGHT_MODES, SOURCES, TRACK_DRAWS, wouldLoop } from '../../protocol.ts';
 import {
   bareCircuit,
   compileCircuit,
@@ -216,6 +216,57 @@ describe('compiling a flow', () => {
       // envelope behaves exactly as it did before there was one to ask for.
       { id: 't2', name: 'Drums', read: 'level', index: 1, smooth: 0.6 },
     ]);
+  });
+});
+
+describe('LFO nodes', () => {
+  it('compiles every waveform against the same controllable timing contract', () => {
+    const expected = {
+      sine: 'cLfoSine(',
+      triangle: 'cLfoTriangle(',
+      saw: 'cLfoSaw(',
+      square: 'cLfoSquare(',
+      'sample-hold': 'cLfoHold(',
+    } as const;
+    for (const op of LFO_SHAPES) {
+      const built = compileCircuit(
+        wire(
+          [
+            { id: 'l', kind: 'lfo', op, values: { rate: 0.5, sync: 1, phase: 0.25 }, x: 0, y: 0 },
+            { id: 'p', kind: 'paint', x: 1, y: 0 },
+            { id: 'o', kind: 'out', x: 2, y: 0 },
+          ],
+          [
+            { from: 'l/n', to: 'p/amount' },
+            { from: 'p/c', to: 'o/c' },
+          ],
+        ),
+      );
+      expect(built.error, op).toBeNull();
+      expect(bodyOf(built.source!), op).toContain(expected[op]);
+      expect(bodyOf(built.source!), op).toContain('cLfoPhase(');
+      expect(built.values.filter((value) => value.id.startsWith('l/')).map((value) => value.id)).toEqual([
+        'l/rate',
+        'l/sync',
+        'l/phase',
+      ]);
+    }
+  });
+
+  it('defaults to a synced quarter note with an unshifted phase', () => {
+    const lfo = { id: 'l', kind: 'lfo', op: 'sine', x: 0, y: 0 } as const;
+    expect(inletsOf(lfo).map(({ name, at }) => ({ name, at }))).toEqual([
+      { name: 'rate', at: 0.5 },
+      { name: 'sync', at: 1 },
+      { name: 'phase', at: 0 },
+    ]);
+    const built = compileCircuit(
+      wire(
+        [lfo, { id: 'p', kind: 'paint', x: 1, y: 0 }, { id: 'o', kind: 'out', x: 2, y: 0 }],
+        [{ from: 'l/n', to: 'p/amount' }, { from: 'p/c', to: 'o/c' }],
+      ),
+    );
+    expect(bodyOf(built.source!)).toContain('cLfoPhase(0.5, 1.0, 0.0)');
   });
 });
 

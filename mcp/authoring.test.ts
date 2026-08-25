@@ -56,6 +56,24 @@ describe('the agent-facing node catalog', () => {
     const image = catalog.find((node) => node.kind === 'image');
     expect(image).toMatchObject({ target: 'media:image', defaultMode: 'cover' });
     expect(image?.variants.map((variant) => variant.mode)).toEqual(['cover', 'contain']);
+    const lfo = catalog.find((node) => node.kind === 'lfo');
+    expect(lfo).toMatchObject({ defaultMode: 'sine', target: null });
+    expect(lfo?.variants.map((variant) => variant.mode)).toEqual([
+      'sine',
+      'triangle',
+      'saw',
+      'square',
+      'sample-hold',
+    ]);
+    for (const variant of lfo?.variants ?? []) {
+      expect(variant.inlets).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: 'rate', default: 0.5, display: 'lfo-rate' }),
+          expect.objectContaining({ name: 'sync', default: 1, control: 'toggle' }),
+          expect.objectContaining({ name: 'phase', default: 0, display: 'phase' }),
+        ]),
+      );
+    }
     expect(
       catalog
         .find((node) => node.kind === 'field')

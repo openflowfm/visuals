@@ -1,5 +1,12 @@
-import { TRACK_READS, type Circuit, type CircuitNode, type Show } from '../../protocol.ts';
+import {
+  LFO_SHAPES,
+  TRACK_READS,
+  type Circuit,
+  type CircuitNode,
+  type Show,
+} from '../../protocol.ts';
 import { NODE_SPECS, inletsOf, splitPort } from './circuit.ts';
+import { lfoClock, lfoIdentity, lfoValue } from '../nodes/lfo/algorithm.ts';
 
 /** Everything a CPU number chain reads at one display-clock tick. */
 export interface NumberInputs {
@@ -314,6 +321,25 @@ export function createNumberEvaluator(): NumberEvaluator {
           case 'wave': {
             const phase = readInlet(`${node.id}/phase`);
             if (phase !== undefined) value = wave(node.op, phase, inputs.seed ?? 3.71);
+            break;
+          }
+          case 'lfo': {
+            const rate = readInlet(`${node.id}/rate`);
+            const sync = readInlet(`${node.id}/sync`);
+            const phase = readInlet(`${node.id}/phase`);
+            if (rate !== undefined && sync !== undefined && phase !== undefined) {
+              const shape = LFO_SHAPES.includes(
+                (node.op ?? '') as (typeof LFO_SHAPES)[number],
+              )
+                ? ((node.op ?? LFO_SHAPES[0]) as (typeof LFO_SHAPES)[number])
+                : LFO_SHAPES[0];
+              value = lfoValue(
+                shape,
+                lfoClock(inputs.beat, inputs.seconds, rate, sync, phase),
+                lfoIdentity(node.id),
+                inputs.seed ?? 3.71,
+              );
+            }
             break;
           }
         }

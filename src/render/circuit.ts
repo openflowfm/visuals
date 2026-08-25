@@ -27,6 +27,7 @@ import { LIGHT_WORK } from './glsl/light.ts';
 import { FRACTAL_ITERATIONS, flowPreamble } from './shaders.ts';
 import { VIDEO_NODE_SPEC } from '../nodes/video/spec.ts';
 import { IMAGE_NODE_SPEC } from '../nodes/image/spec.ts';
+import { LFO_NODE_SPEC } from '../nodes/lfo/spec.ts';
 
 /**
  * A flow, compiled to a fragment shader.
@@ -125,6 +126,10 @@ export interface PortSpec extends PortDocumentation {
    * promoting a constant to an inlet changes nothing until a hand does.
    */
   fallbackInlet?: string;
+  /** A binary face control; it remains a number inlet on the wire. */
+  control?: 'toggle';
+  /** A domain-aware readout for values whose useful meaning is not a percent. */
+  display?: 'lfo-rate' | 'phase';
 }
 
 /** What a node's `emit` is handed. */
@@ -1227,6 +1232,8 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
       return { n: shape(c.read('phase')) };
     },
   },
+
+  lfo: LFO_NODE_SPEC,
 
   give: {
     name: 'give',

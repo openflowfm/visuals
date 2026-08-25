@@ -222,6 +222,9 @@ export const SONG_FACTS: readonly string[] = ['seed', 'tempo', 'key', 'section',
 export const MATH_OPS = ['add', 'subtract', 'multiply', 'min', 'max', 'average'] as const;
 export const WAVE_SHAPES = ['sine', 'saw', 'ramp', 'square', 'pulse', 'noise'] as const;
 
+/** Clock-owning low-frequency oscillator shapes, including one value held per cycle. */
+export const LFO_SHAPES = ['sine', 'triangle', 'saw', 'square', 'sample-hold'] as const;
+
 /** How a `tracks` node decides what each Live track draws. */
 export const TRACK_DRAWS = ['by name', ...SOURCES] as const;
 

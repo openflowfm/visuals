@@ -454,7 +454,21 @@ collection, because a song that modulates is in the first key when it starts.
 
 ### numbers
 
-`math`, `wave`, and `value`.
+`lfo`, `math`, `wave`, and `value`.
+
+**`lfo` owns a clock; `wave` does not.** `wave` turns whatever phase reaches it into a
+shape, which is useful when the phase comes from another graph. `lfo` is the complete
+oscillator: its `sine`, `triangle`, `saw`, `square`, and `sample-hold` modes keep the same
+three inlets while the waveform changes. `rate` chooses the period or frequency, `sync` is
+a real two-state face control and a number inlet on the wire, and `phase` offsets the result
+by zero to one complete cycle. Every one can be wired and modulated.
+
+Synced rate is quantized onto straight periods from `4/1`, `2/1`, `1/1`, `1/2`, `1/4`,
+`1/8`, `1/16`, through `1/32`; the midpoint is a quarter-note cycle. Free rate is exponential
+from 0.05 to 20 Hz with 1 Hz at its midpoint. The face prints the selected note period or Hz
+and phase in degrees rather than showing percentages with no musical meaning. `sample-hold`
+picks one deterministic value per complete cycle; node identity keeps two of them from
+quietly producing the same sequence.
 
 **`math` is deliberately asymmetric at the edge of the 0–1 convention.** `add` and
 `subtract` clamp their answers to 0–1; `multiply` does not, while `min`, `max` and `average`
@@ -684,14 +698,15 @@ the title, two reserved outlet lines, one chooser band and six reserved inlet li
 space is real here: reserving the largest face means changing a mode, wiring a cord or
 renaming a value gives the graph's port observer nothing to report. Each inlet is one row,
 with its dot on the same centre as the thing it governs. A point or colour prints one name;
-every number — the alive ones included — gets one horizontal filled control with its
-name and reading inside it. A driven number stays a control, because the number under the
+every continuous number — the alive ones included — gets one horizontal filled control with
+its name and reading inside it; a binary inlet such as `lfo.sync` gets a switch but remains a
+number on the wire. A driven number stays a control, because the number under the
 cord is the floor the cord carries the inlet from: the row names its driver in its tooltip,
 prints the arriving number in its readout, and holds the fill at the floor a drag on it
 sets. Alive and driven rows are sampled on a ten-hertz display clock,
 not the render loop, and React is updated only when the formatted reading changes.
 
-The CPU can follow `value`, `playback`, `track`, `song`, `math` and `wave` chains. A
+The CPU can follow `value`, `playback`, `track`, `song`, `math`, `wave` and `lfo` chains. A
 `polar` outlet is different: its radius or angle changes per fragment, so there is no one
 number to report. A row driven by one names `polar·radius` or `polar·angle` but deliberately
 shows no number or fill rather than inventing a misleading value.

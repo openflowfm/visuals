@@ -4,6 +4,7 @@ import {
   FIELD_MODES,
   FRACTAL_MODES,
   LIGHT_MODES,
+  LFO_SHAPES,
   GRADE_MODES,
   NODE_FAMILIES,
   SOURCES,
@@ -117,6 +118,10 @@ describe('what the browser lists', () => {
     const lights = browser().filter((each) => each.node.kind === 'light');
     expect(lights).toHaveLength(1);
     expect(lights[0].presets.map((each) => each.op)).toEqual(LIGHT_MODES);
+
+    const lfos = browser().filter((each) => each.node.kind === 'lfo');
+    expect(lfos).toHaveLength(1);
+    expect(lfos[0].presets.map((each) => each.op)).toEqual(LFO_SHAPES);
   });
 
   it('does not offer an iterative fractal once per playing track', () => {

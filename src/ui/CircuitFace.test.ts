@@ -158,6 +158,30 @@ describe('the node face anatomy', () => {
     expect(plain).not.toContain('wdg-device-swap');
   });
 
+  it('gives an LFO a real sync toggle and domain-aware rate and phase readings', () => {
+    const html = face(
+      {
+        id: 'l',
+        kind: 'lfo',
+        op: 'triangle',
+        values: { rate: 0.5, sync: 1, phase: 0.25 },
+        x: 0,
+        y: 0,
+      },
+      undefined,
+      {
+        'l/rate': { value: 0.5, display: '1/4' },
+        'l/sync': { value: 1, display: '100 %' },
+        'l/phase': { value: 0.25, display: '90°' },
+      },
+    );
+    expect(html).toContain('class="wdg wdg-toggle"');
+    expect(html).toContain('aria-pressed="true"');
+    expect(html).toContain('>sync</button>');
+    expect(html).toContain('<span class="wdg-readout">1/4</span>');
+    expect(html).toContain('<span class="wdg-readout">90°</span>');
+  });
+
   it('offers only server-approved media ids on a video face', () => {
     const html = face(
       { id: 'v', kind: 'video', op: 'loop', asset: 'loops/one.mp4', x: 0, y: 0 },

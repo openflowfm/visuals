@@ -11,6 +11,7 @@ import { Device, DevicePortRow } from '@openflow/widgets/chrome/Device.tsx';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { Select } from '@openflow/widgets/controls/Select.tsx';
 import { Slider } from '@openflow/widgets/controls/Slider.tsx';
+import { Toggle } from '@openflow/widgets/controls/Toggle.tsx';
 import {
   flowDoors,
   inletsOf,
@@ -78,7 +79,7 @@ export function CircuitEditor({
    * node may name comes from something the canvas has no business knowing about.
    */
   flows?: readonly { id: string; def: FlowDef }[];
-  /** Server-approved disk videos. The node stores the stable relative id. */
+  /** Server-approved disk media. A media node stores the stable relative id. */
   media?: readonly MediaAsset[];
   /** A small picture of what a node has made, when the host can draw one. */
   picture?: (nodeId: string) => ReactNode;
@@ -434,8 +435,31 @@ export function NodeFace({
     const alive = port.kind === 'n' && port.at === undefined;
     // Nothing wired, nothing held — the row is showing that signal move.
     const running = alive && held === undefined && driver === undefined;
+    const numberValue =
+      held ??
+      port.at ??
+      (driver === undefined
+        ? (reading?.value ??
+          (port.name === 'energy' || port.fallbackInlet === 'energy' ? energy : beat()))
+        : 0);
     const number =
-      port.kind !== 'n' ? null : (
+      port.kind !== 'n' ? null : port.control === 'toggle' ? (
+        <Toggle
+          on={(driver === undefined ? numberValue : (reading?.value ?? numberValue)) >= 0.5}
+          onChange={(on) => onTurn(port.name, on ? 1 : 0)}
+          name={port.name}
+          label={port.name}
+          title={
+            driver !== undefined
+              ? `${port.description} — ${port.name} ← ${driver}`
+              : port.description
+          }
+        >
+          {(driver === undefined ? numberValue : (reading?.value ?? numberValue)) >= 0.5
+            ? 'sync'
+            : 'free'}
+        </Toggle>
+      ) : (
         <Slider
           param={VALUE}
           // The number this inlet holds, wired or not. It used to show the
@@ -450,14 +474,7 @@ export function NodeFace({
           // shows the signal itself — and a drag catches that signal wherever
           // it was and holds it there, which is the gesture the moving fill
           // was always offering.
-          value={PERCENT.to(
-            held ??
-              port.at ??
-              (driver === undefined
-                ? (reading?.value ??
-                  (port.name === 'energy' || port.fallbackInlet === 'energy' ? energy : beat()))
-                : 0),
-          )}
+          value={PERCENT.to(numberValue)}
           onChange={(v) => onTurn(port.name, PERCENT.from(v))}
           depth={driver === undefined ? undefined : (node.depths?.[port.name] ?? 1)}
           onDepth={driver === undefined ? undefined : (d: number) => onRange(port.name, d)}
@@ -471,7 +488,13 @@ export function NodeFace({
           // something the cord on the canvas already says. It is the title
           // now, and what a cord is *doing* — the only thing nothing else
           // shows — has the readout to itself.
-          display={driver === undefined ? undefined : (reading?.display ?? '—')}
+          display={
+            port.display !== undefined
+              ? (reading?.display ?? '—')
+              : driver === undefined
+                ? undefined
+                : (reading?.display ?? '—')
+          }
           title={
             driver !== undefined
               ? `${port.description} — ${port.name} ← ${driver}`

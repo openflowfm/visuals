@@ -258,6 +258,15 @@ when the tempo moves. That is the difference between this and a screensaver.
 should specifically *not* be in time. The noise source's weather moves on `uTime`; its
 density moves on `uLevel`.
 
+`lfo` is the explicit exception that offers both clocks to a flow author. With `sync` on it
+uses `uBeat` and quantizes `rate` to straight note periods from `4/1` through `1/32`; with
+`sync` off it uses `uTime` at an exponential 0.05–20 Hz. Its `phase` inlet is added after the
+clock and offsets one complete cycle. The GLSL expression and the display/CPU evaluator share
+the same TypeScript reference contract, so an LFO driving a shader number and one driving
+video pace cannot disagree about the waveform or clock. Sample-and-hold hashes the complete
+cycle plus node identity and the pass seed, producing one stable value per cycle without CPU
+state or a frame counter.
+
 `beatPulse(division, energy)` in the preamble is 1 on the beat decaying to 0 across it, and
 everything reactive is built from it so that "on the beat" means one thing everywhere.
 
