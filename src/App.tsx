@@ -42,6 +42,12 @@ export function App() {
     labOpen,
     labReview,
     labSkip,
+    labLog,
+    labLogOpen,
+    labRetag,
+    labRenote,
+    labStage,
+    labCandidate,
     clock,
     online,
   } = useShow();
@@ -279,6 +285,12 @@ export function App() {
           labOpen={labOpen}
           labReview={labReview}
           labSkip={labSkip}
+          labLog={labLog}
+          labLogOpen={labLogOpen}
+          labRetag={labRetag}
+          labRenote={labRenote}
+          labStage={labStage}
+          labCandidate={labCandidate}
           clock={clock}
           onClose={() => setEditing(false)}
         />

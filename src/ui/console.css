@@ -1272,7 +1272,7 @@
   max-width: 260px;
 }
 
-.console-head .review-context {
+.console-head .train-context {
   flex: 1;
   color: var(--caption);
   font-size: 10.5px;
@@ -1280,14 +1280,14 @@
   padding-right: 6px;
 }
 
-.review {
+.train {
   flex: 1;
   min-height: 0;
   display: flex;
   gap: 0;
 }
 
-.review-empty {
+.train-empty {
   align-items: center;
   justify-content: center;
   flex-direction: column;
@@ -1295,7 +1295,7 @@
   color: var(--caption);
 }
 
-.review-stage {
+.train-stage {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -1304,7 +1304,7 @@
   gap: 8px;
 }
 
-.review-frame {
+.train-frame {
   flex: 1;
   min-height: 0;
   border: 1px solid var(--bd);
@@ -1313,55 +1313,55 @@
   overflow: hidden;
 }
 
-.review-frame .bench-canvas {
+.train-frame .bench-canvas {
   width: 100%;
   height: 100%;
   display: block;
 }
 
-.review-under {
+.train-under {
   display: flex;
   align-items: baseline;
   gap: 10px;
   min-height: 16px;
 }
 
-.review-name {
+.train-name {
   color: var(--fg);
   font-size: 12px;
 }
 
-.review-provenance {
+.train-provenance {
   color: var(--caption);
   font-size: 10px;
 }
 
-.review-error {
+.train-error {
   color: var(--alarm);
   font-size: 10px;
   margin-left: auto;
 }
 
-.review-room {
+.train-room {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
 }
 
-.review-palette {
+.train-palette {
   display: inline-flex;
   gap: 2px;
 }
 
-.review-palette i {
+.train-palette i {
   width: 14px;
   height: 14px;
   border-radius: var(--radius-xs);
   border: 1px solid var(--bd3);
 }
 
-.review-judgment {
+.train-judgment {
   flex: none;
   width: 380px;
   min-height: 0;
@@ -1374,7 +1374,8 @@
   gap: 14px;
 }
 
-.review-judgment h3 {
+.train-judgment h3,
+.tagpick h3 {
   margin: 0 0 6px;
   font-size: 10px;
   font-weight: 500;
@@ -1383,20 +1384,20 @@
   letter-spacing: 0.08em;
 }
 
-.review-judgment h4 {
+.tagpick h4 {
   margin: 8px 0 4px;
   font-size: 10px;
   font-weight: 500;
   color: var(--caption);
 }
 
-.review-scores {
+.train-scores {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.review-score {
+.train-score {
   display: flex;
   align-items: baseline;
   gap: 10px;
@@ -1410,26 +1411,26 @@
   cursor: pointer;
 }
 
-.review-score b {
+.train-score b {
   color: var(--fg);
   font-weight: 500;
   width: 10px;
 }
 
-.review-score:hover {
+.train-score:hover {
   border-color: var(--focus);
 }
 
-.review-score[data-on] {
+.train-score[data-on] {
   border-color: var(--amber);
   color: var(--fg);
 }
 
-.review-score[data-on] b {
+.train-score[data-on] b {
   color: var(--amber);
 }
 
-.review-tags input {
+.tagpick input {
   border: 1px solid var(--bd3);
   border-radius: var(--radius-xs);
   background: var(--well);
@@ -1440,13 +1441,13 @@
   box-sizing: border-box;
 }
 
-.review-chips {
+.tag-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
 }
 
-.review-chip {
+.tag-chip {
   border: 1px solid var(--bd3);
   border-radius: 999px;
   background: var(--surface-control);
@@ -1457,34 +1458,34 @@
   cursor: pointer;
 }
 
-.review-chip:hover {
+.tag-chip:hover {
   border-color: var(--focus);
 }
 
-.review-chip[data-polarity]::before {
+.tag-chip[data-polarity]::before {
   margin-right: 4px;
   color: var(--caption);
 }
 
-.review-chip[data-polarity='praise']::before {
+.tag-chip[data-polarity='praise']::before {
   content: '+';
 }
 
-.review-chip[data-polarity='fault']::before {
+.tag-chip[data-polarity='fault']::before {
   content: '−';
 }
 
-.review-chip[data-on] {
+.tag-chip[data-on] {
   border-color: var(--amber);
   color: var(--amber);
 }
 
-.review-chip[data-top] {
+.tag-chip[data-top] {
   border-color: var(--focus);
   box-shadow: 0 0 0 1px var(--focus);
 }
 
-.review-note {
+.train-note {
   border: 1px solid var(--bd3);
   border-radius: var(--radius-xs);
   background: var(--well);
@@ -1495,24 +1496,157 @@
   resize: vertical;
 }
 
-.review-notice {
+.train-notice {
   margin: 0;
   color: var(--alarm);
   font-size: 10.5px;
 }
 
-.review-gate {
+.train-gate {
   margin: 0;
   color: var(--caption);
   font-size: 10.5px;
 }
 
-.review-verbs {
+.train-verbs {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.review-verbs .gap {
+.train-verbs .gap {
   flex: 1;
+}
+
+.tagpick {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.reviews {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.reviews-empty {
+  align-items: center;
+  justify-content: center;
+  color: var(--caption);
+}
+
+.reviews-list {
+  flex: none;
+  width: 260px;
+  min-height: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--edge);
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  gap: 4px;
+}
+
+.reviews-row {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  column-gap: 8px;
+  align-items: baseline;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--ui);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.reviews-row:hover {
+  border-color: var(--focus);
+}
+
+.reviews-row[data-on] {
+  border-color: var(--amber);
+  background: var(--surface-control);
+}
+
+.reviews-row b {
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.reviews-row[data-on] b {
+  color: var(--amber);
+}
+
+.reviews-row-name {
+  color: var(--fg);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reviews-row-facts {
+  grid-column: 2;
+  color: var(--caption);
+  font-size: 10px;
+}
+
+.reviews-detail {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+.reviews-stage {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  gap: 8px;
+}
+
+.reviews-fetching {
+  margin: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--caption);
+}
+
+.reviews-judgment {
+  flex: none;
+  width: 380px;
+  min-height: 0;
+  overflow-y: auto;
+  border-left: 1px solid var(--edge);
+  background: var(--panel);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.reviews-score {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.reviews-score b {
+  color: var(--amber);
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.reviews-when {
+  margin-left: auto;
+  color: var(--caption);
+  font-size: 10px;
 }

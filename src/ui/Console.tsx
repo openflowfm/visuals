@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import type {
+  FlowDef,
+  LabReviewRow,
   LabState,
   LabSubmission,
   Library,
@@ -14,8 +16,9 @@ import { NumberField } from '@openflow/widgets/controls/NumberField.tsx';
 import { Select } from '@openflow/widgets/controls/Select.tsx';
 import { Segmented } from '@openflow/widgets/controls/Segmented.tsx';
 import { Designer } from './Designer.tsx';
-import { ReviewView } from './ReviewView.tsx';
+import { ReviewsView } from './ReviewsView.tsx';
 import { SetView } from './SetView.tsx';
+import { TrainView } from './TrainView.tsx';
 import { flowList, renameFlow } from './edits.ts';
 import { BPM, ENERGY, PERCENT } from './param.ts';
 import { KEYS, useRoom, type Room } from '../state/useRoom.ts';
@@ -24,11 +27,13 @@ import type { Clock } from '../state/useShow.ts';
 import './console.css';
 
 /**
- * One app, two views, and it used to be three.
+ * One app, four tabs, and it started as three views.
  *
- * **Design** is the product: a canvas, a library of flows, and a browser of
+ * **Build** is the product: a canvas, a library of flows, and a browser of
  * every node there is. **Set** is the small remainder — the wheel that turns
  * through what you built, and the handful of songs that want to say otherwise.
+ * **Train** and **review** are the lab's two faces: judging new candidates,
+ * and browsing the judgments.
  *
  * What went was coverage and bind, and both went for the same reason. Coverage
  * drew every song against every track and asked which cell nobody had decided
@@ -57,18 +62,25 @@ export interface ConsoleProps {
   labOpen(): void;
   labReview(review: LabSubmission): void;
   labSkip(candidateId: string): void;
+  labLog: { reviews: LabReviewRow[]; more: boolean } | null;
+  labLogOpen(before?: number): void;
+  labRetag(reviewId: number, tags: string[]): void;
+  labRenote(reviewId: number, note: string): void;
+  labStage: { id: string; flow: FlowDef; bundle: Record<string, FlowDef> } | null;
+  labCandidate(candidateId: string): void;
   clock: Clock;
   onClose(): void;
 }
 
 /**
- * Three views now. **Review** is the third and it is not an editor: one
- * generated candidate at a time, judged under an invented room, the judgment
- * kept as evidence. The lab underneath it is `lab.ts` and `server/lab.ts`;
- * the view never touches the scheme except when a review promotes a candidate
- * into it, through the same `edit` the designer uses.
+ * Four tabs. **Build** is the editor and the product; **train** judges one
+ * generated candidate at a time, the judgment kept as evidence; **review**
+ * browses those judgments and revises their tags and notes; **set** is the
+ * wheel and the songs. The lab under train and review is `lab.ts` and
+ * `server/lab.ts`; neither tab touches the scheme except when train promotes
+ * a candidate into it, through the same `edit` the designer uses.
  */
-const VIEWS = ['design', 'set', 'review'] as const;
+const VIEWS = ['build', 'train', 'review', 'set'] as const;
 export type View = (typeof VIEWS)[number];
 
 export function Console({
@@ -86,10 +98,16 @@ export function Console({
   labOpen,
   labReview,
   labSkip,
+  labLog,
+  labLogOpen,
+  labRetag,
+  labRenote,
+  labStage,
+  labCandidate,
   clock,
   onClose,
 }: ConsoleProps) {
-  const [view, setView] = useState<View>('design');
+  const [view, setView] = useState<View>('build');
   const [flow, setFlow] = useState<string | null>(null);
   const [trail, setTrail] = useState<readonly string[]>([]);
   const list = flowList(scheme);
@@ -122,7 +140,7 @@ export function Console({
           saveSchemeAs={saveSchemeAs}
           loadScheme={loadScheme}
         />
-        {view === 'design' && def && id ? (
+        {view === 'build' && def && id ? (
           <div className="flow-context">
             {trail.length > 0 && (
               <nav className="flow-trail" aria-label="How you got here">
@@ -141,16 +159,22 @@ export function Console({
               onChange={(event) => edit(renameFlow(scheme, id, event.currentTarget.value))}
             />
           </div>
-        ) : view === 'review' ? (
-          <span className="review-context">
+        ) : view === 'train' ? (
+          <span className="train-context">
             {lab
               ? `${lab.method} · ${lab.reviewed} reviewed · ${lab.skipped} skipped · ${lab.pending} waiting`
+              : 'opening the lab…'}
+          </span>
+        ) : view === 'review' ? (
+          <span className="train-context">
+            {labLog
+              ? `${labLog.reviews.length}${labLog.more ? '+' : ''} review${labLog.reviews.length === 1 && !labLog.more ? '' : 's'}`
               : 'opening the lab…'}
           </span>
         ) : (
           <span className="head-space" />
         )}
-        {view === 'design' && (
+        {view === 'build' && (
           <PreviewControls room={room} transport={transport} canFollow={canFollow} />
         )}
         <Button tone="quiet" label="Close console" onPress={onClose}>
@@ -158,7 +182,7 @@ export function Console({
         </Button>
       </header>
 
-      {view === 'design' && (
+      {view === 'build' && (
         <Designer
           show={show}
           scheme={scheme}
@@ -175,8 +199,8 @@ export function Console({
 
       {view === 'set' && <SetView show={show} scheme={scheme} grid={grid} edit={edit} />}
 
-      {view === 'review' && (
-        <ReviewView
+      {view === 'train' && (
+        <TrainView
           show={show}
           showRef={showRef}
           clock={clock}
@@ -187,6 +211,17 @@ export function Console({
           labReview={labReview}
           labSkip={labSkip}
           edit={edit}
+        />
+      )}
+
+      {view === 'review' && (
+        <ReviewsView
+          labLog={labLog}
+          labLogOpen={labLogOpen}
+          labRetag={labRetag}
+          labRenote={labRenote}
+          labStage={labStage}
+          labCandidate={labCandidate}
         />
       )}
     </div>

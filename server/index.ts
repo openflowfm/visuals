@@ -214,6 +214,32 @@ sockets.on('connection', (socket) => {
       sendLab(ensureLab().skip(message.candidateId));
       return;
     }
+    // The review tab. The log and a candidate's graph answer only the asker;
+    // a changed row goes to everyone, because an edited description is show
+    // state the way the queue is. The judgment itself has no message here.
+    if (message.kind === 'lab-log') {
+      socket.send(JSON.stringify({ kind: 'lab-log', ...ensureLab().log(message.before) }));
+      return;
+    }
+    if (message.kind === 'lab-retag' || message.kind === 'lab-renote') {
+      const answer =
+        message.kind === 'lab-retag'
+          ? ensureLab().retag(message.reviewId, message.tags)
+          : ensureLab().renote(message.reviewId, message.note);
+      if (!answer.ok) return;
+      const wire = JSON.stringify({ kind: 'lab-review-changed', review: answer.review });
+      for (const other of clients) if (other.readyState === other.OPEN) other.send(wire);
+      return;
+    }
+    if (message.kind === 'lab-candidate') {
+      const held = ensureLab().candidate(message.candidateId);
+      if (held) {
+        socket.send(
+          JSON.stringify({ kind: 'lab-candidate', id: held.id, flow: held.flow, bundle: held.bundle }),
+        );
+      }
+      return;
+    }
     // Persistence is its own gesture now. An edit changes what every screen
     // draws; only these three touch the library on disk. None of them answer
     // inline — the heartbeat notices the revision and the library move within

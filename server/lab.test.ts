@@ -153,6 +153,54 @@ describe('the store', () => {
     expect(store.snapshotRatings('mean', 1)).toBe(1);
   });
 
+  it('lists the log newest first and pages past it', () => {
+    const store = open(scratch());
+    const experiment = store.openExperiment('fresh', 1, 'deck');
+    store.addCandidate(candidate('c-one'));
+    for (const score of [2, 3, 4] as const) {
+      store.serve('c-one', experiment);
+      store.submit(judgment('c-one', dealRoom(`r${score}`), score), {
+        experimentId: experiment,
+        rendererVersion: 'p@1',
+      });
+    }
+    const page = store.reviewLog(2);
+    expect(page.more).toBe(true);
+    expect(page.reviews.map((row) => row.score)).toEqual([4, 3]);
+    expect(page.reviews[0].flowName).toBe('Candidate c-one');
+    expect(page.reviews[0].room).toEqual(dealRoom('r4'));
+    const rest = store.reviewLog(2, page.reviews[1].id);
+    expect(rest.more).toBe(false);
+    expect(rest.reviews.map((row) => row.score)).toEqual([2]);
+  });
+
+  it('revises tags and note; the judgment itself has no verb', () => {
+    const store = open(scratch());
+    const experiment = store.openExperiment('fresh', 1, 'deck');
+    store.addCandidate(candidate('c-one'));
+    store.serve('c-one', experiment);
+    store.submit(judgment('c-one', dealRoom('r'), 2), {
+      experimentId: experiment,
+      rendererVersion: 'p@1',
+    });
+    const held = store.reviewLog(1).reviews[0];
+
+    const retagged = store.retag(held.id, ['generic', 'muddy']);
+    expect(retagged.ok && retagged.review.tags).toEqual(['generic', 'muddy']);
+    expect(store.retag(held.id, ['no-such-tag']).ok).toBe(false);
+    expect(store.retag(held.id + 99, ['generic']).ok).toBe(false);
+
+    const renoted = store.renote(held.id, ' better words ');
+    expect(renoted.ok && renoted.review.note).toBe('better words');
+    const cleared = store.renote(held.id, '  ');
+    expect(cleared.ok && cleared.review.note).toBe(null);
+
+    const after = store.reviewLog(1).reviews[0];
+    expect(after.score).toBe(2);
+    expect(after.room).toEqual(held.room);
+    expect(after.createdAt).toBe(held.createdAt);
+  });
+
   it('round-trips every durable fact through JSONL', () => {
     const store = open(scratch());
     const experiment = store.openExperiment('fresh', 1, 'deck');

@@ -631,6 +631,28 @@ export interface LabSubmission {
 }
 
 /**
+ * One past judgment, as the review tab lists it.
+ *
+ * The judgment itself — candidate, room, score, when — is immutable; `tags`
+ * and `note` are the living description around it, revisable from the review
+ * tab. The row carries the room whole so a judgment can be re-staged without
+ * a second ask; the candidate's graph is fetched separately, because a log of
+ * hundreds of rows each carrying a full flow bundle would be most of a scheme
+ * per row.
+ */
+export interface LabReviewRow {
+  id: number;
+  candidateId: string;
+  /** The frozen flow's display name, so a list reads as work, not hashes. */
+  flowName: string;
+  score: LabScore;
+  tags: string[];
+  note: string | null;
+  room: LabRoom;
+  createdAt: string;
+}
+
+/**
  * What every console shows about the review queue.
  *
  * Server-owned for the reason the wheel is: two screens on one rig are two
@@ -698,7 +720,15 @@ export type Down =
   | ({ kind: 'library' } & Library)
   | { kind: 'media'; assets: MediaAsset[] }
   | { kind: 'grid'; grid: SetGrid }
-  | ({ kind: 'lab' } & LabState);
+  | ({ kind: 'lab' } & LabState)
+  // The review tab's page of past judgments, newest first; `more` says the
+  // log continues past the oldest row sent.
+  | { kind: 'lab-log'; reviews: LabReviewRow[]; more: boolean }
+  // One row after a retag or renote, to every console — an edited description
+  // is show state the way the queue is.
+  | { kind: 'lab-review-changed'; review: LabReviewRow }
+  // A frozen candidate's graph, for re-staging a judgment on the bench.
+  | { kind: 'lab-candidate'; id: string; flow: FlowDef; bundle: Record<string, FlowDef> };
 
 /**
  * Browser to server. An edit is the whole scheme, replaced.
@@ -734,7 +764,13 @@ export type Up =
   // this" and must never be recordable as a low score.
   | { kind: 'lab-open' }
   | { kind: 'lab-review'; review: LabSubmission }
-  | { kind: 'lab-skip'; candidateId: string };
+  | { kind: 'lab-skip'; candidateId: string }
+  // The review tab: browse past judgments and revise their description. The
+  // judgment itself — score, room, when — has no message that can touch it.
+  | { kind: 'lab-log'; before?: number }
+  | { kind: 'lab-retag'; reviewId: number; tags: string[] }
+  | { kind: 'lab-renote'; reviewId: number; note: string }
+  | { kind: 'lab-candidate'; candidateId: string };
 
 export const VISUALS_PORT = 17900;
 export const VISUALS_WS_PATH = '/ws';

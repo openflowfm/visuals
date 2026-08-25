@@ -9,6 +9,7 @@ const { DatabaseSync } = process.getBuiltinModule('node:sqlite');
 import type {
   FlowDef,
   LabCandidate,
+  LabReviewRow,
   LabRoom,
   LabState,
   LabSubmission,
@@ -191,6 +192,25 @@ export interface LabStore {
   ): { ok: true } | { ok: false; problem: string };
   /** "I did not judge this." Never a score, and preserved as its own fact. */
   skip(candidateId: string, experimentId: number): void;
+  /**
+   * A page of past judgments, newest first; `before` pages by review id.
+   * `more` says the log continues past the oldest row returned.
+   */
+  reviewLog(limit: number, before?: number): { reviews: LabReviewRow[]; more: boolean };
+  /**
+   * Replace one review's tag set whole. Tags and the note are the living
+   * description around a judgment; the judgment itself — score, room,
+   * candidate, when — has no verb here that can touch it.
+   */
+  retag(
+    reviewId: number,
+    tags: string[],
+  ): { ok: true; review: LabReviewRow } | { ok: false; problem: string };
+  /** Replace one review's note. Blank becomes null, as on submit. */
+  renote(
+    reviewId: number,
+    note: string,
+  ): { ok: true; review: LabReviewRow } | { ok: false; problem: string };
   /** Rebuilt from raw reviews on every call. Never stored, never trusted stale. */
   aggregate(candidateId: string): CandidateAggregate;
   /** Write one derived rating row per reviewed candidate, named and versioned. */
@@ -290,6 +310,46 @@ export function openLab(file: string): LabStore {
       mean: rows.length ? total / rows.length : null,
       distribution,
       tags: tags.map((row) => ({ id: row.id, count: Number(row.count) })),
+    };
+  };
+
+  const tagsOfReview = db.prepare(
+    'SELECT tag_id FROM review_tags WHERE review_id = ? ORDER BY tag_id',
+  );
+
+  /** One review as the log lists it, or null for an id nothing holds. */
+  const rowOf = (reviewId: number): LabReviewRow | null => {
+    const row = db
+      .prepare(
+        `SELECT r.id AS id, r.score AS score, r.note AS note, r.created_at AS created,
+                e.candidate_id AS candidate, c.flow_json AS flow, ch.room_json AS room
+         FROM reviews r
+         JOIN evaluations e ON e.id = r.evaluation_id
+         JOIN candidates c ON c.id = e.candidate_id
+         JOIN challenges ch ON ch.id = e.challenge_id
+         WHERE r.id = ?`,
+      )
+      .get(reviewId) as
+      | {
+          id: number;
+          score: number;
+          note: string | null;
+          created: string;
+          candidate: string;
+          flow: string;
+          room: string;
+        }
+      | undefined;
+    if (!row) return null;
+    return {
+      id: Number(row.id),
+      candidateId: row.candidate,
+      flowName: (JSON.parse(row.flow) as FlowDef).name,
+      score: row.score as LabReviewRow['score'],
+      tags: (tagsOfReview.all(row.id) as { tag_id: string }[]).map((tag) => tag.tag_id),
+      note: row.note,
+      room: JSON.parse(row.room) as LabRoom,
+      createdAt: row.created,
     };
   };
 
@@ -451,6 +511,47 @@ export function openLab(file: string): LabStore {
       ).run(now(), candidateId, experimentId);
     },
 
+    reviewLog(limit, before) {
+      const rows = (
+        before === undefined
+          ? db.prepare('SELECT id FROM reviews ORDER BY id DESC LIMIT ?').all(limit + 1)
+          : db
+              .prepare('SELECT id FROM reviews WHERE id < ? ORDER BY id DESC LIMIT ?')
+              .all(before, limit + 1)
+      ) as { id: number }[];
+      const more = rows.length > limit;
+      return {
+        reviews: rows.slice(0, limit).flatMap((row) => rowOf(Number(row.id)) ?? []),
+        more,
+      };
+    },
+
+    retag(reviewId, tags) {
+      for (const id of tags) {
+        const known = TAG_BY_ID.get(id);
+        if (!known) return { ok: false, problem: `no tag called ${id}` };
+        if (!known.active) return { ok: false, problem: `${known.label} is deprecated` };
+      }
+      const held = rowOf(reviewId);
+      if (!held) return { ok: false, problem: 'that review is not in the lab' };
+      transaction(() => {
+        db.prepare('DELETE FROM review_tags WHERE review_id = ?').run(reviewId);
+        const tagIn = db.prepare('INSERT INTO review_tags (review_id, tag_id) VALUES (?, ?)');
+        for (const id of new Set(tags)) tagIn.run(reviewId, id);
+      });
+      return { ok: true, review: rowOf(reviewId)! };
+    },
+
+    renote(reviewId, note) {
+      const held = rowOf(reviewId);
+      if (!held) return { ok: false, problem: 'that review is not in the lab' };
+      db.prepare('UPDATE reviews SET note = ? WHERE id = ?').run(
+        note.trim() ? note.trim() : null,
+        reviewId,
+      );
+      return { ok: true, review: rowOf(reviewId)! };
+    },
+
     aggregate: aggregateOf,
 
     snapshotRatings(ratingMethod, ratingVersion) {
@@ -573,6 +674,21 @@ export interface LabEngine {
   open(): LabState;
   submit(review: LabSubmission): LabState;
   skip(candidateId: string): LabState;
+  /**
+   * The review tab's verbs, passed through to the store untouched: the engine
+   * owns the queue, and browsing the log neither deals nor advances it.
+   */
+  log(before?: number): { reviews: LabReviewRow[]; more: boolean };
+  retag(
+    reviewId: number,
+    tags: string[],
+  ): { ok: true; review: LabReviewRow } | { ok: false; problem: string };
+  renote(
+    reviewId: number,
+    note: string,
+  ): { ok: true; review: LabReviewRow } | { ok: false; problem: string };
+  /** One frozen candidate's graph, for re-staging a judgment. */
+  candidate(id: string): StoredCandidate | null;
   close(): void;
 }
 
@@ -687,6 +803,10 @@ export function labEngine<State>(
       if (!store.nextPending(experimentId)) deal();
       return labState();
     },
+    log: (before) => store.reviewLog(50, before),
+    retag: (reviewId, tags) => store.retag(reviewId, tags),
+    renote: (reviewId, note) => store.renote(reviewId, note),
+    candidate: (id) => store.candidate(id),
     close() {
       store.close();
     },

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type {
   Down,
+  FlowDef,
+  LabReviewRow,
   LabState,
   LabSubmission,
   Library,
@@ -102,6 +104,18 @@ export function useShow(): {
   labReview(review: LabSubmission): void;
   /** "I did not judge this." Never a score. */
   labSkip(candidateId: string): void;
+  /** Past judgments, newest first, or null until the review tab has asked. */
+  labLog: { reviews: LabReviewRow[]; more: boolean } | null;
+  /** Ask for a page of the log; `before` pages past the oldest row held. */
+  labLogOpen(before?: number): void;
+  /** Replace one review's tag set. Every console sees the changed row. */
+  labRetag(reviewId: number, tags: string[]): void;
+  /** Replace one review's note, blank meaning none. */
+  labRenote(reviewId: number, note: string): void;
+  /** The last candidate graph fetched for re-staging, or null. */
+  labStage: { id: string; flow: FlowDef; bundle: Record<string, FlowDef> } | null;
+  /** Ask for a frozen candidate's graph. */
+  labCandidate(candidateId: string): void;
   clock: Clock;
   online: boolean;
 } {
@@ -111,6 +125,12 @@ export function useShow(): {
   const [media, setMedia] = useState<MediaAsset[]>([]);
   const [grid, setGrid] = useState<SetGrid | null>(null);
   const [lab, setLab] = useState<LabState | null>(null);
+  const [labLog, setLabLog] = useState<{ reviews: LabReviewRow[]; more: boolean } | null>(null);
+  const [labStage, setLabStage] = useState<{
+    id: string;
+    flow: FlowDef;
+    bundle: Record<string, FlowDef>;
+  } | null>(null);
   const [online, setOnline] = useState(false);
   const live = useRef<WebSocket | null>(null);
 
@@ -167,6 +187,26 @@ export function useShow(): {
         if (message.kind === 'lab') {
           const { kind: _, ...state } = message;
           setLab(state);
+          return;
+        }
+        // A page merges rather than replaces: paging asks for older rows while
+        // the newest are already on screen, and a changed row lands the same
+        // way. Sorted by id descending, which is newest-first.
+        if (message.kind === 'lab-log' || message.kind === 'lab-review-changed') {
+          const arrived = message.kind === 'lab-log' ? message.reviews : [message.review];
+          const grew = message.kind === 'lab-log' ? message.more : null;
+          setLabLog((was) => {
+            const byId = new Map((was?.reviews ?? []).map((row) => [row.id, row]));
+            for (const row of arrived) byId.set(row.id, row);
+            return {
+              reviews: [...byId.values()].sort((a, b) => b.id - a.id),
+              more: grew ?? was?.more ?? false,
+            };
+          });
+          return;
+        }
+        if (message.kind === 'lab-candidate') {
+          setLabStage({ id: message.id, flow: message.flow, bundle: message.bundle });
           return;
         }
         if (message.kind === 'anchor') {
@@ -285,6 +325,34 @@ export function useShow(): {
     }
   }).current;
 
+  const labLogOpen = useRef((before?: number) => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'lab-log', ...(before === undefined ? {} : { before }) }));
+    }
+  }).current;
+
+  const labRetag = useRef((reviewId: number, tags: string[]) => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'lab-retag', reviewId, tags }));
+    }
+  }).current;
+
+  const labRenote = useRef((reviewId: number, note: string) => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'lab-renote', reviewId, note }));
+    }
+  }).current;
+
+  const labCandidate = useRef((candidateId: string) => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'lab-candidate', candidateId }));
+    }
+  }).current;
+
   return {
     show,
     showRef: held,
@@ -302,6 +370,12 @@ export function useShow(): {
     labOpen,
     labReview,
     labSkip,
+    labLog,
+    labLogOpen,
+    labRetag,
+    labRenote,
+    labStage,
+    labCandidate,
     clock,
     online,
   };

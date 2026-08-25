@@ -1,7 +1,8 @@
 # The lab
 
-`lab.ts`, `server/lab.ts`, `server/fresh.ts`, `src/ui/ReviewView.tsx`. One subsystem: the
-durable evidence under the console's **review** view.
+`lab.ts`, `server/lab.ts`, `server/fresh.ts`, `src/ui/TrainView.tsx`,
+`src/ui/ReviewsView.tsx`. One subsystem: the durable evidence under two console tabs —
+**train**, where judgments are made, and **review**, where they are browsed.
 
 ## What it is for
 
@@ -11,14 +12,16 @@ a time gets the wall, a judge gives it an anchored score and a useful account of
 and the judgment is kept — with everything needed to know, years later, exactly what was
 judged and under what conditions.
 
-The visible name is **review**; the subsystem is the **lab**. `arena` was rejected on
-purpose: unlike things would have to compete, and a library whose owner likes many different
-kinds of thing is not a ladder. This is judging one dive at a time.
+The visible names are **train** and **review**; the subsystem is the **lab**. `arena` was
+rejected on purpose: unlike things would have to compete, and a library whose owner likes
+many different kinds of thing is not a ladder. This is judging one dive at a time — and
+coming back to what was judged.
 
 ## The shape
 
 ```
-review view ──WS, three gestures──> server ── LabStore ──> ~/.openflow/visuals/lab.sqlite3
+train view ───WS, three gestures──> server ── LabStore ──> ~/.openflow/visuals/lab.sqlite3
+review tab ───WS, log/retag/renote──┤ │
      │                                │
      └── same Bench/compositor        └── LabMethod (fresh, …) deals candidates
 ```
@@ -31,16 +34,23 @@ review view ──WS, three gestures──> server ── LabStore ──> ~/.op
   coarse `lab` state. WAL, transactions, `PRAGMA user_version` migrations, foreign keys.
 - **`server/fresh.ts`** is the first methodology, deliberately plain: deal from
   `rollCircuit`, validate that it compiles, queue it. It exists to prove the boundary.
-- **`ReviewView.tsx`** draws the candidate through the same `Bench` the designer uses, on
+- **`TrainView.tsx`** draws the candidate through the same `Bench` the designer uses, on
   its own clock, needing no Ableton, no Link and no bridge — and when a bridge *is*
   connected, its source switch judges the candidate against the live set instead: real
   beat, real meters, real section and colourway. A live judgment freezes the set as a
   room, sampled at submit, palette by value, with `live` where a dealt room's seed goes.
+- **`ReviewsView.tsx`** is the review tab: the log of past judgments, newest first, each
+  re-staged on the bench from what the judgment froze — and its tags and note editable
+  through the same `TagPicker` the train view uses, because a reviewer's vocabulary
+  arrives after their taste does.
 
 ## Reviews are facts; scores are derived
 
 A stored review is one person's anchored judgment of one candidate under one room at one
-time, and it is never edited. Anything that looks like "this candidate's score" is a named,
+time, and the judgment is never edited: no verb on the wire or in the store can change a
+review's score, room, candidate or moment. Its **description** — tags and note — is the
+one revisable part, from the review tab, because a score given quickly tonight earns its
+tags on a slower pass tomorrow. Anything that looks like "this candidate's score" is a named,
 versioned calculation rebuilt from raw reviews (`aggregate`, `snapshotRatings`) — deleting
 every derived row loses nothing. A **skip** is its own disposition in the `served` table,
 never a low score; the corpus keeps skips, low scores, and everything else it was shown.
