@@ -224,7 +224,7 @@ function PreviewControls({
         <Button
           tone="quiet"
           label={playing ? 'Stop the preview clock' : 'Play the preview clock'}
-          title={following ? 'The room owns the clock' : undefined}
+          title={following ? 'Live owns the clock' : undefined}
           onPress={() => transport.setPlaying(!transport.playing)}
           disabled={following}
         >
@@ -292,9 +292,10 @@ function PreviewControls({
             role="radio"
             aria-checked={!following}
             data-on={!following ? '' : undefined}
+            title="Invented conditions, controls yours"
             onClick={() => transport.setFollowing(false)}
           >
-            desk
+            preview
           </button>
           <button
             type="button"
@@ -302,10 +303,10 @@ function PreviewControls({
             aria-checked={following}
             data-on={following ? '' : undefined}
             disabled={!canFollow}
-            title={canFollow ? 'Use the real show' : 'Nothing to follow — no bridge is connected'}
+            title={canFollow ? 'The real show, as it plays' : 'Nothing to follow — no bridge is connected'}
             onClick={() => transport.setFollowing(true)}
           >
-            room
+            live
           </button>
         </div>
       </div>

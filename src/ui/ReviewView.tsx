@@ -300,7 +300,7 @@ export function ReviewView({
           <Button
             tone="quiet"
             label={playing ? 'Hold the clock' : 'Run the clock'}
-            title={live ? 'The set owns the clock' : undefined}
+            title={live ? 'Live owns the clock' : undefined}
             disabled={live}
             onPress={() => transport.setPlaying(!transport.playing)}
           >
@@ -376,9 +376,10 @@ export function ReviewView({
                 role="radio"
                 aria-checked={!live}
                 data-on={!live ? '' : undefined}
+                title="The dealt room, controls yours"
                 onClick={() => transport.setFollowing(false)}
               >
-                room
+                preview
               </button>
               <button
                 type="button"
@@ -393,7 +394,7 @@ export function ReviewView({
                 }
                 onClick={() => transport.setFollowing(true)}
               >
-                set
+                live
               </button>
             </div>
           </div>

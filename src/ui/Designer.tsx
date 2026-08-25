@@ -652,7 +652,7 @@ export function Designer({
               flow={id}
               clock={transport}
               onError={setError}
-              aside={room.following ? 'from the room' : 'from the desk'}
+              aside={room.following ? 'live' : 'preview'}
               probing={probing}
               onProbe={setPromoted}
             />
