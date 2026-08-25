@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { FlowDef, LabReviewRow, Scheme, Show } from '../../protocol.ts';
+import type { FlowDef, LabReviewRow, LabScore, Scheme, Show } from '../../protocol.ts';
 import { SCORES } from '../../lab.ts';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { RESTING } from '../state/useShow.ts';
@@ -27,6 +27,7 @@ import { TagPicker } from './TagPicker.tsx';
 export function ReviewsView({
   labLog,
   labLogOpen,
+  labRescore,
   labRetag,
   labRenote,
   labStage,
@@ -34,6 +35,7 @@ export function ReviewsView({
 }: {
   labLog: { reviews: LabReviewRow[]; more: boolean } | null;
   labLogOpen(before?: number): void;
+  labRescore(reviewId: number, score: LabScore): void;
   labRetag(reviewId: number, tags: string[]): void;
   labRenote(reviewId: number, note: string): void;
   labStage: { id: string; flow: FlowDef; bundle: Record<string, FlowDef> } | null;
@@ -174,11 +176,25 @@ export function ReviewsView({
           </div>
 
           <div className="reviews-judgment wdg">
-            <p className="reviews-score">
-              <b>{selected.score}</b>
+            <div className="reviews-score">
+              <span className="reviews-rescore" role="radiogroup" aria-label="Score">
+                {SCORES.map(({ score, means }) => (
+                  <button
+                    key={score}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected.score === score}
+                    data-on={selected.score === score ? '' : undefined}
+                    title={means}
+                    onClick={() => score !== selected.score && labRescore(selected.id, score)}
+                  >
+                    {score}
+                  </button>
+                ))}
+              </span>
               <span>{SCORES.find(({ score }) => score === selected.score)?.means}</span>
               <span className="reviews-when">{when(selected.createdAt)}</span>
-            </p>
+            </div>
 
             <TagPicker
               chosen={selected.tags}

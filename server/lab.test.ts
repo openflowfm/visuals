@@ -195,8 +195,13 @@ describe('the store', () => {
     const cleared = store.renote(held.id, '  ');
     expect(cleared.ok && cleared.review.note).toBe(null);
 
+    const rescored = store.rescore(held.id, 4);
+    expect(rescored.ok && rescored.review.score).toBe(4);
+    expect(store.rescore(held.id, 7 as 5).ok).toBe(false);
+    expect(store.rescore(held.id + 99, 3).ok).toBe(false);
+
     const after = store.reviewLog(1).reviews[0];
-    expect(after.score).toBe(2);
+    expect(after.score).toBe(4);
     expect(after.room).toEqual(held.room);
     expect(after.createdAt).toBe(held.createdAt);
   });
@@ -294,6 +299,38 @@ describe('the engine', () => {
     expect(after.skipped).toBe(1);
     expect(after.reviewed).toBe(0);
     expect(after.candidate?.id).not.toBe(first.candidate?.id);
+  });
+
+  it('an offered flow jumps the queue and says it is manual', () => {
+    const engine = labEngine(open(scratch()), fakeMethod(), 'one-deck');
+    const dealt = engine.open();
+    expect(dealt.candidate?.method).toBe('fake');
+
+    const mine = candidate('built-by-hand', 'plasma');
+    const offered = engine.offer(mine.flow, mine.bundle);
+    expect(offered.candidate?.flow.name).toBe('Candidate built-by-hand');
+    expect(offered.candidate?.method).toBe('manual');
+    expect(offered.pending).toBe(2);
+
+    // Offering the same flow again while it waits is a double click, not a
+    // second serving.
+    expect(engine.offer(mine.flow, mine.bundle).pending).toBe(2);
+
+    const judged = engine.submit(
+      judgment(offered.candidate!.id, offered.room!, 4),
+    );
+    expect(judged.candidate?.method).toBe('fake');
+    expect(judged.candidate?.id).toBe(dealt.candidate?.id);
+  });
+
+  it('refuses an offer that does not compile', () => {
+    const engine = labEngine(open(scratch()), fakeMethod(), 'one-deck');
+    engine.open();
+    const broken = candidate('broken', 'plasma');
+    broken.flow.circuit.nodes = [...broken.flow.circuit.nodes, { id: 'out2', kind: 'out', x: 0, y: 90 }];
+    const state = engine.offer(broken.flow, broken.bundle);
+    expect(state.notice).toBeTruthy();
+    expect(state.candidate?.method).toBe('fake');
   });
 });
 

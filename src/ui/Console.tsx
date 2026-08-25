@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type {
   FlowDef,
   LabReviewRow,
+  LabScore,
   LabState,
   LabSubmission,
   Library,
@@ -62,8 +63,10 @@ export interface ConsoleProps {
   labOpen(): void;
   labReview(review: LabSubmission): void;
   labSkip(candidateId: string): void;
+  labOffer(flowId: string): void;
   labLog: { reviews: LabReviewRow[]; more: boolean } | null;
   labLogOpen(before?: number): void;
+  labRescore(reviewId: number, score: LabScore): void;
   labRetag(reviewId: number, tags: string[]): void;
   labRenote(reviewId: number, note: string): void;
   labStage: { id: string; flow: FlowDef; bundle: Record<string, FlowDef> } | null;
@@ -98,8 +101,10 @@ export function Console({
   labOpen,
   labReview,
   labSkip,
+  labOffer,
   labLog,
   labLogOpen,
+  labRescore,
   labRetag,
   labRenote,
   labStage,
@@ -158,6 +163,16 @@ export function Console({
               aria-label="Flow name"
               onChange={(event) => edit(renameFlow(scheme, id, event.currentTarget.value))}
             />
+            <Button
+              tone="quiet"
+              onPress={() => {
+                labOffer(id);
+                setView('train');
+              }}
+              title="Freeze this flow as it is and judge it in the train tab"
+            >
+              judge
+            </Button>
           </div>
         ) : view === 'train' ? (
           <span className="train-context">
@@ -218,6 +233,7 @@ export function Console({
         <ReviewsView
           labLog={labLog}
           labLogOpen={labLogOpen}
+          labRescore={labRescore}
           labRetag={labRetag}
           labRenote={labRenote}
           labStage={labStage}

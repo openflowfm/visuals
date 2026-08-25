@@ -42,8 +42,10 @@ export function App() {
     labOpen,
     labReview,
     labSkip,
+    labOffer,
     labLog,
     labLogOpen,
+    labRescore,
     labRetag,
     labRenote,
     labStage,
@@ -285,8 +287,10 @@ export function App() {
           labOpen={labOpen}
           labReview={labReview}
           labSkip={labSkip}
+          labOffer={labOffer}
           labLog={labLog}
           labLogOpen={labLogOpen}
+          labRescore={labRescore}
           labRetag={labRetag}
           labRenote={labRenote}
           labStage={labStage}

@@ -1639,14 +1639,34 @@
   gap: 10px;
 }
 
-.reviews-score b {
-  color: var(--amber);
-  font-size: 18px;
-  font-weight: 500;
-}
-
 .reviews-when {
   margin-left: auto;
   color: var(--caption);
   font-size: 10px;
+}
+
+.reviews-rescore {
+  display: inline-flex;
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+}
+
+.reviews-rescore button {
+  border: none;
+  background: var(--surface-control);
+  color: var(--caption);
+  font: inherit;
+  width: 24px;
+  padding: 3px 0;
+  cursor: pointer;
+}
+
+.reviews-rescore button + button {
+  border-left: 1px solid var(--bd3);
+}
+
+.reviews-rescore button[data-on] {
+  background: var(--sel);
+  color: var(--amber);
 }

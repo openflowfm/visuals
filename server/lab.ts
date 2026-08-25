@@ -198,9 +198,9 @@ export interface LabStore {
    */
   reviewLog(limit: number, before?: number): { reviews: LabReviewRow[]; more: boolean };
   /**
-   * Replace one review's tag set whole. Tags and the note are the living
-   * description around a judgment; the judgment itself — score, room,
-   * candidate, when — has no verb here that can touch it.
+   * Replace one review's tag set whole. Score, tags and note are the
+   * assessment, and the assessment may be revised; what it assesses —
+   * candidate, room, when — has no verb here that can touch it.
    */
   retag(
     reviewId: number,
@@ -210,6 +210,11 @@ export interface LabStore {
   renote(
     reviewId: number,
     note: string,
+  ): { ok: true; review: LabReviewRow } | { ok: false; problem: string };
+  /** Replace one review's score, against the same rubric it was given under. */
+  rescore(
+    reviewId: number,
+    score: LabSubmission['score'],
   ): { ok: true; review: LabReviewRow } | { ok: false; problem: string };
   /** Rebuilt from raw reviews on every call. Never stored, never trusted stale. */
   aggregate(candidateId: string): CandidateAggregate;
@@ -431,16 +436,30 @@ export function openLab(file: string): LabStore {
     },
 
     serve(candidateId, experimentId) {
+      // Never pending twice: re-serving a decided candidate is a deliberate
+      // re-judgment, where a second pending row is only ever a double click.
       db.prepare(
-        `INSERT INTO served (candidate_id, experiment_id, disposition, created_at) VALUES (?, ?, 'pending', ?)`,
-      ).run(candidateId, experimentId, now());
+        `INSERT INTO served (candidate_id, experiment_id, disposition, created_at)
+         SELECT ?, ?, 'pending', ?
+         WHERE NOT EXISTS (
+           SELECT 1 FROM served
+           WHERE candidate_id = ? AND experiment_id = ? AND disposition = 'pending'
+         )`,
+      ).run(candidateId, experimentId, now(), candidateId, experimentId);
     },
 
     nextPending(experimentId) {
+      // Manual offers first: a person who offered a flow is standing there
+      // waiting to judge it, where the dealt supply is infinite and patient.
       const row = db
         .prepare(
-          `SELECT candidate_id FROM served WHERE experiment_id = ? AND disposition = 'pending'
-           ORDER BY created_at, rowid LIMIT 1`,
+          `SELECT s.candidate_id AS candidate_id FROM served s
+           WHERE s.experiment_id = ? AND s.disposition = 'pending'
+           ORDER BY EXISTS (
+             SELECT 1 FROM candidate_origins o
+             WHERE o.candidate_id = s.candidate_id AND o.experiment_id = s.experiment_id
+               AND o.operation = 'manual'
+           ) DESC, s.created_at, s.rowid LIMIT 1`,
         )
         .get(experimentId) as { candidate_id: string } | undefined;
       return row?.candidate_id ?? null;
@@ -549,6 +568,16 @@ export function openLab(file: string): LabStore {
         note.trim() ? note.trim() : null,
         reviewId,
       );
+      return { ok: true, review: rowOf(reviewId)! };
+    },
+
+    rescore(reviewId, score) {
+      if (!Number.isInteger(score) || score < 1 || score > 5) {
+        return { ok: false, problem: 'a score is 1 through 5' };
+      }
+      const held = rowOf(reviewId);
+      if (!held) return { ok: false, problem: 'that review is not in the lab' };
+      db.prepare('UPDATE reviews SET score = ? WHERE id = ?').run(score, reviewId);
       return { ok: true, review: rowOf(reviewId)! };
     },
 
@@ -675,10 +704,20 @@ export interface LabEngine {
   submit(review: LabSubmission): LabState;
   skip(candidateId: string): LabState;
   /**
+   * A flow built by hand, frozen and put at the front of the queue — the
+   * person who offered it is waiting to judge it, where the dealt supply is
+   * infinite and patient. Same identity, same evidence, origin `manual`.
+   */
+  offer(flow: FlowDef, bundle: Record<string, FlowDef>): LabState;
+  /**
    * The review tab's verbs, passed through to the store untouched: the engine
    * owns the queue, and browsing the log neither deals nor advances it.
    */
   log(before?: number): { reviews: LabReviewRow[]; more: boolean };
+  rescore(
+    reviewId: number,
+    score: LabSubmission['score'],
+  ): { ok: true; review: LabReviewRow } | { ok: false; problem: string };
   retag(
     reviewId: number,
     tags: string[],
@@ -755,12 +794,14 @@ export function labEngine<State>(
     let room: LabRoom | null = null;
     if (id && held) {
       const origin = store.origin(id, experimentId);
+      // An offered flow says so: its provenance is the person, not the deck.
+      const manual = origin?.operation === 'manual';
       candidate = {
         id,
         flow: held.flow,
         bundle: held.bundle,
-        method: method.id,
-        methodVersion: method.version,
+        method: manual ? 'manual' : method.id,
+        methodVersion: manual ? 1 : method.version,
         seed: String((origin?.json as { seed?: string })?.seed ?? ''),
       };
       // From the candidate id, so the room a judgment is staged under is the
@@ -803,7 +844,20 @@ export function labEngine<State>(
       if (!store.nextPending(experimentId)) deal();
       return labState();
     },
+    offer(flow, bundle) {
+      if (!compiles({ flow, bundle })) {
+        notice = 'that flow does not compile';
+        return labState();
+      }
+      notice = null;
+      const id = sha(canonicalCandidate(flow, bundle));
+      store.addCandidate({ id, flow, bundle, generatorVersion: 'manual@1' });
+      store.addOrigin({ candidateId: id, experimentId, operation: 'manual' });
+      store.serve(id, experimentId);
+      return labState();
+    },
     log: (before) => store.reviewLog(50, before),
+    rescore: (reviewId, score) => store.rescore(reviewId, score),
     retag: (reviewId, tags) => store.retag(reviewId, tags),
     renote: (reviewId, note) => store.renote(reviewId, note),
     candidate: (id) => store.candidate(id),

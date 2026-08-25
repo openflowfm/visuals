@@ -34,6 +34,10 @@ review tab ───WS, log/retag/renote──┤ │
   coarse `lab` state. WAL, transactions, `PRAGMA user_version` migrations, foreign keys.
 - **`server/fresh.ts`** is the first methodology, deliberately plain: deal from
   `rollCircuit`, validate that it compiles, queue it. It exists to prove the boundary.
+- Not everything judged is dealt: the build tab's **judge** button offers the open flow to
+  the queue by hand (`lab-offer`), frozen with its bundle the way any candidate is, origin
+  `manual`. Offers jump the queue — the person who offered is standing there, where the
+  dealt supply is infinite and patient.
 - **`TrainView.tsx`** draws the candidate through the same `Bench` the designer uses, on
   its own clock, needing no Ableton, no Link and no bridge — and when a bridge *is*
   connected, its source switch judges the candidate against the live set instead: real
@@ -46,11 +50,11 @@ review tab ───WS, log/retag/renote──┤ │
 
 ## Reviews are facts; scores are derived
 
-A stored review is one person's anchored judgment of one candidate under one room at one
-time, and the judgment is never edited: no verb on the wire or in the store can change a
-review's score, room, candidate or moment. Its **description** — tags and note — is the
-one revisable part, from the review tab, because a score given quickly tonight earns its
-tags on a slower pass tomorrow. Anything that looks like "this candidate's score" is a named,
+A stored review binds one candidate to one room at one moment, and that binding is never
+edited: no verb on the wire or in the store can change a review's candidate, room or
+moment. The **assessment** — score, tags, note — is revisable from the review tab,
+because taste is allowed to settle: a score given quickly tonight gets reconsidered, and
+earns its tags, on a slower pass tomorrow. Anything that looks like "this candidate's score" is a named,
 versioned calculation rebuilt from raw reviews (`aggregate`, `snapshotRatings`) — deleting
 every derived row loses nothing. A **skip** is its own disposition in the `served` table,
 never a low score; the corpus keeps skips, low scores, and everything else it was shown.

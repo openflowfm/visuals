@@ -765,9 +765,15 @@ export type Up =
   | { kind: 'lab-open' }
   | { kind: 'lab-review'; review: LabSubmission }
   | { kind: 'lab-skip'; candidateId: string }
-  // The review tab: browse past judgments and revise their description. The
-  // judgment itself — score, room, when — has no message that can touch it.
+  // A flow from the open scheme, offered to the queue by hand — so what was
+  // built in the build tab can be judged and kept as evidence the way a dealt
+  // candidate is. The server freezes it: the graph and its bundle by value.
+  | { kind: 'lab-offer'; flowId: string }
+  // The review tab: browse past judgments and revise the assessment — score,
+  // tags, note. What a judgment is *of* — candidate, room, when — has no
+  // message that can touch it.
   | { kind: 'lab-log'; before?: number }
+  | { kind: 'lab-rescore'; reviewId: number; score: LabScore }
   | { kind: 'lab-retag'; reviewId: number; tags: string[] }
   | { kind: 'lab-renote'; reviewId: number; note: string }
   | { kind: 'lab-candidate'; candidateId: string };

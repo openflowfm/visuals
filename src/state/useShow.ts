@@ -3,6 +3,7 @@ import type {
   Down,
   FlowDef,
   LabReviewRow,
+  LabScore,
   LabState,
   LabSubmission,
   Library,
@@ -104,10 +105,14 @@ export function useShow(): {
   labReview(review: LabSubmission): void;
   /** "I did not judge this." Never a score. */
   labSkip(candidateId: string): void;
+  /** Offer a flow from the open scheme to the queue, frozen as it is now. */
+  labOffer(flowId: string): void;
   /** Past judgments, newest first, or null until the review tab has asked. */
   labLog: { reviews: LabReviewRow[]; more: boolean } | null;
   /** Ask for a page of the log; `before` pages past the oldest row held. */
   labLogOpen(before?: number): void;
+  /** Replace one review's score. Every console sees the changed row. */
+  labRescore(reviewId: number, score: LabScore): void;
   /** Replace one review's tag set. Every console sees the changed row. */
   labRetag(reviewId: number, tags: string[]): void;
   /** Replace one review's note, blank meaning none. */
@@ -325,6 +330,20 @@ export function useShow(): {
     }
   }).current;
 
+  const labOffer = useRef((flowId: string) => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'lab-offer', flowId }));
+    }
+  }).current;
+
+  const labRescore = useRef((reviewId: number, score: LabScore) => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'lab-rescore', reviewId, score }));
+    }
+  }).current;
+
   const labLogOpen = useRef((before?: number) => {
     const socket = live.current;
     if (socket?.readyState === WebSocket.OPEN) {
@@ -370,8 +389,10 @@ export function useShow(): {
     labOpen,
     labReview,
     labSkip,
+    labOffer,
     labLog,
     labLogOpen,
+    labRescore,
     labRetag,
     labRenote,
     labStage,

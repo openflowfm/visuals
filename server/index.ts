@@ -6,6 +6,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { VISUALS_PORT, VISUALS_WS_PATH, type Up } from '../protocol.ts';
 import { nextFlow, reOne } from '../resolve.ts';
 import { newSeed } from '../roll.ts';
+import { bundleOf } from '../lab.ts';
 import { followBridge } from './bridge.ts';
 import { freshMethod } from './fresh.ts';
 import { labPlace } from './home.ts';
@@ -214,6 +215,15 @@ sockets.on('connection', (socket) => {
       sendLab(ensureLab().skip(message.candidateId));
       return;
     }
+    // A hand-built flow, frozen from the scheme as it is *now* — the graph and
+    // its whole bundle by value, so editing the library afterwards cannot
+    // change what gets judged. The scheme itself is never touched.
+    if (message.kind === 'lab-offer') {
+      const flows = scheme.current().flows;
+      const flow = flows[message.flowId];
+      if (flow) sendLab(ensureLab().offer(flow, bundleOf(flows, flow)));
+      return;
+    }
     // The review tab. The log and a candidate's graph answer only the asker;
     // a changed row goes to everyone, because an edited description is show
     // state the way the queue is. The judgment itself has no message here.
@@ -221,11 +231,17 @@ sockets.on('connection', (socket) => {
       socket.send(JSON.stringify({ kind: 'lab-log', ...ensureLab().log(message.before) }));
       return;
     }
-    if (message.kind === 'lab-retag' || message.kind === 'lab-renote') {
+    if (
+      message.kind === 'lab-retag' ||
+      message.kind === 'lab-renote' ||
+      message.kind === 'lab-rescore'
+    ) {
       const answer =
         message.kind === 'lab-retag'
           ? ensureLab().retag(message.reviewId, message.tags)
-          : ensureLab().renote(message.reviewId, message.note);
+          : message.kind === 'lab-renote'
+            ? ensureLab().renote(message.reviewId, message.note)
+            : ensureLab().rescore(message.reviewId, message.score);
       if (!answer.ok) return;
       const wire = JSON.stringify({ kind: 'lab-review-changed', review: answer.review });
       for (const other of clients) if (other.readyState === other.OPEN) other.send(wire);
