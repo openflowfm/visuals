@@ -66,9 +66,19 @@ export function probeAt(circuit: Circuit, nodeId: string): Circuit | null {
   // A number becomes brightness; a point becomes somewhere to read a picture.
   // `plasma` rather than the set, because a point's whole job is to move a
   // picture about and a picture with structure in it is one you can see moving.
+  // The bridge paint's energy is held at the middle rather than left to ride
+  // the room: this picture exists to show the probed signal, and a face that
+  // also throbbed with the bench's stand-in energy was showing two signals and
+  // captioning them as one.
   const bridge =
     outlet.kind === 'n'
-      ? { id: BRIDGE, kind: 'paint' as const, x: node.x + 100, y: node.y }
+      ? {
+          id: BRIDGE,
+          kind: 'paint' as const,
+          x: node.x + 100,
+          y: node.y,
+          values: { energy: 0.5 },
+        }
       : { id: BRIDGE, kind: 'source' as const, op: 'plasma', x: node.x + 100, y: node.y };
   const inlet = outlet.kind === 'n' ? 'amount' : 'p';
   return {

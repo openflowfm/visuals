@@ -120,6 +120,22 @@ describe('which outlet a face is a picture of', () => {
     });
   });
 
+  it('holds the bridge paint at a fixed energy', () => {
+    // The bridge exists to show the probed signal. Left unwired, `paint`'s
+    // energy inlet rides the room, and the face throbbed with the bench's
+    // stand-in energy on top of the number it was captioned as showing.
+    const circuit = wire(
+      [
+        { id: 'pol', kind: 'polar', x: 0, y: 0 },
+        { id: 'o', kind: 'out', x: 1, y: 0 },
+      ],
+      [],
+    );
+    const bridge = probeAt(circuit, 'pol')?.nodes.find((node) => node.id === '~probe-bridge');
+
+    expect(bridge?.values).toEqual({ energy: 0.5 });
+  });
+
   it('falls back to the first outlet when nothing is wired yet', () => {
     // A node dropped and not yet connected still has to show something, and the
     // first outlet is as good an answer as exists.

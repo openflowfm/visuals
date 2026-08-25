@@ -266,8 +266,10 @@ still round — exactly what a wider wall does, through exactly the same code.
 
 **It will show one node instead.** Clicking a node's small face promotes it: the bench draws
 what that node has made, at whatever size the panel is. See [flows](flows.md) for what the
-picture is and why it is the same `probeAt` graph the face was already showing; what belongs
-here is the two things the console has to get right about it.
+picture is — for a picture outlet it is the same `probeAt` graph the face was already
+showing; a number's face is a scope, and promoting one shows the `paint` crossing the scope
+replaced, which is the wiring rather than the reading. What belongs here is the two things
+the console has to get right about it.
 
 The first is **saying so**. Somebody clicks a node, walks away, and comes back to a big
 picture that is not what the flow draws — and the next thing that happens is a bug report

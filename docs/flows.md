@@ -741,10 +741,20 @@ you build at a desk is what will play.
 ## A picture on every node
 
 Each node face shows what *that node* has made, not a thumbnail of the finished flow.
-[`probe.ts`](../src/ui/probe.ts) builds it by cutting the graph off at one outlet and
-bringing the result back to a colour: a number through `paint`, a point through a `plasma`
-source, because a point's whole job is to move a picture and a picture with structure in it
-is one you can see moving.
+[`probe.ts`](../src/ui/probe.ts) builds a picture by cutting the graph off at one outlet and
+bringing the result back to a colour: a point through a `plasma` source, because a point's
+whole job is to move a picture and a picture with structure in it is one you can see moving.
+
+A **number** outlet is not brought to a colour any more — its face is an oscilloscope.
+It used to cross through `paint`, which is honest as a wiring and useless as a reading: a
+blinking rectangle cannot tell a sine from a saw, and the bridge's unwired `energy` rode the
+room besides, so the face throbbed with a signal that was not the node's while the readout
+beside it — off the CPU evaluator — told the truth. [`scope.ts`](../src/ui/scope.ts) draws
+the trace from that same evaluator, so the face and the number beside it cannot disagree,
+and the sweep is synced to the bar so a square at 1/4 is four stationary steps and a phase
+offset is a visible shift. The `paint` crossing survives where a number only exists per
+pixel — `polar`'s radius has no single value to plot — and there its energy is now held at
+the middle, so the probed signal is the only thing moving in the picture.
 
 All of them come out of **one** GL context, blitted into a small 2D canvas per node. A
 context each is the obvious build and the wrong one: browsers keep about sixteen alive and
@@ -752,7 +762,9 @@ start evicting the oldest, and this page already has the stage and the bench. Th
 why `preview.ts` caches programs by signature in a map rather than one slot.
 
 One context does not make every draw free. Only visible faces draw, at most ten per frame;
-the promoted node and `out` take the first slots. Zoom below a half, exceed the budget or
+the promoted node and `out` take the first slots. Scope faces are outside the count — a
+polyline into a 2D canvas is not a GL draw, so a graph full of numbers never spends slots
+the pictures could use — though they obey the same switch, zoom floor and visibility. Zoom below a half, exceed the budget or
 turn **live pictures** off and the affected faces keep their last frame with `paused` written
 on it. The browser reports `live / visible` beside the switch, so saving work never looks
 like a broken preview. The switch is a machine preference in `localStorage`, not part of the

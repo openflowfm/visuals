@@ -1,7 +1,16 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import type { Circuit, Scheme, Show } from '../../protocol.ts';
 import { createPreview } from '../render/preview.ts';
+import { createNumberEvaluator } from '../render/evaluateNumber.ts';
 import { probeAt } from './probe.ts';
+import {
+  drawScope,
+  pushScopeSample,
+  scopeHead,
+  scopeOutlets,
+  scopeSweeps,
+  type ScopeSample,
+} from './scope.ts';
 import {
   budgetPictures,
   LIVE_PICTURE_ZOOM_FLOOR,
@@ -17,7 +26,8 @@ export type NodePictureStatus = PictureBudget['counts'] & {
 };
 
 /**
- * A picture per node, out of one GL context.
+ * A picture per node, out of one GL context — and a scope where the output is
+ * a number.
  *
  * Each face shows what *that node* has made, not a thumbnail of the finished
  * flow — a dozen copies of the same image would teach nothing, while a picture
@@ -25,6 +35,17 @@ export type NodePictureStatus = PictureBudget['counts'] & {
  * [`probe.ts`](./probe.ts) builds each one by cutting the circuit off at an
  * outlet and bringing the result back to a colour through the vocabulary's own
  * two crossings.
+ *
+ * **A number outlet is not brought to a colour any more.** Its face is an
+ * oscilloscope — see [`scope.ts`](./scope.ts) for why and for the geometry —
+ * drawn straight into the face's 2D canvas from this component's own CPU
+ * evaluator. Its own rather than the page's, deliberately: the evaluator's
+ * track envelopes advance by the `dt` each caller passes, so one instance
+ * shared between this 60 fps loop and the 10 Hz readout latch would step its
+ * envelopes twice. Two instances, each self-consistent, is the arrangement
+ * that cannot drift. Scope faces obey the same on-switch, zoom floor and
+ * visibility as the pictures, but not the GL budget — a polyline is not a GL
+ * draw, so a scope never spends a slot a picture could use.
  *
  * **One context, blitted per live node.** A context each is the obvious build
  * and the wrong one: browsers keep about sixteen alive and start evicting the
@@ -108,6 +129,13 @@ export function NodePictures({
     const canvas = offscreen.current;
     if (!canvas) return;
     const preview = createPreview(canvas);
+    const numbers = createNumberEvaluator();
+    const traces = new Map<string, ScopeSample[]>();
+    let scopesFor: Circuit | null = null;
+    let scopes = new Map<string, string>();
+    const traceColor =
+      getComputedStyle(document.documentElement).getPropertyValue('--signal-n').trim() ||
+      '#f0b23c';
     let raf = 0;
     let last = performance.now();
 
@@ -116,23 +144,57 @@ export function NodePictures({
       const dt = Math.min((stamp - last) / 1000, 0.1);
       last = stamp;
       const at = now.current;
+      const beat = at.transport.beat();
+      const seconds = at.transport.seconds();
+      // The same stand-in set the bench uses, so a flow built on the set is
+      // not black here and lit there. See [`withStandIns`](../state/useRoom.ts).
+      const show = withStandIns(at.show, beat);
+      const inputs = { show, beat, seconds, dt, pace: at.scheme.defaults.pace };
+
+      // Which faces are scopes is a fact about the wiring, so it is settled
+      // once per circuit rather than asked again every frame.
+      if (scopesFor !== at.circuit) {
+        scopes = scopeOutlets(at.circuit, numbers.sample(at.circuit, inputs));
+        scopesFor = at.circuit;
+        const kept = new Set(scopes.values());
+        for (const id of [...traces.keys()]) if (!kept.has(id)) traces.delete(id);
+      }
+
       const ids = at.circuit.nodes.map((node) => node.id).filter((id) => faces.current.has(id));
+      const scoped = ids.filter((id) => scopes.has(id));
       const zoom = at.scale();
       const budget = budgetPictures({
-        ids,
+        ids: ids.filter((id) => !scopes.has(id)),
         visible: visible.current,
         promoted: at.promoted,
         out: at.circuit.nodes.find((node) => node.kind === 'out')?.id,
         enabled: at.enabled,
         scale: zoom,
       });
+      const scopesOn = at.enabled && zoom >= LIVE_PICTURE_ZOOM_FLOOR;
       const live = new Set(budget.live);
       const paused = new Set(budget.paused);
       for (const [id, face] of faces.current) {
-        markFace(face, live.has(id) ? 'live' : paused.has(id) ? 'paused' : 'culled');
+        const state = scopes.has(id)
+          ? visible.current.has(id)
+            ? scopesOn
+              ? 'live'
+              : 'paused'
+            : 'culled'
+          : live.has(id)
+            ? 'live'
+            : paused.has(id)
+              ? 'paused'
+              : 'culled';
+        markFace(face, state);
       }
+      const scopeShown = scoped.filter((id) => visible.current.has(id));
       publishStatus(lastStatus, at.onStatus, {
-        ...budget.counts,
+        mounted: ids.length,
+        visible: budget.counts.visible + scopeShown.length,
+        live: budget.counts.live + (scopesOn ? scopeShown.length : 0),
+        paused: budget.counts.paused + (scopesOn ? 0 : scopeShown.length),
+        culled: budget.counts.culled + (scoped.length - scopeShown.length),
         reason: !at.enabled
           ? 'off'
           : zoom < LIVE_PICTURE_ZOOM_FLOOR
@@ -142,18 +204,39 @@ export function NodePictures({
               : null,
       });
 
+      if (scopesOn && scoped.length > 0) {
+        const sample = numbers.sample(at.circuit, inputs);
+        const quantum = Math.max(1, Math.round(show.quantum || 4));
+        for (const id of scoped) {
+          const outlet = scopes.get(id);
+          if (!outlet) continue;
+          const value = sample.outlet(outlet);
+          let buffer = traces.get(outlet);
+          if (!buffer) traces.set(outlet, (buffer = []));
+          // Sampled even off-screen, so scrolling a face away and back does
+          // not put a hole in its trace; only the drawing waits for the eye.
+          pushScopeSample(buffer, { beat, value: value ?? null }, quantum);
+          const face = faces.current.get(id);
+          if (!face || !visible.current.has(id)) continue;
+          drawScope(
+            face,
+            scopeSweeps(buffer, quantum),
+            scopeHead(beat, value, quantum),
+            quantum,
+            traceColor,
+          );
+        }
+      }
+
       // Every gate is before the feed, the graph probe and the GL draw. One
       // empty frame therefore costs one small schedule and nothing in WebGL.
       if (budget.live.length === 0) return;
-      const beat = at.transport.beat();
       preview.begin({
         circuit: at.circuit,
-        // The same stand-in set the bench uses, so a flow built on the set is
-        // not black here and lit there. See [`withStandIns`](../state/useRoom.ts).
-        show: withStandIns(at.show, beat),
+        show,
         scheme: at.scheme,
         beat,
-        seconds: at.transport.seconds(),
+        seconds,
         dt,
       });
       for (const id of budget.live) {
