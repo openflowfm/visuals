@@ -97,6 +97,8 @@ export function useShow(): {
   downbeat(): void;
   /** Turn only the flow wheel once, for every screen attached to the server. */
   nextFlow(): void;
+  /** The mirror gesture: turn only the colourway wheel once. */
+  nextColorway(): void;
   /** The review queue, or null until the review view has asked for it. */
   lab: LabState | null;
   /** Ask for the queue's state. The one thing that makes the server deal. */
@@ -311,6 +313,13 @@ export function useShow(): {
     if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ kind: 'next-flow' }));
   }).current;
 
+  const nextColorway = useRef(() => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'next-colorway' }));
+    }
+  }).current;
+
   const labOpen = useRef(() => {
     const socket = live.current;
     if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ kind: 'lab-open' }));
@@ -385,6 +394,7 @@ export function useShow(): {
     loadScheme,
     downbeat,
     nextFlow,
+    nextColorway,
     lab,
     labOpen,
     labReview,

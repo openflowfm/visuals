@@ -38,6 +38,7 @@ export function App() {
     loadScheme,
     downbeat,
     nextFlow,
+    nextColorway,
     lab,
     labOpen,
     labReview,
@@ -100,6 +101,8 @@ export function App() {
       // library before the key-up arrives. Modifiers stay available to the
       // browser (`cmd-N` still opens a window), and the colourway does not move.
       if (e.key === 'n' && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) nextFlow();
+      // Colourway, next — the same gesture's other half, under the same rules.
+      if (e.key === 'c' && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) nextColorway();
       if (e.key === 'i') setPanel((on) => !on);
       if (e.key === 'e') setEditing((on) => !on);
       if (e.key === 'k') align(!aligning);
@@ -114,7 +117,7 @@ export function App() {
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
-  }, [downbeat, nextFlow, saveScheme, align, aligning, walled, send, shut]);
+  }, [downbeat, nextFlow, nextColorway, saveScheme, align, aligning, walled, send, shut]);
 
   useEffect(() => {
     if (!canvas.current) return;
@@ -256,7 +259,8 @@ export function App() {
           </dl>
 
           <p className="hint">
-            <kbd>1</kbd> the one · <kbd>l</kbd> next flow · <kbd>i</kbd> panel · <kbd>e</kbd>{' '}
+            <kbd>1</kbd> the one · <kbd>n</kbd> next flow · <kbd>c</kbd> next colours ·{' '}
+            <kbd>i</kbd> panel · <kbd>e</kbd>{' '}
             edit · <kbd>k</kbd> align · <kbd>w</kbd> wall · <kbd>f</kbd> fullscreen
           </p>
         </div>

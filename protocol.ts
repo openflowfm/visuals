@@ -756,6 +756,7 @@ export type Up =
   | { kind: 'load-scheme'; id: string }
   | { kind: 'downbeat' }
   | { kind: 'next-flow' }
+  | { kind: 'next-colorway' }
   // The lab speaks three coarse gestures and nothing finer. Opening the review
   // view asks for the queue's state — and is the only thing that makes the
   // server deal; nothing is generated merely because a server is running.

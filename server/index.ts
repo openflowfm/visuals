@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { VISUALS_PORT, VISUALS_WS_PATH, type Up } from '../protocol.ts';
-import { nextFlow, reOne } from '../resolve.ts';
+import { nextColorway, nextFlow, reOne } from '../resolve.ts';
 import { newSeed } from '../roll.ts';
 import { bundleOf } from '../lab.ts';
 import { followBridge } from './bridge.ts';
@@ -196,6 +196,12 @@ sockets.on('connection', (socket) => {
     // happen to start together. The colourway deliberately stays where it is.
     if (message.kind === 'next-flow') {
       turning.wheel = nextFlow(turning.wheel);
+      dirty = true;
+      return;
+    }
+    // The mirror gesture: the colourway moves, the flow holds.
+    if (message.kind === 'next-colorway') {
+      turning.wheel = nextColorway(turning.wheel);
       dirty = true;
       return;
     }
