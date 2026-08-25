@@ -103,17 +103,21 @@ describe('the store', () => {
     });
   });
 
-  it('refuses a submission the shared rules refuse, atomically', () => {
+  it('refuses a submission it cannot trust, atomically', () => {
     const store = open(scratch());
     const experiment = store.openExperiment('fresh', 1, 'deck');
     store.addCandidate(candidate('c-one'));
     store.serve('c-one', experiment);
     const bad = judgment('c-one', dealRoom('r'), 4);
-    bad.tags = bad.tags.slice(0, 1);
+    bad.tags = [...bad.tags, 'no-such-tag'];
     const answer = store.submit(bad, { experimentId: experiment, rendererVersion: 'p@1' });
     expect(answer.ok).toBe(false);
     expect(store.reviews('c-one')).toHaveLength(0);
     expect(store.counts(experiment).pending).toBe(1);
+
+    const bare = judgment('c-one', dealRoom('r'), 2);
+    bare.tags = [];
+    expect(store.submit(bare, { experimentId: experiment, rendererVersion: 'p@1' }).ok).toBe(true);
   });
 
   it('keeps a skip as its own fact, never a score', () => {
@@ -222,7 +226,7 @@ describe('the engine', () => {
     const engine = labEngine(open(scratch()), fakeMethod(), 'one-deck');
     const first = engine.open();
     const bad = judgment(first.candidate!.id, first.room!, 3);
-    bad.tags = [];
+    bad.tags = ['no-such-tag'];
     const refused = engine.submit(bad);
     expect(refused.notice).toBeTruthy();
     expect(refused.candidate?.id).toBe(first.candidate?.id);

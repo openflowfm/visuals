@@ -85,8 +85,9 @@ export interface LabTag {
  * 3: polarity narrowed to functional claims; `use` gained sections and energy.
  * 4: effects gone — a tag is the whole gesture; `use` dropped (where a flow
  *    belongs is curation, not judgment); `mood` and `look` opened.
+ * 5: tags optional — a bare score is a complete review; `too-sparse` added.
  */
-export const TAGS_VERSION = 4;
+export const TAGS_VERSION = 5;
 
 export const TAG_CATEGORIES: readonly { category: TagCategory; about: string }[] = [
   { category: 'character', about: 'What kind of thing it is' },
@@ -195,6 +196,7 @@ export const TAGS: readonly LabTag[] = [
   fault('flat', 'composition', 'flat', 'No depth where depth was wanted'),
   fault('harsh', 'composition', 'harsh', 'Contrast or strobe past what a room enjoys'),
   fault('too-dark', 'composition', 'too dark', 'Reads as a dark screen on a lamp'),
+  fault('too-sparse', 'composition', 'too sparse', 'Not enough happening to hold a wall'),
 
   describe('distinctive', 'piece', 'distinctive', 'Not a thing the library already has'),
   describe('surprising', 'piece', 'surprising', 'Did something the recipe did not promise'),
@@ -220,23 +222,17 @@ export const TAG_BY_ID: ReadonlyMap<string, LabTag> = new Map(TAGS.map((t) => [t
  * Why a submission cannot land yet, as sentences, or nothing when it can.
  *
  * One function for the button and for the server, so the UI can never learn a
- * different rule from the one the store enforces. Two rules only: a score,
- * and three known tags. Everything beyond that was force-fed evidence — a
- * demanded justification produces an invented one, and a merely dull flow has
- * no fault to name. With a vocabulary this wide, description is the easy
- * part; the rules just keep a review from being a bare number.
+ * different rule from the one the store enforces. One rule now: a score.
+ * Tags are welcome — they are what lets a score weigh more later — but "all
+ * of it is bad" is a complete judgment, and a gate demanding three tags for
+ * it was slower than the reviewer and no more honest. The store still
+ * refuses a tag it has never heard of; that check is its own, not this one.
  */
 export function submissionProblems(submission: {
   score: LabScore | null;
   tags: readonly string[];
 }): string[] {
-  const problems: string[] = [];
-  const { score, tags } = submission;
-  if (score === null) problems.push('a review requires a score');
-
-  const known = tags.filter((id) => TAG_BY_ID.get(id));
-  if (known.length < 3) problems.push('at least three tags');
-  return problems;
+  return submission.score === null ? ['a review requires a score'] : [];
 }
 
 // --- candidate identity ---------------------------------------------------

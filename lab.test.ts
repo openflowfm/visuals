@@ -113,17 +113,12 @@ describe('the dependency bundle', () => {
 });
 
 describe('the submit rules', () => {
-  it('requires a score and three tags', () => {
-    expect(submissionProblems({ score: null, tags: [] })).toHaveLength(2);
+  it('requires a score and nothing else', () => {
+    expect(submissionProblems({ score: null, tags: [] })).toHaveLength(1);
+    expect(submissionProblems({ score: 2 as LabScore, tags: [] })).toEqual([]);
     expect(
       submissionProblems({ score: 3 as LabScore, tags: ['geometric', 'eerie', 'muddy'] }),
     ).toEqual([]);
-  });
-
-  it('unknown tags do not count toward the three', () => {
-    expect(
-      submissionProblems({ score: 3 as LabScore, tags: ['geometric', 'eerie', 'no-such-tag'] }),
-    ).toEqual(['at least three tags']);
   });
 });
 
