@@ -298,10 +298,16 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       if (alive) {
         release();
         // A context is not collected when the last reference to it goes: a
-        // browser keeps around sixteen per origin and evicts the oldest, so
-        // opening and closing the console enough times silently kills the wall's
-        // own context. This is the one call that actually hands one back.
-        gl.getExtension('WEBGL_lose_context')?.loseContext();
+        // browser keeps about sixteen per origin and evicts the oldest, so
+        // opening and closing the console enough times silently kills the
+        // wall's own. This is the one call that actually hands one back.
+        //
+        // Only for a canvas that has left the page, though. One still in the
+        // document is being *reused* rather than discarded — which is exactly
+        // what React's development double-invoke does, free and re-create on
+        // the same element — and a context lost there is lost for good, since
+        // nothing restores one that was taken deliberately.
+        if (!canvas.isConnected) gl.getExtension('WEBGL_lose_context')?.loseContext();
       }
     },
     frame(show, scheme, beat, seconds, dt) {

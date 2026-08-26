@@ -509,6 +509,12 @@ browser keeps about sixteen per origin and evicts the oldest, so opening and clo
 console enough times would silently take out the wall's own — the risk `NodePictures.tsx`
 already documents from the other side.
 
+**Only for a canvas that has left the page**, and the guard is not paranoia. A canvas still
+in the document is being *reused* rather than discarded, which is precisely what React's
+development double-invoke does: mount, free, mount again on the same element. A context lost
+there is lost permanently, because nothing restores one that was taken deliberately — so
+without the check, `npm run dev` would draw black.
+
 `src/render/flow.ts` holds what both the stage and the node faces need — the shader, the
 banks, the signature. **The bench is not in that list**, because the bench is a whole
 `Compositor` on its own canvas rather than a second renderer. There used to be one and it

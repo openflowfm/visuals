@@ -178,7 +178,11 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
       // keeps about sixteen per origin and evicts the oldest, so opening and
       // closing the console enough times takes out the wall's own — the risk
       // `NodePictures.tsx` already documents. This is the call that returns one.
-      gl.getExtension('WEBGL_lose_context')?.loseContext();
+      //
+      // Only for a canvas that has left the page: one still in the document is
+      // being reused rather than discarded, which is what React's development
+      // double-invoke does, and a context taken deliberately is never restored.
+      if (!canvas.isConnected) gl.getExtension('WEBGL_lose_context')?.loseContext();
     },
 
     begin(room) {
