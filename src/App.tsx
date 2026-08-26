@@ -4,6 +4,7 @@ import { useOutput } from './state/useOutput.ts';
 import { useShow, type Clock } from './state/useShow.ts';
 import { ON_WALL, useOnWall, useWall } from './state/useWall.ts';
 import { Align } from './ui/Align.tsx';
+import { Boundary } from './ui/Boundary.tsx';
 import { Console } from './ui/Console.tsx';
 import './app.css';
 
@@ -276,32 +277,34 @@ export function App() {
         />
       )}
       {editing && scheme && (
-        <Console
-          show={show}
-          showRef={showRef}
-          scheme={scheme}
-          library={library}
-          media={media}
-          grid={grid}
-          edit={edit}
-          saveScheme={saveScheme}
-          saveSchemeAs={saveSchemeAs}
-          loadScheme={loadScheme}
-          lab={lab}
-          labOpen={labOpen}
-          labReview={labReview}
-          labSkip={labSkip}
-          labOffer={labOffer}
-          labLog={labLog}
-          labLogOpen={labLogOpen}
-          labRescore={labRescore}
-          labRetag={labRetag}
-          labRenote={labRenote}
-          labStage={labStage}
-          labCandidate={labCandidate}
-          clock={clock}
-          onClose={() => setEditing(false)}
-        />
+        <Boundary what="the console" onError={() => setEditing(false)}>
+          <Console
+            show={show}
+            showRef={showRef}
+            scheme={scheme}
+            library={library}
+            media={media}
+            grid={grid}
+            edit={edit}
+            saveScheme={saveScheme}
+            saveSchemeAs={saveSchemeAs}
+            loadScheme={loadScheme}
+            lab={lab}
+            labOpen={labOpen}
+            labReview={labReview}
+            labSkip={labSkip}
+            labOffer={labOffer}
+            labLog={labLog}
+            labLogOpen={labLogOpen}
+            labRescore={labRescore}
+            labRetag={labRetag}
+            labRenote={labRenote}
+            labStage={labStage}
+            labCandidate={labCandidate}
+            clock={clock}
+            onClose={() => setEditing(false)}
+          />
+        </Boundary>
       )}
     </>
   );

@@ -471,7 +471,43 @@ an edit to a flow-inside-a-flow invisible until something else forced a rebuild.
 
 A build that fails is remembered as a failure, for the same reason: retrying it every frame
 calls the driver's compiler sixty times a second for as long as it stays broken, which is a
-stall rather than an error message.
+stall rather than an error message. That holds for **all three** kinds of failure — a flow's
+shader, a probe shader on a node face, and the output stage's amplifier, which was the one
+left out and would have retried per frame forever on a driver that refused it.
+
+**A graph that cannot be built at all is a fourth**, and it is not the same failure. A node
+`kind` nothing can draw — a hand edit, an MCP typo — makes `flatten` throw before there is
+any shader to compile, which is *outside* the GL try, on the frame path. There is no
+signature to remember it by, because computing one means flattening it, so the scheme object
+is the key: a broken flow draws nothing, says so in the panel, and is not tried again until
+the scheme itself moves. Retrying costs an edit rather than a frame. `merge` refuses an
+unknown kind at both doors as well — this is the floor under that, not a substitute for it.
+
+## A lost context is not a broken one
+
+A GPU reset — a driver crash, a laptop switching graphics, a display waking up — takes the
+WebGL context with it, and **every GL call afterwards is a silent no-op**. Nothing throws,
+nothing logs, the wall simply stays black; the failure looks exactly like a bug in the flow
+that happened to be up.
+
+`compositor.ts` listens for both halves on the canvas. `webglcontextlost` calls
+`preventDefault` — without it the browser never offers a restore at all — marks the
+compositor dead so `frame` stops, and releases everything *there*, while the context is
+lost and every call is a harmless no-op. Doing it on the restore instead would mean passing
+handles from the old context to the new one, which is an `INVALID_OPERATION` apiece. What
+the release actually reclaims is the half that is not on the GPU: the video elements the
+bank keeps open.
+
+`webglcontextrestored` makes it all again — feed, banks, targets — and clears the flow
+cache, which is the point of a cache here: it is what knows a flow existed, so emptying it
+is what makes the next frame rebuild exactly the flow that was up. Nothing is restored,
+because nothing survived.
+
+`free()` ends with `WEBGL_lose_context.loseContext()`, in the compositor and in the node
+faces' `preview.ts` both. Deleting what a context holds does not give the context back: a
+browser keeps about sixteen per origin and evicts the oldest, so opening and closing the
+console enough times would silently take out the wall's own — the risk `NodePictures.tsx`
+already documents from the other side.
 
 `src/render/flow.ts` holds what both the stage and the node faces need — the shader, the
 banks, the signature. **The bench is not in that list**, because the bench is a whole

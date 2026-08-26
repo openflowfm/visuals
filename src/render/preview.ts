@@ -174,6 +174,11 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
       video.free();
       image.free();
       for (const made of built.values()) if (made.program) gl.deleteProgram(made.program.program);
+      // Deleting what a context holds does not give the context back. A browser
+      // keeps about sixteen per origin and evicts the oldest, so opening and
+      // closing the console enough times takes out the wall's own — the risk
+      // `NodePictures.tsx` already documents. This is the call that returns one.
+      gl.getExtension('WEBGL_lose_context')?.loseContext();
     },
 
     begin(room) {

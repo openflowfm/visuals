@@ -27,6 +27,22 @@ where anything sits; the shell it is edited in is below.
 Set is the small remainder: [the wheel](wheel.md), the colourways, and the handful of songs
 that want to say otherwise.
 
+## The console is never allowed to take the picture with it
+
+React unmounts the whole tree from an uncaught render error, and the whole tree here
+includes the canvas. So a bug in a designer that nobody on the wall can see — a node face
+reading a field a hand-edited flow does not have — used to end the show and leave a blank
+page.
+
+`ui/Boundary.tsx` is where a throw is allowed to stop, and the placement is the whole idea.
+One wraps this subtree, which is the code most likely to throw and the code least entitled
+to take anything with it: the console closes, the wall goes on drawing, and `e` opens it
+again. One wraps everything, in `main.tsx`, because a boundary that catches nothing is still
+what turns a white page into a sentence and a reload button.
+
+**The wall's outer boundary is silent** — it renders nothing rather than an apology. A
+paragraph of English thrown twenty feet across a room is worse than a black projector.
+
 ## What went, and why deleting it was the point
 
 There used to be three views. **Coverage** drew every song against every track and asked

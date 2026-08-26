@@ -82,22 +82,71 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
   }
 
   let error: string | null = null;
+  /** False between a context being lost and the browser handing one back. */
+  let alive = true;
   const flows = new Map<string, Built>();
-  const feed = createFeed(gl);
-  const video = createVideoBank(gl);
-  const image = createImageBank(gl);
+  let feed = createFeed(gl);
+  let video = createVideoBank(gl);
+  let image = createImageBank(gl);
 
   /** Where the set's own picture lands, for the flow to read. */
-  const live = createTarget(gl);
+  let live = createTarget(gl);
   /** Where the flow lands, before the output stage takes it to the screen. */
-  const out = createTarget(gl);
+  let out = createTarget(gl);
   let warp = columns(warpFor(SQUARE));
   let gain = 1;
   let test = false;
 
+  /**
+   * The scheme a flow last failed to *build* from.
+   *
+   * Not the same failure as a shader that would not compile, which the `Built`
+   * below already remembers by signature. This one is a graph that could not be
+   * flattened at all — a node kind nothing can draw, out of a hand edit or an
+   * MCP typo — and there is no signature to key it by, because computing one
+   * means flattening it. So the scheme object is the key: retrying costs an
+   * edit rather than a frame. Rebuilding it per frame is the wall freezing while
+   * it re-flattens a broken graph sixty times a second.
+   */
+  const brokenFrom = new Map<string, Scheme>();
+
   const flowProgram = (scheme: Scheme, id: string): Built => {
-    const signature = signatureOf(scheme.flows, id);
     const held = flows.get(id);
+    if (held && brokenFrom.get(id) === scheme) {
+      error = `${scheme.flows[id]?.name || id}: ${held.error}`;
+      return held;
+    }
+    try {
+      const built = buildProgram(scheme, id, held);
+      brokenFrom.delete(id);
+      return built;
+    } catch (err) {
+      // Outside the GL try below on purpose: this is `flatten` and `buildFlow`
+      // failing, not a shader. A flow that cannot be built draws nothing and
+      // says so in the panel, which is an evening somebody can rescue.
+      const built = nothing((err as Error).message);
+      flows.set(id, built);
+      brokenFrom.set(id, scheme);
+      error = `${scheme.flows[id]?.name || id}: ${built.error}`;
+      return built;
+    }
+  };
+
+  /** A flow that could not be built, in the shape `frame` reads. Draws nothing. */
+  const nothing = (why: string): Built => ({
+    program: null,
+    signature: '',
+    error: why,
+    banks: banksOf({ nodes: [], cords: [] }),
+    draws: null,
+    circuit: { nodes: [], cords: [] },
+    videos: [],
+    images: [],
+    numbers: createNumberEvaluator(),
+  });
+
+  const buildProgram = (scheme: Scheme, id: string, held: Built | undefined): Built => {
+    const signature = signatureOf(scheme.flows, id);
     const { circuit } = flatten(scheme.flows, id);
     if (held && held.signature === signature) {
       held.banks = banksOf(circuit);
@@ -171,6 +220,59 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
 
   resize();
 
+  /** Everything this holds on the GPU, and the video elements beside it. */
+  const release = () => {
+    live.free();
+    out.free();
+    feed.free();
+    video.free();
+    image.free();
+    for (const built of flows.values()) if (built.program) gl.deleteProgram(built.program.program);
+    flows.clear();
+    brokenFrom.clear();
+  };
+
+  /**
+   * A GPU reset, which on a show machine is a driver crash, a laptop switching
+   * graphics, or a display waking up.
+   *
+   * Every GL call after one is a silent no-op, so with nothing listening the
+   * wall simply stays black and nothing anywhere says why. `preventDefault` is
+   * what makes the browser offer a restore at all.
+   *
+   * The teardown is here, on the loss, rather than on the restore: while the
+   * context is lost every call is a harmless no-op, where a call made *after*
+   * restoration holding a handle from before it is an `INVALID_OPERATION`.
+   * What it actually releases is the half that is not on the GPU — the video
+   * elements the bank keeps open.
+   */
+  const onLost = (e: Event) => {
+    e.preventDefault();
+    alive = false;
+    error = 'the graphics context was lost — waiting for the browser to hand one back';
+    release();
+  };
+
+  /**
+   * Nothing is restored, because nothing survived — it is all made again.
+   *
+   * The caches are the point: they are what knows a flow existed, and clearing
+   * them is what makes the next frame rebuild exactly the flow that was up.
+   */
+  const onRestored = () => {
+    feed = createFeed(gl);
+    video = createVideoBank(gl);
+    image = createImageBank(gl);
+    live = createTarget(gl);
+    out = createTarget(gl);
+    alive = true;
+    error = null;
+    resize();
+  };
+
+  canvas.addEventListener('webglcontextlost', onLost);
+  canvas.addEventListener('webglcontextrestored', onRestored);
+
   return {
     get error() {
       return error ?? feed.error ?? video.error ?? image.error;
@@ -189,14 +291,24 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       warp = columns(warpFor(output?.corners ?? SQUARE));
     },
     free() {
-      live.free();
-      out.free();
-      feed.free();
-      video.free();
-      image.free();
-      for (const built of flows.values()) if (built.program) gl.deleteProgram(built.program.program);
+      // Before the release, or `loseContext` below would fire `onLost` and
+      // release a second time.
+      canvas.removeEventListener('webglcontextlost', onLost);
+      canvas.removeEventListener('webglcontextrestored', onRestored);
+      if (alive) {
+        release();
+        // A context is not collected when the last reference to it goes: a
+        // browser keeps around sixteen per origin and evicts the oldest, so
+        // opening and closing the console enough times silently kills the wall's
+        // own context. This is the one call that actually hands one back.
+        gl.getExtension('WEBGL_lose_context')?.loseContext();
+      }
     },
     frame(show, scheme, beat, seconds, dt) {
+      // Nothing to draw into. Every call below would be a no-op anyway; not
+      // making them is what keeps a lost context from rebuilding flows that
+      // cannot compile, sixty times a second, until it comes back.
+      if (!alive) return;
       resize();
       gl.viewport(0, 0, canvas.width, canvas.height);
       gl.disable(gl.DEPTH_TEST);

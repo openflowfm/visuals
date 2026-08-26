@@ -120,6 +120,15 @@ export function createFeed(gl: WebGL2RenderingContext): Feed {
   let error: string | null = null;
   const sources = new Map<string, Program | null>();
   let stage: Program | null = null;
+  /**
+   * The output shader having failed to compile, remembered as a failure.
+   *
+   * The same rule the probe shaders keep: a build that failed is not retried
+   * per frame. Without it a driver that will not take this one shader calls its
+   * compiler sixty times a second for as long as the rig runs, which reads as a
+   * stall rather than as an error message.
+   */
+  let stageFailed = false;
 
   /**
    * Where each track's opacity currently is, as against where the show says.
@@ -254,10 +263,12 @@ export function createFeed(gl: WebGL2RenderingContext): Feed {
 
     grade(texture, at, wall) {
       if (!stage) {
+        if (stageFailed) return;
         try {
           stage = compile(gl, OUTPUT_SHADER, 'output');
         } catch (err) {
           error = (err as Error).message;
+          stageFailed = true;
           return;
         }
       }

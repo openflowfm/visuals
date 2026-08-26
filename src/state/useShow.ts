@@ -145,6 +145,8 @@ export function useShow(): {
   // and must not be re-created when React re-renders for the overlay.
   const held = useRef<Show>(RESTING);
   const timing = useRef({ tempo: 120, anchorBeat: 0, anchorAt: 0, beat: 0, seconds: 0 });
+  /** Kinds already complained about, so a skewed server is one line and not a flood. */
+  const unknown = useRef(new Set<string>());
 
   useEffect(() => {
     let socket: WebSocket | null = null;
@@ -172,7 +174,15 @@ export function useShow(): {
       socket.onerror = () => socket?.close();
 
       socket.onmessage = (event) => {
-        const message = JSON.parse(event.data as string) as Down;
+        let message: Down;
+        try {
+          message = JSON.parse(event.data as string) as Down;
+        } catch {
+          return;
+        }
+        // Read before the chain narrows the union away, because the case worth
+        // naming is the one the union does not have a member for.
+        const kind = String((message as { kind?: unknown })?.kind);
         const t = timing.current;
         if (message.kind === 'scheme') {
           setScheme(message.scheme);
@@ -229,6 +239,19 @@ export function useShow(): {
             opacity: message.opacity[i] ?? track.opacity,
           }));
           held.current = next;
+          return;
+        }
+        // Named rather than assumed. This used to be the fallthrough, so
+        // *anything* unrecognised was treated as a full `Show`: a tab left open
+        // across a server that gained a message kind read `message.tempo` as
+        // undefined, which is a NaN clock, a throw per frame in `drawSet`, and
+        // a React unmount to a blank page. A wall skewed from its server should
+        // keep drawing the last show it was sent.
+        if (message.kind !== 'show') {
+          if (!unknown.current.has(kind)) {
+            unknown.current.add(kind);
+            console.warn(`visuals: ignoring an unknown message kind — ${kind}`);
+          }
           return;
         }
         t.tempo = message.tempo;

@@ -73,6 +73,19 @@ it, so a hidden renderer stops drawing and its measured fps reads 0. That is hon
 than broken, and the snap is what makes the picture correct again on the first frame after
 it comes back.
 
+### A message the browser does not know is not a show
+
+`useShow.ts` reads the anchor off a chain of `kind` checks, and that chain used to **fall
+through** to treating whatever arrived as a full `Show`. So a wall tab left open across a
+server that had gained a message kind read `message.tempo` as `undefined` — a NaN clock, a
+throw per frame in `drawSet`, and a React unmount to a blank page, from a version skew of
+one field.
+
+The last branch names `show` explicitly now, and anything else is logged once per kind and
+ignored: a skewed wall keeps drawing the last show it was sent, which is the right answer,
+because the show it is drawing is still true. The `JSON.parse` above it is wrapped for the
+same reason.
+
 ## The native addon, and its three repairs
 
 `@ktamas77/abletonlink` vendors Ableton's own C++ Link library and wraps it with
