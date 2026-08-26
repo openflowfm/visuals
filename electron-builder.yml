@@ -47,7 +47,8 @@ mac:
   #   npm run pack:visuals -- -c.mac.identity="Developer ID Application: NAME (TEAM)"
   #
   # Notarising as well wants `hardenedRuntime: true`, an entitlements plist and
-  # `notarize:` here — see `docs/desktop.md`. Until then macOS quarantines the
-  # first launch: open it from the context menu once, or strip the flag with
-  # `xattr -dr com.apple.quarantine`.
+  # `notarize:` here — see `docs/desktop.md`. Not signing costs nothing locally:
+  # a bundle you built carries no quarantine flag, and `npm run install:apps`
+  # strips one anyway. It costs on any machine the `.dmg` travels to, where the
+  # unsealed resources read as a broken signature rather than an untrusted one.
   identity: null

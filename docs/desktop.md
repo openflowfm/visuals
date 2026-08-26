@@ -147,8 +147,10 @@ npm run pack:visuals -- -c.mac.identity="Developer ID Application: NAME (TEAM)"
 
 Notarising as well wants `hardenedRuntime: true`, an entitlements plist with
 `com.apple.security.cs.allow-jit`, and a `notarize:` block with an app-specific password or
-an API key. Until any of that, macOS quarantines the first launch — open it from the context
-menu once, or `xattr -dr com.apple.quarantine` the bundle.
+an API key. It does not stop the app opening here — quarantine is set by whatever downloads
+a file, and a bundle you built never had one; `npm run install:apps` strips it anyway and
+verifies the strip. A copy that travelled is the case that bites, and not in the way you can
+right-click past — see [`set/docs/desktop.md`](../../set/docs/desktop.md).
 
 The payload is 4 MB: the renderer, three bundles, and the Link addon. Everything else the
 server needs is already inside `server.mjs`, so `!node_modules/**` drops the dependency tree
