@@ -543,7 +543,7 @@ const cannotListen = (err: NodeJS.ErrnoException) => {
   link.stop();
   scheme.stop();
   bridge.close();
-  // 2 rather than 1, so `npm run show` can tell a failure that waiting fixes
+  // 2 rather than 1, so `npm run visuals` can tell a failure that waiting fixes
   // from one that it never will. Nothing frees a port by trying again.
   process.exit(2);
 };

@@ -9,14 +9,14 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 generateNodes();
 
 // The renderer builds to `visuals/dist`, which `server/index.ts` serves. It is
-// a separate build from `ui/` because it is a separate app on a separate
+// a separate build from `set/` because it is a separate app on a separate
 // machine — nothing here ships inside the device.
 //
-// The dev port follows the UI's at +300, continuing the offsets in
-// widgets/docs/bench.md: UI 5173, widget bench +100, device bench +200. A
-// worktree that moves OPENFLOW_UI_PORT takes all four with it.
-const UI_PORT = Number(process.env.OPENFLOW_UI_PORT) || 5173;
-const PORT = Number(process.env.OPENFLOW_VISUALS_UI_PORT) || UI_PORT + 300;
+// The dev port follows set[flow]'s at +300, continuing the offsets in
+// widgets/docs/bench.md: set 5173, widget bench +100, device bench +200. A
+// worktree that moves OPENFLOW_SET_PORT takes all four with it.
+const SET_PORT = Number(process.env.OPENFLOW_SET_PORT) || 5173;
+const PORT = Number(process.env.OPENFLOW_VISUALS_UI_PORT) || SET_PORT + 300;
 const SERVER = process.env.OPENFLOW_VISUALS || 'http://127.0.0.1:17900';
 
 export default defineConfig({

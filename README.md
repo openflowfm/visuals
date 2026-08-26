@@ -49,7 +49,7 @@ configured for it to draw a show.
 ## Running it
 
 ```sh
-npm run show             # a show night: build, run the server alone, keep it up, open its own Chrome
+npm run visuals          # a show night: build, run the server alone, keep it up, open its own Chrome
 npm run dev              # everything, this included: server on :17900, renderer on :5473
 npm run dev:visuals      # the server alone: Link peer + bridge client + host, :17900
 npm run dev:visuals-ui   # the renderer with HMR, :5473, proxying /ws to the server
@@ -60,15 +60,15 @@ npm --prefix visuals run mcp  # local stdio server for agent-authored flows and 
 
 Open `http://localhost:17900` for the built renderer, or `:5473` while working on it.
 
-`npm run dev` runs both alongside the bridge and `ui/`. It uses `concurrently -k`, so a
+`npm run dev` runs both alongside the bridge and `set/`. It uses `concurrently -k`, so a
 port already in use here takes the whole dev session down with it — if `npm run dev` dies
 on startup, look for a `dev:visuals` you left running.
 
-**That `-k` is why `npm run show` exists.** Ten dev processes where any one exiting kills
+**That `-k` is why `npm run visuals` exists.** Ten dev processes where any one exiting kills
 the other nine is right for a dev loop and wrong for a gig: a watcher falling over would
-take the wall with it. `show` builds `dist/` and runs the server on its own, restarting it
+take the wall with it. It builds `dist/` and runs the server on its own, restarting it
 if it stops for any reason but a clean shutdown or a port already taken — see
-[`tools/show.ts`](../tools/show.ts). It also settles which URL a projector gets: `:17900`
+[`tools/visuals.ts`](../tools/visuals.ts). It also settles which URL a projector gets: `:17900`
 serves the built bundle, where `:5473` has HMR attached and reloads the wall on every save.
 
 And it opens the rig in a Chrome that belongs to the show — its own `--user-data-dir`, so no
