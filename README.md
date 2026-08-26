@@ -49,6 +49,7 @@ configured for it to draw a show.
 ## Running it
 
 ```sh
+npm run show             # a show night: build the renderer, run the server alone, keep it up
 npm run dev              # everything, this included: server on :17900, renderer on :5473
 npm run dev:visuals      # the server alone: Link peer + bridge client + host, :17900
 npm run dev:visuals-ui   # the renderer with HMR, :5473, proxying /ws to the server
@@ -62,6 +63,13 @@ Open `http://localhost:17900` for the built renderer, or `:5473` while working o
 `npm run dev` runs both alongside the bridge and `ui/`. It uses `concurrently -k`, so a
 port already in use here takes the whole dev session down with it — if `npm run dev` dies
 on startup, look for a `dev:visuals` you left running.
+
+**That `-k` is why `npm run show` exists.** Ten dev processes where any one exiting kills
+the other nine is right for a dev loop and wrong for a gig: a watcher falling over would
+take the wall with it. `show` builds `dist/` and runs the server on its own, restarting it
+if it stops for any reason but a clean shutdown or a port already taken — see
+[`tools/show.ts`](../tools/show.ts). It also settles which URL a projector gets: `:17900`
+serves the built bundle, where `:5473` has HMR attached and reloads the wall on every save.
 `i` toggles the panel, `e` the editor, `k` the output stage, `w` the wall, `f` fullscreen, and
 `l` turns to the next flow without changing the colourway. **`1` says
 "here is the one"** — it re-phases the rotation so changes land on the top of a phrase

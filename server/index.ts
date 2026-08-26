@@ -536,17 +536,64 @@ const cannotListen = (err: NodeJS.ErrnoException) => {
   link.stop();
   scheme.stop();
   bridge.close();
-  process.exit(1);
+  // 2 rather than 1, so `npm run show` can tell a failure that waiting fixes
+  // from one that it never will. Nothing frees a port by trying again.
+  process.exit(2);
 };
 
 server.on('error', cannotListen);
 sockets.on('error', cannotListen);
+
+/**
+ * Whether what is being served is older than what it was built from.
+ *
+ * The bundle in `dist/` is not in git, so it is exactly as fresh as the last
+ * `build:visuals` on this machine — and a stale one is the *client/server skew*
+ * the renderer's unknown-kind guard exists to survive, running for real. It is
+ * also invisible: the page loads, the wall draws, and one field is missing.
+ *
+ * Timestamps rather than hashes because this has to be free at startup, and the
+ * only wrong answer it can give is a warning nobody needed after a git checkout
+ * touched a file.
+ */
+function staleBundle(): string | null {
+  let built: number;
+  try {
+    built = fs.statSync(path.join(ROOT, 'index.html')).mtimeMs;
+  } catch {
+    return null; // Not built at all, which the 503 above already says plainly.
+  }
+  const newest = (at: string): number => {
+    let stat: fs.Stats;
+    try {
+      stat = fs.statSync(at);
+    } catch {
+      return 0;
+    }
+    if (!stat.isDirectory()) return stat.mtimeMs;
+    let seen = stat.mtimeMs;
+    for (const entry of fs.readdirSync(at)) seen = Math.max(seen, newest(path.join(at, entry)));
+    return seen;
+  };
+  const sources = ['src', 'protocol.ts', 'resolve.ts'].map((rel) =>
+    newest(path.resolve(here, '..', rel)),
+  );
+  const moved = Math.max(...sources);
+  return moved > built ? `${Math.round((moved - built) / 60000)} minutes` : null;
+}
 
 server.listen(PORT, HOST, () => {
   console.log(`visuals: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);
   console.log(`visuals: bridge ${BRIDGE}`);
   console.log(`visuals: media ${MEDIA_ROOT}`);
   console.log(`visuals: link ${link.live ? 'on' : 'MISSING — running on the wall clock'}`);
+  const stale = staleBundle();
+  if (stale) {
+    console.warn(
+      `visuals: ⚠ the renderer in dist/ is ${stale} older than its source.\n` +
+        `visuals: ⚠ what the browser gets is that build, not this code — run: npm run build:visuals`,
+    );
+  }
 });
 
 /**
