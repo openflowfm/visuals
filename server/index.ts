@@ -41,7 +41,9 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const HOST = process.env.OPENFLOW_VISUALS_HOST ?? '0.0.0.0';
 const PORT = Number(process.env.OPENFLOW_VISUALS_PORT) || VISUALS_PORT;
 const BRIDGE = process.env.OPENFLOW_BRIDGE_WS ?? 'ws://127.0.0.1:17800/ws';
-const ROOT = path.resolve(here, '../dist');
+// Beside the source in the repo, and wherever the packaged app put it
+// otherwise — a bundled server does not sit one directory up from the renderer.
+const ROOT = process.env.OPENFLOW_VISUALS_DIST ?? path.resolve(here, '../dist');
 const MEDIA_ROOT = mediaRoot();
 
 /**

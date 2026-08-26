@@ -1,0 +1,53 @@
+# visual[flow], packaged. `npm run pack:visuals`.
+#
+# The same shape as set[flow]'s, plus the one thing this app has and that one
+# does not: a server, and a native addon under it.
+appId: com.openflow.visuals
+productName: visual[flow]
+copyright: © Ryan Gavin
+
+directories:
+  output: ../release/visuals
+  buildResources: electron/dist
+
+files:
+  - package.json
+  - dist/**
+  - electron/dist/main.cjs
+  - electron/dist/preload.cjs
+  # The server, bundled to ESM and run by Electron's own Node — see
+  # `docs/desktop.md` for why it is not `node` off the PATH.
+  - electron/dist/server.mjs
+  # Everything else is already inside those bundles, so the dependency tree
+  # electron-builder would otherwise copy in is dead weight — the MCP server's
+  # express tree alone is 46 MB of code this app never runs.
+  - '!node_modules/**'
+  # The Ableton Link addon, and the two tiny packages its entry point resolves
+  # the binary through. A `.node` file is the one thing a bundle cannot swallow,
+  # so this ships beside the others — at `Resources/app/node_modules`, which is
+  # exactly where `createRequire` walks to from `electron/dist/`.
+  - node_modules/@ktamas77/abletonlink/**
+  - node_modules/bindings/**
+  - node_modules/file-uri-to-path/**
+  # Its vendored copy of Ableton's Link library: 26 MB of C++ that was compiled
+  # into the binary above at install time and is never read again.
+  - '!node_modules/@ktamas77/abletonlink/link/**'
+
+asar: false
+
+mac:
+  category: public.app-category.music
+  icon: electron/dist/icon.icns
+  target:
+    - dmg
+    - dir
+  # Unsigned, deliberately, for now. There are Apple developer keys to hand, and
+  # turning this on needs no file edit:
+  #
+  #   npm run pack:visuals -- -c.mac.identity="Developer ID Application: NAME (TEAM)"
+  #
+  # Notarising as well wants `hardenedRuntime: true`, an entitlements plist and
+  # `notarize:` here — see `docs/desktop.md`. Until then macOS quarantines the
+  # first launch: open it from the context menu once, or strip the flag with
+  # `xattr -dr com.apple.quarantine`.
+  identity: null

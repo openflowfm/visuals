@@ -23,8 +23,27 @@ import { VISUALS_PORT } from '../protocol.ts';
 
 const PORT = Number(process.env.OPENFLOW_VISUALS_PORT) || VISUALS_PORT;
 const RIG = `http://localhost:${PORT}`;
-const server = path.resolve(__dirname, '..', '..', 'server', 'index.ts');
-const repo = path.resolve(__dirname, '..', '..', '..');
+
+/**
+ * The server, bundled, run by **Electron's own Node** rather than the one on
+ * your PATH.
+ *
+ * A packaged `.app` has no source tree to run `server/index.ts` from — and,
+ * launched from Finder, no `node` either: a GUI process inherits
+ * `/usr/bin:/bin`, not whatever a shell profile added. `ELECTRON_RUN_AS_NODE`
+ * turns this same binary into that Node, so the app carries its own.
+ *
+ * It works because the one native dependency is **node-addon-api** — N-API,
+ * whose whole point is an ABI that holds across Node and Electron alike. That
+ * was checked by loading it rather than assumed, and it is why nothing has to be
+ * rebuilt per Electron upgrade. `link.ts` fails soft anyway: a rig that cannot
+ * find the addon runs on the wall clock and says so.
+ *
+ * Both paths are laid out the same — `electron/dist/server.mjs` beside a
+ * `dist/` two levels up — so the repo and the bundle need no branch.
+ */
+const server = path.join(__dirname, 'server.mjs');
+const renderer = path.resolve(__dirname, '..', '..', 'dist');
 
 /** How long to wait before bringing the server back, so a hard failure cannot spin. */
 const RESTART_MS = 1000;
@@ -61,9 +80,15 @@ let child: ChildProcess | null = null;
 let stopping = false;
 
 const start = (): void => {
-  child = spawn('node', ['--disable-warning=ExperimentalWarning', server], {
-    cwd: repo,
+  child = spawn(process.execPath, [server], {
     stdio: 'inherit',
+    env: {
+      ...process.env,
+      ELECTRON_RUN_AS_NODE: '1',
+      // The server works its own location out from `import.meta.url`, which no
+      // longer sits one hop from the renderer once it is bundled.
+      OPENFLOW_VISUALS_DIST: renderer,
+    },
   });
   child.on('exit', (code, signal) => {
     child = null;

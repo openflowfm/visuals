@@ -8,16 +8,23 @@ processes where any one exiting killed the other nine.
 
 ## The server is a child, not this process
 
-Electron's main process is a Node process, so hosting `server/index.ts` inside it would
-work and would save a socket hop. It is not worth it. The server owns the **Ableton Link
-native addon**, which `tools/build-link.ts` compiles against plain Node's ABI after three
-separate source repairs — a C++14 flag that has to become C++17, a macOS define the package
-applies on every OS, and an unquoted include path that breaks under a directory with a space
-in it. Running it under Electron means redoing that against Electron's ABI, and again on
-every Electron upgrade, on the one native dependency in the project.
+Electron's main process is a Node process, so hosting `server/index.ts` inside it would work
+and would save a socket hop. It stays a child anyway, for three reasons that outlast any one
+of them: **the server remains a program you can run**, bare, with `npm run dev:visuals`, in
+a test, or on a second machine with no app at all; a renderer crash cannot take the clock
+with it, and a server crash gets restarted rather than ending the evening; and the thing the
+app supervises is byte-for-byte the thing everything else runs.
 
-So the app spawns it, and everything in `server/` stays exactly as runnable and as testable
-as it was.
+**The reason it was originally split out turned out not to be one.** The worry was the
+Ableton Link native addon: `tools/build-link.ts` compiles it after three source repairs, and
+an addon built for Node's ABI has no business loading under Electron's. Except that it does
+— the package wraps Link with **node-addon-api**, which is N-API, whose entire purpose is an
+ABI that holds across Node *and* Electron versions. That was checked by loading it rather
+than assumed, and it is why nothing is rebuilt per Electron upgrade and why the packaged app
+can run the server under `ELECTRON_RUN_AS_NODE` with no system Node anywhere.
+
+Worth knowing, because it means hosting the server in-process is available if a reason for
+it ever appears. The three above are why it has not.
 
 **Supervision is lifted from `tools/visuals.ts`** and keeps its contract: restart after a
 second, but **not** on a clean exit and **not** on status **2**, which the server emits
@@ -79,6 +86,43 @@ of the same instruction.
 Forget them and the symptom is a projector that stutters whenever somebody brings another
 window to the front — which is a thing that happens constantly, and reads as a bug in the
 renderer.
+
+## Packaging
+
+`npm run pack:visuals` builds the renderer, the shell, an icon, and a `.app` plus a `.dmg`
+under `release/visuals/`. `npm run pack` does both apps.
+
+**What packaging is for here, and it is not distribution.** Unpackaged, both apps report
+themselves as *Electron*: the menu bar says it, the Dock shows Electron's icon for both, and
+⌘-Tab cannot tell them apart — a small thing until you are reaching for one of them mid-set.
+A bundle gives each a real identifier, a real name and an icon, and only an `Info.plist` can.
+
+The icons are generated rather than committed: `tools/build-icons.ts` pads the open[flow]
+mark onto a coloured square with `sips` and packs it with `iconutil`. The mark is shared on
+purpose — these are two halves of one thing — and the **colour** is what separates them,
+because at Dock size hue is the only thing anyone actually reads. A shape difference at 32
+pixels is not a difference.
+
+`asar: false`, deliberately. The archive is a packaging optimisation that buys nothing for
+an app nobody downloads, and it costs a whole class of path problem — `app.asar.unpacked`,
+and fs calls that only work through Electron's patched fs.
+
+**Signing is off and switching it on needs no file edit:**
+
+```sh
+npm run pack:visuals -- -c.mac.identity="Developer ID Application: NAME (TEAM)"
+```
+
+Notarising as well wants `hardenedRuntime: true`, an entitlements plist with
+`com.apple.security.cs.allow-jit`, and a `notarize:` block with an app-specific password or
+an API key. Until any of that, macOS quarantines the first launch — open it from the context
+menu once, or `xattr -dr com.apple.quarantine` the bundle.
+
+The payload is 4 MB: the renderer, three bundles, and the Link addon. Everything else the
+server needs is already inside `server.mjs`, so `!node_modules/**` drops the dependency tree
+electron-builder would otherwise copy in — the MCP server's express tree alone was 46 MB of
+code this app never runs, and the addon's vendored copy of Ableton's Link library another 26
+MB of C++ that was compiled into the binary at install time and is never read again.
 
 ## What has no tests
 
