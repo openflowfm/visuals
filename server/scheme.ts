@@ -1,4 +1,6 @@
+import { z } from 'zod';
 import type { Circuit, CircuitNode, FlowDef, Scheme, SongSpec } from '../protocol.ts';
+import { NODE_KINDS } from '../src/nodes/generated.ts';
 import { repaired, splitPort } from '../src/render/circuit.ts';
 
 /**
@@ -842,7 +844,7 @@ export interface SchemeSource {
  * would need it in four places and would not cover the file at all.
  */
 export function merge(raw: Partial<Scheme>): Scheme {
-  const file = carried(raw);
+  const file = carried(vetted(raw));
   return {
     // Carried rather than rebuilt, so a rolled show can still say where it came
     // from after a reload. Without it the seed lived exactly as long as the tab.
@@ -981,6 +983,102 @@ const WAS_EFFECT: Record<string, CircuitNode['kind']> = {
   edge: 'spread',
   shift: 'spread',
 };
+
+/**
+ * Every kind a file may spell: the node vocabulary, plus what `reword` below
+ * translates. A kind outside it is not something to repair — `signalOfPort`
+ * reads `NODE_SPECS[node.kind].outlets` unguarded, so `repaired` throws on one.
+ */
+const KINDS: ReadonlySet<string> = new Set<string>([
+  ...NODE_KINDS,
+  ...WAS_GEOMETRY,
+  'sample',
+  'signal',
+  'energy',
+  'effect',
+  'look',
+  'hue',
+  'levels',
+]);
+
+/**
+ * The shapes this module can repair, and no others.
+ *
+ * `merge` fixes graphs — a missing `out`, two of them, a cord to a port that
+ * isn't there — and every one of those repairs assumes it is walking arrays of
+ * objects with string fields. Below that assumption there is nothing to repair,
+ * only something to refuse: `"colorways": {"x": "nope"}` reaches `hex.map` in
+ * `show.ts`, `"flows": "folded"` on a song reaches `song.flows.filter` in
+ * `resolve.ts`, and `nodes` that is not an array reaches `reword`. All three run
+ * inside the show heartbeat, so all three are the visuals process gone and the
+ * wall black — for a typo in a file somebody is *meant* to hand-edit.
+ *
+ * So a value of the wrong shape is a parse failure by another name, and it is
+ * thrown as one: `library.ts` keeps the scheme that was already working and puts
+ * the message in the console's panel, which is what a trailing comma has always
+ * done. Unknown keys pass through untouched — a hand-written `_` block
+ * explaining the file is not an error, and neither are the legacy sections
+ * `carried` is about to drop.
+ *
+ * Validation only. Nothing is rewritten here, or a saved file would quietly lose
+ * whatever the schemas below do not name.
+ */
+const GRAPH = z.object({
+  nodes: z.array(z.object({ id: z.string(), kind: z.string().refine((k) => KINDS.has(k)) })),
+  cords: z.array(z.object({ from: z.string(), to: z.string() })),
+});
+
+const FLOWS = z.record(z.string(), z.object({ circuit: GRAPH.nullish() }));
+
+const NAMES = z.array(z.string());
+
+const SCHEME_FILE = z.object({
+  flows: FLOWS.optional(),
+  looks: FLOWS.optional(),
+  effects: FLOWS.optional(),
+  colorways: z.record(z.string(), NAMES).optional(),
+  rotation: z
+    .object({
+      flows: NAMES.optional(),
+      looks: NAMES.optional(),
+      colorways: NAMES.optional(),
+      bars: z.number().optional(),
+      onClip: z.boolean().optional(),
+      colorEvery: z.number().optional(),
+    })
+    .optional(),
+  songs: z
+    .record(
+      z.string(),
+      z.union([
+        z.string(),
+        z.object({
+          colorway: z.string().optional(),
+          flows: NAMES.optional(),
+          looks: NAMES.optional(),
+        }),
+      ]),
+    )
+    .optional(),
+  defaults: z
+    .object({
+      colorway: z.string().optional(),
+      flow: z.string().optional(),
+      look: z.string().optional(),
+      pace: z.number().optional(),
+      draws: z.string().optional(),
+    })
+    .optional(),
+  seed: z.string().optional(),
+});
+
+function vetted(raw: Partial<Scheme>): Partial<Scheme> {
+  const read = SCHEME_FILE.safeParse(raw);
+  if (read.success) return raw;
+  const first = read.error.issues[0];
+  const at = first.path.join('.');
+  throw new Error(`${at || 'the scheme'} is the wrong shape — ${first.message.toLowerCase()}`);
+}
 
 /**
  * `knobs`, under the name it has now.

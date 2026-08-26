@@ -3,7 +3,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { VISUALS_PORT, VISUALS_WS_PATH, type Up } from '../protocol.ts';
+import { VISUALS_PORT, VISUALS_WS_PATH, type LabState, type Up } from '../protocol.ts';
 import { nextColorway, nextFlow, reOne } from '../resolve.ts';
 import { newSeed } from '../roll.ts';
 import { bundleOf } from '../lab.ts';
@@ -16,6 +16,7 @@ import { openLibrary } from './library.ts';
 import { buildShow, noTurning } from './show.ts';
 import { buildGrid } from './grid.ts';
 import { listMedia, mediaRoot, serveMedia } from './media.ts';
+import { readUp } from './up.ts';
 
 /**
  * The visuals server: a Link peer, a bridge client, and an HTTP host for the
@@ -70,7 +71,30 @@ const TYPES: Record<string, string> = {
   '.svg': 'image/svg+xml',
 };
 
+/**
+ * Every request in one try, because this port is on a LAN.
+ *
+ * `new URL(…, \`http://${host}\`)` throws on a Host header that is not a host —
+ * `Host: [` and `Host: a b` both do it — and a throw in this callback is the
+ * process, which is the wall going black because something scanned the network.
+ * Binding `0.0.0.0` is deliberate (see below), so hostile-shaped traffic is
+ * background noise here rather than an event, and the answer to all of it is
+ * 400.
+ */
 const server = http.createServer((req, res) => {
+  try {
+    serve(req, res);
+  } catch (err) {
+    console.warn(`visuals: request refused — ${(err as Error).message}`);
+    if (res.headersSent) res.destroy();
+    else {
+      res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('bad request');
+    }
+  }
+});
+
+function serve(req: http.IncomingMessage, res: http.ServerResponse): void {
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
   if (url.pathname.startsWith('/media/')) {
     if (serveMedia(req, res, MEDIA_ROOT, url.pathname.slice('/media/'.length))) return;
@@ -95,7 +119,7 @@ const server = http.createServer((req, res) => {
   }
   res.writeHead(200, { 'content-type': TYPES[path.extname(target)] ?? 'application/octet-stream' });
   res.end(fs.readFileSync(target));
-});
+}
 
 const sockets = new WebSocketServer({ server, path: VISUALS_WS_PATH });
 const clients = new Set<WebSocket>();
@@ -146,18 +170,70 @@ const sendGrid = (socket: WebSocket) => {
  * opens the database, never deals a candidate, and never learns the lab exists.
  */
 let lab: LabEngine | null = null;
-const ensureLab = (): LabEngine => {
+/**
+ * Why there is no lab, once opening one has failed.
+ *
+ * Remembered rather than retried, because the cause is a file: a corrupt or
+ * locked `lab.sqlite3`, or a migration that will not run. Retrying it on every
+ * click would relitigate the same failure all night.
+ */
+let labClosed: string | null = null;
+
+const ensureLab = (): LabEngine | null => {
   if (lab) return lab;
-  const store = openLab(labPlace().file);
-  const method = freshMethod();
-  // Resuming the newest experiment rather than opening one per boot: the seed
-  // is the deck, and a restart should keep dealing from where it stood.
-  const seed = store.experimentSeed(method.id, method.version) ?? newSeed();
-  lab = labEngine(store, method, seed);
+  if (labClosed) return null;
+  try {
+    const store = openLab(labPlace().file);
+    const method = freshMethod();
+    // Resuming the newest experiment rather than opening one per boot: the seed
+    // is the deck, and a restart should keep dealing from where it stood.
+    const seed = store.experimentSeed(method.id, method.version) ?? newSeed();
+    lab = labEngine(store, method, seed);
+  } catch (err) {
+    labClosed = `the lab is unavailable — ${(err as Error).message}`;
+    console.warn(`visuals: ${labClosed}`);
+    return null;
+  }
   return lab;
 };
 
-const sendLab = (state: ReturnType<LabEngine['open']>) => {
+/** The queue's state as "there is no queue", so the review view says why. */
+const noLab = (why: string): LabState => ({
+  candidate: null,
+  room: null,
+  method: '',
+  reviewed: 0,
+  skipped: 0,
+  pending: 0,
+  notice: why,
+});
+
+/**
+ * One lab gesture, or the reason it did not happen.
+ *
+ * The database is opened the first time a review view asks and never before, so
+ * **pressing the review tab is what touches the disk** — and a store that will
+ * not open used to take the process with it, from a rig that was drawing fine a
+ * moment earlier. A show with no lab is a show; a show with no server is a black
+ * wall. Every path in here answers the asker either way, so the view says what
+ * happened rather than waiting on a reply that is not coming.
+ */
+const onLab = (socket: WebSocket, run: (engine: LabEngine) => void) => {
+  const engine = ensureLab();
+  if (!engine) {
+    socket.send(JSON.stringify({ kind: 'lab', ...noLab(labClosed ?? 'the lab is unavailable') }));
+    return;
+  }
+  try {
+    run(engine);
+  } catch (err) {
+    const why = `the lab refused that — ${(err as Error).message}`;
+    console.warn(`visuals: ${why}`);
+    socket.send(JSON.stringify({ kind: 'lab', ...noLab(why) }));
+  }
+};
+
+const sendLab = (state: LabState) => {
   const wire = JSON.stringify({ kind: 'lab', ...state });
   for (const socket of clients) if (socket.readyState === socket.OPEN) socket.send(wire);
 };
@@ -175,123 +251,146 @@ sockets.on('connection', (socket) => {
   );
 
   socket.on('message', (raw) => {
-    let message: Up;
+    const read = readUp(String(raw));
+    if (!read.ok) {
+      console.warn(`visuals: dropped a message — ${read.why}`);
+      return;
+    }
+    // The second belt. Every handler below is guarded on its own, and this is
+    // what says that one that is not, or one guarded wrongly, still cannot be
+    // the end of the show.
     try {
-      message = JSON.parse(String(raw)) as Up;
-    } catch {
-      return;
+      dispatch(socket, read.up);
+    } catch (err) {
+      console.warn(`visuals: ${read.up.kind} failed — ${(err as Error).message}`);
     }
-    // "Here is the one." Nothing to carry — *when* it arrives is the message,
-    // and it lands on the server because the wheel belongs to the show rather
-    // than to whoever pressed the key. `dirty` so the re-phased show goes out
-    // on the next tick rather than at the heartbeat, since the point of the
-    // gesture is that it happened just now.
-    if (message.kind === 'downbeat') {
-      turning.wheel = reOne(scheme.current().rotation, link.sample(), turning.wheel);
-      dirty = true;
-      return;
-    }
-    // A flow-only turn, owned by the server for the same reason the one is:
-    // the console and the wall are two views of one show, not two wheels that
-    // happen to start together. The colourway deliberately stays where it is.
-    if (message.kind === 'next-flow') {
-      turning.wheel = nextFlow(turning.wheel);
-      dirty = true;
-      return;
-    }
-    // The mirror gesture: the colourway moves, the flow holds.
-    if (message.kind === 'next-colorway') {
-      turning.wheel = nextColorway(turning.wheel);
-      dirty = true;
-      return;
-    }
-    // The lab's three gestures. Answered inline rather than on the heartbeat,
-    // because a review queue advancing is the one thing the reviewer is
-    // waiting on — and broadcast to every client, because the queue is the
-    // show's the way the wheel is.
-    if (message.kind === 'lab-open') {
-      sendLab(ensureLab().open());
-      return;
-    }
-    if (message.kind === 'lab-review') {
-      sendLab(ensureLab().submit(message.review));
-      return;
-    }
-    if (message.kind === 'lab-skip') {
-      sendLab(ensureLab().skip(message.candidateId));
-      return;
-    }
-    // A hand-built flow, frozen from the scheme as it is *now* — the graph and
-    // its whole bundle by value, so editing the library afterwards cannot
-    // change what gets judged. The scheme itself is never touched.
-    if (message.kind === 'lab-offer') {
-      const flows = scheme.current().flows;
-      const flow = flows[message.flowId];
-      if (flow) sendLab(ensureLab().offer(flow, bundleOf(flows, flow)));
-      return;
-    }
-    // The review tab. The log and a candidate's graph answer only the asker;
-    // a changed row goes to everyone, because an edited description is show
-    // state the way the queue is. The judgment itself has no message here.
-    if (message.kind === 'lab-log') {
-      socket.send(JSON.stringify({ kind: 'lab-log', ...ensureLab().log(message.before) }));
-      return;
-    }
-    if (
-      message.kind === 'lab-retag' ||
-      message.kind === 'lab-renote' ||
-      message.kind === 'lab-rescore'
-    ) {
+  });
+});
+
+function dispatch(socket: WebSocket, message: Up): void {
+  // "Here is the one." Nothing to carry — *when* it arrives is the message,
+  // and it lands on the server because the wheel belongs to the show rather
+  // than to whoever pressed the key. `dirty` so the re-phased show goes out
+  // on the next tick rather than at the heartbeat, since the point of the
+  // gesture is that it happened just now.
+  if (message.kind === 'downbeat') {
+    turning.wheel = reOne(scheme.current().rotation, link.sample(), turning.wheel);
+    dirty = true;
+    return;
+  }
+  // A flow-only turn, owned by the server for the same reason the one is:
+  // the console and the wall are two views of one show, not two wheels that
+  // happen to start together. The colourway deliberately stays where it is.
+  if (message.kind === 'next-flow') {
+    turning.wheel = nextFlow(turning.wheel);
+    dirty = true;
+    return;
+  }
+  // The mirror gesture: the colourway moves, the flow holds.
+  if (message.kind === 'next-colorway') {
+    turning.wheel = nextColorway(turning.wheel);
+    dirty = true;
+    return;
+  }
+  // The lab's three gestures. Answered inline rather than on the heartbeat,
+  // because a review queue advancing is the one thing the reviewer is
+  // waiting on — and broadcast to every client, because the queue is the
+  // show's the way the wheel is.
+  if (message.kind === 'lab-open') {
+    onLab(socket, (engine) => sendLab(engine.open()));
+    return;
+  }
+  if (message.kind === 'lab-review') {
+    onLab(socket, (engine) => sendLab(engine.submit(message.review)));
+    return;
+  }
+  if (message.kind === 'lab-skip') {
+    onLab(socket, (engine) => sendLab(engine.skip(message.candidateId)));
+    return;
+  }
+  // A hand-built flow, frozen from the scheme as it is *now* — the graph and
+  // its whole bundle by value, so editing the library afterwards cannot
+  // change what gets judged. The scheme itself is never touched.
+  //
+  // `hasOwn` rather than a truthiness check: `flowId: 'constructor'` finds a
+  // function on the prototype, which passes `if (flow)` and throws downstream.
+  if (message.kind === 'lab-offer') {
+    const flows = scheme.current().flows;
+    if (!Object.hasOwn(flows, message.flowId)) return;
+    const flow = flows[message.flowId];
+    onLab(socket, (engine) => sendLab(engine.offer(flow, bundleOf(flows, flow))));
+    return;
+  }
+  // The review tab. The log and a candidate's graph answer only the asker;
+  // a changed row goes to everyone, because an edited description is show
+  // state the way the queue is. The judgment itself has no message here.
+  if (message.kind === 'lab-log') {
+    onLab(socket, (engine) => {
+      socket.send(JSON.stringify({ kind: 'lab-log', ...engine.log(message.before) }));
+    });
+    return;
+  }
+  if (
+    message.kind === 'lab-retag' ||
+    message.kind === 'lab-renote' ||
+    message.kind === 'lab-rescore'
+  ) {
+    onLab(socket, (engine) => {
       const answer =
         message.kind === 'lab-retag'
-          ? ensureLab().retag(message.reviewId, message.tags)
+          ? engine.retag(message.reviewId, message.tags)
           : message.kind === 'lab-renote'
-            ? ensureLab().renote(message.reviewId, message.note)
-            : ensureLab().rescore(message.reviewId, message.score);
+            ? engine.renote(message.reviewId, message.note)
+            : engine.rescore(message.reviewId, message.score);
       if (!answer.ok) return;
       const wire = JSON.stringify({ kind: 'lab-review-changed', review: answer.review });
       for (const other of clients) if (other.readyState === other.OPEN) other.send(wire);
-      return;
-    }
-    if (message.kind === 'lab-candidate') {
-      const held = ensureLab().candidate(message.candidateId);
+    });
+    return;
+  }
+  if (message.kind === 'lab-candidate') {
+    onLab(socket, (engine) => {
+      const held = engine.candidate(message.candidateId);
       if (held) {
         socket.send(
           JSON.stringify({ kind: 'lab-candidate', id: held.id, flow: held.flow, bundle: held.bundle }),
         );
       }
-      return;
-    }
-    // Persistence is its own gesture now. An edit changes what every screen
-    // draws; only these three touch the library on disk. None of them answer
-    // inline — the heartbeat notices the revision and the library move within
-    // a tick, which is faster than a finger leaves a button.
-    if (message.kind === 'save-scheme') {
-      scheme.save();
-      return;
-    }
-    if (message.kind === 'save-scheme-as') {
-      scheme.saveAs(message.id);
-      return;
-    }
-    if (message.kind === 'load-scheme') {
-      scheme.load(message.id);
-      dirty = true;
-      return;
-    }
-    if (message.kind !== 'scheme' || !message.scheme) return;
-    scheme.replace(message.scheme);
+    });
+    return;
+  }
+  // Persistence is its own gesture now. An edit changes what every screen
+  // draws; only these three touch the library on disk. None of them answer
+  // inline — the heartbeat notices the revision and the library move within
+  // a tick, which is faster than a finger leaves a button.
+  if (message.kind === 'save-scheme') {
+    scheme.save();
+    return;
+  }
+  if (message.kind === 'save-scheme-as') {
+    scheme.saveAs(message.id);
+    return;
+  }
+  if (message.kind === 'load-scheme') {
+    scheme.load(message.id);
     dirty = true;
-    // Back to everyone, including the editor that sent it: the server merges
-    // against the built-in scheme, so what it now holds is not byte-identical
-    // to what was sent, and an editor showing its own guess rather than the
-    // resolved truth is an editor that drifts.
-    for (const other of clients) if (other.readyState === other.OPEN) sendScheme(other);
-    // The broadcast above already carried this revision; without this the
-    // heartbeat would send every gesture a second time, one tick late.
-    lastRevision = scheme.revision();
-  });
-});
+    return;
+  }
+  if (message.kind !== 'scheme') return;
+  // A shape `merge` refuses leaves the working scheme where it was and puts the
+  // message in the panel, exactly as a file with a trailing comma does — so the
+  // broadcast below carries what the server actually holds either way.
+  scheme.replace(message.scheme);
+  dirty = true;
+  // Back to everyone, including the editor that sent it: the server merges
+  // against the built-in scheme, so what it now holds is not byte-identical
+  // to what was sent, and an editor showing its own guess rather than the
+  // resolved truth is an editor that drifts.
+  for (const other of clients) if (other.readyState === other.OPEN) sendScheme(other);
+  // The broadcast above already carried this revision; without this the
+  // heartbeat would send every gesture a second time, one tick late.
+  lastRevision = scheme.revision();
+}
 
 /**
  * Two rates, and the split is the whole reason the renderer looks smooth.
@@ -324,6 +423,19 @@ let lastMedia = '';
 
 let sinceShow = 0;
 setInterval(() => {
+  // The fix is that `merge` refuses a scheme it cannot build a show from, so a
+  // poisoned value never reaches here. This is the floor under that: a throw
+  // inside a `setInterval` body is the process, and losing the show to one bad
+  // tick — when the next one would very likely be fine — is the wrong trade at
+  // any point in a set.
+  try {
+    tick();
+  } catch (err) {
+    console.warn(`visuals: the show tick failed — ${(err as Error).message}`);
+  }
+}, ANCHOR_MS);
+
+function tick(): void {
   sinceShow += ANCHOR_MS;
   const due = dirty || sinceShow >= SHOW_MS;
   if (due) {
@@ -374,7 +486,7 @@ setInterval(() => {
     if (mediaMoved) socket.send(mediaMoved);
     socket.send(wire);
   }
-}, ANCHOR_MS);
+}
 
 /** The subset that moves every tick, so a quiet show sends ~200 bytes. */
 function anchorOf(show: ReturnType<typeof buildShow>) {
@@ -435,6 +547,22 @@ server.listen(PORT, HOST, () => {
   console.log(`visuals: bridge ${BRIDGE}`);
   console.log(`visuals: media ${MEDIA_ROOT}`);
   console.log(`visuals: link ${link.live ? 'on' : 'MISSING — running on the wall clock'}`);
+});
+
+/**
+ * The last resort, and not the fix.
+ *
+ * Every throw this file used to take exited the process, and this process is the
+ * only thing between a Live set and a wall — so the failure mode was always the
+ * same one, whatever caused it: black, mid-song, with nothing on screen to say
+ * why. Every guard above is the fix. This is what makes a missed one a line in a
+ * log instead, and a device that reaches it has a bug to find.
+ */
+process.on('uncaughtException', (err) => {
+  console.error(`visuals: uncaught — ${(err as Error).message} · still running`);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error(`visuals: unhandled rejection — ${String(reason)} · still running`);
 });
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {

@@ -179,6 +179,20 @@ A parse error **keeps the scheme that was already working** and reports the mess
 panel. Losing the show to a trailing comma is the wrong answer at any time and an unthinkable
 one during a set.
 
+**A value of the wrong shape is a parse error by another name**, and gets the same answer.
+`"colorways": {"x": "nope"}` parses perfectly and then reaches `hex.map` in `show.ts`;
+`"flows": "folded"` on a song reaches `song.flows.filter` in `resolve.ts`; `nodes` that is
+not an array reaches `reword`. All three run inside the show heartbeat, so all three used to
+be the visuals process gone and the wall black — for a typo in a file people are *meant* to
+hand-edit. There is nothing to repair, because nobody can say what those were supposed to be,
+so `merge` refuses them: the working scheme stays, the message goes to the panel. It refuses
+an unknown node `kind` for the same reason — `signalOfPort` reads `NODE_SPECS[kind].outlets`
+unguarded, so a made-up kind is a throw rather than a node that draws nothing. Unknown *keys*
+pass through untouched, since a hand-written `_` block explaining the file is not an error.
+
+Both doors go through it, so an editor that sends a shape `merge` will not take is refused
+the same way and leaves the picture where it was.
+
 The open file is still watched. Edited clean — by hand, or by the MCP server — it reloads
 onto every screen. Edited while the screen holds unsaved work, it does not: the console says
 the file moved, and saving overwrites it while loading takes it. Nothing silently discards

@@ -162,4 +162,31 @@ describe('the scheme store', () => {
     expect(store.current().seed).toBe('showing');
     expect(store.error()).not.toBeNull();
   });
+
+  it('keeps the working scheme when a load hits a poisoned value', () => {
+    // A value of the wrong shape is a parse failure by another name — nothing
+    // can say what `"colorways": {"x": "nope"}` meant — and it used to be worse
+    // than a trailing comma, because it parsed and then killed the show tick.
+    const place = placed();
+    fs.writeFileSync(path.join(place.dir!, 'poison.json'), '{ "colorways": { "x": "nope" } }');
+    store = openLibrary(place);
+    store.replace({ ...store.current(), seed: 'showing' });
+    store.load('poison');
+    expect(store.current().seed).toBe('showing');
+    expect(store.error()).toContain('colorways');
+  });
+
+  it('refuses an edit of the wrong shape and keeps what is on screen', () => {
+    // The editor is the other door into `merge`, and a skewed console or a
+    // hand-built scheme over MCP reaches it the same way a file does.
+    const place = placed();
+    store = openLibrary(place);
+    store.replace({ ...store.current(), seed: 'showing' });
+    const rev = store.revision();
+    store.replace({ ...store.current(), songs: { Sandstorm: { flows: 'folded' } } } as never);
+    expect(store.current().seed).toBe('showing');
+    expect(store.current().songs.Sandstorm).toBeUndefined();
+    expect(store.revision()).toBe(rev);
+    expect(store.error()).not.toBeNull();
+  });
 });

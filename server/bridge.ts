@@ -92,6 +92,11 @@ export function followBridge(url: string, onChange: () => void): BridgeLink {
       onChange();
     });
 
+    // Both halves guarded. `take` reads `event.data.rev`, `snap.clips.map` and
+    // `event.frame.tracks.map` bare, so a peer sending the right `type` with the
+    // wrong shape — a version-skewed device, something else answering on 17800 —
+    // used to be the visuals process gone. An event that cannot be read is
+    // ignored: the next snapshot re-establishes everything this one carried.
     socket.on('message', (raw) => {
       let event: OpenFlow.Event;
       try {
@@ -99,7 +104,14 @@ export function followBridge(url: string, onChange: () => void): BridgeLink {
       } catch {
         return;
       }
-      if (take(event)) onChange();
+      let moved = false;
+      try {
+        moved = take(event);
+      } catch (err) {
+        console.warn(`visuals: bridge sent a ${event?.type} it could not read — ${String(err)}`);
+        return;
+      }
+      if (moved) onChange();
     });
 
     socket.on('close', () => {
@@ -168,6 +180,10 @@ export function followBridge(url: string, onChange: () => void): BridgeLink {
         return true;
       case 'snapshot': {
         const snap = event.data;
+        // Checked before the first assignment rather than caught after it: a
+        // half-applied snapshot is a set with a new `rev` and the old clips,
+        // which is worse than no snapshot at all.
+        if (!snap || !Array.isArray(snap.clips) || !Array.isArray(snap.tracks)) return false;
         state.rev = snap.rev;
         state.tempo = snap.tempo;
         state.tracks = snap.tracks;
@@ -185,6 +201,7 @@ export function followBridge(url: string, onChange: () => void): BridgeLink {
         send({ type: 'snapshot' });
         return true;
       case 'playState':
+        if (!Array.isArray(event.tracks)) return false;
         state.playing = event.isPlaying;
         state.play = event.tracks;
         return true;
@@ -199,6 +216,7 @@ export function followBridge(url: string, onChange: () => void): BridgeLink {
         // into a full one, which is the traffic this split exists to avoid.
         return false;
       case 'meterLevels':
+        if (!event.frame || !Array.isArray(event.frame.tracks)) return false;
         state.masterLevel = event.frame.master;
         state.levels = new Map(event.frame.tracks.map((row) => [row.t, row.level]));
         // Levels move 30 times a second and are read, never diffed against.

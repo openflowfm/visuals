@@ -25,22 +25,47 @@ export function mediaRoot(): string {
   return process.env.OPENFLOW_VISUALS_MEDIA ?? path.join(openflowHome(), 'visuals', 'media');
 }
 
-/** The safe, deterministic library visible to media nodes. Symlinks are never followed. */
+/**
+ * The safe, deterministic library visible to media nodes. Symlinks are never
+ * followed.
+ *
+ * Every disk call here is guarded, because this runs inside the show heartbeat
+ * once a second for as long as a client is connected and **dropping files in
+ * mid-show is the documented way to use it**. A file removed between the
+ * `readdir` and its `stat` is the ordinary case rather than the exotic one, and
+ * unguarded it was the wall going black for a file somebody deleted.
+ */
 export function listMedia(root = mediaRoot()): MediaAsset[] {
-  fs.mkdirSync(root, { recursive: true });
+  try {
+    fs.mkdirSync(root, { recursive: true });
+  } catch {
+    return [];
+  }
   const assets: MediaAsset[] = [];
   const walk = (dir: string, prefix = '') => {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
       if (entry.isSymbolicLink()) continue;
       const id = prefix ? `${prefix}/${entry.name}` : entry.name;
       const file = path.join(dir, entry.name);
       if (entry.isDirectory()) walk(file, id);
       else if (entry.isFile() && MEDIA_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
         const extension = path.extname(entry.name).toLowerCase();
+        let bytes: number;
+        try {
+          bytes = fs.statSync(file).size;
+        } catch {
+          continue;
+        }
         assets.push({
           id,
           name: entry.name,
-          bytes: fs.statSync(file).size,
+          bytes,
           type: IMAGE_EXTENSIONS.has(extension) ? 'image' : 'video',
         });
       }
@@ -122,7 +147,14 @@ export function serveMedia(
   }
   const file = resolveMedia(root, id);
   if (!file) return false;
-  const size = fs.statSync(file).size;
+  let size: number;
+  try {
+    size = fs.statSync(file).size;
+  } catch {
+    // Deleted between `resolveMedia` and here. A 404 is the honest answer and
+    // the caller already writes one.
+    return false;
+  }
   const range = byteRange(req.headers.range, size);
   if (range === 'invalid') {
     res.writeHead(416, { 'content-range': `bytes */${size}`, 'accept-ranges': 'bytes' });
@@ -138,7 +170,16 @@ export function serveMedia(
   };
   if (range) headers['content-range'] = `bytes ${range.start}-${range.end}/${size}`;
   res.writeHead(range ? 206 : 200, headers);
-  if (req.method === 'HEAD') res.end();
-  else fs.createReadStream(file, range ?? undefined).pipe(res);
+  if (req.method === 'HEAD') {
+    res.end();
+    return true;
+  }
+  const stream = fs.createReadStream(file, range ?? undefined);
+  // Deleting a video while the wall is streaming it is an unhandled stream
+  // error, which is the process. The response is destroyed instead: the
+  // renderer's decoder sees a truncated fetch, which it already survives.
+  stream.on('error', () => res.destroy());
+  res.on('close', () => stream.destroy());
+  stream.pipe(res);
   return true;
 }

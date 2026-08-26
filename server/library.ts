@@ -116,6 +116,14 @@ export function openLibrary(place: SchemePlace = schemePlace()): SchemeStore {
       if (debounce) clearTimeout(debounce);
       debounce = setTimeout(changed, 120);
     });
+    // An `FSWatcher` with no 'error' listener throws on the emitter — the
+    // directory going away under it takes the process with it, and losing the
+    // show over a folder that moved is worse than losing the reload.
+    watcher.on('error', (err) => {
+      console.warn(`visuals: scheme watch stopped — ${(err as Error).message}`);
+      watcher?.close();
+      watcher = null;
+    });
   } catch {
     // A platform without directory watching still runs; it just needs a restart.
   }
@@ -151,8 +159,15 @@ export function openLibrary(place: SchemePlace = schemePlace()): SchemeStore {
       notice = null;
       error = null;
     } catch (err) {
-      if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
       error = `could not write ${path.basename(at.file)}: ${(err as Error).message}`;
+      // Its own try: whatever stopped the write — a full disk, a read-only
+      // directory — is just as able to stop the tidy-up, and a failed save must
+      // not be able to become a dead server.
+      try {
+        fs.rmSync(temporary, { force: true });
+      } catch {
+        // A temp file left behind is litter, not a failure.
+      }
     }
   };
 
@@ -161,7 +176,20 @@ export function openLibrary(place: SchemePlace = schemePlace()): SchemeStore {
     error: () => error,
     revision: () => rev,
     replace(next) {
-      working = merge(next);
+      // Refused the same way a bad file is, and for the same reason: an editor
+      // can send a shape `merge` will not take — a hand-built scheme over the
+      // MCP server, a version-skewed console — and losing the show to it is the
+      // wrong answer at any time and an unthinkable one during a set.
+      let taken: Scheme;
+      try {
+        taken = merge(next);
+      } catch (err) {
+        error = (err as Error).message;
+        console.warn(`visuals: scheme edit refused — ${error}`);
+        return;
+      }
+      working = taken;
+      error = null;
       dirty = true;
       rev += 1;
     },

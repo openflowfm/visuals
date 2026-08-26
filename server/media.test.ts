@@ -35,6 +35,36 @@ describe('media library', () => {
     ]);
   });
 
+  it('skips a file that vanishes between the listing and its size', () => {
+    // Dropping files in mid-show is the documented way to use this, and the
+    // listing runs once a second while a client is connected — so a file
+    // removed between the `readdir` and its `stat` is the ordinary case. It
+    // used to be the whole process, because the walk is inside `setInterval`.
+    const root = temporary();
+    fs.writeFileSync(path.join(root, 'kept.mp4'), 'kept');
+    fs.writeFileSync(path.join(root, 'going.mp4'), 'going');
+    const size = fs.statSync;
+    try {
+      Object.defineProperty(fs, 'statSync', {
+        configurable: true,
+        value: (file: string, ...rest: unknown[]) => {
+          if (String(file).endsWith('going.mp4')) throw Object.assign(new Error('gone'), { code: 'ENOENT' });
+          return (size as (...args: unknown[]) => unknown)(file, ...rest);
+        },
+      });
+      expect(listMedia(root).map(({ id }) => id)).toEqual(['kept.mp4']);
+    } finally {
+      Object.defineProperty(fs, 'statSync', { configurable: true, value: size });
+    }
+  });
+
+  it('lists nothing rather than throwing when the root cannot be read', () => {
+    const root = path.join(temporary(), 'nested', 'deeper');
+    fs.mkdirSync(root, { recursive: true });
+    fs.rmSync(path.join(root, '..'), { recursive: true, force: true });
+    expect(listMedia(root)).toEqual([]);
+  });
+
   it('keeps every resolved asset inside the root', () => {
     const root = temporary();
     fs.writeFileSync(path.join(root, 'okay.mp4'), 'okay');

@@ -98,6 +98,14 @@ from.
   dealt only when the queue is empty and a review view is asking, and closing the view
   unmounts the one GL context it owns. A server nobody points a review view at does no
   evaluation work at all.
+- **It never takes the show with it.** Opening lazily means pressing the review tab is what
+  first touches `lab.sqlite3`, and a store that will not open — corrupt, locked, a migration
+  that fails — used to throw straight out of the socket handler and end the process, from a
+  rig that had been drawing fine a second earlier. Every call into the engine is guarded
+  now: a failure to open is remembered rather than retried per click, and both it and a
+  failed gesture come back as a `lab` state with a `notice` and no candidate, so the view
+  says what happened instead of waiting on a reply that is not coming. A show with no lab is
+  a show; a show with no server is a black wall.
 - It never moves with `OPENFLOW_VISUALS_SCHEME`. That variable pins a scheme file; the lab
   lives under `OPENFLOW_HOME` (`~/.openflow/visuals/lab.sqlite3`), because pointing the rig
   at a scratch scheme must not orphan a corpus.

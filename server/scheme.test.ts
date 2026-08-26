@@ -275,6 +275,75 @@ describe('reading a file', () => {
   });
 });
 
+describe('a file with a value of the wrong shape', () => {
+  /**
+   * Refusing rather than repairing, and the difference matters.
+   *
+   * Every one of these reached a `.map`, a `.filter` or a `.trim` on something
+   * that was not the type it was written for, inside the show heartbeat — so a
+   * typo in a file somebody is *meant* to hand-edit was the visuals process
+   * gone and the wall black. There is no repair to make: nobody can say what
+   * `"colorways": {"x": "nope"}` was supposed to be. So it is a parse failure by
+   * another name, and `library.ts` answers it the way it answers a trailing
+   * comma — keep the scheme that was working, put the message in the panel.
+   */
+  it('refuses a colourway that is not a list of colours', () => {
+    // `hex.map(packColor)` in show.ts, once per tick.
+    expect(() => merge({ colorways: { x: 'nope' } } as never)).toThrow();
+    expect(() => merge({ colorways: { x: [1, 2] } } as never)).toThrow();
+    expect(merge({ colorways: { x: [] } }).colorways.x).toEqual([]);
+  });
+
+  it('refuses a song whose pinned flows are not a list', () => {
+    // `song.flows.filter` in resolve.ts, which a string answers with a throw.
+    expect(() => merge({ songs: { Sandstorm: { flows: 'folded' } } } as never)).toThrow();
+    expect(merge({ songs: { Sandstorm: { flows: ['mine'] } } }).songs.Sandstorm.flows).toEqual([
+      'mine',
+    ]);
+  });
+
+  it('refuses a rotation pool that is not a list', () => {
+    expect(() => merge({ rotation: { flows: 'mine' } } as never)).toThrow();
+    expect(() => merge({ rotation: { colorways: 3 } } as never)).toThrow();
+  });
+
+  it('refuses a graph whose nodes or cords are not arrays', () => {
+    // `reword` walks both, and `repaired` walks them again.
+    const flow = (circuit: unknown) => ({ flows: { mine: { name: 'Mine', circuit } } });
+    expect(() => merge(flow({ nodes: 'none', cords: [] }) as never)).toThrow();
+    expect(() => merge(flow({ nodes: [], cords: {} }) as never)).toThrow();
+    expect(() => merge(flow({ nodes: [{ id: 'a' }], cords: [] }) as never)).toThrow();
+  });
+
+  it('refuses a node kind nothing can draw', () => {
+    // `signalOfPort` reads `NODE_SPECS[node.kind].outlets` with no guard, so an
+    // unknown kind is a throw rather than a node that draws nothing.
+    const withKind = (kind: string) => ({
+      flows: { mine: { name: 'Mine', circuit: { nodes: [{ id: 'a', kind, x: 0, y: 0 }], cords: [] } } },
+    });
+    expect(() => merge(withKind('sparkle') as never)).toThrow();
+    // A mode is not a kind: `kaleido` was one of `effect`'s, and `reword` reads
+    // it off `op`. As a kind it is a file nothing can draw.
+    expect(() => merge(withKind('kaleido') as never)).toThrow();
+    // The vocabulary, and every kind `reword` translates.
+    expect(() => merge(withKind('lens') as never)).not.toThrow();
+    expect(() => merge(withKind('sample') as never)).not.toThrow();
+    expect(() => merge(withKind('effect') as never)).not.toThrow();
+    expect(() => merge(withKind('fold') as never)).not.toThrow();
+  });
+
+  it('leaves a hand-written block it does not know about alone', () => {
+    // The file is meant to be read and edited, so a top-level `_` explaining the
+    // keys is not an error — and neither is a legacy section on its way out.
+    const merged = merge({
+      _: 'colourways are #rrggbb',
+      layers: { anything: true },
+      colorways: { mine: ['#123456'] },
+    } as never);
+    expect(merged.colorways.mine).toEqual(['#123456']);
+  });
+});
+
 describe('a file written when the cascade existed', () => {
   /**
    * Most of a real scheme.json from before the collapse.
