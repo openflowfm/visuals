@@ -36,9 +36,13 @@ page.
 
 `ui/Boundary.tsx` is where a throw is allowed to stop, and the placement is the whole idea.
 One wraps this subtree, which is the code most likely to throw and the code least entitled
-to take anything with it: the console closes, the wall goes on drawing, and `e` opens it
-again. One wraps everything, in `main.tsx`, because a boundary that catches nothing is still
-what turns a white page into a sentence and a reload button.
+to take anything with it: it stops there, the canvas under it goes on drawing, and `e` or
+Escape closes the console and gives the picture back. One wraps everything, in `main.tsx`,
+because a boundary that catches nothing is still what turns a white page into a sentence and
+a reload button.
+
+Taking the whole window for that message is safe here because **the console's window is
+never the projector's** — the wall is a second window that mounts no console at all.
 
 **The wall's outer boundary is silent** — it renders nothing rather than an apology. A
 paragraph of English thrown twenty feet across a room is worse than a black projector.

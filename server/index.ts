@@ -242,13 +242,20 @@ sockets.on('connection', (socket) => {
   clients.add(socket);
   socket.on('close', () => clients.delete(socket));
   socket.on('error', () => clients.delete(socket));
-  sendScheme(socket);
-  sendLibrary(socket);
-  sendMedia(socket);
-  sendGrid(socket);
-  socket.send(
-    JSON.stringify({ kind: 'show', ...buildShow(bridge.state, link.sample(), scheme, turning) }),
-  );
+  // The opening burst, guarded like the tick: everything in it is sent again on
+  // the heartbeat, so a client that arrived while something was wrong catches up
+  // within a tick rather than costing the server.
+  try {
+    sendScheme(socket);
+    sendLibrary(socket);
+    sendMedia(socket);
+    sendGrid(socket);
+    socket.send(
+      JSON.stringify({ kind: 'show', ...buildShow(bridge.state, link.sample(), scheme, turning) }),
+    );
+  } catch (err) {
+    console.warn(`visuals: could not answer a new client — ${(err as Error).message}`);
+  }
 
   socket.on('message', (raw) => {
     const read = readUp(String(raw));

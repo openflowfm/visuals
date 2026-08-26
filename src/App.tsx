@@ -153,7 +153,10 @@ export function App() {
         if (!ON_WALL) setFps(Math.round((frames * 1000) / (now - since)));
         frames = 0;
         since = now;
-        if (compositor.error) setGlError(compositor.error);
+        // Set rather than only-when-set: a context that came back clears its
+        // own message, and a panel still reading "the graphics context was
+        // lost" over a picture that is drawing is worse than no panel.
+        setGlError(compositor.error);
       }
     };
     raf = requestAnimationFrame(loop);
@@ -277,7 +280,7 @@ export function App() {
         />
       )}
       {editing && scheme && (
-        <Boundary what="the console" onError={() => setEditing(false)}>
+        <Boundary what="the console">
           <Console
             show={show}
             showRef={showRef}

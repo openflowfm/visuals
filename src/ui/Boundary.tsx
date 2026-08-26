@@ -11,17 +11,20 @@ import { Component, type ErrorInfo, type ReactNode } from 'react';
  *
  * Two of these, and the placement is the whole idea. One wraps the authoring
  * subtree, which is the code most likely to throw and the code least entitled to
- * take anything with it: the console closes, the wall keeps drawing, and `e`
- * opens it again. One wraps everything, because a boundary that catches nothing
- * is still what turns a blank page into a sentence and a button.
+ * take anything with it: it stops there, the canvas under it goes on drawing,
+ * and `e` or Escape closes the console and gives the picture back. One wraps
+ * everything, because a boundary that catches nothing is still what turns a
+ * blank page into a sentence and a button.
+ *
+ * The console's window is never the projector's — the wall is a second window
+ * that mounts no console at all — so a message here can take the whole screen
+ * without anything being thrown at an audience.
  */
 interface Props {
   children: ReactNode;
   /** What this boundary is protecting, shown in the message. */
   what: string;
-  /** Called once when a throw lands, so a parent can close what threw. */
-  onError?: () => void;
-  /** Shown instead of the default surface — the wall must never draw one. */
+  /** Draw nothing rather than a message — the wall must never show one. */
   quiet?: boolean;
 }
 
@@ -38,7 +41,6 @@ export class Boundary extends Component<Props, State> {
 
   override componentDidCatch(error: unknown, info: ErrorInfo): void {
     console.error(`visuals: ${this.props.what} threw`, error, info.componentStack);
-    this.props.onError?.();
   }
 
   override render(): ReactNode {
