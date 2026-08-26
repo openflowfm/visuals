@@ -14,8 +14,8 @@ generateNodes();
 //
 // The dev port follows set[flow]'s at +300, continuing the offsets in
 // widgets/docs/bench.md: set 5173, widget bench +100, device bench +200. A
-// worktree that moves OPENFLOW_SET_PORT takes all four with it.
-const SET_PORT = Number(process.env.OPENFLOW_SET_PORT) || 5173;
+// worktree that moves OPENFLOW_PORT_BASE takes all four with it.
+const SET_PORT = Number(process.env.OPENFLOW_PORT_BASE) || 5173;
 const PORT = Number(process.env.OPENFLOW_VISUALS_UI_PORT) || SET_PORT + 300;
 const SERVER = process.env.OPENFLOW_VISUALS || 'http://127.0.0.1:17900';
 
