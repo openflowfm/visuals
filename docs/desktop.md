@@ -87,6 +87,31 @@ Forget them and the symptom is a projector that stutters whenever somebody bring
 window to the front — which is a thing that happens constantly, and reads as a bug in the
 renderer.
 
+## The dev loop, in this window
+
+`npm run dev:visuals-app` opens this shell on the vite dev server on :5473 rather than on
+the server's own copy of `dist/`, so an edit to a shader or a node lands in the window with
+Fast Refresh intact. `npm run visuals` is a rebuild and a relaunch, which is right for
+checking what ships and wrong for the twenty edits before it.
+
+**In dev it starts no server.** `npm run dev` already has one on 17900 and vite proxies
+`/ws` and `/media` through to it; a second would die of `EADDRINUSE` immediately and take
+the window with it. So dev mode is the shell, the wall handler and the display list over
+somebody else's server — and those three are exactly the parts a browser cannot show you.
+The supervision is what you give up, and `npm run visuals` is where that gets checked.
+
+That makes this the better place to develop the wall, not just an equal one: `window.open`
+becomes a real frameless window on a real projector through `setWindowOpenHandler`, and the
+display list arrives over IPC from `screen.getAllDisplays()` instead of from Chrome's window
+management API behind a permission prompt. Both of those paths only exist here.
+
+`OPENFLOW_DEV=1` is the switch and `OPENFLOW_DEV_URL` overrides the address. The port is
+`OPENFLOW_PORT_BASE` + 300, or `OPENFLOW_VISUALS_UI_PORT` outright — the same two the vite
+config reads, so a worktree moves the app along with its servers. The readiness poll watches
+whichever port the window is actually opening onto, and the settle before its first look is
+skipped: it exists to avoid attaching to a server that is not ours, and in dev attaching to
+exactly that is the point.
+
 ## Packaging
 
 `npm run pack:visuals` builds the renderer, the shell, an icon, and a `.app` plus a `.dmg`

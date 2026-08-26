@@ -14,15 +14,43 @@ import { VISUALS_PORT } from '../protocol.ts';
  * a gig. What is here instead is the one process that matters, supervised, with
  * the windows it draws into.
  *
- * **The server is a child, not this process.** It owns the Ableton Link native
- * addon, which `visuals/tools/build-link.ts` compiles against plain Node's ABI
- * after three source repairs. Hosting it here would mean rebuilding that addon
- * for every Electron version — a standing liability on the one native dependency
- * in the project, in exchange for saving a socket hop that costs nothing.
+ * **The server is a child, not this process**, and no longer for the reason it
+ * first was: the Link addon is node-addon-api, so its ABI holds under Electron
+ * just as well as under Node, and hosting it here would work. It stays a child
+ * for three reasons that outlast that one — the server remains a program you can
+ * run bare, in a test or on a second machine; a renderer crash cannot take the
+ * clock with it; and what this supervises is byte-for-byte what everything else
+ * runs. See `docs/desktop.md`.
  */
 
 const PORT = Number(process.env.OPENFLOW_VISUALS_PORT) || VISUALS_PORT;
 const RIG = `http://localhost:${PORT}`;
+
+/**
+ * The dev loop, in this window instead of a browser.
+ *
+ * `OPENFLOW_DEV=1` points the window at the vite dev server rather than at the
+ * server's own copy of `dist/`, which is a build and has no hot anything in it.
+ * `OPENFLOW_DEV_URL` names the address outright.
+ *
+ * **In dev this app does not start a server.** `npm run dev` already has one on
+ * 17900, and vite proxies `/ws` and `/media` through to it; a second would die of
+ * EADDRINUSE on the spot and take the window with it. So dev mode is the shell,
+ * the wall handler and the display list over somebody else's server — which is
+ * the whole point, because those three are exactly what a browser cannot show you.
+ *
+ * The port is the base every dev server here counts from, plus this app's offset
+ * of 300. Restated rather than imported, because a main process cannot load
+ * `vite.config.ts`; `set/docs/dev-server.md` is where the set of them is written.
+ */
+const DEV_PORT =
+  Number(process.env.OPENFLOW_VISUALS_UI_PORT) ||
+  (Number(process.env.OPENFLOW_PORT_BASE) || 5173) + 300;
+const DEV =
+  process.env.OPENFLOW_DEV_URL || (process.env.OPENFLOW_DEV ? `http://localhost:${DEV_PORT}` : '');
+/** Where the window opens, and the port that has to answer before it does. */
+const HOME = DEV || RIG;
+const TARGET = Number(new URL(HOME).port);
 
 /**
  * The server, bundled, run by **Electron's own Node** rather than the one on
@@ -109,7 +137,7 @@ const start = (): void => {
 /** Whether anything is listening yet. The window must not open on a refusal. */
 const answering = () =>
   new Promise<boolean>((resolve) => {
-    const socket = net.connect({ port: PORT, host: '127.0.0.1' });
+    const socket = net.connect({ port: TARGET, host: '127.0.0.1' });
     const done = (yes: boolean) => {
       socket.destroy();
       resolve(yes);
@@ -171,25 +199,39 @@ const open = (): void => {
     },
   });
   shell(win);
+  // The page sets its own `<title>`, which wins over the option above — so a dev
+  // window has to say so afterwards, and keep saying it.
+  if (DEV) {
+    win.on('page-title-updated', (event, title) => {
+      event.preventDefault();
+      win.setTitle(`${title} — dev`);
+    });
+  }
   win.webContents.on('did-fail-load', (_event, code, why, url) => {
     console.error(`visuals: could not load ${url} — ${why} (${code})`);
   });
-  void win.loadURL(RIG);
+  void win.loadURL(HOME);
 };
 
 const openWhenReady = async (): Promise<void> => {
-  // A beat before the first look. If something else is already on the port, the
-  // very first poll succeeds — against *that* — and a window opens onto somebody
-  // else's server a moment before ours dies of EADDRINUSE.
-  await new Promise((wake) => setTimeout(wake, SETTLE_MS));
+  // A beat before the first look, and only when we are the one starting it. If
+  // something else is already on the port, the very first poll succeeds —
+  // against *that* — and a window opens onto somebody else's server a moment
+  // before ours dies of EADDRINUSE. In dev, opening onto what is already there
+  // is the entire point, so there is nothing to settle for.
+  if (!DEV) await new Promise((wake) => setTimeout(wake, SETTLE_MS));
   const waited = Date.now() + READY_MS;
-  while (child && Date.now() < waited) {
+  while ((DEV || child) && Date.now() < waited) {
     if (await answering()) break;
     await new Promise((wake) => setTimeout(wake, 150));
   }
-  if (!child) return; // Gone before it ever listened. Not ours to open onto.
+  if (!DEV && !child) return; // Gone before it ever listened. Not ours to open onto.
   if (!(await answering())) {
-    console.error(`visuals: the server never answered on ${PORT} — nothing to show`);
+    console.error(
+      DEV
+        ? `visuals: nothing answered on ${TARGET} — is the dev server up? (npm run dev)`
+        : `visuals: the server never answered on ${TARGET} — nothing to show`,
+    );
     app.quit();
     return;
   }
@@ -243,7 +285,9 @@ if (!app.requestSingleInstanceLock()) {
     screen.on('display-added', moved);
     screen.on('display-removed', moved);
     screen.on('display-metrics-changed', moved);
-    start();
+    // In dev the server is somebody else's — `npm run dev` has one, and this
+    // process spawning a second is how both of them stop working.
+    if (!DEV) start();
     void openWhenReady();
   });
 }
