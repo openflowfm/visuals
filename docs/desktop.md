@@ -152,7 +152,7 @@ MB of C++ that was compiled into the binary at install time and is never read ag
 ## What has no tests
 
 Nothing under `electron/` is reachable from vitest; a main process is not somewhere a test
-runner can go. The gnosis graph shows these files with no observed edges, which is the
-honest picture rather than a gap to fill with a fake test. What is testable is what the
+runner can go. Zero coverage here is the honest picture rather than a gap to fill with a
+fake test. What is testable is what the
 renderer decides, and `survey()`'s branch is one `if` over an object that either exists or
 does not.
