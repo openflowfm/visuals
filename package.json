@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "electron/dist/main.cjs",
   "description": "visual[flow]: an Ableton Link peer that renders a Live set from a node graph.",
   "scripts": {
     "build:link": "node --disable-warning=ExperimentalWarning tools/build-link.ts",

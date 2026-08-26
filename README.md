@@ -26,6 +26,7 @@ Live ─ SessionBridge :17800 ─WS─> visuals server :17900 ─WS─> browser 
 | [the lab](docs/lab.md) | judging generated flows, the taste corpus, the method boundary | `lab.ts`, `server/lab.ts`, `src/ui/ReviewView.tsx` |
 | [the renderer](docs/render.md) | the two passes, blending, fill rate, **pointing a projector** | `src/render/*` |
 | [the harness](docs/harness.md) | working on this with no Ableton, and the Link safety rule | `tools/fake-live.ts` |
+| [the desktop app](docs/desktop.md) | the window, the wall on a projector, the display list, why the server is a child process | `electron/main.ts`, `electron/preload.ts`, `src/state/useWall.ts` |
 | [agent authoring](docs/mcp.md) | the MCP tools for reading nodes, validating and saving flows, and reviewing node designs | `mcp/*` |
 
 ## The one idea
@@ -49,7 +50,8 @@ configured for it to draw a show.
 ## Running it
 
 ```sh
-npm run visuals          # a show night: build, run the server alone, keep it up, open its own Chrome
+npm run visuals          # a show night: build, run the server, open the app — see docs/desktop.md
+npm run visuals:browser  # the same, in a dedicated Chrome instead of the app
 npm run dev              # everything, this included: server on :17900, renderer on :5473
 npm run dev:visuals      # the server alone: Link peer + bridge client + host, :17900
 npm run dev:visuals-ui   # the renderer with HMR, :5473, proxying /ws to the server
@@ -66,16 +68,14 @@ on startup, look for a `dev:visuals` you left running.
 
 **That `-k` is why `npm run visuals` exists.** Ten dev processes where any one exiting kills
 the other nine is right for a dev loop and wrong for a gig: a watcher falling over would
-take the wall with it. It builds `dist/` and runs the server on its own, restarting it
-if it stops for any reason but a clean shutdown or a port already taken — see
-[`tools/visuals.ts`](../tools/visuals.ts). It also settles which URL a projector gets: `:17900`
-serves the built bundle, where `:5473` has HMR attached and reloads the wall on every save.
+take the wall with it. It builds `dist/`, runs the server as a supervised child, and opens
+the rig in a window of its own — see [the desktop app](docs/desktop.md). It also settles
+which URL a projector gets: the app is on the built bundle, where `:5473` has HMR attached
+and reloads the wall on every save.
 
-And it opens the rig in a Chrome that belongs to the show — its own `--user-data-dir`, so no
-extensions, no other tabs on the same GPU, its own share of the ~16 WebGL contexts a browser
-keeps per origin, and a window-management permission granted once rather than asked for on
-stage. `--no-browse` skips it. The flags, and why three of them are about a projector, are
-in [`tools/README.md`](../tools/README.md).
+`npm run visuals:browser` is the same rig in a dedicated Chrome instance instead —
+[`tools/visuals.ts`](../tools/visuals.ts) — kept because a second machine runs a browser
+anyway, and because it is the rollback if the app misbehaves on a show night.
 `i` toggles the panel, `e` the editor, `k` the output stage, `w` the wall, `f` fullscreen, and
 `l` turns to the next flow without changing the colourway. **`1` says
 "here is the one"** — it re-phases the rotation so changes land on the top of a phrase

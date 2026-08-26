@@ -67,6 +67,20 @@ interface ScreenDetails extends EventTarget {
 }
 type WithScreens = Window & { getScreenDetails?: () => Promise<ScreenDetails> };
 
+/**
+ * What the desktop app puts there instead — see `visuals/electron/preload.ts`.
+ *
+ * Declared as the *absence* of the browser API rather than as a replacement for
+ * it: the browser path below is not deprecated, it is what a second machine
+ * runs, which is the arrangement this rig was always meant for.
+ */
+type WithNative = typeof globalThis & {
+  openflow?: {
+    displays?: () => Promise<Display[]>;
+    onDisplaysChanged?: (run: () => void) => () => void;
+  };
+};
+
 const CHANNEL = 'openflow.visuals.wall';
 
 /** The display the wall went to last. Per machine, like everything else here. */
@@ -110,6 +124,18 @@ export function hear(on: (word: Word) => void): () => void {
  * rest do.
  */
 async function survey(gesture: boolean): Promise<Display[]> {
+  // The desktop app asks the OS through its main process, so there is no
+  // permission to prompt for and `gesture` has nothing to decide. It already
+  // drops the console's own display and numbers before it does, which is the
+  // rule below written once on the other side of the bridge.
+  const native = (globalThis as WithNative).openflow?.displays;
+  if (native) {
+    try {
+      return await native();
+    } catch {
+      return [];
+    }
+  }
   const api = (window as WithScreens).getScreenDetails;
   if (!api) return [];
   if (!gesture) {
@@ -200,8 +226,12 @@ export function useWall(active: boolean): {
       });
     };
     flow();
+    // The desktop app's version of `screenschange`, which needs no first answer
+    // to have something to listen on: the main process is always watching.
+    const stop = (globalThis as WithNative).openflow?.onDisplaysChanged?.(flow);
     return () => {
       gone = true;
+      stop?.();
       watched?.removeEventListener('screenschange', flow);
     };
   }, [active]);
