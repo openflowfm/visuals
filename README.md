@@ -49,7 +49,7 @@ configured for it to draw a show.
 ## Running it
 
 ```sh
-npm run show             # a show night: build the renderer, run the server alone, keep it up
+npm run show             # a show night: build, run the server alone, keep it up, open its own Chrome
 npm run dev              # everything, this included: server on :17900, renderer on :5473
 npm run dev:visuals      # the server alone: Link peer + bridge client + host, :17900
 npm run dev:visuals-ui   # the renderer with HMR, :5473, proxying /ws to the server
@@ -70,6 +70,12 @@ take the wall with it. `show` builds `dist/` and runs the server on its own, res
 if it stops for any reason but a clean shutdown or a port already taken — see
 [`tools/show.ts`](../tools/show.ts). It also settles which URL a projector gets: `:17900`
 serves the built bundle, where `:5473` has HMR attached and reloads the wall on every save.
+
+And it opens the rig in a Chrome that belongs to the show — its own `--user-data-dir`, so no
+extensions, no other tabs on the same GPU, its own share of the ~16 WebGL contexts a browser
+keeps per origin, and a window-management permission granted once rather than asked for on
+stage. `--no-browse` skips it. The flags, and why three of them are about a projector, are
+in [`tools/README.md`](../tools/README.md).
 `i` toggles the panel, `e` the editor, `k` the output stage, `w` the wall, `f` fullscreen, and
 `l` turns to the next flow without changing the colourway. **`1` says
 "here is the one"** — it re-phases the rotation so changes land on the top of a phrase
