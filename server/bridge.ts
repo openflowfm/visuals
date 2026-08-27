@@ -38,6 +38,16 @@ export interface SetState {
    * arrives on `watchMeters` alongside the levels.
    */
   mixer: OpenFlow.MixerState | null;
+  /**
+   * How many scene launch buttons have been pressed since this process started.
+   *
+   * A count rather than a flag because a launch is an event and everything else
+   * here is state: `buildShow` runs on its own clock and would have to be
+   * trusted to clear a flag exactly once, where a number it compares against
+   * its own last reading cannot be consumed twice or missed. It only ever goes
+   * up, and only the difference means anything.
+   */
+  launches: number;
 }
 
 export function emptySet(): SetState {
@@ -55,6 +65,7 @@ export function emptySet(): SetState {
     levels: new Map(),
     masterLevel: 0,
     mixer: null,
+    launches: 0,
   };
 }
 
@@ -87,6 +98,7 @@ export function followBridge(url: string, onChange: () => void): BridgeLink {
       state.connected = true;
       send({ type: 'snapshot' });
       send({ type: 'watchPlay', on: true });
+      send({ type: 'watchScenes', on: true });
       send({ type: 'watchMeters', on: true });
       send({ type: 'watchTransport', on: true });
       onChange();
@@ -184,6 +196,13 @@ export function followBridge(url: string, onChange: () => void): BridgeLink {
         // half-applied snapshot is a set with a new `rev` and the old clips,
         // which is worse than no snapshot at all.
         if (!snap || !Array.isArray(snap.clips) || !Array.isArray(snap.tracks)) return false;
+        // `watchScenes` installs one observer per scene, so a set that gained or
+        // lost one is watching the wrong scenes. Re-arming is free — the device
+        // clears and rebuilds on every `on` — and the alternative is a launch
+        // that silently stops re-phasing after somebody adds a scene mid-show.
+        if ((snap.scenes ?? []).length !== state.scenes.length) {
+          send({ type: 'watchScenes', on: true });
+        }
         state.rev = snap.rev;
         state.tempo = snap.tempo;
         state.tracks = snap.tracks;
@@ -199,6 +218,9 @@ export function followBridge(url: string, onChange: () => void): BridgeLink {
         // answered from what it holds.
         if (event.model) state.model = event.model;
         send({ type: 'snapshot' });
+        return true;
+      case 'sceneLaunched':
+        state.launches++;
         return true;
       case 'playState':
         if (!Array.isArray(event.tracks)) return false;

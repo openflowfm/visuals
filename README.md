@@ -80,7 +80,9 @@ anyway, and because it is the rollback if the app misbehaves on a show night.
 `l` turns to the next flow without changing the colourway. **`1` says
 "here is the one"** — it re-phases the rotation so changes land on the top of a phrase
 without changing what is on screen. Live's transport starting does the same thing by itself,
-so the key is for a set that never stops. See [the wheel](docs/wheel.md).
+and so does a scene launched somewhere the phrase grid does not already have a line — a set
+that is locked in keeps counting undisturbed. The key is for the rest. See
+[the wheel](docs/wheel.md).
 
 **`w` sends the picture to the projector.** There is no such thing as rendering to an HDMI
 port — the port is a display, and something has to own a window on it — so this opens one for

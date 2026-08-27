@@ -4,7 +4,7 @@ import { emptySet, type SetState } from './bridge.ts';
 import type { LinkFrame } from './link.ts';
 import { merge, type SchemeSource } from './scheme.ts';
 import { buildShow, noTurning, type Turning } from './show.ts';
-import { atOne, atTurn, nextFlow, poolsOf, reOne, turnsAt, whatIsUp } from '../resolve.ts';
+import { atOne, atTurn, inPhase, nextFlow, poolsOf, reOne, turnsAt, whatIsUp } from '../resolve.ts';
 
 /**
  * What is on screen, and why.
@@ -213,6 +213,105 @@ describe('turning on musical time', () => {
     set.play[2] = { playing: 0, fired: -1 } as OpenFlow.TrackPlayState;
     show(set, scheme, turning);
     expect(turning.wheel.turned.flow).toBe(1);
+  });
+
+  it('takes the one from a scene launch, without turning anything', () => {
+    // The gesture `1` is for, made on the launch button instead. The device
+    // reports the *landing* — `Scene.is_triggered` falls when the clips
+    // actually start — so this arrives on a downbeat and needs no wait.
+    const turning = noTurning();
+    const scheme = twoOf();
+    const set = setOf(['Drums', 'Bass', 'Keys'], '[VERSE] one');
+    // A first read of a rolling set is the transport starting and takes the one
+    // on its own; the launch count is only recorded. Everything else is from
+    // there.
+    at(set, scheme, turning, { beat: 100, phase: 0 });
+    expect(turning.wheel.one).toBe(100);
+
+    const before = at(set, scheme, turning, { beat: 108, phase: 0 }).flow;
+    const turns = turnsAt(scheme.rotation, 108, 4, turning.wheel);
+    set.launches++;
+    const drawn = at(set, scheme, turning, { beat: 108, phase: 0 });
+    expect(turning.wheel.one).toBe(108);
+    // Re-phased, not turned: the picture is right and only the timing was off.
+    expect(drawn.flow).toBe(before);
+    expect(turnsAt(scheme.rotation, 108, 4, turning.wheel)).toEqual(turns);
+  });
+
+  it('leaves a locked-in set alone when the launch is already on the grid', () => {
+    // The distinction that makes this safe to leave on. A player launching a
+    // scene exactly one wheel-length in has told the rig nothing it did not
+    // know, and re-phasing there would restart a countdown that was about to
+    // complete — do that every section and the wheel never turns on the clock
+    // again, for a set that is behaving perfectly.
+    const turning = noTurning();
+    const scheme = twoOf();
+    const set = setOf(['Drums', 'Bass'], '[VERSE] one');
+    at(set, scheme, turning, { beat: 100, phase: 0 });
+    expect(turning.wheel.one).toBe(100);
+
+    // Four bars of four beats is the whole wheel. The launch lands on a line the
+    // grid already has, so nothing moves and the rotation keeps counting.
+    set.launches++;
+    at(set, scheme, turning, { beat: 116, phase: 0 });
+    expect(turning.wheel.one).toBe(100);
+
+    // And it stays that way launch after launch, which is the point: a timed
+    // turn still lands in the wheel-length between the two, where a re-phase at
+    // each launch would have pushed it out of reach forever.
+    const before = turnsAt(scheme.rotation, 116, 4, turning.wheel).flow;
+    set.launches++;
+    at(set, scheme, turning, { beat: 132, phase: 0 });
+    expect(turning.wheel.one).toBe(100);
+    expect(turnsAt(scheme.rotation, 132, 4, turning.wheel).flow).toBe(before + 1);
+  });
+
+  it('knows a phrase top from a beat that is merely on a bar line', () => {
+    const rotation = twoOf().rotation;
+    const wheel = { one: 100, turned: { flow: 0, color: 0 } };
+    const beat = (b: number) => ({ beat: b, phase: 0, quantum: 4 });
+    // The wheel is four bars, so every sixteenth beat from the one is a top.
+    expect(inPhase(rotation, beat(100), wheel)).toBe(true);
+    expect(inPhase(rotation, beat(116), wheel)).toBe(true);
+    expect(inPhase(rotation, beat(180), wheel)).toBe(true);
+    // A bar line, and not a phrase top. This is the launch worth re-phasing on.
+    expect(inPhase(rotation, beat(108), wheel)).toBe(false);
+    expect(inPhase(rotation, beat(104), wheel)).toBe(false);
+    // A held wheel has no phrase to be out of, and nothing a move could disturb.
+    expect(inPhase({ ...rotation, bars: 0, colorEvery: 0 }, beat(108), wheel)).toBe(true);
+  });
+
+  it('does not take the one from tracks moving on their own', () => {
+    // The distinction the whole event exists for. Clip follow actions walk
+    // every track to the next row without anybody pressing anything, which is
+    // shaped exactly like a scene launch in `play` and is not one — and a rig
+    // that re-phased on it would restart its countdown every section and never
+    // reach a turn on the clock again.
+    const turning = noTurning();
+    const scheme = twoOf();
+    const set = setOf(['Drums', 'Bass', 'Keys'], '[VERSE] one');
+    set.scenes = [set.scenes[0], scene(1, '[CHORUS] one')];
+    at(set, scheme, turning, { beat: 100, phase: 0 });
+
+    set.play = set.play.map(() => ({ playing: 1, fired: -1 }) as OpenFlow.TrackPlayState);
+    at(set, scheme, turning, { beat: 108, phase: 0 });
+    expect(turning.wheel.one).toBe(100);
+  });
+
+  it('does not treat a set already in progress as one long launch', () => {
+    // The count is a running total, not a flag. Connecting to a set somebody
+    // has been playing for an hour must not read that hour as a press.
+    const turning = noTurning();
+    const scheme = twoOf();
+    const set = setOf(['Drums', 'Bass'], '[VERSE] one');
+    set.launches = 47;
+    at(set, scheme, turning, { beat: 100, phase: 0 });
+    // The transport start took this one; the launches did not add a second.
+    expect(turning.wheel.one).toBe(100);
+    expect(turning.launched).toBe(47);
+
+    at(set, scheme, turning, { beat: 130, phase: 2 });
+    expect(turning.wheel.one).toBe(100);
   });
 
   it('turns only the flow when asked for the next one by hand', () => {

@@ -1,7 +1,7 @@
 import type { Scheme, Show, Track } from '../protocol.ts';
 import type { SetState } from './bridge.ts';
 import type { LinkFrame } from './link.ts';
-import { atOne, bumped, reOne, turnsAt, whatIsUp, type Wheel } from '../resolve.ts';
+import { atOne, bumped, inPhase, reOne, turnsAt, whatIsUp, type Wheel } from '../resolve.ts';
 import type { SchemeSource } from './scheme.ts';
 
 /**
@@ -13,7 +13,7 @@ import type { SchemeSource } from './scheme.ts';
  * instead.
  *
  * What is left here is what only a *running* set can supply: the mixer, the
- * meters, the scene, and the two events the rotation turns on.
+ * meters, the scene, and the events the rotation turns and re-phases on.
  */
 
 /** Hex, `#rrggbb` or `#rgb`, to the packed integer the renderer wants. */
@@ -94,6 +94,14 @@ export interface Turning {
    * Null when nothing is pending. See `buildShow` for why there is a wait.
    */
   waiting: number | null;
+  /**
+   * `SetState.launches` when we last looked, so a launch is counted once.
+   *
+   * -1 until the first read. A rig that connects to a set somebody has been
+   * playing for an hour must not treat that hour's launches as one that just
+   * happened.
+   */
+  launched: number;
 }
 
 export const noTurning = (): Turning => ({
@@ -101,6 +109,7 @@ export const noTurning = (): Turning => ({
   wheel: atOne(),
   rolling: false,
   waiting: null,
+  launched: -1,
 });
 
 /**
@@ -198,6 +207,39 @@ export function buildShow(
     turning.wheel = reOne(scheme.rotation, link, turning.wheel);
   }
   turning.rolling = set.playing;
+
+  // **A scene launch is the one too.** Somebody pressing a scene launch button
+  // is saying where the next section starts, which is the same statement Live
+  // starting makes, made without stopping.
+  //
+  // It is the *button* and not the movement, which is the whole reason this
+  // arrives as an event from the device rather than being read off `set.play`.
+  // A scene launch moves every track's playing index at once — but so does a
+  // row of clip follow actions walking the grid on their own, and those are the
+  // opposite gesture: nobody touched anything, and a rig that re-phased on them
+  // would restart its countdown every section and never turn on the clock
+  // again. `sceneLaunched` fires for the press and never for the follow action.
+  //
+  // No wait here, unlike the transport: `Scene.is_triggered` falls when the
+  // clips actually start, so the device has already sat through Live's launch
+  // quantisation and this arrives on a downbeat. See `onSceneTrigger` in
+  // `bridge/src/lom.ts`.
+  //
+  // **And only when it would move the one.** A launch that lands on a line the
+  // grid already has says nothing new — the set is locked in and the phrase is
+  // where we thought it was. Re-phasing there would restart a countdown that
+  // was about to complete, so a section-per-scene set would never reach a timed
+  // turn and the picture would freeze while everybody played perfectly. See
+  // `inPhase`. What is left is the launch that lands somewhere else: an early
+  // call, a cut, a section that ran long — the times the phrase really moved.
+  //
+  // Nothing turns; see `reOne`. The first read only records where the count is.
+  if (set.launches !== turning.launched) {
+    if (turning.launched >= 0 && !inPhase(scheme.rotation, link, turning.wheel)) {
+      turning.wheel = reOne(scheme.rotation, link, turning.wheel);
+    }
+    turning.launched = set.launches;
+  }
 
   const songKey = scene >= 0 ? (set.model?.songByScene[String(scene)] ?? null) : null;
   const role = scene >= 0 ? roleOf(set.scenes[scene]?.name ?? '') : null;

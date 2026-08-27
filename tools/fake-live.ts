@@ -294,11 +294,29 @@ const sendMixer = () =>
   });
 
 // A scene every eight bars at the nominal tempo, which is what a set does.
+//
+// **Arriving at a scene, not launching one.** Most of these stand in for clip
+// follow actions walking the grid on their own: every track moves at once and
+// nobody pressed anything, which is the case `sceneLaunched` exists to be
+// distinguishable from. Every fourth one is the hand on the launch button, so
+// the harness exercises both and the wheel can visibly re-phase.
+//
+// Whether a given launch *does* re-phase is luck here, and deliberately not
+// engineered: these fire on wall-clock time while the one is counted on Link's,
+// so their phase relationship is whatever it happens to be. `inPhase` is what
+// decides, and `server/show.test.ts` is where both of its answers are pinned —
+// this is for seeing the event arrive at all with no Ableton in the room.
 const barMs = (60_000 / BPM) * 4;
+let advances = 0;
 setInterval(() => {
   scene = (scene + 1) % scenes.length;
+  advances += 1;
+  const launched = advances % 4 === 0;
   sendPlay();
-  console.log(`fake-live: scene ${scene} [${ROLES[scene]}]`);
+  if (launched) all({ type: 'sceneLaunched', s: scene });
+  console.log(
+    `fake-live: scene ${scene} [${ROLES[scene]}]${launched ? ' — launch button' : ''}`,
+  );
 }, barMs * 8);
 
 // Meters at 30 Hz, the rate the device actually pushes them.

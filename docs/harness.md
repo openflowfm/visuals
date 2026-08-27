@@ -14,10 +14,15 @@ watch requests, and then behaves like a band — five named tracks, eight scenes
 in their names, a scene every eight bars, meters at the 30 Hz the device really pushes, and
 one fader riding so opacity is visibly a live value rather than a constant.
 
-Two details are there to exercise cases that are easy to get wrong. **The grid has holes**,
-so some layers have nothing playing and must draw nothing. And **each track's meter runs on
-its own subdivision**, so the layers don't all pulse together and a per-layer reaction is
-visibly per-layer.
+Three details are there to exercise cases that are easy to get wrong. **The grid has holes**,
+so some layers have nothing playing and must draw nothing. **Each track's meter runs on its
+own subdivision**, so the layers don't all pulse together and a per-layer reaction is visibly
+per-layer. And **only every fourth scene change is a launch** — the other three stand in for
+clip follow actions walking the grid, where every track moves at once and nobody pressed
+anything. That is the distinction [the one](wheel.md) turns on. Whether a
+launch also *moves* the one is luck here — these fire on wall-clock time while the one is
+counted on Link's — so the two answers `inPhase` gives are pinned in `server/show.test.ts`
+rather than staged here.
 
 Port 17801 and not 17800, deliberately: the real device may well be running, and a harness
 that fought it for a port would be a confusing five minutes every time.

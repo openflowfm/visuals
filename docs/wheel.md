@@ -63,7 +63,8 @@ The turn belongs to the server, not the browser that received the key, so the co
 projector change together. Key repeat is ignored: one press is one flow.
 
 A **scene change is deliberately not a trigger.** Scenes fire constantly and the picture would
-never settle into anything.
+never settle into anything. A scene *launch* re-phases the wheel instead, which changes
+nothing on screen — see below.
 
 ## Where the phrase starts, and why the rig has to be told
 
@@ -75,13 +76,16 @@ with nothing to do with the music — the third beat of some bar nobody can name
 there all night. Every change lands slightly wrong and no amount of choosing the right
 number of bars fixes it, because the number of bars was never the problem.
 
-Two things set it, and the first costs nobody a gesture:
+Three things set it, and only the last costs a gesture:
 
 - **Live's transport starting.** A set that stops between songs re-phases itself. The
   clearest statement of where a phrase begins that this rig will ever get is somebody
   pressing play, and it is free.
-- **The `1` key**, for a set that never stops. A digit rather than a letter because it *is*
-  the count.
+- **A scene launch button**, and only when the launch lands somewhere the phrase grid does
+  not already have a line. A set that is locked in keeps counting; a section called early
+  moves the one. See below.
+- **The `1` key**, for a set that never stops and never leaves a scene. A digit rather than
+  a letter because it *is* the count.
 
 ### Pressing play is not starting
 
@@ -99,6 +103,52 @@ when there is somebody to wait for** — with no peers there is no session to st
 with, Live rolls immediately, and a rig that held on for a bar would be the one thing in the
 building out of time.
 
+### The launch button, never the movement
+
+**This one is asked for, not inferred, and the difference is the whole feature.**
+
+A scene launch moves every track's `playing_slot_index` at once, so a burst of `playState`
+looks exactly like one. But so does a row of clip follow actions walking the grid on its own,
+and that is the opposite gesture: nobody pressed anything. Re-phasing on those would restart
+the countdown at every section, and a wheel whose period is longer than a section would then
+never reach a turn on the clock at all — the picture would freeze until somebody hit a key.
+
+So the rig watches `Scene.is_triggered`, which **is** the launch button, and which a follow
+action never sets. One observer per scene, which is the same order as the play watcher's
+three per track and nothing like the per-slot cost the [protocol rules](../../protocol/README.md)
+forbid. It is its own watch — `watchScenes` — rather than a rider on `watchPlay`, because
+only this rig asks and a grid that doesn't care shouldn't pay for it.
+
+**The landing, not the press.** `is_triggered` goes 1 when the button is hit and 0 when the
+scene actually starts, so the bridge reports the falling edge: Live has already sat through
+its own launch quantisation, which is the wait the transport needs done by hand and this gets
+for free. Launching a second scene while the first is still blinking clears the first without
+it ever starting, so only the *pending* scene's fall counts. With quantisation off both edges
+arrive in one tick and it still reports.
+
+### Only when it would move the one
+
+A launch that lands on a line the grid already has is **not** a re-phase.
+
+This is the condition that makes the whole thing safe to leave switched on, and the
+arithmetic behind it is worth being explicit about. `reOne` carries the turn count across the
+move, so nothing on screen changes — but it restarts the *countdown*, and a timed turn only
+ever lands if the gap between re-phases is longer than `bars`. Re-phase at every section and
+an eight-bar wheel reaches a turn roughly never: the picture freezes, for a set that is
+behaving perfectly, and the only things left that could move it are `n` and an out-of-band
+clip.
+
+So `inPhase` asks whether the launch is telling the rig anything. A player who launches a
+scene exactly one wheel-length in has confirmed what the grid already said — the set is
+locked in, and it keeps counting undisturbed. What is left is the launch that lands
+*somewhere else*: an early call, a cut, a section that ran long. Those are the moments the
+phrase genuinely moved, and the only ones worth spending a reset on.
+
+Measured against the flow wheel, which is the one being watched. A launch in phase with it
+may be out of phase with a longer colour wheel, and skipping still leaves both exactly where
+they were — where re-phasing would have moved the colour. Skipping is never the destructive
+answer.
+
 ### The line comes from the phase, never from the beat
 
 `Math.round(beat)` is not a downbeat. Link's beat has no bar 1 in it, so a whole beat of it
@@ -109,7 +159,7 @@ the line Live's own grid is drawn on.
 Nearest line rather than the one just passed, because a hand is as likely to be early as
 late and a tap three quarters of the way through a bar means the downbeat about to happen.
 
-**Neither of them turns a wheel**, and that is the part worth getting right. A reset lands
+**None of them turns a wheel**, and that is the part worth getting right. A reset lands
 on a downbeat, which is exactly the moment `beat - one` is nearest zero — which is where a
 naive count would snap every wheel back to the start of its cycle. So the gesture you make
 when the picture is right and only the timing is off would change the picture, every single
