@@ -129,11 +129,14 @@ themselves as *Electron*: the menu bar says it, the Dock shows Electron's icon f
 ⌘-Tab cannot tell them apart — a small thing until you are reaching for one of them mid-set.
 A bundle gives each a real identifier, a real name and an icon, and only an `Info.plist` can.
 
-The icons are generated rather than committed: `tools/build-icons.ts` pads the open[flow]
-mark onto a coloured square with `sips` and packs it with `iconutil`. The mark is shared on
-purpose — these are two halves of one thing — and the **colour** is what separates them,
-because at Dock size hue is the only thing anyone actually reads. A shape difference at 32
-pixels is not a difference.
+The icons are generated rather than committed: `tools/build-icons.ts` rasterises
+`visuals/public/mark.svg` with `sips` and packs it with `iconutil`. Each app has a mark of
+its own and they are the same disc — one thing split down the middle, a dot on each side of
+the divide — differing in hue and in what the dots do: this one throws rays out of its node,
+set[flow] runs rows of clips into it. The shapes are for the 512 and the **colour** is for
+the 32, because at Dock size hue is the only thing anyone actually reads. See
+[`set/docs/desktop.md`](../../set/docs/desktop.md) for the grid the marks are padded onto
+and why editing one wants care.
 
 `asar: false`, deliberately. The archive is a packaging optimisation that buys nothing for
 an app nobody downloads, and it costs a whole class of path problem — `app.asar.unpacked`,
