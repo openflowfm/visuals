@@ -2,6 +2,10 @@ import {
   LENS_MODES,
   GRADE_MODES,
   SPREAD_MODES,
+  DISPLACE_MODES,
+  HALFTONE_MODES,
+  READ_NAMES,
+  MIX_MODES,
   MATH_OPS,
   PLAYBACK_NAMES,
   TRACK_READS,
@@ -370,6 +374,23 @@ const MIXES: Record<string, (a: string, b: string) => string> = {
   add: (a, b) => `(${a} + ${b})`,
   screen: (a, b) => `(${a} + ${b} - ${a} * ${b})`,
   multiply: (a, b) => `(${a} * ${b} + ${a} * (1.0 - ${b}.a))`,
+
+  // The two that carve rather than combine, and the reason `blend` has its own
+  // mode list. Everything above is a pair of GL blend factors written out; a
+  // stencil is not expressible as one, because it reads the top picture's
+  // BRIGHTNESS where fixed-function hardware only ever reads its alpha.
+  //
+  // Brightness and not alpha is the whole point on footage: a video's alpha is
+  // 1 in every pixel, so `over` can never be masked and `multiply` darkens the
+  // outside instead of removing it. Wire the same picture into both inlets and
+  // this is a luma key; wire a light or a source in and it is a mask.
+  //
+  // The luminance is taken off the **premultiplied** colour on purpose, so it is
+  // brightness times coverage in one number: a lamp that fades to nothing at its
+  // edge should stop masking there, and dividing the coverage back out first
+  // would make its faintest edge as strong a mask as its core.
+  stencil: (a, b) => `(${a} * fxLuma(${b}.rgb))`,
+  cut: (a, b) => `(${a} * (1.0 - fxLuma(${b}.rgb)))`,
 };
 
 /**
@@ -415,12 +436,37 @@ const LENS_VALUES = {
 
 const GRADE_VALUES = {
   levels: ['gain', 'lift'],
+  saturate: ['amount'],
   hue: ['shift'],
+  tint: ['amount', 'bias'],
   // `steps`, where it was `levels` — which is now the name of the mode beside
   // it. An inlet and a sibling mode sharing a word is the kind of collision
   // that only shows up when somebody reads the dropdown out loud.
   posterize: ['steps'],
+  solarize: ['pivot', 'amount'],
+  channels: ['rotate'],
   invert: ['hold', 'rate'],
+} as const satisfies Record<string, readonly string[]>;
+
+/**
+ * Both displacements take one number and it is the same number, which is what
+ * makes them modes of one node rather than two kinds: flicking between them
+ * with the picture up moves nothing — the field stays wired, the amount stays
+ * set, and what changes is how the field is READ.
+ */
+const DISPLACE_VALUES = {
+  map: ['amount'],
+  curl: ['amount'],
+} as const satisfies Record<string, readonly string[]>;
+
+const HALFTONE_VALUES = {
+  dots: ['size', 'tilt'],
+  lines: ['size', 'tilt'],
+  // No tilt: a dither is an ordered matrix aligned to the frame, and turning it
+  // would be turning the grid the threshold is defined on rather than turning a
+  // screen laid over the picture.
+  dither: ['size'],
+  scanlines: ['size', 'weight'],
 } as const satisfies Record<string, readonly string[]>;
 
 const SPREAD_VALUES = {
@@ -466,6 +512,8 @@ type ValueInlet =
   | (typeof LENS_VALUES)[keyof typeof LENS_VALUES][number]
   | (typeof GRADE_VALUES)[keyof typeof GRADE_VALUES][number]
   | (typeof SPREAD_VALUES)[keyof typeof SPREAD_VALUES][number]
+  | (typeof DISPLACE_VALUES)[keyof typeof DISPLACE_VALUES][number]
+  | (typeof HALFTONE_VALUES)[keyof typeof HALFTONE_VALUES][number]
   | (typeof FRACTAL_VALUES)[keyof typeof FRACTAL_VALUES][number]
   | (typeof FIELD_VALUES)[keyof typeof FIELD_VALUES][number]
   | (typeof LIGHT_VALUES)[keyof typeof LIGHT_VALUES][number]
@@ -498,6 +546,12 @@ const VALUE_DESCRIPTION: Record<ValueInlet, string> = {
   gain: 'How strongly the resulting colour or edge is amplified.',
   lift: 'How much brightness is added to the darkest colours.',
   shift: 'How far every hue rotates around the colour wheel.',
+  bias: 'Where the recolouring lands: down in the shadows or up in the highlights.',
+  pivot: 'How bright a colour must be before it is folded back down.',
+  rotate: 'Which way round the red, green and blue channels are swapped.',
+  size: 'How coarse the pattern is, from a fine screen to a few large marks.',
+  tilt: 'The angle the screen is laid across the frame at.',
+  weight: 'How far the dimmed rows fall below the lit ones.',
   steps: 'How aggressively the colours are reduced to flat bands.',
   hold: 'How long the inverted state is held.',
   rate: 'Which musical division drives the change.',
@@ -544,9 +598,20 @@ const VALUE_FOLLOWS: ReadonlySet<string> = new Set([
   ...FIELD_VALUES.clouds,
 ]);
 
-/** Where a number starts when nobody has turned it. A half unless it says. */
+/**
+ * Where a number starts when nobody has turned it. A half unless it says.
+ *
+ * Keyed by name, and by `mode/name` where one word starts in two places. That
+ * second form exists because the names are the vocabulary somebody reads the
+ * canvas in, so the same word SHOULD appear on more than one mode — and
+ * `amount` is a wobble of a third at rest and a saturation of exactly what
+ * arrived. A centred control resting off its centre is a node that changed the
+ * picture by being dropped, which is the bargain every unwired inlet makes.
+ */
 const VALUE_AT: Record<string, number> = {
   sides: 0.2,
+  weight: 0.6,
+  'saturate/amount': 0.5,
   amount: 0.3,
   count: 0.3,
   zoom: 0,
@@ -585,7 +650,7 @@ const valuePorts = (names: readonly ValueInlet[], op: string): PortSpec[] => [
   ...names.map((name) =>
     VALUE_FOLLOWS.has(name)
       ? FOLLOWS(name, VALUE_DESCRIPTION[name])
-      : N(name, VALUE_DESCRIPTION[name], VALUE_AT[name] ?? 0.5),
+      : N(name, VALUE_DESCRIPTION[name], VALUE_AT[`${op}/${name}`] ?? VALUE_AT[name] ?? 0.5),
   ),
 ];
 
@@ -613,12 +678,67 @@ const LENS_POINT: Record<string, (ctx: Emitting, e: string, k: (i: number) => st
   pixelate: (c, e, k) => `fxPixelate(${c.read('p')}, ${k(0)}, ${k(1)}, ${e})`,
 };
 
-/** The colour where it already is. Four one-liners, and none of them move. */
+/** The colour where it already is. Eight one-liners, and none of them move. */
 const GRADE_EMIT: Record<string, (ctx: Emitting, e: string, k: (i: number) => string) => string> = {
   levels: (c, _e, k) => `cLevels(${c.read('c')}, ${k(0)}, ${k(1)})`,
+  saturate: (c, _e, k) => `fxSaturate(${c.read('c')}, ${k(0)})`,
   hue: (c, _e, k) => `cHue(${c.read('c')}, ${k(0)})`,
+  tint: (c, _e, k) => `fxTint(${c.read('c')}, ${k(0)}, ${k(1)})`,
   posterize: (c, _e, k) => `fxPosterize(${c.read('c')}, ${k(0)})`,
+  solarize: (c, _e, k) => `fxSolarize(${c.read('c')}, ${k(0)}, ${k(1)})`,
+  channels: (c, _e, k) => `fxChannels(${c.read('c')}, ${k(0)})`,
   invert: (c, e, k) => `fxInvert(${c.read('c')}, ${k(0)}, ${k(1)}, ${e})`,
+};
+
+/**
+ * Where a displacement moves the point to.
+ *
+ * The field is read **at the point being displaced** rather than at the point
+ * this evaluation happens to be at, which is the difference between a field
+ * that travels with a lens in front of it and one that stays nailed to the
+ * frame while the picture slides underneath it.
+ */
+const DISPLACE_POINT: Record<string, (ctx: Emitting, k: (i: number) => string) => string> = {
+  map: (c, k) => {
+    const at = c.read('p');
+    return `fxDisplaceMap(${at}, ${c.readAt('field', at)}, ${k(0)})`;
+  },
+  curl: (c, k) => {
+    const at = c.read('p');
+    return `fxDisplaceCurl(${at}, ${c.readAt('field', at)}, ${k(0)})`;
+  },
+};
+
+/**
+ * The four screens, each one tap of its input and a function of where it is.
+ *
+ * `c.at` rather than a `p` inlet: a screen is laid across the FRAME, and one
+ * that could be moved independently of the picture under it would slide the
+ * dots off the content they are made of.
+ */
+const HALFTONE_EMIT: Record<string, (ctx: Emitting, k: (i: number) => string) => string> = {
+  dots: (c, k) => `fxDots(${c.read('c')}, ${c.at}, ${k(0)}, ${k(1)})`,
+  lines: (c, k) => `fxLines(${c.read('c')}, ${c.at}, ${k(0)}, ${k(1)})`,
+  dither: (c, k) => `fxDither(${c.read('c')}, ${c.at}, ${k(0)})`,
+  scanlines: (c, k) => `fxScanlines(${c.read('c')}, ${c.at}, ${k(0)}, ${k(1)})`,
+};
+
+/**
+ * One number off a picture, unpremultiplied first.
+ *
+ * Every colour on the wire is premultiplied, so a half-covered white pixel is
+ * `vec4(0.5, 0.5, 0.5, 0.5)` and reading `.r` raw would call it grey. Dividing
+ * the coverage back out is what makes `luma` mean the brightness you can SEE
+ * rather than the brightness times how much of it is there — and it is why
+ * `alpha` is the one mode that does not divide, because coverage is the thing
+ * it is asking about.
+ */
+const READ_EMIT: Record<string, (colour: string) => string> = {
+  luma: (c) => `clamp(fxLuma(${c}.rgb / max(${c}.a, 1e-4)), 0.0, 1.0)`,
+  red: (c) => `clamp(${c}.r / max(${c}.a, 1e-4), 0.0, 1.0)`,
+  green: (c) => `clamp(${c}.g / max(${c}.a, 1e-4), 0.0, 1.0)`,
+  blue: (c) => `clamp(${c}.b / max(${c}.a, 1e-4), 0.0, 1.0)`,
+  alpha: (c) => `clamp(${c}.a, 0.0, 1.0)`,
 };
 
 /**
@@ -782,9 +902,33 @@ const LENS_MODE_DOCUMENTATION = documentedModes(LENS_MODES, {
 
 const GRADE_MODE_DOCUMENTATION = documentedModes(GRADE_MODES, {
   levels: 'Raise or lower the picture’s brightness and its darkest colours.',
+  saturate: 'Drain the colour out toward grey, or push it past where it was.',
   hue: 'Rotate every colour while leaving the picture in place.',
+  tint: 'Recolour the picture from its own brightness, ending at the room’s colour.',
   posterize: 'Reduce continuous colour into a small number of flat bands.',
+  solarize: 'Fold everything brighter than a pivot back down the other side.',
+  channels: 'Swap the red, green and blue channels around each other.',
   invert: 'Turn the colours into their opposites on a musical pulse.',
+});
+
+const DISPLACE_MODE_DOCUMENTATION = documentedModes(DISPLACE_MODES, {
+  map: 'Push the point by a picture’s red and green, the way a displacement map is read.',
+  curl: 'Push the point in the direction a picture’s brightness names.',
+});
+
+const HALFTONE_MODE_DOCUMENTATION = documentedModes(HALFTONE_MODES, {
+  dots: 'Reduce the picture to a screen of dots that grow with its brightness.',
+  lines: 'Reduce the picture to ruled lines that thicken with its brightness.',
+  dither: 'Reduce the picture to a fixed pattern of lit and unlit points.',
+  scanlines: 'Dim alternating rows, the way a tube draws a picture.',
+});
+
+const READ_MODES = documentedModes(READ_NAMES, {
+  luma: 'How bright the picture is here, weighted the way an eye reads it.',
+  red: 'How much red the picture has here.',
+  green: 'How much green the picture has here.',
+  blue: 'How much blue the picture has here.',
+  alpha: 'How much of the frame the picture actually covers here.',
 });
 
 const SPREAD_MODE_DOCUMENTATION = documentedModes(SPREAD_MODES, {
@@ -794,11 +938,13 @@ const SPREAD_MODE_DOCUMENTATION = documentedModes(SPREAD_MODES, {
   shift: 'Separate the colour channels, opening on transients and closing in gaps.',
 });
 
-const BLEND_MODES = documentedModes(BLENDS, {
+const BLEND_MODES = documentedModes(MIX_MODES, {
   over: 'Place the top picture over the base according to its opacity.',
   add: 'Sum both pictures, making overlaps brighter.',
   screen: 'Combine both pictures while rolling bright overlaps toward white.',
   multiply: 'See the base through the top, making overlaps darker.',
+  stencil: 'Keep the base only where the top picture is bright.',
+  cut: 'Keep the base only where the top picture is dark.',
 });
 
 const MATH_MODES = documentedModes(MATH_OPS, {
@@ -1014,6 +1160,26 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
   video: VIDEO_NODE_SPEC,
   image: IMAGE_NODE_SPEC,
 
+  last: {
+    name: 'last',
+    description: 'The frame this flow drew last time, fading as it ages.',
+    inlets: [
+      P('p', 'Where in the previous frame to read.'),
+      N(
+        'fade',
+        'How long what was drawn survives, from a flicker to a couple of seconds.',
+        0.45,
+      ),
+    ],
+    outlets: [C('c', 'The previous frame, dimmed by its age.')],
+    // One texture read, exactly like a video — and one buffer however many
+    // `last` nodes a graph has, because they all read the same frame. There is
+    // no ceiling on them for the same reason: a second one costs a sample, not
+    // a decoder.
+    work: 1,
+    emit: (c) => ({ c: `fromLast(${c.read('p')}, ${c.read('fade')})` }),
+  },
+
   tracks: {
     name: 'tracks',
     description:
@@ -1103,6 +1269,27 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     },
   },
 
+  displace: {
+    name: 'displace',
+    description: 'Move the point by what a picture says, rather than by a fixed shape.',
+    inlets: (node) => {
+      const op = modeOf(node, DISPLACE_MODES);
+      const values = DISPLACE_VALUES[op as keyof typeof DISPLACE_VALUES];
+      return [
+        P('p', 'The position to displace.'),
+        C('field', 'The picture whose colour decides which way this point moves.'),
+        ...valuePorts(values, op),
+      ];
+    },
+    outlets: [P('p', 'The displaced position.')],
+    modes: DISPLACE_MODE_DOCUMENTATION,
+    emit: (c) => {
+      const op = modeOf(c.node, DISPLACE_MODES);
+      const names = DISPLACE_VALUES[op as keyof typeof DISPLACE_VALUES];
+      return { p: DISPLACE_POINT[op](c, (i) => (names[i] ? c.read(names[i]) : '0.0')) };
+    },
+  },
+
   place: {
     name: 'place',
     description: 'Turn horizontal and vertical numbers into one position in the frame.',
@@ -1184,12 +1371,47 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     },
   },
 
+  halftone: {
+    name: 'halftone',
+    description: 'Throw brightness away in a pattern that keeps the picture readable.',
+    inlets: (node) => {
+      const op = modeOf(node, HALFTONE_MODES);
+      const values = HALFTONE_VALUES[op as keyof typeof HALFTONE_VALUES];
+      return [C('c', 'The picture to reduce to a pattern.'), ...valuePorts(values, op)];
+    },
+    outlets: [C('c', 'The patterned picture, transparent between its marks.')],
+    modes: HALFTONE_MODE_DOCUMENTATION,
+    emit: (c) => {
+      const op = modeOf(c.node, HALFTONE_MODES);
+      const names = HALFTONE_VALUES[op as keyof typeof HALFTONE_VALUES];
+      return { c: HALFTONE_EMIT[op](c, (i) => (names[i] ? c.read(names[i]) : '0.0')) };
+    },
+  },
+
   blend: {
     name: 'blend',
     description: 'Combine a base picture and a top picture into one frame.',
-    inlets: [
+    /**
+     * Every mode keeps all three inlets. What the mode moves is what the top
+     * inlet answers **when nothing is wired to it**, and it has to move,
+     * because an unwired inlet is a no-op in this vocabulary and the identity
+     * of a carve is not the identity of a sum.
+     *
+     * Nothing on top is nothing added, nothing screened and nothing multiplied
+     * — all of which are `vec4(0.0)`. But nothing on top of a `stencil` is a
+     * mask that lets everything through, which is white, and nothing on top of
+     * a `cut` is a mask that takes nothing away, which is black. Left at zero,
+     * a fresh `stencil` would black the frame the moment it was dropped and
+     * read as a node that had come unhooked, which is the exact complaint that
+     * fixed `multiply`.
+     */
+    inlets: (node) => [
       C('base', 'The picture underneath.'),
-      C('top', 'The picture placed over or combined with the base.'),
+      C(
+        'top',
+        'The picture placed over, combined with, or carved out of the base.',
+        node.op === 'stencil' ? 'vec4(1.0)' : node.op === 'cut' ? 'vec4(0.0, 0.0, 0.0, 1.0)' : 'vec4(0.0)',
+      ),
       N('amount', 'How much of the blended result replaces the base.', 1),
     ],
     outlets: [C('c', 'The combined picture.')],
@@ -1212,6 +1434,21 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     emit: (c) => {
       const op = MATH[c.node.op ?? 'add'] ?? MATH.add;
       return { n: op(c.read('a'), c.read('b')) };
+    },
+  },
+
+  read: {
+    name: 'read',
+    description: 'Take one number off a picture, so what is drawn can drive what happens next.',
+    inlets: [
+      C('c', 'The picture to measure.'),
+      P('p', 'Where in the picture to measure. The point being drawn, unwired.'),
+    ],
+    outlets: [N('n', 'The measured number, from zero to one.')],
+    modes: READ_MODES,
+    emit: (c) => {
+      const op = modeOf(c.node, READ_NAMES);
+      return { n: READ_EMIT[op](c.readAt('c', c.read('p'))) };
     },
   },
 
@@ -1326,6 +1563,15 @@ export interface Compiled {
   images: CircuitImage[];
   /** How each Live track should draw, if this flow asked for the set at all. */
   draws: string | null;
+  /**
+   * Whether anything in the flattened graph reads the previous frame.
+   *
+   * A fact about the graph rather than about the destination, and the only one
+   * a caller needs in order to know whether to keep a history buffer for it.
+   * Every `last` node in a flow reads the same frame, so this is a yes or a no
+   * and never a count.
+   */
+  feedback: boolean;
 }
 
 /**
@@ -1902,6 +2148,7 @@ export function compileFlow(flows: Record<string, FlowDef>, id: string): Compile
   const empty: Compiled = {
     source: null,
     error: expanded.error,
+    feedback: false,
     values: [],
     tracks: [],
     videos: [],
@@ -1917,7 +2164,17 @@ export function compileCircuit(circuit: Circuit): Compiled {
   const tracks = tracksOf(circuit);
   const drawn = circuit.nodes.find((node) => node.kind === 'tracks');
   const draws = drawn ? (drawn.op ?? TRACK_DRAWS[0]) : null;
-  const bare: Compiled = { source: null, error: null, values, tracks, videos: [], images: [], draws };
+  const bare: Compiled = {
+    source: null,
+    error: null,
+    values,
+    tracks,
+    videos: [],
+    images: [],
+    draws,
+    feedback: false,
+  };
+  let feedback = false;
 
   const byId = new Map(circuit.nodes.map((node) => [node.id, node]));
   const slot = new Map(values.map((each) => [each.id, each.index]));
@@ -1995,6 +2252,7 @@ export function compileCircuit(circuit: Circuit): Compiled {
       failed ??= 'too big to draw — an effect that takes many samples is nested too deep';
       return null;
     }
+    if (node.kind === 'last') feedback = true;
     shaderWork += typeof spec.work === 'function' ? spec.work(node) : (spec.work ?? 0);
     if (shaderWork > MAX_SHADER_WORK) {
       failed ??= 'too expensive to draw — a costly picture is being sampled too many times';
@@ -2141,6 +2399,7 @@ ${lines.join('\n')}
     source,
     videos: usedVideos,
     images: usedImages,
+    feedback,
     error: null,
   };
 }

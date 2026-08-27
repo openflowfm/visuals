@@ -28,6 +28,12 @@ out vec4 fragColor;
 
 uniform vec2  uRes;
 uniform float uTime;     // seconds; for drift that should NOT be in time
+// Seconds since the previous drawn frame. The only per-FRAME quantity in here,
+// and it exists for exactly one customer: a feedback trail decays once per
+// frame, so without this its length would be a fact about the display rather
+// than about the show — half as long on a 120Hz panel as on the projector it
+// was dialled in on. See fromLast in shaders.ts.
+uniform float uDt;
 uniform float uBeat;     // continuous Link beats
 uniform float uPhase;    // position within the quantum, in beats
 uniform float uQuantum;

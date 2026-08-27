@@ -49,9 +49,22 @@ describe('the agent-facing node catalog', () => {
     });
     const video = catalog.find((node) => node.kind === 'video');
     expect(video).toMatchObject({ target: 'media:video', defaultMode: 'loop' });
-    expect(video?.variants.map((variant) => variant.mode)).toEqual(['loop', 'once']);
+    expect(video?.variants.map((variant) => variant.mode)).toEqual(['loop', 'once', 'scrub']);
+    // A played clip takes a speed and a freeze; a scrubbed one takes a position
+    // and cannot take either, because both answer the question its position
+    // inlet has already answered. An agent reading this catalog has to be told
+    // which of the two it is looking at, so the mode has to move the inlets here
+    // exactly as it does on the faceplate.
     for (const variant of video?.variants ?? []) {
-      expect(variant.inlets.find((port) => port.name === 'pace')).toMatchObject({ default: 0.5 });
+      const named = variant.inlets.map((port) => port.name);
+      if (variant.mode === 'scrub') {
+        expect(named).toContain('position');
+        expect(named).not.toContain('pace');
+        expect(named).not.toContain('freeze');
+      } else {
+        expect(variant.inlets.find((port) => port.name === 'pace')).toMatchObject({ default: 0.5 });
+        expect(variant.inlets.find((port) => port.name === 'freeze')).toMatchObject({ default: 0 });
+      }
     }
     const image = catalog.find((node) => node.kind === 'image');
     expect(image).toMatchObject({ target: 'media:image', defaultMode: 'cover' });

@@ -1083,7 +1083,7 @@ describe('the bounded light node', () => {
   });
 });
 
-describe('the four ways two pictures combine', () => {
+describe('the six ways two pictures combine', () => {
   const blended = (op: string, top: boolean): string => {
     const built = compileCircuit(
       wire(
@@ -1115,6 +1115,37 @@ describe('the four ways two pictures combine', () => {
     expect(blended('add', false)).toContain('(v0 + vec4(0.0))');
     expect(blended('screen', false)).toContain('(v0 + vec4(0.0) - v0 * vec4(0.0))');
     expect(blended('multiply', false)).toContain('(v0 * vec4(0.0) + v0 * (1.0 - vec4(0.0).a))');
+  });
+
+  it('leaves the base alone when nothing is on top of a carve either', () => {
+    // The same rule as above, and it takes a different fallback to keep it. The
+    // identity of a sum is nothing on top, which is vec4(0.0); the identity of a
+    // stencil is a mask that lets everything through, and the identity of a cut
+    // is one that takes nothing away. Left at zero, dropping a stencil on a
+    // wired-up graph would black the frame — which is exactly the thing that
+    // made multiply look like a node that had come unhooked.
+    expect(blended('stencil', false)).toContain('(v0 * fxLuma(vec4(1.0).rgb))');
+    expect(blended('cut', false)).toContain('(v0 * (1.0 - fxLuma(vec4(0.0, 0.0, 0.0, 1.0).rgb)))');
+  });
+
+  it('carves with the top picture’s brightness, which no blendFunc can do', () => {
+    // The reason `blend` has a mode list of its own rather than sharing the set
+    // pass's. Every mode above is a pair of GL blend factors written out as an
+    // expression; these two read the top picture's LUMINANCE, and fixed-function
+    // hardware only ever reads its alpha. On footage that is the whole
+    // difference between a mask that works and one that cannot: a video's alpha
+    // is 1 in every pixel it has.
+    expect(blended('stencil', true)).toContain('(v0 * fxLuma(v1.rgb))');
+    expect(blended('cut', true)).toContain('(v0 * (1.0 - fxLuma(v1.rgb)))');
+  });
+
+  it('reads the mask premultiplied, so a soft edge masks softly', () => {
+    // Off the premultiplied colour on purpose: brightness times coverage, in one
+    // number. A lamp fading to nothing at its edge should stop masking there,
+    // and dividing the coverage back out first would make its faintest edge as
+    // strong a mask as its core — which is a hard-edged circle drawn by
+    // something that was chosen for being soft.
+    expect(blended('stencil', true)).not.toContain('max(v1.a');
   });
 
   it('multiplies the way the set stacks, and not the way arithmetic does', () => {
@@ -1159,6 +1190,315 @@ describe('an effect reads its input where it says it does', () => {
     expect(step).toBeTruthy();
     expect(body).toContain(`vec2(0.0, ${step})`);
     expect(step).not.toContain('uRes');
+  });
+});
+
+describe('the frame before this one', () => {
+  const trail = (nodes: Circuit['nodes'], cords: Circuit['cords']) => compileCircuit(wire(nodes, cords));
+
+  it('reads a texture rather than an expression, and says the flow needs one', () => {
+    // The deliberate second exception to expression-only pictures, and it is the
+    // same exception a video is: a real texture, sampled as a colour at a point,
+    // so every lens, grade, spread and blend works on it unchanged. What the
+    // caller has to be told is only whether to keep a buffer at all, which is a
+    // yes or a no and never a count — every `last` in a graph reads the one
+    // frame.
+    const built = trail(
+      [
+        { id: 'l', kind: 'last', x: 0, y: 0 },
+        { id: 'o', kind: 'out', x: 1, y: 0 },
+      ],
+      [{ from: 'l/c', to: 'o/c' }],
+    );
+    expect(built.error).toBeNull();
+    expect(bodyOf(built.source!)).toContain('fromLast(centred(), 0.45)');
+    expect(built.feedback).toBe(true);
+  });
+
+  it('costs one buffer however many of them a graph has', () => {
+    // Unlike a video, which is a decoder and is therefore capped at two. Four
+    // `last` nodes are four samples of one texture, so the only budget they
+    // touch is the ordinary one every sample touches.
+    const many = trail(
+      [
+        { id: 'a', kind: 'last', x: 0, y: 0 },
+        { id: 'b', kind: 'last', x: 0, y: 1 },
+        { id: 'c', kind: 'last', x: 0, y: 2 },
+        { id: 'd', kind: 'last', x: 0, y: 3 },
+        { id: 'm1', kind: 'blend', op: 'add', x: 1, y: 0 },
+        { id: 'm2', kind: 'blend', op: 'add', x: 1, y: 1 },
+        { id: 'm3', kind: 'blend', op: 'add', x: 2, y: 0 },
+        { id: 'o', kind: 'out', x: 3, y: 0 },
+      ],
+      [
+        { from: 'a/c', to: 'm1/base' },
+        { from: 'b/c', to: 'm1/top' },
+        { from: 'c/c', to: 'm2/base' },
+        { from: 'd/c', to: 'm2/top' },
+        { from: 'm1/c', to: 'm3/base' },
+        { from: 'm2/c', to: 'm3/top' },
+        { from: 'm3/c', to: 'o/c' },
+      ],
+    );
+    expect(many.error).toBeNull();
+    expect(many.feedback).toBe(true);
+  });
+
+  it('folds a lens into the texture read, like any other picture', () => {
+    // The trail everybody actually wants is the previous frame read slightly
+    // zoomed and added back. If that needed a pass it would need a buffer per
+    // step; because a colour is a function of a point, it is one sample of the
+    // history at a moved point.
+    const built = trail(
+      [
+        { id: 'l', kind: 'last', x: 0, y: 0 },
+        { id: 'z', kind: 'lens', op: 'zoom', x: 1, y: 0 },
+        { id: 'o', kind: 'out', x: 2, y: 0 },
+      ],
+      [
+        { from: 'l/c', to: 'z/c' },
+        { from: 'z/c', to: 'o/c' },
+      ],
+    );
+    expect(bodyOf(built.source!)).toContain('fromLast(cZoom(centred(), 0.5)');
+  });
+
+  it('says nothing about feedback when a graph never asks for it', () => {
+    expect(compileCircuit(starterCircuit()).feedback).toBe(false);
+  });
+
+  it('reports a last inside a nested flow, which reads the outer frame', () => {
+    // There is one buffer and the sub-graph is pasted in, so a `last` down a
+    // nesting reads the previous frame of the flow that reached the wall rather
+    // than of the flow it was written in. Worth pinning: the alternative is a
+    // buffer per flow node, which is the render-target-per-node design this
+    // renderer exists instead of.
+    const built = compileFlow(
+      {
+        trail: {
+          name: 'trail',
+          circuit: wire(
+            [
+              { id: 'l', kind: 'last', x: 0, y: 0 },
+              { id: 'o', kind: 'out', x: 1, y: 0 },
+            ],
+            [{ from: 'l/c', to: 'o/c' }],
+          ),
+        },
+        main: {
+          name: 'main',
+          circuit: wire(
+            [
+              { id: 'f', kind: 'flow', op: 'trail', x: 0, y: 0 },
+              { id: 'o', kind: 'out', x: 1, y: 0 },
+            ],
+            [{ from: 'f/c', to: 'o/c' }],
+          ),
+        },
+      },
+      'main',
+    );
+    expect(built.error).toBeNull();
+    expect(built.feedback).toBe(true);
+    expect(bodyOf(built.source!)).toContain('fromLast(');
+  });
+});
+
+describe('a picture can be a number now', () => {
+  const reading = (op: string, cords: Circuit['cords'] = []) => {
+    const built = compileCircuit(
+      wire(
+        [
+          { id: 's', kind: 'source', op: 'plasma', x: 0, y: 0 },
+          { id: 'r', kind: 'read', op, x: 1, y: 0 },
+          { id: 'g', kind: 'grade', op: 'levels', x: 2, y: 0 },
+          { id: 'o', kind: 'out', x: 3, y: 0 },
+        ],
+        [
+          { from: 's/c', to: 'r/c' },
+          { from: 's/c', to: 'g/c' },
+          { from: 'r/n', to: 'g/gain' },
+          { from: 'g/c', to: 'o/c' },
+          ...cords,
+        ],
+      ),
+    );
+    expect(built.error).toBeNull();
+    return bodyOf(built.source!);
+  };
+
+  it('divides the coverage back out, because every colour on the wire is premultiplied', () => {
+    // A half-covered white pixel is vec4(0.5, 0.5, 0.5, 0.5), so reading .r raw
+    // would call it grey. Luminance means the brightness you can SEE rather than
+    // the brightness times how much of it is there.
+    expect(reading('luma')).toMatch(/clamp\(fxLuma\(v\d+\.rgb \/ max\(v\d+\.a, 1e-4\)\), 0.0, 1.0\)/);
+    expect(reading('red')).toMatch(/clamp\(v\d+\.r \/ max\(v\d+\.a, 1e-4\), 0.0, 1.0\)/);
+  });
+
+  it('does not divide when the coverage is the thing being asked about', () => {
+    expect(reading('alpha')).toMatch(/clamp\(v\d+\.a, 0.0, 1.0\)/);
+  });
+
+  it('measures where the point inlet says, and at this fragment unwired', () => {
+    // Unwired it is the point being drawn, which makes a read a per-pixel fact
+    // about the picture. Wired to a `place` it is one spot, which makes it one
+    // number for the whole frame — the difference between footage driving its
+    // own hue and footage driving the whole show's brightness.
+    expect(reading('luma')).toContain('gen_plasma(centred()');
+
+    const built = compileCircuit(
+      wire(
+        [
+          { id: 's', kind: 'source', op: 'plasma', x: 0, y: 0 },
+          { id: 'pl', kind: 'place', x: 0, y: 1 },
+          { id: 'r', kind: 'read', op: 'luma', x: 1, y: 0 },
+          { id: 'g', kind: 'grade', op: 'levels', x: 2, y: 0 },
+          { id: 'o', kind: 'out', x: 3, y: 0 },
+        ],
+        [
+          { from: 's/c', to: 'r/c' },
+          { from: 'pl/p', to: 'r/p' },
+          { from: 's/c', to: 'g/c' },
+          { from: 'r/n', to: 'g/gain' },
+          { from: 'g/c', to: 'o/c' },
+        ],
+      ),
+    );
+    expect(built.error).toBeNull();
+    // The same source, evaluated twice: once at the fragment for the picture
+    // being graded, and once at the placed point for the number grading it.
+    const body = bodyOf(built.source!);
+    expect(body).toContain('gen_plasma(centred()');
+    expect(body).toMatch(/gen_plasma\(v\d+,/);
+    expect(body).toContain('recentred(vec2(');
+  });
+
+  it('refuses a picture whose own reading moves it', () => {
+    // A real loop rather than a conservative refusal: the lens's colour outlet
+    // reads its own `by`, so the number and the picture are the same trip round.
+    // The way to say this legally is across a frame, with `last`.
+    const built = compileCircuit(
+      wire(
+        [
+          { id: 's', kind: 'source', op: 'plasma', x: 0, y: 0 },
+          { id: 'l', kind: 'lens', op: 'zoom', x: 1, y: 0 },
+          { id: 'r', kind: 'read', op: 'luma', x: 2, y: 0 },
+          { id: 'o', kind: 'out', x: 3, y: 0 },
+        ],
+        [
+          { from: 's/c', to: 'l/c' },
+          { from: 'l/c', to: 'r/c' },
+          { from: 'r/n', to: 'l/by' },
+          { from: 'l/c', to: 'o/c' },
+        ],
+      ),
+    );
+    expect(built.error).toContain('feeds itself');
+  });
+});
+
+describe('a point moved by what a picture says', () => {
+  const displaced = (op: string) => {
+    const built = compileCircuit(
+      wire(
+        [
+          { id: 'f', kind: 'field', op: 'clouds', x: 0, y: 1 },
+          { id: 'd', kind: 'displace', op, x: 1, y: 0 },
+          { id: 's', kind: 'source', op: 'plasma', x: 2, y: 0 },
+          { id: 'o', kind: 'out', x: 3, y: 0 },
+        ],
+        [
+          { from: 'f/c', to: 'd/field' },
+          { from: 'd/p', to: 's/p' },
+          { from: 's/c', to: 'o/c' },
+        ],
+      ),
+    );
+    expect(built.error).toBeNull();
+    return bodyOf(built.source!);
+  };
+
+  it('reads the field at the point being displaced', () => {
+    // Not at the point this evaluation happens to be at, which is the difference
+    // between a field that travels with a lens in front of it and one nailed to
+    // the frame while the picture slides underneath.
+    expect(displaced('curl')).toMatch(/fxDisplaceCurl\(centred\(\), v\d+, 0.3\)/);
+    expect(displaced('map')).toMatch(/fxDisplaceMap\(centred\(\), v\d+, 0.3\)/);
+  });
+
+  it('keeps every cord across a mode flick, because both modes take the same number', () => {
+    // The substitution rule, and the reason these are two modes rather than two
+    // kinds: flicking between them with the picture up moves nothing. What
+    // changes is how the field is READ.
+    const named = (op: string) =>
+      inletsOf({ id: 'd', kind: 'displace', op, x: 0, y: 0 }).map((port) => port.name);
+    expect(named('map')).toEqual(named('curl'));
+    expect(named('map')).toEqual(['p', 'field', 'amount']);
+  });
+
+  it('refuses a picture displaced by itself', () => {
+    const built = compileCircuit(
+      wire(
+        [
+          { id: 'd', kind: 'displace', op: 'curl', x: 1, y: 0 },
+          { id: 'v', kind: 'source', op: 'plasma', x: 2, y: 0 },
+          { id: 'o', kind: 'out', x: 3, y: 0 },
+        ],
+        [
+          { from: 'v/c', to: 'd/field' },
+          { from: 'd/p', to: 'v/p' },
+          { from: 'v/c', to: 'o/c' },
+        ],
+      ),
+    );
+    expect(built.error).toContain('feeds itself');
+  });
+});
+
+describe('a screen that keeps the picture', () => {
+  const screened = (op: string) => {
+    const built = compileCircuit(
+      wire(
+        [
+          { id: 's', kind: 'source', op: 'plasma', x: 0, y: 0 },
+          { id: 'h', kind: 'halftone', op, x: 1, y: 0 },
+          { id: 'o', kind: 'out', x: 2, y: 0 },
+        ],
+        [
+          { from: 's/c', to: 'h/c' },
+          { from: 'h/c', to: 'o/c' },
+        ],
+      ),
+    );
+    expect(built.error).toBeNull();
+    return bodyOf(built.source!);
+  };
+
+  it('lays its screen across the frame rather than across a point it was handed', () => {
+    // `c.at` and not a `p` inlet. A screen that could be moved independently of
+    // the picture under it would slide the dots off the content they are made
+    // of, which is the one thing a halftone must not do.
+    expect(screened('dots')).toMatch(/fxDots\(v\d+, centred\(\)/);
+    expect(screened('lines')).toMatch(/fxLines\(v\d+, centred\(\)/);
+    expect(screened('dither')).toMatch(/fxDither\(v\d+, centred\(\)/);
+    expect(screened('scanlines')).toMatch(/fxScanlines\(v\d+, centred\(\)/);
+  });
+
+  it('gives a dither no angle to be turned to', () => {
+    // A dither is an ordered matrix aligned to the frame. Turning it would be
+    // turning the grid the threshold is defined on rather than turning a screen
+    // laid over a picture, which is a different thing wearing the same word.
+    const named = (op: string) =>
+      inletsOf({ id: 'h', kind: 'halftone', op, x: 0, y: 0 }).map((port) => port.name);
+    expect(named('dots')).toEqual(['c', 'size', 'tilt']);
+    expect(named('dither')).toEqual(['c', 'size']);
+  });
+
+  it('dims a scanline where it carves a dot, and the difference is what they are', () => {
+    // A screen decides whether there is ink here; a tube decides how brightly
+    // this row is lit. Scanlines that carved holes would composite as lace over
+    // whatever is under them.
+    expect(screened('scanlines')).not.toContain('fxScreen');
   });
 });
 

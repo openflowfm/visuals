@@ -84,6 +84,8 @@ export interface Preview {
 interface Built {
   program: Program | null;
   error: string | null;
+  /** Whether this face reads the previous frame, and so needs a history of its own. */
+  feedback: boolean;
 }
 
 /**
@@ -113,6 +115,77 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
   /** Where a face lands, before the output stage grades it onto the canvas. */
   const out = createTarget(gl);
 
+  /**
+   * A previous frame per face, for the faces that read one.
+   *
+   * **Per face and not one shared buffer**, which is the whole difficulty here:
+   * the stage and the bench each own a compositor and therefore each own a
+   * history for free, where this context draws up to ten different graphs in a
+   * single frame through one target. One buffer between them would not be ten
+   * trails; it would be ten graphs smearing into each other.
+   *
+   * **Copied rather than ping-ponged**, the opposite of the compositor's answer
+   * and for the opposite reason: swapping needs a destination per face as well,
+   * which is a second texture each, and a blit at the size of a node face is
+   * nothing. A wall-sized blit would not be.
+   *
+   * Keyed by the signature the shader is keyed by, so an edited face gets a
+   * fresh, black history exactly when it gets a fresh shader — which is also
+   * what stops a graph's trail surviving the edit that removed its feedback.
+   */
+  const history = new Map<string, ReturnType<typeof createTarget>>();
+
+  /**
+   * How many face histories to keep, against `LIVE_PICTURE_LIMIT` of ten.
+   *
+   * Two spare, so promoting a face or scrolling one in does not evict the
+   * history of a face still on screen. Far below `KEEP`: a shader is small and
+   * worth thousands, where a history is a texture the size of a face.
+   */
+  const HISTORIES = 12;
+
+  /** What a face with no history of its own binds, so no sampler is left dangling. */
+  const blank = gl.createTexture()!;
+  gl.bindTexture(gl.TEXTURE_2D, blank);
+  gl.texImage2D(
+    gl.TEXTURE_2D,
+    0,
+    gl.RGBA,
+    1,
+    1,
+    0,
+    gl.RGBA,
+    gl.UNSIGNED_BYTE,
+    new Uint8Array([0, 0, 0, 0]),
+  );
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+  const historyFor = (signature: string) => {
+    const kept = history.get(signature);
+    if (kept) {
+      // Re-inserted so the map's order is least-recently-drawn first, which is
+      // what makes the eviction below take the face nobody is looking at.
+      history.delete(signature);
+      history.set(signature, kept);
+      return kept;
+    }
+    const made = createTarget(gl);
+    made.resize(width, height);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, made.framebuffer);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    history.set(signature, made);
+    if (history.size > HISTORIES) {
+      const oldest = history.keys().next().value;
+      if (oldest !== undefined) {
+        history.get(oldest)?.free();
+        history.delete(oldest);
+      }
+    }
+    return made;
+  };
+
   let at: PreviewRoom | null = null;
   let width = 1;
   let height = 1;
@@ -128,15 +201,14 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
   const whole = (circuit: Circuit, flows: Record<string, FlowDef>): Circuit =>
     flatten({ ...flows, [FACE]: { name: 'face', circuit } }, FACE).circuit;
 
-  const programFor = (circuit: Circuit): Built => {
-    const signature = signatureOfCircuit(circuit);
+  const programFor = (circuit: Circuit, signature: string): Built => {
     const held = built.get(signature);
     if (held) {
       error = held.error;
       return held;
     }
-    const made: Built = { program: null, error: null };
     const compiled = compileCircuit(circuit);
+    const made: Built = { program: null, error: null, feedback: compiled.feedback };
     if (!compiled.source) {
       made.error = compiled.error;
     } else {
@@ -170,6 +242,9 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
     free() {
       live.free();
       out.free();
+      for (const kept of history.values()) kept.free();
+      history.clear();
+      gl.deleteTexture(blank);
       feed.free();
       video.free();
       image.free();
@@ -194,6 +269,10 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
       gl.disable(gl.BLEND);
       live.resize(width, height);
       out.resize(width, height);
+      // A target that changes size is reallocated and therefore cleared, so a
+      // face's trail restarts when the canvas does. That is the honest outcome:
+      // the frame it held was a different number of pixels.
+      for (const kept of history.values()) kept.resize(width, height);
 
       gl.bindFramebuffer(gl.FRAMEBUFFER, live.framebuffer);
       gl.clearColor(0, 0, 0, 0);
@@ -210,8 +289,10 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
     draw(circuit) {
       if (!at) return;
       const graph = whole(circuit, at.scheme.flows);
-      const made = programFor(graph);
+      const signature = signatureOfCircuit(graph);
+      const made = programFor(graph, signature);
       const feeding = { ...at, width, height };
+      const before = made.feedback ? historyFor(signature) : null;
 
       gl.bindFramebuffer(gl.FRAMEBUFFER, out.framebuffer);
       gl.clearColor(0, 0, 0, 1);
@@ -223,13 +304,31 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, live.texture);
         gl.uniform1i(made.program.uniform('uTracksTex'), 0);
+        // The unit the compositor uses, and a blank when this face has no
+        // history: never `out.texture`, which is the target being drawn into.
+        gl.activeTexture(gl.TEXTURE7);
+        gl.bindTexture(gl.TEXTURE_2D, before?.texture ?? blank);
+        gl.uniform1i(made.program.uniform('uLastTex'), 7);
         // One shared context cycles through up to ten different probe graphs in
         // a frame. Starting and tearing down decoders per thumbnail would be
         // worse than hiding the thumbnail, so small faces bind transparent;
         // promotion into the bench uses the full compositor and plays it.
-        video.bind(made.program, [], () => 0.5);
+        video.bind(made.program, [], () => ({ pace: 0.5, freeze: false, position: null }));
         image.bind(made.program, []);
         drawFullscreen(gl);
+      }
+
+      // The face just drawn becomes the face before, for the next frame to
+      // read. Before the grade rather than after it, so a trail accumulates the
+      // picture the flow made rather than the picture the shoulder left —
+      // which would roll the highlights off once per frame, compounding, and
+      // make a long trail fade to a colour the wall never shows.
+      if (before) {
+        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, out.framebuffer);
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, before.framebuffer);
+        gl.blitFramebuffer(0, 0, width, height, 0, 0, width, height, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
       }
 
       // Through the same output stage the wall gets, minus the keystone and the

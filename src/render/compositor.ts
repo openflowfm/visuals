@@ -5,7 +5,7 @@ import { createFeed, type Banks } from './feed.ts';
 import { banksOf, buildFlow, signatureOf } from './flow.ts';
 import { compile, createTarget, drawFullscreen, type Program } from './gl.ts';
 import { columns, warpFor, SQUARE, type Corners } from './output.ts';
-import { createVideoBank } from './video.ts';
+import { createVideoBank, videoControl } from './video.ts';
 import { createImageBank } from './image.ts';
 
 /**
@@ -93,6 +93,30 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
   let live = createTarget(gl);
   /** Where the flow lands, before the output stage takes it to the screen. */
   let out = createTarget(gl);
+  /**
+   * The frame before it, which a `last` node reads.
+   *
+   * **Ping-ponged rather than copied.** Both are full-size, and blitting one
+   * into the other every frame at 1920 would be a second whole-frame write for
+   * a picture nobody sees. Swapping which one is the destination costs two
+   * pointer assignments and leaves last frame exactly where it was drawn.
+   *
+   * **Allocated whether or not the flow reads it**, because the swap is
+   * unconditional: a history buffer kept only while feedback is wired would go
+   * stale the moment somebody unwired it, and hand back a frame from some
+   * earlier minute the next time they wired it up again. It is one texture the
+   * size of the one beside it, on a rig that already keeps two.
+   */
+  let prev = createTarget(gl);
+  /**
+   * Which flow the history belongs to.
+   *
+   * A trail is the previous frame of THIS graph. Carrying one across a flow
+   * change means the new picture opens dissolving out of the old one, which is
+   * a thing somebody might want and nobody asked for — and, worse, it makes a
+   * flow look different the second time it is opened than the first.
+   */
+  let held: string | null = null;
   let warp = columns(warpFor(SQUARE));
   let gain = 1;
   let test = false;
@@ -216,6 +240,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
     }
     live.resize(width, height);
     out.resize(width, height);
+    prev.resize(width, height);
   };
 
   resize();
@@ -224,6 +249,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
   const release = () => {
     live.free();
     out.free();
+    prev.free();
     feed.free();
     video.free();
     image.free();
@@ -265,6 +291,8 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
     image = createImageBank(gl);
     live = createTarget(gl);
     out = createTarget(gl);
+    prev = createTarget(gl);
+    held = null;
     alive = true;
     error = null;
     resize();
@@ -330,6 +358,18 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       if (built?.draws) feed.drawSet(at, built.draws);
 
       // --- the flow --------------------------------------------------------
+      // A new flow starts from black rather than out of whatever the last one
+      // left behind. Both, because the two swap: wiping only the destination
+      // leaves the old picture in the one about to be read as history.
+      if (id !== held) {
+        held = id ?? null;
+        for (const target of [out, prev]) {
+          gl.bindFramebuffer(gl.FRAMEBUFFER, target.framebuffer);
+          gl.clearColor(0, 0, 0, 1);
+          gl.clear(gl.COLOR_BUFFER_BIT);
+        }
+      }
+
       gl.bindFramebuffer(gl.FRAMEBUFFER, out.framebuffer);
       gl.clearColor(0, 0, 0, 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
@@ -341,6 +381,13 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, live.texture);
         gl.uniform1i(built.program.uniform('uTracksTex'), 0);
+        // Unit 7, above the two videos and the four images. Bound whether or not
+        // this graph reads it: a sampler left pointing at whatever texture was
+        // last bound to its unit is how a shader ends up sampling a video frame
+        // through `uLastTex` on some drivers and nothing at all on others.
+        gl.activeTexture(gl.TEXTURE7);
+        gl.bindTexture(gl.TEXTURE_2D, prev.texture);
+        gl.uniform1i(built.program.uniform('uLastTex'), 7);
         const sample = built.numbers.sample(built.circuit, {
           show,
           beat,
@@ -348,12 +395,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
           dt,
           pace: scheme?.defaults.pace,
         });
-        video.bind(
-          built.program,
-          built.videos,
-          (binding) => sample.inlet(portId(binding.id, 'pace')) ?? 0.5,
-          id ?? '',
-        );
+        video.bind(built.program, built.videos, (binding) => videoControl(sample, binding), id ?? '');
         image.bind(built.program, built.images, id ?? '');
         drawFullscreen(gl);
       } else {
@@ -364,6 +406,12 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       // --- to the wall -----------------------------------------------------
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       feed.grade(out.texture, at, { warp, gain, test });
+
+      // The frame just drawn becomes the frame before. After the wall has had
+      // it, so what is projected is this frame rather than a swap late.
+      const spent = out;
+      out = prev;
+      prev = spent;
     },
   };
 }

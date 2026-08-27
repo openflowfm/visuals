@@ -100,8 +100,16 @@ export const FRACTAL_MODES = ['mandelbrot', 'julia'] as const;
  */
 export const LIGHT_MODES = ['lamp', 'beam', 'shafts', 'caustics'] as const;
 
-/** Disk-backed video playback: continuous looping or one pass held on its final frame. */
-export const VIDEO_MODES = ['loop', 'once'] as const;
+/**
+ * Disk-backed video playback: looping, one pass held on its final frame, or a
+ * playhead driven by a number.
+ *
+ * `scrub` is the mode that makes a clip a *function of the music* rather than a
+ * thing playing next to it. Its `position` inlet is the whole clip over 0–1, so
+ * a bar-length ramp is one pass through the footage at whatever tempo the room
+ * is at, and a meter is a clip that only advances when somebody plays.
+ */
+export const VIDEO_MODES = ['loop', 'once', 'scrub'] as const;
 
 /** Disk-backed still-image framing: fill the frame, or preserve the whole image. */
 export const IMAGE_MODES = ['cover', 'contain'] as const;
@@ -147,7 +155,16 @@ export const LENS_MODES: readonly string[] = [
 ];
 
 /** `grade` — the colour where it already is, without moving anything. */
-export const GRADE_MODES: readonly string[] = ['levels', 'hue', 'posterize', 'invert'];
+export const GRADE_MODES: readonly string[] = [
+  'levels',
+  'saturate',
+  'hue',
+  'tint',
+  'posterize',
+  'solarize',
+  'channels',
+  'invert',
+];
 
 /**
  * `spread` — reads its input several times, and is the only family that can
@@ -159,6 +176,64 @@ export const GRADE_MODES: readonly string[] = ['levels', 'hue', 'posterize', 'in
  * never stack two, and the list is the kind now.
  */
 export const SPREAD_MODES: readonly string[] = ['bloom', 'smear', 'edge', 'shift'];
+
+/**
+ * `blend` — how two pictures become one, and why this is not `BLENDS`.
+ *
+ * `Blend` is the **set pass's** list: four names that each compile to one
+ * `blendFunc` pair, because a track is drawn into a buffer by fixed-function
+ * hardware. The `blend` node's list is a GLSL expression over two colours,
+ * which is a strictly larger thing — `stencil` carves one picture with the
+ * brightness of another, and there is no pair of GL factors that says it.
+ *
+ * The two agreed on four names for as long as the node could only do what the
+ * hardware could. The moment that stopped being true they had to part, and
+ * sharing one exported list would have made the next stencil-shaped mode look
+ * like a track blending option it can never be.
+ */
+export const MIX_MODES: readonly string[] = [...BLENDS, 'stencil', 'cut'];
+
+/**
+ * `displace` — move a point by what a *picture* says, rather than by a shape.
+ *
+ * The eleven `lens` modes are eleven fixed functions of a point: a fold, a
+ * swirl, a tile. None of them can be told where to go by something else, which
+ * is why footage under a lens reads as footage under an effect rather than as
+ * footage that is moving on its own. A displacement takes its offset from a
+ * field, so the motion is as organic as whatever you wire in — and at a low
+ * amount the content stays perfectly readable while the frame breathes.
+ *
+ * Not a `lens` mode, by the substitution rule: `lens` spends its one colour
+ * inlet on *the picture it reads through*, and a mode needing a second colour
+ * inlet for a different purpose moves the signal path rather than the trim.
+ */
+export const DISPLACE_MODES: readonly string[] = ['map', 'curl'];
+
+/**
+ * `halftone` — throw brightness away in a pattern that keeps the picture.
+ *
+ * Its own kind rather than four more `grade` modes, because every mode in
+ * `grade` answers *what colour is here* from the colour that is already here,
+ * and these four answer it from the colour **and where in the frame it is**. A
+ * dropdown holding both would teach that a hue rotation and a print screen are
+ * variations on each other, which is the `effect` mistake in miniature.
+ *
+ * They earn their place on footage specifically: a halftone is the one
+ * reduction invented to survive being reduced, so a face is still a face at
+ * four tones. That is the whole brief — make it breathe, keep it decipherable.
+ */
+export const HALFTONE_MODES: readonly string[] = ['dots', 'lines', 'dither', 'scanlines'];
+
+/**
+ * What a `read` node takes off a picture, as one number.
+ *
+ * Nothing else in the vocabulary turns a colour into a number. Every `n` outlet
+ * comes from the clock, the set, or arithmetic between them, so a picture could
+ * drive nothing and footage — the only picture here with content worth
+ * reacting to — was inert. `luma` is the one anybody reaches for; the channels
+ * are there because a colour-keyed mask is a channel and a threshold.
+ */
+export const READ_NAMES: readonly string[] = ['luma', 'red', 'green', 'blue', 'alpha'];
 
 /**
  * Three nodes read the set, and between them they are the whole of it.

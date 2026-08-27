@@ -70,11 +70,22 @@ reachable video nodes start decoders, and a flattened flow may reach at most two
 uploads happen when the browser reports a newly decoded frame, never merely because another
 render frame began. That keeps a 30 fps clip at roughly 30 uploads even on a 120 Hz display.
 
-The node has `loop` and `once` modes. `once` holds its final decoded frame; leaving the flow
-releases the decoder, so returning starts it from the beginning. Its `pace` inlet maps a
-centred 0–1 control exponentially from 0.5× through 1× to 2× and is CPU-evaluated from the
-same number graph the faceplate reads. Video audio is always muted. An absent or undecodable
-asset draws transparent and reports a visible renderer error instead of taking the flow down.
+The node has `loop`, `once` and `scrub` modes. `once` holds its final decoded frame; leaving
+the flow releases the decoder, so returning starts it from the beginning. A played clip takes
+`pace`, a centred 0–1 control mapped exponentially from 0.5× through 1× to 2×, and `freeze`,
+a gate that pauses the decoder on the frame that is up and lets it run again when the gate
+falls. A **scrubbed** clip takes neither and takes `position` instead: the whole clip over
+0–1, seeking only when the ask has moved by more than a frame's worth. That is the mode that
+makes a clip a function of the music rather than a thing playing beside it — a bar-length
+ramp is one pass through the footage at whatever tempo the room is at.
+
+All three are CPU-evaluated from the same number graph the faceplate reads, because none of
+them is something a fragment shader can do: a shader decides what a frame looks like and only
+a decoder decides *which* frame it is. `freeze` is its own inlet rather than a pace of zero
+because `playbackRate = 0` is not a legal rate in every browser, and the ones that accept it
+disagree about whether the decoder still holds the frame. Video audio is always muted. An
+absent or undecodable asset draws transparent and reports a visible renderer error instead of
+taking the flow down.
 Small node-face thumbnails leave video transparent to avoid decoder churn; the large bench
 and wall play it.
 
@@ -92,6 +103,10 @@ uploaded edge is capped at 4096 pixels or the GPU's lower texture limit, and no 
 may reach more than four image nodes. Parked image nodes allocate nothing. Small node-face
 previews bind them transparent for the same anti-thrashing reason as video; the bench and wall
 render the real image.
+
+The **previous frame** is the third stateful picture, and the only one that is not a file.
+See [the frame before this one](#the-frame-before-this-one) below: one ping-ponged target per
+destination, sampled by a `last` node as a colour at a point, exactly as a video is.
 
 The server follows no symlinks and refuses traversal for both media types. It deliberately does
 not admit GIF or SVG: the former quietly turns a still node into animation, while the latter
@@ -319,15 +334,17 @@ editors listing these differently would be two different vocabularies.
 | `fractal` | `p` `energy` + its mode's numbers | `c` | `mandelbrot` or `julia`, with bounded zoom, detail and iterative work |
 | `light` | `p` `energy` + its mode's numbers, and `from` on the hung three | `c` | `lamp` `beam` `shafts` `caustics`; 2D lights with fixed work, drifting in seconds rather than beats |
 | `flow` | `p` | `c` | another flow, whole, as one node |
+| `last` | `p` `fade` | `c` | the frame this flow drew last time, fading as it ages |
 | `paint` | `amount` `energy` | `c` | the colourway's colour at a brightness |
 
 ### transform — everything that gives a picture back where it already is
 
 | node | in | out | |
 |---|---|---|---|
-| `grade` | `c` + its mode's numbers | `c` | `levels` `hue` `posterize` `invert` |
+| `grade` | `c` + its mode's numbers | `c` | `levels` `saturate` `hue` `tint` `posterize` `solarize` `channels` `invert` |
 | `spread` | `c` `energy` + its mode's numbers | `c` | `bloom` `smear` `edge` `shift` |
-| `blend` | `base` `top` `amount` | `c` | `over` `add` `screen` `multiply` |
+| `halftone` | `c` + its mode's numbers | `c` | `dots` `lines` `dither` `scanlines` |
+| `blend` | `base` `top` `amount` | `c` | `over` `add` `screen` `multiply` `stencil` `cut` |
 
 ### geometry — moving the point a picture is read at
 
@@ -336,6 +353,7 @@ editors listing these differently would be two different vocabularies.
 | `point` | — | `p` | where this fragment is being read |
 | `place` | `x` `y` | `p` | how two numbers become a position |
 | `lens` | `p` `c` `energy` + its mode's numbers | `p` `c` | `zoom` `swirl` `fold` `wobble` `tile` `mirror` `kaleido` `twist` `ripple` `slice` `pixelate` |
+| `displace` | `p` `field` `amount` | `p` | `map` `curl`: a point moved by what a picture says |
 | `polar` | `p` | `radius` `angle` | how a position becomes a number |
 
 ### `place` is the other direction, and it was missing
@@ -411,6 +429,71 @@ two multiplies everything upstream of them. That was already true and already lo
 and a fact the vocabulary could not state was a fact somebody had to remember. It is a kind
 now, and the list is gone.
 
+### `displace` is not a lens mode, and `halftone` is not a grade mode
+
+Three kinds were added for footage, and each one is a kind rather than a mode for a reason the
+vocabulary already had a rule for.
+
+**`displace` moves a point by what a picture says.** The eleven `lens` modes are eleven fixed
+functions of a point — a fold, a swirl, a tile — and none of them can be told where to go by
+something else, which is why footage under a lens reads as footage under an *effect* rather
+than as footage moving on its own. A displacement takes its offset from a field, so the motion
+is as organic as whatever is wired in, and at a low amount the content stays perfectly
+readable while the frame breathes. It cannot be a `lens` mode because `lens` spends its one
+colour inlet on *the picture it reads through*: a mode needing a second colour inlet for a
+different purpose moves the signal path rather than the trim, which is the same line `place`
+sits on the other side of.
+
+Its two modes both take one `amount` and read the same field, so flicking between them moves
+no cords at all. `map` reads red and green as x and y, the way a displacement map has always
+been read, which is right for footage and photographs where the channels are independent.
+`curl` reads brightness as a *direction*, which is right for everything else here: every
+procedural picture is tinted by the colourway, so a source's red and green move together and
+reading them as x and y would lock the whole displacement to one diagonal.
+
+**`halftone` reads the colour *and* where in the frame it is.** Every `grade` mode answers
+*what colour is here* from the colour that is already here; these four answer it from the
+colour and its position. A dropdown holding both would teach that a hue rotation and a print
+screen are variations on each other, which is the `effect` mistake in miniature.
+
+They earn a place in a video vocabulary specifically. A halftone is the one reduction that was
+invented to survive being reduced, so a face is still a face at four tones — which is the
+whole brief: make it breathe, keep it decipherable. `scanlines` is the one that dims rather
+than carves, and the difference is what the two things are: a screen decides whether there is
+ink here, a tube decides how brightly this row is lit, and scanlines that carved holes would
+composite as lace over whatever is underneath.
+
+**`stencil` and `cut` are why `blend` has a mode list of its own.** `Blend` is the *set pass's*
+list: four names that each compile to one `blendFunc` pair, because a track is drawn into a
+buffer by fixed-function hardware. A stencil is not expressible as one, because it reads the
+top picture's **brightness** where the hardware only ever reads its alpha.
+
+Brightness rather than alpha is the entire point on footage: a video's alpha is 1 in every
+pixel it has, so `over` can never be masked and `multiply` darkens the outside instead of
+removing it. Wire the same picture into both inlets and a stencil is a luma key; wire a light
+or a source in and it is a mask. The luminance is taken off the *premultiplied* colour, so it
+is brightness times coverage in one number — a lamp fading to nothing at its edge should stop
+masking there, and dividing the coverage back out first would make its faintest edge as strong
+a mask as its core.
+
+Each carve keeps all three inlets and moves only what the top inlet answers when nothing is
+wired to it. Nothing on top of a sum is `vec4(0.0)`; nothing on top of a stencil is a mask
+that lets everything through, which is white, and nothing on top of a cut is one that takes
+nothing away, which is black. Left at zero, a fresh `stencil` would black the frame the moment
+it was dropped and read as a node that had come unhooked — which is the exact complaint that
+fixed `multiply`.
+
+**And four `grade` modes that are only colour.** `saturate` was a plain hole: nothing in the
+vocabulary could make footage mono, which is the most reliable way there is to make a clip sit
+under everything else. `tint` maps luminance into a ramp ending at the room's own colour and is
+the most content-preserving thing in the file — the brightness carrying the picture passes
+through untouched and only the hue is decided, so a face is still a face while the frame agrees
+with the colourway. `solarize` folds everything above a pivot back down the other side and
+leaves it there, which is a *look*, where the `invert` beside it turns the whole frame over on
+a division, which is an *event*. `channels` permutes red, green and blue, snapped to thirds so
+a wave wired into it lands on one of three whole rotations in time rather than spending most of
+the bar between two wrong colours.
+
 ### the room — three questions you can ask the set
 
 | node | out | |
@@ -454,7 +537,28 @@ collection, because a song that modulates is in the first key when it starts.
 
 ### numbers
 
-`lfo`, `math`, `wave`, and `value`.
+`lfo`, `math`, `read`, `wave`, and `value`.
+
+**`read` is the one that turns a picture into a number**, and until it existed nothing did.
+Every `n` outlet in the vocabulary came from the clock, the set, or arithmetic between them,
+so a picture could drive nothing at all. That barely mattered while every picture was
+procedural — a graph already knows what it told a plasma to do — and it matters enormously
+with footage, which is the only picture here whose content nobody in the graph chose.
+
+It takes a `c` and a `p` and gives one number: `luma`, `red`, `green`, `blue`, or `alpha`.
+Unwired, the `p` is the point being drawn, which makes a read a per-pixel fact about the
+picture; wired to a `place` it is one spot, which makes it one number for the whole frame.
+That is the difference between footage driving its own hue and footage driving the brightness
+of the entire show.
+
+Every colour on the wire is premultiplied, so the four colour modes divide the coverage back
+out before reporting — a half-covered white pixel is `vec4(0.5)` and reading `.r` raw would
+call it grey. `alpha` is the one that does not divide, because coverage is what it is asking
+about.
+
+A picture whose own reading moves it is a **loop**, and the compiler refuses it by name. That
+is correct rather than conservative: the number and the picture are the same trip round the
+graph. The way to say it legally is across a frame, through `last`.
 
 **`lfo` owns a clock; `wave` does not.** `wave` turns whatever phase reaches it into a
 shape, which is useful when the phase comes from another graph. `lfo` is the complete
@@ -610,6 +714,99 @@ one that reads as broken.
 The bench and the node faces are both fed the **room's** energy — the control on the designer's
 own bar — for the same reason and from the other end: it is a condition you can dial rather
 than one you have to wait for.
+
+## The frame before this one
+
+A colour is a function of a point, so no node can ever see another node's *result* — only
+recompute it. That is what deleted the layer stack, and it forbids exactly one family of
+effect: anything that needs a **finished picture**. Trails, echo, infinite zoom, and every
+other feedback look are all one thing, and the expression model cannot say any of it.
+
+So there is a `last` node, and it is the same escape hatch a video is: a real texture,
+sampled as a colour at a point, with every lens, grade, spread, blend and nested flow working
+on it unchanged. The trail everybody actually reaches for is four nodes —
+
+```
+last -> lens zoom -> grade levels -> blend add <- the fresh picture -> out
+```
+
+— and because a colour is a function of a point, the zoom does not need a pass of its own. It
+compiles to one sample of the history at a moved point: `fromLast(cZoom(centred(), 0.55), …)`.
+
+### It is the previous output of the whole flow
+
+Not "the previous value of the node I am wired to", which would be a buffer per node and is
+precisely the render-target-per-node design this renderer exists instead of. There is **one**
+history, so every `last` in a graph reads the same frame and four of them cost four samples
+rather than four buffers — unlike a video, which is a decoder and is capped at two.
+
+A `last` inside a nested flow therefore reads the previous frame of the flow that reached the
+wall, not of the sub-flow it was written in. That is the only coherent rule with one buffer,
+and it is stated here because it is the kind of thing that is otherwise discovered.
+
+### The buffer is per destination, and there are three of them
+
+Feedback is state, and state belongs to whoever is drawing rather than to the graph. The
+stage and the bench each own a `Compositor`, so each owns a history already. The node faces
+are the hard case: `preview.ts` draws up to ten different graphs through **one** target in a
+single frame, so one shared buffer between them would not be ten trails, it would be ten
+graphs smearing into each other.
+
+They get a history each, keyed by the same signature the shader is keyed by — so an edited
+face gets a fresh, black history exactly when it gets a fresh shader. Twelve are kept against
+a live-picture limit of ten, which is two spare so promoting a face does not evict the history
+of one still on screen.
+
+The two answers are also opposites on purpose. The compositor **ping-pongs**: two full-size
+targets and a swap, because blitting 1920×1080 every frame is a second whole-frame write for
+a picture nobody sees. A face **copies**, because ping-ponging needs a second texture per face
+and a blit at the size of a node face is nothing.
+
+A face's history is copied out **before** the output stage rather than after it, so a trail
+accumulates the picture the flow made rather than the picture the shoulder left. Rolling the
+highlights off once per frame, compounding, would make a long trail fade toward a colour the
+wall never shows.
+
+### The decay is in seconds, and it is the only thing here that is
+
+Everything in this renderer is in beats on purpose: the clock is a uniform, so a shape that
+grows over a bar grows over a *musical* bar and stays with the music when the tempo moves.
+Feedback cannot be. A trail loses a fixed fraction per **drawn frame**, so a decay expressed
+per frame is a decay expressed per display — a 0.9 that is a 115ms half-life on the projector
+it was dialled in on is 58ms on a 120Hz laptop beside it.
+
+So `fade` is a half-life in seconds, from a flicker to two and a half, applied with a `uDt`
+uniform that is the one per-frame quantity in the preamble. Wire a wave into it for a trail
+that breathes with the music; the seconds are what make it the same trail on the bench and on
+the wall. `uDt` is clamped to 100ms before it is uploaded, because a hidden tab, a stalled
+driver, or the first frame after a rebuild all hand it a second or more, and one of those
+would wipe a trail to nothing in a way that reads as the loop having broken.
+
+### A loop with gain in it will find white
+
+`last` itself can never amplify: it multiplies by a decay that is at most one, and it does
+**not** re-`charge` what it reads, which would compound contrast every frame until the picture
+was two colours. The gain comes from what you add the history back with.
+
+`blend add` is the one to know about. A bright picture summed into a history that decays by
+0.995 a frame settles at a couple of hundred times that picture, which is a white wall in well
+under a second. The output shoulder means it clips rather than explodes, but it clips to white.
+`screen` is the safe version of the same gesture — `a + b - ab` converges on one rather than on
+infinity — and a `grade levels` dimming the history before it is added back is the other
+answer. This is true of feedback in every rig that has it; it is written down here because the
+distance between a trail and a white-out is one knob, and the room it happens in has a band in
+it.
+
+### Two things it does not do
+
+**It never samples past its own edge.** The target is `CLAMP_TO_EDGE` like every other one
+here, which is right for an effect reading a neighbour and catastrophic for a loop reading
+itself: a feedback zoom would write its own edge pixel back every frame and burn four
+permanent streaks across the wall inside a second. Outside the frame `last` is transparent.
+
+**It starts from black on a flow change.** Carrying a history across one would open the new
+picture dissolving out of the old, which is a thing somebody might want and nobody asked for
+— and, worse, it would make a flow look different the second time it was opened.
 
 ## The set is a pass, and it is the only one
 
@@ -866,10 +1063,16 @@ substitution rule says the polar reading cannot be a mode of it — see above. W
 wants a kind of its own is a question to answer after somebody has missed it.
 
 **Arithmetic on a point.** `math` takes two numbers; there is nothing that adds two points,
-so a `place` cannot be used as an *offset* to the point being asked about. The lens modes
-displace a point in eleven fixed shapes and none of them takes a vector. It is the obvious
-next node and it was deliberately not smuggled into `place`, whose whole claim is that it
-makes a point out of two numbers rather than out of two numbers and a point.
+so a `place` cannot be used as an *offset* to the point being asked about. `displace` moves a
+point by what a *picture* says, which is the case that mattered for footage and is not the
+general one: it takes a colour, not a point, so two points still cannot be added. It was
+deliberately not smuggled into `place`, whose whole claim is that it makes a point out of two
+numbers rather than out of two numbers and a point.
+
+**A picture's own reading moving that picture.** `read` gives a number off a colour and the
+compiler refuses the graph where that number moves the point the same colour is read at,
+correctly: it is one trip round. Saying it needs a frame of delay, which is what `last` is —
+so it is expressible, and only across a frame.
 
 **Undo.** The scheme is replaced whole on every edit and the file is the record, so `git
 diff` is the undo — and the roll keeps one level of its own.

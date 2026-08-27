@@ -1,4 +1,5 @@
-import type { CircuitVideo } from './circuit.ts';
+import { portId, type CircuitVideo } from './circuit.ts';
+import type { NumberSample } from './evaluateNumber.ts';
 import type { Program } from './gl.ts';
 import { mediaUrl } from './media.ts';
 
@@ -12,11 +13,27 @@ interface HeldVideo {
   trouble: string | null;
 }
 
+/**
+ * What the graph is telling one decoder to do this frame.
+ *
+ * All three are CPU-evaluated out of the same number graph the faceplate reads,
+ * because none of them is a thing a fragment shader can do: a shader can decide
+ * what a frame looks like and only a decoder can decide WHICH frame it is.
+ */
+export interface VideoControl {
+  /** Playback speed, as the centred 0–1 control `videoRate` maps. */
+  pace: number;
+  /** Hold the frame that is up, and let it run again when this falls. */
+  freeze: boolean;
+  /** Where in the clip to sit, 0–1, when the node is scrubbing. Null when it plays. */
+  position: number | null;
+}
+
 export interface VideoBank {
   bind(
     program: Program,
     videos: readonly CircuitVideo[],
-    pace: (video: CircuitVideo) => number,
+    control: (video: CircuitVideo) => VideoControl,
     scope?: string,
   ): void;
   /** Release every decoder when no drawable flow is active. */
@@ -24,6 +41,34 @@ export interface VideoBank {
   readonly error: string | null;
   free(): void;
 }
+
+/**
+ * What one video node is being told this frame, read off the CPU number graph.
+ *
+ * `position` is null unless the node is scrubbing, and that is the whole of the
+ * decision: a clip is either played — at a speed, possibly frozen — or
+ * placed, and there is no coherent third thing where it is both carried along by
+ * its own clock and put where a number says. Which is why the two lists of
+ * inlets cannot both be mounted, and why this reads the mode rather than
+ * guessing from whichever inlet happens to have a cord on it.
+ */
+export const videoControl = (sample: NumberSample, video: CircuitVideo): VideoControl =>
+  video.mode === 'scrub'
+    ? { pace: 0.5, freeze: false, position: sample.inlet(portId(video.id, 'position')) ?? 0 }
+    : {
+        pace: sample.inlet(portId(video.id, 'pace')) ?? 0.5,
+        freeze: (sample.inlet(portId(video.id, 'freeze')) ?? 0) > 0.5,
+        position: null,
+      };
+
+/**
+ * How far off the frame that is up an ask has to be before it is worth a seek.
+ *
+ * A seek is a decode, and a scrub whose number has not moved would ask for the
+ * frame already on screen at the display's rate. One thirtieth of a second is
+ * about a frame of ordinary footage: below it there is nothing new to show.
+ */
+const SEEK_EPSILON = 1 / 30;
 
 /** A centred control is normal speed; its useful bounded range is 0.5x–2x. */
 export const videoRate = (pace: number): number => 2 ** ((Math.max(0, Math.min(1, pace)) - 0.5) * 2);
@@ -99,17 +144,53 @@ export function createVideoBank(gl: WebGL2RenderingContext): VideoBank {
       };
       next();
     }
-    void element.play().catch((err: unknown) => {
-      state.trouble = `${video.asset}: ${(err as Error).message}`;
-    });
+    // A scrubbed clip is never playing, so it is never started. Starting one and
+    // pausing it on the first bind would decode a frame nobody asked for and
+    // show it for exactly one frame, which reads as a flash on a cut.
+    if (video.mode !== 'scrub') play(state);
     return state;
+  };
+
+  const play = (state: HeldVideo) => {
+    void state.element.play().catch((err: unknown) => {
+      state.trouble = `${state.key}: ${(err as Error).message}`;
+    });
+  };
+
+  /**
+   * The decoder half of a video node, which is everything a shader cannot say.
+   *
+   * **Scrubbing pauses and seeks**, rather than setting a rate: a position is a
+   * place, and the only way to be somewhere in a clip is to go there. It is
+   * guarded by `SEEK_EPSILON` because a seek is a decode.
+   *
+   * **Freezing pauses without seeking**, which is why it is a different inlet
+   * rather than a pace of zero. `playbackRate = 0` is not a legal rate in every
+   * browser, and the ones that take it disagree about whether the decoder is
+   * still holding the frame or has released it.
+   */
+  const drive = (state: HeldVideo, control: VideoControl) => {
+    const element = state.element;
+    if (control.position !== null) {
+      if (!element.paused) element.pause();
+      const span = element.duration;
+      if (Number.isFinite(span) && span > 0) {
+        const want = Math.max(0, Math.min(1, control.position)) * span;
+        if (Math.abs(want - element.currentTime) > SEEK_EPSILON) element.currentTime = want;
+      }
+      return;
+    }
+    element.playbackRate = videoRate(control.pace);
+    if (control.freeze) {
+      if (!element.paused) element.pause();
+    } else if (element.paused && !element.ended) play(state);
   };
 
   return {
     get error() {
       return [...held.values()].find((state) => state.trouble)?.trouble ?? null;
     },
-    bind(program, videos, pace, scope = '') {
+    bind(program, videos, control, scope = '') {
       const active = new Set(videos.map((video) => video.index));
       for (const [index, state] of held) {
         if (active.has(index)) continue;
@@ -140,7 +221,7 @@ export function createVideoBank(gl: WebGL2RenderingContext): VideoBank {
           state = create(video, key);
           held.set(index, state);
         }
-        state.element.playbackRate = videoRate(pace(video));
+        drive(state, control(video));
         if (!state.element.requestVideoFrameCallback && state.element.currentTime !== state.lastTime) {
           state.dirty = true;
         }

@@ -36,6 +36,7 @@ export { GENERATOR_LIB } from './glsl/sources.ts';
  */
 export const flowPreamble = (values: number): string => `${PREAMBLE}
 uniform sampler2D uTracksTex;
+uniform sampler2D uLastTex;
 uniform sampler2D uVideo0;
 uniform sampler2D uVideo1;
 uniform vec2 uVideoSize[2];
@@ -78,6 +79,31 @@ vec4 laid(vec4 g, float e) {
 // The Live set's own picture, at a point.
 vec4 fromTracks(vec2 p) {
   return texture(uTracksTex, clamp(uncentred(p), 0.0, 1.0));
+}
+
+/*
+ * The frame this flow drew last time, at a point. The one thing in the whole
+ * vocabulary that is not a function of now.
+ *
+ * **Nothing outside the frame, rather than the edge pixel.** The target is
+ * CLAMP_TO_EDGE like every other one here, which is right for an effect reading
+ * a neighbour and catastrophic for a loop reading itself: a feedback zoom that
+ * sampled past its own edge would write that edge back every frame, and four
+ * permanent streaks would burn across the wall inside a second.
+ *
+ * **The decay is a half-life in seconds, applied with uDt.** Everything else
+ * in this renderer is in beats, on purpose, because the clock is a uniform and
+ * a shape that grows over a bar should grow over a MUSICAL bar. This is the one
+ * quantity that cannot be: a trail loses a fixed fraction per drawn frame, so a
+ * decay expressed per frame is a decay expressed per display. Wire a wave into
+ * fade for a trail that breathes with the music; the seconds are what make it
+ * the same trail on the bench and on the wall.
+ */
+vec4 fromLast(vec2 p, float fade) {
+  vec2 uv = uncentred(p);
+  float inside = float(all(greaterThanEqual(uv, vec2(0.0))) && all(lessThanEqual(uv, vec2(1.0))));
+  float life = mix(0.03, 2.5, clamp(fade, 0.0, 1.0));
+  return texture(uLastTex, clamp(uv, 0.0, 1.0)) * inside * exp2(-uDt / max(life, 1e-4));
 }
 
 vec2 videoUv(vec2 p, vec2 size) {

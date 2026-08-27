@@ -169,6 +169,12 @@ export function createFeed(gl: WebGL2RenderingContext): Feed {
     const quantum = at.show.quantum || 4;
     gl.uniform2f(program.uniform('uRes'), at.width, at.height);
     gl.uniform1f(program.uniform('uTime'), at.seconds);
+    // Clamped, and not passed through raw. A tab that was hidden, a driver that
+    // stalled, or the first frame after a flow is built all hand this a dt of a
+    // second or more, and a trail whose decay is exp2(-dt / life) would be wiped
+    // to nothing by one of them — a hitch that reads as the feedback loop
+    // having broken rather than as a frame having been late.
+    gl.uniform1f(program.uniform('uDt'), Math.min(Math.max(at.dt, 0), 0.1));
     gl.uniform1f(program.uniform('uBeat'), at.beat);
     gl.uniform1f(program.uniform('uPhase'), ((at.beat % quantum) + quantum) % quantum);
     gl.uniform1f(program.uniform('uQuantum'), quantum);
