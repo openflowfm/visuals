@@ -352,7 +352,7 @@ editors listing these differently would be two different vocabularies.
 |---|---|---|---|
 | `point` | — | `p` | where this fragment is being read |
 | `place` | `x` `y` | `p` | how two numbers become a position |
-| `lens` | `p` `c` `energy` + its mode's numbers | `p` `c` | `zoom` `swirl` `fold` `wobble` `tile` `mirror` `kaleido` `twist` `ripple` `slice` `pixelate` |
+| `lens` | `p` `c` `energy` + its mode's numbers | `p` `c` | `zoom` `swirl` `fold` `wobble` `tile` `mirror` `kaleido` `twist` `ripple` `slice` `pixelate` `creep` |
 | `displace` | `p` `field` `amount` | `p` | `map` `curl`: a point moved by what a picture says |
 | `polar` | `p` | `radius` `angle` | how a position becomes a number |
 
@@ -781,6 +781,28 @@ that breathes with the music; the seconds are what make it the same trail on the
 the wall. `uDt` is clamped to 100ms before it is uploaded, because a hidden tab, a stalled
 driver, or the first frame after a rebuild all hand it a second or more, and one of those
 would wipe a trail to nothing in a way that reads as the loop having broken.
+
+### `creep` is the zoom a trail wants
+
+The iconic feedback look is the history read slightly larger every frame, and `zoom` is the
+wrong control for it twice over.
+
+Its range is four octaves either way, so every useful per-frame step lives between 0.500 and
+0.510 — a hundredth of the travel, which is not something anybody dials at a desk with a band
+waiting. And a fixed factor applied once a frame **compounds into a different speed on every
+display**: sixty frames of 0.99 is not a hundred and twenty frames of 0.99, so a trail set on
+the projector runs at half the speed on the laptop beside it. That is the same fault `uDt` was
+added to fix one node along, and feedback is the only place it can appear.
+
+So `creep` is a zoom per *second*. Its exponents sum to the elapsed time however many frames
+it took, and the curve is cubed so most of the travel is a few percent a second while the ends
+can still throw the picture out of the frame. At rest it holds still, like every other centred
+control.
+
+It is deliberately **not dealt by [the roll](wheel.md)**. A creep only says something when its
+result is fed back into the picture it came from, a roll never wires a `last`, and a rolled
+creep would be a lens moving the point by a fraction of a percent — a dead node wearing a real
+name. The mode is not the problem; dealing it into a graph with no feedback in it is.
 
 ### A loop with gain in it will find white
 

@@ -432,6 +432,7 @@ const LENS_VALUES = {
   ripple: ['waves', 'depth', 'speed'],
   slice: ['bands', 'throw'],
   pixelate: ['blocks', 'resolve'],
+  creep: ['grow'],
 } as const satisfies Record<string, readonly string[]>;
 
 const GRADE_VALUES = {
@@ -543,6 +544,7 @@ const VALUE_DESCRIPTION: Record<ValueInlet, string> = {
   throw: 'How far each sliced band is pushed sideways.',
   blocks: 'How large the pixel blocks become.',
   resolve: 'How far the blocks resolve back into the picture.',
+  grow: 'How fast the picture grows or shrinks, per second rather than per step.',
   gain: 'How strongly the resulting colour or edge is amplified.',
   lift: 'How much brightness is added to the darkest colours.',
   shift: 'How far every hue rotates around the colour wheel.',
@@ -676,6 +678,7 @@ const LENS_POINT: Record<string, (ctx: Emitting, e: string, k: (i: number) => st
   ripple: (c, e, k) => `fxRipple(${c.read('p')}, ${k(0)}, ${k(1)}, ${k(2)}, ${e})`,
   slice: (c, e, k) => `fxSlice(${c.read('p')}, ${k(0)}, ${k(1)}, ${e})`,
   pixelate: (c, e, k) => `fxPixelate(${c.read('p')}, ${k(0)}, ${k(1)}, ${e})`,
+  creep: (c, _e, k) => `fxCreep(${c.read('p')}, ${k(0)})`,
 };
 
 /** The colour where it already is. Eight one-liners, and none of them move. */
@@ -898,6 +901,7 @@ const LENS_MODE_DOCUMENTATION = documentedModes(LENS_MODES, {
   ripple: 'Send a wave from the centre that displaces the picture as it passes.',
   slice: 'Cut the picture into horizontal bands and throw them sideways.',
   pixelate: 'Break the picture into blocks that resolve across the bar.',
+  creep: 'Zoom continuously at a speed, for a point fed back into its own picture.',
 });
 
 const GRADE_MODE_DOCUMENTATION = documentedModes(GRADE_MODES, {

@@ -201,6 +201,28 @@ vec4 fxScanlines(vec4 c, vec2 p, float size, float weight) {
   return vec4(c.rgb * mix(1.0, 0.5 + 0.5 * row, clamp(weight, 0.0, 1.0)), c.a);
 }
 
+// A zoom expressed as a RATE rather than as a distance, for the one thing that
+// compounds: a point that is fed back into the picture it came from.
+//
+// zoom is wrong for this twice over. Its range is four octaves either way,
+// which puts every useful per-frame step inside half a hundredth of the
+// control — the whole trail lives between 0.500 and 0.510 and there is no
+// dialling that at a desk. And a fixed factor applied once a frame compounds
+// into a different speed on every display, which is exactly the fault uDt
+// was added to fix in the decay beside it. Sixty frames of 0.99 is not a
+// hundred and twenty frames of 0.99.
+//
+// Here the exponents add up to the elapsed time however many frames it took, so
+// a trail creeps out at the same speed on the bench, on the wall, and on a
+// laptop dropping frames. The curve is cubed because the useful range for
+// something accumulating is tiny and the reachable one still has to be there:
+// most of the travel is a few percent a second, and the ends can still throw
+// the picture out of the frame.
+vec2 fxCreep(vec2 p, float grow) {
+  float n = (grow - 0.5) * 2.0;
+  return p * exp2(-n * n * n * 1.5 * uDt);
+}
+
 // --- a point moved by what a picture says ---------------------------------
 
 // Red and green as x and y, the way a displacement map has always been read.

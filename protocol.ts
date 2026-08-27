@@ -152,6 +152,7 @@ export const LENS_MODES: readonly string[] = [
   'ripple',
   'slice',
   'pixelate',
+  'creep',
 ];
 
 /** `grade` — the colour where it already is, without moving anything. */

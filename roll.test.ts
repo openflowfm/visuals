@@ -215,6 +215,25 @@ describe('rolled flows', () => {
     }
   });
 
+  it('never deals a creep, which needs feedback to mean anything', () => {
+    // A zoom per second only says something when its result is fed back into
+    // the picture it came from. A roll never wires a `last`, so a rolled creep
+    // would be a lens that moves the point by a fraction of a percent and
+    // nothing else — a dead node on the canvas wearing a real name.
+    let lenses = 0;
+    for (const seed of seeds) {
+      const rng = seedOf(seed);
+      for (let i = 0; i < 12; i++) {
+        for (const node of rollCircuit(rng).nodes) {
+          if (node.kind !== 'lens') continue;
+          lenses += 1;
+          expect(node.op).not.toBe('creep');
+        }
+      }
+    }
+    expect(lenses).toBeGreaterThan(0);
+  });
+
   it('writes smoothing only on track nodes and values only on value nodes', () => {
     let tracks = 0;
     let values = 0;

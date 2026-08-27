@@ -1193,6 +1193,44 @@ describe('an effect reads its input where it says it does', () => {
   });
 });
 
+describe('a zoom that compounds is a rate, not a distance', () => {
+  it('creeps by the elapsed time rather than by a step per frame', () => {
+    // The same argument as the decay beside it, one node along. A fixed factor
+    // applied once a frame compounds into a different speed on every display,
+    // so sixty frames of 0.99 is not a hundred and twenty frames of 0.99 — and
+    // a trail dialled in on the projector would run at half the speed on the
+    // laptop next to it. Summing exponents over `uDt` is what makes it one
+    // speed everywhere.
+    const built = compileCircuit(
+      wire(
+        [
+          { id: 'l', kind: 'last', x: 0, y: 0 },
+          { id: 'c', kind: 'lens', op: 'creep', x: 1, y: 0 },
+          { id: 'o', kind: 'out', x: 2, y: 0 },
+        ],
+        [
+          { from: 'l/c', to: 'c/c' },
+          { from: 'c/c', to: 'o/c' },
+        ],
+      ),
+    );
+    expect(built.error).toBeNull();
+    expect(bodyOf(built.source!)).toContain('fxCreep(centred(), 0.5)');
+    expect(built.source!).toContain('exp2(-n * n * n * 1.5 * uDt)');
+  });
+
+  it('holds still at the centre, like every other centred control', () => {
+    // Dropping one changes nothing until it is turned, which is the bargain
+    // every unwired inlet makes. A creep that drifted at rest would be a node
+    // that moved the picture by existing.
+    expect(inletsOf({ id: 'c', kind: 'lens', op: 'creep', x: 0, y: 0 })).toMatchObject([
+      { name: 'p' },
+      { name: 'c' },
+      { name: 'grow', at: 0.5 },
+    ]);
+  });
+});
+
 describe('the frame before this one', () => {
   const trail = (nodes: Circuit['nodes'], cords: Circuit['cords']) => compileCircuit(wire(nodes, cords));
 

@@ -42,7 +42,7 @@ describe('the agent-facing node catalog', () => {
   it('carries every node, mode, inlet, and outlet description', () => {
     const catalog = nodeCatalog();
     expect(catalog.map((node) => node.kind)).toContain('out');
-    expect(catalog.find((node) => node.kind === 'lens')?.variants).toHaveLength(11);
+    expect(catalog.find((node) => node.kind === 'lens')?.variants).toHaveLength(12);
     expect(catalog.find((node) => node.kind === 'field')).toMatchObject({
       work: 16,
       variants: FIELD_MODES.map((mode) => ({ mode, work: FIELD_WORK[mode] })),

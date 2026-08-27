@@ -199,6 +199,18 @@ export function palette(rng: Rng): string[] {
  * vocabulary said they were a set. They are one node's modes now, so what is
  * left here is only the part a roll actually needs: which number to reach for.
  */
+/**
+ * The lens modes a roll may reach for, which is every one but `creep`.
+ *
+ * `creep` is a zoom per *second* and only means anything when its result is fed
+ * back into the picture it came from — under a `last`, where the frames
+ * compound. A roll never wires one, so a rolled `creep` is a lens that moves the
+ * point by a fraction of a percent and nothing else: a dead node on the canvas
+ * wearing a real name. Excluded here rather than in the vocabulary, because the
+ * mode is not the problem; dealing it into a graph with no feedback in it is.
+ */
+const ROLLED_LENS_MODES: readonly string[] = LENS_MODES.filter((mode) => mode !== 'creep');
+
 const LENS_VALUE: Record<string, string> = {
   zoom: 'by',
   swirl: 'turn',
@@ -380,7 +392,7 @@ export function rollCircuit(rng: Rng): Circuit {
   const bent = (least: number, most: number): string => {
     let carry = point;
     const steps = least + Math.floor(rng() * (most - least + 1));
-    for (const op of shuffled(rng, [...LENS_MODES]).slice(0, steps)) {
+    for (const op of shuffled(rng, [...ROLLED_LENS_MODES]).slice(0, steps)) {
       const x = at();
       const node = add({ kind: 'lens', op, x, y: 20 });
       wire(carry, `${node}/p`);
@@ -431,7 +443,7 @@ export function rollCircuit(rng: Rng): Circuit {
   if (shape < 0.35) {
     let carry = lead(0.6, bent(1, 3));
     if (chance(rng, 0.6)) {
-      const node = add({ kind: 'lens', op: pick(rng, LENS_MODES), x: at(), y: 20 });
+      const node = add({ kind: 'lens', op: pick(rng, ROLLED_LENS_MODES), x: at(), y: 20 });
       wire(carry, `${node}/c`);
       carry = `${node}/c`;
     }
@@ -507,7 +519,7 @@ export function rollCircuit(rng: Rng): Circuit {
   if (shape < 0.9) {
     let carry = lead(0.6, bent(1, 2));
     if (chance(rng, 0.5)) {
-      const node = add({ kind: 'lens', op: pick(rng, LENS_MODES), x: at(), y: 20 });
+      const node = add({ kind: 'lens', op: pick(rng, ROLLED_LENS_MODES), x: at(), y: 20 });
       wire(carry, `${node}/c`);
       carry = `${node}/c`;
     }
@@ -522,7 +534,7 @@ export function rollCircuit(rng: Rng): Circuit {
   // --- keyed: the song's key turns the colour, so a set modulates ----------
   let carry = lead(0.7, bent(1, 2));
   if (chance(rng, 0.5)) {
-    const node = add({ kind: 'lens', op: pick(rng, LENS_MODES), x: at(), y: 20 });
+    const node = add({ kind: 'lens', op: pick(rng, ROLLED_LENS_MODES), x: at(), y: 20 });
     wire(carry, `${node}/c`);
     carry = `${node}/c`;
   }
