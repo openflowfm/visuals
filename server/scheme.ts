@@ -31,8 +31,8 @@ import { repaired, splitPort } from '../src/render/circuit.ts';
  * A flow, spelled compactly, because a graph written as JSON is unreadable.
  *
  * **Laid out from the wiring rather than from the order it was typed.** These
- * are the four graphs anyone opens first, so where the nodes sit is part of what
- * they teach: a column per step along the signal, so the picture reads left to
+ * are the graphs a fresh install opens first, so where the nodes sit is part of
+ * what they teach: a column per step along the signal, so the picture reads left to
  * right and the cords do not cross. A row-major grid put a `value` node between
  * two links in a chain and made a six-node flow need untangling before it could
  * be read, which for the library that *is* the manual is the wrong first sight.
@@ -733,6 +733,230 @@ const BUILT_IN: Scheme = {
         'lit/c -> o/c',
       ],
     ),
+    // Two lamps cross the frame in counter-motion over a radial armature. The
+    // horizontal cycle takes two bars and the vertical one four, so their
+    // relationship keeps changing without the focal points rushing around the
+    // wall. A playing set is a quiet layer of bars rather than the picture the
+    // composition waits for.
+    counterweight: wire(
+      'Counterweight',
+      [
+        ['pt', 'point'],
+        ['across', 'lfo', 'sine', { rate: 1 / 7, sync: 1 }],
+        ['rise', 'lfo', 'triangle', { rate: 0, sync: 1, phase: 0.25 }],
+        ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.35],
+        ['lift', 'math', 'max', { a: [0.28, 0.34] }],
+        ['high', 'place', undefined, { x: [0.18, 0.64], y: [0.58, 0.22] }],
+        ['low', 'place', undefined, { x: [0.82, -0.64], y: [0.42, -0.22] }],
+        ['rays', 'source', 'rays', { spokes: 0.32 }],
+        ['highLamp', 'light', 'lamp', { carry: 0.42, soft: 0.36 }],
+        ['lowLamp', 'light', 'lamp', { carry: 0.32, soft: 0.58 }],
+        ['lamps', 'blend', 'screen', { amount: 0.82 }],
+        ['structure', 'blend', 'screen', { amount: 0.62 }],
+        ['live', 'tracks', 'bars'],
+        ['liveMix', 'blend', 'screen', { amount: 0.2 }],
+        ['o', 'out'],
+      ],
+      [
+        'across/n -> high/x',
+        'across/n -> low/x',
+        'rise/n -> high/y',
+        'rise/n -> low/y',
+        'across/n -> lift/a',
+        'e/n -> lift/b',
+        'pt/p -> rays/p',
+        'lift/n -> rays/energy',
+        'pt/p -> highLamp/p',
+        'high/p -> highLamp/from',
+        'lift/n -> highLamp/energy',
+        'pt/p -> lowLamp/p',
+        'low/p -> lowLamp/from',
+        'lift/n -> lowLamp/energy',
+        'highLamp/c -> lamps/base',
+        'lowLamp/c -> lamps/top',
+        'rays/c -> structure/base',
+        'lamps/c -> structure/top',
+        'pt/p -> live/p',
+        'structure/c -> liveMix/base',
+        'live/c -> liveMix/top',
+        'liveMix/c -> o/c',
+      ],
+    ),
+    // A high window of moving haze. Mirror and fold establish the architecture
+    // before either bounded picture is read; clouds supply the volume and slow
+    // shafts give it a direction. Both clocks are long enough to feel like the
+    // building breathing rather than an effect turning a control.
+    glasshouse: wire(
+      'Glasshouse',
+      [
+        ['pt', 'point'],
+        ['across', 'lfo', 'sine', { rate: 0, sync: 1, phase: 0.1 }],
+        ['breath', 'lfo', 'triangle', { rate: 1 / 7, sync: 1, phase: 0.35 }],
+        ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.35],
+        ['lift', 'math', 'max', { a: [0.28, 0.38] }],
+        ['hang', 'place', undefined, { x: [0.2, 0.6], y: [0.76, 0.14] }],
+        ['mirror', 'lens', 'mirror', { line: 0.5, angle: 0.5 }],
+        ['fold', 'lens', 'fold', { sides: 0.32 }],
+        ['sky', 'field', 'clouds', { weave: [0.25, 0.28] }],
+        ['shafts', 'light', 'shafts', { blades: 0.38, haze: 0.68 }],
+        ['glass', 'blend', 'screen', { amount: 0.72 }],
+        ['live', 'tracks', 'by name'],
+        ['liveMix', 'blend', 'screen', { amount: 0.18 }],
+        ['o', 'out'],
+      ],
+      [
+        'across/n -> hang/x',
+        'breath/n -> hang/y',
+        'breath/n -> lift/a',
+        'e/n -> lift/b',
+        'pt/p -> mirror/p',
+        'mirror/p -> fold/p',
+        'fold/p -> sky/p',
+        'lift/n -> sky/energy',
+        'across/n -> sky/weave',
+        'fold/p -> shafts/p',
+        'hang/p -> shafts/from',
+        'lift/n -> shafts/energy',
+        'sky/c -> glass/base',
+        'shafts/c -> glass/top',
+        'fold/p -> live/p',
+        'glass/c -> liveMix/base',
+        'live/c -> liveMix/top',
+        'liveMix/c -> o/c',
+      ],
+    ),
+    // A liquid field in two depths: caustic web in the back, a colony of soft
+    // bodies over it, and one shallow refraction around the composite. The
+    // caustics keep drifting in seconds while the colony and ripple breathe on
+    // long Link divisions, so the surface has motion at more than one scale.
+    'tidal-glass': wire(
+      'Tidal glass',
+      [
+        ['pt', 'point'],
+        ['tide', 'lfo', 'sine', { rate: 0, sync: 1, phase: 0.08 }],
+        ['swell', 'lfo', 'triangle', { rate: 1 / 7, sync: 1, phase: 0.25 }],
+        ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.55],
+        ['lift', 'math', 'max', { a: [0.28, 0.46] }],
+        ['caustic', 'light', 'caustics', { weave: 0.48, glint: 0.48 }],
+        ['balls', 'field', 'metaballs', { balls: 0.65, apart: [0.2, 0.55] }],
+        ['water', 'blend', 'screen', { amount: 0.68 }],
+        ['ripple', 'lens', 'ripple', { waves: 0.34, depth: [0.1, 0.12], speed: 0.18 }],
+        ['rings', 'source', 'rings'],
+        ['live', 'tracks', 'rings'],
+        ['accent', 'blend', 'screen', { amount: 0.22 }],
+        ['finish', 'blend', 'screen', { amount: 0.3 }],
+        ['o', 'out'],
+      ],
+      [
+        'tide/n -> lift/a',
+        'e/n -> lift/b',
+        'pt/p -> caustic/p',
+        'lift/n -> caustic/energy',
+        'pt/p -> balls/p',
+        'lift/n -> balls/energy',
+        'swell/n -> balls/apart',
+        'caustic/c -> water/base',
+        'balls/c -> water/top',
+        'pt/p -> ripple/p',
+        'water/c -> ripple/c',
+        'lift/n -> ripple/energy',
+        'tide/n -> ripple/depth',
+        'pt/p -> rings/p',
+        'lift/n -> rings/energy',
+        'pt/p -> live/p',
+        'rings/c -> accent/base',
+        'live/c -> accent/top',
+        'ripple/c -> finish/base',
+        'accent/c -> finish/top',
+        'finish/c -> o/c',
+      ],
+    ),
+    // One bounded Julia orbit, turned into a radial loom by moving the point
+    // before the fractal reads it. That ordering matters: the expensive orbit
+    // runs once, with no spread above it. Long LFOs change the turn, seed and
+    // fold while the set contributes only a thin field of sparks.
+    'star-loom': wire(
+      'Star loom',
+      [
+        ['pt', 'point'],
+        ['orbit', 'lfo', 'triangle', { rate: 1 / 7, sync: 1, phase: 0.18 }],
+        ['shape', 'lfo', 'sine', { rate: 0, sync: 1, phase: 0.62 }],
+        ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.45],
+        ['lift', 'math', 'max', { a: [0.3, 0.4] }],
+        ['radial', 'lens', 'kaleido', { segments: 0.42, spin: [0.38, 0.2] }],
+        [
+          'julia',
+          'fractal',
+          'julia',
+          { zoom: 0, turn: [0.4, 0.18], detail: 0.72, shape: [0.28, 0.44] },
+        ],
+        ['live', 'tracks', 'sparks'],
+        ['liveMix', 'blend', 'screen', { amount: 0.16 }],
+        ['o', 'out'],
+      ],
+      [
+        'orbit/n -> lift/a',
+        'e/n -> lift/b',
+        'pt/p -> radial/p',
+        'lift/n -> radial/energy',
+        'orbit/n -> radial/spin',
+        'radial/p -> julia/p',
+        'lift/n -> julia/energy',
+        'orbit/n -> julia/turn',
+        'shape/n -> julia/shape',
+        'pt/p -> live/p',
+        'julia/c -> liveMix/base',
+        'live/c -> liveMix/top',
+        'liveMix/c -> o/c',
+      ],
+    ),
+    // A mechanical plate assembled from cells and a checker. Sample-and-hold
+    // changes its weave every two bars; a triangle keeps continuous motion
+    // underneath those larger states. The raw plate and its four-tap edge are
+    // screened together before a final posterisation, making linework without
+    // throwing away the body that gives it weight.
+    switchyard: wire(
+      'Switchyard',
+      [
+        ['pt', 'point'],
+        ['sweep', 'lfo', 'triangle', { rate: 2 / 7, sync: 1 }],
+        ['step', 'lfo', 'sample-hold', { rate: 1 / 7, sync: 1 }],
+        ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.18],
+        ['lift', 'math', 'max', { a: [0.34, 0.42] }],
+        ['cells', 'field', 'cells', { weave: [0.12, 0.24] }],
+        ['grid', 'source', 'checker', { tiles: [0.12, 0.18] }],
+        ['bed', 'blend', 'screen', { amount: 0.3 }],
+        ['live', 'tracks', 'scan'],
+        ['accent', 'blend', 'over', { amount: 0.18 }],
+        ['ink', 'spread', 'edge', { width: 0.55, gain: 0.7 }],
+        ['plate', 'blend', 'screen', { amount: 0.5 }],
+        ['bands', 'grade', 'posterize', { steps: [0.58, 0.14] }],
+        ['dark', 'grade', 'levels', { gain: 0.56, lift: 0.36 }],
+        ['o', 'out'],
+      ],
+      [
+        'sweep/n -> lift/a',
+        'e/n -> lift/b',
+        'pt/p -> cells/p',
+        'lift/n -> cells/energy',
+        'step/n -> cells/weave',
+        'pt/p -> grid/p',
+        'lift/n -> grid/energy',
+        'step/n -> grid/tiles',
+        'cells/c -> bed/base',
+        'grid/c -> bed/top',
+        'pt/p -> live/p',
+        'bed/c -> accent/base',
+        'live/c -> accent/top',
+        'accent/c -> ink/c',
+        'accent/c -> plate/base',
+        'ink/c -> plate/top',
+        'plate/c -> bands/c',
+        'step/n -> bands/steps',
+        'bands/c -> dark/c',
+        'dark/c -> o/c',
+      ],
+    ),
     // Three of the others, as three nodes. The claim the vocabulary makes about
     // itself — a flow is a picture, so a flow goes wherever a picture goes — and
     // the only one of these you cannot read without believing it.
@@ -796,8 +1020,8 @@ const BUILT_IN: Scheme = {
     dusk: ['#b026ff', '#ff2d95', '#ffe600', '#2ee6ff', '#f6d6ff'],
   },
   rotation: {
-    // Empty pools mean "everything", so a fresh clone turns through all four
-    // flows and all four colourways without anyone filling anything in.
+    // Empty pools mean "everything", so a fresh clone turns through every
+    // flow and all four colourways without anyone filling anything in.
     flows: [],
     colorways: [],
     // Eight bars. Long enough to read as a section and short enough that a

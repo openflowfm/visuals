@@ -150,7 +150,7 @@ describe('the built-in scheme', () => {
     }
   });
 
-  it('uses every family in the vocabulary between the four of them', () => {
+  it('uses every family in the vocabulary between them', () => {
     // The library is the only documentation of the vocabulary anyone actually
     // reads, so a library that only demonstrates pictures and blends leaves the
     // half that makes this model unusual — geometry, and numbers becoming
@@ -160,6 +160,20 @@ describe('the built-in scheme', () => {
     );
     for (const family of NODE_FAMILIES) {
       expect(family.kinds.some((kind) => kinds.has(kind)), family.name).toBe(true);
+    }
+  });
+
+  it('demonstrates the asset-free modern vocabulary', () => {
+    // Media cannot ship without somebody's files, and doors only make sense in
+    // a deliberately reusable provider. Everything else added since the first
+    // library can teach itself in a general-purpose flow that works on a fresh
+    // machine, so keep those examples in the show rather than only in the node
+    // browser.
+    const kinds = new Set(
+      Object.values(BUILT_IN.flows).flatMap((def) => def.circuit.nodes.map((node) => node.kind)),
+    );
+    for (const kind of ['field', 'fractal', 'lfo', 'light', 'place'] as const) {
+      expect(kinds.has(kind), kind).toBe(true);
     }
   });
 
@@ -185,7 +199,7 @@ describe('the built-in scheme', () => {
 
   it('draws something with no set playing', () => {
     // Sometimes all that is running is the click. A wheel that turns through
-    // twelve flows and goes black on five of them between songs is a wheel
+    // seventeen flows and goes black on any of them between songs is a wheel
     // nobody leaves running, so every flow carries a picture of its own
     // underneath whatever the set is doing.
     //
@@ -194,7 +208,9 @@ describe('the built-in scheme', () => {
     // a single node is a node, and the node browser already offers it.
     for (const [, def] of Object.entries(BUILT_IN.flows)) {
       const kinds = new Set(def.circuit.nodes.map((node) => node.kind));
-      const draws = kinds.has('source') || kinds.has('paint') || kinds.has('flow');
+      const draws = (
+        ['source', 'field', 'fractal', 'light', 'paint', 'flow'] as const
+      ).some((kind) => kinds.has(kind));
       expect(draws, `${def.name} has nothing to draw without the set`).toBe(true);
     }
   });
@@ -230,7 +246,7 @@ describe('the built-in scheme', () => {
           if (port.name !== 'energy') continue;
           const kinds = feeding(def, portId(node.id, port.name));
           if (!kinds.has('track')) continue;
-          const clocked = kinds.has('wave') || kinds.has('playback');
+          const clocked = kinds.has('wave') || kinds.has('lfo') || kinds.has('playback');
           expect(clocked, `${def.name}: ${node.id} energy is only a meter`).toBe(true);
         }
       }

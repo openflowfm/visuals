@@ -481,7 +481,7 @@ bipolar cosine from a unipolar wave, because its negative half stops at zero.
 on the face does not, and costs a cord across the canvas to say it. What it still does, and
 nothing else can, is put *the same* number on two inlets at once: turn it and both move.
 `Weather` in the built-in library is wired that way on purpose, and it is the only `value`
-node left in the twelve flows that ship.
+node left in the seventeen flows that ship.
 
 ## `out` is at most one, and none is a provider
 
@@ -587,7 +587,8 @@ What is not right is a flow that is only alive when the room is loud, because mo
 hours anyone spends in the designer are hours with no Live attached — and because a set
 between songs is a click and nothing else. The fix is in the wiring rather than in the
 number: **take the motion off the clock and let the meter add to it.** `phase`, `beat`,
-`pulse` and a `wave` all run whether or not anything is playing, since Link free-runs.
+`pulse`, a synced `lfo` and a `wave` all run whether or not anything is playing, since
+Link free-runs.
 
 The shape that says it is **`max` of a clock and a meter**, with the clock arriving on a
 range:
@@ -602,7 +603,7 @@ track master ────> b ┘                   and the meter wins above that
 clock is doing — which is how a floor becomes a ceiling. The range on `a` is what keeps the
 floor off the ground without pinning the top: an energy at 0.3 is a picture, an energy at 0
 is the same picture at its dullest setting, and the difference between those two is most of
-what "it looks dead at a desk" ever meant. The twelve flows that ship keep that rule, a
+what "it looks dead at a desk" ever meant. The seventeen flows that ship keep that rule, a
 test asserts it, and it is the difference between a library that reads as calm at a desk and
 one that reads as broken.
 
