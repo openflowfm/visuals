@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type {
+  CalibrationState,
+  CalibrationSubmission,
   FlowDef,
   LabReviewRow,
   LabScore,
@@ -20,6 +22,7 @@ import { Designer } from './Designer.tsx';
 import { ReviewsView } from './ReviewsView.tsx';
 import { SetView } from './SetView.tsx';
 import { TrainView } from './TrainView.tsx';
+import { CalibrationView } from './CalibrationView.tsx';
 import { flowList, renameFlow } from './edits.ts';
 import { BPM, ENERGY, PERCENT } from './param.ts';
 import { KEYS, useRoom, type Room } from '../state/useRoom.ts';
@@ -28,7 +31,8 @@ import type { Clock } from '../state/useShow.ts';
 import './console.css';
 
 /**
- * One app, four tabs, and it started as three views.
+ * One app, four product tabs, and a fifth development tab only when the server
+ * advertises calibration. It started as three views.
  *
  * **Build** is the product: a canvas, a library of flows, and a browser of
  * every node there is. **Set** is the small remainder — the wheel that turns
@@ -71,19 +75,23 @@ export interface ConsoleProps {
   labRenote(reviewId: number, note: string): void;
   labStage: { id: string; flow: FlowDef; bundle: Record<string, FlowDef> } | null;
   labCandidate(candidateId: string): void;
+  calibrationAvailable: boolean;
+  calibration: CalibrationState | null;
+  calibrationOpen(trialId?: string, trialVersion?: number): void;
+  calibrationDecide(decision: CalibrationSubmission): void;
   clock: Clock;
   onClose(): void;
 }
 
 /**
- * Four tabs. **Build** is the editor and the product; **train** judges one
+ * Four product tabs. **Build** is the editor and the product; **train** judges one
  * generated candidate at a time, the judgment kept as evidence; **review**
  * browses those judgments and revises their tags and notes; **set** is the
  * wheel and the songs. The lab under train and review is `lab.ts` and
  * `server/lab.ts`; neither tab touches the scheme except when train promotes
  * a candidate into it, through the same `edit` the designer uses.
  */
-const VIEWS = ['build', 'train', 'review', 'set'] as const;
+const VIEWS = ['build', 'train', 'review', 'set', 'calibrate'] as const;
 export type View = (typeof VIEWS)[number];
 
 export function Console({
@@ -109,12 +117,22 @@ export function Console({
   labRenote,
   labStage,
   labCandidate,
+  calibrationAvailable,
+  calibration,
+  calibrationOpen,
+  calibrationDecide,
   clock,
   onClose,
 }: ConsoleProps) {
   const [view, setView] = useState<View>('build');
   const [flow, setFlow] = useState<string | null>(null);
   const [trail, setTrail] = useState<readonly string[]>([]);
+  const views: readonly View[] = calibrationAvailable
+    ? VIEWS
+    : VIEWS.filter((candidate) => candidate !== 'calibrate');
+  useEffect(() => {
+    if (!calibrationAvailable && view === 'calibrate') setView('build');
+  }, [calibrationAvailable, view]);
   const list = flowList(scheme);
   const id = flow && scheme.flows[flow] ? flow : (list[0]?.id ?? null);
   const def = id ? scheme.flows[id] : null;
@@ -133,9 +151,9 @@ export function Console({
     <div className="console wdg">
       <header className="console-head">
         <Segmented
-          items={VIEWS as unknown as string[]}
-          index={VIEWS.indexOf(view)}
-          onChange={(i) => setView(VIEWS[i])}
+          items={views as unknown as string[]}
+          index={Math.max(0, views.indexOf(view))}
+          onChange={(i) => setView(views[i] ?? 'build')}
           label="View"
           className="views"
         />
@@ -185,6 +203,12 @@ export function Console({
             {labLog
               ? `${labLog.reviews.length}${labLog.more ? '+' : ''} review${labLog.reviews.length === 1 && !labLog.more ? '' : 's'}`
               : 'opening the lab…'}
+          </span>
+        ) : view === 'calibrate' ? (
+          <span className="train-context">
+            {calibration
+              ? `${calibration.decided} / ${calibration.total} responses decided`
+              : 'opening calibration…'}
           </span>
         ) : (
           <span className="head-space" />
@@ -238,6 +262,15 @@ export function Console({
           labRenote={labRenote}
           labStage={labStage}
           labCandidate={labCandidate}
+        />
+      )}
+
+      {view === 'calibrate' && calibrationAvailable && (
+        <CalibrationView
+          state={calibration}
+          open={calibrationOpen}
+          decide={calibrationDecide}
+          clock={clock}
         />
       )}
     </div>

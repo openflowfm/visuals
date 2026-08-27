@@ -96,6 +96,9 @@ export function followBridge(url: string, onChange: () => void): BridgeLink {
 
     socket.on('open', () => {
       state.connected = true;
+      // First, so the device's roster lights visual[flow]'s row rather than
+      // counting one more anonymous connection. Nothing waits on it.
+      send({ type: 'identify', client: 'visual' });
       send({ type: 'snapshot' });
       send({ type: 'watchPlay', on: true });
       send({ type: 'watchScenes', on: true });

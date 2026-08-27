@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type {
+  CalibrationState,
+  CalibrationSubmission,
   Down,
   FlowDef,
   LabReviewRow,
@@ -123,6 +125,12 @@ export function useShow(): {
   labStage: { id: string; flow: FlowDef; bundle: Record<string, FlowDef> } | null;
   /** Ask for a frozen candidate's graph. */
   labCandidate(candidateId: string): void;
+  /** True only when this server was deliberately started with internal calibration enabled. */
+  calibrationAvailable: boolean;
+  /** Current development calibration queue, unopened until its tab asks. */
+  calibration: CalibrationState | null;
+  calibrationOpen(trialId?: string, trialVersion?: number): void;
+  calibrationDecide(decision: CalibrationSubmission): void;
   clock: Clock;
   online: boolean;
 } {
@@ -138,6 +146,8 @@ export function useShow(): {
     flow: FlowDef;
     bundle: Record<string, FlowDef>;
   } | null>(null);
+  const [calibrationAvailable, setCalibrationAvailable] = useState(false);
+  const [calibration, setCalibration] = useState<CalibrationState | null>(null);
   const [online, setOnline] = useState(false);
   const live = useRef<WebSocket | null>(null);
 
@@ -224,6 +234,16 @@ export function useShow(): {
         }
         if (message.kind === 'lab-candidate') {
           setLabStage({ id: message.id, flow: message.flow, bundle: message.bundle });
+          return;
+        }
+        if (message.kind === 'calibration-available') {
+          setCalibrationAvailable(message.available);
+          if (!message.available) setCalibration(null);
+          return;
+        }
+        if (message.kind === 'calibration') {
+          const { kind: _, ...state } = message;
+          setCalibration(state);
           return;
         }
         if (message.kind === 'anchor') {
@@ -404,6 +424,23 @@ export function useShow(): {
     }
   }).current;
 
+  const calibrationOpen = useRef((trialId?: string, trialVersion?: number) => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({
+        kind: 'calibration-open',
+        ...(trialId && trialVersion ? { trialId, trialVersion } : {}),
+      }));
+    }
+  }).current;
+
+  const calibrationDecide = useRef((decision: CalibrationSubmission) => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'calibration-decide', decision }));
+    }
+  }).current;
+
   return {
     show,
     showRef: held,
@@ -430,6 +467,10 @@ export function useShow(): {
     labRenote,
     labStage,
     labCandidate,
+    calibrationAvailable,
+    calibration,
+    calibrationOpen,
+    calibrationDecide,
     clock,
     online,
   };

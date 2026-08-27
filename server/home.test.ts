@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openflowHome, schemePlace, shown } from './home.ts';
+import { calibrationFile, labPlace, openflowHome, schemePlace, shown } from './home.ts';
 
 /**
  * Where the open scheme is, and the one-time adoption of a file from an older
@@ -93,6 +93,12 @@ describe('schemePlace', () => {
     fs.writeFileSync(file, '{"seed":"newer"}\n');
     schemePlace(legacy);
     expect(fs.readFileSync(file, 'utf8')).toBe('{"seed":"newer"}\n');
+  });
+
+  it('keeps development calibration evidence beside but outside the user lab', () => {
+    expect(labPlace().file).toBe(path.join(scratch, 'visuals', 'lab.sqlite3'));
+    expect(calibrationFile()).toBe(path.join(scratch, 'visuals', 'calibration.sqlite3'));
+    expect(calibrationFile()).not.toBe(labPlace().file);
   });
 });
 

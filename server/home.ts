@@ -115,6 +115,16 @@ export function labPlace(): LabPlace {
   return { file: path.join(home, 'lab.sqlite3'), artifacts };
 }
 
+/**
+ * Development calibration evidence, deliberately separate from the user-facing
+ * lab corpus even though both use the same durable SQLite pattern.
+ */
+export function calibrationFile(): string {
+  const home = path.join(openflowHome(), 'visuals');
+  fs.mkdirSync(home, { recursive: true });
+  return path.join(home, 'calibration.sqlite3');
+}
+
 /** A path with the home directory spelled `~`, for logs meant to be read. */
 export function shown(file: string): string {
   const home = os.homedir();

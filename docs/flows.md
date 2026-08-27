@@ -145,6 +145,28 @@ It is also what lets **one control** serve every number inlet there is. `VALUE` 
 [`param.ts`](../src/ui/param.ts) is that control, and nothing has to declare a range to get
 one.
 
+### The wire is normalized; the response is not
+
+The final 0–1-to-domain mapping is executable metadata on the consuming
+`PortSpec`, after the inlet's held value and modulation depth have been combined.
+`response.ts` owns the data shapes and their matched TypeScript and GLSL
+evaluators: linear, exponential, centered power, and discrete steps. This keeps
+cords interchangeable while letting a signed speed spend most of its travel
+near stopped, a frequency use ratios, and a count land on actual rungs.
+
+Response-set version three contains 85 calibrated controls: the original three
+rotation mappings plus 82 accepted legacy-parameter shapes. Linear identities
+are recorded alongside root and square choices so the source says that a
+control was judged, not merely that it happens to retain its old arithmetic.
+Swirl remains linear, twist has more linear reach, and kaleidoscope spin has a
+square response with more reach. The
+[calibration bench](calibration.md) substitutes candidate definitions at
+compile time without writing them into a flow. Its broader legacy-parameter
+matrix shapes the normalized input in front of the existing shader mapping;
+those compact source-controlled mappings can be absorbed into semantic
+responses as the handwritten arithmetic moves. Accepted responses live in
+source, never in the calibration database or in a scheme.
+
 ### Unconnected inlets have answers, and a number's answer is yours
 
 Every inlet has an answer, so a half-wired graph still compiles and still draws. An unwired

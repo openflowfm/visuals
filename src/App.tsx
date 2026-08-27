@@ -52,6 +52,10 @@ export function App() {
     labRenote,
     labStage,
     labCandidate,
+    calibrationAvailable,
+    calibration,
+    calibrationOpen,
+    calibrationDecide,
     clock,
     online,
   } = useShow();
@@ -304,6 +308,10 @@ export function App() {
             labRenote={labRenote}
             labStage={labStage}
             labCandidate={labCandidate}
+            calibrationAvailable={calibrationAvailable}
+            calibration={calibration}
+            calibrationOpen={calibrationOpen}
+            calibrationDecide={calibrationDecide}
             clock={clock}
             onClose={() => setEditing(false)}
           />

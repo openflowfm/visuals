@@ -1,5 +1,12 @@
 import { TRACK_READS, type Circuit, type FlowDef } from '../../protocol.ts';
-import { compileFlow, flatten, valuesOf, tracksOf, type Compiled } from './circuit.ts';
+import {
+  compileFlow,
+  flatten,
+  valuesOf,
+  tracksOf,
+  type CompileOptions,
+  type Compiled,
+} from './circuit.ts';
 
 /**
  * What a flow *is*, independent of who is drawing it.
@@ -19,8 +26,12 @@ import { compileFlow, flatten, valuesOf, tracksOf, type Compiled } from './circu
  * changes when a flow it contains changes, which is exactly right and is the
  * reason the signature below walks the same expansion.
  */
-export function buildFlow(flows: Record<string, FlowDef>, id: string): Compiled {
-  return compileFlow(flows, id);
+export function buildFlow(
+  flows: Record<string, FlowDef>,
+  id: string,
+  options: CompileOptions = {},
+): Compiled {
+  return compileFlow(flows, id, options);
 }
 
 /**

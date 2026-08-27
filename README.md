@@ -24,6 +24,7 @@ Live ─ SessionBridge :17800 ─WS─> visuals server :17900 ─WS─> browser 
 | [the wheel](docs/wheel.md) | what is on screen and why, song overrides, the scheme file, the roll | `resolve.ts`, `server/show.ts`, `server/scheme.ts`, `roll.ts` |
 | [the console](docs/console.md) | the three views, and what the views before them were for | `src/ui/Console.tsx`, `Designer.tsx`, `SetView.tsx` |
 | [the lab](docs/lab.md) | judging generated flows, the taste corpus, the method boundary | `lab.ts`, `server/lab.ts`, `src/ui/ReviewView.tsx` |
+| [parameter calibration](docs/calibration.md) | the development-only A/B/C response bench and its evidence | `response.ts`, `calibration.ts`, `server/calibration.ts`, `src/ui/CalibrationView.tsx` |
 | [the renderer](docs/render.md) | the two passes, blending, fill rate, **pointing a projector** | `src/render/*` |
 | [the harness](docs/harness.md) | working on this with no Ableton, and the Link safety rule | `tools/fake-live.ts` |
 | [the desktop app](docs/desktop.md) | the window, the wall on a projector, the display list, why the server is a child process | `electron/main.ts`, `electron/preload.ts`, `src/state/useWall.ts` |
@@ -147,6 +148,11 @@ compositor, under an invented, reproducible room — no Ableton, no Link, no bri
 anchored score, tags that say why, and a corpus that keeps every judgment; promoting a
 keeper copies it into the open scheme through the ordinary edit-and-save path. See
 [the lab](docs/lab.md).
+
+An internal **calibrate** view appears only when the server is started with
+`OPENFLOW_CALIBRATION=1`. It compares parameter-response curves and writes to a separate
+development database; it is not part of the user-facing lab. See
+[parameter calibration](docs/calibration.md).
 
 Every name either view offers — songs, tracks, flows — comes from **the set** or from what
 you made, so it never asks you to type one.

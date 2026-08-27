@@ -25,6 +25,7 @@
  * colours it draws from.
  */
 import { NODE_FAMILIES, type NodeKind } from './src/nodes/generated.ts';
+import type { ParameterResponse, ResponseTarget } from './response.ts';
 
 export { NODE_FAMILIES, type NodeKind };
 
@@ -747,6 +748,81 @@ export interface LabState {
   notice: string | null;
 }
 
+// --- development calibration --------------------------------------------
+
+/** One curve offered in a parameter-response comparison. */
+export interface CalibrationOption {
+  /** Stable within the trial; the UI deliberately presents only A/B/C. */
+  id: string;
+  response: ParameterResponse;
+}
+
+/** One reproducible parameter question and the picture used to answer it. */
+export interface CalibrationTrial {
+  id: string;
+  version: number;
+  batch: string;
+  name: string;
+  question: string;
+  target: ResponseTarget & { nodeId: string };
+  flow: FlowDef;
+  room: LabRoom;
+  /** Where the target control starts when this trial is opened. */
+  initialValue: number;
+  options: CalibrationOption[];
+}
+
+export interface CalibrationSubmission {
+  trialId: string;
+  trialVersion: number;
+  /** The exact development room on screen when the decision was made. */
+  room: LabRoom;
+  /** Null is an explicit rejection of every option, never a skip. */
+  selectedOptionId: string | null;
+  /** The selected option after the shared maximum-reach adjustment. */
+  response: ParameterResponse | null;
+  extent: number;
+  note?: string;
+}
+
+/** One row in the device/parameter browser, without its heavier frozen flow. */
+export interface CalibrationTrialSummary {
+  id: string;
+  version: number;
+  batch: string;
+  name: string;
+  target: ResponseTarget;
+  ordinal: number;
+  decided: boolean;
+}
+
+/** A compact completed decision for progress and review in the development UI. */
+export interface CalibrationDecisionRow {
+  id: number;
+  trialId: string;
+  trialVersion: number;
+  name: string;
+  target: ResponseTarget;
+  room: LabRoom;
+  selectedOptionId: string | null;
+  response: ParameterResponse | null;
+  extent: number;
+  note: string | null;
+  createdAt: string;
+}
+
+export interface CalibrationState {
+  trial: CalibrationTrial | null;
+  /** The latest decision for the selected trial, if it has been calibrated before. */
+  decision: CalibrationDecisionRow | null;
+  /** Every active question, kept compact for device and parameter selection. */
+  trials: CalibrationTrialSummary[];
+  decided: number;
+  total: number;
+  history: CalibrationDecisionRow[];
+  notice: string | null;
+}
+
 // --- the wire -----------------------------------------------------------
 
 /**
@@ -804,7 +880,9 @@ export type Down =
   // is show state the way the queue is.
   | { kind: 'lab-review-changed'; review: LabReviewRow }
   // A frozen candidate's graph, for re-staging a judgment on the bench.
-  | { kind: 'lab-candidate'; id: string; flow: FlowDef; bundle: Record<string, FlowDef> };
+  | { kind: 'lab-candidate'; id: string; flow: FlowDef; bundle: Record<string, FlowDef> }
+  | { kind: 'calibration-available'; available: boolean }
+  | ({ kind: 'calibration' } & CalibrationState);
 
 /**
  * Browser to server. An edit is the whole scheme, replaced.
@@ -853,7 +931,9 @@ export type Up =
   | { kind: 'lab-rescore'; reviewId: number; score: LabScore }
   | { kind: 'lab-retag'; reviewId: number; tags: string[] }
   | { kind: 'lab-renote'; reviewId: number; note: string }
-  | { kind: 'lab-candidate'; candidateId: string };
+  | { kind: 'lab-candidate'; candidateId: string }
+  | { kind: 'calibration-open'; trialId?: string; trialVersion?: number }
+  | { kind: 'calibration-decide'; decision: CalibrationSubmission };
 
 export const VISUALS_PORT = 17900;
 export const VISUALS_WS_PATH = '/ws';

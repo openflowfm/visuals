@@ -3,14 +3,22 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { VISUALS_PORT, VISUALS_WS_PATH, type LabState, type Up } from '../protocol.ts';
+import {
+  VISUALS_PORT,
+  VISUALS_WS_PATH,
+  type CalibrationState,
+  type LabState,
+  type Up,
+} from '../protocol.ts';
 import { nextColorway, nextFlow, reOne } from '../resolve.ts';
 import { newSeed } from '../roll.ts';
 import { bundleOf } from '../lab.ts';
+import { CALIBRATION_TRIALS } from '../calibration.ts';
 import { followBridge } from './bridge.ts';
 import { freshMethod } from './fresh.ts';
-import { labPlace } from './home.ts';
+import { calibrationFile, labPlace } from './home.ts';
 import { labEngine, openLab, type LabEngine } from './lab.ts';
+import { openCalibration, type CalibrationStore } from './calibration.ts';
 import { openLink } from './link.ts';
 import { openLibrary } from './library.ts';
 import { buildShow, noTurning } from './show.ts';
@@ -45,6 +53,8 @@ const BRIDGE = process.env.OPENFLOW_BRIDGE_WS ?? 'ws://127.0.0.1:17800/ws';
 // otherwise — a bundled server does not sit one directory up from the renderer.
 const ROOT = process.env.OPENFLOW_VISUALS_DIST ?? path.resolve(here, '../dist');
 const MEDIA_ROOT = mediaRoot();
+/** Internal tooling is absent unless the server was deliberately started with it. */
+const CALIBRATION_ENABLED = process.env.OPENFLOW_CALIBRATION === '1';
 
 /**
  * Binding to every interface rather than to loopback, unlike the device.
@@ -98,6 +108,10 @@ const server = http.createServer((req, res) => {
 
 function serve(req: http.IncomingMessage, res: http.ServerResponse): void {
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
+  if (url.pathname === '/calibration/export') {
+    serveCalibrationExport(res);
+    return;
+  }
   if (url.pathname.startsWith('/media/')) {
     if (serveMedia(req, res, MEDIA_ROOT, url.pathname.slice('/media/'.length))) return;
     res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
@@ -240,6 +254,81 @@ const sendLab = (state: LabState) => {
   for (const socket of clients) if (socket.readyState === socket.OPEN) socket.send(wire);
 };
 
+/** Development evidence has its own database and can never disable the user lab. */
+let calibration: CalibrationStore | null = null;
+let calibrationClosed: string | null = null;
+
+const noCalibration = (why: string): CalibrationState => ({
+  trial: null,
+  decision: null,
+  trials: [],
+  decided: 0,
+  total: 0,
+  history: [],
+  notice: why,
+});
+
+const ensureCalibration = (): CalibrationStore | null => {
+  if (!CALIBRATION_ENABLED || calibrationClosed) return null;
+  if (calibration) return calibration;
+  try {
+    calibration = openCalibration(calibrationFile(), CALIBRATION_TRIALS);
+  } catch (error) {
+    calibrationClosed = `calibration is unavailable — ${(error as Error).message}`;
+    console.warn(`visuals: ${calibrationClosed}`);
+  }
+  return calibration;
+};
+
+const sendCalibration = (socket: WebSocket, state: CalibrationState) => {
+  if (socket.readyState === socket.OPEN) {
+    socket.send(JSON.stringify({ kind: 'calibration', ...state }));
+  }
+};
+
+const onCalibration = (socket: WebSocket, run: (store: CalibrationStore) => void) => {
+  const store = ensureCalibration();
+  if (!store) {
+    socket.send(
+      JSON.stringify({
+        kind: 'calibration',
+        ...noCalibration(
+          CALIBRATION_ENABLED
+            ? (calibrationClosed ?? 'calibration is unavailable')
+            : 'calibration was not enabled for this server',
+        ),
+      }),
+    );
+    return;
+  }
+  try {
+    run(store);
+  } catch (error) {
+    const why = `calibration refused that — ${(error as Error).message}`;
+    console.warn(`visuals: ${why}`);
+    socket.send(JSON.stringify({ kind: 'calibration', ...noCalibration(why) }));
+  }
+};
+
+function serveCalibrationExport(res: http.ServerResponse): void {
+  if (!CALIBRATION_ENABLED) {
+    res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+    res.end('not found');
+    return;
+  }
+  const store = ensureCalibration();
+  if (!store) {
+    res.writeHead(503, { 'content-type': 'text/plain; charset=utf-8' });
+    res.end(`${calibrationClosed ?? 'calibration is unavailable'}\n`);
+    return;
+  }
+  res.writeHead(200, {
+    'content-type': 'application/x-ndjson; charset=utf-8',
+    'content-disposition': 'attachment; filename="calibration-results.jsonl"',
+  });
+  res.end(store.exportJsonl());
+}
+
 sockets.on('connection', (socket) => {
   clients.add(socket);
   socket.on('close', () => clients.delete(socket));
@@ -252,6 +341,9 @@ sockets.on('connection', (socket) => {
     sendLibrary(socket);
     sendMedia(socket);
     sendGrid(socket);
+    socket.send(
+      JSON.stringify({ kind: 'calibration-available', available: CALIBRATION_ENABLED }),
+    );
     socket.send(
       JSON.stringify({ kind: 'show', ...buildShow(bridge.state, link.sample(), scheme, turning) }),
     );
@@ -366,6 +458,23 @@ function dispatch(socket: WebSocket, message: Up): void {
         );
       }
     });
+    return;
+  }
+  if (message.kind === 'calibration-open') {
+    onCalibration(socket, (store) =>
+      sendCalibration(
+        socket,
+        store.state(
+          message.trialId !== undefined && message.trialVersion !== undefined
+            ? { trialId: message.trialId, trialVersion: message.trialVersion }
+            : undefined,
+        ),
+      ),
+    );
+    return;
+  }
+  if (message.kind === 'calibration-decide') {
+    onCalibration(socket, (store) => sendCalibration(socket, store.decide(message.decision)));
     return;
   }
   // Persistence is its own gesture now. An edit changes what every screen
@@ -596,6 +705,7 @@ server.listen(PORT, HOST, () => {
   console.log(`visuals: bridge ${BRIDGE}`);
   console.log(`visuals: media ${MEDIA_ROOT}`);
   console.log(`visuals: link ${link.live ? 'on' : 'MISSING — running on the wall clock'}`);
+  if (CALIBRATION_ENABLED) console.log(`visuals: calibration ${calibrationFile()}`);
   const stale = staleBundle();
   if (stale) {
     console.warn(
@@ -627,6 +737,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     scheme.stop();
     bridge.close();
     lab?.close();
+    calibration?.close();
     server.close();
     process.exit(0);
   });

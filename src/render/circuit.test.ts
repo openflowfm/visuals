@@ -253,7 +253,7 @@ describe('LFO nodes', () => {
     }
   });
 
-  it('defaults to a synced quarter note with an unshifted phase', () => {
+  it('defaults to the calibrated square response at the old midpoint', () => {
     const lfo = { id: 'l', kind: 'lfo', op: 'sine', x: 0, y: 0 } as const;
     expect(inletsOf(lfo).map(({ name, at }) => ({ name, at }))).toEqual([
       { name: 'rate', at: 0.5 },
@@ -266,7 +266,10 @@ describe('LFO nodes', () => {
         [{ from: 'l/n', to: 'p/amount' }, { from: 'p/c', to: 'o/c' }],
       ),
     );
-    expect(bodyOf(built.source!)).toContain('cLfoPhase(0.5, 1.0, 0.0)');
+    const source = bodyOf(built.source!);
+    expect(source).toContain('cLfoPhase(');
+    expect(source).toContain('pow(');
+    expect(source).toContain(', 2.0)');
   });
 });
 
@@ -774,21 +777,25 @@ describe('an inlet holds a number of its own', () => {
         ],
         [{ from: 'g/c', to: 'o/c' }],
       );
-    // Untouched, `columns` compiles to the energy coupling it replaced, so
-    // promoting the constant changed nothing anybody had drawn.
-    expect(bodyOf(compileCircuit(bars()).source!)).toMatch(/gen_bars\(.*uEnergy, uEnergy\)/);
-    // A held energy carries its followers with it — one caught number still
-    // moves the whole source together, exactly as the coupling always did.
+    // Both begin from the room's normalized energy. The accepted square energy
+    // response and linear columns response then let the two controls interpret
+    // that shared source independently.
+    const live = bodyOf(compileCircuit(bars()).source!);
+    expect(live).toContain('gen_bars(');
+    expect(live).toContain('pow(');
+    expect(live).toMatch(/, uEnergy\),/);
+    // A held energy is still the raw source for its follower; each inlet then
+    // applies the response calibrated for its own meaning.
     const heldEnergy = bars({ energy: 0.8 });
-    expect(bodyOf(compileCircuit(heldEnergy).source!)).toMatch(
-      /gen_bars\(.*uParams\[0\], uParams\[0\]\)/,
-    );
+    const heldEnergySource = bodyOf(compileCircuit(heldEnergy).source!);
+    expect(heldEnergySource).toContain('pow(');
+    expect(heldEnergySource).toMatch(/, uParams\[0\]\),/);
     // A caught `columns` pins the shape and leaves the energy live.
     const heldColumns = bars({ columns: 0.2 });
     expect(valuesOf(heldColumns).map((each) => each.id)).toEqual(['g/columns']);
-    expect(bodyOf(compileCircuit(heldColumns).source!)).toMatch(
-      /gen_bars\(.*uEnergy, uParams\[0\]\)/,
-    );
+    const heldColumnsSource = bodyOf(compileCircuit(heldColumns).source!);
+    expect(heldColumnsSource).toContain('pow(');
+    expect(heldColumnsSource).toContain('uParams[0]');
   });
 
   it('gives a nested flow its own slots', () => {
@@ -972,7 +979,8 @@ describe('the bounded fractal node', () => {
     const built = compileCircuit(circuit);
 
     expect(built.error).toBeNull();
-    expect(bodyOf(built.source!)).toContain('fractalMandelbrot(centred(), 0.0, 0.5, uParams[0]');
+    expect(bodyOf(built.source!)).toContain('fractalMandelbrot(');
+    expect(bodyOf(built.source!)).toContain('uParams[0]');
     expect(bodyOf(built.source!)).not.toContain('0.8');
   });
 

@@ -12,6 +12,7 @@ import { inside, usePlace, type Place } from '../state/usePlace.ts';
 import { withStandIns } from '../state/useRoom.ts';
 import type { Clock } from '../state/useShow.ts';
 import { previewOutletOf, probeAt } from './probe.ts';
+import type { ResponseOverrides } from '../../response.ts';
 
 /**
  * The bench: the flow you are editing, drawn by the renderer the wall uses.
@@ -34,6 +35,7 @@ export function Bench({
   flow,
   clock,
   live,
+  responses,
   onError,
 }: {
   show: Show;
@@ -48,11 +50,13 @@ export function Bench({
    * every fader at wherever the last structural push left it.
    */
   live?: { readonly current: Show } | null;
+  /** Development-only response substitutions for the calibration bench. */
+  responses?: ResponseOverrides;
   onError(message: string | null): void;
 }) {
   const canvas = useRef<HTMLCanvasElement | null>(null);
-  const now = useRef({ show, scheme, flow, clock, live: live ?? null, onError });
-  now.current = { show, scheme, flow, clock, live: live ?? null, onError };
+  const now = useRef({ show, scheme, flow, clock, live: live ?? null, responses, onError });
+  now.current = { show, scheme, flow, clock, live: live ?? null, responses, onError };
 
   useEffect(() => {
     const el = canvas.current;
@@ -78,6 +82,7 @@ export function Bench({
         beat,
         held.clock.seconds(),
         dt,
+        held.responses,
       );
       if (compositor.error !== said) {
         said = compositor.error;

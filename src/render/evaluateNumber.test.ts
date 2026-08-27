@@ -181,7 +181,7 @@ describe('CPU number evaluation', () => {
       op: 'saw',
       values: { rate: 0.5, sync: 1, phase: 0.25 },
     });
-    expect(one(synced, { beat: 0.125, seconds: 0.25 })).toBeCloseTo(0.375);
+    expect(one(synced, { beat: 0.125, seconds: 0.25 })).toBeCloseTo(0.28125);
     expect(
       one(
         node('l', 'lfo', {
@@ -190,7 +190,7 @@ describe('CPU number evaluation', () => {
         }),
         { beat: 0.125, seconds: 0.25 },
       ),
-    ).toBeCloseTo(0.5);
+    ).toBeCloseTo(0.3059017);
     expect(
       one(
         node('l', 'lfo', {
@@ -199,7 +199,7 @@ describe('CPU number evaluation', () => {
         }),
         { beat: 0.125 },
       ),
-    ).toBeCloseTo(0.625);
+    ).toBeCloseTo(0.53125);
   });
 
   it('keeps sample-and-hold stable inside one LFO cycle', () => {
@@ -207,8 +207,10 @@ describe('CPU number evaluation', () => {
       op: 'sample-hold',
       values: { rate: 0.5, sync: 1, phase: 0 },
     });
-    expect(one(held, { beat: 4.1 })).toBe(one(held, { beat: 4.9 }));
-    expect(one(held, { beat: 4.1 })).not.toBe(one(held, { beat: 5.1 }));
+    // The accepted root response at 150% reaches the fastest synced rung at
+    // this midpoint, so one held cycle is deliberately much shorter now.
+    expect(one(held, { beat: 4.01 })).toBe(one(held, { beat: 4.1 }));
+    expect(one(held, { beat: 4.01 })).not.toBe(one(held, { beat: 4.13 }));
   });
 
   it('lets cords switch the LFO clock and offset its phase', () => {
@@ -225,13 +227,13 @@ describe('CPU number evaluation', () => {
     );
     const evaluator = createNumberEvaluator();
     expect(evaluator.sample(graph, inputs({ beat: 0.125, seconds: 0.75 })).outlet('l/n')).toBeCloseTo(
-      0.375,
+      0.28125,
     );
     expect(
       evaluator
         .sample(graph, inputs({ beat: 0.125, seconds: 0.75, params: { sync: 0, shift: 0.5 } }))
         .outlet('l/n'),
-    ).toBeCloseTo(0.25);
+    ).toBeCloseTo(0.6677051);
   });
 
   it('walks a nested number chain and exposes the answer arriving at any row', () => {

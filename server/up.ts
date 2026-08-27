@@ -53,6 +53,40 @@ const SUBMISSION = z.object({
   note: z.string().optional(),
 });
 
+const RESPONSE = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('linear'), min: z.number(), max: z.number(), unit: z.string() }),
+  z.object({
+    kind: z.literal('exponential'),
+    min: z.number().positive(),
+    max: z.number().positive(),
+    unit: z.string(),
+  }),
+  z.object({
+    kind: z.literal('centered-power'),
+    center: z.number().min(0).max(1),
+    min: z.number(),
+    neutral: z.number(),
+    max: z.number(),
+    exponent: z.number().positive(),
+    unit: z.string(),
+  }),
+  z.object({
+    kind: z.literal('steps'),
+    values: z.array(z.number()).min(1),
+    unit: z.string(),
+  }),
+]);
+
+const CALIBRATION_DECISION = z.object({
+  trialId: z.string(),
+  trialVersion: z.number().int().positive(),
+  room: ROOM,
+  selectedOptionId: z.string().nullable(),
+  response: RESPONSE.nullable(),
+  extent: z.number().min(0.01).max(2),
+  note: z.string().optional(),
+});
+
 const UP = z.discriminatedUnion('kind', [
   // The whole scheme, an object and no more than that here. What it is made of
   // is `merge`'s question, and it is the one door for both a file and an edit —
@@ -73,6 +107,12 @@ const UP = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('lab-retag'), reviewId: z.number(), tags: NAMES }),
   z.object({ kind: z.literal('lab-renote'), reviewId: z.number(), note: z.string() }),
   z.object({ kind: z.literal('lab-candidate'), candidateId: z.string() }),
+  z.object({
+    kind: z.literal('calibration-open'),
+    trialId: z.string().optional(),
+    trialVersion: z.number().int().positive().optional(),
+  }),
+  z.object({ kind: z.literal('calibration-decide'), decision: CALIBRATION_DECISION }),
 ]);
 
 export type UpRead = { ok: true; up: Up } | { ok: false; why: string };
@@ -86,7 +126,16 @@ export function readUp(raw: string): UpRead {
     return { ok: false, why: 'not json' };
   }
   const read = UP.safeParse(parsed);
-  if (read.success) return { ok: true, up: parsed as Up };
+  if (read.success) {
+    const up = parsed as Up;
+    if (
+      up.kind === 'calibration-open' &&
+      ((up.trialId === undefined) !== (up.trialVersion === undefined))
+    ) {
+      return { ok: false, why: 'trial id and version must be sent together' };
+    }
+    return { ok: true, up };
+  }
   const first = read.error.issues[0];
   const at = first.path.join('.');
   return { ok: false, why: at ? `${at}: ${first.message.toLowerCase()}` : first.message };

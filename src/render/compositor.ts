@@ -7,6 +7,10 @@ import { compile, createTarget, drawFullscreen, type Program } from './gl.ts';
 import { columns, warpFor, SQUARE, type Corners } from './output.ts';
 import { createVideoBank, videoControl } from './video.ts';
 import { createImageBank } from './image.ts';
+import {
+  responseOverridesSignature,
+  type ResponseOverrides,
+} from '../../response.ts';
 
 /**
  * Two passes and an output stage, where there used to be a stack of them.
@@ -29,7 +33,14 @@ import { createImageBank } from './image.ts';
  */
 
 export interface Compositor {
-  frame(show: Show, scheme: Scheme | null, beat: number, seconds: number, dt: number): void;
+  frame(
+    show: Show,
+    scheme: Scheme | null,
+    beat: number,
+    seconds: number,
+    dt: number,
+    responses?: ResponseOverrides,
+  ): void;
   setOutput(output: Output | null): void;
   /** Draw for a window somebody is looking *at*, rather than for a projector. */
   preview(on: boolean): void;
@@ -132,16 +143,18 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
    * edit rather than a frame. Rebuilding it per frame is the wall freezing while
    * it re-flattens a broken graph sixty times a second.
    */
-  const brokenFrom = new Map<string, Scheme>();
+  const brokenFrom = new Map<string, { scheme: Scheme; responses: string }>();
 
-  const flowProgram = (scheme: Scheme, id: string): Built => {
+  const flowProgram = (scheme: Scheme, id: string, responses?: ResponseOverrides): Built => {
     const held = flows.get(id);
-    if (held && brokenFrom.get(id) === scheme) {
+    const responseSignature = responseOverridesSignature(responses);
+    const broken = brokenFrom.get(id);
+    if (held && broken?.scheme === scheme && broken.responses === responseSignature) {
       error = `${scheme.flows[id]?.name || id}: ${held.error}`;
       return held;
     }
     try {
-      const built = buildProgram(scheme, id, held);
+      const built = buildProgram(scheme, id, held, responses);
       brokenFrom.delete(id);
       return built;
     } catch (err) {
@@ -150,7 +163,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       // says so in the panel, which is an evening somebody can rescue.
       const built = nothing((err as Error).message);
       flows.set(id, built);
-      brokenFrom.set(id, scheme);
+      brokenFrom.set(id, { scheme, responses: responseSignature });
       error = `${scheme.flows[id]?.name || id}: ${built.error}`;
       return built;
     }
@@ -169,8 +182,13 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
     numbers: createNumberEvaluator(),
   });
 
-  const buildProgram = (scheme: Scheme, id: string, held: Built | undefined): Built => {
-    const signature = signatureOf(scheme.flows, id);
+  const buildProgram = (
+    scheme: Scheme,
+    id: string,
+    held: Built | undefined,
+    responses?: ResponseOverrides,
+  ): Built => {
+    const signature = `${signatureOf(scheme.flows, id)}|responses:${responseOverridesSignature(responses)}`;
     const { circuit } = flatten(scheme.flows, id);
     if (held && held.signature === signature) {
       held.banks = banksOf(circuit);
@@ -179,7 +197,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
     }
     if (held?.program) gl.deleteProgram(held.program.program);
 
-    const compiled = buildFlow(scheme.flows, id);
+    const compiled = buildFlow(scheme.flows, id, { responses });
     const built: Built = {
       program: null,
       signature,
@@ -338,7 +356,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
         if (!canvas.isConnected) gl.getExtension('WEBGL_lose_context')?.loseContext();
       }
     },
-    frame(show, scheme, beat, seconds, dt) {
+    frame(show, scheme, beat, seconds, dt, responses) {
       // Nothing to draw into. Every call below would be a no-op anyway; not
       // making them is what keeps a lost context from rebuilding flows that
       // cannot compile, sixty times a second, until it comes back.
@@ -349,7 +367,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
 
       const at = { show, scheme, beat, seconds, dt, width: canvas.width, height: canvas.height };
       const id = show.flow;
-      const built = scheme && id ? flowProgram(scheme, id) : null;
+      const built = scheme && id ? flowProgram(scheme, id, responses) : null;
 
       // --- the set's own picture, when the flow asked for it ---------------
       gl.bindFramebuffer(gl.FRAMEBUFFER, live.framebuffer);

@@ -24,7 +24,7 @@ vec2 fxMirror(vec2 p, float line, float angle) {
 
 vec2 fxKaleido(vec2 p, float segments, float spin, float e) {
   float n = floor(max(2.0, 2.0 + segments * 10.0 + e * 4.0));
-  float a = atan(p.y, p.x) + uBeat * (spin - 0.5) * 0.6;
+  float a = atan(p.y, p.x) + uBeat * spin * 6.28318530718;
   float r = length(p);
   float wedge = PI / n;
   a = abs(mod(a, wedge * 2.0) - wedge);
@@ -60,7 +60,7 @@ vec2 fxSlice(vec2 p, float bands, float throwBy, float e) {
 }
 
 vec2 fxTwist(vec2 p, float turn, float sway, float e) {
-  float a = (turn - 0.5) * 9.0 * length(p) + sin(uBeat * rate(e) * PI * 0.5) * sway * 1.5;
+  float a = turn * 6.28318530718 * length(p) + sin(uBeat * rate(e) * PI * 0.5) * sway * 1.5;
   float c = cos(a), s = sin(a);
   return mat2(c, -s, s, c) * p;
 }

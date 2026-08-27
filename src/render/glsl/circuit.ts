@@ -22,8 +22,8 @@ vec2 cFold(vec2 p, float n) {
   return vec2(cos(a), sin(a)) * length(p);
 }
 
-vec2 cSwirl(vec2 p, float n) {
-  float a = (n - 0.5) * 12.56637 * length(p);
+vec2 cSwirl(vec2 p, float turns) {
+  float a = turns * 6.28318530718 * length(p);
   float c = cos(a), s = sin(a);
   return mat2(c, -s, s, c) * p;
 }

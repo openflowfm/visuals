@@ -3,6 +3,13 @@
 `src/ui/Console.tsx`, `Designer.tsx`, `SetView.tsx`, `ReviewView.tsx`. Three views over one
 show.
 
+Development may add one conditional view without changing that product shape:
+**calibrate** is advertised by a server started with `OPENFLOW_CALIBRATION=1`,
+and is absent otherwise. It is the internal parameter-response bench documented
+in [calibration](calibration.md), not another face of the user lab. Its device
+and parameter selectors are local navigation over frozen development questions;
+opening one does not move another console or change the show.
+
 ## Why three, and why these
 
 | view | the question | the scale |

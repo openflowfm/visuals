@@ -25,9 +25,51 @@ const wire = (value: unknown) => readUp(JSON.stringify(value));
 
 describe('reading a message off the socket', () => {
   it('takes every gesture that carries nothing', () => {
-    for (const kind of ['downbeat', 'next-flow', 'next-colorway', 'lab-open', 'save-scheme']) {
+    for (const kind of [
+      'downbeat',
+      'next-flow',
+      'next-colorway',
+      'lab-open',
+      'calibration-open',
+      'save-scheme',
+    ]) {
       expect(wire({ kind }).ok).toBe(true);
     }
+  });
+
+  it('accepts a whole calibration decision and rejects a malformed response', () => {
+    const decision = {
+      trialId: 'rotation-spin',
+      trialVersion: 1,
+      room,
+      selectedOptionId: 'square',
+      response: {
+        kind: 'centered-power',
+        center: 0.5,
+        min: -0.1,
+        neutral: 0,
+        max: 0.1,
+        exponent: 2,
+        unit: 'turn/beat',
+      },
+      extent: 0.8,
+      note: 'good middle',
+    };
+    expect(wire({ kind: 'calibration-decide', decision }).ok).toBe(true);
+    expect(
+      wire({
+        kind: 'calibration-decide',
+        decision: { ...decision, response: { ...decision.response, exponent: -1 } },
+      }).ok,
+    ).toBe(false);
+  });
+
+  it('opens one calibration parameter only with its complete frozen identity', () => {
+    expect(
+      wire({ kind: 'calibration-open', trialId: 'parameter-lens-zoom-by', trialVersion: 1 }).ok,
+    ).toBe(true);
+    expect(wire({ kind: 'calibration-open', trialId: 'parameter-lens-zoom-by' }).ok).toBe(false);
+    expect(wire({ kind: 'calibration-open', trialVersion: 1 }).ok).toBe(false);
   });
 
   it('refuses text that is not json at all', () => {

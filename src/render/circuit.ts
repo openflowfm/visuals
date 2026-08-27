@@ -32,6 +32,13 @@ import { FRACTAL_ITERATIONS, flowPreamble } from './shaders.ts';
 import { VIDEO_NODE_SPEC } from '../nodes/video/spec.ts';
 import { IMAGE_NODE_SPEC } from '../nodes/image/spec.ts';
 import { LFO_NODE_SPEC } from '../nodes/lfo/spec.ts';
+import {
+  productionResponse,
+  responseGlsl,
+  responseKey,
+  type ParameterResponse,
+  type ResponseOverrides,
+} from '../../response.ts';
 
 /**
  * A flow, compiled to a fragment shader.
@@ -134,6 +141,8 @@ export interface PortSpec extends PortDocumentation {
   control?: 'toggle';
   /** A domain-aware readout for values whose useful meaning is not a percent. */
   display?: 'lfo-rate' | 'phase';
+  /** How this inlet turns the graph's normalized number into its working domain. */
+  response?: ParameterResponse;
 }
 
 /** What a node's `emit` is handed. */
@@ -647,13 +656,16 @@ const NEEDS_ENERGY = new Set([
   'caustics',
 ]);
 
-const valuePorts = (names: readonly ValueInlet[], op: string): PortSpec[] => [
+const valuePorts = (kind: NodeKind, names: readonly ValueInlet[], op: string): PortSpec[] => [
   ...(NEEDS_ENERGY.has(op) ? [E()] : []),
-  ...names.map((name) =>
-    VALUE_FOLLOWS.has(name)
+  ...names.map((name) => {
+    const port = VALUE_FOLLOWS.has(name)
       ? FOLLOWS(name, VALUE_DESCRIPTION[name])
-      : N(name, VALUE_DESCRIPTION[name], VALUE_AT[`${op}/${name}`] ?? VALUE_AT[name] ?? 0.5),
-  ),
+      : N(name, VALUE_DESCRIPTION[name], VALUE_AT[`${op}/${name}`] ?? VALUE_AT[name] ?? 0.5);
+    const response = productionResponse({ kind, mode: op, inlet: name });
+    if (response) port.response = response;
+    return port;
+  }),
 ];
 
 /**
@@ -1060,7 +1072,7 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
       const op = modeOf(node, SOURCES);
       return [
         P('p', 'Where in the generated picture to read.'),
-        ...valuePorts(SOURCE_VALUES[op], op),
+        ...valuePorts('source', SOURCE_VALUES[op], op),
       ];
     },
     outlets: [C('c', 'The generated picture.')],
@@ -1086,7 +1098,7 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
       const op = modeOf(node, FIELD_MODES);
       return [
         P('p', 'Where in the procedural field to read.'),
-        ...valuePorts(FIELD_VALUES[op], op),
+        ...valuePorts('field', FIELD_VALUES[op], op),
       ];
     },
     outlets: [C('c', 'The generated field picture.')],
@@ -1111,7 +1123,7 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
       const values = FRACTAL_VALUES[op];
       return [
         P('p', 'Where in the fractal plane to read.'),
-        ...valuePorts(values, op),
+        ...valuePorts('fractal', values, op),
       ];
     },
     outlets: [C('c', 'The generated fractal picture.')],
@@ -1143,7 +1155,7 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
       return [
         P('p', 'Where in the frame the light is read.'),
         ...(hung ? [P('from', 'Where the light hangs.', hung)] : []),
-        ...valuePorts(LIGHT_VALUES[op], op),
+        ...valuePorts('light', LIGHT_VALUES[op], op),
       ];
     },
     outlets: [C('c', 'The light, as a picture.')],
@@ -1242,7 +1254,7 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
       return [
         P('p', 'The position to transform.'),
         C('c', 'The picture to read through the transformed position.'),
-        ...valuePorts(values, op),
+        ...valuePorts('lens', values, op),
       ];
     },
     outlets: [
@@ -1282,7 +1294,7 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
       return [
         P('p', 'The position to displace.'),
         C('field', 'The picture whose colour decides which way this point moves.'),
-        ...valuePorts(values, op),
+        ...valuePorts('displace', values, op),
       ];
     },
     outlets: [P('p', 'The displaced position.')],
@@ -1342,7 +1354,10 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     inlets: (node) => {
       const op = modeOf(node, GRADE_MODES);
       const values = GRADE_VALUES[op as keyof typeof GRADE_VALUES];
-      return [C('c', 'The picture whose colours will be changed.'), ...valuePorts(values, op)];
+      return [
+        C('c', 'The picture whose colours will be changed.'),
+        ...valuePorts('grade', values, op),
+      ];
     },
     outlets: [C('c', 'The colour-adjusted picture.')],
     modes: GRADE_MODE_DOCUMENTATION,
@@ -1362,7 +1377,10 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     inlets: (node) => {
       const op = modeOf(node, SPREAD_MODES);
       const values = SPREAD_VALUES[op as keyof typeof SPREAD_VALUES];
-      return [C('c', 'The picture to sample around each point.'), ...valuePorts(values, op)];
+      return [
+        C('c', 'The picture to sample around each point.'),
+        ...valuePorts('spread', values, op),
+      ];
     },
     outlets: [C('c', 'The picture made from the surrounding samples.')],
     modes: SPREAD_MODE_DOCUMENTATION,
@@ -1381,7 +1399,10 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     inlets: (node) => {
       const op = modeOf(node, HALFTONE_MODES);
       const values = HALFTONE_VALUES[op as keyof typeof HALFTONE_VALUES];
-      return [C('c', 'The picture to reduce to a pattern.'), ...valuePorts(values, op)];
+      return [
+        C('c', 'The picture to reduce to a pattern.'),
+        ...valuePorts('halftone', values, op),
+      ];
     },
     outlets: [C('c', 'The patterned picture, transparent between its marks.')],
     modes: HALFTONE_MODE_DOCUMENTATION,
@@ -2147,7 +2168,16 @@ function feedOf(circuit: { cords: readonly CircuitCordLike[] }, inlet: string): 
  * and looking at it, and a compiler that treated an unwired node as an error
  * would make the canvas unusable for exactly the way it gets used.
  */
-export function compileFlow(flows: Record<string, FlowDef>, id: string): Compiled {
+export interface CompileOptions {
+  /** Development-only substitutions used by the response calibration bench. */
+  responses?: ResponseOverrides;
+}
+
+export function compileFlow(
+  flows: Record<string, FlowDef>,
+  id: string,
+  options: CompileOptions = {},
+): Compiled {
   const expanded = flatten(flows, id);
   const empty: Compiled = {
     source: null,
@@ -2160,10 +2190,10 @@ export function compileFlow(flows: Record<string, FlowDef>, id: string): Compile
     draws: null,
   };
   if (expanded.error) return empty;
-  return compileCircuit(expanded.circuit);
+  return compileCircuit(expanded.circuit, options);
 }
 
-export function compileCircuit(circuit: Circuit): Compiled {
+export function compileCircuit(circuit: Circuit, options: CompileOptions = {}): Compiled {
   const values = valuesOf(circuit);
   const tracks = tracksOf(circuit);
   const drawn = circuit.nodes.find((node) => node.kind === 'tracks');
@@ -2263,6 +2293,9 @@ export function compileCircuit(circuit: Circuit): Compiled {
       return null;
     }
     open.add(here);
+    // Named once for the nested inlet readers; function declarations do not
+    // retain the map lookup's narrowing even though they only run in this call.
+    const subject = node;
 
     /**
      * What an inlet reads with nothing wired to it: the number somebody set,
@@ -2274,18 +2307,18 @@ export function compileCircuit(circuit: Circuit): Compiled {
      * shader sixty times a second, and an inlined constant hands that back at
      * every inlet on the canvas.
      */
-    const answer = (port: PortSpec, where: string): string => {
+    function answer(port: PortSpec, where: string): string {
       const held = slot.get(portId(nodeId, port.name));
       if (held !== undefined) return `uParams[${held}]`;
       // A follower with nothing of its own reads its named sibling — through
       // that inlet's own cord or held number, so `columns` follows whatever
       // `energy` is actually doing rather than the raw room uniform.
-      if (port.fallbackInlet !== undefined) return readAt(port.fallbackInlet, where);
+      if (port.fallbackInlet !== undefined) return readRawAt(port.fallbackInlet, where);
       return port.fallback ?? (port.kind === 'p' ? where : '0.0');
-    };
+    }
 
-    const readAt = (inlet: string, where: string): string => {
-      const wanted = inletsOf(node).find((p) => p.name === inlet);
+    function readRawAt(inlet: string, where: string): string {
+      const wanted = inletsOf(subject).find((p) => p.name === inlet);
       if (!wanted) return '0.0';
       const id = portId(nodeId, inlet);
       const from = feeds.get(id);
@@ -2306,7 +2339,19 @@ export function compileCircuit(circuit: Circuit): Compiled {
       // moves back under it. Bitwig's rule, and it is the one that makes a
       // range you set once survive being slid around.
       return `clamp(uParams[${base}] + uParams[${depth}] * ${signal}, 0.0, 1.0)`;
-    };
+    }
+
+    function readAt(inlet: string, where: string): string {
+      const wanted = inletsOf(subject).find((p) => p.name === inlet);
+      if (!wanted) return '0.0';
+      const raw = readRawAt(inlet, where);
+      if (wanted.kind !== 'n') return raw;
+      const mode = subject.op ?? '';
+      const target = { kind: subject.kind, mode, inlet };
+      const response =
+        options.responses?.[responseKey(target)] ?? wanted.response ?? productionResponse(target);
+      return response ? responseGlsl(response, raw) : raw;
+    }
 
     const ctx: Emitting = {
       at,

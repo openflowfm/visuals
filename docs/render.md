@@ -93,6 +93,15 @@ frame. There used to be a third bank for those; `track` and `energy` are one nod
 what goes in a slot is that node's business and the shader reads a number without learning
 which.
 
+An inlet with a `ParameterResponse` is converted from normalized 0–1 only when
+the consuming node reads it, after base-plus-depth modulation. The compiler can
+receive a response override for the development [calibration
+bench](calibration.md); the override is part of the program-cache signature, so
+A/B/C can swap against one continuing clock without ever entering a scheme.
+Automatic trial version one also overrides newly promoted responses back to its
+response-set-two identity baseline, so finishing one parameter cannot change a
+pending fixture underneath the reviewer.
+
 ## What there is to look at
 
 Thirteen lightweight sources, three bounded procedural fields, four bounded 2D lights, one

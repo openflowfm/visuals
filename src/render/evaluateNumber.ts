@@ -7,6 +7,7 @@ import {
 } from '../../protocol.ts';
 import { NODE_SPECS, inletsOf, splitPort } from './circuit.ts';
 import { lfoClock, lfoIdentity, lfoValue } from '../nodes/lfo/algorithm.ts';
+import { evaluateResponse, productionResponse } from '../../response.ts';
 
 /** Everything a CPU number chain reads at one display-clock tick. */
 export interface NumberInputs {
@@ -270,6 +271,11 @@ export function createNumberEvaluator(): NumberEvaluator {
             value = readInlet(`${nodeId}/${port.fallbackInlet}`);
           else if (port.fallback === 'uEnergy') value = inputs.show.master;
           else if (port.fallback === 'uBeat') value = inputs.beat;
+        }
+        if (value !== undefined) {
+          const response =
+            port.response ?? productionResponse({ kind: node.kind, mode: node.op ?? '', inlet: name });
+          if (response) value = evaluateResponse(response, value);
         }
         inlets.set(id, value);
         return value;

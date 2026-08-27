@@ -1518,6 +1518,261 @@
   flex: 1;
 }
 
+/* Development-only parameter response calibration. The server omits this
+   entire view unless OPENFLOW_CALIBRATION=1. */
+.calibration {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.calibration-empty,
+.calibration-done {
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  color: var(--caption);
+}
+
+.calibration-done > div:first-child {
+  max-width: 480px;
+}
+
+.calibration-done h2 {
+  color: var(--fg);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.calibration-export,
+.calibration a {
+  color: var(--amber);
+}
+
+.calibration-stage {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  gap: 8px;
+}
+
+.calibration-stage .train-frame {
+  flex: 1;
+}
+
+.calibration-transport {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.calibration-caption {
+  color: var(--caption);
+  margin-left: 4px;
+}
+
+.calibration-transport > button,
+.calibration-small-verbs button {
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-xs);
+  background: var(--surface-control);
+  color: var(--ui);
+  font: inherit;
+  padding: 3px 7px;
+  cursor: pointer;
+}
+
+.calibration-transport > button[data-on],
+.calibration-small-verbs button[data-on] {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
+.calibration-controls {
+  flex: none;
+  width: 360px;
+  min-height: 0;
+  overflow-y: auto;
+  border-left: 1px solid var(--edge);
+  background: var(--panel);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.calibration-controls > header {
+  display: flex;
+  justify-content: space-between;
+  color: var(--caption);
+}
+
+.calibration-controls h2 {
+  margin: 0;
+  color: var(--fg);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.calibration-picker {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--edge);
+}
+
+.calibration-picker label {
+  display: grid;
+  grid-template-columns: 68px 1fr;
+  align-items: center;
+  gap: 8px;
+  color: var(--caption);
+}
+
+.calibration-picker select {
+  min-width: 0;
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-xs);
+  background: var(--surface-control);
+  color: var(--fg);
+  font: inherit;
+  padding: 5px 7px;
+}
+
+.calibration-picker > button {
+  align-self: flex-end;
+  border: 0;
+  background: none;
+  color: var(--amber);
+  font: inherit;
+  cursor: pointer;
+}
+
+.calibration-picker > button:disabled {
+  color: var(--caption);
+  cursor: default;
+}
+
+.calibration-decided {
+  margin: -10px 0 0;
+  color: var(--amber);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.calibration-question {
+  margin: -8px 0 0;
+  color: var(--ui);
+  line-height: 1.45;
+}
+
+.calibration-controls section {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.calibration-controls h3 {
+  margin: 0;
+  color: var(--caption);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.calibration-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+}
+
+.calibration-options button {
+  height: 36px;
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-xs);
+  background: var(--surface-control);
+  color: var(--fg);
+  font: 500 14px var(--mono);
+  cursor: pointer;
+}
+
+.calibration-options button:hover {
+  border-color: var(--focus);
+}
+
+.calibration-options button[data-on] {
+  border-color: var(--amber);
+  color: var(--amber);
+  box-shadow: inset 0 0 0 1px var(--amber);
+}
+
+.calibration-reading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.calibration-reading b {
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.calibration-reading span {
+  color: var(--caption);
+}
+
+.calibration-controls input[type='range'] {
+  width: 100%;
+  accent-color: var(--amber);
+}
+
+.calibration-small-verbs {
+  display: flex;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.calibration-controls textarea {
+  min-height: 72px;
+  resize: vertical;
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-xs);
+  background: var(--well);
+  color: var(--fg);
+  font: inherit;
+  padding: 7px 8px;
+}
+
+.calibration-verbs {
+  display: flex;
+  gap: 7px;
+}
+
+.calibration-history {
+  width: 420px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.calibration-history article {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--edge);
+}
+
+.calibration-history article b {
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.calibration-history article p {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
 .tagpick {
   display: flex;
   flex-direction: column;
