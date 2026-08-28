@@ -36,6 +36,10 @@ Set `OPENFLOW_VISUALS_SCHEME` in that process to pin one exact file instead of t
 library's open scheme. Nothing except JSON-RPC is written to stdout; diagnostics go to stderr,
 because one ordinary log line on stdout corrupts a stdio MCP session.
 
+The system **Examples** scheme has no writable file. If it is open, authoring refuses to
+start with a read-only message; use the console's **save as** field to make a user scheme,
+then start the MCP server against that scheme.
+
 ## What an agent gets
 
 Two resources carry context rather than pretending a read is an action:

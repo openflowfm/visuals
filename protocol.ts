@@ -681,7 +681,7 @@ export interface LabRoom {
   seed: string;
 }
 
-/** One frozen candidate, as the review view receives it. */
+/** One frozen candidate, as a lab view receives it. */
 export interface LabCandidate {
   /** A hash of visual behaviour — see `canonicalCandidate` in `lab.ts`. */
   id: string;
@@ -692,9 +692,142 @@ export interface LabCandidate {
   methodVersion: number;
   /** The seed this candidate was dealt from, within its experiment. */
   seed: string;
+  /** The candidate changed to make this one, or null for a fresh seed. */
+  parentId: string | null;
+  /** The one generation operation that produced this candidate. */
+  operation: string;
+  /** Zero for a fresh seed; one more than its parent after each mutation. */
+  generation: number;
+  /** Candidates compared under one frozen room share this id. */
+  cohort: string;
 }
 
 export type LabScore = 1 | 2 | 3 | 4 | 5;
+
+/** The deliberately small signal used by the fast train loop. */
+export type LabVerdict = 'up' | 'down';
+
+/** One binary preference, kept separately from the anchored review rubric. */
+export interface LabSelection {
+  candidateId: string;
+  /** The server owns the cohort room; a binary client cannot vary it. */
+  verdict: LabVerdict;
+}
+
+/** The two kinds of question the recursive search asks. */
+export type LabEncounterPhase = 'explore' | 'refine';
+
+/**
+ * A comparison needs absolute anchors at both ends. Without both/neither, a
+ * pair always manufactures a winner even when it contains two keepers or two
+ * failures.
+ */
+export type LabComparisonChoice = 'left' | 'right' | 'both' | 'neither';
+
+/** One synchronized pair, frozen by the server before it reaches Train. */
+export interface LabEncounter {
+  id: number;
+  phase: LabEncounterPhase;
+  /** The candidate this neighborhood was opened around, null for immigrants. */
+  anchorId: string | null;
+  left: LabCandidate;
+  right: LabCandidate;
+  room: LabRoom;
+  /** Search depth, not the number of atomic edits inside an exploratory leap. */
+  depth: number;
+}
+
+/** The complete gesture for one pair. Its room and candidates are server-owned. */
+export interface LabComparisonSubmission {
+  encounterId: number;
+  choice: LabComparisonChoice;
+}
+
+/** An absolute finished-work judgment, separate from search direction. */
+export type LabArchiveVerdict = 'keep' | 'pass' | 'clear';
+
+export interface LabArchiveSubmission {
+  candidateId: string;
+  verdict: LabArchiveVerdict;
+  source: 'search' | 'archive';
+}
+
+/** Lightweight enough to send the complete search history without its graphs. */
+export interface LabLineageNode {
+  id: string;
+  name: string;
+  parentId: string | null;
+  generation: number;
+  cohort: string;
+  operation: string;
+  appearances: number;
+  chosen: number;
+  finals: number;
+  reviewed: boolean;
+  kept: boolean;
+  finalist: boolean;
+}
+
+export interface LabLineageFinalistSubmission {
+  candidateId: string;
+  finalist: boolean;
+}
+
+/** One historical work replayed in the exact room where it first appeared. */
+export interface LabArchiveState {
+  /** The complete lightweight lineage forest. Full graphs are loaded on selection. */
+  nodes: LabLineageNode[];
+  candidate: LabCandidate | null;
+  room: LabRoom | null;
+  reviewed: number;
+  total: number;
+  kept: number;
+  keptCandidateIds: string[];
+  complete: boolean;
+  notice: string | null;
+}
+
+/** One Finals match: preference and independent show-readiness for both sides. */
+export interface LabFinalsSubmission {
+  encounterId: number;
+  choice: LabComparisonChoice;
+  leftShowReady: boolean;
+  rightShowReady: boolean;
+}
+
+/** One cross-family match under a named room from the frozen Finals deck. */
+export interface LabFinalsEncounter {
+  id: number;
+  left: LabCandidate;
+  right: LabCandidate;
+  room: LabRoom;
+  roomIndex: number;
+  roomName: string;
+}
+
+/** A nominee's current or final standing. Score is 0–1 and deliberately derived. */
+export interface LabFinalist {
+  rank: number;
+  candidate: LabCandidate;
+  matches: number;
+  showReady: number;
+  preference: number;
+  score: number;
+  uncertainty: number;
+}
+
+/** The durable playoff over a frozen, diverse snapshot of one search experiment. */
+export interface LabFinalsState {
+  runId: number;
+  status: 'judging' | 'complete';
+  nominees: number;
+  compared: number;
+  total: number;
+  encounter: LabFinalsEncounter | null;
+  /** Ten while possible, ordered by current derived standing. */
+  leaders: LabFinalist[];
+  notice: string | null;
+}
 
 /** One judgment, exactly as submitted. The raw fact every score derives from. */
 export interface LabSubmission {
@@ -736,14 +869,30 @@ export interface LabReviewRow {
  * views of one queue, not two queues that happen to start together.
  */
 export interface LabState {
+  /** The active recursive-search question. */
+  encounter: LabEncounter | null;
+  /** Absolute preservation evidence and the next historical replay. */
+  archive: LabArchiveState | null;
+  /** A frozen playoff, absent until Finals is opened for this experiment. */
+  finals: LabFinalsState | null;
+  /** Legacy single-candidate state, retained for historical methods. */
   candidate: LabCandidate | null;
-  /** The room dealt with the candidate. A console may adjust its copy. */
+  /** The room dealt with the candidate; Train treats it as immutable. */
   room: LabRoom | null;
   method: string;
+  /** Binary train decisions in this experiment. */
+  liked: number;
+  rejected: number;
   reviewed: number;
   skipped: number;
   /** Dealt and waiting, this candidate included. */
   pending: number;
+  /** Pairwise search progress for the active method. */
+  comparisons: number;
+  explores: number;
+  refines: number;
+  frontier: number;
+  maxGeneration: number;
   /** One sentence when a submit was refused, or null. */
   notice: string | null;
 }
@@ -829,11 +978,20 @@ export interface CalibrationState {
  * The scheme library, as the console shows it: every saved scheme, which one
  * is open, and whether the open one holds edits its file does not have.
  */
+export const EXAMPLES_SCHEME_ID = '@examples';
+
+/** The system scheme has an address no user file may claim, and one human name. */
+export function schemeLabel(id: string): string {
+  return id === EXAMPLES_SCHEME_ID ? 'Examples' : id;
+}
+
 export interface Library {
-  /** Every saved scheme by id — the filename without `.json`, sorted. */
+  /** Every saved scheme by id, plus the read-only system examples. */
   schemes: string[];
   /** The one that is open. */
   current: string;
+  /** The open scheme is a system source: editable in memory, but only Save As may write it. */
+  readOnly: boolean;
   /** True when the open scheme has been edited since it was last saved. */
   dirty: boolean;
   /** One sentence the console should show — a refusal, a file moved under us — or null. */
@@ -911,13 +1069,23 @@ export type Up =
   | { kind: 'downbeat' }
   | { kind: 'next-flow' }
   | { kind: 'next-colorway' }
-  // The lab speaks three coarse gestures and nothing finer. Opening the review
-  // view asks for the queue's state — and is the only thing that makes the
-  // server deal; nothing is generated merely because a server is running.
-  // A submit and a skip both advance the queue, and they are different
-  // messages because they are different facts: a skip is "I did not judge
-  // this" and must never be recordable as a low score.
+  // The lab speaks coarse gestures and nothing finer. Opening train asks for
+  // the queue's state — and is the only thing that makes the server deal;
+  // nothing is generated merely because a server is running. A comparison,
+  // a historical binary choice, a detailed review and a skip remain different
+  // facts and therefore different messages.
   | { kind: 'lab-open' }
+  | { kind: 'lab-compare'; comparison: LabComparisonSubmission }
+  | { kind: 'lab-skip-encounter'; encounterId: number }
+  | { kind: 'lab-archive-open' }
+  | { kind: 'lab-archive-select'; candidateId: string }
+  | { kind: 'lab-archive-decide'; decision: LabArchiveSubmission }
+  | { kind: 'lab-lineage-finalist'; decision: LabLineageFinalistSubmission }
+  | { kind: 'lab-finals-open' }
+  | { kind: 'lab-finals-new' }
+  | { kind: 'lab-finals-compare'; comparison: LabFinalsSubmission }
+  | { kind: 'lab-finals-skip'; encounterId: number }
+  | { kind: 'lab-select'; selection: LabSelection }
   | { kind: 'lab-review'; review: LabSubmission }
   | { kind: 'lab-skip'; candidateId: string }
   // A flow from the open scheme, offered to the queue by hand — so what was

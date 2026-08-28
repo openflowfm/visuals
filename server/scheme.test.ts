@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { hint } from '../hints.ts';
 import { NODE_FAMILIES, flowsUsedBy } from '../protocol.ts';
 import { compileFlow, inletsOf, portId, reachesOut, repaired, splitPort } from '../src/render/circuit.ts';
-import { BUILT_IN, merge } from './scheme.ts';
+import { EXAMPLES, merge } from './scheme.ts';
 
 /**
  * The name hints, against the names of a real set.
@@ -76,14 +76,14 @@ describe('name hints', () => {
   });
 });
 
-describe('the built-in scheme', () => {
+describe('the example scheme', () => {
   it('is a show on its own, with nothing configured', () => {
     // The rule the file is designed around. A rig that draws nothing until it
     // has been configured is a rig nobody configures.
-    expect(Object.keys(BUILT_IN.flows).length).toBeGreaterThan(1);
-    expect(Object.keys(BUILT_IN.colorways).length).toBeGreaterThan(1);
-    expect(BUILT_IN.flows[BUILT_IN.defaults.flow]).toBeDefined();
-    expect(BUILT_IN.colorways[BUILT_IN.defaults.colorway]).toBeDefined();
+    expect(Object.keys(EXAMPLES.flows).length).toBeGreaterThan(1);
+    expect(Object.keys(EXAMPLES.colorways).length).toBeGreaterThan(1);
+    expect(EXAMPLES.flows[EXAMPLES.defaults.flow]).toBeDefined();
+    expect(EXAMPLES.colorways[EXAMPLES.defaults.colorway]).toBeDefined();
   });
 
   it('ships colourways that are five long, loud, and led by the loudest', () => {
@@ -99,7 +99,7 @@ describe('the built-in scheme', () => {
       const min = Math.min(r, g, b);
       return { chroma: max - min, l: (max + min) / 2 };
     };
-    for (const [name, hexes] of Object.entries(BUILT_IN.colorways)) {
+    for (const [name, hexes] of Object.entries(EXAMPLES.colorways)) {
       expect(hexes, name).toHaveLength(5);
       const each = hexes.map(read);
       expect(each[0].chroma, `${name} leads with the loudest`).toBeGreaterThanOrEqual(0.6);
@@ -109,23 +109,23 @@ describe('the built-in scheme', () => {
   });
 
   it('turns through everything, because nothing is narrowed', () => {
-    expect(BUILT_IN.rotation.flows).toEqual([]);
-    expect(BUILT_IN.rotation.colorways).toEqual([]);
-    expect(BUILT_IN.rotation.bars).toBeGreaterThan(0);
+    expect(EXAMPLES.rotation.flows).toEqual([]);
+    expect(EXAMPLES.rotation.colorways).toEqual([]);
+    expect(EXAMPLES.rotation.bars).toBeGreaterThan(0);
   });
 
   it('every flow it ships compiles', () => {
     // The library is the only documentation of the vocabulary anyone will read,
     // so one of them failing to build is four-quarters of the manual gone.
-    for (const [id, def] of Object.entries(BUILT_IN.flows)) {
-      const built = compileFlow(BUILT_IN.flows, id);
+    for (const [id, def] of Object.entries(EXAMPLES.flows)) {
+      const built = compileFlow(EXAMPLES.flows, id);
       expect(built.error, `${def.name}: ${built.error}`).toBeNull();
       expect(built.source).toContain('void main()');
     }
   });
 
   it('keeps values on value nodes and smoothing on track nodes', () => {
-    const nodes = Object.values(BUILT_IN.flows).flatMap((def) => def.circuit.nodes);
+    const nodes = Object.values(EXAMPLES.flows).flatMap((def) => def.circuit.nodes);
     const tracks = nodes.filter((node) => node.kind === 'track');
     const values = nodes.filter((node) => node.kind === 'value');
     expect(tracks.length).toBeGreaterThan(0);
@@ -144,7 +144,7 @@ describe('the built-in scheme', () => {
     // A shipped flow with a node parked off to one side is fine; a shipped flow
     // with nothing wired to `out` is a black frame with a library entry's name
     // on it, and it is the first thing anyone opens.
-    for (const [id, def] of Object.entries(BUILT_IN.flows)) {
+    for (const [id, def] of Object.entries(EXAMPLES.flows)) {
       expect(reachesOut(def.circuit), def.name).toBe(true);
       expect(repaired(def.circuit), `${id} needs no repair`).toEqual(def.circuit);
     }
@@ -156,7 +156,7 @@ describe('the built-in scheme', () => {
     // half that makes this model unusual — geometry, and numbers becoming
     // colours — invisible to everyone who learns it by taking these apart.
     const kinds = new Set(
-      Object.values(BUILT_IN.flows).flatMap((def) => def.circuit.nodes.map((node) => node.kind)),
+      Object.values(EXAMPLES.flows).flatMap((def) => def.circuit.nodes.map((node) => node.kind)),
     );
     for (const family of NODE_FAMILIES) {
       expect(family.kinds.some((kind) => kinds.has(kind)), family.name).toBe(true);
@@ -170,7 +170,7 @@ describe('the built-in scheme', () => {
     // machine, so keep those examples in the show rather than only in the node
     // browser.
     const kinds = new Set(
-      Object.values(BUILT_IN.flows).flatMap((def) => def.circuit.nodes.map((node) => node.kind)),
+      Object.values(EXAMPLES.flows).flatMap((def) => def.circuit.nodes.map((node) => node.kind)),
     );
     for (const kind of ['field', 'fractal', 'lfo', 'light', 'place'] as const) {
       expect(kinds.has(kind), kind).toBe(true);
@@ -185,15 +185,15 @@ describe('the built-in scheme', () => {
     // holds an **id**, and a shipped flow whose id changed would make the graph
     // that used it go quiet rather than fail — which is right for a flow somebody
     // deleted and wrong for one that ships beside it.
-    const nested = Object.entries(BUILT_IN.flows).filter(
+    const nested = Object.entries(EXAMPLES.flows).filter(
       ([, def]) => flowsUsedBy(def.circuit).length > 0,
     );
     expect(nested.length).toBeGreaterThan(0);
     for (const [id, def] of nested) {
       for (const used of flowsUsedBy(def.circuit)) {
-        expect(BUILT_IN.flows[used], `${def.name} uses ${used}`).toBeDefined();
+        expect(EXAMPLES.flows[used], `${def.name} uses ${used}`).toBeDefined();
       }
-      expect(compileFlow(BUILT_IN.flows, id).error, def.name).toBeNull();
+      expect(compileFlow(EXAMPLES.flows, id).error, def.name).toBeNull();
     }
   });
 
@@ -206,7 +206,7 @@ describe('the built-in scheme', () => {
     // There used to be an exemption here for `The set`, which was one `tracks`
     // node and nothing else. It went, and so did the exemption: a flow that is
     // a single node is a node, and the node browser already offers it.
-    for (const [, def] of Object.entries(BUILT_IN.flows)) {
+    for (const [, def] of Object.entries(EXAMPLES.flows)) {
       const kinds = new Set(def.circuit.nodes.map((node) => node.kind));
       const draws = (
         ['source', 'field', 'fractal', 'light', 'paint', 'flow'] as const
@@ -222,7 +222,7 @@ describe('the built-in scheme', () => {
     // least charge. The fix is in the wiring rather than in the number — every
     // meter that reaches an energy is floored by something on the clock — and
     // this is the assertion that keeps it there.
-    const feeding = (def: (typeof BUILT_IN.flows)[string], inlet: string): Set<string> => {
+    const feeding = (def: (typeof EXAMPLES.flows)[string], inlet: string): Set<string> => {
       const byId = new Map(def.circuit.nodes.map((node) => [node.id, node]));
       const feeds = new Map(def.circuit.cords.map((cord) => [cord.to, cord.from]));
       const kinds = new Set<string>();
@@ -240,7 +240,7 @@ describe('the built-in scheme', () => {
       return kinds;
     };
 
-    for (const def of Object.values(BUILT_IN.flows)) {
+    for (const def of Object.values(EXAMPLES.flows)) {
       for (const node of def.circuit.nodes) {
         for (const port of inletsOf(node)) {
           if (port.name !== 'energy') continue;
@@ -256,27 +256,35 @@ describe('the built-in scheme', () => {
   it('ships a flow that reads the set, and one that does not', () => {
     // Both halves have to exist in the library or half the vocabulary is
     // invisible to anyone who learns it by taking these apart.
-    const reads = Object.values(BUILT_IN.flows).filter((def) =>
+    const reads = Object.values(EXAMPLES.flows).filter((def) =>
       def.circuit.nodes.some((n) => n.kind === 'tracks'),
     );
     expect(reads.length).toBeGreaterThan(0);
-    expect(reads.length).toBeLessThan(Object.keys(BUILT_IN.flows).length);
+    expect(reads.length).toBeLessThan(Object.keys(EXAMPLES.flows).length);
   });
 });
 
 describe('reading a file', () => {
-  it('overrides one colourway without deleting the rest', () => {
+  it('treats a present colourway section as the complete set', () => {
     const merged = merge({ colorways: { mine: ['#123456'] } });
     expect(merged.colorways.mine).toEqual(['#123456']);
-    expect(Object.keys(merged.colorways).length).toBeGreaterThan(1);
+    expect(Object.keys(merged.colorways)).toEqual(['mine']);
+    expect(merged.defaults.colorway).toBe('mine');
   });
 
-  it('keeps the flows that ship alongside one the file adds', () => {
+  it('treats a present flow section as the complete library', () => {
     const merged = merge({
       flows: { mine: { name: 'Mine', circuit: { nodes: [], cords: [] } } },
     });
     expect(merged.flows.mine).toBeDefined();
-    expect(Object.keys(merged.flows).length).toBeGreaterThan(1);
+    expect(Object.keys(merged.flows)).toEqual(['mine']);
+    expect(merged.defaults.flow).toBe('mine');
+  });
+
+  it('uses Examples only when an old partial file omits a whole section', () => {
+    const merged = merge({ seed: 'before-complete-schemes' });
+    expect(merged.flows).toEqual(EXAMPLES.flows);
+    expect(merged.colorways).toEqual(EXAMPLES.colorways);
   });
 
   it('reads a song written as a bare colourway name', () => {
@@ -750,12 +758,12 @@ describe('a file written when a flow was called a look', () => {
     expect(compileFlow(now.flows, 'mine').error).toBeNull();
   });
 
-  it('sends a file that defaulted to The set back to the built-in default', () => {
+  it('sends a file that defaulted to The set back to the example default', () => {
     // `The set` was one `tracks` node and is gone. A file that named it is a
     // file naming a flow nobody has, and the only honest answer to that is the
-    // default everyone has.
+    // default the compatibility floor has.
     const now = merge({ defaults: { look: 'live', colorway: 'ember', pace: 0 } } as never);
-    expect(now.defaults.flow).toBe(BUILT_IN.defaults.flow);
+    expect(now.defaults.flow).toBe(EXAMPLES.defaults.flow);
     expect(now.flows[now.defaults.flow]).toBeDefined();
   });
 
@@ -763,7 +771,7 @@ describe('a file written when a flow was called a look', () => {
     // The bug this replaced rebuilt `defaults` out of `colorway` and `pace` and
     // dropped the rest, so a default flow set in the editor was reset on the
     // next read. It never showed because the only value anyone had was the
-    // built-in one.
+    // example one.
     const now = merge({ defaults: { flow: 'outline', colorway: 'cold', pace: 2, draws: 'by name' } } as never);
     expect(now.defaults.flow).toBe('outline');
     expect(now.defaults.colorway).toBe('cold');

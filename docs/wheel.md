@@ -203,12 +203,14 @@ between a set you can navigate and a set that looks right.
 
 ## The scheme library
 
-`~/.openflow/visuals/schemes/<id>.json`, one saved scheme per file, **entirely optional** —
-the built-in scheme in `server/scheme.ts` is a complete show and a file only ever overrides
-parts of it. `state.json` beside the library remembers which scheme is open, so a restart
-reopens the show you were in. The paths are `home.ts`'s business: `OPENFLOW_HOME` moves the
-`~/.openflow` root wholesale, `OPENFLOW_VISUALS_SCHEME` pins one exact file and turns the
-library off, and a scheme from before the library — the single
+`~/.openflow/visuals/schemes/<id>.json`, one saved scheme per file. On a new library,
+`server/library.ts` writes **main** as an ordinary editable copy of `EXAMPLES` and also puts
+the system **Examples** scheme on the shelf. Examples is read-only: it always reflects what
+this version ships, and **save as** is the way to make a scheme from it. `state.json` beside
+the library remembers which scheme is open, so a restart reopens the show you were in. The
+paths are `home.ts`'s business: `OPENFLOW_HOME` moves the `~/.openflow` root wholesale,
+`OPENFLOW_VISUALS_SCHEME` pins one exact file and turns the library off, and a scheme from
+before the library — the single
 `~/.openflow/visuals/scheme.json`, or the `visuals/scheme.json` beside the code before
 that — is adopted as `main`, copied once, the first time anything resolves it.
 
@@ -217,13 +219,17 @@ the picture has to follow the pointer — and all of it lands in server memory o
 changes when you press save, and the distance between the two is the dirty mark in the
 console. That is what makes it safe to tear a scheme apart during a set: the saved one is
 exactly as good as it was when you last meant it. The cost is honest too — unsaved edits
-live in the server process, and stopping it takes them along. Save writes the open scheme's
-file, save-as writes it under a new id and stays there, load opens a saved one — the
-console asks before dropping unsaved edits, the server does not. `server/library.ts` holds
-all of this.
+live in the server process, and stopping it takes them along. Save writes the open user
+scheme's file, save-as writes it under a new id and stays there, load opens a saved one —
+the console asks before dropping unsaved edits, the server does not. An edited Examples
+scheme may only be saved as a user scheme; save and the MCP authoring door both refuse to
+overwrite the system source. `server/library.ts` holds all of this.
 
-Overrides are shallow per section: naming one colourway does not delete the other three, and
-registering one flow does not remove the twelve that ship.
+**A scheme owns its flows and colourways.** Their maps are complete, not overlays: removing
+an id means it is gone, on the next server round trip and after a restart. A file from an old
+partial format that omits an entire `flows` or `colorways` section receives the examples as
+a one-time compatibility floor; once saved, the full maps are explicit like every current
+scheme.
 
 A parse error **keeps the scheme that was already working** and reports the message in the
 panel. Losing the show to a trailing comma is the wrong answer at any time and an unthinkable
@@ -256,19 +262,17 @@ two things a *file* can say and the editor cannot. Repairing here means the repa
 back the next time anything saves; repairing in the compiler would mean silently redoing the
 same fix sixty times a second and never telling anyone. See [flows](flows.md).
 
-**A saved file holds a copy of every flow that ships**, because the editor sends the whole
-scheme and the server writes the whole scheme. So improving a built-in does not reach a
-machine that has already saved once — its saved scheme shadows the new one under the same
-id, and a built-in *added* since that save does arrive, because there is nothing in the file
-to shadow it. Deleting the shipped entries from the file is the whole fix, and it is worth
-knowing before wondering why an updated library did not arrive.
+**Examples never leak into a user scheme.** Improving or adding one changes the read-only
+Examples scheme and the `main` copied on a genuinely new library. Existing schemes stay
+byte-for-byte theirs; taking a newer example is an explicit copy rather than an update that
+arrives inside a show.
 
-## The twelve that ship
+## The seventeen examples
 
-`BUILT_IN.flows` in `server/scheme.ts`, and they are the manual: nobody reads a node
+`EXAMPLES.flows` in `server/scheme.ts`, and they are the manual: nobody reads a node
 reference and everybody takes a working example apart. So they are a **spread** rather than
-twelve variations, one lesson each — and because the wheel turns through everything by
-default, they are also the show a fresh clone puts on.
+seventeen variations, one lesson each — and because the wheel turns through everything by
+default, they are also the show a fresh `main` puts on.
 
 | flow | what it is for |
 |---|---|
@@ -283,6 +287,11 @@ default, they are also the show a fresh clone puts on.
 | **Glitch** | two lenses, a spread and two grades in a row and nothing else, over a scan pattern there is always something to break in — the busiest thing here, and the one that teaches how far a chain of small steps gets |
 | **Lava** | a threshold walked slowly off `time` rather than the beat, and a cord run backwards by a negative depth |
 | **Storm** | a `wave` snapped to the beat times a squared `random`, gating a contour cut out of a noise field — a strike that is rarely big and never the same size twice |
+| **Counterweight** | two lamps crossing in counter-motion over radial structure, with the set kept as a quiet layer rather than the picture it waits for |
+| **Glasshouse** | mirrored and folded architecture filled with slow clouds and light shafts, moving like a building breathing |
+| **Tidal glass** | caustics and metaballs moving at different depths under one shallow refraction |
+| **Star loom** | a bounded Julia orbit folded before it is drawn, so one expensive fractal becomes radial without a spread multiplying it |
+| **Switchyard** | a sample-held mechanical plate of cells, checker, edge and posterised bands |
 | **The lot** | three of the others as three nodes, one of them folded by a kaleidoscope that never touches its insides |
 
 Three of them are **portals**, and that is deliberate rather than repetition: `Deep` recedes,

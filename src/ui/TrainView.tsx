@@ -1,392 +1,451 @@
-import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type {
-  LabRoom,
-  LabScore,
+  LabCandidate,
+  LabArchiveSubmission,
+  LabComparisonChoice,
+  LabComparisonSubmission,
+  LabFinalsSubmission,
+  LabLineageFinalistSubmission,
   LabState,
-  LabSubmission,
   Scheme,
   Show,
 } from '../../protocol.ts';
-import { SCORES, dealRoom, promoteCandidate, submissionProblems } from '../../lab.ts';
+import { promoteCandidate, promotedCandidateId } from '../../lab.ts';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
-import { NumberField } from '@openflow/widgets/controls/NumberField.tsx';
-import { Select } from '@openflow/widgets/controls/Select.tsx';
+import type { Clock } from '../state/useShow.ts';
+import { useTransport, type Transport } from '../state/useTransport.ts';
 import { KEYS } from '../state/useRoom.ts';
-import { RESTING, type Clock } from '../state/useShow.ts';
-import { useTransport } from '../state/useTransport.ts';
-import { BPM, ENERGY, PERCENT } from './param.ts';
 import { Bench } from './Preview.tsx';
-import { CANDIDATE_FLOW, heardRoom, hexOf, parkedScheme, stagedShow } from './stage.ts';
-import { TagPicker } from './TagPicker.tsx';
+import { CANDIDATE_FLOW, parkedScheme, stagedShow } from './stage.ts';
+import { FinalsView } from './FinalsView.tsx';
+import { ArchiveView } from './ArchiveView.tsx';
 
-/**
- * The train view: one candidate at a time, judged like a dive.
- *
- * Not a second launcher and not an arena — candidates do not compete, because
- * a library whose owner likes many kinds of thing has no use for a single
- * ladder. The candidate gets the wall, the judge gives it an anchored score
- * and a useful account of the score, and the next candidate follows. The
- * judgments it writes are what the **review** tab browses afterwards.
- *
- * Everything here draws through the same `Bench` the designer judges flows on,
- * against a **frozen** scheme built from the candidate and its dependency
- * bundle — never the open one, so editing the library later cannot change what
- * an old judgment was looking at. The room is invented, dealt from a seed,
- * adjustable before scoring; whatever room is actually on screen rides the
- * submission, palette by value.
- *
- * **Or the room is the set.** The dealt room proves a candidate under
- * conditions nobody has to stage, but the litmus test is the real music — so
- * when a bridge is connected the source switch hands the stage to the live
- * show: the Link beat, the real meters riding the anchors, the section, the
- * key, the colourway that is actually up. The same rule as always decides
- * what a judgment freezes — the room on screen rides the submission — which
- * for the set means a sample taken at the moment of submit, palette by value,
- * with `live` where a dealt room carries its seed.
- *
- * Closing the view unmounts the `Bench`, which frees its compositor — the one
- * GL context this view owns. Nothing renders, and nothing is dealt, while the
- * view is closed.
- */
-export function TrainView({
-  show,
-  showRef,
-  clock,
-  canFollow,
-  scheme,
-  lab,
-  labOpen,
-  labReview,
-  labSkip,
-  edit,
-}: {
-  show: Show;
-  showRef: { readonly current: Show };
+const operationName = (operation: string): string =>
+  operation === 'random'
+    ? 'new family'
+    : operation === 'explore:leap'
+      ? 'exploratory leap'
+      : operation.replace(/^mutate:/, 'one change · ');
+
+/** Search discovers visual languages; Finals chooses a show-ready collection. */
+interface TrainViewProps {
   clock: Clock;
-  /** Whether there is a live show to judge against: a Link clock and a set. */
-  canFollow: boolean;
   scheme: Scheme;
   lab: LabState | null;
   labOpen(): void;
-  labReview(review: LabSubmission): void;
-  labSkip(candidateId: string): void;
+  labCompare(comparison: LabComparisonSubmission): void;
+  labSkipEncounter(encounterId: number): void;
+  labArchiveOpen(): void;
+  labArchiveSelect(candidateId: string): void;
+  labArchiveDecide(decision: LabArchiveSubmission): void;
+  labLineageFinalist(decision: LabLineageFinalistSubmission): void;
+  labFinalsOpen(): void;
+  labFinalsNew(): void;
+  labFinalsCompare(comparison: LabFinalsSubmission): void;
+  labFinalsSkip(encounterId: number): void;
+  edit(next: Scheme): void;
+}
+
+export function TrainView(props: TrainViewProps) {
+  const [mode, setMode] = useState<'search' | 'archive' | 'finals'>('search');
+  return (
+    <div className="train-workspace">
+      <nav className="train-mode" aria-label="Training stage">
+        <button type="button" aria-pressed={mode === 'search'} onClick={() => setMode('search')}>
+          search
+        </button>
+        <button type="button" aria-pressed={mode === 'archive'} onClick={() => setMode('archive')}>
+          archive
+        </button>
+        <button type="button" aria-pressed={mode === 'finals'} onClick={() => setMode('finals')}>
+          finals
+        </button>
+        <span>
+          {mode === 'search'
+            ? 'discover visual languages'
+            : mode === 'archive'
+              ? 'remember finished works'
+              : 'choose the show-ready collection'}
+        </span>
+      </nav>
+      <div className="train-workspace-body">
+        {mode === 'search' ? (
+          <SearchView
+            clock={props.clock}
+            scheme={props.scheme}
+            lab={props.lab}
+            labOpen={props.labOpen}
+            labCompare={props.labCompare}
+            labSkipEncounter={props.labSkipEncounter}
+            labArchiveDecide={props.labArchiveDecide}
+            edit={props.edit}
+          />
+        ) : mode === 'archive' ? (
+          <ArchiveView
+            clock={props.clock}
+            scheme={props.scheme}
+            archive={props.lab?.archive ?? null}
+            open={props.labArchiveOpen}
+            select={props.labArchiveSelect}
+            decide={props.labArchiveDecide}
+            finalist={props.labLineageFinalist}
+            edit={props.edit}
+          />
+        ) : (
+          <FinalsView
+            clock={props.clock}
+            scheme={props.scheme}
+            finals={props.lab?.finals ?? null}
+            open={props.labFinalsOpen}
+            newEdition={props.labFinalsNew}
+            compare={props.labFinalsCompare}
+            skip={props.labFinalsSkip}
+            edit={props.edit}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SearchView({
+  clock,
+  scheme,
+  lab,
+  labOpen,
+  labCompare,
+  labSkipEncounter,
+  labArchiveDecide,
+  edit,
+}: {
+  clock: Clock;
+  scheme: Scheme;
+  lab: LabState | null;
+  labOpen(): void;
+  labCompare(comparison: LabComparisonSubmission): void;
+  labSkipEncounter(encounterId: number): void;
+  labArchiveDecide(decision: LabArchiveSubmission): void;
   edit(next: Scheme): void;
 }) {
-  const candidate = lab?.candidate ?? null;
+  const encounter = lab?.encounter ?? null;
+  const [errors, setErrors] = useState<{ left: string | null; right: string | null }>({
+    left: null,
+    right: null,
+  });
+  const transport = useTransport(clock, false);
+  const kept = new Set(lab?.archive?.keptCandidateIds ?? []);
 
-  // Everything judged is keyed to the candidate on the wall: a new deal resets
-  // the room, the score, the tags and the note in one place, so a judgment can
-  // never be half about the previous candidate.
-  const [judging, setJudging] = useState<{
-    id: string | null;
-    room: LabRoom | null;
-    rooms: number;
-    score: LabScore | null;
-    tags: string[];
-    note: string;
-    promoted: boolean;
-  }>({ id: null, room: null, rooms: 0, score: null, tags: [], note: '', promoted: false });
-  const [benchError, setBenchError] = useState<string | null>(null);
+  useEffect(() => labOpen(), [labOpen]);
 
-  const transport = useTransport(clock, canFollow);
-  /** Judging against the set rather than the dealt room. Masked by `canFollow`. */
-  const live = transport.following;
-
+  const encounterId = encounter?.id ?? null;
   useEffect(() => {
-    labOpen();
-  }, [labOpen]);
-
-  // A new deal resets the judgment whole and re-tunes the clock to the dealt
-  // room, from the top of a bar — so every candidate is met the same way.
-  const dealtId = candidate?.id ?? null;
-  const dealtRoom = lab?.room ?? null;
-  useEffect(() => {
-    if (!dealtId) return;
-    const room = dealtRoom ?? dealRoom(`room:${dealtId}`);
-    setJudging({ id: dealtId, room, rooms: 0, score: null, tags: [], note: '', promoted: false });
-    transport.setBpm(room.tempo);
+    if (!encounter) return;
+    setErrors({ left: null, right: null });
+    transport.setBpm(encounter.room.tempo);
     transport.restart();
-  }, [dealtId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [encounterId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const room = judging.id === dealtId ? judging.room : null;
-
-  const parked = useMemo(
-    (): Scheme | null => (candidate ? parkedScheme(candidate.flow, candidate.bundle) : null),
-    [candidate],
-  );
-
-  const staged = useMemo(
-    (): Show => (room && candidate ? stagedShow(room, candidate.id) : RESTING),
-    [room, candidate],
-  );
-
-  const reroom = () => {
-    if (!candidate) return;
-    const next = dealRoom(`room:${candidate.id}~${judging.rooms + 1}`);
-    setJudging((held) => ({ ...held, room: next, rooms: held.rooms + 1 }));
-    transport.setBpm(next.tempo);
+  const choose = (choice: LabComparisonChoice) => {
+    if (encounter) labCompare({ encounterId: encounter.id, choice });
   };
 
-  const setRoom = (patch: Partial<LabRoom>) => {
-    setJudging((held) => (held.room ? { ...held, room: { ...held.room, ...patch } } : held));
-  };
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => {
+      if (
+        event.repeat ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        (event.target instanceof Element && event.target.matches('input, textarea, select'))
+      ) {
+        return;
+      }
+      const pressed = event.key.toLowerCase();
+      const choice =
+        event.key === 'ArrowLeft' || pressed === 'a'
+          ? 'left'
+          : event.key === 'ArrowRight' || pressed === 'd' || pressed === 'b'
+            ? 'right'
+            : event.key === 'ArrowUp' || pressed === 'w'
+              ? 'both'
+              : event.key === 'ArrowDown' || pressed === 'x'
+                ? 'neither'
+                : null;
+      if (choice) {
+        event.preventDefault();
+        choose(choice);
+      } else if (pressed === 's' && encounter) {
+        event.preventDefault();
+        labSkipEncounter(encounter.id);
+      } else if (pressed === 'r') {
+        event.preventDefault();
+        transport.restart();
+      }
+    };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, [encounterId, labCompare, labSkipEncounter]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const toggleTag = (id: string) => {
-    setJudging((held) => ({
-      ...held,
-      tags: held.tags.includes(id)
-        ? held.tags.filter((each) => each !== id)
-        : [...held.tags, id],
-    }));
-  };
-
-  const problems = submissionProblems({ score: judging.score, tags: judging.tags });
-
-  const submit = () => {
-    if (!candidate || !room || judging.score === null || problems.length > 0) return;
-    labReview({
-      candidateId: candidate.id,
-      // The room actually judged: the set as heard right now, or the dealt one.
-      room: live ? heardRoom(showRef.current) : room,
-      score: judging.score,
-      tags: judging.tags,
-      note: judging.note.trim() || undefined,
-    });
-  };
-
-  const promote = () => {
-    if (!candidate || judging.promoted) return;
-    edit(promoteCandidate(scheme, candidate).scheme);
-    setJudging((held) => ({ ...held, promoted: true }));
-  };
-
-  /** The train view's extra keys on the filter box: 1–5 scores, ⌘⏎ submits. */
-  const extraKeys = (event: KeyboardEvent<HTMLInputElement>, search: string): boolean => {
-    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-      event.preventDefault();
-      submit();
-      return true;
-    }
-    if (search === '' && event.key >= '1' && event.key <= '5') {
-      event.preventDefault();
-      const score = Number(event.key) as LabScore;
-      setJudging((held) => ({ ...held, score }));
-      return true;
-    }
-    return false;
-  };
-
-  if (!candidate || !room) {
+  if (!encounter) {
     return (
       <div className="train train-empty">
-        <p>{lab?.notice ?? 'waiting for the lab to deal a candidate…'}</p>
+        <p>{lab?.notice ?? 'building a distinct pair that compiles…'}</p>
         <Button onPress={labOpen}>ask again</Button>
       </div>
     );
   }
 
-  const nodes = candidate.flow.circuit.nodes.length;
-
-  // The row shows the room being judged: the set's own numbers while
-  // following — disabled, because the set owns them — and the dealt room's
-  // controls otherwise. The same derivation the designer's header makes.
-  const tempo = live ? show.tempo : room.tempo;
-  const bpm = Number.isInteger(tempo) ? tempo.toFixed(0) : tempo.toFixed(1);
-  const energy = live ? show.master : room.energy;
-  const sections = live ? (show.roles.length ? show.roles : ['—']) : room.sections;
-  const section = live ? (show.role ?? '—') : room.section;
-  const keyAt = live
-    ? show.key === null
-      ? 0
-      : (Math.round(show.key * 12) % 12) + 1
-    : room.key === null
-      ? 0
-      : room.key + 1;
-  const palette = live ? show.colors.map(hexOf) : room.colors;
-  const playing = live ? show.playing : transport.playing;
+  // One seed for both sides. A song node must not receive candidate A's hash on
+  // the left and candidate B's on the right or the room is not actually held.
+  const show = stagedShow(encounter.room, `encounter:${encounter.id}`);
+  const refining = encounter.phase === 'refine';
+  const leftLabel = refining ? 'current' : 'direction A';
+  const rightLabel = refining ? 'variation' : 'direction B';
+  const room = encounter.room;
+  const keyName = room.key === null ? 'no key' : KEYS[room.key] ?? 'no key';
 
   return (
-    <div className="train">
-      <div className="train-stage">
-        <div className="train-frame">
-          <Bench
-            show={staged}
-            scheme={parked!}
-            flow={CANDIDATE_FLOW}
-            clock={transport}
-            live={live ? showRef : null}
-            onError={setBenchError}
-          />
-        </div>
-        <div className="train-under">
-          <span className="train-name">{candidate.flow.name}</span>
-          <span className="train-provenance">
-            {nodes} node{nodes === 1 ? '' : 's'} · {candidate.method} v{candidate.methodVersion}
-            {candidate.seed ? ` · ${candidate.seed}` : ''} · {candidate.id.slice(0, 12)}
-          </span>
-          {benchError && <span className="train-error">{benchError}</span>}
-        </div>
-        <div className="train-room wdg">
+    <div className="train train-comparison" data-phase={encounter.phase}>
+      <section className="train-pair">
+        <CandidatePane
+          side="left"
+          label={leftLabel}
+          candidate={encounter.left}
+          show={show}
+          transport={transport}
+          scheme={scheme}
+          edit={edit}
+          error={errors.left}
+          setError={(error) => setErrors((held) => ({ ...held, left: error }))}
+          kept={kept.has(encounter.left.id)}
+          mark={(verdict) => labArchiveDecide({
+            candidateId: encounter.left.id,
+            verdict,
+            source: 'search',
+          })}
+        />
+        <CandidatePane
+          side="right"
+          label={rightLabel}
+          candidate={encounter.right}
+          show={show}
+          transport={transport}
+          scheme={scheme}
+          edit={edit}
+          error={errors.right}
+          setError={(error) => setErrors((held) => ({ ...held, right: error }))}
+          kept={kept.has(encounter.right.id)}
+          mark={(verdict) => labArchiveDecide({
+            candidateId: encounter.right.id,
+            verdict,
+            source: 'search',
+          })}
+        />
+
+        <div className="train-room train-room-frozen train-shared-room wdg">
           <Button
             tone="quiet"
-            label={playing ? 'Hold the clock' : 'Run the clock'}
-            title={live ? 'Live owns the clock' : undefined}
-            disabled={live}
+            label={transport.playing ? 'Hold both clocks' : 'Run both clocks'}
             onPress={() => transport.setPlaying(!transport.playing)}
           >
-            {playing ? '■' : '▶'}
+            {transport.playing ? '■' : '▶'}
           </Button>
-          <Button
-            tone="quiet"
-            label="Back to the top of the bar"
-            onPress={transport.restart}
-            disabled={live}
-          >
+          <Button tone="quiet" label="Restart both at the bar" onPress={transport.restart}>
             ↺
           </Button>
-          <NumberField
-            param={BPM}
-            value={tempo}
-            onChange={(next) => {
-              setRoom({ tempo: next });
-              transport.setBpm(next);
-            }}
-            name="tempo"
-            label="Room tempo"
-            display={`${bpm} bpm`}
-            width={62}
-            disabled={live}
-          />
-          <NumberField
-            param={ENERGY}
-            value={PERCENT.to(energy)}
-            onChange={(value) => setRoom({ energy: PERCENT.from(value) })}
-            name="energy"
-            width={48}
-            disabled={live}
-          />
-          <Select
-            items={[...sections]}
-            index={Math.max(0, sections.indexOf(section))}
-            onChange={(at) => setRoom({ section: room.sections[at] })}
-            name="section"
-            width={104}
-            disabled={live}
-          />
-          <Select
-            items={['—', ...KEYS]}
-            index={keyAt}
-            onChange={(at) => setRoom({ key: at === 0 ? null : at - 1 })}
-            name="key"
-            width={58}
-            disabled={live}
-            title="What a `song key` node reports; — states none"
-          />
-          <span
-            className="train-palette"
-            title={live ? 'the palette that is up' : `room ${room.seed}`}
-          >
-            {palette.map((hex, at) => (
+          <span>{Number.isInteger(room.tempo) ? room.tempo.toFixed(0) : room.tempo.toFixed(1)} bpm</span>
+          <span>{Math.round(room.energy * 100)}% energy</span>
+          <span>{room.section.toLowerCase()}</span>
+          <span>{keyName}</span>
+          <span className="train-palette" title={`comparison room ${room.seed}`}>
+            {room.colors.map((hex, at) => (
               <i key={`${hex}${at}`} style={{ background: hex }} />
             ))}
           </span>
-          <Button
-            tone="quiet"
-            onPress={reroom}
-            disabled={live}
-            title="Deal a different room for the same candidate"
-          >
-            another room
-          </Button>
-          <div className="room-source">
-            <span className="wdg-caption">source</span>
-            <div className="room-source-body" role="radiogroup" aria-label="Judging source">
-              <button
-                type="button"
-                role="radio"
-                aria-checked={!live}
-                data-on={!live ? '' : undefined}
-                title="The dealt room, controls yours"
-                onClick={() => transport.setFollowing(false)}
-              >
-                preview
-              </button>
-              <button
-                type="button"
-                role="radio"
-                aria-checked={live}
-                data-on={live ? '' : undefined}
-                disabled={!canFollow}
-                title={
-                  canFollow
-                    ? 'The real music, as it plays'
-                    : 'Nothing to follow — no bridge is connected'
-                }
-                onClick={() => transport.setFollowing(true)}
-              >
-                live
-              </button>
-            </div>
-          </div>
+          <span className="train-cohort">one clock · one room · one question</span>
         </div>
-      </div>
+      </section>
 
-      <div className="train-judgment wdg">
-        <section className="train-scores">
-          <h3>score</h3>
-          {SCORES.map(({ score, means }) => (
-            <button
-              key={score}
-              type="button"
-              className="train-score"
-              data-on={judging.score === score ? '' : undefined}
-              onClick={() => setJudging((held) => ({ ...held, score }))}
-            >
-              <b>{score}</b>
-              <span>{means}</span>
-            </button>
-          ))}
-        </section>
+      <aside className="train-choice train-compare-choice wdg">
+        <header>
+          <span className="train-phase">{encounter.phase}</span>
+          <span>depth {encounter.depth}</span>
+        </header>
+        <div>
+          <h2>
+            {refining ? 'Did the one change improve this family?' : 'Which direction deserves a future?'}
+          </h2>
+          <p>
+            {refining
+              ? 'Current and variation differ by one recorded intervention. Choose what should survive.'
+              : encounter.anchorId
+                ? 'Both are visible leaps from the same parent. Keep either, both, or neither.'
+                : 'These are deliberately distant immigrants. This chooses where search begins.'}
+          </p>
+          {encounter.anchorId && (
+            <p className="train-anchor">from {encounter.anchorId.slice(0, 10)}</p>
+          )}
+        </div>
 
-        <TagPicker
-          chosen={judging.tags}
-          toggle={toggleTag}
-          autoFocus
-          placeholder="find a tag — ⏎ adds · 1–5 score · ⌘⏎ submits"
-          onKeyExtra={extraKeys}
-        />
+        <div className="train-comparison-verbs" role="group" aria-label="Choose between the pair">
+          <Choice
+            choice="left"
+            keyName="← / A"
+            title={refining ? 'keep current' : 'choose A'}
+            detail={encounter.left.flow.name}
+            choose={choose}
+          />
+          <Choice
+            choice="both"
+            keyName="↑ / W"
+            title="keep both"
+            detail="preserve two branches"
+            choose={choose}
+          />
+          <Choice
+            choice="neither"
+            keyName="↓ / X"
+            title="neither"
+            detail="no winner manufactured"
+            choose={choose}
+          />
+          <Choice
+            choice="right"
+            keyName="→ / D"
+            title={refining ? 'take variation' : 'choose B'}
+            detail={encounter.right.flow.name}
+            choose={choose}
+          />
+        </div>
 
-        <textarea
-          className="train-note"
-          value={judging.note}
-          onChange={(event) => setJudging((held) => ({ ...held, note: event.target.value }))}
-          placeholder="a note, if one is worth keeping…"
-          aria-label="Review note"
-        />
+        <dl className="train-tally train-search-tally">
+          <div>
+            <dt>compared</dt>
+            <dd>{lab?.comparisons ?? 0}</dd>
+          </div>
+          <div>
+            <dt>explore / refine</dt>
+            <dd>{lab?.explores ?? 0} / {lab?.refines ?? 0}</dd>
+          </div>
+          <div>
+            <dt>frontier</dt>
+            <dd>{lab?.frontier ?? 0}</dd>
+          </div>
+          <div>
+            <dt>deepest</dt>
+            <dd>{lab?.maxGeneration ?? 0}</dd>
+          </div>
+        </dl>
 
         {lab?.notice && <p className="train-notice">{lab.notice}</p>}
-        {problems.length > 0 && judging.score !== null && (
-          <p className="train-gate">{problems.join(' · ')}</p>
-        )}
-
         <div className="train-verbs">
-          <Button onPress={submit} disabled={judging.score === null || problems.length > 0}>
-            submit · next
-          </Button>
-          <Button tone="quiet" onPress={() => labSkip(candidate.id)} title="Not a judgment — never a score">
-            skip
-          </Button>
-          <span className="gap" />
           <Button
             tone="quiet"
-            onPress={promote}
-            disabled={judging.promoted}
-            title="Copy this candidate into the open scheme — saved by the ordinary save"
+            onPress={() => labSkipEncounter(encounter.id)}
+            title="No comparison was formed — shortcut S"
           >
-            {judging.promoted ? 'promoted ✓' : 'promote to library'}
+            skip this pair
           </Button>
+          <span className="gap" />
+          <span className="train-restart-hint">R restarts both</span>
         </div>
-      </div>
+      </aside>
     </div>
+  );
+}
+
+function CandidatePane({
+  side,
+  label,
+  candidate,
+  show,
+  transport,
+  scheme,
+  edit,
+  error,
+  setError,
+  kept,
+  mark,
+}: {
+  side: 'left' | 'right';
+  label: string;
+  candidate: LabCandidate;
+  show: Show;
+  transport: Transport;
+  scheme: Scheme;
+  edit(next: Scheme): void;
+  error: string | null;
+  setError(error: string | null): void;
+  kept: boolean;
+  mark(verdict: 'keep' | 'clear'): void;
+}) {
+  const parked = useMemo(
+    () => parkedScheme(candidate.flow, candidate.bundle),
+    [candidate],
+  );
+  const promoted = useMemo(
+    () => promotedCandidateId(scheme, candidate) !== null,
+    [scheme, candidate],
+  );
+  const nodes = candidate.flow.circuit.nodes.length;
+  const copy = () => {
+    if (!promoted) edit(promoteCandidate(scheme, candidate).scheme);
+  };
+  return (
+    <article className="train-candidate" data-side={side}>
+      <header>
+        <span className="train-side">{label}</span>
+        <strong>{candidate.flow.name}</strong>
+        <button
+          type="button"
+          className="archive-star"
+          aria-pressed={kept}
+          onClick={() => mark(kept ? 'clear' : 'keep')}
+          title="Preserve this finished work independently of which direction wins"
+        >
+          {kept ? '★ kept' : '☆ keep'}
+        </button>
+        <Button tone="quiet" onPress={copy} disabled={promoted}>
+          {promoted ? 'copied ✓' : 'copy'}
+        </Button>
+      </header>
+      <div className="train-frame">
+        <Bench
+          show={show}
+          scheme={parked}
+          flow={CANDIDATE_FLOW}
+          clock={transport}
+          onError={setError}
+        />
+      </div>
+      <footer>
+        <span>
+          {nodes} nodes · generation {candidate.generation} · {operationName(candidate.operation)}
+        </span>
+        {error && <span className="train-error">{error}</span>}
+      </footer>
+    </article>
+  );
+}
+
+function Choice({
+  choice,
+  keyName,
+  title,
+  detail,
+  choose,
+}: {
+  choice: LabComparisonChoice;
+  keyName: string;
+  title: string;
+  detail: string;
+  choose(choice: LabComparisonChoice): void;
+}) {
+  return (
+    <button type="button" data-choice={choice} onClick={() => choose(choice)}>
+      <kbd>{keyName}</kbd>
+      <b>{title}</b>
+      <small>{detail}</small>
+    </button>
   );
 }

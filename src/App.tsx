@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { schemeLabel } from '../protocol.ts';
 import { createCompositor, type Compositor } from './render/compositor.ts';
 import { useOutput } from './state/useOutput.ts';
 import { useShow, type Clock } from './state/useShow.ts';
@@ -42,8 +43,16 @@ export function App() {
     nextColorway,
     lab,
     labOpen,
-    labReview,
-    labSkip,
+    labCompare,
+    labSkipEncounter,
+    labArchiveOpen,
+    labArchiveSelect,
+    labArchiveDecide,
+    labLineageFinalist,
+    labFinalsOpen,
+    labFinalsNew,
+    labFinalsCompare,
+    labFinalsSkip,
     labOffer,
     labLog,
     labLogOpen,
@@ -232,7 +241,7 @@ export function App() {
             <dd>{show.role ?? '—'}</dd>
             <dt>scheme</dt>
             <dd className="wide">
-              {library ? `${library.current}${library.dirty ? ' *' : ''}` : '—'}
+              {library ? `${schemeLabel(library.current)}${library.dirty ? ' *' : ''}` : '—'}
             </dd>
             <dt>flow</dt>
             <dd className="wide">
@@ -287,7 +296,6 @@ export function App() {
         <Boundary what="the console">
           <Console
             show={show}
-            showRef={showRef}
             scheme={scheme}
             library={library}
             media={media}
@@ -298,8 +306,16 @@ export function App() {
             loadScheme={loadScheme}
             lab={lab}
             labOpen={labOpen}
-            labReview={labReview}
-            labSkip={labSkip}
+            labCompare={labCompare}
+            labSkipEncounter={labSkipEncounter}
+            labArchiveOpen={labArchiveOpen}
+            labArchiveSelect={labArchiveSelect}
+            labArchiveDecide={labArchiveDecide}
+            labLineageFinalist={labLineageFinalist}
+            labFinalsOpen={labFinalsOpen}
+            labFinalsNew={labFinalsNew}
+            labFinalsCompare={labFinalsCompare}
+            labFinalsSkip={labFinalsSkip}
             labOffer={labOffer}
             labLog={labLog}
             labLogOpen={labLogOpen}

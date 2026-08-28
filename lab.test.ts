@@ -4,6 +4,7 @@ import {
   canonicalCandidate,
   dealRoom,
   promoteCandidate,
+  promotedCandidateId,
   submissionProblems,
 } from './lab.ts';
 import type { FlowDef, LabCandidate, LabScore, Scheme } from './protocol.ts';
@@ -162,6 +163,10 @@ describe('promotion', () => {
     method: 'fresh',
     methodVersion: 1,
     seed: 'x:0',
+    parentId: null,
+    operation: 'fresh',
+    generation: 0,
+    cohort: 'room:abcdef1234567890',
   };
 
   it('adds the candidate and its bundle and touches nothing else', () => {
@@ -172,10 +177,12 @@ describe('promotion', () => {
     expect(next.rotation).toEqual(scheme.rotation);
     expect(next.defaults).toEqual(scheme.defaults);
     expect(scheme.flows[id]).toBeUndefined();
+    expect(promotedCandidateId(scheme, shaped)).toBeNull();
+    expect(promotedCandidateId(next, shaped)).toBe(id);
   });
 
   it('lands a colliding bundle id somewhere free and rewires the graph to it', () => {
-    const { scheme: next, id } = promoteCandidate(scheme, {
+    const colliding = {
       ...candidate,
       flow: {
         ...candidate.flow,
@@ -186,11 +193,33 @@ describe('promotion', () => {
           ),
         },
       },
-    });
+    };
+    const { scheme: next, id } = promoteCandidate(scheme, colliding);
     expect(next.flows['held'].name).toBe('Held');
     expect(next.flows['held-2'].name).toBe('Bundled inner');
     const promoted = next.flows[id];
     const flowNode = promoted.circuit.nodes.find((node) => node.kind === 'flow');
     expect(flowNode?.op).toBe('held-2');
+    expect(promotedCandidateId(next, colliding)).toBe(id);
+  });
+
+  it('stops calling a copy promoted after its visual behaviour is developed', () => {
+    const { scheme: next, id } = promoteCandidate(scheme, candidate);
+    const changed: Scheme = {
+      ...next,
+      flows: {
+        ...next.flows,
+        [id]: {
+          ...next.flows[id],
+          circuit: {
+            ...next.flows[id].circuit,
+            nodes: next.flows[id].circuit.nodes.map((node) =>
+              node.kind === 'flow' ? { ...node, op: 'held' } : node,
+            ),
+          },
+        },
+      },
+    };
+    expect(promotedCandidateId(changed, candidate)).toBeNull();
   });
 });

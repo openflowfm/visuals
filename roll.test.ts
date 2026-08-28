@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { compileCircuit, valuesOf, MAX_VALUES } from './src/render/circuit.ts';
 import type { Scheme, Show, Track } from './protocol.ts';
-import { BUILT_IN } from './server/scheme.ts';
+import { EXAMPLES } from './server/scheme.ts';
 import { newSeed, rollCircuit, rollScheme } from './roll.ts';
 
 /**
@@ -62,7 +62,7 @@ const SHOW: Show = {
 };
 
 const seeds = Array.from({ length: 40 }, (_, i) => `seed-${i}`);
-const rolled = (seed: string): Scheme => rollScheme(seed, SHOW, BUILT_IN);
+const rolled = (seed: string): Scheme => rollScheme(seed, SHOW, EXAMPLES);
 
 describe('a roll is a library', () => {
   it('names only colourways it defined', () => {
@@ -103,7 +103,7 @@ describe('a roll is a library', () => {
     // down an exception nobody asked for, which is exactly the noise the
     // cascade used to generate.
     for (const seed of seeds) {
-      expect(Object.keys(rolled(seed).songs), seed).toEqual(Object.keys(BUILT_IN.songs));
+      expect(Object.keys(rolled(seed).songs), seed).toEqual(Object.keys(EXAMPLES.songs));
     }
   });
 
@@ -147,7 +147,7 @@ const apart = (a: number, b: number) => {
 
 describe('a rolled colourway', () => {
   const rolled = seeds.flatMap((seed) =>
-    Object.entries(rollScheme(seed, SHOW, BUILT_IN, ['colours']).colorways).map(
+    Object.entries(rollScheme(seed, SHOW, EXAMPLES, ['colours']).colorways).map(
       ([name, colours]) => [`${seed} ${name}`, colours] as const,
     ),
   );
@@ -315,17 +315,17 @@ describe('rolled flows', () => {
   it('does not pile up across rolls', () => {
     // A week of rolling would otherwise leave forty of them, and the wheel would
     // spend most of its time on flows nobody chose.
-    let scheme = BUILT_IN;
+    let scheme = EXAMPLES;
     for (const seed of seeds.slice(0, 10)) scheme = rollScheme(seed, SHOW, scheme);
     expect(Object.values(scheme.flows).filter((d) => d.rolled)).toHaveLength(4);
     // And the ones that ship are still there to take apart.
-    for (const id of Object.keys(BUILT_IN.flows)) expect(scheme.flows[id], id).toBeDefined();
+    for (const id of Object.keys(EXAMPLES.flows)) expect(scheme.flows[id], id).toBeDefined();
   });
 });
 
 describe('rolling part of a library', () => {
   it('leaves a part it was not asked for exactly as it was', () => {
-    const settled = rollScheme('oak-ember-12', SHOW, BUILT_IN);
+    const settled = rollScheme('oak-ember-12', SHOW, EXAMPLES);
     const again = rollScheme('rust-cobalt-99', SHOW, settled, ['flows']);
     expect(again.colorways).toEqual(settled.colorways);
     expect(again.rotation).toEqual(settled.rotation);
@@ -336,13 +336,13 @@ describe('rolling part of a library', () => {
   it('gives the same answer for a part however much else was rolled with it', () => {
     // The whole worth of a seed. If keeping the colours gave different colours
     // from rolling everything, a seed written on a hand would be worth nothing.
-    const whole = rollScheme('glass-drift-576', SHOW, BUILT_IN);
-    const part = rollScheme('glass-drift-576', SHOW, BUILT_IN, ['colours']);
+    const whole = rollScheme('glass-drift-576', SHOW, EXAMPLES);
+    const part = rollScheme('glass-drift-576', SHOW, EXAMPLES, ['colours']);
     expect(part.colorways).toEqual(whole.colorways);
   });
 
   it('never points the fallback at a colourway that is not there', () => {
-    const settled = rollScheme('oak-ember-12', SHOW, BUILT_IN);
+    const settled = rollScheme('oak-ember-12', SHOW, EXAMPLES);
     const again = rollScheme('rust-cobalt-99', SHOW, settled, ['flows']);
     expect(again.colorways).toHaveProperty(again.defaults.colorway);
     expect(again.flows).toHaveProperty(again.defaults.flow);
@@ -353,9 +353,9 @@ describe('rolling part of a library', () => {
     // that one level of undo covers it, and one level of undo does not make
     // losing an evening's work acceptable.
     const mine = {
-      ...BUILT_IN,
+      ...EXAMPLES,
       flows: {
-        ...BUILT_IN.flows,
+        ...EXAMPLES.flows,
         mine: { name: 'Mine', circuit: { nodes: [], cords: [] } },
         old: { name: 'Old', circuit: { nodes: [], cords: [] }, rolled: true },
       },

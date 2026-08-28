@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Circuit, Scheme } from '../../protocol.ts';
-import { BUILT_IN } from '../../server/scheme.ts';
+import { EXAMPLES } from '../../server/scheme.ts';
 import { inletsOf, starterCircuit } from '../render/circuit.ts';
 import { clearValue, dropNode, forkFlow, setValue, setNode } from './edits.ts';
 import { palette } from './nodes.ts';
@@ -165,7 +165,7 @@ describe('a value set on an inlet', () => {
     // A spread is one level deep, so the two graphs shared one map: turning a
     // number on the fork turned it on the flow it came from, which reads as the
     // original having been edited by a copy nobody had opened yet.
-    const one = { ...(BUILT_IN as Scheme), flows: { one: { name: 'One', circuit: posterized() } } };
+    const one = { ...(EXAMPLES as Scheme), flows: { one: { name: 'One', circuit: posterized() } } };
     const made = forkFlow(one, 'one');
     const copy = made.scheme.flows[made.id].circuit;
     const turned = setValue(copy, 'e', 'waves', 0.1);

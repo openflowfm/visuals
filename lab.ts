@@ -2,8 +2,11 @@ import type {
   Circuit,
   FlowDef,
   LabCandidate,
+  LabComparisonChoice,
+  LabEncounterPhase,
   LabRoom,
   LabScore,
+  LabVerdict,
   Scheme,
 } from './protocol.ts';
 import { flowsUsedBy } from './protocol.ts';
@@ -374,7 +377,7 @@ export function dealRoom(seed: string): LabRoom {
  */
 export function promoteCandidate(
   scheme: Scheme,
-  candidate: LabCandidate,
+  candidate: Pick<LabCandidate, 'id' | 'flow' | 'bundle'>,
 ): { scheme: Scheme; id: string } {
   const taken = new Set(Object.keys(scheme.flows));
   const free = (want: string): string => {
@@ -413,12 +416,50 @@ export function promoteCandidate(
   return { id, scheme: { ...scheme, flows } };
 }
 
+/**
+ * The copy of a candidate already present in this scheme, if there is one.
+ *
+ * Promotion's id is the durable mark: a hand-built flow that happens to draw
+ * the same graph is still its own work. The behaviour check keeps the mark
+ * honest after somebody develops the copied flow — once it no longer matches
+ * what the lab froze, the original candidate may be copied again.
+ */
+export function promotedCandidateId(
+  scheme: Scheme,
+  candidate: Pick<LabCandidate, 'id' | 'flow' | 'bundle'>,
+): string | null {
+  const base = `lab-${candidate.id.slice(0, 8)}`;
+  const frozen = canonicalCandidate(candidate.flow, candidate.bundle);
+  for (const [id, flow] of Object.entries(scheme.flows)) {
+    if (id !== base && !id.startsWith(`${base}-`)) continue;
+    if (canonicalCandidate(flow, bundleOf(scheme.flows, flow)) === frozen) return id;
+  }
+  return null;
+}
+
 // --- the method boundary --------------------------------------------------
+
+/** One candidate as a generation method may read it from the corpus. */
+export interface EvidenceCandidate {
+  id: string;
+  flow: FlowDef;
+  bundle: Record<string, FlowDef>;
+  parentId: string | null;
+  operation: string;
+  generation: number;
+  cohort: string;
+  verdict: LabVerdict | null;
+  /** Monotonic selection id; null while the candidate is pending or skipped. */
+  selectedAt: number | null;
+}
 
 /** What a method reads about the corpus. Grows; never lets a method write. */
 export interface EvidenceView {
   reviewed: number;
   skipped: number;
+  liked: number;
+  rejected: number;
+  candidates: EvidenceCandidate[];
 }
 
 export interface CandidateDraft {
@@ -428,7 +469,17 @@ export interface CandidateDraft {
   parents: string[];
   /** The generation operation, e.g. `fresh`, `mutate:swap-mode`. */
   operation: string;
+  /** The exact operation operands, kept so a mutation can be replayed. */
+  operationData?: unknown;
+  /** Zero for a fresh seed; normally its parent's generation plus one. */
+  generation?: number;
+  /** The room seed shared by candidates which should be compared directly. */
+  cohort?: string;
 }
+
+export type LabObservation =
+  | { kind: 'review'; score: LabScore }
+  | { kind: 'selection'; verdict: LabVerdict };
 
 /**
  * Generation policy, behind the one boundary the lab admits it through.
@@ -448,7 +499,99 @@ export interface LabMethod<State> {
     budget: number,
     rng: () => number,
   ): CandidateDraft[];
-  observe(state: State, completed: { score: LabScore }[]): State;
+  observe(state: State, completed: LabObservation[]): State;
+}
+
+/** One persisted pair as a recursive search method reads it. */
+export interface EvidenceComparison {
+  id: number;
+  phase: LabEncounterPhase;
+  anchorId: string | null;
+  leftId: string;
+  rightId: string;
+  depth: number;
+  disposition: 'pending' | 'compared' | 'skipped';
+  choice: LabComparisonChoice | null;
+  /** Monotonic comparison id, null until the pair is answered. */
+  decidedAt: number | null;
+}
+
+/** The append-only facts available to an encounter scheduler. */
+export interface SearchEvidence extends EvidenceView {
+  comparisons: EvidenceComparison[];
+}
+
+/** One nominee frozen into a Finals run. */
+export interface FinalsNomineeEvidence {
+  candidate: EvidenceCandidate;
+  seedScore: number;
+  selectedOrder: number;
+}
+
+/** Latest absolute preservation state for one accepted candidate. */
+export interface ArchiveDecisionEvidence {
+  candidateId: string;
+  verdict: 'keep' | 'pass' | 'clear';
+  source: 'search' | 'archive';
+  decidedAt: number;
+}
+
+/** One durable Finals match as selection and ranking read it. */
+export interface FinalsComparisonEvidence {
+  id: number;
+  leftId: string;
+  rightId: string;
+  roomIndex: number;
+  disposition: 'pending' | 'compared' | 'skipped';
+  choice: LabComparisonChoice | null;
+  leftShowReady: boolean;
+  rightShowReady: boolean;
+}
+
+/** One side may reuse an archive candidate or introduce a new descendant. */
+export type EncounterSideDraft =
+  | { kind: 'existing'; candidateId: string }
+  | { kind: 'draft'; candidate: CandidateDraft };
+
+/** A pair proposed by a method; the engine owns identity, validation and room. */
+export interface LabEncounterDraft {
+  phase: LabEncounterPhase;
+  anchorId: string | null;
+  left: EncounterSideDraft;
+  right: EncounterSideDraft;
+  depth: number;
+}
+
+export interface LabSearchSummary {
+  frontier: number;
+  maxGeneration: number;
+}
+
+/**
+ * Recursive comparison policy. Unlike the legacy single-candidate method, it
+ * proposes whole questions so persistence can retain what was compared rather
+ * than inferring it from presentation order.
+ */
+export interface LabSearchMethod<State> {
+  readonly id: string;
+  readonly version: number;
+  start(): State;
+  next(
+    state: State,
+    evidence: SearchEvidence,
+    rng: () => number,
+  ): LabEncounterDraft | null;
+  /** Optional immediate question around a hand-authored candidate. */
+  around?(
+    candidate: EvidenceCandidate,
+    evidence: SearchEvidence,
+    rng: () => number,
+  ): LabEncounterDraft | null;
+  observe(
+    state: State,
+    completed: { phase: LabEncounterPhase; choice: LabComparisonChoice }[],
+  ): State;
+  summarize(evidence: SearchEvidence): LabSearchSummary;
 }
 
 export { seeded };

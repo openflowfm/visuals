@@ -107,6 +107,85 @@ describe('reading a message off the socket', () => {
     );
   });
 
+  it('takes only a complete binary train decision', () => {
+    const selection = { candidateId: 'a', verdict: 'up' };
+    expect(wire({ kind: 'lab-select', selection }).ok).toBe(true);
+    expect(wire({ kind: 'lab-select', selection: { ...selection, verdict: 'down' } }).ok).toBe(
+      true,
+    );
+    expect(wire({ kind: 'lab-select', selection: { candidateId: 'a' } }).ok).toBe(
+      false,
+    );
+    expect(wire({ kind: 'lab-select', selection: { ...selection, verdict: 'maybe' } }).ok).toBe(
+      false,
+    );
+  });
+
+  it('takes one explicit pair answer, including both and neither', () => {
+    for (const choice of ['left', 'right', 'both', 'neither']) {
+      expect(
+        wire({ kind: 'lab-compare', comparison: { encounterId: 7, choice } }).ok,
+      ).toBe(true);
+    }
+    expect(
+      wire({ kind: 'lab-compare', comparison: { encounterId: 0, choice: 'left' } }).ok,
+    ).toBe(false);
+    expect(
+      wire({ kind: 'lab-compare', comparison: { encounterId: 7, choice: 'better' } }).ok,
+    ).toBe(false);
+    expect(wire({ kind: 'lab-skip-encounter', encounterId: 7 }).ok).toBe(true);
+    expect(wire({ kind: 'lab-skip-encounter', encounterId: '7' }).ok).toBe(false);
+  });
+
+  it('keeps Finals preference and show-readiness in one complete gesture', () => {
+    expect(wire({ kind: 'lab-finals-open' }).ok).toBe(true);
+    expect(wire({ kind: 'lab-finals-new' }).ok).toBe(true);
+    const comparison = {
+      encounterId: 9,
+      choice: 'both',
+      leftShowReady: true,
+      rightShowReady: false,
+    };
+    expect(wire({ kind: 'lab-finals-compare', comparison }).ok).toBe(true);
+    expect(
+      wire({
+        kind: 'lab-finals-compare',
+        comparison: { ...comparison, leftShowReady: 'yes' },
+      }).ok,
+    ).toBe(false);
+    expect(
+      wire({ kind: 'lab-finals-compare', comparison: { encounterId: 9, choice: 'left' } }).ok,
+    ).toBe(false);
+    expect(wire({ kind: 'lab-finals-skip', encounterId: 9 }).ok).toBe(true);
+  });
+
+  it('takes only a complete absolute Archive judgment', () => {
+    expect(wire({ kind: 'lab-archive-open' }).ok).toBe(true);
+    expect(wire({ kind: 'lab-archive-select', candidateId: 'candidate' }).ok).toBe(true);
+    for (const verdict of ['keep', 'pass', 'clear']) {
+      expect(wire({
+        kind: 'lab-archive-decide',
+        decision: { candidateId: 'candidate', verdict, source: 'archive' },
+      }).ok).toBe(true);
+    }
+    expect(wire({
+      kind: 'lab-archive-decide',
+      decision: { candidateId: 'candidate', verdict: 'keep' },
+    }).ok).toBe(false);
+    expect(wire({
+      kind: 'lab-archive-decide',
+      decision: { candidateId: 'candidate', verdict: 'favorite', source: 'search' },
+    }).ok).toBe(false);
+    expect(wire({
+      kind: 'lab-lineage-finalist',
+      decision: { candidateId: 'candidate', finalist: true },
+    }).ok).toBe(true);
+    expect(wire({
+      kind: 'lab-lineage-finalist',
+      decision: { candidateId: 'candidate', finalist: 'yes' },
+    }).ok).toBe(false);
+  });
+
   it('holds the score to the five the corpus is anchored on', () => {
     for (const score of [1, 2, 3, 4, 5]) {
       expect(wire({ kind: 'lab-rescore', reviewId: 1, score }).ok).toBe(true);

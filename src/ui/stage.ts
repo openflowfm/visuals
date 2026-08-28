@@ -47,7 +47,7 @@ export function parkedScheme(flow: FlowDef, bundle: Record<string, FlowDef>): Sc
 }
 
 /** A room as a `Show`, which is all the renderer understands. */
-export function stagedShow(room: LabRoom, candidateId: string): Show {
+export function stagedShow(room: LabRoom, songSeed: string): Show {
   const colors = (room.colors.length ? room.colors : ['#ffffff']).map(packColor);
   return {
     ...RESTING,
@@ -56,9 +56,10 @@ export function stagedShow(room: LabRoom, candidateId: string): Show {
     quantum: room.quantum,
     master: room.energy,
     colors,
-    // The candidate id, so a `song seed` node reads a number that is stable
-    // for this candidate and different for the next one.
-    song: candidateId,
+    // Reviews pass a candidate id; comparisons pass one encounter id to both
+    // sides. Either way a `song seed` node is reproducible without becoming a
+    // hidden difference inside a controlled pair.
+    song: songSeed,
     key: room.key === null ? null : room.key / 12,
     role: room.section,
     roles: [...room.sections],

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { EXAMPLES_SCHEME_ID } from '../protocol.ts';
 
 /**
  * Where the schemes live: `~/.openflow/visuals/schemes/<id>.json`.
@@ -27,7 +28,7 @@ export function openflowHome(): string {
 export const SCHEME_ID = /^[a-z][a-z0-9_-]*$/;
 
 export interface SchemePlace {
-  /** The open scheme's file. */
+  /** The open scheme's file, or its unused address while system Examples is open. */
   file: string;
   /** Its id, which is the filename without `.json`. */
   id: string;
@@ -48,8 +49,9 @@ export interface SchemePlace {
  * Otherwise the library directory is created here rather than at first write,
  * because the watcher in `library.ts` watches the *directory*, and a directory
  * that does not exist yet would silently cost the hot reload. `state.json`
- * says which scheme is open; an id it holds that is not a plain filename is
- * ignored rather than resolved, because this path is joined onto.
+ * says which scheme is open; an id it holds that is neither a plain filename
+ * nor the one system scheme is ignored rather than resolved, because this path
+ * is joined onto.
  *
  * A scheme from before the library is adopted into it as `main` — the single
  * `~/.openflow/visuals/scheme.json` an earlier version kept, or the
@@ -73,7 +75,12 @@ export function schemePlace(legacy = path.resolve(here, '../scheme.json')): Sche
   let id = 'main';
   try {
     const state = JSON.parse(fs.readFileSync(stateFile, 'utf8')) as { scheme?: string };
-    if (typeof state.scheme === 'string' && SCHEME_ID.test(state.scheme)) id = state.scheme;
+    if (
+      typeof state.scheme === 'string' &&
+      (SCHEME_ID.test(state.scheme) || state.scheme === EXAMPLES_SCHEME_ID)
+    ) {
+      id = state.scheme;
+    }
   } catch {
     // No state yet, or an unreadable one: `main` is where every library starts.
   }
@@ -89,9 +96,13 @@ export function schemePlace(legacy = path.resolve(here, '../scheme.json')): Sche
   return { file, id, dir, stateFile };
 }
 
-/** The open scheme's file alone, which is all the MCP entry needs. */
+/** The open user scheme's file alone, which is all the MCP entry needs. */
 export function schemeFile(legacy?: string): string {
-  return schemePlace(legacy).file;
+  const place = schemePlace(legacy);
+  if (place.dir && place.id === EXAMPLES_SCHEME_ID) {
+    throw new Error('Examples is read-only — save it under a new scheme name before authoring');
+  }
+  return place.file;
 }
 
 export interface LabPlace {

@@ -4,8 +4,13 @@ import type {
   CalibrationSubmission,
   Down,
   FlowDef,
+  LabArchiveSubmission,
+  LabComparisonSubmission,
+  LabFinalsSubmission,
+  LabLineageFinalistSubmission,
   LabReviewRow,
   LabScore,
+  LabSelection,
   LabState,
   LabSubmission,
   Library,
@@ -101,10 +106,32 @@ export function useShow(): {
   nextFlow(): void;
   /** The mirror gesture: turn only the colourway wheel once. */
   nextColorway(): void;
-  /** The review queue, or null until the review view has asked for it. */
+  /** The active lab search, or null until Train has asked for it. */
   lab: LabState | null;
   /** Ask for the queue's state. The one thing that makes the server deal. */
   labOpen(): void;
+  /** One historical binary preference, retained for old method clients. */
+  labSelect(selection: LabSelection): void;
+  /** One explicit Explore or Refine comparison. */
+  labCompare(comparison: LabComparisonSubmission): void;
+  /** No preference was formed for this pair. */
+  labSkipEncounter(encounterId: number): void;
+  /** Open historical preservation replay without generating anything. */
+  labArchiveOpen(): void;
+  /** Focus one historical candidate from the lineage forest. */
+  labArchiveSelect(candidateId: string): void;
+  /** Preserve, pass, or clear one absolute finished-work judgment. */
+  labArchiveDecide(decision: LabArchiveSubmission): void;
+  /** Set or clear the representative chosen for one lineage. */
+  labLineageFinalist(decision: LabLineageFinalistSubmission): void;
+  /** Freeze/open the diverse playoff for this search experiment. */
+  labFinalsOpen(): void;
+  /** Freeze a new playoff edition from the current archive. */
+  labFinalsNew(): void;
+  /** One Finals preference plus independent show-readiness marks. */
+  labFinalsCompare(comparison: LabFinalsSubmission): void;
+  /** No Finals comparison was formed for this pair. */
+  labFinalsSkip(encounterId: number): void;
   /** One judgment, whole. The server answers with the advanced queue. */
   labReview(review: LabSubmission): void;
   /** "I did not judge this." Never a score. */
@@ -368,6 +395,83 @@ export function useShow(): {
     if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ kind: 'lab-open' }));
   }).current;
 
+  const labSelect = useRef((selection: LabSelection) => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'lab-select', selection }));
+    }
+  }).current;
+
+  const labCompare = useRef((comparison: LabComparisonSubmission) => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'lab-compare', comparison }));
+    }
+  }).current;
+
+  const labSkipEncounter = useRef((encounterId: number) => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'lab-skip-encounter', encounterId }));
+    }
+  }).current;
+
+  const labArchiveOpen = useRef(() => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'lab-archive-open' }));
+    }
+  }).current;
+
+  const labArchiveSelect = useRef((candidateId: string) => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'lab-archive-select', candidateId }));
+    }
+  }).current;
+
+  const labArchiveDecide = useRef((decision: LabArchiveSubmission) => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'lab-archive-decide', decision }));
+    }
+  }).current;
+
+  const labLineageFinalist = useRef((decision: LabLineageFinalistSubmission) => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'lab-lineage-finalist', decision }));
+    }
+  }).current;
+
+  const labFinalsOpen = useRef(() => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'lab-finals-open' }));
+    }
+  }).current;
+
+  const labFinalsNew = useRef(() => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'lab-finals-new' }));
+    }
+  }).current;
+
+  const labFinalsCompare = useRef((comparison: LabFinalsSubmission) => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'lab-finals-compare', comparison }));
+    }
+  }).current;
+
+  const labFinalsSkip = useRef((encounterId: number) => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'lab-finals-skip', encounterId }));
+    }
+  }).current;
+
   const labReview = useRef((review: LabSubmission) => {
     const socket = live.current;
     if (socket?.readyState === WebSocket.OPEN) {
@@ -457,6 +561,17 @@ export function useShow(): {
     nextColorway,
     lab,
     labOpen,
+    labCompare,
+    labSkipEncounter,
+    labArchiveOpen,
+    labArchiveSelect,
+    labArchiveDecide,
+    labLineageFinalist,
+    labFinalsOpen,
+    labFinalsNew,
+    labFinalsCompare,
+    labFinalsSkip,
+    labSelect,
     labReview,
     labSkip,
     labOffer,

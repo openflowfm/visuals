@@ -53,6 +53,37 @@ const SUBMISSION = z.object({
   note: z.string().optional(),
 });
 
+const SELECTION = z.object({
+  candidateId: z.string(),
+  verdict: z.union([z.literal('up'), z.literal('down')]),
+});
+
+const COMPARISON = z.object({
+  encounterId: z.number().int().positive(),
+  choice: z.union([
+    z.literal('left'),
+    z.literal('right'),
+    z.literal('both'),
+    z.literal('neither'),
+  ]),
+});
+
+const FINALS_COMPARISON = COMPARISON.extend({
+  leftShowReady: z.boolean(),
+  rightShowReady: z.boolean(),
+});
+
+const ARCHIVE_DECISION = z.object({
+  candidateId: z.string(),
+  verdict: z.union([z.literal('keep'), z.literal('pass'), z.literal('clear')]),
+  source: z.union([z.literal('search'), z.literal('archive')]),
+});
+
+const LINEAGE_FINALIST = z.object({
+  candidateId: z.string(),
+  finalist: z.boolean(),
+});
+
 const RESPONSE = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('linear'), min: z.number(), max: z.number(), unit: z.string() }),
   z.object({
@@ -99,6 +130,17 @@ const UP = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('next-flow') }),
   z.object({ kind: z.literal('next-colorway') }),
   z.object({ kind: z.literal('lab-open') }),
+  z.object({ kind: z.literal('lab-compare'), comparison: COMPARISON }),
+  z.object({ kind: z.literal('lab-skip-encounter'), encounterId: z.number().int().positive() }),
+  z.object({ kind: z.literal('lab-archive-open') }),
+  z.object({ kind: z.literal('lab-archive-select'), candidateId: z.string() }),
+  z.object({ kind: z.literal('lab-archive-decide'), decision: ARCHIVE_DECISION }),
+  z.object({ kind: z.literal('lab-lineage-finalist'), decision: LINEAGE_FINALIST }),
+  z.object({ kind: z.literal('lab-finals-open') }),
+  z.object({ kind: z.literal('lab-finals-new') }),
+  z.object({ kind: z.literal('lab-finals-compare'), comparison: FINALS_COMPARISON }),
+  z.object({ kind: z.literal('lab-finals-skip'), encounterId: z.number().int().positive() }),
+  z.object({ kind: z.literal('lab-select'), selection: SELECTION }),
   z.object({ kind: z.literal('lab-review'), review: SUBMISSION }),
   z.object({ kind: z.literal('lab-skip'), candidateId: z.string() }),
   z.object({ kind: z.literal('lab-offer'), flowId: z.string() }),

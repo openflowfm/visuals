@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FlowDef, LabReviewRow, LabScore, Scheme, Show } from '../../protocol.ts';
-import { SCORES } from '../../lab.ts';
+import { SCORES, promoteCandidate, promotedCandidateId } from '../../lab.ts';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { RESTING } from '../state/useShow.ts';
 import { useTransport } from '../state/useTransport.ts';
@@ -9,8 +9,10 @@ import { CANDIDATE_FLOW, parkedScheme, stagedShow } from './stage.ts';
 import { TagPicker } from './TagPicker.tsx';
 
 /**
- * The review tab: the corpus, browsable — every judgment the train view has
- * written, newest first, re-staged on the bench exactly as it was seen.
+ * The review tab: the detailed corpus, browsable — every anchored judgment
+ * preserved from the slower review workflow, newest first, re-staged on the
+ * bench exactly as it was seen. Binary train decisions live beside rather than
+ * inside this rubric and do not manufacture rows here.
  *
  * The split this tab lives on: the **judgment** — candidate, room, score,
  * when — is immutable, and nothing here can touch it. The **description** —
@@ -32,6 +34,8 @@ export function ReviewsView({
   labRenote,
   labStage,
   labCandidate,
+  scheme,
+  edit,
 }: {
   labLog: { reviews: LabReviewRow[]; more: boolean } | null;
   labLogOpen(before?: number): void;
@@ -40,6 +44,9 @@ export function ReviewsView({
   labRenote(reviewId: number, note: string): void;
   labStage: { id: string; flow: FlowDef; bundle: Record<string, FlowDef> } | null;
   labCandidate(candidateId: string): void;
+  scheme: Scheme;
+  /** Copy through the ordinary in-memory scheme edit path; Save stays separate. */
+  edit(next: Scheme): void;
 }) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [note, setNote] = useState('');
@@ -91,6 +98,15 @@ export function ReviewsView({
     if (selected && note.trim() !== (selected.note ?? '')) labRenote(selected.id, note);
   };
 
+  const copied = useMemo(
+    () => (graph ? promotedCandidateId(scheme, graph) !== null : false),
+    [scheme, graph],
+  );
+  const copy = () => {
+    if (!graph || copied) return;
+    edit(promoteCandidate(scheme, graph).scheme);
+  };
+
   const when = (iso: string) => {
     const at = new Date(iso);
     return `${at.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} ${at
@@ -102,7 +118,7 @@ export function ReviewsView({
   if (reviews.length === 0) {
     return (
       <div className="reviews reviews-empty">
-        <p>{labLog ? 'no reviews yet — the train tab writes them' : 'asking the lab…'}</p>
+        <p>{labLog ? 'no detailed reviews yet' : 'asking the lab…'}</p>
       </div>
     );
   }
@@ -210,6 +226,18 @@ export function ReviewsView({
               placeholder="a note, if one is worth keeping…"
               aria-label="Review note"
             />
+
+            <div className="train-verbs">
+              <span className="gap" />
+              <Button
+                tone="quiet"
+                onPress={copy}
+                disabled={!graph || copied}
+                title="Copy this frozen flow into the open scheme — saved by the ordinary save"
+              >
+                {copied ? 'copied ✓' : 'copy to scheme'}
+              </Button>
+            </div>
           </div>
         </div>
       )}

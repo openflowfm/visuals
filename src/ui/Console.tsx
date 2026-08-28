@@ -3,16 +3,20 @@ import type {
   CalibrationState,
   CalibrationSubmission,
   FlowDef,
+  LabComparisonSubmission,
+  LabArchiveSubmission,
+  LabFinalsSubmission,
+  LabLineageFinalistSubmission,
   LabReviewRow,
   LabScore,
   LabState,
-  LabSubmission,
   Library,
   MediaAsset,
   Scheme,
   SetGrid,
   Show,
 } from '../../protocol.ts';
+import { EXAMPLES_SCHEME_ID, schemeLabel } from '../../protocol.ts';
 import '@openflow/widgets/tokens.css';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { NumberField } from '@openflow/widgets/controls/NumberField.tsx';
@@ -37,8 +41,8 @@ import './console.css';
  * **Build** is the product: a canvas, a library of flows, and a browser of
  * every node there is. **Set** is the small remainder — the wheel that turns
  * through what you built, and the handful of songs that want to say otherwise.
- * **Train** and **review** are the lab's two faces: judging new candidates,
- * and browsing the judgments.
+ * **Train** and **review** are the lab's two faces: fast recursive comparisons,
+ * and the detailed score/tag corpus preserved for slower judgment.
  *
  * What went was coverage and bind, and both went for the same reason. Coverage
  * drew every song against every track and asked which cell nobody had decided
@@ -53,7 +57,6 @@ import './console.css';
  */
 export interface ConsoleProps {
   show: Show;
-  showRef: { readonly current: Show };
   scheme: Scheme;
   library: Library | null;
   media: readonly MediaAsset[];
@@ -65,8 +68,16 @@ export interface ConsoleProps {
   loadScheme(id: string): void;
   lab: LabState | null;
   labOpen(): void;
-  labReview(review: LabSubmission): void;
-  labSkip(candidateId: string): void;
+  labCompare(comparison: LabComparisonSubmission): void;
+  labSkipEncounter(encounterId: number): void;
+  labArchiveOpen(): void;
+  labArchiveSelect(candidateId: string): void;
+  labArchiveDecide(decision: LabArchiveSubmission): void;
+  labLineageFinalist(decision: LabLineageFinalistSubmission): void;
+  labFinalsOpen(): void;
+  labFinalsNew(): void;
+  labFinalsCompare(comparison: LabFinalsSubmission): void;
+  labFinalsSkip(encounterId: number): void;
   labOffer(flowId: string): void;
   labLog: { reviews: LabReviewRow[]; more: boolean } | null;
   labLogOpen(before?: number): void;
@@ -84,19 +95,18 @@ export interface ConsoleProps {
 }
 
 /**
- * Four product tabs. **Build** is the editor and the product; **train** judges one
- * generated candidate at a time, the judgment kept as evidence; **review**
- * browses those judgments and revises their tags and notes; **set** is the
- * wheel and the songs. The lab under train and review is `lab.ts` and
- * `server/lab.ts`; neither tab touches the scheme except when train promotes
- * a candidate into it, through the same `edit` the designer uses.
+ * Four product tabs. **Build** is the editor and the product; **train** compares
+ * generated directions through recursive Explore and Refine turns; **review**
+ * browses detailed anchored judgments and revises their tags and notes; **set**
+ * is the wheel and the songs. The lab under train and review is `lab.ts` and
+ * `server/lab.ts`; neither tab touches the scheme except when a candidate is
+ * explicitly copied into it, through the same `edit` the designer uses.
  */
 const VIEWS = ['build', 'train', 'review', 'set', 'calibrate'] as const;
 export type View = (typeof VIEWS)[number];
 
 export function Console({
   show,
-  showRef,
   scheme,
   library,
   media,
@@ -107,8 +117,16 @@ export function Console({
   loadScheme,
   lab,
   labOpen,
-  labReview,
-  labSkip,
+  labCompare,
+  labSkipEncounter,
+  labArchiveOpen,
+  labArchiveSelect,
+  labArchiveDecide,
+  labLineageFinalist,
+  labFinalsOpen,
+  labFinalsNew,
+  labFinalsCompare,
+  labFinalsSkip,
   labOffer,
   labLog,
   labLogOpen,
@@ -187,15 +205,15 @@ export function Console({
                 labOffer(id);
                 setView('train');
               }}
-              title="Freeze this flow as it is and judge it in the train tab"
+              title="Freeze this flow as it is and offer it to the train loop"
             >
-              judge
+              train
             </Button>
           </div>
         ) : view === 'train' ? (
           <span className="train-context">
             {lab
-              ? `${lab.method} · ${lab.reviewed} reviewed · ${lab.skipped} skipped · ${lab.pending} waiting`
+              ? `${lab.method} · ${lab.comparisons} comparisons · ${lab.frontier} frontier · depth ${lab.maxGeneration}`
               : 'opening the lab…'}
           </span>
         ) : view === 'review' ? (
@@ -240,15 +258,20 @@ export function Console({
 
       {view === 'train' && (
         <TrainView
-          show={show}
-          showRef={showRef}
           clock={clock}
-          canFollow={canFollow}
           scheme={scheme}
           lab={lab}
           labOpen={labOpen}
-          labReview={labReview}
-          labSkip={labSkip}
+          labCompare={labCompare}
+          labSkipEncounter={labSkipEncounter}
+          labArchiveOpen={labArchiveOpen}
+          labArchiveSelect={labArchiveSelect}
+          labArchiveDecide={labArchiveDecide}
+          labLineageFinalist={labLineageFinalist}
+          labFinalsOpen={labFinalsOpen}
+          labFinalsNew={labFinalsNew}
+          labFinalsCompare={labFinalsCompare}
+          labFinalsSkip={labFinalsSkip}
           edit={edit}
         />
       )}
@@ -262,6 +285,8 @@ export function Console({
           labRenote={labRenote}
           labStage={labStage}
           labCandidate={labCandidate}
+          scheme={scheme}
+          edit={edit}
         />
       )}
 
@@ -466,10 +491,16 @@ function Schemes({
           setArming(null);
         }}
       >
-        {library.current}
+        {schemeLabel(library.current)}
         {library.dirty ? <span className="dot" /> : null}
       </button>
-      <Button tone="quiet" label="Save scheme" onPress={saveScheme} disabled={!library.dirty}>
+      <Button
+        tone="quiet"
+        label="Save scheme"
+        title={library.readOnly ? 'Examples is read-only — use save as' : undefined}
+        onPress={saveScheme}
+        disabled={library.readOnly || !library.dirty}
+      >
         save
       </Button>
       {open && (
@@ -481,7 +512,11 @@ function Schemes({
               className={`row${id === library.current ? ' here' : ''}${arming === id ? ' asking' : ''}`}
               onClick={() => pick(id)}
             >
-              {arming === id ? (id === library.current ? 'discard edits?' : 'discard edits, open?') : id}
+              {arming === id
+                ? id === library.current
+                  ? 'discard edits?'
+                  : 'discard edits, open?'
+                : `${schemeLabel(id)}${id === EXAMPLES_SCHEME_ID ? ' · read only' : ''}`}
             </button>
           ))}
           <form

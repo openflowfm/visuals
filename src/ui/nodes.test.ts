@@ -10,7 +10,7 @@ import {
   SOURCES,
   TRACK_DRAWS,
 } from '../../protocol.ts';
-import { BUILT_IN } from '../../server/scheme.ts';
+import { EXAMPLES } from '../../server/scheme.ts';
 import {
   NODE_SPECS,
   descriptionOf,
@@ -43,7 +43,7 @@ import {
  * search is what pays for the presets being folded away.
  */
 
-const scheme = BUILT_IN as Scheme;
+const scheme = EXAMPLES as Scheme;
 const browser = () => palette();
 const bySignal = (a: string, b: string) => 'pnc'.indexOf(a) - 'pnc'.indexOf(b);
 const find = (entries: readonly Entry[], kind: string, op?: string) =>

@@ -606,7 +606,7 @@ bipolar cosine from a unipolar wave, because its negative half stops at zero.
 `value` node wired to exactly one of them is the long way round — it says nothing the number
 on the face does not, and costs a cord across the canvas to say it. What it still does, and
 nothing else can, is put *the same* number on two inlets at once: turn it and both move.
-`Weather` in the built-in library is wired that way on purpose, and it is the only `value`
+`Weather` in the Examples scheme is wired that way on purpose, and it is the only `value`
 node left in the seventeen flows that ship.
 
 ## `out` is at most one, and none is a provider

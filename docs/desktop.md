@@ -3,8 +3,8 @@
 `visuals/electron/main.ts`, `visuals/electron/preload.ts`, `visuals/src/state/useWall.ts`.
 
 `npm run visuals` builds the renderer, starts the server, and opens the rig in a window it
-owns. It is the show-night command, and it replaced a `concurrently -k` over ten dev
-processes where any one exiting killed the other nine.
+owns. It is the show-night command. `npm run dev` opens the same shell automatically, but
+points it at vite so renderer edits arrive through HMR.
 
 ## The server is a child, not this process
 
@@ -43,10 +43,16 @@ Three things it must do, and all three are the kind that bite at the worst time:
 
 ## Windows, and the one that matters
 
-The console window loads `http://localhost:17900`. There is no custom scheme here, unlike
-set[flow], because the server is already serving `visuals/dist` at a stable origin —
-`location.host` works, `/media/*` works, and the `localStorage` that holds the keystone
-corners is on the same origin a browser would have used.
+In production the console window loads `http://localhost:17900`. There is no custom scheme
+here, unlike set[flow], because the server is already serving `visuals/dist` at a stable
+origin — `location.host` works, `/media/*` works, and the `localStorage` that holds the
+keystone corners is on the same origin a browser would have used. In development it loads
+vite on `:5473`; vite owns HMR and proxies socket and media requests to the app's child.
+
+An app-owned server binds `127.0.0.1` by default. Its console and wall are on the same
+machine, so advertising an unauthenticated write socket to the LAN buys nothing. An explicit
+`OPENFLOW_VISUALS_HOST` still wins, and the standalone browser command keeps the server's
+ordinary LAN default for the second-machine path.
 
 **The wall is still `window.open`.** The renderer calls it with a features string carrying a
 position, exactly as it does in a browser. Electron refuses that unless something says what
@@ -89,21 +95,29 @@ renderer.
 
 ## The dev loop, in this window
 
-`npm run dev:visuals-app` opens this shell on the vite dev server on :5473 rather than on
-the server's own copy of `dist/`, so an edit to a shader or a node lands in the window with
-Fast Refresh intact. `npm run visuals` is a rebuild and a relaunch, which is right for
-checking what ships and wrong for the twenty edits before it.
+`npm run dev` starts vite and opens this shell on `:5473`, so an edit to a shader, node or
+component lands in the real Electron window with React Fast Refresh intact. `npm run
+dev:visuals-app` remains the narrower command when vite is already running. `npm run
+visuals` is a rebuild and relaunch, which is right for checking what ships and wrong for the
+twenty edits before it.
 
-**In dev it starts no server.** `npm run dev` already has one on 17900 and vite proxies
-`/ws` and `/media` through to it; a second would die of `EADDRINUSE` immediately and take
-the window with it. So dev mode is the shell, the wall handler and the display list over
-somebody else's server — and those three are exactly the parts a browser cannot show you.
-The supervision is what you give up, and `npm run visuals` is where that gets checked.
+**The app starts and supervises the backend in dev too.** The old stack started
+`server/index.ts` as one `concurrently` process, then required the Electron shell to attach
+to that process. Now the shell owns the backend in both modes and vite merely proxies `/ws`
+and `/media` to it. Closing the app kills its child; a backend crash is supervised by the
+same code used on a show night; and a second standalone process cannot race it for the port.
 
 That makes this the better place to develop the wall, not just an equal one: `window.open`
 becomes a real frameless window on a real projector through `setWindowOpenHandler`, and the
 display list arrives over IPC from `screen.getAllDisplays()` instead of from Chrome's window
 management API behind a permission prompt. Both of those paths only exist here.
+
+**17900 is still a backend port, not a second dev UI.** The sandboxed renderer and every
+wall window share Link, bridge, scheme, lab and wheel state over its WebSocket, and media
+files are streamed over its HTTP side. Removing the listener altogether would mean replacing
+both with Electron IPC plus a custom media protocol, and would also make the browser/remote
+wall path a separate transport. The app-owned listener is therefore kept local rather than
+pretending the backend disappeared; the page being developed is only vite's `:5473` page.
 
 `OPENFLOW_DEV=1` is the switch and `OPENFLOW_DEV_URL` overrides the address. The port is
 `OPENFLOW_PORT_BASE` + 300, or `OPENFLOW_VISUALS_UI_PORT` outright — the same two the vite

@@ -8,7 +8,7 @@ is a thing that breaks; the package is `@openflow/visuals`. `visual[flow]` is wh
 calls itself; the paths are what the compiler calls it.
 
 ```
-Live ─ SessionBridge :17800 ─WS─> visuals server :17900 ─WS─> browser (WebGL2)
+Live ─ SessionBridge :17800 ─WS─> visuals backend :17900 ─WS─> Electron (WebGL2)
                                           |
                                      Ableton Link  <──── Live's Link session
 ```
@@ -22,8 +22,8 @@ Live ─ SessionBridge :17800 ─WS─> visuals server :17900 ─WS─> browser 
 | [the clock](docs/clock.md) | Link, tempo, the beat, why the browser extrapolates, the native addon | `server/link.ts`, `src/state/useShow.ts`, `tools/build-link.ts` |
 | [flows](docs/flows.md) | **the one noun**, the node vocabulary, the compiler, the designer | `protocol.ts`, `src/render/circuit.ts`, `src/ui/Designer.tsx` |
 | [the wheel](docs/wheel.md) | what is on screen and why, song overrides, the scheme file, the roll | `resolve.ts`, `server/show.ts`, `server/scheme.ts`, `roll.ts` |
-| [the console](docs/console.md) | the three views, and what the views before them were for | `src/ui/Console.tsx`, `Designer.tsx`, `SetView.tsx` |
-| [the lab](docs/lab.md) | judging generated flows, the taste corpus, the method boundary | `lab.ts`, `server/lab.ts`, `src/ui/ReviewView.tsx` |
+| [the console](docs/console.md) | the four product views, and what the views before them were for | `src/ui/Console.tsx`, `Designer.tsx`, `TrainView.tsx`, `ReviewsView.tsx`, `SetView.tsx` |
+| [the lab](docs/lab.md) | recursive search, historical Archive, frozen Finals and the detailed corpus | `lab.ts`, `server/lab.ts`, `server/lineage.ts`, `server/finals.ts`, `src/ui/TrainView.tsx`, `src/ui/ArchiveView.tsx`, `src/ui/FinalsView.tsx`, `src/ui/ReviewsView.tsx` |
 | [parameter calibration](docs/calibration.md) | the development-only A/B/C response bench and its evidence | `response.ts`, `calibration.ts`, `server/calibration.ts`, `src/ui/CalibrationView.tsx` |
 | [the renderer](docs/render.md) | the two passes, blending, fill rate, **pointing a projector** | `src/render/*` |
 | [the harness](docs/harness.md) | working on this with no Ableton, and the Link safety rule | `tools/fake-live.ts` |
@@ -53,19 +53,23 @@ configured for it to draw a show.
 ```sh
 npm run visuals          # a show night: build, run the server, open the app — see docs/desktop.md
 npm run visuals:browser  # the same, in a dedicated Chrome instead of the app
-npm run dev              # everything, this included: server on :17900, renderer on :5473
+npm run dev              # everything, opening the app on vite HMR; its backend stays local
 npm run dev:visuals      # the server alone: Link peer + bridge client + host, :17900
 npm run dev:visuals-ui   # the renderer with HMR, :5473, proxying /ws to the server
+npm run dev:visuals-app  # the HMR app + its backend, when vite is already running
 npm run build:visuals    # the renderer into visuals/dist, which the server serves
 npm run dev:fake-live    # a bridge that isn't one, for working without Ableton
 npm --prefix visuals run mcp  # local stdio server for agent-authored flows and nodes
 ```
 
-Open `http://localhost:17900` for the built renderer, or `:5473` while working on it.
+`npm run dev` opens the Electron window itself; `:5473` is the HMR page it loads. Open
+`http://localhost:17900` only for the built browser renderer.
 
-`npm run dev` runs both alongside the bridge and `set/`. It uses `concurrently -k`, so a
-port already in use here takes the whole dev session down with it — if `npm run dev` dies
-on startup, look for a `dev:visuals` you left running.
+`npm run dev` runs vite alongside the bridge and `set/`, then launches the real visuals
+Electron shell. The shell supervises its own backend exactly as it does in production;
+vite proxies `/ws` and `/media` to that local child. The stack uses `concurrently -k`, so a
+port already in use takes the whole dev session down with it — if it dies on startup, look
+for a visuals app or standalone `dev:visuals` you left running.
 
 **That `-k` is why `npm run visuals` exists.** Ten dev processes where any one exiting kills
 the other nine is right for a dev loop and wrong for a gig: a watcher falling over would
@@ -99,7 +103,7 @@ because they describe this projector in this room and would be wrong everywhere 
 
 | | | |
 |---|---|---|
-| server | 17900 | `OPENFLOW_VISUALS_PORT`, `OPENFLOW_VISUALS_HOST` |
+| app backend | 17900, loopback | `OPENFLOW_VISUALS_PORT`, `OPENFLOW_VISUALS_HOST` |
 | renderer (dev) | UI + 300 | `OPENFLOW_VISUALS_UI_PORT` |
 | bridge it follows | `ws://127.0.0.1:17800/ws` | `OPENFLOW_BRIDGE_WS` |
 | fake bridge | 17801 | `OPENFLOW_FAKE_PORT` |
@@ -113,8 +117,10 @@ lives *inside* Max — a Live update would break it. `tools/build-link.ts` exist
 package needs two repairs before it compiles at all; see [the clock](docs/clock.md).
 
 **It is meant to run on another machine**, so a GPU drawing sixty frames a second is never
-on the same box as Live's audio thread. That is also why this server binds `0.0.0.0` where
-the device binds `127.0.0.1` — a deliberate exposure, on a show LAN and not a hotel one.
+on the same box as Live's audio thread. A standalone browser server therefore binds
+`0.0.0.0` — a deliberate exposure, on a show LAN and not a hotel one. The Electron app's
+child binds `127.0.0.1` instead because both of its windows are already local; an explicit
+`OPENFLOW_VISUALS_HOST` can still opt it into the LAN.
 
 Once it is out of the device, being an ordinary bridge client is free, and rule 5 in
 [`AGENTS.md`](../AGENTS.md) already anticipated it: *"a second kind of client — a stage
@@ -125,15 +131,16 @@ without the bridge noticing.
 ## Customising it
 
 Press **`e`** in the app for the console, over the picture so you can work on a flow while
-one is on screen. Three views:
+one is on screen. Four product views:
 
 | view | the question | the scale |
 |---|---|---|
-| **design** | what is worth putting on a wall | one flow |
+| **build** | what is worth putting on a wall | one flow |
+| **train** | which visual directions deserve a future | one synchronized comparison |
+| **review** | what did a slower, detailed judgment say | the preserved corpus |
 | **set** | what turns through them, and what says otherwise | the set |
-| **review** | is this generated flow any good, and why | one candidate |
 
-**Design is the product.** A canvas, a library of the flows you have made, and a browser of
+**Build is the product.** A canvas, a library of the flows you have made, and a browser of
 every node there is — the node is the row and its presets open under it, the way a device
 browser lists one, with a search box that reaches inside. It runs on its own clock and needs
 no bridge, no set and no Link: a library you can only see during a rehearsal is a library
@@ -143,11 +150,23 @@ nobody builds.
 colourways, and the handful of songs that want to pin one instead. Most songs should have
 nothing there.
 
-**Review is where generated flows get judged.** One candidate at a time through the real
-compositor, under an invented, reproducible room — no Ableton, no Link, no bridge. An
-anchored score, tags that say why, and a corpus that keeps every judgment; promoting a
-keeper copies it into the open scheme through the ordinary edit-and-save path. See
-[the lab](docs/lab.md).
+**Train is the fast evolutionary loop.** Explore shows two meaningfully different directions;
+Refine shows a surviving parent beside one atomic change. Both run through synchronized real
+compositors under one reproducible room, and every accepted depth receives Explore and Refine
+again. Left, right, both and neither preserve the answer you actually meant, while periodic
+random immigrants and a novelty-preserving frontier keep one early taste from becoming the
+only style. A separate **Archive** maps every parent branch as a zoomable lineage forest,
+surfaces likely historical peaks, and loads any clicked work in its original room. A star
+keeps the work itself; a diamond chooses the current finalist for its lineage. When the field
+is worth preserving, **Finals** admits lineage finalists and keepers first, adds diverse
+historical winners, tests every nominee across four different rooms, and produces a derived
+top-ten collection. Completed runs stay durable and a new archive-first edition can follow.
+It needs no Ableton, Link or bridge, and copying one keeper or the collection uses the
+ordinary edit-and-save path.
+
+**Review preserves the detailed corpus.** The earlier anchored scores, tags, signed reasons
+and notes are still browsable and revisable there. Binary selections do not manufacture
+those labels. See [the lab](docs/lab.md).
 
 An internal **calibrate** view appears only when the server is started with
 `OPENFLOW_CALIBRATION=1`. It compares parameter-response curves and writes to a separate
@@ -157,21 +176,22 @@ development database; it is not part of the user-facing lab. See
 Every name either view offers — songs, tracks, flows — comes from **the set** or from what
 you made, so it never asks you to type one.
 
-Schemes are saved in `~/.openflow/visuals/schemes/`, one readable file per scheme, and the
-library is **entirely optional**: with nothing saved, the built-in scheme is a complete
-show. Edit a saved file by hand if you like — the open one is watched, and a clean reload
-reaches the screen.
+Schemes are saved in `~/.openflow/visuals/schemes/`, one readable file per scheme. A new
+library starts with an editable `main` copied from the complete system **Examples** scheme;
+Examples stays on the shelf, read-only, so newer examples never appear unexpectedly inside
+a show you own. Edit a saved file by hand if you like — the open one is watched, and a clean
+reload reaches the screen.
 
 **An edit is not a save.** Every gesture follows the pointer onto every screen, but nothing
 reaches disk until you press save (or `⌘S`). The console's header names the open scheme,
 marks unsaved edits, and opens the shelf: save, save under a new name, or load another —
 loading asks before it drops unsaved work. A restart reopens the scheme you were in.
 
-**None of it is in the repo.** The library is yours the way `bridge/roles.json` is yours.
-It lives under `~/.openflow` (`OPENFLOW_HOME` moves that root; `OPENFLOW_VISUALS_SCHEME`
-pins one exact file and turns the library off), a scheme from before the library is adopted
-as `main` on first start, and a fresh machine draws the built-in show until you save one of
-your own. See [the wheel](docs/wheel.md).
+**Every user scheme is yours.** The library lives under `~/.openflow` (`OPENFLOW_HOME` moves
+that root; `OPENFLOW_VISUALS_SCHEME` pins one exact file and turns the library off), a scheme
+from before the library is adopted as `main` on first start, and a fresh machine receives a
+real `main.json` copied from Examples. Flow and colourway maps are complete rather than
+overlays, so deleting one stays deleted. See [the wheel](docs/wheel.md).
 
 Everything that draws is a **flow**, and a flow is a **graph** — see [flows](docs/flows.md).
 The lightweight pictures, the bounded fractals and the effects that ship are node *modes*,

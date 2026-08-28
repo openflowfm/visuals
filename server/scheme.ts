@@ -7,13 +7,13 @@ import { repaired, splitPort } from '../src/render/circuit.ts';
  * The scheme: every flow there is, the colours they draw from, and the wheel
  * that turns through them. Saved schemes live in `~/.openflow/visuals/schemes/`
  * and are held, watched and written by `library.ts`; this module is the
- * built-in scheme and the door every file comes through.
+ * example scheme and the door every file comes through.
  *
  * **Everything here has a default that works**, which is the rule the file is
  * designed around. A rig that draws nothing until it has been configured is a
- * rig nobody configures, so the built-in scheme below is a complete show and the
- * file only ever overrides parts of it. Delete every saved scheme and the
- * picture changes; it does not stop.
+ * rig nobody configures, so the example scheme below is a complete show. The
+ * library copies it into `main` once; after that a user's scheme owns every
+ * flow and colourway it names.
  *
  * ## What is not in it any more
  *
@@ -43,7 +43,7 @@ import { repaired, splitPort } from '../src/render/circuit.ts';
  * Tall enough for the tallest faceplate there is, which is a `track`: a picture,
  * two pickers and a control. Nodes grew when their pictures went to 16:9 and grew
  * again when `track` took on a second dropdown, and a spacing left at the old
- * height put the second row of every built-in through the first one.
+ * height put the second row of every example through the first one.
  */
 const ROW = 220;
 
@@ -116,7 +116,7 @@ function wire(
  * it, and zero for anything nothing feeds.
  *
  * Guarded against a graph that feeds itself even though none of these do, since
- * the only thing worse than a badly laid out built-in is a server that will not
+ * the only thing worse than a badly laid out example is a server that will not
  * start.
  */
 function columnsOf(ids: readonly string[], cords: readonly { from: string; to: string }[]): Map<string, number> {
@@ -192,7 +192,7 @@ function columnsOf(ids: readonly string[], cords: readonly { from: string; to: s
  * face, which is four fewer cords across the four graphs anyone opens first. The
  * one left is in `Weather`, feeding two places, which is what that node is for.
  */
-const BUILT_IN: Scheme = {
+const EXAMPLES: Scheme = {
   flows: {
     // A colour is a function of a point. The set is read through a swirl that
     // sways once a bar, and the kaleidoscope folds the whole chain rather than
@@ -1052,10 +1052,11 @@ export interface SchemeSource {
 }
 
 /**
- * A file overrides the built-in scheme one section at a time.
+ * A file becomes a complete, safe scheme.
  *
- * Shallow per section, deliberately. Naming one colourway should not delete the
- * other three, and registering one flow should not remove the four that ship.
+ * Whole missing sections use the examples as a compatibility floor for old
+ * partial files. Entries inside a present flow or colourway section do not:
+ * that map belongs to the scheme, and absence means deletion.
  *
  * **This is the one door**, and it is why every graph is repaired here. A scheme
  * reaches the renderer exactly two ways — read off disk, or sent up by an editor
@@ -1069,15 +1070,28 @@ export interface SchemeSource {
  */
 export function merge(raw: Partial<Scheme>): Scheme {
   const file = carried(vetted(raw));
+  // A missing whole section is an old partial file and starts from the
+  // examples once. A present section is authoritative, including an empty
+  // one: schemes own their members now, so deleting an example flow or
+  // colourway from an editable copy cannot make it return on the round trip.
+  const flows = whole(file.flows ?? EXAMPLES.flows);
+  const colorways = { ...(file.colorways ?? EXAMPLES.colorways) };
+  const defaults = { ...EXAMPLES.defaults, ...(file.defaults ?? {}) };
+  if (!Object.hasOwn(flows, defaults.flow)) {
+    defaults.flow = Object.keys(flows)[0] ?? defaults.flow;
+  }
+  if (!Object.hasOwn(colorways, defaults.colorway)) {
+    defaults.colorway = Object.keys(colorways)[0] ?? defaults.colorway;
+  }
   return {
     // Carried rather than rebuilt, so a rolled show can still say where it came
     // from after a reload. Without it the seed lived exactly as long as the tab.
     ...(file.seed ? { seed: file.seed } : {}),
-    flows: whole({ ...BUILT_IN.flows, ...(file.flows ?? {}) }),
-    colorways: { ...BUILT_IN.colorways, ...(file.colorways ?? {}) },
-    rotation: { ...BUILT_IN.rotation, ...(file.rotation ?? {}) },
+    flows,
+    colorways,
+    rotation: { ...EXAMPLES.rotation, ...(file.rotation ?? {}) },
     songs: songsOf(file.songs),
-    defaults: { ...BUILT_IN.defaults, ...(file.defaults ?? {}) },
+    defaults,
   };
 }
 
@@ -1140,7 +1154,7 @@ function carried(file: Partial<Scheme> & Legacy): Partial<Scheme> {
   // flows would silently widen to everything the first time it was opened.
   const pool = (file as Legacy).rotation?.looks;
   if (pool && !file.rotation?.flows) {
-    out.rotation = { ...BUILT_IN.rotation, ...file.rotation, flows: pool };
+    out.rotation = { ...EXAMPLES.rotation, ...file.rotation, flows: pool };
     delete (out.rotation as Legacy['rotation'])!.looks;
   }
 
@@ -1148,15 +1162,15 @@ function carried(file: Partial<Scheme> & Legacy): Partial<Scheme> {
   // for as long as `defaults` has had more than two fields: it rebuilt the block
   // out of `colorway` and `pace` and dropped everything else, so a file's own
   // default flow and draw mode were reset on every load. It never showed,
-  // because the only values anyone had were the built-in ones — but deleting the
+  // because the only values anyone had were the example ones — but deleting the
   // default flow repoints it in `edits.ts`, and that repoint was being thrown
   // away the next time the file was read.
   const old = (file as Legacy).defaults;
   if (old) {
     const { look, ...rest } = old;
-    const defaults = { ...BUILT_IN.defaults, ...rest };
+    const defaults = { ...EXAMPLES.defaults, ...rest };
     // `The set` is gone, so a file that named it as its default names nothing;
-    // the built-in default is the only honest answer to that.
+    // the example default is the only honest answer to that.
     if (!file.defaults?.flow && look && look !== 'live') defaults.flow = look;
     out.defaults = defaults;
   }
@@ -1500,7 +1514,7 @@ interface Legacy {
  * is passed through whole, minus the fields that no longer exist.
  */
 function songsOf(songs: Record<string, SongSpec | string> | undefined): Record<string, SongSpec> {
-  const out: Record<string, SongSpec> = { ...BUILT_IN.songs };
+  const out: Record<string, SongSpec> = {};
   for (const [name, spec] of Object.entries(songs ?? {})) {
     if (typeof spec === 'string') {
       out[name] = { colorway: spec };
@@ -1515,4 +1529,4 @@ function songsOf(songs: Record<string, SongSpec | string> | undefined): Record<s
   return out;
 }
 
-export { BUILT_IN };
+export { EXAMPLES };

@@ -33,11 +33,10 @@ const RIG = `http://localhost:${PORT}`;
  * server's own copy of `dist/`, which is a build and has no hot anything in it.
  * `OPENFLOW_DEV_URL` names the address outright.
  *
- * **In dev this app does not start a server.** `npm run dev` already has one on
- * 17900, and vite proxies `/ws` and `/media` through to it; a second would die of
- * EADDRINUSE on the spot and take the window with it. So dev mode is the shell,
- * the wall handler and the display list over somebody else's server — which is
- * the whole point, because those three are exactly what a browser cannot show you.
+ * **The app owns the server in dev too.** `npm run dev` starts vite and this
+ * shell; this shell supervises the same backend the production app does, while
+ * vite proxies `/ws` and `/media` to it. There is no second standalone visuals
+ * process to race it for 17900 or survive after the app closes.
  *
  * The port is the base every dev server here counts from, plus this app's offset
  * of 300. Restated rather than imported, because a main process cannot load
@@ -50,7 +49,10 @@ const DEV =
   process.env.OPENFLOW_DEV_URL || (process.env.OPENFLOW_DEV ? `http://localhost:${DEV_PORT}` : '');
 /** Where the window opens, and the port that has to answer before it does. */
 const HOME = DEV || RIG;
-const TARGET = Number(new URL(HOME).port);
+const target = new URL(HOME);
+const TARGET = Number(target.port);
+/** Vite may resolve localhost to IPv6; production's app-owned child is explicitly IPv4. */
+const TARGET_HOST = DEV ? target.hostname : '127.0.0.1';
 
 /**
  * The server, bundled, run by **Electron's own Node** rather than the one on
@@ -116,6 +118,9 @@ const start = (): void => {
       // The server works its own location out from `import.meta.url`, which no
       // longer sits one hop from the renderer once it is bundled.
       OPENFLOW_VISUALS_DIST: renderer,
+      // An app-owned backend serves this app, not the LAN. The standalone
+      // browser command may still bind broadly, and an explicit override wins.
+      OPENFLOW_VISUALS_HOST: process.env.OPENFLOW_VISUALS_HOST ?? '127.0.0.1',
     },
   });
   child.on('exit', (code, signal) => {
@@ -137,7 +142,7 @@ const start = (): void => {
 /** Whether anything is listening yet. The window must not open on a refusal. */
 const answering = () =>
   new Promise<boolean>((resolve) => {
-    const socket = net.connect({ port: TARGET, host: '127.0.0.1' });
+    const socket = net.connect({ port: TARGET, host: TARGET_HOST });
     const done = (yes: boolean) => {
       socket.destroy();
       resolve(yes);
@@ -285,9 +290,7 @@ if (!app.requestSingleInstanceLock()) {
     screen.on('display-added', moved);
     screen.on('display-removed', moved);
     screen.on('display-metrics-changed', moved);
-    // In dev the server is somebody else's — `npm run dev` has one, and this
-    // process spawning a second is how both of them stop working.
-    if (!DEV) start();
+    start();
     void openWhenReady();
   });
 }

@@ -1,7 +1,7 @@
 # The console
 
-`src/ui/Console.tsx`, `Designer.tsx`, `SetView.tsx`, `ReviewView.tsx`. Three views over one
-show.
+`src/ui/Console.tsx`, `Designer.tsx`, `TrainView.tsx`, `ReviewsView.tsx`,
+`SetView.tsx`. Four product views over one show.
 
 Development may add one conditional view without changing that product shape:
 **calibrate** is advertised by a server started with `OPENFLOW_CALIBRATION=1`,
@@ -10,23 +10,36 @@ in [calibration](calibration.md), not another face of the user lab. Its device
 and parameter selectors are local navigation over frozen development questions;
 opening one does not move another console or change the show.
 
-## Why three, and why these
+## Why four, and why these
 
 | view | the question | the scale |
 |---|---|---|
-| **design** | what is worth putting on a wall | one flow |
+| **build** | what is worth putting on a wall | one flow |
+| **train** | which directions deserve a future, then a show | one synchronized comparison |
+| **review** | what did a slower, detailed judgment say | the preserved corpus |
 | **set** | what turns through them, and what says otherwise | the set |
-| **review** | is this generated flow any good, and why | one candidate |
 
-**Review is not an editor.** It shows one generated candidate at a time through the same
-compositor the wall uses, under an invented room, and turns the judgment into durable
-evidence — the lab underneath it has [a doc of its own](lab.md). It sits in the console
-because it is a view over the same show the other two serve: what it promotes lands in the
-open scheme through the same `edit`, and its context line lives in the same header. Its
-room controls are its own rather than the header's, because the review room comes frozen
-with the candidate and must never read the open scheme's colourways.
+**Train is not an editor or a detailed review form.** Its **Search** stage discovers visual
+languages: Explore compares distinct directions and Refine compares a surviving parent with
+one atomic intervention. Its **Archive** stage draws the complete history as a zoomable
+lineage forest: one island per family, every parent branch intact, likely peaks emphasized,
+and every dot clickable into its original room. Keep/pass records the separate absolute
+question, while a diamond chooses the one current finalist for a lineage. A star on either
+Search candidate records keep without changing which direction survives. Its **Finals**
+stage admits lineage finalists and keepers first, then fills a diverse frozen field from
+the historical search, then shows every nominee in four named rooms and asks both which work
+is stronger and whether either side is ready for a show. Finals ends in a derived top-ten
+collection, and another archive-first edition can be frozen without overwriting the completed
+one. **Review** is the
+earlier, slower corpus: it re-stages scored judgments and lets their tags and notes settle.
+The lab beneath both has [a doc of its own](lab.md).
 
-Design is the product. Everything else this app does is arrangements of what gets made
+They sit in the console because they are views over the same kind of flow the other tabs
+serve. Copying a candidate lands in the open scheme through the same `edit`; neither view
+writes a scheme by itself. Their rooms are their own rather than the header's, because a
+reproducible judgment must never read the open scheme's colourways.
+
+Build is the product. Everything else this app does is arrangements of what gets made
 there, which is why it opens on it and why it has the whole screen. The **vocabulary** is
 documented in [flows](flows.md), because it is about what a flow *is* rather than about
 where anything sits; the shell it is edited in is below.
@@ -355,6 +368,11 @@ only while there is something to write; the name opens the shelf: every saved sc
 open one marked, and a field that saves under a new name. It is in the header rather than
 in either view because a scheme spans both — the flows are design, the wheel is set — and
 because the fact it shows is global: *this* show, saved or not.
+
+**Examples** is the one system row on that shelf. It cannot be overwritten and always shows
+the examples shipped by this version; editing a working copy is allowed, but the only write
+gesture it offers is **save as**. A new library starts with a normal `main` copied from it,
+so the first thing on screen is useful and every flow in it is still yours to delete.
 
 Anything that would drop unsaved edits asks by arming, the same way delete does — the first
 press turns the row into the question, the second answers it. That covers loading another

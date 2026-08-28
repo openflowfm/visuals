@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { calibrationFile, labPlace, openflowHome, schemePlace, shown } from './home.ts';
+import { EXAMPLES_SCHEME_ID } from '../protocol.ts';
+import { calibrationFile, labPlace, openflowHome, schemeFile, schemePlace, shown } from './home.ts';
 
 /**
  * Where the open scheme is, and the one-time adoption of a file from an older
@@ -57,6 +58,14 @@ describe('schemePlace', () => {
     fs.mkdirSync(home, { recursive: true });
     fs.writeFileSync(path.join(home, 'state.json'), '{ "scheme": "night" }\n');
     expect(schemePlace(path.join(scratch, 'no-legacy.json')).id).toBe('night');
+  });
+
+  it('remembers Examples for the app but refuses it as an authoring file', () => {
+    const home = path.join(scratch, 'visuals');
+    fs.mkdirSync(home, { recursive: true });
+    fs.writeFileSync(path.join(home, 'state.json'), `{ "scheme": "${EXAMPLES_SCHEME_ID}" }\n`);
+    expect(schemePlace(path.join(scratch, 'no-legacy.json')).id).toBe(EXAMPLES_SCHEME_ID);
+    expect(() => schemeFile(path.join(scratch, 'no-legacy.json'))).toThrow('read-only');
   });
 
   it('ignores a remembered id that is not a plain filename', () => {

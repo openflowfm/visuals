@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Library, Scheme } from '../protocol.ts';
+import { EXAMPLES_SCHEME_ID, type Library, type Scheme } from '../protocol.ts';
 import { SCHEME_ID, schemePlace, shown, type SchemePlace } from './home.ts';
-import { BUILT_IN, merge, type SchemeSource } from './scheme.ts';
+import { EXAMPLES, merge, type SchemeSource } from './scheme.ts';
 
 /**
  * The scheme library: what is open, what is saved, and the distance between.
@@ -23,11 +23,11 @@ import { BUILT_IN, merge, type SchemeSource } from './scheme.ts';
 export interface SchemeStore extends SchemeSource {
   /** Take an edit: published everywhere, held in memory, written nowhere. */
   replace(next: Scheme): void;
-  /** Write the open scheme to its file — the one way memory reaches disk. */
+  /** Write the open user scheme to its file; system Examples refuses this. */
   save(): void;
   /** Write it under a new id, and be on that id from now on. */
   saveAs(id: string): void;
-  /** Open a saved scheme. Unsaved edits are dropped, which is the point. */
+  /** Open a saved scheme or system Examples. Unsaved edits are dropped. */
   load(id: string): void;
   /** What the console's scheme shelf shows. */
   library(): Library;
@@ -38,7 +38,35 @@ export interface SchemeStore extends SchemeSource {
 
 export function openLibrary(place: SchemePlace = schemePlace()): SchemeStore {
   let at = place;
-  let working: Scheme = BUILT_IN;
+  const systemExamples = () => at.dir !== null && at.id === EXAMPLES_SCHEME_ID;
+
+  // A new library starts with an ordinary, editable copy. It is written now
+  // rather than held as another fallback: `main` owns these entries from its
+  // first frame, so deleting one has a durable meaning. A library that already
+  // has any scheme is not "new", and nothing is injected into it.
+  if (at.dir && at.id === 'main' && !fs.existsSync(at.file)) {
+    let hasScheme = false;
+    try {
+      hasScheme = fs.readdirSync(at.dir).some((name) => name.endsWith('.json'));
+    } catch {
+      // The read below remains the harmless in-memory fallback.
+    }
+    if (!hasScheme) {
+      const temporary = `${at.file}.${process.pid}.tmp`;
+      try {
+        fs.writeFileSync(temporary, `${JSON.stringify(EXAMPLES, null, 2)}\n`);
+        fs.renameSync(temporary, at.file);
+      } catch {
+        try {
+          fs.rmSync(temporary, { force: true });
+        } catch {
+          // A failed first-run copy still leaves a complete show in memory.
+        }
+      }
+    }
+  }
+
+  let working: Scheme = merge(EXAMPLES);
   let dirty = false;
   let rev = 0;
   let error: string | null = null;
@@ -54,10 +82,17 @@ export function openLibrary(place: SchemePlace = schemePlace()): SchemeStore {
 
   /** The open file into memory, replacing what was there. */
   const read = () => {
+    if (systemExamples()) {
+      working = merge(EXAMPLES);
+      error = null;
+      rev += 1;
+      return;
+    }
     if (!fs.existsSync(at.file)) {
-      // A library with nothing in it draws the built-in show. Saving is what
-      // creates the file, so a fresh machine stays clean until someone means it.
-      working = BUILT_IN;
+      // A missing user file still draws a complete editable starting point.
+      // In a normal first run the copy above already made `main.json`; this is
+      // the fallback for a failed write, a removed open file, or pinned mode.
+      working = merge(EXAMPLES);
       error = null;
       rev += 1;
       return;
@@ -139,6 +174,10 @@ export function openLibrary(place: SchemePlace = schemePlace()): SchemeStore {
   };
 
   const write = () => {
+    if (systemExamples()) {
+      notice = 'Examples is read-only — save it under a new name first';
+      return;
+    }
     // Written over whatever the file already held rather than in place of it:
     // a hand-written top-level `_` block explaining the keys survives a save.
     let held: Record<string, unknown> = {};
@@ -219,7 +258,8 @@ export function openLibrary(place: SchemePlace = schemePlace()): SchemeStore {
         notice = 'pinned to one file by OPENFLOW_VISUALS_SCHEME — there is nothing else to open';
         return;
       }
-      if (!SCHEME_ID.test(id) || !fs.existsSync(path.join(at.dir, `${id}.json`))) {
+      const examples = id === EXAMPLES_SCHEME_ID;
+      if (!examples && (!SCHEME_ID.test(id) || !fs.existsSync(path.join(at.dir, `${id}.json`)))) {
         notice = `no scheme named ${id}`;
         return;
       }
@@ -236,16 +276,18 @@ export function openLibrary(place: SchemePlace = schemePlace()): SchemeStore {
           schemes = fs
             .readdirSync(at.dir)
             .filter((name) => name.endsWith('.json'))
-            .map((name) => name.slice(0, -'.json'.length));
+            .map((name) => name.slice(0, -'.json'.length))
+            .filter((id) => id !== EXAMPLES_SCHEME_ID);
         } catch {
           schemes = [];
         }
         // The open scheme may not have a file yet — a fresh library, or a
         // save-as that failed to write. It is still the one that is open.
-        if (!schemes.includes(at.id)) schemes.push(at.id);
+        if (!systemExamples() && !schemes.includes(at.id)) schemes.push(at.id);
         schemes.sort();
+        schemes.unshift(EXAMPLES_SCHEME_ID);
       }
-      return { schemes, current: at.id, dirty, notice };
+      return { schemes, current: at.id, readOnly: systemExamples(), dirty, notice };
     },
     stop() {
       if (debounce) clearTimeout(debounce);

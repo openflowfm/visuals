@@ -15,9 +15,9 @@ import { newSeed } from '../roll.ts';
 import { bundleOf } from '../lab.ts';
 import { CALIBRATION_TRIALS } from '../calibration.ts';
 import { followBridge } from './bridge.ts';
-import { freshMethod } from './fresh.ts';
+import { lineageMethod } from './lineage.ts';
 import { calibrationFile, labPlace } from './home.ts';
-import { labEngine, openLab, type LabEngine } from './lab.ts';
+import { labSearchEngine, openLab, type LabEngine } from './lab.ts';
 import { openCalibration, type CalibrationStore } from './calibration.ts';
 import { openLink } from './link.ts';
 import { openLibrary } from './library.ts';
@@ -39,7 +39,7 @@ import { readUp } from './up.ts';
  * an ordinary client of the bridge is free.
  *
  * ```
- * Live ─ SessionBridge :17800 ─WS─> visuals server :17900 ─WS─> browser (WebGL2)
+ * Live ─ SessionBridge :17800 ─WS─> visuals backend :17900 ─WS─> renderer (WebGL2)
  *                    (same LAN)            |
  *                                     Ableton Link  <──── Live's Link session
  * ```
@@ -200,11 +200,11 @@ const ensureLab = (): LabEngine | null => {
   if (labClosed) return null;
   try {
     const store = openLab(labPlace().file);
-    const method = freshMethod();
+    const method = lineageMethod();
     // Resuming the newest experiment rather than opening one per boot: the seed
     // is the deck, and a restart should keep dealing from where it stood.
     const seed = store.experimentSeed(method.id, method.version) ?? newSeed();
-    lab = labEngine(store, method, seed);
+    lab = labSearchEngine(store, method, seed);
   } catch (err) {
     labClosed = `the lab is unavailable — ${(err as Error).message}`;
     console.warn(`visuals: ${labClosed}`);
@@ -215,12 +215,22 @@ const ensureLab = (): LabEngine | null => {
 
 /** The queue's state as "there is no queue", so the review view says why. */
 const noLab = (why: string): LabState => ({
+  encounter: null,
+  archive: null,
+  finals: null,
   candidate: null,
   room: null,
   method: '',
+  liked: 0,
+  rejected: 0,
   reviewed: 0,
   skipped: 0,
   pending: 0,
+  comparisons: 0,
+  explores: 0,
+  refines: 0,
+  frontier: 0,
+  maxGeneration: 0,
   notice: why,
 });
 
@@ -393,12 +403,55 @@ function dispatch(socket: WebSocket, message: Up): void {
     dirty = true;
     return;
   }
-  // The lab's three gestures. Answered inline rather than on the heartbeat,
-  // because a review queue advancing is the one thing the reviewer is
-  // waiting on — and broadcast to every client, because the queue is the
-  // show's the way the wheel is.
+  // The lab's queue gestures. Answered inline rather than on the heartbeat,
+  // because advancing the question is the answer the reviewer is waiting on,
+  // and broadcast because every attached console sees the same queue.
   if (message.kind === 'lab-open') {
     onLab(socket, (engine) => sendLab(engine.open()));
+    return;
+  }
+  if (message.kind === 'lab-compare') {
+    onLab(socket, (engine) => sendLab(engine.compare(message.comparison)));
+    return;
+  }
+  if (message.kind === 'lab-skip-encounter') {
+    onLab(socket, (engine) => sendLab(engine.skipEncounter(message.encounterId)));
+    return;
+  }
+  if (message.kind === 'lab-archive-open') {
+    onLab(socket, (engine) => sendLab(engine.archiveOpen()));
+    return;
+  }
+  if (message.kind === 'lab-archive-select') {
+    onLab(socket, (engine) => sendLab(engine.archiveSelect(message.candidateId)));
+    return;
+  }
+  if (message.kind === 'lab-archive-decide') {
+    onLab(socket, (engine) => sendLab(engine.archiveDecide(message.decision)));
+    return;
+  }
+  if (message.kind === 'lab-lineage-finalist') {
+    onLab(socket, (engine) => sendLab(engine.lineageFinalist(message.decision)));
+    return;
+  }
+  if (message.kind === 'lab-finals-open') {
+    onLab(socket, (engine) => sendLab(engine.finalsOpen()));
+    return;
+  }
+  if (message.kind === 'lab-finals-new') {
+    onLab(socket, (engine) => sendLab(engine.finalsNew()));
+    return;
+  }
+  if (message.kind === 'lab-finals-compare') {
+    onLab(socket, (engine) => sendLab(engine.finalsCompare(message.comparison)));
+    return;
+  }
+  if (message.kind === 'lab-finals-skip') {
+    onLab(socket, (engine) => sendLab(engine.finalsSkip(message.encounterId)));
+    return;
+  }
+  if (message.kind === 'lab-select') {
+    onLab(socket, (engine) => sendLab(engine.select(message.selection)));
     return;
   }
   if (message.kind === 'lab-review') {
@@ -500,10 +553,10 @@ function dispatch(socket: WebSocket, message: Up): void {
   // broadcast below carries what the server actually holds either way.
   scheme.replace(message.scheme);
   dirty = true;
-  // Back to everyone, including the editor that sent it: the server merges
-  // against the built-in scheme, so what it now holds is not byte-identical
-  // to what was sent, and an editor showing its own guess rather than the
-  // resolved truth is an editor that drifts.
+  // Back to everyone, including the editor that sent it: the server repairs
+  // and carries schemes at this one door, so what it now holds need not be
+  // byte-identical to what was sent, and an editor showing its own guess rather
+  // than the resolved truth is an editor that drifts.
   for (const other of clients) if (other.readyState === other.OPEN) sendScheme(other);
   // The broadcast above already carried this revision; without this the
   // heartbeat would send every gesture a second time, one tick late.

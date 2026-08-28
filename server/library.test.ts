@@ -2,9 +2,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { EXAMPLES_SCHEME_ID } from '../protocol.ts';
 import type { SchemePlace } from './home.ts';
 import { openLibrary, type SchemeStore } from './library.ts';
-import { BUILT_IN } from './scheme.ts';
+import { EXAMPLES } from './scheme.ts';
 
 /**
  * The distance between the screen and the disk, which is the store's whole
@@ -40,22 +41,30 @@ describe('the scheme store', () => {
     fs.rmSync(scratch, { recursive: true, force: true });
   });
 
-  it('draws the built-in show from an empty library, cleanly', () => {
-    store = openLibrary(placed());
-    expect(store.current()).toBe(BUILT_IN);
-    expect(store.library()).toMatchObject({ schemes: ['main'], current: 'main', dirty: false });
-    expect(fs.existsSync(placed().file)).toBe(false);
+  it('starts a new library with an editable main copied from Examples', () => {
+    const place = placed();
+    store = openLibrary(place);
+    expect(store.current()).toEqual(EXAMPLES);
+    expect(store.current()).not.toBe(EXAMPLES);
+    expect(store.library()).toMatchObject({
+      schemes: [EXAMPLES_SCHEME_ID, 'main'],
+      current: 'main',
+      readOnly: false,
+      dirty: false,
+    });
+    expect(JSON.parse(fs.readFileSync(place.file, 'utf8'))).toEqual(EXAMPLES);
   });
 
   it('holds an edit in memory and touches no file', () => {
     const place = placed();
     store = openLibrary(place);
+    const beforeFile = fs.readFileSync(place.file, 'utf8');
     const before = store.revision();
     store.replace({ ...store.current(), seed: 'edited' });
     expect(store.current().seed).toBe('edited');
     expect(store.revision()).toBeGreaterThan(before);
     expect(store.library().dirty).toBe(true);
-    expect(fs.existsSync(place.file)).toBe(false);
+    expect(fs.readFileSync(place.file, 'utf8')).toBe(beforeFile);
   });
 
   it('saves the open scheme to its file and is clean again', () => {
@@ -84,16 +93,15 @@ describe('the scheme store', () => {
     store = openLibrary(place);
     store.replace({ ...store.current(), seed: 'night-version' });
     store.saveAs('night');
-    // `main` is gone from the shelf: it never had a file, and an unsaved id
-    // is only listed while it is the open one.
     expect(store.library()).toMatchObject({
-      schemes: ['night'],
+      schemes: [EXAMPLES_SCHEME_ID, 'main', 'night'],
       current: 'night',
+      readOnly: false,
       dirty: false,
     });
     expect(fs.existsSync(path.join(place.dir!, 'night.json'))).toBe(true);
-    // main.json was never written: save-as moved *on*, it did not save behind.
-    expect(fs.existsSync(place.file)).toBe(false);
+    // Save-as moved on without changing the editable starter behind it.
+    expect(fs.existsSync(place.file)).toBe(true);
     const state = JSON.parse(fs.readFileSync(place.stateFile!, 'utf8')) as { scheme: string };
     expect(state.scheme).toBe('night');
   });
@@ -106,6 +114,41 @@ describe('the scheme store', () => {
     store.load('calm');
     expect(store.current().seed).toBe('calm');
     expect(store.library()).toMatchObject({ current: 'calm', dirty: false });
+  });
+
+  it('does not put an example flow back after an editable scheme deletes it', () => {
+    const place = placed();
+    store = openLibrary(place);
+    const flows = { ...store.current().flows };
+    delete flows.folded;
+    store.replace({ ...store.current(), flows });
+    expect(store.current().flows.folded).toBeUndefined();
+    store.save();
+    store.stop();
+    store = openLibrary(place);
+    expect(store.current().flows.folded).toBeUndefined();
+  });
+
+  it('keeps Examples read-only and makes an editable copy with save as', () => {
+    const place = placed();
+    store = openLibrary(place);
+    store.load(EXAMPLES_SCHEME_ID);
+    expect(store.current()).toEqual(EXAMPLES);
+    expect(store.library()).toMatchObject({ current: EXAMPLES_SCHEME_ID, readOnly: true });
+
+    const flows = { ...store.current().flows };
+    delete flows.folded;
+    store.replace({ ...store.current(), flows });
+    expect(store.current().flows.folded).toBeUndefined();
+    store.save();
+    expect(store.library().notice).toContain('read-only');
+    expect(fs.existsSync(path.join(place.dir!, `${EXAMPLES_SCHEME_ID}.json`))).toBe(false);
+
+    store.saveAs('from-examples');
+    expect(store.library()).toMatchObject({ current: 'from-examples', readOnly: false, dirty: false });
+    expect(store.current().flows.folded).toBeUndefined();
+    store.load(EXAMPLES_SCHEME_ID);
+    expect(store.current().flows.folded).toBeDefined();
   });
 
   it('reloading the open scheme is the revert gesture', () => {

@@ -6,6 +6,7 @@ import { dealRoom, seeded, type CandidateDraft, type LabMethod } from '../lab.ts
 import type { FlowDef, LabRoom, LabSubmission } from '../protocol.ts';
 import { SOURCES } from '../protocol.ts';
 import { freshMethod } from './fresh.ts';
+import { finalsRooms } from './finals.ts';
 import { labEngine, openLab, type LabStore } from './lab.ts';
 
 const dirs: string[] = [];
@@ -97,6 +98,8 @@ describe('the store', () => {
     expect(held[0].tags).toEqual(['breathing', 'distinctive', 'euphoric', 'geometric']);
     expect(again.candidate('c-one')?.flow.name).toBe('Candidate c-one');
     expect(again.counts(again.openExperiment('fresh', 1, 'deck'))).toEqual({
+      liked: 0,
+      rejected: 0,
       reviewed: 1,
       skipped: 0,
       pending: 0,
@@ -126,7 +129,13 @@ describe('the store', () => {
     store.addCandidate(candidate('c-one'));
     store.serve('c-one', experiment);
     store.skip('c-one', experiment);
-    expect(store.counts(experiment)).toEqual({ reviewed: 0, skipped: 1, pending: 0 });
+    expect(store.counts(experiment)).toEqual({
+      liked: 0,
+      rejected: 0,
+      reviewed: 0,
+      skipped: 1,
+      pending: 0,
+    });
     expect(store.reviews('c-one')).toHaveLength(0);
     expect(store.aggregate('c-one').count).toBe(0);
   });
@@ -151,6 +160,150 @@ describe('the store', () => {
     const generic = held.tags.find((t) => t.id === 'generic');
     expect(generic?.count).toBe(1);
     expect(store.snapshotRatings('mean', 1)).toBe(1);
+  });
+
+  it('keeps binary train decisions out of the anchored review corpus', () => {
+    const store = open(scratch());
+    const experiment = store.openExperiment('lineage', 1, 'deck');
+    store.addCandidate(candidate('c-one'));
+    store.addOrigin({
+      candidateId: 'c-one',
+      experimentId: experiment,
+      operation: 'random',
+      operationJson: { cohort: 'cohort-one' },
+    });
+    store.serve('c-one', experiment);
+    const room = dealRoom('cohort-one');
+    expect(
+      store.select(
+        { candidateId: 'c-one', verdict: 'up' },
+        { experimentId: experiment, rendererVersion: 'p@1' },
+      ).ok,
+    ).toBe(true);
+    expect(store.counts(experiment)).toEqual({
+      liked: 1,
+      rejected: 0,
+      reviewed: 1,
+      skipped: 0,
+      pending: 0,
+    });
+    expect(store.reviews('c-one')).toEqual([]);
+    expect(store.aggregate('c-one').count).toBe(0);
+    const challenge = store
+      .exportJsonl()
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as { t: string; room_json?: string })
+      .find((line) => line.t === 'challenge');
+    expect(JSON.parse(challenge!.room_json!)).toEqual(room);
+    expect(store.evidence(experiment)[0]).toMatchObject({
+      id: 'c-one',
+      cohort: 'cohort-one',
+      verdict: 'up',
+      generation: 0,
+    });
+    expect(
+      store.select(
+        { candidateId: 'c-one', verdict: 'down' },
+        { experimentId: experiment, rendererVersion: 'p@1' },
+      ).ok,
+    ).toBe(false);
+  });
+
+  it('persists a whole search comparison without inventing two single votes', () => {
+    const store = open(scratch());
+    const experiment = store.openExperiment('lineage', 2, 'deck');
+    store.addCandidate(candidate('left'));
+    store.addCandidate(candidate('right', 'noise'));
+    store.addOrigin({
+      candidateId: 'left',
+      experimentId: experiment,
+      operation: 'random',
+      operationJson: { cohort: 'family-left' },
+    });
+    store.addOrigin({
+      candidateId: 'right',
+      experimentId: experiment,
+      operation: 'random',
+      operationJson: { cohort: 'family-right' },
+    });
+    const room = dealRoom('one-question');
+    const encounterId = store.addEncounter({
+      experimentId: experiment,
+      phase: 'explore',
+      anchorId: null,
+      leftId: 'left',
+      rightId: 'right',
+      room,
+      depth: 0,
+    });
+
+    expect(store.nextEncounter(experiment)).toEqual({
+      id: encounterId,
+      phase: 'explore',
+      anchorId: null,
+      leftId: 'left',
+      rightId: 'right',
+      room,
+      depth: 0,
+    });
+    expect(
+      store.compare(
+        { encounterId, choice: 'both' },
+        { experimentId: experiment, rendererVersion: 'pipeline@test' },
+      ),
+    ).toEqual({ ok: true });
+    expect(store.nextEncounter(experiment)).toBeNull();
+    expect(store.encounterEvidence(experiment)).toEqual([
+      {
+        id: encounterId,
+        phase: 'explore',
+        anchorId: null,
+        leftId: 'left',
+        rightId: 'right',
+        depth: 0,
+        disposition: 'compared',
+        choice: 'both',
+        decidedAt: 1,
+      },
+    ]);
+    expect(store.searchCounts(experiment)).toEqual({
+      comparisons: 1,
+      explores: 1,
+      refines: 0,
+      skipped: 0,
+      pending: 0,
+    });
+    expect(store.counts(experiment)).toEqual({
+      liked: 0,
+      rejected: 0,
+      reviewed: 0,
+      skipped: 0,
+      pending: 0,
+    });
+    expect(
+      store.compare(
+        { encounterId, choice: 'left' },
+        { experimentId: experiment, rendererVersion: 'pipeline@test' },
+      ).ok,
+    ).toBe(false);
+
+    const skipped = store.addEncounter({
+      experimentId: experiment,
+      phase: 'refine',
+      anchorId: 'left',
+      leftId: 'left',
+      rightId: 'right',
+      room: dealRoom('another-question'),
+      depth: 1,
+    });
+    store.skipEncounter(skipped, experiment);
+    expect(store.searchCounts(experiment).skipped).toBe(1);
+    expect(store.encounterEvidence(experiment)[1]).toMatchObject({
+      id: skipped,
+      disposition: 'skipped',
+      choice: null,
+    });
   });
 
   it('lists the log newest first and pages past it', () => {
@@ -217,8 +370,62 @@ describe('the store', () => {
       rendererVersion: 'p@1',
     });
     store.addCandidate(candidate('c-two', 'noise'));
+    store.addOrigin({
+      candidateId: 'c-two',
+      experimentId: experiment,
+      operation: 'random',
+      operationJson: { cohort: 'cohort-two' },
+    });
     store.serve('c-two', experiment);
-    store.skip('c-two', experiment);
+    store.select(
+      { candidateId: 'c-two', verdict: 'down' },
+      { experimentId: experiment, rendererVersion: 'p@1' },
+    );
+    const encounter = store.addEncounter({
+      experimentId: experiment,
+      phase: 'explore',
+      anchorId: null,
+      leftId: 'c-one',
+      rightId: 'c-two',
+      room: dealRoom('pair'),
+      depth: 0,
+    });
+    store.compare(
+      { encounterId: encounter, choice: 'neither' },
+      { experimentId: experiment, rendererVersion: 'p@1' },
+    );
+    store.archiveDecide(
+      { candidateId: 'c-one', verdict: 'keep', source: 'archive' },
+      { experimentId: experiment, room: dealRoom('remembered') },
+    );
+    store.lineageFinalist({ candidateId: 'c-one', finalist: true }, experiment);
+    const rooms = finalsRooms('round-trip');
+    const run = store.createFinalsRun({
+      experimentId: experiment,
+      targetCount: 2,
+      rooms,
+      nominees: store.evidence(experiment).map((held, selectedOrder) => ({
+        candidate: held,
+        seedScore: 0.5,
+        selectedOrder,
+      })),
+    });
+    const finalMatch = store.addFinalsEncounter({
+      runId: run,
+      leftId: 'c-one',
+      rightId: 'c-two',
+      roomIndex: 0,
+      room: rooms[0].room,
+    });
+    store.finalsCompare(
+      {
+        encounterId: finalMatch,
+        choice: 'left',
+        leftShowReady: true,
+        rightShowReady: false,
+      },
+      { runId: run, rendererVersion: 'p@1' },
+    );
 
     const text = store.exportJsonl();
     const twin = open(scratch());
@@ -228,6 +435,12 @@ describe('the store', () => {
     expect(twin.counts(twin.openExperiment('fresh', 1, 'deck'))).toEqual(
       store.counts(experiment),
     );
+    expect(twin.encounterEvidence(experiment)).toEqual(store.encounterEvidence(experiment));
+    expect(twin.archiveCandidates(experiment)).toEqual(store.archiveCandidates(experiment));
+    expect(twin.archiveDecisions(experiment)).toEqual(store.archiveDecisions(experiment));
+    expect(twin.lineageFinalists(experiment)).toEqual(store.lineageFinalists(experiment));
+    expect(twin.finalsRun(experiment)).toEqual(store.finalsRun(experiment));
+    expect(twin.finalsEvidence(run)).toEqual(store.finalsEvidence(run));
     expect(() => twin.importJsonl(text)).toThrow(/empty/);
   });
 });
@@ -301,6 +514,19 @@ describe('the engine', () => {
     expect(after.candidate?.id).not.toBe(first.candidate?.id);
   });
 
+  it('advances on a thumb without manufacturing a detailed score', () => {
+    const engine = labEngine(open(scratch()), fakeMethod(), 'one-deck');
+    const first = engine.open();
+    const after = engine.select({
+      candidateId: first.candidate!.id,
+      verdict: 'up',
+    });
+    expect(after.liked).toBe(1);
+    expect(after.rejected).toBe(0);
+    expect(after.candidate?.id).not.toBe(first.candidate?.id);
+    expect(engine.log().reviews).toEqual([]);
+  });
+
   it('an offered flow jumps the queue and says it is manual', () => {
     const engine = labEngine(open(scratch()), fakeMethod(), 'one-deck');
     const dealt = engine.open();
@@ -337,10 +563,11 @@ describe('the engine', () => {
 describe('the fresh method', () => {
   it('is deterministic in its seed', () => {
     const method = freshMethod();
-    const a = method.next(null, { reviewed: 0, skipped: 0 }, 3, seeded('deck:0'));
-    const b = method.next(null, { reviewed: 0, skipped: 0 }, 3, seeded('deck:0'));
+    const empty = { reviewed: 0, skipped: 0, liked: 0, rejected: 0, candidates: [] };
+    const a = method.next(null, empty, 3, seeded('deck:0'));
+    const b = method.next(null, empty, 3, seeded('deck:0'));
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
-    const c = method.next(null, { reviewed: 0, skipped: 0 }, 3, seeded('deck:1'));
+    const c = method.next(null, empty, 3, seeded('deck:1'));
     expect(JSON.stringify(c)).not.toBe(JSON.stringify(a));
   });
 
