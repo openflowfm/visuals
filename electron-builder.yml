@@ -35,20 +35,43 @@ files:
 
 asar: false
 
+# The `.dmg` is the file that actually travels, and electron-builder notarises
+# the `.app` inside it and nothing else. An unsigned disk image is assessed by
+# Gatekeeper on open and fails there, however good the bundle within it is — so
+# this signs it, and `.github/workflows/release.yml` notarises and staples it
+# afterwards. Both halves are needed: the ticket on the app survives being
+# dragged out of the image, the ticket on the image is what lets it open.
+dmg:
+  sign: true
+
 mac:
   category: public.app-category.music
   icon: electron/dist/icon.icns
   target:
     - dmg
     - dir
-  # Unsigned, deliberately, for now. There are Apple developer keys to hand, and
-  # turning this on needs no file edit:
+  # Signed with whatever Developer ID is in the keychain, and notarised when the
+  # notary credentials are in the environment. `.github/workflows/release.yml`
+  # supplies both; nothing else has to, and no flag turns it on.
   #
-  #   npm run pack:visuals -- -c.mac.identity="Developer ID Application: NAME (TEAM)"
+  # A machine with neither still packs — electron-builder warns and leaves the
+  # ad-hoc signature the linker wrote. That bundle is fine for
+  # `npm run install:apps` and worthless anywhere else: it reads
+  # `Identifier=Electron` with `Sealed Resources=none`, so a Mac that did not
+  # build it reports it as damaged rather than as unsigned. Distributing one is
+  # a worse first run than distributing nothing.
   #
-  # Notarising as well wants `hardenedRuntime: true`, an entitlements plist and
-  # `notarize:` here — see `docs/desktop.md`. Not signing costs nothing locally:
-  # a bundle you built carries no quarantine flag, and `npm run install:apps`
-  # strips one anyway. It costs on any machine the `.dmg` travels to, where the
-  # unsealed resources read as a broken signature rather than an untrusted one.
-  identity: null
+  # Hardened runtime and the entitlements notarisation demands are already
+  # electron-builder's defaults for a Developer ID build — JIT, unsigned
+  # executable memory, and library validation off. Electron needs the first two
+  # and the Link addon needs the third, its `.node` binary being a library
+  # loaded after launch. There is no plist of our own to keep in step.
+
+  # Link finds its peers over UDP multicast, which macOS 15 gates behind the
+  # local-network prompt. Without this string the prompt still appears, worded
+  # by the system and explaining nothing — and a refusal is silent afterwards:
+  # the clock simply never finds Live.
+  extendInfo:
+    NSLocalNetworkUsageDescription: >-
+      visual[flow] uses the local network to find Ableton Link peers, so the
+      show follows Live's tempo and downbeat.
