@@ -6,6 +6,14 @@ appId: com.openflow.visuals
 productName: visual[flow]
 copyright: © Ryan Gavin
 
+# The download name, which is not the app name. `productName` above is what the
+# Dock, the menu bar and ⌘-Tab read, and the brackets are the whole point of it.
+# They are ruinous in a filename: `gh release create` glob-expands every asset
+# path it is given, reads `[flow]` as a character class, matches nothing, and
+# fails with "no matches found" before it has spoken to GitHub at all. A URL
+# would escape them too.
+artifactName: visual-flow-${version}-${arch}.${ext}
+
 directories:
   output: ../release/visuals
   buildResources: electron/dist
