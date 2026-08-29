@@ -124,6 +124,19 @@ html, body, #root {
 
 .panel dd.beat b[data-on] { color: #f0b23c; }
 
+.panel dd.frames {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.panel dd.frames small { color: #5e5e66; }
+
+.panel dd.frames.good { color: #ececed; }
+.panel dd.frames.watch { color: #f0b23c; }
+.panel dd.frames.bad { color: #ff8b8b; }
+
 .hint { margin: 6px 0 0; color: #5e5e66; }
 
 kbd {

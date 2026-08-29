@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { schemeLabel } from '../protocol.ts';
 import { createCompositor, type Compositor } from './render/compositor.ts';
+import type { FrameStats } from './render/meter.ts';
+import { describeFrames } from './ui/frames.ts';
 import { useOutput } from './state/useOutput.ts';
 import { useShow, type Clock } from './state/useShow.ts';
-import { ON_WALL, useOnWall, useWall } from './state/useWall.ts';
+import { ON_WALL, reportFrames, useOnWall, useWall, useWallFrames } from './state/useWall.ts';
 import { Align } from './ui/Align.tsx';
 import { Boundary } from './ui/Boundary.tsx';
 import { Console } from './ui/Console.tsx';
@@ -75,11 +77,24 @@ export function App() {
   schemeRef.current = scheme;
   const { output, aligning, align, moveCorner, setGain, reset } = useOutput();
   const wall = useWall(!ON_WALL);
+  const wallFrames = useWallFrames(!ON_WALL);
   const { open: walled, send, shut } = wall;
   useOnWall(ON_WALL);
   const [panel, setPanel] = useState(true);
   const [editing, setEditing] = useState(false);
-  const [fps, setFps] = useState(0);
+  /**
+   * This window's own frames. On the console with a wall up these describe a
+   * quarter-size preview rather than the show, which is why the readout prefers
+   * the wall's numbers whenever there are any.
+   */
+  const [frames, setFrames] = useState<FrameStats | null>(null);
+  // The wall's numbers whenever there is a wall, because with one up this
+  // window is drawing a quarter-size preview and its frame time describes that
+  // preview rather than the show. The readout names which it is showing.
+  const frameLine = describeFrames(
+    walled ? wallFrames : frames,
+    walled ? 'wall' : 'console',
+  );
   const [glError, setGlError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -147,7 +162,6 @@ export function App() {
 
     let raf = 0;
     let last = performance.now();
-    let frames = 0;
     let since = last;
 
     const loop = (now: number) => {
@@ -159,12 +173,14 @@ export function App() {
       clock.advance(dt);
       compositor.frame(showRef.current, schemeRef.current, clock.beat(), clock.seconds(), dt);
 
-      frames += 1;
       if (now - since >= 500) {
-        // Nobody reads a frame rate off a projector, and a wall re-rendering
-        // twice a second for a number it does not draw is two renders too many.
-        if (!ON_WALL) setFps(Math.round((frames * 1000) / (now - since)));
-        frames = 0;
+        // Nobody reads a frame rate off a projector, so the wall does not draw
+        // this — it says it, once a second, and the console reads it. Sorting a
+        // 600-frame window twice a second is nothing next to a frame; sorting
+        // it *inside* a frame would not be, which is why it is on this tick.
+        const reading = compositor.stats();
+        if (ON_WALL) reportFrames(reading);
+        else setFrames(reading);
         since = now;
         // Set rather than only-when-set: a context that came back clears its
         // own message, and a panel still reading "the graphics context was
@@ -250,8 +266,11 @@ export function App() {
             </dd>
             <dt>colours</dt>
             <dd className="wide">{show.colorway ?? '—'}</dd>
-            <dt>fps</dt>
-            <dd>{fps}</dd>
+            <dt>frames</dt>
+            <dd className={`frames ${frameLine.tone}`} title={frameLine.detail}>
+              <span>{frameLine.headline}</span>
+              <small>{frameLine.source}</small>
+            </dd>
             <dt>wall</dt>
             <dd className="wall">
               {walled ? (

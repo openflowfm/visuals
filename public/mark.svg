@@ -1,33 +1,35 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
   <defs>
-    <linearGradient id="visual" x1="78" y1="64" x2="438" y2="450" gradientUnits="userSpaceOnUse">
+    <linearGradient id="visual" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#6D5CFF"/>
       <stop offset="0.52" stop-color="#D849FF"/>
       <stop offset="1" stop-color="#FF6B6B"/>
     </linearGradient>
-    <clipPath id="disc">
-      <circle cx="256" cy="256" r="200"/>
+    <clipPath id="face">
+      <rect x="10" y="10" width="492" height="492" rx="105"/>
     </clipPath>
   </defs>
 
-  <circle cx="256" cy="256" r="220" fill="#090A0E"/>
-  <circle cx="256" cy="256" r="200" fill="#F7F4EB"/>
-  <path d="M256 56A200 200 0 0 1 256 456A100 100 0 0 1 256 256A100 100 0 0 0 256 56Z" fill="url(#visual)"/>
+  <rect x="0" y="0" width="512" height="512" rx="115" fill="#090A0E"/>
+  <rect x="10" y="10" width="492" height="492" rx="105" fill="#F7F4EB"/>
 
-  <!-- Rotationally paired ray fields make both dots behave as emitter nodes. -->
-  <g clip-path="url(#disc)" fill="none" stroke-width="20" stroke-linecap="round">
-    <g stroke="url(#visual)" opacity="0.96">
-      <path d="M256 156C191 211 132 231 40 238"/>
-      <path d="M256 156C181 169 116 159 40 120"/>
-      <path d="M256 156C194 118 143 83 102 32"/>
-    </g>
-    <g stroke="#090A0E" opacity="0.52">
-      <path d="M256 356C321 301 380 281 472 274"/>
-      <path d="M256 356C331 343 396 353 472 392"/>
-      <path d="M256 356C318 394 369 429 410 480"/>
+  <g clip-path="url(#face)">
+    <path d="M256 0H512V512H256A128 128 0 0 1 256 256A128 128 0 0 0 256 0Z" fill="url(#visual)"/>
+
+    <g fill="none" stroke-width="24" stroke-linecap="round">
+      <g stroke="url(#visual)" opacity="0.96">
+        <path d="M256 128C176 190 110 212 0 218"/>
+        <path d="M256 128C168 142 92 128 0 82"/>
+        <path d="M256 128C186 82 130 42 84 -16"/>
+      </g>
+      <g stroke="#090A0E" opacity="0.52">
+        <path d="M256 384C336 322 402 300 512 294"/>
+        <path d="M256 384C344 370 420 384 512 430"/>
+        <path d="M256 384C326 430 382 470 428 528"/>
+      </g>
     </g>
   </g>
 
-  <circle cx="256" cy="156" r="30" fill="url(#visual)"/>
-  <circle cx="256" cy="356" r="30" fill="#F7F4EB"/>
+  <circle cx="256" cy="128" r="38" fill="url(#visual)"/>
+  <circle cx="256" cy="384" r="38" fill="#F7F4EB"/>
 </svg>

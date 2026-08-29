@@ -26,6 +26,7 @@ Live ─ SessionBridge :17800 ─WS─> visuals backend :17900 ─WS─> Electro
 | [the lab](docs/lab.md) | recursive search, historical Archive, frozen Finals and the detailed corpus | `lab.ts`, `server/lab.ts`, `server/lineage.ts`, `server/finals.ts`, `src/ui/TrainView.tsx`, `src/ui/ArchiveView.tsx`, `src/ui/FinalsView.tsx`, `src/ui/ReviewsView.tsx` |
 | [parameter calibration](docs/calibration.md) | the development-only A/B/C response bench and its evidence | `response.ts`, `calibration.ts`, `server/calibration.ts`, `src/ui/CalibrationView.tsx` |
 | [the renderer](docs/render.md) | the two passes, blending, fill rate, **pointing a projector** | `src/render/*` |
+| [the engine](docs/engine.md) | where the frame time goes, Electron's real cost, why particles need no rewrite | `src/render/compositor.ts`, `electron/main.ts` |
 | [the harness](docs/harness.md) | working on this with no Ableton, and the Link safety rule | `tools/fake-live.ts` |
 | [the desktop app](docs/desktop.md) | the window, the wall on a projector, the display list, why the server is a child process | `electron/main.ts`, `electron/preload.ts`, `src/state/useWall.ts` |
 | [agent authoring](docs/mcp.md) | the MCP tools for reading nodes, validating and saving flows, and reviewing node designs | `mcp/*` |

@@ -4,6 +4,7 @@ import { createNumberEvaluator, type NumberEvaluator } from './evaluateNumber.ts
 import { createFeed, type Banks } from './feed.ts';
 import { banksOf, buildFlow, signatureOf } from './flow.ts';
 import { compile, createTarget, drawFullscreen, type Program } from './gl.ts';
+import { createMeter, type FrameStats, type Meter } from './meter.ts';
 import { columns, warpFor, SQUARE, type Corners } from './output.ts';
 import { createVideoBank, videoControl } from './video.ts';
 import { createImageBank } from './image.ts';
@@ -47,6 +48,13 @@ export interface Compositor {
   resize(): void;
   free(): void;
   readonly error: string | null;
+  /**
+   * What the last ten seconds of frames cost. Sorts its window, so read it about
+   * once a second — not every frame, and never from inside one.
+   */
+  stats(): FrameStats;
+  /** Throw the window away, so a reading starts from a change rather than through it. */
+  resetStats(): void;
 }
 
 export interface Output {
@@ -82,6 +90,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
   });
 
   if (!gl) {
+    const idle = createMeter();
     return {
       frame() {},
       setOutput() {},
@@ -89,6 +98,8 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       resize() {},
       free() {},
       error: 'WebGL2 is not available in this browser.',
+      stats: () => idle.read(),
+      resetStats: () => idle.reset(),
     };
   }
 
@@ -96,6 +107,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
   /** False between a context being lost and the browser handing one back. */
   let alive = true;
   const flows = new Map<string, Built>();
+  let meter: Meter = createMeter(gl);
   let feed = createFeed(gl);
   let video = createVideoBank(gl);
   let image = createImageBank(gl);
@@ -271,6 +283,10 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
     feed.free();
     video.free();
     image.free();
+    // The timer queries are GL objects like any other, and a pool of them left
+    // behind on every console open is exactly the slow leak this file's meter
+    // exists to make visible. `onRestored` builds a fresh meter after this.
+    meter.free();
     for (const built of flows.values()) if (built.program) gl.deleteProgram(built.program.program);
     flows.clear();
     brokenFrom.clear();
@@ -304,6 +320,11 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
    * them is what makes the next frame rebuild exactly the flow that was up.
    */
   const onRestored = () => {
+    // The old meter's queries died with the context, and its window describes a
+    // renderer that no longer exists. Both are thrown away rather than carried
+    // across, or the first reading after a restore would report the stall.
+    meter.free();
+    meter = createMeter(gl);
     feed = createFeed(gl);
     video = createVideoBank(gl);
     image = createImageBank(gl);
@@ -323,6 +344,8 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
     get error() {
       return error ?? feed.error ?? video.error ?? image.error;
     },
+    stats: () => meter.read(),
+    resetStats: () => meter.reset(),
     resize,
     preview(on) {
       // `?maxEdge` still wins. Someone who asked for 800 asked for 800.
@@ -361,6 +384,10 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       // making them is what keeps a lost context from rebuilding flows that
       // cannot compile, sixty times a second, until it comes back.
       if (!alive) return;
+      // Before `resize`, so the measure covers everything this frame does. A
+      // lost context is deliberately outside it: those frames are not frames,
+      // and counting them would report a stall as a clean 0ms.
+      meter.begin(performance.now());
       resize();
       gl.viewport(0, 0, canvas.width, canvas.height);
       gl.disable(gl.DEPTH_TEST);
@@ -430,6 +457,13 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       const spent = out;
       out = prev;
       prev = spent;
+
+      // What this closes is the *CPU* half: every draw call is now issued, and
+      // almost none of them has finished. That is the honest boundary a caller
+      // can measure — waiting for the GPU here would mean a `finish()`, which
+      // would stall the very pipeline it was trying to time. The GPU's own
+      // number comes back through the timer query, several frames later.
+      meter.end(performance.now());
     },
   };
 }

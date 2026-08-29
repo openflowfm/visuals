@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { FrameStats } from '../render/meter.ts';
 import type { Output } from './useOutput.ts';
 
 /**
@@ -45,7 +46,17 @@ type Word =
   | { kind: 'wall' }
   | { kind: 'gone' }
   | { kind: 'shut' }
-  | { kind: 'output'; output: Output; aligning: boolean };
+  | { kind: 'output'; output: Output; aligning: boolean }
+  /**
+   * What the wall's own frames cost.
+   *
+   * The wall is the window whose frame time is the only one that matters and
+   * the one window that must not draw a number — nobody reads a readout off a
+   * projector, and a wall re-rendering to show one is spending the very frames
+   * it would be reporting on. So it measures and says, once a second, and the
+   * console is where the answer is read. See `../render/meter.ts`.
+   */
+  | { kind: 'meter'; stats: FrameStats };
 
 /**
  * Chrome's window management API, which `lib.dom` does not describe yet.
@@ -100,6 +111,11 @@ function wire(): BroadcastChannel | null {
 /** Say something to the other end. Free when there isn't one. */
 export function say(word: Word): void {
   wire()?.postMessage(word);
+}
+
+/** The wall reporting what its frames cost. Silent anywhere but the wall. */
+export function reportFrames(stats: FrameStats): void {
+  say({ kind: 'meter', stats });
 }
 
 /** Listen to the other end. A channel never delivers to its own sender. */
@@ -328,6 +344,25 @@ export function useOnWall(active: boolean): void {
       leaving();
     };
   }, [active]);
+}
+
+/**
+ * The wall's last frame report, or `null` while there is no wall to hear from.
+ *
+ * Cleared when the wall goes, rather than left showing the last thing it said:
+ * a stale p99 beside a closed projector reads as a live one, and the whole
+ * point of the number is that it describes what is on screen now.
+ */
+export function useWallFrames(active: boolean): FrameStats | null {
+  const [stats, setStats] = useState<FrameStats | null>(null);
+  useEffect(() => {
+    if (!active) return;
+    return hear((word) => {
+      if (word.kind === 'meter') setStats(word.stats);
+      if (word.kind === 'gone') setStats(null);
+    });
+  }, [active]);
+  return stats;
 }
 
 /** Whether this window *is* the wall. Decided by the URL, once, for its lifetime. */
