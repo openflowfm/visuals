@@ -161,34 +161,58 @@ than a gap.
 drawn as fast as this machine can draw it.
 
 ```sh
-npm run benchmark                      # 1920, which is the show
+npm run benchmark                      # 1920, eight bars a flow
+npm run benchmark -- --bars=2          # the same ranking, a quarter of the time
 npm run benchmark -- --sweep           # 1280, 1920, 2560, 3840
 npm run benchmark -- --edges=3840      # whatever you name
 ```
+
+Eight bars at 128bpm is fifteen seconds a flow, so a whole scheme is about seven minutes and
+a `--sweep` is most of an hour. `--bars` is the flag to reach for when that is too long.
 
 **It cannot use `requestAnimationFrame`, and that is the whole design.** A browser paces rAF
 to the display, so a machine capable of 300fps and one barely holding 60 both report 60
 through it — which is the one answer a *ceiling* measurement must not give. The page runs
 free instead.
 
-**It times a batch rather than a frame**, for two reasons that are both hard constraints and
-both cost an afternoon to find.
+**It fixes the music and counts the frames**, rather than fixing the frames and timing them.
 
-*The clock is too coarse.* `performance.now()` is clamped to 100µs in a page that is not
-cross-origin isolated, and a 1080p flow on an M1 Max lands near that. Timed one frame at a
-time, every flow at every resolution reported 0.0 or 0.1ms — 4K and 540p alike, which is a
-clock reading its own floor rather than a renderer being fast.
+The inverse is what this was first, and it is subtly the wrong question. With a frame count,
+frames land every half-millisecond, so the musical clock has to advance *per frame* to keep
+moving — which runs the show at about thirty times speed. Everything the renderer does
+against real elapsed time is then wrong in the same direction: a video decoder delivers four
+frames where a show would see four hundred, and its per-frame upload cost disappears from the
+table; an envelope follower sees a bar go by in a few milliseconds. The picture being priced
+stops being a picture anyone will ever see.
 
-*And a per-frame barrier does not exist.* `gl.finish()` is the obvious one and in a browser
-it does not do the job: Chromium runs WebGL over a command buffer, and `finish` returns when
-*that* has drained rather than when the GPU is done. A one-pixel `readPixels` per frame is a
-real barrier and was no better, because it stalls the pipeline it is timing.
+Here the beat comes off the wall clock. Musical time advances at the rate it advances on a
+stage, every decoder and follower runs at the rate it will run on the night, and the only
+thing free to vary is how many frames get drawn — which is the thing being measured.
 
-So a run of frames is issued and the batch is closed with a single `readPixels`, which
-cannot return until the GPU has caught up on all of them. The total over the count is
-**throughput** — which keeps the CPU/GPU overlap a real frame has, where a stalled per-frame
-measure deliberately destroys it. The check that it is honest is that cost scales with
-pixels: the same flow at 3840 costs about four times what it costs at 1920.
+**Two hard constraints shape the timing, and both cost an afternoon to find.**
+
+*The clock is too coarse to time one frame.* `performance.now()` is clamped to 100µs in a
+page that is not cross-origin isolated, and a 1080p flow on an M1 Max lands near that. Timed
+a frame at a time, every flow at every resolution reported 0.0 or 0.1ms — 4K and 540p alike,
+which is a clock reading its own floor rather than a renderer being fast. Measuring against a
+window sidesteps it entirely.
+
+*And a per-frame GPU barrier does not exist.* `gl.finish()` is the obvious one and in a
+browser it does not do the job: Chromium runs WebGL over a command buffer, and `finish`
+returns when *that* has drained rather than when the GPU is done. A one-pixel `readPixels`
+is a real barrier and was no better, because it stalls the pipeline it is timing.
+
+So frames are issued in chunks of about sixteen milliseconds, each closed with one
+`readPixels`. That keeps the CPU/GPU overlap a real frame has *within* a chunk, and bounds
+the frames that could be counted but not yet drawn to one chunk's worth. It also makes the
+run watchable, because a yield is what lets a frame reach the screen — fifteen seconds of
+unbroken JavaScript is a page the browser calls unresponsive and a window the runner cannot
+ask anything of. The yield is a `MessageChannel` rather than a `setTimeout(0)`, which is
+clamped to 4ms and would spend a fifth of every chunk waiting.
+
+Draining every chunk is work a show never does, so **these are ceilings a real show should
+beat.** The check that they are honest is that cost scales with pixels: the same flow at
+3840 costs about four times what it costs at 1920.
 
 The context comes from the canvas rather than from the compositor: `getContext` returns the
 same object for the same canvas, so the bench forces its barrier without the renderer growing

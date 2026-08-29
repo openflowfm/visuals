@@ -10,25 +10,33 @@
  * measurement must not give. The loop here runs free and forces the GPU to
  * finish, so what it reports is the ceiling rather than the cap.
  *
- * **A batch is timed, not a frame, and both reasons are hard constraints.**
+ * **A fixed window of music, and the frames that fit in it.** Eight bars at the
+ * show's own tempo, drawn as fast as the machine will draw them, and the score
+ * is the count.
  *
- * *The clock is too coarse.* `performance.now()` is clamped to 100µs in a page
- * that is not cross-origin isolated, and a 1080p flow on this class of GPU lands
- * near that. Timed one frame at a time, every flow at every resolution reported
- * 0.0 or 0.1ms — 4K and 540p alike, which is a clock reading its own floor
- * rather than a renderer being fast.
+ * The obvious inverse — a fixed frame count, timed — is what this was first, and
+ * it is subtly the wrong question. Frames land every half-millisecond there, so
+ * the musical clock has to be advanced *per frame* to keep moving, which runs
+ * the show at about thirty times speed. Everything the renderer does against
+ * real elapsed time is then wrong in the same direction: a video decoder
+ * delivers four frames where a show would see four hundred and its per-frame
+ * upload cost vanishes; an envelope follower sees a bar go by in a few
+ * milliseconds. The picture being priced stops being a picture anyone will see.
  *
- * *And a per-frame barrier does not exist.* `gl.finish()` is the obvious one and
- * in a browser it does not do the job: Chromium runs WebGL over a command
- * buffer, and `finish` returns when *that* has drained rather than when the GPU
- * is done. A one-pixel `readPixels` per frame is a real barrier and was no
- * better, because it stalls the pipeline it is timing.
+ * Here the clock comes off the wall instead. Musical time advances at the rate
+ * it advances on a stage, every decoder and follower runs at the rate it will
+ * run on the night, and the only thing free to vary is how many frames get
+ * drawn — which is exactly the thing being measured.
  *
- * So a run of frames is issued and the batch is closed with a single
- * `readPixels`, which cannot return until the GPU has caught up on all of them.
- * The total divided by the count is **throughput**, and throughput is the honest
- * form of "how fast can this go" — it keeps the CPU/GPU overlap a real frame
- * has, where a stalled per-frame measure deliberately destroys it.
+ * **Two hard constraints shape how it is timed.** `performance.now()` is clamped
+ * to 100µs in a page that is not cross-origin isolated, so no single frame can
+ * be timed at all on this class of GPU — measuring against a window sidesteps
+ * that completely. And there is no working per-frame GPU barrier in a browser:
+ * `gl.finish()` returns when Chromium's command buffer has drained rather than
+ * when the GPU is done, and a one-pixel `readPixels` is real but stalls the
+ * pipeline it is timing. So frames are issued in chunks, each chunk closed with
+ * one `readPixels`, which keeps the CPU/GPU overlap a real frame has and bounds
+ * how many frames can be counted but not yet drawn to one chunk's worth.
  *
  * The context is fetched from the canvas rather than handed over by the
  * compositor: `getContext` returns the same object for the same canvas, so the
@@ -46,11 +54,14 @@ export interface FlowResult {
   name: string;
   /** The compiler's own prediction, against a ceiling of 64. */
   work: number;
-  /** Milliseconds a frame cost, as a batch's total over its count. */
-  msPerFrame: number;
-  /** The ceiling that implies. */
-  fps: number;
+  /** Frames drawn inside the window. The score. */
   frames: number;
+  /** How long the window actually ran, which overshoots by at most one chunk. */
+  windowMs: number;
+  /** The window over the count. */
+  msPerFrame: number;
+  /** Frames a second, sustained across the whole window. */
+  fps: number;
   error: string | null;
 }
 
@@ -58,6 +69,9 @@ export interface Pass {
   width: number;
   height: number;
   tracks: number;
+  /** Bars of music each flow was drawn for, at `tempo`. */
+  bars: number;
+  tempo: number;
   flows: FlowResult[];
 }
 
@@ -103,13 +117,29 @@ const number = (name: string, fallback: number): number => {
 const WARMUP = number('warmup', 30);
 
 /**
- * Frames in a timed batch.
+ * Bars of music each flow is drawn for.
  *
- * Large enough that the 100µs clock resolution is noise against the total: at
- * 240 frames a flow taking 0.3ms each is a 72ms batch, which the clock reads to
- * better than a part in five hundred.
+ * Eight is a phrase, which is the unit this rig thinks in and long enough that
+ * a flow moving on a four-bar cycle is seen twice. It is also fifteen seconds a
+ * flow at 128bpm, so a whole scheme is minutes rather than seconds — `--bars=2`
+ * gives the same ranking in a quarter of the time when the ranking is all you
+ * are after.
  */
-const SAMPLES = number('samples', 240);
+const BARS = number('bars', 8);
+
+/** The tempo the window is measured in, and the one the show is fed. */
+const TEMPO = 128;
+
+/**
+ * How long to draw before yielding to the browser, in milliseconds.
+ *
+ * The loop has to come up for air: fifteen seconds of unbroken JavaScript is a
+ * page the browser calls unresponsive and a window the runner cannot ask
+ * anything of. Yielding also lets the frame actually reach the screen, which is
+ * what makes the run watchable. Its cost is charged against the window rather
+ * than excused from it — a real frame loop yields too.
+ */
+const CHUNK_MS = 16;
 
 /** Flows to run, for a probe rather than a reading. All of them by default. */
 const LIMIT = number('flows', Number.POSITIVE_INFINITY);
@@ -136,7 +166,7 @@ function showWith(tracks: number, colors: number[]): Show {
     playing: true,
     peers: 1,
     clock: true,
-    tempo: 128,
+    tempo: TEMPO,
     quantum: 4,
     beat: 0,
     at: Date.now(),
@@ -157,6 +187,21 @@ function showWith(tracks: number, colors: number[]): Show {
     roles: [],
     songs: [],
   };
+}
+
+/**
+ * Give the browser one turn.
+ *
+ * A `MessageChannel` rather than `setTimeout(0)`: a nested timeout is clamped to
+ * four milliseconds, which against a sixteen-millisecond chunk would spend a
+ * fifth of the window waiting rather than drawing. This yields in microseconds.
+ */
+function breathe(): Promise<void> {
+  return new Promise((wake) => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => wake();
+    channel.port2.postMessage(0);
+  });
 }
 
 function packColor(hex: string): number {
@@ -226,16 +271,11 @@ export async function run(canvas: HTMLCanvasElement): Promise<BenchReport> {
     const sync = new Uint8Array(4);
     const flows: FlowResult[] = [];
 
+    const windowMs = (BARS * 4 * 60_000) / TEMPO;
+
     for (const id of ids) {
       const compiled = compileFlow(loaded.flows, id);
       const at: Show = { ...show, flow: id };
-      let beat = 0;
-      const step = () => {
-        // A moving clock, because a still one lets the driver reuse work no real
-        // frame could — and because the reactive nodes are most of the cost.
-        beat += 128 / 60 / 60;
-        compositor.frame(at, loaded, beat, beat * 0.46875, 1 / 60);
-      };
 
       /** Block until the GPU has finished everything issued so far. */
       const settle = () => {
@@ -243,20 +283,48 @@ export async function run(canvas: HTMLCanvasElement): Promise<BenchReport> {
         gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, sync);
       };
 
-      for (let i = 0; i < WARMUP; i++) step();
-      // Closed before the clock starts, so the warmup's own queue is not charged
-      // to the first frames of the batch.
+      // Warmed on a still clock, because the only thing this has to buy is the
+      // shader compile and the driver settling — neither cares what beat it is.
+      for (let i = 0; i < WARMUP; i++) compositor.frame(at, loaded, 0, 0, 1 / 60);
       settle();
 
       const started = performance.now();
-      for (let i = 0; i < SAMPLES; i++) step();
+      let last = started;
+      let elapsed = 0;
+      let frames = 0;
+
+      while (elapsed < windowMs) {
+        const until = Math.min(windowMs, elapsed + CHUNK_MS);
+        do {
+          const now = performance.now();
+          elapsed = now - started;
+          // **Musical time off the wall clock, not off a frame counter.** This
+          // is the whole point: the beat advances at the rate a stage advances
+          // it, however many frames the machine manages in between.
+          const dt = Math.min((now - last) / 1000, 0.1);
+          last = now;
+          compositor.frame(at, loaded, (elapsed / 60_000) * TEMPO, elapsed / 1000, dt);
+          frames++;
+        } while (elapsed < until);
+
+        // One barrier a chunk. Per frame would stall the pipeline being measured;
+        // once at the end would let an unknown number of frames be counted and
+        // never drawn. A chunk bounds that error to sixteen milliseconds of it.
+        settle();
+        elapsed = performance.now() - started;
+        await breathe();
+        elapsed = performance.now() - started;
+      }
+
       settle();
-      const ms = (performance.now() - started) / SAMPLES;
+      const spent = performance.now() - started;
+      const ms = spent / frames;
       // Published as it goes. A run this long with no output cannot be told
       // from a run that has hung, and the difference matters at minute four.
       const said =
         `${canvas.width}x${canvas.height}  ${flows.length + 1}/${ids.length}  ` +
-        `${loaded.flows[id]?.name ?? id}  ${ms.toFixed(2)}ms`;
+        `${loaded.flows[id]?.name ?? id}  ${frames} frames in ${BARS} bars  ` +
+        `${((frames * 1000) / spent).toFixed(0)}fps`;
       (window as unknown as { __benchProgress?: string }).__benchProgress = said;
       // The drawing buffer's real size, on the page, beside the picture it
       // describes. The canvas is displayed smaller than it is drawn, and that
@@ -269,8 +337,11 @@ export async function run(canvas: HTMLCanvasElement): Promise<BenchReport> {
         name: loaded.flows[id]?.name ?? id,
         work: compiled.work,
         msPerFrame: ms,
-        fps: ms > 0 ? 1000 / ms : 0,
-        frames: SAMPLES,
+        // From the window rather than from `ms`, so it is literally frames
+        // divided by the seconds they were drawn in.
+        fps: spent > 0 ? (frames * 1000) / spent : 0,
+        frames,
+        windowMs: spent,
         error: compositor.error ?? compiled.error,
       });
 
@@ -279,7 +350,14 @@ export async function run(canvas: HTMLCanvasElement): Promise<BenchReport> {
       await new Promise((wake) => setTimeout(wake, 0));
     }
 
-    passes.push({ width: canvas.width, height: canvas.height, tracks: TRACKS, flows });
+    passes.push({
+      width: canvas.width,
+      height: canvas.height,
+      tracks: TRACKS,
+      bars: BARS,
+      tempo: TEMPO,
+      flows,
+    });
     compositor.free();
   }
 
