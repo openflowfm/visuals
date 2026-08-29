@@ -82,6 +82,9 @@ const EDGES = (new URLSearchParams(location.search).get('edges') ?? '1920')
 /** Playing tracks in the set pass. Eight is the realistic ceiling for a set. */
 const TRACKS = 8;
 
+/** Height of the readout strip along the bottom, which the picture must clear. */
+const READOUT = 34;
+
 const asked = new URLSearchParams(location.search);
 const number = (name: string, fallback: number): number => {
   const found = Number(asked.get(name));
@@ -187,21 +190,29 @@ export async function run(canvas: HTMLCanvasElement): Promise<BenchReport> {
     // that upscale, not the shader, was what the first runs were measuring.
     //
     // The transform then fits that box to the window without touching
-    // `clientWidth`, which is what the size above was derived from. **Fitted
-    // rather than shrunk to a fixed fraction**: the box is wider than the window
-    // at every resolution worth running, so a constant scale makes 4K a stamp
-    // and makes the picture impossible to check against — and a benchmark whose
-    // output you cannot see is one you have to take on trust.
+    // `clientWidth`, which is what the size above was derived from.
     //
-    // It costs nothing to show. Compositing is charged on the *destination*,
-    // which is the window either way, and it happens at the display's rate
-    // rather than at the rate this issues frames.
+    // **Both axes, and no clamp at 1.** Fitting width alone leaves a 16:9 box
+    // taller than the window cropped at the bottom; clamping at 1 means the box
+    // is never scaled *up*, so 1920 on a two-times display is a 960-pixel box
+    // sitting in a 1200-pixel window looking like a preview of a preview. The
+    // box is smaller than the window as often as it is larger, and only fitting
+    // both directions in both directions actually fills it.
+    //
+    // Showing it costs nothing worth having: compositing is charged on the
+    // destination, which is the window either way, and it happens at the
+    // display's rate rather than at the rate this issues frames.
     const ratio = Math.min(window.devicePixelRatio || 1, 2);
-    const box = edge / ratio;
-    canvas.style.width = `${box}px`;
-    canvas.style.height = `${Math.round((edge * 9) / 16 / ratio)}px`;
+    const box = { width: edge / ratio, height: Math.round((edge * 9) / 16 / ratio) };
+    canvas.style.width = `${box.width}px`;
+    canvas.style.height = `${box.height}px`;
     canvas.style.transformOrigin = '0 0';
-    canvas.style.transform = `scale(${Math.min(1, window.innerWidth / box)})`;
+    const fit = Math.min(
+      window.innerWidth / box.width,
+      // The readout sits along the bottom, so the picture does not get that strip.
+      (window.innerHeight - READOUT) / box.height,
+    );
+    canvas.style.transform = `scale(${fit})`;
 
     const compositor = createCompositor(canvas);
     const gl = canvas.getContext('webgl2');

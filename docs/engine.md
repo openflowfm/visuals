@@ -195,11 +195,16 @@ same object for the same canvas, so the bench forces its barrier without the ren
 a method that exists for one caller.
 
 **The window shows the picture, and says what size it really is.** The canvas has to carry a
-CSS box of `edge / devicePixelRatio` for the drawing buffer to land on the target exactly,
-which is wider than the window at every resolution worth running — so it is scaled to fit
-rather than to a fixed fraction, and the readout along the bottom prints `canvas.width` and
-`canvas.height` themselves. A benchmark drawing something you cannot see, at a size you have
-to take on trust, invites exactly the doubt it exists to remove.
+CSS box of `edge / devicePixelRatio` for the drawing buffer to land on the target exactly —
+960 CSS pixels for a 1920 pass on a two-times display, 1920 for a 4K one. That box is
+*smaller* than the window as often as it is larger, so the fit scales in both directions and
+is not clamped at 1: 1920 fills a 1440-wide window at `scale(1.5)`, 3840 fills the same
+window at `0.75`, and both draw the resolution they claim. Fitting width alone crops a 16:9
+box at the bottom, and clamping at 1 leaves the common case as a preview of a preview.
+
+The readout along the bottom prints `canvas.width` and `canvas.height` themselves rather
+than the pass's nominal size. A benchmark drawing something you cannot see, at a size you
+have to take on trust, invites exactly the doubt it exists to remove.
 
 Thirty frames are discarded before timing. The first frame of a flow compiles a shader,
 which is milliseconds of driver work charged to a frame that never pays it again — and
