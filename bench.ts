@@ -186,13 +186,22 @@ export async function run(canvas: HTMLCanvasElement): Promise<BenchReport> {
     // composited at 3840 CSS pixels however small its drawing buffer is, and
     // that upscale, not the shader, was what the first runs were measuring.
     //
-    // The transform then takes the element off the compositor's books without
-    // touching `clientWidth`, which is what the size above was derived from.
+    // The transform then fits that box to the window without touching
+    // `clientWidth`, which is what the size above was derived from. **Fitted
+    // rather than shrunk to a fixed fraction**: the box is wider than the window
+    // at every resolution worth running, so a constant scale makes 4K a stamp
+    // and makes the picture impossible to check against — and a benchmark whose
+    // output you cannot see is one you have to take on trust.
+    //
+    // It costs nothing to show. Compositing is charged on the *destination*,
+    // which is the window either way, and it happens at the display's rate
+    // rather than at the rate this issues frames.
     const ratio = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.style.width = `${edge / ratio}px`;
+    const box = edge / ratio;
+    canvas.style.width = `${box}px`;
     canvas.style.height = `${Math.round((edge * 9) / 16 / ratio)}px`;
     canvas.style.transformOrigin = '0 0';
-    canvas.style.transform = 'scale(0.12)';
+    canvas.style.transform = `scale(${Math.min(1, window.innerWidth / box)})`;
 
     const compositor = createCompositor(canvas);
     const gl = canvas.getContext('webgl2');
@@ -234,9 +243,16 @@ export async function run(canvas: HTMLCanvasElement): Promise<BenchReport> {
       const ms = (performance.now() - started) / SAMPLES;
       // Published as it goes. A run this long with no output cannot be told
       // from a run that has hung, and the difference matters at minute four.
-      (window as unknown as { __benchProgress?: string }).__benchProgress =
-        `${edge}: ${flows.length + 1}/${ids.length} ${loaded.flows[id]?.name ?? id} ` +
-        `${ms.toFixed(1)}ms`;
+      const said =
+        `${canvas.width}x${canvas.height}  ${flows.length + 1}/${ids.length}  ` +
+        `${loaded.flows[id]?.name ?? id}  ${ms.toFixed(2)}ms`;
+      (window as unknown as { __benchProgress?: string }).__benchProgress = said;
+      // The drawing buffer's real size, on the page, beside the picture it
+      // describes. The canvas is displayed smaller than it is drawn, and that
+      // is exactly the kind of thing a number should settle rather than a
+      // reader having to trust the transform above.
+      const out = document.getElementById('out');
+      if (out) out.textContent = said;
       flows.push({
         id,
         name: loaded.flows[id]?.name ?? id,

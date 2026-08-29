@@ -194,6 +194,13 @@ The context comes from the canvas rather than from the compositor: `getContext` 
 same object for the same canvas, so the bench forces its barrier without the renderer growing
 a method that exists for one caller.
 
+**The window shows the picture, and says what size it really is.** The canvas has to carry a
+CSS box of `edge / devicePixelRatio` for the drawing buffer to land on the target exactly,
+which is wider than the window at every resolution worth running — so it is scaled to fit
+rather than to a fixed fraction, and the readout along the bottom prints `canvas.width` and
+`canvas.height` themselves. A benchmark drawing something you cannot see, at a size you have
+to take on trust, invites exactly the doubt it exists to remove.
+
 Thirty frames are discarded before timing. The first frame of a flow compiles a shader,
 which is milliseconds of driver work charged to a frame that never pays it again — and
 charged worst to the flows with the most in them, which are exactly the ones being ranked.
