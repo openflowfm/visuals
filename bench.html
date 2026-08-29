@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>visual[flow] benchmark</title>
+    <style>
+      html, body { margin: 0; background: #0b0b0d; color: #ececed; overflow: hidden; }
+      body { font: 13px ui-monospace, monospace; }
+      #out { position: fixed; inset: 12px; z-index: 1; white-space: pre; }
+      canvas { position: fixed; top: 0; left: 0; opacity: 0.12; }
+    </style>
+  </head>
+  <body>
+    <div id="out">starting…</div>
+    <canvas id="stage"></canvas>
+    <script type="module">
+      import { run } from '/bench.ts';
+
+      const out = document.getElementById('out');
+      const canvas = document.getElementById('stage');
+      // The runner reads these two off the page rather than being messaged: a
+      // window that failed still has an answer, and a poll finds either one.
+      run(canvas).then(
+        (report) => {
+          window.__bench = report;
+          out.textContent = 'done';
+        },
+        (err) => {
+          window.__benchError = String(err?.stack ?? err);
+          out.textContent = String(err);
+        },
+      );
+    </script>
+  </body>
+</html>

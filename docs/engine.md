@@ -155,12 +155,70 @@ result means the GPU was preempted mid-measure and the number means nothing. Abs
 disjoint are both reported as absent rather than as zero, because a zero in a p99 is worse
 than a gap.
 
+## The benchmark
+
+`npm run benchmark` — `tools/benchmark.ts` and `../bench.ts`. Every flow in the scheme,
+drawn as fast as this machine can draw it.
+
+```sh
+npm run benchmark                      # 1920, which is the show
+npm run benchmark -- --sweep           # 1280, 1920, 2560, 3840
+npm run benchmark -- --edges=3840      # whatever you name
+```
+
+**It cannot use `requestAnimationFrame`, and that is the whole design.** A browser paces rAF
+to the display, so a machine capable of 300fps and one barely holding 60 both report 60
+through it — which is the one answer a *ceiling* measurement must not give. The page runs
+free instead.
+
+**It times a batch rather than a frame**, for two reasons that are both hard constraints and
+both cost an afternoon to find.
+
+*The clock is too coarse.* `performance.now()` is clamped to 100µs in a page that is not
+cross-origin isolated, and a 1080p flow on an M1 Max lands near that. Timed one frame at a
+time, every flow at every resolution reported 0.0 or 0.1ms — 4K and 540p alike, which is a
+clock reading its own floor rather than a renderer being fast.
+
+*And a per-frame barrier does not exist.* `gl.finish()` is the obvious one and in a browser
+it does not do the job: Chromium runs WebGL over a command buffer, and `finish` returns when
+*that* has drained rather than when the GPU is done. A one-pixel `readPixels` per frame is a
+real barrier and was no better, because it stalls the pipeline it is timing.
+
+So a run of frames is issued and the batch is closed with a single `readPixels`, which
+cannot return until the GPU has caught up on all of them. The total over the count is
+**throughput** — which keeps the CPU/GPU overlap a real frame has, where a stalled per-frame
+measure deliberately destroys it. The check that it is honest is that cost scales with
+pixels: the same flow at 3840 costs about four times what it costs at 1920.
+
+The context comes from the canvas rather than from the compositor: `getContext` returns the
+same object for the same canvas, so the bench forces its barrier without the renderer growing
+a method that exists for one caller.
+
+Thirty frames are discarded before timing. The first frame of a flow compiles a shader,
+which is milliseconds of driver work charged to a frame that never pays it again — and
+charged worst to the flows with the most in them, which are exactly the ones being ranked.
+
+It runs in Electron rather than the Chrome in `tools/visuals.ts` for one reason: it is the
+same Chromium the app ships, and a benchmark run on a different engine than the product is a
+benchmark of the wrong thing. It warns when visual[flow], set[flow] or Live is already on the
+GPU, because a contended run reports floors and nothing in the table would say so.
+
+**`work` beside each flow is the compiler's own prediction** against its ceiling of 64, now
+published on `Compiled`. Where the prediction and the measurement disagree, the cost model in
+`src/render/circuit.ts` is what needs revisiting — a model nobody checks against a
+measurement is a model that drifts.
+
 ## What would actually settle it
 
 Nothing above establishes there is a problem today, because the number that decides it has
 not been taken: **the ninety-ninth percentile frame time on the wall, at show resolution,
-with the console in front, running the heaviest flow in the scheme.** The meter above is
-there to take it; nobody has run it against a real show yet.
+with the console in front, running the heaviest flow in the scheme.** The meter is there to
+take it; nobody has run it against a real show yet.
+
+The benchmark answers the neighbouring question — *how much room is there at all* — without
+needing a show or a projector, which is why it is the cheaper one to run first. A scheme
+whose slowest flow clears 60Hz several times over at 1920 has already answered the engine
+question for the rig it was run on.
 
 If that is clean, this whole question is about a 275 MB download. If it spikes, it points at
 one of the four costs above and says which — and a profile is a far better reason to rewrite

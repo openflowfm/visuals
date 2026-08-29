@@ -1597,6 +1597,15 @@ export interface Compiled {
    * and never a count.
    */
   feedback: boolean;
+  /**
+   * Charged fixed work in this shader, against `MAX_SHADER_WORK`.
+   *
+   * Already counted to enforce the ceiling; published because it is the
+   * compiler's own prediction of what a flow costs, and `tools/benchmark.ts`
+   * measures what it actually costs. A model nobody checks against a
+   * measurement is a model that drifts.
+   */
+  work: number;
 }
 
 /**
@@ -2183,6 +2192,7 @@ export function compileFlow(
     source: null,
     error: expanded.error,
     feedback: false,
+    work: 0,
     values: [],
     tracks: [],
     videos: [],
@@ -2207,6 +2217,7 @@ export function compileCircuit(circuit: Circuit, options: CompileOptions = {}): 
     images: [],
     draws,
     feedback: false,
+    work: 0,
   };
   let feedback = false;
 
@@ -2449,6 +2460,7 @@ ${lines.join('\n')}
     videos: usedVideos,
     images: usedImages,
     feedback,
+    work: shaderWork,
     error: null,
   };
 }
