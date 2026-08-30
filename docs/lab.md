@@ -138,13 +138,34 @@ batch that ran out of matches.
 ## The forest is the document
 
 It used to be a report — a rendering of decisions taken somewhere else. Now it is the
-surface you act on: click a node to look at it, bookmark it, develop it, or copy it. Same
+surface you act on: click a work to look at it, bookmark it, develop it, or copy it. Same
 distinction as a log versus an editor.
 
-Layout is a real tidy tree (`d3-hierarchy`'s Reingold–Tilford), one per family, depth
-running horizontally because generation is the axis that grows without bound. The previous
-grid put a node wherever its generation and arrival order landed, so cords crossed half a
-family and sibling groups read as unrelated.
+**One family at a time.** Three panes: the lineages on the left, the chosen one on the
+canvas, the selected work on the right. Every family stacked in one scroll was a wall —
+the thing you actually do here is follow a single lineage, and drawing forty at once made
+that the hardest thing to do. The left pane lists each family by its **root**, the topmost
+ancestor, because that is the name anybody would look for. Selecting a work anywhere opens
+the family it belongs to, so a jump from the inspector or from **next undeveloped** never
+lands on a tree that is not showing.
+
+**It grows downward.** Left-to-right was chosen when every family shared one canvas and
+generation had to run unbounded across it. With one tree in a pane of its own the unbounded
+axis is the one you scroll anyway, and a parent above its children is what "descendant"
+already means. Layout is `d3-hierarchy`'s Reingold–Tilford, unswapped.
+
+**The canvas is React Flow.** Pan, zoom, fit-to-view, a minimap and keyboard focus are all
+things a map of several hundred works needs and none of them are worth hand-rolling. It is
+configured as a **read-only map** — nothing drags, nothing connects — so the library is
+doing navigation rather than editing. `widgets`' own `Graph` stays the circuit editor's,
+because that canvas has the opposite requirements: the host owns positions so an edit can be
+undone or refused, a rejected cord must cost nothing, and it draws twenty nodes rather than
+two thousand. Two canvases with different jobs, not one canvas used twice.
+
+Both UI dependencies live in the **root** `package.json`, with React. `visuals/package.json`
+is the server and Electron side — Link, `ws`, `zod`, the MCP SDK — and installing a
+React-peered package there gives the tree a second copy of React, which is a null
+`useContext` in every component that reads one.
 
 Two facts on every dot carry the weight:
 

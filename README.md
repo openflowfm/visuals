@@ -153,9 +153,10 @@ colourways, and the handful of songs that want to pin one instead. Most songs sh
 nothing there.
 
 **Train grows a body of work, and the record of how it got there.** Its home is the
-**forest**: every work ever staged, as a zoomable tidy tree, one band per family, each dot
-clickable into the room it first appeared in. Bookmarks and batch counts live on the map, so
-the thing you can see at a glance is which ideas somebody liked and never developed.
+**forest**: the lineages down the left listed by their root, one family at a time on a
+pannable canvas growing downward, and the selected work on the right. Bookmarks and batch
+counts ride on every node, so the thing you can see at a glance is which ideas somebody
+liked and never developed.
 
 **Explore** stages one fresh root at a time and asks only whether there is anything there —
 yes, no, or skip. Nothing is compared, because what is being decided is absolute, and one at

@@ -1,5 +1,19 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { hierarchy, tree } from 'd3-hierarchy';
+import {
+  Background,
+  Controls,
+  Handle,
+  MiniMap,
+  Position,
+  ReactFlow,
+  ReactFlowProvider,
+  useReactFlow,
+  type Edge,
+  type Node,
+  type NodeProps,
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import type {
   LabArchiveState,
@@ -16,43 +30,33 @@ import { Bench } from './Preview.tsx';
 import { CANDIDATE_FLOW, parkedScheme, stagedShow } from './stage.ts';
 
 /**
- * The forest: the home of Train, and the thing you act on rather than read.
+ * The forest: Train's home, and the thing you act on rather than read.
  *
- * It used to be a report — a rendering of decisions taken somewhere else, with
- * the actual work happening in a queue that decided for you which branch got
- * developed next. That scheduler is gone, and this is what replaced it. A node
- * is clicked to be looked at, bookmarked, developed or copied, which makes the
- * map the document and the modes the places you go from it.
+ * Three panes, and the middle one shows **one family at a time**. Every family
+ * stacked in one scroll was a wall: the thing you actually do here is follow a
+ * single lineage, and drawing forty of them at once made that the hardest thing
+ * to do. So the left pane lists the families by their root — the topmost
+ * ancestor, which is the name anybody would look for — and the canvas draws the
+ * one that is chosen.
  *
- * Two facts on every dot carry the weight. **Bookmarked** says come back here,
- * and several per family is ordinary rather than a conflict: an ancestor and a
- * descendant ten generations apart can both be finished work, because lineage
- * is provenance and confers no ranking. **Batches** says how many times this
- * node has been developed, which is the one number that reveals the failure
- * this rewrite exists to fix — an idea nobody argued with, that simply never
- * got mutated.
+ * It grows **downward**, which is how a family tree reads. Left-to-right was
+ * chosen when every family shared one canvas and generation was the axis that
+ * had to run unbounded; with one tree in a pane of its own, the unbounded axis
+ * is the one you scroll anyway, and a parent above its children is what the
+ * word "descendant" already means.
+ *
+ * The canvas is React Flow rather than hand-rolled SVG. Pan, zoom, fit-to-view,
+ * a minimap and keyboard focus are all things a map of several hundred works
+ * needs and none of them are worth writing again — this is a **read-only map**,
+ * so nothing drags, nothing connects, and the library is doing navigation
+ * rather than editing. `widgets`' own `Graph` stays the circuit editor's,
+ * because that canvas has the opposite requirements: the host owns positions,
+ * a refused cord must cost nothing, and there are twenty nodes rather than two
+ * thousand.
  */
 
-const ROW = 20;
-const COLUMN = 92;
-
-interface Placed extends LabLineageNode {
-  x: number;
-  y: number;
-}
-
-interface Family {
-  id: string;
-  y: number;
-  height: number;
-  nodes: Placed[];
-}
-
-/** One family as a tree. The head is synthetic, so several roots still lay out. */
-interface Branch {
-  node: LabLineageNode | null;
-  children: Branch[];
-}
+const NODE_WIDTH = 150;
+const NODE_HEIGHT = 54;
 
 /** Bookmarks first, then evidence of having been chosen. Never a hidden score. */
 const interest = (node: LabLineageNode): number =>
@@ -62,85 +66,195 @@ const interest = (node: LabLineageNode): number =>
   node.chosen * 12 +
   ((node.chosen + 1) / (node.appearances + 2)) * 20;
 
-/**
- * One tidy tree per family, stacked.
- *
- * `d3-hierarchy`'s Reingold–Tilford rather than the generation-by-index grid
- * that was here before. The grid put a node wherever its generation and its
- * arrival order happened to land, so a cord could cross half the family to
- * reach its parent and sibling groups read as unrelated. A tidy tree keeps
- * children under their parent and siblings adjacent, which is the entire
- * reason a lineage is worth drawing as a tree at all.
- *
- * The layout runs on x and y swapped — depth is horizontal, because generation
- * is the axis that grows without bound and a screen is wider than it is tall.
- */
-function layoutForest(nodes: readonly LabLineageNode[]) {
-  const grouped = new Map<string, LabLineageNode[]>();
-  for (const node of nodes) grouped.set(node.cohort, [...(grouped.get(node.cohort) ?? []), node]);
-  const ordered = [...grouped.entries()].sort(
-    ([, a], [, b]) => Math.max(...b.map(interest)) - Math.max(...a.map(interest)),
-  );
-
-  const families: Family[] = [];
-  const byId = new Map<string, Placed>();
-  let top = 10;
-  let width = 640;
-
-  for (const [id, members] of ordered) {
-    const present = new Set(members.map((node) => node.id));
-    const childrenOf = new Map<string, LabLineageNode[]>();
-    for (const node of members) {
-      if (!node.parentId || !present.has(node.parentId)) continue;
-      childrenOf.set(node.parentId, [...(childrenOf.get(node.parentId) ?? []), node]);
-    }
-    // A family's roots are the members whose parent is outside it. Normally
-    // one; a manual offer or an imported corpus can leave several, and a
-    // synthetic head above them keeps that a tidy forest rather than a crash.
-    const roots = members.filter((node) => !node.parentId || !present.has(node.parentId));
-    if (roots.length === 0) continue;
-
-    const branch = (node: LabLineageNode): Branch => ({
-      node,
-      children: (childrenOf.get(node.id) ?? [])
-        .sort((a, b) => interest(b) - interest(a))
-        .map(branch),
-    });
-    const head: Branch = { node: null, children: roots.map(branch) };
-
-    const laid = tree<Branch>()
-      .nodeSize([ROW, COLUMN])
-      .separation((a, b) => (a.parent === b.parent ? 1 : 1.4))(
-      hierarchy<Branch>(head, (datum) => datum.children),
-    );
-
-    const points = laid.descendants().filter((point) => point.data.node !== null);
-    if (points.length === 0) continue;
-    const lowest = Math.min(...points.map((point) => point.x));
-    const highest = Math.max(...points.map((point) => point.x));
-    const height = Math.max(66, highest - lowest + 46);
-    const placed: Placed[] = [];
-    for (const point of points) {
-      const held = point.data.node!;
-      const result: Placed = {
-        ...held,
-        x: 118 + point.y - COLUMN,
-        y: top + 30 + (point.x - lowest),
-      };
-      placed.push(result);
-      byId.set(held.id, result);
-      width = Math.max(width, result.x + 150);
-    }
-    families.push({ id, y: top, height, nodes: placed });
-    top += height + 8;
-  }
-  return { families, byId, width, height: top + 10 };
+/** One family as a tree. The head is synthetic, so several roots still lay out. */
+interface Branch {
+  node: LabLineageNode | null;
+  children: Branch[];
 }
 
-const sizeOf = (node: Placed): number =>
-  node.bookmarked ? 6.5 : node.batches > 0 || node.finals > 0 || node.chosen >= 2 ? 5 : 3.2;
+export interface Family {
+  id: string;
+  /** The topmost ancestor, which is what the sidebar lists a family by. */
+  root: LabLineageNode;
+  members: LabLineageNode[];
+  generations: number;
+  bookmarked: number;
+  batches: number;
+  interest: number;
+}
 
-export function ForestView({
+export function familiesOf(nodes: readonly LabLineageNode[]): Family[] {
+  const grouped = new Map<string, LabLineageNode[]>();
+  for (const node of nodes) grouped.set(node.cohort, [...(grouped.get(node.cohort) ?? []), node]);
+  const families: Family[] = [];
+  for (const [id, members] of grouped) {
+    const present = new Set(members.map((node) => node.id));
+    const roots = members.filter((node) => !node.parentId || !present.has(node.parentId));
+    const root = roots.sort((a, b) => a.generation - b.generation || interest(b) - interest(a))[0];
+    if (!root) continue;
+    families.push({
+      id,
+      root,
+      members,
+      generations: Math.max(...members.map((node) => node.generation)) + 1,
+      bookmarked: members.filter((node) => node.bookmarked).length,
+      batches: members.reduce((total, node) => total + node.batches, 0),
+      interest: Math.max(...members.map(interest)),
+    });
+  }
+  return families.sort((a, b) => b.interest - a.interest);
+}
+
+/** One family, laid out downward. Reingold–Tilford, unswapped. */
+function layoutFamily(family: Family): { nodes: Node[]; edges: Edge[] } {
+  const present = new Set(family.members.map((node) => node.id));
+  const childrenOf = new Map<string, LabLineageNode[]>();
+  for (const node of family.members) {
+    if (!node.parentId || !present.has(node.parentId)) continue;
+    childrenOf.set(node.parentId, [...(childrenOf.get(node.parentId) ?? []), node]);
+  }
+  const roots = family.members.filter((node) => !node.parentId || !present.has(node.parentId));
+
+  const branch = (node: LabLineageNode): Branch => ({
+    node,
+    children: (childrenOf.get(node.id) ?? [])
+      .sort((a, b) => interest(b) - interest(a))
+      .map(branch),
+  });
+  const head: Branch = { node: null, children: roots.map(branch) };
+
+  const laid = tree<Branch>()
+    .nodeSize([NODE_WIDTH + 26, NODE_HEIGHT + 46])
+    .separation((a, b) => (a.parent === b.parent ? 1 : 1.25))(
+    hierarchy<Branch>(head, (datum) => datum.children),
+  );
+
+  const points = laid.descendants().filter((point) => point.data.node !== null);
+  const nodes: Node[] = points.map((point) => ({
+    id: point.data.node!.id,
+    type: 'work',
+    position: { x: point.x, y: point.y - (NODE_HEIGHT + 46) },
+    data: { work: point.data.node! },
+    draggable: false,
+  }));
+  const edges: Edge[] = family.members.flatMap((node) =>
+    node.parentId && present.has(node.parentId)
+      ? [
+          {
+            id: `${node.parentId}:${node.id}`,
+            source: node.parentId,
+            target: node.id,
+            type: 'smoothstep',
+          },
+        ]
+      : [],
+  );
+  return { nodes, edges };
+}
+
+const operationName = (operation: string): string =>
+  operation === 'random'
+    ? 'new family'
+    : operation === 'explore:leap'
+      ? 'leap'
+      : operation.replace(/^mutate:/, '');
+
+function WorkNode({ data, selected }: NodeProps) {
+  const work = (data as { work: LabLineageNode }).work;
+  return (
+    <div
+      className="forest-work"
+      data-selected={selected ? '' : undefined}
+      data-bookmarked={work.bookmarked ? '' : undefined}
+      data-developed={work.batches > 0 ? '' : undefined}
+    >
+      <Handle type="target" position={Position.Top} isConnectable={false} />
+      <strong>{work.name}</strong>
+      <span className="forest-work-op">{operationName(work.operation)}</span>
+      <span className="forest-work-facts">
+        <i>g{work.generation}</i>
+        {work.appearances > 0 && (
+          <i>
+            {work.chosen}/{work.appearances}
+          </i>
+        )}
+        {work.batches > 0 && <i data-on="">{work.batches}×dev</i>}
+        {work.bookmarked && <i data-mark="">★</i>}
+      </span>
+      <Handle type="source" position={Position.Bottom} isConnectable={false} />
+    </div>
+  );
+}
+
+const NODE_TYPES = { work: WorkNode };
+
+function FamilyCanvas({
+  family,
+  selectedId,
+  onSelect,
+}: {
+  family: Family;
+  selectedId: string | null;
+  onSelect(id: string): void;
+}) {
+  const { nodes, edges } = useMemo(() => layoutFamily(family), [family]);
+  const flow = useReactFlow();
+
+  const painted = useMemo(
+    () => nodes.map((node) => ({ ...node, selected: node.id === selectedId })),
+    [nodes, selectedId],
+  );
+
+  // A different family is a different picture, not a pan of the same one.
+  useEffect(() => {
+    const at = requestAnimationFrame(() => flow.fitView({ duration: 260, padding: 0.18 }));
+    return () => cancelAnimationFrame(at);
+  }, [family.id, flow]);
+
+  return (
+    <ReactFlow
+      nodes={painted}
+      edges={edges}
+      nodeTypes={NODE_TYPES}
+      onNodeClick={(_event, node) => onSelect(node.id)}
+      nodesDraggable={false}
+      nodesConnectable={false}
+      edgesFocusable={false}
+      elementsSelectable
+      proOptions={{ hideAttribution: true }}
+      minZoom={0.08}
+      maxZoom={1.8}
+      fitView
+      fitViewOptions={{ padding: 0.18 }}
+      onlyRenderVisibleElements
+    >
+      <Background gap={22} size={1} />
+      <Controls showInteractive={false} />
+      <MiniMap pannable zoomable nodeStrokeWidth={3} />
+    </ReactFlow>
+  );
+}
+
+export function ForestView(props: {
+  clock: Clock;
+  scheme: Scheme;
+  archive: LabArchiveState | null;
+  notice: string | null;
+  batchSizes: readonly number[];
+  open(): void;
+  select(candidateId: string): void;
+  bookmark(decision: LabBookmarkSubmission): void;
+  deal(request: LabDevelopRequest): void;
+  edit(next: Scheme): void;
+}) {
+  return (
+    <ReactFlowProvider>
+      <Forest {...props} />
+    </ReactFlowProvider>
+  );
+}
+
+function Forest({
   clock,
   scheme,
   archive,
@@ -155,7 +269,6 @@ export function ForestView({
   clock: Clock;
   scheme: Scheme;
   archive: LabArchiveState | null;
-  /** Why a gesture was refused — a deal against an open batch, most often. */
   notice: string | null;
   batchSizes: readonly number[];
   open(): void;
@@ -167,28 +280,39 @@ export function ForestView({
   const transport = useTransport(clock, false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
-  const [zoom, setZoom] = useState(0.9);
   const [size, setSize] = useState(batchSizes[1] ?? batchSizes[0]);
+  const [openFamily, setOpenFamily] = useState<string | null>(null);
 
   const candidate = archive?.candidate ?? null;
   const room = archive?.room ?? null;
-  const parked = useMemo(
-    () => (candidate ? parkedScheme(candidate.flow, candidate.bundle) : null),
-    [candidate],
+  const families = useMemo(() => familiesOf(archive?.nodes ?? []), [archive?.nodes]);
+  const byId = useMemo(
+    () => new Map((archive?.nodes ?? []).map((node) => [node.id, node])),
+    [archive?.nodes],
   );
-  const forest = useMemo(() => layoutForest(archive?.nodes ?? []), [archive?.nodes]);
-  const selected = candidate ? forest.byId.get(candidate.id) ?? null : null;
+  const selected = candidate ? (byId.get(candidate.id) ?? null) : null;
+
+  // Selecting a work anywhere opens the family it belongs to, so following a
+  // link from the inspector or from "next undeveloped" never lands on a tree
+  // that is not showing.
+  const family =
+    families.find((held) => held.id === (selected?.cohort ?? openFamily)) ?? families[0] ?? null;
 
   const normalized = query.trim().toLowerCase();
-  const matches = (node: LabLineageNode) =>
-    !normalized || `${node.name} ${node.operation} ${node.cohort}`.toLowerCase().includes(normalized);
+  const shownFamilies = normalized
+    ? families.filter((held) =>
+        held.members.some((node) =>
+          `${node.name} ${node.operation}`.toLowerCase().includes(normalized),
+        ),
+      )
+    : families;
 
   /**
    * The undeveloped shelf: bookmarked, and never once mutated.
    *
-   * This is the list the old lab could not produce, and the absence of it is
-   * exactly how good ideas got lost. A bookmark says somebody thought this was
-   * worth coming back to; a batch count of zero says nobody ever did.
+   * The list the old lab could not produce, and the absence of it is how good
+   * ideas got lost. A bookmark says somebody thought this was worth coming back
+   * to; a batch count of zero says nobody ever did.
    */
   const neglected = useMemo(
     () =>
@@ -196,6 +320,19 @@ export function ForestView({
         .filter((node) => node.bookmarked && node.batches === 0)
         .sort((a, b) => interest(b) - interest(a)),
     [archive?.nodes],
+  );
+
+  const parked = useMemo(
+    () => (candidate ? parkedScheme(candidate.flow, candidate.bundle) : null),
+    [candidate],
+  );
+
+  const pick = useCallback(
+    (id: string) => {
+      setOpenFamily(byId.get(id)?.cohort ?? null);
+      select(id);
+    },
+    [byId, select],
   );
 
   useEffect(() => open(), [open]);
@@ -244,130 +381,81 @@ export function ForestView({
   const bookmarked = archive.nodes.filter((node) => node.bookmarked).length;
 
   return (
-    <div className="lineage-archive">
-      <section className="lineage-map">
+    <div className="forest">
+      <nav className="forest-roots" aria-label="Lineages">
         <header>
           <div>
-            <span className="finals-kicker">lineage forest</span>
+            <span className="finals-kicker">lineages</span>
             <strong>
-              {forest.families.length} families · {archive.nodes.length} works
+              {families.length} families · {archive.nodes.length} works
             </strong>
           </div>
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="find a work, operation, or family"
-            aria-label="Filter lineage map"
+            placeholder="find a work"
+            aria-label="Filter lineages"
           />
-          <label className="lineage-zoom">
-            zoom
-            <input
-              type="range"
-              min="0.4"
-              max="1.8"
-              step="0.05"
-              value={zoom}
-              onChange={(event) => setZoom(Number(event.target.value))}
-            />
-          </label>
+        </header>
+
+        <ul>
+          {shownFamilies.map((held) => (
+            <li key={held.id}>
+              <button
+                type="button"
+                aria-pressed={family?.id === held.id}
+                onClick={() => {
+                  setOpenFamily(held.id);
+                  select(held.root.id);
+                }}
+              >
+                <strong>{held.root.name}</strong>
+                <span>
+                  {held.members.length} works · {held.generations} deep
+                </span>
+                <span className="forest-root-marks">
+                  {held.bookmarked > 0 && <i data-mark="">★ {held.bookmarked}</i>}
+                  {held.batches > 0 && <i data-on="">{held.batches}×dev</i>}
+                  {held.batches === 0 && held.bookmarked > 0 && <i data-warn="">undeveloped</i>}
+                </span>
+              </button>
+            </li>
+          ))}
+          {shownFamilies.length === 0 && <li className="forest-roots-empty">nothing matches</li>}
+        </ul>
+
+        <footer>
           <Button
             tone="quiet"
             disabled={neglected.length === 0}
-            onPress={() => neglected[0] && select(neglected[0].id)}
+            onPress={() => neglected[0] && pick(neglected[0].id)}
           >
             next undeveloped ({neglected.length})
           </Button>
-        </header>
-
-        <div className="lineage-scroll">
-          <svg
-            width={forest.width * zoom}
-            height={forest.height * zoom}
-            role="tree"
-            aria-label="Visual lineages"
-          >
-            <g transform={`scale(${zoom})`}>
-              {forest.families.map((family) => (
-                <g key={family.id}>
-                  <rect
-                    className="lineage-band"
-                    x="0"
-                    y={family.y}
-                    width={forest.width}
-                    height={family.height}
-                  />
-                  <text className="lineage-family" x="10" y={family.y + 18}>
-                    {family.id.replace(/^family-/, '')}
-                  </text>
-                  {family.nodes.map((node) => {
-                    const parent = node.parentId ? forest.byId.get(node.parentId) : null;
-                    return parent && parent.cohort === node.cohort ? (
-                      <path
-                        key={`${parent.id}:${node.id}`}
-                        className="lineage-edge"
-                        d={`M ${parent.x + 6} ${parent.y} C ${parent.x + 42} ${parent.y}, ${node.x - 42} ${node.y}, ${node.x - 6} ${node.y}`}
-                      />
-                    ) : null;
-                  })}
-                  {family.nodes.map((node) => (
-                    <g
-                      key={node.id}
-                      className="lineage-node"
-                      data-selected={selected?.id === node.id ? '' : undefined}
-                      data-hot={node.batches > 0 || node.chosen >= 2 ? '' : undefined}
-                      data-kept={node.bookmarked ? '' : undefined}
-                      data-dim={!matches(node) ? '' : undefined}
-                      transform={`translate(${node.x} ${node.y})`}
-                      role="treeitem"
-                      tabIndex={0}
-                      onClick={() => select(node.id)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') select(node.id);
-                      }}
-                    >
-                      <circle r={sizeOf(node)} />
-                      {node.batches > 0 && <circle className="lineage-developed" r={sizeOf(node) + 3.5} />}
-                      {(node.bookmarked || selected?.id === node.id) && (
-                        <text x="11" y="3">
-                          {node.name}
-                        </text>
-                      )}
-                      <title>
-                        {node.name} · generation {node.generation} · chosen {node.chosen}/
-                        {node.appearances} · {node.batches} batches
-                      </title>
-                    </g>
-                  ))}
-                </g>
-              ))}
-            </g>
-          </svg>
-        </div>
-
-        <footer>
-          <span>
-            <i data-legend="ordinary" /> every work
-          </span>
-          <span>
-            <i data-legend="developed" /> developed
-          </span>
-          <span>
-            <i data-legend="peak" /> repeatedly chosen
-          </span>
-          <span>
-            <i data-legend="kept" /> bookmarked
-          </span>
-          <span className="gap" />
-          <span>
-            {bookmarked} bookmarked · {neglected.length} never developed
-          </span>
+          <span>{bookmarked} bookmarked</span>
         </footer>
+      </nav>
+
+      <section className="forest-canvas">
+        {family ? (
+          <FamilyCanvas
+            key={family.id}
+            family={family}
+            selectedId={selected?.id ?? null}
+            onSelect={pick}
+          />
+        ) : (
+          <div className="archive-empty">
+            <h2>No lineages yet.</h2>
+            <p>Explore admits roots; developing one gives it descendants.</p>
+          </div>
+        )}
       </section>
 
       <aside className="lineage-inspector wdg">
         {!candidate || !room || !show || !parked ? (
           <div className="archive-empty">
-            <h2>Select any node.</h2>
+            <h2>Select any work.</h2>
             <p>The whole history stays visible; only its graph loads.</p>
           </div>
         ) : (
@@ -398,7 +486,7 @@ export function ForestView({
 
             <div className="lineage-provenance">
               <span>{candidate.flow.circuit.nodes.length} nodes</span>
-              <span>{candidate.operation.replace(/^mutate:/, '')}</span>
+              <span>{operationName(candidate.operation)}</span>
               <span>
                 chosen {selected?.chosen ?? 0} / {selected?.appearances ?? 0}
               </span>
@@ -449,7 +537,7 @@ export function ForestView({
                 </select>
               </label>
               <Button onPress={() => deal({ candidateId: candidate.id, size })}>
-                develop this node
+                develop this work
               </Button>
             </div>
             <p className="lineage-explanation">

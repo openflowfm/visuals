@@ -2130,174 +2130,221 @@
   color: var(--alarm);
 }
 
-.lineage-archive {
+.forest {
   flex: 1;
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 390px;
+  grid-template-columns: 232px minmax(0, 1fr) 390px;
 }
 
-.lineage-map {
+.forest-roots {
   min-width: 0;
   min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  background: var(--well);
-}
-
-.lineage-map > header {
-  min-height: 46px;
-  border-bottom: 1px solid var(--edge);
-  padding: 7px 10px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  border-right: 1px solid var(--edge);
   background: var(--panel);
 }
 
-.lineage-map > header > div {
-  min-width: 170px;
+.forest-roots > header {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--edge);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.forest-roots > header strong {
+  color: var(--fg);
+  font: 10px var(--mono);
+}
+
+.forest-roots > header input {
+  min-width: 0;
+  height: 24px;
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-xs);
+  padding: 0 7px;
+  background: var(--surface-control);
+  color: var(--fg);
+  font: 9.5px var(--mono);
+}
+
+.forest-roots > ul {
+  margin: 0;
+  padding: 5px;
+  list-style: none;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.forest-roots li button {
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  padding: 6px 8px;
   display: flex;
   flex-direction: column;
   gap: 3px;
+  background: none;
+  color: var(--caption);
+  font: 9px var(--mono);
+  text-align: left;
+  cursor: pointer;
 }
 
-.lineage-map > header strong {
+.forest-roots li button strong {
   color: var(--fg);
-  font-size: 10.5px;
-  font-weight: 500;
+  font: 10px var(--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.lineage-map > header > input {
-  flex: 1;
-  min-width: 130px;
-  max-width: 320px;
-  border: 1px solid var(--bd3);
-  border-radius: var(--radius-xs);
-  padding: 6px 8px;
+.forest-roots li button:hover {
+  border-color: var(--bd3);
   background: var(--surface-control);
-  color: var(--fg);
-  font: 10px var(--sans);
 }
 
-.lineage-map > header .lineage-zoom {
+.forest-roots li button[aria-pressed='true'] {
+  border-color: var(--focus);
+  background: var(--surface-control);
+}
+
+.forest-root-marks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.forest-root-marks i,
+.forest-work-facts i {
+  font-style: normal;
+  color: var(--caption);
+}
+
+.forest-root-marks i[data-mark],
+.forest-work-facts i[data-mark] {
+  color: var(--amber);
+}
+
+.forest-root-marks i[data-on],
+.forest-work-facts i[data-on] {
+  color: #7ec8ff;
+}
+
+.forest-root-marks i[data-warn] {
+  color: var(--alarm);
+}
+
+.forest-roots-empty {
+  padding: 9px;
+  color: var(--caption);
+  font: 9px var(--mono);
+}
+
+.forest-roots > footer {
+  min-height: 34px;
+  border-top: 1px solid var(--edge);
+  padding: 0 8px;
   display: flex;
   align-items: center;
-  gap: 5px;
+  justify-content: space-between;
+  gap: 7px;
+  color: var(--caption);
+  font-size: 8.5px;
+}
+
+.forest-canvas {
+  min-width: 0;
+  min-height: 0;
+  background: var(--well);
+}
+
+.forest-work {
+  width: 150px;
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-xs);
+  padding: 5px 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--surface-control);
   color: var(--caption);
   font: 8.5px var(--mono);
 }
 
-.lineage-map > header .lineage-zoom input {
-  width: 72px;
-  padding: 0;
+.forest-work strong {
+  color: var(--fg);
+  font: 9.5px var(--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.lineage-scroll {
-  min-width: 0;
-  min-height: 0;
-  overflow: auto;
+.forest-work-op {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.lineage-scroll svg {
-  display: block;
-}
-
-.lineage-band {
-  fill: var(--panel);
-  stroke: var(--edge);
-  stroke-width: 1;
-}
-
-.lineage-family {
-  fill: var(--caption);
-  font: 8px var(--mono);
-  letter-spacing: 0.05em;
-}
-
-.lineage-edge {
-  fill: none;
-  stroke: var(--bd3);
-  stroke-width: 1;
-}
-
-.lineage-node {
-  cursor: pointer;
-  outline: none;
-}
-
-.lineage-node circle {
-  fill: var(--caption);
-  stroke: var(--panel);
-  stroke-width: 2;
-}
-
-.lineage-node text {
-  fill: var(--caption);
-  font: 8px var(--sans);
-  pointer-events: none;
-}
-
-.lineage-node[data-hot] circle {
-  fill: #7ec8ff;
-}
-
-.lineage-node[data-kept] circle {
-  fill: var(--amber);
-}
-
-.lineage-developed {
-  fill: none;
-  stroke: #7ec8ff;
-  stroke-width: 1.2;
-  opacity: 0.7;
-}
-
-.lineage-node[data-selected] circle {
-  stroke: var(--focus);
-  stroke-width: 4;
-}
-
-.lineage-node[data-dim] {
-  opacity: 0.12;
-}
-
-.lineage-node:hover text,
-.lineage-node[data-selected] text {
-  fill: var(--fg);
-}
-
-.lineage-map > footer {
-  min-height: 29px;
-  border-top: 1px solid var(--edge);
-  padding: 0 10px;
+.forest-work-facts {
   display: flex;
-  align-items: center;
-  gap: 13px;
-  color: var(--caption);
-  font-size: 8.5px;
-  background: var(--panel);
-}
-
-.lineage-map > footer span {
-  display: inline-flex;
-  align-items: center;
+  flex-wrap: wrap;
   gap: 5px;
 }
 
-.lineage-map > footer i {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--caption);
+.forest-work[data-developed] {
+  border-color: color-mix(in srgb, #7ec8ff 45%, var(--bd3));
 }
 
-.lineage-map > footer i[data-legend='peak'] { background: #7ec8ff; }
-.lineage-map > footer i[data-legend='kept'] { background: var(--amber); }
-.lineage-map > footer i[data-legend='developed'] {
-  background: transparent;
-  box-shadow: 0 0 0 1.5px #7ec8ff;
+.forest-work[data-bookmarked] {
+  border-color: var(--amber);
+}
+
+.forest-work[data-selected] {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 2px var(--focus);
+}
+
+.forest-canvas .react-flow__handle {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.forest-canvas .react-flow__edge-path {
+  stroke: var(--bd3);
+  stroke-width: 1.2;
+}
+
+.forest-canvas .react-flow__background-pattern {
+  color: var(--edge);
+}
+
+.forest-canvas .react-flow__controls-button {
+  border-bottom: 1px solid var(--edge);
+  background: var(--surface-control);
+  fill: var(--caption);
+}
+
+.forest-canvas .react-flow__controls-button:hover {
+  background: var(--panel);
+  fill: var(--fg);
+}
+
+.forest-canvas .react-flow__minimap {
+  background: var(--panel);
+}
+
+.forest-canvas .react-flow__minimap-mask {
+  fill: color-mix(in srgb, var(--well) 70%, transparent);
+}
+
+.forest-canvas .react-flow__node {
+  cursor: pointer;
 }
 
 .lineage-inspector {
