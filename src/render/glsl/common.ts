@@ -22,6 +22,13 @@
  */
 export const PREAMBLE = `#version 300 es
 precision highp float;
+// Required, not decorative. In GLSL ES 3.00 a *fragment* shader defaults int
+// and uint to mediump, which is only guaranteed sixteen bits -- and every hash
+// here is a 32-bit bit-mixer whose whole correctness is exact wraparound. Most
+// desktop drivers hand out 32-bit ints regardless, which is why this was never
+// visibly wrong; a tiler that honours the default would have truncated every
+// lattice hash in the library.
+precision highp int;
 
 in vec2 vUv;
 out vec4 fragColor;
@@ -31,7 +38,7 @@ uniform float uTime;     // seconds; for drift that should NOT be in time
 // Seconds since the previous drawn frame. The only per-FRAME quantity in here,
 // and it exists for exactly one customer: a feedback trail decays once per
 // frame, so without this its length would be a fact about the display rather
-// than about the show — half as long on a 120Hz panel as on the projector it
+// than about the show -- half as long on a 120Hz panel as on the projector it
 // was dialled in on. See fromLast in shaders.ts.
 uniform float uDt;
 uniform float uBeat;     // continuous Link beats
@@ -69,8 +76,41 @@ vec2 recentred(vec2 uv) {
   return p;
 }
 
+// A hash, not a stream.
+//
+// fract(sin(dot(p, k)) * 43758.5453) was here, and it is well distributed --
+// that was never the problem. The problem is that it is *chaotically* sensitive
+// to the last bits of sin: multiplying by 43758 and taking the fraction turns a
+// one-ulp disagreement into a completely different number. Evaluated at 32-bit
+// instead of 64-bit precision, the same expression on the same inputs disagrees
+// about half the time -- so what it returned was a property of the driver that
+// compiled it rather than of the flow.
+//
+// That mattered in one place far more than the rest. rate() uses this to pick
+// which musical division something pulses on, so a value that moves is a flow
+// that changes tempo, and two render boxes could not agree about it.
+//
+// Integer bit-mixing instead: the same lowbias32 mixer fields.ts already uses,
+// for the reason written there. uint operations have exact wraparound in GLSL
+// ES 3, so a fixed probe agrees across drivers and a CPU mirror can reproduce
+// it honestly. floatBitsToUint rather than quantising, because it is one
+// instruction, exact for every finite input, and has no range to overflow.
+// Only -0.0 and +0.0 hash apart, which no caller here can produce for one cell.
+uint hashBits(uint value) {
+  value ^= value >> 16;
+  value *= 0x7feb352du;
+  value ^= value >> 15;
+  value *= 0x846ca68bu;
+  value ^= value >> 16;
+  return value;
+}
+
 float hash(vec2 p) {
-  return fract(sin(dot(p, vec2(127.1, 311.7)) + uSeed) * 43758.5453);
+  uvec2 bits = floatBitsToUint(p);
+  uint mixed = hashBits(bits.x * 0x9e3779b9u)
+             ^ hashBits(bits.y * 0x85ebca6bu)
+             ^ hashBits(floatBitsToUint(uSeed));
+  return float(hashBits(mixed) & 0x00ffffffu) / 16777215.0;
 }
 
 float noise(vec2 p) {

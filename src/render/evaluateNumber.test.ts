@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Circuit, CircuitNode, Show } from '../../protocol.ts';
 import {
   createNumberEvaluator,
+  hash,
   sectionOf,
   seedOf,
   smoothTrack,
@@ -346,5 +347,52 @@ describe('shared number facts', () => {
     expect(smoothTrack(0.9, 0.2, 0, 0.1)).toBe(0.2);
     expect(smoothTrack(0.9, 0.2, 1, 0.1)).toBeLessThan(0.9);
     expect(smoothTrack(0.9, 0.2, 1, 0.1)).toBeGreaterThan(0.2);
+  });
+});
+
+describe('the hash both sides of the wire share', () => {
+  /**
+   * Pinned probes, the way `fields.ts` pins its lattice hash and for the same
+   * reason: these are the numbers a second render box has to agree about, so
+   * they belong in a test rather than in whatever `sin` a driver ships.
+   */
+  it('pins integer-hash probes', () => {
+    expect(hash(0, 0, 3.71)).toBeCloseTo(0.11932797, 8);
+    expect(hash(11.3, 4.7, 3.71)).toBeCloseTo(0.74614058, 8);
+    expect(hash(-7, 13, 0)).toBeCloseTo(0.10282803, 8);
+  });
+
+  /**
+   * The property the sine hash could not have, and the whole point of the port.
+   *
+   * `fract(sin(...) * 43758.5453)` amplifies a one-ulp difference into an
+   * unrelated number, so evaluating it at 32 bits on a GPU and 64 bits here
+   * disagreed about half the time — and `rate` turns that value into which
+   * musical division a flow pulses on. Integer mixing has no precision to
+   * disagree about: the input goes in by its 32-bit pattern and every step after
+   * is exact wraparound, so rounding a coordinate to float32 first cannot move
+   * the answer.
+   */
+  it('does not change when its inputs are rounded to a GPU float', () => {
+    for (const [x, y, seed] of [
+      [11.3, 4.7, 3.71],
+      [0.1, 0.2, 37.13],
+      [123.456, -78.9, 222.78],
+      [1e-7, 1e7, 0.5],
+    ]) {
+      expect(hash(Math.fround(x), Math.fround(y), Math.fround(seed))).toBe(hash(x, y, seed));
+    }
+  });
+
+  it('stays uniform, which is the thing the sine hash was already good at', () => {
+    const bins = new Array(10).fill(0);
+    for (let x = 0; x < 160; x++) {
+      for (let y = 0; y < 160; y++) bins[Math.min(9, Math.floor(hash(x, y, 3.71) * 10))] += 1;
+    }
+    const expected = (160 * 160) / 10;
+    const chi = bins.reduce((total, bin) => total + (bin - expected) ** 2 / expected, 0);
+    // Nine degrees of freedom; 21.7 is p=0.01. A port that traded distribution
+    // for portability would be a bad trade, so this refuses to make it.
+    expect(chi).toBeLessThan(21.7);
   });
 });

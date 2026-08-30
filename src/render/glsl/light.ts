@@ -35,7 +35,7 @@ export type LightMode = keyof typeof LIGHT_WORK;
  * second lattice.
  */
 export const LIGHT_LIB = `
-// Wrapped distance between two angles, so a cone does not tear at ±PI.
+// Wrapped distance between two angles, so a cone does not tear at +/-PI.
 float lightAngleOff(float angle, float axis) {
   return abs(mod(angle - axis + PI, 2.0 * PI) - PI);
 }
@@ -76,7 +76,7 @@ vec4 light_beam(vec2 p, vec2 from, float e, float aim, float spread) {
 // Crepuscular rays: fBm read over the angle around a hanging point, so the
 // streaks are radial and constant along each ray, fanned downward and fading
 // with distance. The angle is measured from straight down, which parks the
-// fBm seam at ±PI behind the sector window where it never draws.
+// fBm seam at +/-PI behind the sector window where it never draws.
 vec4 light_shafts(vec2 p, vec2 from, float e, float blades, float haze) {
   vec2 v = p - from;
   float r = length(v);

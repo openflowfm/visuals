@@ -48,7 +48,7 @@ export const GENERATOR_BODIES = {
   solid: `
   // The plainest picture there is: the colour, breathing on the bar and
   // brightening with the sound. The one source that fills the frame at full
-  // alpha, which makes it the one that can hide everything under it — so its
+  // alpha, which makes it the one that can hide everything under it -- so its
   // brightness stays well short of white.
   float breathe = 0.55 + 0.45 * (1.0 - uPhase / uQuantum);
   return vec4(uColor * (breathe * 0.6 + uLevel * 0.45), 1.0);`,
@@ -81,7 +81,7 @@ export const GENERATOR_BODIES = {
 
   noise: `
   // A drifting field that thickens with the sound. The drift is on uTime
-  // deliberately — it should feel like weather, not like a metronome.
+  // deliberately -- it should feel like weather, not like a metronome.
   vec2 q = p * mix(2.5, 6.0, weave);
   float n = noise(q + vec2(uTime * 0.15, uTime * 0.1));
   n += 0.5 * noise(q * 2.3 - uTime * 0.2);
@@ -112,7 +112,7 @@ export const GENERATOR_BODIES = {
 
   tunnel: `
   // A corridor rushing toward you. Depth is 1/r, which is what makes it read as
-  // perspective rather than as rings — and the rush is on the beat, so the room
+  // perspective rather than as rings -- and the rush is on the beat, so the room
   // moves through it in time rather than at a rate of its own.
   float r = max(length(p), 1e-3);
   float a = atan(p.y, p.x);
@@ -127,7 +127,7 @@ export const GENERATOR_BODIES = {
 
   plasma: `
   // Four sines crossed. The oldest trick there is and still the best full-frame
-  // wash — it never repeats visibly, it costs nothing, and it takes a colour and
+  // wash -- it never repeats visibly, it costs nothing, and it takes a colour and
   // its complement rather than a fixed palette.
   vec2 q = p * mix(2.0, 5.0, weave);
   float t = uBeat * rate(e) * 0.25;
@@ -138,7 +138,7 @@ export const GENERATOR_BODIES = {
 
   spiral: `
   // Arms winding out of the centre and turning on the beat. Reads as motion
-  // with a direction, which nothing else here does — rings expand, this rotates.
+  // with a direction, which nothing else here does -- rings expand, this rotates.
   float r = length(p);
   float count = floor(mix(2.0, 7.0, arms));
   float band = 0.5 + 0.5 * sin(atan(p.y, p.x) * count + r * mix(7.0, 22.0, coil)

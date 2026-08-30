@@ -43,8 +43,19 @@ export const SCORES: readonly { score: LabScore; means: string }[] = [
 
 export const RUBRIC_VERSION = 1;
 
-/** Bumped when the compiled pipeline changes what the same flow looks like. */
-export const LAB_RENDERER_VERSION = 1;
+/**
+ * Bumped when the compiled pipeline changes what the same flow looks like.
+ *
+ * 2: the preamble's `hash` became an integer bit-mixer. The sine hash it
+ *    replaced was chaotically sensitive to its own last bits, so what it
+ *    returned was a property of the driver that compiled the shader — measured,
+ *    32-bit and 64-bit evaluation of it disagreed about half the time, and
+ *    `rate` turns that value into which musical division a flow pulses on.
+ *    Judgments recorded under renderer 1 were therefore never reproducible on
+ *    this axis in the first place; they keep their version, and what replaces
+ *    it is stable rather than merely different.
+ */
+export const LAB_RENDERER_VERSION = 2;
 
 // --- the tag vocabulary ---------------------------------------------------
 

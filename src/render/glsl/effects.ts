@@ -103,7 +103,7 @@ vec4 fxSaturate(vec4 c, float amount) {
 // the brightness carrying the picture is passed through untouched and only the
 // hue is being decided, so a face is still a face and a logo is still legible
 // while the frame agrees with the colourway. That is the whole trade the video
-// vocabulary is after — breathe, stay decipherable.
+// vocabulary is after -- breathe, stay decipherable.
 vec4 fxTint(vec4 c, float amount, float bias) {
   float a = max(c.a, 1e-4);
   vec3 col = c.rgb / a;
@@ -206,7 +206,7 @@ vec4 fxScanlines(vec4 c, vec2 p, float size, float weight) {
 //
 // zoom is wrong for this twice over. Its range is four octaves either way,
 // which puts every useful per-frame step inside half a hundredth of the
-// control — the whole trail lives between 0.500 and 0.510 and there is no
+// control -- the whole trail lives between 0.500 and 0.510 and there is no
 // dialling that at a desk. And a fixed factor applied once a frame compounds
 // into a different speed on every display, which is exactly the fault uDt
 // was added to fix in the decay beside it. Sixty frames of 0.99 is not a
@@ -237,7 +237,7 @@ vec2 fxDisplaceMap(vec2 p, vec4 field, float amount) {
 //
 // Every picture here is tinted by the colourway, so a source's red and green
 // move together and reading them as x and y would lock the whole displacement
-// to one diagonal — the map mode is for footage and photographs, where the
+// to one diagonal -- the map mode is for footage and photographs, where the
 // channels are independent, and this one is for everything else.
 vec2 fxDisplaceCurl(vec2 p, vec4 field, float amount) {
   float ang = fxLuma(field.rgb / max(field.a, 1e-4)) * PI * 2.0;
