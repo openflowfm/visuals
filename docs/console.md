@@ -262,8 +262,9 @@ The flows shelf scrolled inside a column that also scrolled the palette — two 
 in 248px, and the pale default bars were the brightest thing in the column. The shelves
 now stack in **one scroll container**; each shelf head is sticky, so `flows` and `nodes`
 hold at the top with their controls while their rows pass under — the way any browser
-holds the category you are in. The one scrollbar is an inset dark pill that only shows
-while the pointer is over the column.
+holds the category you are in. The one scrollbar is an inset pill, and it is the console's
+rather than this column's: `.console` styles every scroll container it contains, so the
+shelves, the inspector and the log all draw the same bar.
 
 An emptied column says why. Both shelves answer one search box *and* the port filter, so
 "nothing by that name" was a lie whenever the filter was the reason — the empty state now

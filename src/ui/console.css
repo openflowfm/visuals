@@ -20,6 +20,10 @@
   --well: #111113;
   --alarm: #ff8b8b;
   --live: #6ee7a0;
+  --detail: #8b8b93;
+  --radius-pill: 999px;
+  --scroll-size: 10px;
+  --scroll-inset: 3px;
 
   position: fixed;
   inset: 0;
@@ -30,6 +34,40 @@
   font-family: var(--mono);
   font-size: 11px;
   overflow: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--idle) transparent;
+}
+
+.console ::-webkit-scrollbar {
+  width: var(--scroll-size);
+  height: var(--scroll-size);
+}
+
+.console ::-webkit-scrollbar-thumb {
+  border: var(--scroll-inset) solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--idle);
+  background-clip: padding-box;
+}
+
+.console ::-webkit-scrollbar-thumb:hover,
+.console ::-webkit-scrollbar-thumb:active {
+  border-width: calc(var(--scroll-inset) - 1px);
+}
+
+.console ::-webkit-scrollbar-thumb:hover {
+  background: var(--focus);
+  background-clip: padding-box;
+}
+
+.console ::-webkit-scrollbar-thumb:active {
+  background: var(--detail);
+  background-clip: padding-box;
+}
+
+.console ::-webkit-scrollbar-track,
+.console ::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 .console-head {
@@ -432,8 +470,6 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--bd3) transparent;
 }
 
 .designer .shelf {
@@ -487,31 +523,6 @@
 
 .designer .pictures-toggle[data-on]:hover {
   border-color: var(--bd3);
-}
-
-.designer .stacks::-webkit-scrollbar {
-  width: 11px;
-}
-
-.designer .stacks::-webkit-scrollbar-track {
-  background: none;
-}
-
-.designer .stacks::-webkit-scrollbar-thumb {
-  border: 3px solid transparent;
-  border-radius: 6px;
-  background: var(--bd);
-  background-clip: padding-box;
-}
-
-.designer .stacks:hover::-webkit-scrollbar-thumb {
-  background: var(--bd3);
-  background-clip: padding-box;
-}
-
-.designer .stacks::-webkit-scrollbar-thumb:active {
-  background: var(--idle);
-  background-clip: padding-box;
 }
 
 .designer .shelf-flows .flow-row {
