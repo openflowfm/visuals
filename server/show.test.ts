@@ -59,6 +59,7 @@ const LINK: LinkFrame = {
   peers: 0,
   playing: true,
   at: 0,
+  since: 0,
 };
 
 function sourceOf(scheme: Scheme): SchemeSource {
@@ -447,5 +448,40 @@ describe('the tracks', () => {
     const drawn = show(setOf(['Bass'], '[VERSE] one'), twoOf());
     expect(drawn.roles).toEqual(['VERSE']);
     expect(drawn.songs).toEqual(['sandstorm']);
+  });
+});
+
+describe('the clock the unmusical half runs on', () => {
+  /**
+   * `uTime` drives haze, dust and sway — motion deliberately outside the beat —
+   * and every renderer used to count it from its own boot. Two boxes started a
+   * minute apart were a minute out of phase on all of it.
+   *
+   * Link cannot supply the fix. It shares a beat timeline, and each peer maps
+   * that to its own host clock; there is no shared wall time in the addon's
+   * surface. Deriving seconds from the beat would work and be wrong, because it
+   * would put drift back in tempo. So it rides the anchor, from the one server
+   * every render box already shares.
+   */
+  it('carries the server second onto the show, beside the beat', () => {
+    const built = at(setOf(['Drums'], 'A'), twoOf(), noTurning(), {
+      beat: 12.5,
+      at: 1_700_000_000_000,
+      since: 42.25,
+    });
+    expect(built.since).toBe(42.25);
+    expect(built.beat).toBe(12.5);
+    expect(built.at).toBe(1_700_000_000_000);
+  });
+
+  it('is seconds since the server started, not a Unix time', () => {
+    // A 32-bit float has about two minutes of resolution at 1.7e9, and `uTime`
+    // is a float uniform. A haze that only moves every two minutes is a still.
+    const built = at(setOf(['Drums'], 'A'), twoOf(), noTurning(), {
+      at: Date.now(),
+      since: 8.5,
+    });
+    expect(built.since).toBeLessThan(1_000_000);
+    expect(Math.fround(built.since)).toBe(built.since);
   });
 });

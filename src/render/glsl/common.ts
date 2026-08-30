@@ -8,6 +8,13 @@
  * why `uTime` is present but barely used — it is for drift and shimmer, things
  * that should specifically *not* be in time.
  *
+ * `uTime` is nonetheless **shared**: seconds since the *server* started, riding
+ * the anchor and extrapolated locally the same way the beat is. It used to be
+ * counted from whenever each window opened, which made every haze and sway a
+ * fact about a boot time and put two render boxes minutes out of phase. Link
+ * could not have fixed it — Link shares a beat timeline, not a host clock, and
+ * deriving seconds from the beat would put drift back in tempo.
+ *
  * ## Energy is an argument now, not a uniform
  *
  * It used to be the one number the whole show agreed about: an archetype set it,
@@ -34,7 +41,7 @@ in vec2 vUv;
 out vec4 fragColor;
 
 uniform vec2  uRes;
-uniform float uTime;     // seconds; for drift that should NOT be in time
+uniform float uTime;     // seconds since the SERVER started; drift, not tempo
 // Seconds since the previous drawn frame. The only per-FRAME quantity in here,
 // and it exists for exactly one customer: a feedback trail decays once per
 // frame, so without this its length would be a fact about the display rather

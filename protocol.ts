@@ -584,6 +584,14 @@ export interface Show {
   beat: number;
   /** `Date.now()` when `beat` was sampled. */
   at: number;
+  /**
+   * Seconds since the server started, sampled with `beat`.
+   *
+   * What `uTime` is extrapolated from, so the deliberately unmusical half of the
+   * renderer — haze, dust, sway — is in phase across every render box. Counting
+   * it locally made it a fact about when a window opened. See `server/link.ts`.
+   */
+  since: number;
   master: number;
   tracks: Track[];
   /**
@@ -1133,6 +1141,7 @@ export type Down =
       tempo: number;
       beat: number;
       at: number;
+      since: number;
       playing: boolean;
       master: number;
       /** By track, in the order the last `show` gave them. */

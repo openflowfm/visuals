@@ -300,6 +300,7 @@ export function buildShow(
     quantum: link.quantum,
     beat: link.beat,
     at: link.at,
+    since: link.since,
     master: set.masterLevel,
     tracks: drawn,
     groups: grouped,

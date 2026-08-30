@@ -58,6 +58,7 @@ const RESTING: Show = {
   quantum: 4,
   beat: 0,
   at: 0,
+  since: 0,
   master: 0,
   tracks: [],
   groups: [],
@@ -203,7 +204,14 @@ export function useShow(): {
   // The show is also held in a ref because the render loop reads it every frame
   // and must not be re-created when React re-renders for the overlay.
   const held = useRef<Show>(RESTING);
-  const timing = useRef({ tempo: 120, anchorBeat: 0, anchorAt: 0, beat: 0, seconds: 0 });
+  const timing = useRef({
+    tempo: 120,
+    anchorBeat: 0,
+    anchorAt: 0,
+    anchorSince: 0,
+    beat: 0,
+    seconds: 0,
+  });
   /** Kinds already complained about, so a skewed server is one line and not a flood. */
   const unknown = useRef(new Set<string>());
 
@@ -298,6 +306,7 @@ export function useShow(): {
         if (message.kind === 'anchor') {
           t.tempo = message.tempo;
           t.anchorBeat = message.beat;
+          t.anchorSince = message.since;
           t.anchorAt = performance.now();
           // Levels and faders ride the anchor rather than waking a full push,
           // so patch them into the held show in place. Nothing re-renders.
@@ -325,6 +334,7 @@ export function useShow(): {
         }
         t.tempo = message.tempo;
         t.anchorBeat = message.beat;
+        t.anchorSince = message.since;
         t.anchorAt = performance.now();
         held.current = message;
         setShow(message);
@@ -344,6 +354,20 @@ export function useShow(): {
       const t = timing.current;
       t.seconds += dt;
       t.beat += dt * (t.tempo / 60);
+      // Seconds get exactly what the beat gets below, and for the same reason
+      // one step out. This used to be the line above and nothing else, so
+      // `uTime` counted from whenever *this* window opened — which made every
+      // drift, haze and sway a fact about a boot time. Two render boxes started
+      // a minute apart were a minute out of phase on all of them.
+      //
+      // The server is the shared reference, not Link: Link shares a beat
+      // timeline and each peer maps it to its own host clock, and deriving
+      // seconds from the beat would put drift back in tempo, which is the one
+      // thing `uTime` exists not to be.
+      const sinceTarget = t.anchorSince + (performance.now() - t.anchorAt) / 1000;
+      const sinceError = sinceTarget - t.seconds;
+      t.seconds += sinceError * 0.15;
+      if (Math.abs(sinceError) > 0.5) t.seconds = sinceTarget;
       const target = t.anchorBeat + ((performance.now() - t.anchorAt) / 1000) * (t.tempo / 60);
       const error = target - t.beat;
       // The free run above is what makes the steady-state error zero. Easing

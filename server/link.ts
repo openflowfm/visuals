@@ -42,6 +42,26 @@ export interface LinkFrame {
    * `docs/link.md`.
    */
   at: number;
+  /**
+   * Seconds since this server started, sampled with the beat.
+   *
+   * The clock the *un*musical half of the renderer runs on. `uTime` drives haze,
+   * dust and sway — motion that is deliberately not in time — and every renderer
+   * was counting it from its own boot, so two of them started a minute apart
+   * were a minute out of phase on every one of those.
+   *
+   * Link cannot supply this. It shares a **beat timeline**, not a host clock:
+   * peers agree about which beat it is and each maps that to its own local time,
+   * and there is no method here that would say otherwise. Deriving seconds from
+   * the beat would work and would be wrong — it would put drift back in tempo,
+   * which is the one thing `uTime` exists not to be.
+   *
+   * So it comes from the server, which is already the single thing every render
+   * box shares. Seconds since start rather than a Unix time because `uTime` is a
+   * 32-bit float on the far side: 1.7e9 has about two minutes of resolution
+   * there, and a haze that only moves every two minutes is a still image.
+   */
+  since: number;
 }
 
 interface Addon {
@@ -106,6 +126,7 @@ export function openLink(bpm = 120, quantum = 4): LinkPeer {
           peers: 0,
           playing: false,
           at: Date.now(),
+          since: (Date.now() - from) / 1000,
         };
       }
       return {
@@ -116,6 +137,7 @@ export function openLink(bpm = 120, quantum = 4): LinkPeer {
         peers: held.getNumPeers(),
         playing: held.isPlaying(),
         at: Date.now(),
+        since: (Date.now() - from) / 1000,
       };
     },
     stop() {

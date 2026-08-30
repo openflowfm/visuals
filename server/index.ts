@@ -704,6 +704,7 @@ function anchorOf(show: ReturnType<typeof buildShow>) {
     tempo: show.tempo,
     beat: show.beat,
     at: show.at,
+    since: show.since,
     playing: show.playing,
     master: show.master,
     levels: show.tracks.map((track) => track.level),
