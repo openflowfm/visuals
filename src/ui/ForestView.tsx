@@ -70,7 +70,20 @@ const interest = (node: LabLineageNode): number =>
 interface Branch {
   node: LabLineageNode | null;
   children: Branch[];
+  /** Descendants folded away under this one, and zero when it is open. */
+  hidden: number;
 }
+
+/**
+ * Which way a family grows.
+ *
+ * Downward reads like a family tree and puts the unbounded axis where a pane
+ * scrolls anyway. Left-to-right puts generation on the horizontal, which is
+ * what a long refinement chain wants — 243 deep and eight wide is a column of
+ * specks growing downward and a legible run across. Neither is right for both
+ * shapes, so it is a toggle rather than a decision.
+ */
+type Growth = 'down' | 'right';
 
 export interface Family {
   id: string;
@@ -80,6 +93,8 @@ export interface Family {
   generations: number;
   bookmarked: number;
   batches: number;
+  /** Works in this family that have led a settled batch. */
+  won: number;
   interest: number;
 }
 
@@ -98,6 +113,7 @@ export function familiesOf(nodes: readonly LabLineageNode[]): Family[] {
       members,
       generations: Math.max(...members.map((node) => node.generation)) + 1,
       bookmarked: members.filter((node) => node.bookmarked).length,
+      won: members.filter((node) => node.wins > 0).length,
       batches: members.reduce((total, node) => total + node.batches, 0),
       interest: Math.max(...members.map(interest)),
     });
@@ -105,8 +121,21 @@ export function familiesOf(nodes: readonly LabLineageNode[]): Family[] {
   return families.sort((a, b) => b.interest - a.interest);
 }
 
-/** One family, laid out downward. Reingold–Tilford, unswapped. */
-function layoutFamily(family: Family): { nodes: Node[]; edges: Edge[] } {
+/**
+ * One family, laid out. Reingold-Tilford, unswapped.
+ *
+ * Folding a branch away is a fact about the *layout* and not about the corpus:
+ * the works under it are still there, still counted, still reachable by opening
+ * it again. It exists because the largest family here is 435 works and reading
+ * one lineage should not mean drawing the four hundred somebody is not looking
+ * at — d3 lays out what it is given, so the cheapest way to leave them out of
+ * the picture is to not hand them over.
+ */
+function layoutFamily(
+  family: Family,
+  growth: Growth,
+  collapsed: ReadonlySet<string>,
+): { nodes: Node[]; edges: Edge[] } {
   const present = new Set(family.members.map((node) => node.id));
   const childrenOf = new Map<string, LabLineageNode[]>();
   for (const node of family.members) {
@@ -115,16 +144,38 @@ function layoutFamily(family: Family): { nodes: Node[]; edges: Edge[] } {
   }
   const roots = family.members.filter((node) => !node.parentId || !present.has(node.parentId));
 
-  const branch = (node: LabLineageNode): Branch => ({
-    node,
-    children: (childrenOf.get(node.id) ?? [])
-      .sort((a, b) => interest(b) - interest(a))
-      .map(branch),
-  });
-  const head: Branch = { node: null, children: roots.map(branch) };
+  const under = (node: LabLineageNode): number => {
+    let total = 0;
+    const queue = [...(childrenOf.get(node.id) ?? [])];
+    while (queue.length > 0) {
+      const each = queue.pop()!;
+      total += 1;
+      queue.push(...(childrenOf.get(each.id) ?? []));
+    }
+    return total;
+  };
+
+  const branch = (node: LabLineageNode): Branch => {
+    const shut = collapsed.has(node.id);
+    return {
+      node,
+      hidden: shut ? under(node) : 0,
+      children: shut
+        ? []
+        : (childrenOf.get(node.id) ?? []).sort((a, b) => interest(b) - interest(a)).map(branch),
+    };
+  };
+  const head: Branch = { node: null, children: roots.map(branch), hidden: 0 };
+
+  // d3 lays out breadth first and depth second, whichever way the picture ends
+  // up pointing; growing rightward is that same layout read with the axes
+  // swapped, which is why the node size swaps with it.
+  const down = growth === 'down';
+  const breadth = down ? NODE_WIDTH + 26 : NODE_HEIGHT + 26;
+  const depth = down ? NODE_HEIGHT + 46 : NODE_WIDTH + 46;
 
   const laid = tree<Branch>()
-    .nodeSize([NODE_WIDTH + 26, NODE_HEIGHT + 46])
+    .nodeSize([breadth, depth])
     .separation((a, b) => (a.parent === b.parent ? 1 : 1.25))(
     hierarchy<Branch>(head, (datum) => datum.children),
   );
@@ -133,12 +184,17 @@ function layoutFamily(family: Family): { nodes: Node[]; edges: Edge[] } {
   const nodes: Node[] = points.map((point) => ({
     id: point.data.node!.id,
     type: 'work',
-    position: { x: point.x, y: point.y - (NODE_HEIGHT + 46) },
-    data: { work: point.data.node! },
+    // The synthetic head sits one rank before the real roots, so the whole
+    // tree comes back by one rank along whichever axis depth runs on.
+    position: down
+      ? { x: point.x, y: point.y - depth }
+      : { x: point.y - depth, y: point.x },
+    data: { work: point.data.node!, growth, hidden: point.data.hidden },
     draggable: false,
   }));
+  const drawn = new Set(points.map((point) => point.data.node!.id));
   const edges: Edge[] = family.members.flatMap((node) =>
-    node.parentId && present.has(node.parentId)
+    node.parentId && drawn.has(node.id) && drawn.has(node.parentId)
       ? [
           {
             id: `${node.parentId}:${node.id}`,
@@ -160,15 +216,27 @@ const operationName = (operation: string): string =>
       : operation.replace(/^mutate:/, '');
 
 function WorkNode({ data, selected }: NodeProps) {
-  const work = (data as { work: LabLineageNode }).work;
+  const { work, growth, hidden, fold } = data as {
+    work: LabLineageNode;
+    growth: Growth;
+    hidden: number;
+    fold(id: string): void;
+  };
+  const down = growth === 'down';
   return (
     <div
       className="forest-work"
       data-selected={selected ? '' : undefined}
       data-bookmarked={work.bookmarked ? '' : undefined}
       data-developed={work.batches > 0 ? '' : undefined}
+      data-won={work.wins > 0 ? '' : undefined}
+      data-folded={hidden > 0 ? '' : undefined}
     >
-      <Handle type="target" position={Position.Top} isConnectable={false} />
+      <Handle
+        type="target"
+        position={down ? Position.Top : Position.Left}
+        isConnectable={false}
+      />
       <strong>{work.name}</strong>
       <span className="forest-work-op">{operationName(work.operation)}</span>
       <span className="forest-work-facts">
@@ -179,9 +247,38 @@ function WorkNode({ data, selected }: NodeProps) {
           </i>
         )}
         {work.batches > 0 && <i data-on="">{work.batches}×dev</i>}
+        {/*
+          Won and bookmarked are deliberately two marks. One is the corpus
+          saying this came first in a field of its siblings; the other is a
+          person saying come back here. A single mark for both would make the
+          forest unable to show the interesting case, which is either without
+          the other.
+        */}
+        {work.wins > 0 && <i data-won="">{work.wins > 1 ? `${work.wins}×` : ''}won</i>}
         {work.bookmarked && <i data-mark="">★</i>}
+        {work.children > 0 && (
+          <button
+            type="button"
+            className="forest-fold"
+            aria-pressed={hidden > 0}
+            title={hidden > 0 ? `show ${hidden} below` : 'fold this branch away'}
+            // The card is the selection target, so the fold must not also be
+            // one: without this, hiding a branch would drag the inspector onto
+            // whatever it was hung from.
+            onClick={(event) => {
+              event.stopPropagation();
+              fold(work.id);
+            }}
+          >
+            {hidden > 0 ? `+${hidden}` : '−'}
+          </button>
+        )}
       </span>
-      <Handle type="source" position={Position.Bottom} isConnectable={false} />
+      <Handle
+        type="source"
+        position={down ? Position.Bottom : Position.Right}
+        isConnectable={false}
+      />
     </div>
   );
 }
@@ -190,26 +287,43 @@ const NODE_TYPES = { work: WorkNode };
 
 function FamilyCanvas({
   family,
+  growth,
+  collapsed,
   selectedId,
   onSelect,
+  onFold,
 }: {
   family: Family;
+  growth: Growth;
+  collapsed: ReadonlySet<string>;
   selectedId: string | null;
   onSelect(id: string): void;
+  onFold(id: string): void;
 }) {
-  const { nodes, edges } = useMemo(() => layoutFamily(family), [family]);
+  const { nodes, edges } = useMemo(
+    () => layoutFamily(family, growth, collapsed),
+    [family, growth, collapsed],
+  );
   const flow = useReactFlow();
 
+  // The fold handler is attached here rather than in the layout so that
+  // changing it cannot invalidate a tree of several hundred positions.
   const painted = useMemo(
-    () => nodes.map((node) => ({ ...node, selected: node.id === selectedId })),
-    [nodes, selectedId],
+    () =>
+      nodes.map((node) => ({
+        ...node,
+        selected: node.id === selectedId,
+        data: { ...node.data, fold: onFold },
+      })),
+    [nodes, selectedId, onFold],
   );
 
-  // A different family is a different picture, not a pan of the same one.
+  // A different family is a different picture, not a pan of the same one, and
+  // so is the same family turned on its side.
   useEffect(() => {
     const at = requestAnimationFrame(() => flow.fitView({ duration: 260, padding: 0.18 }));
     return () => cancelAnimationFrame(at);
-  }, [family.id, flow]);
+  }, [family.id, growth, flow]);
 
   return (
     <ReactFlow
@@ -282,6 +396,16 @@ function Forest({
   const [query, setQuery] = useState('');
   const [size, setSize] = useState(batchSizes[1] ?? batchSizes[0]);
   const [openFamily, setOpenFamily] = useState<string | null>(null);
+  const [growth, setGrowth] = useState<Growth>('down');
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
+
+  const fold = useCallback((id: string) => {
+    setCollapsed((held) => {
+      const next = new Set(held);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }, []);
 
   const candidate = archive?.candidate ?? null;
   const room = archive?.room ?? null;
@@ -297,6 +421,14 @@ function Forest({
   // that is not showing.
   const family =
     families.find((held) => held.id === (selected?.cohort ?? openFamily)) ?? families[0] ?? null;
+
+  // Every work with descendants, so folding the lot leaves the roots and the
+  // shape of what hangs off them.
+  const parents = useMemo(
+    () => (family?.members ?? []).filter((node) => node.children > 0).map((node) => node.id),
+    [family],
+  );
+  const folded = collapsed.size;
 
   const normalized = query.trim().toLowerCase();
   const shownFamilies = normalized
@@ -415,6 +547,7 @@ function Forest({
                 </span>
                 <span className="forest-root-marks">
                   {held.bookmarked > 0 && <i data-mark="">★ {held.bookmarked}</i>}
+                  {held.won > 0 && <i data-won="">{held.won} won</i>}
                   {held.batches > 0 && <i data-on="">{held.batches}×dev</i>}
                   {held.batches === 0 && held.bookmarked > 0 && <i data-warn="">undeveloped</i>}
                 </span>
@@ -437,12 +570,38 @@ function Forest({
       </nav>
 
       <section className="forest-canvas">
+        <div className="forest-canvas-bar wdg">
+          {(['down', 'right'] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={growth === option}
+              onClick={() => setGrowth(option)}
+            >
+              {option === 'down' ? 'downward' : 'left to right'}
+            </button>
+          ))}
+          <span className="forest-canvas-gap" />
+          <button
+            type="button"
+            disabled={!family || parents.length === 0}
+            onClick={() => setCollapsed(new Set(parents))}
+          >
+            fold branches
+          </button>
+          <button type="button" disabled={folded === 0} onClick={() => setCollapsed(new Set())}>
+            unfold all{folded > 0 ? ` (${folded})` : ''}
+          </button>
+        </div>
         {family ? (
           <FamilyCanvas
             key={family.id}
             family={family}
+            growth={growth}
+            collapsed={collapsed}
             selectedId={selected?.id ?? null}
             onSelect={pick}
+            onFold={fold}
           />
         ) : (
           <div className="archive-empty">

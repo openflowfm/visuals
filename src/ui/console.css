@@ -2236,6 +2236,12 @@
   color: #7ec8ff;
 }
 
+.forest-work-facts i[data-won],
+.forest-root-marks i[data-won] {
+  color: #8ce39a;
+}
+
+
 .forest-root-marks i[data-warn] {
   color: var(--alarm);
 }
@@ -2261,7 +2267,55 @@
 .forest-canvas {
   min-width: 0;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
   background: var(--well);
+}
+
+.forest-canvas-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--edge);
+  background: var(--panel);
+}
+
+.forest-canvas-bar button {
+  border: 0;
+  border-radius: var(--radius-xs);
+  padding: 3px 9px;
+  background: transparent;
+  color: var(--caption);
+  font: 9.5px var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+
+.forest-canvas-bar button:hover:not(:disabled) {
+  color: var(--fg);
+  background: var(--surface-control);
+}
+
+.forest-canvas-bar button[aria-pressed='true'] {
+  color: var(--amber);
+  background: var(--well);
+}
+
+.forest-canvas-bar button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.forest-canvas-gap {
+  flex: 1;
+}
+
+.forest-canvas .react-flow {
+  flex: 1;
+  min-height: 0;
 }
 
 .forest-work {
@@ -2302,6 +2356,33 @@
 }
 
 .forest-work[data-bookmarked] {
+  border-color: var(--amber);
+}
+
+.forest-work[data-won] {
+  border-color: #8ce39a;
+}
+
+.forest-fold {
+  margin-left: auto;
+  min-width: 18px;
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-xs);
+  padding: 0 3px;
+  background: var(--well);
+  color: var(--caption);
+  font: 8.5px var(--mono);
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.forest-fold:hover {
+  color: var(--fg);
+  border-color: var(--focus);
+}
+
+.forest-work[data-folded] .forest-fold {
+  color: var(--amber);
   border-color: var(--amber);
 }
 

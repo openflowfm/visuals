@@ -323,6 +323,43 @@ describe('Develop runs a batch somebody asked for', () => {
     expect(developed?.children).toBeGreaterThan(0);
   });
 
+  it('marks the work that led a batch, once the batch has settled', () => {
+    const engine = labSearchEngine(open(), lineageMethod(), 'winner-deck');
+    let state = engine.exploreOpen();
+    const seed = state.explore!.encounter!;
+    state = engine.exploreJudge({ encounterId: seed.id, verdict: 'yes' });
+    state = engine.developDeal({ candidateId: seed.candidate.id, size: 6 });
+    const parentId = state.develop!.parent.id;
+
+    // A batch still being judged has a leader, and a leader is not a result.
+    const first = state.develop!.encounter!;
+    state = engine.developCompare({
+      encounterId: first.id,
+      choice: first.left.id === parentId ? 'right' : 'left',
+    });
+    expect(state.archive!.nodes.every((node) => node.wins === 0)).toBe(true);
+
+    for (let guard = 0; guard < 60; guard++) {
+      const held = state.develop?.encounter;
+      if (!held) break;
+      const choice =
+        held.left.id === parentId ? 'right' : held.right.id === parentId ? 'left' : 'left';
+      state = engine.developCompare({ encounterId: held.id, choice });
+    }
+    const winner = state.develop!.standings[0];
+    expect(winner.isParent).toBe(false);
+
+    const won = state.archive!.nodes.filter((node) => node.wins > 0);
+    expect(won.map((node) => node.id)).toEqual([winner.candidate.id]);
+    expect(won[0].wins).toBe(1);
+    // A bookmark is a different fact and this must not have invented one.
+    expect(won[0].bookmarked).toBe(false);
+
+    // Reading the result and leaving does not un-win it.
+    state = engine.developClose();
+    expect(state.archive!.nodes.find((node) => node.id === winner.candidate.id)?.wins).toBe(1);
+  });
+
   it('refuses a second batch while one is open, and reopens the forest after discarding', () => {
     const engine = labSearchEngine(open(), lineageMethod(), 'one-batch-deck');
     let state = engine.exploreOpen();

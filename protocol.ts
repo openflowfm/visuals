@@ -782,6 +782,19 @@ export interface LabLineageNode {
    * that it was never mutated, and that is a number nothing else reports.
    */
   batches: number;
+  /**
+   * Batches this node led, of those that ran to the end.
+   *
+   * The empirical half of what the forest marks, and a different fact from a
+   * bookmark: a bookmark is somebody saying *come back here*, and this is a
+   * field of nine variations having been compared three times and this one
+   * coming out on top. Both are worth seeing and neither implies the other —
+   * a winner nobody marked is exactly the thing that used to get lost.
+   *
+   * A parent leading its own batch counts, because it beat its children under
+   * the same room and that is the same evidence pointing at a local peak.
+   */
+  wins: number;
   /** Descendants one step down, so a leaf reads as a leaf without a scan. */
   children: number;
 }

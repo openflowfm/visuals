@@ -37,11 +37,21 @@ export const BATCH_SIZES: readonly number[] = [6, 10, 16];
 
 export const DEFAULT_BATCH_SIZE = 10;
 
-export interface BatchEntrantEvidence {
+/**
+ * What ranking a field needs, which is less than staging one does.
+ *
+ * Separated so the forest can derive who led every settled batch without
+ * parsing a circuit per entrant to do it: standings come from the answers
+ * alone, and the graphs are only wanted when a batch is being *dealt*.
+ */
+export interface BatchStandingEvidence {
   candidateId: string;
   /** The parent rides in its own batch, so "did this family improve" has an answer. */
   isParent: boolean;
   order: number;
+}
+
+export interface BatchEntrantEvidence extends BatchStandingEvidence {
   circuit: Circuit;
 }
 
@@ -75,7 +85,7 @@ export interface BatchStanding {
  * into half a win each would invent a preference nobody expressed.
  */
 export function rankBatch(
-  entrants: readonly BatchEntrantEvidence[],
+  entrants: readonly BatchStandingEvidence[],
   evidence: readonly BatchComparisonEvidence[],
 ): BatchStanding[] {
   const compared = evidence.filter(

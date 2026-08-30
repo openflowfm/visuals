@@ -65,6 +65,7 @@ import {
   rankBatch,
   type BatchComparisonEvidence,
   type BatchEntrantEvidence,
+  type BatchStandingEvidence,
 } from './batch.ts';
 import { batchDrafts, seedDraft } from './lineage.ts';
 
@@ -591,6 +592,19 @@ export interface LabStore {
   closeBatch(batchId: number): void;
   /** How many batches every node has ever been developed with. */
   batchCounts(experimentId: number): Map<string, number>;
+  /**
+   * Every batch that ran to the end, with what it takes to rank one.
+   *
+   * Settled means `complete` or `closed` — every match answered. A batch
+   * somebody walked away from has a leader too, and it is not a result: half a
+   * field judged once is exactly the thin evidence the old scheduler acted on.
+   *
+   * In bulk, and without circuits, because the forest ranks every one of these
+   * on each state push to mark the winners.
+   */
+  settledBatches(
+    experimentId: number,
+  ): { id: number; entrants: BatchStandingEvidence[]; evidence: BatchComparisonEvidence[] }[];
   /** Times staged in a batch match, and times chosen, per candidate. */
   batchAppearances(
     experimentId: number,
@@ -1723,6 +1737,75 @@ export function openLab(file: string): LabStore {
             round: Number(row.round),
           }
         : null;
+    },
+
+    settledBatches(experimentId) {
+      const settled = `b.experiment_id = ? AND b.status IN ('complete', 'closed')`;
+      const entrantRows = db
+        .prepare(
+          `SELECT e.batch_id AS batch_id, e.candidate_id AS candidate_id,
+                  e.is_parent AS is_parent, e.entered_order AS entered_order
+           FROM batch_entrants e
+           JOIN batches b ON b.id = e.batch_id
+           WHERE ${settled}
+           ORDER BY e.batch_id, e.entered_order`,
+        )
+        .all(experimentId) as {
+        batch_id: number;
+        candidate_id: string;
+        is_parent: number;
+        entered_order: number;
+      }[];
+      const evidenceRows = db
+        .prepare(
+          `SELECT e.batch_id AS batch_id, e.id AS id,
+                  e.left_candidate_id AS left_id, e.right_candidate_id AS right_id,
+                  e.round AS round, e.disposition AS disposition, c.choice AS choice
+           FROM batch_encounters e
+           JOIN batches b ON b.id = e.batch_id
+           LEFT JOIN batch_comparisons c ON c.encounter_id = e.id
+           WHERE ${settled}
+           ORDER BY e.batch_id, e.id`,
+        )
+        .all(experimentId) as {
+        batch_id: number;
+        id: number;
+        left_id: string;
+        right_id: string;
+        round: number;
+        disposition: BatchComparisonEvidence['disposition'];
+        choice: BatchComparisonEvidence['choice'];
+      }[];
+
+      const batches = new Map<
+        number,
+        { id: number; entrants: BatchStandingEvidence[]; evidence: BatchComparisonEvidence[] }
+      >();
+      const at = (id: number) => {
+        const held = batches.get(id);
+        if (held) return held;
+        const made = { id, entrants: [], evidence: [] };
+        batches.set(id, made);
+        return made;
+      };
+      for (const row of entrantRows) {
+        at(Number(row.batch_id)).entrants.push({
+          candidateId: row.candidate_id,
+          isParent: row.is_parent === 1,
+          order: Number(row.entered_order),
+        });
+      }
+      for (const row of evidenceRows) {
+        at(Number(row.batch_id)).evidence.push({
+          id: Number(row.id),
+          leftId: row.left_id,
+          rightId: row.right_id,
+          round: Number(row.round),
+          disposition: row.disposition,
+          choice: row.choice,
+        });
+      }
+      return [...batches.values()];
     },
 
     batchEvidence(batchId) {
@@ -2894,6 +2977,17 @@ export function labSearchEngine<State>(
       appearances.set(fact.candidateId, (appearances.get(fact.candidateId) ?? 0) + fact.appearances);
       chosen.set(fact.candidateId, (chosen.get(fact.candidateId) ?? 0) + fact.chosen);
     }
+    // Who led each batch that ran to the end. Derived from the answers every
+    // time, like every other standing in here, and never written down: a
+    // stored winner is a score, and the day the ranking changes it becomes a
+    // claim about a judgment nobody made.
+    const wins = new Map<string, number>();
+    for (const batch of store.settledBatches(experimentId)) {
+      const top = rankBatch(batch.entrants, batch.evidence)[0];
+      // A batch closed without a single answer has a leader by entry order
+      // alone, which is not a thing anybody decided.
+      if (top && top.matches > 0) wins.set(top.candidateId, (wins.get(top.candidateId) ?? 0) + 1);
+    }
     const childCounts = new Map<string, number>();
     for (const candidate of search.candidates) {
       if (!candidate.parentId) continue;
@@ -2914,6 +3008,7 @@ export function labSearchEngine<State>(
         reviewed: latest.get(held.id)?.verdict === 'keep' || latest.get(held.id)?.verdict === 'pass',
         bookmarked: kept.has(held.id) || finalists.has(held.id),
         batches: batches.get(held.id) ?? 0,
+        wins: wins.get(held.id) ?? 0,
         children: childCounts.get(held.id) ?? 0,
       }] : [];
     });
