@@ -69,6 +69,12 @@ mac:
   # build it reports it as damaged rather than as unsigned. Distributing one is
   # a worse first run than distributing nothing.
   #
+  #
+  # `npm run qa` overrides both of these — `-c.mac.target=dir -c.mac.identity=null`
+  # — because it installs the `.app` locally and never opens a disk image.
+  # Measured: signing costs about 90s per app and the image about as much again,
+  # against 4.7s for the ad-hoc bundle described above, which is the one QA
+  # wants. `npm run pack` is unchanged and still produces the signed pair.
   # Hardened runtime and the entitlements notarisation demands are already
   # electron-builder's defaults for a Developer ID build — JIT, unsigned
   # executable memory, and library validation off. Electron needs the first two
