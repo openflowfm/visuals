@@ -216,6 +216,8 @@ const ensureLab = (): LabEngine | null => {
 /** The queue's state as "there is no queue", so the review view says why. */
 const noLab = (why: string): LabState => ({
   encounter: null,
+  explore: null,
+  develop: null,
   archive: null,
   finals: null,
   candidate: null,
@@ -432,6 +434,42 @@ function dispatch(socket: WebSocket, message: Up): void {
   }
   if (message.kind === 'lab-lineage-finalist') {
     onLab(socket, (engine) => sendLab(engine.lineageFinalist(message.decision)));
+    return;
+  }
+  if (message.kind === 'lab-explore-open') {
+    onLab(socket, (engine) => sendLab(engine.exploreOpen()));
+    return;
+  }
+  if (message.kind === 'lab-explore-judge') {
+    onLab(socket, (engine) => sendLab(engine.exploreJudge(message.submission)));
+    return;
+  }
+  if (message.kind === 'lab-explore-skip') {
+    onLab(socket, (engine) => sendLab(engine.exploreSkip(message.encounterId)));
+    return;
+  }
+  if (message.kind === 'lab-bookmark') {
+    onLab(socket, (engine) => sendLab(engine.bookmark(message.decision)));
+    return;
+  }
+  if (message.kind === 'lab-develop-open') {
+    onLab(socket, (engine) => sendLab(engine.developOpen(message.candidateId)));
+    return;
+  }
+  if (message.kind === 'lab-develop-deal') {
+    onLab(socket, (engine) => sendLab(engine.developDeal(message.request)));
+    return;
+  }
+  if (message.kind === 'lab-develop-compare') {
+    onLab(socket, (engine) => sendLab(engine.developCompare(message.comparison)));
+    return;
+  }
+  if (message.kind === 'lab-develop-skip') {
+    onLab(socket, (engine) => sendLab(engine.developSkip(message.encounterId)));
+    return;
+  }
+  if (message.kind === 'lab-develop-close') {
+    onLab(socket, (engine) => sendLab(engine.developClose()));
     return;
   }
   if (message.kind === 'lab-finals-open') {

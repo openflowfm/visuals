@@ -295,6 +295,15 @@ be *silent* about it: a canvas full of nodes drawing black is indistinguishable 
 full of nodes that is broken, and the difference is one cord. So the canvas says
 `nothing reaches out` under the graph and refuses nothing.
 
+**A branch that stops one cord short is the same argument, one step later.** Once something
+*does* leave the flow, a node whose work never reaches a door — `out`'s inlet, or a `give`'s
+— draws no pixel, so the picture is identical to the same graph with that branch deleted.
+`strandedNodes` names them and the canvas dims them and says how many there are, still
+refusing nothing: a graph being wired is stranded almost continuously, so a canvas that
+objected would object the whole time somebody was working. The lab takes the opposite
+position on the same fact and rejects a *candidate* that has any — see
+[the lab](lab.md).
+
 ## A folder is the registration
 
 Every node kind has one folder under `src/nodes/` and one `node.ts` descriptor in that

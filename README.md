@@ -23,7 +23,7 @@ Live ─ SessionBridge :17800 ─WS─> visuals backend :17900 ─WS─> Electro
 | [flows](docs/flows.md) | **the one noun**, the node vocabulary, the compiler, the designer | `protocol.ts`, `src/render/circuit.ts`, `src/ui/Designer.tsx` |
 | [the wheel](docs/wheel.md) | what is on screen and why, song overrides, the scheme file, the roll | `resolve.ts`, `server/show.ts`, `server/scheme.ts`, `roll.ts` |
 | [the console](docs/console.md) | the four product views, and what the views before them were for | `src/ui/Console.tsx`, `Designer.tsx`, `TrainView.tsx`, `ReviewsView.tsx`, `SetView.tsx` |
-| [the lab](docs/lab.md) | recursive search, historical Archive, frozen Finals and the detailed corpus | `lab.ts`, `server/lab.ts`, `server/lineage.ts`, `server/finals.ts`, `src/ui/TrainView.tsx`, `src/ui/ArchiveView.tsx`, `src/ui/FinalsView.tsx`, `src/ui/ReviewsView.tsx` |
+| [the lab](docs/lab.md) | the lineage forest, exploring roots, developing a node, frozen editions and the detailed corpus | `lab.ts`, `server/lab.ts`, `server/lineage.ts`, `server/batch.ts`, `server/finals.ts`, `src/ui/TrainView.tsx`, `src/ui/ForestView.tsx`, `src/ui/ExploreView.tsx`, `src/ui/DevelopView.tsx`, `src/ui/FinalsView.tsx`, `src/ui/ReviewsView.tsx` |
 | [parameter calibration](docs/calibration.md) | the development-only A/B/C response bench and its evidence | `response.ts`, `calibration.ts`, `server/calibration.ts`, `src/ui/CalibrationView.tsx` |
 | [the renderer](docs/render.md) | the two passes, blending, fill rate, **pointing a projector** | `src/render/*` |
 | [the engine](docs/engine.md) | where the frame time goes, the meter, the benchmark, why particles need no rewrite | `src/render/meter.ts`, `bench.ts`, `../tools/benchmark.ts` |
@@ -138,7 +138,7 @@ one is on screen. Four product views:
 | view | the question | the scale |
 |---|---|---|
 | **build** | what is worth putting on a wall | one flow |
-| **train** | which visual directions deserve a future | one synchronized comparison |
+| **train** | what is worth developing, and what developing it produced | one lineage forest |
 | **review** | what did a slower, detailed judgment say | the preserved corpus |
 | **set** | what turns through them, and what says otherwise | the set |
 
@@ -152,18 +152,22 @@ nobody builds.
 colourways, and the handful of songs that want to pin one instead. Most songs should have
 nothing there.
 
-**Train is the fast evolutionary loop.** Explore shows two meaningfully different directions;
-Refine shows a surviving parent beside one atomic change. Both run through synchronized real
-compositors under one reproducible room, and every accepted depth receives Explore and Refine
-again. Left, right, both and neither preserve the answer you actually meant, while periodic
-random immigrants and a novelty-preserving frontier keep one early taste from becoming the
-only style. A separate **Archive** maps every parent branch as a zoomable lineage forest,
-surfaces likely historical peaks, and loads any clicked work in its original room. A star
-keeps the work itself; a diamond chooses the current finalist for its lineage. When the field
-is worth preserving, **Finals** admits lineage finalists and keepers first, adds diverse
-historical winners, tests every nominee across four different rooms, and produces a derived
-top-ten collection. Completed runs stay durable and a new archive-first edition can follow.
-It needs no Ableton, Link or bridge, and copying one keeper or the collection uses the
+**Train grows a body of work, and the record of how it got there.** Its home is the
+**forest**: every work ever staged, as a zoomable tidy tree, one band per family, each dot
+clickable into the room it first appeared in. Bookmarks and batch counts live on the map, so
+the thing you can see at a glance is which ideas somebody liked and never developed.
+
+**Explore** stages one fresh root at a time and asks only whether there is anything there —
+yes, no, or skip. Nothing is compared, because what is being decided is absolute, and one at
+a time means every sampled root reaches you instead of one in six. **Develop** is where
+comparison belongs: choose a node, ask for a batch, and its children — some one-step, some
+larger leaps — run against each other *and against their parent* under one room. The parent
+being in its own field is what lets the answer be "nothing here beat it". **Editions** freezes
+a collection out of what accumulated and tests every nominee across four different rooms,
+producing a derived top-ten. Completed runs stay durable and another edition can follow.
+
+Nothing schedules anything: the map is the document and the modes are places you go from it.
+It needs no Ableton, Link or bridge, and copying one work or a whole collection uses the
 ordinary edit-and-save path.
 
 **Review preserves the detailed corpus.** The earlier anchored scores, tags, signed reasons

@@ -7,7 +7,11 @@ import type {
   LabArchiveSubmission,
   LabComparisonSubmission,
   LabFinalsSubmission,
+  LabBatchSubmission,
+  LabBookmarkSubmission,
+  LabDevelopRequest,
   LabLineageFinalistSubmission,
+  LabSeedSubmission,
   LabReviewRow,
   LabScore,
   LabSelection,
@@ -124,6 +128,24 @@ export function useShow(): {
   labArchiveDecide(decision: LabArchiveSubmission): void;
   /** Set or clear the representative chosen for one lineage. */
   labLineageFinalist(decision: LabLineageFinalistSubmission): void;
+  /** Stage the first fresh root, and keep exactly one waiting after that. */
+  labExploreOpen(): void;
+  /** Admit or decline one root on its own merits. */
+  labExploreJudge(submission: LabSeedSubmission): void;
+  /** No judgment was formed about this root. */
+  labExploreSkip(encounterId: number): void;
+  /** Mark or unmark one work to come back to. */
+  labBookmark(decision: LabBookmarkSubmission): void;
+  /** Select one node of the forest to develop. */
+  labDevelopOpen(candidateId: string): void;
+  /** Generate a batch of children on one node and start its tournament. */
+  labDevelopDeal(request: LabDevelopRequest): void;
+  /** One preference inside the open batch. */
+  labDevelopCompare(comparison: LabBatchSubmission): void;
+  /** No preference was formed for this match. */
+  labDevelopSkip(encounterId: number): void;
+  /** Abandon the open batch without answering the rest of it. */
+  labDevelopClose(): void;
   /** Freeze/open the diverse playoff for this search experiment. */
   labFinalsOpen(): void;
   /** Freeze a new playoff edition from the current archive. */
@@ -444,6 +466,69 @@ export function useShow(): {
     }
   }).current;
 
+  const labExploreOpen = useRef(() => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'lab-explore-open' }));
+    }
+  }).current;
+
+  const labExploreJudge = useRef((submission: LabSeedSubmission) => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'lab-explore-judge', submission }));
+    }
+  }).current;
+
+  const labExploreSkip = useRef((encounterId: number) => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'lab-explore-skip', encounterId }));
+    }
+  }).current;
+
+  const labBookmark = useRef((decision: LabBookmarkSubmission) => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'lab-bookmark', decision }));
+    }
+  }).current;
+
+  const labDevelopOpen = useRef((candidateId: string) => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'lab-develop-open', candidateId }));
+    }
+  }).current;
+
+  const labDevelopDeal = useRef((request: LabDevelopRequest) => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'lab-develop-deal', request }));
+    }
+  }).current;
+
+  const labDevelopCompare = useRef((comparison: LabBatchSubmission) => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'lab-develop-compare', comparison }));
+    }
+  }).current;
+
+  const labDevelopSkip = useRef((encounterId: number) => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'lab-develop-skip', encounterId }));
+    }
+  }).current;
+
+  const labDevelopClose = useRef(() => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'lab-develop-close' }));
+    }
+  }).current;
+
   const labFinalsOpen = useRef(() => {
     const socket = live.current;
     if (socket?.readyState === WebSocket.OPEN) {
@@ -567,6 +652,15 @@ export function useShow(): {
     labArchiveSelect,
     labArchiveDecide,
     labLineageFinalist,
+    labExploreOpen,
+    labExploreJudge,
+    labExploreSkip,
+    labBookmark,
+    labDevelopOpen,
+    labDevelopDeal,
+    labDevelopCompare,
+    labDevelopSkip,
+    labDevelopClose,
     labFinalsOpen,
     labFinalsNew,
     labFinalsCompare,

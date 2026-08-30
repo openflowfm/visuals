@@ -10,8 +10,10 @@ import {
   inletsOf,
   valuesOf,
   MAX_VALUES,
+  liveNodes,
   reachesOut,
   repaired,
+  strandedNodes,
   signalOf,
   starterCircuit,
   tracksOf,
@@ -165,6 +167,69 @@ describe('compiling a flow', () => {
     expect(reachesOut(stranded)).toBe(false);
     expect(compileCircuit(stranded).error).toBeNull();
     expect(reachesOut(starterCircuit())).toBe(true);
+  });
+
+  it('names the nodes whose work never leaves the flow', () => {
+    // A branch that stops short draws nothing, so the picture is identical to
+    // the same graph without it. The editor wants them named to finish them;
+    // the lab wants a candidate that has none, because a second copy of one
+    // picture is a second id, a second dot and a second comparison.
+    const circuit = wire(
+      [
+        { id: 'live', kind: 'source', op: 'plasma', x: 0, y: 0 },
+        { id: 'dead', kind: 'source', op: 'rings', x: 0, y: 1 },
+        { id: 'lonely', kind: 'grade', op: 'warm', x: 1, y: 1 },
+        { id: 'o', kind: 'out', x: 2, y: 0 },
+      ],
+      [
+        { from: 'live/c', to: 'o/c' },
+        { from: 'dead/c', to: 'lonely/c' },
+      ],
+    );
+    expect(strandedNodes(circuit)).toEqual(['dead', 'lonely']);
+    expect([...liveNodes(circuit)].sort()).toEqual(['live', 'o']);
+    // And it never refuses to draw one: a graph mid-wiring is stranded almost
+    // continuously, which is why this is a sentence and not a gate.
+    expect(compileCircuit(circuit).error).toBeNull();
+  });
+
+  it('follows what an outlet actually reads, not what its node touches', () => {
+    // The `lens` case, one direction over from `wouldFeedItself`. Its `p`
+    // outlet never looks at its `c` inlet, so a picture wired into that inlet
+    // when only the point is taken is genuinely doing nothing — and anything
+    // reasoning node-to-node would call it live and keep it.
+    const circuit = wire(
+      [
+        { id: 'pic', kind: 'source', op: 'plasma', x: 0, y: 0 },
+        { id: 'l', kind: 'lens', op: 'ripple', x: 1, y: 0 },
+        { id: 'field', kind: 'source', op: 'rings', x: 1, y: 1 },
+        { id: 'o', kind: 'out', x: 2, y: 0 },
+      ],
+      [
+        { from: 'pic/c', to: 'l/c' },
+        { from: 'l/p', to: 'field/p' },
+        { from: 'field/c', to: 'o/c' },
+      ],
+    );
+    expect(strandedNodes(circuit)).toEqual(['pic']);
+
+    // Take the colour instead and the same picture is load-bearing.
+    const taken = wire(circuit.nodes, [
+      { from: 'pic/c', to: 'l/c' },
+      { from: 'l/c', to: 'o/c' },
+    ]);
+    expect(strandedNodes(taken)).toEqual(['field']);
+  });
+
+  it('counts a give as a door, so a provider is not entirely stranded', () => {
+    const provider = wire(
+      [
+        { id: 's', kind: 'source', op: 'plasma', x: 0, y: 0 },
+        { id: 'g', kind: 'give', op: 'colour', x: 1, y: 0 },
+      ],
+      [{ from: 's/c', to: 'g/in' }],
+    );
+    expect(strandedNodes(provider)).toEqual([]);
   });
 
   it('gives a mode nobody has heard of the values it will be compiled with', () => {

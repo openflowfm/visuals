@@ -208,17 +208,19 @@ describe('the historical Archive', () => {
     expect(state.archive?.kept).toBe(1);
     expect(state.archive?.nodes).toHaveLength(4);
 
-    state = engine.archiveSelect(first.left.id);
-    state = engine.lineageFinalist({ candidateId: first.left.id, finalist: true });
+    // An ancestor and a descendant can both be finished work. Lineage is
+    // provenance, so a family has no single representative to compete for —
+    // the rule that gave it one was the thing that made an older generation
+    // disappear the moment a later one was marked.
     const descendant = state.archive!.nodes.find(
       (node) => node.cohort === first.left.cohort && node.id !== first.left.id,
     )!;
-    state = engine.archiveSelect(descendant.id);
-    state = engine.lineageFinalist({ candidateId: descendant.id, finalist: true });
-    expect(
-      state.archive?.nodes.filter((node) => node.cohort === descendant.cohort && node.finalist)
-        .map((node) => node.id),
-    ).toEqual([descendant.id]);
+    state = engine.bookmark({ candidateId: descendant.id, marked: true });
+    const marked = state.archive!.nodes
+      .filter((node) => node.cohort === first.left.cohort && node.bookmarked)
+      .map((node) => node.id);
+    expect(marked).toContain(first.left.id);
+    expect(marked).toContain(descendant.id);
   });
 });
 

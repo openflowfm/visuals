@@ -117,6 +117,15 @@
   margin-top: 6px;
 }
 
+.wdg-graph-node.stranded {
+  opacity: 0.55;
+}
+
+.wdg-graph-node.stranded .node {
+  outline: 1px dashed var(--caption);
+  outline-offset: 2px;
+}
+
 .node {
   --wdg-space: 5px;
   --wdg-port-row-height: 24px;

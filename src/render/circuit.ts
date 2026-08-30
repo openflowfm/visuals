@@ -1713,6 +1713,83 @@ export function reachesOut(circuit: Circuit): boolean {
   return !!end && circuit.cords.some((cord) => cord.to === portId(end.id, 'c'));
 }
 
+/** The inlets of this node that outlet depends on. The inverse of `outletsReading`. */
+function inletsRead(node: CircuitNode, outlet: string): readonly string[] {
+  const spec = NODE_SPECS[node.kind];
+  return spec.reads?.(node, outlet) ?? inletsOf(node).map((port) => port.name);
+}
+
+/**
+ * Every node whose work reaches a door out of this flow.
+ *
+ * A door is `out`'s inlet or a `give`'s: those are the only two ways a picture
+ * or a number leaves, and a provider flow that ends in `give` is as finished as
+ * a top-level one that ends in `out`. A node this set omits contributes nothing
+ * to what the flow draws or hands over.
+ *
+ * Backwards, port to port, for the reason [`wouldFeedItself`] walks forwards
+ * that way: a node is not one thing. `lens` hands back a point that never
+ * looked at its colour, so a picture wired into a lens whose *point* outlet is
+ * the only one anybody reads is genuinely doing nothing, and node-to-node
+ * reachability would call it live. `reads` is the same table both directions
+ * consult, so the two walks cannot disagree about what depends on what.
+ *
+ * A graph with no door at all has no live nodes, which is the honest answer
+ * rather than a special case: nothing in it reaches anywhere. Callers that
+ * want to say something kinder about an empty canvas have `reachesOut`.
+ */
+export function liveNodes(circuit: Circuit): Set<string> {
+  const byId = new Map(circuit.nodes.map((node) => [node.id, node]));
+  const feeding = new Map<string, string[]>();
+  for (const cord of circuit.cords) {
+    feeding.set(cord.to, [...(feeding.get(cord.to) ?? []), cord.from]);
+  }
+
+  const live = new Set<string>();
+  const seen = new Set<string>();
+  const queue: string[] = [];
+
+  const wantInlet = (id: string) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    queue.push(id);
+  };
+
+  for (const node of circuit.nodes) {
+    if (node.kind !== 'out' && node.kind !== 'give') continue;
+    live.add(node.id);
+    for (const port of inletsOf(node)) wantInlet(portId(node.id, port.name));
+  }
+
+  while (queue.length > 0) {
+    const inlet = queue.pop()!;
+    for (const outlet of feeding.get(inlet) ?? []) {
+      const { node: id, port } = splitPort(outlet);
+      const node = byId.get(id);
+      if (!node) continue;
+      live.add(id);
+      for (const name of inletsRead(node, port)) wantInlet(portId(id, name));
+    }
+  }
+  return live;
+}
+
+/**
+ * The nodes `liveNodes` leaves out, in the order the circuit lists them.
+ *
+ * Two callers want opposite things from this one fact. The editor names them
+ * so a branch that stopped short is easy to find and finish — never a refusal,
+ * because a graph on its way to being wired is stranded almost continuously.
+ * The lab refuses a *candidate* that has any, because a stranded branch draws
+ * nothing: the picture is identical to the same graph without it, so admitting
+ * one means a second id, a second dot and a second comparison for a work
+ * already in the corpus.
+ */
+export function strandedNodes(circuit: Circuit): string[] {
+  const live = liveNodes(circuit);
+  return circuit.nodes.filter((node) => !live.has(node.id)).map((node) => node.id);
+}
+
 /**
  * Whether wiring this outlet into that inlet would make the graph eat itself.
  *

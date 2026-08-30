@@ -3,10 +3,12 @@ import type {
   CalibrationState,
   CalibrationSubmission,
   FlowDef,
-  LabComparisonSubmission,
   LabArchiveSubmission,
   LabFinalsSubmission,
-  LabLineageFinalistSubmission,
+  LabBatchSubmission,
+  LabBookmarkSubmission,
+  LabDevelopRequest,
+  LabSeedSubmission,
   LabReviewRow,
   LabScore,
   LabState,
@@ -68,12 +70,18 @@ export interface ConsoleProps {
   loadScheme(id: string): void;
   lab: LabState | null;
   labOpen(): void;
-  labCompare(comparison: LabComparisonSubmission): void;
-  labSkipEncounter(encounterId: number): void;
   labArchiveOpen(): void;
   labArchiveSelect(candidateId: string): void;
   labArchiveDecide(decision: LabArchiveSubmission): void;
-  labLineageFinalist(decision: LabLineageFinalistSubmission): void;
+  labExploreOpen(): void;
+  labExploreJudge(submission: LabSeedSubmission): void;
+  labExploreSkip(encounterId: number): void;
+  labBookmark(decision: LabBookmarkSubmission): void;
+  labDevelopOpen(candidateId: string): void;
+  labDevelopDeal(request: LabDevelopRequest): void;
+  labDevelopCompare(comparison: LabBatchSubmission): void;
+  labDevelopSkip(encounterId: number): void;
+  labDevelopClose(): void;
   labFinalsOpen(): void;
   labFinalsNew(): void;
   labFinalsCompare(comparison: LabFinalsSubmission): void;
@@ -117,12 +125,18 @@ export function Console({
   loadScheme,
   lab,
   labOpen,
-  labCompare,
-  labSkipEncounter,
   labArchiveOpen,
   labArchiveSelect,
   labArchiveDecide,
-  labLineageFinalist,
+  labExploreOpen,
+  labExploreJudge,
+  labExploreSkip,
+  labBookmark,
+  labDevelopOpen,
+  labDevelopDeal,
+  labDevelopCompare,
+  labDevelopSkip,
+  labDevelopClose,
   labFinalsOpen,
   labFinalsNew,
   labFinalsCompare,
@@ -262,12 +276,18 @@ export function Console({
           scheme={scheme}
           lab={lab}
           labOpen={labOpen}
-          labCompare={labCompare}
-          labSkipEncounter={labSkipEncounter}
           labArchiveOpen={labArchiveOpen}
           labArchiveSelect={labArchiveSelect}
           labArchiveDecide={labArchiveDecide}
-          labLineageFinalist={labLineageFinalist}
+          labExploreOpen={labExploreOpen}
+          labExploreJudge={labExploreJudge}
+          labExploreSkip={labExploreSkip}
+          labBookmark={labBookmark}
+          labDevelopOpen={labDevelopOpen}
+          labDevelopDeal={labDevelopDeal}
+          labDevelopCompare={labDevelopCompare}
+          labDevelopSkip={labDevelopSkip}
+          labDevelopClose={labDevelopClose}
           labFinalsOpen={labFinalsOpen}
           labFinalsNew={labFinalsNew}
           labFinalsCompare={labFinalsCompare}

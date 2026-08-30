@@ -1,4 +1,4 @@
-import { useState, type ReactNode, type Ref } from 'react';
+import { useMemo, useState, type ReactNode, type Ref } from 'react';
 import type { Circuit, CircuitNode, FlowDef, MediaAsset, NodeKind } from '../../protocol.ts';
 import {
   Graph,
@@ -19,6 +19,7 @@ import {
   NODE_SPECS,
   portId,
   reachesOut,
+  strandedNodes,
   signalOf,
   wouldFeedItself,
   type PortSpec,
@@ -101,6 +102,26 @@ export function CircuitEditor({
   /** The record shape `signalOf` reads doors from, keyed the library's way. */
   const flowRecord = Object.fromEntries((flows ?? []).map((each) => [each.id, each.def]));
 
+  /**
+   * The nodes whose work never leaves the flow.
+   *
+   * Named, never refused. A graph being wired is stranded almost continuously —
+   * every node is stranded between being dropped and being connected — so a
+   * canvas that objected would be objecting the whole time somebody was
+   * working. What it can do is make the difference visible, because a branch
+   * that stops one cord short looks exactly like a branch that is finished.
+   */
+  const stranded = useMemo(() => new Set(strandedNodes(circuit)), [circuit]);
+
+  /** Whether anything leaves at all — an `out` that is fed, or a fed `give`. */
+  const leaves =
+    reachesOut(circuit) ||
+    circuit.nodes.some(
+      (node) =>
+        node.kind === 'give' &&
+        circuit.cords.some((cord) => cord.to === portId(node.id, 'in')),
+    );
+
   const cords: GraphCord[] = circuit.cords.map((cord) => ({
     from: cord.from,
     to: cord.to,
@@ -139,7 +160,13 @@ export function CircuitEditor({
           }
         >
           {circuit.nodes.map((node) => (
-            <GraphNode key={node.id} id={node.id} x={node.x} y={node.y}>
+            <GraphNode
+              key={node.id}
+              id={node.id}
+              x={node.x}
+              y={node.y}
+              className={leaves && stranded.has(node.id) ? 'stranded' : undefined}
+            >
               <NodeFace
                 node={node}
                 circuit={circuit}
@@ -176,18 +203,28 @@ export function CircuitEditor({
         point of it draws nothing on purpose, and saying so every time would
         be the canvas nagging about the design.
       */}
-      {!reachesOut(circuit) &&
-        !circuit.nodes.some(
-          (node) =>
-            node.kind === 'give' &&
-            circuit.cords.some((cord) => cord.to === portId(node.id, 'in')),
-        ) && (
-          <p className="hits bad">
-            {circuit.nodes.some((node) => node.kind === 'out')
-              ? 'nothing reaches out — this flow draws nothing until something does'
-              : 'nothing leaves this flow — wire an out to draw, or a give to hand a signal out'}
-          </p>
-        )}
+      {!leaves && (
+        <p className="hits bad">
+          {circuit.nodes.some((node) => node.kind === 'out')
+            ? 'nothing reaches out — this flow draws nothing until something does'
+            : 'nothing leaves this flow — wire an out to draw, or a give to hand a signal out'}
+        </p>
+      )}
+
+      {/*
+        Once something *does* leave, a stranded branch stops being the state
+        every graph passes through and starts being a loose end. It costs
+        nothing to draw and changes no pixel, so nothing here is wrong — but a
+        picture that came out right with three nodes doing nothing is a picture
+        that came out right with three nodes fewer, and that is worth knowing
+        before it is saved.
+      */}
+      {leaves && stranded.size > 0 && (
+        <p className="hits">
+          {stranded.size === 1 ? '1 node draws nothing' : `${stranded.size} nodes draw nothing`} —
+          nothing they make reaches out
+        </p>
+      )}
       {refused && <p className="hits bad">{refused}</p>}
     </div>
   );

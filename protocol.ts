@@ -764,8 +764,18 @@ export interface LabLineageNode {
   chosen: number;
   finals: number;
   reviewed: boolean;
-  kept: boolean;
-  finalist: boolean;
+  /** Marked to come back to. Several per family is normal, not a conflict. */
+  bookmarked: boolean;
+  /**
+   * How many batches this node has ever been developed with.
+   *
+   * The instrument against the thing that made this rewrite necessary. A shelf
+   * of admitted ideas is only half of it; what tells you an idea got lost is
+   * that it was never mutated, and that is a number nothing else reports.
+   */
+  batches: number;
+  /** Descendants one step down, so a leaf reads as a leaf without a scan. */
+  children: number;
 }
 
 export interface LabLineageFinalistSubmission {
@@ -829,6 +839,99 @@ export interface LabFinalsState {
   notice: string | null;
 }
 
+/** A seed is admitted or declined on its own merits; there is nothing to compare. */
+export type LabSeedVerdict = 'yes' | 'no';
+
+/** One fresh root, staged alone under a frozen room. */
+export interface LabSeedEncounter {
+  id: number;
+  candidate: LabCandidate;
+  room: LabRoom;
+}
+
+export interface LabSeedSubmission {
+  encounterId: number;
+  verdict: LabSeedVerdict;
+}
+
+/**
+ * Explore: acquiring stock, not searching.
+ *
+ * The counts are the point as much as the queue is. `seen` against `admitted`
+ * is the first honest measurement of the generator this lab has ever been able
+ * to take — under a pairing, ten of every twelve roots were discarded before
+ * anybody looked, so "what fraction of random roots are worth anything" had no
+ * answer. If that ratio is dismal, no amount of mutation downstream will help,
+ * and the work belongs in the dealer rather than in the tournament.
+ */
+export interface LabExploreState {
+  encounter: LabSeedEncounter | null;
+  seen: number;
+  admitted: number;
+  declined: number;
+  skipped: number;
+  notice: string | null;
+}
+
+/** One entrant's current standing inside a batch. */
+export interface LabBatchEntrant {
+  rank: number;
+  candidate: LabCandidate;
+  /** The parent, riding in its own batch so the family can fail to improve. */
+  isParent: boolean;
+  matches: number;
+  preference: number;
+  score: number;
+  uncertainty: number;
+}
+
+/** One match inside a batch: which of these two, under the batch's one room. */
+export interface LabBatchEncounter {
+  id: number;
+  left: LabCandidate;
+  right: LabCandidate;
+  room: LabRoom;
+  round: number;
+  rounds: number;
+}
+
+export interface LabBatchSubmission {
+  encounterId: number;
+  choice: LabComparisonChoice;
+}
+
+/**
+ * Develop: one parent's children, in a tournament somebody asked for.
+ *
+ * `improved` is the result the old Refine phase could never state. A batch
+ * whose leader is the parent says this node is already at its local peak —
+ * a real answer, and one worth having before spending another batch on it.
+ */
+export interface LabDevelopState {
+  batchId: number;
+  parent: LabCandidate;
+  status: 'judging' | 'complete';
+  size: number;
+  compared: number;
+  total: number;
+  encounter: LabBatchEncounter | null;
+  standings: LabBatchEntrant[];
+  improved: boolean;
+  notice: string | null;
+}
+
+/** Mark or unmark one work. A bookmark is navigation, never a verdict. */
+export interface LabBookmarkSubmission {
+  candidateId: string;
+  marked: boolean;
+}
+
+/** Ask for a batch of children on one node, or throw the current one away. */
+export interface LabDevelopRequest {
+  candidateId: string;
+  size: number;
+}
+
 /** One judgment, exactly as submitted. The raw fact every score derives from. */
 export interface LabSubmission {
   candidateId: string;
@@ -869,9 +972,19 @@ export interface LabReviewRow {
  * views of one queue, not two queues that happen to start together.
  */
 export interface LabState {
-  /** The active recursive-search question. */
+  /**
+   * The legacy paired search question.
+   *
+   * Retained so `lineage@2`'s answered pairs keep their meaning and keep
+   * feeding the forest's counts. Nothing deals a new one: Explore and Develop
+   * replaced the scheduler that used to choose between them.
+   */
   encounter: LabEncounter | null;
-  /** Absolute preservation evidence and the next historical replay. */
+  /** One fresh root at a time, admitted or declined on its own merits. */
+  explore: LabExploreState | null;
+  /** The open batch, or null when no node is being developed. */
+  develop: LabDevelopState | null;
+  /** The lineage forest, and whichever work is selected in it. */
   archive: LabArchiveState | null;
   /** A frozen playoff, absent until Finals is opened for this experiment. */
   finals: LabFinalsState | null;
@@ -1081,6 +1194,15 @@ export type Up =
   | { kind: 'lab-archive-select'; candidateId: string }
   | { kind: 'lab-archive-decide'; decision: LabArchiveSubmission }
   | { kind: 'lab-lineage-finalist'; decision: LabLineageFinalistSubmission }
+  | { kind: 'lab-explore-open' }
+  | { kind: 'lab-explore-judge'; submission: LabSeedSubmission }
+  | { kind: 'lab-explore-skip'; encounterId: number }
+  | { kind: 'lab-bookmark'; decision: LabBookmarkSubmission }
+  | { kind: 'lab-develop-open'; candidateId: string }
+  | { kind: 'lab-develop-deal'; request: LabDevelopRequest }
+  | { kind: 'lab-develop-compare'; comparison: LabBatchSubmission }
+  | { kind: 'lab-develop-skip'; encounterId: number }
+  | { kind: 'lab-develop-close' }
   | { kind: 'lab-finals-open' }
   | { kind: 'lab-finals-new' }
   | { kind: 'lab-finals-compare'; comparison: LabFinalsSubmission }

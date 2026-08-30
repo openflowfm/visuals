@@ -427,6 +427,38 @@ describe('the store', () => {
       { runId: run, rendererVersion: 'p@1' },
     );
 
+    // Explore and Develop leave durable facts too; a round trip that dropped
+    // them would quietly lose every seed judgment and every batch.
+    const seedEncounter = store.addSeedEncounter({
+      experimentId: experiment,
+      candidateId: 'c-one',
+      room: dealRoom('seed-room'),
+    });
+    store.judgeSeed(
+      { encounterId: seedEncounter, verdict: 'yes' },
+      { experimentId: experiment, rendererVersion: 'p@1' },
+    );
+    const batch = store.createBatch({
+      experimentId: experiment,
+      parentId: 'c-one',
+      room: dealRoom('batch-room'),
+      rounds: 3,
+      entrants: [
+        { candidateId: 'c-one', isParent: true },
+        { candidateId: 'c-two', isParent: false },
+      ],
+    });
+    const match = store.addBatchEncounter({
+      batchId: batch,
+      leftId: 'c-one',
+      rightId: 'c-two',
+      round: 0,
+    });
+    store.batchCompare(
+      { encounterId: match, choice: 'right' },
+      { batchId: batch, rendererVersion: 'p@1' },
+    );
+
     const text = store.exportJsonl();
     const twin = open(scratch());
     twin.importJsonl(text);
@@ -441,6 +473,12 @@ describe('the store', () => {
     expect(twin.lineageFinalists(experiment)).toEqual(store.lineageFinalists(experiment));
     expect(twin.finalsRun(experiment)).toEqual(store.finalsRun(experiment));
     expect(twin.finalsEvidence(run)).toEqual(store.finalsEvidence(run));
+    expect(twin.seedCounts(experiment)).toEqual(store.seedCounts(experiment));
+    expect(twin.admittedSeeds(experiment)).toEqual(store.admittedSeeds(experiment));
+    expect(twin.batchEntrants(batch)).toEqual(store.batchEntrants(batch));
+    expect(twin.batchEvidence(batch)).toEqual(store.batchEvidence(batch));
+    expect(twin.batchCounts(experiment)).toEqual(store.batchCounts(experiment));
+    expect(twin.batchAppearances(experiment)).toEqual(store.batchAppearances(experiment));
     expect(() => twin.importJsonl(text)).toThrow(/empty/);
   });
 });

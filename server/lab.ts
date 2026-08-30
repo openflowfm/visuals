@@ -10,15 +10,21 @@ import type {
   FlowDef,
   LabArchiveSubmission,
   LabArchiveState,
+  LabBatchSubmission,
+  LabBookmarkSubmission,
   LabCandidate,
   LabComparisonSubmission,
+  LabDevelopRequest,
+  LabDevelopState,
   LabEncounter,
   LabEncounterPhase,
+  LabExploreState,
   LabFinalsState,
   LabFinalsSubmission,
   LabLineageFinalistSubmission,
   LabReviewRow,
   LabRoom,
+  LabSeedSubmission,
   LabSelection,
   LabState,
   LabSubmission,
@@ -52,6 +58,15 @@ import {
   nominateFinalists,
   rankFinalists,
 } from './finals.ts';
+import {
+  BATCH_ROUNDS,
+  BATCH_SIZES,
+  nextBatchPair,
+  rankBatch,
+  type BatchComparisonEvidence,
+  type BatchEntrantEvidence,
+} from './batch.ts';
+import { batchDrafts, seedDraft } from './lineage.ts';
 
 const RENDERER = `pipeline@${LAB_RENDERER_VERSION}`;
 
@@ -278,6 +293,70 @@ const MIGRATIONS: readonly string[] = [
   CREATE INDEX lineage_finalist_decisions_family
     ON lineage_finalist_decisions (experiment_id, family_id, id);
   `,
+  `
+  CREATE TABLE seed_encounters (
+    id INTEGER PRIMARY KEY,
+    experiment_id INTEGER NOT NULL REFERENCES experiments(id),
+    candidate_id TEXT NOT NULL REFERENCES candidates(id),
+    challenge_id TEXT NOT NULL REFERENCES challenges(id),
+    disposition TEXT NOT NULL DEFAULT 'pending'
+      CHECK (disposition IN ('pending', 'judged', 'skipped')),
+    created_at TEXT NOT NULL,
+    decided_at TEXT
+  );
+  CREATE INDEX seed_encounters_pending
+    ON seed_encounters (experiment_id, disposition, id);
+  CREATE TABLE seed_verdicts (
+    id INTEGER PRIMARY KEY,
+    encounter_id INTEGER NOT NULL UNIQUE REFERENCES seed_encounters(id),
+    verdict TEXT NOT NULL CHECK (verdict IN ('yes', 'no')),
+    renderer_version TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  `,
+  `
+  CREATE TABLE batches (
+    id INTEGER PRIMARY KEY,
+    experiment_id INTEGER NOT NULL REFERENCES experiments(id),
+    parent_candidate_id TEXT NOT NULL REFERENCES candidates(id),
+    challenge_id TEXT NOT NULL REFERENCES challenges(id),
+    rounds INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'judging'
+      CHECK (status IN ('judging', 'complete', 'abandoned', 'closed')),
+    created_at TEXT NOT NULL,
+    completed_at TEXT
+  );
+  CREATE INDEX batches_experiment ON batches (experiment_id, status, id);
+  CREATE TABLE batch_entrants (
+    batch_id INTEGER NOT NULL REFERENCES batches(id),
+    candidate_id TEXT NOT NULL REFERENCES candidates(id),
+    is_parent INTEGER NOT NULL CHECK (is_parent IN (0, 1)),
+    entered_order INTEGER NOT NULL,
+    UNIQUE (batch_id, candidate_id),
+    UNIQUE (batch_id, entered_order)
+  );
+  CREATE TABLE batch_encounters (
+    id INTEGER PRIMARY KEY,
+    batch_id INTEGER NOT NULL REFERENCES batches(id),
+    left_candidate_id TEXT NOT NULL REFERENCES candidates(id),
+    right_candidate_id TEXT NOT NULL REFERENCES candidates(id),
+    round INTEGER NOT NULL,
+    disposition TEXT NOT NULL DEFAULT 'pending'
+      CHECK (disposition IN ('pending', 'compared', 'skipped')),
+    created_at TEXT NOT NULL,
+    decided_at TEXT,
+    CHECK (left_candidate_id <> right_candidate_id)
+  );
+  CREATE INDEX batch_encounters_pending
+    ON batch_encounters (batch_id, disposition, id);
+  CREATE TABLE batch_comparisons (
+    id INTEGER PRIMARY KEY,
+    encounter_id INTEGER NOT NULL UNIQUE REFERENCES batch_encounters(id),
+    choice TEXT NOT NULL CHECK (choice IN ('left', 'right', 'both', 'neither')),
+    renderer_version TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  `,
 ];
 
 export interface StoredCandidate {
@@ -329,6 +408,35 @@ export interface StoredArchiveCandidate {
 export interface StoredLineageFinalist {
   cohort: string;
   candidateId: string;
+}
+
+export interface StoredSeedEncounter {
+  id: number;
+  candidateId: string;
+  room: LabRoom;
+}
+
+export interface StoredBatch {
+  id: number;
+  parentId: string;
+  room: LabRoom;
+  rounds: number;
+  /**
+   * `judging` while matches remain, `complete` once every round is answered,
+   * and then one of two endings. **abandoned** is walking away mid-batch;
+   * **closed** is reading the result and leaving. They are separate because a
+   * batch nobody finished is not evidence of the same thing as a batch that
+   * ran out of matches, and collapsing them would make "how often does a
+   * developed node actually get developed" unanswerable.
+   */
+  status: 'judging' | 'complete' | 'abandoned' | 'closed';
+}
+
+export interface StoredBatchEncounter {
+  id: number;
+  leftId: string;
+  rightId: string;
+  round: number;
 }
 
 export interface LabStore {
@@ -422,6 +530,63 @@ export interface LabStore {
   ): { ok: true } | { ok: false; problem: string };
   skipFinalsEncounter(encounterId: number, runId: number): void;
   completeFinals(runId: number): void;
+  /** Stage one fresh root to be judged alone, under a frozen room. */
+  addSeedEncounter(input: {
+    experimentId: number;
+    candidateId: string;
+    room: LabRoom;
+  }): number;
+  nextSeedEncounter(experimentId: number): StoredSeedEncounter | null;
+  judgeSeed(
+    submission: LabSeedSubmission,
+    at: { experimentId: number; rendererVersion: string },
+  ): { ok: true } | { ok: false; problem: string };
+  skipSeedEncounter(encounterId: number, experimentId: number): void;
+  seedCounts(experimentId: number): {
+    seen: number;
+    admitted: number;
+    declined: number;
+    skipped: number;
+  };
+  /** Every root ever admitted by Explore, oldest first. */
+  admittedSeeds(experimentId: number): string[];
+  /** Whether this root has already been staged for a seed judgment. */
+  seedSeen(experimentId: number, candidateId: string): boolean;
+  /** One batch, its field frozen at the moment it was asked for. */
+  createBatch(input: {
+    experimentId: number;
+    parentId: string;
+    room: LabRoom;
+    rounds: number;
+    entrants: readonly { candidateId: string; isParent: boolean }[];
+  }): number;
+  /** The batch currently being judged in this experiment, if there is one. */
+  openBatch(experimentId: number): StoredBatch | null;
+  batchEntrants(batchId: number): BatchEntrantEvidence[];
+  addBatchEncounter(input: {
+    batchId: number;
+    leftId: string;
+    rightId: string;
+    round: number;
+  }): number;
+  nextBatchEncounter(batchId: number): StoredBatchEncounter | null;
+  batchEvidence(batchId: number): BatchComparisonEvidence[];
+  batchCompare(
+    comparison: LabBatchSubmission,
+    at: { batchId: number; rendererVersion: string },
+  ): { ok: true } | { ok: false; problem: string };
+  skipBatchEncounter(encounterId: number, batchId: number): void;
+  completeBatch(batchId: number): void;
+  /** Walk away from a batch mid-way; its answered matches stay evidence. */
+  abandonBatch(batchId: number): void;
+  /** Dismiss a finished batch after reading its standings. */
+  closeBatch(batchId: number): void;
+  /** How many batches every node has ever been developed with. */
+  batchCounts(experimentId: number): Map<string, number>;
+  /** Times staged in a batch match, and times chosen, per candidate. */
+  batchAppearances(
+    experimentId: number,
+  ): { candidateId: string; appearances: number; chosen: number }[];
   /** Put a candidate in the queue. */
   serve(candidateId: string, experimentId: number): void;
   /** The oldest undecided candidate, or null for an empty queue. */
@@ -927,6 +1092,15 @@ export function openLab(file: string): LabStore {
              FROM search_encounters e
              WHERE e.experiment_id = ?
              UNION ALL
+             SELECT s.candidate_id, s.challenge_id, 500000000 + s.id
+             FROM seed_encounters s
+             WHERE s.experiment_id = ?
+             UNION ALL
+             SELECT en.candidate_id, b.challenge_id, 700000000 + b.id * 1000 + en.entered_order
+             FROM batch_entrants en
+             JOIN batches b ON b.id = en.batch_id
+             WHERE b.experiment_id = ?
+             UNION ALL
              SELECT d.candidate_id, d.challenge_id, 1000000000 + d.id
              FROM archive_decisions d
              WHERE d.experiment_id = ?
@@ -944,7 +1118,13 @@ export function openLab(file: string): LabStore {
            WHERE f.pick = 1
            ORDER BY f.discovered_at, f.candidate_id`,
         )
-        .all(experimentId, experimentId, experimentId) as {
+        .all(
+          experimentId,
+          experimentId,
+          experimentId,
+          experimentId,
+          experimentId,
+        ) as {
         candidate_id: string;
         room: string;
         discovered_at: number;
@@ -1311,6 +1491,358 @@ export function openLab(file: string): LabStore {
       ).run(now(), runId);
     },
 
+    addSeedEncounter(input) {
+      return transaction(() => {
+        const roomJson = JSON.stringify(input.room);
+        const challengeId = sha(roomJson);
+        db.prepare(
+          'INSERT OR IGNORE INTO challenges (id, room_json, challenge_version) VALUES (?, ?, 1)',
+        ).run(challengeId, roomJson);
+        const wrote = db
+          .prepare(
+            `INSERT INTO seed_encounters
+             (experiment_id, candidate_id, challenge_id, disposition, created_at)
+             VALUES (?, ?, ?, 'pending', ?)`,
+          )
+          .run(input.experimentId, input.candidateId, challengeId, now());
+        return Number(wrote.lastInsertRowid);
+      });
+    },
+
+    nextSeedEncounter(experimentId) {
+      const row = db
+        .prepare(
+          `SELECT e.id, e.candidate_id AS candidate_id, c.room_json AS room
+           FROM seed_encounters e
+           JOIN challenges c ON c.id = e.challenge_id
+           WHERE e.experiment_id = ? AND e.disposition = 'pending'
+           ORDER BY e.id LIMIT 1`,
+        )
+        .get(experimentId) as { id: number; candidate_id: string; room: string } | undefined;
+      return row
+        ? {
+            id: Number(row.id),
+            candidateId: row.candidate_id,
+            room: JSON.parse(row.room) as LabRoom,
+          }
+        : null;
+    },
+
+    judgeSeed(submission, at) {
+      if (!['yes', 'no'].includes(submission.verdict)) {
+        return { ok: false, problem: 'a seed is admitted or declined' };
+      }
+      const pending = db
+        .prepare(
+          `SELECT id FROM seed_encounters
+           WHERE id = ? AND experiment_id = ? AND disposition = 'pending'`,
+        )
+        .get(submission.encounterId, at.experimentId);
+      if (!pending) return { ok: false, problem: 'that seed is not waiting for an answer' };
+      transaction(() => {
+        db.prepare(
+          `INSERT INTO seed_verdicts (encounter_id, verdict, renderer_version, created_at)
+           VALUES (?, ?, ?, ?)`,
+        ).run(submission.encounterId, submission.verdict, at.rendererVersion, now());
+        db.prepare(
+          `UPDATE seed_encounters SET disposition = 'judged', decided_at = ?
+           WHERE id = ? AND experiment_id = ? AND disposition = 'pending'`,
+        ).run(now(), submission.encounterId, at.experimentId);
+      });
+      return { ok: true };
+    },
+
+    skipSeedEncounter(encounterId, experimentId) {
+      // A skip says no seed was judged, never that the seed was declined. It
+      // settles the question and leaves no preference behind.
+      db.prepare(
+        `UPDATE seed_encounters SET disposition = 'skipped', decided_at = ?
+         WHERE id = ? AND experiment_id = ? AND disposition = 'pending'`,
+      ).run(now(), encounterId, experimentId);
+    },
+
+    seedCounts(experimentId) {
+      const row = db
+        .prepare(
+          `SELECT
+             SUM(CASE WHEN e.disposition = 'judged' THEN 1 ELSE 0 END) AS seen,
+             SUM(CASE WHEN v.verdict = 'yes' THEN 1 ELSE 0 END) AS admitted,
+             SUM(CASE WHEN v.verdict = 'no' THEN 1 ELSE 0 END) AS declined,
+             SUM(CASE WHEN e.disposition = 'skipped' THEN 1 ELSE 0 END) AS skipped
+           FROM seed_encounters e
+           LEFT JOIN seed_verdicts v ON v.encounter_id = e.id
+           WHERE e.experiment_id = ?`,
+        )
+        .get(experimentId) as {
+        seen: number | null;
+        admitted: number | null;
+        declined: number | null;
+        skipped: number | null;
+      };
+      return {
+        seen: Number(row.seen ?? 0),
+        admitted: Number(row.admitted ?? 0),
+        declined: Number(row.declined ?? 0),
+        skipped: Number(row.skipped ?? 0),
+      };
+    },
+
+    admittedSeeds(experimentId) {
+      const rows = db
+        .prepare(
+          `SELECT e.candidate_id AS candidate_id
+           FROM seed_encounters e
+           JOIN seed_verdicts v ON v.encounter_id = e.id
+           WHERE e.experiment_id = ? AND v.verdict = 'yes'
+           ORDER BY e.id`,
+        )
+        .all(experimentId) as { candidate_id: string }[];
+      return rows.map((row) => row.candidate_id);
+    },
+
+    seedSeen(experimentId, candidateId) {
+      const row = db
+        .prepare(
+          `SELECT 1 AS held FROM seed_encounters
+           WHERE experiment_id = ? AND candidate_id = ? LIMIT 1`,
+        )
+        .get(experimentId, candidateId);
+      return !!row;
+    },
+
+    createBatch(input) {
+      return transaction(() => {
+        const roomJson = JSON.stringify(input.room);
+        const challengeId = sha(roomJson);
+        db.prepare(
+          'INSERT OR IGNORE INTO challenges (id, room_json, challenge_version) VALUES (?, ?, 1)',
+        ).run(challengeId, roomJson);
+        const wrote = db
+          .prepare(
+            `INSERT INTO batches
+             (experiment_id, parent_candidate_id, challenge_id, rounds, status, created_at)
+             VALUES (?, ?, ?, ?, 'judging', ?)`,
+          )
+          .run(input.experimentId, input.parentId, challengeId, input.rounds, now());
+        const batchId = Number(wrote.lastInsertRowid);
+        const insert = db.prepare(
+          `INSERT INTO batch_entrants (batch_id, candidate_id, is_parent, entered_order)
+           VALUES (?, ?, ?, ?)`,
+        );
+        input.entrants.forEach((entrant, order) => {
+          insert.run(batchId, entrant.candidateId, entrant.isParent ? 1 : 0, order);
+        });
+        return batchId;
+      });
+    },
+
+    openBatch(experimentId) {
+      const row = db
+        .prepare(
+          `SELECT b.id, b.parent_candidate_id AS parent_id, b.rounds AS rounds,
+                  b.status AS status, c.room_json AS room
+           FROM batches b
+           JOIN challenges c ON c.id = b.challenge_id
+           WHERE b.experiment_id = ? AND b.status IN ('judging', 'complete')
+           ORDER BY b.id DESC LIMIT 1`,
+        )
+        .get(experimentId) as
+        | { id: number; parent_id: string; rounds: number; status: StoredBatch['status']; room: string }
+        | undefined;
+      return row
+        ? {
+            id: Number(row.id),
+            parentId: row.parent_id,
+            room: JSON.parse(row.room) as LabRoom,
+            rounds: Number(row.rounds),
+            status: row.status,
+          }
+        : null;
+    },
+
+    batchEntrants(batchId) {
+      const rows = db
+        .prepare(
+          `SELECT e.candidate_id AS candidate_id, e.is_parent AS is_parent,
+                  e.entered_order AS entered_order, c.flow_json AS flow
+           FROM batch_entrants e
+           JOIN candidates c ON c.id = e.candidate_id
+           WHERE e.batch_id = ?
+           ORDER BY e.entered_order`,
+        )
+        .all(batchId) as {
+        candidate_id: string;
+        is_parent: number;
+        entered_order: number;
+        flow: string;
+      }[];
+      return rows.map((row) => ({
+        candidateId: row.candidate_id,
+        isParent: row.is_parent === 1,
+        order: Number(row.entered_order),
+        circuit: (JSON.parse(row.flow) as FlowDef).circuit,
+      }));
+    },
+
+    addBatchEncounter(input) {
+      const wrote = db
+        .prepare(
+          `INSERT INTO batch_encounters
+           (batch_id, left_candidate_id, right_candidate_id, round, disposition, created_at)
+           VALUES (?, ?, ?, ?, 'pending', ?)`,
+        )
+        .run(input.batchId, input.leftId, input.rightId, input.round, now());
+      return Number(wrote.lastInsertRowid);
+    },
+
+    nextBatchEncounter(batchId) {
+      const row = db
+        .prepare(
+          `SELECT id, left_candidate_id AS left_id, right_candidate_id AS right_id,
+                  round AS round
+           FROM batch_encounters
+           WHERE batch_id = ? AND disposition = 'pending'
+           ORDER BY id LIMIT 1`,
+        )
+        .get(batchId) as
+        | { id: number; left_id: string; right_id: string; round: number }
+        | undefined;
+      return row
+        ? {
+            id: Number(row.id),
+            leftId: row.left_id,
+            rightId: row.right_id,
+            round: Number(row.round),
+          }
+        : null;
+    },
+
+    batchEvidence(batchId) {
+      const rows = db
+        .prepare(
+          `SELECT e.id, e.left_candidate_id AS left_id, e.right_candidate_id AS right_id,
+                  e.round AS round, e.disposition AS disposition, c.choice AS choice
+           FROM batch_encounters e
+           LEFT JOIN batch_comparisons c ON c.encounter_id = e.id
+           WHERE e.batch_id = ?
+           ORDER BY e.id`,
+        )
+        .all(batchId) as {
+        id: number;
+        left_id: string;
+        right_id: string;
+        round: number;
+        disposition: BatchComparisonEvidence['disposition'];
+        choice: BatchComparisonEvidence['choice'];
+      }[];
+      return rows.map((row) => ({
+        id: Number(row.id),
+        leftId: row.left_id,
+        rightId: row.right_id,
+        round: Number(row.round),
+        disposition: row.disposition,
+        choice: row.choice,
+      }));
+    },
+
+    batchCompare(comparison, at) {
+      if (!['left', 'right', 'both', 'neither'].includes(comparison.choice)) {
+        return { ok: false, problem: 'choose left, right, both, or neither' };
+      }
+      const pending = db
+        .prepare(
+          `SELECT id FROM batch_encounters
+           WHERE id = ? AND batch_id = ? AND disposition = 'pending'`,
+        )
+        .get(comparison.encounterId, at.batchId);
+      if (!pending) return { ok: false, problem: 'that match is not waiting for an answer' };
+      transaction(() => {
+        db.prepare(
+          `INSERT INTO batch_comparisons
+           (encounter_id, choice, renderer_version, created_at)
+           VALUES (?, ?, ?, ?)`,
+        ).run(comparison.encounterId, comparison.choice, at.rendererVersion, now());
+        db.prepare(
+          `UPDATE batch_encounters SET disposition = 'compared', decided_at = ?
+           WHERE id = ? AND batch_id = ? AND disposition = 'pending'`,
+        ).run(now(), comparison.encounterId, at.batchId);
+      });
+      return { ok: true };
+    },
+
+    skipBatchEncounter(encounterId, batchId) {
+      db.prepare(
+        `UPDATE batch_encounters SET disposition = 'skipped', decided_at = ?
+         WHERE id = ? AND batch_id = ? AND disposition = 'pending'`,
+      ).run(now(), encounterId, batchId);
+    },
+
+    completeBatch(batchId) {
+      db.prepare(
+        `UPDATE batches SET status = 'complete', completed_at = ?
+         WHERE id = ? AND status = 'judging'`,
+      ).run(now(), batchId);
+    },
+
+    abandonBatch(batchId) {
+      // Abandoned rather than deleted. The children were generated, staged and
+      // in some cases already compared; throwing the rows away would take those
+      // answers with them and make the forest forget works it had drawn.
+      db.prepare(
+        `UPDATE batches SET status = 'abandoned', completed_at = ?
+         WHERE id = ? AND status = 'judging'`,
+      ).run(now(), batchId);
+    },
+
+    closeBatch(batchId) {
+      db.prepare(
+        `UPDATE batches SET status = 'closed' WHERE id = ? AND status = 'complete'`,
+      ).run(batchId);
+    },
+
+    batchCounts(experimentId) {
+      const rows = db
+        .prepare(
+          `SELECT parent_candidate_id AS parent_id, COUNT(*) AS batches
+           FROM batches WHERE experiment_id = ? GROUP BY parent_candidate_id`,
+        )
+        .all(experimentId) as { parent_id: string; batches: number }[];
+      return new Map(rows.map((row) => [row.parent_id, Number(row.batches)]));
+    },
+
+    batchAppearances(experimentId) {
+      const rows = db
+        .prepare(
+          `WITH sides AS (
+             SELECT e.left_candidate_id AS candidate_id,
+                    CASE WHEN c.choice IN ('left', 'both') THEN 1 ELSE 0 END AS chosen
+             FROM batch_encounters e
+             JOIN batches b ON b.id = e.batch_id
+             JOIN batch_comparisons c ON c.encounter_id = e.id
+             WHERE b.experiment_id = ?
+             UNION ALL
+             SELECT e.right_candidate_id,
+                    CASE WHEN c.choice IN ('right', 'both') THEN 1 ELSE 0 END
+             FROM batch_encounters e
+             JOIN batches b ON b.id = e.batch_id
+             JOIN batch_comparisons c ON c.encounter_id = e.id
+             WHERE b.experiment_id = ?
+           )
+           SELECT candidate_id, COUNT(*) AS appearances, SUM(chosen) AS chosen
+           FROM sides GROUP BY candidate_id`,
+        )
+        .all(experimentId, experimentId) as {
+        candidate_id: string;
+        appearances: number;
+        chosen: number;
+      }[];
+      return rows.map((row) => ({
+        candidateId: row.candidate_id,
+        appearances: Number(row.appearances),
+        chosen: Number(row.chosen ?? 0),
+      }));
+    },
+
     serve(candidateId, experimentId) {
       // Never pending twice: re-serving a decided candidate is a deliberate
       // re-judgment, where a second pending row is only ever a double click.
@@ -1588,7 +2120,7 @@ export function openLab(file: string): LabStore {
 
     exportJsonl() {
       const lines: string[] = [
-        JSON.stringify({ t: 'lab', v: 6, rubric: RUBRIC_VERSION, tags: TAGS_VERSION }),
+        JSON.stringify({ t: 'lab', v: 7, rubric: RUBRIC_VERSION, tags: TAGS_VERSION }),
       ];
       const dump = (t: string, sql: string) => {
         for (const row of db.prepare(sql).all()) {
@@ -1610,6 +2142,12 @@ export function openLab(file: string): LabStore {
       dump('finals_nominee', 'SELECT * FROM finals_nominees ORDER BY run_id, selected_order');
       dump('finals_encounter', 'SELECT * FROM finals_encounters ORDER BY id');
       dump('finals_comparison', 'SELECT * FROM finals_comparisons ORDER BY id');
+      dump('seed_encounter', 'SELECT * FROM seed_encounters ORDER BY id');
+      dump('seed_verdict', 'SELECT * FROM seed_verdicts ORDER BY id');
+      dump('batch', 'SELECT * FROM batches ORDER BY id');
+      dump('batch_entrant', 'SELECT * FROM batch_entrants ORDER BY batch_id, entered_order');
+      dump('batch_encounter', 'SELECT * FROM batch_encounters ORDER BY id');
+      dump('batch_comparison', 'SELECT * FROM batch_comparisons ORDER BY id');
       dump('tag', 'SELECT * FROM tags ORDER BY id');
       dump('review_tag', 'SELECT * FROM review_tags ORDER BY rowid');
       dump('served', 'SELECT * FROM served ORDER BY rowid');
@@ -1639,6 +2177,12 @@ export function openLab(file: string): LabStore {
         finals_nominee: 'finals_nominees',
         finals_encounter: 'finals_encounters',
         finals_comparison: 'finals_comparisons',
+        seed_encounter: 'seed_encounters',
+        seed_verdict: 'seed_verdicts',
+        batch: 'batches',
+        batch_entrant: 'batch_entrants',
+        batch_encounter: 'batch_encounters',
+        batch_comparison: 'batch_comparisons',
         tag: 'tags',
         review_tag: 'review_tags',
         served: 'served',
@@ -1676,6 +2220,15 @@ export interface LabEngine {
   archiveSelect(candidateId: string): LabState;
   archiveDecide(decision: LabArchiveSubmission): LabState;
   lineageFinalist(decision: LabLineageFinalistSubmission): LabState;
+  exploreOpen(): LabState;
+  exploreJudge(submission: LabSeedSubmission): LabState;
+  exploreSkip(encounterId: number): LabState;
+  bookmark(decision: LabBookmarkSubmission): LabState;
+  developOpen(candidateId: string): LabState;
+  developDeal(request: LabDevelopRequest): LabState;
+  developCompare(comparison: LabBatchSubmission): LabState;
+  developSkip(encounterId: number): LabState;
+  developClose(): LabState;
   finalsOpen(): LabState;
   finalsNew(): LabState;
   finalsCompare(comparison: LabFinalsSubmission): LabState;
@@ -1802,6 +2355,8 @@ export function labEngine<State>(
     }
     return {
       encounter: null,
+      explore: null,
+      develop: null,
       archive: null,
       finals: null,
       candidate,
@@ -1851,6 +2406,42 @@ export function labEngine<State>(
     },
     lineageFinalist() {
       notice = 'Lineage finalists need a recursive comparison experiment';
+      return labState();
+    },
+    exploreOpen() {
+      notice = 'Explore needs a lineage experiment';
+      return labState();
+    },
+    exploreJudge() {
+      notice = 'Explore needs a lineage experiment';
+      return labState();
+    },
+    exploreSkip() {
+      notice = 'Explore needs a lineage experiment';
+      return labState();
+    },
+    bookmark() {
+      notice = 'Bookmarks need a lineage experiment';
+      return labState();
+    },
+    developOpen() {
+      notice = 'Develop needs a lineage experiment';
+      return labState();
+    },
+    developDeal() {
+      notice = 'Develop needs a lineage experiment';
+      return labState();
+    },
+    developCompare() {
+      notice = 'Develop needs a lineage experiment';
+      return labState();
+    },
+    developSkip() {
+      notice = 'Develop needs a lineage experiment';
+      return labState();
+    },
+    developClose() {
+      notice = 'Develop needs a lineage experiment';
       return labState();
     },
     finalsOpen() {
@@ -1943,6 +2534,8 @@ export function labSearchEngine<State>(
   let archiveNotice: string | null = null;
   let archiveFocus: string | null = null;
   let finalsNotice: string | null = null;
+  let exploreNotice: string | null = null;
+  let developNotice: string | null = null;
 
   const compiles = (draft: { flow: FlowDef; bundle: Record<string, FlowDef> }): boolean => {
     const compiled = compileFlow({ ...draft.bundle, '~deal': draft.flow }, '~deal');
@@ -2110,6 +2703,131 @@ export function labSearchEngine<State>(
     return store.finalsRun(experimentId);
   };
 
+  /**
+   * Explore's whole loop: keep exactly one unjudged seed staged.
+   *
+   * One at a time on purpose. A queue of them would be a queue of pictures
+   * nobody has looked at, which is the pairing problem again in a different
+   * shape — work generated ahead of the attention that justifies it. The
+   * database opens when Train is opened and deals one root; closing the tab
+   * leaves exactly one seed pending and nothing running.
+   */
+  const advanceExplore = (): void => {
+    if (store.nextSeedEncounter(experimentId)) return;
+    const counts = store.seedCounts(experimentId);
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const at = counts.seen + counts.skipped + attempt;
+      const dealSeed = `${seed}:seed:${at}`;
+      const draft = seedDraft(seeded(dealSeed));
+      const id = materialize({ kind: 'draft', candidate: draft }, dealSeed);
+      // A root already judged is not a question. Two seeds producing one graph
+      // is rare but not impossible, and asking again would put a duplicate
+      // answer in the corpus about a picture that already has one.
+      if (!id || store.seedSeen(experimentId, id)) continue;
+      store.addSeedEncounter({
+        experimentId,
+        candidateId: id,
+        room: dealRoom(`${seed}:seed-room:${at}`),
+      });
+      return;
+    }
+    exploreNotice = 'the dealer could not make a fresh root that compiles';
+  };
+
+  const exploreState = (): LabExploreState => {
+    const held = store.nextSeedEncounter(experimentId);
+    const candidate = held ? asCandidate(held.candidateId) : null;
+    const counts = store.seedCounts(experimentId);
+    return {
+      encounter:
+        held && candidate ? { id: held.id, candidate, room: held.room } : null,
+      seen: counts.seen,
+      admitted: counts.admitted,
+      declined: counts.declined,
+      skipped: counts.skipped,
+      notice: exploreNotice,
+    };
+  };
+
+  /** Keep one match staged in the open batch, and close it when every round is answered. */
+  const advanceBatch = (batch: StoredBatch): void => {
+    if (batch.status !== 'judging' || store.nextBatchEncounter(batch.id)) return;
+    const entrants = store.batchEntrants(batch.id);
+    const facts = store.batchEvidence(batch.id);
+    const pair = nextBatchPair(
+      entrants,
+      facts,
+      batch.rounds,
+      seeded(`${seed}:batch:${batch.id}:${facts.length}`),
+    );
+    if (!pair) {
+      store.completeBatch(batch.id);
+      return;
+    }
+    store.addBatchEncounter({
+      batchId: batch.id,
+      leftId: pair.leftId,
+      rightId: pair.rightId,
+      round: pair.round,
+    });
+  };
+
+  const developState = (): LabDevelopState | null => {
+    // No batch is not an error state with an empty batch in it. A refusal to
+    // deal one belongs on the shared notice, where the forest can say it.
+    const batch = store.openBatch(experimentId);
+    if (!batch) return null;
+    const parent = asCandidate(batch.parentId);
+    if (!parent) return null;
+    const entrants = store.batchEntrants(batch.id);
+    const facts = store.batchEvidence(batch.id);
+    const standing = rankBatch(entrants, facts);
+    const standings = standing.flatMap((row, rank) => {
+      const candidate = asCandidate(row.candidateId);
+      return candidate
+        ? [{
+            rank: rank + 1,
+            candidate,
+            isParent: row.isParent,
+            matches: row.matches,
+            preference: row.preference,
+            score: row.score,
+            uncertainty: row.uncertainty,
+          }]
+        : [];
+    });
+    const held = store.nextBatchEncounter(batch.id);
+    const left = held ? asCandidate(held.leftId) : null;
+    const right = held ? asCandidate(held.rightId) : null;
+    const answered = facts.filter((fact) => fact.disposition === 'compared').length;
+    const leader = standings[0];
+    return {
+      batchId: batch.id,
+      parent,
+      status: batch.status === 'judging' && held ? 'judging' : 'complete',
+      size: entrants.length,
+      compared: answered,
+      total: (entrants.length * batch.rounds) / 2,
+      encounter:
+        held && left && right
+          ? {
+              id: held.id,
+              left,
+              right,
+              room: batch.room,
+              round: held.round,
+              rounds: batch.rounds,
+            }
+          : null,
+      standings,
+      // The result the old Refine phase could not state: a leader that is the
+      // parent says this node is already at its local peak, and that is worth
+      // knowing before another batch is spent on it.
+      improved: !!leader && !leader.isParent && leader.matches > 0,
+      notice: developNotice,
+    };
+  };
+
   const archiveState = (): LabArchiveState => {
     const candidates = store.archiveCandidates(experimentId);
     const decisions = store.archiveDecisions(experimentId);
@@ -2149,6 +2867,19 @@ export function labSearchEngine<State>(
       }
     }
     const byId = new Map(search.candidates.map((candidate) => [candidate.id, candidate]));
+    const batches = store.batchCounts(experimentId);
+    // A batch match is an appearance too, so a child developed under the new
+    // shape accumulates the same evidence a paired one used to. Without this
+    // the forest would rank every recent work as never having been looked at.
+    for (const fact of store.batchAppearances(experimentId)) {
+      appearances.set(fact.candidateId, (appearances.get(fact.candidateId) ?? 0) + fact.appearances);
+      chosen.set(fact.candidateId, (chosen.get(fact.candidateId) ?? 0) + fact.chosen);
+    }
+    const childCounts = new Map<string, number>();
+    for (const candidate of search.candidates) {
+      if (!candidate.parentId) continue;
+      childCounts.set(candidate.parentId, (childCounts.get(candidate.parentId) ?? 0) + 1);
+    }
     const nodes = candidates.flatMap((candidate) => {
       const held = byId.get(candidate.candidateId);
       return held ? [{
@@ -2162,8 +2893,9 @@ export function labSearchEngine<State>(
         chosen: chosen.get(held.id) ?? 0,
         finals: finalsCounts.get(held.id) ?? 0,
         reviewed: latest.get(held.id)?.verdict === 'keep' || latest.get(held.id)?.verdict === 'pass',
-        kept: kept.has(held.id),
-        finalist: finalists.has(held.id),
+        bookmarked: kept.has(held.id) || finalists.has(held.id),
+        batches: batches.get(held.id) ?? 0,
+        children: childCounts.get(held.id) ?? 0,
       }] : [];
     });
     const reviewed = candidates.filter((candidate) => {
@@ -2181,7 +2913,9 @@ export function labSearchEngine<State>(
       complete: candidates.length > 0 && current === null,
       notice:
         archiveNotice ??
-        (candidates.length === 0 ? 'Archive will fill after Search stages its first pair' : null),
+        (candidates.length === 0
+          ? 'The forest fills as Explore admits roots and batches stage their children'
+          : null),
     };
   };
 
@@ -2254,6 +2988,8 @@ export function labSearchEngine<State>(
     const summary = method.summarize(evidence());
     return {
       encounter,
+      explore: exploreState(),
+      develop: developState(),
       archive: archiveState(),
       finals: finalsState(),
       candidate: null,
@@ -2362,6 +3098,181 @@ export function labSearchEngine<State>(
       }
       const answer = store.lineageFinalist(decision, experimentId);
       if (!answer.ok) archiveNotice = answer.problem;
+      return labState();
+    },
+    exploreOpen() {
+      exploreNotice = null;
+      advanceExplore();
+      return labState();
+    },
+    exploreJudge(submission) {
+      exploreNotice = null;
+      const active = store.nextSeedEncounter(experimentId);
+      if (!active || active.id !== submission.encounterId) {
+        exploreNotice = 'that seed is no longer the one on screen';
+        return labState();
+      }
+      const answer = store.judgeSeed(submission, {
+        experimentId,
+        rendererVersion: RENDERER,
+      });
+      if (!answer.ok) {
+        exploreNotice = answer.problem;
+        return labState();
+      }
+      // Admitting a root bookmarks it, because "yes, worth developing" and
+      // "come back to this" are the same intention said once. Declining marks
+      // nothing: a no is not a judgment worth carrying around, only a seed not
+      // taken, and the work stays in the forest where it can be reconsidered.
+      if (submission.verdict === 'yes') {
+        store.archiveDecide(
+          { candidateId: active.candidateId, verdict: 'keep', source: 'search' },
+          { experimentId, room: active.room },
+        );
+      }
+      advanceExplore();
+      return labState();
+    },
+    exploreSkip(encounterId) {
+      exploreNotice = null;
+      const active = store.nextSeedEncounter(experimentId);
+      if (!active || active.id !== encounterId) {
+        exploreNotice = 'that seed is no longer the one on screen';
+        return labState();
+      }
+      store.skipSeedEncounter(encounterId, experimentId);
+      advanceExplore();
+      return labState();
+    },
+    bookmark(decision) {
+      archiveNotice = null;
+      // Any work in the corpus, from wherever it is being looked at. A bookmark
+      // is navigation, so requiring it to be the staged one — as keep did —
+      // made the forest's own marks depend on what the queue happened to be
+      // showing.
+      const held = store
+        .archiveCandidates(experimentId)
+        .find((candidate) => candidate.candidateId === decision.candidateId);
+      if (!held) {
+        archiveNotice = 'that work is not in this lineage forest';
+        return labState();
+      }
+      const answer = store.archiveDecide(
+        {
+          candidateId: decision.candidateId,
+          verdict: decision.marked ? 'keep' : 'pass',
+          source: 'archive',
+        },
+        { experimentId, room: held.room },
+      );
+      if (!answer.ok) archiveNotice = answer.problem;
+      return labState();
+    },
+    developOpen(candidateId) {
+      developNotice = null;
+      archiveNotice = null;
+      if (!store.archiveCandidates(experimentId).some((held) => held.candidateId === candidateId)) {
+        archiveNotice = 'that work is not in this lineage forest';
+        return labState();
+      }
+      archiveFocus = candidateId;
+      return labState();
+    },
+    developDeal(request) {
+      developNotice = null;
+      notice = null;
+      const open = store.openBatch(experimentId);
+      if (open) {
+        notice =
+          open.status === 'complete'
+            ? 'read the finished batch and close it before dealing another'
+            : 'finish or discard the open batch before dealing another';
+        return labState();
+      }
+      if (!BATCH_SIZES.includes(request.size)) {
+        notice = `a batch is ${BATCH_SIZES.join(', ')} works including the parent`;
+        return labState();
+      }
+      const parent = evidence().candidates.find(
+        (candidate) => candidate.id === request.candidateId,
+      );
+      if (!parent) {
+        notice = 'that work is not in this lineage forest';
+        return labState();
+      }
+      const at = store.batchCounts(experimentId).get(parent.id) ?? 0;
+      const dealSeed = `${seed}:batch:${parent.id}:${at}`;
+      const drafts = batchDrafts(parent, request.size - 1, seeded(dealSeed));
+      const entrants: { candidateId: string; isParent: boolean }[] = [
+        { candidateId: parent.id, isParent: true },
+      ];
+      drafts.forEach((draft, index) => {
+        const id = materialize({ kind: 'draft', candidate: draft }, `${dealSeed}:${index}`);
+        if (id && !entrants.some((entrant) => entrant.candidateId === id)) {
+          entrants.push({ candidateId: id, isParent: false });
+        }
+      });
+      // A round is a perfect matching, so an odd field would leave somebody
+      // unjudged in every round. Dropping the last child is honest where
+      // manufacturing a bye would put a free win in the standings.
+      if (entrants.length % 2 === 1) entrants.pop();
+      if (entrants.length < 4) {
+        notice = 'the dealer could not make enough distinct children for a batch';
+        return labState();
+      }
+      const batchId = store.createBatch({
+        experimentId,
+        parentId: parent.id,
+        // One room for the whole batch. Different rooms would make a child look
+        // better for a reason that has nothing to do with the edit that made it.
+        room: dealRoom(`${dealSeed}:room`),
+        rounds: BATCH_ROUNDS,
+        entrants,
+      });
+      const batch = store.openBatch(experimentId);
+      if (batch && batch.id === batchId) advanceBatch(batch);
+      archiveFocus = parent.id;
+      return labState();
+    },
+    developCompare(comparison) {
+      developNotice = null;
+      const batch = store.openBatch(experimentId);
+      const active = batch ? store.nextBatchEncounter(batch.id) : null;
+      if (!batch || !active || active.id !== comparison.encounterId) {
+        developNotice = 'that match is no longer the one on screen';
+        return labState();
+      }
+      const answer = store.batchCompare(comparison, {
+        batchId: batch.id,
+        rendererVersion: RENDERER,
+      });
+      if (!answer.ok) {
+        developNotice = answer.problem;
+        return labState();
+      }
+      advanceBatch(batch);
+      return labState();
+    },
+    developSkip(encounterId) {
+      developNotice = null;
+      const batch = store.openBatch(experimentId);
+      const active = batch ? store.nextBatchEncounter(batch.id) : null;
+      if (!batch || !active || active.id !== encounterId) {
+        developNotice = 'that match is no longer the one on screen';
+        return labState();
+      }
+      store.skipBatchEncounter(encounterId, batch.id);
+      advanceBatch(batch);
+      return labState();
+    },
+    developClose() {
+      developNotice = null;
+      const batch = store.openBatch(experimentId);
+      if (!batch) return labState();
+      // Leaving a finished batch is reading its result; leaving an unfinished
+      // one is walking away from it. The store keeps those apart.
+      if (batch.status === 'complete') store.closeBatch(batch.id);
+      else store.abandonBatch(batch.id);
       return labState();
     },
     finalsOpen() {

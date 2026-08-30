@@ -84,6 +84,24 @@ const LINEAGE_FINALIST = z.object({
   finalist: z.boolean(),
 });
 
+const SEED_VERDICT = z.object({
+  encounterId: z.number().int().positive(),
+  verdict: z.union([z.literal('yes'), z.literal('no')]),
+});
+
+const BOOKMARK = z.object({
+  candidateId: z.string(),
+  marked: z.boolean(),
+});
+
+// The size is checked here for shape and in the engine for whether it is one of
+// the offered fields, which is the engine's to know — this door only refuses a
+// number that could never be a field at all.
+const DEVELOP_REQUEST = z.object({
+  candidateId: z.string(),
+  size: z.number().int().min(2).max(64),
+});
+
 const RESPONSE = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('linear'), min: z.number(), max: z.number(), unit: z.string() }),
   z.object({
@@ -136,6 +154,15 @@ const UP = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('lab-archive-select'), candidateId: z.string() }),
   z.object({ kind: z.literal('lab-archive-decide'), decision: ARCHIVE_DECISION }),
   z.object({ kind: z.literal('lab-lineage-finalist'), decision: LINEAGE_FINALIST }),
+  z.object({ kind: z.literal('lab-explore-open') }),
+  z.object({ kind: z.literal('lab-explore-judge'), submission: SEED_VERDICT }),
+  z.object({ kind: z.literal('lab-explore-skip'), encounterId: z.number().int().positive() }),
+  z.object({ kind: z.literal('lab-bookmark'), decision: BOOKMARK }),
+  z.object({ kind: z.literal('lab-develop-open'), candidateId: z.string() }),
+  z.object({ kind: z.literal('lab-develop-deal'), request: DEVELOP_REQUEST }),
+  z.object({ kind: z.literal('lab-develop-compare'), comparison: COMPARISON }),
+  z.object({ kind: z.literal('lab-develop-skip'), encounterId: z.number().int().positive() }),
+  z.object({ kind: z.literal('lab-develop-close') }),
   z.object({ kind: z.literal('lab-finals-open') }),
   z.object({ kind: z.literal('lab-finals-new') }),
   z.object({ kind: z.literal('lab-finals-compare'), comparison: FINALS_COMPARISON }),
@@ -156,6 +183,30 @@ const UP = z.discriminatedUnion('kind', [
   }),
   z.object({ kind: z.literal('calibration-decide'), decision: CALIBRATION_DECISION }),
 ]);
+
+/**
+ * The two unions must name exactly the same messages, and this is what says so.
+ *
+ * `readUp` casts a schema-validated frame to `Up`, which quietly assumes the
+ * schema and the protocol agree. They can drift in both directions and both are
+ * silent at the point of the mistake. A kind added to `protocol.ts` and not
+ * here is **dropped** — the client sends it, the server logs one line about an
+ * invalid discriminator, and the feature simply does nothing. A kind here and
+ * not there is a cast to a type that does not describe the value.
+ *
+ * So the drift is made a type error instead. `Exhaustive` is satisfiable only
+ * when its two arguments are mutually assignable, so adding a message to either
+ * union without the other fails `npm run typecheck` at the line below rather
+ * than at runtime in front of somebody.
+ */
+type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+type Assert<T extends true> = T;
+type _MessagesAgree = Assert<Same<z.infer<typeof UP>['kind'], Up['kind']>>;
+
+/** Every kind this door admits, for a test that walks all of them. */
+export const UP_KINDS: readonly Up['kind'][] = UP.options.map(
+  (option) => option.shape.kind.value as Up['kind'],
+);
 
 export type UpRead = { ok: true; up: Up } | { ok: false; why: string };
 

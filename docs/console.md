@@ -15,23 +15,20 @@ opening one does not move another console or change the show.
 | view | the question | the scale |
 |---|---|---|
 | **build** | what is worth putting on a wall | one flow |
-| **train** | which directions deserve a future, then a show | one synchronized comparison |
+| **train** | what is worth developing, and what developing it produced | one lineage forest |
 | **review** | what did a slower, detailed judgment say | the preserved corpus |
 | **set** | what turns through them, and what says otherwise | the set |
 
-**Train is not an editor or a detailed review form.** Its **Search** stage discovers visual
-languages: Explore compares distinct directions and Refine compares a surviving parent with
-one atomic intervention. Its **Archive** stage draws the complete history as a zoomable
-lineage forest: one island per family, every parent branch intact, likely peaks emphasized,
-and every dot clickable into its original room. Keep/pass records the separate absolute
-question, while a diamond chooses the one current finalist for a lineage. A star on either
-Search candidate records keep without changing which direction survives. Its **Finals**
-stage admits lineage finalists and keepers first, then fills a diverse frozen field from
-the historical search, then shows every nominee in four named rooms and asks both which work
-is stronger and whether either side is ready for a show. Finals ends in a derived top-ten
-collection, and another archive-first edition can be frozen without overwriting the completed
-one. **Review** is the
-earlier, slower corpus: it re-stages scored judgments and lets their tags and notes settle.
+**Train is not an editor or a detailed review form.** Its home is the **forest**: the whole
+history as a zoomable tidy tree, one band per family, every dot clickable into the room it
+first appeared in, bookmarks and batch counts on the map. From there, **explore** stages one
+fresh root at a time and asks only whether there is anything there; **develop** generates a
+batch of children on a node you chose and runs them against each other and against their
+parent under one room; **editions** freezes a collection out of what accumulated and plays it
+through four named rooms, asking both which work is stronger and whether either side is ready
+for a show. Nothing schedules anything — the map is the document and the modes are places you
+go from it. **Review** is the earlier, slower corpus: it re-stages scored judgments and lets
+their tags and notes settle.
 The lab beneath both has [a doc of its own](lab.md).
 
 They sit in the console because they are views over the same kind of flow the other tabs

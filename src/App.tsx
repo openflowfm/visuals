@@ -45,12 +45,18 @@ export function App() {
     nextColorway,
     lab,
     labOpen,
-    labCompare,
-    labSkipEncounter,
     labArchiveOpen,
     labArchiveSelect,
     labArchiveDecide,
-    labLineageFinalist,
+    labExploreOpen,
+    labExploreJudge,
+    labExploreSkip,
+    labBookmark,
+    labDevelopOpen,
+    labDevelopDeal,
+    labDevelopCompare,
+    labDevelopSkip,
+    labDevelopClose,
     labFinalsOpen,
     labFinalsNew,
     labFinalsCompare,
@@ -325,12 +331,18 @@ export function App() {
             loadScheme={loadScheme}
             lab={lab}
             labOpen={labOpen}
-            labCompare={labCompare}
-            labSkipEncounter={labSkipEncounter}
             labArchiveOpen={labArchiveOpen}
             labArchiveSelect={labArchiveSelect}
             labArchiveDecide={labArchiveDecide}
-            labLineageFinalist={labLineageFinalist}
+            labExploreOpen={labExploreOpen}
+            labExploreJudge={labExploreJudge}
+            labExploreSkip={labExploreSkip}
+            labBookmark={labBookmark}
+            labDevelopOpen={labDevelopOpen}
+            labDevelopDeal={labDevelopDeal}
+            labDevelopCompare={labDevelopCompare}
+            labDevelopSkip={labDevelopSkip}
+            labDevelopClose={labDevelopClose}
             labFinalsOpen={labFinalsOpen}
             labFinalsNew={labFinalsNew}
             labFinalsCompare={labFinalsCompare}

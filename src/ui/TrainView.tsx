@@ -1,44 +1,67 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
-  LabCandidate,
   LabArchiveSubmission,
-  LabComparisonChoice,
-  LabComparisonSubmission,
+  LabBatchSubmission,
+  LabBookmarkSubmission,
+  LabDevelopRequest,
   LabFinalsSubmission,
-  LabLineageFinalistSubmission,
+  LabSeedSubmission,
   LabState,
   Scheme,
-  Show,
 } from '../../protocol.ts';
-import { promoteCandidate, promotedCandidateId } from '../../lab.ts';
-import { Button } from '@openflow/widgets/controls/Button.tsx';
 import type { Clock } from '../state/useShow.ts';
-import { useTransport, type Transport } from '../state/useTransport.ts';
-import { KEYS } from '../state/useRoom.ts';
-import { Bench } from './Preview.tsx';
-import { CANDIDATE_FLOW, parkedScheme, stagedShow } from './stage.ts';
 import { FinalsView } from './FinalsView.tsx';
-import { ArchiveView } from './ArchiveView.tsx';
+import { ForestView } from './ForestView.tsx';
+import { ExploreView } from './ExploreView.tsx';
+import { DevelopView } from './DevelopView.tsx';
 
-const operationName = (operation: string): string =>
-  operation === 'random'
-    ? 'new family'
-    : operation === 'explore:leap'
-      ? 'exploratory leap'
-      : operation.replace(/^mutate:/, 'one change · ');
+/**
+ * Train, as three places rather than one queue.
+ *
+ * The old shape had a single Search tab whose scheduler decided, encounter by
+ * encounter, whether you were exploring or refining and which branch you were
+ * doing it to. Two things went wrong with that, and they were the same thing
+ * twice. Exploration was coupled to comparison, so a new idea only reached a
+ * person if it happened to be one of the two most distant of twelve. And a
+ * candidate could only be developed after winning a comparison, so an idea that
+ * lost once — to something excellent, on an unlucky draw — was never mutated
+ * again. Good work got lost at its first node, and the search funnelled into
+ * whatever had early success.
+ *
+ * So the phases became places you go, and the forest became the home you go
+ * from. **Explore** acquires stock: one root, one look, yes or no. **Develop**
+ * spends attention deliberately: a batch of children on a node you chose, all
+ * judged against each other and against their parent. **Editions** freeze a
+ * collection out of what accumulated. Nothing schedules anything; the map is
+ * the document and you are the scheduler.
+ *
+ * The old paired Search is gone from the UI but not from the corpus. Its
+ * answers still mean what they meant and still feed the forest's counts —
+ * removing a mode is not permission to reinterpret the facts it left behind.
+ */
 
-/** Search discovers visual languages; Finals chooses a show-ready collection. */
+/** Field sizes offered for a batch, the parent included. Mirrors `server/batch.ts`. */
+const BATCH_SIZES: readonly number[] = [6, 10, 16];
+
+type Place = 'forest' | 'explore' | 'develop' | 'editions';
+
 interface TrainViewProps {
   clock: Clock;
   scheme: Scheme;
   lab: LabState | null;
   labOpen(): void;
-  labCompare(comparison: LabComparisonSubmission): void;
-  labSkipEncounter(encounterId: number): void;
   labArchiveOpen(): void;
   labArchiveSelect(candidateId: string): void;
   labArchiveDecide(decision: LabArchiveSubmission): void;
-  labLineageFinalist(decision: LabLineageFinalistSubmission): void;
+  labExploreOpen(): void;
+  labExploreJudge(submission: LabSeedSubmission): void;
+  labExploreSkip(encounterId: number): void;
+  labBookmark(decision: LabBookmarkSubmission): void;
+  labDevelopOpen(candidateId: string): void;
+  labDevelopDeal(request: LabDevelopRequest): void;
+  labDevelopCompare(comparison: LabBatchSubmission): void;
+  labDevelopSkip(encounterId: number): void;
+  labDevelopClose(): void;
   labFinalsOpen(): void;
   labFinalsNew(): void;
   labFinalsCompare(comparison: LabFinalsSubmission): void;
@@ -47,51 +70,108 @@ interface TrainViewProps {
 }
 
 export function TrainView(props: TrainViewProps) {
-  const [mode, setMode] = useState<'search' | 'archive' | 'finals'>('search');
+  const [place, setPlace] = useState<Place>('forest');
+  const develop = props.lab?.develop ?? null;
+
+  /**
+   * Dealing a batch is what opens Develop, from wherever it was asked for, and
+   * closing one puts you back on the map.
+   *
+   * On the *change*, not on the state. Following `develop !== null` every render
+   * would drag you back to the batch every time you tried to look at the forest
+   * while one was open — which is exactly the browsing the forest exists for.
+   */
+  const seen = useRef<number | null>(null);
+  useEffect(() => {
+    const id = develop?.batchId ?? null;
+    if (id === seen.current) return;
+    if (id !== null && seen.current === null) setPlace('develop');
+    if (id === null) setPlace('forest');
+    seen.current = id;
+  }, [develop?.batchId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const bookmarkedIds = useMemo(
+    () =>
+      new Set(
+        (props.lab?.archive?.nodes ?? [])
+          .filter((node) => node.bookmarked)
+          .map((node) => node.id),
+      ),
+    [props.lab?.archive?.nodes],
+  );
+
+  const about: Record<Place, string> = {
+    forest: 'browse the lineages — the home everything is reached from',
+    explore: 'one fresh root at a time: is there anything here',
+    develop: 'a batch of children on one node, judged against each other',
+    editions: 'freeze a show-ready collection out of what accumulated',
+  };
+
   return (
     <div className="train-workspace">
       <nav className="train-mode" aria-label="Training stage">
-        <button type="button" aria-pressed={mode === 'search'} onClick={() => setMode('search')}>
-          search
-        </button>
-        <button type="button" aria-pressed={mode === 'archive'} onClick={() => setMode('archive')}>
-          archive
-        </button>
-        <button type="button" aria-pressed={mode === 'finals'} onClick={() => setMode('finals')}>
-          finals
-        </button>
-        <span>
-          {mode === 'search'
-            ? 'discover visual languages'
-            : mode === 'archive'
-              ? 'remember finished works'
-              : 'choose the show-ready collection'}
-        </span>
+        {(['forest', 'explore', 'develop', 'editions'] as const).map((option) => (
+          <button
+            key={option}
+            type="button"
+            aria-pressed={place === option}
+            disabled={option === 'develop' && !develop}
+            onClick={() => setPlace(option)}
+          >
+            {option}
+          </button>
+        ))}
+        <span>{about[place]}</span>
       </nav>
+
       <div className="train-workspace-body">
-        {mode === 'search' ? (
-          <SearchView
-            clock={props.clock}
-            scheme={props.scheme}
-            lab={props.lab}
-            labOpen={props.labOpen}
-            labCompare={props.labCompare}
-            labSkipEncounter={props.labSkipEncounter}
-            labArchiveDecide={props.labArchiveDecide}
-            edit={props.edit}
-          />
-        ) : mode === 'archive' ? (
-          <ArchiveView
+        {place === 'forest' && (
+          <ForestView
             clock={props.clock}
             scheme={props.scheme}
             archive={props.lab?.archive ?? null}
+            notice={props.lab?.notice ?? null}
+            batchSizes={BATCH_SIZES}
             open={props.labArchiveOpen}
-            select={props.labArchiveSelect}
-            decide={props.labArchiveDecide}
-            finalist={props.labLineageFinalist}
+            select={props.labDevelopOpen}
+            bookmark={props.labBookmark}
+            deal={props.labDevelopDeal}
             edit={props.edit}
           />
-        ) : (
+        )}
+
+        {place === 'explore' && (
+          <ExploreView
+            clock={props.clock}
+            scheme={props.scheme}
+            explore={props.lab?.explore ?? null}
+            open={props.labExploreOpen}
+            judge={props.labExploreJudge}
+            skip={props.labExploreSkip}
+            edit={props.edit}
+          />
+        )}
+
+        {place === 'develop' &&
+          (develop ? (
+            <DevelopView
+              clock={props.clock}
+              scheme={props.scheme}
+              develop={develop}
+              compare={props.labDevelopCompare}
+              skip={props.labDevelopSkip}
+              close={props.labDevelopClose}
+              bookmark={props.labBookmark}
+              bookmarkedIds={bookmarkedIds}
+              edit={props.edit}
+            />
+          ) : (
+            <div className="train train-empty">
+              <p>No batch is open. Choose a node in the forest and develop it.</p>
+            </div>
+          ))}
+
+        {place === 'editions' && (
           <FinalsView
             clock={props.clock}
             scheme={props.scheme}
@@ -105,347 +185,5 @@ export function TrainView(props: TrainViewProps) {
         )}
       </div>
     </div>
-  );
-}
-
-function SearchView({
-  clock,
-  scheme,
-  lab,
-  labOpen,
-  labCompare,
-  labSkipEncounter,
-  labArchiveDecide,
-  edit,
-}: {
-  clock: Clock;
-  scheme: Scheme;
-  lab: LabState | null;
-  labOpen(): void;
-  labCompare(comparison: LabComparisonSubmission): void;
-  labSkipEncounter(encounterId: number): void;
-  labArchiveDecide(decision: LabArchiveSubmission): void;
-  edit(next: Scheme): void;
-}) {
-  const encounter = lab?.encounter ?? null;
-  const [errors, setErrors] = useState<{ left: string | null; right: string | null }>({
-    left: null,
-    right: null,
-  });
-  const transport = useTransport(clock, false);
-  const kept = new Set(lab?.archive?.keptCandidateIds ?? []);
-
-  useEffect(() => labOpen(), [labOpen]);
-
-  const encounterId = encounter?.id ?? null;
-  useEffect(() => {
-    if (!encounter) return;
-    setErrors({ left: null, right: null });
-    transport.setBpm(encounter.room.tempo);
-    transport.restart();
-  }, [encounterId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const choose = (choice: LabComparisonChoice) => {
-    if (encounter) labCompare({ encounterId: encounter.id, choice });
-  };
-
-  useEffect(() => {
-    const key = (event: KeyboardEvent) => {
-      if (
-        event.repeat ||
-        event.metaKey ||
-        event.ctrlKey ||
-        event.altKey ||
-        (event.target instanceof Element && event.target.matches('input, textarea, select'))
-      ) {
-        return;
-      }
-      const pressed = event.key.toLowerCase();
-      const choice =
-        event.key === 'ArrowLeft' || pressed === 'a'
-          ? 'left'
-          : event.key === 'ArrowRight' || pressed === 'd' || pressed === 'b'
-            ? 'right'
-            : event.key === 'ArrowUp' || pressed === 'w'
-              ? 'both'
-              : event.key === 'ArrowDown' || pressed === 'x'
-                ? 'neither'
-                : null;
-      if (choice) {
-        event.preventDefault();
-        choose(choice);
-      } else if (pressed === 's' && encounter) {
-        event.preventDefault();
-        labSkipEncounter(encounter.id);
-      } else if (pressed === 'r') {
-        event.preventDefault();
-        transport.restart();
-      }
-    };
-    window.addEventListener('keydown', key);
-    return () => window.removeEventListener('keydown', key);
-  }, [encounterId, labCompare, labSkipEncounter]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  if (!encounter) {
-    return (
-      <div className="train train-empty">
-        <p>{lab?.notice ?? 'building a distinct pair that compiles…'}</p>
-        <Button onPress={labOpen}>ask again</Button>
-      </div>
-    );
-  }
-
-  // One seed for both sides. A song node must not receive candidate A's hash on
-  // the left and candidate B's on the right or the room is not actually held.
-  const show = stagedShow(encounter.room, `encounter:${encounter.id}`);
-  const refining = encounter.phase === 'refine';
-  const leftLabel = refining ? 'current' : 'direction A';
-  const rightLabel = refining ? 'variation' : 'direction B';
-  const room = encounter.room;
-  const keyName = room.key === null ? 'no key' : KEYS[room.key] ?? 'no key';
-
-  return (
-    <div className="train train-comparison" data-phase={encounter.phase}>
-      <section className="train-pair">
-        <CandidatePane
-          side="left"
-          label={leftLabel}
-          candidate={encounter.left}
-          show={show}
-          transport={transport}
-          scheme={scheme}
-          edit={edit}
-          error={errors.left}
-          setError={(error) => setErrors((held) => ({ ...held, left: error }))}
-          kept={kept.has(encounter.left.id)}
-          mark={(verdict) => labArchiveDecide({
-            candidateId: encounter.left.id,
-            verdict,
-            source: 'search',
-          })}
-        />
-        <CandidatePane
-          side="right"
-          label={rightLabel}
-          candidate={encounter.right}
-          show={show}
-          transport={transport}
-          scheme={scheme}
-          edit={edit}
-          error={errors.right}
-          setError={(error) => setErrors((held) => ({ ...held, right: error }))}
-          kept={kept.has(encounter.right.id)}
-          mark={(verdict) => labArchiveDecide({
-            candidateId: encounter.right.id,
-            verdict,
-            source: 'search',
-          })}
-        />
-
-        <div className="train-room train-room-frozen train-shared-room wdg">
-          <Button
-            tone="quiet"
-            label={transport.playing ? 'Hold both clocks' : 'Run both clocks'}
-            onPress={() => transport.setPlaying(!transport.playing)}
-          >
-            {transport.playing ? '■' : '▶'}
-          </Button>
-          <Button tone="quiet" label="Restart both at the bar" onPress={transport.restart}>
-            ↺
-          </Button>
-          <span>{Number.isInteger(room.tempo) ? room.tempo.toFixed(0) : room.tempo.toFixed(1)} bpm</span>
-          <span>{Math.round(room.energy * 100)}% energy</span>
-          <span>{room.section.toLowerCase()}</span>
-          <span>{keyName}</span>
-          <span className="train-palette" title={`comparison room ${room.seed}`}>
-            {room.colors.map((hex, at) => (
-              <i key={`${hex}${at}`} style={{ background: hex }} />
-            ))}
-          </span>
-          <span className="train-cohort">one clock · one room · one question</span>
-        </div>
-      </section>
-
-      <aside className="train-choice train-compare-choice wdg">
-        <header>
-          <span className="train-phase">{encounter.phase}</span>
-          <span>depth {encounter.depth}</span>
-        </header>
-        <div>
-          <h2>
-            {refining ? 'Did the one change improve this family?' : 'Which direction deserves a future?'}
-          </h2>
-          <p>
-            {refining
-              ? 'Current and variation differ by one recorded intervention. Choose what should survive.'
-              : encounter.anchorId
-                ? 'Both are visible leaps from the same parent. Keep either, both, or neither.'
-                : 'These are deliberately distant immigrants. This chooses where search begins.'}
-          </p>
-          {encounter.anchorId && (
-            <p className="train-anchor">from {encounter.anchorId.slice(0, 10)}</p>
-          )}
-        </div>
-
-        <div className="train-comparison-verbs" role="group" aria-label="Choose between the pair">
-          <Choice
-            choice="left"
-            keyName="← / A"
-            title={refining ? 'keep current' : 'choose A'}
-            detail={encounter.left.flow.name}
-            choose={choose}
-          />
-          <Choice
-            choice="both"
-            keyName="↑ / W"
-            title="keep both"
-            detail="preserve two branches"
-            choose={choose}
-          />
-          <Choice
-            choice="neither"
-            keyName="↓ / X"
-            title="neither"
-            detail="no winner manufactured"
-            choose={choose}
-          />
-          <Choice
-            choice="right"
-            keyName="→ / D"
-            title={refining ? 'take variation' : 'choose B'}
-            detail={encounter.right.flow.name}
-            choose={choose}
-          />
-        </div>
-
-        <dl className="train-tally train-search-tally">
-          <div>
-            <dt>compared</dt>
-            <dd>{lab?.comparisons ?? 0}</dd>
-          </div>
-          <div>
-            <dt>explore / refine</dt>
-            <dd>{lab?.explores ?? 0} / {lab?.refines ?? 0}</dd>
-          </div>
-          <div>
-            <dt>frontier</dt>
-            <dd>{lab?.frontier ?? 0}</dd>
-          </div>
-          <div>
-            <dt>deepest</dt>
-            <dd>{lab?.maxGeneration ?? 0}</dd>
-          </div>
-        </dl>
-
-        {lab?.notice && <p className="train-notice">{lab.notice}</p>}
-        <div className="train-verbs">
-          <Button
-            tone="quiet"
-            onPress={() => labSkipEncounter(encounter.id)}
-            title="No comparison was formed — shortcut S"
-          >
-            skip this pair
-          </Button>
-          <span className="gap" />
-          <span className="train-restart-hint">R restarts both</span>
-        </div>
-      </aside>
-    </div>
-  );
-}
-
-function CandidatePane({
-  side,
-  label,
-  candidate,
-  show,
-  transport,
-  scheme,
-  edit,
-  error,
-  setError,
-  kept,
-  mark,
-}: {
-  side: 'left' | 'right';
-  label: string;
-  candidate: LabCandidate;
-  show: Show;
-  transport: Transport;
-  scheme: Scheme;
-  edit(next: Scheme): void;
-  error: string | null;
-  setError(error: string | null): void;
-  kept: boolean;
-  mark(verdict: 'keep' | 'clear'): void;
-}) {
-  const parked = useMemo(
-    () => parkedScheme(candidate.flow, candidate.bundle),
-    [candidate],
-  );
-  const promoted = useMemo(
-    () => promotedCandidateId(scheme, candidate) !== null,
-    [scheme, candidate],
-  );
-  const nodes = candidate.flow.circuit.nodes.length;
-  const copy = () => {
-    if (!promoted) edit(promoteCandidate(scheme, candidate).scheme);
-  };
-  return (
-    <article className="train-candidate" data-side={side}>
-      <header>
-        <span className="train-side">{label}</span>
-        <strong>{candidate.flow.name}</strong>
-        <button
-          type="button"
-          className="archive-star"
-          aria-pressed={kept}
-          onClick={() => mark(kept ? 'clear' : 'keep')}
-          title="Preserve this finished work independently of which direction wins"
-        >
-          {kept ? '★ kept' : '☆ keep'}
-        </button>
-        <Button tone="quiet" onPress={copy} disabled={promoted}>
-          {promoted ? 'copied ✓' : 'copy'}
-        </Button>
-      </header>
-      <div className="train-frame">
-        <Bench
-          show={show}
-          scheme={parked}
-          flow={CANDIDATE_FLOW}
-          clock={transport}
-          onError={setError}
-        />
-      </div>
-      <footer>
-        <span>
-          {nodes} nodes · generation {candidate.generation} · {operationName(candidate.operation)}
-        </span>
-        {error && <span className="train-error">{error}</span>}
-      </footer>
-    </article>
-  );
-}
-
-function Choice({
-  choice,
-  keyName,
-  title,
-  detail,
-  choose,
-}: {
-  choice: LabComparisonChoice;
-  keyName: string;
-  title: string;
-  detail: string;
-  choose(choice: LabComparisonChoice): void;
-}) {
-  return (
-    <button type="button" data-choice={choice} onClick={() => choose(choice)}>
-      <kbd>{keyName}</kbd>
-      <b>{title}</b>
-      <small>{detail}</small>
-    </button>
   );
 }

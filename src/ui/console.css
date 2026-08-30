@@ -2247,10 +2247,11 @@
   fill: var(--amber);
 }
 
-.lineage-node[data-finalist] circle {
-  fill: #fff2a8;
-  stroke: var(--amber);
-  stroke-width: 3;
+.lineage-developed {
+  fill: none;
+  stroke: #7ec8ff;
+  stroke-width: 1.2;
+  opacity: 0.7;
 }
 
 .lineage-node[data-selected] circle {
@@ -2294,9 +2295,9 @@
 
 .lineage-map > footer i[data-legend='peak'] { background: #7ec8ff; }
 .lineage-map > footer i[data-legend='kept'] { background: var(--amber); }
-.lineage-map > footer i[data-legend='finalist'] {
-  background: #fff2a8;
-  box-shadow: 0 0 0 2px var(--amber);
+.lineage-map > footer i[data-legend='developed'] {
+  background: transparent;
+  box-shadow: 0 0 0 1.5px #7ec8ff;
 }
 
 .lineage-inspector {
@@ -2389,8 +2390,138 @@
   color: var(--amber);
 }
 
-.lineage-decisions .lineage-finalist {
-  grid-column: 1 / -1;
+.lineage-decisions {
+  grid-template-columns: 1fr;
+}
+
+.lineage-develop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.lineage-develop label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--caption);
+  font: 9.5px var(--mono);
+}
+
+.lineage-develop select {
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-xs);
+  padding: 3px 5px;
+  background: var(--surface-control);
+  color: var(--fg);
+  font: 9.5px var(--mono);
+}
+
+.train-explore .explore-stage {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 9px;
+  min-width: 0;
+}
+
+.train-candidate[data-side='only'] {
+  max-width: 900px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.train-candidate[data-parent] > header .train-side {
+  color: var(--amber);
+}
+
+.develop-head {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 11px 13px;
+  border-bottom: 1px solid var(--edge);
+}
+
+.develop-head strong {
+  display: block;
+  color: var(--fg);
+}
+
+.develop-head > span {
+  color: var(--caption);
+  font: 9.5px var(--mono);
+}
+
+.develop-done {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+  background: var(--panel);
+}
+
+.develop-verdict {
+  margin: 13px 13px 0;
+  padding: 9px 11px;
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-xs);
+  color: var(--caption);
+  font: 10.5px var(--mono);
+}
+
+.develop-verdict[data-improved] {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
+.develop-standings {
+  margin: 11px 13px 17px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.develop-standings li {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1.5fr) minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 9px;
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-xs);
+  background: var(--surface-control);
+  font: 9.5px var(--mono);
+  color: var(--caption);
+}
+
+.develop-standings li[data-parent] {
+  border-color: var(--amber);
+}
+
+.develop-standings li:first-child .develop-rank {
+  color: var(--amber);
+}
+
+.develop-name {
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.develop-name em {
+  color: var(--amber);
+  font-style: normal;
+}
+
+.develop-op,
+.develop-score {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .lineage-explanation {

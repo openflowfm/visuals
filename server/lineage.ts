@@ -14,6 +14,7 @@ import {
   NODE_SPECS,
   signalOf,
   splitPort,
+  strandedNodes,
   wouldFeedItself,
   type Signal,
 } from '../src/render/circuit.ts';
@@ -228,7 +229,7 @@ export function randomCircuit(rng: Rng, maximumNodes = 7): Circuit {
     }
 
     const compiled = compileCircuit(circuit);
-    if (!compiled.error && compiled.source) return circuit;
+    if (!compiled.error && compiled.source && whole(circuit)) return circuit;
   }
   // This is the smallest useful graph and a visible failure mode if the
   // vocabulary ever changes so far that the generic constructor gets stuck.
@@ -528,6 +529,45 @@ const MUTATORS: readonly Mutator[] = [
   addBlend,
 ];
 
+/**
+ * Nothing in this circuit is doing nothing.
+ *
+ * A branch that never reaches a door draws no pixel, so a graph carrying one is
+ * *visually identical* to the same graph without it. Three things go wrong if
+ * one becomes a candidate anyway. Its id is a hash of the whole circuit, so the
+ * same picture enters the corpus twice under two ids. It arrives as its own dot
+ * and its own comparison, spending the scarcest thing here — attention — on a
+ * work already judged. And it eats the generation's node ceiling with nodes
+ * that draw nothing.
+ *
+ * The check belongs to the **candidate**, never to the edit. See `leap`: the
+ * steps inside one exploratory jump may strand whatever they like, because that
+ * jump is judged whole and is the one place where stranding a branch and
+ * blending it back in is a change somebody can actually see. Gating each step
+ * instead would delete that path and bias the operator set, which is a much
+ * larger loss than the duplicates it would save.
+ */
+const whole = (circuit: Circuit): boolean => strandedNodes(circuit).length === 0;
+
+/**
+ * One atomic edit whose result is a candidate: valid, and with nothing
+ * stranded. Resampled rather than repaired — pruning the branch would make the
+ * recorded operation stop describing what actually happened.
+ */
+function wholeMutation(
+  circuit: Circuit,
+  rng: Rng,
+  maximumNodes: number,
+  avoid?: ReadonlySet<string>,
+): AtomicMutation | null {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const mutation = mutateCircuit(circuit, rng, maximumNodes, avoid);
+    if (!mutation) return null;
+    if (whole(mutation.circuit)) return mutation;
+  }
+  return null;
+}
+
 /** One behavior-changing edit. An addition introduces at most one node. */
 export function mutateCircuit(
   circuit: Circuit,
@@ -630,6 +670,111 @@ const randomDraft = (rng: Rng): CandidateDraft => ({
   cohort: family(rng),
 });
 
+/**
+ * One fresh root, judged alone.
+ *
+ * The whole of Explore's generation policy, and the interesting thing about it
+ * is what it no longer does. `globalExplore` sampled twelve of these and showed
+ * the two most structurally distant, which meant ten new ideas were discarded
+ * unseen for every question asked — a pairing cost paid in exactly the currency
+ * the search is shortest on. A seed judged on its own merits is one look and
+ * one key, so every sample reaches a person, and "what fraction of random roots
+ * are worth anything" becomes a number the corpus can answer about its own
+ * generator rather than a thing nobody can see.
+ */
+export const seedDraft = (rng: Rng): CandidateDraft => randomDraft(rng);
+
+/**
+ * How many mutations are drawn for every one that is kept.
+ *
+ * Oversampling is what makes a batch a spread of directions rather than a
+ * handful of near-duplicates: the survivors are chosen for being unlike each
+ * other, and a pool the size of the batch would leave nothing to choose from.
+ */
+const BATCH_OVERSAMPLE = 4;
+
+/** Batches mix one-step and several-step children; this is the share of leaps. */
+const BATCH_LEAP_SHARE = 0.45;
+
+/**
+ * A parent's children, generated together and judged together.
+ *
+ * Deliberately mixed. A one-step child answers *which knob* — it is the causal
+ * question the old Refine phase asked, and its operand names the single edit
+ * responsible for any difference. A leap answers *which future*, and is the
+ * only path where stranding a branch and blending it back in is a change
+ * somebody can see, because the steps are judged as one jump. Running both in
+ * one field means a single set of comparisons answers both questions against
+ * the same parent under the same room, which is the control the scattered
+ * pairwise record never had.
+ *
+ * The survivors are picked for being unlike one another rather than for being
+ * good: nothing here has been judged yet, and letting a distance metric guess
+ * at quality is how a dealer's opinion gets in front of the person's. What it
+ * may legitimately do is refuse to ask the same question twice.
+ */
+export function batchDrafts(
+  parent: EvidenceCandidate,
+  count: number,
+  rng: Rng,
+): CandidateDraft[] {
+  const limit = nodeLimit(parent.generation + 1);
+  const pool: CandidateDraft[] = [];
+  const seen = new Set<string>([JSON.stringify(parent.flow.circuit)]);
+
+  const admit = (draft: CandidateDraft | null) => {
+    if (!draft) return;
+    const key = JSON.stringify(draft.flow.circuit);
+    if (seen.has(key)) return;
+    seen.add(key);
+    pool.push(draft);
+  };
+
+  for (let attempt = 0; attempt < count * BATCH_OVERSAMPLE * 3 && pool.length < count * BATCH_OVERSAMPLE; attempt++) {
+    if (chance(rng, BATCH_LEAP_SHARE)) {
+      const made = leap(parent, rng);
+      admit(made?.draft ?? null);
+      continue;
+    }
+    const mutation = wholeMutation(parent.flow.circuit, rng, limit);
+    if (!mutation) continue;
+    admit({
+      flow: { name: name(rng), circuit: mutation.circuit },
+      bundle: parent.bundle,
+      parents: [parent.id],
+      operation: mutation.operation,
+      operationData: mutation.data,
+      generation: parent.generation + 1,
+      cohort: parent.cohort,
+    });
+  }
+
+  // A greedy spread: take one, then repeatedly take whichever remaining child
+  // is least like everything already taken. The same beam the frontier used,
+  // with the quality term removed, because there is no evidence yet to weigh.
+  const chosen: CandidateDraft[] = [];
+  while (pool.length > 0 && chosen.length < count) {
+    let bestAt = 0;
+    let best = -Infinity;
+    for (let at = 0; at < pool.length; at++) {
+      const novelty =
+        chosen.length === 0
+          ? 0
+          : Math.min(
+              ...chosen.map((other) =>
+                circuitDistance(pool[at].flow.circuit, other.flow.circuit),
+              ),
+            );
+      if (novelty > best) {
+        best = novelty;
+        bestAt = at;
+      }
+    }
+    chosen.push(pool.splice(bestAt, 1)[0]);
+  }
+  return chosen;
+}
+
 const farthest = <T>(values: readonly T[], distance: (a: T, b: T) => number): [T, T] | null => {
   let best: [T, T] | null = null;
   let bestDistance = -1;
@@ -679,7 +824,11 @@ function leap(parent: EvidenceCandidate, rng: Rng): Leap | null {
     used.add(mutation.operation);
     steps.push({ operation: mutation.operation, data: mutation.data });
   }
-  if (steps.length < 2) return null;
+  // The steps above were free to strand a branch; the jump they add up to is
+  // not. This is the one path where stranding something and blending it back in
+  // is a single visible change, which is exactly why it is checked here and not
+  // inside the loop.
+  if (steps.length < 2 || !whole(circuit)) return null;
   const distance = circuitDistance(parent.flow.circuit, circuit);
   return {
     distance,
@@ -731,8 +880,8 @@ const refine = (
         return child ? [child.operation] : [];
       }),
   );
-  let mutation = mutateCircuit(parent.flow.circuit, rng, nodeLimit(parent.generation + 1), tried);
-  if (!mutation) mutation = mutateCircuit(parent.flow.circuit, rng, nodeLimit(parent.generation + 1));
+  let mutation = wholeMutation(parent.flow.circuit, rng, nodeLimit(parent.generation + 1), tried);
+  if (!mutation) mutation = wholeMutation(parent.flow.circuit, rng, nodeLimit(parent.generation + 1));
   if (!mutation) return null;
   return {
     phase: 'refine',
