@@ -905,6 +905,20 @@ export interface LabBatchEncounter {
 export interface LabBatchSubmission {
   encounterId: number;
   choice: LabComparisonChoice;
+  /**
+   * The room this match was actually answered under — the batch's, or the
+   * batch's with a colourway of the person's choosing over it.
+   *
+   * The same shape `LabSubmission` already carries, and for the same reason: a
+   * judgment is only meaningful beside the conditions it was made in, and the
+   * batch's dealt room stops describing them the moment somebody re-lights the
+   * field. Both sides of a match always share it, so swapping palettes cannot
+   * bias a choice; what it does change is what "all under one room" means
+   * across a batch, and that has to be recoverable rather than assumed.
+   *
+   * Absent means the batch's own room, which is what the server stores.
+   */
+  room?: LabRoom;
 }
 
 /**

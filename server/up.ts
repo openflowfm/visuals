@@ -68,6 +68,15 @@ const COMPARISON = z.object({
   ]),
 });
 
+/**
+ * A batch match, and the room it was answered under.
+ *
+ * Optional, and only here: the legacy search's `lab-compare` takes the plain
+ * shape, because nothing can change the room under it any more and a field
+ * that is never sent is a field that will be wrong the day somebody reads it.
+ */
+const BATCH_COMPARISON = COMPARISON.extend({ room: ROOM.optional() });
+
 const FINALS_COMPARISON = COMPARISON.extend({
   leftShowReady: z.boolean(),
   rightShowReady: z.boolean(),
@@ -160,7 +169,7 @@ const UP = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('lab-bookmark'), decision: BOOKMARK }),
   z.object({ kind: z.literal('lab-develop-open'), candidateId: z.string() }),
   z.object({ kind: z.literal('lab-develop-deal'), request: DEVELOP_REQUEST }),
-  z.object({ kind: z.literal('lab-develop-compare'), comparison: COMPARISON }),
+  z.object({ kind: z.literal('lab-develop-compare'), comparison: BATCH_COMPARISON }),
   z.object({ kind: z.literal('lab-develop-skip'), encounterId: z.number().int().positive() }),
   z.object({ kind: z.literal('lab-develop-close') }),
   z.object({ kind: z.literal('lab-finals-open') }),

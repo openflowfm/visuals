@@ -5,6 +5,7 @@ import type {
   LabBookmarkSubmission,
   LabCandidate,
   LabComparisonChoice,
+  LabDevelopRequest,
   LabDevelopState,
   Scheme,
   Show,
@@ -41,6 +42,8 @@ export function DevelopView({
   compare,
   skip,
   close,
+  deal,
+  sizes,
   bookmark,
   bookmarkedIds,
   edit,
@@ -51,6 +54,8 @@ export function DevelopView({
   compare(comparison: LabBatchSubmission): void;
   skip(encounterId: number): void;
   close(): void;
+  deal(request: LabDevelopRequest): void;
+  sizes: readonly number[];
   bookmark(decision: LabBookmarkSubmission): void;
   bookmarkedIds: ReadonlySet<string>;
   edit(next: Scheme): void;
@@ -65,9 +70,29 @@ export function DevelopView({
     shown: string | null;
   }>({ left: null, right: null, shown: null });
   const [shownId, setShownId] = useState<string | null>(null);
+  const [colorway, setColorway] = useState<string>('');
   const encounter = develop.encounter;
   const encounterId = encounter?.id ?? null;
-  const room = develop.room;
+
+  /**
+   * The batch's room, re-lit if somebody asked for a different colourway.
+   *
+   * A dealt palette is a fair test and not always a useful one: three rounds
+   * spent deciding between variations you would never light that way answers a
+   * question nobody asked. Both sides always take the same room, so this cannot
+   * favour a side — and every comparison carries the room it was answered
+   * under, so the record says which light the choice was made in rather than
+   * assuming the dealt one.
+   *
+   * Only the colours. Tempo, energy, section and key are the controlled part of
+   * the field, and a knob for those would be a way to keep re-asking a question
+   * until the answer is the one you wanted.
+   */
+  const room = useMemo(() => {
+    const hex = scheme.colorways[colorway];
+    return colorway && hex?.length ? { ...develop.room, colors: [...hex] } : develop.room;
+  }, [develop.room, scheme.colorways, colorway]);
+  const colorways = Object.keys(scheme.colorways);
 
   useEffect(() => {
     transport.setBpm(room.tempo);
@@ -80,7 +105,7 @@ export function DevelopView({
   }, [encounterId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const choose = (choice: LabComparisonChoice) => {
-    if (encounter) compare({ encounterId: encounter.id, choice });
+    if (encounter) compare({ encounterId: encounter.id, choice, room });
   };
 
   const leader = develop.standings[0] ?? null;
@@ -90,6 +115,12 @@ export function DevelopView({
   // same work, and an id that is no longer in the field falls back to the top
   // instead of showing nothing.
   const shown = develop.standings.find((row) => row.candidate.id === shownId) ?? leader;
+  // The field this batch actually had, when that is still an offered size. A
+  // batch can come up short — a draft that would have rendered a picture
+  // already in the corpus is refused rather than staged — and asking for a
+  // size the engine does not offer would come back as a notice instead of a
+  // batch.
+  const again = sizes.includes(develop.size) ? develop.size : (sizes[1] ?? sizes[0]);
   const keyName = room.key === null ? 'no key' : (KEYS[room.key] ?? 'no key');
 
   useEffect(() => {
@@ -160,6 +191,19 @@ export function DevelopView({
           <span>
             {develop.compared} of {develop.total} matches answered · ↑↓ walks the field
           </span>
+          {shown && (
+            <Button
+              onPress={() => {
+                // Closed first because the engine deals one batch at a time,
+                // and both ride the same socket in order — so this is exactly
+                // the two gestures it replaces, not a new path into the store.
+                close();
+                deal({ candidateId: shown.candidate.id, size: again });
+              }}
+            >
+              {shown.rank === 1 ? 'develop the winner' : 'develop this one'}
+            </Button>
+          )}
           <Button onPress={close}>back to the forest</Button>
         </header>
 
@@ -218,7 +262,10 @@ export function DevelopView({
                   <i key={`${hex}${at}`} style={{ background: hex }} />
                 ))}
               </span>
-              <span className="train-cohort">the room this batch was judged in</span>
+              <Colorway colorway={colorway} colorways={colorways} set={setColorway} />
+              <span className="train-cohort">
+                {colorway ? 'the batch room, re-lit' : 'the room this batch was judged in'}
+              </span>
             </div>
           </div>
 
@@ -291,7 +338,10 @@ export function DevelopView({
               <i key={`${hex}${at}`} style={{ background: hex }} />
             ))}
           </span>
-          <span className="train-cohort">one room for the whole batch</span>
+          <Colorway colorway={colorway} colorways={colorways} set={setColorway} />
+          <span className="train-cohort">
+            {colorway ? `one room for the whole batch, lit as ${colorway}` : 'one room for the whole batch'}
+          </span>
         </div>
       </section>
 
@@ -343,6 +393,32 @@ export function DevelopView({
         </div>
       </aside>
     </div>
+  );
+}
+
+/** Re-light the field, without touching anything the field controls. */
+function Colorway({
+  colorway,
+  colorways,
+  set,
+}: {
+  colorway: string;
+  colorways: readonly string[];
+  set(next: string): void;
+}) {
+  if (colorways.length === 0) return null;
+  return (
+    <label className="train-colorway">
+      light
+      <select value={colorway} onChange={(event) => set(event.target.value)}>
+        <option value="">as dealt</option>
+        {colorways.map((name) => (
+          <option key={name} value={name}>
+            {name}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

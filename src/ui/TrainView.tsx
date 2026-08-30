@@ -161,6 +161,8 @@ export function TrainView(props: TrainViewProps) {
               compare={props.labDevelopCompare}
               skip={props.labDevelopSkip}
               close={props.labDevelopClose}
+              deal={props.labDevelopDeal}
+              sizes={BATCH_SIZES}
               bookmark={props.labBookmark}
               bookmarkedIds={bookmarkedIds}
               edit={props.edit}

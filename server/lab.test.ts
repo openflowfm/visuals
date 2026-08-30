@@ -456,7 +456,7 @@ describe('the store', () => {
     });
     store.batchCompare(
       { encounterId: match, choice: 'right' },
-      { batchId: batch, rendererVersion: 'p@1' },
+      { batchId: batch, rendererVersion: 'p@1', room: dealRoom('batch-room') },
     );
 
     const text = store.exportJsonl();

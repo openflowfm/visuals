@@ -256,6 +256,49 @@ describe('Develop runs a batch somebody asked for', () => {
     expect(done.improved).toBe(false);
   });
 
+  it('records the room a match was answered under when the light was changed', () => {
+    const store = open();
+    const engine = labSearchEngine(store, lineageMethod(), 'relight-deck');
+    let state = engine.exploreOpen();
+    const seed = state.explore!.encounter!;
+    state = engine.exploreJudge({ encounterId: seed.id, verdict: 'yes' });
+    state = engine.developDeal({ candidateId: seed.candidate.id, size: 6 });
+
+    const dealt = state.develop!.room;
+    const relit = { ...dealt, colors: ['#ff0000', '#00ff00'] };
+    const first = state.develop!.encounter!;
+    state = engine.developCompare({ encounterId: first.id, choice: 'left', room: relit });
+
+    // The batch keeps the room it was dealt: that one is the field's control,
+    // and a person changing the light must not be able to rewrite it.
+    expect(state.develop!.room).toEqual(dealt);
+
+    const rows = store
+      .exportJsonl()
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    const comparison = rows.find((row) => row.t === 'batch_comparison')!;
+    const challenge = rows.find(
+      (row) => row.t === 'challenge' && row.id === comparison.challenge_id,
+    )!;
+    expect(JSON.parse(challenge.room_json as string).colors).toEqual(['#ff0000', '#00ff00']);
+
+    // And a match answered without saying anything is the batch's own room.
+    const second = state.develop!.encounter!;
+    state = engine.developCompare({ encounterId: second.id, choice: 'left' });
+    const after = store
+      .exportJsonl()
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    const plain = after.filter((row) => row.t === 'batch_comparison')[1]!;
+    const dealtChallenge = after.find(
+      (row) => row.t === 'challenge' && row.id === plain.challenge_id,
+    )!;
+    expect(JSON.parse(dealtChallenge.room_json as string).colors).toEqual(dealt.colors);
+  });
+
   it('records that the family improved when a child leads', () => {
     const engine = labSearchEngine(open(), lineageMethod(), 'improve-deck');
     let state = engine.exploreOpen();

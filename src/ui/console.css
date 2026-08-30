@@ -2456,6 +2456,23 @@
   font: 9.5px var(--mono);
 }
 
+.train-colorway {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--caption);
+  font: 9.5px var(--mono);
+}
+
+.train-colorway select {
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-xs);
+  padding: 2px 5px;
+  background: var(--surface-control);
+  color: var(--fg);
+  font: 9.5px var(--mono);
+}
+
 .lineage-develop select {
   border: 1px solid var(--bd3);
   border-radius: var(--radius-xs);

@@ -357,6 +357,14 @@ const MIGRATIONS: readonly string[] = [
     created_at TEXT NOT NULL
   );
   `,
+  `
+  -- The room a batch match was answered under, which is the batch's until
+  -- somebody changes the colourway mid-field. Nullable, and null means the
+  -- batch's own: every comparison recorded before this column existed was
+  -- answered under the dealt room, and writing that id in retroactively would
+  -- be inventing a fact rather than recording one.
+  ALTER TABLE batch_comparisons ADD COLUMN challenge_id TEXT REFERENCES challenges(id);
+  `,
 ];
 
 export interface StoredCandidate {
@@ -573,7 +581,7 @@ export interface LabStore {
   batchEvidence(batchId: number): BatchComparisonEvidence[];
   batchCompare(
     comparison: LabBatchSubmission,
-    at: { batchId: number; rendererVersion: string },
+    at: { batchId: number; rendererVersion: string; room: LabRoom },
   ): { ok: true } | { ok: false; problem: string };
   skipBatchEncounter(encounterId: number, batchId: number): void;
   completeBatch(batchId: number): void;
@@ -1756,12 +1764,23 @@ export function openLab(file: string): LabStore {
         )
         .get(comparison.encounterId, at.batchId);
       if (!pending) return { ok: false, problem: 'that match is not waiting for an answer' };
+      const roomJson = JSON.stringify(at.room);
+      const challengeId = sha(roomJson);
       transaction(() => {
         db.prepare(
+          'INSERT OR IGNORE INTO challenges (id, room_json, challenge_version) VALUES (?, ?, 1)',
+        ).run(challengeId, roomJson);
+        db.prepare(
           `INSERT INTO batch_comparisons
-           (encounter_id, choice, renderer_version, created_at)
-           VALUES (?, ?, ?, ?)`,
-        ).run(comparison.encounterId, comparison.choice, at.rendererVersion, now());
+           (encounter_id, choice, renderer_version, challenge_id, created_at)
+           VALUES (?, ?, ?, ?, ?)`,
+        ).run(
+          comparison.encounterId,
+          comparison.choice,
+          at.rendererVersion,
+          challengeId,
+          now(),
+        );
         db.prepare(
           `UPDATE batch_encounters SET disposition = 'compared', decided_at = ?
            WHERE id = ? AND batch_id = ? AND disposition = 'pending'`,
@@ -3245,6 +3264,10 @@ export function labSearchEngine<State>(
       const answer = store.batchCompare(comparison, {
         batchId: batch.id,
         rendererVersion: RENDERER,
+        // The room the person says they answered under, and the batch's when
+        // they say nothing. Never read back off the client as the batch's own
+        // room: that one is the field's control and only the dealer sets it.
+        room: comparison.room ?? batch.room,
       });
       if (!answer.ok) {
         developNotice = answer.problem;
