@@ -56,23 +56,45 @@ export function DevelopView({
   edit(next: Scheme): void;
 }) {
   const transport = useTransport(clock, false);
-  const [errors, setErrors] = useState<{ left: string | null; right: string | null }>({
-    left: null,
-    right: null,
-  });
+  const [errors, setErrors] = useState<{
+    left: string | null;
+    right: string | null;
+    // The results screen draws one entrant at a time and outlives the matches,
+    // so a compile error there is its own: reusing a pane's slot would print
+    // the last match's failure under a winner that draws perfectly well.
+    shown: string | null;
+  }>({ left: null, right: null, shown: null });
+  const [shownId, setShownId] = useState<string | null>(null);
   const encounter = develop.encounter;
   const encounterId = encounter?.id ?? null;
+  const room = develop.room;
+
+  useEffect(() => {
+    transport.setBpm(room.tempo);
+  }, [room.tempo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!encounter) return;
-    setErrors({ left: null, right: null });
-    transport.setBpm(encounter.room.tempo);
+    setErrors((was) => ({ ...was, left: null, right: null }));
     transport.restart();
   }, [encounterId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const choose = (choice: LabComparisonChoice) => {
     if (encounter) compare({ encounterId: encounter.id, choice });
   };
+
+  const leader = develop.standings[0] ?? null;
+  const complete = develop.status === 'complete' || !encounter;
+  // Looked up rather than held, so a standing that moves under the viewer —
+  // the last match answered re-ranks the field — leaves it pointing at the
+  // same work, and an id that is no longer in the field falls back to the top
+  // instead of showing nothing.
+  const shown = develop.standings.find((row) => row.candidate.id === shownId) ?? leader;
+  const keyName = room.key === null ? 'no key' : (KEYS[room.key] ?? 'no key');
+
+  useEffect(() => {
+    setErrors((was) => ({ ...was, shown: null }));
+  }, [shown?.candidate.id]);
 
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
@@ -86,6 +108,25 @@ export function DevelopView({
         return;
       }
       const pressed = event.key.toLowerCase();
+      if (pressed === 'r') {
+        event.preventDefault();
+        transport.restart();
+        return;
+      }
+      // The same arrows mean different things either side of the last match,
+      // because the screen is asking a different question: while judging they
+      // answer it, and afterwards they walk the field.
+      if (complete) {
+        const step = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0;
+        if (!step || develop.standings.length === 0) return;
+        event.preventDefault();
+        const at = develop.standings.findIndex((row) => row.candidate.id === shown?.candidate.id);
+        const next = develop.standings[
+          Math.min(Math.max(at + step, 0), develop.standings.length - 1)
+        ];
+        if (next) setShownId(next.candidate.id);
+        return;
+      }
       const choice: LabComparisonChoice | null =
         event.key === 'ArrowLeft' || pressed === 'a'
           ? 'left'
@@ -102,17 +143,11 @@ export function DevelopView({
       } else if (pressed === 's' && encounterId) {
         event.preventDefault();
         skip(encounterId);
-      } else if (pressed === 'r') {
-        event.preventDefault();
-        transport.restart();
       }
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
-  }, [encounterId, compare, skip]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const leader = develop.standings[0] ?? null;
-  const complete = develop.status === 'complete' || !encounter;
+  }, [encounterId, compare, skip, complete, shown?.candidate.id, develop.standings]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (complete) {
     return (
@@ -123,7 +158,7 @@ export function DevelopView({
             <strong>{develop.parent.flow.name}</strong>
           </div>
           <span>
-            {develop.compared} of {develop.total} matches answered
+            {develop.compared} of {develop.total} matches answered · ↑↓ walks the field
           </span>
           <Button onPress={close}>back to the forest</Button>
         </header>
@@ -140,23 +175,71 @@ export function DevelopView({
             : 'Nothing in this batch beat the parent — this node is at a local peak.'}
         </p>
 
-        <Standings
-          standings={develop.standings}
-          scheme={scheme}
-          bookmarkedIds={bookmarkedIds}
-          bookmark={bookmark}
-          edit={edit}
-        />
+        <section className="develop-result">
+          <div className="develop-stage">
+            {shown && (
+              <Pane
+                side="only"
+                candidate={shown.candidate}
+                parentId={develop.parent.id}
+                standing={shown}
+                // One seed for the whole field, so stepping through entrants
+                // changes the picture and nothing else. A seed per candidate
+                // would hand each one a different song underneath, which is the
+                // one difference nobody in this batch was judging.
+                show={stagedShow(room, `batch:${develop.batchId}`)}
+                transport={transport}
+                scheme={scheme}
+                edit={edit}
+                error={errors.shown}
+                setError={(error) => setErrors((was) => ({ ...was, shown: error }))}
+                bookmarked={bookmarkedIds.has(shown.candidate.id)}
+                bookmark={bookmark}
+              />
+            )}
+
+            <div className="train-room train-room-frozen wdg">
+              <Button
+                tone="quiet"
+                label={transport.playing ? 'Hold the clock' : 'Run the clock'}
+                onPress={() => transport.setPlaying(!transport.playing)}
+              >
+                {transport.playing ? '■' : '▶'}
+              </Button>
+              <Button tone="quiet" label="Restart at the bar" onPress={transport.restart}>
+                ↺
+              </Button>
+              <span>{Math.round(room.tempo)} bpm</span>
+              <span>{Math.round(room.energy * 100)}% energy</span>
+              <span>{room.section.toLowerCase()}</span>
+              <span>{keyName}</span>
+              <span className="train-palette" title={`batch room ${room.seed}`}>
+                {room.colors.map((hex, at) => (
+                  <i key={`${hex}${at}`} style={{ background: hex }} />
+                ))}
+              </span>
+              <span className="train-cohort">the room this batch was judged in</span>
+            </div>
+          </div>
+
+          <Standings
+            standings={develop.standings}
+            shownId={shown?.candidate.id ?? null}
+            show={setShownId}
+            scheme={scheme}
+            bookmarkedIds={bookmarkedIds}
+            bookmark={bookmark}
+            edit={edit}
+          />
+        </section>
         {develop.notice && <p className="train-notice">{develop.notice}</p>}
       </div>
     );
   }
 
-  const room = encounter.room;
   // One seed for both sides: a `song` node must not read a different hash on
   // each side, or the room is not actually held between them.
   const show = stagedShow(room, `batch:${develop.batchId}:${encounter.id}`);
-  const keyName = room.key === null ? 'no key' : (KEYS[room.key] ?? 'no key');
 
   return (
     <div className="train train-comparison develop">
@@ -263,14 +346,26 @@ export function DevelopView({
   );
 }
 
+/**
+ * The field, and the way back into any of it.
+ *
+ * A standing is a row you can look at, not just a row you can read. The
+ * numbers say which entrant won; only the picture says what winning looked
+ * like, and a batch whose result is a name in a list makes the person carry
+ * nine variations in their head to know what they chose.
+ */
 function Standings({
   standings,
+  shownId,
+  show,
   scheme,
   bookmarkedIds,
   bookmark,
   edit,
 }: {
   standings: LabDevelopState['standings'];
+  shownId: string | null;
+  show(candidateId: string): void;
   scheme: Scheme;
   bookmarkedIds: ReadonlySet<string>;
   bookmark(decision: LabBookmarkSubmission): void;
@@ -281,17 +376,29 @@ function Standings({
       {standings.map((row) => {
         const marked = bookmarkedIds.has(row.candidate.id);
         const copied = promotedCandidateId(scheme, row.candidate) !== null;
+        const isShown = row.candidate.id === shownId;
         return (
-          <li key={row.candidate.id} data-parent={row.isParent ? '' : undefined}>
-            <span className="develop-rank">{row.rank}</span>
-            <span className="develop-name">
-              {row.candidate.flow.name}
-              {row.isParent && <em> · the parent</em>}
-            </span>
-            <span className="develop-op">{operationName(row.candidate.operation)}</span>
-            <span className="develop-score">
-              {Math.round(row.preference * 100)}% over {row.matches}
-            </span>
+          <li
+            key={row.candidate.id}
+            data-parent={row.isParent ? '' : undefined}
+            data-shown={isShown ? '' : undefined}
+          >
+            <button
+              type="button"
+              className="develop-pick"
+              aria-pressed={isShown}
+              onClick={() => show(row.candidate.id)}
+            >
+              <span className="develop-rank">{row.rank}</span>
+              <span className="develop-name">
+                {row.candidate.flow.name}
+                {row.isParent && <em> · the parent</em>}
+              </span>
+              <span className="develop-op">{operationName(row.candidate.operation)}</span>
+              <span className="develop-score">
+                {Math.round(row.preference * 100)}% over {row.matches}
+              </span>
+            </button>
             <button
               type="button"
               className="archive-star"
@@ -318,6 +425,7 @@ function Pane({
   side,
   candidate,
   parentId,
+  standing,
   show,
   transport,
   scheme,
@@ -327,9 +435,11 @@ function Pane({
   bookmarked,
   bookmark,
 }: {
-  side: 'left' | 'right';
+  side: 'left' | 'right' | 'only';
   candidate: LabCandidate;
   parentId: string;
+  /** Where this one placed, on the results screen. Absent while judging. */
+  standing?: LabDevelopState['standings'][number];
   show: Show;
   transport: Transport;
   scheme: Scheme;
@@ -348,6 +458,7 @@ function Pane({
   return (
     <article className="train-candidate" data-side={side} data-parent={isParent ? '' : undefined}>
       <header>
+        {standing && <span className="develop-rank">{standing.rank}</span>}
         <span className="train-side">{isParent ? 'the parent' : operationName(candidate.operation)}</span>
         <strong>{candidate.flow.name}</strong>
         <button
@@ -373,6 +484,10 @@ function Pane({
       <footer>
         <span>
           {candidate.flow.circuit.nodes.length} nodes · generation {candidate.generation}
+          {standing &&
+            ` · won ${Math.round(standing.preference * 100)}% over ${standing.matches} ${
+              standing.matches === 1 ? 'match' : 'matches'
+            }`}
         </span>
         {error && <span className="train-error">{error}</span>}
       </footer>

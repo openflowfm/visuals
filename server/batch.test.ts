@@ -245,6 +245,12 @@ describe('Develop runs a batch somebody asked for', () => {
     expect(done.status).toBe('complete');
     expect(done.encounter).toBeNull();
     expect(done.compared).toBe(done.total);
+    // The results screen re-stages an entrant in the room it was judged in, so
+    // the room has to outlive the encounter that used to carry it — and every
+    // entrant has to still be there to be looked at, not just the winner.
+    expect(done.room).toEqual(develop.room);
+    expect(done.standings).toHaveLength(develop.size);
+    expect(done.standings.every((row) => row.candidate.flow.circuit.nodes.length > 0)).toBe(true);
     // The result the old Refine phase could not state.
     expect(done.standings[0].isParent).toBe(true);
     expect(done.improved).toBe(false);

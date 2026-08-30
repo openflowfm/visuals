@@ -2804,6 +2804,7 @@ export function labSearchEngine<State>(
     return {
       batchId: batch.id,
       parent,
+      room: batch.room,
       status: batch.status === 'judging' && held ? 'judging' : 'complete',
       size: entrants.length,
       compared: answered,
@@ -2814,7 +2815,6 @@ export function labSearchEngine<State>(
               id: held.id,
               left,
               right,
-              room: batch.room,
               round: held.round,
               rounds: batch.rounds,
             }

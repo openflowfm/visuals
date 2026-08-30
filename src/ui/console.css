@@ -2501,11 +2501,37 @@
 }
 
 .develop-done {
+  flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
   background: var(--panel);
+}
+
+.develop-result {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr);
+  gap: 13px;
+  padding: 11px 13px 13px;
+}
+
+.develop-stage {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 9px;
+}
+
+@media (max-width: 900px) {
+  .develop-result {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(220px, 1fr) minmax(0, 1fr);
+    overflow: auto;
+  }
 }
 
 .develop-verdict {
@@ -2523,8 +2549,10 @@
 }
 
 .develop-standings {
-  margin: 11px 13px 17px;
+  margin: 0;
   padding: 0;
+  min-height: 0;
+  overflow-y: auto;
   list-style: none;
   display: flex;
   flex-direction: column;
@@ -2533,7 +2561,7 @@
 
 .develop-standings li {
   display: grid;
-  grid-template-columns: 26px minmax(0, 1.5fr) minmax(0, 1fr) auto auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 9px;
   padding: 5px 9px;
@@ -2548,8 +2576,38 @@
   border-color: var(--amber);
 }
 
+.develop-standings li[data-shown] {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 2px var(--focus);
+}
+
 .develop-standings li:first-child .develop-rank {
   color: var(--amber);
+}
+
+.develop-pick {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1.6fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.develop-pick:focus-visible {
+  outline: 1px solid var(--amber);
+  outline-offset: 2px;
+}
+
+.train-candidate > header .develop-rank {
+  color: var(--amber);
+  font: 9.5px var(--mono);
 }
 
 .develop-name {

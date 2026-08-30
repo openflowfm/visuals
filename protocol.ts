@@ -898,7 +898,6 @@ export interface LabBatchEncounter {
   id: number;
   left: LabCandidate;
   right: LabCandidate;
-  room: LabRoom;
   round: number;
   rounds: number;
 }
@@ -918,6 +917,20 @@ export interface LabBatchSubmission {
 export interface LabDevelopState {
   batchId: number;
   parent: LabCandidate;
+  /**
+   * The one room every match in this batch was judged under.
+   *
+   * On the batch rather than on the encounter, where Explore and Finals keep
+   * theirs, because those two genuinely have a room per encounter — Explore
+   * deals one with each seed, Finals runs a deck of four — and a batch has
+   * exactly one by construction. Two homes for it would let the results screen
+   * re-stage a winner under a room nobody judged it in, which is a different
+   * picture and therefore a different work.
+   *
+   * It also has to outlive the encounter: the field stays viewable after the
+   * last match is answered, and by then there is no encounter to carry it.
+   */
+  room: LabRoom;
   status: 'judging' | 'complete';
   size: number;
   compared: number;
