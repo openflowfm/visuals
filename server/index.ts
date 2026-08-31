@@ -11,7 +11,7 @@ import {
   type Up,
 } from '../protocol.ts';
 import { nextColorway, nextFlow, reOne } from '../resolve.ts';
-import { newSeed } from '../roll.ts';
+import { newSeed } from '../randomize.ts';
 import { bundleOf } from '../lab.ts';
 import { CALIBRATION_TRIALS } from '../calibration.ts';
 import { followBridge } from './bridge.ts';

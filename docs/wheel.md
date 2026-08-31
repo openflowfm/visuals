@@ -1,6 +1,6 @@
 # The wheel
 
-`resolve.ts`, `server/show.ts`, `server/scheme.ts`, `roll.ts`. What is on screen, and why.
+`resolve.ts`, `server/show.ts`, `server/scheme.ts`, `randomize.ts`. What is on screen, and why.
 
 ## It replaced a cascade
 
@@ -201,6 +201,26 @@ Each track takes a colour by its position in the set out of whatever colourway i
 your place in the grid during a show, and driving the picture from them would force a choice
 between a set you can navigate and a set that looks right.
 
+### A colourway is five roles, and the length is fixed
+
+`primary`, `secondary`, `complement`, `accent`, `chalk` — `COLOR_ROLES` in `protocol.ts`.
+Each names the job the colour does in a picture rather than where it sits, so a source asks
+for the kind of colour it needs and any colourway can answer.
+
+This replaced a list of any length whose only distinction was position, of which **a flow
+could reach exactly one**. Every generator drew from `colors[0]` and invented the rest,
+mixing toward `vec3(1.0)` or toward its own complement — so a five-colour palette rendered
+as one member plus two colours that were not in it, and members two through five were
+reachable only through a `tracks` node handing them out by position in the set. The cheap
+per-track pass was the only thing in the rig honouring the palette.
+
+**Fixed at five**, because outlets are static on a node spec and the colourway on the wheel
+changes every `colorEvery` bars. A `colorway` node's per-role outlets cannot follow a
+palette that changes length, and a cord orphaned by editing a *palette* — in a flow that is
+not even open — is the worst kind of action at a distance. `paletteOf` is the one place a
+shorter stored colourway is made to answer, called from `merge` so the repair is written
+back rather than redone sixty times a second.
+
 ## The scheme library
 
 `~/.openflow/visuals/schemes/<id>.json`, one saved scheme per file. On a new library,
@@ -344,14 +364,19 @@ and the library should contain one honest example of that rather than only the c
 They are also **laid out from their own wiring** — a column per step along the signal — so
 the first thing anyone opens reads left to right instead of needing untangling.
 
-## Rolling a library
+## Randomising a library
 
-`roll` deals a new one from a seed. It used to roll a *show* — colourways, song assignments,
-section energies, per-track bindings and two circuits at once — because a show was a table of
-decisions with a couple of graphs in it. A show is a library and a wheel now, so it rolls the
-two things a library is made of: **flows and colourways**.
+`randomize` deals a new one from a seed. It used to deal a *show* — colourways, song
+assignments, section energies, per-track bindings and two circuits at once — because a show
+was a table of decisions with a couple of graphs in it. A show is a library and a wheel now,
+so it deals the two things a library is made of: **flows and colourways**.
 
-A rolled flow walks a **shape** — a structure a person might wire — and randomises what
+It was called `roll`, and the word had to go. A roll is a piano roll in every DAW there is,
+and this repo proves the point on itself — `tools/fake-live.ts` uses "the roll" throughout to
+mean the chart's note display, three directories from a function that meant something else
+entirely.
+
+A randomised flow walks a **shape** — a structure a person might wire — and randomises what
 fills each slot. A random walk over the whole vocabulary produces garbage nine times in
 ten; the shape is what makes it a flow and the fill is what makes it a different one every
 time. There are **five shapes** now, where one deck of judged deals showed a single shape
@@ -361,22 +386,28 @@ lamp at a driven `place`, over the set or a dimmed wash), a spread finish, and a
 whose colour turns with the song's key. `video`, `flow` and `polar` stay out on purpose —
 files a machine may not have, a library a deal must not assume, and an authoring tool.
 
-Three constraints are worth stating because they are what make a rolled one read as
+Three constraints are worth stating because they are what make a dealt one read as
 *something*:
 
-- **It reaches for the set more often than not.** A rolled flow that ignored whoever is
+- **It reaches for the set more often than not.** A randomised flow that ignored whoever is
   playing is a screensaver, and this rig is not one.
 - **It wires at most one `spread`, and only over a cheap chain.** `bloom`, `smear`, `edge`
   and `shift` each read their input several times, so nesting two — or putting one over a
   fractal, field or light — multiplies the shader. A hand reaches for one knowing what it
-  costs; a roll follows the rule constructively, so it can never wire the multiplication
-  the compiler would refuse.
-- **Colours are a harmony, not five hues**, and the harmony always contains an opposite. A
-  base, one of five relationships to it, **two members taken loud** — the base and whatever
-  sits furthest from it — and one kept as a **tint** so a busy frame has something to read
-  edges against. Two of the five relationships used to be a spread of neighbours, and a set
-  drawn out of one of those is a wall in a single colour: harmonious, and indistinguishable
-  from a gel over the lamp.
+  costs; the randomiser follows the rule constructively, so it can never wire the
+  multiplication the compiler would refuse.
+- **Every colour is dealt to its role.** A colourway is five named jobs — `primary`,
+  `secondary`, `complement`, `accent`, `chalk` — and each harmony now states which offset
+  fills which. It did not used to: the deal found whichever member sat furthest round the
+  wheel and called that the loud answer, then picked one of the leftovers at random to be the
+  light one. So which *position* held the opposite moved from deal to deal, which was
+  survivable while nothing could reach past the first colour and is not now that a graph
+  wires to a role.
+
+  Every relationship still contains an opposite, because a palette of neighbours is a wall in
+  a single colour — harmonious, and indistinguishable from a gel over the lamp. What changed
+  is that the opposite is *chosen* rather than found, and it lands in `complement` where the
+  vocabulary says it is.
 
   **Saturated is not the same as bright, and confusing the two is what made these pastel.**
   The old range topped out at 70% lightness, where a hue has given away most of itself
@@ -385,7 +416,15 @@ Three constraints are worth stating because they are what make a rolled one read
   brightness at all, and the ones that vanish on a cheap lamp are always the blues. What the
   projector argument actually asks for is *not dark*; it never asked for pale.
 
-**Nothing about the songs is rolled.** A song entry is an override, and rolling one would be
+  **And the same lesson holds at the other end, which took a second telling.** `chalk` is
+  taken at nearly *full* saturation and skips the hue-evening lift entirely. At 88% lightness
+  a hue has almost no room left to be a colour in, so a saturation of 0.3 there is white with
+  a rumour on it — and the lift, which exists so a blue at mid lightness is not nearly black,
+  pushes a blue tint into its 0.94 ceiling where no saturation can put the hue back. The one
+  colour in the palette that must not be white was the one being turned white. `EXAMPLES` has
+  been right about this by hand all along: ember's `#ffe3c2` is a cream at 99% saturation.
+
+**Nothing about the songs is dealt.** A song entry is an override, and dealing one would be
 the machine writing down an exception nobody asked for — which is exactly the noise the
 cascade used to generate.
 
@@ -395,19 +434,22 @@ Three chips beside the button — `colours`, `flows`, `rotation` — all on by d
 second evening the colourways are the part you have settled and the flows are the part you
 are still fishing for, and a button that deals both is a button you stop pressing.
 
-**Every part is rolled and only the wanted ones land.** Drawing from the generator in the same
+**Every part is dealt and only the wanted ones land.** Drawing from the generator in the same
 order regardless of what is kept is what makes a seed mean one show: keeping only the colours
-has to give the same colours rolling everything would have, or a seed written on a hand is
+has to give the same colours dealing everything would have, or a seed written on a hand is
 worth nothing.
 
-Clearing "what the last roll wired" means **only** that: a rolled flow carries `rolled: true`,
-so a flow you built by hand survives instead of being deleted as a side effect of a button
-whose whole promise is that one level of undo covers it.
+Clearing "what the last one wired" means **only** that: a dealt flow carries
+`randomized: true`, so a flow you built by hand survives instead of being deleted as a side
+effect of a button whose whole promise is that one level of undo covers it. A file still
+spelling that mark `rolled` is carried across by `merge` — it is the one field here a *later*
+gesture reads, so a file keeping the old name would have every dealt flow quietly become
+permanent.
 
-**Undo covers the roll you just did; the seed covers the one from last Tuesday.** One level is
-the right number — a roll replaces a library, so the thing you want back is always the thing
-you had a moment ago. Anything older is better served by a seed, which is two words and a
-number, survives a reload, and can be written on a hand.
+**Undo covers the randomise you just did; the seed covers the one from last Tuesday.** One
+level is the right number — a randomise replaces a library, so the thing you want back is
+always the thing you had a moment ago. Anything older is better served by a seed, which is two
+words and a number, survives a reload, and can be written on a hand.
 
 ## What is deliberately absent
 

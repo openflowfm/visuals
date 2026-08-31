@@ -129,8 +129,8 @@ export interface FlowRow {
   about: string;
   /** How many nodes are inside. A primitive has no answer to this. */
   size: number;
-  /** Wired by a roll, and the next roll replaces it. */
-  rolled: boolean;
+  /** Wired by the randomiser, and the next randomise replaces it. */
+  randomized: boolean;
   /** This flow's own signature, doors included — a provider gives no `c`. */
   ports: Ports;
   terms: string;
@@ -240,7 +240,7 @@ export function flowShelf(scheme: Scheme): FlowRow[] {
       name,
       about,
       size: nodes.length,
-      rolled: def.rolled === true,
+      randomized: def.randomized === true,
       ports: flowPorts(def),
       terms: `${name} ${id} flow ${about}`.toLowerCase(),
     };

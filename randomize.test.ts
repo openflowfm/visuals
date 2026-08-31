@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { compileCircuit, valuesOf, MAX_VALUES } from './src/render/circuit.ts';
 import type { Scheme, Show, Track } from './protocol.ts';
 import { EXAMPLES } from './server/scheme.ts';
-import { newSeed, rollCircuit, rollScheme } from './roll.ts';
+import { newSeed, randomizeCircuit, randomizeScheme } from './randomize.ts';
 
 /**
  * The randomiser.
  *
  * What is worth asserting is not that it produces random output — it will — but
- * that everything it produces is **still a library**. A roll that wired a graph
+ * that everything it produces is **still a library**. A randomise that wired a graph
  * naming a port that does not exist, or that pointed the fallback at a flow it
  * had just deleted, is not a different show; it is a broken one, and it breaks
  * on stage rather than here.
@@ -62,12 +62,12 @@ const SHOW: Show = {
 };
 
 const seeds = Array.from({ length: 40 }, (_, i) => `seed-${i}`);
-const rolled = (seed: string): Scheme => rollScheme(seed, SHOW, EXAMPLES);
+const randomised = (seed: string): Scheme => randomizeScheme(seed, SHOW, EXAMPLES);
 
-describe('a roll is a library', () => {
+describe('a randomise is a library', () => {
   it('names only colourways it defined', () => {
     for (const seed of seeds) {
-      const s = rolled(seed);
+      const s = randomised(seed);
       for (const [song, spec] of Object.entries(s.songs)) {
         if (spec.colorway) expect(s.colorways[spec.colorway], `${seed} ${song}`).toBeDefined();
       }
@@ -79,7 +79,7 @@ describe('a roll is a library', () => {
     // An id pointing at nothing is a black screen for as long as the wheel sits
     // on it, and it is invisible until it comes round.
     for (const seed of seeds) {
-      const s = rolled(seed);
+      const s = randomised(seed);
       expect(s.flows[s.defaults.flow], seed).toBeDefined();
       for (const id of s.rotation.flows) expect(s.flows[id], `${seed} ${id}`).toBeDefined();
       for (const [song, spec] of Object.entries(s.songs)) {
@@ -90,26 +90,26 @@ describe('a roll is a library', () => {
 
   it('turns through everything it just made', () => {
     // An empty pool means "everything there is", which is what you want the
-    // moment after a roll has finished making four things.
+    // moment after a randomise has finished making four things.
     for (const seed of seeds) {
-      const s = rolled(seed);
+      const s = randomised(seed);
       expect(s.rotation.flows, seed).toEqual([]);
       expect(s.rotation.bars, seed).toBeGreaterThan(0);
     }
   });
 
   it('leaves the songs alone', () => {
-    // A song entry is an override now. Rolling one would be the machine writing
+    // A song entry is an override now. Randomising one would be the machine writing
     // down an exception nobody asked for, which is exactly the noise the
     // cascade used to generate.
     for (const seed of seeds) {
-      expect(Object.keys(rolled(seed).songs), seed).toEqual(Object.keys(EXAMPLES.songs));
+      expect(Object.keys(randomised(seed).songs), seed).toEqual(Object.keys(EXAMPLES.songs));
     }
   });
 
   it('keeps the pace on the ladder rather than between its rungs', () => {
     for (const seed of seeds) {
-      const { pace } = rolled(seed).defaults;
+      const { pace } = randomised(seed).defaults;
       expect(Number.isInteger(pace), seed).toBe(true);
       expect(Math.abs(pace), seed).toBeLessThanOrEqual(2);
     }
@@ -145,9 +145,9 @@ const apart = (a: number, b: number) => {
   return gap > 180 ? 360 - gap : gap;
 };
 
-describe('a rolled colourway', () => {
-  const rolled = seeds.flatMap((seed) =>
-    Object.entries(rollScheme(seed, SHOW, EXAMPLES, ['colours']).colorways).map(
+describe('a randomised colourway', () => {
+  const randomised = seeds.flatMap((seed) =>
+    Object.entries(randomizeScheme(seed, SHOW, EXAMPLES, ['colours']).colorways).map(
       ([name, colours]) => [`${seed} ${name}`, colours] as const,
     ),
   );
@@ -156,16 +156,16 @@ describe('a rolled colourway', () => {
     // Tracks take a colour by position and a flow draws from the first, so a
     // palette that was sometimes four and sometimes five is a set that changes
     // which track is which colour when the wheel turns.
-    for (const [where, colours] of rolled) expect(colours, where).toHaveLength(5);
+    for (const [where, colours] of randomised) expect(colours, where).toHaveLength(5);
   });
 
   it('puts each colour in the role that names it', () => {
-    // The roles used to be emergent: the roll found whichever member sat
+    // The roles used to be emergent: the randomiser found whichever member sat
     // furthest round the wheel and called that the loud answer, then picked one
     // of the leftovers to be the light one — so which position held the
     // opposite moved from deal to deal. A graph wires to a position, so the
     // position has to mean the same thing every time.
-    for (const [where, colours] of rolled) {
+    for (const [where, colours] of randomised) {
       const [primary, secondary, complement, accent, chalk] = colours.map(taken);
       // The two that carry the palette across a room, and they are the pair.
       expect(primary.s, `${where} primary`).toBeGreaterThanOrEqual(0.85);
@@ -193,7 +193,7 @@ describe('a rolled colourway', () => {
     // wall in one colour — harmonious, and indistinguishable from a gel. It sits
     // in `complement` rather than wherever it landed, because that outlet is
     // what a source's opposing colour wires to.
-    for (const [where, colours] of rolled) {
+    for (const [where, colours] of randomised) {
       const hues = colours.map((each) => taken(each).hue);
       // 119 rather than 120: a hue written to eight bits per channel and read
       // back lands within about a degree of where it went in, and the tightest
@@ -206,7 +206,7 @@ describe('a rolled colourway', () => {
     // It is the palette's answer to white and the colour a generator's hot half
     // mixes toward, so it belongs to the light in the room. Drifted a little
     // warm or cool, which is what a colourist does to a highlight, and no more.
-    for (const [where, colours] of rolled) {
+    for (const [where, colours] of randomised) {
       const hues = colours.map((each) => taken(each).hue);
       expect(apart(hues[0], hues[4]), where).toBeLessThanOrEqual(30);
       // Chroma rather than saturation, and the difference is the whole trick: at
@@ -221,22 +221,22 @@ describe('a rolled colourway', () => {
     }
   });
 
-  it('never rolls a colour too dark to see on a cheap lamp', () => {
+  it('never randomises a colour too dark to see on a cheap lamp', () => {
     // The reason lightness is evened out by hue: a blue at the same number as a
     // yellow is nearly black, and a projector has no black to work against.
-    for (const [where, colours] of rolled) {
+    for (const [where, colours] of randomised) {
       for (const each of colours) expect(taken(each).luma, `${where} ${each}`).toBeGreaterThan(0.15);
     }
   });
 });
 
-describe('rolled flows', () => {
+describe('randomised flows', () => {
   it('compiles, from every seed', () => {
     // Really an assertion that the generator never names a port that does not
     // exist, which is the way a hand-written node table drifts.
     for (const seed of seeds) {
-      for (const [id, def] of Object.entries(rolled(seed).flows)) {
-        if (!def.rolled) continue;
+      for (const [id, def] of Object.entries(randomised(seed).flows)) {
+        if (!def.randomized) continue;
         const built = compileCircuit(def.circuit);
         expect(built.error, `${seed} ${id}: ${built.error}`).toBeNull();
       }
@@ -247,21 +247,21 @@ describe('rolled flows', () => {
     for (const seed of seeds) {
       const rng = seedOf(seed);
       for (let i = 0; i < 12; i++) {
-        expect(valuesOf(rollCircuit(rng)).length, seed).toBeLessThanOrEqual(MAX_VALUES);
+        expect(valuesOf(randomizeCircuit(rng)).length, seed).toBeLessThanOrEqual(MAX_VALUES);
       }
     }
   });
 
   it('never deals a creep, which needs feedback to mean anything', () => {
     // A zoom per second only says something when its result is fed back into
-    // the picture it came from. A roll never wires a `last`, so a rolled creep
+    // the picture it came from. The randomiser never wires a `last`, so a randomised creep
     // would be a lens that moves the point by a fraction of a percent and
     // nothing else — a dead node on the canvas wearing a real name.
     let lenses = 0;
     for (const seed of seeds) {
       const rng = seedOf(seed);
       for (let i = 0; i < 12; i++) {
-        for (const node of rollCircuit(rng).nodes) {
+        for (const node of randomizeCircuit(rng).nodes) {
           if (node.kind !== 'lens') continue;
           lenses += 1;
           expect(node.op).not.toBe('creep');
@@ -277,7 +277,7 @@ describe('rolled flows', () => {
     for (const seed of seeds) {
       const rng = seedOf(seed);
       for (let i = 0; i < 12; i++) {
-        for (const node of rollCircuit(rng).nodes) {
+        for (const node of randomizeCircuit(rng).nodes) {
           if (node.kind === 'track') {
             tracks += 1;
             expect(node.smooth).toBeDefined();
@@ -304,7 +304,7 @@ describe('rolled flows', () => {
     for (const seed of seeds) {
       const rng = seedOf(seed);
       for (let i = 0; i < 12; i++) {
-        const circuit = rollCircuit(rng);
+        const circuit = randomizeCircuit(rng);
         const places = new Set(
           circuit.nodes.filter((n) => n.kind === 'place').map((n) => n.id),
         );
@@ -325,7 +325,7 @@ describe('rolled flows', () => {
     for (const seed of seeds) {
       const rng = seedOf(seed);
       for (let i = 0; i < 12; i++) {
-        for (const node of rollCircuit(rng).nodes) kinds.add(node.kind);
+        for (const node of randomizeCircuit(rng).nodes) kinds.add(node.kind);
       }
     }
     for (const kind of ['fractal', 'field', 'light', 'spread', 'song', 'math', 'colorway']) {
@@ -334,14 +334,14 @@ describe('rolled flows', () => {
   });
 
   it('mostly reaches for the set rather than ignoring it', () => {
-    // A rolled flow that ignored whoever is playing is a screensaver, and this
+    // A randomised flow that ignored whoever is playing is a screensaver, and this
     // rig is not one. Not every one of them — a wash that runs on its own is a
     // real thing to want — but most.
     let usesSet = 0;
     let total = 0;
     for (const seed of seeds) {
-      for (const def of Object.values(rolled(seed).flows)) {
-        if (!def.rolled) continue;
+      for (const def of Object.values(randomised(seed).flows)) {
+        if (!def.randomized) continue;
         total += 1;
         if (def.circuit.nodes.some((n) => n.kind === 'tracks')) usesSet += 1;
       }
@@ -349,43 +349,43 @@ describe('rolled flows', () => {
     expect(usesSet / total).toBeGreaterThan(0.4);
   });
 
-  it('does not pile up across rolls', () => {
-    // A week of rolling would otherwise leave forty of them, and the wheel would
+  it('does not pile up across randomises', () => {
+    // A week of randomising would otherwise leave forty of them, and the wheel would
     // spend most of its time on flows nobody chose.
     let scheme = EXAMPLES;
-    for (const seed of seeds.slice(0, 10)) scheme = rollScheme(seed, SHOW, scheme);
-    expect(Object.values(scheme.flows).filter((d) => d.rolled)).toHaveLength(4);
+    for (const seed of seeds.slice(0, 10)) scheme = randomizeScheme(seed, SHOW, scheme);
+    expect(Object.values(scheme.flows).filter((d) => d.randomized)).toHaveLength(4);
     // And the ones that ship are still there to take apart.
     for (const id of Object.keys(EXAMPLES.flows)) expect(scheme.flows[id], id).toBeDefined();
   });
 });
 
-describe('rolling part of a library', () => {
+describe('randomising part of a library', () => {
   it('leaves a part it was not asked for exactly as it was', () => {
-    const settled = rollScheme('oak-ember-12', SHOW, EXAMPLES);
-    const again = rollScheme('rust-cobalt-99', SHOW, settled, ['flows']);
+    const settled = randomizeScheme('oak-ember-12', SHOW, EXAMPLES);
+    const again = randomizeScheme('rust-cobalt-99', SHOW, settled, ['flows']);
     expect(again.colorways).toEqual(settled.colorways);
     expect(again.rotation).toEqual(settled.rotation);
     // And the part it *was* asked for actually moved.
     expect(again.flows).not.toEqual(settled.flows);
   });
 
-  it('gives the same answer for a part however much else was rolled with it', () => {
+  it('gives the same answer for a part however much else was randomised with it', () => {
     // The whole worth of a seed. If keeping the colours gave different colours
-    // from rolling everything, a seed written on a hand would be worth nothing.
-    const whole = rollScheme('glass-drift-576', SHOW, EXAMPLES);
-    const part = rollScheme('glass-drift-576', SHOW, EXAMPLES, ['colours']);
+    // from randomising everything, a seed written on a hand would be worth nothing.
+    const whole = randomizeScheme('glass-drift-576', SHOW, EXAMPLES);
+    const part = randomizeScheme('glass-drift-576', SHOW, EXAMPLES, ['colours']);
     expect(part.colorways).toEqual(whole.colorways);
   });
 
   it('never points the fallback at a colourway that is not there', () => {
-    const settled = rollScheme('oak-ember-12', SHOW, EXAMPLES);
-    const again = rollScheme('rust-cobalt-99', SHOW, settled, ['flows']);
+    const settled = randomizeScheme('oak-ember-12', SHOW, EXAMPLES);
+    const again = randomizeScheme('rust-cobalt-99', SHOW, settled, ['flows']);
     expect(again.colorways).toHaveProperty(again.defaults.colorway);
     expect(again.flows).toHaveProperty(again.defaults.flow);
   });
 
-  it('clears what the last roll wired and keeps what someone built', () => {
+  it('clears what the last randomise wired and keeps what someone built', () => {
     // Deleting every graph was a side effect of a button whose whole promise is
     // that one level of undo covers it, and one level of undo does not make
     // losing an evening's work acceptable.
@@ -394,10 +394,10 @@ describe('rolling part of a library', () => {
       flows: {
         ...EXAMPLES.flows,
         mine: { name: 'Mine', circuit: { nodes: [], cords: [] } },
-        old: { name: 'Old', circuit: { nodes: [], cords: [] }, rolled: true },
+        old: { name: 'Old', circuit: { nodes: [], cords: [] }, randomized: true },
       },
     };
-    const out = rollScheme('oak-ember-12', SHOW, mine);
+    const out = randomizeScheme('oak-ember-12', SHOW, mine);
     expect(out.flows.mine).toBeDefined();
     expect(out.flows.old).toBeUndefined();
   });
@@ -409,11 +409,11 @@ describe('a seed', () => {
   });
 
   it('reproduces a show exactly', () => {
-    expect(rolled('glass-drift-576')).toEqual(rolled('glass-drift-576'));
+    expect(randomised('glass-drift-576')).toEqual(randomised('glass-drift-576'));
   });
 
   it('gives two seeds two different libraries', () => {
-    expect(rolled('a-b-1')).not.toEqual(rolled('c-d-2'));
+    expect(randomised('a-b-1')).not.toEqual(randomised('c-d-2'));
   });
 });
 

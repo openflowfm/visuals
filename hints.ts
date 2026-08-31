@@ -13,7 +13,7 @@
  * to trace back to a regular expression.
  */
 export interface Hint {
-  /** What kind of thing this is, which is what a roll deals a picture to. */
+  /** What kind of thing this is, which is what the randomiser deals a picture to. */
   family: string;
   test: RegExp;
   /** A `source` mode. The picture a track of this kind draws. */
@@ -42,5 +42,5 @@ export function familyOf(name: string): string {
   return HINTS.find(({ test }) => test.test(name))?.family ?? 'other';
 }
 
-/** Every family a roll might have to deal a picture to, `other` last. */
+/** Every family the randomiser might have to deal a picture to, `other` last. */
 export const FAMILIES: readonly string[] = [...HINTS.map((h) => h.family), 'other'];

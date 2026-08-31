@@ -293,7 +293,7 @@ describe('reading a file', () => {
     expect(merge({ songs: { one: 'ember' } as never }).songs.one).toEqual({ colorway: 'ember' });
   });
 
-  it('remembers what a rolled show was rolled from', () => {
+  it('remembers what a randomised show was randomised from', () => {
     expect(merge({ seed: 'oak-ember-12' }).seed).toBe('oak-ember-12');
     expect(merge({}).seed).toBeUndefined();
   });
@@ -436,6 +436,23 @@ describe('a file written when the cascade existed', () => {
     // And `signal` itself is `playback` — the same node, next to a `song` node
     // that was also, unhelpfully, a signal.
     expect(kept.nodes.find((n) => n.id === 'e')?.kind).toBe('playback');
+  });
+
+  it('carries the mark saying the randomiser wired a flow', () => {
+    // `rolled` is the flag's old spelling, from when the deal was called a roll,
+    // and it is the one field here a *later* gesture reads: clearing "what the
+    // last one wired" walks it. A file keeping the old name would have every
+    // dealt flow quietly become permanent, the opposite of what it means.
+    const merged = merge({
+      flows: {
+        dealt: { name: 'Dealt', circuit: { nodes: [], cords: [] }, rolled: true },
+        mine: { name: 'Mine', circuit: { nodes: [], cords: [] } },
+      },
+    } as never).flows;
+    expect(merged.dealt.randomized).toBe(true);
+    expect(merged.mine.randomized).toBeUndefined();
+    // And the old spelling does not survive alongside the new one.
+    expect(merged.dealt).not.toHaveProperty('rolled');
   });
 
   it('carries a paint node onto the colourway node, cord and all', () => {

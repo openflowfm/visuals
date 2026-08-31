@@ -9,16 +9,16 @@ import {
 } from './protocol.ts';
 
 /**
- * A library, rolled.
+ * A library, randomised.
  *
- * It used to roll a *show*: colourways, song assignments, section energies,
+ * it used to deal a *show*: colourways, song assignments, section energies,
  * per-track bindings and two circuits at once, because a show was a table of
  * decisions with a couple of graphs in it. A show is a library of graphs and a
- * wheel now, so this rolls the two things a library is made of — **flows and
+ * wheel now, so this randomises the two things a library is made of — **flows and
  * colourways** — and the wheel turns through whatever it made.
  *
  * Not a scatter of random numbers. A random graph is easy and always looks like
- * noise; what makes a rolled one look like something is that it walks a
+ * noise; what makes a randomised one look like something is that it walks a
  * **shape** — a picture, a few things done to it, a colour operation or two —
  * and randomises what fills each slot. The shape is what makes it a flow; the
  * fill is what makes it a different one every time.
@@ -32,7 +32,7 @@ import {
  * is what made these pastel.
  *
  * Deterministic in its seed, which is the whole reason there is a seed: undo
- * covers the roll you just did, and a seed covers the one from last Tuesday.
+ * covers the randomise you just did, and a seed covers the one from last Tuesday.
  */
 
 /** xmur3 into mulberry32: short, fast, and identical everywhere it runs. */
@@ -101,7 +101,7 @@ function hex(h: number, s: number, l: number): string {
  * The relationships a palette can be built on, as hue offsets from the primary.
  *
  * These used to be five flat lists of offsets whose **roles were emergent**: the
- * roll found whichever member sat furthest round the wheel and called that the
+ * randomiser found whichever member sat furthest round the wheel and called that the
  * loud answer, then picked one of the leftovers at random to be the light one.
  * So which position held the opposite moved from deal to deal, and a graph
  * cannot wire to a position that moves.
@@ -148,7 +148,7 @@ function luma(hue: number): number {
  *
  * Hue and brightness are not independent: a yellow at half lightness is a bright
  * colour and a blue at half lightness is nearly black, because the eye takes
- * most of its luminance from green. A palette rolled at one lightness therefore
+ * most of its luminance from green. A palette randomised at one lightness therefore
  * has members that punch and members that vanish, and the ones that vanish are
  * always the blues and violets — which on a lamp with no black to work against
  * is a colour nobody in the room can see.
@@ -190,7 +190,7 @@ function evenly(hue: number, l: number): number {
  * hue has almost no room left to be a colour in, so the saturation *number* has
  * to be near the top to produce any hue at all — 0.3 there is white with a
  * rumour on it. `EXAMPLES` has been right about this by hand all along: ember's
- * `#ffe3c2` is a cream at 99% saturation, and a rolled tint that was not was the
+ * `#ffe3c2` is a cream at 99% saturation, and a randomised tint that was not was the
  * one member of every dealt palette that did not belong to it.
  */
 export function palette(rng: Rng): string[] {
@@ -218,24 +218,24 @@ export function palette(rng: Rng): string[] {
 }
 
 /**
- * The `lens` modes a roll wires, and the inlet each one drives.
+ * The `lens` modes the randomiser wires, and the inlet each one drives.
  *
  * This was a hand-written table of five node kinds, because the five geometry
  * kinds were five kinds with five different inlet names and nothing in the
  * vocabulary said they were a set. They are one node's modes now, so what is
- * left here is only the part a roll actually needs: which number to reach for.
+ * left here is only the part the randomiser actually needs: which number to reach for.
  */
 /**
- * The lens modes a roll may reach for, which is every one but `creep`.
+ * The lens modes the randomiser may reach for, which is every one but `creep`.
  *
  * `creep` is a zoom per *second* and only means anything when its result is fed
  * back into the picture it came from — under a `last`, where the frames
- * compound. A roll never wires one, so a rolled `creep` is a lens that moves the
+ * compound. The randomiser never wires one, so a randomised `creep` is a lens that moves the
  * point by a fraction of a percent and nothing else: a dead node on the canvas
  * wearing a real name. Excluded here rather than in the vocabulary, because the
  * mode is not the problem; dealing it into a graph with no feedback in it is.
  */
-const ROLLED_LENS_MODES: readonly string[] = LENS_MODES.filter((mode) => mode !== 'creep');
+const RANDOM_LENS_MODES: readonly string[] = LENS_MODES.filter((mode) => mode !== 'creep');
 
 const LENS_VALUE: Record<string, string> = {
   zoom: 'by',
@@ -251,7 +251,7 @@ const LENS_VALUE: Record<string, string> = {
   pixelate: 'blocks',
 };
 
-/** The number a rolled `grade` drives, one per mode. */
+/** The number a randomised `grade` drives, one per mode. */
 const GRADE_VALUE: Record<string, string> = {
   levels: 'gain',
   hue: 'shift',
@@ -259,7 +259,7 @@ const GRADE_VALUE: Record<string, string> = {
   invert: 'hold',
 };
 
-/** The number a rolled `field` drives, one per mode. */
+/** The number a randomised `field` drives, one per mode. */
 const FIELD_VALUE: Record<string, string> = {
   cells: 'weave',
   clouds: 'weave',
@@ -267,7 +267,7 @@ const FIELD_VALUE: Record<string, string> = {
 };
 
 /**
- * The number a rolled `fractal` drives — the one that is *always* visible.
+ * The number a randomised `fractal` drives — the one that is *always* visible.
  * Never `zoom`: a meter resting near zero parks it at one end of its range,
  * and a parked zoom is a flat frame of fractal interior.
  */
@@ -277,10 +277,10 @@ const FRACTAL_VALUE: Record<string, string> = {
 };
 
 /**
- * The lights a roll may hang, and the two numbers that shape each one.
+ * The lights the randomiser may hang, and the two numbers that shape each one.
  *
  * `caustics` has no `from` — sunlight through water arrives from everywhere —
- * so it is the one light a roll never gives a `place`.
+ * so it is the one light the randomiser never gives a `place`.
  */
 const LIGHT_VALUE: Record<string, [string, string]> = {
   lamp: ['carry', 'soft'],
@@ -289,7 +289,7 @@ const LIGHT_VALUE: Record<string, [string, string]> = {
   caustics: ['weave', 'glint'],
 };
 
-/** The number a rolled `spread` drives, one per mode. */
+/** The number a randomised `spread` drives, one per mode. */
 const SPREAD_VALUE: Record<string, string> = {
   bloom: 'reach',
   smear: 'reach',
@@ -302,13 +302,13 @@ const WAVES = ['sine', 'saw', 'ramp', 'pulse'] as const;
 const MATHS = ['add', 'multiply', 'average'] as const;
 
 /**
- * Everything a roll may wire blind, which is everything that is not `spread`.
+ * Everything the randomiser may wire blind, which is everything that is not `spread`.
  *
  * It used to be `EFFECTS` minus a hand-maintained list of the four that read
  * their input several times, kept by name and by hand because nesting two of
- * them multiplies the shader — a roll would stack three and hand the driver
+ * them multiplies the shader — it would stack three and hand the driver
  * something that takes a second to compile. **`spread` is that list now**, so
- * there is nothing to keep: a roll reaches for `lens` and `grade` and the rule
+ * there is nothing to keep: the randomiser reaches for `lens` and `grade` and the rule
  * is in the vocabulary rather than in a filter beside it. See `MAX_LINES`.
  */
 
@@ -333,7 +333,7 @@ const MATHS = ['add', 'multiply', 'average'] as const;
  * not have, the other on a library the deal must not assume — and `polar` is
  * an authoring tool, not a thing to be dealt.
  */
-export function rollCircuit(rng: Rng): Circuit {
+export function randomizeCircuit(rng: Rng): Circuit {
   const nodes: CircuitNode[] = [];
   const cords: { from: string; to: string }[] = [];
   let next = 0;
@@ -347,8 +347,8 @@ export function rollCircuit(rng: Rng): Circuit {
   let values = 0;
   /** Whatever drives an amount: a value, an envelope, a signal, or arithmetic on two. */
   const drive = (x: number, y: number, into: string) => {
-    const roll = rng();
-    if (roll < 0.3 && values < 4) {
+    const draw = rng();
+    if (draw < 0.3 && values < 4) {
       values += 1;
       const from = add({
         kind: 'value',
@@ -360,10 +360,10 @@ export function rollCircuit(rng: Rng): Circuit {
       wire(`${from}/n`, into);
       return;
     }
-    if (roll < 0.5) {
+    if (draw < 0.5) {
       // An envelope rather than a bare meter, because a picture driven by the
       // raw meter twitches and one driven by an envelope breathes — and
-      // breathing is what makes a rolled flow read designed.
+      // breathing is what makes a randomised flow read designed.
       const from = add({
         kind: 'track',
         of: 'master',
@@ -375,19 +375,19 @@ export function rollCircuit(rng: Rng): Circuit {
       wire(`${from}/n`, into);
       return;
     }
-    if (roll < 0.72) {
+    if (draw < 0.72) {
       const from = add({ kind: 'playback', op: pick(rng, SIGNALS), x, y });
       wire(`${from}/n`, into);
       return;
     }
-    if (roll < 0.8) {
+    if (draw < 0.8) {
       // A song fact: steady through a song, different in the next one, which
       // is a kind of motion no meter can supply.
       const from = add({ kind: 'song', op: chance(rng, 0.6) ? 'key' : 'section', x, y });
       wire(`${from}/n`, into);
       return;
     }
-    if (roll < 0.92) {
+    if (draw < 0.92) {
       const source = add({ kind: 'playback', op: pick(rng, SIGNALS), x: x - 150, y });
       const shape = add({ kind: 'wave', op: pick(rng, WAVES), x, y });
       wire(`${source}/n`, `${shape}/phase`);
@@ -418,7 +418,7 @@ export function rollCircuit(rng: Rng): Circuit {
   const bent = (least: number, most: number): string => {
     let carry = point;
     const steps = least + Math.floor(rng() * (most - least + 1));
-    for (const op of shuffled(rng, [...ROLLED_LENS_MODES]).slice(0, steps)) {
+    for (const op of shuffled(rng, [...RANDOM_LENS_MODES]).slice(0, steps)) {
       const x = at();
       const node = add({ kind: 'lens', op, x, y: 20 });
       wire(carry, `${node}/p`);
@@ -428,7 +428,7 @@ export function rollCircuit(rng: Rng): Circuit {
     return carry;
   };
 
-  /** The Live set more often than not: a rolled screensaver is not this rig. */
+  /** The Live set more often than not: a randomised screensaver is not this rig. */
   const lead = (setChance: number, carry: string): string => {
     const picture = chance(rng, setChance)
       ? add({ kind: 'tracks', op: 'by name', x: at(), y: 20 })
@@ -469,7 +469,7 @@ export function rollCircuit(rng: Rng): Circuit {
   if (shape < 0.35) {
     let carry = lead(0.6, bent(1, 3));
     if (chance(rng, 0.6)) {
-      const node = add({ kind: 'lens', op: pick(rng, ROLLED_LENS_MODES), x: at(), y: 20 });
+      const node = add({ kind: 'lens', op: pick(rng, RANDOM_LENS_MODES), x: at(), y: 20 });
       wire(carry, `${node}/c`);
       carry = `${node}/c`;
     }
@@ -545,7 +545,7 @@ export function rollCircuit(rng: Rng): Circuit {
   if (shape < 0.9) {
     let carry = lead(0.6, bent(1, 2));
     if (chance(rng, 0.5)) {
-      const node = add({ kind: 'lens', op: pick(rng, ROLLED_LENS_MODES), x: at(), y: 20 });
+      const node = add({ kind: 'lens', op: pick(rng, RANDOM_LENS_MODES), x: at(), y: 20 });
       wire(carry, `${node}/c`);
       carry = `${node}/c`;
     }
@@ -560,7 +560,7 @@ export function rollCircuit(rng: Rng): Circuit {
   // --- keyed: the song's key turns the colour, so a set modulates ----------
   let carry = lead(0.7, bent(1, 2));
   if (chance(rng, 0.5)) {
-    const node = add({ kind: 'lens', op: pick(rng, ROLLED_LENS_MODES), x: at(), y: 20 });
+    const node = add({ kind: 'lens', op: pick(rng, RANDOM_LENS_MODES), x: at(), y: 20 });
     wire(carry, `${node}/c`);
     carry = `${node}/c`;
   }
@@ -572,22 +572,22 @@ export function rollCircuit(rng: Rng): Circuit {
   return done(`${hue}/c`);
 }
 
-// --- the roll ------------------------------------------------------------
+// --- the randomiser ------------------------------------------------------
 
 /**
- * Which part of the library a roll is allowed to touch.
+ * Which part of the library a randomise is allowed to touch.
  *
  * All-or-nothing is the wrong shape for how this gets used: by the second
  * evening the colourways are the part you have settled and the flows are the
  * part you are still fishing for, and a button that deals both is a button you
  * stop pressing.
  */
-export type RollPart = 'colours' | 'flows' | 'rotation';
+export type RandomPart = 'colours' | 'flows' | 'rotation';
 
-export const ROLL_PARTS: readonly RollPart[] = ['colours', 'flows', 'rotation'];
+export const RANDOM_PARTS: readonly RandomPart[] = ['colours', 'flows', 'rotation'];
 
 /** What each part is, for a control that has one line to say it in. */
-export const ROLL_ABOUT: Record<RollPart, string> = {
+export const RANDOM_ABOUT: Record<RandomPart, string> = {
   colours: 'four fresh colourways: five each, two of them loud, one a tint',
   flows: 'four freshly wired flows, replacing the last four it wired',
   rotation: 'how often the wheel turns, and how fast the whole show moves',
@@ -596,50 +596,50 @@ export const ROLL_ABOUT: Record<RollPart, string> = {
 /**
  * A library, from a seed and from whatever the set contains.
  *
- * **Every part is rolled and then only the wanted ones land.** Drawing from the
+ * **Every part is randomised and then only the wanted ones land.** Drawing from the
  * generator in the same order regardless of what is kept is what makes a seed
- * mean one show: keeping only the colours has to give the same colours rolling
+ * mean one show: keeping only the colours has to give the same colours randomising
  * everything would have, or a seed written on a hand is worth nothing.
  *
- * Nothing about the songs is rolled. A song entry is an override now, and
- * rolling one would be the machine writing down an exception nobody asked for —
+ * Nothing about the songs is randomised. A song entry is an override now, and
+ * randomising one would be the machine writing down an exception nobody asked for —
  * which is exactly the noise the cascade used to generate.
  */
-export function rollScheme(
+export function randomizeScheme(
   seed: string,
   _show: Show,
   base: Scheme,
-  parts: readonly RollPart[] = ROLL_PARTS,
+  parts: readonly RandomPart[] = RANDOM_PARTS,
 ): Scheme {
   const rng = seeded(seed);
-  const rolling = (part: RollPart) => parts.includes(part);
+  const randomising = (part: RandomPart) => parts.includes(part);
 
   const names = shuffled(rng, WORDS).slice(0, 4);
-  const rolledColorways: Record<string, string[]> = {};
-  for (const name of names) rolledColorways[name] = palette(rng);
-  const colorways = rolling('colours') ? rolledColorways : base.colorways;
+  const randomizedColorways: Record<string, string[]> = {};
+  for (const name of names) randomizedColorways[name] = palette(rng);
+  const colorways = randomising('colours') ? randomizedColorways : base.colorways;
 
   const flows: Scheme['flows'] = { ...base.flows };
-  if (rolling('flows')) {
-    // Only what a previous roll wired. A flow someone built by hand is work
+  if (randomising('flows')) {
+    // Only what a previous randomise wired. A flow someone built by hand is work
     // rather than scaffolding, and deleting it as a side effect of this button
     // is not something one level of undo makes acceptable.
-    for (const [id, def] of Object.entries(flows)) if (def.rolled) delete flows[id];
+    for (const [id, def] of Object.entries(flows)) if (def.randomized) delete flows[id];
   }
   const wired: string[] = [];
   for (let i = 0; i < 4; i++) {
-    const id = `roll${i + 1}`;
+    const id = `random${i + 1}`;
     const [a, b] = shuffled(rng, WORDS);
-    const circuit = rollCircuit(rng);
-    if (!rolling('flows')) continue;
-    flows[id] = { name: `${a[0].toUpperCase()}${a.slice(1)} ${b}`, circuit, rolled: true };
+    const circuit = randomizeCircuit(rng);
+    if (!randomising('flows')) continue;
+    flows[id] = { name: `${a[0].toUpperCase()}${a.slice(1)} ${b}`, circuit, randomized: true };
     wired.push(id);
   }
 
   const bars = pick(rng, [4, 8, 8, 16]);
   const rotation: Scheme['rotation'] = {
     // Emptied rather than filled: an empty pool means "everything there is",
-    // which is what you want the moment after a roll has just made four things.
+    // which is what you want the moment after a randomise has just made four things.
     flows: [],
     colorways: [],
     bars,
@@ -655,19 +655,19 @@ export function rollScheme(
     seed,
     flows,
     colorways,
-    rotation: rolling('rotation') ? rotation : base.rotation,
+    rotation: randomising('rotation') ? rotation : base.rotation,
     songs: base.songs,
     defaults: {
       ...base.defaults,
       // A fallback that names something that exists, whichever way round the
-      // parts were rolled.
+      // parts were randomised.
       colorway: colorways[base.defaults.colorway]
         ? base.defaults.colorway
         : (Object.keys(colorways)[0] ?? base.defaults.colorway),
       flow: flows[base.defaults.flow]
         ? base.defaults.flow
         : (wired[0] ?? Object.keys(flows)[0] ?? base.defaults.flow),
-      pace: rolling('rotation') ? pace : base.defaults.pace,
+      pace: randomising('rotation') ? pace : base.defaults.pace,
     },
   };
 }

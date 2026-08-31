@@ -531,7 +531,9 @@ export function Designer({
                     >
                       <span className="flow-name">
                         {row.name}
-                        {row.rolled && <i title="wired by a roll — the next roll replaces it">◇</i>}
+                        {row.randomized && (
+                          <i title="wired by the randomiser — the next one replaces it">◇</i>
+                        )}
                       </span>
                       <span className="flow-about">{row.about}</span>
                     </button>

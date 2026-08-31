@@ -1022,11 +1022,17 @@ const EXAMPLES: Scheme = {
     // four shades of off-white with a tint on them.
     //
     // These sit where a hue is loudest and stay clear of the dark end. Each is
-    // built the way [the roll](../roll.ts) builds one: **the first is the
-    // loudest**, because a flow that ignores the set draws every generator from
-    // `colors[0]`; one member answers it from across the wheel, so nothing is a
-    // wall in a single colour; and one is a **tint** rather than a white, light
+    // built the way [the randomiser](../randomize.ts) builds one, and each is
+    // in `COLOR_ROLES` order: a loud **primary**, a **secondary** beside it, a
+    // **complement** from across the wheel taken just as loud, an **accent** for
+    // what is small, and a **chalk** that is a tint rather than a white — light
     // enough to read edges against and coloured enough to belong.
+    //
+    // The order was a convention these four happened to keep and the deal did
+    // not; it is the vocabulary now. Position three was an opposite here long
+    // before anything could wire to one, because the shaders were going to draw
+    // `vec3(1.0) - uColor` whether the palette agreed or not — so the palettes
+    // were written to agree. It is a choice rather than a compensation now.
     ember: ['#ff5a1f', '#ffb703', '#00c4ff', '#ff2d55', '#ffe3c2'],
     cold: ['#00a2ff', '#00e5d0', '#ff7a29', '#6a5cff', '#d8f1ff'],
     acid: ['#b4ff00', '#00ffa8', '#c400ff', '#ffe600', '#eaffc2'],
@@ -1120,7 +1126,7 @@ export function merge(raw: Partial<Scheme>): Scheme {
     defaults.colorway = Object.keys(colorways)[0] ?? defaults.colorway;
   }
   return {
-    // Carried rather than rebuilt, so a rolled show can still say where it came
+    // Carried rather than rebuilt, so a randomised show can still say where it came
     // from after a reload. Without it the seed lived exactly as long as the tab.
     ...(file.seed ? { seed: file.seed } : {}),
     // Always this build's version: everything above has just been carried to it,
@@ -1181,9 +1187,20 @@ function carried(file: Partial<Scheme> & Legacy): Partial<Scheme> {
   if (flows) {
     const kept: Record<string, FlowDef> = {};
     for (const [id, def] of Object.entries(flows)) {
-      const circuit = (def as FlowDef & { builtin?: string }).circuit;
+      const was = def as FlowDef & { builtin?: string; rolled?: boolean };
+      const circuit = was.circuit;
       if (!circuit) continue;
-      kept[id] = { ...def, circuit: reword(circuit) };
+      // `rolled` is the flag's old spelling, from when the deal was called a
+      // roll. It is the one field here that a *later* gesture reads — clearing
+      // "what the last one wired" walks it — so a file keeping the old name
+      // would have every dealt flow quietly become permanent, which is the
+      // opposite of what the mark means.
+      const { rolled, ...rest } = was;
+      kept[id] = {
+        ...rest,
+        ...(rolled !== undefined && was.randomized === undefined ? { randomized: rolled } : {}),
+        circuit: reword(circuit),
+      };
     }
     out.flows = kept;
   }
@@ -1482,7 +1499,7 @@ function reword(circuit: Circuit): Circuit {
     if (node.kind === 'energy') {
       // A fall of nothing written down was 0.4, and the merged node's nothing
       // is zero — so an unstated fall has to be written down rather than
-      // inherited, or every rolled flow would lose its breathing.
+      // inherited, or every randomised flow would lose its breathing.
       const next: Was = {
         ...node,
         kind: 'track',

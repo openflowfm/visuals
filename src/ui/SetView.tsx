@@ -6,7 +6,7 @@ import { Select } from '@openflow/widgets/controls/Select.tsx';
 import { Toggle } from '@openflow/widgets/controls/Toggle.tsx';
 import { Colorways } from './Colorways.tsx';
 import { flowList, toggleId } from './edits.ts';
-import { newSeed, ROLL_ABOUT, ROLL_PARTS, rollScheme, type RollPart } from '../../roll.ts';
+import { newSeed, RANDOM_ABOUT, RANDOM_PARTS, randomizeScheme, type RandomPart } from '../../randomize.ts';
 import { BARS, PACE } from './param.ts';
 
 /**
@@ -35,11 +35,11 @@ export function SetView({
   edit(next: Scheme): void;
 }) {
   const [typed, setTyped] = useState<string | null>(null);
-  const [parts, setParts] = useState<RollPart[]>([...ROLL_PARTS]);
+  const [parts, setParts] = useState<RandomPart[]>([...RANDOM_PARTS]);
   /**
-   * The scheme as it was before the last roll, and one level is the right
-   * number. A roll replaces a library, so the thing you want back is always the
-   * thing you had a moment ago — and for anything older the seed is a better
+   * The scheme as it was before the last randomise, and one level is the right
+   * number. A randomise replaces a library, so the thing you want back is always
+   * the thing you had a moment ago — and for anything older the seed is a better
    * answer than a stack, because it survives a reload.
    */
   const [before, setBefore] = useState<Scheme | null>(null);
@@ -48,11 +48,11 @@ export function SetView({
   const ways = Object.keys(scheme.colorways);
   const songs = grid?.songs ?? show.songs.map((name) => ({ name, key: name, roles: [] }));
 
-  const roll = (seed: string) => {
+  const randomize = (seed: string) => {
     if (parts.length === 0) return;
     setBefore(scheme);
     setTyped(null);
-    edit(rollScheme(seed, show, scheme, parts));
+    edit(randomizeScheme(seed, show, scheme, parts));
   };
 
   const rotate = (next: Partial<Scheme['rotation']>) =>
@@ -63,28 +63,28 @@ export function SetView({
       <div className="bar">
         <Button
           title={
-            parts.length === ROLL_PARTS.length
+            parts.length === RANDOM_PARTS.length
               ? 'Deal a whole new library from a fresh seed'
               : `Deal ${parts.join(', ')} and leave the rest alone`
           }
           disabled={parts.length === 0}
-          onPress={() => roll(newSeed())}
+          onPress={() => randomize(newSeed())}
         >
-          roll
+          randomize
         </Button>
         <span className="parts">
-          {ROLL_PARTS.map((part) => (
+          {RANDOM_PARTS.map((part) => (
             <button
               key={part}
               type="button"
               data-on={parts.includes(part) ? '' : undefined}
-              title={ROLL_ABOUT[part]}
+              title={RANDOM_ABOUT[part]}
               aria-pressed={parts.includes(part)}
               onClick={() =>
                 setParts((was) =>
                   was.includes(part)
                     ? was.filter((each) => each !== part)
-                    : ROLL_PARTS.filter((each) => each === part || was.includes(each)),
+                    : RANDOM_PARTS.filter((each) => each === part || was.includes(each)),
                 )
               }
             >
@@ -96,14 +96,14 @@ export function SetView({
           seed
           <input
             value={typed ?? scheme.seed ?? ''}
-            placeholder="never rolled"
+            placeholder="never randomised"
             spellCheck={false}
-            aria-label="Roll seed"
+            aria-label="Randomise seed"
             onChange={(e) => setTyped(e.target.value)}
             onKeyDown={(e) => {
               if (e.key !== 'Enter') return;
               const wanted = (typed ?? '').trim();
-              if (wanted) roll(wanted);
+              if (wanted) randomize(wanted);
             }}
           />
         </label>
@@ -114,7 +114,7 @@ export function SetView({
               setBefore(null);
             }}
           >
-            undo roll
+            undo randomize
           </Button>
         )}
         <span className="gap" />
@@ -203,7 +203,7 @@ export function SetView({
                   ? `${Object.keys(scheme.songs).length} of ${songs.length} pinned`
                   : `${Object.keys(scheme.songs).length} pinned, from a set not connected`}
               </span>
-              {/* A scheme rolled before the wheel existed assigned a colourway to
+              {/* A scheme randomised before the wheel existed assigned a colourway to
                   every song, which is a perfectly good record of what you had and
                   also the state in which nothing turns. One button rather than
                   thirty-five dropdowns. */}

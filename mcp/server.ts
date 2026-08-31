@@ -43,7 +43,7 @@ const CircuitSchema = z.object({
 const FlowSchema = z.object({
   name: z.string().min(1),
   circuit: CircuitSchema,
-  rolled: z.boolean().optional(),
+  randomized: z.boolean().optional(),
 });
 
 const ProposedPortSchema = z.object({

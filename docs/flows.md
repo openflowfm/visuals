@@ -53,7 +53,7 @@ A **multi-tap** effect evaluates its whole input once per tap. `bloom` is eight 
 the centre, `smear` is six, `edge` is four, `shift` is three. Nesting two of them multiplies.
 `MAX_LINES` is the backstop and it refuses by name rather than handing the driver a shader
 that takes a second to compile — the number is high enough that no sane graph reaches it,
-and [the roll](wheel.md) deliberately never wires those four.
+and [the randomiser](wheel.md) deliberately never wires those four.
 
 A bounded procedural node needs a second answer, because a loop or repeated kernel may still
 be one GLSL statement. `field` charges 9, 16, or 7 primitive visits for cells, clouds, or
@@ -407,7 +407,7 @@ something, which is the same bargain every other unwired inlet makes.
 **A place is one colour.** It is the same point for every fragment, so a picture read at one
 fills the whole frame with whatever is at that spot — moving, if the numbers move, but flat.
 That is a real thing to reach for: it is how you take a colour *out* of a picture and blend
-it under something. It is also why [the roll](wheel.md) never wires one, and why a `place`
+it under something. It is also why [the randomiser](wheel.md) never wires one, and why a `place`
 node's own face is a flat square.
 
 **Cartesian, and there is no polar mode.** Two numbers read as a radius and an angle is a
@@ -456,7 +456,7 @@ where anything reasoning node-to-node calls it a loop and refuses the cord.
 
 `bloom`, `smear`, `edge` and `shift` each read their whole input several times, so nesting
 two multiplies everything upstream of them. That was already true and already load-bearing —
-`roll.ts` kept a hand-written list of these four by name so a roll would never stack three —
+`randomize.ts` kept a hand-written list of these four by name so a deal would never stack three —
 and a fact the vocabulary could not state was a fact somebody had to remember. It is a kind
 now, and the list is gone.
 
@@ -830,8 +830,9 @@ it took, and the curve is cubed so most of the travel is a few percent a second 
 can still throw the picture out of the frame. At rest it holds still, like every other centred
 control.
 
-It is deliberately **not dealt by [the roll](wheel.md)**. A creep only says something when its
-result is fed back into the picture it came from, a roll never wires a `last`, and a rolled
+It is deliberately **not dealt by [the randomiser](wheel.md)**. A creep only says something when
+its result is fed back into the picture it came from, the randomiser never wires a `last`, and
+a randomised
 creep would be a lens moving the point by a fraction of a percent — a dead node wearing a real
 name. The mode is not the problem; dealing it into a graph with no feedback in it is.
 
@@ -1128,4 +1129,4 @@ correctly: it is one trip round. Saying it needs a frame of delay, which is what
 so it is expressible, and only across a frame.
 
 **Undo.** The scheme is replaced whole on every edit and the file is the record, so `git
-diff` is the undo — and the roll keeps one level of its own.
+diff` is the undo — and the randomiser keeps one level of its own.

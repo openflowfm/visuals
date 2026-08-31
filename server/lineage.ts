@@ -6,7 +6,7 @@ import type {
   SearchEvidence,
 } from '../lab.ts';
 import type { Circuit, CircuitNode, NodeKind } from '../protocol.ts';
-import { WORDS } from '../roll.ts';
+import { WORDS } from '../randomize.ts';
 import {
   compileCircuit,
   inletsOf,

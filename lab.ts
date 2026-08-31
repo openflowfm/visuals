@@ -10,7 +10,7 @@ import type {
   Scheme,
 } from './protocol.ts';
 import { flowsUsedBy } from './protocol.ts';
-import { palette, seeded } from './roll.ts';
+import { palette, seeded } from './randomize.ts';
 
 /**
  * The lab: the durable evidence under the review view, and the contract both
@@ -215,7 +215,7 @@ export const TAGS: readonly LabTag[] = [
   describe('distinctive', 'piece', 'distinctive', 'Not a thing the library already has'),
   describe('surprising', 'piece', 'surprising', 'Did something the recipe did not promise'),
   describe('beautiful', 'piece', 'beautiful', 'The looks alone would keep it'),
-  describe('generic', 'piece', 'generic', 'Any roll could have made it'),
+  describe('generic', 'piece', 'generic', 'The randomiser could have made it'),
   describe('gimmicky', 'piece', 'gimmicky', 'One trick, and the trick is the whole flow'),
   praise('coherent', 'piece', 'coherent', 'Its parts belong to one idea'),
   praise('economical', 'piece', 'economical', 'A small graph doing a lot'),

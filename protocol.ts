@@ -174,7 +174,7 @@ export const GRADE_MODES: readonly string[] = [
  *
  * Its own kind because that is a fact about **cost** rather than about what it
  * does to a picture, and cost is the one thing the vocabulary could not say out
- * loud before: `roll.ts` kept a hand-written list of these four so it would
+ * loud before: `randomize.ts` kept a hand-written list of these four so it would
  * never stack two, and the list is the kind now.
  */
 export const SPREAD_MODES: readonly string[] = ['bloom', 'smear', 'edge', 'shift'];
@@ -424,8 +424,8 @@ export interface FlowDef {
   /** What it is called in the editor. Ids are stable; names are not. */
   name: string;
   circuit: Circuit;
-  /** The randomiser wired this one, so the next roll may clear it. */
-  rolled?: boolean;
+  /** The randomiser wired this one, so the next randomise may clear it. */
+  randomized?: boolean;
   /**
    * The response-set version this flow's numbers were dialled against, when it
    * is not the scheme's.
@@ -617,7 +617,7 @@ export interface Scheme {
   rotation: Rotation;
   /** By the set's own song name. Overrides only — most sets have none. */
   songs: Record<string, SongSpec>;
-  /** What the randomiser was rolled from, when it was. */
+  /** What the randomiser was randomised from, when it was. */
   seed?: string;
   /**
    * The response-set version the stored inlet values were dialled against.

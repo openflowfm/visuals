@@ -1,13 +1,13 @@
 import type { CandidateDraft, LabMethod } from '../lab.ts';
-import { WORDS, rollCircuit } from '../roll.ts';
+import { WORDS, randomizeCircuit } from '../randomize.ts';
 
 /**
  * The first methodology, deliberately plain: deal a candidate from the
- * constrained grammar in `rollCircuit` and propose it. No evidence is read, no
+ * constrained grammar in `randomizeCircuit` and propose it. No evidence is read, no
  * parent is mutated, and that is the point — `fresh` exists to prove the
  * `LabMethod` boundary before any method worth arguing about arrives behind it.
  *
- * The version names the grammar this method dealt from. Widening `rollCircuit`
+ * The version names the grammar this method dealt from. Widening `randomizeCircuit`
  * changes what the same seed deals, so a widened grammar is a version bump —
  * old candidates keep saying which deck they came from. Version 1 was the
  * single classic shape; version 2 is the five-shape deck.
@@ -25,7 +25,7 @@ export function freshMethod(): LabMethod<null> {
         drafts.push({
           flow: {
             name: `${a[0].toUpperCase()}${a.slice(1)} ${b}`,
-            circuit: rollCircuit(rng),
+            circuit: randomizeCircuit(rng),
           },
           bundle: {},
           parents: [],
