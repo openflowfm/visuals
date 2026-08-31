@@ -48,9 +48,9 @@ vec4 fractalColour(vec2 z, vec2 c, float detail, float e) {
   float orbit = clamp(smoothAt / float(steps), 0.0, 1.0);
   float bands = 0.5 + 0.5 * cos(6.28318530718 *
                 (orbit * 4.0 - uBeat * rate(e) * 0.035));
-  vec3 outside = mix(uColor, vec3(1.0) - uColor, bands * 0.72);
+  vec3 outside = mix(uPrimary, vec3(1.0) - uPrimary, bands * 0.72);
   outside *= mix(0.35, 1.0, 1.0 - orbit);
-  vec3 inside = uColor * mix(0.12, 0.28, e);
+  vec3 inside = uPrimary * mix(0.12, 0.28, e);
   return vec4(mix(inside, outside, escaped), 1.0);
 }
 
@@ -62,7 +62,7 @@ vec4 fractalMandelbrot(vec2 p, float zoom, float turn, float detail, float e) {
   float q = dot(c - vec2(0.25, 0.0), c - vec2(0.25, 0.0));
   bool cardioid = q * (q + c.x - 0.25) <= 0.25 * c.y * c.y;
   bool bulb = dot(c - vec2(-1.0, 0.0), c - vec2(-1.0, 0.0)) <= 0.0625;
-  if (cardioid || bulb) return vec4(uColor * mix(0.12, 0.28, e), 1.0);
+  if (cardioid || bulb) return vec4(uPrimary * mix(0.12, 0.28, e), 1.0);
 
   return fractalColour(vec2(0.0), c, detail, e);
 }

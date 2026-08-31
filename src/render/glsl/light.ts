@@ -50,7 +50,7 @@ vec4 light_lamp(vec2 p, vec2 from, float e, float carry, float soft) {
   float halo = window / (1.0 + 9.0 * q * q);
   float core = exp(-q * q / max(0.0045, soft * soft * 0.22));
   float lit = clamp((halo + core) * mix(0.55, 1.15, e), 0.0, 1.0);
-  vec3 colour = mix(uColor, vec3(1.0), core * 0.75);
+  vec3 colour = mix(uPrimary, vec3(1.0), core * 0.75);
   return vec4(colour, lit);
 }
 
@@ -69,7 +69,7 @@ vec4 light_beam(vec2 p, vec2 from, float e, float aim, float spread) {
   float dust = 0.8 + 0.28 * (fieldGradientNoise(dustAt) +
                              0.5 * fieldGradientNoise(dustAt * 2.3 + vec2(11.7, 3.1)));
   float lit = clamp(cone * throwFade * dust * mix(0.55, 1.25, e), 0.0, 1.0);
-  vec3 colour = mix(uColor, vec3(1.0), lit * 0.45);
+  vec3 colour = mix(uPrimary, vec3(1.0), lit * 0.45);
   return vec4(colour, lit);
 }
 
@@ -87,7 +87,7 @@ vec4 light_shafts(vec2 p, vec2 from, float e, float blades, float haze) {
   float rays = smoothstep(0.42, 0.8, streaks);
   float carry = exp(-r * mix(2.6, 0.85, clamp(haze, 0.0, 1.0))) * smoothstep(0.0, 0.05, r);
   float lit = clamp(rays * fan * carry * mix(0.5, 1.2, e), 0.0, 1.0);
-  vec3 colour = mix(uColor, vec3(1.0), lit * 0.35);
+  vec3 colour = mix(uPrimary, vec3(1.0), lit * 0.35);
   return vec4(colour, lit);
 }
 
@@ -103,7 +103,7 @@ vec4 light_caustics(vec2 p, float e, float weave, float glint) {
   float web = pow(clamp(1.0 - min(w1, w2), 0.0, 1.0), sharp);
   float crossings = pow(clamp((1.0 - w1) * (1.0 - w2), 0.0, 1.0), sharp * 0.5);
   float lit = clamp((web * 0.75 + crossings * 0.55) * mix(0.5, 1.2, e), 0.0, 1.0);
-  vec3 colour = mix(uColor, vec3(1.0), lit * lit * 0.5);
+  vec3 colour = mix(uPrimary, vec3(1.0), lit * lit * 0.5);
   return vec4(colour, lit);
 }
 `;

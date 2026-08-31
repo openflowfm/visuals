@@ -54,7 +54,14 @@ uniform float uQuantum;
 uniform float uLevel;    // the meter this pass is about, 0-1
 uniform float uEnergy;   // the ROOM's energy: a smoothed master meter. A default.
 uniform float uOpacity;
-uniform vec3  uColor;
+// The colourway, by role. One array rather than five uniforms because the roles
+// are a fixed vocabulary and the track pass overwrites only the first slot.
+uniform vec3  uColors[5];
+#define uPrimary    uColors[0]
+#define uSecondary  uColors[1]
+#define uComplement uColors[2]
+#define uAccent     uColors[3]
+#define uChalk      uColors[4]
 uniform float uSeed;
 uniform float uPace;     // whole rungs along the division ladder, -2 to +2
 

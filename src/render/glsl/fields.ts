@@ -138,7 +138,7 @@ vec4 field_cells(vec2 p, float e, float weave) {
   float f1 = fieldWorleyF1(p * mix(4.0, 12.0, weave));
   float body = 1.0 - smoothstep(0.12, 0.58, f1);
   float contour = 1.0 - smoothstep(0.0, 0.06, abs(f1 - 0.34));
-  vec3 colour = mix(uColor * (0.45 + body * 0.55), vec3(1.0) - uColor, contour * 0.35);
+  vec3 colour = mix(uPrimary * (0.45 + body * 0.55), vec3(1.0) - uPrimary, contour * 0.35);
   return vec4(colour, clamp(body * 0.75 + contour * 0.45, 0.0, 1.0));
 }
 
@@ -146,7 +146,7 @@ vec4 field_clouds(vec2 p, float e, float weave) {
   vec2 drift = vec2(uTime * 0.035, uTime * 0.021);
   float density = fieldFbm(p * mix(1.4, 3.8, weave) + drift);
   float coverage = smoothstep(0.34 - uLevel * 0.08, 0.72, density);
-  vec3 colour = mix(uColor * 0.5, mix(uColor, vec3(1.0), 0.42), density);
+  vec3 colour = mix(uPrimary * 0.5, mix(uPrimary, vec3(1.0), 0.42), density);
   return vec4(colour, coverage);
 }
 
@@ -154,7 +154,7 @@ vec4 field_metaballs(vec2 p, float e, float balls, float apart) {
   float density = fieldMetaballDensity(p, e, balls, apart);
   float coverage = smoothstep(0.45, 0.85, density);
   float rim = 1.0 - smoothstep(0.0, 0.10, abs(density - 0.62));
-  vec3 colour = mix(uColor, vec3(1.0) - uColor, rim * 0.45);
+  vec3 colour = mix(uPrimary, vec3(1.0) - uPrimary, rim * 0.45);
   return vec4(colour, clamp(coverage + rim * 0.25, 0.0, 1.0));
 }
 `;

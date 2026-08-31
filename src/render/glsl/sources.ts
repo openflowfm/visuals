@@ -51,7 +51,7 @@ export const GENERATOR_BODIES = {
   // alpha, which makes it the one that can hide everything under it -- so its
   // brightness stays well short of white.
   float breathe = 0.55 + 0.45 * (1.0 - uPhase / uQuantum);
-  return vec4(uColor * (breathe * 0.6 + uLevel * 0.45), 1.0);`,
+  return vec4(uPrimary * (breathe * 0.6 + uLevel * 0.45), 1.0);`,
 
   bars: `
   // Vertical bars whose heights are a bar of music: each column is one
@@ -64,7 +64,7 @@ export const GENERATOR_BODIES = {
   float lit = step(abs(x - head), 0.5);
   float height = 0.2 + 0.8 * hash(vec2(x, floor(uBeat / uQuantum))) * (0.3 + uLevel);
   float bar = step(uv.y, height);
-  return vec4(uColor * (0.35 + 0.65 * lit), bar * (0.35 + 0.65 * lit));`,
+  return vec4(uPrimary * (0.35 + 0.65 * lit), bar * (0.35 + 0.65 * lit));`,
 
   rings: `
   // Rings launched on the beat and expanding outward, so the picture carries
@@ -77,7 +77,7 @@ export const GENERATOR_BODIES = {
     float radius = age * mix(0.55, 0.95, flight);
     total += smoothstep(0.03, 0.0, abs(r - radius)) * (1.0 - age);
   }
-  return vec4(uColor, clamp(total * (0.6 + uLevel * 1.4), 0.0, 1.0));`,
+  return vec4(uPrimary, clamp(total * (0.6 + uLevel * 1.4), 0.0, 1.0));`,
 
   noise: `
   // A drifting field that thickens with the sound. The drift is on uTime
@@ -87,7 +87,7 @@ export const GENERATOR_BODIES = {
   n += 0.5 * noise(q * 2.3 - uTime * 0.2);
   n /= 1.5;
   float threshold = mix(0.72, 0.42, cover) - uLevel * 0.25;
-  return vec4(uColor * (0.6 + n), smoothstep(threshold, threshold + 0.18, n));`,
+  return vec4(uPrimary * (0.6 + n), smoothstep(threshold, threshold + 0.18, n));`,
 
   strobe: `
   // Whole-frame flashes on the beat division energy chose. The one source with
@@ -96,7 +96,7 @@ export const GENERATOR_BODIES = {
   // nothing playing through it flashing at a third of full is the whole frame
   // going off on every beat for no reason at all.
   float flash = beatPulse(rate(pulse), e);
-  return vec4(mix(uColor, vec3(1.0), 0.3), flash * (0.1 + uLevel * 0.75));`,
+  return vec4(mix(uPrimary, vec3(1.0), 0.3), flash * (0.1 + uLevel * 0.75));`,
 
   grid: `
   // A grid of cells, each lighting on its own beat. Reads as structure rather
@@ -108,7 +108,7 @@ export const GENERATOR_BODIES = {
   float when = hash(id);
   float lit = pow(1.0 - fract(uBeat * rate(e) * 0.5 + when), 6.0);
   float inset = smoothstep(0.0, 0.06, min(min(f.x, f.y), min(1.0 - f.x, 1.0 - f.y)));
-  return vec4(uColor * (0.5 + lit), inset * (0.12 + lit * (0.55 + uLevel * 0.45)));`,
+  return vec4(uPrimary * (0.5 + lit), inset * (0.12 + lit * (0.55 + uLevel * 0.45)));`,
 
   tunnel: `
   // A corridor rushing toward you. Depth is 1/r, which is what makes it read as
@@ -123,7 +123,7 @@ export const GENERATOR_BODIES = {
   float lit = max(rings, ribs * 0.8);
   // Fades into the vanishing point, where the maths goes to infinity anyway.
   float fade = smoothstep(0.02, 0.3, r);
-  return vec4(mix(uColor, vec3(1.0), rings * 0.4), lit * fade * (0.35 + uLevel * 0.9));`,
+  return vec4(mix(uPrimary, vec3(1.0), rings * 0.4), lit * fade * (0.35 + uLevel * 0.9));`,
 
   plasma: `
   // Four sines crossed. The oldest trick there is and still the best full-frame
@@ -134,7 +134,7 @@ export const GENERATOR_BODIES = {
   float v = sin(q.x + t) + sin(q.y * 1.3 - t) + sin((q.x + q.y) * 0.7 + t * 0.8)
           + sin(length(q) * 2.2 - t * 1.6);
   v = v * 0.125 + 0.5;
-  return vec4(mix(uColor, vec3(1.0) - uColor, v) * (0.45 + uLevel * 0.7), 0.3 + v * 0.55);`,
+  return vec4(mix(uPrimary, vec3(1.0) - uPrimary, v) * (0.45 + uLevel * 0.7), 0.3 + v * 0.55);`,
 
   spiral: `
   // Arms winding out of the centre and turning on the beat. Reads as motion
@@ -145,7 +145,7 @@ export const GENERATOR_BODIES = {
                                - uBeat * rate(e) * PI);
   band = smoothstep(0.45, 0.85, band);
   float fade = 1.0 - smoothstep(0.16, 0.64, r);
-  return vec4(uColor * (0.5 + band * 0.7), band * fade * (0.4 + uLevel));`,
+  return vec4(uPrimary * (0.5 + band * 0.7), band * fade * (0.4 + uLevel));`,
 
   scan: `
   // Lines, with a bar's worth of sweep passing down them. The one source that
@@ -155,7 +155,7 @@ export const GENERATOR_BODIES = {
   float line = smoothstep(0.4, 0.5, abs(fract(uv.y * rules) - 0.5));
   float head = 1.0 - uPhase / uQuantum;
   float sweep = pow(1.0 - min(abs(uv.y - head) * 3.5, 1.0), 3.0);
-  return vec4(mix(uColor, vec3(1.0), sweep * 0.55),
+  return vec4(mix(uPrimary, vec3(1.0), sweep * 0.55),
               clamp(line * (0.16 + sweep * 1.5) * (0.45 + uLevel), 0.0, 1.0));`,
 
   sparks: `
@@ -171,7 +171,7 @@ export const GENERATOR_BODIES = {
   float pop = pow(1.0 - life, 5.0);
   vec2 drift = (vec2(hash(id + 3.7), hash(id + 9.1)) - 0.5) * 0.7;
   float spark = smoothstep(0.02 + 0.18 * pop, 0.0, length(f - drift * life));
-  return vec4(mix(uColor, vec3(1.0), 0.35), spark * pop * (0.35 + uLevel * 0.9));`,
+  return vec4(mix(uPrimary, vec3(1.0), 0.35), spark * pop * (0.35 + uLevel * 0.9));`,
 
   ...PATTERN_BODIES,
 } satisfies Record<Source, string>;

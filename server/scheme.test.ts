@@ -267,7 +267,7 @@ describe('the example scheme', () => {
 describe('reading a file', () => {
   it('treats a present colourway section as the complete set', () => {
     const merged = merge({ colorways: { mine: ['#123456'] } });
-    expect(merged.colorways.mine).toEqual(['#123456']);
+    expect(merged.colorways.mine).toEqual(Array(5).fill('#123456'));
     expect(Object.keys(merged.colorways)).toEqual(['mine']);
     expect(merged.defaults.colorway).toBe('mine');
   });
@@ -315,7 +315,10 @@ describe('a file with a value of the wrong shape', () => {
     // `hex.map(packColor)` in show.ts, once per tick.
     expect(() => merge({ colorways: { x: 'nope' } } as never)).toThrow();
     expect(() => merge({ colorways: { x: [1, 2] } } as never)).toThrow();
-    expect(merge({ colorways: { x: [] } }).colorways.x).toEqual([]);
+    // Accepted, not refused — and answered with a neutral five. Every colourway
+    // that leaves here has one colour per role, so nothing downstream indexes
+    // past the end into black.
+    expect(merge({ colorways: { x: [] } }).colorways.x).toHaveLength(5);
   });
 
   it('refuses a song whose pinned flows are not a list', () => {
@@ -364,7 +367,7 @@ describe('a file with a value of the wrong shape', () => {
       layers: { anything: true },
       colorways: { mine: ['#123456'] },
     } as never);
-    expect(merged.colorways.mine).toEqual(['#123456']);
+    expect(merged.colorways.mine).toEqual(Array(5).fill('#123456'));
   });
 });
 
@@ -409,7 +412,7 @@ describe('a file written when the cascade existed', () => {
     // wrote and nobody wants to debug, so the bindings go. The colourways, the
     // song assignments and any flow that was a graph are work, so they stay.
     const merged = merge(old as never);
-    expect(merged.colorways.rust).toEqual(['#aa4422']);
+    expect(merged.colorways.rust).toEqual(Array(5).fill('#aa4422'));
     expect(merged.songs.sandstorm).toEqual({ colorway: 'rust' });
     expect(merged.flows.mine).toBeDefined();
     expect((merged as unknown as Record<string, unknown>).layers).toBeUndefined();

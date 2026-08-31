@@ -1,4 +1,4 @@
-import type { Scheme, Show, Track } from '../protocol.ts';
+import { paletteOf, type Scheme, type Show, type Track } from '../protocol.ts';
 import type { SetState } from './bridge.ts';
 import type { LinkFrame } from './link.ts';
 import { atOne, bumped, inPhase, reOne, turnsAt, whatIsUp, type Wheel } from '../resolve.ts';
@@ -255,8 +255,11 @@ export function buildShow(
   const up = whatIsUp(scheme, songKey, turns);
 
   // A colourway nobody assigned still has colours: an unstyled song would be a
-  // black screen for the one thing nobody remembered to configure.
-  const hex = (up.colorway ? scheme.colorways[up.colorway] : null) ?? ['#ffffff'];
+  // black screen for the one thing nobody remembered to configure. Through
+  // `paletteOf` so what leaves here is always exactly five, in role order —
+  // every reader downstream indexes by role and none of them should have to
+  // ask how long this one happened to be.
+  const hex = paletteOf((up.colorway ? scheme.colorways[up.colorway] : null) ?? []);
   const colors = hex.map(packColor);
 
   const read = (track: (typeof set.tracks)[number], depth: number): Track => {

@@ -532,10 +532,78 @@ export interface Rotation {
   colorEvery: number;
 }
 
+/**
+ * The five colours a colourway is, named for the job each does in a picture.
+ *
+ * A colourway used to be any number of hexes whose only distinction was
+ * position, and only the first of them ever reached a flow: every generator
+ * drew from `colors[0]` and invented the rest, mixing toward `vec3(1.0)` or
+ * toward its own complement. So a five-colour palette rendered as one member
+ * plus two colours that were not in it, and the palettes compensated —
+ * `EXAMPLES` puts an opposite at position three precisely because the shader
+ * was going to draw one whether the palette liked it or not.
+ *
+ * Naming the positions is what lets a graph reach them. Each role says what the
+ * colour is *for* rather than where it sits, so a source asks for the kind of
+ * colour it needs and any colourway can answer:
+ *
+ * - `primary` carries the picture. The loud base every generator starts from.
+ * - `secondary` sits beside it without fighting: the neighbour in the harmony.
+ * - `complement` opposes it, taken loud. What stops a frame being a wall in one
+ *   colour, and what replaces the `vec3(1.0) - uColor` the shaders invented.
+ * - `accent` is for what is small and wants to be seen — sparks, sweep heads.
+ * - `chalk` is light and coloured, for reading edges against. It is the
+ *   palette's answer to white, which is what the hot half of every generator
+ *   used to mix toward.
+ *
+ * **Five, fixed.** Outlets are static on a node spec, so a `colorway` node's
+ * per-role outlets cannot follow a colourway that changes length — and the
+ * colourway on the wheel changes every `colorEvery` bars. A cord orphaned by
+ * editing a *palette*, in a flow that is not even open, is the worst kind of
+ * action at a distance. So the length is a fact about the vocabulary and
+ * `paletteOf` is where a shorter one is made to answer.
+ */
+export const COLOR_ROLES = ['primary', 'secondary', 'complement', 'accent', 'chalk'] as const;
+
+export type ColorRole = (typeof COLOR_ROLES)[number];
+
+/**
+ * What a colourway with no colours in it draws.
+ *
+ * White alone was the old answer and it is the wrong shape now: a `complement`
+ * of white is black and a `chalk` of white is white, so an unstyled song lost
+ * every distinction the roles exist to make. This is a neutral palette that
+ * still has five distinguishable jobs in it.
+ */
+const NOTHING_SET: readonly string[] = [
+  '#ffffff',
+  '#c8c8c8',
+  '#3c3c3c',
+  '#f0f0f0',
+  '#e8e8e8',
+];
+
+/**
+ * Any stored colourway as exactly five, by role.
+ *
+ * Wrapping rather than padding with white: a two-colour palette somebody typed
+ * is a statement about a relationship, and repeating it round the roles keeps
+ * that relationship in every position. Padding would hand `complement` and
+ * `chalk` to a colour nobody chose.
+ *
+ * Longer than five is truncated. There is nothing to do with a sixth colour —
+ * no role asks for it and no generator can reach it — and keeping it would let
+ * a file carry a colour that silently never draws.
+ */
+export function paletteOf(hex: readonly string[]): string[] {
+  if (hex.length === 0) return [...NOTHING_SET];
+  return COLOR_ROLES.map((_, i) => hex[i % hex.length]);
+}
+
 export interface Scheme {
   /** Every flow, by id. All of them are graphs; none of them ship. */
   flows: Record<string, FlowDef>;
-  /** Named colour sets, as `#rrggbb`. */
+  /** Named colour sets, as `#rrggbb`. Five each, by `COLOR_ROLES`. */
   colorways: Record<string, string[]>;
   rotation: Rotation;
   /** By the set's own song name. Overrides only — most sets have none. */

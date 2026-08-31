@@ -1,4 +1,4 @@
-import type { Scheme } from '../../protocol.ts';
+import { COLOR_ROLES, paletteOf, type Scheme } from '../../protocol.ts';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 
 /**
@@ -54,7 +54,10 @@ export function Colorways({
   const add = () => {
     let name = 'new';
     for (let n = 2; scheme.colorways[name]; n++) name = `new ${n}`;
-    setWay(name, ['#ffffff', '#888888']);
+    // A harmony rather than five greys, because a new colourway that draws
+    // nothing distinguishable teaches that the roles do not matter. Loud base,
+    // its opposite loud, a neighbour, an accent, and a tint of the base.
+    setWay(name, ['#ff5a1f', '#ffb703', '#00c4ff', '#ff2d55', '#ffe3c2']);
   };
 
   return (
@@ -73,35 +76,22 @@ export function Colorways({
             }}
           />
           <span className="swatches">
-            {scheme.colorways[name].map((hex, i) => (
-              <input
-                key={i}
-                type="color"
-                value={hex}
-                aria-label={`${name} colour ${i + 1}`}
-                onChange={(e) => {
-                  const colors = [...scheme.colorways[name]];
-                  colors[i] = e.target.value;
-                  setWay(name, colors);
-                }}
-              />
+            {paletteOf(scheme.colorways[name]).map((hex, i) => (
+              <label key={COLOR_ROLES[i]} className="role">
+                <input
+                  type="color"
+                  value={hex}
+                  aria-label={`${name} ${COLOR_ROLES[i]}`}
+                  onChange={(e) => {
+                    const colors = paletteOf(scheme.colorways[name]);
+                    colors[i] = e.target.value;
+                    setWay(name, colors);
+                  }}
+                />
+                <span>{COLOR_ROLES[i]}</span>
+              </label>
             ))}
           </span>
-          <Button
-            tone="quiet"
-            label={`Add a colour to ${name}`}
-            onPress={() => setWay(name, [...scheme.colorways[name], '#ffffff'])}
-          >
-            +
-          </Button>
-          <Button
-            tone="quiet"
-            label={`Remove the last colour from ${name}`}
-            disabled={scheme.colorways[name].length <= 1}
-            onPress={() => setWay(name, scheme.colorways[name].slice(0, -1))}
-          >
-            {String.fromCharCode(8722)}
-          </Button>
           <Button
             tone="danger"
             label={`Delete ${name}`}

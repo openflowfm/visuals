@@ -23,7 +23,7 @@ export const PATTERN_BODIES = {
   float feather = max(density / min(uRes.x, uRes.y), 0.001);
   float inset = smoothstep(0.0, feather, edgeDistance);
 
-  vec3 ink = mix(uColor, vec3(1.0) - uColor, parity * 0.72);
+  vec3 ink = mix(uPrimary, vec3(1.0) - uPrimary, parity * 0.72);
   return vec4(ink * (0.48 + uLevel * 0.62),
               inset * mix(0.28, 0.82, parity));`,
 
@@ -32,7 +32,7 @@ export const PATTERN_BODIES = {
   // harmless answer before asking for an angle; it also leaves a clean pinhole
   // where all of the sectors meet.
   float radius2 = dot(p, p);
-  if (radius2 < 1e-10) return vec4(uColor, 0.0);
+  if (radius2 < 1e-10) return vec4(uPrimary, 0.0);
 
   // An even number of equal angular sectors, alternately dark and bright.
   // Positive radial scaling cannot change the sector: only the angle matters.
@@ -50,7 +50,7 @@ export const PATTERN_BODIES = {
   float feather = clamp(angularPixel, 0.001, 0.49);
   float interior = smoothstep(0.0, feather, edgeDistance);
 
-  vec3 ink = mix(uColor * 0.55, mix(uColor, vec3(1.0), 0.34), parity);
+  vec3 ink = mix(uPrimary * 0.55, mix(uPrimary, vec3(1.0), 0.34), parity);
   return vec4(ink * (0.5 + uLevel * 0.65),
               interior * mix(0.18, 0.78, parity));`,
 } satisfies Record<'checker' | 'rays', string>;

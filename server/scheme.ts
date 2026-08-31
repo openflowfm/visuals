@@ -1,5 +1,12 @@
 import { z } from 'zod';
-import type { Circuit, CircuitNode, FlowDef, Scheme, SongSpec } from '../protocol.ts';
+import {
+  paletteOf,
+  type Circuit,
+  type CircuitNode,
+  type FlowDef,
+  type Scheme,
+  type SongSpec,
+} from '../protocol.ts';
 import { NODE_KINDS } from '../src/nodes/generated.ts';
 import { repaired, splitPort } from '../src/render/circuit.ts';
 import { RESPONSE_SET_VERSION } from '../response.ts';
@@ -1094,7 +1101,17 @@ export function merge(raw: Partial<Scheme>): Scheme {
     ? migrateFlowResponses(file.flows, file.responses ?? OLDEST_RESPONSE_SET_VERSION).flows
     : EXAMPLES.flows;
   const flows = whole(dialled);
-  const colorways = { ...(file.colorways ?? EXAMPLES.colorways) };
+  // Through `paletteOf`, so every colourway that reaches a show is exactly five
+  // in role order. A file may hand-write two and mean it; the roles are what a
+  // graph wires to, so the repair belongs here — the one door — rather than in
+  // the renderer, where it would be redone sixty times a second and written
+  // back nowhere. A saved scheme carries the repaired five.
+  const colorways = Object.fromEntries(
+    Object.entries({ ...(file.colorways ?? EXAMPLES.colorways) }).map(([name, hex]) => [
+      name,
+      paletteOf(hex),
+    ]),
+  );
   const defaults = { ...EXAMPLES.defaults, ...(file.defaults ?? {}) };
   if (!Object.hasOwn(flows, defaults.flow)) {
     defaults.flow = Object.keys(flows)[0] ?? defaults.flow;

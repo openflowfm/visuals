@@ -823,7 +823,7 @@ const SPREAD_EMIT: Record<string, (ctx: Emitting, e: string, k: (i: number) => s
       const h = `abs(${c.readAt('c', `(${c.at} + ${x})`)}.rgb - ${c.readAt('c', `(${c.at} - ${x})`)}.rgb)`;
       const v = `abs(${c.readAt('c', `(${c.at} + ${y})`)}.rgb - ${c.readAt('c', `(${c.at} - ${y})`)}.rgb)`;
       const m = `clamp(length(${h} + ${v}) * mix(1.5, 6.0, ${k(1)}), 0.0, 1.0)`;
-      return `vec4(mix(uColor, vec3(1.0), 0.45) * ${m}, ${m})`;
+      return `vec4(mix(uPrimary, vec3(1.0), 0.45) * ${m}, ${m})`;
     },
   };
 
@@ -1236,7 +1236,7 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     inlets: [N('amount', 'The brightness and opacity of the painted colour.'), E()],
     outlets: [C('c', 'A frame filled with the active colour.')],
     emit: (c) => ({
-      c: `vec4(charge(uColor, ${c.read('energy')}) * clamp(${c.read('amount')}, 0.0, 1.0), clamp(${c.read('amount')}, 0.0, 1.0))`,
+      c: `vec4(charge(uPrimary, ${c.read('energy')}) * clamp(${c.read('amount')}, 0.0, 1.0), clamp(${c.read('amount')}, 0.0, 1.0))`,
     }),
   },
 

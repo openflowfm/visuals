@@ -110,7 +110,7 @@ vec4 fxTint(vec4 c, float amount, float bias) {
   // The bias bends the ramp rather than sliding it, so the tint can be pushed
   // into the shadows or held up in the highlights without clipping either end.
   float shaped = pow(clamp(fxLuma(col), 0.0, 1.0), exp2((0.5 - bias) * 2.4));
-  vec3 duo = mix(uColor * 0.12, mix(uColor, vec3(1.0), 0.3), shaped);
+  vec3 duo = mix(uPrimary * 0.12, mix(uPrimary, vec3(1.0), 0.3), shaped);
   return vec4(clamp(mix(col, duo, clamp(amount, 0.0, 1.0)), 0.0, 1.0) * c.a, c.a);
 }
 

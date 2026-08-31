@@ -164,6 +164,29 @@ export function createFeed(gl: WebGL2RenderingContext): Feed {
     return built;
   };
 
+  /**
+   * The colourway as one bank of five vec3s, in `COLOR_ROLES` order.
+   *
+   * Filled in place rather than allocated: this runs once per flow and once per
+   * playing track, sixty times a second, and a fresh Float32Array per track was
+   * garbage for nothing.
+   *
+   * A show whose palette is short is wrapped rather than read past the end.
+   * `paletteOf` already guarantees five out of the scheme, so this only catches
+   * a show from an older server or a test room that built one by hand — but the
+   * alternative is reading undefined into black, and a black `chalk` is every
+   * hot highlight in the rig going out.
+   */
+  const colorBank = new Float32Array(15);
+  const palette = (colors: readonly number[], first?: number): Float32Array => {
+    const length = Math.max(1, colors.length);
+    for (let i = 0; i < 5; i++) {
+      const packed = i === 0 && first !== undefined ? first : (colors[i % length] ?? 0xffffff);
+      colorBank.set(rgb(packed), i * 3);
+    }
+    return colorBank;
+  };
+
   /** The clock, which every shader in the rig reads and none of them owns. */
   const clock = (program: Program, at: Feeding) => {
     const quantum = at.show.quantum || 4;
@@ -213,7 +236,11 @@ export function createFeed(gl: WebGL2RenderingContext): Feed {
         gl.uniform1f(program.uniform('uLevel'), track.level);
         gl.uniform1f(program.uniform('uEnergy'), show.master);
         gl.uniform1f(program.uniform('uOpacity'), opacity);
-        gl.uniform3fv(program.uniform('uColor'), rgb(track.color));
+        // The whole palette, with this track's own colour standing in for the
+        // primary. A per-track picture still reaches `chalk` and `complement`
+        // for its hot and opposing halves, so it agrees with the same generator
+        // drawn inside a flow.
+        gl.uniform3fv(program.uniform('uColors'), palette(show.colors, track.color));
         // Per track and stable, so two tracks drawing the same picture out of
         // the same colourway do not draw the identical thing on top of each
         // other. It is also what spreads them across the division ladder.
@@ -231,7 +258,7 @@ export function createFeed(gl: WebGL2RenderingContext): Feed {
       gl.uniform1f(program.uniform('uEnergy'), room);
       gl.uniform1f(program.uniform('uOpacity'), 1);
       gl.uniform1f(program.uniform('uSeed'), 3.71);
-      gl.uniform3fv(program.uniform('uColor'), rgb(show.colors[0] ?? 0xffffff));
+      gl.uniform3fv(program.uniform('uColors'), palette(show.colors));
       gl.uniform1f(program.uniform('uSongSeed'), seedOf(show.song));
       gl.uniform1f(program.uniform('uSongTempo'), show.tempo);
       // A half for a set that states no key, which is the convention every other
