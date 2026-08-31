@@ -257,6 +257,15 @@ makes it the family that can run out of budget.
 
 Nothing has to be registered in a scheme, because a mode is not a flow.
 
+**A new node arrives in the manual the same way.** `nodeCatalog()` in `mcp/authoring.ts`
+already assembles the whole vocabulary for an agent — family, modes, every inlet with the
+sentence it carries and the value it starts on — and `npm run dev:node-manual` renders that
+into the user manual's [Nodes](https://github.com/ryangavin/better-session-view/wiki/Nodes)
+page. The page is a rendering of the descriptions the app itself shows on the node, so
+nobody has to remember to describe a mode twice, and a hand-written list cannot quietly fall
+behind the compiler: the one it replaces had counted eleven `lens` modes since the twelfth
+was added.
+
 ## The clock is a uniform, and so is energy
 
 Nothing in a shader reads a wall clock or counts frames. `uBeat` and `uPhase` come from
