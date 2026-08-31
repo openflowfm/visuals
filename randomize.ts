@@ -86,24 +86,151 @@ export function newSeed(): string {
   return `${at()}-${at()}-${Math.floor(Math.random() * 900 + 100)}`;
 }
 
-function hex(h: number, s: number, l: number): string {
-  const f = (n: number) => {
-    const k = (n + ((h % 360) + 360) / 30) % 12;
-    const v = l - s * Math.min(l, 1 - l) * Math.max(-1, Math.min(k - 3, 9 - k, 1));
-    return Math.round(Math.max(0, Math.min(1, v)) * 255)
-      .toString(16)
-      .padStart(2, '0');
-  };
-  return `#${f(0)}${f(8)}${f(4)}`;
+/** OKLab to linear sRGB, at one lightness, chroma and hue. Ottosson's matrices. */
+function linearOf(l: number, c: number, hueDegrees: number): [number, number, number] {
+  const h = (hueDegrees * Math.PI) / 180;
+  const a = c * Math.cos(h);
+  const b = c * Math.sin(h);
+  const lp = (l + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+  const mp = (l - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+  const sp = (l - 0.0894841775 * a - 1.291485548 * b) ** 3;
+  return [
+    4.0767416621 * lp - 3.3077115913 * mp + 0.2309699292 * sp,
+    -1.2684380046 * lp + 2.6097574011 * mp - 0.3413193965 * sp,
+    -0.0041960863 * lp - 0.7034186147 * mp + 1.707614701 * sp,
+  ];
+}
+
+const inGamut = (l: number, c: number, h: number) =>
+  linearOf(l, c, h).every((v) => v >= -0.0001 && v <= 1.0001);
+
+/**
+ * The most chroma sRGB can hold at this lightness and hue.
+ *
+ * Most of OKLCH is not in sRGB, and the naive conversion of a colour outside it
+ * returns channels past 0–1 that clip to something with the wrong *hue*. So the
+ * generator asks how much colour is available and takes a fraction of it, rather
+ * than naming a number and hoping.
+ */
+function maxChroma(l: number, h: number): number {
+  let lo = 0;
+  let hi = 0.4;
+  for (let i = 0; i < 16; i++) {
+    const mid = (lo + hi) / 2;
+    if (inGamut(l, mid, h)) lo = mid;
+    else hi = mid;
+  }
+  return lo;
+}
+
+/**
+ * The lightness at which a hue is most colourful, and how colourful that is.
+ *
+ * **This is the thing the old generator had no way to ask, and the reason its
+ * palettes were muddy.** How vivid a hue can be depends entirely on how light it
+ * is, and *where* that peak sits moves right around the wheel: a fully saturated
+ * yellow-green is a light colour and a fully saturated blue is a dark one. There
+ * is no yellow at the lightness of a vivid blue — it does not exist in sRGB — so
+ * naming one lightness for every member and pulling chroma back until it fitted
+ * asked for exactly the colour that cannot be had, and got mud in the yellows
+ * every time.
+ *
+ * The four shipped colourways have always done this by eye. Measured in OKLCH,
+ * every non-tint member of all four sits at or near its own hue's peak, and
+ * their lightnesses run from 0.60 to 0.92 as a result — which reads as a deal
+ * with no rule in it and is the rule.
+ *
+ * A ternary-ish narrowing rather than a scan, because the peak is a single
+ * smooth maximum in lightness.
+ */
+function cusp(h: number): number {
+  let lo = 0.3;
+  let hi = 0.98;
+  let at = 0.7;
+  for (let pass = 0; pass < 4; pass++) {
+    const step = (hi - lo) / 12;
+    let best = -1;
+    for (let l = lo; l <= hi + 1e-9; l += step) {
+      const c = maxChroma(l, h);
+      if (c > best) {
+        best = c;
+        at = l;
+      }
+    }
+    lo = Math.max(0.05, at - step);
+    hi = Math.min(0.99, at + step);
+  }
+  return at;
+}
+
+/**
+ * A lightness above a hue's peak, named by **how much colour it is willing to
+ * give up** rather than by a number of steps.
+ *
+ * A fixed lift does not mean a fixed thing. Chroma falls away from the peak at
+ * a rate that is different for every hue: +0.12 off an amber, which peaks around
+ * 0.75, lands at 0.87 where amber has almost nothing left — while the same +0.12
+ * off a yellow costs it almost nothing, because yellow peaks light and stays
+ * colourful up there. So `accent` was a strong mark for half the wheel and a
+ * washed-out one for the rest, from one number that looked even.
+ *
+ * Asking for the lightness where this hue still holds `keep` of its best chroma
+ * gives every hue the same *bargain* instead of the same *step*.
+ */
+function lifted(h: number, keep: number): number {
+  const peak = cusp(h);
+  const want = maxChroma(peak, h) * keep;
+  let lo = peak;
+  let hi = 0.97;
+  for (let i = 0; i < 14; i++) {
+    const mid = (lo + hi) / 2;
+    if (maxChroma(mid, h) > want) lo = mid;
+    else hi = mid;
+  }
+  return lo;
+}
+
+/**
+ * OKLCH to `#rrggbb`.
+ *
+ * ## Why not HSL
+ *
+ * This used to be HSL with two corrections bolted onto it, and both of them were
+ * the same admission: **HSL's L is not lightness and its H is not evenly
+ * spaced.** A yellow and a blue at `l: 0.5` are not remotely as bright as each
+ * other, so a palette dealt at one number had members that punched and members
+ * that vanished — patched by an `evenly()` that added back a fraction of the
+ * hue's own luma, itself computed from a hand-written primaries table. And a
+ * step of 22 degrees is the whole distance from red to orange but almost nothing
+ * between two greens, so one harmony read as a real relationship on one deal and
+ * as the same colour twice on the next.
+ *
+ * OKLab was built to fix exactly that. `L` is perceptual lightness, so the
+ * correction is deleted rather than improved. `C` is chroma — *how much colour
+ * there is* — and is independent of `L`, where the old code could only ask for
+ * "saturation 0.9", which at a light lightness is a pastel and at a mid one is a
+ * fire engine. And hue degrees are near enough perceptually even that an offset
+ * means one relationship wherever the base landed.
+ */
+function hex(l: number, c: number, h: number): string {
+  const encode = (v: number) =>
+    v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055;
+  return `#${linearOf(l, c, h)
+    .map((v) =>
+      Math.round(Math.max(0, Math.min(1, encode(Math.max(0, Math.min(1, v))))) * 255)
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('')}`;
 }
 
 /**
  * The relationships a palette can be built on, as hue offsets from the primary.
  *
  * These used to be five flat lists of offsets whose **roles were emergent**: the
- * randomiser found whichever member sat furthest round the wheel and called that the
- * loud answer, then picked one of the leftovers at random to be the light one.
- * So which position held the opposite moved from deal to deal, and a graph
+ * randomiser found whichever member sat furthest round the wheel and called that
+ * the loud answer, then picked one of the leftovers at random to be the light
+ * one. So which position held the opposite moved from deal to deal, and a graph
  * cannot wire to a position that moves.
  *
  * A colourway is five named roles now, so a harmony states them. Each row is one
@@ -111,11 +238,17 @@ function hex(h: number, s: number, l: number): string {
  * least 120 degrees from the base — a palette of neighbours is a wall in one
  * colour, harmonious and indistinguishable from a gel over the lamp.
  *
- * `chalk` is not here. It is a tint of the primary rather than a member of the
- * relationship, which is what the four shipped colourways already do and what
- * the role is for: it is the palette's answer to white, and the colour a
- * generator's hot half goes toward. A highlight belongs to the light in the
- * room, so it belongs to the base.
+ * The degrees are **OKLCH** degrees, so they are near enough perceptually even
+ * that one row means one relationship wherever the base lands. The same numbers
+ * in HSL did not: 25 degrees is the whole distance from red to orange and almost
+ * nothing between two greens, so `analogous` used to deal a real pairing half
+ * the time and the same colour twice the other half.
+ *
+ * `chalk` is not here. It is a tint of the primary drifted a little warm or
+ * cool, which is what all four shipped colourways already do and what the role
+ * is for: it is the palette's answer to white, and the colour a generator's hot
+ * half goes toward. A highlight belongs to the light in the room, so it belongs
+ * to the base.
  */
 interface Harmony {
   /** What a person would call it. Here for the reader, not for the app. */
@@ -126,93 +259,110 @@ interface Harmony {
 }
 
 const HARMONIES: readonly Harmony[] = [
-  { name: 'complementary', secondary: 22, complement: 180, accent: 202 },
-  { name: 'split complement', secondary: 25, complement: 150, accent: 210 },
-  { name: 'triadic', secondary: 20, complement: 120, accent: 240 },
-  { name: 'analogous, answered', secondary: 26, complement: 195, accent: 52 },
-  { name: 'rectangle', secondary: 60, complement: 180, accent: 240 },
+  { name: 'complementary', secondary: 26, complement: 180, accent: 206 },
+  { name: 'split complement', secondary: 28, complement: 152, accent: 208 },
+  { name: 'triadic', secondary: 24, complement: 122, accent: 242 },
+  { name: 'analogous, answered', secondary: 32, complement: 196, accent: 60 },
+  { name: 'rectangle', secondary: 64, complement: 180, accent: 244 },
 ];
-
-/** What a hue at full saturation is worth in light. Green nearly all of it. */
-function luma(hue: number): number {
-  const h = ((((hue % 360) + 360) % 360) / 60);
-  const x = 1 - Math.abs((h % 2) - 1);
-  const [r, g, b] =
-    h < 1 ? [1, x, 0] : h < 2 ? [x, 1, 0] : h < 3 ? [0, 1, x]
-    : h < 4 ? [0, x, 1] : h < 5 ? [x, 0, 1] : [1, 0, x];
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-
-/**
- * A lightness that reads the same the whole way round the wheel.
- *
- * Hue and brightness are not independent: a yellow at half lightness is a bright
- * colour and a blue at half lightness is nearly black, because the eye takes
- * most of its luminance from green. A palette randomised at one lightness therefore
- * has members that punch and members that vanish, and the ones that vanish are
- * always the blues and violets — which on a lamp with no black to work against
- * is a colour nobody in the room can see.
- *
- * So the number is a **target** and the hue's own luma says how far above it the
- * colour has to sit. It costs one multiply and it is the difference between five
- * colours and three colours and two smudges.
- */
-function evenly(hue: number, l: number): number {
-  return Math.min(0.94, l + (1 - luma(hue)) * 0.12);
-}
 
 /**
  * A palette: one colour per role, dealt to the role rather than to a position.
  *
- * Each of the five is now a job a graph can wire to, so the deal states all five
- * instead of finding two of them afterwards:
+ * Each of the five is a job a graph can wire to, so the deal states all five
+ * instead of finding two of them afterwards. Every member is placed **relative
+ * to its own hue's peak** rather than at a lightness named in advance — see
+ * `cusp`, which is the whole of why this stopped producing mud.
  *
- * - **primary** is the base, loud. Every generator starts here, and a flow that
- *   ignores the set is made of it.
- * - **secondary** is the harmony's neighbour, a little softer, so the palette
- *   has somewhere to sit that is not a second shout.
- * - **complement** is the answer from across the wheel, taken *as loud as the
- *   base*. This is the one that used to be synthesised: every generator's second
- *   colour was `vec3(1.0) - uColor`, an arithmetic opposite that was in no
- *   palette at all. It is chosen now, so it can be a colour rather than a
- *   calculation.
- * - **accent** is saturated and **lighter** than the field, because its job is
- *   the small mark that has to be seen against everything else — a spark, a
- *   sweep head. Loud and dark would be a third field colour and the frame would
- *   have nothing quiet left in it.
- * - **chalk** is the primary drifted a little warm or cool and lifted to where a
- *   tint lives. Not a near-white: enough colour to belong, light enough to read
- *   edges against. It is what a generator's hot half mixes toward, which is why
- *   it is a tint of the light in the room rather than a fifth hue.
+ * - **primary** sits at its hue's peak, taking nearly all the colour available
+ *   there. Every generator starts here.
+ * - **secondary** is the harmony's neighbour, a little lighter and pulled back to
+ *   around four fifths of *the primary's* chroma, so the palette has somewhere to
+ *   sit that is not a second shout. Four fifths rather than a half because the
+ *   four shipped colourways put it there: measured, their secondaries run 80–87%
+ *   of the primary's. A quiet member is a different palette, not this one.
+ * - **complement** is the answer from across the wheel, at its own peak because
+ *   it and the primary are a pair. This is the one that used to be synthesised:
+ *   every generator's second colour was `vec3(1.0) - uColor`, an arithmetic
+ *   opposite in no palette at all.
+ * - **accent** is lifted well above its peak and takes all the colour left up
+ *   there, because its job is the small mark seen against everything else — a
+ *   spark, a sweep head. Lightness is what separates it from the loud pair.
+ * - **chalk** is the primary drifted a little warm or cool, lifted to where a
+ *   tint lives and held to a chroma that reads as *tinted* rather than pale. Not
+ *   a near-white: enough colour to belong, light enough to read edges against.
+ *   It is what a generator's hot half mixes toward.
  *
- * **Chalk is taken at nearly full saturation**, which looks wrong written down
- * and is the same lesson as the loud pair, at the other end. At 88% lightness a
- * hue has almost no room left to be a colour in, so the saturation *number* has
- * to be near the top to produce any hue at all — 0.3 there is white with a
- * rumour on it. `EXAMPLES` has been right about this by hand all along: ember's
- * `#ffe3c2` is a cream at 99% saturation, and a randomised tint that was not was the
- * one member of every dealt palette that did not belong to it.
+ * **Each role has a band its lightness must land in, and both ends earn their
+ * keep.** The floor is the projector argument: a hue whose peak is darker than
+ * it — the blues and violets, every time — is lifted and gives up some colour
+ * for the privilege, because a cheap lamp has no black to work against and the
+ * most vivid possible blue is the one nobody in the room can see. The ceiling is
+ * the opposite failure and the one that is easy to miss: a green peaks at 0.86,
+ * so lifting `secondary` and `accent` off *that* put them at 0.92 where there is
+ * no colour left to take a fraction of, and both came back as pale mints
+ * indistinguishable from the tint. A role that can turn into `chalk` for half
+ * the wheel is not a role.
+ *
+ * **And not every palette is dealt at the same loudness.** One `charge` scales
+ * all five together, so some libraries come out electric and some handsome, and
+ * the members keep their relationship either way. It stays above 0.86 because
+ * the floor of a colourway is still a colourway.
  */
 export function palette(rng: Rng): string[] {
   const base = rng() * 360;
   const harmony = pick(rng, HARMONIES);
-  const at = (hue: number, sLo: number, sHi: number, lLo: number, lHi: number) =>
-    hex(hue, between(rng, sLo, sHi), evenly(hue, between(rng, lLo, lHi)));
+  const charge = between(rng, 0.86, 1);
+
+  /** A hue placed in its band, and how much colour is available once it is. */
+  const place = (hue: number, at: number, band: [number, number]) => {
+    const l = Math.min(band[1], Math.max(band[0], at));
+    return { l, hue, room: maxChroma(l, hue) };
+  };
+
+  const primary = place(base, cusp(base), [0.58, 0.9]);
+  const loud = primary.room * between(rng, 0.92, 1) * charge;
+
+  // **Measured against what the primary actually got, not against its own hue's
+  // ceiling**, and that distinction is the difference between a palette that
+  // leads and one that argues with itself. How much colour a hue can hold varies
+  // enormously round the wheel, so a blue primary — floored up to 0.58 for the
+  // projector, where blue holds little — next to a magenta secondary taking four
+  // fifths of magenta's far larger ceiling gives a *secondary that shouts louder
+  // than the base*. Capping against the primary's own chroma makes the
+  // relationship hold for every pairing rather than most of them.
+  const secondHue = base + harmony.secondary;
+  const second = place(secondHue, lifted(secondHue, 0.88), [0.62, 0.86]);
+  const quieter = Math.min(second.room, loud * between(rng, 0.72, 0.88));
+
+  const oppositeHue = base + harmony.complement;
+  const opposite = place(oppositeHue, cusp(oppositeHue), [0.58, 0.9]);
+  // Lifted until it has given up a quarter of its colour, which is a real lift
+  // at every hue and a ruinous one at none.
+  const markHue = base + harmony.accent;
+  const mark = place(markHue, lifted(markHue, 0.74), [0.7, 0.9]);
+
   // In role order, which is the order the array is read in everywhere else.
   return [
-    at(base, 0.9, 1, 0.46, 0.54),
-    at(base + harmony.secondary, 0.72, 0.88, 0.5, 0.6),
-    at(base + harmony.complement, 0.9, 1, 0.46, 0.54),
-    at(base + harmony.accent, 0.82, 0.94, 0.58, 0.66),
-    // Straight to `hex`, deliberately skipping `evenly`. That lift exists so a
-    // blue at mid lightness is not nearly black; up here there is nothing to
-    // rescue, and applying it anyway pushes a blue tint into its 0.94 ceiling
-    // where no saturation can put a hue back. The one colour in the palette
-    // that must not be white is the one that lift was turning white.
+    hex(primary.l, loud, primary.hue),
+    hex(second.l, quieter, second.hue),
+    // Its own peak rather than the primary's chroma: these two are a pair, and
+    // an answer from across the wheel that came back quieter than the question
+    // is not an answer.
+    hex(opposite.l, opposite.room * between(rng, 0.92, 1) * charge, opposite.hue),
+    hex(mark.l, mark.room * between(rng, 0.88, 1) * charge, mark.hue),
+    // Held below the quietest of the other four rather than just at a low
+    // number. Chalk is *defined* as the tint, so being the least colourful thing
+    // in the palette is the property, not a coincidence of the ranges — and it
+    // stopped being one the moment an amber accent lifted itself down to a
+    // chroma a cream could match.
     hex(
-      base + between(rng, -18, 18),
-      between(rng, 0.82, 1),
-      between(rng, 0.84, 0.9),
+      between(rng, 0.9, 0.95),
+      Math.min(
+        between(rng, 0.045, 0.08) * charge,
+        Math.min(loud, quieter, opposite.room, mark.room) * 0.6,
+      ),
+      base + between(rng, -20, 20),
     ),
   ];
 }
@@ -614,9 +764,19 @@ export function randomizeScheme(
   const rng = seeded(seed);
   const randomising = (part: RandomPart) => parts.includes(part);
 
-  const names = shuffled(rng, WORDS).slice(0, 4);
+  // **The colourways that are already there, re-dealt in place.** This used to
+  // invent four fresh names out of `WORDS` and drop whatever the library held,
+  // which was wrong twice over: a scheme somebody had grown to eight came back
+  // as four, and — the part that actually broke things — a song pins a colourway
+  // **by name**, so every pin in the scheme was orphaned by every press of the
+  // button. Nothing said so; the songs just quietly fell back to the default.
+  //
+  // Names are a person's, so the randomiser does not touch them. What it deals
+  // is what is inside them.
+  const names = Object.keys(base.colorways);
   const randomizedColorways: Record<string, string[]> = {};
-  for (const name of names) randomizedColorways[name] = palette(rng);
+  for (const name of (names.length > 0 ? names : shuffled(rng, WORDS).slice(0, 4)))
+    randomizedColorways[name] = palette(rng);
   const colorways = randomising('colours') ? randomizedColorways : base.colorways;
 
   const flows: Scheme['flows'] = { ...base.flows };

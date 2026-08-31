@@ -75,6 +75,32 @@ describe('a randomise is a library', () => {
     }
   });
 
+  it('re-deals the colourways that are there rather than inventing new ones', () => {
+    // It used to take four fresh names out of WORDS and drop whatever the
+    // library held. That was wrong twice: a scheme grown to eight came back as
+    // four, and — the part that actually broke — **a song pins a colourway by
+    // name**, so every pin was orphaned by every press of the button, silently.
+    const eight: Scheme = {
+      ...EXAMPLES,
+      colorways: {
+        ...EXAMPLES.colorways,
+        mine: ['#111111', '#222222', '#333333', '#444444', '#555555'],
+        yours: ['#666666', '#777777', '#888888', '#999999', '#aaaaaa'],
+        theirs: ['#bbbbbb', '#cccccc', '#dddddd', '#eeeeee', '#ffffff'],
+        ours: ['#010101', '#020202', '#030303', '#040404', '#050505'],
+      },
+      songs: { Sandstorm: { colorway: 'mine' } },
+    };
+    for (const seed of seeds.slice(0, 8)) {
+      const dealt = randomizeScheme(seed, SHOW, eight, ['colours']);
+      expect(Object.keys(dealt.colorways), seed).toEqual(Object.keys(eight.colorways));
+      // The pin still points at something, which is the whole of why.
+      expect(dealt.colorways.mine, seed).toBeDefined();
+      // And the colours inside really did change.
+      expect(dealt.colorways.mine, seed).not.toEqual(eight.colorways.mine);
+    }
+  });
+
   it('names only flows it made', () => {
     // An id pointing at nothing is a black screen for as long as the wheel sits
     // on it, and it is invisible until it comes round.
@@ -117,27 +143,31 @@ describe('a randomise is a library', () => {
 });
 
 /**
- * A colour, taken apart, so a palette can be asserted about rather than looked
- * at. Saturation on its own says nothing — a pale tint and a fire engine can
- * both read 100% — so **chroma** is the one that means loud.
+ * A colour, taken apart in OKLCH, so a palette can be asserted about rather than
+ * looked at.
+ *
+ * Derived here rather than imported, deliberately: a test that measured a
+ * generator with the generator's own arithmetic would agree with it about a
+ * mistake. HSL was the wrong ruler for this — its `l` is not lightness and its
+ * `s` says the same thing about a pale tint and a fire engine — so the numbers
+ * asserted below are `L`, real perceptual lightness, and `C`, how much colour is
+ * actually there.
  */
 function taken(hex: string) {
   const n = parseInt(hex.slice(1), 16);
-  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => v / 255);
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const l = (max + min) / 2;
-  const chroma = max - min;
-  const s = chroma === 0 ? 0 : chroma / (1 - Math.abs(2 * l - 1));
-  const hue =
-    chroma === 0
-      ? 0
-      : max === r
-        ? (60 * (((g - b) / chroma) % 6) + 360) % 360
-        : max === g
-          ? 60 * ((b - r) / chroma + 2)
-          : 60 * ((r - g) / chroma + 4);
-  return { hue, s, l, chroma, luma: 0.2126 * r + 0.7152 * g + 0.0722 * b };
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+    .map((v) => v / 255)
+    .map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  const A = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s;
+  const B = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s;
+  return {
+    L: 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+    C: Math.hypot(A, B),
+    hue: ((Math.atan2(B, A) * 180) / Math.PI + 360) % 360,
+  };
 }
 
 const apart = (a: number, b: number) => {
@@ -167,24 +197,29 @@ describe('a randomised colourway', () => {
     // position has to mean the same thing every time.
     for (const [where, colours] of randomised) {
       const [primary, secondary, complement, accent, chalk] = colours.map(taken);
-      // The two that carry the palette across a room, and they are the pair.
-      expect(primary.s, `${where} primary`).toBeGreaterThanOrEqual(0.85);
-      expect(complement.s, `${where} complement`).toBeGreaterThanOrEqual(0.85);
-      // Softer, so the palette has somewhere to sit that is not a second shout.
-      expect(secondary.s, `${where} secondary`).toBeLessThan(primary.s);
-      // Saturated but lighter than the field: a small mark that has to be seen
-      // against everything else, rather than a third colour competing with it.
-      // Saturated, and never the tint. Its lightness is aimed above the loud
-      // pair's so a small mark reads against the field, but that is a *target*
-      // and not something to assert: `evenly` lifts by hue, so a blue primary
-      // comes out lighter than a yellow accent and the comparison says nothing
-      // about either. What holds whatever the hues are is that it is loud and
-      // it is not the light one.
-      expect(accent.s, `${where} accent`).toBeGreaterThanOrEqual(0.8);
-      expect(accent.chroma, `${where} accent vs chalk`).toBeGreaterThan(chalk.chroma);
-      // Exactly one light one, and it is chalk.
-      expect(chalk.l, `${where} chalk`).toBeGreaterThanOrEqual(0.8);
-      expect(colours.map(taken).filter((c) => c.l >= 0.8).length, `${where} lights`).toBe(1);
+      // The pair that carries the palette across a room, each at its own hue's
+      // peak. 0.09 is a floor rather than a target: what a hue can hold at its
+      // peak varies hugely round the wheel — a vivid yellow has far more chroma
+      // available than a vivid blue — so the assertion is that both took what
+      // was there, not that they landed on one number.
+      expect(primary.C, `${where} primary`).toBeGreaterThan(0.09);
+      expect(complement.C, `${where} complement`).toBeGreaterThan(0.09);
+      // Pulled back, so the palette has somewhere to sit that is not a second
+      // shout — but nowhere near quiet. See the shipped four.
+      expect(secondary.C, `${where} secondary`).toBeLessThan(primary.C);
+      // Loud, and lifted off its own hue's peak. Not asserted against the
+      // primary's lightness: they are different hues with peaks in different
+      // places, so a yellow primary really is lighter than a pink accent and
+      // the comparison says nothing about either.
+      expect(accent.C, `${where} accent`).toBeGreaterThan(0.06);
+      expect(accent.L, `${where} accent lift`).toBeGreaterThan(0.67);
+      // One tint, and it is chalk. Distinguished by having the least colour in
+      // it rather than by being the lightest: a yellow primary sits at 0.9 too,
+      // and lightness alone would not separate them.
+      expect(chalk.L, `${where} chalk`).toBeGreaterThan(0.87);
+      for (const [i, other] of [primary, secondary, complement, accent].entries()) {
+        expect(chalk.C, `${where} chalk vs ${i}`).toBeLessThan(other.C);
+      }
     }
   });
 
@@ -195,10 +230,9 @@ describe('a randomised colourway', () => {
     // what a source's opposing colour wires to.
     for (const [where, colours] of randomised) {
       const hues = colours.map((each) => taken(each).hue);
-      // 119 rather than 120: a hue written to eight bits per channel and read
-      // back lands within about a degree of where it went in, and the tightest
-      // harmony here is the triad at exactly 120.
-      expect(apart(hues[0], hues[2]), where).toBeGreaterThanOrEqual(119);
+      // 118 rather than 122: eight bits per channel, and the gamut walk moves a
+      // hue by a fraction of a degree on the way in.
+      expect(apart(hues[0], hues[2]), where).toBeGreaterThanOrEqual(118);
     }
   });
 
@@ -208,24 +242,24 @@ describe('a randomised colourway', () => {
     // warm or cool, which is what a colourist does to a highlight, and no more.
     for (const [where, colours] of randomised) {
       const hues = colours.map((each) => taken(each).hue);
-      expect(apart(hues[0], hues[4]), where).toBeLessThanOrEqual(30);
-      // Chroma rather than saturation, and the difference is the whole trick: at
-      // 88% lightness a hue has almost no room to be a colour in, so a chalk
-      // that *reads* as a tint is taken at nearly full HSL saturation. Asserting
-      // a low saturation number here is what would produce white.
-      const chalk = taken(colours[4]);
-      expect(chalk.chroma, `${where} chalk has colour in it`).toBeGreaterThan(0.1);
-      expect(chalk.chroma, `${where} chalk is still a tint`).toBeLessThan(
-        taken(colours[0]).chroma,
-      );
+      // The drift is 20 degrees; the tolerance is wider because the measurement
+      // is. Hue is numerically unstable at a chroma this low — eight bits per
+      // channel is a coarse grid to read an angle off when the colour is nearly
+      // neutral — and a few degrees there is not something an eye can see.
+      expect(apart(hues[0], hues[4]), where).toBeLessThanOrEqual(42);
+      // It has colour in it. A tint that measured zero here would be white, and
+      // white is what every generator's hot half used to mix toward — the whole
+      // reason this role exists is to replace it with something that belongs.
+      expect(taken(colours[4]).C, `${where} chalk has colour in it`).toBeGreaterThan(0.02);
     }
   });
 
   it('never randomises a colour too dark to see on a cheap lamp', () => {
-    // The reason lightness is evened out by hue: a blue at the same number as a
-    // yellow is nearly black, and a projector has no black to work against.
+    // A cheap projector has no black to work against, so a hue whose peak is
+    // darker than the floor is lifted to it and gives up some colour for the
+    // privilege. The blues and violets, every time.
     for (const [where, colours] of randomised) {
-      for (const each of colours) expect(taken(each).luma, `${where} ${each}`).toBeGreaterThan(0.15);
+      for (const each of colours) expect(taken(each).L, `${where} ${each}`).toBeGreaterThan(0.55);
     }
   });
 });

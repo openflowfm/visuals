@@ -1,4 +1,5 @@
 import { COLOR_ROLES, paletteOf, type Scheme } from '../../protocol.ts';
+import { newSeed, palette, seeded } from '../../randomize.ts';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 
 /**
@@ -13,6 +14,11 @@ import { Button } from '@openflow/widgets/controls/Button.tsx';
  * Renaming carries every reference with it. A rename that quietly orphaned the
  * songs pointing at the old name would turn every one of them black — which is
  * the failure this whole level exists to prevent.
+ *
+ * Five swatches, labelled with the role each one fills — see `COLOR_ROLES`. The
+ * row used to grow and shrink with `+` and `−`; the length is the vocabulary
+ * now, because a `colorway` node has an outlet per role and a cord cannot point
+ * at a position that a palette edit removed.
  */
 export function Colorways({
   scheme,
@@ -50,6 +56,18 @@ export function Colorways({
       scheme.defaults.colorway === from ? { ...scheme.defaults, colorway: name } : scheme.defaults;
     edit({ ...scheme, colorways, songs, defaults });
   };
+
+  /**
+   * New colours for this one colourway, leaving every other alone.
+   *
+   * The randomise button deals the whole library, which is the wrong size of
+   * gesture most of the time: by the second evening three of the four are
+   * settled and the fourth is the one being fished for. Dealt from a fresh seed
+   * and not written down, because this is a hand edit like dragging a swatch —
+   * the scheme's `seed` is what the last *library* was dealt from and a
+   * per-row deal is not that.
+   */
+  const deal = (name: string) => setWay(name, palette(seeded(newSeed())));
 
   const add = () => {
     let name = 'new';
@@ -92,6 +110,14 @@ export function Colorways({
               </label>
             ))}
           </span>
+          <Button
+            tone="quiet"
+            label={`Deal new colours for ${name}`}
+            title="new colours for this colourway alone"
+            onPress={() => deal(name)}
+          >
+            {'\u2684'}
+          </Button>
           <Button
             tone="danger"
             label={`Delete ${name}`}

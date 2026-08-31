@@ -409,24 +409,54 @@ Three constraints are worth stating because they are what make a dealt one read 
   is that the opposite is *chosen* rather than found, and it lands in `complement` where the
   vocabulary says it is.
 
-  **Saturated is not the same as bright, and confusing the two is what made these pastel.**
-  The old range topped out at 70% lightness, where a hue has given away most of itself
-  whatever its saturation says. The new one sits where a colour is loudest — and is then
-  **evened out by hue**, because a yellow and a blue at the same lightness are not the same
-  brightness at all, and the ones that vanish on a cheap lamp are always the blues. What the
-  projector argument actually asks for is *not dark*; it never asked for pale.
+  **The colours are picked in OKLCH, and dropping HSL is what stopped them being mud.**
+  HSL's `l` is not lightness and its hue degrees are not evenly spaced, and the old generator
+  carried a correction for each: an `evenly()` that added back a fraction of a hand-written
+  luma table, and harmonies whose 22-degree step was the whole distance from red to orange
+  but almost nothing between two greens. Both are deleted rather than improved. `L` is
+  perceptual lightness, `C` is how much colour there actually is — independent of `L`, where
+  "saturation 0.9" had meant a pastel at one lightness and a fire engine at another — and a
+  hue offset means one relationship wherever the base landed.
 
-  **And the same lesson holds at the other end, which took a second telling.** `chalk` is
-  taken at nearly *full* saturation and skips the hue-evening lift entirely. At 88% lightness
-  a hue has almost no room left to be a colour in, so a saturation of 0.3 there is white with
-  a rumour on it — and the lift, which exists so a blue at mid lightness is not nearly black,
-  pushes a blue tint into its 0.94 ceiling where no saturation can put the hue back. The one
-  colour in the palette that must not be white was the one being turned white. `EXAMPLES` has
-  been right about this by hand all along: ember's `#ffe3c2` is a cream at 99% saturation.
+  **Every member sits relative to its own hue's peak**, which is the thing the old one had no
+  way to ask. How vivid a hue can be depends entirely on how light it is, and where that peak
+  sits moves right around the wheel: a fully saturated yellow-green is a light colour and a
+  fully saturated blue is a dark one. Naming one lightness for all five asked for the colour
+  that does not exist and got mud in the yellows every time. The four shipped colourways have
+  always done this by eye — measured in OKLCH, every non-tint member of all four sits at or
+  near its own hue's peak, and their lightnesses run 0.60 to 0.92 as a result.
+
+  Three things are then guaranteed by construction rather than left to the ranges, because
+  each had a hue somewhere on the wheel that broke it:
+
+  - **`secondary` is measured against the primary's own chroma**, not its own hue's ceiling.
+    A blue primary floored up to 0.58 for the projector, beside a magenta secondary taking
+    four fifths of magenta's far larger ceiling, gave a secondary that shouted louder than
+    the base.
+  - **`accent` is lifted by what the lift costs**, not by a fixed step. +0.12 off an amber
+    peaking at 0.75 lands where amber has nothing left, while the same step costs a yellow
+    almost nothing — so one number made a strong mark for half the wheel and a washed-out one
+    for the rest.
+  - **`chalk` is held below the quietest of the other four.** Being the least colourful thing
+    in the palette is what the role *is*, so it cannot be a coincidence of the ranges — and it
+    stopped being one the moment a lifted amber accent reached a chroma a cream could match.
 
 **Nothing about the songs is dealt.** A song entry is an override, and dealing one would be
 the machine writing down an exception nobody asked for — which is exactly the noise the
 cascade used to generate.
+
+**It re-deals the colourways that are there rather than inventing new ones.** It used to take
+four fresh names out of `WORDS` and drop whatever the library held, which was wrong twice
+over: a scheme somebody had grown to eight came back as four, and — the part that actually
+broke things — **a song pins a colourway by name**, so every pin in the scheme was orphaned by
+every press of the button, with nothing said. The songs just quietly fell back to the default.
+Names are a person's; what the randomiser deals is what is inside them.
+
+**And one colourway can be dealt on its own**, from the dice beside its row in the console.
+The button deals a whole library, which is the wrong size of gesture most of the time: by the
+second evening three of the four are settled and the fourth is the one being fished for. A
+per-row deal is a hand edit like dragging a swatch, so it is not written to the scheme's
+`seed` — that records what the last *library* came from.
 
 ### It deals only what you leave switched on
 
