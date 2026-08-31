@@ -23,11 +23,13 @@ import {
  * and randomises what fills each slot. The shape is what makes it a flow; the
  * fill is what makes it a different one every time.
  *
- * Colours are a harmony rather than five hues: a base, one of five relationships
- * to it — each of which contains an opposite — and two members taken loud. Kept
- * light rather than dark, because a cheap lamp has no black to work against and
- * a dark colourway is a dark screen. **Saturated is not the same as dark**, and
- * confusing the two is what made these pastel.
+ * Colours are a harmony rather than five hues, and every colour is dealt **to a
+ * role**: a base, one of five relationships to it, an answer from across the
+ * wheel taken as loud as the base, a lighter accent for what has to be seen
+ * small, and a tint of the base to read edges against. Kept light rather than
+ * dark, because a cheap lamp has no black to work against and a dark colourway
+ * is a dark screen. **Saturated is not the same as dark**, and confusing the two
+ * is what made these pastel.
  *
  * Deterministic in its seed, which is the whole reason there is a seed: undo
  * covers the roll you just did, and a seed covers the one from last Tuesday.
@@ -96,33 +98,40 @@ function hex(h: number, s: number, l: number): string {
 }
 
 /**
- * Five colours in one relationship, and **every relationship contains an
- * opposite**.
+ * The relationships a palette can be built on, as hue offsets from the primary.
  *
- * That is the part that changed. Two of these were a spread of neighbours —
- * analogous over 44 degrees, near-mono over 16 — and a set drawn entirely out of
- * one of those is a wall in a single colour: harmonious, and indistinguishable
- * from a projector with a gel on it. Each now carries its counterpoint as the
- * fourth and fifth member, so there is always something in the palette that is
- * *not* the base to read the base against.
+ * These used to be five flat lists of offsets whose **roles were emergent**: the
+ * roll found whichever member sat furthest round the wheel and called that the
+ * loud answer, then picked one of the leftovers at random to be the light one.
+ * So which position held the opposite moved from deal to deal, and a graph
+ * cannot wire to a position that moves.
  *
- * The offsets are still one relationship each rather than five hues picked
- * apart, because five random hues is what a colour picker gives you and it never
- * looks like anything.
+ * A colourway is five named roles now, so a harmony states them. Each row is one
+ * relationship a person could name, and every one of them puts something at
+ * least 120 degrees from the base — a palette of neighbours is a wall in one
+ * colour, harmonious and indistinguishable from a gel over the lamp.
+ *
+ * `chalk` is not here. It is a tint of the primary rather than a member of the
+ * relationship, which is what the four shipped colourways already do and what
+ * the role is for: it is the palette's answer to white, and the colour a
+ * generator's hot half goes toward. A highlight belongs to the light in the
+ * room, so it belongs to the base.
  */
-const HARMONIES: readonly (readonly number[])[] = [
-  [0, 24, 48, 204, 180], // neighbours, answered
-  [0, 120, 240, 60, 300], // triadic
-  [0, 180, 20, 200, 160], // complementary
-  [0, 150, 210, 30, 180], // split complement
-  [0, 12, 348, 168, 192], // near mono, answered
-];
-
-/** How far round the wheel two hues are, the short way. */
-function apart(a: number, b: number): number {
-  const gap = Math.abs(a - b) % 360;
-  return gap > 180 ? 360 - gap : gap;
+interface Harmony {
+  /** What a person would call it. Here for the reader, not for the app. */
+  name: string;
+  secondary: number;
+  complement: number;
+  accent: number;
 }
+
+const HARMONIES: readonly Harmony[] = [
+  { name: 'complementary', secondary: 22, complement: 180, accent: 202 },
+  { name: 'split complement', secondary: 25, complement: 150, accent: 210 },
+  { name: 'triadic', secondary: 20, complement: 120, accent: 240 },
+  { name: 'analogous, answered', secondary: 26, complement: 195, accent: 52 },
+  { name: 'rectangle', secondary: 60, complement: 180, accent: 240 },
+];
 
 /** What a hue at full saturation is worth in light. Green nearly all of it. */
 function luma(hue: number): number {
@@ -153,42 +162,59 @@ function evenly(hue: number, l: number): number {
 }
 
 /**
- * A palette: five colours, two of them loud, one of them light.
+ * A palette: one colour per role, dealt to the role rather than to a position.
  *
- * **The two loud ones are the base and whatever sits furthest from it**, which
- * is the pair that decides whether a palette reads across a room. They are taken
- * near the top of the saturation range and at the lightness where a hue is
- * strongest — a colour at 70% lightness has given most of its saturation away
- * whatever the number says, which is why the old range topping out there came
- * back as pastel however high the saturation went.
+ * Each of the five is now a job a graph can wire to, so the deal states all five
+ * instead of finding two of them afterwards:
  *
- * **The light one is not decoration.** Tracks take a colour by position, so a
- * set drawn entirely out of loud hues has nothing in it to read edges against
- * and turns to mud on a wall. It is a tint rather than the near-white it was —
- * enough colour in it to belong to the palette, light enough to do its job — and
- * it is never one of the two loud ones, so a palette cannot lose both its
- * anchors to one dice roll.
+ * - **primary** is the base, loud. Every generator starts here, and a flow that
+ *   ignores the set is made of it.
+ * - **secondary** is the harmony's neighbour, a little softer, so the palette
+ *   has somewhere to sit that is not a second shout.
+ * - **complement** is the answer from across the wheel, taken *as loud as the
+ *   base*. This is the one that used to be synthesised: every generator's second
+ *   colour was `vec3(1.0) - uColor`, an arithmetic opposite that was in no
+ *   palette at all. It is chosen now, so it can be a colour rather than a
+ *   calculation.
+ * - **accent** is saturated and **lighter** than the field, because its job is
+ *   the small mark that has to be seen against everything else — a spark, a
+ *   sweep head. Loud and dark would be a third field colour and the frame would
+ *   have nothing quiet left in it.
+ * - **chalk** is the primary drifted a little warm or cool and lifted to where a
+ *   tint lives. Not a near-white: enough colour to belong, light enough to read
+ *   edges against. It is what a generator's hot half mixes toward, which is why
+ *   it is a tint of the light in the room rather than a fifth hue.
  *
- * The first colour is the base on purpose: a flow's `paint`, `source` and every
- * generator draw from `colors[0]`, so the palette's loudest member is the one a
- * flow that ignores the set is made of.
+ * **Chalk is taken at nearly full saturation**, which looks wrong written down
+ * and is the same lesson as the loud pair, at the other end. At 88% lightness a
+ * hue has almost no room left to be a colour in, so the saturation *number* has
+ * to be near the top to produce any hue at all — 0.3 there is white with a
+ * rumour on it. `EXAMPLES` has been right about this by hand all along: ember's
+ * `#ffe3c2` is a cream at 99% saturation, and a rolled tint that was not was the
+ * one member of every dealt palette that did not belong to it.
  */
 export function palette(rng: Rng): string[] {
   const base = rng() * 360;
   const harmony = pick(rng, HARMONIES);
-  const far = harmony.reduce(
-    (most, offset, i) => (apart(offset, 0) > apart(harmony[most], 0) ? i : most),
-    0,
-  );
-  const rest = harmony.map((_, i) => i).filter((i) => i !== 0 && i !== far);
-  const light = pick(rng, rest);
-  return harmony.map((offset, i) => {
-    const hue = base + offset;
-    const at = (s: number, lo: number, hi: number) => hex(hue, s, evenly(hue, between(rng, lo, hi)));
-    if (i === 0 || i === far) return at(between(rng, 0.92, 1), 0.46, 0.54);
-    if (i === light) return at(between(rng, 0.3, 0.46), 0.83, 0.9);
-    return at(between(rng, 0.7, 0.9), 0.48, 0.6);
-  });
+  const at = (hue: number, sLo: number, sHi: number, lLo: number, lHi: number) =>
+    hex(hue, between(rng, sLo, sHi), evenly(hue, between(rng, lLo, lHi)));
+  // In role order, which is the order the array is read in everywhere else.
+  return [
+    at(base, 0.9, 1, 0.46, 0.54),
+    at(base + harmony.secondary, 0.72, 0.88, 0.5, 0.6),
+    at(base + harmony.complement, 0.9, 1, 0.46, 0.54),
+    at(base + harmony.accent, 0.82, 0.94, 0.58, 0.66),
+    // Straight to `hex`, deliberately skipping `evenly`. That lift exists so a
+    // blue at mid lightness is not nearly black; up here there is nothing to
+    // rescue, and applying it anyway pushes a blue tint into its 0.94 ceiling
+    // where no saturation can put a hue back. The one colour in the palette
+    // that must not be white is the one that lift was turning white.
+    hex(
+      base + between(rng, -18, 18),
+      between(rng, 0.82, 1),
+      between(rng, 0.84, 0.9),
+    ),
+  ];
 }
 
 /**

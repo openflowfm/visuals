@@ -159,28 +159,65 @@ describe('a rolled colourway', () => {
     for (const [where, colours] of rolled) expect(colours, where).toHaveLength(5);
   });
 
-  it('always contains two loud ones and exactly one light one', () => {
-    // The two loud ones are what makes it read across a room; the light one is
-    // what a busy frame reads its edges against. Neither can be left to a dice
-    // roll, so the roll assigns them rather than hoping for them.
+  it('puts each colour in the role that names it', () => {
+    // The roles used to be emergent: the roll found whichever member sat
+    // furthest round the wheel and called that the loud answer, then picked one
+    // of the leftovers to be the light one — so which position held the
+    // opposite moved from deal to deal. A graph wires to a position, so the
+    // position has to mean the same thing every time.
     for (const [where, colours] of rolled) {
-      const taken_ = colours.map(taken);
-      const loud = taken_.filter((c) => c.s >= 0.85 && c.chroma >= 0.5);
-      const light = taken_.filter((c) => c.l >= 0.8);
-      expect(loud.length, `${where} loud`).toBeGreaterThanOrEqual(2);
-      expect(light.length, `${where} light`).toBe(1);
-      // And they are never the same colour wearing both hats.
-      expect(loud.some((c) => c.l >= 0.8), `${where} overlap`).toBe(false);
+      const [primary, secondary, complement, accent, chalk] = colours.map(taken);
+      // The two that carry the palette across a room, and they are the pair.
+      expect(primary.s, `${where} primary`).toBeGreaterThanOrEqual(0.85);
+      expect(complement.s, `${where} complement`).toBeGreaterThanOrEqual(0.85);
+      // Softer, so the palette has somewhere to sit that is not a second shout.
+      expect(secondary.s, `${where} secondary`).toBeLessThan(primary.s);
+      // Saturated but lighter than the field: a small mark that has to be seen
+      // against everything else, rather than a third colour competing with it.
+      // Saturated, and never the tint. Its lightness is aimed above the loud
+      // pair's so a small mark reads against the field, but that is a *target*
+      // and not something to assert: `evenly` lifts by hue, so a blue primary
+      // comes out lighter than a yellow accent and the comparison says nothing
+      // about either. What holds whatever the hues are is that it is loud and
+      // it is not the light one.
+      expect(accent.s, `${where} accent`).toBeGreaterThanOrEqual(0.8);
+      expect(accent.chroma, `${where} accent vs chalk`).toBeGreaterThan(chalk.chroma);
+      // Exactly one light one, and it is chalk.
+      expect(chalk.l, `${where} chalk`).toBeGreaterThanOrEqual(0.8);
+      expect(colours.map(taken).filter((c) => c.l >= 0.8).length, `${where} lights`).toBe(1);
     }
   });
 
-  it('always answers its base from across the wheel', () => {
+  it('answers the primary from across the wheel, in the complement slot', () => {
     // Every harmony carries its opposite, because a palette of neighbours is a
-    // wall in one colour — harmonious, and indistinguishable from a gel.
+    // wall in one colour — harmonious, and indistinguishable from a gel. It sits
+    // in `complement` rather than wherever it landed, because that outlet is
+    // what a source's opposing colour wires to.
     for (const [where, colours] of rolled) {
       const hues = colours.map((each) => taken(each).hue);
-      const widest = Math.max(...hues.map((a) => Math.max(...hues.map((b) => apart(a, b)))));
-      expect(widest, where).toBeGreaterThanOrEqual(120);
+      // 119 rather than 120: a hue written to eight bits per channel and read
+      // back lands within about a degree of where it went in, and the tightest
+      // harmony here is the triad at exactly 120.
+      expect(apart(hues[0], hues[2]), where).toBeGreaterThanOrEqual(119);
+    }
+  });
+
+  it('keeps chalk a tint of the primary rather than a fifth hue', () => {
+    // It is the palette's answer to white and the colour a generator's hot half
+    // mixes toward, so it belongs to the light in the room. Drifted a little
+    // warm or cool, which is what a colourist does to a highlight, and no more.
+    for (const [where, colours] of rolled) {
+      const hues = colours.map((each) => taken(each).hue);
+      expect(apart(hues[0], hues[4]), where).toBeLessThanOrEqual(30);
+      // Chroma rather than saturation, and the difference is the whole trick: at
+      // 88% lightness a hue has almost no room to be a colour in, so a chalk
+      // that *reads* as a tint is taken at nearly full HSL saturation. Asserting
+      // a low saturation number here is what would produce white.
+      const chalk = taken(colours[4]);
+      expect(chalk.chroma, `${where} chalk has colour in it`).toBeGreaterThan(0.1);
+      expect(chalk.chroma, `${where} chalk is still a tint`).toBeLessThan(
+        taken(colours[0]).chroma,
+      );
     }
   });
 
