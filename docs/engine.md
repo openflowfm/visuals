@@ -161,11 +161,39 @@ than a gap.
 drawn as fast as this machine can draw it.
 
 ```sh
-npm run benchmark                      # 1920, eight bars a flow
+npm run benchmark                      # throughput: how much work fits in a second
+npm run benchmark -- --paced           # headroom: what one frame costs at 60Hz
 npm run benchmark -- --bars=2          # the same ranking, a quarter of the time
 npm run benchmark -- --sweep           # 1280, 1920, 2560, 3840
 npm run benchmark -- --edges=3840      # whatever you name
 ```
+
+## Throughput is not headroom
+
+**The most useful thing this has found, and it invalidated the first table it printed.**
+
+The unpaced run draws as fast as the machine will go, which means several frames are inside
+the GPU pipeline at once. Vortex comes out at about 1090fps that way. Divide by 60 and it
+looks like eighteen times a 60Hz budget, which is what the table used to say.
+
+The GPU's own timer disagrees, and it is right. One Vortex frame takes **3.2ms**, unpaced and
+paced alike — the two modes agree on the cost of a frame to within a few percent. The 1090fps
+is throughput with the pipeline full; 3.2ms is *latency*, the time from starting a frame to
+finishing it.
+
+A show cannot use the throughput. It presents one frame per refresh, so there is nothing to
+overlap it with, and what its budget buys is one frame's latency. Against a 16.7ms budget
+that is **two and a half times headroom, not eighteen.**
+
+So the two modes answer two questions and only one of them is about frame budget:
+
+| | what it answers | what it cannot say |
+|---|---|---|
+| default | how much work per second the GPU will chew | whether a frame fits in a refresh |
+| `--paced` | what one frame costs at the display's rate, and what got dropped | how much room is left over |
+
+`--paced` needs a **visible** window: a hidden or occluded one gets no `requestAnimationFrame`
+at all, and the run simply never advances.
 
 Eight bars at 128bpm is fifteen seconds a flow, so a whole scheme is about seven minutes and
 a `--sweep` is most of an hour. `--bars` is the flag to reach for when that is too long.
@@ -218,6 +246,17 @@ The context comes from the canvas rather than from the compositor: `getContext` 
 same object for the same canvas, so the bench forces its barrier without the renderer growing
 a method that exists for one caller.
 
+The barrier reads a scratch 1×1 attachment rather than the default framebuffer. Commands in
+one context complete in order, so a read anywhere drains the whole queue equally — but
+reading the default framebuffer is reading the buffer the compositor is trying to present,
+which puts the barrier inside the presentation path it is not supposed to be measuring.
+
+**The measuring is the compositor's own meter**, in both modes, rather than one of the
+bench's. A second meter on the same context was two `TIME_ELAPSED` queries fighting over one
+target — every frame threw `INVALID_OPERATION` and the GPU numbers were nonsense. Using the
+compositor's also means the benchmark and the panel's live readout are the same instrument,
+so a number here and a number on a show night cannot quietly diverge.
+
 **The window shows the picture, and says what size it really is.** The canvas has to carry a
 CSS box of `edge / devicePixelRatio` for the drawing buffer to land on the target exactly —
 960 CSS pixels for a 1920 pass on a two-times display, 1920 for a 4K one. That box is
@@ -244,6 +283,43 @@ published on `Compiled`. Where the prediction and the measurement disagree, the 
 `src/render/circuit.ts` is what needs revisiting — a model nobody checks against a
 measurement is a model that drifts.
 
+## What the paced run found, and what it overturned
+
+**The first reading from `--paced` contradicts the conclusion the rest of this document was
+written around, and the paced number is the one to believe.**
+
+At 1920×1080 with eight tracks playing, on an M1 Max with Ableton Live also on the GPU:
+
+| flow | gpu p99 | share of a 60Hz budget | frames late |
+|---|---:|---:|---:|
+| Showcase — Metaball bloom | 15.78ms | **94.5%** | 0.46% |
+| Showcase — Cloud chamber | 12.00ms | 71.9% | 0 |
+| Vortex | 10.66ms | 63.8% | 0 |
+| The lot | 9.47ms | 56.7% | 0 |
+| … | | | |
+| Chandelier | 0.86ms | 5.1% | 0 |
+
+The heaviest flow in the scheme spends **almost a whole 60Hz frame** at the ninety-ninth
+percentile and drops frames. Its median is 8.4ms, which is still half the budget. The
+unpaced run priced the same flow at 195fps and the summary line divided that by 60 and called
+it three times a budget. That was throughput read as headroom, and it was wrong by about
+thirty times.
+
+Three things follow, and none of them were visible before there was a paced mode:
+
+- **There is no comfortable headroom at 1080p/60 on the heaviest flow.** There is a little,
+  and it is contended: Live was running. A clean rerun is the first thing to do.
+- **120Hz is out of reach for that flow**, at 8.3ms a frame, and probably for the three below
+  it too.
+- **The engine question is genuinely open again.** "Fill-rate bound in one fragment shader"
+  is still true and still means a native port moves nothing on its own — but "there is
+  plenty of room" was an artefact of measuring the wrong quantity. A particle pass added on
+  top of Metaball bloom has nowhere to go.
+
+The `work` column stays interesting for the same reason it always was: `The lot` charges 0
+and sits fourth-worst at 56.7% of a budget, and `Orbit garden` charges 32 and sits at 11%.
+The cost model is not tracking what the GPU actually does.
+
 ## What would actually settle it
 
 Nothing above establishes there is a problem today, because the number that decides it has
@@ -251,10 +327,10 @@ not been taken: **the ninety-ninth percentile frame time on the wall, at show re
 with the console in front, running the heaviest flow in the scheme.** The meter is there to
 take it; nobody has run it against a real show yet.
 
-The benchmark answers the neighbouring question — *how much room is there at all* — without
-needing a show or a projector, which is why it is the cheaper one to run first. A scheme
-whose slowest flow clears 60Hz several times over at 1920 has already answered the engine
-question for the rig it was run on.
+`--paced` is the closest thing to it that needs no projector and no band, and its first
+reading is above. What it cannot tell you is what a *wall* does: a second window, a second
+GL context, and a projector at whatever it refreshes at. Given how little room the paced run
+found, that measurement now matters a great deal more than it did this morning.
 
 If that is clean, this whole question is about a 275 MB download. If it spikes, it points at
 one of the four costs above and says which — and a profile is a far better reason to rewrite

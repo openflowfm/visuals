@@ -62,13 +62,48 @@ export interface FlowResult {
   msPerFrame: number;
   /** Frames a second, sustained across the whole window. */
   fps: number;
+  /** Present only in paced mode: what it cost to draw at the display's rate. */
+  paced: PacedResult | null;
   error: string | null;
+}
+
+/**
+ * What a paced run saw.
+ *
+ * `lateShare` is the number that decides it. Everything else explains it: if
+ * frames were missed, `cpu` and `gpu` say whether our own work is why.
+ */
+export interface PacedResult {
+  /** Refresh rate the display actually ran at, from the median interval. */
+  hz: number;
+  /** Frames whose interval ran past 1.5x the median — the display repeating one. */
+  late: number;
+  lateShare: number;
+  intervalP50: number;
+  intervalP99: number;
+  /** Milliseconds inside `frame()`, which is the part that is ours. */
+  cpuP50: number;
+  cpuP99: number;
+  gpuP50: number | null;
+  gpuP99: number | null;
+  /**
+   * The share of one refresh interval a frame took, at the 99th percentile.
+   *
+   * Against the **larger** of CPU and GPU, not against CPU. The two overlap —
+   * this frame's GPU work runs while the next frame's JavaScript does — so the
+   * one that does not fit is the one that decides, and on this renderer that is
+   * usually the GPU by a factor of two. Quoting CPU alone reported twenty times
+   * the headroom actually available.
+   */
+  budgetShare: number;
 }
 
 export interface Pass {
   width: number;
   height: number;
   tracks: number;
+  /** `paced` draws one frame a refresh; `ceiling` draws as many as it can. */
+  mode: 'ceiling' | 'paced';
   /** Bars of music each flow was drawn for, at `tempo`. */
   bars: number;
   tempo: number;
@@ -141,8 +176,29 @@ const TEMPO = 128;
  */
 const CHUNK_MS = 16;
 
+/** How long a paced run waits for an animation frame before calling it stalled. */
+const STALL_MS = 4000;
+
 /** Flows to run, for a probe rather than a reading. All of them by default. */
 const LIMIT = number('flows', Number.POSITIVE_INFINITY);
+
+/**
+ * Paced: draw one frame per display refresh, the way a show draws.
+ *
+ * The unpaced run answers "how much work fits in a second". It cannot answer
+ * "does this hold at 60Hz", and the two are not the same question — an unpaced
+ * loop draws two thousand frames and *presents* sixty of them, so every cost
+ * that is paid per presentation rather than per draw is amortised away by a
+ * factor of thirty. Swap-chain acquire, the browser compositing the canvas into
+ * the page, and the wait on vsync are all in that bucket. A ceiling that hides
+ * them is a ceiling nothing can reach by any route.
+ *
+ * So this mode gives up the ceiling and measures the thing a show actually does:
+ * one frame per refresh, for the same window of music, reporting what was missed
+ * and what a frame cost while making it. It is also the mode that looks right,
+ * because presenting on the beat of the display is what smooth *is*.
+ */
+const PACED = asked.get('paced') === '1';
 
 function trackAt(t: number): Track {
   return {
@@ -269,6 +325,14 @@ export async function run(canvas: HTMLCanvasElement): Promise<BenchReport> {
     const show = showWith(TRACKS, colors);
     /** The one pixel the barrier reads back into. Allocated once, never read. */
     const sync = new Uint8Array(4);
+    /** A 1x1 target for the barrier to read, so it never touches the front buffer. */
+    const scratch = gl.createFramebuffer();
+    const scratchTexture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, scratchTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, scratch);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, scratchTexture, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     const flows: FlowResult[] = [];
 
     const windowMs = (BARS * 4 * 60_000) / TEMPO;
@@ -277,10 +341,20 @@ export async function run(canvas: HTMLCanvasElement): Promise<BenchReport> {
       const compiled = compileFlow(loaded.flows, id);
       const at: Show = { ...show, flow: id };
 
-      /** Block until the GPU has finished everything issued so far. */
+      /**
+       * Block until the GPU has finished everything issued so far.
+       *
+       * Read from a scratch attachment rather than from the default framebuffer.
+       * Commands in one context complete in order, so a one-pixel read anywhere
+       * drains the whole queue equally — but reading the *default* framebuffer
+       * is reading the buffer the compositor is trying to present, which puts
+       * the barrier in the middle of the presentation path it is not supposed
+       * to be measuring.
+       */
       const settle = () => {
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, scratch);
         gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, sync);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       };
 
       // Warmed on a still clock, because the only thing this has to buy is the
@@ -288,43 +362,146 @@ export async function run(canvas: HTMLCanvasElement): Promise<BenchReport> {
       for (let i = 0; i < WARMUP; i++) compositor.frame(at, loaded, 0, 0, 1 / 60);
       settle();
 
+      /** One frame of the show, at whatever moment the caller has reached. */
+      const draw = (elapsed: number, dt: number): void => {
+        // **Musical time off the wall clock, not off a frame counter.** This is
+        // the whole point of the window: the beat advances at the rate a stage
+        // advances it, however many frames the machine manages in between.
+        compositor.frame(at, loaded, (elapsed / 60_000) * TEMPO, elapsed / 1000, dt);
+      };
+
       const started = performance.now();
-      let last = started;
-      let elapsed = 0;
       let frames = 0;
+      let paced: PacedResult | null = null;
 
-      while (elapsed < windowMs) {
-        const until = Math.min(windowMs, elapsed + CHUNK_MS);
-        do {
-          const now = performance.now();
-          elapsed = now - started;
-          // **Musical time off the wall clock, not off a frame counter.** This
-          // is the whole point: the beat advances at the rate a stage advances
-          // it, however many frames the machine manages in between.
-          const dt = Math.min((now - last) / 1000, 0.1);
-          last = now;
-          compositor.frame(at, loaded, (elapsed / 60_000) * TEMPO, elapsed / 1000, dt);
-          frames++;
-        } while (elapsed < until);
+      // Read in both modes. The whole question the paced run exists to settle is
+      // whether the unpaced ceiling is reachable, and that comparison is only
+      // honest if the same instrument measures both.
+      compositor.resetStats();
 
-        // One barrier a chunk. Per frame would stall the pipeline being measured;
-        // once at the end would let an unknown number of frames be counted and
-        // never drawn. A chunk bounds that error to sixteen milliseconds of it.
+      if (PACED) {
+        // **Every frame presented, one a refresh, and none of them hurried.**
+        // `requestAnimationFrame` is the pacing a show has, so the browser's
+        // whole presentation path is inside what gets measured rather than
+        // amortised over thirty draws. There is no barrier here and there must
+        // not be: the display's own cadence is the barrier, and a `readPixels`
+        // would stall the pipeline whose smoothness is the thing in question.
+        //
+        // **The compositor's own meter does the measuring**, rather than one of
+        // this file's. Not only to avoid two `TIME_ELAPSED` queries fighting
+        // over one context — which is what a second meter here actually did —
+        // but because it makes the benchmark and the panel's live readout the
+        // same instrument, so a number here and a number on a show night cannot
+        // quietly diverge.
+        await new Promise<void>((done, stop) => {
+          let last = started;
+          let ticked = performance.now();
+
+          // **A stalled paced run must say so rather than hang.** An occluded or
+          // hidden window gets no animation frames at all — not slow ones, none
+          // — so the loop simply stops, the promise never settles, and the whole
+          // command sits there until its timeout with nothing printed. That is
+          // indistinguishable from a slow benchmark, which is a mistake this
+          // file has already made twice. A timer still runs when rAF does not,
+          // which is exactly what makes it a usable watchdog.
+          const watchdog = setInterval(() => {
+            if (performance.now() - ticked < STALL_MS) return;
+            clearInterval(watchdog);
+            stop(
+              new Error(
+                'paced run stalled: no animation frame for ' +
+                  `${(STALL_MS / 1000).toFixed(0)}s. The window has to stay visible — ` +
+                  'a hidden or fully covered one is given no frames to draw.',
+              ),
+            );
+          }, 500);
+
+          const tick = (now: number) => {
+            ticked = performance.now();
+            const elapsed = now - started;
+            if (elapsed >= windowMs) {
+              clearInterval(watchdog);
+              done();
+              return;
+            }
+            requestAnimationFrame(tick);
+            draw(elapsed, Math.min((now - last) / 1000, 0.1));
+            last = now;
+            frames++;
+          };
+          requestAnimationFrame(tick);
+        });
+
+        const read = compositor.stats();
+        const refresh = read.hz > 0 ? 1000 / read.hz : 0;
+        paced = {
+          hz: read.hz,
+          late: read.late,
+          lateShare: read.lateShare,
+          intervalP50: read.interval.p50,
+          intervalP99: read.interval.p99,
+          cpuP50: read.cpu.p50,
+          cpuP99: read.cpu.p99,
+          gpuP50: read.gpu?.p50 ?? null,
+          gpuP99: read.gpu?.p99 ?? null,
+          budgetShare:
+            refresh > 0 ? Math.max(read.cpu.p99, read.gpu?.p99 ?? 0) / refresh : 0,
+        };
+      } else {
+        let last = started;
+        let elapsed = 0;
+        while (elapsed < windowMs) {
+          const until = Math.min(windowMs, elapsed + CHUNK_MS);
+          do {
+            const now = performance.now();
+            elapsed = now - started;
+            const dt = Math.min((now - last) / 1000, 0.1);
+            last = now;
+            draw(elapsed, dt);
+            frames++;
+          } while (elapsed < until);
+
+          // One barrier a chunk. Per frame would stall the pipeline being
+          // measured; once at the end would let an unknown number of frames be
+          // counted and never drawn. A chunk bounds that error to sixteen
+          // milliseconds of it.
+          settle();
+          await breathe();
+          elapsed = performance.now() - started;
+        }
         settle();
-        elapsed = performance.now() - started;
-        await breathe();
-        elapsed = performance.now() - started;
+
+        // The same three clocks, from an unpaced run. `interval` and `late` mean
+        // nothing here — there is no cadence to be late against — but `cpu` and
+        // `gpu` are directly comparable to the paced numbers, and it is their
+        // disagreement that says whether a ceiling is reachable.
+        const read = compositor.stats();
+        paced = {
+          hz: 0,
+          late: 0,
+          lateShare: 0,
+          intervalP50: read.interval.p50,
+          intervalP99: read.interval.p99,
+          cpuP50: read.cpu.p50,
+          cpuP99: read.cpu.p99,
+          gpuP50: read.gpu?.p50 ?? null,
+          gpuP99: read.gpu?.p99 ?? null,
+          budgetShare: 0,
+        };
       }
 
-      settle();
       const spent = performance.now() - started;
       const ms = spent / frames;
       // Published as it goes. A run this long with no output cannot be told
       // from a run that has hung, and the difference matters at minute four.
-      const said =
-        `${canvas.width}x${canvas.height}  ${flows.length + 1}/${ids.length}  ` +
-        `${loaded.flows[id]?.name ?? id}  ${frames} frames in ${BARS} bars  ` +
-        `${((frames * 1000) / spent).toFixed(0)}fps`;
+      const said = paced
+        ? `${canvas.width}x${canvas.height}  ${flows.length + 1}/${ids.length}  ` +
+          `${loaded.flows[id]?.name ?? id}  paced ${paced.hz.toFixed(0)}Hz  ` +
+          `${(paced.lateShare * 100).toFixed(1)}% late  ` +
+          `${(paced.budgetShare * 100).toFixed(0)}% of budget`
+        : `${canvas.width}x${canvas.height}  ${flows.length + 1}/${ids.length}  ` +
+          `${loaded.flows[id]?.name ?? id}  ${frames} frames in ${BARS} bars  ` +
+          `${((frames * 1000) / spent).toFixed(0)}fps`;
       (window as unknown as { __benchProgress?: string }).__benchProgress = said;
       // The drawing buffer's real size, on the page, beside the picture it
       // describes. The canvas is displayed smaller than it is drawn, and that
@@ -342,6 +519,7 @@ export async function run(canvas: HTMLCanvasElement): Promise<BenchReport> {
         fps: spent > 0 ? (frames * 1000) / spent : 0,
         frames,
         windowMs: spent,
+        paced,
         error: compositor.error ?? compiled.error,
       });
 
@@ -354,10 +532,13 @@ export async function run(canvas: HTMLCanvasElement): Promise<BenchReport> {
       width: canvas.width,
       height: canvas.height,
       tracks: TRACKS,
+      mode: PACED ? ('paced' as const) : ('ceiling' as const),
       bars: BARS,
       tempo: TEMPO,
       flows,
     });
+    gl.deleteFramebuffer(scratch);
+    gl.deleteTexture(scratchTexture);
     compositor.free();
   }
 
