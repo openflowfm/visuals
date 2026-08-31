@@ -582,7 +582,12 @@ describe('a file written when the cascade existed', () => {
       },
     } as never).flows.mine.circuit;
     const ripple = kept.nodes.find((n) => n.id === 'r');
-    expect(ripple?.values).toEqual({ waves: 0.72, depth: 0.4 });
+    // Both numbers arrive under the new name. `waves` is the one that reads
+    // back unchanged; `depth` is carried by the response migration, because a
+    // file old enough to say `knobs` was also dialled before inlet responses
+    // existed — see `responseMigration.test.ts` for what that carry preserves.
+    expect(Object.keys(ripple?.values ?? {}).sort()).toEqual(['depth', 'waves']);
+    expect(ripple?.values?.waves).toBe(0.72);
     // And the old spelling is gone rather than sitting beside the new one:
     // `scheme.json` is read and diffed by hand, and two names for one map in it
     // is a question nobody should have to answer.

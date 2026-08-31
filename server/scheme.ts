@@ -2,6 +2,8 @@ import { z } from 'zod';
 import type { Circuit, CircuitNode, FlowDef, Scheme, SongSpec } from '../protocol.ts';
 import { NODE_KINDS } from '../src/nodes/generated.ts';
 import { repaired, splitPort } from '../src/render/circuit.ts';
+import { RESPONSE_SET_VERSION } from '../response.ts';
+import { OLDEST_RESPONSE_SET_VERSION, migrateFlowResponses } from '../responseMigration.ts';
 
 /**
  * The scheme: every flow there is, the colours they draw from, and the wheel
@@ -193,6 +195,10 @@ function columnsOf(ids: readonly string[], cords: readonly { from: string; to: s
  * one left is in `Weather`, feeding two places, which is what that node is for.
  */
 const EXAMPLES: Scheme = {
+  // Source, dialled against this build's inlet responses — so a copy of it
+  // written to disk is already current and is never carried across a response
+  // change. Without this the first library anyone opens is solved backwards.
+  responses: RESPONSE_SET_VERSION,
   flows: {
     // A colour is a function of a point. The set is read through a swirl that
     // sways once a bar, and the kaleidoscope folds the whole chain rather than
@@ -1074,7 +1080,20 @@ export function merge(raw: Partial<Scheme>): Scheme {
   // examples once. A present section is authoritative, including an empty
   // one: schemes own their members now, so deleting an example flow or
   // colourway from an editable copy cannot make it return on the round trip.
-  const flows = whole(file.flows ?? EXAMPLES.flows);
+  // Re-solved before repair, so what `repaired` walks is the graph this build
+  // will actually draw. A file with no stamp was dialled before inlet responses
+  // existed, which is version 1 — see `responseMigration.ts` for why the stamp
+  // rather than the shape of the values is what decides.
+  // Only what came out of a file. `EXAMPLES` is source, written against this
+  // build's responses, so carrying it would solve numbers that were never
+  // dialled under an older meaning — and a fresh library would open already
+  // wrong. A file with no stamp was dialled before inlet responses existed,
+  // which is version 1; see `responseMigration.ts` for why the stamp rather
+  // than the shape of the values is what decides.
+  const dialled = file.flows
+    ? migrateFlowResponses(file.flows, file.responses ?? OLDEST_RESPONSE_SET_VERSION).flows
+    : EXAMPLES.flows;
+  const flows = whole(dialled);
   const colorways = { ...(file.colorways ?? EXAMPLES.colorways) };
   const defaults = { ...EXAMPLES.defaults, ...(file.defaults ?? {}) };
   if (!Object.hasOwn(flows, defaults.flow)) {
@@ -1087,6 +1106,9 @@ export function merge(raw: Partial<Scheme>): Scheme {
     // Carried rather than rebuilt, so a rolled show can still say where it came
     // from after a reload. Without it the seed lived exactly as long as the tab.
     ...(file.seed ? { seed: file.seed } : {}),
+    // Always this build's version: everything above has just been carried to it,
+    // and the stamp is what stops the next load carrying it again.
+    responses: RESPONSE_SET_VERSION,
     flows,
     colorways,
     rotation: { ...EXAMPLES.rotation, ...(file.rotation ?? {}) },
@@ -1308,6 +1330,9 @@ const SCHEME_FILE = z.object({
     })
     .optional(),
   seed: z.string().optional(),
+  // Declared so a file saying something other than a number is refused at the
+  // door rather than read as version 1 and re-solved a second time.
+  responses: z.number().int().positive().optional(),
 });
 
 function vetted(raw: Partial<Scheme>): Partial<Scheme> {

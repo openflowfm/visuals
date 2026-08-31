@@ -167,12 +167,52 @@ product state. Locking a result means:
    `NORMALIZED_CALIBRATIONS` table owns legacy normalized mappings);
 3. increment `RESPONSE_SET_VERSION`;
 4. add parity and visual-contract tests;
-5. decide how older stored values should migrate; and
+5. add an era entry to `responseMigration.ts` for every key whose delivered
+   meaning moved; and
 6. recheck affected built-in and saved flows.
 
 Keeping that step in source control prevents one developer's local database
-from silently changing a show. This batch deliberately does **not** rewrite
-stored normalized values: preserving the old visual answer would also preserve
-the overly abrupt part of the range the calibration was meant to change.
-Endpoints remain endpoints unless maximum reach explicitly changed, and built-in
-flows go through the ordinary visual review with their newly shaped middles.
+from silently changing a show. Endpoints remain endpoints unless maximum reach
+explicitly changed, and built-in flows go through the ordinary visual review
+with their newly shaped middles.
+
+## Carrying stored values across a version
+
+A response decides what an inlet's 0–1 *means*, so changing one changes every
+saved flow holding a number for it — silently, because no file changed and
+nothing recompiles differently. Version 3 was promoted without this and the
+result was fourteen of twenty-seven flows in a real library looking different
+with nobody having touched them, which read from the outside like the compositor
+having broken.
+
+So a stored number crosses a version boundary by being **re-solved**: find the
+value that, under the new response, delivers what the old one delivered.
+`responseMigration.ts` owns both halves — `invertResponse` for the four
+primitives, and an era table saying what each key used to deliver, in the units
+its current response answers in. Only keys whose meaning actually moved need an
+entry; a reshaped range in front of unchanged shader arithmetic delivered the
+stored number itself, which is the identity the table falls back to. The three
+version-3 entries are there because `fxKaleido`, `fxTwist` and `cSwirl` gave up
+their own centring and scaling in the same commit.
+
+Three things are worth knowing before adding an era:
+
+- **It is not idempotent.** Solving twice compounds, so `Scheme.responses` is
+  what says a carry has already happened. `merge` writes it, and a file without
+  one genuinely is version 1 rather than a default standing in for a missing
+  field.
+- **A library can span the change.** A scheme is saved whole but authored a flow
+  at a time, so flows may sit either side of a promotion with one save date
+  between them. `FlowDef.responses` is how a flow says it is already current;
+  `merge` consumes those and drops them so the file settles back to one stamp.
+- **`EXAMPLES` is source, not a file.** It carries the current version and is
+  never carried, or a fresh library would open solved backwards.
+
+`npm run dev:responses` prints what a carry would change before it changes
+anything, grouped by how each flow was placed either side of the promotion: the
+lab writes down when it made a candidate, so its flows are placed exactly, and
+everything else is compared against a reference copy of the same library from
+before the change. A flow neither can place is named rather than guessed at.
+`-- --write` then records what was placed, as `FlowDef.responses`, moving no
+stored value — the carry itself still happens in `merge` on the next load. It is
+the honest form of step 6.

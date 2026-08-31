@@ -426,6 +426,21 @@ export interface FlowDef {
   circuit: Circuit;
   /** The randomiser wired this one, so the next roll may clear it. */
   rolled?: boolean;
+  /**
+   * The response-set version this flow's numbers were dialled against, when it
+   * is not the scheme's.
+   *
+   * A scheme is saved whole but authored a flow at a time, so a library can
+   * outlive a response change with some flows dialled either side of it — which
+   * is exactly what happened across version 3. Carrying the whole file from one
+   * version would then over-correct everything made since. This is how a flow
+   * says it is already current; absent means the scheme's stamp speaks for it,
+   * which is true of every flow in a library nobody has edited across a change.
+   *
+   * `merge` consumes these and drops them, so the file settles back to one
+   * stamp on the scheme rather than sixty on the flows.
+   */
+  responses?: number;
 }
 
 /** Every flow a graph reaches from this one, in the order its nodes appear. */
@@ -527,6 +542,21 @@ export interface Scheme {
   songs: Record<string, SongSpec>;
   /** What the randomiser was rolled from, when it was. */
   seed?: string;
+  /**
+   * The response-set version the stored inlet values were dialled against.
+   *
+   * An inlet's response decides what its 0-1 means, so changing one changes
+   * every saved flow that holds a number for it. This says which set of
+   * meanings the numbers in this file were chosen under, and `merge` re-solves
+   * them when it is behind. Absent is version 1 — a file written before inlet
+   * responses existed at all — and that is the honest reading of one, not a
+   * default standing in for a missing field.
+   *
+   * Unlike the other repairs `merge` performs, re-solving is not idempotent, so
+   * this stamp is what stops a value being carried twice. See
+   * `responseMigration.ts`.
+   */
+  responses?: number;
   defaults: {
     colorway: string;
     /** Drawn when the rotation has nothing to turn through. */
