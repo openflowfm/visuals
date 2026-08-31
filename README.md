@@ -19,16 +19,16 @@ Live ─ SessionBridge :17800 ─WS─> visuals backend :17900 ─WS─> Electro
 
 | doc | read it before touching | source |
 |---|---|---|
-| [the clock](docs/clock.md) | Link, tempo, the beat, why the browser extrapolates, the native addon | `server/link.ts`, `src/state/useShow.ts`, `tools/build-link.ts` |
-| [flows](docs/flows.md) | **the one noun**, the node vocabulary, the compiler, the designer | `protocol.ts`, `src/render/circuit.ts`, `src/ui/Designer.tsx` |
+| [the clock](docs/clock.md) | Link, tempo, the beat, why the browser extrapolates, the native addon | `server/link.ts`, `client/state/useShow.ts`, `tools/build-link.ts` |
+| [flows](docs/flows.md) | **the one noun**, the node vocabulary, the compiler, the designer | `protocol.ts`, `client/render/circuit.ts`, `client/ui/Designer.tsx` |
 | [the wheel](docs/wheel.md) | what is on screen and why, song overrides, the scheme file, the randomiser | `resolve.ts`, `server/show.ts`, `server/scheme.ts`, `randomize.ts` |
-| [the console](docs/console.md) | the four product views, and what the views before them were for | `src/ui/Console.tsx`, `Designer.tsx`, `TrainView.tsx`, `ReviewsView.tsx`, `SetView.tsx` |
-| [the lab](docs/lab.md) | the lineage forest, exploring roots, developing a node, frozen editions and the detailed corpus | `lab.ts`, `server/lab.ts`, `server/lineage.ts`, `server/batch.ts`, `server/finals.ts`, `src/ui/TrainView.tsx`, `src/ui/ForestView.tsx`, `src/ui/ExploreView.tsx`, `src/ui/DevelopView.tsx`, `src/ui/FinalsView.tsx`, `src/ui/ReviewsView.tsx` |
-| [parameter calibration](docs/calibration.md) | the development-only A/B/C response bench and its evidence | `response.ts`, `calibration.ts`, `server/calibration.ts`, `src/ui/CalibrationView.tsx` |
-| [the renderer](docs/render.md) | the two passes, blending, fill rate, **pointing a projector** | `src/render/*` |
-| [the engine](docs/engine.md) | where the frame time goes, the meter, the benchmark, why particles need no rewrite | `src/render/meter.ts`, `bench.ts`, `../tools/benchmark.ts` |
+| [the console](docs/console.md) | the four product views, and what the views before them were for | `client/ui/Console.tsx`, `Designer.tsx`, `TrainView.tsx`, `ReviewsView.tsx`, `SetView.tsx` |
+| [the lab](docs/lab.md) | the lineage forest, exploring roots, developing a node, frozen editions and the detailed corpus | `lab.ts`, `server/lab.ts`, `server/lineage.ts`, `server/batch.ts`, `server/finals.ts`, `client/ui/TrainView.tsx`, `client/ui/ForestView.tsx`, `client/ui/ExploreView.tsx`, `client/ui/DevelopView.tsx`, `client/ui/FinalsView.tsx`, `client/ui/ReviewsView.tsx` |
+| [parameter calibration](docs/calibration.md) | the development-only A/B/C response bench and its evidence | `response.ts`, `calibration.ts`, `server/calibration.ts`, `client/ui/CalibrationView.tsx` |
+| [the renderer](docs/render.md) | the two passes, blending, fill rate, **pointing a projector** | `client/render/*` |
+| [the engine](docs/engine.md) | where the frame time goes, the meter, the benchmark, why particles need no rewrite | `client/render/meter.ts`, `bench.ts`, `../tools/benchmark.ts` |
 | [the harness](docs/harness.md) | working on this with no Ableton, and the Link safety rule | `tools/fake-live.ts` |
-| [the desktop app](docs/desktop.md) | the window, the wall on a projector, the display list, why the server is a child process | `electron/main.ts`, `electron/preload.ts`, `src/state/useWall.ts` |
+| [the desktop app](docs/desktop.md) | the window, the wall on a projector, the display list, why the server is a child process | `electron/main.ts`, `electron/preload.ts`, `client/state/useWall.ts` |
 | [agent authoring](docs/mcp.md) | the MCP tools for reading nodes, validating and saving flows, and reviewing node designs | `mcp/*` |
 
 ## The one idea

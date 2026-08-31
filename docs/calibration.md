@@ -1,7 +1,7 @@
 # Parameter response calibration
 
 `response.ts`, `calibration.ts`, `server/calibration.ts`,
-`src/ui/CalibrationView.tsx`. Internal development tooling for deciding how a
+`client/ui/CalibrationView.tsx`. Internal development tooling for deciding how a
 normalized inlet should feel before that decision becomes product behaviour.
 
 ## It is not the lab

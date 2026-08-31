@@ -1,6 +1,6 @@
 # The engine, and where it runs
 
-`src/render/*`, `electron/main.ts`. Why the show is drawn by WebGL2 inside a Chromium
+`client/render/*`, `electron/main.ts`. Why the show is drawn by WebGL2 inside a Chromium
 renderer, what that costs, and what would have to be true before it stopped being the right
 answer.
 
@@ -9,7 +9,7 @@ weight is real; the question is whether any of it lands on the frame.
 
 ## Where the frame time actually goes
 
-A wall frame, from `src/render/compositor.ts`:
+A wall frame, from `client/render/compositor.ts`:
 
 ```
 <= 8 track passes   only playing tracks; opacity below 0.002 is skipped entirely
@@ -39,7 +39,7 @@ They get discussed as one and they are not one.
 | | the change | what it costs | effect on the frame |
 |---|---|---|---|
 | **the shell** | Electron to Tauri | ~600 lines, plus a Node sidecar and the whole signing chain again | **negative on macOS** |
-| **the engine** | WebGL2 in the renderer to a native GPU engine | ~6,000 lines of `src/render/`, plus a picture path back into the webview | ~0 today; raises a ceiling |
+| **the engine** | WebGL2 in the renderer to a native GPU engine | ~6,000 lines of `client/render/`, plus a picture path back into the webview | ~0 today; raises a ceiling |
 | **the language** | GLSL to SPIR-V or WGSL | a codegen retarget | ~0 |
 
 **The shell alone is the one combination that pays and loses.** Tauri's macOS webview is
@@ -65,7 +65,7 @@ Ranked by whether it lands on a frame:
 2. **No compute shaders.** WebGL2 has none. Algorithms wanting workgroup memory and atomics —
    neighbour search, SPH fluids, flocking with real queries — are not slow here, they are
    awkward to the point of not being worth writing. A ceiling rather than a tax.
-3. **The video path.** `src/render/video.ts` decodes through a `<video>` element and uploads
+3. **The video path.** `client/render/video.ts` decodes through a `<video>` element and uploads
    to a texture. Native would hand VideoToolbox's output to Metal with no copy. Small at
    1080p, growing with resolution.
 4. **Disk and memory.** A 291 MB bundle, and a few hundred MB resident across main, GPU and
@@ -73,7 +73,7 @@ Ranked by whether it lands on a frame:
 
 ## What Electron is buying
 
-1. **One engine draws the wall, the bench and the ten node faces.** `src/render/preview.ts`
+1. **One engine draws the wall, the bench and the ten node faces.** `client/render/preview.ts`
    runs all of them through a single GL context, and its argument for doing so is that a face
    is only worth having because it is fed exactly what the bench is fed. A native engine has
    to hand pictures back into the webview for those. It is not hard — ten 128-pixel thumbnails
@@ -126,7 +126,7 @@ exception follows the first rather than inventing anything.
 
 ## The meter
 
-`src/render/meter.ts`, read in the panel as the **frames** row.
+`client/render/meter.ts`, read in the panel as the **frames** row.
 
 Three clocks, because they fail differently and the difference names the culprit.
 **Interval** is wall time between presented frames and is the one that matters — if it is
@@ -280,7 +280,7 @@ GPU, because a contended run reports floors and nothing in the table would say s
 
 **`work` beside each flow is the compiler's own prediction** against its ceiling of 64, now
 published on `Compiled`. Where the prediction and the measurement disagree, the cost model in
-`src/render/circuit.ts` is what needs revisiting — a model nobody checks against a
+`client/render/circuit.ts` is what needs revisiting — a model nobody checks against a
 measurement is a model that drifts.
 
 ## What the paced run found, and what it overturned

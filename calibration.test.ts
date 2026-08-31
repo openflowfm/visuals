@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CALIBRATION_FLOW, CALIBRATION_TRIALS, calibrationProblems, calibrationScheme } from './calibration.ts';
-import { compileFlow } from './src/render/circuit.ts';
+import { compileFlow } from './client/render/circuit.ts';
 import { CALIBRATION_BASELINE_RESPONSES, responseKey } from './response.ts';
 
 describe('response calibration manifest', () => {

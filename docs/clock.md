@@ -1,6 +1,6 @@
 # The clock
 
-`server/link.ts`, `src/state/useShow.ts`, `tools/build-link.ts`.
+`server/link.ts`, `client/state/useShow.ts`, `tools/build-link.ts`.
 
 ## Link says *when*; the bridge says *what*
 

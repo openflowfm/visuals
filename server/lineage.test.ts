@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { seeded } from '../lab.ts';
-import { compileCircuit } from '../src/render/circuit.ts';
+import { compileCircuit } from '../client/render/circuit.ts';
 import { labSearchEngine, openLab, type LabStore } from './lab.ts';
 import { circuitDistance, lineageMethod, mutateCircuit, randomCircuit } from './lineage.ts';
 

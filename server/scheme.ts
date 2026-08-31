@@ -7,8 +7,8 @@ import {
   type Scheme,
   type SongSpec,
 } from '../protocol.ts';
-import { NODE_KINDS } from '../src/nodes/generated.ts';
-import { repaired, splitPort } from '../src/render/circuit.ts';
+import { NODE_KINDS } from '../client/nodes/generated.ts';
+import { repaired, splitPort } from '../client/render/circuit.ts';
 import { RESPONSE_SET_VERSION } from '../response.ts';
 import { OLDEST_RESPONSE_SET_VERSION, migrateFlowResponses } from '../responseMigration.ts';
 

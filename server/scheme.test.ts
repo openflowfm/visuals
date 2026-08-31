@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { hint } from '../hints.ts';
 import { NODE_FAMILIES, flowsUsedBy } from '../protocol.ts';
-import { compileFlow, inletsOf, portId, reachesOut, repaired, splitPort } from '../src/render/circuit.ts';
+import { compileFlow, inletsOf, portId, reachesOut, repaired, splitPort } from '../client/render/circuit.ts';
 import { EXAMPLES, merge } from './scheme.ts';
 
 /**

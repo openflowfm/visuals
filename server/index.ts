@@ -785,7 +785,7 @@ function staleBundle(): string | null {
     for (const entry of fs.readdirSync(at)) seen = Math.max(seen, newest(path.join(at, entry)));
     return seen;
   };
-  const sources = ['src', 'protocol.ts', 'resolve.ts'].map((rel) =>
+  const sources = ['client', 'protocol.ts', 'resolve.ts'].map((rel) =>
     newest(path.resolve(here, '..', rel)),
   );
   const moved = Math.max(...sources);

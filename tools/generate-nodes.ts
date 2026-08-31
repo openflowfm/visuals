@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const nodes = path.resolve(here, '../src/nodes');
+const nodes = path.resolve(here, '../client/nodes');
 const target = path.join(nodes, 'generated.ts');
 
 function source(): string {
@@ -57,7 +57,7 @@ export function generateNodes(check = false): void {
   const next = source();
   const held = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : '';
   if (check) {
-    if (held !== next) throw new Error('src/nodes/generated.ts is stale; run npm run nodes');
+    if (held !== next) throw new Error('client/nodes/generated.ts is stale; run npm run nodes');
     return;
   }
   if (held !== next) fs.writeFileSync(target, next);

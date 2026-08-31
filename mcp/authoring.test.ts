@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { FlowDef } from '../protocol.ts';
 import { FIELD_MODES } from '../protocol.ts';
-import { FIELD_WORK } from '../src/render/glsl/fields.ts';
+import { FIELD_WORK } from '../client/render/glsl/fields.ts';
 import {
   FlowAuthoringStore,
   nodeCatalog,
@@ -250,7 +250,7 @@ describe('node design review', () => {
     expect(review.ready).toBe(true);
     expect(review.implementationPlan).toEqual(
       expect.arrayContaining([
-        expect.stringContaining('src/nodes/<kind>/node.ts'),
+        expect.stringContaining('client/nodes/<kind>/node.ts'),
         expect.stringContaining('NodeSpec'),
         expect.stringContaining('docs/flows.md'),
       ]),

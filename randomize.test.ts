@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compileCircuit, valuesOf, MAX_VALUES } from './src/render/circuit.ts';
+import { compileCircuit, valuesOf, MAX_VALUES } from './client/render/circuit.ts';
 import type { Scheme, Show, Track } from './protocol.ts';
 import { EXAMPLES } from './server/scheme.ts';
 import { newSeed, randomizeCircuit, randomizeScheme } from './randomize.ts';

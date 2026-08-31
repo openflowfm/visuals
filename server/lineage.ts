@@ -17,8 +17,8 @@ import {
   strandedNodes,
   wouldFeedItself,
   type Signal,
-} from '../src/render/circuit.ts';
-import { NODE_KINDS } from '../src/nodes/generated.ts';
+} from '../client/render/circuit.ts';
+import { NODE_KINDS } from '../client/nodes/generated.ts';
 
 type Rng = () => number;
 

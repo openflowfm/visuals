@@ -1,7 +1,7 @@
 # Flows
 
-`protocol.ts`, `src/render/circuit.ts`, `src/render/glsl/*`,
-`src/render/shaders.ts`, `src/ui/Designer.tsx`.
+`protocol.ts`, `client/render/circuit.ts`, `client/render/glsl/*`,
+`client/render/shaders.ts`, `client/ui/Designer.tsx`.
 The one noun, the vocabulary it is wired from, and the compiler underneath.
 
 ## One noun, and it is a graph
@@ -142,7 +142,7 @@ own business and is not visible on the canvas. The alternative is a patch bay of
 which is how these things usually die.
 
 It is also what lets **one control** serve every number inlet there is. `VALUE` in
-[`param.ts`](../src/ui/param.ts) is that control, and nothing has to declare a range to get
+[`param.ts`](../client/ui/param.ts) is that control, and nothing has to declare a range to get
 one.
 
 ### The wire is normalized; the response is not
@@ -306,10 +306,10 @@ position on the same fact and rejects a *candidate* that has any — see
 
 ## A folder is the registration
 
-Every node kind has one folder under `src/nodes/` and one `node.ts` descriptor in that
+Every node kind has one folder under `client/nodes/` and one `node.ts` descriptor in that
 folder. The descriptor owns the stable kind, browser family, order, and whether the node is
 addable, belongs on the flow shelf, or is fixed in every graph. `tools/generate-nodes.ts`
-discovers those folders and writes `src/nodes/generated.ts`, whose static imports work in
+discovers those folders and writes `client/nodes/generated.ts`, whose static imports work in
 both the Vite browser bundle and the raw Node MCP server. Vite refreshes it at startup,
 `npm --prefix visuals run mcp` refreshes it before serving, and `nodes:check` plus the
 manifest test make a forgotten generated update fail rather than silently hiding a node.
@@ -993,7 +993,7 @@ you build at a desk is what will play.
 ## A picture on every node
 
 Each node face shows what *that node* has made, not a thumbnail of the finished flow.
-[`probe.ts`](../src/ui/probe.ts) builds a picture by cutting the graph off at one outlet and
+[`probe.ts`](../client/ui/probe.ts) builds a picture by cutting the graph off at one outlet and
 bringing the result back to a colour: a point through a `plasma` source, because a point's
 whole job is to move a picture and a picture with structure in it is one you can see moving.
 
@@ -1001,7 +1001,7 @@ A **number** outlet is not brought to a colour any more — its face is an oscil
 It used to cross through `colorway`, which is honest as a wiring and useless as a reading: a
 blinking rectangle cannot tell a sine from a saw, and the bridge's unwired `energy` rode the
 room besides, so the face throbbed with a signal that was not the node's while the readout
-beside it — off the CPU evaluator — told the truth. [`scope.ts`](../src/ui/scope.ts) draws
+beside it — off the CPU evaluator — told the truth. [`scope.ts`](../client/ui/scope.ts) draws
 the trace from that same evaluator, so the face and the number beside it cannot disagree,
 and the sweep is synced to the bar so a square at 1/4 is four stationary steps and a phase
 offset is a visible shift. The `colorway` crossing survives where a number only exists per
@@ -1035,9 +1035,9 @@ That argument was wrong in the way that matters. The gesture this panel is built
 one has failed at the only thing it is for: you cannot tell whether what you are looking at
 is the node or the renderer. Fourteen separate uniforms had drifted between the two lists,
 in different files, neither of which looked wrong on its own — so there is one list, in
-[`feed.ts`](../src/render/feed.ts), and the stage, the bench and every face read it.
+[`feed.ts`](../client/render/feed.ts), and the stage, the bench and every face read it.
 
-The faces get the same [`Show`](../src/state/useRoom.ts) the bench does, which at a desk is
+The faces get the same [`Show`](../client/state/useRoom.ts) the bench does, which at a desk is
 the room, dialled, and therefore steady anyway — including the same stand-in set when there
 is no Live attached, which is `withStandIns` and is shared for the same reason.
 

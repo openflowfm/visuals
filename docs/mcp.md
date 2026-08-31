@@ -118,7 +118,7 @@ that already mean something in a DAW, and an existing node kind. It also returns
 mode with the same signal signature: the concrete evidence for asking whether this is really
 one more mode whose wiring should stay put.
 
-A ready review returns the implementation route through a discovered `src/nodes/<kind>/`
+A ready review returns the implementation route through a discovered `client/nodes/<kind>/`
 folder, its documented `NodeSpec`, renderer/server work appropriate to its runtime class, derived browser,
 compiler tests, `docs/flows.md`, and the Visuals wiki. The agent still makes and verifies those
 changes in the repository; MCP supplies the contract and the current facts rather than a
@@ -128,7 +128,7 @@ second extension system beside the real one.
 
 `nodeCatalog()` walks the generated folder manifest and serializes each `NodeSpec` directly.
 It does not have a hand-maintained MCP copy or a second list of kinds.
-The contract added in `src/render/circuit.ts` already makes every node, fixed mode and port carry
+The contract added in `client/render/circuit.ts` already makes every node, fixed mode and port carry
 documentation; the MCP catalog is another consumer beside browser search and faceplate help.
 Adding a protocol mode without its description remains a TypeScript error, and adding a dynamic
 inlet without its description remains one too.

@@ -1,6 +1,6 @@
 # The desktop app
 
-`visuals/electron/main.ts`, `visuals/electron/preload.ts`, `visuals/src/state/useWall.ts`.
+`visuals/electron/main.ts`, `visuals/electron/preload.ts`, `visuals/client/state/useWall.ts`.
 
 `npm run visuals` builds the renderer, starts the server, and opens the rig in a window it
 owns. It is the show-night command. `npm run dev` opens the same shell automatically, but

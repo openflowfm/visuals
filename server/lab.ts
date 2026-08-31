@@ -50,7 +50,7 @@ import {
   type LabSearchMethod,
   type SearchEvidence,
 } from '../lab.ts';
-import { compileFlow } from '../src/render/circuit.ts';
+import { compileFlow } from '../client/render/circuit.ts';
 import {
   FINALS_WINNERS,
   finalsRooms,

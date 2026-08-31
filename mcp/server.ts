@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as z from 'zod/v4';
 import type { FlowDef } from '../protocol.ts';
-import { NODE_KINDS } from '../src/nodes/generated.ts';
+import { NODE_KINDS } from '../client/nodes/generated.ts';
 import {
   FlowAuthoringStore,
   nodeCatalog,

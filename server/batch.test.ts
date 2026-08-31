@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { seeded } from '../lab.ts';
-import { strandedNodes } from '../src/render/circuit.ts';
+import { strandedNodes } from '../client/render/circuit.ts';
 import { labSearchEngine, openLab, type LabStore } from './lab.ts';
 import { batchDrafts, lineageMethod, randomCircuit, seedDraft } from './lineage.ts';
 import { nextBatchPair, rankBatch, type BatchComparisonEvidence } from './batch.ts';

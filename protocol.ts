@@ -24,7 +24,7 @@
  * What is left above the graph is deliberately tiny: which flow is up, and which
  * colours it draws from.
  */
-import { NODE_FAMILIES, type NodeKind } from './src/nodes/generated.ts';
+import { NODE_FAMILIES, type NodeKind } from './client/nodes/generated.ts';
 import type { ParameterResponse, ResponseTarget } from './response.ts';
 
 export { NODE_FAMILIES, type NodeKind };

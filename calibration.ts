@@ -14,7 +14,7 @@ import {
   inletsOf,
   modesOf,
   type PortSpec,
-} from './src/render/circuit.ts';
+} from './client/render/circuit.ts';
 import {
   type ParameterResponse,
   type ResponseTarget,

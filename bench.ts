@@ -46,8 +46,8 @@
 
 import scheme from './scheme.json' with { type: 'json' };
 import type { Scheme, Show, Track } from './protocol.ts';
-import { createCompositor } from './src/render/compositor.ts';
-import { compileFlow } from './src/render/circuit.ts';
+import { createCompositor } from './client/render/compositor.ts';
+import { compileFlow } from './client/render/circuit.ts';
 
 export interface FlowResult {
   id: string;

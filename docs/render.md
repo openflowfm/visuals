@@ -1,17 +1,17 @@
 # The renderer
 
-`src/render/`. WebGL2, two passes and an output stage.
+`client/render/`. WebGL2, two passes and an output stage.
 
-Shader source is split by responsibility under `src/render/glsl/`: `common.ts`
+Shader source is split by responsibility under `client/render/glsl/`: `common.ts`
 owns the uniforms and shared coordinate/clock helpers, `sources.ts` owns the
 lightweight generators, `fields.ts` owns fixed-work procedural fields,
 `fractal.ts` owns bounded iterative pictures, `light.ts` owns fixed-work 2D
 lights built on the field lattice,
 `effects.ts` owns single-read image operations, and `circuit.ts` owns helpers
-used only by graph expressions. `src/render/shaders.ts` is the assembly boundary
-for full flow and per-track fragment shaders; `src/render/circuit.ts` compiles a
+used only by graph expressions. `client/render/shaders.ts` is the assembly boundary
+for full flow and per-track fragment shaders; `client/render/circuit.ts` compiles a
 graph against that boundary. The final projector pass stays in
-`src/render/output.ts`, because it is a separate program with separate uniforms.
+`client/render/output.ts`, because it is a separate program with separate uniforms.
 
 ## The frame
 
@@ -238,7 +238,7 @@ per playing track is the GPU failure this boundary prevents.
 | `edge` | four taps, a fraction of the frame apart. The one that makes a busy frame *less* busy |
 | `shift` | three taps, one per channel, opening with the level so it bites on transients |
 
-Adding a node starts with a `src/nodes/<kind>/node.ts` folder descriptor; the generated
+Adding a node starts with a `client/nodes/<kind>/node.ts` folder descriptor; the generated
 manifest makes that folder the source of truth for its kind, family, and browser placement.
 See [flows](flows.md). Adding a lightweight picture mode is a typed body in
 `glsl/sources.ts`'s `GENERATOR_BODIES`
@@ -524,7 +524,7 @@ development double-invoke does: mount, free, mount again on the same element. A 
 there is lost permanently, because nothing restores one that was taken deliberately — so
 without the check, `npm run dev` would draw black.
 
-`src/render/flow.ts` holds what both the stage and the node faces need — the shader, the
+`client/render/flow.ts` holds what both the stage and the node faces need — the shader, the
 banks, the signature. **The bench is not in that list**, because the bench is a whole
 `Compositor` on its own canvas rather than a second renderer. There used to be one and it
 was a standing risk: a bench that could disagree with the stage about brightness or blend is
@@ -532,7 +532,7 @@ worse than no bench.
 
 ## One list of uniforms, because two of them drifted
 
-`src/render/feed.ts` is what a flow is *fed*: the clock, the set's own pass, every uniform a
+`client/render/feed.ts` is what a flow is *fed*: the clock, the set's own pass, every uniform a
 compiled flow reads, and the output stage. The stage and the node faces both call it.
 
 It was two lists, in two files, and they had drifted apart in fourteen places — the faces

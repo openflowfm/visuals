@@ -1,8 +1,8 @@
 # The lab
 
 `lab.ts`, `server/lab.ts`, `server/lineage.ts`, `server/batch.ts`, `server/finals.ts`,
-`server/fresh.ts`, `src/ui/TrainView.tsx`, `src/ui/ForestView.tsx`, `src/ui/ExploreView.tsx`,
-`src/ui/DevelopView.tsx`, `src/ui/FinalsView.tsx`, `src/ui/ReviewsView.tsx`. One subsystem
+`server/fresh.ts`, `client/ui/TrainView.tsx`, `client/ui/ForestView.tsx`, `client/ui/ExploreView.tsx`,
+`client/ui/DevelopView.tsx`, `client/ui/FinalsView.tsx`, `client/ui/ReviewsView.tsx`. One subsystem
 under two console tabs: **train** grows a body of work and the record of how it got there,
 while **review** preserves the slower scored and tagged corpus.
 
@@ -186,7 +186,7 @@ is not a feature that was added; it is what falls out of the marks living on the
 
 A node whose work never reaches a door — `out`'s inlet, or a `give`'s — contributes nothing.
 The graph renders pixel-identical to the same graph with that branch deleted.
-`liveNodes` and `strandedNodes` in `src/render/circuit.ts` name them, walking backwards port
+`liveNodes` and `strandedNodes` in `client/render/circuit.ts` name them, walking backwards port
 to port for the reason `wouldFeedItself` walks forwards that way: a `lens` hands back a point
 that never looked at its colour, so node-to-node reachability would keep a picture that is
 genuinely doing nothing.

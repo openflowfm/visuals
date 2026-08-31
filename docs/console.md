@@ -1,6 +1,6 @@
 # The console
 
-`src/ui/Console.tsx`, `Designer.tsx`, `TrainView.tsx`, `ReviewsView.tsx`,
+`client/ui/Console.tsx`, `Designer.tsx`, `TrainView.tsx`, `ReviewsView.tsx`,
 `SetView.tsx`. Four product views over one show.
 
 Development may add one conditional view without changing that product shape:
@@ -320,7 +320,7 @@ through `colorway` and a point back through a `plasma` source, and what is on sc
 than a border, so lighting it cannot move the face a pixel.
 
 The second is that promoting a face must not **change** the picture, only its size. That is
-[`feed.ts`](../src/render/feed.ts)'s job and it took a rewrite to get: the faces and the
+[`feed.ts`](../client/render/feed.ts)'s job and it took a rewrite to get: the faces and the
 bench had been feeding their flows different uniforms in fourteen places, so clicking one
 gave you a picture with a different colourway, a different set, a different key and no
 shoulder — and no way to tell which of those you were looking at. They read one list now.

@@ -20,9 +20,9 @@ import {
   wouldFeedItself,
   type PortSpec,
   type Signal,
-} from '../src/render/circuit.ts';
-import { NODE_BY_KIND, NODE_KINDS } from '../src/nodes/generated.ts';
-import { NODE_FAMILY_DETAILS } from '../src/nodes/descriptor.ts';
+} from '../client/render/circuit.ts';
+import { NODE_BY_KIND, NODE_KINDS } from '../client/nodes/generated.ts';
+import { NODE_FAMILY_DETAILS } from '../client/nodes/descriptor.ts';
 
 export type Severity = 'error' | 'warning';
 
@@ -908,10 +908,10 @@ export function reviewNodeDesign(proposal: NodeProposal): NodeDesignReview {
   }
 
   const implementationPlan = [
-    'Add src/nodes/<kind>/node.ts; the generated manifest derives NodeKind, family placement, browser order, validation, and MCP discovery from that folder.',
+    'Add client/nodes/<kind>/node.ts; the generated manifest derives NodeKind, family placement, browser order, validation, and MCP discovery from that folder.',
     'Keep its documented NodeSpec, every port and mode description, and runtime-specific emitter beside the descriptor; add shared protocol vocabulary only when another subsystem consumes it.',
     proposal.runtime === 'render-pass'
-      ? 'Design the extra render pass and its budget in src/render; expression nodes are the default, so justify this boundary.'
+      ? 'Design the extra render pass and its budget in client/render; expression nodes are the default, so justify this boundary.'
       : proposal.runtime === 'cpu-state' || proposal.runtime === 'set-data'
         ? 'Define the CPU/server value source and protocol payload before the shader slot that consumes it.'
         : proposal.runtime === 'multi-tap'
