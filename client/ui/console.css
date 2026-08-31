@@ -413,6 +413,16 @@
   white-space: nowrap;
 }
 
+.console .waymood select {
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-xs);
+  padding: 1px 3px;
+  background: var(--surface-control);
+  color: var(--caption);
+  font: 9px var(--mono);
+  max-width: 62px;
+}
+
 .console .swatches input[type='color'] {
   width: 15px;
   height: 15px;

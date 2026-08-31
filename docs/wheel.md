@@ -306,7 +306,7 @@ default, they are also the show a fresh `main` puts on.
 | **Poster** | flat bands, and the one flow that changes with the *music* rather than the playing: `posterize` to four steps over a wash, hue rotated by the song's key |
 | **Glitch** | two lenses, a spread and two grades in a row and nothing else, over a scan pattern there is always something to break in — the busiest thing here, and the one that teaches how far a chain of small steps gets |
 | **Lava** | a threshold walked slowly off `time` rather than the beat, and a cord run backwards by a negative depth |
-| **Storm** | a `wave` snapped to the beat times a squared `random`, gating a contour cut out of a noise field — a strike that is rarely big and never the same size twice |
+| **Storm** | an `lfo` snapped to the beat times a squared `random`, gating a contour cut out of a noise field — a strike that is rarely big and never the same size twice |
 | **Counterweight** | two lamps crossing in counter-motion over radial structure, with the set kept as a quiet layer rather than the picture it waits for |
 | **Glasshouse** | mirrored and folded architecture filled with slow clouds and light shafts, moving like a building breathing |
 | **Tidal glass** | caustics and metaballs moving at different depths under one shallow refraction |
@@ -328,7 +328,7 @@ slowest rung on the division ladder, least charge. Every one of these now floors
 something on the clock:
 
 ```
-wave / playback ──> a ┐
+lfo / playback ───> a ┐
                       ├ max ──> energy
 track (master) ────> b ┘
 ```
@@ -437,9 +437,85 @@ Three constraints are worth stating because they are what make a dealt one read 
     peaking at 0.75 lands where amber has nothing left, while the same step costs a yellow
     almost nothing — so one number made a strong mark for half the wheel and a washed-out one
     for the rest.
-  - **`chalk` is held below the quietest of the other four.** Being the least colourful thing
-    in the palette is what the role *is*, so it cannot be a coincidence of the ranges — and it
+  - **`chalk` is held below the quietest of the other four**, and takes **what its hue can
+    actually hold** at the lightness it landed on. Being the least colourful thing in the
+    palette is what the role *is*, so it cannot be a coincidence of the ranges — and it
     stopped being one the moment a lifted amber accent reached a chroma a cream could match.
+
+    The gamut check is newer and it fixed a bug nobody could see. Chalk was the one member
+    still *naming* a chroma rather than asking for one, and sRGB is at its narrowest in the
+    tints: at 0.94 lightness a green has 0.22 of chroma available and a blue has 0.030. A flat
+    ask of 0.045 was comfortable at one end of the wheel and fifty per cent outside the gamut
+    at the other — and outside it, clipping does not return a quieter version of the colour
+    asked for, it returns **a different hue**, by as much as 24 degrees. So the tint of a blue
+    primary came back a pale cyan two roles away from the colour it was supposed to be tinting.
+
+### The deal is searched, not rolled
+
+Everything above is **placement**, and every rule in it is pairwise: it fixes one member's
+relationship to the primary. That is why the generator could satisfy every rule it had and
+still deal a bad palette — nothing in it could see the five members *together*.
+
+So a deal is now forty candidates scored against four criteria, keeping the best. The
+randomness that is left is the randomness worth having: **which good palette**, rather than
+whether it is one.
+
+| criterion | what it catches |
+|---|---|
+| **separation** | two roles that came out the same colour. A split complement on a base around 150° put `complement` at 302 and `accent` at 358, both lifted, both landing on one violet-pink — every rule satisfied, and a four-colour palette with a spare. A graph wires to five outlets; two of them carrying the same colour is a flow whose second cord does nothing. Floors are per pair, because `secondary` is *meant* to sit close and `complement` is not, and `accent` has the strictest floor against everything because hue discrimination collapses at the size it gets drawn. |
+| **hierarchy** | a "primary" that is the second-loudest thing in the palette. `complement` is dealt at its own hue's peak on purpose, and how much a hue can hold varies enormously — so a blue primary floored up for the projector, against a magenta complement at magenta's much larger peak, inverts the palette. The fix is not to cap the complement, which would undo the reason it is there; it is to **prefer a base that can hold the lead against its own opposite**, and that is a choice only a search can make. |
+| **temperature** | a palette that is all one temperature. The oldest working rule in colour and one the generator had no notion of: a dominant with a **counterpoint**. The harmonies guarantee an opposite *hue*, which is a different claim — red and yellow-green are 120° apart and both warm. Three against one, either way, is the classic. |
+| **clarity** | the khaki. Only one stretch of the wheel goes *dirty* rather than pale when it loses chroma, and exactly one role loses chroma on purpose: `accent` trades colour for lightness. Traded in the yellows that is a fine bargain; traded at 110° it is olive drab, and olive drab as the small bright mark is a mark nobody finds. |
+
+Separation is a **gate** rather than a vote — the score multiplies by it, so a candidate whose
+members collide can never win on charm. Two members reading as one colour is a broken palette;
+a palette with no temperature lead is merely a duller one, and no amount of dullness should
+lose to a collision.
+
+Distance is measured as ΔE in OKLab **with lightness at less than half weight**. OKLab is
+calibrated for two patches side by side on a good display; a cheap lamp has no black to work
+against and the room adds its own light to everything equally, and both of those crush
+lightness differences specifically. Two colours that differ only in how light they are arrive
+at the back of the room as one colour.
+
+### A mood is the person's half of the deal
+
+`MOODS` in `protocol.ts`: `any`, `neon`, `sunset`, `ice`, `earth`, `flare`, pinned per
+colourway from the picker beside its dice and stored in `Scheme.moods`.
+
+The generator knows a great deal about *how* to build a palette and nothing about **which one
+you want tonight**, and that gap is what made the dice feel like a slot machine: every press
+was an equally likely draw from the whole wheel, so getting the cold one you had in mind meant
+pressing until it came up.
+
+A mood does not name colours — the swatches are for that. It names the **conditions**: which
+arc of the wheel the base comes from, how loud the palette may be, how high or low it sits,
+and which relationships are on the table. The rules then do exactly the work they already did,
+inside that. They are lighting conditions rather than adjectives on purpose — this is a rig
+that points a lamp at a wall, and "sunset" says something a room can be where "warm" only says
+something a number can be.
+
+**`earth` is the one worth reading the code for**, because the obvious implementation of it is
+wrong. Rust, ochre, olive and brick are not desaturated oranges, reds and yellows — they are
+*dark* ones. A tangerine at full chroma and two tenths less lightness is rust; getting there by
+pulling chroma out instead gives a dusty pastel, which is the thing a cheap lamp cannot throw
+and the thing this generator was rewritten to stop producing. And a lift alone could not do it,
+because a lift is one number and a peak is not: seven hundredths off an orange peaking at 0.70
+is rust, and the same seven hundredths off a yellow peaking at 0.95 is still lemon. `earth`
+dealt limes until it was given a **ceiling**. It is also the only mood that switches off
+`clarity`, because the khaki that criterion exists to catch is what this one is made of.
+
+A mood may spend below the usual chroma floor — `ice` buys lightness with it and `earth` buys
+its ochre — but nothing moves any role below the projector floor. That number is not a mood's
+to argue with: a cheap lamp has no black to work against whatever light the room is meant to be
+in, and a colourway nobody can see is not a quiet colourway.
+
+**Moods are the one overlay in a scheme.** Every other map is complete; this one is keyed by
+colourway name, so `merge` prunes any entry whose colourway is gone and any word this build
+does not know — a file naming an unknown light is a *newer* file, not a broken one, and
+refusing the whole scheme over it would cost somebody their flows. Rename carries the mood,
+delete drops it, and `any` is stored by not being stored, so what is in `moods` is what
+somebody actually asked for.
 
 **Nothing about the songs is dealt.** A song entry is an override, and dealing one would be
 the machine writing down an exception nobody asked for — which is exactly the noise the
@@ -452,11 +528,26 @@ broke things — **a song pins a colourway by name**, so every pin in the scheme
 every press of the button, with nothing said. The songs just quietly fell back to the default.
 Names are a person's; what the randomiser deals is what is inside them.
 
-**And one colourway can be dealt on its own**, from the dice beside its row in the console.
-The button deals a whole library, which is the wrong size of gesture most of the time: by the
-second evening three of the four are settled and the fourth is the one being fished for. A
-per-row deal is a hand edit like dragging a swatch, so it is not written to the scheme's
-`seed` — that records what the last *library* came from.
+**And it deals the library against itself.** Four independent deals are not a library, and
+this was the second way the old generator felt random when it was not: every colourway was
+excellent, and nothing stopped three of the four being excellent in the same part of the
+wheel. Turning through those is a wheel that does not appear to turn — the flow changes, the
+palette changes, and the wall stays roughly amber all night. So each row takes its own arc of
+the wheel from an even division, spun to a random offset and shuffled among the names, and its
+own relationship while there are unused ones left. Measured as the widest arc no colourway
+occupies, four independent deals leave a median of 222° empty and as much as 346°; dealt
+against each other the worst case is 186°.
+
+**A pinned mood wins over the spread.** Naming a light is an instruction and the spread is only
+a default — somebody who has set two rows to `ice` has said something more specific than "be
+different from each other", and dragging one of them into the oranges would ignore the only
+part of this they actually asked for.
+
+**And one colourway can be dealt on its own**, from the dice beside its row in the console —
+in its own mood. The button deals a whole library, which is the wrong size of gesture most of
+the time: by the second evening three of the four are settled and the fourth is the one being
+fished for. A per-row deal is a hand edit like dragging a swatch, so it is not written to the
+scheme's `seed` — that records what the last *library* came from.
 
 ### It deals only what you leave switched on
 

@@ -78,7 +78,7 @@ lenses, displacement, grades, spreads, halftones, blends, and LFO rate. Each
 mode gets its own target because the same word can have a different useful feel
 on two pictures; `energy` on a lamp is not assumed to be `energy` on a ripple.
 
-Exact number plumbing is deliberately absent. Math operands, a wave's phase,
+Exact number plumbing is deliberately absent. Math operands, an lfo's clock,
 positions, producer values, toggles, and a scrub position are normalized by
 contract rather than by taste. Video pace also waits for a source-controlled
 development clip: calibrating a decoder against whatever happens to be in one

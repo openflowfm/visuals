@@ -38,7 +38,7 @@ describe('naming what drives an inlet', () => {
     // chosen answer consistently even when another kind has one spelled alike.
     const circuit = wire(
       [
-        { id: 'wave1', kind: 'wave', op: 'pulse', x: 0, y: 0 },
+        { id: 'wave1', kind: 'lfo', op: 'pulse', x: 0, y: 0 },
         { id: 'l', kind: 'lens', op: 'ripple', x: 1, y: 0 },
       ],
       [{ from: 'wave1/n', to: 'l/depth' }],

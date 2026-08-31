@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { Circuit, CircuitNode, Show } from '../../protocol.ts';
+import type { Circuit, CircuitNode, LFO_SHAPES, Show } from '../../protocol.ts';
+import { hash } from './scalar.ts';
+import { lfoRateForBeat } from '../nodes/lfo/algorithm.ts';
 import {
   createNumberEvaluator,
-  hash,
   sectionOf,
   seedOf,
   smoothTrack,
@@ -163,15 +164,26 @@ describe('CPU number evaluation', () => {
     ['ramp', 0.75],
     ['square', 0],
     ['pulse', 0.31640625],
-  ])('evaluates the %s wave expression used by the shader', (op, expected) => {
-    expect(one(node('w', 'wave', { op }), { beat: 0.25 })).toBeCloseTo(expected);
+  ])('evaluates the %s shape expression used by the shader', (op, expected) => {
+    // `clock` is unwired, so it reads the beat — and the rate is written down
+    // rather than left at its midpoint, because that midpoint is a different
+    // note period per shape once each one's calibration is applied. This test
+    // is about the shape, so the timing under it is pinned to one cycle a beat.
+    const shape = node('w', 'lfo', {
+      op,
+      values: { rate: lfoRateForBeat(op as (typeof LFO_SHAPES)[number]), sync: 1 },
+    });
+    expect(one(shape, { beat: 0.25 })).toBeCloseTo(expected);
   });
 
   it('evaluates seeded noise deterministically and keeps it in range', () => {
-    const wave = node('w', 'wave', { op: 'noise' });
-    const a = one(wave, { beat: 0.25, seed: 2 });
-    const again = one(wave, { beat: 0.25, seed: 2 });
-    const other = one(wave, { beat: 0.25, seed: 3 });
+    const shape = node('w', 'lfo', {
+      op: 'noise',
+      values: { rate: lfoRateForBeat('noise'), sync: 1 },
+    });
+    const a = one(shape, { beat: 0.25, seed: 2 });
+    const again = one(shape, { beat: 0.25, seed: 2 });
+    const other = one(shape, { beat: 0.25, seed: 3 });
     expect(a).toBe(again);
     expect(a).toBeGreaterThanOrEqual(0);
     expect(a).toBeLessThanOrEqual(1);
@@ -244,13 +256,16 @@ describe('CPU number evaluation', () => {
         node('a', 'value', { value: 0.2 }),
         node('b', 'value', { value: 0.3 }),
         node('sum', 'math', { op: 'add' }),
-        node('shape', 'wave', { op: 'saw' }),
+        node('shape', 'lfo', {
+          op: 'saw',
+          values: { rate: lfoRateForBeat('saw'), sync: 1 },
+        }),
         node('colorway', 'colorway'),
       ],
       [
         { from: 'a/n', to: 'sum/a' },
         { from: 'b/n', to: 'sum/b' },
-        { from: 'sum/n', to: 'shape/phase' },
+        { from: 'sum/n', to: 'shape/clock' },
         { from: 'shape/n', to: 'colorway/amount' },
       ],
     );

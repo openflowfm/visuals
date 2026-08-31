@@ -261,7 +261,7 @@ across at the one door every scheme comes through, and drops the old spelling ra
 leaving both — see below on reading an old file.
 
 **Two number inlets start on a signal rather than a setting**, and they are the two whose
-answer is already alive: an `energy` inlet reads the room, and a `wave`'s `phase` reads the
+answer is already alive: an `energy` inlet reads the room, and an `lfo`'s `clock` reads the
 beat. Neither carries a default number — a default there would replace something moving with
 something that is not, which is a worse default than the one it replaced. But the row is the
 same fader as every other number row, and a drag on it catches the signal wherever it was
@@ -364,6 +364,9 @@ editors listing these differently would be two different vocabularies.
 | `field` | `p` `energy`, plus `balls` `apart` on metaballs | `c` | `cells` `clouds` `metaballs`; fixed work, charged per graph sample and never offered per track |
 | `fractal` | `p` `energy` + its mode's numbers | `c` | `mandelbrot` or `julia`, with bounded zoom, detail and iterative work |
 | `light` | `p` `energy` + its mode's numbers, and `from` on the hung three | `c` | `lamp` `beam` `shafts` `caustics`; 2D lights with fixed work, drifting in seconds rather than beats |
+| `form` | `p` `turn` `tilt` `dolly` `thick` `flare` `chrome` `energy` + its mode's number | `c` | `torus` `rings` `frame` `lattice` `tube`; the one node with a third coordinate in it, marched and charged like a fractal |
+| `glow` | `d` `energy` + its mode's numbers | `c` | `neon` `soft` `band`: a distance becomes a lit stroke |
+| `shade` | `n` `amount` `energy` | `c` | `across` or `heat`: a number becomes a colour off the colourway |
 | `flow` | `p` | `c` | another flow, whole, as one node |
 | `last` | `p` `fade` | `c` | the frame this flow drew last time, fading as it ages |
 | `colorway` | `amount` `energy` | `primary` `secondary` `complement` `accent` `chalk` | the colourway that is up, one outlet per role |
@@ -386,12 +389,14 @@ editors listing these differently would be two different vocabularies.
 | `lens` | `p` `c` `energy` + its mode's numbers | `p` `c` | `zoom` `swirl` `fold` `wobble` `tile` `mirror` `kaleido` `twist` `ripple` `slice` `pixelate` `creep` |
 | `displace` | `p` `field` `amount` | `p` | `map` `curl`: a point moved by what a picture says |
 | `polar` | `p` | `radius` `angle` | how a position becomes a number |
+| `figure` | `p` + its mode's numbers | `d` `along` | `circle` `box` `line` `arc` `polygon` `star` `rose` `lissajous`: how far this point is from a shape |
+| `array` | `p` `count`, and `turn` on the ring | `p` `which` | `row` `grid` `ring` `mirror`: a repeated space, and the copy you are in |
 
 ### `place` is the other direction, and it was missing
 
 `polar` took a point apart and nothing put one back together. A graph could read a position
 as two numbers and never write two numbers as a position, so a point built from a pair of
-`wave`s, or from two Ableton track levels, was a sentence the vocabulary could not say.
+`lfo`s, or from two Ableton track levels, was a sentence the vocabulary could not say.
 
 `place` says it. Two 0–1 numbers, `x` and `y`, through `recentred` — the same helper the
 handful of screen-space effects come back through — so **0 to 1 spans the frame and a half
@@ -420,9 +425,87 @@ rule working; a mode moving the whole signal path is a change of wiring wearing 
 
 And it is not a second *kind* either, because two node kinds differing only by a coordinate
 system is two rows in a browser for one idea — the exact complaint that merged `energy` into
-`track`. So building a point from a radius and an angle is not expressible, `wave` and `math`
+`track`. So building a point from a radius and an angle is not expressible, `lfo` and `math`
 cannot fake it (`math`'s `subtract` clamps at zero, so there is no way to make a bipolar
 cosine out of a unipolar sine), and it is in **what is not built** below where it belongs.
+
+## A distance is the missing direction, and `figure` measures one
+
+`read` turns a picture into a number and `polar` turns a point into numbers. Nothing went the
+other way. A number could decide *where* something was drawn and never *that* something was
+drawn, so the only way to get a line on the wall was to find a `source` that happened to
+contain one — and the whole family of looks that is nothing but glowing curves was
+unreachable by anyone who had not shipped a shader for it.
+
+Three small nodes close it. **`figure` is `polar` generalised off the origin**: instead of
+how far this point is from the middle, how far it is from a circle, a rose, a lissajous
+figure — and, on its second outlet, how far *along* that shape the nearest part of it lies.
+It is in `geometry` for the reason `polar` is, and it gives back a number rather than a
+picture, which is the whole design. What a distance becomes is somebody else's decision:
+**`glow`** makes it a lit stroke with a hot filament and a halo, **`shade`** makes it a
+colour off the colourway, `math` makes it another distance, `displace` reads it off a
+picture instead. A `figure` that drew its own line would own a thickness, a falloff and a
+colour, and would be one more source that only draws what its author thought of.
+
+`shade` is not called `ramp`, which is what it is: an lfo runs a `ramp` shape, and one word
+meaning a falling oscillator in one node and a colour lookup in another is a vocabulary you
+cannot read a dropdown out of. It is not `swatch` either — the colourway editor calls its
+five role chips swatches, and this node's job is the colours *between* those five.
+
+Only `lissajous` costs anything: a closed form for the distance to one does not exist, so it
+is walked in thirty-two segments and charged at that ceiling the way a fractal is. Everything
+else is arithmetic, which is why a `glow` may be bloomed like any other picture.
+
+**Most of these distances are radial rather than perpendicular.** For a circle, a box and a
+straight line the two are the same and the maths is exact. For a rose, a star and a polygon
+the distance is taken along the ray from the centre, which is wrong by the cosine of how
+steeply the curve leans away from that ray. What it *looks* like is a stroke that thickens
+where the curve is steep — which is what a brush does. An exact rhodonea distance costs a
+root solve per pixel and buys a stroke of relentlessly even weight.
+
+## `array` repeats a space and says which copy you are in
+
+`lens/tile` already repeats a picture across the frame, and for a wallpaper that is the whole
+job. What it cannot say is *which* tile, so every copy is the same copy and twenty of them is
+one thing stamped twenty times.
+
+The second outlet is the entire reason this is a kind. Wire `which` into a sweep, a phase, a
+size or a colour and the copies stop being stamps: a fan of arcs each opening a little
+further, a stack of squares each dimmer than the last, a grid of cells each firing on its own
+beat. It is the difference between a repeat and an arrangement. Two outlets of different
+signals is already precedent — `polar` has them — and neither can be a loop, because an
+`array` has no colour inlet to feed anything back into.
+
+## `form` is the only node with a third coordinate, and it keeps it
+
+A colour here is a function of a point and the point is two numbers. That is what makes the
+graph composable, and it is also what kept every picture in it flat: a ring seen at an angle,
+a cube whose far edges are behind its near ones, a corridor with things arriving out of it —
+none of that is a function of where you are on the screen. It is a function of what lies
+along the ray through that screen position, which is a **search** rather than an expression.
+
+So `form` does the search and hands back a picture, exactly as `field` and `fractal` do for
+their own bounded loops. The third coordinate stays inside it. Nothing else in the vocabulary
+learns one, no cord changes what it carries, and a form composes downstream as any other
+picture does.
+
+**It brings its own light rather than being bloomed.** Every step of the march adds
+`exp(-distance)` to a running total, *weighted by how far that step carried the ray* — count
+steps instead and you count deceleration, because a march slows to its floor as it closes on
+a surface, so a ray grazing a tube comes out as bright as one that went through the middle.
+Weighted, the glow is an integral along the ray, which is better than a screen-space bloom
+rather than a substitute for one: near tubes bloom harder than far ones, and a strand passing
+behind another glows through it. It is also the only affordable answer — a march is charged
+at its step ceiling and a `spread` reads its input once per tap, so a bloom over a form would
+charge nine marches and be refused by name.
+
+**Chrome is an inlet, not a mode.** The march already knows where it stopped, and four more
+distance samples give the surface normal, so a reflection is one `reflect` and a room to
+reflect into. The room is the colourway as a gradient with a **hard horizon** in it: a
+polished thing reads as polished because it shows you a whole room compressed into a curve,
+and a room has edges. A smooth gradient reflected off a tube is indistinguishable from matte
+plastic lit from above, which is what the first version of it was. At `chrome` zero none of
+it is mixed in and the form is pure emission.
 
 ## `effect` was three things wearing one name
 
@@ -522,7 +605,7 @@ through untouched and only the hue is decided, so a face is still a face while t
 with the colourway. `solarize` folds everything above a pivot back down the other side and
 leaves it there, which is a *look*, where the `invert` beside it turns the whole frame over on
 a division, which is an *event*. `channels` permutes red, green and blue, snapped to thirds so
-a wave wired into it lands on one of three whole rotations in time rather than spending most of
+an lfo wired into it lands on one of three whole rotations in time rather than spending most of
 the bar between two wrong colours.
 
 ### the room — three questions you can ask the set
@@ -568,7 +651,7 @@ collection, because a song that modulates is in the first key when it starts.
 
 ### numbers
 
-`lfo`, `math`, `read`, `wave`, and `value`.
+`lfo`, `math`, `read`, and `value`.
 
 **`read` is the one that turns a picture into a number**, and until it existed nothing did.
 Every `n` outlet in the vocabulary came from the clock, the set, or arithmetic between them,
@@ -591,12 +674,33 @@ A picture whose own reading moves it is a **loop**, and the compiler refuses it 
 is correct rather than conservative: the number and the picture are the same trip round the
 graph. The way to say it legally is across a frame, through `last`.
 
-**`lfo` owns a clock; `wave` does not.** `wave` turns whatever phase reaches it into a
-shape, which is useful when the phase comes from another graph. `lfo` is the complete
-oscillator: its `sine`, `triangle`, `saw`, `square`, and `sample-hold` modes keep the same
-three inlets while the waveform changes. `rate` chooses the period or frequency, `sync` is
-a real two-state face control and a number inlet on the wire, and `phase` offsets the result
-by zero to one complete cycle. Every one can be wired and modulated.
+**`lfo` is the only oscillator, and it was two.** A `wave` node turned whatever phase
+reached it into a shape and, with nothing wired, read the beat — so it owned a clock after
+all, and the line this paragraph used to draw between them was not one the code kept. Across
+72 authored flows, every one of the 23 `wave` nodes in them was an oscillator on musical
+time: ten took the beat unwired, eleven were fed a `playback` phase, and the three that
+looked like genuine shapers were `playback:time` through a `math:multiply` — a rate knob,
+hand-built. So they merged, and the six shapes a wave owned came across with it.
+
+Eight modes now — `sine`, `triangle`, `saw`, `ramp`, `square`, `pulse`, `noise` and
+`sample-hold` — over four inlets that stay put while the waveform changes. **`clock` is the
+phase it runs on**, and it is alive: unwired it reads the beat, which is what makes an
+untouched lfo run in time with the music. `rate` chooses the note period or frequency,
+`sync` is a real two-state face control and a number inlet on the wire, and `phase` offsets
+the result by zero to one complete cycle. Every one can be wired and modulated.
+
+**A wired clock is divided rather than obeyed.** `rate` goes on working: a phase arriving
+once a bar leaves twice a bar at `1/8`, which is the thing those three hand-built multiplies
+were for. Free-running is the exception — elapsed seconds are the clock there, so a signal
+wired in has nothing to divide and is not read.
+
+A library written before the merge migrates at the one door every scheme comes through: a
+`wave` becomes an `lfo` of the same shape, a cord on its `phase` moves to `clock`, and **the
+rate is written down** rather than left at its resting place. That last part is not a detail.
+`rate` is calibrated per mode — sine, triangle and saw square the knob and the rest do not —
+so the midpoint is a whole-note cycle on the first three and a quarter-note cycle on the
+others. A migration that trusted the default would have run half the shipped flows four times
+too slowly: the same picture, and wrong.
 
 Synced rate is quantized onto straight periods from `4/1`, `2/1`, `1/1`, `1/2`, `1/4`,
 `1/8`, `1/16`, through `1/32`; the midpoint is a quarter-note cycle. Free rate is exponential
@@ -609,7 +713,7 @@ quietly producing the same sequence.
 `subtract` clamp their answers to 0–1; `multiply` does not, while `min`, `max` and `average`
 need no extra clamp for ordinary 0–1 inputs. The unclamped multiply is load-bearing:
 `Water` uses it to amplify a number beyond one. It also means subtraction cannot make a
-bipolar cosine from a unipolar wave, because its negative half stops at zero.
+bipolar cosine from a unipolar oscillator, because its negative half stops at zero.
 
 **`value` means one number in several places.** Every inlet holds its own number now, so a
 `value` node wired to exactly one of them is the long way round — it says nothing the number
@@ -722,14 +826,14 @@ What is not right is a flow that is only alive when the room is loud, because mo
 hours anyone spends in the designer are hours with no Live attached — and because a set
 between songs is a click and nothing else. The fix is in the wiring rather than in the
 number: **take the motion off the clock and let the meter add to it.** `phase`, `beat`,
-`pulse`, a synced `lfo` and a `wave` all run whether or not anything is playing, since
+`pulse` and a synced `lfo` both run whether or not anything is playing, since
 Link free-runs.
 
 The shape that says it is **`max` of a clock and a meter**, with the clock arriving on a
 range:
 
 ```
-wave pulse ─────> a ┐                    a: value 0.3, depth 0.4
+lfo pulse ──────> a ┐                    a: value 0.3, depth 0.4
                     ├ max ──> energy     so the clock walks 0.3 → 0.7
 track master ────> b ┘                   and the meter wins above that
 ```
@@ -807,7 +911,7 @@ per frame is a decay expressed per display — a 0.9 that is a 115ms half-life o
 it was dialled in on is 58ms on a 120Hz laptop beside it.
 
 So `fade` is a half-life in seconds, from a flicker to two and a half, applied with a `uDt`
-uniform that is the one per-frame quantity in the preamble. Wire a wave into it for a trail
+uniform that is the one per-frame quantity in the preamble. Wire an lfo into it for a trail
 that breathes with the music; the seconds are what make it the same trail on the bench and on
 the wall. `uDt` is clamped to 100ms before it is uploaded, because a hidden tab, a stalled
 driver, or the first frame after a rebuild all hand it a second or more, and one of those
@@ -958,7 +1062,7 @@ prints the arriving number in its readout, and holds the fill at the floor a dra
 sets. Alive and driven rows are sampled on a ten-hertz display clock,
 not the render loop, and React is updated only when the formatted reading changes.
 
-The CPU can follow `value`, `playback`, `track`, `song`, `math`, `wave` and `lfo` chains. A
+The CPU can follow `value`, `playback`, `track`, `song`, `math` and `lfo` chains. A
 `polar` outlet is different: its radius or angle changes per fragment, so there is no one
 number to report. A row driven by one names `polar·radius` or `polar·angle` but deliberately
 shows no number or fill rather than inventing a misleading value.

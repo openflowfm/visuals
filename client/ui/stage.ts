@@ -40,6 +40,7 @@ export function parkedScheme(flow: FlowDef, bundle: Record<string, FlowDef>): Sc
   return {
     flows: { ...bundle, [CANDIDATE_FLOW]: flow },
     colorways: {},
+    moods: {},
     rotation: { flows: [], colorways: [], bars: 0, onClip: false, colorEvery: 0 },
     songs: {},
     defaults: { colorway: '', flow: CANDIDATE_FLOW, pace: 0, draws: 'by name' },

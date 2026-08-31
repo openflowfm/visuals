@@ -1,4 +1,4 @@
-import { COLOR_ROLES, paletteOf, type Scheme } from '../../protocol.ts';
+import { COLOR_ROLES, MOODS, MOOD_ABOUT, paletteOf, type Mood, type Scheme } from '../../protocol.ts';
 import { newSeed, palette, seeded } from '../../randomize.ts';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 
@@ -19,6 +19,14 @@ import { Button } from '@openflow/widgets/controls/Button.tsx';
  * row used to grow and shrink with `+` and `−`; the length is the vocabulary
  * now, because a `colorway` node has an outlet per role and a cord cannot point
  * at a position that a palette edit removed.
+ *
+ * **And a light beside the dice** — see `MOODS`. The generator knows a great
+ * deal about how to build a palette and nothing about which one you want
+ * tonight, which is the gap that made the dice feel like a slot machine: getting
+ * the cold one you had in mind meant pressing until it came up. The mood is the
+ * person's half of that decision, and it lives on the row rather than in a
+ * dialog because it is a property of *this colourway* — it is what this row gets
+ * re-dealt as, every time either dice is pressed, until somebody changes it.
  */
 export function Colorways({
   scheme,
@@ -34,9 +42,27 @@ export function Colorways({
 
   const setWay = (name: string, colors: string[] | null) => {
     const colorways = { ...scheme.colorways };
-    if (colors === null) delete colorways[name];
-    else colorways[name] = colors;
-    edit({ ...scheme, colorways });
+    const moods = { ...scheme.moods };
+    if (colors === null) {
+      delete colorways[name];
+      // The moods map is the one overlay in a scheme, so it is the one thing
+      // that can be left holding a key for a row that no longer exists. `merge`
+      // prunes an orphan at the door, but leaving one here would mean a deleted
+      // colourway quietly haunting a new one of the same name until the next
+      // reload — which is action at a distance with a delay on it.
+      delete moods[name];
+    } else colorways[name] = colors;
+    edit({ ...scheme, colorways, moods });
+  };
+
+  const setMood = (name: string, mood: Mood) => {
+    const moods = { ...scheme.moods };
+    // `any` is the absence of an instruction rather than an instruction, so it
+    // is stored by not being stored. Keeps a hand-edited scheme file readable:
+    // what is in `moods` is what somebody actually asked for.
+    if (mood === 'any') delete moods[name];
+    else moods[name] = mood;
+    edit({ ...scheme, moods });
   };
 
   const renameWay = (from: string, to: string) => {
@@ -54,7 +80,14 @@ export function Colorways({
     );
     const defaults =
       scheme.defaults.colorway === from ? { ...scheme.defaults, colorway: name } : scheme.defaults;
-    edit({ ...scheme, colorways, songs, defaults });
+    // The mood is keyed by name like everything else here, so it is carried by
+    // the rename for the same reason the song pins are: a row that silently lost
+    // its light on being renamed would look exactly like the dice having got
+    // worse.
+    const moods = Object.fromEntries(
+      Object.entries(scheme.moods).map(([key, mood]) => [key === from ? name : key, mood]),
+    );
+    edit({ ...scheme, colorways, moods, songs, defaults });
   };
 
   /**
@@ -67,7 +100,7 @@ export function Colorways({
    * the scheme's `seed` is what the last *library* was dealt from and a
    * per-row deal is not that.
    */
-  const deal = (name: string) => setWay(name, palette(seeded(newSeed())));
+  const deal = (name: string) => setWay(name, palette(seeded(newSeed()), scheme.moods[name] ?? 'any'));
 
   const add = () => {
     let name = 'new';
@@ -110,6 +143,20 @@ export function Colorways({
               </label>
             ))}
           </span>
+          <label className="waymood">
+            <select
+              value={scheme.moods[name] ?? 'any'}
+              aria-label={`${name} mood`}
+              title={MOOD_ABOUT[scheme.moods[name] ?? 'any']}
+              onChange={(e) => setMood(name, e.target.value as Mood)}
+            >
+              {MOODS.map((mood) => (
+                <option key={mood} value={mood} title={MOOD_ABOUT[mood]}>
+                  {mood}
+                </option>
+              ))}
+            </select>
+          </label>
           <Button
             tone="quiet"
             label={`Deal new colours for ${name}`}

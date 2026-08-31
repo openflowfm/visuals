@@ -5,7 +5,11 @@ import { CALIBRATION_BASELINE_RESPONSES, responseKey } from './response.ts';
 
 describe('response calibration manifest', () => {
   it('covers the complete subjective visual-control matrix', () => {
-    expect(CALIBRATION_TRIALS).toHaveLength(125);
+    // 128 rather than 125: `ramp`, `pulse` and `noise` came over from the
+    // `wave` node with no calibration of their own, so the bench has three more
+    // rate trials to run. Until it does, those three rest on a linear response
+    // while sine, triangle and saw square theirs — see docs/calibration.md.
+    expect(CALIBRATION_TRIALS).toHaveLength(128);
     expect(new Set(CALIBRATION_TRIALS.map((trial) => trial.target.kind))).toEqual(
       new Set([
         'source',

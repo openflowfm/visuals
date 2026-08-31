@@ -43,6 +43,7 @@ const startsOn = (inlet: Inlet): string => {
   if (inlet.default !== undefined) return `\`${inlet.default}\``;
   if (inlet.liveDefault === 'energy') return 'the room';
   if (inlet.liveDefault === 'beat') return 'the beat';
+  if (inlet.liveDefault === 'here') return 'where you are';
   return '—';
 };
 

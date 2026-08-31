@@ -290,7 +290,10 @@ describe('LFO nodes', () => {
       sine: 'cLfoSine(',
       triangle: 'cLfoTriangle(',
       saw: 'cLfoSaw(',
+      ramp: 'cLfoRamp(',
       square: 'cLfoSquare(',
+      pulse: 'cLfoPulse(',
+      noise: 'cLfoNoise(',
       'sample-hold': 'cLfoHold(',
     } as const;
     for (const op of LFO_SHAPES) {
@@ -321,6 +324,9 @@ describe('LFO nodes', () => {
   it('defaults to the calibrated square response at the old midpoint', () => {
     const lfo = { id: 'l', kind: 'lfo', op: 'sine', x: 0, y: 0 } as const;
     expect(inletsOf(lfo).map(({ name, at }) => ({ name, at }))).toEqual([
+      // `clock` first, and with no resting number: it rests on the beat, and
+      // being first is what lets the lab splice one onto a number cord.
+      { name: 'clock', at: undefined },
       { name: 'rate', at: 0.5 },
       { name: 'sync', at: 1 },
       { name: 'phase', at: 0 },
@@ -659,17 +665,18 @@ describe('a place is two numbers made into a point', () => {
 
   it('is a point a pair of moving numbers can name', () => {
     // The thing nothing could say before: a graph could take a point apart and
-    // never put one together, so two waves — or two meters — had nowhere to go.
+    // never put one together, so two oscillators — or two meters — had nowhere
+    // to go.
     const built = compileCircuit(
       placed(
         [
           { id: 'b', kind: 'playback', op: 'beat', x: 0, y: 1 },
-          { id: 'wx', kind: 'wave', op: 'sine', x: 0, y: 2 },
-          { id: 'wy', kind: 'wave', op: 'saw', x: 0, y: 3 },
+          { id: 'wx', kind: 'lfo', op: 'sine', x: 0, y: 2 },
+          { id: 'wy', kind: 'lfo', op: 'saw', x: 0, y: 3 },
         ],
         [
-          { from: 'b/n', to: 'wx/phase' },
-          { from: 'b/n', to: 'wy/phase' },
+          { from: 'b/n', to: 'wx/clock' },
+          { from: 'b/n', to: 'wy/clock' },
           { from: 'wx/n', to: 'pl/x' },
           { from: 'wy/n', to: 'pl/y' },
         ],
@@ -806,7 +813,13 @@ describe('an inlet holds a number of its own', () => {
       'depth',
       'speed',
     ]);
-    expect(starting({ id: 'w', kind: 'wave', op: 'sine', x: 0, y: 0 })).toEqual([]);
+    // `clock` rests on the beat rather than on a number, so it contributes no
+    // starting value even though the three inlets beside it do.
+    expect(starting({ id: 'w', kind: 'lfo', op: 'sine', x: 0, y: 0 })).toEqual([
+      'rate',
+      'sync',
+      'phase',
+    ]);
     expect(starting({ id: 'b', kind: 'blend', op: 'over', x: 0, y: 0 })).toEqual(['amount']);
   });
 

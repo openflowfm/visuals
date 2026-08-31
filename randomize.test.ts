@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { compileCircuit, valuesOf, MAX_VALUES } from './client/render/circuit.ts';
-import type { Scheme, Show, Track } from './protocol.ts';
+import { MOODS, type Mood, type Scheme, type Show, type Track } from './protocol.ts';
 import { EXAMPLES } from './server/scheme.ts';
-import { newSeed, randomizeCircuit, randomizeScheme } from './randomize.ts';
+import { newSeed, palette, palettes, randomizeCircuit, randomizeScheme, seeded } from './randomize.ts';
+import { lfoRateForBeat } from './client/nodes/lfo/algorithm.ts';
+import { LFO_SHAPES } from './protocol.ts';
 
 /**
  * The randomiser.
@@ -178,9 +180,27 @@ const apart = (a: number, b: number) => {
 describe('a randomised colourway', () => {
   const randomised = seeds.flatMap((seed) =>
     Object.entries(randomizeScheme(seed, SHOW, EXAMPLES, ['colours']).colorways).map(
-      ([name, colours]) => [`${seed} ${name}`, colours] as const,
+      ([name, colours]) => [`${seed} ${name}`, colours, EXAMPLES.moods[name] ?? 'any'] as const,
     ),
   );
+
+  /**
+   * How much colour a loud role is guaranteed, by **the light it was dealt
+   * under**.
+   *
+   * One number was right while every deal was the same deal. It is not now: a
+   * mood is allowed to spend chroma on something else, and two of them do. `ice`
+   * buys lightness with it — that is the whole of what "light coming through
+   * something" means — and `earth` buys the ochre it is named for. Both spend
+   * *deliberately*, and asserting one floor across all of them would either fail
+   * on the moods that work or be too low to catch the failure it exists for.
+   *
+   * The floor is still a floor. Neither of them may go quiet: the point of these
+   * two roles is that they carry across a room, and a mood is a light in the
+   * room rather than permission to turn it off.
+   */
+  const CARRIES: Partial<Record<Mood, number>> = { ice: 0.07, earth: 0.07 };
+  const carries = (mood: Mood) => CARRIES[mood] ?? 0.09;
 
   it('is always five colours', () => {
     // Tracks take a colour by position and a flow draws from the first, so a
@@ -195,15 +215,15 @@ describe('a randomised colourway', () => {
     // of the leftovers to be the light one — so which position held the
     // opposite moved from deal to deal. A graph wires to a position, so the
     // position has to mean the same thing every time.
-    for (const [where, colours] of randomised) {
+    for (const [where, colours, mood] of randomised) {
       const [primary, secondary, complement, accent, chalk] = colours.map(taken);
       // The pair that carries the palette across a room, each at its own hue's
       // peak. 0.09 is a floor rather than a target: what a hue can hold at its
       // peak varies hugely round the wheel — a vivid yellow has far more chroma
       // available than a vivid blue — so the assertion is that both took what
       // was there, not that they landed on one number.
-      expect(primary.C, `${where} primary`).toBeGreaterThan(0.09);
-      expect(complement.C, `${where} complement`).toBeGreaterThan(0.09);
+      expect(primary.C, `${where} primary`).toBeGreaterThan(carries(mood));
+      expect(complement.C, `${where} complement`).toBeGreaterThan(carries(mood));
       // Pulled back, so the palette has somewhere to sit that is not a second
       // shout — but nowhere near quiet. See the shipped four.
       expect(secondary.C, `${where} secondary`).toBeLessThan(primary.C);
@@ -242,11 +262,21 @@ describe('a randomised colourway', () => {
     // warm or cool, which is what a colourist does to a highlight, and no more.
     for (const [where, colours] of randomised) {
       const hues = colours.map((each) => taken(each).hue);
-      // The drift is 20 degrees; the tolerance is wider because the measurement
-      // is. Hue is numerically unstable at a chroma this low — eight bits per
-      // channel is a coarse grid to read an angle off when the colour is nearly
-      // neutral — and a few degrees there is not something an eye can see.
-      expect(apart(hues[0], hues[4]), where).toBeLessThanOrEqual(42);
+      // The drift is 20 degrees and the measurement now agrees, which it did
+      // not: this used to allow 42 on the reasoning that hue is unstable at a
+      // low chroma, and the reasoning was covering for a bug rather than for
+      // noise. Chalk asked for a flat 0.045-ish of chroma without checking what
+      // the hue could hold at 0.94 lightness, where sRGB is at its narrowest —
+      // a green has 0.22 available up there and a blue has 0.030. Half of what
+      // it asked for was outside the gamut, `hex` clipped the channels, and
+      // clipping returns **a different hue**: the tint of a blue primary came
+      // back 44 degrees away, a pale cyan rather than a pale blue.
+      //
+      // Chalk takes what the hue can hold now, so 24 is the real 20 plus the
+      // couple of degrees eight bits per channel actually costs. Loosening this
+      // number again means the gamut check has gone, not that the eye stopped
+      // minding.
+      expect(apart(hues[0], hues[4]), where).toBeLessThanOrEqual(24);
       // It has colour in it. A tint that measured zero here would be white, and
       // white is what every generator's hot half used to mix toward — the whole
       // reason this role exists is to replace it with something that belongs.
@@ -261,6 +291,236 @@ describe('a randomised colourway', () => {
     for (const [where, colours] of randomised) {
       for (const each of colours) expect(taken(each).L, `${where} ${each}`).toBeGreaterThan(0.55);
     }
+  });
+});
+
+/**
+ * How far apart two members read **on a wall**, which is the ruler the generator
+ * uses and therefore the one an assertion about it has to use too.
+ *
+ * Straight ΔE in OKLab, except that lightness counts for less than half. A cheap
+ * lamp has no black to work against and the room adds its own light to every
+ * part of the picture equally, so two colours that differ only in how light they
+ * are arrive at the back of the room as one colour — a distance OKLab scores as
+ * real and the audience does not get.
+ *
+ * Derived here rather than imported, for the reason `taken` is: a test that
+ * measured a generator with the generator's own arithmetic would agree with it
+ * about a mistake.
+ */
+function far(a: string, b: string): number {
+  const [x, y] = [taken(a), taken(b)];
+  const at = (t: ReturnType<typeof taken>): [number, number] => {
+    const rad = (t.hue * Math.PI) / 180;
+    return [t.C * Math.cos(rad), t.C * Math.sin(rad)];
+  };
+  const [xa, xb] = at(x);
+  const [ya, yb] = at(y);
+  return Math.hypot((x.L - y.L) * 0.45, xa - ya, xb - yb);
+}
+
+/** The warm half of the wheel: magenta round through red and amber to yellow-green. */
+const warm = (hue: number) => (((hue - 340) % 360) + 360) % 360 < 150;
+
+describe('a colourway is searched rather than rolled', () => {
+  const many = Array.from({ length: 96 }, (_, i) => `judged-${i}`);
+  const everyMood = MOODS.flatMap((mood) =>
+    many.map((seed) => [`${seed} ${mood}`, palette(seeded(`${seed}-${mood}`), mood), mood] as const),
+  );
+
+  it('deals five colours that are five colours', () => {
+    // **The criterion the generator had no way to state, and the one this whole
+    // change exists for.** Every member was already placed correctly *with
+    // respect to the primary* — the bands, the chroma caps and the lifts are all
+    // pairwise rules and all of them held — and nothing anywhere asked whether
+    // the five came out distinguishable from each other. So a split complement
+    // on a base around 150 degrees put `complement` at 302 and `accent` at 358,
+    // both lifted, both landing on the same violet-pink; the deal satisfied
+    // every rule it had and produced a four-colour palette with a spare.
+    //
+    // A graph wires to five outlets. Two of them carrying the same colour is not
+    // a subtle failure of taste, it is a flow whose second cord does nothing.
+    for (const [where, colours] of everyMood) {
+      for (let i = 0; i < 5; i++) {
+        for (let j = i + 1; j < 5; j++) {
+          expect(far(colours[i], colours[j]), `${where} roles ${i}/${j}`).toBeGreaterThan(0.045);
+        }
+      }
+    }
+  });
+
+  it('keeps the loud pair a room apart', () => {
+    // `primary` and `complement` are the two that carry the picture between
+    // them, and the floor they clear is four times the one above: a neighbour
+    // that is merely distinguishable is doing its job, and an opposite that is
+    // merely distinguishable is not an opposite.
+    for (const [where, colours] of everyMood) {
+      expect(far(colours[0], colours[2]), `${where} the loud pair`).toBeGreaterThan(0.19);
+    }
+  });
+
+  it('rarely lets a palette be all one temperature', () => {
+    // The oldest working rule in colour, and one the generator had no notion of:
+    // a palette wants a dominant temperature and a **counterpoint**. All warm is
+    // a fire and all cool is an aquarium, and the harmonies do not prevent
+    // either — they guarantee an opposite *hue*, which is a different claim,
+    // because red and yellow-green sit 120 degrees apart and are both warm.
+    //
+    // Asserted as a rate rather than as a law, because it is scored as a
+    // preference rather than enforced as a gate, and a test that pretended
+    // otherwise would be describing a generator nobody wrote. It cannot reach
+    // zero either: the cool half of the wheel is wider than the warm half, so a
+    // base in the greens can put all four on one side with every other criterion
+    // satisfied. What the criterion buys is that it almost never happens — and
+    // one in twenty is far enough above the one in sixty measured that this
+    // fails when the criterion is removed rather than when a seed is unlucky.
+    const flat = everyMood.filter(([, colours]) => {
+      const hot = colours.slice(0, 4).filter((each) => warm(taken(each).hue)).length;
+      return hot === 4 || hot === 0;
+    });
+    expect(flat.length / everyMood.length).toBeLessThan(0.05);
+  });
+
+  it('never deals a palette that is entirely warm', () => {
+    // The one direction that *is* structural, and worth pinning separately
+    // because it is the direction a stage rig fails in. Every harmony puts its
+    // complement at least 122 degrees out, and 150 degrees of warm arc cannot
+    // hold a base, an opposite and a mark that far apart at once.
+    for (const [where, colours] of everyMood) {
+      const hot = colours.slice(0, 4).filter((each) => warm(taken(each).hue)).length;
+      expect(hot, `${where} is a fire`).toBeLessThan(4);
+    }
+  });
+});
+
+describe('a mood', () => {
+  const dealt = (mood: Mood) =>
+    Array.from(
+      { length: 96 },
+      (_, i) => [`${mood}-${i}`, palette(seeded(`${mood}-${i}`), mood)] as const,
+    );
+
+  /** Inside an arc given as a start and a span in degrees clockwise. */
+  const within = (hue: number, from: number, span: number) =>
+    (((hue - from) % 360) + 360) % 360 <= span;
+
+  it('draws sunset from the warm arc and answers it from the blue side', () => {
+    // The mood is the person's half of a decision the generator cannot make. It
+    // is worth asserting literally, because the failure mode of a control like
+    // this is not that it breaks — it is that it quietly stops meaning anything
+    // and nobody notices for a month.
+    for (const [where, colours] of dealt('sunset')) {
+      const [primary, , complement] = colours.map(taken);
+      expect(within(primary.hue, 334, 108), `${where} primary ${primary.hue}`).toBe(true);
+      expect(warm(complement.hue), `${where} complement is the answer`).toBe(false);
+    }
+  });
+
+  it('draws ice from the cool arc', () => {
+    for (const [where, colours] of dealt('ice')) {
+      const primary = taken(colours[0]);
+      expect(within(primary.hue, 174, 118), `${where} primary ${primary.hue}`).toBe(true);
+      expect(warm(primary.hue), `${where} primary is cool`).toBe(false);
+    }
+  });
+
+  it('holds earth down rather than making it pale', () => {
+    // **The distinction the whole file turns on**, stated as a test because it
+    // is the one a future edit will get wrong. Rust, ochre, olive and brick are
+    // not desaturated oranges and yellows — they are *dark* ones, and reaching
+    // them by pulling chroma out gives a dusty pastel, which is exactly the
+    // thing a cheap lamp cannot throw. So the assertion is on lightness, and the
+    // chroma floor the other moods clear still applies underneath.
+    //
+    // A lift alone could not do it and that is worth remembering: a lift is one
+    // number and a peak is not, so seven hundredths off an orange is rust while
+    // seven hundredths off a yellow is still lemon. `earth` dealt limes until it
+    // was given a ceiling.
+    for (const [where, colours] of dealt('earth')) {
+      const [primary, secondary, complement, accent] = colours.map(taken);
+      for (const [role, each] of [
+        ['primary', primary],
+        ['secondary', secondary],
+        ['complement', complement],
+        ['accent', accent],
+      ] as const) {
+        expect(each.L, `${where} ${role} is held down`).toBeLessThanOrEqual(0.78);
+      }
+      expect(warm(primary.hue), `${where} primary is warm`).toBe(true);
+      expect(primary.C, `${where} primary still carries`).toBeGreaterThan(0.07);
+    }
+  });
+
+  it('keeps flare to one family and one answer', () => {
+    for (const [where, colours] of dealt('flare')) {
+      const hues = colours.map((each) => taken(each).hue);
+      expect(apart(hues[0], hues[1]), `${where} the family`).toBeLessThanOrEqual(16);
+      expect(apart(hues[0], hues[2]), `${where} the spark`).toBeGreaterThanOrEqual(140);
+    }
+  });
+
+  it('deals neon louder than the wheel does on its own', () => {
+    // Electric is the whole of what the word promises, and the only way to break
+    // it silently is to leave the charge range where every other mood has it.
+    for (const [where, colours] of dealt('neon')) {
+      expect(taken(colours[0]).C, `${where} primary`).toBeGreaterThan(0.15);
+    }
+  });
+});
+
+describe('a library of colourways', () => {
+  const seeds = Array.from({ length: 96 }, (_, i) => `library-${i}`);
+
+  /** The widest stretch of the wheel no colourway in the library sits in. */
+  const unused = (library: Record<string, string[]>) => {
+    const hues = Object.values(library)
+      .map((colours) => taken(colours[0]).hue)
+      .sort((a, b) => a - b);
+    let widest = 0;
+    for (let i = 0; i < hues.length; i++) {
+      widest = Math.max(widest, (hues[(i + 1) % hues.length] - hues[i] + 360) % 360);
+    }
+    return widest;
+  };
+
+  it('gives the wheel somewhere to turn to', () => {
+    // Four excellent deals are not a library. This is the second way the old
+    // generator felt random when it was not: nothing stopped three of the four
+    // being excellent in the same part of the wheel, and turning through those
+    // is a wheel that does not appear to turn — the flow changes, the palette
+    // changes, and the wall stays roughly amber all night.
+    //
+    // Measured as the widest arc nobody occupies, which is the honest question:
+    // a library that leaves three quarters of the wheel empty has one idea in
+    // it. Dealt independently the worst of these seeds leaves 346 degrees empty
+    // — every colourway within fourteen degrees of every other — and the median
+    // leaves 222. Dealt against each other the worst leaves 186. The threshold
+    // sits between those two worlds on purpose: it fails the day the rows stop
+    // being dealt as a set, rather than the day one of them is unlucky.
+    for (const seed of seeds) {
+      const library = palettes(seeded(seed), ['a', 'b', 'c', 'd'], {});
+      expect(unused(library), seed).toBeLessThan(220);
+    }
+  });
+
+  it('lets a pinned mood out of the spread', () => {
+    // Naming a light is an instruction and the spread is only a default. A
+    // person who has set two rows to `ice` has said something more specific than
+    // "be different from each other", and a library that answered by dragging
+    // one of them into the oranges would be ignoring the only part of this
+    // anybody actually asked for.
+    for (const seed of seeds.slice(0, 24)) {
+      const library = palettes(seeded(seed), ['a', 'b', 'c', 'd'], { a: 'ice', b: 'ice' });
+      for (const name of ['a', 'b']) {
+        expect(warm(taken(library[name][0]).hue), `${seed} ${name} stayed cool`).toBe(false);
+      }
+    }
+  });
+
+  it('deals every name it was given, and only those', () => {
+    const library = palettes(seeded('library-0'), ['one', 'two', 'three'], { two: 'earth' });
+    expect(Object.keys(library)).toEqual(['one', 'two', 'three']);
+    for (const colours of Object.values(library)) expect(colours).toHaveLength(5);
   });
 });
 
@@ -303,6 +563,28 @@ describe('randomised flows', () => {
       }
     }
     expect(lenses).toBeGreaterThan(0);
+  });
+
+  it('deals every oscillator at one cycle a beat, whatever shape it is', () => {
+    // The shapes came across from `wave`, which ran once a beat and had no rate
+    // to say so. An lfo's rate rests wherever its shape's calibration puts it —
+    // a whole-note cycle for sine and saw, a quarter-note for ramp and pulse —
+    // so a deal that leaves it alone runs half its shapes four times slower
+    // than the other half, in the same graph, for no reason a person could see.
+    let oscillators = 0;
+    for (const seed of seeds) {
+      const rng = seedOf(seed);
+      for (let i = 0; i < 12; i++) {
+        for (const node of randomizeCircuit(rng).nodes) {
+          if (node.kind !== 'lfo') continue;
+          oscillators += 1;
+          expect(node.values?.rate, node.op).toBe(
+            lfoRateForBeat(node.op as (typeof LFO_SHAPES)[number]),
+          );
+        }
+      }
+    }
+    expect(oscillators).toBeGreaterThan(0);
   });
 
   it('writes smoothing only on track nodes and values only on value nodes', () => {
@@ -410,6 +692,29 @@ describe('randomising part of a library', () => {
     const whole = randomizeScheme('glass-drift-576', SHOW, EXAMPLES);
     const part = randomizeScheme('glass-drift-576', SHOW, EXAMPLES, ['colours']);
     expect(part.colorways).toEqual(whole.colorways);
+  });
+
+  it('re-deals inside the mood a row was pinned to rather than past it', () => {
+    // A mood is what a person asked this row to *be*, so the button that deals
+    // new colours has to deal new colours **of that kind**. Dealing a fresh mood
+    // as well would be the machine overruling the only instruction it was given,
+    // and would make the control look broken rather than ignored — the row would
+    // visibly change light every time anybody pressed anything.
+    const pinned: Scheme = {
+      ...EXAMPLES,
+      colorways: { ...EXAMPLES.colorways },
+      moods: { ember: 'earth', cold: 'ice' },
+    };
+    for (const seed of seeds) {
+      const dealt = randomizeScheme(seed, SHOW, pinned, ['colours']);
+      expect(dealt.moods, seed).toEqual(pinned.moods);
+      // Earth is held down; nothing else in the library is. That the pin
+      // actually reached the deal is the point of the assertion — a mood that
+      // was carried but not consulted would pass an equality check alone.
+      for (const each of dealt.colorways.ember.slice(0, 4)) {
+        expect(taken(each).L, `${seed} ember stayed earth`).toBeLessThanOrEqual(0.78);
+      }
+    }
   });
 
   it('never points the fallback at a colourway that is not there', () => {

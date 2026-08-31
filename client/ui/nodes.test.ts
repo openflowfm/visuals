@@ -249,8 +249,9 @@ describe('finding one', () => {
   });
 
   it('finds a preset by the compound name it used to be listed under', () => {
-    // The rows read `sine` and `key` now that they sit under `wave` and `song`,
-    // but everyone who has used this once types the old two-word name.
+    // The rows read `sine` and `key` now that they sit under `lfo` and `song`,
+    // but everyone who has used this once types the old two-word name — and
+    // `sine wave` has to go on working now that the `wave` node is an lfo.
     expect(matching(browser(), 'sine wave')[0].presets[0].op).toBe('sine');
     expect(matching(browser(), 'song key')[0].presets[0].op).toBe('key');
   });

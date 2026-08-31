@@ -592,10 +592,21 @@ export interface DocumentedPort {
   description: string;
   settable: boolean;
   default?: number;
-  liveDefault?: 'beat' | 'energy';
+  liveDefault?: 'beat' | 'energy' | 'here';
   control?: 'toggle';
   display?: 'lfo-rate' | 'phase';
 }
+
+/**
+ * Which live thing an unheld, unwired number inlet is reading.
+ *
+ * Named rather than inferred from "not the energy one". There are three now —
+ * the room, the beat, and where in the frame you are — and a fourth arriving
+ * to be silently documented as the beat is exactly the kind of quiet lie a
+ * generated manual exists to prevent.
+ */
+const liveSignal = (port: PortSpec): 'beat' | 'energy' | 'here' =>
+  port.fallback === 'uEnergy' ? 'energy' : port.fallback?.includes('uBeat') ? 'beat' : 'here';
 
 const documentedPort = (port: PortSpec): DocumentedPort => ({
   name: port.name,
@@ -605,9 +616,7 @@ const documentedPort = (port: PortSpec): DocumentedPort => ({
   // that signal until a value is held on it.
   settable: port.kind === 'n',
   ...(port.at !== undefined ? { default: port.at } : {}),
-  ...(port.kind === 'n' && port.at === undefined
-    ? { liveDefault: port.fallback === 'uEnergy' ? ('energy' as const) : ('beat' as const) }
-    : {}),
+  ...(port.kind === 'n' && port.at === undefined ? { liveDefault: liveSignal(port) } : {}),
   ...(port.control ? { control: port.control } : {}),
   ...(port.display ? { display: port.display } : {}),
 });
@@ -657,7 +666,7 @@ export interface ProposedPort {
   signal: Signal;
   description: string;
   default?: number;
-  liveDefault?: 'beat' | 'energy';
+  liveDefault?: 'beat' | 'energy' | 'here';
 }
 
 export interface ProposedMode {

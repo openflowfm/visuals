@@ -293,6 +293,43 @@ describe('reading a file', () => {
     expect(merge({ songs: { one: 'ember' } as never }).songs.one).toEqual({ colorway: 'ember' });
   });
 
+  it('keeps a mood a scheme names, and drops one naming nothing', () => {
+    // The moods map is **the one overlay in a scheme** — every other map is
+    // complete, so every other map is safe from this. It is keyed by colourway
+    // name, which means it is the only thing that can end up holding a key for a
+    // row that is not there: a hand edit that deleted a colourway, or an older
+    // build that renamed one without knowing moods existed.
+    //
+    // Pruned at the door rather than tolerated downstream, which is the same
+    // argument `paletteOf` is applied here for. An orphan costs nothing today
+    // and costs a mystery the day somebody makes a *new* colourway with the old
+    // name and it comes back dealt as ice.
+    const now = merge({
+      colorways: { mine: ['#123456'], yours: ['#654321'] },
+      moods: { mine: 'earth', gone: 'neon' },
+    } as never);
+    expect(now.moods).toEqual({ mine: 'earth' });
+  });
+
+  it('drops a mood this build has never heard of rather than refusing the file', () => {
+    // A file naming a light we do not have is a *newer* file, not a broken one,
+    // and the failure has to be proportionate: refusing the whole scheme at the
+    // door would cost somebody every flow in it to save them from one colourway
+    // that would have dealt correctly as `any` anyway. So the word is dropped
+    // and the row falls back to what it said before anyone pinned it.
+    const now = merge({
+      colorways: { mine: ['#123456'] },
+      moods: { mine: 'thunderstorm' },
+    } as never);
+    expect(now.moods).toEqual({});
+    expect(now.colorways.mine).toHaveLength(5);
+  });
+
+  it('says nothing about moods when a file says nothing', () => {
+    // Every scheme written before moods existed, which is all of them.
+    expect(merge({ colorways: { mine: ['#123456'] } }).moods).toEqual({});
+  });
+
   it('remembers what a randomised show was randomised from', () => {
     expect(merge({ seed: 'oak-ember-12' }).seed).toBe('oak-ember-12');
     expect(merge({}).seed).toBeUndefined();

@@ -4,6 +4,11 @@ import { EFFECT_LIB } from './glsl/effects.ts';
 import { FIELD_LIB } from './glsl/fields.ts';
 import { FRACTAL_LIB } from './glsl/fractal.ts';
 import { LIGHT_LIB } from './glsl/light.ts';
+import { GLOW_LIB } from './glsl/glow.ts';
+import { SHADE_LIB } from './glsl/shade.ts';
+import { FIGURE_LIB } from './glsl/figure.ts';
+import { ARRAY_LIB } from './glsl/array.ts';
+import { FORM_LIB } from './glsl/form.ts';
 import { GENERATOR_LIB, SOURCE_VALUES } from './glsl/sources.ts';
 
 export { PREAMBLE } from './glsl/common.ts';
@@ -11,6 +16,11 @@ export { EFFECT_LIB } from './glsl/effects.ts';
 export { FIELD_LIB, FIELD_MAX_WORK, FIELD_WORK } from './glsl/fields.ts';
 export { FRACTAL_ITERATIONS, FRACTAL_LIB } from './glsl/fractal.ts';
 export { LIGHT_LIB, LIGHT_WORK } from './glsl/light.ts';
+export { GLOW_LIB } from './glsl/glow.ts';
+export { SHADE_LIB } from './glsl/shade.ts';
+export { FIGURE_LIB, FIGURE_SAMPLES } from './glsl/figure.ts';
+export { ARRAY_LIB } from './glsl/array.ts';
+export { FORM_LIB, FORM_STEPS, FORM_WORK } from './glsl/form.ts';
 export { GENERATOR_LIB } from './glsl/sources.ts';
 
 /**
@@ -63,6 +73,16 @@ ${GENERATOR_LIB}
 ${FIELD_LIB}
 
 ${LIGHT_LIB}
+
+${GLOW_LIB}
+
+${SHADE_LIB}
+
+${FIGURE_LIB}
+
+${ARRAY_LIB}
+
+${FORM_LIB}
 
 ${FRACTAL_LIB}
 

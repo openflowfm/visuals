@@ -71,11 +71,16 @@ describe('the agent-facing node catalog', () => {
     expect(image?.variants.map((variant) => variant.mode)).toEqual(['cover', 'contain']);
     const lfo = catalog.find((node) => node.kind === 'lfo');
     expect(lfo).toMatchObject({ defaultMode: 'sine', target: null });
+    // Eight, since the six a `wave` node used to own came across when the two
+    // merged — it was the same oscillator with a worse clock.
     expect(lfo?.variants.map((variant) => variant.mode)).toEqual([
       'sine',
       'triangle',
       'saw',
+      'ramp',
       'square',
+      'pulse',
+      'noise',
       'sample-hold',
     ]);
     for (const variant of lfo?.variants ?? []) {
@@ -95,8 +100,8 @@ describe('the agent-facing node catalog', () => {
     ).toEqual(['p', 'energy', 'balls', 'apart']);
     expect(
       catalog
-        .find((node) => node.kind === 'wave')
-        ?.variants[0].inlets.find((port) => port.name === 'phase')?.liveDefault,
+        .find((node) => node.kind === 'lfo')
+        ?.variants[0].inlets.find((port) => port.name === 'clock')?.liveDefault,
     ).toBe('beat');
     for (const node of catalog) {
       expect(node.description.trim()).not.toBe('');

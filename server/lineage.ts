@@ -85,7 +85,6 @@ const NUMBER_TERMINALS: readonly NodeKind[] = [
   'playback',
   'track',
   'song',
-  'wave',
   'lfo',
   'polar',
 ];
@@ -328,7 +327,10 @@ const tuneDepth: Mutator = (source, rng) => {
 const INSERTS: Record<Signal, readonly NodeKind[]> = {
   c: ['grade', 'lens', 'spread', 'halftone'],
   p: ['lens', 'displace'],
-  n: ['wave', 'math'],
+  // An lfo takes the cord on its `clock` inlet — its first, which is what
+  // `inletOf` reaches for — so the number that was travelling here still
+  // arrives, shaped and divided, rather than being replaced by an oscillator.
+  n: ['lfo', 'math'],
 };
 
 const insertNode: Mutator = (source, rng, maximumNodes) => {

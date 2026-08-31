@@ -433,6 +433,7 @@ export function calibrationScheme(trial: CalibrationTrial, value: number): Schem
   return {
     flows: { [CALIBRATION_FLOW]: flow },
     colorways: {},
+    moods: {},
     rotation: { flows: [], colorways: [], bars: 0, onClip: false, colorEvery: 0 },
     songs: {},
     defaults: { colorway: '', flow: CALIBRATION_FLOW, pace: 0, draws: 'by name' },

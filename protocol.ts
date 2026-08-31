@@ -115,6 +115,64 @@ export const VIDEO_MODES = ['loop', 'once', 'scrub'] as const;
 /** Disk-backed still-image framing: fill the frame, or preserve the whole image. */
 export const IMAGE_MODES = ['cover', 'contain'] as const;
 
+/**
+ * The three falloffs the `glow` node turns a distance into.
+ *
+ * Not `SOURCES` and not `LIGHT_MODES`: a source draws a picture out of a point
+ * and a light hangs one in the frame, while a glow draws nothing at all until
+ * something hands it a number. It is the other end of `read` — the one
+ * direction the three signals could not travel.
+ */
+export const GLOW_MODES = ['neon', 'soft', 'band'] as const;
+
+/**
+ * The two ways `shade` walks a number through the colourway.
+ *
+ * **Not `ramp`**, which is the obvious name for it and belongs to something
+ * else: an lfo runs a `ramp` shape, and a vocabulary where one word is a
+ * falling oscillator in one node and a colour lookup in another is a
+ * vocabulary you cannot read a dropdown out of. Not `swatch` either — the
+ * colourway editor already calls its five role chips swatches, and this node's
+ * whole job is the colours *between* those five.
+ */
+export const SHADE_MODES = ['across', 'heat'] as const;
+
+/**
+ * The shapes `figure` measures a point against.
+ *
+ * A vocabulary of *curves*, not of pictures: each is a thing a distance can be
+ * taken from, and what that distance becomes is decided downstream. Ordered
+ * from the shapes whose distance is exact through the ones taken along the ray
+ * from the centre, ending at the one that has to be walked.
+ */
+export const FIGURE_MODES = [
+  'circle',
+  'box',
+  'line',
+  'arc',
+  'polygon',
+  'star',
+  'rose',
+  'lissajous',
+] as const;
+
+/** The four ways `array` repeats the space a picture is read in. */
+export const ARRAY_MODES = ['row', 'grid', 'ring', 'mirror'] as const;
+
+/**
+ * The five shapes the `form` node marches, and the order is the argument.
+ *
+ * One ring, then several turning against each other, then a cube's edges, then
+ * that cube repeated through space, then a corridor the eye is inside. Each is
+ * the previous one plus one idea, which is what makes the list a vocabulary
+ * rather than a catalogue of demos.
+ *
+ * Deliberately not `SOURCES`, for the reason `fractal` and `light` are not:
+ * every source is also drawn once per playing track, and a ray march per track
+ * is exactly the accidental GPU load the bounded nodes exist to prevent.
+ */
+export const FORM_MODES = ['torus', 'rings', 'frame', 'lattice', 'tube'] as const;
+
 /** The effects that ship, as `effect` node modes. The other half of the old split. */
 /**
  * The three that `effect` split into, and why it had to.
@@ -297,10 +355,22 @@ export const TRACK_READS: readonly string[] = ['level', 'fader', 'playing'];
 export const SONG_FACTS: readonly string[] = ['seed', 'tempo', 'key', 'section', 'sections'];
 
 export const MATH_OPS = ['add', 'subtract', 'multiply', 'min', 'max', 'average'] as const;
-export const WAVE_SHAPES = ['sine', 'saw', 'ramp', 'square', 'pulse', 'noise'] as const;
 
-/** Clock-owning low-frequency oscillator shapes, including one value held per cycle. */
-export const LFO_SHAPES = ['sine', 'triangle', 'saw', 'square', 'sample-hold'] as const;
+/**
+ * Every shape an lfo can run. The six a `wave` node used to own are in here —
+ * it was the same oscillator with a worse clock, so the shapes came across
+ * rather than the node.
+ */
+export const LFO_SHAPES = [
+  'sine',
+  'triangle',
+  'saw',
+  'ramp',
+  'square',
+  'pulse',
+  'noise',
+  'sample-hold',
+] as const;
 
 /** How a `tracks` node decides what each Live track draws. */
 export const TRACK_DRAWS = ['by name', ...SOURCES] as const;
@@ -609,11 +679,76 @@ export function paletteOf(hex: readonly string[]): string[] {
   return COLOR_ROLES.map((_, i) => hex[i % hex.length]);
 }
 
+/**
+ * The light a colourway is dealt under.
+ *
+ * The generator knows a great deal about *how* to build a palette — see
+ * `palette` in `randomize.ts` — and nothing at all about **which one you want
+ * tonight**. That gap is what made the dice feel like a slot machine: every
+ * press was an equally likely draw from the whole wheel, so getting the cold
+ * one you had in mind meant pressing until it came up.
+ *
+ * A mood is the person's half of the deal. It does not name colours — naming
+ * colours is what the swatches are for — it names the **conditions**: which arc
+ * of the wheel the base is drawn from, how loud the palette is allowed to be,
+ * how high it sits, and which relationships are on the table. The rules then do
+ * the same work they always did, inside that.
+ *
+ * They are lighting conditions rather than adjectives on purpose. This is a rig
+ * that points a lamp at a wall, and "sunset" says something a room can be
+ * whereas "warm" only says something a number can be.
+ *
+ * - `any` is the whole wheel, which is what the dice always did.
+ * - `neon` is electric: every member at the most colour its hue can hold, and
+ *   the harmonies that put real distance between them.
+ * - `sunset` leads warm — ambers, reds, magentas — and is answered from the
+ *   blue side, which is the one pairing every sky already makes.
+ * - `ice` leads cool and sits high, so the whole palette reads as light coming
+ *   through something rather than off it.
+ * - `earth` is the quiet one: ochre, olive, rust, brick. **The only mood that
+ *   allows the muddy arc**, because the muddy arc is what it is made of — see
+ *   `clarity` in `randomize.ts`, which penalises exactly this everywhere else.
+ * - `flare` is one colour and the spark that cuts it: the base family held
+ *   tight and a single loud answer from across the wheel.
+ *
+ * Deliberately **not** `cast` — `server/up.ts` and `server/batch.ts` already
+ * use that word — and deliberately not "ink", which the shipped list nearly
+ * was: ink is dark, and this generator refuses dark for the projector reason.
+ */
+export const MOODS = ['any', 'neon', 'sunset', 'ice', 'earth', 'flare'] as const;
+
+export type Mood = (typeof MOODS)[number];
+
+/** What each mood deals, for a control that has one line to say it in. */
+export const MOOD_ABOUT: Record<Mood, string> = {
+  any: 'the whole wheel',
+  neon: 'electric, and as far apart as the wheel allows',
+  sunset: 'warm-led, answered from the blue side',
+  ice: 'cool-led and high, like light through something',
+  earth: 'ochre, olive, rust — the quiet one',
+  flare: 'one colour, and the spark that cuts it',
+};
+
 export interface Scheme {
   /** Every flow, by id. All of them are graphs; none of them ship. */
   flows: Record<string, FlowDef>;
   /** Named colour sets, as `#rrggbb`. Five each, by `COLOR_ROLES`. */
   colorways: Record<string, string[]>;
+  /**
+   * The light each colourway is re-dealt under, by the same name.
+   *
+   * A parallel map rather than a field on the colourway, because a colourway is
+   * five hexes everywhere it is read — the wire packs it, the renderer uploads
+   * it, a person edits it in a file — and wrapping all of that in an object to
+   * carry one word nobody but the dice reads would be paid for sixty times a
+   * second.
+   *
+   * It is therefore an **overlay, pruned at the door**: `merge` drops any entry
+   * whose colourway is gone, so a rename that forgot to carry the mood costs a
+   * default rather than an orphan. A name that is absent means `any`, which is
+   * what every scheme written before moods existed says by saying nothing.
+   */
+  moods: Record<string, Mood>;
   rotation: Rotation;
   /** By the set's own song name. Overrides only — most sets have none. */
   songs: Record<string, SongSpec>;

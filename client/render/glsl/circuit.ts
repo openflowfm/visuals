@@ -1,16 +1,23 @@
 /** Helper functions used by expressions emitted from the circuit compiler. */
 export const CIRCUIT_HELPERS = `
-float cLfoPhase(float rate, float sync, float offset) {
+// clock is the beat when nothing is wired to that inlet, which is what makes an
+// untouched lfo a beat-synced oscillator. Wired, it is whatever arrives — and
+// rate goes on dividing it, so a phase that runs once a bar can be run twice or
+// half as often without a multiply node in front of it.
+float cLfoPhase(float clock, float rate, float sync, float offset) {
   float rung = floor(clamp(rate, 0.0, 1.0) * 7.0 + 0.5);
   float cyclesPerBeat = exp2(rung - 4.0);
   float hz = 0.05 * pow(400.0, clamp(rate, 0.0, 1.0));
-  return mix(uTime * hz, uBeat * cyclesPerBeat, step(0.5, sync)) + clamp(offset, 0.0, 1.0);
+  return mix(uTime * hz, clock * cyclesPerBeat, step(0.5, sync)) + clamp(offset, 0.0, 1.0);
 }
 
 float cLfoSine(float p) { return sin(fract(p) * PI * 2.0) * 0.5 + 0.5; }
 float cLfoTriangle(float p) { return 1.0 - abs(fract(p) * 2.0 - 1.0); }
 float cLfoSaw(float p) { return fract(p); }
+float cLfoRamp(float p) { return 1.0 - fract(p); }
 float cLfoSquare(float p) { return step(0.5, fract(p)); }
+float cLfoPulse(float p) { return pow(1.0 - fract(p), 4.0); }
+float cLfoNoise(float p) { return noise(vec2(p, p * 0.37)); }
 float cLfoHold(float p, float identity) {
   return hash(vec2(floor(p) + identity, identity * 0.37));
 }

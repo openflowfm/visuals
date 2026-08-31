@@ -95,7 +95,7 @@ describe('the node face anatomy', () => {
   it('leaves a driven number row live, because the number under a cord is its floor', () => {
     const circuit: Circuit = {
       nodes: [
-        { id: 'w', kind: 'wave', op: 'pulse', x: 0, y: 0 },
+        { id: 'w', kind: 'lfo', op: 'pulse', x: 0, y: 0 },
         { id: 'l', kind: 'lens', op: 'ripple', values: { depth: 0.81 }, x: 1, y: 0 },
       ],
       cords: [{ from: 'w/n', to: 'l/depth' }],
@@ -119,7 +119,7 @@ describe('the node face anatomy', () => {
   it('draws a range only where a cord could use one', () => {
     const wired: Circuit = {
       nodes: [
-        { id: 'w', kind: 'wave', op: 'pulse', x: 0, y: 0 },
+        { id: 'w', kind: 'lfo', op: 'pulse', x: 0, y: 0 },
         { id: 'l', kind: 'lens', op: 'ripple', values: { depth: 0.2 }, depths: { depth: 0.3 }, x: 1, y: 0 },
       ],
       cords: [{ from: 'w/n', to: 'l/depth' }],
@@ -150,7 +150,7 @@ describe('the node face anatomy', () => {
   });
 
   it('puts a fixed mode on the title and offers hot-swap there', () => {
-    const mode = face({ id: 'w', kind: 'wave', op: 'sine', x: 0, y: 0 });
+    const mode = face({ id: 'w', kind: 'lfo', op: 'sine', x: 0, y: 0 });
     expect(mode).toContain('<span class="wdg-device-name">sine</span>');
     expect(mode).toContain('Swap sine preset');
 

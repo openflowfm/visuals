@@ -8,6 +8,7 @@ import {
 import { NODE_SPECS, inletsOf, splitPort } from './circuit.ts';
 import { lfoClock, lfoIdentity, lfoValue } from '../nodes/lfo/algorithm.ts';
 import { evaluateResponse, productionResponse } from '../../response.ts';
+import { clamp, fract, hash, mix } from './scalar.ts';
 
 /** Everything a CPU number chain reads at one display-clock tick. */
 export interface NumberInputs {
@@ -51,66 +52,7 @@ export interface NumberEvaluator {
   reset(): void;
 }
 
-const clamp = (value: number, low = 0, high = 1): number =>
-  Math.max(low, Math.min(high, value));
-const fract = (value: number): number => value - Math.floor(value);
-const mix = (a: number, b: number, amount: number): number => a + (b - a) * amount;
 
-/**
- * The scalar form of the shader preamble's `hash(vec2)` — bit for bit.
- *
- * It has to be exact, and under the old sine hash it could not be. The GPU
- * evaluated `fract(sin(...) * 43758.5453)` at 32 bits and this evaluated it at
- * 64, and that expression amplifies a one-ulp difference into an unrelated
- * number: measured across the seeds this app actually uses, the two disagreed
- * about which musical division `rate` returned **half the time**. A knob's
- * readout and the picture beside it were describing different flows.
- *
- * Integer mixing removes the disagreement rather than narrowing it. `Math.imul`
- * is the 32-bit wrapping multiply GLSL's `uint` already does, `>>> 0` keeps the
- * intermediate unsigned, and the float goes in by its 32-bit bit pattern so both
- * sides start from the same bits.
- */
-const FLOAT_BITS = new DataView(new ArrayBuffer(4));
-
-function floatBitsToUint(value: number): number {
-  FLOAT_BITS.setFloat32(0, value);
-  return FLOAT_BITS.getUint32(0);
-}
-
-function hashBits(value: number): number {
-  let v = value >>> 0;
-  v = (v ^ (v >>> 16)) >>> 0;
-  v = Math.imul(v, 0x7feb352d) >>> 0;
-  v = (v ^ (v >>> 15)) >>> 0;
-  v = Math.imul(v, 0x846ca68b) >>> 0;
-  v = (v ^ (v >>> 16)) >>> 0;
-  return v;
-}
-
-export function hash(x: number, y: number, seed: number): number {
-  const mixed =
-    (hashBits(Math.imul(floatBitsToUint(x), 0x9e3779b9) >>> 0) ^
-      hashBits(Math.imul(floatBitsToUint(y), 0x85ebca6b) >>> 0) ^
-      hashBits(floatBitsToUint(seed))) >>>
-    0;
-  return (hashBits(mixed) & 0x00ffffff) / 16777215;
-}
-
-/** The scalar form of the shader preamble's two-dimensional value noise. */
-function noise(x: number, y: number, seed: number): number {
-  const ix = Math.floor(x);
-  const iy = Math.floor(y);
-  let fx = fract(x);
-  let fy = fract(y);
-  fx = fx * fx * (3 - 2 * fx);
-  fy = fy * fy * (3 - 2 * fy);
-  return mix(
-    mix(hash(ix, iy, seed), hash(ix + 1, iy, seed), fx),
-    mix(hash(ix, iy + 1, seed), hash(ix + 1, iy + 1, seed), fx),
-    fy,
-  );
-}
 
 /** The shader's quantised ladder of musical divisions. */
 function rate(energy: number, pace: number, seed: number): number {
@@ -235,24 +177,6 @@ function maths(op: string | undefined, a: number, b: number): number {
   }
 }
 
-function wave(op: string | undefined, phase: number, seed: number): number {
-  switch (op ?? 'sine') {
-    case 'saw':
-      return fract(phase);
-    case 'ramp':
-      return 1 - fract(phase);
-    case 'square':
-      return fract(phase) < 0.5 ? 0 : 1;
-    case 'pulse':
-      return Math.pow(1 - fract(phase), 4);
-    case 'noise':
-      return noise(phase, phase * 0.37, seed);
-    case 'sine':
-    default:
-      return Math.sin(phase * 6.28318) * 0.5 + 0.5;
-  }
-}
-
 export function createNumberEvaluator(): NumberEvaluator {
   /** Same key and lifetime as the follower bank in `createFeed`. */
   const followed = new Map<string, number>();
@@ -360,16 +284,17 @@ export function createNumberEvaluator(): NumberEvaluator {
             if (a !== undefined && b !== undefined) value = maths(node.op, a, b);
             break;
           }
-          case 'wave': {
-            const phase = readInlet(`${node.id}/phase`);
-            if (phase !== undefined) value = wave(node.op, phase, inputs.seed ?? 3.71);
-            break;
-          }
           case 'lfo': {
+            const clock = readInlet(`${node.id}/clock`);
             const rate = readInlet(`${node.id}/rate`);
             const sync = readInlet(`${node.id}/sync`);
             const phase = readInlet(`${node.id}/phase`);
-            if (rate !== undefined && sync !== undefined && phase !== undefined) {
+            if (
+              clock !== undefined &&
+              rate !== undefined &&
+              sync !== undefined &&
+              phase !== undefined
+            ) {
               const shape = LFO_SHAPES.includes(
                 (node.op ?? '') as (typeof LFO_SHAPES)[number],
               )
@@ -377,7 +302,7 @@ export function createNumberEvaluator(): NumberEvaluator {
                 : LFO_SHAPES[0];
               value = lfoValue(
                 shape,
-                lfoClock(inputs.beat, inputs.seconds, rate, sync, phase),
+                lfoClock(clock, inputs.seconds, rate, sync, phase),
                 lfoIdentity(node.id),
                 inputs.seed ?? 3.71,
               );

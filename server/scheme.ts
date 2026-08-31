@@ -1,13 +1,17 @@
 import { z } from 'zod';
 import {
+  LFO_SHAPES,
+  MOODS,
   paletteOf,
   type Circuit,
   type CircuitNode,
   type FlowDef,
+  type Mood,
   type Scheme,
   type SongSpec,
 } from '../protocol.ts';
 import { NODE_KINDS } from '../client/nodes/generated.ts';
+import { lfoRateForBeat } from '../client/nodes/lfo/algorithm.ts';
 import { repaired, splitPort } from '../client/render/circuit.ts';
 import { RESPONSE_SET_VERSION } from '../response.ts';
 import { OLDEST_RESPONSE_SET_VERSION, migrateFlowResponses } from '../responseMigration.ts';
@@ -215,7 +219,7 @@ const EXAMPLES: Scheme = {
       [
         ['pt', 'point'],
         ['bar', 'playback', 'phase'],
-        ['sway', 'wave', 'sine'],
+        ['sway', 'lfo', 'sine', { rate: 0.755, sync: 1 }],
         ['half', 'math', 'average'],
         ['turn', 'lens', 'swirl'],
         ['live', 'tracks', 'by name'],
@@ -234,7 +238,7 @@ const EXAMPLES: Scheme = {
         ['o', 'out'],
       ],
       [
-        'bar/n -> sway/phase',
+        'bar/n -> sway/clock',
         // `b` is left at its own half, which halves the swing about centre —
         // an unwired inlet's answer, doing real work.
         'sway/n -> half/a',
@@ -261,7 +265,7 @@ const EXAMPLES: Scheme = {
         ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.4],
         // A snap on every beat, floored under the meter: the corridor gains
         // arms and rushes harder on the hit, and does it with nothing playing.
-        ['beat', 'wave', 'pulse'],
+        ['beat', 'lfo', 'pulse', { rate: 0.571, sync: 1 }],
         ['lift', 'math', 'max', { a: [0.32, 0.4] }],
         ['pt', 'point'],
         ['tun', 'source', 'tunnel'],
@@ -345,7 +349,7 @@ const EXAMPLES: Scheme = {
         ['pt', 'point'],
         ['t', 'playback', 'time'],
         ['slow', 'math', 'multiply', { b: 0.12 }],
-        ['sway', 'wave', 'sine'],
+        ['sway', 'lfo', 'sine', { rate: 0.755, sync: 1 }],
         ['wob', 'lens', 'wobble'],
         ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.55],
         // The same sine that moves the surface is the floor under the meter, so
@@ -362,7 +366,7 @@ const EXAMPLES: Scheme = {
       ],
       [
         't/n -> slow/a',
-        'slow/n -> sway/phase',
+        'slow/n -> sway/clock',
         'pt/p -> wob/p',
         'sway/n -> wob/amount',
         'wob/p -> surf/p',
@@ -426,7 +430,7 @@ const EXAMPLES: Scheme = {
         ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.35],
         // A saw rather than a pulse: the corridor and the rings ramp up across
         // each beat and drop, so the gate breathes instead of twitching.
-        ['ramp', 'wave', 'saw'],
+        ['ramp', 'lfo', 'saw', { rate: 0.755, sync: 1 }],
         ['lift', 'math', 'max', { a: [0.28, 0.4] }],
         ['tun', 'source', 'tunnel'],
         ['rng', 'source', 'rings'],
@@ -464,7 +468,7 @@ const EXAMPLES: Scheme = {
     outline: wire(
       'Outline',
       [
-        ['beat', 'wave', 'sine'],
+        ['beat', 'lfo', 'sine', { rate: 0.755, sync: 1 }],
         ['breath', 'math', 'average'],
         ['grid', 'source', 'grid'],
         ['ink', 'tracks', 'by name'],
@@ -504,7 +508,7 @@ const EXAMPLES: Scheme = {
         // nothing is playing. Its energy is a sine on the beat, which for a
         // picture about to be quantised to four steps is not a frequency change
         // you watch — it is the bands themselves breathing.
-        ['swell', 'wave', 'sine'],
+        ['swell', 'lfo', 'sine', { rate: 0.755, sync: 1 }],
         // Halved about a half, the way `Folded` halves its swirl: `b` left at
         // its own middle turns a full swing into a quarter either side, which
         // for a spatial frequency is the difference between breathing and
@@ -558,7 +562,7 @@ const EXAMPLES: Scheme = {
         ['live', 'tracks', 'by name'],
         ['bed', 'blend', 'over'],
         ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.12],
-        ['twitch', 'wave', 'pulse'],
+        ['twitch', 'lfo', 'pulse', { rate: 0.571, sync: 1 }],
         // A low floor and a wide reach: this is the one that should still be
         // twitching on the click, and the one that should go off in a loud room.
         ['lift', 'math', 'max', { a: [0.25, 0.5] }],
@@ -612,7 +616,7 @@ const EXAMPLES: Scheme = {
         // A cycle every seventeen seconds or so. The same unclamped multiply
         // `Water` drifts on, slower, and for the same reason.
         ['slow', 'math', 'multiply', { b: 0.06 }],
-        ['rise', 'wave', 'sine'],
+        ['rise', 'lfo', 'sine', { rate: 0.755, sync: 1 }],
         ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.7],
         // `max`, and the rise arrives on a range rather than whole: the wax sits
         // between a seventh and a third of the frame all on its own, and the
@@ -634,7 +638,7 @@ const EXAMPLES: Scheme = {
         // snap of contrast on each beat, sixteen hundredths deep. Lava that
         // moved on the beat would stop being lava, but a lamp with a band on the
         // other side of the room is allowed to flicker with them.
-        ['throb', 'wave', 'pulse'],
+        ['throb', 'lfo', 'pulse', { rate: 0.571, sync: 1 }],
         ['melt', 'grade', 'levels', { gain: [0.5, 0.16], lift: 0.62 }],
         ['pol', 'polar'],
         ['lamp', 'colorway', undefined, { amount: [1, -1] }],
@@ -643,7 +647,7 @@ const EXAMPLES: Scheme = {
       ],
       [
         't/n -> slow/a',
-        'slow/n -> rise/phase',
+        'slow/n -> rise/clock',
         'rise/n -> heat/a',
         'e/n -> heat/b',
         'heat/n -> wax/energy',
@@ -698,7 +702,7 @@ const EXAMPLES: Scheme = {
       [
         ['sky', 'source', 'plasma'],
         ['cloud', 'source', 'noise'],
-        ['hit', 'wave', 'pulse'],
+        ['hit', 'lfo', 'pulse', { rate: 0.571, sync: 1 }],
         ['dice', 'playback', 'random'],
         ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.3],
         // A narrow range on purpose. The field's energy is how many contours
@@ -1038,6 +1042,16 @@ const EXAMPLES: Scheme = {
     acid: ['#b4ff00', '#00ffa8', '#c400ff', '#ffe600', '#eaffc2'],
     dusk: ['#b026ff', '#ff2d95', '#ffe600', '#2ee6ff', '#f6d6ff'],
   },
+  // **Two of the four pinned, and two left to roam**, because one press of the
+  // dice has to teach what a mood is. A library where nothing is pinned re-deals
+  // as four unrelated palettes and the control beside each row looks decorative;
+  // a library where everything is pinned never shows the spread, which is the
+  // other half of the same deal. Pinned this way, one press keeps `ember` warm
+  // and `cold` cool while `acid` and `dusk` go somewhere else entirely — and the
+  // reason is legible without reading anything, because the names already said
+  // it. Nobody has to keep them: a mood is a person's, and clearing one is a
+  // click.
+  moods: { ember: 'sunset', cold: 'ice' },
   rotation: {
     // Empty pools mean "everything", so a fresh clone turns through every
     // flow and all four colourways without anyone filling anything in.
@@ -1118,6 +1132,17 @@ export function merge(raw: Partial<Scheme>): Scheme {
       paletteOf(hex),
     ]),
   );
+  // **Pruned to what is actually there, at the one door.** The moods map is the
+  // only overlay in a scheme — everything else is complete — so it is the only
+  // thing that can hold a key naming something that no longer exists. Dropping
+  // an orphan here rather than tolerating it downstream is what keeps a rename
+  // that forgot to carry the mood costing a default instead of a mystery: the
+  // row deals `any`, which is what it said before anyone pinned it.
+  const moods = Object.fromEntries(
+    Object.entries(file.moods ?? {}).filter(
+      ([name, mood]) => Object.hasOwn(colorways, name) && (MOODS as readonly string[]).includes(mood),
+    ),
+  ) as Record<string, Mood>;
   const defaults = { ...EXAMPLES.defaults, ...(file.defaults ?? {}) };
   if (!Object.hasOwn(flows, defaults.flow)) {
     defaults.flow = Object.keys(flows)[0] ?? defaults.flow;
@@ -1134,6 +1159,7 @@ export function merge(raw: Partial<Scheme>): Scheme {
     responses: RESPONSE_SET_VERSION,
     flows,
     colorways,
+    moods,
     rotation: { ...EXAMPLES.rotation, ...(file.rotation ?? {}) },
     songs: songsOf(file.songs),
     defaults,
@@ -1257,7 +1283,8 @@ type Was = Omit<CircuitNode, 'kind'> & {
     | 'swirl'
     | 'zoom'
     | 'wobble'
-    | 'tile';
+    | 'tile'
+    | 'wave';
 };
 
 /** The five geometry kinds, which are `lens` modes now and were always its functions. */
@@ -1295,6 +1322,7 @@ const KINDS: ReadonlySet<string> = new Set<string>([
   'hue',
   'levels',
   'paint',
+  'wave',
 ]);
 
 /**
@@ -1333,6 +1361,12 @@ const SCHEME_FILE = z.object({
   looks: FLOWS.optional(),
   effects: FLOWS.optional(),
   colorways: z.record(z.string(), NAMES).optional(),
+  // The mood strings are not enumerated here on purpose. A file naming a light
+  // this build has never heard of is a *newer* file, not a broken one, and
+  // refusing the whole scheme over one word would cost somebody their flows to
+  // save them from a colourway that would have re-dealt correctly anyway.
+  // `merge` drops the unknown ones instead.
+  moods: z.record(z.string(), z.string()).optional(),
   rotation: z
     .object({
       flows: NAMES.optional(),
@@ -1485,6 +1519,7 @@ function ranged(node: Was, wired: ReadonlySet<string>): Was {
 function reword(circuit: Circuit): Circuit {
   const renamed = new Set<string>();
   const repainted = new Set<string>();
+  const reclocked = new Set<string>();
   const wired = new Set(circuit.cords.map((cord) => cord.to));
   const nodes = circuit.nodes.map((raw): CircuitNode => {
     const node = ranged(resmoothed(revalued(raw as Was)), wired);
@@ -1546,12 +1581,42 @@ function reword(circuit: Circuit): Circuit {
       repainted.add(node.id);
       return { ...node, kind: 'colorway' };
     }
+    // A `wave` was an lfo that could only ever be told the beat. Its shapes are
+    // the lfo's shapes now, and **no number moves**: an lfo's `rate` rests at
+    // the rung that is one cycle per beat and its `sync` rests on, which is
+    // exactly what a wave did with nothing wired to it. The one thing that has
+    // to move is the inlet the phase arrived on — `phase` means the offset here,
+    // so a cord left addressed to it would quietly become a phase trim.
+    if (node.kind === 'wave') {
+      reclocked.add(node.id);
+      const shape = (LFO_SHAPES as readonly string[]).includes(node.op ?? '')
+        ? ((node.op ?? 'sine') as (typeof LFO_SHAPES)[number])
+        : 'sine';
+      const moved = swapValue(node.values, 'phase', 'clock');
+      const depths = swapValue(node.depths, 'phase', 'clock');
+      return {
+        ...node,
+        kind: 'lfo',
+        op: shape,
+        // The rate has to be written down. A wave ran once a beat and had no
+        // rate to say so; an lfo's rests wherever its shape's calibration puts
+        // it, which is a whole-note cycle for sine, triangle and saw. Left to
+        // the default, every migrated one of those would run four times too
+        // slowly — the same picture, and wrong.
+        values: { ...(moved ?? {}), rate: lfoRateForBeat(shape), sync: 1 },
+        ...(depths ? { depths } : {}),
+      };
+    }
     return node as CircuitNode;
   });
   return {
     nodes,
     cords: circuit.cords.map((cord) => {
       const from = splitPort(cord.from);
+      const to = splitPort(cord.to);
+      if (reclocked.has(to.node) && to.port === 'phase') {
+        return { ...cord, to: `${to.node}/clock` };
+      }
       if (renamed.has(from.node) && from.port === 'level') {
         return { ...cord, from: `${from.node}/n` };
       }

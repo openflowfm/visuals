@@ -17,7 +17,6 @@ import {
   IMAGE_MODES,
   VIDEO_MODES,
   TRACK_DRAWS,
-  WAVE_SHAPES,
   BLENDS,
   COLOR_ROLES,
   COLOR_ROLE_DETAILS,
@@ -26,6 +25,16 @@ import {
   type FlowDef,
   type NodeKind,
 } from '../../protocol.ts';
+import { ALIVE, asFloat, C, E, FOLLOWS, N, P } from './ports.ts';
+import type { PortDocumentation, PortSpec, Signal } from './ports.ts';
+export type { PortDocumentation, PortSpec, Signal } from './ports.ts';
+export {
+  P as pointPort,
+  C as colourPort,
+  N as numberPort,
+  ALIVE as livePort,
+  E as energyPort,
+} from './ports.ts';
 import { CIRCUIT_HELPERS } from './glsl/circuit.ts';
 import { FIELD_WORK } from './glsl/fields.ts';
 import { SOURCE_VALUES } from './glsl/sources.ts';
@@ -34,6 +43,11 @@ import { FRACTAL_ITERATIONS, flowPreamble } from './shaders.ts';
 import { VIDEO_NODE_SPEC } from '../nodes/video/spec.ts';
 import { IMAGE_NODE_SPEC } from '../nodes/image/spec.ts';
 import { LFO_NODE_SPEC } from '../nodes/lfo/spec.ts';
+import { GLOW_NODE_SPEC } from '../nodes/glow/spec.ts';
+import { SHADE_NODE_SPEC } from '../nodes/shade/spec.ts';
+import { FIGURE_NODE_SPEC } from '../nodes/figure/spec.ts';
+import { ARRAY_NODE_SPEC } from '../nodes/array/spec.ts';
+import { FORM_NODE_SPEC } from '../nodes/form/spec.ts';
 import {
   productionResponse,
   responseGlsl,
@@ -101,51 +115,9 @@ import {
  * `uParams` like every other one, so turning it recompiles nothing.
  *
  * The exceptions are the two number inlets whose answer is already alive —
- * `energy` reads the room and a `wave`'s `phase` reads the beat. There is no
+ * `energy` reads the room and an `lfo`'s `clock` reads the beat. There is no
  * number to set there, only a signal to leave running or replace with a cord.
  */
-
-/** Which of the three things a port carries. Surfaced as `data-kind` on the canvas. */
-export type Signal = 'p' | 'n' | 'c';
-
-/** Documentation every real port is required to carry into the app. */
-export interface PortDocumentation {
-  /** One plain-language sentence about what arrives or leaves here. */
-  description: string;
-}
-
-export interface PortSpec extends PortDocumentation {
-  name: string;
-  kind: Signal;
-  /** The GLSL used when nothing is wired here and nothing is set. */
-  fallback?: string;
-  /**
-   * The number this inlet holds when nothing is wired, and therefore where the
-   * control on the node's face starts.
-   *
-   * A point and a colour have none — there is no one control for a position and
-   * no useful constant for a picture. A live number (`ALIVE`) has none either,
-   * but for the opposite reason: its resting answer is a signal, not a number.
-   * Every `n` inlet is settable — one without an `at` simply starts live and
-   * only holds a number once somebody sets one.
-   */
-  at?: number;
-  /**
-   * Another inlet on the same node whose answer this one borrows while it has
-   * none of its own — unwired and unheld, it reads whatever that inlet reads.
-   *
-   * This is how a source's shape numbers follow its energy: `columns` on a
-   * `bars` compiles to the energy expression until somebody catches it, so
-   * promoting a constant to an inlet changes nothing until a hand does.
-   */
-  fallbackInlet?: string;
-  /** A binary face control; it remains a number inlet on the wire. */
-  control?: 'toggle';
-  /** A domain-aware readout for values whose useful meaning is not a percent. */
-  display?: 'lfo-rate' | 'phase';
-  /** How this inlet turns the graph's normalized number into its working domain. */
-  response?: ParameterResponse;
-}
 
 /** What a node's `emit` is handed. */
 export interface Emitting {
@@ -221,73 +193,6 @@ export interface NodeSpec extends NodeDocumentation {
   emit(ctx: Emitting): Record<string, string>;
 }
 
-const P = (name: string, description: string, fallback?: string): PortSpec => ({
-  name,
-  kind: 'p',
-  description,
-  fallback,
-});
-const C = (name: string, description: string, fallback = 'vec4(0.0)'): PortSpec => ({
-  name,
-  kind: 'c',
-  description,
-  fallback,
-});
-
-/**
- * A settable number inlet, and the number it sits at until someone turns it.
- *
- * The fallback is that number as GLSL rather than a string written twice, so
- * what the face shows and what a shader with nothing set compiles cannot drift
- * apart.
- */
-const N = (name: string, description: string, at = 0.5): PortSpec => ({
-  name,
-  kind: 'n',
-  description,
-  at,
-  fallback: asFloat(at),
-});
-
-/**
- * A number inlet whose unwired answer is a **signal** rather than a setting.
- *
- * There are two, and both are the reason this rig is not a screensaver:
- * `energy` reads the room and a `wave`'s `phase` reads the beat. Neither has an
- * `at`, because their resting state is the signal — a default number here would
- * replace something already moving with a number that is not, which is a worse
- * default than the one it would be replacing.
- *
- * They can still be **held**. A number set on one of these goes into
- * `node.values` like any other and takes the inlet over until it is cleared,
- * which is what makes the row on the face a control rather than a reading. The
- * live signal is the default, not the law.
- */
-const ALIVE = (name: string, description: string, from: string): PortSpec => ({
-  name,
-  kind: 'n',
-  description,
-  fallback: from,
-});
-
-/** Every room-reactive mode gets one, so `rate` and `charge` have something to run on. */
-const E = () =>
-  ALIVE('energy', 'How strongly the room drives this movement or brightness.', 'uEnergy');
-
-/**
- * A number inlet that borrows the energy inlet's answer until somebody takes it.
- *
- * The promotion path for a constant with `e` mixed into it: as `FOLLOWS`, it
- * compiles to exactly the coupling it replaced — through a held or wired
- * energy too — and a graph that never touches it draws what it always drew.
- */
-const FOLLOWS = (name: string, description: string): PortSpec => ({
-  name,
-  kind: 'n',
-  description,
-  fallbackInlet: 'energy',
-});
-
 /**
  * Turn a fixed vocabulary into documented modes without allowing a missing row.
  *
@@ -316,8 +221,6 @@ export function descriptionOf(kind: NodeKind, op?: string): string {
   return spec.modes?.find((mode) => mode.name === op)?.description ?? spec.description;
 }
 
-/** A number as GLSL. `1` has to be spelled `1.0` or the shader will not compile. */
-const asFloat = (n: number): string => (Number.isInteger(n) ? n.toFixed(1) : String(n));
 
 /**
  * The one port name the flattener writes and nobody types.
@@ -354,15 +257,6 @@ const MATH: Record<string, (a: string, b: string) => string> = {
   min: (a, b) => `min(${a}, ${b})`,
   max: (a, b) => `max(${a}, ${b})`,
   average: (a, b) => `((${a} + ${b}) * 0.5)`,
-};
-
-const WAVES: Record<string, (x: string) => string> = {
-  sine: (x) => `(sin(${x} * 6.28318) * 0.5 + 0.5)`,
-  saw: (x) => `fract(${x})`,
-  ramp: (x) => `(1.0 - fract(${x}))`,
-  square: (x) => `step(0.5, fract(${x}))`,
-  pulse: (x) => `pow(1.0 - fract(${x}), 4.0)`,
-  noise: (x) => `noise(vec2(${x}, ${x} * 0.37))`,
 };
 
 /**
@@ -831,7 +725,7 @@ const SPREAD_EMIT: Record<string, (ctx: Emitting, e: string, k: (i: number) => s
 
 const PLAYBACK_MODES = documentedModes(PLAYBACK_NAMES, {
   level: "The room's master meter, from silence to its current loudness.",
-  beat: 'Continuous musical beats. Feed it through a wave when you need a repeating shape.',
+  beat: 'Continuous musical beats. Wire it into an lfo when you need a repeating shape.',
   phase: 'The current position through the bar, from its first beat to its last.',
   pulse: 'A hit at the start of each beat that decays before the next one.',
   time: 'Seconds since the renderer opened, for motion that should not lock to the music.',
@@ -972,15 +866,6 @@ const MATH_MODES = documentedModes(MATH_OPS, {
   min: 'Use whichever of the two numbers is lower.',
   max: 'Use whichever of the two numbers is higher.',
   average: 'Use the midpoint between both numbers.',
-});
-
-const WAVE_MODES = documentedModes(WAVE_SHAPES, {
-  sine: 'Rise and fall smoothly once per phase cycle.',
-  saw: 'Rise steadily and jump back to zero at the end of the cycle.',
-  ramp: 'Fall steadily and jump back to one at the end of the cycle.',
-  square: 'Switch between zero and one halfway through the cycle.',
-  pulse: 'Start at one and decay quickly toward zero.',
-  noise: 'Produce a smoothly changing irregular value from the phase.',
 });
 
 /**
@@ -1177,6 +1062,11 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
 
   video: VIDEO_NODE_SPEC,
   image: IMAGE_NODE_SPEC,
+  glow: GLOW_NODE_SPEC,
+  shade: SHADE_NODE_SPEC,
+  figure: FIGURE_NODE_SPEC,
+  array: ARRAY_NODE_SPEC,
+  form: FORM_NODE_SPEC,
 
   last: {
     name: 'last',
@@ -1331,7 +1221,7 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     description: 'Turn horizontal and vertical numbers into one position in the frame.',
     // The one node in the vocabulary that makes a point out of nothing you were
     // handed, which is why it has no `p` inlet. `polar` takes a point apart and
-    // this puts one together, so a pair of `wave`s or a pair of meters can name
+    // this puts one together, so a pair of `lfo`s or a pair of meters can name
     // somewhere to read a picture — which nothing could say before.
     //
     // **Cartesian, and no polar mode.** Two numbers read as `radius` and
@@ -1494,24 +1384,6 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     emit: (c) => {
       const op = modeOf(c.node, READ_NAMES);
       return { n: READ_EMIT[op](c.readAt('c', c.read('p'))) };
-    },
-  },
-
-  wave: {
-    name: 'wave',
-    description: 'Turn a repeating phase into a useful motion shape.',
-    inlets: [
-      ALIVE(
-        'phase',
-        'The position through the wave cycle. It follows the beat when unwired.',
-        'uBeat',
-      ),
-    ],
-    outlets: [N('n', 'The selected wave shape at the current phase.')],
-    modes: WAVE_MODES,
-    emit: (c) => {
-      const shape = WAVES[c.node.op ?? 'sine'] ?? WAVES.sine;
-      return { n: shape(c.read('phase')) };
     },
   },
 
