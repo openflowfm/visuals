@@ -20,6 +20,7 @@
     "server",
     "mcp",
     "tools",
-    "../protocol/global.d.ts"
+    "../protocol/global.d.ts",
+    "../types/assets.d.ts"
   ]
 }
