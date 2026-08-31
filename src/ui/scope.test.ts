@@ -87,7 +87,7 @@ describe('which faces are scopes', () => {
   it('refuses a number that only exists per pixel', () => {
     // `polar`'s radius is an `n` outlet, but its value depends on which pixel
     // is asking — there is no single number to plot, so the face stays the
-    // picture the paint bridge makes of it. The refusal follows the chain: a
+    // picture the colour bridge makes of it. The refusal follows the chain: a
     // `math` fed from it has no answer either.
     const scoped = scopedIn(
       [

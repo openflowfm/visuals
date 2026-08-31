@@ -209,7 +209,7 @@ describe('the example scheme', () => {
     for (const [, def] of Object.entries(EXAMPLES.flows)) {
       const kinds = new Set(def.circuit.nodes.map((node) => node.kind));
       const draws = (
-        ['source', 'field', 'fractal', 'light', 'paint', 'flow'] as const
+        ['source', 'field', 'fractal', 'light', 'colorway', 'flow'] as const
       ).some((kind) => kinds.has(kind));
       expect(draws, `${def.name} has nothing to draw without the set`).toBe(true);
     }
@@ -438,6 +438,32 @@ describe('a file written when the cascade existed', () => {
     expect(kept.nodes.find((n) => n.id === 'e')?.kind).toBe('playback');
   });
 
+  it('carries a paint node onto the colourway node, cord and all', () => {
+    // `paint` handed out the colourway's first colour through an outlet called
+    // `c`, because the first was the only one a graph could reach. The node
+    // hands out five now, so the outlet has to name a role — and a cord left
+    // addressed to `c` is one `repaired` drops as pointing at a port that is
+    // not there, which unwires a flow somebody made without saying so.
+    const merged = merge({
+      flows: {
+        mine: {
+          name: 'Mine',
+          circuit: {
+            nodes: [
+              { id: 'p', kind: 'paint', x: 0, y: 0, values: { amount: 0.4 } },
+              { id: 'o', kind: 'out', x: 1, y: 0 },
+            ],
+            cords: [{ from: 'p/c', to: 'o/c' }],
+          },
+        },
+      },
+    } as never).flows.mine.circuit;
+    expect(merged.nodes.find((n) => n.id === 'p')?.kind).toBe('colorway');
+    // The number on its face is untouched: this is a rename, not a re-dial.
+    expect(merged.nodes.find((n) => n.id === 'p')?.values).toEqual({ amount: 0.4 });
+    expect(merged.cords).toEqual([{ from: 'p/primary', to: 'o/c' }]);
+  });
+
   it('folds an energy node into the track it was following', () => {
     // It was `track` with an envelope on it: same signature, same bank, named
     // the same way. A file full of them has to keep breathing, so an unstated
@@ -450,12 +476,12 @@ describe('a file written when the cascade existed', () => {
           circuit: {
             nodes: [
               { id: 'e', kind: 'energy', op: 'Bass', x: 0, y: 0 },
-              { id: 'p', kind: 'paint', x: 1, y: 0 },
+              { id: 'p', kind: 'colorway', x: 1, y: 0 },
               { id: 'o', kind: 'out', x: 2, y: 0 },
             ],
             cords: [
               { from: 'e/n', to: 'p/amount' },
-              { from: 'p/c', to: 'o/c' },
+              { from: 'p/primary', to: 'o/c' },
             ],
           },
         },
@@ -642,7 +668,7 @@ describe('a file written when the cascade existed', () => {
           circuit: {
             nodes: [
               { id: 't', kind: 'track', op: 'Drums', x: 0, y: 0 },
-              { id: 'p', kind: 'paint', x: 1, y: 0 },
+              { id: 'p', kind: 'colorway', x: 1, y: 0 },
               { id: 'o', kind: 'out', x: 2, y: 0 },
             ],
             cords: [

@@ -5,10 +5,10 @@ import { previewOutletOf } from './probe.ts';
 /**
  * The oscilloscope face: what a number outlet looks like.
  *
- * A number used to be shown the way `paint` would show it — bridged into a
+ * A number used to be shown the way `colorway` would show it — bridged into a
  * frame of the active colour at that brightness. That crossing is honest as a
  * wiring ("this is what it does to a picture") and useless as a reading: a
- * blinking rectangle cannot tell a sine from a saw, and the bridge's `paint`
+ * blinking rectangle cannot tell a sine from a saw, and the bridge's `colorway`
  * charges its colour with the room's energy besides, so the face throbbed with
  * a signal that was not the node's. The outlet readout beside it came off the
  * CPU evaluator and told the truth, which made the face's lie visible.

@@ -109,7 +109,7 @@ export interface Entry {
  * One row of the **flow** shelf, which is a different shelf on purpose.
  *
  * Flows used to sit in this list as `flow` node rows under `draw`, in the same
- * chip with the same border as `source` and `paint` — so a graph of sixteen
+ * chip with the same border as `source` and `colorway` — so a graph of sixteen
  * nodes and a single shipped shader were the same object to anyone reading the
  * column. That is the mistake every node editor that has one has already made
  * and undone: Blender keeps node groups in their own `Group` submenu, Unreal

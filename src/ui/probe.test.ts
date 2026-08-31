@@ -30,18 +30,18 @@ describe('which outlet a face is a picture of', () => {
       [
         { id: 'pt', kind: 'point', x: 0, y: 0 },
         { id: 'pol', kind: 'polar', x: 1, y: 0 },
-        { id: 'pa', kind: 'paint', x: 2, y: 0 },
+        { id: 'pa', kind: 'colorway', x: 2, y: 0 },
         { id: 'o', kind: 'out', x: 3, y: 0 },
       ],
       [
         { from: 'pt/p', to: 'pol/p' },
         { from: 'pol/angle', to: 'pa/amount' },
-        { from: 'pa/c', to: 'o/c' },
+        { from: 'pa/primary', to: 'o/c' },
       ],
     );
-    // Through `paint`, because a number has no picture of its own — but of the
+    // Through `colorway`, because a number has no picture of its own — but of the
     // angle rather than the radius.
-    expect(shownBy(circuit, 'pol')).toBe('~probe-bridge/c');
+    expect(shownBy(circuit, 'pol')).toBe('~probe-bridge/primary');
     expect(probeAt(circuit, 'pol')?.cords).toContainEqual({
       from: 'pol/angle',
       to: '~probe-bridge/amount',
@@ -52,12 +52,12 @@ describe('which outlet a face is a picture of', () => {
     const circuit = wire(
       [
         { id: 'pol', kind: 'polar', previewOutlet: 'radius', x: 0, y: 0 },
-        { id: 'pa', kind: 'paint', x: 1, y: 0 },
+        { id: 'pa', kind: 'colorway', x: 1, y: 0 },
         { id: 'o', kind: 'out', x: 2, y: 0 },
       ],
       [
         { from: 'pol/angle', to: 'pa/amount' },
-        { from: 'pa/c', to: 'o/c' },
+        { from: 'pa/primary', to: 'o/c' },
       ],
     );
     expect(previewOutletOf(circuit, 'pol')?.name).toBe('radius');
@@ -105,12 +105,12 @@ describe('which outlet a face is a picture of', () => {
     const circuit = wire(
       [
         { id: 'pol', kind: 'polar', previewOutlet: 'depth', x: 0, y: 0 },
-        { id: 'pa', kind: 'paint', x: 1, y: 0 },
+        { id: 'pa', kind: 'colorway', x: 1, y: 0 },
         { id: 'o', kind: 'out', x: 2, y: 0 },
       ],
       [
         { from: 'pol/angle', to: 'pa/amount' },
-        { from: 'pa/c', to: 'o/c' },
+        { from: 'pa/primary', to: 'o/c' },
       ],
     );
     expect(previewOutletOf(circuit, 'pol')?.name).toBe('angle');
@@ -120,8 +120,8 @@ describe('which outlet a face is a picture of', () => {
     });
   });
 
-  it('holds the bridge paint at a fixed energy', () => {
-    // The bridge exists to show the probed signal. Left unwired, `paint`'s
+  it('holds the bridge colour at a fixed energy', () => {
+    // The bridge exists to show the probed signal. Left unwired, `colorway`'s
     // energy inlet rides the room, and the face throbbed with the bench's
     // stand-in energy on top of the number it was captioned as showing.
     const circuit = wire(

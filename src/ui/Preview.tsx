@@ -140,7 +140,7 @@ const EMPTY: Circuit = { nodes: [], cords: [] };
  * because a reader who has stopped reading still sees a colour.
  *
  * The last clause is the one that is easy to leave out. A `p` or an `n` outlet
- * has no picture of its own: `probeAt` brings a number back through `paint` and
+ * has no picture of its own: `probeAt` brings a number back through `colorway` and
  * a point back through a `plasma` source, so what you are looking at is a
  * **diagram** of a signal rather than a frame. A big one implies otherwise
  * unless it says.

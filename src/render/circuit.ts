@@ -19,6 +19,8 @@ import {
   TRACK_DRAWS,
   WAVE_SHAPES,
   BLENDS,
+  COLOR_ROLES,
+  COLOR_ROLE_DETAILS,
   type Circuit,
   type CircuitNode,
   type FlowDef,
@@ -1230,14 +1232,32 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     emit: (c) => ({ c: c.readAt(INNER, c.read('p')) }),
   },
 
-  paint: {
-    name: 'paint',
-    description: "The active colourway's colour at an adjustable brightness.",
-    inlets: [N('amount', 'The brightness and opacity of the painted colour.'), E()],
-    outlets: [C('c', 'A frame filled with the active colour.')],
-    emit: (c) => ({
-      c: `vec4(charge(uPrimary, ${c.read('energy')}) * clamp(${c.read('amount')}, 0.0, 1.0), clamp(${c.read('amount')}, 0.0, 1.0))`,
-    }),
+  colorway: {
+    name: 'colorway',
+    description: 'The colourway that is up, as five colours named for the job each does.',
+    // `paint`, which was this node with one outlet called `c` and a description
+    // that said "the colourway's colour" while meaning the first of five. The
+    // other four were unreachable from a graph: a flow drew from `colors[0]`
+    // and every generator invented its second colour by mixing toward white or
+    // toward its own complement. These outlets are the whole palette, so a
+    // source can be told which colour to draw in rather than guessing.
+    //
+    // One `amount` for all five rather than one each. It is a master dim on
+    // whatever you take out of here, which is what `paint`'s was; five would be
+    // five controls on a node whose job is to hand out colours, and the graph
+    // already has `grade` for dimming one of them on its own.
+    inlets: [N('amount', 'The brightness and opacity of every colour taken from here.'), E()],
+    outlets: COLOR_ROLES.map((role) => C(role, COLOR_ROLE_DETAILS[role])),
+    emit: (c) => {
+      const amount = `clamp(${c.read('amount')}, 0.0, 1.0)`;
+      const energy = c.read('energy');
+      return Object.fromEntries(
+        COLOR_ROLES.map((role, i) => [
+          role,
+          `vec4(charge(uColors[${i}], ${energy}) * ${amount}, ${amount})`,
+        ]),
+      );
+    },
   },
 
   lens: {

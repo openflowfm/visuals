@@ -278,7 +278,7 @@ default, they are also the show a fresh `main` puts on.
 |---|---|
 | **Folded** | a colour is a function of a point: the set and a ring of its own, read through a swirl and folded by a kaleidoscope that moves the whole chain |
 | **Deep** | two pictures, one of them the room's — a corridor with the set screened into it and graded |
-| **Weather** | no set and no shipped picture: `polar` makes two numbers out of a position, `paint` makes a colour out of one and `hue` makes every colour out of the other |
+| **Weather** | no set and no shipped picture: `polar` makes two numbers out of a position, `colorway` makes a colour out of one and `hue` makes every colour out of the other |
 | **Water** | refraction. A surface that displaces what you see *through* it, and the one drift here deliberately not in time |
 | **Vortex** | a portal that turns rather than recedes: `zoom` on the beat pulse, so the whole spiral punches inward on every hit |
 | **Gateway** | geometry happens *before* the picture — `fold` and a bare point feed two sources that never meet until the blend |

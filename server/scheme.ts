@@ -291,7 +291,7 @@ const EXAMPLES: Scheme = {
       ],
     ),
     // No set at all, and no picture that ships either: `polar` turns a position
-    // into two numbers, `paint` turns one of them into the colourway, and `hue`
+    // into two numbers, `colorway` turns one of them into a palette colour, and `hue`
     // turns the other into every colour there is. The song moves the grain, so
     // one set of files is a different weather per song.
     //
@@ -310,7 +310,7 @@ const EXAMPLES: Scheme = {
         // graph has any business knowing that number.
         ['fade', 'math', 'subtract', { a: 1 }],
         ['grain', 'source', 'noise'],
-        ['glow', 'paint'],
+        ['glow', 'colorway'],
         ['tint', 'grade', 'hue'],
         ['song', 'song', 'seed'],
         ['mix', 'blend', 'screen'],
@@ -320,7 +320,7 @@ const EXAMPLES: Scheme = {
         'pt/p -> pol/p',
         'pol/radius -> fade/b',
         'fade/n -> glow/amount',
-        'glow/c -> tint/c',
+        'glow/primary -> tint/c',
         'pol/angle -> tint/shift',
         'weight/n -> grain/energy',
         'weight/n -> glow/energy',
@@ -599,7 +599,7 @@ const EXAMPLES: Scheme = {
     // lamp still rises and falls on its own, and a loud room fattens the wax until
     // the blobs run together. A long envelope on it, because lava has weight.
     //
-    // `paint` is the bulb behind the glass, and it is the one wired with a
+    // `colorway` is the bulb behind the glass, and it is the one wired with a
     // **negative depth**: the inlet sits at one and the distance from the centre
     // carries it down to nothing, which is a `subtract` node's worth of graph
     // written as the polarity of a cord. `Weather` fades the same disc the older
@@ -637,7 +637,7 @@ const EXAMPLES: Scheme = {
         ['throb', 'wave', 'pulse'],
         ['melt', 'grade', 'levels', { gain: [0.5, 0.16], lift: 0.62 }],
         ['pol', 'polar'],
-        ['lamp', 'paint', undefined, { amount: [1, -1] }],
+        ['lamp', 'colorway', undefined, { amount: [1, -1] }],
         ['mix', 'blend', 'screen', { amount: 0.9 }],
         ['o', 'out'],
       ],
@@ -657,7 +657,7 @@ const EXAMPLES: Scheme = {
         'pt/p -> pol/p',
         'pol/radius -> lamp/amount',
         'heat/n -> lamp/energy',
-        'lamp/c -> mix/base',
+        'lamp/primary -> mix/base',
         'melt/c -> mix/top',
         'mix/c -> o/c',
       ],
@@ -674,7 +674,7 @@ const EXAMPLES: Scheme = {
     //
     // The strike then does three things and no more: it opens the blend the
     // crackle arrives through, it throws the broken pieces further apart, and it
-    // lights the whole room through `paint`.
+    // lights the whole room through `colorway`.
     //
     // A bolt is an `edge` of a noise field — the contour where the noise crosses
     // its threshold, kept, with the field itself thrown away — and `slice` throws
@@ -718,7 +718,7 @@ const EXAMPLES: Scheme = {
         ['jag', 'lens', 'slice', { bands: 0.66, throw: [0.24, 0.4] }],
         ['dim', 'grade', 'levels', { gain: 0.32, lift: 0.4 }],
         ['crack', 'blend', 'add'],
-        ['glare', 'paint'],
+        ['glare', 'colorway'],
         ['lit', 'blend', 'screen', { amount: 0.55 }],
         ['o', 'out'],
       ],
@@ -742,7 +742,7 @@ const EXAMPLES: Scheme = {
         'strike/n -> crack/amount',
         'strike/n -> glare/amount',
         'crack/c -> lit/base',
-        'glare/c -> lit/top',
+        'glare/primary -> lit/top',
         'lit/c -> o/c',
       ],
     ),
@@ -1235,6 +1235,7 @@ type Was = Omit<CircuitNode, 'kind'> & {
     | 'look'
     | 'hue'
     | 'levels'
+    | 'paint'
     | 'fold'
     | 'swirl'
     | 'zoom'
@@ -1276,6 +1277,7 @@ const KINDS: ReadonlySet<string> = new Set<string>([
   'look',
   'hue',
   'levels',
+  'paint',
 ]);
 
 /**
@@ -1465,6 +1467,7 @@ function ranged(node: Was, wired: ReadonlySet<string>): Was {
 
 function reword(circuit: Circuit): Circuit {
   const renamed = new Set<string>();
+  const repainted = new Set<string>();
   const wired = new Set(circuit.cords.map((cord) => cord.to));
   const nodes = circuit.nodes.map((raw): CircuitNode => {
     const node = ranged(resmoothed(revalued(raw as Was)), wired);
@@ -1517,15 +1520,28 @@ function reword(circuit: Circuit): Circuit {
       renamed.add(node.id);
       return { ...node, kind: 'track', of: node.op ?? 'master', op: 'level' };
     }
+    // `paint` handed out the colourway's first colour through an outlet called
+    // `c`, back when the first was the only one a graph could reach. The node
+    // hands out all five now, so the outlet has to say which — and a cord left
+    // addressed to `c` would be dropped by `repaired` as pointing at a port
+    // that is not there, silently unwiring a flow somebody made.
+    if (node.kind === 'paint') {
+      repainted.add(node.id);
+      return { ...node, kind: 'colorway' };
+    }
     return node as CircuitNode;
   });
   return {
     nodes,
     cords: circuit.cords.map((cord) => {
       const from = splitPort(cord.from);
-      return renamed.has(from.node) && from.port === 'level'
-        ? { ...cord, from: `${from.node}/n` }
-        : cord;
+      if (renamed.has(from.node) && from.port === 'level') {
+        return { ...cord, from: `${from.node}/n` };
+      }
+      if (repainted.has(from.node) && from.port === 'c') {
+        return { ...cord, from: `${from.node}/primary` };
+      }
+      return cord;
     }),
   };
 }

@@ -13,7 +13,7 @@ describe('response calibration manifest', () => {
         'fractal',
         'light',
         'last',
-        'paint',
+        'colorway',
         'lens',
         'displace',
         'grade',

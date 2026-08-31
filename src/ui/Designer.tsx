@@ -105,7 +105,7 @@ export function sameDisplayedReadings(
  * The left side is **flows** over **nodes** under one search box. It used to be
  * two lists that did not know about each other, and every flow appeared in both
  * — once as something to open and once, in the node palette under `draw`, as a
- * chip identical to `source` and `paint`. So a graph of sixteen nodes and a
+ * chip identical to `source` and `colorway`. So a graph of sixteen nodes and a
  * shipped shader were the same object to anyone reading the column, and the
  * only way to find out which you were holding was to drop it.
  *

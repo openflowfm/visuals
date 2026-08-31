@@ -298,12 +298,12 @@ describe('LFO nodes', () => {
         wire(
           [
             { id: 'l', kind: 'lfo', op, values: { rate: 0.5, sync: 1, phase: 0.25 }, x: 0, y: 0 },
-            { id: 'p', kind: 'paint', x: 1, y: 0 },
+            { id: 'p', kind: 'colorway', x: 1, y: 0 },
             { id: 'o', kind: 'out', x: 2, y: 0 },
           ],
           [
             { from: 'l/n', to: 'p/amount' },
-            { from: 'p/c', to: 'o/c' },
+            { from: 'p/primary', to: 'o/c' },
           ],
         ),
       );
@@ -327,8 +327,8 @@ describe('LFO nodes', () => {
     ]);
     const built = compileCircuit(
       wire(
-        [lfo, { id: 'p', kind: 'paint', x: 1, y: 0 }, { id: 'o', kind: 'out', x: 2, y: 0 }],
-        [{ from: 'l/n', to: 'p/amount' }, { from: 'p/c', to: 'o/c' }],
+        [lfo, { id: 'p', kind: 'colorway', x: 1, y: 0 }, { id: 'o', kind: 'out', x: 2, y: 0 }],
+        [{ from: 'l/n', to: 'p/amount' }, { from: 'p/primary', to: 'o/c' }],
       ),
     );
     const source = bodyOf(built.source!);
@@ -709,13 +709,13 @@ describe('a place is two numbers made into a point', () => {
         [
           { id: 'pl', kind: 'place', x: 0, y: 0 },
           { id: 'po', kind: 'polar', x: 1, y: 0 },
-          { id: 'pa', kind: 'paint', x: 2, y: 0 },
+          { id: 'pa', kind: 'colorway', x: 2, y: 0 },
           { id: 'o', kind: 'out', x: 3, y: 0 },
         ],
         [
           { from: 'pl/p', to: 'po/p' },
           { from: 'po/radius', to: 'pa/amount' },
-          { from: 'pa/c', to: 'o/c' },
+          { from: 'pa/primary', to: 'o/c' },
         ],
       ),
     );

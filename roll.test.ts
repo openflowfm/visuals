@@ -291,7 +291,7 @@ describe('rolled flows', () => {
         for (const node of rollCircuit(rng).nodes) kinds.add(node.kind);
       }
     }
-    for (const kind of ['fractal', 'field', 'light', 'spread', 'song', 'math', 'paint']) {
+    for (const kind of ['fractal', 'field', 'light', 'spread', 'song', 'math', 'colorway']) {
       expect(kinds.has(kind), kind).toBe(true);
     }
   });

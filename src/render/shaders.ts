@@ -70,7 +70,7 @@ ${EFFECT_LIB}
 
 // A generator's raw (colour, coverage) as the premultiplied, charged vec4 the
 // rest of the vocabulary passes about — the same shape cPaint produces, so a
-// source node and a paint node are interchangeable downstream.
+// source node and a colorway node are interchangeable downstream.
 vec4 laid(vec4 g, float e) {
   float a = clamp(g.a, 0.0, 1.0);
   return vec4(charge(g.rgb, e) * a, a);

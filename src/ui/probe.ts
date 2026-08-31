@@ -36,7 +36,7 @@ export function previewOutletOf(circuit: Circuit, nodeId: string): PortSpec | un
  * This is what a picture on every node actually *is*. Only `out` takes a colour,
  * so a number or a point has to be brought back to one before it can be looked
  * at, and the bridge is the vocabulary's own rather than a rendering trick: a
- * number is shown the way `paint` would show it, and a point the way a picture
+ * number is shown the way `colorway` would show it, and a point the way a picture
  * read at it would flow. Which is how it will flow if you wire it that way.
  */
 export function probeAt(circuit: Circuit, nodeId: string): Circuit | null {
@@ -66,7 +66,7 @@ export function probeAt(circuit: Circuit, nodeId: string): Circuit | null {
   // A number becomes brightness; a point becomes somewhere to read a picture.
   // `plasma` rather than the set, because a point's whole job is to move a
   // picture about and a picture with structure in it is one you can see moving.
-  // The bridge paint's energy is held at the middle rather than left to ride
+  // The bridge colour's energy is held at the middle rather than left to ride
   // the room: this picture exists to show the probed signal, and a face that
   // also throbbed with the bench's stand-in energy was showing two signals and
   // captioning them as one.
@@ -74,19 +74,22 @@ export function probeAt(circuit: Circuit, nodeId: string): Circuit | null {
     outlet.kind === 'n'
       ? {
           id: BRIDGE,
-          kind: 'paint' as const,
+          kind: 'colorway' as const,
           x: node.x + 100,
           y: node.y,
           values: { energy: 0.5 },
         }
       : { id: BRIDGE, kind: 'source' as const, op: 'plasma', x: node.x + 100, y: node.y };
   const inlet = outlet.kind === 'n' ? 'amount' : 'p';
+  // A `colorway` hands out one colour per role, so the bridge has to name which
+  // it is taking. `plasma` still has the one picture outlet it always had.
+  const taken = outlet.kind === 'n' ? 'primary' : 'c';
   return {
     nodes: [...nodes, bridge],
     cords: [
       ...cords,
       { from, to: `${BRIDGE}/${inlet}` },
-      { from: `${BRIDGE}/c`, to: `${END}/c` },
+      { from: `${BRIDGE}/${taken}`, to: `${END}/c` },
     ],
   };
 }

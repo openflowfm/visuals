@@ -245,20 +245,20 @@ describe('CPU number evaluation', () => {
         node('b', 'value', { value: 0.3 }),
         node('sum', 'math', { op: 'add' }),
         node('shape', 'wave', { op: 'saw' }),
-        node('paint', 'paint'),
+        node('colorway', 'colorway'),
       ],
       [
         { from: 'a/n', to: 'sum/a' },
         { from: 'b/n', to: 'sum/b' },
         { from: 'sum/n', to: 'shape/phase' },
-        { from: 'shape/n', to: 'paint/amount' },
+        { from: 'shape/n', to: 'colorway/amount' },
       ],
     );
     const sample = createNumberEvaluator().sample(graph, inputs());
 
     expect(sample.outlet('shape/n')).toBe(0.5);
-    expect(sample.inlet('paint/amount')).toBe(0.5);
-    expect(sample.inlet('paint/energy')).toBe(0.6);
+    expect(sample.inlet('colorway/amount')).toBe(0.5);
+    expect(sample.inlet('colorway/energy')).toBe(0.6);
   });
 
   it('returns undefined for per-fragment polar numbers and anything they drive', () => {

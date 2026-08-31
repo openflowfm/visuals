@@ -402,7 +402,7 @@ function PreviewControls({
         name="colourway"
         width={110}
         disabled={following || room.colorways.length === 0}
-        title="What `paint` and the set's own tracks draw from"
+        title="What `colorway` and the set's own tracks draw from"
       />
       <Select
         items={keyItems}

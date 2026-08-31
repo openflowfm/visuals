@@ -366,7 +366,7 @@ editors listing these differently would be two different vocabularies.
 | `light` | `p` `energy` + its mode's numbers, and `from` on the hung three | `c` | `lamp` `beam` `shafts` `caustics`; 2D lights with fixed work, drifting in seconds rather than beats |
 | `flow` | `p` | `c` | another flow, whole, as one node |
 | `last` | `p` `fade` | `c` | the frame this flow drew last time, fading as it ages |
-| `paint` | `amount` `energy` | `c` | the colourway's colour at a brightness |
+| `colorway` | `amount` `energy` | `primary` `secondary` `complement` `accent` `chalk` | the colourway that is up, one outlet per role |
 
 ### transform — everything that gives a picture back where it already is
 
@@ -997,13 +997,13 @@ bringing the result back to a colour: a point through a `plasma` source, because
 whole job is to move a picture and a picture with structure in it is one you can see moving.
 
 A **number** outlet is not brought to a colour any more — its face is an oscilloscope.
-It used to cross through `paint`, which is honest as a wiring and useless as a reading: a
+It used to cross through `colorway`, which is honest as a wiring and useless as a reading: a
 blinking rectangle cannot tell a sine from a saw, and the bridge's unwired `energy` rode the
 room besides, so the face throbbed with a signal that was not the node's while the readout
 beside it — off the CPU evaluator — told the truth. [`scope.ts`](../src/ui/scope.ts) draws
 the trace from that same evaluator, so the face and the number beside it cannot disagree,
 and the sweep is synced to the bar so a square at 1/4 is four stationary steps and a phase
-offset is a visible shift. The `paint` crossing survives where a number only exists per
+offset is a visible shift. The `colorway` crossing survives where a number only exists per
 pixel — `polar`'s radius has no single value to plot — and there its energy is now held at
 the middle, so the probed signal is the only thing moving in the picture.
 

@@ -73,7 +73,7 @@ that evidence rather than silently rebuilding history from production values.
 
 The active manifest contains 125 questions. It is derived from the renderer's
 own node and inlet specifications, then narrowed to controls whose useful visual
-range is a matter of taste: sources, fields, fractals, lights, feedback, paint,
+range is a matter of taste: sources, fields, fractals, lights, feedback, colorway,
 lenses, displacement, grades, spreads, halftones, blends, and LFO rate. Each
 mode gets its own target because the same word can have a different useful feel
 on two pictures; `energy` on a lamp is not assumed to be `energy` on a ripple.

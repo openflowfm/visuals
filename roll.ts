@@ -486,7 +486,7 @@ export function rollCircuit(rng: Rng): Circuit {
             // over a mid-bright flat colour is invisible, and the whole deal
             // rides on the light reading.
             const wash = add({
-              kind: 'paint',
+              kind: 'colorway',
               x: at(),
               y: 20,
               values: { amount: round2(between(rng, 0.12, 0.35)) },

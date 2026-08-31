@@ -181,7 +181,7 @@ to be saved under, and that decision is better made once these have been used.
 ### Flows are not in that list, and that is the whole point
 
 Every flow in the library used to be a row in the node browser, under `draw`, in the same
-chip with the same border as `source` and `paint`. So a graph of sixteen nodes and a single
+chip with the same border as `source` and `colorway`. So a graph of sixteen nodes and a single
 shipped shader were the same object to anyone reading the column, and the only way to find
 out which you were holding was to drop it. The flow that made this undeniable was `The set`
 — one `tracks` node wired to `out` — which sat two rows below the `tracks` node it
@@ -305,7 +305,7 @@ still round — exactly what a wider wall does, through exactly the same code.
 **It will show one node instead.** Clicking a node's small face promotes it: the bench draws
 what that node has made, at whatever size the panel is. See [flows](flows.md) for what the
 picture is — for a picture outlet it is the same `probeAt` graph the face was already
-showing; a number's face is a scope, and promoting one shows the `paint` crossing the scope
+showing; a number's face is a scope, and promoting one shows the `colorway` crossing the scope
 replaced, which is the wiring rather than the reading. What belongs here is the two things
 the console has to get right about it.
 
@@ -314,7 +314,7 @@ picture that is not what the flow draws — and the next thing that happens is a
 about a flow that is fine. So the header names the node, says plainly that it is one node,
 and turns amber, because a reader who has stopped reading still sees a colour. A `p` or an
 `n` outlet gets a clause of its own: those have no picture, so `probeAt` brings a number back
-through `paint` and a point back through a `plasma` source, and what is on screen is a
+through `colorway` and a point back through a `plasma` source, and what is on screen is a
 **diagram** of a signal rather than a frame. On a face nobody was going to mistake one; at
 600 wide they would. The node reads as chosen on the canvas too, by an `outline` rather
 than a border, so lighting it cannot move the face a pixel.

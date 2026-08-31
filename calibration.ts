@@ -181,7 +181,7 @@ const CALIBRATABLE_KINDS: ReadonlySet<NodeKind> = new Set([
   'fractal',
   'light',
   'last',
-  'paint',
+  'colorway',
   'lens',
   'displace',
   'grade',
@@ -256,7 +256,7 @@ function picture(id: string, op: 'grid' | 'plasma' | 'rings', x: number, y: numb
 function fixture(kind: NodeKind, mode: string): FlowDef {
   const subject: CircuitNode = { id: 'subject', kind, ...(mode ? { op: mode } : {}), x: 340, y: 100 };
   const out: CircuitNode = { id: 'out', kind: 'out', x: 720, y: 110 };
-  const direct = new Set<NodeKind>(['source', 'field', 'fractal', 'light', 'paint']);
+  const direct = new Set<NodeKind>(['source', 'field', 'fractal', 'light', 'colorway']);
 
   if (direct.has(kind)) {
     return {

@@ -136,7 +136,7 @@ describe('what the browser lists', () => {
 
   it('lists no flows, because a flow is not one of these', () => {
     // Every flow in the library used to be a row here, under `draw`, in the
-    // same chip as `source` and `paint` — so a graph of sixteen nodes and a
+    // same chip as `source` and `colorway` — so a graph of sixteen nodes and a
     // shipped shader were the same object to anyone reading the column. That is
     // the whole of what this browser got wrong, and it is why `The set`, a flow
     // that was one `tracks` node, read as a kind of node.

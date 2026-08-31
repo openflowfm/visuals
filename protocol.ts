@@ -567,6 +567,15 @@ export const COLOR_ROLES = ['primary', 'secondary', 'complement', 'accent', 'cha
 
 export type ColorRole = (typeof COLOR_ROLES)[number];
 
+/** What each role is for, as the `colorway` node's outlets say it. */
+export const COLOR_ROLE_DETAILS: Record<ColorRole, string> = {
+  primary: 'The colour that carries the picture. What every generator starts from.',
+  secondary: 'The neighbour in the harmony — beside the primary without fighting it.',
+  complement: 'The opposing colour, taken loud, so a frame is never one colour.',
+  accent: 'For what is small and wants to be seen.',
+  chalk: 'Light and coloured, for reading edges against. The palette\'s answer to white.',
+};
+
 /**
  * What a colourway with no colours in it draws.
  *
