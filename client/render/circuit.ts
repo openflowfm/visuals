@@ -352,6 +352,7 @@ const GRADE_VALUES = {
   solarize: ['pivot', 'amount'],
   channels: ['rotate'],
   invert: ['hold', 'rate'],
+  highlights: ['knee', 'amount'],
 } as const satisfies Record<string, readonly string[]>;
 
 /**
@@ -381,6 +382,8 @@ const SPREAD_VALUES = {
   edge: ['width', 'gain'],
   // `split`, where it was `spread` — same collision, this time with the kind.
   shift: ['split', 'drive'],
+  streak: ['reach', 'gain'],
+  disperse: ['split', 'drive'],
 } as const satisfies Record<string, readonly string[]>;
 
 const FRACTAL_VALUES = {
@@ -462,6 +465,7 @@ const VALUE_DESCRIPTION: Record<ValueInlet, string> = {
   steps: 'How aggressively the colours are reduced to flat bands.',
   hold: 'How long the inverted state is held.',
   rate: 'Which musical division drives the change.',
+  knee: 'How bright a colour must be before it starts rolling off.',
   reach: 'How far from this point the surrounding picture is sampled.',
   floor: 'How bright something must be before it blooms.',
   drive: 'How strongly the room energy drives the effect.',
@@ -516,6 +520,10 @@ const VALUE_FOLLOWS: ReadonlySet<string> = new Set([
  * picture by being dropped, which is the bargain every unwired inlet makes.
  */
 const VALUE_AT: Record<string, number> = {
+  // A shoulder that starts near the top and rolls hard: anywhere lower and the
+  // node is a contrast control wearing the wrong name.
+  knee: 0.65,
+  'highlights/amount': 0.55,
   sides: 0.2,
   weight: 0.6,
   'saturate/amount': 0.5,
@@ -541,6 +549,8 @@ const NEEDS_ENERGY = new Set([
   'invert',
   'bloom',
   'shift',
+  'streak',
+  'disperse',
   'mandelbrot',
   'julia',
   'cells',
@@ -599,6 +609,7 @@ const GRADE_EMIT: Record<string, (ctx: Emitting, e: string, k: (i: number) => st
   solarize: (c, _e, k) => `fxSolarize(${c.read('c')}, ${k(0)}, ${k(1)})`,
   channels: (c, _e, k) => `fxChannels(${c.read('c')}, ${k(0)})`,
   invert: (c, e, k) => `fxInvert(${c.read('c')}, ${k(0)}, ${k(1)}, ${e})`,
+  highlights: (c, _e, k) => `fxHighlights(${c.read('c')}, ${k(0)}, ${k(1)})`,
 };
 
 /**
@@ -692,6 +703,83 @@ const SPREAD_EMIT: Record<string, (ctx: Emitting, e: string, k: (i: number) => s
         return c.readAt('c', `(${c.at} + vec2(cos(${a}), sin(${a})) * ${reach})`);
       });
       return `(${c.read('c')} + max((${taps.join(' + ')}) / 8.0 - vec4(${k(1)}), vec4(0.0)) * mix(0.4, 1.1, ${e}))`;
+    },
+
+    // Bright things smeared sideways, the way light through an anamorphic
+    // element flares along one axis only. Nine taps in a line, weighted so the
+    // near ones dominate, and — like `bloom` — only what is already bright is
+    // added back, because a streak over the whole frame is a horizontal blur
+    // and reads as a broken projector rather than a lens.
+    //
+    // The reach is in **plane units and corrected for aspect**, so the streak is
+    // as long a fraction of the frame's *width* at every resolution. Without the
+    // correction a streak dialled in on the bench arrives at 16:9 shorter than
+    // it was drawn, which is the trap `edge` documents from the other side.
+    streak: (c, e, k) => {
+      const reach = `((0.012 + ${k(0)} * 0.22) * (0.55 + uLevel * 0.75))`;
+      // **Squared spacing, halving weights.** Evenly spaced taps of similar
+      // weight do not read as a smear at all — they read as six copies of the
+      // picture in a row, which is what the first version of this did. A tail
+      // that falls off geometrically while the samples spread out to meet it is
+      // the cheapest thing that looks continuous: the near taps carry almost
+      // all of the light and sit almost on top of the source, and the far ones
+      // are too faint to be seen as anything but a glow by the time they are
+      // far enough apart to be told apart.
+      const arms = [1, 2, 3, 4, 5, 6];
+      const total = arms.reduce((sum, i) => sum + 2 * 0.55 ** i, 0);
+      const taps = arms.flatMap((i) => {
+        const at = ((i / arms.length) ** 2).toFixed(4);
+        const weight = (0.55 ** i).toFixed(4);
+        const step = `vec2(${reach} * ${at} * uRes.x / uRes.y, 0.0)`;
+        return [
+          `${c.readAt('c', `(${c.at} + ${step})`)} * ${weight}`,
+          `${c.readAt('c', `(${c.at} - ${step})`)} * ${weight}`,
+        ];
+      });
+      const gathered = `((${taps.join(' + ')}) / ${total.toFixed(4)})`;
+      return `(${c.read('c')} + max(${gathered} - vec4(0.06), vec4(0.0)) * mix(0.6, 1.8, ${e}) * ${k(1)} * 3.0)`;
+    },
+
+    // The picture read at six radii and each read kept for a different part of
+    // the spectrum, which is what a real lens does to a bright edge off-axis:
+    // the further from the middle, the further the colours have walked apart.
+    //
+    // Radial rather than the sideways separation `shift` does, and that is the
+    // whole difference between them. `shift` is a *glitch* — three whole
+    // channels shoved apart in one direction, and it reads as a broken signal,
+    // which is often what is wanted. This is an *optic*: nothing moves at the
+    // centre, everything smears outward, and the fringe is red one side and blue
+    // the other because it is the same lens on both.
+    disperse: (c, e, k) => {
+      const split = `(${k(0)} * 0.055 * (0.35 + uLevel * ${k(1)} * 1.6) * mix(0.5, 1.5, ${e}))`;
+      // Six weights across a rainbow, and the divisors are their own sums, so a
+      // white pixel at the centre comes back white rather than tinted.
+      const weights: readonly (readonly [number, number, number])[] = [
+        [1.0, 0.15, 0.0],
+        [0.9, 0.5, 0.0],
+        [0.4, 1.0, 0.1],
+        [0.1, 0.9, 0.5],
+        [0.0, 0.4, 1.0],
+        [0.0, 0.1, 1.0],
+      ];
+      const sum = weights.reduce<[number, number, number]>(
+        (into, w) => [into[0] + w[0], into[1] + w[1], into[2] + w[2]],
+        [0, 0, 0],
+      );
+      const reads = weights.map((w, i) => {
+        const along = (i / (weights.length - 1)) * 2 - 1;
+        const at = `(${c.at} * (1.0 + ${along.toFixed(4)} * ${split}))`;
+        return { tap: c.readAt('c', at), w };
+      });
+      const channel = (band: 0 | 1 | 2) =>
+        `(${reads
+          .filter((read) => read.w[band] > 0)
+          .map((read) => `${read.tap}.${'rgb'[band]} * ${read.w[band].toFixed(3)}`)
+          .join(' + ')}) / ${sum[band].toFixed(3)}`;
+      // The most opaque of the six, so a fringe that has walked off the shape
+      // still composites instead of vanishing into what it walked onto.
+      const cover = reads.map((read) => `${read.tap}.a`).reduce((a, b) => `max(${a}, ${b})`);
+      return `vec4(${channel(0)}, ${channel(1)}, ${channel(2)}, ${cover})`;
     },
 
     // Difference across a pixel, both ways. Throws away the fill and keeps the
@@ -821,6 +909,7 @@ const GRADE_MODE_DOCUMENTATION = documentedModes(GRADE_MODES, {
   solarize: 'Fold everything brighter than a pivot back down the other side.',
   channels: 'Swap the red, green and blue channels around each other.',
   invert: 'Turn the colours into their opposites on a musical pulse.',
+  highlights: 'Roll the brightest colours off into white instead of letting them clip.',
 });
 
 const DISPLACE_MODE_DOCUMENTATION = documentedModes(DISPLACE_MODES, {
@@ -848,6 +937,8 @@ const SPREAD_MODE_DOCUMENTATION = documentedModes(SPREAD_MODES, {
   smear: 'Blend nearby samples into a short radial blur.',
   edge: 'Keep the changes between nearby samples and throw the fill away.',
   shift: 'Separate the colour channels, opening on transients and closing in gaps.',
+  streak: 'Smear the bright parts sideways, the way an anamorphic lens flares.',
+  disperse: 'Split the picture into its spectrum along the line out from the centre.',
 });
 
 const BLEND_MODES = documentedModes(MIX_MODES, {

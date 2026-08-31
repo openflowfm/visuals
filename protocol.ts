@@ -224,6 +224,7 @@ export const GRADE_MODES: readonly string[] = [
   'solarize',
   'channels',
   'invert',
+  'highlights',
 ];
 
 /**
@@ -235,7 +236,14 @@ export const GRADE_MODES: readonly string[] = [
  * loud before: `randomize.ts` kept a hand-written list of these four so it would
  * never stack two, and the list is the kind now.
  */
-export const SPREAD_MODES: readonly string[] = ['bloom', 'smear', 'edge', 'shift'];
+export const SPREAD_MODES: readonly string[] = [
+  'bloom',
+  'smear',
+  'edge',
+  'shift',
+  'streak',
+  'disperse',
+];
 
 /**
  * `blend` — how two pictures become one, and why this is not `BLENDS`.

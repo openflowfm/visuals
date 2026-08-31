@@ -136,6 +136,31 @@ vec4 fxSolarize(vec4 c, float pivot, float amount) {
 // smeared one spends most of the bar between two wrong colours. It is a
 // permutation rather than a rotation about the grey axis, so luminance is very
 // nearly kept and the content survives a shift that changes every colour in it.
+// Roll the brightest colours off into white instead of letting them clip.
+//
+// Everything in this rig composites in a bounded range and then meets an output
+// stage, so a picture with a hot core in it — which is every picture made of
+// glowing lines — arrives with that core already flat at 1.0 across a wide
+// area. Flat white with a hard edge is what makes a generated frame read as
+// generated; film has no such edge because its response is asymptotic.
+//
+// Below the knee nothing moves at all, which is what separates this from a
+// levels curve: the shadows and the midtones are exactly as they arrived, and
+// only what was going to clip is bent. Per channel rather than on the
+// luminance, because a highlight rolling off should *desaturate* as it climbs —
+// that is the thing an eye reads as brightness beyond the top of the range.
+vec4 fxHighlights(vec4 c, float knee, float amount) {
+  float a = max(c.a, 1e-4);
+  vec3 col = c.rgb / a;
+  float pivot = mix(0.35, 0.92, clamp(knee, 0.0, 1.0));
+  float headroom = 1.0 - pivot;
+  float roll = mix(0.6, 4.5, clamp(amount, 0.0, 1.0));
+  vec3 over = max(col - pivot, 0.0) * roll;
+  vec3 rolled = pivot + headroom * over / (over + headroom);
+  vec3 shaped = mix(col, rolled, step(vec3(pivot), col));
+  return vec4(clamp(shaped, 0.0, 1.0) * c.a, c.a);
+}
+
 vec4 fxChannels(vec4 c, float rotate) {
   float which = floor(clamp(rotate, 0.0, 0.999) * 3.0);
   vec3 col = which < 1.0 ? c.rgb : (which < 2.0 ? c.gbr : c.brg);

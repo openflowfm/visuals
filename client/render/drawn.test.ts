@@ -183,6 +183,69 @@ describe('a space repeated, and which copy you are in', () => {
   });
 });
 
+describe('the finish these pictures are drawn for', () => {
+  const lit = (finish: { id: string; kind: 'spread' | 'grade'; op: string }) =>
+    built({
+      nodes: [
+        { id: 'f', kind: 'figure', op: 'rose', x: 0, y: 0 },
+        { id: 'g', kind: 'glow', op: 'neon', x: 300, y: 0 },
+        { ...finish, x: 600, y: 0 },
+        out,
+      ],
+      cords: [
+        { from: 'f/d', to: 'g/d' },
+        { from: 'g/c', to: `${finish.id}/c` },
+        { from: `${finish.id}/c`, to: 'o/c' },
+      ],
+    });
+
+  it('smears the streak along one axis and corrects it for the frame', () => {
+    const made = lit({ id: 'x', kind: 'spread', op: 'streak' });
+    expect(made.error).toBeNull();
+    const source = body(made.source!);
+    // Horizontal only — a streak with any vertical component is a blur.
+    expect(source).toContain('uRes.x / uRes.y, 0.0)');
+    // Twelve taps and the picture itself: six arms each way.
+    expect((source.match(/figure_rose\(/g) ?? []).length).toBe(13);
+  });
+
+  it('walks the spectrum out from the centre, evenly and both ways', () => {
+    // The one claim that separates this from `shift`, which is three whole
+    // channels shoved sideways and reads as a broken signal. This is an optic:
+    // the taps are a *scale about the centre*, so nothing moves in the middle
+    // and the fringe is red on one side of a shape and blue on the other
+    // because it is the same lens on both. Offsets that stopped being
+    // symmetric would tint one edge of every bright thing in the frame.
+    const made = lit({ id: 'x', kind: 'spread', op: 'disperse' });
+    expect(made.error).toBeNull();
+    const source = body(made.source!);
+    expect((source.match(/figure_rose\(/g) ?? []).length).toBe(6);
+
+    const along = [...source.matchAll(/\(1\.0 \+ (-?[0-9.]+) \*/g)].map((each) =>
+      Number(each[1]),
+    );
+    expect(along).toHaveLength(6);
+    // Spanning the whole split, and mirrored about zero.
+    expect(Math.min(...along)).toBeCloseTo(-1, 6);
+    expect(Math.max(...along)).toBeCloseTo(1, 6);
+    for (let i = 0; i < along.length; i++) {
+      expect(along[i]!).toBeCloseTo(-along[along.length - 1 - i]!, 6);
+    }
+    // A scale about the centre rather than a translation: every tap multiplies
+    // the point, and none of them adds a fixed offset to it.
+    expect(source).not.toMatch(/disperse[^;]*\+ vec2\(/);
+  });
+
+  it('rolls the highlights without reading the picture twice', () => {
+    const made = lit({ id: 'x', kind: 'grade', op: 'highlights' });
+    expect(made.error).toBeNull();
+    expect(body(made.source!)).toContain('fxHighlights(');
+    // A grade is the colour where it already is: one read, no multiplication.
+    expect((body(made.source!).match(/figure_rose\(/g) ?? []).length).toBe(1);
+    expect(made.work).toBe(0);
+  });
+});
+
 describe('the one node with a third coordinate in it', () => {
   it('keeps the space to itself: what leaves is a picture like any other', () => {
     for (const op of FORM_MODES) {
