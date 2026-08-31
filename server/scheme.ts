@@ -1016,6 +1016,236 @@ const EXAMPLES: Scheme = {
         'over/c -> o/c',
       ],
     ),
+
+    // ---- five that are one family, deliberately --------------------------
+    //
+    // Everything above is a spread: no two of them are the same idea. These
+    // five are the opposite, and the reason is that they are the only place the
+    // drawing vocabulary is written down as something you can take apart. A
+    // distance is not a picture, a copy number is not a position, and a march
+    // is not a source — none of that is guessable from a node browser, and all
+    // of it is obvious after ten seconds with a graph that does it.
+    //
+    // They are also the answer to the question these were built for: a wall of
+    // glowing tube geometry, of the kind normally bought as a folder of video
+    // files. What a file cannot do is any of what these do — the loop length is
+    // the beat rather than eight seconds of footage, the colour is the
+    // colourway rather than the render, and there is no resolution it was
+    // mastered at.
+
+    // The simplest thing the marcher can say, and the one that says it is 3D.
+    // Three tubes on their own axes, precessing through each other on the beat
+    // while the eye drifts round — take the beat away and it is a still life.
+    halo: wire(
+      'Halo',
+      [
+        ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.45],
+        // A cycle every four beats. Slower than anything in the picture, so it
+        // reads as the room breathing rather than as the rings doing something.
+        ['swell', 'lfo', 'sine', { rate: 0.53, sync: 1 }],
+        ['lift', 'math', 'max', { a: [0.35, 0.4] }],
+        // A little chrome, not much: enough for the tubes to catch a highlight
+        // and be read as solid, well short of the emission going out.
+        [
+          'rings',
+          'form',
+          'rings',
+          { tilt: 0.7, dolly: 0.42, thick: 0.26, flare: 0.45, chrome: 0.22, apart: 0.45 },
+        ],
+        ['roll', 'grade', 'highlights', { knee: 0.58, amount: 0.62 }],
+        ['o', 'out'],
+      ],
+      [
+        'swell/n -> lift/a',
+        'e/n -> lift/b',
+        'lift/n -> rings/energy',
+        'rings/c -> roll/c',
+        'roll/c -> o/c',
+      ],
+    ),
+
+    // The same node with the eye inside the shape, and chrome up far enough
+    // that the scaffold stops glowing and starts reflecting. Nothing here is a
+    // `spread`: a march is charged at its step ceiling, so a bloom over one
+    // would charge nine marches and the compiler refuses it by name. It does
+    // not want one — the light is gathered along the ray on the way past.
+    cage: wire(
+      'Cage',
+      [
+        ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.5],
+        ['drift', 'lfo', 'sine', { rate: 0.365, sync: 1 }],
+        ['lift', 'math', 'max', { a: [0.34, 0.4] }],
+        // The eye pushes in and back over eight beats, which is the whole
+        // motion: a lattice that only turned would be wallpaper in perspective.
+        [
+          'grid',
+          'form',
+          'lattice',
+          // Wide cells and thin tubes, because the eye is *inside* this one:
+          // a lattice dense enough to fill every ray is a grey wall, and what
+          // makes a scaffold read as a scaffold is the black between it.
+          { tilt: 0.62, dolly: [0.3, 0.35], thick: 0.15, flare: 0.26, chrome: 0.62, apart: 0.75 },
+        ],
+        ['roll', 'grade', 'highlights', { knee: 0.6, amount: 0.6 }],
+        ['o', 'out'],
+      ],
+      [
+        'drift/n -> lift/a',
+        'e/n -> lift/b',
+        'drift/n -> grid/dolly',
+        'lift/n -> grid/energy',
+        'grid/c -> roll/c',
+        'roll/c -> o/c',
+      ],
+    ),
+
+    // Flat, and the one to read first: a shape measured, that measurement lit,
+    // and the frame it was measured in folded before any of it happened. The
+    // whole picture is three nodes; everything after them is the ghost and the
+    // optics.
+    bloom: wire(
+      'Bloom',
+      [
+        ['pt', 'point'],
+        ['rose', 'figure', 'rose', { size: 0.52, petals: 0.3 }],
+        ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.35],
+        // A strike on every beat that decays before the next one. It fattens
+        // the filament rather than brightening the frame — a line that goes
+        // from hairline to hot and back is the shape of the thing being struck.
+        ['hit', 'lfo', 'pulse', { rate: 0.571, sync: 1 }],
+        ['lift', 'math', 'max', { a: [0.3, 0.45] }],
+        ['lit', 'glow', 'neon', { core: [0.2, 0.55], halo: 0.34 }],
+        // The second outlet, doing the thing it exists for. `along` says how
+        // far round the rose the nearest part of it is, so the colour runs
+        // along the curve instead of being one colour with a shape cut out of
+        // it. Behind a fold it would be useless — every copy would show the
+        // same slice of the ramp — which is why this one is not folded.
+        ['hue', 'shade', 'heat', { amount: 1 }],
+        ['ink', 'blend', 'stencil'],
+        // The ghost: the previous frame read a little further out, so what was
+        // drawn last beat is still leaving as this one arrives.
+        ['creep', 'lens', 'creep', { grow: 0.56 }],
+        ['ghost', 'last', undefined, { fade: 0.42 }],
+        ['stack', 'blend', 'add'],
+        ['prism', 'spread', 'disperse', { split: 0.42, drive: 0.5 }],
+        ['roll', 'grade', 'highlights', { knee: 0.62, amount: 0.6 }],
+        ['o', 'out'],
+      ],
+      [
+        'pt/p -> rose/p',
+        'rose/d -> lit/d',
+        'rose/along -> hue/n',
+        'hit/n -> lift/a',
+        'e/n -> lift/b',
+        'lift/n -> lit/energy',
+        'hit/n -> lit/core',
+        'hue/c -> ink/base',
+        'lit/c -> ink/top',
+        'pt/p -> creep/p',
+        'creep/p -> ghost/p',
+        'ghost/c -> stack/base',
+        'ink/c -> stack/top',
+        'stack/c -> prism/c',
+        'prism/c -> roll/c',
+        'roll/c -> o/c',
+      ],
+    ),
+
+    // The one that is about `array`. Sixteen arcs around the centre, each
+    // opening further than the last because the copy number is wired into how
+    // far it sweeps — take that one cord out and it is a rubber stamp. The
+    // colour runs along each arc for the same reason: `along` says where on the
+    // curve you are, and `shade` turns that into a colour off the colourway.
+    fan: wire(
+      'Fan',
+      [
+        ['pt', 'point'],
+        ['spin', 'playback', 'phase'],
+        ['ring', 'array', 'ring', { count: 0.55, turn: [0, 1] }],
+        // **A ring array folds every wedge onto the same one**, so what makes
+        // the copies differ has to be a number the figure reads, not a shape
+        // that happens to point somewhere. The radius is that number here: each
+        // wedge shows its arc of a circle at its own distance from the middle,
+        // and the sixteen of them together are a staircase winding out.
+        //
+        // The first version of this wired `which` into an arc's sweep and drew
+        // a plain circle, because inside one wedge the arc was never reaching
+        // its own ends. Worth leaving written down: a control that cannot be
+        // seen to move is indistinguishable from a cord that was never drawn.
+        ['step', 'figure', 'circle', { size: [0.18, 0.5] }],
+        ['lit', 'glow', 'neon', { core: 0.28, halo: 0.3 }],
+        ['hue', 'shade', 'across', { amount: 1 }],
+        // Keep the colour only where the stroke is: the glow is the mask and
+        // the palette is what gets masked, so each arm comes out its own
+        // colour rather than the whole fan being one.
+        ['ink', 'blend', 'stencil'],
+        ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.4],
+        ['sway', 'lfo', 'sine', { rate: 0.53, sync: 1 }],
+        ['lift', 'math', 'max', { a: [0.32, 0.42] }],
+        ['flare', 'spread', 'streak', { reach: 0.42, gain: 0.45 }],
+        ['roll', 'grade', 'highlights', { knee: 0.6, amount: 0.6 }],
+        ['o', 'out'],
+      ],
+      [
+        'pt/p -> ring/p',
+        'spin/n -> ring/turn',
+        'ring/p -> step/p',
+        'ring/which -> step/size',
+        'ring/which -> hue/n',
+        'step/d -> lit/d',
+        'hue/c -> ink/base',
+        'lit/c -> ink/top',
+        'sway/n -> lift/a',
+        'e/n -> lift/b',
+        'lift/n -> lit/energy',
+        'ink/c -> flare/c',
+        'flare/c -> roll/c',
+        'roll/c -> o/c',
+      ],
+    ),
+
+    // A grid of cells that only exists on the flash. `source/strobe` is the
+    // whole-frame beat flash that already shipped, used here as a **mask**
+    // rather than as a picture — which is what `stencil` is for, and what makes
+    // a gate a wiring decision rather than a mode nobody wrote yet. Each cell
+    // glows differently because a grid's copy number is a stable hash of the
+    // cell rather than a count across it.
+    signal: wire(
+      'Signal',
+      [
+        ['pt', 'point'],
+        ['cells', 'array', 'grid', { count: 0.34 }],
+        // **Smaller than its cell.** A figure's size is in plane units and a
+        // cell is a fraction of the frame, so a box dialled to what looks
+        // right on its own is drawn entirely outside the cell it belongs to
+        // and the frame comes back black with nothing to say why.
+        ['box', 'figure', 'box', { size: 0.08, corner: 0.55 }],
+        ['lit', 'glow', 'neon', { core: 0.3, halo: [0.2, 0.35] }],
+        ['flash', 'source', 'strobe', { pulse: 0.5 }],
+        ['gate', 'blend', 'stencil'],
+        ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.3],
+        ['hit', 'lfo', 'pulse', { rate: 0.571, sync: 1 }],
+        ['lift', 'math', 'max', { a: [0.3, 0.45] }],
+        ['prism', 'spread', 'disperse', { split: 0.55, drive: 0.6 }],
+        ['roll', 'grade', 'highlights', { knee: 0.58, amount: 0.65 }],
+        ['o', 'out'],
+      ],
+      [
+        'pt/p -> cells/p',
+        'cells/p -> box/p',
+        'box/d -> lit/d',
+        'cells/which -> lit/halo',
+        'hit/n -> lift/a',
+        'e/n -> lift/b',
+        'lift/n -> lit/energy',
+        'lift/n -> flash/energy',
+        'lit/c -> gate/base',
+        'flash/c -> gate/top',
+        'gate/c -> prism/c',
+        'prism/c -> roll/c',
+        'roll/c -> o/c',
+      ],
+    ),
   },
   colorways: {
     // Five each, and **saturated is not the same as bright**, which is what the

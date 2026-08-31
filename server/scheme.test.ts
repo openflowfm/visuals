@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { hint } from '../hints.ts';
 import { NODE_FAMILIES, flowsUsedBy } from '../protocol.ts';
 import { compileFlow, inletsOf, portId, reachesOut, repaired, splitPort } from '../client/render/circuit.ts';
+import { NODE_DEFINITIONS } from '../client/nodes/generated.ts';
 import { EXAMPLES, merge } from './scheme.ts';
 
 /**
@@ -206,13 +207,64 @@ describe('the example scheme', () => {
     // There used to be an exemption here for `The set`, which was one `tracks`
     // node and nothing else. It went, and so did the exemption: a flow that is
     // a single node is a node, and the node browser already offers it.
+    // **Derived from the vocabulary, not listed here.** A hand-written list of
+    // the things that draw is a list that goes stale the first time the draw
+    // family grows, and it goes stale *silently* — a flow built entirely out of
+    // new drawing nodes passes this test by accident, which is exactly what
+    // happened when `form`, `glow` and `shade` arrived.
+    const own = new Set<string>(
+      NODE_DEFINITIONS.filter((node) => node.family === 'draw').map((node) => node.kind),
+    );
+    // Four are in that family and cannot be the answer to this question: the
+    // set is the thing being drawn without, media depends on files a machine
+    // may not have, and the previous frame of a flow that draws nothing is
+    // still nothing.
+    for (const conditional of ['tracks', 'image', 'video', 'last']) own.delete(conditional);
+
     for (const [, def] of Object.entries(EXAMPLES.flows)) {
       const kinds = new Set(def.circuit.nodes.map((node) => node.kind));
-      const draws = (
-        ['source', 'field', 'fractal', 'light', 'colorway', 'flow'] as const
-      ).some((kind) => kinds.has(kind));
+      const draws = [...kinds].some((kind) => own.has(kind));
       expect(draws, `${def.name} has nothing to draw without the set`).toBe(true);
     }
+  });
+
+  it('never draws a figure larger than the cell it is repeated into', () => {
+    // The one failure a compiler cannot see and a test can. A figure's size is
+    // in plane units and an `array` cell is a fraction of the frame, so a shape
+    // dialled to what looks right on its own is drawn entirely *outside* the
+    // cell it belongs to — and what comes back is a black frame with nothing in
+    // the graph to say why. It happened twice while these were being written.
+    //
+    // Only the cells that actually bound a radius: `ring` and `mirror` fold by
+    // angle and leave the distance from the centre alone, and a row bounds one
+    // axis. A grid bounds both, which is where this bites.
+    const radius = (size: number) => 0.05 + (0.6 - 0.05) * Math.min(1, Math.max(0, size));
+    const halfCell = (op: string | undefined, count: number) =>
+      op === 'grid'
+        ? 1 / (1 + Math.floor(Math.min(1, Math.max(0, count)) * 7)) / 2
+        : op === 'row'
+          ? 1.8 / (1 + Math.floor(Math.min(1, Math.max(0, count)) * 11)) / 2
+          : null;
+
+    let checked = 0;
+    for (const def of Object.values(EXAMPLES.flows)) {
+      const byId = new Map(def.circuit.nodes.map((node) => [node.id, node]));
+      const feeds = new Map(def.circuit.cords.map((cord) => [cord.to, cord.from]));
+      for (const node of def.circuit.nodes) {
+        if (node.kind !== 'figure' || node.op === 'line') continue;
+        const from = feeds.get(portId(node.id, 'p'));
+        const cell = from && byId.get(splitPort(from).node);
+        if (!cell || cell.kind !== 'array') continue;
+        const bound = halfCell(cell.op, cell.values?.count ?? 0.5);
+        if (bound === null) continue;
+        checked += 1;
+        const drawn = radius(node.values?.size ?? 0.5);
+        expect(drawn, `${def.name}: ${node.id} is ${drawn} in a cell of ${bound}`).toBeLessThan(
+          bound,
+        );
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
   });
 
   it('never hangs an energy on the meter alone', () => {
