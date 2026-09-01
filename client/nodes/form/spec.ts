@@ -32,6 +32,7 @@ const descriptions: Record<Mode, string> = {
   corolla: 'Coaxial banks of tangent rounded loops and circular hoops opening into a layered flower.',
   spindle: 'Open coaxial hoop rails widening away from a narrow waist while their gaps circulate.',
   meridian: 'Two pole-sharing banks of complete elliptical rails in permanent vertical planes.',
+  vault: 'Perpendicular dense stacks of broad and portrait rounded loops forming a vault and arcade.',
   tube: 'A helix winding away down a corridor the eye is inside.',
 };
 
@@ -108,6 +109,11 @@ const values: Record<Mode, readonly PortSpec[]> = {
     numberPort('ribs', 'How many permanent planes meet at each lobe pair of poles.', 0.58),
     numberPort('bow', 'How far each complete rail bows sideways between its shared poles.', 0.7),
     numberPort('phase', 'Where the upper and lower banks sit in their counter-rotation.', 0),
+  ],
+  vault: [
+    numberPort('ribs', 'How many permanent rounded loops fill each perpendicular stack.', 0.62),
+    numberPort('arch', 'How round and tall the vault and central arcade become.', 0.68),
+    numberPort('phase', 'Where the two complete loop stacks sit on their closed counter-rock.', 0),
   ],
   tube: [
     numberPort('coil', 'How tightly the helix winds as it goes away.', 0.35),

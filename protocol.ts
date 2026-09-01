@@ -170,7 +170,7 @@ export const FIGURE_MODES = [
 export const ARRAY_MODES = ['row', 'grid', 'ring', 'mirror'] as const;
 
 /**
- * The nineteen shapes the `form` node marches, and the order is the argument.
+ * The twenty shapes the `form` node marches, and the order is the argument.
  *
  * One ring, then several turning against each other, then a cube's edges, then
  * that cube repeated through space, two compound tube arrangements, one of
@@ -179,7 +179,8 @@ export const ARRAY_MODES = ['row', 'grid', 'ring', 'mirror'] as const;
  * rotor, a nested armillary, paired rounded gyroscope banks, a rigid sculpture
  * of flat circular gimbals, a radial circular-hoop mechanism, a two-bank
  * corolla of rounded and circular loops, a coaxial open-arc spindle, two
- * pole-sharing ellipsoidal meridian banks, then a corridor the eye is inside.
+ * pole-sharing ellipsoidal meridian banks, perpendicular dense loop stacks
+ * forming a vault and central arcade, then a corridor the eye is inside.
  * The compound forms reuse the same analytic ring and rounded-loop distances
  * rather than introducing another rendering path.
  *
@@ -206,6 +207,7 @@ export const FORM_MODES = [
   'corolla',
   'spindle',
   'meridian',
+  'vault',
   'tube',
 ] as const;
 

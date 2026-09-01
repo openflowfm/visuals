@@ -364,7 +364,7 @@ editors listing these differently would be two different vocabularies.
 | `field` | `p` `energy`, plus `balls` `apart` on metaballs | `c` | `cells` `clouds` `metaballs`; fixed work, charged per graph sample and never offered per track |
 | `fractal` | `p` `energy` + its mode's numbers | `c` | `mandelbrot` or `julia`, with bounded zoom, detail and iterative work |
 | `light` | `p` `energy` + its mode's numbers, and `from` on the hung three | `c` | `lamp` `beam` `shafts` `caustics`; 2D lights with fixed work, drifting in seconds rather than beats |
-| `form` | `p` `turn` `tilt` `dolly` `thick` `flare` `chrome` `energy` + its mode's numbers | `c` | `torus` `rings` `frame` `lattice` `weave` `loom` `orbits` `relief` `iris` `truss` `rotor` `armillary` `gyre` `astrolabe` `rosette` `corolla` `spindle` `meridian` `tube`; the one node with a third coordinate in it, marched and charged like a fractal |
+| `form` | `p` `turn` `tilt` `dolly` `thick` `flare` `chrome` `energy` + its mode's numbers | `c` | `torus` `rings` `frame` `lattice` `weave` `loom` `orbits` `relief` `iris` `truss` `rotor` `armillary` `gyre` `astrolabe` `rosette` `corolla` `spindle` `meridian` `vault` `tube`; the one node with a third coordinate in it, marched and charged like a fractal |
 | `glow` | `d` `energy` + its mode's numbers | `c` | `neon` `soft` `band`: a distance becomes a lit stroke |
 | `shade` | `n` `amount` `energy` | `c` | `across` `heat` `filament`: a number becomes a colour off the colourway |
 | `flow` | `p` | `c` | another flow, whole, as one node |
@@ -631,6 +631,22 @@ polar coordinates and across its fixed plane identity. That makes bright segment
 the same complete rails while the unlit portions remain real occluding geometry rather than being
 deleted by a screen mask. A mostly cyan strip-lit room and a small opposing bank exposure reproduce
 the moving white/cyan emphasis while leaving geometry, excitation and reflected material separately
+controllable.
+
+`vault` reconstructs Xenon 62 as two finite perpendicular stacks of complete D-loops. Nine broad
+depth-plane members make the low outer vault: every path is an upper elliptical arch joined to its
+own horizontal return at the visible waist. Fifteen transverse portrait members make the central
+arcade. Their permanent height and depth-radius hierarchy puts the tallest crown in the middle and
+steps fixed outside members lower, so their projected apexes form an arch instead of an artificial
+flat plate. The long legs and portrait returns are real too; the close camera simply puts their
+lowest portions below the frame.
+
+The finite plane fold selects a real first or last rail outside either stack rather than repeating
+members through space, and it adds no loop inside the march. `ribs` changes both permanent counts,
+`arch` changes their D-sections and crown hierarchy, and `phase` counter-rocks both banks on closed
+paths without exchanging members. A member-indexed light wave illuminates whole physical rails while
+a weaker wave travels around each same D-loop. Narrow reflected panels expose the remaining dark
+chrome, keeping geometry, member exposure, surface light and the final cyan transfer independently
 controllable.
 
 `loom` repeats the weave as geometry through all three axes rather than tiling a rendered

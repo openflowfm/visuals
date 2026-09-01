@@ -101,6 +101,31 @@ float formRoundedLoop(vec3 q, float halfSize, float corner, float t) {
   return formRoundedLoopSize(q, vec2(halfSize), corner, t);
 }
 
+// Conservative distance to an elliptical loop in its own plane. Scaling the
+// normalized radial error by the shorter axis never lets a march step beyond
+// the real ellipse; adding the plane coordinate then sweeps round stock around
+// the complete path just as formRoundedLoopSize does for a rounded box.
+float formEllipseLoopSize(vec3 q, vec2 radius, float t) {
+  float ellipse = (length(q.xy / radius) - 1.0) * min(radius.x, radius.y);
+  return length(vec2(ellipse, q.z)) - t;
+}
+
+// A complete D-loop: an upper elliptical arch joined by one low horizontal
+// return. Below the spring line the nearest point on the arch is one of its
+// two real endpoints, not the invisible lower half of an ellipse. The corner
+// is rounded by the swept stock itself. This is the persistent section behind
+// Xenon 62's dome and its long-legged central arcade.
+float formArchLoopSize(vec3 q, vec2 radius, float base, float t) {
+  vec2 p = q.xy;
+  float radial = abs((length(vec2(p.x / radius.x, (p.y - base) / radius.y)) - 1.0)
+                     * min(radius.x, radius.y));
+  float endpoints = min(length(p - vec2(-radius.x, base)),
+                        length(p - vec2(radius.x, base)));
+  float upper = p.y >= base ? radial : endpoints;
+  float floor = length(vec2(max(abs(p.x) - radius.x, 0.0), p.y - base));
+  return length(vec2(min(upper, floor), q.z)) - t;
+}
+
 // Four parallel planes at -1.5, -0.5, 0.5 and 1.5 times the gap. Folding to
 // the nearest plane is the analytic version of evaluating four separate loops,
 // and keeps the weave exact without putting another loop inside the ray march.
@@ -698,6 +723,97 @@ float formMeridianExcitation(vec3 q, float ribs, float bow, float phase) {
   return mix(0.07, 1.0, exposed) * bank;
 }
 
+// Signed offset from the nearest of a finite, evenly spaced stack of planes.
+// Unlike formLayerPlane this scales to a dense bank without spelling out each
+// member, but remains bounded: beyond the first and last plane it measures to
+// the real outside member instead of repeating the construction forever.
+float formStackPlane(float q, float gap, float count) {
+  float edge = (count - 1.0) * 0.5;
+  float member = clamp(round(q / gap), -edge, edge);
+  return q - member * gap;
+}
+
+// Xenon 62 is two perpendicular banks of complete rounded loops. The broad
+// landscape stack occupies nearby depth planes and makes the enclosing vault;
+// a narrower portrait stack occupies transverse planes and projects as the
+// central arcade. The outer rails remain equal; the portrait bank has a fixed
+// crown hierarchy, with central members reaching higher than outside members.
+// Perspective and the close crop produce the apparent nested dome and fanned
+// legs—neither is a 2D repeat, a meridian surface, nor animated radius noise.
+float formVault(vec3 q, float ribs, float arch, float phase, float t) {
+  float a = clamp(phase, 0.0, 1.0) * 2.0 * PI;
+  float count = 7.0 + floor(clamp(ribs, 0.0, 1.0) * 5.999) * 2.0;
+  float gap = mix(0.047, 0.075, clamp(ribs, 0.0, 1.0));
+
+  // Both stacks rock on closed paths rather than exchanging members. The
+  // unequal counter-motion changes their occlusion order while preserving the
+  // two banks and returns every physical plane exactly at the loop seam.
+  vec3 outer = q;
+  outer.xz = formSpin(sin(a) * 0.12) * outer.xz;
+  outer.yz = formSpin((cos(a) - 1.0) * 0.045) * outer.yz;
+  float outerPlane = formStackPlane(outer.z, gap, count);
+  float outerRise = mix(1.56, 1.8, clamp(arch, 0.0, 1.0));
+  float d = formArchLoopSize(vec3(outer.xy, outerPlane),
+    vec2(1.35, outerRise), -0.8, t);
+
+  vec3 inner = q;
+  inner.xz = formSpin(-sin(a) * 0.2) * inner.xz;
+  inner.xy = formSpin((cos(a) - 1.0) * 0.035) * inner.xy;
+  float innerCount = count + 6.0;
+  float innerMember = clamp(round(inner.x / gap), -(innerCount - 1.0) * 0.5,
+                            (innerCount - 1.0) * 0.5);
+  float innerAcross = abs(innerMember) / ((innerCount - 1.0) * 0.5);
+  float innerPlane = inner.x - innerMember * gap;
+  float innerRise = mix(1.02, 1.2, clamp(arch, 0.0, 1.0));
+  innerRise *= 1.0 - innerAcross * innerAcross * 0.12;
+  float innerRadius = 0.8 * (1.0 - innerAcross * innerAcross * 0.1);
+  d = min(d, formArchLoopSize(vec3(inner.z, inner.y, innerPlane),
+    vec2(innerRadius, innerRise), -0.9, t * 0.82));
+  return d;
+}
+
+// Exposure follows permanent member identity in both stacks. The strongest
+// wave illuminates a whole loop as Xenon's white/cyan rails do; a weaker wave
+// travels around that same ellipse so its crown and legs do not flash as a
+// screen-space unit. Geometry remains present when its excitation falls dark.
+float formVaultExcitation(vec3 q, float ribs, float arch, float phase) {
+  float a = clamp(phase, 0.0, 1.0) * 2.0 * PI;
+  float count = 7.0 + floor(clamp(ribs, 0.0, 1.0) * 5.999) * 2.0;
+  float gap = mix(0.047, 0.075, clamp(ribs, 0.0, 1.0));
+
+  vec3 outer = q;
+  outer.xz = formSpin(sin(a) * 0.12) * outer.xz;
+  outer.yz = formSpin((cos(a) - 1.0) * 0.045) * outer.yz;
+  float outerMember = clamp(round(outer.z / gap), -(count - 1.0) * 0.5,
+                            (count - 1.0) * 0.5);
+  float outerRise = mix(1.56, 1.8, clamp(arch, 0.0, 1.0));
+  float outerD = formArchLoopSize(vec3(outer.xy, formStackPlane(outer.z, gap, count)),
+    vec2(1.35, outerRise), -0.8, 0.0);
+
+  vec3 inner = q;
+  inner.xz = formSpin(-sin(a) * 0.2) * inner.xz;
+  inner.xy = formSpin((cos(a) - 1.0) * 0.035) * inner.xy;
+  float innerCount = count + 6.0;
+  float innerMember = clamp(round(inner.x / gap), -(innerCount - 1.0) * 0.5,
+                            (innerCount - 1.0) * 0.5);
+  float innerAcross = abs(innerMember) / ((innerCount - 1.0) * 0.5);
+  float innerRise = mix(1.02, 1.2, clamp(arch, 0.0, 1.0));
+  innerRise *= 1.0 - innerAcross * innerAcross * 0.12;
+  float innerRadius = 0.8 * (1.0 - innerAcross * innerAcross * 0.1);
+  float innerD = formArchLoopSize(vec3(inner.z, inner.y,
+    inner.x - innerMember * gap),
+    vec2(innerRadius, innerRise), -0.9, 0.0);
+
+  float member = outerD < innerD ? outerMember : innerMember + 3.7;
+  float along = outerD < innerD
+    ? atan((outer.y + 0.8) / outerRise, outer.x / 1.35)
+    : atan((inner.y + 0.9) / innerRise, inner.z / innerRadius);
+  float railWave = pow(0.5 + 0.5 * cos(member * 0.86 - a * 2.0), 5.0);
+  float pathWave = pow(0.5 + 0.5 * cos(along * 2.0 + member * 0.37 + a * 3.0), 6.0);
+  float base = outerD < innerD ? 0.42 : 0.14;
+  return mix(base, 1.4, max(railWave, pathWave * 0.68));
+}
+
 // The woven object repeated as construction rather than copied as pixels.
 // Each cell holds three orthogonal bundles of four rounded loops; folding the
 // point into the cell makes the field infinite without a loop inside the march.
@@ -927,6 +1043,9 @@ vec3 formBaseColour(vec3 q, int mode, float extra, float detail, float motion) {
   if (mode == 17) {
     return mix(uPrimary, uChalk, 0.15);
   }
+  if (mode == 18) {
+    return mix(uPrimary * 0.06, uChalk, 0.08);
+  }
   if (mode == 14 || mode == 15 || mode == 16) {
     // Every hoop is the same pale luminous stock. Recovering a sector from the
     // shaded world point after the shared rocking transform would make colours
@@ -1065,6 +1184,9 @@ float formField(vec3 q, int mode, float thick, float extra, float detail, float 
   if (mode == 17) {
     return formMeridian(q, extra, detail, motion, t);
   }
+  if (mode == 18) {
+    return formVault(q, extra, detail, motion, t);
+  }
   // A helix winding away down the corridor. The one shape here whose distance
   // is an over-estimate along its axis, which is why every march takes half
   // steps: a full one would tunnel through the strand and draw nothing.
@@ -1086,7 +1208,7 @@ float formField(vec3 q, int mode, float thick, float extra, float detail, float 
 float formStride(int mode) {
   if (mode == 5) return 0.85;
   if (mode == 10) return 0.5;
-  return mode == 18 ? 0.5 : 0.9;
+  return mode == 19 ? 0.5 : 0.9;
 }
 
 // The surface direction, from four samples around the point the ray stopped at.
@@ -1216,6 +1338,23 @@ vec3 formMeridianSky(vec3 ray) {
   return room;
 }
 
+// Narrow panels in a black cyan room expose individual planes of the Vault's
+// dense banks. Their reflections travel along a whole physical loop as its
+// surface turns; broad ambient light would reveal all twenty rails uniformly
+// and collapse both stacks into two flat luminous bands.
+vec3 formVaultSky(vec3 ray) {
+  float azimuth = atan(ray.x, ray.z);
+  float vertical = pow(0.5 + 0.5 * cos(azimuth * 7.0 - 0.3), 24.0);
+  float crown = pow(clamp(dot(ray, normalize(vec3(-0.12, 0.92, -0.38))),
+                           0.0, 1.0), 7.0);
+  float lowStrip = 1.0 - smoothstep(0.025, 0.095, abs(ray.y + 0.22));
+  vec3 room = vec3(0.0008);
+  room += uPrimary * vertical * 1.35;
+  room += uChalk * crown * 2.5;
+  room += mix(uSecondary, uComplement, smoothstep(-0.8, 0.8, ray.x)) * lowStrip * 0.5;
+  return room;
+}
+
 vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
                 float thick, float flare, float chrome, float extra, float detail, float motion) {
   float yaw = turn * 6.28318530718;
@@ -1277,7 +1416,7 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
     side = rolledSide;
   }
 
-  if (mode == 18) {
+  if (mode == 19) {
     float off = clamp(dolly, 0.0, 1.0) * 0.32;
     float coil = 0.6 + clamp(extra, 0.0, 1.0) * 3.5;
     float cycle = 2.0 * PI / coil;
@@ -1291,7 +1430,7 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
   // far members collect into the dense inner knot. Pulling the ordinary camera
   // closer without widening it merely crops a larger version of the same tidy
   // orthographic-looking ball.
-  float focal = mode == 16 ? 0.88
+  float focal = mode == 16 || mode == 18 ? 0.88
     : (mode == 17 ? 1.0
       : (mode == 13 || mode == 14 || mode == 15 ? 1.1 : 1.4));
   vec3 ray = normalize(fwd * focal + side * p.x + up * p.y);
@@ -1300,6 +1439,7 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
   if (mode == 13) tight *= 0.42;
   if (mode == 16) tight *= 0.58;
   if (mode == 17) tight *= 1.8;
+  if (mode == 18) tight *= 0.27;
   float stride = formStride(mode);
   /*
    * Start each ray a random fraction of a step along, and the contours go away.
@@ -1352,6 +1492,7 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
   float raw = gathered * mix(8.0, 26.0, clamp(flare, 0.0, 1.0)) * mix(0.7, 1.2, e);
   if (mode == 16) raw *= formSpindleExcitation(where, extra, motion);
   if (mode == 17) raw *= formMeridianExcitation(where, extra, detail, motion) * 4.5;
+  if (mode == 18) raw *= formVaultExcitation(where, extra, detail, motion) * 0.21;
   // The armillary is polished black construction in a lit room, not emissive
   // wire. Energy opens a controlled amount of internal light for the bright
   // Xenon 84 treatment; near zero, Xenon 87 is revealed almost entirely by
@@ -1368,7 +1509,7 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
   // light as a grazing ray, which otherwise draws a black cord inside a cyan
   // halo. The footage has the opposite physical ordering: a saturated core
   // with bloom falling away from it.
-  if (mode == 14 || mode == 15 || mode == 16 || mode == 17) {
+  if (mode == 14 || mode == 15 || mode == 16 || mode == 17 || mode == 18) {
     raw = max(raw, hit * mix(0.12, 0.32, clamp(e, 0.0, 1.0)));
   }
   float lit = clamp(raw, 0.0, 1.0);
@@ -1382,7 +1523,8 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
   // one channel can reach the ceiling while the others keep the spectral rim.
   // That is why its hottest frames remain chromatic instead of becoming a
   // white cage. Other forms retain the harder neutral filament.
-  vec3 hot = mode == 8 ? uChalk : vec3(1.0);
+  vec3 hot = mode == 8 ? uChalk
+    : (mode == 18 ? mix(uPrimary, uChalk, 0.35) : vec3(1.0));
   vec3 colour = mix(material, hot, clamp(raw * 1.6 - 0.75, 0.0, 1.0));
   colour *= 1.0 + max(raw - 1.0, 0.0) * mix(0.8, 2.6, clamp(flare, 0.0, 1.0));
   if (mode == 8) colour = min(colour, uChalk * 1.02);
@@ -1424,7 +1566,8 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
       : (mode == 12 ? formArmillarySky(bounced) * 1.18
         : (mode == 13 ? formAstrolabeSky(bounced)
           : (mode == 16 ? formSpindleSky(bounced)
-            : (mode == 17 ? formMeridianSky(bounced) : formSky(bounced)))));
+            : (mode == 17 ? formMeridianSky(bounced)
+              : (mode == 18 ? formVaultSky(bounced) : formSky(bounced))))));
     vec3 shell = reflectedRoom * mix(0.35, 1.0, facing) * roomWeight
                + vec3(1.0) * glint * mix(1.4, 6.0, polish) * glintWeight
                + uChalk * facing * 0.6 * rimWeight;

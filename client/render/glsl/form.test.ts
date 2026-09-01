@@ -178,7 +178,7 @@ describe('the iris is a lens shell around bounded edge-on ribs', () => {
   });
 
   it('keeps saturated iris highlights in the pale colourway role', () => {
-    expect(FORM_LIB).toContain('vec3 hot = mode == 8 ? uChalk : vec3(1.0);');
+    expect(FORM_LIB).toContain('vec3 hot = mode == 8 ? uChalk');
     expect(FORM_LIB).toContain('if (mode == 8) colour = min(colour, uChalk * 1.02);');
     expect(FORM_LIB).toContain('mix(uAccent, uPrimary, smoothstep(-0.025, 0.025, signedLens))');
   });
@@ -619,7 +619,7 @@ describe('the spindle is a finite waist of permanent open coaxial hoops', () => 
       expect(Math.sin(gap(1, across))).toBeCloseTo(Math.sin(gap(0, across)), 12);
     }
     expect(FORM_LIB).toContain('return formSpindle(q, extra, detail, motion, t);');
-    expect(FORM_LIB).toContain('float focal = mode == 16 ? 0.88');
+    expect(FORM_LIB).toContain('float focal = mode == 16 || mode == 18 ? 0.88');
     expect(FORM_LIB).toContain('if (mode == 16) tight *= 0.58;');
     expect(FORM_LIB).toContain('float formSpindleExcitation(');
     expect(FORM_LIB).toContain('member * 0.83');
@@ -699,6 +699,76 @@ describe('the meridian is two pole-sharing banks of complete elliptical rails', 
     expect(FORM_LIB).toContain('if (mode == 17) tight *= 1.8;');
     expect(FORM_LIB).toContain('vec3 formMeridianSky(vec3 ray)');
     expect(FORM_LIB).toContain('mode == 17 ? formMeridianSky(bounced)');
+  });
+});
+
+describe('the vault is two finite perpendicular stacks of permanent rounded loops', () => {
+  const stackPlane = (value: number, gap: number, count: number) => {
+    const edge = (count - 1) * 0.5;
+    const member = clamp(Math.round(value / gap), -edge, edge);
+    return value - member * gap;
+  };
+
+  it('selects the exact nearest member of a bounded dense plane stack', () => {
+    const gap = 0.06;
+    const count = 13;
+    const brute = (value: number) => Math.min(...Array.from({ length: count }, (_, index) =>
+      Math.abs(value - (index - (count - 1) / 2) * gap)));
+    for (const value of [-1.2, -0.39, -0.181, 0, 0.147, 0.41, 1.3]) {
+      expect(Math.abs(stackPlane(value, gap, count))).toBeCloseTo(brute(value), 12);
+    }
+    // Outside the bank the field stays attached to its last real plane rather
+    // than wrapping and inventing more rails.
+    expect(Math.abs(stackPlane(1.3, gap, count))).toBeGreaterThan(0.8);
+    expect(FORM_LIB).toContain('float formStackPlane(');
+    expect(FORM_LIB).toContain('clamp(round(q / gap), -edge, edge)');
+  });
+
+  it('keeps equal broad depth arches separate from a fixed portrait crown hierarchy', () => {
+    const vault = FORM_LIB.slice(
+      FORM_LIB.indexOf('float formVault('),
+      FORM_LIB.indexOf('// The woven object repeated'),
+    );
+    expect(vault).toContain('formStackPlane(outer.z, gap, count)');
+    expect(vault).toContain('vec3(outer.xy, outerPlane)');
+    expect(vault).toContain('float innerCount = count + 6.0;');
+    expect(vault).toContain('vec3(inner.z, inner.y, innerPlane)');
+    expect(vault).toContain('innerRise *= 1.0 - innerAcross * innerAcross * 0.12;');
+    expect(vault).toContain('float innerRadius = 0.8 * (1.0 - innerAcross * innerAcross * 0.1);');
+    expect(vault).not.toMatch(/for\s*\(/);
+    expect(vault).not.toContain('q / cell');
+    expect(FORM_LIB).toContain('float formArchLoopSize(');
+    expect(FORM_LIB).toContain('float upper = p.y >= base ? radial : endpoints;');
+    expect(FORM_LIB).toContain('float floor = length(vec2(max(abs(p.x) - radius.x, 0.0), p.y - base));');
+    expect(vault).toContain('7.0 + floor(clamp(ribs, 0.0, 1.0) * 5.999) * 2.0');
+    expect(FORM_LIB).toContain('return formVault(q, extra, detail, motion, t);');
+  });
+
+  it('counter-rocks fixed stacks and returns every plane exactly at the seam', () => {
+    const pose = (phase: number) => {
+      const a = phase * Math.PI * 2;
+      return [
+        Math.sin(a) * 0.12,
+        (Math.cos(a) - 1) * 0.045,
+        -Math.sin(a) * 0.2,
+        (Math.cos(a) - 1) * 0.035,
+      ];
+    };
+    for (let angle = 0; angle < 4; angle++) {
+      expect(pose(1)[angle]).toBeCloseTo(pose(0)[angle]!, 12);
+    }
+    expect(FORM_LIB).toContain('outer.xz = formSpin(sin(a) * 0.12)');
+    expect(FORM_LIB).toContain('inner.xz = formSpin(-sin(a) * 0.2)');
+  });
+
+  it('reveals dark chrome rails with physical reflected strips', () => {
+    expect(FORM_LIB).toContain('float formVaultExcitation(');
+    expect(FORM_LIB).toContain('float railWave = pow(0.5 + 0.5 * cos(member * 0.86 - a * 2.0), 5.0);');
+    expect(FORM_LIB).toContain('raw *= formVaultExcitation(where, extra, detail, motion) * 0.21;');
+    expect(FORM_LIB).toContain('mode == 18 ? mix(uPrimary, uChalk, 0.35)');
+    expect(FORM_LIB).toContain('return mix(uPrimary * 0.06, uChalk, 0.08);');
+    expect(FORM_LIB).toContain('vec3 formVaultSky(vec3 ray)');
+    expect(FORM_LIB).toContain('mode == 18 ? formVaultSky(bounced)');
   });
 });
 
@@ -784,7 +854,7 @@ describe('the march is bounded and says so', () => {
       FORM_LIB.indexOf('float formField('),
       FORM_LIB.indexOf('float formStride('),
     );
-    expect(FORM_MODES.length).toBe(19);
+    expect(FORM_MODES.length).toBe(20);
     for (let i = 0; i < FORM_MODES.length - 1; i++) {
       expect(field).toContain(`if (mode == ${i})`);
     }
@@ -795,10 +865,10 @@ describe('the march is bounded and says so', () => {
   it('takes half steps only for the shape whose distance is an over-estimate', () => {
     // The helix measures across the strand while the strand moves away along
     // its own axis, so the true nearest surface can be nearer than it says.
-    expect(FORM_MODES.indexOf('tube')).toBe(18);
+    expect(FORM_MODES.indexOf('tube')).toBe(19);
     expect(FORM_LIB).toContain('if (mode == 5) return 0.85;');
     expect(FORM_LIB).toContain('if (mode == 10) return 0.5;');
-    expect(FORM_LIB).toContain('return mode == 18 ? 0.5 : 0.9;');
+    expect(FORM_LIB).toContain('return mode == 19 ? 0.5 : 0.9;');
   });
 
   it('accumulates glow along the ray rather than once per step', () => {
