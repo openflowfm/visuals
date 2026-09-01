@@ -225,6 +225,20 @@ describe('the historical Archive', () => {
 });
 
 describe('Finals over a frozen search', () => {
+  /*
+   * Forty-five seconds, up from ten, and the reason is the vocabulary.
+   *
+   * Sixty encounters and then forty-eight finals matches, each dealing a random
+   * circuit and compiling it, make this the heaviest test in the suite by an
+   * order of magnitude. What it costs grows with the *node vocabulary*, because
+   * that is what `randomCircuit` deals from — so adding one kind adds work to
+   * every one of a hundred and eight rounds, and adding `vary` was what finally
+   * took it past ten seconds on CI under coverage instrumentation.
+   *
+   * That is not this test finding a defect, and the next node added would have
+   * pushed it over again. The headroom is deliberate rather than tight: the
+   * limit is here to catch a hang, not to police a few hundred milliseconds.
+   */
   it('plays a diverse field once in every room and produces ten leaders', () => {
     const store = open();
     const method = lineageMethod();
@@ -276,5 +290,5 @@ describe('Finals over a frozen search', () => {
       .map((nominee) => nominee.candidate.id);
     expect(nominees).toContain(protectedWork.id);
     expect(nominees[0]).toBe(protectedWork.id);
-  }, 10_000);
+  }, 45_000);
 });
