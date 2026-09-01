@@ -364,7 +364,7 @@ editors listing these differently would be two different vocabularies.
 | `field` | `p` `energy`, plus `balls` `apart` on metaballs | `c` | `cells` `clouds` `metaballs`; fixed work, charged per graph sample and never offered per track |
 | `fractal` | `p` `energy` + its mode's numbers | `c` | `mandelbrot` or `julia`, with bounded zoom, detail and iterative work |
 | `light` | `p` `energy` + its mode's numbers, and `from` on the hung three | `c` | `lamp` `beam` `shafts` `caustics`; 2D lights with fixed work, drifting in seconds rather than beats |
-| `form` | `p` `turn` `tilt` `dolly` `thick` `flare` `chrome` `energy` + its mode's numbers | `c` | `torus` `rings` `frame` `lattice` `weave` `loom` `orbits` `relief` `iris` `tube`; the one node with a third coordinate in it, marched and charged like a fractal |
+| `form` | `p` `turn` `tilt` `dolly` `thick` `flare` `chrome` `energy` + its mode's numbers | `c` | `torus` `rings` `frame` `lattice` `weave` `loom` `orbits` `relief` `iris` `truss` `rotor` `tube`; the one node with a third coordinate in it, marched and charged like a fractal |
 | `glow` | `d` `energy` + its mode's numbers | `c` | `neon` `soft` `band`: a distance becomes a lit stroke |
 | `shade` | `n` `amount` `energy` | `c` | `across` `heat` `filament`: a number becomes a colour off the colourway |
 | `flow` | `p` | `c` | another flow, whole, as one node |
@@ -518,6 +518,27 @@ camera. Weave's two-axis route eases away from exact equal-angle steps so its fo
 symmetry does not collapse a phase sequence into repeated views, while both axes still close
 exactly at the seam. Both remain analytic unions inside the existing march — they add no hidden loop and
 keep the same declared work ceiling as the five simpler forms.
+
+`truss` is a related construction with different dimensions and motion rather than a renamed
+weave. Its twelve members are four parallel rounded-rectangle rails around each of the three
+centre planes of one cuboid: the wide, tall and deep faces share the same three physical
+extents. That produces the outer cage, horizontal hourglass and nested central diamonds as
+different projections of one object instead of drawing those silhouettes independently.
+`apart` separates each four-rail face and `corner` rounds it. `tumble` drives a closed rigid
+oscillation which exposes a different side at every quarter, dwells around the frontal
+hourglass and returns every member and crossing to the same place at the seam.
+
+`rotor` is a counter-wound pair of turbine cages rather than a flat radial array. One open
+U-shaped blade is folded analytically into between fourteen and thirty azimuthal sectors;
+each blade has two swept sides, a rounded outer bridge and four deliberately open ends around
+the throat. Front and rear cages rise into opposite domes and disagree slightly in phase and
+curl, so the rear members become visible through gaps in the front and produce real woven
+crossings under an oblique eye. `blades` sets the physical member count and `sweep` controls
+both the pinwheel bend and dome depth. `tumble` combines a bounded two-axis view excursion
+with thirteen complete blade sectors of spin. Repeated geometry therefore returns to the
+identical pose at one without hiding the object edge-on for half the loop. The sector fold is
+analytic and the approximate swept-curve distance uses a conservative half stride, so the
+mode still has only the renderer's one ray loop.
 
 `loom` repeats the weave as geometry through all three axes rather than tiling a rendered
 picture of it. Every cell contains three orthogonal four-member loop bundles. Each complete

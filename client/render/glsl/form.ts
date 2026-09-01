@@ -92,9 +92,13 @@ float formRoundedBox2(vec2 p, vec2 halfSize, float corner) {
   return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - corner;
 }
 
-float formRoundedLoop(vec3 q, float halfSize, float corner, float t) {
-  float outline = abs(formRoundedBox2(q.xy, vec2(halfSize), corner));
+float formRoundedLoopSize(vec3 q, vec2 halfSize, float corner, float t) {
+  float outline = abs(formRoundedBox2(q.xy, halfSize, corner));
   return length(vec2(outline, q.z)) - t;
+}
+
+float formRoundedLoop(vec3 q, float halfSize, float corner, float t) {
+  return formRoundedLoopSize(q, vec2(halfSize), corner, t);
 }
 
 // Four parallel planes at -1.5, -0.5, 0.5 and 1.5 times the gap. Folding to
@@ -113,27 +117,75 @@ float formWeave(vec3 q, float apart, float corner, float t) {
   return min(d, formRoundedLoop(vec3(q.xz, formLayerPlane(q.y, gap)), 0.62, roundness, t));
 }
 
-// Three successively smaller rounded frames in one plane. Unlike Weave's four
-// equal-size copies displaced through depth, these members share a plane and
-// step inward in scale. That difference is the truss's visible hierarchy.
-float formNestedFrames(vec3 q, float nest, float corner, float t) {
-  float stepDown = mix(0.075, 0.17, clamp(nest, 0.0, 1.0));
-  float roundness = mix(0.035, 0.22, clamp(corner, 0.0, 1.0));
-  float d = formRoundedLoop(q, 0.72, roundness, t);
-  d = min(d, formRoundedLoop(q, 0.72 - stepDown, roundness * 0.82, t * 0.82));
-  return min(d, formRoundedLoop(q, 0.72 - stepDown * 2.0, roundness * 0.64, t * 0.66));
+// Four equal rails following one rounded rectangle at four real depths. The
+// outline may be rectangular: Xenon's truss is a cuboid armature, not three
+// square ornaments. A wide face, a tall face and a deep face therefore share
+// the same three extents and meet as one construction when crossed below.
+float formTrussStack(vec3 q, vec2 halfSize, float gap, float corner, float t) {
+  float outline = abs(formRoundedBox2(q.xy, halfSize, corner));
+  return length(vec2(outline, formLayerPlane(q.z, gap))) - t;
 }
 
-// Nine real frames: three nested scales on each of three crossing planes.
-// The whole union tumbles before any distance is taken, so every crossing has
-// stable front/back order and the construction never boils or changes identity.
-float formTruss(vec3 q, float nest, float corner, float phase, float t) {
+// Twelve real rails around the three centre planes of one cuboid. The closed
+// oscillation dwells on its frontal hourglass rather than spinning through a
+// succession of unrelated star silhouettes; every member still moves under
+// the same rigid transform, preserving its identity and occlusion order.
+float formTruss(vec3 q, float apart, float corner, float phase, float t) {
   float a = clamp(phase, 0.0, 1.0) * 2.0 * PI;
-  q.xy = formSpin(a + sin(a) * 0.31) * q.xy;
-  q.yz = formSpin(a * 2.0 + sin(a * 2.0) * 0.19) * q.yz;
-  float d = formNestedFrames(q, nest, corner, t);
-  d = min(d, formNestedFrames(vec3(q.yz, q.x), nest, corner, t));
-  return min(d, formNestedFrames(vec3(q.xz, q.y), nest, corner, t));
+  q.xy = formSpin(sin(a) * 0.32) * q.xy;
+  q.yz = formSpin((cos(a) - 1.0) * 0.45) * q.yz;
+  float gap = mix(0.045, 0.14, clamp(apart, 0.0, 1.0));
+  float roundness = mix(0.07, 0.26, clamp(corner, 0.0, 1.0));
+  float d = formTrussStack(q, vec2(0.78, 0.43), gap, roundness, t);
+  d = min(d, formTrussStack(vec3(q.yz, q.x), vec2(0.43, 0.68), gap, roundness, t));
+  return min(d, formTrussStack(vec3(q.xz, q.y), vec2(0.78, 0.68), gap, roundness, t));
+}
+
+// One open turbine blade, repeated analytically around the z axis. Folding the
+// azimuth selects the nearest sector, so twenty-odd complete blades cost one
+// distance rather than putting a second loop inside the ray march. Each blade
+// is a U: two swept sides joined at the outer rim and left open at the throat.
+// Mirroring the dome through z makes the front and rear cages one construction;
+// they meet at the throat and rim and separate through the body of the rotor.
+float formRotor(vec3 q, float blades, float sweep, float phase, float t) {
+  float a = clamp(phase, 0.0, 1.0) * 2.0 * PI;
+  float count = floor(mix(14.0, 30.0, clamp(blades, 0.0, 1.0)));
+  float sector = 2.0 * PI / count;
+  // Thirteen complete sectors of spin return repeated geometry to the same pose,
+  // while two bounded tilts show depth without spending half the loop edge-on.
+  q.xy = formSpin(a * 13.0 / count) * q.xy;
+  q.yz = formSpin(sin(a) * 0.7) * q.yz;
+  q.xz = formSpin(sin(a * 2.0) * 0.42) * q.xz;
+
+  float angle = mod(atan(q.y, q.x) + sector * 0.5, sector) - sector * 0.5;
+  float radius = length(q.xy);
+  float inner = 0.16;
+  float outer = 0.82;
+  float along = clamp((radius - inner) / (outer - inner), 0.0, 1.0);
+
+  // The centreline leans backward through its sector while the two sides open
+  // toward the rim. Their sum remains inside half a sector, so folding never
+  // cuts a blade or mistakes one member for its neighbour.
+  float bend = mix(0.16, 0.39, clamp(sweep, 0.0, 1.0));
+  float centre = -sector * bend * pow(along, 0.7);
+  float halfWidth = sector * mix(0.035, 0.1, along);
+  float dome = sin(along * PI) * mix(0.2, 0.46, clamp(sweep, 0.0, 1.0));
+  float radialEnd = max(max(inner - radius, radius - outer), 0.0);
+  float frontAngular = min(abs(angle - centre - halfWidth), abs(angle - centre + halfWidth));
+  float rearCentre = -centre + sector * 0.16;
+  float rearAngular = min(abs(angle - rearCentre - halfWidth), abs(angle - rearCentre + halfWidth));
+  float front = length(vec3(radialEnd, frontAngular * radius, abs(q.z - dome))) - t;
+  float rear = length(vec3(radialEnd, rearAngular * radius, abs(q.z + dome))) - t;
+  float sides = min(front, rear);
+
+  // A circular arc at the outer radius is the rounded bridge between both
+  // sides. There is deliberately no corresponding inner arc: those four ends
+  // are the dark, open teeth around the reference's central throat.
+  float frontCapAngle = clamp(angle, centre - halfWidth, centre + halfWidth);
+  float rearCapAngle = clamp(angle, rearCentre - halfWidth, rearCentre + halfWidth);
+  float frontCap = length(vec3(radius - outer, (angle - frontCapAngle) * outer, q.z)) - t;
+  float rearCap = length(vec3(radius - outer, (angle - rearCapAngle) * outer, q.z)) - t;
+  return min(sides, min(frontCap, rearCap));
 }
 
 // The woven object repeated as construction rather than copied as pixels.
@@ -433,6 +485,9 @@ float formField(vec3 q, int mode, float thick, float extra, float detail, float 
   if (mode == 9) {
     return formTruss(q, extra, detail, motion, t);
   }
+  if (mode == 10) {
+    return formRotor(q, extra, detail, motion, t);
+  }
   // A helix winding away down the corridor. The one shape here whose distance
   // is an over-estimate along its axis, which is why every march takes half
   // steps: a full one would tunnel through the strand and draw nothing.
@@ -453,7 +508,7 @@ float formField(vec3 q, int mode, float thick, float extra, float detail, float 
 // reports a hit, and chrome is only mixed in where something was hit.
 float formStride(int mode) {
   if (mode == 5) return 0.85;
-  return mode == 10 ? 0.5 : 0.9;
+  return mode >= 10 ? 0.5 : 0.9;
 }
 
 // The surface direction, from four samples around the point the ray stopped at.
@@ -554,7 +609,7 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
     side = rolledSide;
   }
 
-  if (mode == 10) {
+  if (mode == 11) {
     float off = clamp(dolly, 0.0, 1.0) * 0.32;
     float coil = 0.6 + clamp(extra, 0.0, 1.0) * 3.5;
     float cycle = 2.0 * PI / coil;

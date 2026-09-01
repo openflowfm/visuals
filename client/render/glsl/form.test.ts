@@ -260,24 +260,56 @@ describe('the woven form is twelve hollow loops', () => {
   });
 });
 
-describe('the truss is nested frames on three crossing planes', () => {
-  it('uses scale hierarchy rather than displaced equal-size layers', () => {
-    expect(FORM_LIB).toContain('float formNestedFrames(');
-    expect(FORM_LIB).toContain('0.72 - stepDown * 2.0');
-    expect(FORM_LIB).toContain('formNestedFrames(vec3(q.yz, q.x)');
-    expect(FORM_LIB).toContain('formNestedFrames(vec3(q.xz, q.y)');
+describe('the truss is the rectangular faces of one layered cuboid', () => {
+  it('uses the same three extents for four real rails on three crossing planes', () => {
+    expect(FORM_LIB).toContain('float formTrussStack(');
+    expect(FORM_LIB).toContain('vec2(0.78, 0.43)');
+    expect(FORM_LIB).toContain('vec2(0.43, 0.68)');
+    expect(FORM_LIB).toContain('vec2(0.78, 0.68)');
+    expect(FORM_LIB).toContain('formLayerPlane(q.z, gap)');
   });
 
-  it('moves the complete union on a closed eased rigid path', () => {
+  it('moves the complete union on a closed rigid oscillation', () => {
     const angles = (phase: number) => {
       const a = phase * Math.PI * 2;
-      return [a + Math.sin(a) * 0.31, a * 2 + Math.sin(a * 2) * 0.19];
+      return [Math.sin(a) * 0.32, (Math.cos(a) - 1) * 0.45];
     };
     const start = angles(0);
     const end = angles(1);
-    expect((end[0]! - start[0]!) / (Math.PI * 2)).toBeCloseTo(1, 12);
-    expect((end[1]! - start[1]!) / (Math.PI * 2)).toBeCloseTo(2, 12);
+    expect(end[0]).toBeCloseTo(start[0]!, 12);
+    expect(end[1]).toBeCloseTo(start[1]!, 12);
+    expect(angles(0.5)).not.toEqual(start);
+    expect(FORM_LIB).toContain('formSpin(sin(a) * 0.32)');
+    expect(FORM_LIB).toContain('formSpin((cos(a) - 1.0) * 0.45)');
     expect(FORM_LIB).toContain('return formTruss(q, extra, detail, motion, t);');
+  });
+});
+
+describe('the rotor is one open blade repeated as a double-domed cage', () => {
+  it('folds azimuth into one sector instead of looping over every blade', () => {
+    expect(FORM_LIB).toContain('float formRotor(');
+    expect(FORM_LIB).toContain('float count = floor(mix(14.0, 30.0');
+    expect(FORM_LIB).toContain('mod(atan(q.y, q.x) + sector * 0.5, sector)');
+    expect(FORM_LIB).toContain('float rearCentre = -centre + sector * 0.16');
+    expect(FORM_LIB).toContain('abs(q.z - dome)');
+    expect(FORM_LIB).toContain('abs(q.z + dome)');
+    expect(FORM_LIB).toContain('float rearCapAngle = clamp(angle, rearCentre - halfWidth, rearCentre + halfWidth)');
+  });
+
+  it('leaves the throat open and closes its rigid tumble at the seam', () => {
+    expect(FORM_LIB).toContain('float inner = 0.16;');
+    expect(FORM_LIB).toContain('There is deliberately no corresponding inner arc');
+    const angles = (phase: number, count = 22) => {
+      const a = phase * Math.PI * 2;
+      return [a * 13 / count, Math.sin(a) * 0.7, Math.sin(a * 2) * 0.42];
+    };
+    const start = angles(0);
+    const end = angles(1);
+    expect((end[0]! - start[0]!) / (Math.PI * 2 / 22)).toBeCloseTo(13, 12);
+    expect(end[1]).toBeCloseTo(start[1]!, 12);
+    expect(end[2]).toBeCloseTo(start[2]!, 12);
+    expect(angles(0.5)).not.toEqual(start);
+    expect(FORM_LIB).toContain('formSpin(a * 13.0 / count)');
   });
 });
 
@@ -363,7 +395,7 @@ describe('the march is bounded and says so', () => {
       FORM_LIB.indexOf('float formField('),
       FORM_LIB.indexOf('float formStride('),
     );
-    expect(FORM_MODES.length).toBe(11);
+    expect(FORM_MODES.length).toBe(12);
     for (let i = 0; i < FORM_MODES.length - 1; i++) {
       expect(field).toContain(`if (mode == ${i})`);
     }
@@ -374,9 +406,9 @@ describe('the march is bounded and says so', () => {
   it('takes half steps only for the shape whose distance is an over-estimate', () => {
     // The helix measures across the strand while the strand moves away along
     // its own axis, so the true nearest surface can be nearer than it says.
-    expect(FORM_MODES.indexOf('tube')).toBe(10);
+    expect(FORM_MODES.indexOf('tube')).toBe(11);
     expect(FORM_LIB).toContain('if (mode == 5) return 0.85;');
-    expect(FORM_LIB).toContain('return mode == 10 ? 0.5 : 0.9;');
+    expect(FORM_LIB).toContain('return mode >= 10 ? 0.5 : 0.9;');
   });
 
   it('accumulates glow along the ray rather than once per step', () => {

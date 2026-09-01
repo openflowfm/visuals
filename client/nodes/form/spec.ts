@@ -23,7 +23,8 @@ const descriptions: Record<Mode, string> = {
   orbits: 'Nested rings on fixed crossing planes, enclosed by one large orbit.',
   relief: 'A wall of bevelled frames, U modules, hooks and paired arcs while the eye travels over it.',
   iris: 'A lens-shaped shell enclosing a bank of parallel edge-on ribs.',
-  truss: 'Nested rounded-square frames crossing through three planes as one rigid armature.',
+  truss: 'Parallel rounded-rectangle rails crossing around three planes as one cuboid armature.',
+  rotor: 'Open swept blades repeated around the throat of a double-domed turbine cage.',
   tube: 'A helix winding away down a corridor the eye is inside.',
 };
 
@@ -57,9 +58,14 @@ const values: Record<Mode, readonly PortSpec[]> = {
     numberPort('phase', 'Where the ribs sit between their edge-on bank and crossed pair.', 0),
   ],
   truss: [
-    numberPort('nest', 'How far each frame steps down inside the one before it.', 0.55),
-    numberPort('corner', 'How round the nested square frames become.', 0.35),
-    numberPort('tumble', 'How far the complete truss has travelled around its closed tumble.', 0),
+    numberPort('apart', 'How far the four rails of each rectangular face sit apart.', 0.45),
+    numberPort('corner', 'How round the rectangular face rails become.', 0.55),
+    numberPort('tumble', 'Where the complete truss sits on its closed rigid oscillation.', 0),
+  ],
+  rotor: [
+    numberPort('blades', 'How many open blades repeat around the rotor throat.', 0.55),
+    numberPort('sweep', 'How far the blade sides curl and rise through the double dome.', 0.65),
+    numberPort('tumble', 'Where the complete rotor sits on its closed rigid tumble.', 0),
   ],
   tube: [
     numberPort('coil', 'How tightly the helix winds as it goes away.', 0.35),
