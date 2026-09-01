@@ -126,6 +126,15 @@ export const IMAGE_MODES = ['cover', 'contain'] as const;
 export const GLOW_MODES = ['neon', 'soft', 'band'] as const;
 
 /**
+ * The two distributions a `vary` deals from.
+ *
+ * Not `random`, because nothing here is: the same copy gets the same number on
+ * every frame, and a name that promised otherwise would have people reaching
+ * for it to make things flicker.
+ */
+export const VARY_MODES = ['even', 'few'] as const;
+
+/**
  * The two ways `shade` walks a number through the colourway.
  *
  * **Not `ramp`**, which is the obvious name for it and belongs to something
@@ -135,7 +144,7 @@ export const GLOW_MODES = ['neon', 'soft', 'band'] as const;
  * colourway editor already calls its five role chips swatches, and this node's
  * whole job is the colours *between* those five.
  */
-export const SHADE_MODES = ['across', 'heat'] as const;
+export const SHADE_MODES = ['across', 'heat', 'filament'] as const;
 
 /**
  * The shapes `figure` measures a point against.
@@ -362,7 +371,15 @@ export const TRACK_READS: readonly string[] = ['level', 'fader', 'playing'];
  */
 export const SONG_FACTS: readonly string[] = ['seed', 'tempo', 'key', 'section', 'sections'];
 
-export const MATH_OPS = ['add', 'subtract', 'multiply', 'min', 'max', 'average'] as const;
+export const MATH_OPS = [
+  'add',
+  'subtract',
+  'multiply',
+  'min',
+  'max',
+  'average',
+  'curve',
+] as const;
 
 /**
  * Every shape an lfo can run. The six a `wave` node used to own are in here —

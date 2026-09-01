@@ -27,6 +27,23 @@
  * survives as **the room's** energy — a smoothed master meter — which is what an
  * unwired energy inlet falls back to. A default, not a level.
  */
+/**
+ * How far past white a colour is allowed to travel before anything composites.
+ *
+ * The display clips at one, so everything above it is invisible *as brightness*
+ * — the point of carrying it is that spread/bloom can find it and put it back
+ * as halo. That is what a blown highlight is: light that could not fit in the
+ * pixel it landed on, spilling into the ones around it. With no headroom the
+ * bloom has nothing to harvest and a filament is merely a pale line, which is
+ * what every flow in the library looked like.
+ *
+ * Four is not arbitrary: glow_neon overdrives a filament to about 4.7 at full
+ * core, and this is what survives of it after contrast. Raising the ceiling
+ * cannot on its own make an existing flow brighter — nothing but a glow emits
+ * above one — so the number is a permission, not a gain.
+ */
+export const OVERBRIGHT = 4.0;
+
 export const PREAMBLE = `#version 300 es
 precision highp float;
 // Required, not decorative. In GLSL ES 3.00 a *fragment* shader defaults int
@@ -157,6 +174,8 @@ float beatPulse(float division, float e) {
   return pow(1.0 - fract(uBeat * division), mix(2.5, 5.0, e));
 }
 
+#define OVERBRIGHT ${OVERBRIGHT.toFixed(1)}
+
 // Brightness and contrast, the cheap half of what energy is for. It reads
 // instantly on a projector and costs one multiply.
 //
@@ -167,7 +186,7 @@ float beatPulse(float division, float e) {
 // actually is, and leaves headroom for the output stage's shoulder.
 vec3 charge(vec3 c, float e) {
   vec3 lifted = c * mix(0.8, 1.1, e);
-  return clamp((lifted - 0.28) * mix(1.0, 1.3, e) + 0.28, 0.0, 1.2);
+  return clamp((lifted - 0.28) * mix(1.0, 1.3, e) + 0.28, 0.0, OVERBRIGHT);
 }
 
 #define OUT(rgb, a) { float _a = (a) * uOpacity; fragColor = vec4(charge(rgb, uEnergy) * _a, _a); }

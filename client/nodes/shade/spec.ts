@@ -8,6 +8,8 @@ type Mode = (typeof SHADE_MODES)[number];
 const descriptions: Record<Mode, string> = {
   across: 'Walk the whole colourway, from the first role through to the last.',
   heat: 'Out of the dark, through the colour, into the accent and up to white.',
+  filament:
+    'One colour from unlit to blown out, so the number reads as how hard it is lit.',
 };
 
 /** The node that turns a number into a colour, beside its discovered descriptor. */

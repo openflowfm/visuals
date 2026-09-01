@@ -4,6 +4,7 @@ import { ARRAY_MODES, FIGURE_MODES, FORM_MODES, GLOW_MODES, SHADE_MODES } from '
 import { compileCircuit, MAX_SHADER_WORK } from './circuit.ts';
 import { FIGURE_SAMPLES } from './glsl/figure.ts';
 import { FORM_WORK } from './glsl/form.ts';
+import { OVERBRIGHT as PREAMBLE_OVERBRIGHT } from './glsl/common.ts';
 
 /**
  * The five nodes that let the vocabulary draw a lit line.
@@ -301,5 +302,82 @@ describe('the one node with a third coordinate in it', () => {
       ],
     });
     expect(bloomed.error).toContain('too expensive to draw');
+  });
+});
+
+describe('light with somewhere above white to go', () => {
+  it('lets a filament out of the range the display can show', () => {
+    // A glow that could only reach one had nowhere to put the difference
+    // between "lit" and "blown", so every stroke in the library came out the
+    // same pale wash of the colourway. The excess is invisible on its own —
+    // the display clips — and exists so a bloom downstream has something to
+    // find. See OVERBRIGHT.
+    const made = built({
+      nodes: [{ id: 'g', kind: 'glow', op: 'neon', x: 0, y: 0 }, out],
+      cords: [{ from: 'g/c', to: 'o/c' }],
+    });
+    expect(made.error).toBeNull();
+    expect(body(made.source ?? '')).toContain('glow_neon(');
+    expect(PREAMBLE_OVERBRIGHT).toBeGreaterThan(1);
+  });
+
+  it('charges a bloom for every tap it takes of what is under it', () => {
+    // Eight taps, and each one re-evaluates the whole picture upstream. Over a
+    // march that is eight marches, which is the compiler's business to refuse
+    // rather than the driver's to discover.
+    const overForm = built({
+      nodes: [
+        { id: 'f', kind: 'form', op: 'rings', x: 0, y: 0 },
+        { id: 's', kind: 'spread', op: 'bloom', x: 300, y: 0 },
+        out,
+      ],
+      cords: [
+        { from: 'f/c', to: 's/c' },
+        { from: 's/c', to: 'o/c' },
+      ],
+    });
+    expect(overForm.error).toMatch(/too expensive to draw/);
+
+    const overFigure = built({
+      nodes: [
+        { id: 'g', kind: 'glow', op: 'neon', x: 0, y: 0 },
+        { id: 's', kind: 'spread', op: 'bloom', x: 300, y: 0 },
+        out,
+      ],
+      cords: [
+        { from: 'g/c', to: 's/c' },
+        { from: 's/c', to: 'o/c' },
+      ],
+    });
+    expect(overFigure.error).toBeNull();
+    expect(overFigure.work).toBeLessThanOrEqual(MAX_SHADER_WORK);
+  });
+
+  it('bends a number without moving either end of it', () => {
+    // `math/curve` exists because there was no way to write an exponent, so
+    // flows reached for `multiply` with both inlets fed from one cord to get a
+    // square. Its midpoint has to be the identity or wiring nothing to the
+    // amount would change the picture.
+    const exponent = (b: number) => 2 ** ((Math.max(0, Math.min(1, b)) - 0.5) * 4);
+    expect(exponent(0.5)).toBeCloseTo(1, 12);
+    expect(exponent(1)).toBeCloseTo(4, 12);
+    expect(exponent(0)).toBeCloseTo(0.25, 12);
+    for (const at of [0.1, 0.4, 0.9]) {
+      expect(at ** exponent(0.85)).toBeLessThan(at);
+      expect(at ** exponent(0.15)).toBeGreaterThan(at);
+    }
+    const made = built({
+      nodes: [
+        { id: 'm', kind: 'math', op: 'curve', x: 0, y: 0 },
+        { id: 'g', kind: 'glow', op: 'neon', x: 300, y: 0 },
+        out,
+      ],
+      cords: [
+        { from: 'm/n', to: 'g/core' },
+        { from: 'g/c', to: 'o/c' },
+      ],
+    });
+    expect(made.error).toBeNull();
+    expect(body(made.source ?? '')).toContain('pow(');
   });
 });

@@ -32,4 +32,29 @@ vec4 shade_heat(float n, float amount) {
   col = mix(col, vec3(1.0), smoothstep(0.72, 1.0, t));
   return vec4(col, clamp(t * 2.5, 0.0, 1.0) * clamp(amount, 0.0, 1.0));
 }
+
+/*
+ * One colour, from unlit to blown: the exposure of a thing rather than its
+ * identity.
+ *
+ * The other two modes answer "which colour is this number" by walking the
+ * palette, and that turns out to be the wrong question most of the time. A
+ * number that says how brightly some part of a shape is lit is not naming a
+ * different colour when it rises — it is naming the same colour with more light
+ * on it. Ramping across the roles instead paints hue onto geometry, and a lit
+ * curve whose colour changes along its length reads as a thermal image or a
+ * media-player visualisation, never as something that is glowing.
+ *
+ * So: black, up through the primary, out to white, and then past it. Only the
+ * last stretch overdrives, which is what keeps a filament a filament — the
+ * whole curve is one hue and the top of it is where that hue has been
+ * overwhelmed. See OVERBRIGHT for where the excess goes.
+ */
+vec4 shade_filament(float n, float amount) {
+  float t = clamp(n, 0.0, 1.0);
+  vec3 col = uPrimary * smoothstep(0.0, 0.55, t);
+  col = mix(col, vec3(1.0), smoothstep(0.55, 0.92, t));
+  col *= 1.0 + smoothstep(0.8, 1.0, t) * 2.5;
+  return vec4(col, clamp(t * 3.0, 0.0, 1.0) * clamp(amount, 0.0, 1.0));
+}
 `;

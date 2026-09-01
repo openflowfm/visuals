@@ -366,7 +366,7 @@ editors listing these differently would be two different vocabularies.
 | `light` | `p` `energy` + its mode's numbers, and `from` on the hung three | `c` | `lamp` `beam` `shafts` `caustics`; 2D lights with fixed work, drifting in seconds rather than beats |
 | `form` | `p` `turn` `tilt` `dolly` `thick` `flare` `chrome` `energy` + its mode's number | `c` | `torus` `rings` `frame` `lattice` `tube`; the one node with a third coordinate in it, marched and charged like a fractal |
 | `glow` | `d` `energy` + its mode's numbers | `c` | `neon` `soft` `band`: a distance becomes a lit stroke |
-| `shade` | `n` `amount` `energy` | `c` | `across` or `heat`: a number becomes a colour off the colourway |
+| `shade` | `n` `amount` `energy` | `c` | `across` `heat` `filament`: a number becomes a colour off the colourway |
 | `flow` | `p` | `c` | another flow, whole, as one node |
 | `last` | `p` `fade` | `c` | the frame this flow drew last time, fading as it ages |
 | `colorway` | `amount` `energy` | `primary` `secondary` `complement` `accent` `chalk` | the colourway that is up, one outlet per role |
@@ -376,7 +376,7 @@ editors listing these differently would be two different vocabularies.
 | node | in | out | |
 |---|---|---|---|
 | `grade` | `c` + its mode's numbers | `c` | `levels` `saturate` `hue` `tint` `posterize` `solarize` `channels` `invert` |
-| `spread` | `c` `energy` + its mode's numbers | `c` | `bloom` `smear` `edge` `shift` |
+| `spread` | `c` `energy` + its mode's numbers | `c` | `bloom` `smear` `edge` `shift` `streak` `disperse` |
 | `halftone` | `c` + its mode's numbers | `c` | `dots` `lines` `dither` `scanlines` |
 | `blend` | `base` `top` `amount` | `c` | `over` `add` `screen` `multiply` `stencil` `cut` |
 
@@ -391,6 +391,7 @@ editors listing these differently would be two different vocabularies.
 | `polar` | `p` | `radius` `angle` | how a position becomes a number |
 | `figure` | `p` + its mode's numbers | `d` `along` | `circle` `box` `line` `arc` `polygon` `star` `rose` `lissajous`: how far this point is from a shape |
 | `array` | `p` `count`, and `turn` on the ring | `p` `which` | `row` `grid` `ring` `mirror`: a repeated space, and the copy you are in |
+| `vary` | `n` `steps` | `n` | `even` or `few`: an ordered number dealt into a stable unordered one |
 
 ### `place` is the other direction, and it was missing
 
@@ -506,6 +507,58 @@ polished thing reads as polished because it shows you a whole room compressed in
 and a room has edges. A smooth gradient reflected off a tube is indistinguishable from matte
 plastic lit from above, which is what the first version of it was. At `chrome` zero none of
 it is mixed in and the form is pure emission.
+
+## Light is allowed above white, and that is where a bloom comes from
+
+For most of this vocabulary's life nothing in it could emit a colour greater than one. It
+sounds like a rounding matter and it is the difference between a picture that is lit and a
+picture that is drawn.
+
+The reason is what a blown highlight physically *is*. A bright thing does not stop at the top
+of the display's range; it overwhelms the pixel it lands on and spills into the ones around
+it, and the size of that spill is how the eye judges how bright the thing was. Clamp every
+stage at one and there is no spill to find — a filament and a merely-lit line come out the
+same value, and the only tool left for saying "brighter" is a wider stroke.
+
+So three things carry the excess. `glow/neon` drives its filament past one, by an amount its
+`core` chooses; `form` keeps the light it gathered along the ray unclamped before deciding how
+white it is; and `charge` — the contrast every generator passes through — clamps at
+`OVERBRIGHT` rather than at one. None of that is visible on its own. What makes it visible is
+`spread/bloom`, which takes eight taps around each point, keeps only what is above its
+`floor`, and adds that back. **`floor` has white at its midpoint**, so at rest the node
+harvests exactly the light that could not fit and nothing else. Turned down, it blooms things
+that are merely bright, which is a decision rather than a default.
+
+Two consequences worth stating. A bloom over a `form` is refused, because eight taps of a
+march is eight marches — the light there is gathered along the ray on the way past instead.
+And a glow's falloff is **windowed**: an inverse square never reaches zero, and the tail of
+one glow covering every pixel in the frame at some small amplitude means a picture built out
+of glows has no black in it anywhere, and any radial optic downstream turns that gradient into
+a frame-wide hue shift. A cyan flower on a red field, with nothing in the graph saying red.
+
+## `vary` deals the copies, because a copy number is in order and light is not
+
+`array` hands out a copy number and `figure` hands out how far along a curve a point is. Both
+are *ordered* — copy three is between two and four and always will be — so wiring either
+straight into a control paints a gradient across the repeat: a fan whose arms get steadily
+brighter clockwise, which reads as a ramp somebody applied rather than as sixteen separate
+lights.
+
+`vary` is the step from that ordered number to an unordered one that is nonetheless **stable**:
+the same copy is dealt the same value on every frame, so nothing flickers, but neighbours have
+nothing to do with each other. `steps` cuts the number into bands first, which is what turns a
+continuous `along` into dashes rather than dissolving it.
+
+The two modes are two distributions and the second is the one worth having. `even` is flat.
+`few` is cubed, so most copies land near nothing and a handful land right up — which is how a
+bank of lights actually looks, and what the eye reads as *many* rather than as a pattern. An
+even roll across sixteen arms puts half of them in the top half of the range, and a ring where
+half the arms are burning has no highlight in it at all.
+
+`math/curve` is the general form of the same idea for a single number: `pow` with the exponent
+on a control whose midpoint is the identity. It exists because there was no way to write an
+exponent at all, so flows reached for `multiply` with both inlets fed from one cord to get a
+square.
 
 ## `effect` was three things wearing one name
 
@@ -651,7 +704,7 @@ collection, because a song that modulates is in the first key when it starts.
 
 ### numbers
 
-`lfo`, `math`, `read`, and `value`.
+`lfo`, `math`, `read`, `take`, `value`, and `vary`.
 
 **`read` is the one that turns a picture into a number**, and until it existed nothing did.
 Every `n` outlet in the vocabulary came from the clock, the set, or arithmetic between them,

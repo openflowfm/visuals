@@ -7,6 +7,7 @@ import { LIGHT_LIB } from './glsl/light.ts';
 import { GLOW_LIB } from './glsl/glow.ts';
 import { SHADE_LIB } from './glsl/shade.ts';
 import { FIGURE_LIB } from './glsl/figure.ts';
+import { VARY_LIB } from './glsl/vary.ts';
 import { ARRAY_LIB } from './glsl/array.ts';
 import { FORM_LIB } from './glsl/form.ts';
 import { GENERATOR_LIB, SOURCE_VALUES } from './glsl/sources.ts';
@@ -20,6 +21,7 @@ export { GLOW_LIB } from './glsl/glow.ts';
 export { SHADE_LIB } from './glsl/shade.ts';
 export { FIGURE_LIB, FIGURE_SAMPLES } from './glsl/figure.ts';
 export { ARRAY_LIB } from './glsl/array.ts';
+export { VARY_LIB } from './glsl/vary.ts';
 export { FORM_LIB, FORM_STEPS, FORM_WORK } from './glsl/form.ts';
 export { GENERATOR_LIB } from './glsl/sources.ts';
 
@@ -81,6 +83,8 @@ ${SHADE_LIB}
 ${FIGURE_LIB}
 
 ${ARRAY_LIB}
+
+${VARY_LIB}
 
 ${FORM_LIB}
 

@@ -1040,27 +1040,34 @@ const EXAMPLES: Scheme = {
       'Halo',
       [
         ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.45],
-        // A cycle every four beats. Slower than anything in the picture, so it
-        // reads as the room breathing rather than as the rings doing something.
-        ['swell', 'lfo', 'sine', { rate: 0.53, sync: 1 }],
-        ['lift', 'math', 'max', { a: [0.35, 0.4] }],
-        // A little chrome, not much: enough for the tubes to catch a highlight
-        // and be read as solid, well short of the emission going out.
+        // The rings turn on the transport rather than on an lfo, so the shape
+        // is where the bar says it is and not where a free oscillator drifted
+        // to. Everything that *hits* is the pulse below; this is only carriage.
+        ['spin', 'playback', 'phase'],
+        // A strike on every beat, into flare. Flare is how far light bleeds off
+        // the tubes as the ray goes past, so on the beat the whole knot swells
+        // past white and then falls back to a drawn outline — which is the
+        // difference between a model that is lit and a model that is rotating.
+        ['hit', 'lfo', 'pulse', { rate: 0.571, sync: 1 }],
+        ['lift', 'math', 'max', { a: [0.46, 0.32] }],
+        // Thicker tubes and far more flare than this had. It was a wireframe
+        // before — measured at a mean luma of 6 against the 31 of the footage
+        // it is imitating, and not one pixel of it ever reached white.
         [
           'rings',
           'form',
           'rings',
-          { tilt: 0.7, dolly: 0.42, thick: 0.26, flare: 0.45, chrome: 0.22, apart: 0.45 },
+          { tilt: 0.7, dolly: 0.42, thick: 0.34, flare: [0.7, 0.26], chrome: 0.18, apart: 0.45 },
         ],
-        ['roll', 'grade', 'highlights', { knee: 0.58, amount: 0.62 }],
         ['o', 'out'],
       ],
       [
-        'swell/n -> lift/a',
+        'spin/n -> rings/turn',
+        'hit/n -> lift/a',
         'e/n -> lift/b',
         'lift/n -> rings/energy',
-        'rings/c -> roll/c',
-        'roll/c -> o/c',
+        'hit/n -> rings/flare',
+        'rings/c -> o/c',
       ],
     ),
 
@@ -1068,13 +1075,15 @@ const EXAMPLES: Scheme = {
     // that the scaffold stops glowing and starts reflecting. Nothing here is a
     // `spread`: a march is charged at its step ceiling, so a bloom over one
     // would charge nine marches and the compiler refuses it by name. It does
-    // not want one — the light is gathered along the ray on the way past.
+    // not want one — the light is gathered along the ray on the way past, and
+    // since the march overdrives its own core the blowout is already in there.
     cage: wire(
       'Cage',
       [
         ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.5],
         ['drift', 'lfo', 'sine', { rate: 0.365, sync: 1 }],
-        ['lift', 'math', 'max', { a: [0.34, 0.4] }],
+        ['hit', 'lfo', 'pulse', { rate: 0.571, sync: 1 }],
+        ['lift', 'math', 'max', { a: [0.46, 0.3] }],
         // The eye pushes in and back over eight beats, which is the whole
         // motion: a lattice that only turned would be wallpaper in perspective.
         [
@@ -1084,84 +1093,93 @@ const EXAMPLES: Scheme = {
           // Wide cells and thin tubes, because the eye is *inside* this one:
           // a lattice dense enough to fill every ray is a grey wall, and what
           // makes a scaffold read as a scaffold is the black between it.
-          { tilt: 0.62, dolly: [0.3, 0.35], thick: 0.15, flare: 0.26, chrome: 0.62, apart: 0.75 },
+          {
+            tilt: 0.62,
+            dolly: [0.3, 0.35],
+            thick: 0.11,
+            flare: [0.24, 0.22],
+            chrome: 0.42,
+            apart: 0.85,
+          },
         ],
-        ['roll', 'grade', 'highlights', { knee: 0.6, amount: 0.6 }],
         ['o', 'out'],
       ],
       [
         'drift/n -> lift/a',
         'e/n -> lift/b',
         'drift/n -> grid/dolly',
+        'hit/n -> grid/flare',
         'lift/n -> grid/energy',
-        'grid/c -> roll/c',
-        'roll/c -> o/c',
+        'grid/c -> o/c',
       ],
     ),
 
     // Flat, and the one to read first: a shape measured, that measurement lit,
     // and the frame it was measured in folded before any of it happened. The
-    // whole picture is three nodes; everything after them is the ghost and the
+    // whole picture is two nodes; everything after them is the ghost and the
     // optics.
     bloom: wire(
       'Bloom',
       [
         ['pt', 'point'],
-        ['rose', 'figure', 'rose', { size: 0.52, petals: 0.3 }],
+        ['rose', 'figure', 'rose', { size: 0.62, petals: 0.3 }],
         ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.35],
         // A strike on every beat that decays before the next one. It fattens
         // the filament rather than brightening the frame — a line that goes
         // from hairline to hot and back is the shape of the thing being struck.
         ['hit', 'lfo', 'pulse', { rate: 0.571, sync: 1 }],
-        ['lift', 'math', 'max', { a: [0.3, 0.45] }],
-        ['lit', 'glow', 'neon', { core: [0.2, 0.55], halo: 0.34 }],
-        // The second outlet, doing the thing it exists for. `along` says how
-        // far round the rose the nearest part of it is, so the colour runs
-        // along the curve instead of being one colour with a shape cut out of
-        // it. Behind a fold it would be useless — every copy would show the
-        // same slice of the ramp — which is why this one is not folded.
-        ['hue', 'shade', 'heat', { amount: 1 }],
-        ['ink', 'blend', 'stencil'],
+        ['lift', 'math', 'max', { a: [0.44, 0.34] }],
+        // Cut into segments around the curve, each dealt its own heat, so the rose
+        // is a chain of separately lit strokes instead of one even outline.
+        ['dash', 'vary', 'even', { steps: 0.5 }],
+        ['lit', 'glow', 'neon', { core: [0.12, 0.6], halo: [0.2, 0.2] }],
         // The ghost: the previous frame read a little further out, so what was
         // drawn last beat is still leaving as this one arrives.
         ['creep', 'lens', 'creep', { grow: 0.56 }],
         ['ghost', 'last', undefined, { fade: 0.42 }],
         ['stack', 'blend', 'add'],
-        ['prism', 'spread', 'disperse', { split: 0.42, drive: 0.5 }],
-        ['roll', 'grade', 'highlights', { knee: 0.62, amount: 0.6 }],
+        ['prism', 'spread', 'disperse', { split: 0.09, drive: 0.35 }],
+        // Last, and after the prism on purpose: the spill is the brightest
+        // thing in the frame, so splitting it is what puts colour on the *edge*
+        // of the halo instead of a rainbow through the middle of the stroke.
+        ['spill', 'spread', 'bloom', { reach: 0.3, floor: 0.5 }],
         ['o', 'out'],
       ],
       [
         'pt/p -> rose/p',
         'rose/d -> lit/d',
-        'rose/along -> hue/n',
+        // The second outlet, doing the thing it exists for. `along` says how
+        // far round the rose the nearest part of it is, and it is wired into
+        // the *core* rather than into a colour: the stroke blows out white at
+        // some points along its length and is a dim coloured line at others,
+        // the way a real filament varies. It used to drive a `shade/heat`,
+        // which painted a hue ramp along the curve and came out as a thermal
+        // image — colour describing geometry instead of describing light.
+        'rose/along -> dash/n',
+        'dash/n -> lit/core',
         'hit/n -> lift/a',
         'e/n -> lift/b',
         'lift/n -> lit/energy',
-        'hit/n -> lit/core',
-        'hue/c -> ink/base',
-        'lit/c -> ink/top',
+        'hit/n -> lit/halo',
         'pt/p -> creep/p',
         'creep/p -> ghost/p',
         'ghost/c -> stack/base',
-        'ink/c -> stack/top',
+        'lit/c -> stack/top',
         'stack/c -> prism/c',
-        'prism/c -> roll/c',
-        'roll/c -> o/c',
+        'prism/c -> spill/c',
+        'spill/c -> o/c',
       ],
     ),
 
     // The one that is about `array`. Sixteen arcs around the centre, each
     // opening further than the last because the copy number is wired into how
-    // far it sweeps — take that one cord out and it is a rubber stamp. The
-    // colour runs along each arc for the same reason: `along` says where on the
-    // curve you are, and `shade` turns that into a colour off the colourway.
+    // far it sweeps — take that one cord out and it is a rubber stamp.
     fan: wire(
       'Fan',
       [
         ['pt', 'point'],
         ['spin', 'playback', 'phase'],
-        ['ring', 'array', 'ring', { count: 0.55, turn: [0, 1] }],
+        ['ring', 'array', 'ring', { count: 0.85, turn: [0, 1] }],
         // **A ring array folds every wedge onto the same one**, so what makes
         // the copies differ has to be a number the figure reads, not a shape
         // that happens to point somewhere. The radius is that number here: each
@@ -1172,18 +1190,17 @@ const EXAMPLES: Scheme = {
         // a plain circle, because inside one wedge the arc was never reaching
         // its own ends. Worth leaving written down: a control that cannot be
         // seen to move is indistinguishable from a cord that was never drawn.
-        ['step', 'figure', 'circle', { size: [0.18, 0.5] }],
-        ['lit', 'glow', 'neon', { core: 0.28, halo: 0.3 }],
-        ['hue', 'shade', 'across', { amount: 1 }],
-        // Keep the colour only where the stroke is: the glow is the mask and
-        // the palette is what gets masked, so each arm comes out its own
-        // colour rather than the whole fan being one.
-        ['ink', 'blend', 'stencil'],
+        ['step', 'figure', 'circle', { size: [0.1, 0.85] }],
+        // Sixteen arms, and the roll decides which of them burn. `few` rather than
+        // `even` because a ring where half the arms are hot has no highlight in
+        // it — the eye needs a bed to read the blown ones against.
+        ['spark', 'vary', 'few', { steps: 0.34 }],
+        ['lit', 'glow', 'neon', { core: [0.14, 0.7], halo: 0.5 }],
         ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.4],
-        ['sway', 'lfo', 'sine', { rate: 0.53, sync: 1 }],
-        ['lift', 'math', 'max', { a: [0.32, 0.42] }],
-        ['flare', 'spread', 'streak', { reach: 0.42, gain: 0.45 }],
-        ['roll', 'grade', 'highlights', { knee: 0.6, amount: 0.6 }],
+        ['hit', 'lfo', 'pulse', { rate: 0.571, sync: 1 }],
+        ['lift', 'math', 'max', { a: [0.44, 0.32] }],
+        ['flare', 'spread', 'streak', { reach: 0.55, gain: 0.45 }],
+        ['spill', 'spread', 'bloom', { reach: 0.4, floor: 0.5 }],
         ['o', 'out'],
       ],
       [
@@ -1191,16 +1208,20 @@ const EXAMPLES: Scheme = {
         'spin/n -> ring/turn',
         'ring/p -> step/p',
         'ring/which -> step/size',
-        'ring/which -> hue/n',
+        // And into the core as well, which is the second thing the copy number
+        // is good for: the arms do not all burn equally, so a few of them go
+        // white while the rest stay a dim coloured bed. Every arm at one
+        // brightness is the tell of a repeat; the footage this imitates never
+        // has it.
+        'ring/which -> spark/n',
+        'spark/n -> lit/core',
         'step/d -> lit/d',
-        'hue/c -> ink/base',
-        'lit/c -> ink/top',
-        'sway/n -> lift/a',
+        'hit/n -> lift/a',
         'e/n -> lift/b',
         'lift/n -> lit/energy',
-        'ink/c -> flare/c',
-        'flare/c -> roll/c',
-        'roll/c -> o/c',
+        'lit/c -> flare/c',
+        'flare/c -> spill/c',
+        'spill/c -> o/c',
       ],
     ),
 
@@ -1208,32 +1229,36 @@ const EXAMPLES: Scheme = {
     // whole-frame beat flash that already shipped, used here as a **mask**
     // rather than as a picture — which is what `stencil` is for, and what makes
     // a gate a wiring decision rather than a mode nobody wrote yet. Each cell
-    // glows differently because a grid's copy number is a stable hash of the
+    // burns differently because a grid's copy number is a stable hash of the
     // cell rather than a count across it.
     signal: wire(
       'Signal',
       [
         ['pt', 'point'],
-        ['cells', 'array', 'grid', { count: 0.34 }],
+        ['cells', 'array', 'grid', { count: 0.62 }],
         // **Smaller than its cell.** A figure's size is in plane units and a
         // cell is a fraction of the frame, so a box dialled to what looks
         // right on its own is drawn entirely outside the cell it belongs to
-        // and the frame comes back black with nothing to say why.
-        ['box', 'figure', 'box', { size: 0.08, corner: 0.55 }],
-        ['lit', 'glow', 'neon', { core: 0.3, halo: [0.2, 0.35] }],
-        ['flash', 'source', 'strobe', { pulse: 0.5 }],
+        // and the frame comes back black with nothing to say why. Six across
+        // leaves a half-cell of 0.083 and this radius is 0.072.
+        ['box', 'figure', 'box', { size: 0.02, corner: 0.8 }],
+        ['spark', 'vary', 'few', { steps: 0.6 }],
+        ['lit', 'glow', 'neon', { core: [0.18, 0.7], halo: [0.34, 0.3] }],
+        ['flash', 'source', 'strobe', { pulse: 0.34 }],
         ['gate', 'blend', 'stencil'],
         ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.3],
         ['hit', 'lfo', 'pulse', { rate: 0.571, sync: 1 }],
-        ['lift', 'math', 'max', { a: [0.3, 0.45] }],
-        ['prism', 'spread', 'disperse', { split: 0.55, drive: 0.6 }],
-        ['roll', 'grade', 'highlights', { knee: 0.58, amount: 0.65 }],
+        ['lift', 'math', 'max', { a: [0.42, 0.34] }],
+        ['prism', 'spread', 'disperse', { split: 0.45, drive: 0.55 }],
+        ['spill', 'spread', 'bloom', { reach: 0.25, floor: 0.55 }],
         ['o', 'out'],
       ],
       [
         'pt/p -> cells/p',
         'cells/p -> box/p',
         'box/d -> lit/d',
+        'cells/which -> spark/n',
+        'spark/n -> lit/core',
         'cells/which -> lit/halo',
         'hit/n -> lift/a',
         'e/n -> lift/b',
@@ -1242,8 +1267,147 @@ const EXAMPLES: Scheme = {
         'lit/c -> gate/base',
         'flash/c -> gate/top',
         'gate/c -> prism/c',
-        'prism/c -> roll/c',
-        'roll/c -> o/c',
+        'prism/c -> spill/c',
+        'spill/c -> o/c',
+      ],
+    ),
+
+    /*
+     * The one that is about *layers*, and the only picture in the library with
+     * another picture behind it.
+     *
+     * Everything else here draws one thing and lights it. The footage this
+     * vocabulary was measured against almost never does: it puts a big soft
+     * out-of-focus version of the motif behind a small crisp one, and the ten-
+     * to-one difference in scale between them is most of why those frames read
+     * as deep rather than as flat. Nothing new was needed to say it — a second
+     * `figure`, a `glow/soft` with no filament in it, and a `smear` to throw
+     * the whole bed out of focus. The blur is what makes it a background: two
+     * sharp layers are a collision, and one sharp layer over one soft one is a
+     * lens with something in front of it.
+     */
+    depth: wire(
+      'Depth',
+      [
+        ['pt', 'point'],
+        // Wide and open, with few petals, so it reads as a shape rather than
+        // as detail once it has been thrown out of focus.
+        ['bed', 'figure', 'rose', { size: 0.7, petals: 0.35 }],
+        ['wide', 'glow', 'soft', { halo: 0.58 }],
+        ['blur', 'spread', 'smear', { reach: 0.75, drive: 0.5 }],
+        // What actually makes it a background. Blur alone puts a shape out of
+        // focus without putting it behind anything — the eye reads distance
+        // from *contrast*, and two layers at one level read as one busy layer.
+        ['far', 'grade', 'levels', { gain: 0.46, lift: 0 }],
+        // And the same curve again, small, tight and sharp.
+        ['top', 'figure', 'star', { size: 0.4, points: 0.3, spike: 0.62 }],
+        ['dash', 'vary', 'even', { steps: 0.45 }],
+        ['sharp', 'glow', 'neon', { core: [0.5, 0.45], halo: 0.3 }],
+        ['stack', 'blend', 'add'],
+        ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.4],
+        ['hit', 'lfo', 'pulse', { rate: 0.571, sync: 1 }],
+        // The strike, bent steeper before it drives anything. A pulse straight
+        // into brightness is already percussive; through a curve it is a snap.
+        ['bend', 'math', 'curve', { b: 0.72 }],
+        ['lift', 'math', 'max', { a: [0.44, 0.34] }],
+        ['spill', 'spread', 'bloom', { reach: 0.32, floor: 0.5 }],
+        ['o', 'out'],
+      ],
+      [
+        'pt/p -> bed/p',
+        'bed/d -> wide/d',
+        'wide/c -> blur/c',
+        'blur/c -> far/c',
+        'pt/p -> top/p',
+        'top/d -> sharp/d',
+        'top/along -> dash/n',
+        'dash/n -> sharp/core',
+        'hit/n -> bend/a',
+        'bend/n -> lift/a',
+        'e/n -> lift/b',
+        'lift/n -> wide/energy',
+        'lift/n -> sharp/energy',
+        'far/c -> stack/base',
+        'sharp/c -> stack/top',
+        'stack/c -> spill/c',
+        'spill/c -> o/c',
+      ],
+    ),
+
+    /*
+     * Spokes that leave a wake.
+     *
+     * A ring of radial segments, each dealt its own length and its own heat, on
+     * top of the previous frame pulled outward — so what was drawn a moment ago
+     * is still travelling away as the next one arrives. The trail is not an
+     * effect over the picture, it *is* the picture: at any instant the drawn
+     * part is a few short strokes, and everything else on the screen is where
+     * those strokes have been.
+     *
+     * This is the one to point at when asked what a rendering engine buys over
+     * a clip of the same thing. The wake is made from the frame that was
+     * actually shown, so it lengthens when the room does and shortens when it
+     * stops, and the spokes are dealt rather than drawn — the same graph with a
+     * different seed is a different fountain rather than the same one again.
+     */
+    comet: wire(
+      'Comet',
+      [
+        ['pt', 'point'],
+        ['spin', 'playback', 'phase'],
+        ['ring', 'array', 'ring', { count: 0.9, turn: [0, 1] }],
+        // `line` rather than a closed shape, because inside a ring wedge a
+        // segment is a spoke: the fold is what turns a row of lines into a
+        // fountain, and no node had to know that.
+        // **Turn zero, and it matters.** A ring wedge folds every point onto the
+        // +x axis, so a segment at a quarter turn is perpendicular to the only
+        // place there are any points to measure — sixteen spokes came back as
+        // one dot in the middle of the frame. Along the wedge's own axis it is
+        // a radial spoke, which is what a fold was wanted for.
+        ['spoke', 'figure', 'line', { turn: 0, span: [0.2, 0.65] }],
+        ['reach', 'vary', 'even', { steps: 0.5 }],
+        ['spark', 'vary', 'few', { steps: 0.5 }],
+        ['lit', 'glow', 'neon', { core: [0.1, 0.6], halo: 0.22 }],
+        // **`creep`, not `zoom`, and a short fade.** Two mistakes worth leaving
+        // written down, because a feedback loop punishes both silently. A
+        // `zoom` is a fixed scale per *frame*, so the wake it draws is a fact
+        // about the display rather than about the music; `creep` is the same
+        // move scaled by uDt and is the one built for reading yourself. And the
+        // fade is a half-life: at 0.2 the frame keeps 96% of itself every
+        // sixtieth of a second, which is not a trail, it is an accumulator —
+        // it settled at a mean of 161 out of 255 with 4% black left in the
+        // frame. Short enough to actually decay is much shorter than it sounds.
+        ['pull', 'lens', 'creep', { grow: 0.82 }],
+        ['ghost', 'last', undefined, { fade: 0.05 }],
+        ['stack', 'blend', 'add'],
+        ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.35],
+        ['hit', 'lfo', 'pulse', { rate: 0.571, sync: 1 }],
+        ['lift', 'math', 'max', { a: [0.42, 0.36] }],
+        ['spill', 'spread', 'bloom', { reach: 0.28, floor: 0.55 }],
+        ['o', 'out'],
+      ],
+      [
+        'pt/p -> ring/p',
+        'spin/n -> ring/turn',
+        'ring/p -> spoke/p',
+        // Two rolls off one copy number, and they must not agree: one decides
+        // how far the spoke runs and the other how hard it burns. Driving both
+        // from the same number would make every long spoke a bright one, which
+        // is a rule the eye picks up immediately and stops looking.
+        'ring/which -> reach/n',
+        'reach/n -> spoke/span',
+        'ring/which -> spark/n',
+        'spark/n -> lit/core',
+        'spoke/d -> lit/d',
+        'hit/n -> lift/a',
+        'e/n -> lift/b',
+        'lift/n -> lit/energy',
+        'pt/p -> pull/p',
+        'pull/p -> ghost/p',
+        'ghost/c -> stack/base',
+        'lit/c -> stack/top',
+        'stack/c -> spill/c',
+        'spill/c -> o/c',
       ],
     ),
   },

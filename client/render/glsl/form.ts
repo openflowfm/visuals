@@ -218,13 +218,19 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
     if (travelled > away + 5.0) break;
   }
 
-  float lit = clamp(gathered * mix(8.0, 26.0, clamp(flare, 0.0, 1.0))
-                    * mix(0.7, 1.2, e), 0.0, 1.0);
+  // Kept unclamped, because how far past full the glow went is the whole
+  // question downstream: coverage saturates at one and light does not. Where
+  // the ray ran down the length of a tube this comes back well above one, and
+  // that excess is what makes a core white and gives a bloom something to
+  // spread. See OVERBRIGHT.
+  float raw = gathered * mix(8.0, 26.0, clamp(flare, 0.0, 1.0)) * mix(0.7, 1.2, e);
+  float lit = clamp(raw, 0.0, 1.0);
   // Only what is genuinely saturated goes white. Mixing toward white from
   // halfway up leaves every tube the same pale grey and throws the colourway
   // away, which is the difference between a lit tube and a lit tube-shaped
   // hole.
-  vec3 colour = mix(uPrimary, vec3(1.0), clamp(lit * 2.2 - 1.1, 0.0, 1.0));
+  vec3 colour = mix(uPrimary, vec3(1.0), clamp(raw * 1.6 - 0.75, 0.0, 1.0));
+  colour *= 1.0 + max(raw - 1.0, 0.0) * mix(0.8, 2.6, clamp(flare, 0.0, 1.0));
   float cover = lit;
 
   if (chrome > 0.002) {
@@ -232,8 +238,14 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
     float facing = pow(1.0 - clamp(dot(-ray, n), 0.0, 1.0), 3.0);
     vec3 shell = formSky(reflect(ray, n)) * mix(0.45, 1.0, facing)
                + vec3(1.0) * pow(facing, 2.5) * 0.5;
-    colour = mix(colour, shell, chrome * hit);
-    cover = max(cover, hit * chrome);
+    // Chrome falls off with how far the ray went to find it. Without this a
+    // lattice is equally bright at every depth, so the far cells fill the frame
+    // instead of receding into it and the picture has no black in it at all —
+    // 9% of the frame against the 47% the footage this imitates runs at. Depth
+    // is the difference between a structure and a wallpaper.
+    float depth = exp(-max(travelled - 1.0, 0.0) * 0.55);
+    colour = mix(colour, shell * depth, chrome * hit);
+    cover = max(cover, hit * chrome * depth);
   }
 
   return vec4(colour, cover);

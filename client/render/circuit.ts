@@ -45,6 +45,7 @@ import { IMAGE_NODE_SPEC } from '../nodes/image/spec.ts';
 import { LFO_NODE_SPEC } from '../nodes/lfo/spec.ts';
 import { GLOW_NODE_SPEC } from '../nodes/glow/spec.ts';
 import { SHADE_NODE_SPEC } from '../nodes/shade/spec.ts';
+import { VARY_NODE_SPEC } from '../nodes/vary/spec.ts';
 import { FIGURE_NODE_SPEC } from '../nodes/figure/spec.ts';
 import { ARRAY_NODE_SPEC } from '../nodes/array/spec.ts';
 import { FORM_NODE_SPEC } from '../nodes/form/spec.ts';
@@ -257,6 +258,20 @@ const MATH: Record<string, (a: string, b: string) => string> = {
   min: (a, b) => `min(${a}, ${b})`,
   max: (a, b) => `max(${a}, ${b})`,
   average: (a, b) => `((${a} + ${b}) * 0.5)`,
+  /*
+   * Bend a number toward one end of its travel without moving either end.
+   *
+   * The one shape this node could not make, and the gap showed up everywhere
+   * once anything started modulating anything: a linear ramp into brightness
+   * reads as a fader being ridden, and the percussive version of the same ramp
+   * — quick up, long tail, or the reverse — needs an exponent. There was no way
+   * to write one, so flows reached for `multiply` with both inlets fed from the
+   * same cord to get a square, which is a squint at the problem.
+   *
+   * `b` at its midpoint is the identity, so wiring nothing to it changes
+   * nothing, and the two halves of the control bend the curve opposite ways.
+   */
+  curve: (a, b) => `pow(clamp(${a}, 0.0, 1.0), exp2((clamp(${b}, 0.0, 1.0) - 0.5) * 4.0))`,
 };
 
 /**
@@ -693,16 +708,36 @@ const SPREAD_EMIT: Record<string, (ctx: Emitting, e: string, k: (i: number) => s
       return `((${taps.join(' + ')}) / 6.0)`;
     },
 
-    // Eight taps on a ring, and only what is already bright gets added back.
-    // The cheapest thing that makes a projector look like it cost more than it
-    // did: a cheap lamp has no contrast to spare, so highlights must be built.
+    /*
+     * Light above white, put back as halo around whatever spilled it.
+     *
+     * **Eight taps on a golden-angle spiral, not on a ring.** A ring of equal
+     * radii is a poor sample of a disc: a single bright point comes back as
+     * eight satellites at one distance, which reads as a lens artifact rather
+     * than as glow. Spiralling the radius out as the angle turns spends the
+     * same eight taps on a falloff instead, and eight is the budget — every tap
+     * re-evaluates the whole picture upstream, so this already costs eight
+     * times what reading it once does.
+     *
+     * **`floor` has white at its midpoint.** It used to be a plain 0-1 level,
+     * which meant a bloom at rest harvested mid-greys and blurred the picture
+     * into itself. Now the resting position takes only what could not fit in
+     * the pixel — see OVERBRIGHT — and turning it down is a deliberate choice
+     * to bloom things that are merely bright.
+     */
     bloom: (c, e, k) => {
-      const reach = `((0.003 + ${k(0)} * 0.022) * (0.6 + uLevel * 0.8))`;
-      const taps = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => {
-        const a = ((i * Math.PI) / 4).toFixed(4);
-        return c.readAt('c', `(${c.at} + vec2(cos(${a}), sin(${a})) * ${reach})`);
+      const reach = `((0.004 + ${k(0)} * 0.075) * (0.6 + uLevel * 0.8))`;
+      const arms = [0, 1, 2, 3, 4, 5, 6, 7];
+      const weights = arms.map((i) => Math.exp(-1.6 * ((i + 0.5) / 8)));
+      const total = weights.reduce((sum, w) => sum + w, 0);
+      const taps = arms.map((i) => {
+        const angle = (i * 2.39996).toFixed(4);
+        const radius = (((i + 0.5) / 8) ** 0.7).toFixed(4);
+        const at = `(${c.at} + vec2(cos(${angle}), sin(${angle})) * ${reach} * ${radius})`;
+        return `${c.readAt('c', at)} * ${weights[i].toFixed(4)}`;
       });
-      return `(${c.read('c')} + max((${taps.join(' + ')}) / 8.0 - vec4(${k(1)}), vec4(0.0)) * mix(0.4, 1.1, ${e}))`;
+      const gathered = `((${taps.join(' + ')}) / ${total.toFixed(4)})`;
+      return `fxBloom(${c.read('c')}, ${gathered}, ${k(1)} * 2.0, mix(0.5, 1.4, ${e}))`;
     },
 
     // Bright things smeared sideways, the way light through an anamorphic
@@ -957,6 +992,8 @@ const MATH_MODES = documentedModes(MATH_OPS, {
   min: 'Use whichever of the two numbers is lower.',
   max: 'Use whichever of the two numbers is higher.',
   average: 'Use the midpoint between both numbers.',
+  curve:
+    'Bend the first number toward one end of its travel. The second is the amount, straight at the middle.',
 });
 
 /**
@@ -1155,6 +1192,7 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
   image: IMAGE_NODE_SPEC,
   glow: GLOW_NODE_SPEC,
   shade: SHADE_NODE_SPEC,
+  vary: VARY_NODE_SPEC,
   figure: FIGURE_NODE_SPEC,
   array: ARRAY_NODE_SPEC,
   form: FORM_NODE_SPEC,

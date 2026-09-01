@@ -161,6 +161,25 @@ vec4 fxHighlights(vec4 c, float knee, float amount) {
   return vec4(clamp(shaped, 0.0, 1.0) * c.a, c.a);
 }
 
+/*
+ * Put light that did not fit in a pixel back into the ones around it.
+ *
+ * gathered is the neighbourhood, already weighted; floorAt is the level
+ * above which light counts as spill. Everything below it is the picture and
+ * stays where it is — a bloom that harvested mid-greys would be a blur, which
+ * is what this was while nothing in the vocabulary could exceed one.
+ *
+ * The spill lifts coverage as well as colour, because a halo that brightened
+ * the frame without covering any of it would vanish the moment the result was
+ * composited over anything: light is both the thing you see and the thing that
+ * hides what is behind it.
+ */
+vec4 fxBloom(vec4 base, vec4 gathered, float floorAt, float gain) {
+  vec3 spill = max(gathered.rgb - vec3(floorAt), vec3(0.0)) * gain;
+  float most = max(max(spill.r, spill.g), spill.b);
+  return vec4(base.rgb + spill, min(1.0, base.a + most));
+}
+
 vec4 fxChannels(vec4 c, float rotate) {
   float which = floor(clamp(rotate, 0.0, 0.999) * 3.0);
   vec3 col = which < 1.0 ? c.rgb : (which < 2.0 ? c.gbr : c.brg);

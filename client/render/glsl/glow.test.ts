@@ -7,12 +7,27 @@ const mix = (a: number, b: number, amount: number): number => a + (b - a) * amou
 
 /** The scalar form of the falloffs, which are closed and hold no lattice. */
 const reach = (halo: number): number => 0.004 * Math.pow(60, clamp(halo));
+const glowBody = (q: number): number => Math.max(1 / (1 + q * q * 8) - 0.02, 0) / 0.98;
 const neon = (d: number, e: number, core: number, halo: number): number => {
   const q = Math.max(d, 0) / reach(halo);
-  const body = 1 / (1 + q * q * 8);
   const width = mix(0.1, 0.85, clamp(core));
   const hot = Math.exp(-(q * q) / (width * width));
-  return clamp((body * 0.85 + hot) * mix(0.65, 1.15, e));
+  return clamp((glowBody(q) * 0.85 + hot) * mix(0.65, 1.15, e));
+};
+/** How far past white the filament drives, which is the whole point of it. */
+const neonPeak = (d: number, e: number, core: number, halo: number): number => {
+  const q = Math.max(d, 0) / reach(halo);
+  const width = mix(0.1, 0.85, clamp(core));
+  const hot = Math.exp(-(q * q) / (width * width));
+  const white = smoothstep(0.15, 0.6, hot);
+  const over = 1 + hot * hot * mix(0.8, 4.0, clamp(core)) * mix(0.7, 1.3, e);
+  // The blue channel of a saturated cyan primary is the one that clips first;
+  // the red channel is the one that decides whether it is *white*.
+  return (0.078 + white * (1 - 0.078)) * over;
+};
+const smoothstep = (edge0: number, edge1: number, x: number): number => {
+  const t = clamp((x - edge0) / (edge1 - edge0));
+  return t * t * (3 - 2 * t);
 };
 const band = (d: number, e: number, away: number, halo: number): number =>
   clamp(
@@ -62,6 +77,50 @@ describe('a distance becoming light', () => {
       const lit = band((step / 12) * 0.3, 0.5, 0, 0.35);
       expect(lit).toBeLessThanOrEqual(previous);
       previous = lit;
+    }
+  });
+});
+
+describe('a filament that can actually blow out', () => {
+  it('drives the middle of the stroke past white rather than up to it', () => {
+    // The version this replaced mixed `hot * 0.85` toward white, which against
+    // a saturated primary put a hard ceiling of about (220, 246, 255) on the
+    // brightest pixel a glow could emit: every lit line in the library came out
+    // a pale wash of the colourway and nothing was ever white. Measured against
+    // the footage it imitates, the reference blows 11% of its peak frame and
+    // the library managed 0.9%.
+    expect(neonPeak(0, 0.6, 0.6, 0.35)).toBeGreaterThan(1);
+    // And it is the core that decides how hard, so the control still means
+    // something at both ends.
+    expect(neonPeak(0, 0.6, 0.9, 0.35)).toBeGreaterThan(neonPeak(0, 0.6, 0.15, 0.35));
+  });
+
+  it('keeps the white to the middle, so the halo stays the colourway', () => {
+    const halo = 0.35;
+    // Far enough out that the filament has gone, the colour is the primary
+    // undiluted — a glow whose halo whitened would throw the palette away.
+    const q = 2.0;
+    expect(smoothstep(0.15, 0.6, Math.exp(-(q * q) / (0.46 * 0.46)))).toBe(0);
+    expect(neon(0, 0.6, 0.6, halo)).toBeGreaterThan(neon(0.02, 0.6, 0.6, halo));
+  });
+
+  it('reaches zero at a finite distance instead of tailing off forever', () => {
+    // An inverse square never ends, and over a whole frame that is not a
+    // rounding matter: the tail of one glow covers every pixel at some small
+    // amplitude, so a picture built out of glows has no black in it anywhere
+    // and any radial optic downstream turns that gradient into a frame-wide
+    // hue shift. A cyan flower on a red field, with nothing in the graph
+    // saying red.
+    expect(glowBody(0)).toBeCloseTo(1, 6);
+    expect(glowBody(2.5)).toBe(0);
+    expect(glowBody(50)).toBe(0);
+    // And it is still monotone on the way down, with no step where it lands.
+    let previous = Infinity;
+    for (let step = 0; step <= 60; step++) {
+      const at = glowBody((step / 60) * 3);
+      expect(at).toBeLessThanOrEqual(previous + 1e-9);
+      expect(at).toBeGreaterThanOrEqual(0);
+      previous = at;
     }
   });
 });
