@@ -135,6 +135,54 @@ const RESPONSE = z.discriminatedUnion('kind', [
   }),
 ]);
 
+const MODEL_TARGET = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('node-transform'),
+    node: z.number().int().nonnegative(),
+    nodePath: z.string(),
+    property: z.enum([
+      'translation-x', 'translation-y', 'translation-z',
+      'rotation-x', 'rotation-y', 'rotation-z',
+      'scale-x', 'scale-y', 'scale-z',
+    ]),
+  }),
+  z.object({
+    kind: z.literal('morph'),
+    mesh: z.number().int().nonnegative(),
+    target: z.number().int().nonnegative(),
+    name: z.string(),
+  }),
+  z.object({ kind: z.literal('animation'), animation: z.number().int().nonnegative(), name: z.string() }),
+  z.object({
+    kind: z.literal('material'),
+    material: z.number().int().nonnegative(),
+    property: z.enum(['metallic', 'roughness', 'opacity', 'emissive-strength']),
+  }),
+]);
+
+const MODEL_BINDING = z.object({
+  id: z.string(),
+  label: z.string(),
+  group: z.string(),
+  target: MODEL_TARGET,
+  default: z.number(),
+  min: z.number(),
+  max: z.number(),
+});
+
+const MODEL_SETUP = z.object({
+  id: z.string(),
+  name: z.string(),
+  assetHash: z.string(),
+  bindings: z.array(MODEL_BINDING),
+  materials: z.array(z.object({
+    material: z.number().int().nonnegative(),
+    source: z.enum(['color-a', 'color-b', 'primary', 'secondary', 'complement', 'accent', 'chalk', 'original']),
+    amount: z.number(),
+  })),
+  camera: z.number().int().nonnegative().nullable().optional(),
+});
+
 const CALIBRATION_DECISION = z.object({
   trialId: z.string(),
   trialVersion: z.number().int().positive(),
@@ -156,6 +204,17 @@ const UP = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('downbeat') }),
   z.object({ kind: z.literal('next-flow') }),
   z.object({ kind: z.literal('next-colorway') }),
+  z.object({ kind: z.literal('model-save'), setup: MODEL_SETUP }),
+  z.object({
+    kind: z.literal('model-reconcile'),
+    setupId: z.string(),
+    assetHash: z.string(),
+    decision: z.object({
+      targets: z.record(z.string(), MODEL_TARGET),
+      materials: z.record(z.string(), z.number().int().nonnegative().nullable()),
+      camera: z.number().int().nonnegative().nullable(),
+    }),
+  }),
   z.object({ kind: z.literal('lab-open') }),
   z.object({ kind: z.literal('lab-compare'), comparison: COMPARISON }),
   z.object({ kind: z.literal('lab-skip-encounter'), encounterId: z.number().int().positive() }),

@@ -35,6 +35,10 @@ export function App() {
     scheme,
     library,
     media,
+    models,
+    importModel,
+    saveModelSetup,
+    reconcileModel,
     grid,
     edit,
     saveScheme,
@@ -81,6 +85,8 @@ export function App() {
   // rebuilding the loop whenever a number moved would drop a frame per edit.
   const schemeRef = useRef(scheme);
   schemeRef.current = scheme;
+  const modelsRef = useRef(models);
+  modelsRef.current = models;
   const { output, aligning, align, moveCorner, setGain, reset } = useOutput();
   const wall = useWall(!ON_WALL);
   const wallFrames = useWallFrames(!ON_WALL);
@@ -177,7 +183,15 @@ export function App() {
       const dt = Math.min((now - last) / 1000, 0.1);
       last = now;
       clock.advance(dt);
-      compositor.frame(showRef.current, schemeRef.current, clock.beat(), clock.seconds(), dt);
+      compositor.frame(
+        showRef.current,
+        schemeRef.current,
+        clock.beat(),
+        clock.seconds(),
+        dt,
+        undefined,
+        modelsRef.current,
+      );
 
       if (now - since >= 500) {
         // Nobody reads a frame rate off a projector, so the wall does not draw
@@ -324,6 +338,10 @@ export function App() {
             scheme={scheme}
             library={library}
             media={media}
+            models={models}
+            importModel={importModel}
+            saveModelSetup={saveModelSetup}
+            reconcileModel={reconcileModel}
             grid={grid}
             edit={edit}
             saveScheme={saveScheme}

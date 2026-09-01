@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Circuit, MediaAsset, NodeKind, Scheme, Show } from '../../protocol.ts';
+import type {
+  ModelLibrary,
+  ModelRevisionDecision,
+  ModelSetupDraft,
+} from '../../model.ts';
 import { wouldLoop } from '../../protocol.ts';
 import type { GraphView } from '@openflow/widgets/chrome/Graph.tsx';
 import { format } from '@openflow/widgets/param/format.ts';
@@ -40,6 +45,7 @@ import { withStandIns, type Room } from '../state/useRoom.ts';
 import type { Transport } from '../state/useTransport.ts';
 import './circuit.css';
 import './console.css';
+import { ModelLibraryPanel } from './ModelLibrary.tsx';
 
 const PICTURES_KEY = 'openflow.visuals.live-node-pictures';
 const DISPLAY_RATE_MS = 100;
@@ -148,6 +154,10 @@ export function Designer({
   show,
   scheme,
   media,
+  models,
+  importModel,
+  saveModelSetup,
+  reconcileModel,
   edit,
   flow,
   setFlow,
@@ -159,6 +169,10 @@ export function Designer({
   show: Show;
   scheme: Scheme;
   media: readonly MediaAsset[];
+  models: ModelLibrary;
+  importModel(file: File): Promise<void>;
+  saveModelSetup(setup: ModelSetupDraft): void;
+  reconcileModel(setupId: string, assetHash: string, decision: ModelRevisionDecision): void;
   edit(next: Scheme): void;
   /** Which flow is open, held above so the one header can name it. */
   flow: string | null;
@@ -566,6 +580,12 @@ export function Designer({
           )}
 
           <div className="shelf shelf-nodes">
+            <ModelLibraryPanel
+              library={models}
+              onImport={importModel}
+              onSave={saveModelSetup}
+              onReconcile={reconcileModel}
+            />
             <div className="shelf-head">
               <h4>{activeSwap ? `${activeSwap.kind} modes` : 'nodes'}</h4>
               <button
@@ -626,6 +646,7 @@ export function Designer({
                   tracks={trackNames}
                   flows={list}
                   media={media}
+                  models={models}
                   viewRef={graphView}
                   energy={room.show.master}
                   beat={transport.beat}
@@ -661,6 +682,7 @@ export function Designer({
             <FloatingBench
               show={room.show}
               scheme={scheme}
+              models={models}
               flow={id}
               clock={transport}
               onError={setError}

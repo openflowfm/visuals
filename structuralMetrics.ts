@@ -24,6 +24,14 @@ export interface StructuralDifference {
   rightJunctions: number;
 }
 
+/** Coarse spatial chromaticity, independent of exposure and tube thickness. */
+export interface MaterialStructure {
+  columns: number;
+  rows: number;
+  /** Per cell: red share, green share, blue share, saturation, occupied flag. */
+  cells: Float32Array;
+}
+
 const luma = (r: number, g: number, b: number): number =>
   0.2126 * r + 0.7152 * g + 0.0722 * b;
 
@@ -232,6 +240,83 @@ export function structureOf(
     endpoints,
     junctions,
   };
+}
+
+/**
+ * Preserve where authored/material colours live without comparing brightness.
+ *
+ * The grid is deliberately coarse: it distinguishes a cyan cap from an amber
+ * centre and alternating rails from one flat tint, while a two-pixel projection
+ * shift or a wider bloom cannot dominate the result. RGB is divided by its sum
+ * per pixel, so exposure and emissive strength are not mistaken for material.
+ */
+export function materialStructureOf(
+  pixels: Uint8Array | Uint8ClampedArray,
+  width: number,
+  height: number,
+  columns = 8,
+  rows = 5,
+): MaterialStructure {
+  if (pixels.length !== width * height * 4) throw new Error('material structure dimensions do not match');
+  const cells = new Float32Array(columns * rows * 5);
+  const counts = new Uint32Array(columns * rows);
+  for (let y = 0; y < height; y++) {
+    const row = Math.min(rows - 1, Math.floor((y / height) * rows));
+    for (let x = 0; x < width; x++) {
+      const at = (y * width + x) * 4;
+      const r = pixels[at];
+      const g = pixels[at + 1];
+      const b = pixels[at + 2];
+      const most = Math.max(r, g, b);
+      if (most < 16) continue;
+      const sum = Math.max(1, r + g + b);
+      const cell = row * columns + Math.min(columns - 1, Math.floor((x / width) * columns));
+      const out = cell * 5;
+      cells[out] += r / sum;
+      cells[out + 1] += g / sum;
+      cells[out + 2] += b / sum;
+      cells[out + 3] += (most - Math.min(r, g, b)) / most;
+      counts[cell] += 1;
+    }
+  }
+  for (let cell = 0; cell < counts.length; cell++) {
+    const count = counts[cell];
+    if (!count) continue;
+    const at = cell * 5;
+    cells[at] /= count;
+    cells[at + 1] /= count;
+    cells[at + 2] /= count;
+    cells[at + 3] /= count;
+    cells[at + 4] = 1;
+  }
+  return { columns, rows, cells };
+}
+
+/** Mean spatial chromaticity/saturation difference, 0 for the same materials. */
+export function materialStructureDifference(left: MaterialStructure, right: MaterialStructure): number {
+  if (left.columns !== right.columns || left.rows !== right.rows || left.cells.length !== right.cells.length) {
+    throw new Error('material structures use different grids');
+  }
+  let total = 0;
+  let compared = 0;
+  for (let at = 0; at < left.cells.length; at += 5) {
+    const leftOn = left.cells[at + 4] > 0;
+    const rightOn = right.cells[at + 4] > 0;
+    if (!leftOn && !rightOn) continue;
+    compared += 1;
+    if (!leftOn || !rightOn) {
+      total += 0.5;
+      continue;
+    }
+    const chromaticity = (
+      Math.abs(left.cells[at] - right.cells[at]) +
+      Math.abs(left.cells[at + 1] - right.cells[at + 1]) +
+      Math.abs(left.cells[at + 2] - right.cells[at + 2])
+    ) / 2;
+    const saturation = Math.abs(left.cells[at + 3] - right.cells[at + 3]);
+    total += chromaticity * 0.75 + saturation * 0.25;
+  }
+  return compared ? total / compared : 0;
 }
 
 function distanceTo(mask: Uint8Array, width: number, height: number): Float32Array {

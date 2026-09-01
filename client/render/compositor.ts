@@ -1,5 +1,6 @@
 import type { Circuit, Scheme, Show } from '../../protocol.ts';
-import { flatten, portId, type CircuitImage, type CircuitVideo } from './circuit.ts';
+import type { ModelLibrary } from '../../model.ts';
+import { flatten, portId, type CircuitImage, type CircuitModel, type CircuitVideo } from './circuit.ts';
 import { createNumberEvaluator, type NumberEvaluator } from './evaluateNumber.ts';
 import { createFeed, type Banks } from './feed.ts';
 import { banksOf, buildFlow, signatureOf } from './flow.ts';
@@ -8,10 +9,13 @@ import { createMeter, type FrameStats, type Meter } from './meter.ts';
 import { columns, warpFor, SQUARE, type Corners } from './output.ts';
 import { createVideoBank, videoControl } from './video.ts';
 import { createImageBank } from './image.ts';
+import { createModelBank, type ModelResourceStats } from './model.ts';
 import {
   responseOverridesSignature,
   type ResponseOverrides,
 } from '../../response.ts';
+
+const EMPTY_MODELS: ModelLibrary = { assets: [], setups: [], notice: null };
 
 /**
  * Two passes and an output stage, where there used to be a stack of them.
@@ -41,6 +45,7 @@ export interface Compositor {
     seconds: number,
     dt: number,
     responses?: ResponseOverrides,
+    models?: ModelLibrary,
   ): void;
   setOutput(output: Output | null): void;
   /** Draw for a window somebody is looking *at*, rather than for a projector. */
@@ -55,6 +60,8 @@ export interface Compositor {
   stats(): FrameStats;
   /** Throw the window away, so a reading starts from a change rather than through it. */
   resetStats(): void;
+  /** Bounded model allocations and asynchronous load state, for headless proof. */
+  modelResources(): ModelResourceStats;
 }
 
 export interface Output {
@@ -78,6 +85,7 @@ interface Built {
   circuit: Circuit;
   videos: CircuitVideo[];
   images: CircuitImage[];
+  models: CircuitModel[];
   numbers: NumberEvaluator;
 }
 
@@ -100,6 +108,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       error: 'WebGL2 is not available in this browser.',
       stats: () => idle.read(),
       resetStats: () => idle.reset(),
+      modelResources: () => ({ instances: 0, geometries: 0, targets: 0, loading: 0 }),
     };
   }
 
@@ -111,6 +120,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
   let feed = createFeed(gl);
   let video = createVideoBank(gl);
   let image = createImageBank(gl);
+  let model = createModelBank(gl);
 
   /** Where the set's own picture lands, for the flow to read. */
   let live = createTarget(gl);
@@ -191,6 +201,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
     circuit: { nodes: [], cords: [] },
     videos: [],
     images: [],
+    models: [],
     numbers: createNumberEvaluator(),
   });
 
@@ -219,6 +230,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       circuit,
       videos: compiled.videos,
       images: compiled.images,
+      models: compiled.models,
       numbers: createNumberEvaluator(),
     };
     if (compiled.source) {
@@ -283,6 +295,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
     feed.free();
     video.free();
     image.free();
+    model.free();
     // The timer queries are GL objects like any other, and a pool of them left
     // behind on every console open is exactly the slow leak this file's meter
     // exists to make visible. `onRestored` builds a fresh meter after this.
@@ -328,6 +341,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
     feed = createFeed(gl);
     video = createVideoBank(gl);
     image = createImageBank(gl);
+    model = createModelBank(gl);
     live = createTarget(gl);
     out = createTarget(gl);
     prev = createTarget(gl);
@@ -342,10 +356,11 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
 
   return {
     get error() {
-      return error ?? feed.error ?? video.error ?? image.error;
+      return error ?? feed.error ?? video.error ?? image.error ?? model.error;
     },
     stats: () => meter.read(),
     resetStats: () => meter.reset(),
+    modelResources: () => model.resources,
     resize,
     preview(on) {
       // `?maxEdge` still wins. Someone who asked for 800 asked for 800.
@@ -379,7 +394,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
         if (!canvas.isConnected) gl.getExtension('WEBGL_lose_context')?.loseContext();
       }
     },
-    frame(show, scheme, beat, seconds, dt, responses) {
+    frame(show, scheme, beat, seconds, dt, responses, models = EMPTY_MODELS) {
       // Nothing to draw into. Every call below would be a no-op anyway; not
       // making them is what keeps a lost context from rebuilding flows that
       // cannot compile, sixty times a second, until it comes back.
@@ -421,6 +436,29 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       gl.disable(gl.BLEND);
 
       if (built?.program) {
+        const sample = built.numbers.sample(built.circuit, {
+          show,
+          beat,
+          seconds,
+          dt,
+          pace: scheme?.defaults.pace,
+        });
+        model.bind(
+          built.program,
+          built.models,
+          models,
+          sample,
+          show.colors,
+          canvas.width,
+          canvas.height,
+          id ?? '',
+        );
+        // The model bank rendered into its own depth target. Return to the
+        // ordinary flow destination and state before sampling those textures.
+        gl.bindFramebuffer(gl.FRAMEBUFFER, out.framebuffer);
+        gl.viewport(0, 0, canvas.width, canvas.height);
+        gl.disable(gl.DEPTH_TEST);
+        gl.disable(gl.BLEND);
         gl.useProgram(built.program.program);
         feed.flow(built.program, at, built.banks);
         gl.activeTexture(gl.TEXTURE0);
@@ -433,19 +471,13 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
         gl.activeTexture(gl.TEXTURE7);
         gl.bindTexture(gl.TEXTURE_2D, prev.texture);
         gl.uniform1i(built.program.uniform('uLastTex'), 7);
-        const sample = built.numbers.sample(built.circuit, {
-          show,
-          beat,
-          seconds,
-          dt,
-          pace: scheme?.defaults.pace,
-        });
         video.bind(built.program, built.videos, (binding) => videoControl(sample, binding), id ?? '');
         image.bind(built.program, built.images, id ?? '');
         drawFullscreen(gl);
       } else {
         video.clear();
         image.clear();
+        model.clear();
       }
 
       // --- to the wall -----------------------------------------------------

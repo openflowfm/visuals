@@ -23,6 +23,11 @@ import type {
   SetGrid,
   Show,
 } from '../../protocol.ts';
+import type {
+  ModelLibrary,
+  ModelRevisionDecision,
+  ModelSetupDraft,
+} from '../../model.ts';
 
 /**
  * The connection to the visuals server, and the clock the renderer runs on.
@@ -93,6 +98,15 @@ export function useShow(): {
   library: Library | null;
   /** Server-approved video files below the configured media root. */
   media: MediaAsset[];
+  /** Immutable GLBs and reusable OpenFlow-owned setup metadata. */
+  models: ModelLibrary;
+  importModel(file: File): Promise<void>;
+  saveModelSetup(setup: ModelSetupDraft): void;
+  reconcileModel(
+    setupId: string,
+    assetHash: string,
+    decision: ModelRevisionDecision,
+  ): void;
   /**
    * Publish an edit. Every screen follows it immediately; nothing reaches
    * disk — that is `saveScheme`'s job, and the distance between the two is
@@ -188,6 +202,7 @@ export function useShow(): {
   const [scheme, setScheme] = useState<Scheme | null>(null);
   const [library, setLibrary] = useState<Library | null>(null);
   const [media, setMedia] = useState<MediaAsset[]>([]);
+  const [models, setModels] = useState<ModelLibrary>({ assets: [], setups: [], notice: null });
   const [grid, setGrid] = useState<SetGrid | null>(null);
   const [lab, setLab] = useState<LabState | null>(null);
   const [labLog, setLabLog] = useState<{ reviews: LabReviewRow[]; more: boolean } | null>(null);
@@ -266,6 +281,10 @@ export function useShow(): {
         }
         if (message.kind === 'media') {
           setMedia(message.assets);
+          return;
+        }
+        if (message.kind === 'models') {
+          setModels(message.library);
           return;
         }
         if (message.kind === 'lab') {
@@ -433,6 +452,38 @@ export function useShow(): {
     const socket = live.current;
     if (socket?.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ kind: 'next-colorway' }));
+    }
+  }).current;
+
+  const importModel = useRef(async (file: File) => {
+    const response = await fetch('/models/import', {
+      method: 'POST',
+      headers: {
+        'content-type': 'model/gltf-binary',
+        'x-openflow-name': encodeURIComponent(file.name),
+      },
+      body: file,
+    });
+    if (!response.ok) {
+      throw new Error((await response.text()) || `model import failed (${response.status})`);
+    }
+  }).current;
+
+  const saveModelSetup = useRef((setup: ModelSetupDraft) => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'model-save', setup }));
+    }
+  }).current;
+
+  const reconcileModel = useRef((
+    setupId: string,
+    assetHash: string,
+    decision: ModelRevisionDecision,
+  ) => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ kind: 'model-reconcile', setupId, assetHash, decision }));
     }
   }).current;
 
@@ -660,6 +711,7 @@ export function useShow(): {
     scheme,
     library,
     media,
+    models,
     grid,
     edit,
     saveScheme,
@@ -668,6 +720,9 @@ export function useShow(): {
     downbeat,
     nextFlow,
     nextColorway,
+    importModel,
+    saveModelSetup,
+    reconcileModel,
     lab,
     labOpen,
     labCompare,

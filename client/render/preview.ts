@@ -315,6 +315,17 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
         // promotion into the bench uses the full compositor and plays it.
         video.bind(made.program, [], () => ({ pace: 0.5, freeze: false, position: null }));
         image.bind(made.program, []);
+        // Model assets deliberately do not load once per tiny node face. Bind
+        // every model sampler explicitly to transparent instead of leaving it
+        // at texture unit zero, where it would sample the set picture.
+        for (let index = 0; index < 2; index++) {
+          for (const name of ['Base', 'Mask'] as const) {
+            const unit = 8 + index * 2 + (name === 'Mask' ? 1 : 0);
+            gl.activeTexture(gl.TEXTURE0 + unit);
+            gl.bindTexture(gl.TEXTURE_2D, blank);
+            gl.uniform1i(made.program.uniform(`uModel${name}${index}`), unit);
+          }
+        }
         drawFullscreen(gl);
       }
 

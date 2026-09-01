@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode, type Ref } from 'react';
 import type { Circuit, CircuitNode, FlowDef, MediaAsset, NodeKind } from '../../protocol.ts';
+import { modelPorts, type ModelLibrary } from '../../model.ts';
 import {
   Graph,
   GraphNode,
@@ -57,6 +58,7 @@ export function CircuitEditor({
   tracks = [],
   flows = [],
   media = [],
+  models = { assets: [], setups: [], notice: null },
   picture,
   energy = 0,
   beat = () => 0,
@@ -82,6 +84,8 @@ export function CircuitEditor({
   flows?: readonly { id: string; def: FlowDef }[];
   /** Server-approved disk media. A media node stores the stable relative id. */
   media?: readonly MediaAsset[];
+  /** Reusable setups a model node may select. */
+  models?: ModelLibrary;
   /** A small picture of what a node has made, when the host can draw one. */
   picture?: (nodeId: string) => ReactNode;
   /** The room's current energy, for an unwired alive inlet. */
@@ -173,6 +177,7 @@ export function CircuitEditor({
                 tracks={tracks}
                 flows={flows}
                 media={media}
+                models={models}
                 picture={picture}
                 energy={energy}
                 beat={beat}
@@ -246,6 +251,7 @@ export function NodeFace({
   tracks,
   flows,
   media = [],
+  models = { assets: [], setups: [], notice: null },
   picture,
   energy,
   beat,
@@ -264,6 +270,7 @@ export function NodeFace({
   tracks: readonly string[];
   flows?: readonly { id: string; def: FlowDef }[];
   media?: readonly MediaAsset[];
+  models?: ModelLibrary;
   picture?: (nodeId: string) => ReactNode;
   energy: number;
   beat: () => number;
@@ -329,6 +336,7 @@ export function NodeFace({
   const mediaIds = media.filter((asset) => asset.type === mediaType).map((asset) => asset.id);
   const mediaChoices =
     node.asset && !mediaIds.includes(node.asset) ? [node.asset, ...mediaIds] : mediaIds;
+  const modelChoices = models.setups;
   const chooser =
     node.kind === 'flow' ? (
       <Select
@@ -347,6 +355,24 @@ export function NodeFace({
         onChange={(i) => onChange({ of: targets[i] })}
         label="Track this reads"
       />
+    ) : node.kind === 'model' ? (
+      modelChoices.length > 0 ? (
+        <Select
+          items={['choose setup', ...modelChoices.map((setup) => setup.name)]}
+          index={Math.max(0, modelChoices.findIndex((setup) => setup.id === node.setup) + 1)}
+          onChange={(i) => {
+            const setup = i > 0 ? modelChoices[i - 1] : undefined;
+            onChange(setup ? {
+              setup: setup.id,
+              setupRevision: setup.revision,
+              modelPorts: modelPorts(setup),
+            } : { setup: undefined, setupRevision: undefined, modelPorts: [] });
+          }}
+          label="Reusable model setup"
+        />
+      ) : (
+        <span className="node-empty">no model setups</span>
+      )
     ) : mediaType ? (
       mediaChoices.length > 0 ? (
         <Select
@@ -554,7 +580,7 @@ export function NodeFace({
           <Port
             id={id}
             side="in"
-            label={port.name}
+            label={port.label ?? port.name}
             showLabel={false}
             kind={port.kind}
             connected={fed.has(id)}
@@ -584,7 +610,7 @@ export function NodeFace({
       control:
         port.kind !== 'n' ? (
           <span className="node-inlet-name" title={port.description}>
-            {port.name}
+            {port.label ?? port.name}
           </span>
         ) : alive ? (
           <span

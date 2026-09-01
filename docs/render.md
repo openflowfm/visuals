@@ -1,6 +1,6 @@
 # The renderer
 
-`client/render/`. WebGL2, two passes and an output stage.
+`client/render/`. WebGL2, bounded passes and an output stage.
 
 Shader source is split by responsibility under `client/render/glsl/`: `common.ts`
 owns the uniforms and shared coordinate/clock helpers, `sources.ts` owns the
@@ -23,8 +23,10 @@ the set's picture (only if the flow asked for it)
     draw its picture, blended, into one target
 
 the flow
+  render up to two reachable GLB model instances into bounded HDR/depth targets
   one full-screen pass, one compiled fragment shader
   reading that target wherever a `tracks` node appears
+  sampling model base and palette-mask textures wherever a `model` node appears,
   up to two persistent decoded-video textures where `video` nodes appear,
   and up to four persistent still textures where `image` nodes appear
 
@@ -36,6 +38,15 @@ the output stage
 targets. That is gone, because [a colour is a function of a point](flows.md): a whole flow —
 however many sources, effects and nested flows it contains — compiles to one shader, and
 composition happens in the expression rather than in a buffer.
+
+**A GLB model is the other deliberate pass.** Triangle projection, occlusion and skinning
+need a depth buffer, so `client/render/model.ts` draws each reachable instance into one
+multi-render target: authored material light in the base texture and separate `color-a` /
+`color-b` masks beside it. The target is `RGBA16F` when the WebGL float-render extension is
+present, `RGBA8` as a visible fallback, carries a 24-bit depth buffer, and is capped at 1280
+on its longest edge. The full-screen flow shader reconstructs the chosen palette colours and
+sees an ordinary premultiplied source. Downstream blend, grade, lens, feedback and output
+paths therefore remain exactly the ones above. See [models](models.md).
 
 **The set is the one thing that cannot be an expression.** A `tracks` node draws the same
 picture once per playing Live track, with a different colour, meter and fader each time, and
@@ -448,7 +459,8 @@ help, and because it is the same idiom as `?maxEdge`.
 ## Fill rate is the only performance number
 
 Cost is `pixels × passes × 60`, and there are far fewer passes than there were: one per
-playing track plus one for the flow, where it used to be up to three per track. What
+playing track plus one for the flow, with one bounded geometry pass for each reachable model,
+where it used to be up to three passes per track. What
 replaced them is **instruction count inside one shader**, which is cheaper per pixel but no
 longer free to grow — a multi-tap effect over a deep graph is the way to make a single pass
 expensive, and `MAX_LINES` is the backstop. Iterative nodes also declare worst-case work:
@@ -514,10 +526,10 @@ that happened to be up.
 compositor dead so `frame` stops, and releases everything *there*, while the context is
 lost and every call is a harmless no-op. Doing it on the restore instead would mean passing
 handles from the old context to the new one, which is an `INVALID_OPERATION` apiece. What
-the release actually reclaims is the half that is not on the GPU: the video elements the
-bank keeps open.
+the release actually reclaims is both sides: video elements, in-flight model loads and the
+model scene clones, geometry buffers, depth targets and textures held by the banks.
 
-`webglcontextrestored` makes it all again — feed, banks, targets — and clears the flow
+`webglcontextrestored` makes it all again — feed, media and model banks, targets — and clears the flow
 cache, which is the point of a cache here: it is what knows a flow existed, so emptying it
 is what makes the next frame rebuild exactly the flow that was up. Nothing is restored,
 because nothing survived.

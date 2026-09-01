@@ -6,6 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import type { Circuit, CircuitNode, Scheme, Show } from '../../protocol.ts';
+import type { ModelLibrary } from '../../model.ts';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { createCompositor } from '../render/compositor.ts';
 import { inside, usePlace, type Place } from '../state/usePlace.ts';
@@ -35,6 +36,7 @@ export function Bench({
   flow,
   clock,
   live,
+  models = { assets: [], setups: [], notice: null },
   responses,
   onError,
 }: {
@@ -50,13 +52,14 @@ export function Bench({
    * every fader at wherever the last structural push left it.
    */
   live?: { readonly current: Show } | null;
+  models?: ModelLibrary;
   /** Development-only response substitutions for the calibration bench. */
   responses?: ResponseOverrides;
   onError(message: string | null): void;
 }) {
   const canvas = useRef<HTMLCanvasElement | null>(null);
-  const now = useRef({ show, scheme, flow, clock, live: live ?? null, responses, onError });
-  now.current = { show, scheme, flow, clock, live: live ?? null, responses, onError };
+  const now = useRef({ show, scheme, flow, clock, live: live ?? null, models, responses, onError });
+  now.current = { show, scheme, flow, clock, live: live ?? null, models, responses, onError };
 
   useEffect(() => {
     const el = canvas.current;
@@ -83,6 +86,7 @@ export function Bench({
         held.clock.seconds(),
         dt,
         held.responses,
+        held.models,
       );
       if (compositor.error !== said) {
         said = compositor.error;
@@ -204,6 +208,7 @@ export function FloatingBench({
   onError,
   aside,
   probing,
+  models,
   onProbe,
 }: {
   show: Show;
@@ -215,6 +220,7 @@ export function FloatingBench({
   aside: string;
   /** A node of `flow` to draw instead of the whole thing, or null for the flow. */
   probing: CircuitNode | null;
+  models: ModelLibrary;
   onProbe(id: string | null): void;
 }) {
   const panel = useRef<HTMLDivElement | null>(null);
@@ -332,6 +338,7 @@ export function FloatingBench({
         scheme={drawn.scheme}
         flow={drawn.flow}
         clock={clock}
+        models={models}
         onError={onError}
       />
       <div

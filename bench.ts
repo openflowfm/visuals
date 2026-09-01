@@ -44,8 +44,8 @@
  * only for this file.
  */
 
-import scheme from './scheme.json' with { type: 'json' };
 import type { Scheme, Show, Track } from './protocol.ts';
+import type { ModelLibrary } from './model.ts';
 import { createCompositor } from './client/render/compositor.ts';
 import { compileFlow } from './client/render/circuit.ts';
 
@@ -265,7 +265,8 @@ function packColor(hex: string): number {
 }
 
 export async function run(canvas: HTMLCanvasElement): Promise<BenchReport> {
-  const loaded = scheme as unknown as Scheme;
+  const loaded = (await (await fetch('/scheme.json')).json()) as Scheme;
+  const models = (await (await fetch('/models.json')).json()) as ModelLibrary;
   const ids = Object.keys(loaded.flows).slice(0, LIMIT);
   const colors = (Object.values(loaded.colorways)[0] ?? ['#ffffff']).map(packColor);
   const passes: Pass[] = [];
@@ -359,7 +360,16 @@ export async function run(canvas: HTMLCanvasElement): Promise<BenchReport> {
 
       // Warmed on a still clock, because the only thing this has to buy is the
       // shader compile and the driver settling — neither cares what beat it is.
-      for (let i = 0; i < WARMUP; i++) compositor.frame(at, loaded, 0, 0, 1 / 60);
+      compositor.frame(at, loaded, 0, 0, 1 / 60, undefined, models);
+      const readyBy = performance.now() + 15_000;
+      while (compositor.modelResources().loading > 0 && performance.now() < readyBy) {
+        await new Promise((ready) => setTimeout(ready, 16));
+        compositor.frame(at, loaded, 0, 0, 1 / 60, undefined, models);
+      }
+      if (compositor.modelResources().loading > 0) {
+        throw new Error(`${loaded.flows[id]?.name ?? id}: model load timed out`);
+      }
+      for (let i = 0; i < WARMUP; i++) compositor.frame(at, loaded, 0, 0, 1 / 60, undefined, models);
       settle();
 
       /** One frame of the show, at whatever moment the caller has reached. */
@@ -367,7 +377,7 @@ export async function run(canvas: HTMLCanvasElement): Promise<BenchReport> {
         // **Musical time off the wall clock, not off a frame counter.** This is
         // the whole point of the window: the beat advances at the rate a stage
         // advances it, however many frames the machine manages in between.
-        compositor.frame(at, loaded, (elapsed / 60_000) * TEMPO, elapsed / 1000, dt);
+        compositor.frame(at, loaded, (elapsed / 60_000) * TEMPO, elapsed / 1000, dt, undefined, models);
       };
 
       const started = performance.now();

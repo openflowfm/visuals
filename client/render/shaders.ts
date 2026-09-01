@@ -57,6 +57,10 @@ uniform sampler2D uImage1;
 uniform sampler2D uImage2;
 uniform sampler2D uImage3;
 uniform vec2 uImageSize[4];
+uniform sampler2D uModelBase0;
+uniform sampler2D uModelMask0;
+uniform sampler2D uModelBase1;
+uniform sampler2D uModelMask1;
 uniform float uParams[${Math.max(1, values)}];
 // Meters of tracks a flow NAMED, in the order its track nodes appear, and
 // energies computed on the CPU for its energy nodes. Banks rather than a
@@ -103,6 +107,28 @@ vec4 laid(vec4 g, float e) {
 // The Live set's own picture, at a point.
 vec4 fromTracks(vec2 p) {
   return texture(uTracksTex, clamp(uncentred(p), 0.0, 1.0));
+}
+
+// A model pass keeps authored/palette-role colour in its base target and independently
+// controlled material light in the red/green mask channels. Mapping the two
+// external colour inlets here is what leaves them ordinary graph colours:
+// they can come from colorway, another picture, or their primary/secondary
+// defaults without making the model renderer a second graph compiler.
+vec4 modelColour(vec2 p, sampler2D baseTex, sampler2D maskTex, vec4 a, vec4 b) {
+  vec2 uv = clamp(uncentred(p), 0.0, 1.0);
+  vec4 base = texture(baseTex, uv);
+  vec4 mask = texture(maskTex, uv);
+  vec3 colour = base.rgb + mask.r * a.rgb + mask.g * b.rgb;
+  float cover = base.a + mask.a * max(a.a, b.a);
+  return vec4(colour, clamp(cover, 0.0, 1.0));
+}
+
+vec4 fromModel0(vec2 p, vec4 a, vec4 b) {
+  return modelColour(p, uModelBase0, uModelMask0, a, b);
+}
+
+vec4 fromModel1(vec2 p, vec4 a, vec4 b) {
+  return modelColour(p, uModelBase1, uModelMask1, a, b);
 }
 
 /*

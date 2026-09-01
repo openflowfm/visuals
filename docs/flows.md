@@ -104,6 +104,14 @@ may reach more than four image nodes. Parked image nodes allocate nothing. Small
 previews bind them transparent for the same anti-thrashing reason as video; the bench and wall
 render the real image.
 
+A **model** is the bounded 3D exception. Its GLB is rendered into a colour texture with depth
+before the expression pass, then sampled as an ordinary premultiplied colour. Everything after
+it remains the same graph: blends, grades, lenses, feedback and nested flows do not learn a
+fourth signal or a special model path. At most two reachable model instances allocate targets;
+parked model nodes allocate nothing. The setup owns which discovered GLB properties become
+dynamic number inlets, while the node keeps only that setup reference and its ordinary
+values, depths and cords. See [models](models.md).
+
 The **previous frame** is the third stateful picture, and the only one that is not a file.
 See [the frame before this one](#the-frame-before-this-one) below: one ping-ponged target per
 destination, sampled by a `last` node as a colour at a point, exactly as a video is.
@@ -364,7 +372,8 @@ editors listing these differently would be two different vocabularies.
 | `field` | `p` `energy`, plus `balls` `apart` on metaballs | `c` | `cells` `clouds` `metaballs`; fixed work, charged per graph sample and never offered per track |
 | `fractal` | `p` `energy` + its mode's numbers | `c` | `mandelbrot` or `julia`, with bounded zoom, detail and iterative work |
 | `light` | `p` `energy` + its mode's numbers, and `from` on the hung three | `c` | `lamp` `beam` `shafts` `caustics`; 2D lights with fixed work, drifting in seconds rather than beats |
-| `form` | `p` `turn` `tilt` `dolly` `thick` `flare` `chrome` `energy` + its mode's numbers | `c` | `torus` `rings` `frame` `lattice` `weave` `loom` `orbits` `relief` `iris` `truss` `rotor` `armillary` `gyre` `astrolabe` `rosette` `corolla` `spindle` `meridian` `vault` `graticule` `tube`; the one node with a third coordinate in it, marched and charged like a fractal |
+| `form` | `p` `turn` `tilt` `dolly` `thick` `flare` `chrome` `energy` + its mode's numbers | `c` | `torus` `rings` `frame` `lattice` `weave` `loom` `orbits` `relief` `iris` `truss` `rotor` `armillary` `gyre` `astrolabe` `rosette` `corolla` `spindle` `meridian` `vault` `graticule` `tube`; procedural 3D marched and charged like a fractal |
+| `model` | `p` `color-a` `color-b` + a setup's published numbers | `c` | one reusable setup over an imported GLB; bounded depth-rendered geometry which rejoins the ordinary colour graph |
 | `glow` | `d` `energy` + its mode's numbers | `c` | `neon` `soft` `band`: a distance becomes a lit stroke |
 | `shade` | `n` `amount` `energy` | `c` | `across` `heat` `filament`: a number becomes a colour off the colourway |
 | `flow` | `p` | `c` | another flow, whole, as one node |
@@ -477,7 +486,7 @@ beat. It is the difference between a repeat and an arrangement. Two outlets of d
 signals is already precedent — `polar` has them — and neither can be a loop, because an
 `array` has no colour inlet to feed anything back into.
 
-## `form` is the only node with a third coordinate, and it keeps it
+## `form` is procedural 3D, and it keeps its third coordinate
 
 A colour here is a function of a point and the point is two numbers. That is what makes the
 graph composable, and it is also what kept every picture in it flat: a ring seen at an angle,
@@ -489,6 +498,11 @@ So `form` does the search and hands back a picture, exactly as `field` and `frac
 their own bounded loops. The third coordinate stays inside it. Nothing else in the vocabulary
 learns one, no cord changes what it carries, and a form composes downstream as any other
 picture does.
+
+`model` reaches the same colour boundary by a different implementation: imported triangles
+are rasterized with a depth buffer into a bounded texture first. It is not another `form`
+mode and does not put a third coordinate on a cord; the two sources merely share the rule
+that their 3D work ends at one ordinary colour outlet. See [models](models.md).
 
 **It brings its own light rather than being bloomed.** Every step of the march adds
 `exp(-distance)` to a running total, *weighted by how far that step carried the ray* — count

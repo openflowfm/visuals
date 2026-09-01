@@ -18,6 +18,7 @@ import type {
   SetGrid,
   Show,
 } from '../../protocol.ts';
+import type { ModelLibrary, ModelRevisionDecision, ModelSetupDraft } from '../../model.ts';
 import { EXAMPLES_SCHEME_ID, schemeLabel } from '../../protocol.ts';
 import '@openflow/widgets/tokens.css';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
@@ -62,6 +63,10 @@ export interface ConsoleProps {
   scheme: Scheme;
   library: Library | null;
   media: readonly MediaAsset[];
+  models: ModelLibrary;
+  importModel(file: File): Promise<void>;
+  saveModelSetup(setup: ModelSetupDraft): void;
+  reconcileModel(setupId: string, assetHash: string, decision: ModelRevisionDecision): void;
   grid: SetGrid | null;
   /** Publish an edit to every screen. Disk is `saveScheme`'s business. */
   edit(next: Scheme): void;
@@ -118,6 +123,10 @@ export function Console({
   scheme,
   library,
   media,
+  models,
+  importModel,
+  saveModelSetup,
+  reconcileModel,
   grid,
   edit,
   saveScheme,
@@ -258,6 +267,10 @@ export function Console({
           show={show}
           scheme={scheme}
           media={media}
+          models={models}
+          importModel={importModel}
+          saveModelSetup={saveModelSetup}
+          reconcileModel={reconcileModel}
           edit={edit}
           flow={flow}
           setFlow={setFlow}

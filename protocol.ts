@@ -26,6 +26,12 @@
  */
 import { NODE_FAMILIES, type NodeKind } from './client/nodes/generated.ts';
 import type { ParameterResponse, ResponseTarget } from './response.ts';
+import type {
+  ModelLibrary,
+  ModelPortSnapshot,
+  ModelRevisionDecision,
+  ModelSetupDraft,
+} from './model.ts';
 
 export { NODE_FAMILIES, type NodeKind };
 
@@ -471,6 +477,15 @@ export interface CircuitNode {
   of?: string;
   /** A server-approved path below the visuals media root, for a media node. */
   asset?: string;
+  /** Reusable OpenFlow model setup selected by a `model` node. */
+  setup?: string;
+  /** Setup content stamp this instance last synchronized against. */
+  setupRevision?: string;
+  /**
+   * Context-free dynamic inlet snapshot. Stable ids address cords and values;
+   * labels may change without moving either.
+   */
+  modelPorts?: ModelPortSnapshot[];
   /**
    * What each unwired number inlet holds, by inlet name, 0–1.
    *
@@ -1489,6 +1504,7 @@ export type Down =
   | { kind: 'scheme'; scheme: Scheme }
   | ({ kind: 'library' } & Library)
   | { kind: 'media'; assets: MediaAsset[] }
+  | { kind: 'models'; library: ModelLibrary }
   | { kind: 'grid'; grid: SetGrid }
   | ({ kind: 'lab' } & LabState)
   // The review tab's page of past judgments, newest first; `more` says the
@@ -1529,6 +1545,13 @@ export type Up =
   | { kind: 'downbeat' }
   | { kind: 'next-flow' }
   | { kind: 'next-colorway' }
+  | { kind: 'model-save'; setup: ModelSetupDraft }
+  | {
+      kind: 'model-reconcile';
+      setupId: string;
+      assetHash: string;
+      decision: ModelRevisionDecision;
+    }
   // The lab speaks coarse gestures and nothing finer. Opening train asks for
   // the queue's state — and is the only thing that makes the server deal;
   // nothing is generated merely because a server is running. A comparison,

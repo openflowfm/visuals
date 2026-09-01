@@ -54,6 +54,7 @@ export default defineConfig({
     proxy: {
       '/ws': { target: SERVER.replace('http', 'ws'), ws: true },
       '/media': { target: SERVER },
+      '/models': { target: SERVER },
     },
   },
 });

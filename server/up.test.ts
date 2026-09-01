@@ -32,6 +32,37 @@ const SAMPLES: Record<string, unknown> = {
   downbeat: { kind: 'downbeat' },
   'next-flow': { kind: 'next-flow' },
   'next-colorway': { kind: 'next-colorway' },
+  'model-save': {
+    kind: 'model-save',
+    setup: {
+      id: 'capsule',
+      name: 'Capsule',
+      assetHash: 'a'.repeat(64),
+      bindings: [{
+        id: 'turn',
+        label: 'Turn',
+        group: 'motion',
+        target: { kind: 'node-transform', node: 0, nodePath: 'Capsule', property: 'rotation-x' },
+        default: 0.5,
+        min: -3.14,
+        max: 3.14,
+      }],
+      materials: [{ material: 0, source: 'color-a', amount: 1 }],
+      camera: null,
+    },
+  },
+  'model-reconcile': {
+    kind: 'model-reconcile',
+    setupId: 'capsule',
+    assetHash: 'b'.repeat(64),
+    decision: {
+      targets: {
+        turn: { kind: 'node-transform', node: 2, nodePath: 'Revised/Capsule', property: 'rotation-x' },
+      },
+      materials: { 0: 1 },
+      camera: null,
+    },
+  },
   'lab-open': { kind: 'lab-open' },
   'lab-compare': { kind: 'lab-compare', comparison: { encounterId: 1, choice: 'left' } },
   'lab-skip-encounter': { kind: 'lab-skip-encounter', encounterId: 1 },

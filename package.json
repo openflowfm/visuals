@@ -10,12 +10,18 @@
     "build:link": "node --disable-warning=ExperimentalWarning tools/build-link.ts",
     "nodes": "node --disable-warning=ExperimentalWarning tools/generate-nodes.ts",
     "nodes:check": "node --disable-warning=ExperimentalWarning tools/generate-nodes.ts --check",
-    "mcp": "npm run nodes && node --disable-warning=ExperimentalWarning mcp/index.ts"
+    "mcp": "npm run nodes && node --disable-warning=ExperimentalWarning mcp/index.ts",
+    "model:xenon": "node --disable-warning=ExperimentalWarning tools/generate-xenon-60-model.ts",
+    "model:proof": "node --disable-warning=ExperimentalWarning tools/xenon-model-proof.ts"
   },
   "dependencies": {
     "@ktamas77/abletonlink": "^1.2.3",
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "three": "^0.180.0",
     "ws": "^8.18.0",
     "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/three": "^0.180.0"
   }
 }

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { structuralDifference, structureOf } from './structuralMetrics.ts';
+import {
+  materialStructureDifference,
+  materialStructureOf,
+  structuralDifference,
+  structureOf,
+} from './structuralMetrics.ts';
 
 const image = (width: number, height: number, lit: (x: number, y: number) => boolean) => {
   const pixels = new Uint8ClampedArray(width * height * 4);
@@ -49,5 +54,26 @@ describe('structural frame comparison', () => {
     const held = structureOf(plus, 31, 31);
     expect(held.endpoints).toBe(4);
     expect(held.junctions).toBe(1);
+  });
+
+  it('compares spatial material colour without confusing exposure for identity', () => {
+    const cyan = image(32, 16, (x) => x < 16);
+    for (let at = 0; at < cyan.length; at += 4) {
+      if (!cyan[at]) continue;
+      cyan[at] = 20;
+      cyan[at + 1] = 180;
+      cyan[at + 2] = 220;
+    }
+    const dim = new Uint8ClampedArray(cyan.map((value, at) => at % 4 === 3 ? value : value * 0.4));
+    const amber = new Uint8ClampedArray(cyan);
+    for (let at = 0; at < amber.length; at += 4) {
+      if (!amber[at + 2]) continue;
+      amber[at] = 220;
+      amber[at + 1] = 100;
+      amber[at + 2] = 20;
+    }
+    const held = materialStructureOf(cyan, 32, 16, 4, 2);
+    expect(materialStructureDifference(held, materialStructureOf(dim, 32, 16, 4, 2))).toBeCloseTo(0, 2);
+    expect(materialStructureDifference(held, materialStructureOf(amber, 32, 16, 4, 2))).toBeGreaterThan(0.15);
   });
 });

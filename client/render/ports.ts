@@ -23,6 +23,10 @@ export interface PortDocumentation {
 
 export interface PortSpec extends PortDocumentation {
   name: string;
+  /** Cosmetic faceplate name. `name` remains the stable graph address. */
+  label?: string;
+  /** Optional visual grouping for setup-published controls. */
+  group?: string;
   kind: Signal;
   /** The GLSL used when nothing is wired here and nothing is set. */
   fallback?: string;

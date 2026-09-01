@@ -49,6 +49,7 @@ import { VARY_NODE_SPEC } from '../nodes/vary/spec.ts';
 import { FIGURE_NODE_SPEC } from '../nodes/figure/spec.ts';
 import { ARRAY_NODE_SPEC } from '../nodes/array/spec.ts';
 import { FORM_NODE_SPEC } from '../nodes/form/spec.ts';
+import { MODEL_NODE_SPEC } from '../nodes/model/spec.ts';
 import {
   productionResponse,
   responseGlsl,
@@ -1192,6 +1193,7 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
 
   video: VIDEO_NODE_SPEC,
   image: IMAGE_NODE_SPEC,
+  model: MODEL_NODE_SPEC,
   glow: GLOW_NODE_SPEC,
   shade: SHADE_NODE_SPEC,
   vary: VARY_NODE_SPEC,
@@ -1600,6 +1602,12 @@ export interface CircuitImage {
   index: number;
 }
 
+export interface CircuitModel {
+  id: string;
+  setup: string;
+  index: number;
+}
+
 export interface Compiled {
   source: string | null;
   error: string | null;
@@ -1609,6 +1617,8 @@ export interface Compiled {
   videos: CircuitVideo[];
   /** Reachable still images, in their fixed four texture slots. */
   images: CircuitImage[];
+  /** Reachable reusable model instances, in their bounded offscreen slots. */
+  models: CircuitModel[];
   /** How each Live track should draw, if this flow asked for the set at all. */
   draws: string | null;
   /**
@@ -1651,6 +1661,9 @@ export const MAX_VIDEOS = 2;
 
 /** Four persistent textures is the hard ceiling for one flattened flow. */
 export const MAX_IMAGES = 4;
+
+/** Two HDR/depth model passes is the explicit per-flow resource ceiling. */
+export const MAX_MODELS = 2;
 
 /**
  * How many GLSL statements a flow may emit.
@@ -2297,6 +2310,7 @@ export function compileFlow(
     tracks: [],
     videos: [],
     images: [],
+    models: [],
     draws: null,
   };
   if (expanded.error) return empty;
@@ -2315,6 +2329,7 @@ export function compileCircuit(circuit: Circuit, options: CompileOptions = {}): 
     tracks,
     videos: [],
     images: [],
+    models: [],
     draws,
     feedback: false,
     work: 0,
@@ -2328,6 +2343,8 @@ export function compileCircuit(circuit: Circuit, options: CompileOptions = {}): 
   const usedVideos: CircuitVideo[] = [];
   const imageSlot = new Map<string, number>();
   const usedImages: CircuitImage[] = [];
+  const modelSlot = new Map<string, number>();
+  const usedModels: CircuitModel[] = [];
 
   // At most one. A flow with no `out` at all is legal now — a provider, whose
   // doors are `give` nodes and whose picture is honestly nothing — so only the
@@ -2524,6 +2541,22 @@ export function compileCircuit(circuit: Circuit, options: CompileOptions = {}): 
                 const contain = usedImages[index]?.mode === 'contain' ? 'true' : 'false';
                 return { c: `fromImage${index}(${ctx.read('p')}, ${contain})` };
               })()
+          : node.kind === 'model'
+            ? (() => {
+                let index = modelSlot.get(node.id);
+                if (index === undefined) {
+                  index = usedModels.length;
+                  if (index >= MAX_MODELS) {
+                    failed ??= `more than ${MAX_MODELS} reachable model nodes`;
+                    return { c: 'vec4(0.0)' };
+                  }
+                  modelSlot.set(node.id, index);
+                  usedModels.push({ id: node.id, setup: node.setup ?? '', index });
+                }
+                return {
+                  c: `fromModel${index}(${ctx.read('p')}, ${ctx.read('color-a')}, ${ctx.read('color-b')})`,
+                };
+              })()
           : spec.emit(ctx);
     open.delete(here);
 
@@ -2559,6 +2592,7 @@ ${lines.join('\n')}
     source,
     videos: usedVideos,
     images: usedImages,
+    models: usedModels,
     feedback,
     work: shaderWork,
     error: null,

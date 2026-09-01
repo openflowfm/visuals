@@ -98,6 +98,16 @@ from and the panel you judge in.
 
 ### The node browser lists nodes, and presets sit under them
 
+The **Models** drawer sits above that browser because it creates things the browser may place,
+not another family of presets. It imports an ordinary `.glb`, shows the inspected scene roots,
+node transforms, mesh primitives and morph names, skins and joints, animation clips and
+channels, materials, cameras and lights, and creates an OpenFlow-owned reusable setup from
+those facts. A setup publishes only selected transforms, morphs, clips or material properties
+as renameable normalized controls; it never turns every joint into a faceplate. Saved setups
+then appear in the ordinary `model` node's chooser. Asset revision is a separate action which
+requires a decision for every published target, material mapping and camera before it moves.
+The complete ownership and safety contract is in [models](models.md).
+
 It listed the **modes** — `plasma`, `kaleido`, `sparks`, twenty-three of them flat — and
 never mentioned the node they were. That was solving something real, and the replacement has
 to keep solving it: browsing nineteen node kinds and then discovering that two of them

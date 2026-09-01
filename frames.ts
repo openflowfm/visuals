@@ -20,6 +20,7 @@
  */
 
 import type { Scheme, Show, Track } from './protocol.ts';
+import type { ModelLibrary } from './model.ts';
 import { createCompositor } from './client/render/compositor.ts';
 import { compileFlow } from './client/render/circuit.ts';
 import { cyclicMotion, metricsOf, type FrameMetrics } from './frameMetrics.ts';
@@ -118,6 +119,13 @@ export interface FramesReport {
   height: number;
   stats: FrameStat[];
   sequences: SequenceStat[];
+  models: {
+    peakInstances: number;
+    peakGeometries: number;
+    peakTargets: number;
+    loadingAtCapture: number;
+    instancesAfterRelease: number;
+  };
   errors: string[];
 }
 
@@ -129,6 +137,7 @@ export async function run(canvas: HTMLCanvasElement): Promise<FramesReport> {
   // it was taken compiled to an empty circuit and rendered black with no error
   // to say why.
   const loaded = (await (await fetch('/scheme.json')).json()) as Scheme;
+  const models = (await (await fetch('/models.json')).json()) as ModelLibrary;
   const wayName = asked('colorway', Object.keys(loaded.colorways)[0] ?? '');
   const colors = (loaded.colorways[wayName] ?? Object.values(loaded.colorways)[0] ?? ['#ffffff'])
     .map(packColor);
@@ -164,6 +173,20 @@ export async function run(canvas: HTMLCanvasElement): Promise<FramesReport> {
   const stats: FrameStat[] = [];
   const sequences: SequenceStat[] = [];
   const errors: string[] = [];
+  const modelStats = {
+    peakInstances: 0,
+    peakGeometries: 0,
+    peakTargets: 0,
+    loadingAtCapture: 0,
+    instancesAfterRelease: 0,
+  };
+  const measureModels = () => {
+    const held = compositor.modelResources();
+    modelStats.peakInstances = Math.max(modelStats.peakInstances, held.instances);
+    modelStats.peakGeometries = Math.max(modelStats.peakGeometries, held.geometries);
+    modelStats.peakTargets = Math.max(modelStats.peakTargets, held.targets);
+    modelStats.loadingAtCapture = held.loading;
+  };
   const dt = 1 / FPS;
   const perFrame = TEMPO / 60 / FPS;
 
@@ -178,16 +201,34 @@ export async function run(canvas: HTMLCanvasElement): Promise<FramesReport> {
       continue;
     }
     const sampled: Uint8ClampedArray[] = [];
+    // Start model loads, then yield until the actual parser says every
+    // reachable setup is ready. A fixed sleep made captures depend on disk and
+    // GPU speed and let a slow machine record a convincing sheet of black.
+    compositor.frame(showAt(beats[0] ?? 0, colors, id), loaded, beats[0] ?? 0, 0, dt, undefined, models);
+    const readyBy = performance.now() + 15_000;
+    while (compositor.modelResources().loading > 0 && performance.now() < readyBy) {
+      await new Promise((ready) => setTimeout(ready, 16));
+      compositor.frame(showAt(beats[0] ?? 0, colors, id), loaded, beats[0] ?? 0, 0, dt, undefined, models);
+    }
+    if (compositor.modelResources().loading > 0) {
+      errors.push(`${id}: model load timed out`);
+      continue;
+    }
+    if (compositor.error) {
+      errors.push(`${id}: ${compositor.error}`);
+      continue;
+    }
+    measureModels();
     for (const target of beats) {
       // Wind the clock up to the wanted beat from far enough back that anything
       // reading the previous frame has a previous frame to read. A flow with a
       // trail in it captured cold is a picture of its first frame.
       let beat = target - SETTLE * perFrame;
       for (let step = 0; step < SETTLE; step++) {
-        compositor.frame(showAt(beat, colors, id), loaded, beat, beat * (60 / TEMPO), dt);
+        compositor.frame(showAt(beat, colors, id), loaded, beat, beat * (60 / TEMPO), dt, undefined, models);
         beat += perFrame;
       }
-      compositor.frame(showAt(target, colors, id), loaded, target, target * (60 / TEMPO), dt);
+      compositor.frame(showAt(target, colors, id), loaded, target, target * (60 / TEMPO), dt, undefined, models);
       if (compositor.error) {
         errors.push(`${id}: ${compositor.error}`);
         break;
@@ -201,6 +242,7 @@ export async function run(canvas: HTMLCanvasElement): Promise<FramesReport> {
       const pixels = flat.getImageData(0, 0, WIDTH, HEIGHT).data;
       stats.push(statOf(pixels, WIDTH, HEIGHT, id, target));
       sampled.push(new Uint8ClampedArray(pixels));
+      measureModels();
       const png = shot.toDataURL('image/png');
       await fetch(`/write?name=${encodeURIComponent(`${id}@${target}`)}`, {
         method: 'POST',
@@ -210,6 +252,8 @@ export async function run(canvas: HTMLCanvasElement): Promise<FramesReport> {
     if (sampled.length > 0) sequences.push({ flow: id, motion: cyclicMotion(sampled) });
   }
 
+  compositor.frame(showAt(0, colors, null), loaded, 0, 0, dt, undefined, models);
+  modelStats.instancesAfterRelease = compositor.modelResources().instances;
   compositor.free();
-  return { renderer, width: WIDTH, height: HEIGHT, stats, sequences, errors };
+  return { renderer, width: WIDTH, height: HEIGHT, stats, sequences, models: modelStats, errors };
 }

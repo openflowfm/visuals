@@ -24,6 +24,8 @@ import { openLibrary } from './library.ts';
 import { buildShow, noTurning } from './show.ts';
 import { buildGrid } from './grid.ts';
 import { listMedia, mediaRoot, serveMedia } from './media.ts';
+import { MAX_MODEL_BYTES, MODEL_HASH } from '../model.ts';
+import { openModelStore, synchronizeModelNodes } from './models.ts';
 import { readUp } from './up.ts';
 
 /**
@@ -53,6 +55,7 @@ const BRIDGE = process.env.OPENFLOW_BRIDGE_WS ?? 'ws://127.0.0.1:17800/ws';
 // otherwise — a bundled server does not sit one directory up from the renderer.
 const ROOT = process.env.OPENFLOW_VISUALS_DIST ?? path.resolve(here, '../dist');
 const MEDIA_ROOT = mediaRoot();
+const models = openModelStore();
 /** Internal tooling is absent unless the server was deliberately started with it. */
 const CALIBRATION_ENABLED = process.env.OPENFLOW_CALIBRATION === '1';
 
@@ -108,6 +111,33 @@ const server = http.createServer((req, res) => {
 
 function serve(req: http.IncomingMessage, res: http.ServerResponse): void {
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
+  if (url.pathname === '/models/import') {
+    if (req.method !== 'POST') {
+      res.writeHead(405, { allow: 'POST', 'content-type': 'text/plain; charset=utf-8' });
+      res.end('method not allowed');
+      return;
+    }
+    serveModelImport(req, res);
+    return;
+  }
+  if (url.pathname.startsWith('/models/assets/')) {
+    const name = url.pathname.slice('/models/assets/'.length);
+    const hash = name.endsWith('.glb') ? name.slice(0, -4) : '';
+    const file = MODEL_HASH.test(hash) ? models.assetFile(hash) : null;
+    if (!file) {
+      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('model not found');
+      return;
+    }
+    const stat = fs.statSync(file);
+    res.writeHead(200, {
+      'content-type': 'model/gltf-binary',
+      'content-length': stat.size,
+      'cache-control': 'public, max-age=31536000, immutable',
+    });
+    fs.createReadStream(file).pipe(res);
+    return;
+  }
   if (url.pathname === '/calibration/export') {
     serveCalibrationExport(res);
     return;
@@ -137,6 +167,50 @@ function serve(req: http.IncomingMessage, res: http.ServerResponse): void {
   res.end(fs.readFileSync(target));
 }
 
+/** One bounded same-origin upload. Nothing here accepts a path from the client. */
+function serveModelImport(req: http.IncomingMessage, res: http.ServerResponse): void {
+  const declared = Number(req.headers['content-length']);
+  if (Number.isFinite(declared) && declared > MAX_MODEL_BYTES) {
+    res.writeHead(413, { 'content-type': 'text/plain; charset=utf-8' });
+    res.end('GLB is larger than 128 MiB');
+    req.destroy();
+    return;
+  }
+  const chunks: Buffer[] = [];
+  let bytes = 0;
+  let answered = false;
+  const refuse = (status: number, message: string) => {
+    if (answered) return;
+    answered = true;
+    res.writeHead(status, { 'content-type': 'text/plain; charset=utf-8' });
+    res.end(message);
+  };
+  req.on('data', (chunk: Buffer) => {
+    bytes += chunk.byteLength;
+    if (bytes > MAX_MODEL_BYTES) {
+      refuse(413, 'GLB is larger than 128 MiB');
+      req.destroy();
+      return;
+    }
+    chunks.push(chunk);
+  });
+  req.on('error', (error) => refuse(400, `upload failed: ${error.message}`));
+  req.on('end', () => {
+    if (answered) return;
+    try {
+      const name = typeof req.headers['x-openflow-name'] === 'string'
+        ? decodeURIComponent(req.headers['x-openflow-name']) : 'model.glb';
+      const asset = models.import(Buffer.concat(chunks), name);
+      answered = true;
+      res.writeHead(201, { 'content-type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify(asset));
+      sendModels();
+    } catch (error) {
+      refuse(400, (error as Error).message);
+    }
+  });
+}
+
 const sockets = new WebSocketServer({ server, path: VISUALS_WS_PATH });
 const clients = new Set<WebSocket>();
 
@@ -150,6 +224,19 @@ const sendLibrary = (socket: WebSocket) => {
 
 const sendMedia = (socket: WebSocket) => {
   socket.send(JSON.stringify({ kind: 'media', assets: listMedia(MEDIA_ROOT) }));
+};
+
+const sendModels = (socket?: WebSocket, notice?: string) => {
+  const library = models.library();
+  const wire = JSON.stringify({
+    kind: 'models' as const,
+    library: notice ? { ...library, notice } : library,
+  });
+  if (socket) {
+    if (socket.readyState === socket.OPEN) socket.send(wire);
+    return;
+  }
+  for (const client of clients) if (client.readyState === client.OPEN) client.send(wire);
 };
 
 /**
@@ -352,6 +439,7 @@ sockets.on('connection', (socket) => {
     sendScheme(socket);
     sendLibrary(socket);
     sendMedia(socket);
+    sendModels(socket);
     sendGrid(socket);
     socket.send(
       JSON.stringify({ kind: 'calibration-available', available: CALIBRATION_ENABLED }),
@@ -402,6 +490,30 @@ function dispatch(socket: WebSocket, message: Up): void {
   // The mirror gesture: the colourway moves, the flow holds.
   if (message.kind === 'next-colorway') {
     turning.wheel = nextColorway(turning.wheel);
+    dirty = true;
+    return;
+  }
+  if (message.kind === 'model-save') {
+    try {
+      models.save(message.setup);
+      scheme.replace(synchronizeModelNodes(scheme.current(), models.library()));
+    } catch (error) {
+      sendModels(socket, `setup was not saved — ${(error as Error).message}`);
+      return;
+    }
+    sendModels();
+    dirty = true;
+    return;
+  }
+  if (message.kind === 'model-reconcile') {
+    try {
+      models.reconcile(message.setupId, message.assetHash, message.decision);
+      scheme.replace(synchronizeModelNodes(scheme.current(), models.library()));
+    } catch (error) {
+      sendModels(socket, `asset revision was not accepted — ${(error as Error).message}`);
+      return;
+    }
+    sendModels();
     dirty = true;
     return;
   }

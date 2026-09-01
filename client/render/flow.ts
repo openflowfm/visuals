@@ -63,7 +63,8 @@ export function signatureOfCircuit(circuit: Circuit): string {
   const nodes = circuit.nodes
     .map(
       (n) =>
-        `${n.id}:${n.kind}:${n.op ?? ''}:${n.asset ?? ''}:${Object.keys(n.values ?? {}).sort().join('+')}`,
+        `${n.id}:${n.kind}:${n.op ?? ''}:${n.asset ?? ''}:${n.setup ?? ''}:${n.setupRevision ?? ''}:` +
+        `${(n.modelPorts ?? []).map((port) => port.id).join('+')}:${Object.keys(n.values ?? {}).sort().join('+')}`,
     )
     .join(',');
   const cords = circuit.cords.map((c) => `${c.from}>${c.to}`).join(',');

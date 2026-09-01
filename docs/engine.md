@@ -168,6 +168,14 @@ npm run benchmark -- --sweep           # 1280, 1920, 2560, 3840
 npm run benchmark -- --edges=3840      # whatever you name
 ```
 
+Pass `--models=/path/to/models` when a pinned scratch scheme uses a scratch model library.
+The hidden page receives the same capability/setup records and immutable GLB route as the
+product. A model run waits for reachable assets to finish or fail before timing rather than
+charging network/parse startup to its first sample. The compiler enforces the two-instance
+ceiling before the run; the companion frame report below records the actual peak instances,
+uploaded geometries, render targets and pending loads, so a fast black frame cannot pass as a
+fast model renderer.
+
 Throughput and sweep runs drive draws directly and stay in a hidden, non-focusable window.
 Only `--paced` is visible: it deliberately measures display-paced
 `requestAnimationFrame`, which Chromium stops delivering to a hidden or fully covered
@@ -183,6 +191,10 @@ npm run frames -- --flows=halo,cage --at=0,1,2,3 --size=1920x1080
 npm run frames -- --flows=comet --at=1.5 --scheme=xenon --out=/tmp/look
 npm run frames -- --scheme=/tmp/scratch.json --flows=halo --at=0,1,2,3
 ```
+
+`--models=/path/to/models` supplies the corresponding model library for a scratch scheme.
+`stats.json` records peak and released model resources as well as renderer errors; capture
+waits on readiness and the headless window remains hidden and non-focusable.
 
 It builds `visuals/frames.html` with vite, runs it in a hidden, non-focusable Electron window,
 and writes one PNG per flow and beat into `visuals/frames-out/`, with a `stats.json` and
