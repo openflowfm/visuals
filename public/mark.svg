@@ -5,7 +5,7 @@
       <stop offset="0.52" stop-color="#D849FF"/>
       <stop offset="1" stop-color="#FF6B6B"/>
     </linearGradient>
-    <clipPath id="face">
+    <clipPath id="face-visual">
       <rect x="10" y="10" width="492" height="492" rx="105"/>
     </clipPath>
   </defs>
@@ -13,10 +13,10 @@
   <rect x="0" y="0" width="512" height="512" rx="115" fill="#090A0E"/>
   <rect x="10" y="10" width="492" height="492" rx="105" fill="#F7F4EB"/>
 
-  <g clip-path="url(#face)">
+  <g clip-path="url(#face-visual)">
     <path d="M256 0H512V512H256A128 128 0 0 1 256 256A128 128 0 0 0 256 0Z" fill="url(#visual)"/>
 
-    <g fill="none" stroke-width="24" stroke-linecap="round">
+    <g fill="none" stroke-width="30" stroke-linecap="round">
       <g stroke="url(#visual)" opacity="0.96">
         <path d="M256 128C176 190 110 212 0 218"/>
         <path d="M256 128C168 142 92 128 0 82"/>
