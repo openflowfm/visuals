@@ -30,7 +30,7 @@
   background: #0a0a0b;
   color: var(--ui);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--text-body);
   overflow: hidden;
   scrollbar-width: thin;
   scrollbar-color: var(--idle) transparent;
@@ -140,7 +140,7 @@
   background: transparent;
   color: var(--fg);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--text-body);
   padding: 3px 5px;
 }
 
@@ -236,9 +236,9 @@
 
 .console .cap {
   color: var(--caption);
-  letter-spacing: 0.14em;
+  letter-spacing: var(--track-caps);
   text-transform: uppercase;
-  font-size: 9px;
+  font-size: var(--text-label);
 }
 
 .console .gap {
@@ -254,8 +254,8 @@
   color: var(--caption);
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  font-size: 9px;
-  font-weight: 500;
+  font-size: var(--text-label);
+  font-weight: var(--weight-medium);
 }
 
 .console .seg.wide {
@@ -293,8 +293,8 @@
 .console .under {
   margin: 8px 0 0;
   text-transform: none;
-  letter-spacing: 0;
-  font-size: 10px;
+  letter-spacing: var(--track-none);
+  font-size: var(--text-control);
 }
 
 /* --- shared -------------------------------------------------------- */
@@ -305,7 +305,7 @@
   padding: 0;
   color: var(--amber);
   text-decoration: underline;
-  font-size: 10px;
+  font-size: var(--text-control);
 }
 
 .console .parts {
@@ -322,7 +322,7 @@
   letter-spacing: 0.1em;
   text-transform: uppercase;
   font: inherit;
-  font-size: 8px;
+  font-size: var(--text-annot);
   padding: 3px 5px;
   cursor: pointer;
 }
@@ -340,7 +340,7 @@
   color: var(--caption);
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  font-size: 9px;
+  font-size: var(--text-label);
 }
 
 .console .seed input,
@@ -357,7 +357,7 @@
 
 .console .seed input {
   width: 92px;
-  letter-spacing: 0;
+  letter-spacing: var(--track-none);
   text-transform: none;
 }
 
@@ -381,7 +381,7 @@
 .console .wayname {
   width: 74px;
   flex: none;
-  font-size: 10px;
+  font-size: var(--text-control);
 }
 
 .console .swatches {
@@ -402,7 +402,7 @@
 
 .console .swatches .role span {
   font-family: var(--mono);
-  font-size: 8px;
+  font-size: var(--text-annot);
   line-height: 1;
   color: var(--caption);
   max-width: 44px;
@@ -437,7 +437,7 @@
 
 .console .flat {
   text-transform: none;
-  letter-spacing: 0;
+  letter-spacing: var(--track-none);
   line-height: 1.45;
   font-size: 9.5px;
   margin: 0;
@@ -522,7 +522,7 @@
 
 .designer .shelf-head .act .wdg-button-body {
   padding: 1px 5px;
-  font-size: 9px;
+  font-size: var(--text-label);
 }
 
 .designer .shelf-head .act .wdg-button-body,
@@ -539,7 +539,7 @@
 
 .designer .pictures-toggle {
   padding: 1px 5px;
-  font-size: 9px;
+  font-size: var(--text-label);
   color: var(--caption);
 }
 
@@ -571,7 +571,7 @@
   background: none;
   color: var(--ui);
   font: inherit;
-  font-size: 10px;
+  font-size: var(--text-control);
   text-align: left;
   padding: 2px 4px 2px 5px;
   cursor: pointer;
@@ -606,7 +606,7 @@
   padding: 0;
   color: var(--idle);
   font: inherit;
-  font-size: 8px;
+  font-size: var(--text-annot);
   line-height: 1;
   text-align: center;
   cursor: pointer;
@@ -632,14 +632,14 @@
 .designer .node-about {
   flex: none;
   color: var(--idle);
-  font-size: 9px;
+  font-size: var(--text-label);
   white-space: nowrap;
 }
 
 .designer .node-sig {
   display: inline-flex;
   gap: 1px;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--track-slight);
 }
 
 .designer .node-sig span {
@@ -672,7 +672,7 @@
   gap: 3px;
   margin-bottom: 2px;
   padding: 0 2px;
-  font-size: 9px;
+  font-size: var(--text-label);
   color: var(--idle);
 }
 
@@ -689,11 +689,11 @@
 
 .designer .port-filter-side b {
   margin-right: 3px;
-  font-weight: 400;
+  font-weight: var(--weight-normal);
   color: var(--caption);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  font-size: 8px;
+  font-size: var(--text-annot);
 }
 
 .designer .port-filter button {
@@ -703,7 +703,7 @@
   background: none;
   color: var(--bd3);
   font: inherit;
-  font-size: 9px;
+  font-size: var(--text-label);
   line-height: 1.5;
   padding: 0;
   cursor: pointer;
@@ -767,7 +767,7 @@
 .designer .flow-place .wdg-button-body,
 .designer .flow-x .wdg-button-body {
   padding: 0 4px;
-  font-size: 10px;
+  font-size: var(--text-control);
 }
 
 .designer .flow-x.armed .wdg-button-body {
@@ -790,15 +790,15 @@
 .designer .group h5 {
   margin: 0 0 4px;
   color: var(--caption);
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.14em;
+  font-size: var(--text-label);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--track-caps);
   text-transform: uppercase;
 }
 
 .designer .group h5 em {
   font-style: normal;
-  letter-spacing: 0;
+  letter-spacing: var(--track-none);
   text-transform: none;
   color: var(--idle);
 }
@@ -855,7 +855,7 @@
   background: var(--surface-control);
   color: var(--ui);
   text-transform: uppercase;
-  font-size: 9px;
+  font-size: var(--text-label);
   letter-spacing: 0.06em;
 }
 
@@ -907,7 +907,7 @@
 }
 
 .designer .bench .hold .wdg-button-body {
-  font-size: 9px;
+  font-size: var(--text-label);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -976,7 +976,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10px;
+  font-size: var(--text-control);
   color: var(--fg);
 }
 
@@ -1010,7 +1010,7 @@
   flex: 1;
   min-width: 0;
   width: 100%;
-  font-size: 10px;
+  font-size: var(--text-control);
   padding: 3px 6px;
 }
 
@@ -1023,7 +1023,7 @@
 .designer .picture-status {
   overflow: hidden;
   color: var(--idle);
-  font-size: 8px;
+  font-size: var(--text-annot);
   line-height: 1.2;
   text-align: right;
   margin: -2px 0 7px;
@@ -1049,10 +1049,10 @@
 .designer .palette h5 {
   margin: 0 0 2px;
   color: var(--caption);
-  letter-spacing: 0.14em;
+  letter-spacing: var(--track-caps);
   text-transform: uppercase;
-  font-size: 8px;
-  font-weight: 500;
+  font-size: var(--text-annot);
+  font-weight: var(--weight-medium);
 }
 
 .designer .node-entry {
@@ -1148,10 +1148,10 @@
 .setview h5 {
   margin: 14px 0 5px;
   color: var(--caption);
-  letter-spacing: 0.14em;
+  letter-spacing: var(--track-caps);
   text-transform: uppercase;
-  font-size: 8px;
-  font-weight: 500;
+  font-size: var(--text-annot);
+  font-weight: var(--weight-medium);
 }
 
 .setview .fields {
@@ -1168,7 +1168,7 @@
   color: var(--caption);
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  font-size: 9px;
+  font-size: var(--text-label);
 }
 
 .setview .fields label.flat {
@@ -1418,17 +1418,17 @@
 
 .train-name {
   color: var(--fg);
-  font-size: 12px;
+  font-size: var(--text-lead);
 }
 
 .train-provenance {
   color: var(--caption);
-  font-size: 10px;
+  font-size: var(--text-control);
 }
 
 .train-error {
   color: var(--alarm);
-  font-size: 10px;
+  font-size: var(--text-control);
   margin-left: auto;
 }
 
@@ -1476,14 +1476,14 @@
 .train-choice h2 {
   margin: 0 0 8px;
   color: var(--fg);
-  font-size: 14px;
-  font-weight: 500;
+  font-size: var(--text-heading);
+  font-weight: var(--weight-medium);
 }
 
 .train-choice p {
   margin: 0;
   color: var(--caption);
-  font-size: 11px;
+  font-size: var(--text-body);
   line-height: 1.45;
 }
 
@@ -1520,7 +1520,7 @@
   white-space: nowrap;
   color: var(--fg);
   font-size: 11.5px;
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
 .train-candidate > header button {
@@ -1557,9 +1557,9 @@
   border-radius: var(--radius-xs);
   padding: 3px 6px;
   color: var(--caption);
-  font-size: 9px;
+  font-size: var(--text-label);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--track-label);
   white-space: nowrap;
 }
 
@@ -1643,15 +1643,15 @@
 
 .train-comparison-verbs b {
   color: var(--fg);
-  font-size: 11px;
-  font-weight: 500;
+  font-size: var(--text-body);
+  font-weight: var(--weight-medium);
 }
 
 .train-comparison-verbs small {
   width: 100%;
   overflow: hidden;
   color: var(--caption);
-  font-size: 9px;
+  font-size: var(--text-label);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1679,7 +1679,7 @@
 .train-restart-hint {
   align-self: center;
   color: var(--caption);
-  font-size: 9px;
+  font-size: var(--text-label);
 }
 
 .train-thumbs {
@@ -1716,7 +1716,7 @@
 .train-thumb b {
   font-size: 32px;
   line-height: 1;
-  font-weight: 400;
+  font-weight: var(--weight-normal);
 }
 
 .train-thumb span {
@@ -1757,7 +1757,7 @@
 
 .train-tally dt {
   color: var(--caption);
-  font-size: 9px;
+  font-size: var(--text-label);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -1788,17 +1788,17 @@
 .train-judgment h3,
 .tagpick h3 {
   margin: 0 0 6px;
-  font-size: 10px;
-  font-weight: 500;
+  font-size: var(--text-control);
+  font-weight: var(--weight-medium);
   color: var(--caption);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--track-label);
 }
 
 .tagpick h4 {
   margin: 8px 0 4px;
-  font-size: 10px;
-  font-weight: 500;
+  font-size: var(--text-control);
+  font-weight: var(--weight-medium);
   color: var(--caption);
 }
 
@@ -1824,7 +1824,7 @@
 
 .train-score b {
   color: var(--fg);
-  font-weight: 500;
+  font-weight: var(--weight-medium);
   width: 10px;
 }
 
@@ -1952,7 +1952,7 @@
   margin: 0;
   color: var(--fg);
   font-size: 16px;
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
 .finals-empty p,
@@ -1976,10 +1976,10 @@
 
 .finals-room-name {
   color: var(--amber);
-  font-size: 10px;
-  font-weight: 500;
+  font-size: var(--text-control);
+  font-weight: var(--weight-medium);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--track-label);
 }
 
 .finals-ready {
@@ -2055,7 +2055,7 @@
   margin: 0;
   color: var(--fg);
   font-size: 16px;
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
 .archive-empty p {
@@ -2083,8 +2083,8 @@
 
 .archive-stage > header strong {
   color: var(--fg);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--text-lead);
+  font-weight: var(--weight-medium);
 }
 
 .archive-stage > header button {
@@ -2119,8 +2119,8 @@
 .archive-choice h2 {
   margin: 0 0 7px;
   color: var(--fg);
-  font-size: 14px;
-  font-weight: 500;
+  font-size: var(--text-heading);
+  font-weight: var(--weight-medium);
 }
 
 .archive-choice p {
@@ -2150,8 +2150,8 @@
 
 .archive-choice > button b {
   color: var(--fg);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--text-lead);
+  font-weight: var(--weight-medium);
 }
 
 .archive-choice > button small,
@@ -2495,7 +2495,7 @@
   overflow: hidden;
   color: var(--fg);
   font-size: 11.5px;
-  font-weight: 500;
+  font-weight: var(--weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2520,7 +2520,7 @@
   align-items: center;
   gap: 8px;
   color: var(--caption);
-  font-size: 9px;
+  font-size: var(--text-label);
 }
 
 .lineage-provenance {
@@ -2768,7 +2768,7 @@
 .lineage-explanation {
   margin: 0;
   color: var(--caption);
-  font-size: 9px;
+  font-size: var(--text-label);
   line-height: 1.4;
 }
 
@@ -2813,7 +2813,7 @@
   overflow: hidden;
   color: var(--fg);
   font-size: 11.5px;
-  font-weight: 500;
+  font-weight: var(--weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2845,7 +2845,7 @@
 .finals-results li dd {
   margin: 2px 0 0;
   color: var(--fg);
-  font-size: 11px;
+  font-size: var(--text-body);
 }
 
 /* Development-only parameter response calibration. The server omits this
@@ -2871,7 +2871,7 @@
 .calibration-done h2 {
   color: var(--fg);
   font-size: 16px;
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
 .calibration-export,
@@ -2943,7 +2943,7 @@
   margin: 0;
   color: var(--fg);
   font-size: 15px;
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
 .calibration-picker {
@@ -2986,8 +2986,8 @@
 .calibration-decided {
   margin: -10px 0 0;
   color: var(--amber);
-  font-size: 10px;
-  letter-spacing: 0.04em;
+  font-size: var(--text-control);
+  letter-spacing: var(--track-slight);
 }
 
 .calibration-question {
@@ -3005,9 +3005,9 @@
 .calibration-controls h3 {
   margin: 0;
   color: var(--caption);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
+  font-size: var(--text-control);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--track-label);
   text-transform: uppercase;
 }
 
@@ -3045,7 +3045,7 @@
 
 .calibration-reading b {
   color: var(--fg);
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
 .calibration-reading span {
@@ -3095,7 +3095,7 @@
 
 .calibration-history article b {
   color: var(--fg);
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
 .calibration-history article p {
@@ -3159,7 +3159,7 @@
 
 .reviews-row b {
   color: var(--fg);
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
 .reviews-row[data-on] b {
@@ -3177,7 +3177,7 @@
 .reviews-row-facts {
   grid-column: 2;
   color: var(--caption);
-  font-size: 10px;
+  font-size: var(--text-control);
 }
 
 .reviews-detail {
@@ -3227,7 +3227,7 @@
 .reviews-when {
   margin-left: auto;
   color: var(--caption);
-  font-size: 10px;
+  font-size: var(--text-control);
 }
 
 .reviews-rescore {

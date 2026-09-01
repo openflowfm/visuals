@@ -54,7 +54,7 @@
   background: rgb(10 10 11 / 0.85);
   color: #b7b7be;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--text-body);
   pointer-events: auto;
   transform: translateX(-50%);
   backdrop-filter: blur(8px);
@@ -62,8 +62,8 @@
 
 .alignbar b {
   color: #f0b23c;
-  font-weight: 400;
-  letter-spacing: 0.14em;
+  font-weight: var(--weight-normal);
+  letter-spacing: var(--track-caps);
   text-transform: uppercase;
 }
 

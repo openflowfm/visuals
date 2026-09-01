@@ -26,7 +26,7 @@ html, body, #root {
   background: rgb(10 10 11 / 0.82);
   color: #b7b7be;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--text-body);
   line-height: 1.5;
   backdrop-filter: blur(8px);
   user-select: none;
@@ -38,16 +38,16 @@ html, body, #root {
   gap: 6px;
   margin: 0 0 6px;
   color: #ececed;
-  font-size: 11px;
-  letter-spacing: 0.14em;
+  font-size: var(--text-body);
+  letter-spacing: var(--track-caps);
   text-transform: uppercase;
 }
 
 .panel h1 span {
   padding: 1px 6px;
   border-radius: 2px;
-  font-size: 9px;
-  letter-spacing: 0.08em;
+  font-size: var(--text-label);
+  letter-spacing: var(--track-label);
 }
 
 .ok { background: #14351f; color: #6ee7a0; }
@@ -76,7 +76,7 @@ html, body, #root {
   background: rgb(10 10 11 / 0.92);
   color: #ececed;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--text-lead);
   text-align: center;
 }
 
@@ -107,7 +107,7 @@ html, body, #root {
   margin: 0;
 }
 
-.panel dt { color: #5e5e66; font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; }
+.panel dt { color: #5e5e66; font-size: var(--text-label); text-transform: uppercase; letter-spacing: var(--track-label); }
 .panel dd { margin: 0; color: #ececed; white-space: nowrap; }
 
 .panel dd.wide {
@@ -120,7 +120,7 @@ html, body, #root {
 
 .panel dd.beat b {
   color: #3a3a41;
-  font-weight: 400;
+  font-weight: var(--weight-normal);
   font-variant-numeric: tabular-nums;
 }
 
