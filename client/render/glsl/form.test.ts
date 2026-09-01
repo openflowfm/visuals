@@ -210,7 +210,7 @@ describe('the loom is repeated construction with a closed flight', () => {
 
   it('keeps broad room light off its black chrome while retaining sharp glints', () => {
     expect(FORM_LIB).toContain('float roomWeight = mode == 5 ? 0.65 : 1.0;');
-    expect(FORM_LIB).toContain('float glintWeight = mode == 5 ? 0.3 : 1.0;');
+    expect(FORM_LIB).toContain('float glintWeight = mode == 5 ? 0.3 : (mode == 11 ? 0.12 : 1.0);');
   });
 
   it('returns its eye and heading modulo exactly four repeated cells', () => {
@@ -313,6 +313,66 @@ describe('the rotor is one open blade repeated as a double-domed cage', () => {
   });
 });
 
+describe('the armillary is a nested bank around a dark body and three gimbals', () => {
+  it('selects the nearest real bank radius analytically and leaves the centre empty', () => {
+    const radius = (radial: number, count: number, inner: number, outer: number) => {
+      const spacing = (outer - inner) / (count - 1);
+      const member = clamp(Math.round((radial - inner) / spacing), 0, count - 1);
+      return inner + member * spacing;
+    };
+    expect(radius(0, 15, 0.24, 0.66)).toBeCloseTo(0.24, 12);
+    expect(radius(0.45, 15, 0.24, 0.66)).toBeCloseTo(0.45, 12);
+    expect(radius(1, 15, 0.24, 0.66)).toBeCloseTo(0.66, 12);
+    expect(FORM_LIB).toContain('float formRingBank(');
+    expect(FORM_LIB).toContain('round((radial - inner) / spacing)');
+  });
+
+  it('keeps the body fixed while every moving member closes on whole turns', () => {
+    expect(FORM_LIB).toContain('float d = length(q) - 0.205;');
+    expect(FORM_LIB).toContain('float formGimbalXY(');
+    expect(FORM_LIB).toContain('formGimbalXY(outer, 0.92, 0.020');
+    expect(FORM_LIB).toContain('formGimbalXY(middle, 0.84, 0.017');
+    expect(FORM_LIB).toContain('formGimbalXY(inner, 0.76, 0.014');
+    const turns = (phase: number) => {
+      const a = phase * Math.PI * 2;
+      return [
+        a + Math.sin(a) * 0.24,
+        a * 2 + (Math.cos(a) - 1) * 0.28,
+        a * 0.5,
+        (Math.cos(a) - 1) * 0.2,
+        (Math.cos(a) - 1) * 0.28,
+        a,
+        -a * 0.5,
+        (Math.cos(a) - 1) * 0.16,
+      ];
+    };
+    const start = turns(0);
+    const end = turns(1);
+    expect((end[0]! - start[0]!) / (Math.PI * 2)).toBeCloseTo(1, 12);
+    expect((end[1]! - start[1]!) / (Math.PI * 2)).toBeCloseTo(2, 12);
+    expect((end[2]! - start[2]!) / (Math.PI * 2)).toBeCloseTo(0.5, 12);
+    expect(end[3]).toBeCloseTo(start[3]!, 12);
+    expect(end[4]).toBeCloseTo(start[4]!, 12);
+    expect((end[5]! - start[5]!) / (Math.PI * 2)).toBeCloseTo(1, 12);
+    expect((end[6]! - start[6]!) / (Math.PI * 2)).toBeCloseTo(-0.5, 12);
+    expect(end[7]).toBeCloseTo(start[7]!, 12);
+    expect(turns(0.5)).not.toEqual(start);
+  });
+
+  it('keeps material identity on invariant radii and reflects a black strip-lit room', () => {
+    expect(FORM_LIB).toContain('if (radius < 0.23) return vec3(0.002);');
+    expect(FORM_LIB).toContain('float role = mod(member, 4.0);');
+    expect(FORM_LIB).toContain('vec3 formArmillarySky(vec3 ray)');
+    expect(FORM_LIB).toContain('float diagonalDistance = abs(dot(ray.xy, diagonalAxis) - 0.18);');
+    expect(FORM_LIB).toContain('mode == 11 ? formArmillarySky(bounced) : formSky(bounced)');
+  });
+
+  it('turns down emitted wire light before hiding the construction itself', () => {
+    expect(FORM_LIB).toContain('if (mode == 11) raw *= mix(0.04, 0.65');
+    expect(FORM_LIB).toContain('mode == 11 ? 0.12 : 1.0');
+  });
+});
+
 describe('the cube is edges, not a brick', () => {
   it('is on the surface along an edge and inside the tube around it', () => {
     expect(cage(0, 1, 1, 1, 0.05)).toBeCloseTo(-0.05, 12);
@@ -395,7 +455,7 @@ describe('the march is bounded and says so', () => {
       FORM_LIB.indexOf('float formField('),
       FORM_LIB.indexOf('float formStride('),
     );
-    expect(FORM_MODES.length).toBe(12);
+    expect(FORM_MODES.length).toBe(13);
     for (let i = 0; i < FORM_MODES.length - 1; i++) {
       expect(field).toContain(`if (mode == ${i})`);
     }
@@ -406,9 +466,10 @@ describe('the march is bounded and says so', () => {
   it('takes half steps only for the shape whose distance is an over-estimate', () => {
     // The helix measures across the strand while the strand moves away along
     // its own axis, so the true nearest surface can be nearer than it says.
-    expect(FORM_MODES.indexOf('tube')).toBe(11);
+    expect(FORM_MODES.indexOf('tube')).toBe(12);
     expect(FORM_LIB).toContain('if (mode == 5) return 0.85;');
-    expect(FORM_LIB).toContain('return mode >= 10 ? 0.5 : 0.9;');
+    expect(FORM_LIB).toContain('if (mode == 10) return 0.5;');
+    expect(FORM_LIB).toContain('return mode == 12 ? 0.5 : 0.9;');
   });
 
   it('accumulates glow along the ray rather than once per step', () => {

@@ -188,6 +188,60 @@ float formRotor(vec3 q, float blades, float sweep, float phase, float t) {
   return min(sides, min(frontCap, rearCap));
 }
 
+// A dense bank of coplanar circular hoops. Radius is the coordinate that
+// distinguishes one member from the next, so rounding that coordinate selects
+// the nearest real hoop analytically; fifteen nested rings still cost one
+// distance inside the march and leave the centre physically empty.
+float formRingBank(vec3 q, float ribs, float nest, float t) {
+  float count = floor(mix(7.0, 20.0, clamp(ribs, 0.0, 1.0)));
+  float inner = 0.24;
+  float outer = mix(0.52, 0.72, clamp(nest, 0.0, 1.0));
+  float spacing = (outer - inner) / (count - 1.0);
+  float radial = length(q.xy);
+  float member = clamp(round((radial - inner) / spacing), 0.0, count - 1.0);
+  float radius = inner + member * spacing;
+  return length(vec2(radial - radius, q.z)) - t * 0.52;
+}
+
+// One broad polished gimbal. The reference's parallel streaks move across the
+// member as its orientation changes, so they are reflected strips, not three
+// separate skinny rails. Making those streaks geometry produced a tidy wire
+// sculpture whose gaps stayed fixed in the object — physically the wrong read.
+float formGimbalXY(vec3 q, float radius, float shoulder, float t) {
+  return length(vec2(length(q.xy) - radius, q.z)) - (t + shoulder);
+}
+
+// One dark central body, one nested ring bank and three larger gimbal hoops.
+// The body is invariant. The bank precesses as one assembly while every gimbal
+// follows a different closed whole-turn path, so they periodically agree as
+// concentric circles and elsewhere expose a hoop as the reference's bright
+// edge-on bar. No member changes radius or identity during that motion.
+float formArmillary(vec3 q, float ribs, float nest, float phase, float t) {
+  float a = clamp(phase, 0.0, 1.0) * 2.0 * PI;
+  float d = length(q) - 0.205;
+
+  vec3 bank = q;
+  bank.yz = formSpin(a + sin(a) * 0.24) * bank.yz;
+  bank.xz = formSpin(a * 2.0 + (cos(a) - 1.0) * 0.28) * bank.xz;
+  d = min(d, formRingBank(bank, ribs, nest, t));
+
+  vec3 outer = q;
+  outer.yz = formSpin(a * 0.5) * outer.yz;
+  outer.xz = formSpin((cos(a) - 1.0) * 0.2) * outer.xz;
+  d = min(d, formGimbalXY(outer, 0.92, 0.020, t * 1.1));
+
+  vec3 middle = q;
+  middle.yz = formSpin((cos(a) - 1.0) * 0.28) * middle.yz;
+  middle.xz = formSpin(a) * middle.xz;
+  d = min(d, formGimbalXY(middle, 0.84, 0.017, t * 0.9));
+
+  vec3 inner = q;
+  inner.yz = formSpin(a) * inner.yz;
+  inner.xz = formSpin(-a * 0.5) * inner.xz;
+  inner.xy = formSpin((cos(a) - 1.0) * 0.16) * inner.xy;
+  return min(d, formGimbalXY(inner, 0.76, 0.014, t * 0.74));
+}
+
 // The woven object repeated as construction rather than copied as pixels.
 // Each cell holds three orthogonal bundles of four rounded loops; folding the
 // point into the cell makes the field infinite without a loop inside the march.
@@ -379,6 +433,26 @@ vec3 formBaseColour(vec3 q, int mode, float extra, float detail, float motion) {
     float chase = pow(0.5 + 0.5 * sin(motion * 2.0 * PI - member * 0.47), 5.0);
     return mix(uPrimary * 0.08, uChalk, 0.12 + chase * 0.88);
   }
+  if (mode == 11) {
+    // Radius is a stable member identity for this construction: the central
+    // sphere and every hoop stay centred on the origin even while their planes
+    // precess. Colouring by screen position made the rainbow slide over the
+    // object like a filter; colouring by radius makes each physical rail keep
+    // its material throughout the loop.
+    float radius = length(q);
+    if (radius < 0.23) return vec3(0.002);
+    if (radius > 0.885) return uChalk;
+    if (radius > 0.805) return uPrimary;
+    if (radius > 0.725) return uComplement;
+    float count = floor(mix(7.0, 20.0, clamp(extra, 0.0, 1.0)));
+    float outer = mix(0.52, 0.72, clamp(detail, 0.0, 1.0));
+    float member = round((radius - 0.24) / ((outer - 0.24) / (count - 1.0)));
+    float role = mod(member, 4.0);
+    if (role < 0.5) return uPrimary;
+    if (role < 1.5) return uSecondary;
+    if (role < 2.5) return uComplement;
+    return uAccent;
+  }
   if (mode != 4) return uPrimary;
   float a = clamp(motion, 0.0, 1.0) * 2.0 * PI;
   q.xy = formSpin(a) * q.xy;
@@ -488,6 +562,9 @@ float formField(vec3 q, int mode, float thick, float extra, float detail, float 
   if (mode == 10) {
     return formRotor(q, extra, detail, motion, t);
   }
+  if (mode == 11) {
+    return formArmillary(q, extra, detail, motion, t);
+  }
   // A helix winding away down the corridor. The one shape here whose distance
   // is an over-estimate along its axis, which is why every march takes half
   // steps: a full one would tunnel through the strand and draw nothing.
@@ -508,7 +585,8 @@ float formField(vec3 q, int mode, float thick, float extra, float detail, float 
 // reports a hit, and chrome is only mixed in where something was hit.
 float formStride(int mode) {
   if (mode == 5) return 0.85;
-  return mode >= 10 ? 0.5 : 0.9;
+  if (mode == 10) return 0.5;
+  return mode == 12 ? 0.5 : 0.9;
 }
 
 // The surface direction, from four samples around the point the ray stopped at.
@@ -556,6 +634,27 @@ vec3 formSky(vec3 ray) {
   float bars = smoothstep(0.62, 0.98, abs(fract(ray.z * 2.1 + 0.5) * 2.0 - 1.0))
              * smoothstep(0.1, 0.6, above);
   return room + vec3(1.0) * lamp * 2.0 + uAccent * strips * 0.4 + uChalk * bars * 0.55;
+}
+
+// A black studio built specifically for the armillary. Its illumination is
+// made from large strips rather than point lamps: a strip reflected in the
+// central sphere becomes the reference's bent diagonal slash, and the same
+// strip breaks into long travelling arcs on the curved gimbals. Most of the
+// room remains truly black, so lowering energy reveals only reflections rather
+// than a uniformly dim neon drawing of every rail.
+vec3 formArmillarySky(vec3 ray) {
+  vec2 diagonalAxis = normalize(vec2(0.72, -0.69));
+  float diagonalDistance = abs(dot(ray.xy, diagonalAxis) - 0.18);
+  float softbox = 1.0 - smoothstep(0.04, 0.2, diagonalDistance);
+  float azimuth = atan(ray.x, ray.z);
+  float panels = pow(0.5 + 0.5 * cos(azimuth * 4.0 + 0.45), 18.0);
+  panels *= smoothstep(-0.72, 0.38, ray.y);
+  float horizon = 1.0 - smoothstep(0.025, 0.09, abs(ray.y + 0.28));
+  vec3 room = vec3(0.0015);
+  room += uChalk * softbox * 2.2;
+  room += uPrimary * panels * 0.92;
+  room += mix(uAccent, uComplement, smoothstep(-0.8, 0.8, ray.x)) * horizon * 0.48;
+  return room;
 }
 
 vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
@@ -609,7 +708,7 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
     side = rolledSide;
   }
 
-  if (mode == 11) {
+  if (mode == 12) {
     float off = clamp(dolly, 0.0, 1.0) * 0.32;
     float coil = 0.6 + clamp(extra, 0.0, 1.0) * 3.5;
     float cycle = 2.0 * PI / coil;
@@ -672,6 +771,11 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
   // that excess is what makes a core white and gives a bloom something to
   // spread. See OVERBRIGHT.
   float raw = gathered * mix(8.0, 26.0, clamp(flare, 0.0, 1.0)) * mix(0.7, 1.2, e);
+  // The armillary is polished black construction in a lit room, not emissive
+  // wire. Energy opens a controlled amount of internal light for the bright
+  // Xenon 84 treatment; near zero, Xenon 87 is revealed almost entirely by
+  // the strips it reflects.
+  if (mode == 11) raw *= mix(0.04, 0.65, pow(clamp(e, 0.0, 1.0), 2.0));
   float lit = clamp(raw, 0.0, 1.0);
   // Only what is genuinely saturated goes white. Mixing toward white from
   // halfway up leaves every tube the same pale grey and throws the colourway
@@ -716,9 +820,10 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
     float glint = pow(clamp(dot(bounced, normalize(FORM_LAMP)), 0.0, 1.0), gloss)
                 + pow(clamp(dot(bounced, normalize(FORM_FILL)), 0.0, 1.0), gloss * 0.6) * 0.55;
     float roomWeight = mode == 5 ? 0.65 : 1.0;
-    float glintWeight = mode == 5 ? 0.3 : 1.0;
+    float glintWeight = mode == 5 ? 0.3 : (mode == 11 ? 0.12 : 1.0);
     float rimWeight = mode == 5 ? 0.25 : 1.0;
-    vec3 shell = formSky(bounced) * mix(0.35, 1.0, facing) * roomWeight
+    vec3 reflectedRoom = mode == 11 ? formArmillarySky(bounced) : formSky(bounced);
+    vec3 shell = reflectedRoom * mix(0.35, 1.0, facing) * roomWeight
                + vec3(1.0) * glint * mix(1.4, 6.0, polish) * glintWeight
                + uChalk * facing * 0.6 * rimWeight;
     // Chrome falls off with how far the ray went to find it. Without this a

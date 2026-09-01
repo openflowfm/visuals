@@ -364,7 +364,7 @@ editors listing these differently would be two different vocabularies.
 | `field` | `p` `energy`, plus `balls` `apart` on metaballs | `c` | `cells` `clouds` `metaballs`; fixed work, charged per graph sample and never offered per track |
 | `fractal` | `p` `energy` + its mode's numbers | `c` | `mandelbrot` or `julia`, with bounded zoom, detail and iterative work |
 | `light` | `p` `energy` + its mode's numbers, and `from` on the hung three | `c` | `lamp` `beam` `shafts` `caustics`; 2D lights with fixed work, drifting in seconds rather than beats |
-| `form` | `p` `turn` `tilt` `dolly` `thick` `flare` `chrome` `energy` + its mode's numbers | `c` | `torus` `rings` `frame` `lattice` `weave` `loom` `orbits` `relief` `iris` `truss` `rotor` `tube`; the one node with a third coordinate in it, marched and charged like a fractal |
+| `form` | `p` `turn` `tilt` `dolly` `thick` `flare` `chrome` `energy` + its mode's numbers | `c` | `torus` `rings` `frame` `lattice` `weave` `loom` `orbits` `relief` `iris` `truss` `rotor` `armillary` `tube`; the one node with a third coordinate in it, marched and charged like a fractal |
 | `glow` | `d` `energy` + its mode's numbers | `c` | `neon` `soft` `band`: a distance becomes a lit stroke |
 | `shade` | `n` `amount` `energy` | `c` | `across` `heat` `filament`: a number becomes a colour off the colourway |
 | `flow` | `p` | `c` | another flow, whole, as one node |
@@ -539,6 +539,17 @@ with thirteen complete blade sectors of spin. Repeated geometry therefore return
 identical pose at one without hiding the object edge-on for half the loop. The sector fold is
 analytic and the approximate swept-curve distance uses a conservative half stride, so the
 mode still has only the renderer's one ray loop.
+
+`armillary` is one fixed dark sphere, an analytic bank of seven to twenty separate coplanar
+hoops and three enclosing gimbals. The gimbals are single broad polished bodies: the parallel
+streaks which cross them come from a black studio's reflected strips, not extra rails frozen
+into the geometry. The same strip bends into the characteristic diagonal slash on the sphere.
+Every member remains centred on the origin, so radius gives it a stable material identity while
+its plane moves; spectral roles therefore stay attached to physical hoops instead of sliding
+over the finished image. `ribs` sets the bank's member count, `nest` its outer radius and
+`tumble` runs the bank and three gimbals through separate closed precessions. Hoop planes are
+half-turn periodic, so their whole- and half-turn paths meet exactly at the loop seam even
+though their bounded excursions produce different intermediate silhouettes.
 
 `loom` repeats the weave as geometry through all three axes rather than tiling a rendered
 picture of it. Every cell contains three orthogonal four-member loop bundles. Each complete

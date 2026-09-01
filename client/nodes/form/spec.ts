@@ -25,6 +25,7 @@ const descriptions: Record<Mode, string> = {
   iris: 'A lens-shaped shell enclosing a bank of parallel edge-on ribs.',
   truss: 'Parallel rounded-rectangle rails crossing around three planes as one cuboid armature.',
   rotor: 'Open swept blades repeated around the throat of a double-domed turbine cage.',
+  armillary: 'A dark central body inside a precessing nested ring bank and three gimbal hoops.',
   tube: 'A helix winding away down a corridor the eye is inside.',
 };
 
@@ -66,6 +67,11 @@ const values: Record<Mode, readonly PortSpec[]> = {
     numberPort('blades', 'How many open blades repeat around the rotor throat.', 0.55),
     numberPort('sweep', 'How far the blade sides curl and rise through the double dome.', 0.65),
     numberPort('tumble', 'Where the complete rotor sits on its closed rigid tumble.', 0),
+  ],
+  armillary: [
+    numberPort('ribs', 'How many coplanar hoops fill the nested central bank.', 0.62),
+    numberPort('nest', 'How far the bank extends from its dark central body.', 0.62),
+    numberPort('tumble', 'Where the bank and three gimbals sit on their closed precession.', 0),
   ],
   tube: [
     numberPort('coil', 'How tightly the helix winds as it goes away.', 0.35),
