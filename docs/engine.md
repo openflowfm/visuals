@@ -179,9 +179,11 @@ npm run frames -- --flows=comet --at=1.5 --scheme=xenon --out=/tmp/look
 npm run frames -- --scheme=/tmp/scratch.json --flows=halo --at=0,1,2,3
 ```
 
-It builds `visuals/frames.html` with vite, opens it in Electron, and writes one PNG per flow
-and beat into `visuals/frames-out/`, with a `stats.json` and equal-phase HTML index beside
-them.
+It builds `visuals/frames.html` with vite, runs it in a hidden, non-focusable Electron window,
+and writes one PNG per flow and beat into `visuals/frames-out/`, with a `stats.json` and
+equal-phase HTML index beside them. Unlike the paced benchmark, this harness drives every
+frame directly instead of waiting for `requestAnimationFrame`, so hiding it does not change
+its rendering path or stall its clock and an analysis run never has to steal the desktop.
 
 The requested `--size` is also the compositor's longest-edge cap. That is load-bearing on a
 Retina screen: sizing only the CSS canvas lets `devicePixelRatio` make a larger backing
