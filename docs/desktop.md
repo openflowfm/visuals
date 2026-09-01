@@ -122,9 +122,10 @@ exactly that is the point.
 `npm run pack:visuals` builds the renderer, the shell, an icon, and a `.app` plus a `.dmg`
 under `release/visuals/`. `npm run pack` does every app.
 
-`npm run install:apps` copies what that produced into `/Applications`, or `install:apps
-visuals` for this one alone. It replaces rather than merges, refuses while the app is open,
-and takes `OPENFLOW_APPS` for a machine where `/Applications` is not yours to write — see
+`npm run install:apps` copies what that produced into `/Applications/open[flow]`, or
+`install:apps visuals` for this one alone. It replaces rather than merges, refuses while the
+app is open, and takes `OPENFLOW_APPS` for a machine where `/Applications` is not yours to
+write — see
 [`set/docs/desktop.md`](../../set/docs/desktop.md) for why each of those is the case. The
 `.node` addon and `server.mjs` ride along inside the bundle, so an installed copy needs
 nothing from the repo it was built in.
