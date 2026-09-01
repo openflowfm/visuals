@@ -21,9 +21,9 @@ Live ─ SessionBridge :17800 ─WS─> visuals backend :17900 ─WS─> Electro
 |---|---|---|
 | [the clock](docs/clock.md) | Link, tempo, the beat, why the browser extrapolates, the native addon | `server/link.ts`, `client/state/useShow.ts`, `tools/build-link.ts` |
 | [flows](docs/flows.md) | **the one noun**, the node vocabulary, the compiler, the designer | `protocol.ts`, `client/render/circuit.ts`, `client/ui/Designer.tsx` |
-| [models](docs/models.md) | importing a GLB, reusable setups, published controls, revision reconciliation | `model.ts`, `server/models.ts`, `client/ui/ModelLibrary.tsx`, `client/render/model.ts` |
+| [models](docs/models.md) | importing a GLB, the first-class model library, reusable setups, published controls, revision reconciliation | `model.ts`, `server/models.ts`, `client/ui/ModelLibrary.tsx`, `client/render/model.ts` |
 | [the wheel](docs/wheel.md) | what is on screen and why, song overrides, the scheme file, the randomiser | `resolve.ts`, `server/show.ts`, `server/scheme.ts`, `randomize.ts` |
-| [the console](docs/console.md) | the four product views, and what the views before them were for | `client/ui/Console.tsx`, `Designer.tsx`, `TrainView.tsx`, `ReviewsView.tsx`, `SetView.tsx` |
+| [the console](docs/console.md) | the five product views, and what the views before them were for | `client/ui/Console.tsx`, `Designer.tsx`, `ModelLibrary.tsx`, `TrainView.tsx`, `ReviewsView.tsx`, `SetView.tsx` |
 | [the lab](docs/lab.md) | the lineage forest, exploring roots, developing a node, frozen editions and the detailed corpus | `lab.ts`, `server/lab.ts`, `server/lineage.ts`, `server/batch.ts`, `server/finals.ts`, `client/ui/TrainView.tsx`, `client/ui/ForestView.tsx`, `client/ui/ExploreView.tsx`, `client/ui/DevelopView.tsx`, `client/ui/FinalsView.tsx`, `client/ui/ReviewsView.tsx` |
 | [parameter calibration](docs/calibration.md) | the development-only A/B/C response bench and its evidence | `response.ts`, `calibration.ts`, `server/calibration.ts`, `client/ui/CalibrationView.tsx` |
 | [the renderer](docs/render.md) | the two passes, blending, fill rate, **pointing a projector** | `client/render/*` |
@@ -135,11 +135,12 @@ without the bridge noticing.
 ## Customising it
 
 Press **`e`** in the app for the console, over the picture so you can work on a flow while
-one is on screen. Four product views:
+one is on screen. Five product views:
 
 | view | the question | the scale |
 |---|---|---|
 | **build** | what is worth putting on a wall | one flow |
+| **models** | which parts of imported 3D work should become reusable | one setup and its GLB |
 | **train** | what is worth developing, and what developing it produced | one lineage forest |
 | **review** | what did a slower, detailed judgment say | the preserved corpus |
 | **set** | what turns through them, and what says otherwise | the set |
@@ -213,7 +214,7 @@ has aspect-correct cover and contain framing and uploads a selected still once; 
 looping and one-shot modes, always mutes embedded audio, and keeps at most two reachable
 decoders alive per flattened flow.
 
-Import ordinary binary glTF files from **Build → Models**. The GLB needs no OpenFlow
+Import ordinary binary glTF files from **Models**. The GLB needs no OpenFlow
 manifest: visual[flow] inspects its named nodes, transforms, morphs, animation, materials,
 skins, cameras and lights, then lets you make reusable setups which publish only the controls
 you choose. A `model` node is an instance of one setup, with its own values, modulation depths

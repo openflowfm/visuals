@@ -1,6 +1,6 @@
 # Models
 
-`model.ts`, `server/models.ts`, `client/ui/ModelLibrary.tsx`,
+`model.ts`, `server/models.ts`, `client/ui/ModelLibrary.tsx`, `client/ui/models.css`,
 `client/nodes/model/`, `client/render/model.ts`. Importing binary glTF, turning discovered
 facts into reusable OpenFlow setups, and rendering setup instances as graph colours.
 
@@ -28,13 +28,25 @@ setup per flow, or cut cords on a rename.
 `OPENFLOW_VISUALS_MODELS` moves the model root independently. `OPENFLOW_HOME` moves the whole
 user library as usual.
 
+## Models is a library workspace
+
+Model authoring is a first-class **Models** view beside Build, Train, Review and Set. Its left
+side is a searchable catalog with reusable setups and immutable GLBs deliberately shown as two
+collections. Setup rows report their published inlet count and how many direct flow instances
+currently select them; asset rows report capability/byte counts and how many setups reuse those
+bytes. Selecting an asset starts a new setup without mutating an existing one. Selecting a setup
+opens the wide capability editor, material mapper, published-inlet face and revision reconciler.
+
+Build no longer contains a model-library drawer. Its ordinary `model` node chooser consumes the
+saved setups and owns only that flow instance's normalized values, depths and cords.
+
 ## Inspection is bounded and inert
 
 `inspectGlb` parses the GLB 2.0 container and its JSON without executing content or resolving a
 URI. It reports scenes and roots; node paths, hierarchy and matrix/TRS transforms; meshes,
 primitive modes, attributes and counts; named morph targets; skins, skeletons and joints;
 named animation clips, channels, interpolation, key counts and duration; material factors;
-cameras; and `KHR_lights_punctual` lights. Those are the facts shown in **Build → Models**.
+cameras; and `KHR_lights_punctual` lights. Those are the facts shown in **Models**.
 
 The import boundary accepts at most 128 MiB, at most 8 MiB of JSON, 4,096 nodes or members in
 the major collections, 16,384 primitives, and 16,384 animation channels. It rejects malformed
@@ -88,7 +100,8 @@ instances in one expanded flow. Each instance loads the immutable local GLB, clo
 (including skeleton ownership), applies its normalized setup/instance controls, samples
 animation clips, and rasterizes the scene with depth into a multi-render target. The current
 bounded pass supports node transforms, four morph targets per geometry, skins up to 64 bones,
-authored PBR factors and opacity, the setup's camera or automatic framing. Imported lights are
+authored PBR factors and opacity, the setup's camera or automatic framing. Texture maps and
+extension-specific PBR lobes are not sampled by this bounded stage material pass. Imported lights are
 inspected; the pass presently uses one stable stage key/rim treatment so an exporter's lighting
 rig cannot make a show setup unpredictably black.
 
@@ -103,9 +116,43 @@ framebuffers and depth renderbuffers. Context loss clears the same bank and rest
 new one. Missing, invalid or still-loading models draw transparent and report a visible renderer
 error; they do not take the rest of the graph down.
 
-## The Xenon 60 proof
+## A representative showcase
 
-`visuals/assets/models/xenon-60.glb` is a metadata-free proof asset with twelve separately named,
+The recommended demo uses two assets from Khronos' curated glTF sample library rather than
+presenting the synthetic capsule as the product's model vocabulary:
+
+- **Fox** exposes one 24-joint skin and Survey, Walk and Run clips. The showcase makes separate
+  Run and Survey setups over the same content-addressed GLB, proving one asset can support more
+  than one performance face, then uses both in a palette-driven kinetic duet.
+- **Toy Car** exposes three material groups and eight authored cameras. Its setup publishes body
+  rotation, glass presence, body shine and the optional display cloth, maps its parts across the
+  palette, and feeds the ordinary array, feedback, blend, bloom and grade graph path.
+
+Install the assets, three setups and two-flow scheme explicitly:
+
+```sh
+npm --prefix visuals run model:showcase -- --install
+npm run visuals
+```
+
+The authoring command downloads the upstream GLBs, verifies pinned SHA-256 digests, and imports
+them through the same content-addressed store as the UI. That command is the only network step;
+rendering reads the local immutable copies and remains stage-safe. Source credits and licenses
+are recorded in `assets/models/SOURCES.md`. The install is additive and does not change which
+scheme is open; choose **model showcase** from the scheme shelf, then switch between its two
+flows in Build or Set.
+
+For hidden frame evidence without touching the user library, omit `--install`, then run:
+
+```sh
+npm run frames -- --scheme=/private/tmp/openflow-model-showcase/scheme.json \
+  --models=/private/tmp/openflow-model-showcase/models \
+  --flows=model-fox-duet,model-toy-car --at=0,0.5,1,1.5,2,2.5,3,3.5
+```
+
+## The Xenon 60 regression proof
+
+`visuals/assets/models/xenon-60.glb` remains a metadata-free structural regression asset with twelve separately named,
 equal-radius capsule-meridian nodes and materials, a named animation, camera and light. Generate
 it, or install the complete reusable setup and two-instance scheme:
 

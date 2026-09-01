@@ -12,7 +12,8 @@
     "nodes:check": "node --disable-warning=ExperimentalWarning tools/generate-nodes.ts --check",
     "mcp": "npm run nodes && node --disable-warning=ExperimentalWarning mcp/index.ts",
     "model:xenon": "node --disable-warning=ExperimentalWarning tools/generate-xenon-60-model.ts",
-    "model:proof": "node --disable-warning=ExperimentalWarning tools/xenon-model-proof.ts"
+    "model:proof": "node --disable-warning=ExperimentalWarning tools/xenon-model-proof.ts",
+    "model:showcase": "node --disable-warning=ExperimentalWarning tools/model-showcase.ts"
   },
   "dependencies": {
     "@ktamas77/abletonlink": "^1.2.3",

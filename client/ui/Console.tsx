@@ -30,6 +30,7 @@ import { ReviewsView } from './ReviewsView.tsx';
 import { SetView } from './SetView.tsx';
 import { TrainView } from './TrainView.tsx';
 import { CalibrationView } from './CalibrationView.tsx';
+import { ModelLibraryView } from './ModelLibrary.tsx';
 import { flowList, renameFlow } from './edits.ts';
 import { BPM, ENERGY, PERCENT } from './param.ts';
 import { KEYS, useRoom, type Room } from '../state/useRoom.ts';
@@ -38,12 +39,13 @@ import type { Clock } from '../state/useShow.ts';
 import './console.css';
 
 /**
- * One app, four product tabs, and a fifth development tab only when the server
+ * One app, five product tabs, and a sixth development tab only when the server
  * advertises calibration. It started as three views.
  *
- * **Build** is the product: a canvas, a library of flows, and a browser of
+ * **Build** is the graph product: a canvas, a library of flows, and a browser of
  * every node there is. **Set** is the small remainder — the wheel that turns
  * through what you built, and the handful of songs that want to say otherwise.
+ * **Models** owns imported GLBs and the reusable setups Build instances.
  * **Train** and **review** are the lab's two faces: fast recursive comparisons,
  * and the detailed score/tag corpus preserved for slower judgment.
  *
@@ -108,14 +110,15 @@ export interface ConsoleProps {
 }
 
 /**
- * Four product tabs. **Build** is the editor and the product; **train** compares
+ * Five product tabs. **Build** is the editor and the product; **models** turns
+ * inert imported GLBs into the reusable sources Build places; **train** compares
  * generated directions through recursive Explore and Refine turns; **review**
  * browses detailed anchored judgments and revises their tags and notes; **set**
  * is the wheel and the songs. The lab under train and review is `lab.ts` and
  * `server/lab.ts`; neither tab touches the scheme except when a candidate is
  * explicitly copied into it, through the same `edit` the designer uses.
  */
-const VIEWS = ['build', 'train', 'review', 'set', 'calibrate'] as const;
+const VIEWS = ['build', 'models', 'train', 'review', 'set', 'calibrate'] as const;
 export type View = (typeof VIEWS)[number];
 
 export function Console({
@@ -268,9 +271,6 @@ export function Console({
           scheme={scheme}
           media={media}
           models={models}
-          importModel={importModel}
-          saveModelSetup={saveModelSetup}
-          reconcileModel={reconcileModel}
           edit={edit}
           flow={flow}
           setFlow={setFlow}
@@ -278,6 +278,16 @@ export function Console({
           transport={transport}
           trail={trail}
           setTrail={setTrail}
+        />
+      )}
+
+      {view === 'models' && (
+        <ModelLibraryView
+          library={models}
+          scheme={scheme}
+          onImport={importModel}
+          onSave={saveModelSetup}
+          onReconcile={reconcileModel}
         />
       )}
 

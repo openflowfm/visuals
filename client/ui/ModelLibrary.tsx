@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Euler, Matrix4, Quaternion, Vector3 } from 'three';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
+import type { Scheme } from '../../protocol.ts';
+import './models.css';
 import {
   MODEL_SETUP_ID,
   bindingTargetKey,
@@ -28,6 +30,12 @@ const slug = (value: string): string => {
 
 const normalized = (value: number, min: number, max: number): number =>
   Math.max(0, Math.min(1, (value - min) / (max - min)));
+
+const transformNumber = (value: number): string => {
+  const magnitude = Math.abs(value);
+  if (value !== 0 && (magnitude < 0.01 || magnitude >= 1000)) return value.toExponential(2);
+  return value.toFixed(2);
+};
 
 function transformOf(node: ModelNodeCapability): { translation: number[]; rotation: number[]; scale: number[] } {
   const position = new Vector3(...node.translation);
@@ -148,19 +156,20 @@ function asDraft(setup: ModelSetup): ModelSetupDraft {
   };
 }
 
-export function ModelLibraryPanel({
+export function ModelLibraryView({
   library,
+  scheme,
   onImport,
   onSave,
   onReconcile,
 }: {
   library: ModelLibrary;
+  scheme: Scheme;
   onImport(file: File): Promise<void>;
   onSave(setup: ModelSetupDraft): void;
   onReconcile(setupId: string, assetHash: string, decision: ModelRevisionDecision): void;
 }) {
   const input = useRef<HTMLInputElement | null>(null);
-  const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<ModelSetupDraft | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [importing, setImporting] = useState<string | null>(null);
@@ -168,6 +177,7 @@ export function ModelLibraryPanel({
   const [reconciled, setReconciled] = useState<Record<string, ModelBindingTarget>>({});
   const [materialReconciled, setMaterialReconciled] = useState<Record<string, number | null>>({});
   const [revisionCamera, setRevisionCamera] = useState<number | null>(null);
+  const [query, setQuery] = useState('');
 
   const asset = draft ? library.assets.find((entry) => entry.hash === draft.assetHash) ?? null : null;
   const saved = savedId ? library.setups.find((entry) => entry.id === savedId) ?? null : null;
@@ -175,6 +185,22 @@ export function ModelLibraryPanel({
   const preview = saved && revision ? reconcileBindings(saved, revision.capabilities) : null;
   const candidates = useMemo(() => revision ? allTargets(revision) : [], [revision]);
   const candidateMap = useMemo(() => new Map(candidates.map((target) => [bindingTargetKey(target), target])), [candidates]);
+  const used = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const flow of Object.values(scheme.flows)) {
+      for (const node of flow.circuit.nodes) {
+        if (node.kind === 'model' && node.setup) counts.set(node.setup, (counts.get(node.setup) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [scheme.flows]);
+  const needle = query.trim().toLowerCase();
+  const visibleSetups = library.setups.filter((setup) =>
+    !needle || setup.name.toLowerCase().includes(needle) || setup.id.includes(needle),
+  );
+  const visibleAssets = library.assets.filter((entry) =>
+    !needle || entry.name.toLowerCase().includes(needle) || entry.hash.includes(needle),
+  );
 
   useEffect(() => {
     if (!preview) {
@@ -255,13 +281,12 @@ export function ModelLibraryPanel({
   };
 
   return (
-    <section className="model-library" data-open={open ? '' : undefined}>
-      <button type="button" className="model-library-head" onClick={() => setOpen((shown) => !shown)}>
-        <span>models</span>
-        <span>{library.assets.length} GLB · {library.setups.length} setup{library.setups.length === 1 ? '' : 's'} {open ? '▾' : '▸'}</span>
-      </button>
-      {open && (
-        <div className="model-library-body">
+    <section className="model-workspace">
+      <aside className="model-catalog">
+        <div className="model-catalog-head">
+          <span className="model-eyebrow">model library</span>
+          <h2>Reusable GLB setups</h2>
+          <p>Import inert model bytes once, then publish only the controls a flow should see.</p>
           <div className="model-actions">
             <Button tone="quiet" onPress={() => input.current?.click()}>import GLB</Button>
             <Button tone="quiet" disabled={library.assets.length === 0} onPress={() => start()}>new setup</Button>
@@ -283,30 +308,90 @@ export function ModelLibraryPanel({
           </div>
           {importing && <p className="model-notice">{importing}</p>}
           {library.notice && <p className="model-notice bad">{library.notice}</p>}
+          <input
+            className="model-search"
+            type="search"
+            value={query}
+            placeholder="Find a setup or GLB"
+            aria-label="Find a model setup or GLB"
+            onChange={(event) => setQuery(event.currentTarget.value)}
+          />
+        </div>
 
-          {library.setups.length > 0 && (
-            <label className="model-field">
-              <span>reusable setup</span>
-              <select value={savedId ?? ''} onChange={(event) => chooseSetup(event.target.value)}>
-                <option value="">choose one</option>
-                {library.setups.map((setup) => <option key={setup.id} value={setup.id}>{setup.name}</option>)}
-              </select>
-            </label>
-          )}
+        <div className="model-catalog-scroll">
+          <section className="model-catalog-group">
+            <h3>setups <span>{visibleSetups.length}</span></h3>
+            {visibleSetups.length === 0 && <p className="model-empty-small">No reusable setups{needle ? ' match this search' : ' yet'}.</p>}
+            {visibleSetups.map((setup) => {
+              const source = library.assets.find((entry) => entry.hash === setup.assetHash);
+              return (
+                <button
+                  type="button"
+                  className="model-catalog-card"
+                  data-selected={savedId === setup.id ? '' : undefined}
+                  key={setup.id}
+                  onClick={() => chooseSetup(setup.id)}
+                >
+                  <b>{setup.name}</b>
+                  <span>{setup.bindings.length} inlet{setup.bindings.length === 1 ? '' : 's'} · {used.get(setup.id) ?? 0} flow instance{used.get(setup.id) === 1 ? '' : 's'}</span>
+                  <small>{source?.name ?? setup.assetHash.slice(0, 10)} · revision {setup.revision.slice(0, 8)}</small>
+                </button>
+              );
+            })}
+          </section>
 
-          {!draft && library.assets.length > 0 && (
-            <div className="model-assets">
-              {library.assets.map((entry) => (
-                <button type="button" key={entry.hash} onClick={() => start(entry)}>
+          <section className="model-catalog-group">
+            <h3>immutable GLBs <span>{visibleAssets.length}</span></h3>
+            {visibleAssets.length === 0 && <p className="model-empty-small">{needle ? 'No GLBs match this search.' : 'Import an ordinary .glb to begin.'}</p>}
+            {visibleAssets.map((entry) => {
+              const setupCount = library.setups.filter((setup) => setup.assetHash === entry.hash).length;
+              return (
+                <button
+                  type="button"
+                  className="model-catalog-card asset"
+                  data-selected={asset?.hash === entry.hash && savedId === null ? '' : undefined}
+                  key={entry.hash}
+                  onClick={() => start(entry)}
+                >
                   <b>{entry.name}</b>
                   <span>{entry.capabilities.nodes.length} nodes · {entry.capabilities.meshes.length} meshes · {(entry.bytes / 1024).toFixed(0)} KiB</span>
+                  <small>{setupCount} setup{setupCount === 1 ? '' : 's'} · {entry.hash.slice(0, 10)}</small>
                 </button>
-              ))}
-            </div>
-          )}
+              );
+            })}
+          </section>
+        </div>
+      </aside>
 
+      <main className="model-studio">
+        {!draft && (
+          <div className="model-welcome">
+            <span className="model-eyebrow">asset → setup → flow instance</span>
+            <h2>Make the useful surface.</h2>
+            <p>The GLB stays immutable. A setup names the materials, animation, morphs and transforms worth wiring. Every model node then keeps its own values and cords.</p>
+            <Button onPress={() => library.assets.length ? start() : input.current?.click()}>
+              {library.assets.length ? 'make a setup' : 'import your first GLB'}
+            </Button>
+          </div>
+        )}
           {draft && asset && (
-            <>
+            <div className="model-editor">
+              <header className="model-editor-head">
+                <div>
+                  <span className="model-eyebrow">{savedId ? 'reusable setup' : 'new setup'}</span>
+                  <h2>{draft.name || 'Untitled setup'}</h2>
+                </div>
+                <div className="model-actions">
+                  <Button
+                    disabled={!MODEL_SETUP_ID.test(draft.id) || !draft.name.trim()}
+                    onPress={() => {
+                      onSave(draft);
+                      setSavedId(draft.id);
+                    }}
+                  >save setup</Button>
+                  <Button tone="quiet" onPress={() => { setDraft(null); setSavedId(null); }}>close</Button>
+                </div>
+              </header>
               <div className="model-fields two">
                 <label className="model-field">
                   <span>setup name</span>
@@ -356,7 +441,7 @@ export function ModelLibraryPanel({
                   const transform = transformOf(node);
                   return <div className="model-capability" key={node.index}>
                     <span title={node.path}>
-                      {node.path}<small> T {transform.translation.map((value) => value.toFixed(2)).join(', ')} · R {transform.rotation.map((value) => value.toFixed(2)).join(', ')} · S {transform.scale.map((value) => value.toFixed(2)).join(', ')}{node.matrix ? ' · matrix' : ''}</small>
+                      {node.path}<small> T {transform.translation.map(transformNumber).join(', ')} · R {transform.rotation.map(transformNumber).join(', ')} · S {transform.scale.map(transformNumber).join(', ')}{node.matrix ? ' · matrix' : ''}</small>
                     </span>
                     <span className="model-publish">
                       {(['rotation-x', 'rotation-y', 'rotation-z'] as const).map((property, axis) => (
@@ -625,10 +710,9 @@ export function ModelLibraryPanel({
                   )}
                 </details>
               )}
-            </>
+            </div>
           )}
-        </div>
-      )}
+      </main>
     </section>
   );
 }

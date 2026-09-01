@@ -1,7 +1,7 @@
 # The console
 
-`client/ui/Console.tsx`, `Designer.tsx`, `TrainView.tsx`, `ReviewsView.tsx`,
-`SetView.tsx`. Four product views over one show.
+`client/ui/Console.tsx`, `Designer.tsx`, `ModelLibrary.tsx`, `TrainView.tsx`,
+`ReviewsView.tsx`, `SetView.tsx`. Five product views over one show.
 
 Development may add one conditional view without changing that product shape:
 **calibrate** is advertised by a server started with `OPENFLOW_CALIBRATION=1`,
@@ -10,11 +10,12 @@ in [calibration](calibration.md), not another face of the user lab. Its device
 and parameter selectors are local navigation over frozen development questions;
 opening one does not move another console or change the show.
 
-## Why four, and why these
+## Why five, and why these
 
 | view | the question | the scale |
 |---|---|---|
 | **build** | what is worth putting on a wall | one flow |
+| **models** | which parts of imported 3D work belong on a reusable face | one setup and its immutable GLB |
 | **train** | what is worth developing, and what developing it produced | one lineage forest |
 | **review** | what did a slower, detailed judgment say | the preserved corpus |
 | **set** | what turns through them, and what says otherwise | the set |
@@ -36,8 +37,13 @@ serve. Copying a candidate lands in the open scheme through the same `edit`; nei
 writes a scheme by itself. Their rooms are their own rather than the header's, because a
 reproducible judgment must never read the open scheme's colourways.
 
-Build is the product. Everything else this app does is arrangements of what gets made
-there, which is why it opens on it and why it has the whole screen. The **vocabulary** is
+Build is the graph product. Models is the library product beside it: imported bytes and
+reusable setup authoring outlive any one flow, so placing that work in Build made it look
+like a subordinate drawer and left neither browsing nor inspection enough room. The Models
+view keeps a searchable asset/setup catalog visible beside the full inspector, says how many
+flow instances use each setup, and leaves Build to place the resulting `model` source.
+
+The console still opens on Build. The **vocabulary** is
 documented in [flows](flows.md), because it is about what a flow *is* rather than about
 where anything sits; the shell it is edited in is below.
 
@@ -98,15 +104,10 @@ from and the panel you judge in.
 
 ### The node browser lists nodes, and presets sit under them
 
-The **Models** drawer sits above that browser because it creates things the browser may place,
-not another family of presets. It imports an ordinary `.glb`, shows the inspected scene roots,
-node transforms, mesh primitives and morph names, skins and joints, animation clips and
-channels, materials, cameras and lights, and creates an OpenFlow-owned reusable setup from
-those facts. A setup publishes only selected transforms, morphs, clips or material properties
-as renameable normalized controls; it never turns every joint into a faceplate. Saved setups
-then appear in the ordinary `model` node's chooser. Asset revision is a separate action which
-requires a decision for every published target, material mapping and camera before it moves.
-The complete ownership and safety contract is in [models](models.md).
+Reusable setups made in **Models** appear in the ordinary `model` node's chooser here. Import,
+capability inspection, publishing and asset revision reconciliation stay in that first-class
+view; the node browser is only the place that creates one flow-owned instance. The complete
+ownership and safety contract is in [models](models.md).
 
 It listed the **modes** — `plasma`, `kaleido`, `sparks`, twenty-three of them flat — and
 never mentioned the node they were. That was solving something real, and the replacement has
