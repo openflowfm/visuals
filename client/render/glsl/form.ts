@@ -402,6 +402,155 @@ vec2 formAstrolabeNearest(vec3 q, float members, float spread, float phase, floa
     formRibbonGimbalXY(m6, 0.94 - stepDown * 5.75, 0.02, 0.006, t * 0.46), 6.0, count);
 }
 
+// One circular member whose permanent hinge lies on the radial rail at
+// memberAngle. In its resting pose every hoop is parallel to xy. Rotating it
+// around its own radial x axis opens the common coplanar flower into a real 3D
+// mechanism without moving the hinge or changing the hoop's radius.
+float formRosetteMember(vec3 q, float memberAngle, float hinge, float radius,
+                        float open, float t) {
+  q.xy = formSpin(-memberAngle) * q.xy;
+  q -= vec3(hinge, 0.0, 0.0);
+  q.yz = formSpin(open) * q.yz;
+  return formGimbalXY(q, radius, 0.003, t * 0.36);
+}
+
+float formRosetteTake(float best, vec3 q, float member, float count, float sector,
+                      float hinge, float radius, float open, float t) {
+  if (member < 0.0 || member >= count) return best;
+  return min(best, formRosetteMember(q, member * sector, hinge, radius, open, t));
+}
+
+// Permanent hoops hinged around one axis. Axis-crossing flowers and localized
+// wreaths have different apparent density, but the distance field cannot drop
+// either one's remote members. A nearest-sector window looks plausible at the
+// shading point yet overestimates distance along rays that approach a hoop
+// through another sector, cutting black wedges through the render. Evaluate
+// every permanent member explicitly instead. The fixed calls are bounded and
+// contain no second shader loop, and unlike a screen kaleidoscope every
+// crossing has a real front and back.
+float formRosette(vec3 q, float petals, float spread, float phase, float t) {
+  float a = clamp(phase, 0.0, 1.0) * 2.0 * PI;
+  float opened = clamp(spread, 0.0, 1.0);
+  float count = floor(mix(5.0, 24.0, clamp(petals, 0.0, 1.0)));
+  float sector = 2.0 * PI / count;
+  // One topology control moves along the family the footage actually uses:
+  // large circles with nearby hinges cross through the common axis as petals;
+  // pushing the hinges out while shrinking those same circles opens a toroidal
+  // hole without changing member count or replacing the construction.
+  float hinge = mix(0.18, 0.58, opened);
+  float radius = mix(0.78, 0.24, opened);
+
+  // The whole rail rocks while every member opens by the same amount around
+  // its own radial hinge. Both are bounded trigonometric paths: the sculpture
+  // reaches a genuinely different midpoint and returns exactly at one.
+  q.yz = formSpin(sin(a) * 0.42) * q.yz;
+  q.xz = formSpin((cos(a) - 1.0) * 0.24) * q.xz;
+  float open = 0.18 + (cos(a) - 1.0) * 0.82 + sin(a * 2.0) * 0.16;
+
+  float d = 10.0;
+  d = formRosetteTake(d, q, 0.0, count, sector, hinge, radius, open, t);
+  d = formRosetteTake(d, q, 1.0, count, sector, hinge, radius, open, t);
+  d = formRosetteTake(d, q, 2.0, count, sector, hinge, radius, open, t);
+  d = formRosetteTake(d, q, 3.0, count, sector, hinge, radius, open, t);
+  d = formRosetteTake(d, q, 4.0, count, sector, hinge, radius, open, t);
+  d = formRosetteTake(d, q, 5.0, count, sector, hinge, radius, open, t);
+  d = formRosetteTake(d, q, 6.0, count, sector, hinge, radius, open, t);
+  d = formRosetteTake(d, q, 7.0, count, sector, hinge, radius, open, t);
+  d = formRosetteTake(d, q, 8.0, count, sector, hinge, radius, open, t);
+  d = formRosetteTake(d, q, 9.0, count, sector, hinge, radius, open, t);
+  d = formRosetteTake(d, q, 10.0, count, sector, hinge, radius, open, t);
+  d = formRosetteTake(d, q, 11.0, count, sector, hinge, radius, open, t);
+  d = formRosetteTake(d, q, 12.0, count, sector, hinge, radius, open, t);
+  d = formRosetteTake(d, q, 13.0, count, sector, hinge, radius, open, t);
+  d = formRosetteTake(d, q, 14.0, count, sector, hinge, radius, open, t);
+  d = formRosetteTake(d, q, 15.0, count, sector, hinge, radius, open, t);
+  d = formRosetteTake(d, q, 16.0, count, sector, hinge, radius, open, t);
+  d = formRosetteTake(d, q, 17.0, count, sector, hinge, radius, open, t);
+  d = formRosetteTake(d, q, 18.0, count, sector, hinge, radius, open, t);
+  d = formRosetteTake(d, q, 19.0, count, sector, hinge, radius, open, t);
+  d = formRosetteTake(d, q, 20.0, count, sector, hinge, radius, open, t);
+  d = formRosetteTake(d, q, 21.0, count, sector, hinge, radius, open, t);
+  d = formRosetteTake(d, q, 22.0, count, sector, hinge, radius, open, t);
+  return formRosetteTake(d, q, 23.0, count, sector, hinge, radius, open, t);
+}
+
+// One sector of the two coaxial banks in Xenon 78. The outer member is a
+// persistent rounded loop and the inner member is a persistent circle; both
+// rotate around the same local tangential axis but keep separate hinges and
+// opening angles. Their different profiles remain visible where the two banks
+// overlap, which is what a single repeated petal silhouette cannot reproduce.
+float formCorollaMember(vec3 q, float memberAngle, vec2 outerSize,
+                        float outerHinge, float innerHinge, float innerRadius,
+                        float outerOpen, float innerOpen, float corner, float t) {
+  q.xy = formSpin(-memberAngle) * q.xy;
+
+  vec3 outer = q - vec3(outerHinge, 0.0, 0.0);
+  // The rounded bank does not merely fall flat: every loop twists about its
+  // own normal as it opens, producing the reference's coherent clockwise
+  // pinwheel while the compact necklace retains untwisted tangent links.
+  float outerSkew = (1.0 - smoothstep(0.08, 1.38, outerOpen)) * 0.32;
+  outer.xy = formSpin(-outerSkew) * outer.xy;
+  outer.xz = formSpin(outerOpen) * outer.xz;
+  float d = formRoundedLoopSize(outer, outerSize, corner, t * 0.35 + 0.003);
+
+  vec3 inner = q - vec3(innerHinge, 0.0, 0.0);
+  inner.xz = formSpin(innerOpen) * inner.xz;
+  return min(d, formGimbalXY(inner, innerRadius, 0.003, t * 0.32));
+}
+
+float formCorollaTake(float best, vec3 q, float member, float count, float sector,
+                       vec2 outerSize, float outerHinge, float innerHinge,
+                       float innerRadius, float outerOpen, float innerOpen,
+                       float corner, float t) {
+  if (member >= count) return best;
+  return min(best, formCorollaMember(q, member * sector, outerSize,
+    outerHinge, innerHinge, innerRadius, outerOpen, innerOpen, corner, t));
+}
+
+// A compact toroidal cage opening into two legible radial layers. Size changes
+// are attached to the actual member dimensions and hinge rails: at the flower
+// pose the reference's outer rounded loops reach beyond its inner circular
+// turbine, while in the compact pose both banks collect around the same dark
+// throat. Fourteen explicit sectors keep the distance valid between members;
+// a nearest-sector fold cuts wedges through rays before they reach the cage.
+float formCorolla(vec3 q, float petals, float rounded, float phase, float t) {
+  float a = clamp(phase, 0.0, 1.0) * 2.0 * PI;
+  float bloom = sin(a * 0.5);
+  bloom *= bloom;
+  float count = floor(mix(10.0, 14.0, clamp(petals, 0.0, 1.0)));
+  float sector = 2.0 * PI / count;
+  float outerHinge = mix(0.52, 0.68, bloom);
+  vec2 outerSize = mix(vec2(0.25, 0.18), vec2(0.42, 0.32), bloom);
+  float innerHinge = mix(0.4, 0.3, bloom);
+  float innerRadius = mix(0.16, 0.34, bloom);
+  float corner = mix(0.045, 0.18, clamp(rounded, 0.0, 1.0));
+  float outerOpen = mix(1.38, 0.08, bloom);
+  float innerOpen = mix(1.32, 0.34, bloom);
+
+  // A shallow shared nod exposes the depth of the compact cage. It is one
+  // closed motion of the entire construction, not an angle recovered from the
+  // screen, so the same loop remains traceable through the cycle.
+  float sharedTilt = mix(0.72, 0.08, bloom) + sin(a) * 0.08;
+  q.yz = formSpin(sharedTilt) * q.yz;
+  q.xy = formSpin(sin(a * 2.0) * 0.08) * q.xy;
+
+  float d = 10.0;
+  d = formCorollaTake(d, q, 0.0, count, sector, outerSize, outerHinge, innerHinge, innerRadius, outerOpen, innerOpen, corner, t);
+  d = formCorollaTake(d, q, 1.0, count, sector, outerSize, outerHinge, innerHinge, innerRadius, outerOpen, innerOpen, corner, t);
+  d = formCorollaTake(d, q, 2.0, count, sector, outerSize, outerHinge, innerHinge, innerRadius, outerOpen, innerOpen, corner, t);
+  d = formCorollaTake(d, q, 3.0, count, sector, outerSize, outerHinge, innerHinge, innerRadius, outerOpen, innerOpen, corner, t);
+  d = formCorollaTake(d, q, 4.0, count, sector, outerSize, outerHinge, innerHinge, innerRadius, outerOpen, innerOpen, corner, t);
+  d = formCorollaTake(d, q, 5.0, count, sector, outerSize, outerHinge, innerHinge, innerRadius, outerOpen, innerOpen, corner, t);
+  d = formCorollaTake(d, q, 6.0, count, sector, outerSize, outerHinge, innerHinge, innerRadius, outerOpen, innerOpen, corner, t);
+  d = formCorollaTake(d, q, 7.0, count, sector, outerSize, outerHinge, innerHinge, innerRadius, outerOpen, innerOpen, corner, t);
+  d = formCorollaTake(d, q, 8.0, count, sector, outerSize, outerHinge, innerHinge, innerRadius, outerOpen, innerOpen, corner, t);
+  d = formCorollaTake(d, q, 9.0, count, sector, outerSize, outerHinge, innerHinge, innerRadius, outerOpen, innerOpen, corner, t);
+  d = formCorollaTake(d, q, 10.0, count, sector, outerSize, outerHinge, innerHinge, innerRadius, outerOpen, innerOpen, corner, t);
+  d = formCorollaTake(d, q, 11.0, count, sector, outerSize, outerHinge, innerHinge, innerRadius, outerOpen, innerOpen, corner, t);
+  d = formCorollaTake(d, q, 12.0, count, sector, outerSize, outerHinge, innerHinge, innerRadius, outerOpen, innerOpen, corner, t);
+  return formCorollaTake(d, q, 13.0, count, sector, outerSize, outerHinge, innerHinge, innerRadius, outerOpen, innerOpen, corner, t);
+}
+
 // The woven object repeated as construction rather than copied as pixels.
 // Each cell holds three orthogonal bundles of four rounded loops; folding the
 // point into the cell makes the field infinite without a loop inside the march.
@@ -628,6 +777,14 @@ vec3 formBaseColour(vec3 q, int mode, float extra, float detail, float motion) {
     // than being painted permanently onto whole members.
     return mix(uChalk, role, 0.28);
   }
+  if (mode == 14 || mode == 15) {
+    // Every hoop is the same pale luminous stock. Recovering a sector from the
+    // shaded world point after the shared rocking transform would make colours
+    // jump at sector boundaries; a constant material keeps the mechanism's
+    // physical continuity and leaves spectral variation to reflected light or
+    // an explicit downstream treatment.
+    return mix(uPrimary, uChalk, 0.35);
+  }
   if (mode != 4) return uPrimary;
   float a = clamp(motion, 0.0, 1.0) * 2.0 * PI;
   q.xy = formSpin(a) * q.xy;
@@ -746,6 +903,12 @@ float formField(vec3 q, int mode, float thick, float extra, float detail, float 
   if (mode == 13) {
     return formAstrolabeNearest(q, extra, detail, motion, t).x;
   }
+  if (mode == 14) {
+    return formRosette(q, extra, detail, motion, t);
+  }
+  if (mode == 15) {
+    return formCorolla(q, extra, detail, motion, t);
+  }
   // A helix winding away down the corridor. The one shape here whose distance
   // is an over-estimate along its axis, which is why every march takes half
   // steps: a full one would tunnel through the strand and draw nothing.
@@ -767,7 +930,7 @@ float formField(vec3 q, int mode, float thick, float extra, float detail, float 
 float formStride(int mode) {
   if (mode == 5) return 0.85;
   if (mode == 10) return 0.5;
-  return mode == 14 ? 0.5 : 0.9;
+  return mode == 16 ? 0.5 : 0.9;
 }
 
 // The surface direction, from four samples around the point the ray stopped at.
@@ -866,6 +1029,16 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
   float yaw = turn * 6.28318530718;
   float pitch = (clamp(tilt, 0.0, 1.0) - 0.5) * 2.4;
   float away = mix(1.5, 4.5, clamp(dolly, 0.0, 1.0));
+  if (mode == 14) {
+    // Xenon's hinged rosette is choreographed as a camera move as well as a
+    // mechanism. At its coplanar pose the whole wreath is visible; as the
+    // hoops stand up, the eye drives close enough for their long projected
+    // rails to leave the frame. sin² closes at both ends with zero velocity.
+    float push = sin(clamp(motion, 0.0, 1.0) * PI);
+    push *= push;
+    push = pow(push, 0.35);
+    away *= mix(1.45, 0.62, push);
+  }
   vec3 eye = vec3(cos(pitch) * sin(yaw), sin(pitch), cos(pitch) * cos(yaw)) * away;
   vec3 fwd = normalize(-eye);
   vec3 side = normalize(cross(vec3(0.0, 1.0, 0.0), fwd));
@@ -912,7 +1085,7 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
     side = rolledSide;
   }
 
-  if (mode == 14) {
+  if (mode == 16) {
     float off = clamp(dolly, 0.0, 1.0) * 0.32;
     float coil = 0.6 + clamp(extra, 0.0, 1.0) * 3.5;
     float cycle = 2.0 * PI / coil;
@@ -926,7 +1099,7 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
   // far members collect into the dense inner knot. Pulling the ordinary camera
   // closer without widening it merely crops a larger version of the same tidy
   // orthographic-looking ball.
-  float focal = mode == 13 ? 1.1 : 1.4;
+  float focal = mode == 13 || mode == 14 || mode == 15 ? 1.1 : 1.4;
   vec3 ray = normalize(fwd * focal + side * p.x + up * p.y);
 
   float tight = mix(120.0, 24.0, clamp(flare, 0.0, 1.0));
@@ -992,6 +1165,12 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
   // silhouette, but the face has to disappear when it turns away from the
   // studio strips or the broad/edge distinction in the geometry is erased.
   if (mode == 13) raw *= mix(0.05, 0.18, pow(clamp(e, 0.0, 1.0), 2.0));
+  // Rosette and Corolla use genuinely emissive fine wire. On a thin member a
+  // direct hit terminates before the volumetric integral has gathered as much
+  // light as a grazing ray, which otherwise draws a black cord inside a cyan
+  // halo. The footage has the opposite physical ordering: a saturated core
+  // with bloom falling away from it.
+  if (mode == 14 || mode == 15) raw = max(raw, hit * mix(0.12, 0.32, clamp(e, 0.0, 1.0)));
   float lit = clamp(raw, 0.0, 1.0);
   // Only what is genuinely saturated goes white. Mixing toward white from
   // halfway up leaves every tube the same pale grey and throws the colourway

@@ -207,6 +207,12 @@ the topology: enclosed regions, curve endpoints and junction clusters. That dist
 load-bearing for compound forms — one bright cube and twelve woven loops can have the same
 coverage and centroid, but they cannot have the same skeleton.
 
+A preview file may contain the seamless loop repeated more than once. Pass `--cycles=2` when
+two copies occupy the container (or the corresponding positive integer): the tool samples one
+fundamental period while still taking the same number of graph and footage poses. Otherwise a
+graph cycle is compared with duplicated target poses and the alignment score describes the
+container edit rather than the motion being reconstructed.
+
 **Every shortcut around this has produced a wrong answer.** The obvious way to look at a flow
 is to compile its shader, set its uniforms by hand, and render it in a page — it is quick to
 write, and it is wrong in ways that do not announce themselves:

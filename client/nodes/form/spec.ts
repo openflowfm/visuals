@@ -28,6 +28,8 @@ const descriptions: Record<Mode, string> = {
   armillary: 'A dark central body inside a precessing nested ring bank and three gimbal hoops.',
   gyre: 'Paired nested rounded hoops turning through each other as a symmetric chrome gyroscope.',
   astrolabe: 'Three to seven flat metal gimbals locked into one rigidly tumbling sculpture.',
+  rosette: 'Circular hoops hinged around one axis, opening from a radial wreath into crossed petals.',
+  corolla: 'Coaxial banks of tangent rounded loops and circular hoops opening into a layered flower.',
   tube: 'A helix winding away down a corridor the eye is inside.',
 };
 
@@ -84,6 +86,16 @@ const values: Record<Mode, readonly PortSpec[]> = {
     numberPort('members', 'How many fixed circular gimbals are present.', 0.58),
     numberPort('spread', 'How quickly the nested gimbal radii step down.', 0.48),
     numberPort('tumble', 'Where the sculpture sits on its closed rigid tumble.', 0),
+  ],
+  rosette: [
+    numberPort('petals', 'How many permanent hinged hoops repeat around the axis.', 0.42),
+    numberPort('spread', 'How far hinges open outward as the hoops shrink into a wreath.', 0.35),
+    numberPort('tumble', 'Where the shared hinge mechanism sits on its closed cycle.', 0),
+  ],
+  corolla: [
+    numberPort('petals', 'How many permanent members repeat in each coaxial bank.', 0.58),
+    numberPort('corner', 'How round or faceted the outer bank loops become.', 0.48),
+    numberPort('open', 'Where both hinge banks sit on their closed compact-to-flower cycle.', 0),
   ],
   tube: [
     numberPort('coil', 'How tightly the helix winds as it goes away.', 0.35),

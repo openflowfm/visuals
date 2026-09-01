@@ -364,7 +364,7 @@ editors listing these differently would be two different vocabularies.
 | `field` | `p` `energy`, plus `balls` `apart` on metaballs | `c` | `cells` `clouds` `metaballs`; fixed work, charged per graph sample and never offered per track |
 | `fractal` | `p` `energy` + its mode's numbers | `c` | `mandelbrot` or `julia`, with bounded zoom, detail and iterative work |
 | `light` | `p` `energy` + its mode's numbers, and `from` on the hung three | `c` | `lamp` `beam` `shafts` `caustics`; 2D lights with fixed work, drifting in seconds rather than beats |
-| `form` | `p` `turn` `tilt` `dolly` `thick` `flare` `chrome` `energy` + its mode's numbers | `c` | `torus` `rings` `frame` `lattice` `weave` `loom` `orbits` `relief` `iris` `truss` `rotor` `armillary` `gyre` `astrolabe` `tube`; the one node with a third coordinate in it, marched and charged like a fractal |
+| `form` | `p` `turn` `tilt` `dolly` `thick` `flare` `chrome` `energy` + its mode's numbers | `c` | `torus` `rings` `frame` `lattice` `weave` `loom` `orbits` `relief` `iris` `truss` `rotor` `armillary` `gyre` `astrolabe` `rosette` `corolla` `tube`; the one node with a third coordinate in it, marched and charged like a fractal |
 | `glow` | `d` `energy` + its mode's numbers | `c` | `neon` `soft` `band`: a distance becomes a lit stroke |
 | `shade` | `n` `amount` `energy` | `c` | `across` `heat` `filament`: a number becomes a colour off the colourway |
 | `flow` | `p` | `c` | another flow, whole, as one node |
@@ -575,6 +575,29 @@ cyan, magenta, warm and white studio panels; colour therefore travels along the 
 its surface normal turns, while a weak permanent member tint keeps crossings legible. Two
 orthogonal `mirror` lenses can impose Xenon 96's exact frame symmetry after projection without
 changing the underlying 3D construction.
+
+`rosette` distributes between five and twenty-four equal circular hoops on permanent hinges
+around one axis. `petals` alone chooses the member count; `spread` moves every hinge outward
+while shrinking its hoop, so a low value makes large circles cross through the common axis and
+a high value opens a hollow wreath without replacing the members at a hidden threshold. Every
+hoop opens by the same closed angle around its own radial hinge while the complete rail rocks as
+one construction. The camera push is part of that closed choreography: the coplanar wreath is
+shown whole, then the eye moves close as its hoops stand up and their projected rails leave the
+frame. All members are evaluated explicitly because a nearest-sector shortcut overestimates the
+distance along rays approaching from another sector and cuts black wedges through the sculpture.
+The members use fine emissive wire with a saturated hit core rather than chrome-dark tube faces,
+which preserves the thin cyan/white crossings in the Xenon 05 treatment.
+
+`corolla` is a separate two-bank mechanism rather than the high-spread end of `rosette`. Ten to
+fourteen rounded outer loops and circular inner hoops sit on coaxial hinge rails. In the compact
+pose both banks stand in tangent planes around a hollow torus, like links around a necklace; as
+`open` advances they enlarge and rotate into a face-on layered flower. The outer bank also makes
+one coherent normal-axis twist during that opening, producing a pinwheel instead of a radial
+row of rectangles, while the inner circular bank opens by a different angle into the smaller
+turbine. `petals` changes the permanent sector count and `corner` changes only the rounded outer
+profile. Both banks retain every member, hinge and distinct profile through the closed cycle,
+and all sectors are explicit for the same ray-distance reason as `rosette`. This is the compound
+compact-cage/large-flower topology of the Xenon 78 treatment, not a 2D repeat of one petal.
 
 `loom` repeats the weave as geometry through all three axes rather than tiling a rendered
 picture of it. Every cell contains three orthogonal four-member loop bundles. Each complete

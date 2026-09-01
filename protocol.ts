@@ -170,16 +170,17 @@ export const FIGURE_MODES = [
 export const ARRAY_MODES = ['row', 'grid', 'ring', 'mirror'] as const;
 
 /**
- * The fifteen shapes the `form` node marches, and the order is the argument.
+ * The seventeen shapes the `form` node marches, and the order is the argument.
  *
  * One ring, then several turning against each other, then a cube's edges, then
  * that cube repeated through space, two compound tube arrangements, one of
  * those repeated into a camera-filling loom, an extruded path field, a lens
  * shell around a changing hoop assembly, a three-plane cuboid truss, a double-domed blade
  * rotor, a nested armillary, paired rounded gyroscope banks, a rigid sculpture
- * of flat circular gimbals, then a corridor the eye is inside. The compound forms
- * reuse the same analytic ring and rounded-loop distances rather than
- * introducing another rendering path.
+ * of flat circular gimbals, a radial circular-hoop mechanism, a two-bank
+ * corolla of rounded and circular loops, then a corridor the eye is inside.
+ * The compound forms reuse the same analytic ring and rounded-loop distances
+ * rather than introducing another rendering path.
  *
  * Deliberately not `SOURCES`, for the reason `fractal` and `light` are not:
  * every source is also drawn once per playing track, and a ray march per track
@@ -200,6 +201,8 @@ export const FORM_MODES = [
   'armillary',
   'gyre',
   'astrolabe',
+  'rosette',
+  'corolla',
   'tube',
 ] as const;
 

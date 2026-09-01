@@ -466,7 +466,7 @@ describe('the astrolabe is one rigid sculpture of variable metal gimbals', () =>
     expect(FORM_LIB).toContain('vec2(width + t, depth + t * 0.32)');
     expect(FORM_LIB).toContain('formRibbonGimbalXY(m0, 0.98, 0.042, 0.012, t)');
     expect(FORM_LIB).not.toContain('formGimbalXY(m0');
-    expect(FORM_LIB).toContain('float focal = mode == 13 ? 1.1 : 1.4;');
+    expect(FORM_LIB).toContain('float focal = mode == 13 || mode == 14 || mode == 15 ? 1.1 : 1.4;');
     expect(FORM_LIB).toContain('if (mode == 13) tight *= 0.42;');
   });
 
@@ -476,6 +476,101 @@ describe('the astrolabe is one rigid sculpture of variable metal gimbals', () =>
     expect(FORM_LIB).toContain('vec3 formAstrolabeSky(vec3 ray)');
     expect(FORM_LIB).toContain('mode == 13 ? formAstrolabeSky(bounced)');
     expect(FORM_LIB).toContain('return formAstrolabeNearest(q, extra, detail, motion, t).x;');
+  });
+});
+
+describe('the rosette is a radial hinge mechanism of permanent circular hoops', () => {
+  it('keeps every permanent member in both crossing petals and localized wreaths', () => {
+    expect(FORM_LIB).toContain('float formRosetteTake(');
+    expect(FORM_LIB).toContain('floor(mix(5.0, 24.0');
+    for (let member = 0; member < 24; member++) {
+      expect(FORM_LIB).toContain(`${member}.0, count, sector`);
+    }
+    expect(FORM_LIB).not.toContain('float nearest = round(atan(q.y, q.x) / sector);');
+    const field = FORM_LIB.slice(
+      FORM_LIB.indexOf('float formRosette('),
+      FORM_LIB.indexOf('// The woven object repeated'),
+    );
+    expect(field).not.toMatch(/for\s*\(/);
+  });
+
+  it('moves one permanent topology from axis-crossing petals to an open wreath', () => {
+    const hinge = (spread: number) => 0.18 + (0.58 - 0.18) * spread;
+    const radius = (spread: number) => 0.78 + (0.24 - 0.78) * spread;
+    expect(radius(0)).toBeGreaterThan(hinge(0));
+    expect(radius(1)).toBeLessThan(hinge(1));
+    expect(FORM_LIB).toContain('float hinge = mix(0.18, 0.58, opened);');
+    expect(FORM_LIB).toContain('float radius = mix(0.78, 0.24, opened);');
+    expect(FORM_LIB).toContain('q -= vec3(hinge, 0.0, 0.0);');
+  });
+
+  it('lets only petals choose member count and pushes the camera in as the hoops stand up', () => {
+    const count = (petals: number, _spread: number) => Math.floor(5 + 19 * petals);
+    for (const petals of [0, 0.2, 0.5, 0.8, 1]) {
+      expect(count(petals, 0)).toBe(count(petals, 1));
+    }
+    expect(FORM_LIB).not.toContain('float count = opened <');
+    expect(FORM_LIB).toContain('if (mode == 14) {');
+    expect(FORM_LIB).toContain('push = pow(push, 0.35);');
+    expect(FORM_LIB).toContain('away *= mix(1.45, 0.62, push);');
+  });
+
+  it('opens every member around its radial hinge and returns exactly at the seam', () => {
+    const angles = (phase: number) => {
+      const a = phase * Math.PI * 2;
+      return [
+        Math.sin(a) * 0.42,
+        (Math.cos(a) - 1) * 0.24,
+        0.18 + (Math.cos(a) - 1) * 0.82 + Math.sin(a * 2) * 0.16,
+      ];
+    };
+    expect(angles(1)).toEqual(expect.arrayContaining(angles(0).map((value) => expect.closeTo(value, 12))));
+    expect(angles(0.5)).not.toEqual(angles(0));
+    expect(FORM_LIB).toContain('q.yz = formSpin(open) * q.yz;');
+    expect(FORM_LIB).toContain('formGimbalXY(q, radius, 0.003, t * 0.36)');
+    expect(FORM_LIB).toContain('return formRosette(q, extra, detail, motion, t);');
+  });
+
+  it('keeps one continuous pale material instead of assigning colour by a moving sector seam', () => {
+    expect(FORM_LIB).toContain('return mix(uPrimary, uChalk, 0.35);');
+    expect(FORM_LIB).not.toContain('float member = round(atan(q.y, q.x) / (2.0 * PI / count));');
+    expect(FORM_LIB).toContain('if (mode == 14 || mode == 15) raw = max(raw, hit * mix(0.12, 0.32');
+  });
+});
+
+describe('the corolla is two coaxial banks rather than one repeated outline', () => {
+  it('keeps a rounded outer loop and circular inner hoop in every permanent sector', () => {
+    expect(FORM_LIB).toContain('float formCorollaMember(');
+    expect(FORM_LIB).toContain('formRoundedLoopSize(outer, outerSize, corner');
+    expect(FORM_LIB).toContain('formGimbalXY(inner, innerRadius');
+    expect(FORM_LIB).toContain('outer.xz = formSpin(outerOpen) * outer.xz;');
+    expect(FORM_LIB).toContain('inner.xz = formSpin(innerOpen) * inner.xz;');
+    expect(FORM_LIB).toContain('outer.xy = formSpin(-outerSkew) * outer.xy;');
+    for (let member = 0; member < 14; member++) {
+      expect(FORM_LIB).toContain(`${member}.0, count, sector, outerSize`);
+    }
+  });
+
+  it('opens the compact cage into separately sized outer and inner flower layers', () => {
+    expect(FORM_LIB).toContain('float outerHinge = mix(0.52, 0.68, bloom);');
+    expect(FORM_LIB).toContain('vec2 outerSize = mix(vec2(0.25, 0.18), vec2(0.42, 0.32), bloom);');
+    expect(FORM_LIB).toContain('float innerHinge = mix(0.4, 0.3, bloom);');
+    expect(FORM_LIB).toContain('float innerRadius = mix(0.16, 0.34, bloom);');
+    expect(FORM_LIB).toContain('float outerOpen = mix(1.38, 0.08, bloom);');
+    expect(FORM_LIB).toContain('float innerOpen = mix(1.32, 0.34, bloom);');
+    expect(FORM_LIB).toContain('smoothstep(0.08, 1.38, outerOpen)) * 0.32;');
+    expect(FORM_LIB).toContain('return formCorolla(q, extra, detail, motion, t);');
+  });
+
+  it('returns both hinge banks and the shared construction to the same seam pose', () => {
+    const pose = (phase: number) => {
+      const a = phase * Math.PI * 2;
+      const bloom = Math.sin(a * 0.5) ** 2;
+      return [bloom, 0.72 + Math.sin(a) * 0.08, Math.sin(a * 2) * 0.08];
+    };
+    for (let axis = 0; axis < 3; axis++) {
+      expect(pose(1)[axis]).toBeCloseTo(pose(0)[axis]!, 12);
+    }
   });
 });
 
@@ -561,7 +656,7 @@ describe('the march is bounded and says so', () => {
       FORM_LIB.indexOf('float formField('),
       FORM_LIB.indexOf('float formStride('),
     );
-    expect(FORM_MODES.length).toBe(15);
+    expect(FORM_MODES.length).toBe(17);
     for (let i = 0; i < FORM_MODES.length - 1; i++) {
       expect(field).toContain(`if (mode == ${i})`);
     }
@@ -572,10 +667,10 @@ describe('the march is bounded and says so', () => {
   it('takes half steps only for the shape whose distance is an over-estimate', () => {
     // The helix measures across the strand while the strand moves away along
     // its own axis, so the true nearest surface can be nearer than it says.
-    expect(FORM_MODES.indexOf('tube')).toBe(14);
+    expect(FORM_MODES.indexOf('tube')).toBe(16);
     expect(FORM_LIB).toContain('if (mode == 5) return 0.85;');
     expect(FORM_LIB).toContain('if (mode == 10) return 0.5;');
-    expect(FORM_LIB).toContain('return mode == 14 ? 0.5 : 0.9;');
+    expect(FORM_LIB).toContain('return mode == 16 ? 0.5 : 0.9;');
   });
 
   it('accumulates glow along the ray rather than once per step', () => {
