@@ -15,21 +15,10 @@
 
   <g clip-path="url(#face-visual)">
     <path d="M256 0H512V512H256A128 128 0 0 1 256 256A128 128 0 0 0 256 0Z" fill="url(#visual)"/>
-
-    <g fill="none" stroke-width="30" stroke-linecap="round">
-      <g stroke="url(#visual)" opacity="0.96">
-        <path d="M256 128C176 190 110 212 0 218"/>
-        <path d="M256 128C168 142 92 128 0 82"/>
-        <path d="M256 128C186 82 130 42 84 -16"/>
-      </g>
-      <g stroke="#090A0E" opacity="0.52">
-        <path d="M256 384C336 322 402 300 512 294"/>
-        <path d="M256 384C344 370 420 384 512 430"/>
-        <path d="M256 384C326 430 382 470 428 528"/>
-      </g>
-    </g>
   </g>
 
-  <circle cx="256" cy="128" r="38" fill="url(#visual)"/>
-  <circle cx="256" cy="384" r="38" fill="#F7F4EB"/>
+  <g fill="none" stroke-width="22">
+    <circle cx="256" cy="128" r="29" stroke="url(#visual)"/>
+    <circle cx="256" cy="384" r="29" stroke="#F7F4EB"/>
+  </g>
 </svg>
