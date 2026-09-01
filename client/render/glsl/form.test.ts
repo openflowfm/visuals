@@ -210,9 +210,8 @@ describe('the loom is repeated construction with a closed flight', () => {
 
   it('keeps broad room light off its black chrome while retaining sharp glints', () => {
     expect(FORM_LIB).toContain('float roomWeight = mode == 5 ? 0.65 : 1.0;');
-    expect(FORM_LIB).toContain(
-      'float glintWeight = mode == 5 ? 0.3 : (mode == 11 ? 0.12 : (mode == 12 ? 0.2 : 1.0));',
-    );
+    expect(FORM_LIB).toContain('float glintWeight = mode == 5 ? 0.3');
+    expect(FORM_LIB).toContain('mode == 11 ? 0.12 : (mode == 12 ? 0.2');
   });
 
   it('returns its eye and heading modulo exactly four repeated cells', () => {
@@ -371,7 +370,7 @@ describe('the armillary is a nested bank around a dark body and three gimbals', 
 
   it('turns down emitted wire light before hiding the construction itself', () => {
     expect(FORM_LIB).toContain('if (mode == 11) raw *= mix(0.04, 0.65');
-    expect(FORM_LIB).toContain('mode == 11 ? 0.12 : (mode == 12 ? 0.2 : 1.0)');
+    expect(FORM_LIB).toContain('mode == 11 ? 0.12 : (mode == 12 ? 0.2');
   });
 });
 
@@ -416,7 +415,7 @@ describe('the gyre is counter-moving nested rounded solids', () => {
 
   it('uses the same black strip room without adopting armillary energy suppression', () => {
     expect(FORM_LIB).toContain('mode == 12 ? formArmillarySky(bounced) * 1.18');
-    expect(FORM_LIB).toContain('mode == 12 ? 0.2 : 1.0');
+    expect(FORM_LIB).toContain('mode == 12 ? 0.2');
     expect(FORM_LIB).not.toContain('mode == 12) raw *= mix(0.04, 0.65');
   });
 
@@ -426,6 +425,57 @@ describe('the gyre is counter-moving nested rounded solids', () => {
     expect(FORM_LIB).toContain('outside - anyMember');
     expect(FORM_LIB).toContain('raw *= mix(0.14, 0.58, gyreOuter);');
     expect(FORM_LIB).toContain('material = mix(uPrimary * 0.08, uChalk, gyreOuter);');
+  });
+});
+
+describe('the astrolabe is one rigid sculpture of variable metal gimbals', () => {
+  it('gates seven explicit permanent members instead of folding coincident projections', () => {
+    expect(FORM_LIB).toContain('vec2 formAstrolabeTake(');
+    expect(FORM_LIB).toContain('float count = floor(mix(3.0, 7.0');
+    for (let member = 0; member < 7; member++) {
+      expect(FORM_LIB).toContain(`${member}.0, count`);
+    }
+    const field = FORM_LIB.slice(
+      FORM_LIB.indexOf('vec2 formAstrolabeNearest('),
+      FORM_LIB.indexOf('// The woven object repeated'),
+    );
+    expect(field).not.toMatch(/for\s*\(/);
+  });
+
+  it('keeps every hoop plane fixed under one closed rigid tumble', () => {
+    const angles = (phase: number) => {
+      const a = phase * Math.PI * 2;
+      return [
+        Math.sin(a) * 1.08, (Math.cos(a) - 1) * 0.82, Math.sin(a * 2) * 0.27,
+      ];
+    };
+    const start = angles(0);
+    const end = angles(1);
+    for (const index of [0, 1, 2]) {
+      expect(end[index]).toBeCloseTo(start[index]!, 12);
+    }
+    expect(angles(0.5)).not.toEqual(start);
+    expect(FORM_LIB).toContain('q.yz = formSpin(sin(a) * 1.08) * q.yz;');
+    expect(FORM_LIB).toContain('q.xz = formSpin((cos(a) - 1.0) * 0.82) * q.xz;');
+    expect(FORM_LIB).toContain('m0.yz = formSpin(0.18) * m0.yz;');
+    expect(FORM_LIB).toContain('m5.yz = formSpin(1.2) * m5.yz;');
+  });
+
+  it('uses flat rounded stock whose broad face and thin edge are physically distinct', () => {
+    expect(FORM_LIB).toContain('float formRibbonGimbalXY(');
+    expect(FORM_LIB).toContain('vec2(width + t, depth + t * 0.32)');
+    expect(FORM_LIB).toContain('formRibbonGimbalXY(m0, 0.98, 0.042, 0.012, t)');
+    expect(FORM_LIB).not.toContain('formGimbalXY(m0');
+    expect(FORM_LIB).toContain('float focal = mode == 13 ? 1.1 : 1.4;');
+    expect(FORM_LIB).toContain('if (mode == 13) tight *= 0.42;');
+  });
+
+  it('keeps a weak member tint but carries the spectrum in reflected studio panels', () => {
+    expect(FORM_LIB).toContain('formAstrolabeNearest(q, extra, detail, motion, 0.0).y');
+    expect(FORM_LIB).toContain('return mix(uChalk, role, 0.28);');
+    expect(FORM_LIB).toContain('vec3 formAstrolabeSky(vec3 ray)');
+    expect(FORM_LIB).toContain('mode == 13 ? formAstrolabeSky(bounced)');
+    expect(FORM_LIB).toContain('return formAstrolabeNearest(q, extra, detail, motion, t).x;');
   });
 });
 
@@ -511,7 +561,7 @@ describe('the march is bounded and says so', () => {
       FORM_LIB.indexOf('float formField('),
       FORM_LIB.indexOf('float formStride('),
     );
-    expect(FORM_MODES.length).toBe(14);
+    expect(FORM_MODES.length).toBe(15);
     for (let i = 0; i < FORM_MODES.length - 1; i++) {
       expect(field).toContain(`if (mode == ${i})`);
     }
@@ -522,10 +572,10 @@ describe('the march is bounded and says so', () => {
   it('takes half steps only for the shape whose distance is an over-estimate', () => {
     // The helix measures across the strand while the strand moves away along
     // its own axis, so the true nearest surface can be nearer than it says.
-    expect(FORM_MODES.indexOf('tube')).toBe(13);
+    expect(FORM_MODES.indexOf('tube')).toBe(14);
     expect(FORM_LIB).toContain('if (mode == 5) return 0.85;');
     expect(FORM_LIB).toContain('if (mode == 10) return 0.5;');
-    expect(FORM_LIB).toContain('return mode == 13 ? 0.5 : 0.9;');
+    expect(FORM_LIB).toContain('return mode == 14 ? 0.5 : 0.9;');
   });
 
   it('accumulates glow along the ray rather than once per step', () => {

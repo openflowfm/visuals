@@ -211,6 +211,17 @@ float formGimbalXY(vec3 q, float radius, float shoulder, float t) {
   return length(vec2(length(q.xy) - radius, q.z)) - (t + shoulder);
 }
 
+// A circular hoop made from flat metal stock rather than round neon cord.
+// The two cross-section axes deliberately disagree: looking onto the hoop
+// reveals its broad radial face, while looking along its plane sees only the
+// thin edge. A small round keeps the stock manufactured rather than perfectly
+// sharp without turning it back into a tube.
+float formRibbonGimbalXY(vec3 q, float radius, float width, float depth, float t) {
+  vec2 stock = abs(vec2(length(q.xy) - radius, q.z)) - vec2(width + t, depth + t * 0.32);
+  float bevel = 0.004;
+  return length(max(stock, 0.0)) + min(max(stock.x, stock.y), 0.0) - bevel;
+}
+
 // One dark central body, one nested ring bank and three larger gimbal hoops.
 // The body is invariant. The bank precesses as one assembly while every gimbal
 // follows a different closed whole-turn path, so they periodically agree as
@@ -316,6 +327,79 @@ float formGyreOuter(vec3 q, float nest, float rounded, float phase) {
 
   float anyMember = formGyre(q, nest, rounded, phase, 0.0);
   return 1.0 - smoothstep(0.002, 0.025, outside - anyMember);
+}
+
+// Keep the closer distance together with the permanent member that supplied
+// it. The march reads x; the material reads y once at the point the ray found.
+// Screen position cannot recover identity after several circular hoops cross,
+// while this comparison remains attached to the solid.
+vec2 formAstrolabeTake(vec2 best, float distance, float member, float count) {
+  if (member >= count || distance >= best.x) return best;
+  return vec2(distance, member);
+}
+
+// Three to seven broad metal gimbals locked into one sculpture. Every radius
+// and plane belongs to a permanent member and one shared transform tumbles the
+// whole construction; intersections and relative occlusion can therefore be
+// followed from frame to frame. This is the crucial distinction between an
+// object and a collection of animated ring glyphs. Explicit members also let
+// coincident projections coexist where an analytic nearest-radius fold would
+// select only one of them.
+vec2 formAstrolabeNearest(vec3 q, float members, float spread, float phase, float t) {
+  float a = clamp(phase, 0.0, 1.0) * 2.0 * PI;
+  float count = floor(mix(3.0, 7.0, clamp(members, 0.0, 1.0)));
+  float stepDown = mix(0.055, 0.13, clamp(spread, 0.0, 1.0));
+  vec2 best = vec2(10.0, 0.0);
+
+  // One closed rigid motion. Three disagreeing bounded excursions avoid the
+  // false half-cycle produced when a centrally symmetric hoop sculpture spins
+  // around one axis: all eight study poses are different, yet the exact first
+  // transform returns at the seam.
+  q.yz = formSpin(sin(a) * 1.08) * q.yz;
+  q.xz = formSpin((cos(a) - 1.0) * 0.82) * q.xz;
+  q.xy = formSpin(sin(a * 2.0) * 0.27) * q.xy;
+
+  vec3 m0 = q;
+  m0.yz = formSpin(0.18) * m0.yz;
+  m0.xz = formSpin(0.32) * m0.xz;
+  best = formAstrolabeTake(best, formRibbonGimbalXY(m0, 0.98, 0.042, 0.012, t), 0.0, count);
+
+  vec3 m1 = q;
+  m1.xz = formSpin(-0.92) * m1.xz;
+  m1.yz = formSpin(0.35) * m1.yz;
+  best = formAstrolabeTake(best,
+    formRibbonGimbalXY(m1, 0.94 - stepDown * 0.25, 0.036, 0.011, t * 0.88), 1.0, count);
+
+  vec3 m2 = q;
+  m2.xy = formSpin(0.55) * m2.xy;
+  m2.xz = formSpin(-0.48) * m2.xz;
+  best = formAstrolabeTake(best,
+    formRibbonGimbalXY(m2, 0.94 - stepDown * 1.5, 0.032, 0.01, t * 0.78), 2.0, count);
+
+  vec3 m3 = q;
+  m3.yz = formSpin(1.05) * m3.yz;
+  m3.xy = formSpin(-0.3) * m3.xy;
+  best = formAstrolabeTake(best,
+    formRibbonGimbalXY(m3, 0.94 - stepDown * 2.8, 0.029, 0.009, t * 0.7), 3.0, count);
+
+  vec3 m4 = q;
+  m4.xz = formSpin(0.78) * m4.xz;
+  m4.yz = formSpin(-0.55) * m4.yz;
+  best = formAstrolabeTake(best,
+    formRibbonGimbalXY(m4, 0.94 - stepDown * 4.1, 0.026, 0.008, t * 0.62), 4.0, count);
+
+  vec3 m5 = q;
+  m5.xy = formSpin(-0.72) * m5.xy;
+  m5.yz = formSpin(1.2) * m5.yz;
+  best = formAstrolabeTake(best,
+    formRibbonGimbalXY(m5, 0.94 - stepDown * 5.1, 0.023, 0.007, t * 0.54), 5.0, count);
+
+  vec3 m6 = q;
+  m6.yz = formSpin(-0.35) * m6.yz;
+  m6.xz = formSpin(0.65) * m6.xz;
+  m6.xy = formSpin(0.22) * m6.xy;
+  return formAstrolabeTake(best,
+    formRibbonGimbalXY(m6, 0.94 - stepDown * 5.75, 0.02, 0.006, t * 0.46), 6.0, count);
 }
 
 // The woven object repeated as construction rather than copied as pixels.
@@ -529,6 +613,21 @@ vec3 formBaseColour(vec3 q, int mode, float extra, float detail, float motion) {
     if (role < 2.5) return uComplement;
     return uAccent;
   }
+  if (mode == 13) {
+    float member = formAstrolabeNearest(q, extra, detail, motion, 0.0).y;
+    vec3 role = uChalk;
+    if (member < 0.5) role = uChalk;
+    else if (member < 1.5) role = uPrimary;
+    else if (member < 2.5) role = uAccent;
+    else if (member < 3.5) role = uComplement;
+    else if (member < 4.5) role = uSecondary;
+    else role = mod(member, 2.0) < 0.5 ? uChalk : uPrimary;
+    // The stock is pale metal with only a trace of member tint. Xenon 34's
+    // cyan, magenta and orange travel along each *same* hoop as it turns, so
+    // most spectral identity has to come from the reflected room below rather
+    // than being painted permanently onto whole members.
+    return mix(uChalk, role, 0.28);
+  }
   if (mode != 4) return uPrimary;
   float a = clamp(motion, 0.0, 1.0) * 2.0 * PI;
   q.xy = formSpin(a) * q.xy;
@@ -644,6 +743,9 @@ float formField(vec3 q, int mode, float thick, float extra, float detail, float 
   if (mode == 12) {
     return formGyre(q, extra, detail, motion, t);
   }
+  if (mode == 13) {
+    return formAstrolabeNearest(q, extra, detail, motion, t).x;
+  }
   // A helix winding away down the corridor. The one shape here whose distance
   // is an over-estimate along its axis, which is why every march takes half
   // steps: a full one would tunnel through the strand and draw nothing.
@@ -665,7 +767,7 @@ float formField(vec3 q, int mode, float thick, float extra, float detail, float 
 float formStride(int mode) {
   if (mode == 5) return 0.85;
   if (mode == 10) return 0.5;
-  return mode == 13 ? 0.5 : 0.9;
+  return mode == 14 ? 0.5 : 0.9;
 }
 
 // The surface direction, from four samples around the point the ray stopped at.
@@ -736,6 +838,29 @@ vec3 formArmillarySky(vec3 ray) {
   return room;
 }
 
+// The coloured studio around Astrolabe's neutral metal. Broad azimuthal panels
+// are reflected into long arcs, so one physical hoop can run cyan, white,
+// magenta and warm as its normal turns around the circle. Painting those
+// colours by member instead makes flat plastic rings; painting them by screen
+// position makes a filter that slides over the object. Reflection is the only
+// mapping that stays attached to the surface and changes with its orientation.
+vec3 formAstrolabeSky(vec3 ray) {
+  float azimuth = atan(ray.x, ray.z);
+  float cyan = pow(0.5 + 0.5 * cos(azimuth * 2.0 - 0.35), 8.0);
+  float rose = pow(0.5 + 0.5 * cos(azimuth * 2.0 + 2.05), 10.0);
+  float warm = pow(0.5 + 0.5 * cos(azimuth * 3.0 - 1.35), 12.0);
+  float edge = pow(1.0 - abs(ray.y), 7.0);
+  float overhead = smoothstep(0.04, 0.5, ray.y);
+  float softbox = pow(clamp(dot(ray, normalize(vec3(-0.28, 0.9, -0.32))), 0.0, 1.0), 7.0);
+  vec3 room = vec3(0.0015);
+  room += uPrimary * cyan * (0.65 + overhead * 0.7);
+  room += uSecondary * rose * 1.35;
+  room += uComplement * warm * 1.45;
+  room += uAccent * edge * 0.22;
+  room += uChalk * softbox * 2.4;
+  return room;
+}
+
 vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
                 float thick, float flare, float chrome, float extra, float detail, float motion) {
   float yaw = turn * 6.28318530718;
@@ -787,7 +912,7 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
     side = rolledSide;
   }
 
-  if (mode == 13) {
+  if (mode == 14) {
     float off = clamp(dolly, 0.0, 1.0) * 0.32;
     float coil = 0.6 + clamp(extra, 0.0, 1.0) * 3.5;
     float cycle = 2.0 * PI / coil;
@@ -797,9 +922,15 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
     up = cross(fwd, side);
   }
 
-  vec3 ray = normalize(fwd * 1.4 + side * p.x + up * p.y);
+  // Astrolabe uses a close wide-angle eye: near arcs swell past the frame while
+  // far members collect into the dense inner knot. Pulling the ordinary camera
+  // closer without widening it merely crops a larger version of the same tidy
+  // orthographic-looking ball.
+  float focal = mode == 13 ? 1.1 : 1.4;
+  vec3 ray = normalize(fwd * focal + side * p.x + up * p.y);
 
   float tight = mix(120.0, 24.0, clamp(flare, 0.0, 1.0));
+  if (mode == 13) tight *= 0.42;
   float stride = formStride(mode);
   /*
    * Start each ray a random fraction of a step along, and the contours go away.
@@ -857,6 +988,10 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
   if (mode == 11) raw *= mix(0.04, 0.65, pow(clamp(e, 0.0, 1.0), 2.0));
   float gyreOuter = mode == 12 ? formGyreOuter(where, extra, detail, motion) : 1.0;
   if (mode == 12) raw *= mix(0.14, 0.58, gyreOuter);
+  // Astrolabe is lit metal stock. Enough internal light remains to halo its
+  // silhouette, but the face has to disappear when it turns away from the
+  // studio strips or the broad/edge distinction in the geometry is erased.
+  if (mode == 13) raw *= mix(0.05, 0.18, pow(clamp(e, 0.0, 1.0), 2.0));
   float lit = clamp(raw, 0.0, 1.0);
   // Only what is genuinely saturated goes white. Mixing toward white from
   // halfway up leaves every tube the same pale grey and throws the colourway
@@ -902,11 +1037,13 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
     float glint = pow(clamp(dot(bounced, normalize(FORM_LAMP)), 0.0, 1.0), gloss)
                 + pow(clamp(dot(bounced, normalize(FORM_FILL)), 0.0, 1.0), gloss * 0.6) * 0.55;
     float roomWeight = mode == 5 ? 0.65 : 1.0;
-    float glintWeight = mode == 5 ? 0.3 : (mode == 11 ? 0.12 : (mode == 12 ? 0.2 : 1.0));
-    float rimWeight = mode == 5 ? 0.25 : 1.0;
+    float glintWeight = mode == 5 ? 0.3
+      : (mode == 11 ? 0.12 : (mode == 12 ? 0.2 : (mode == 13 ? 0.38 : 1.0)));
+    float rimWeight = mode == 5 ? 0.25 : (mode == 13 ? 0.38 : 1.0);
     vec3 reflectedRoom = mode == 11
       ? formArmillarySky(bounced)
-      : (mode == 12 ? formArmillarySky(bounced) * 1.18 : formSky(bounced));
+      : (mode == 12 ? formArmillarySky(bounced) * 1.18
+        : (mode == 13 ? formAstrolabeSky(bounced) : formSky(bounced)));
     vec3 shell = reflectedRoom * mix(0.35, 1.0, facing) * roomWeight
                + vec3(1.0) * glint * mix(1.4, 6.0, polish) * glintWeight
                + uChalk * facing * 0.6 * rimWeight;

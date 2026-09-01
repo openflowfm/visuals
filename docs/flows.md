@@ -364,7 +364,7 @@ editors listing these differently would be two different vocabularies.
 | `field` | `p` `energy`, plus `balls` `apart` on metaballs | `c` | `cells` `clouds` `metaballs`; fixed work, charged per graph sample and never offered per track |
 | `fractal` | `p` `energy` + its mode's numbers | `c` | `mandelbrot` or `julia`, with bounded zoom, detail and iterative work |
 | `light` | `p` `energy` + its mode's numbers, and `from` on the hung three | `c` | `lamp` `beam` `shafts` `caustics`; 2D lights with fixed work, drifting in seconds rather than beats |
-| `form` | `p` `turn` `tilt` `dolly` `thick` `flare` `chrome` `energy` + its mode's numbers | `c` | `torus` `rings` `frame` `lattice` `weave` `loom` `orbits` `relief` `iris` `truss` `rotor` `armillary` `gyre` `tube`; the one node with a third coordinate in it, marched and charged like a fractal |
+| `form` | `p` `turn` `tilt` `dolly` `thick` `flare` `chrome` `energy` + its mode's numbers | `c` | `torus` `rings` `frame` `lattice` `weave` `loom` `orbits` `relief` `iris` `truss` `rotor` `armillary` `gyre` `astrolabe` `tube`; the one node with a third coordinate in it, marched and charged like a fractal |
 | `glow` | `d` `energy` + its mode's numbers | `c` | `neon` `soft` `band`: a distance becomes a lit stroke |
 | `shade` | `n` `amount` `energy` | `c` | `across` `heat` `filament`: a number becomes a colour off the colourway |
 | `flow` | `p` | `c` | another flow, whole, as one node |
@@ -562,6 +562,19 @@ and sides of the same rounded rectangle differently. `nest` controls the size hi
 axial whole turn at the seam. The Xenon 91 treatment mirrors the rendered projection across
 both frame axes—the source members remain ordinary 3D solids, while the two mirror seams make
 the exact bilateral cusps visible in the reference.
+
+`astrolabe` locks between three and seven circular gimbals into one rigid sculpture. They are
+rounded rectangular metal stock rather than round neon cord: a hoop exposes a broad radial
+face from one direction and only its thin edge from another. `members` changes the physical
+member count and `spread` opens a deliberately non-uniform hierarchy—two dominant outside
+bands around a much smaller inner knot. One closed three-axis rocking transform drives
+`tumble`, so the angles between members, their intersections and their occlusion order remain
+fixed through the loop instead of every hoop inventing a new pose. The mode uses a close
+wide-angle eye so near arcs swell around a compact far knot. Its neutral stock reflects broad
+cyan, magenta, warm and white studio panels; colour therefore travels along the same member as
+its surface normal turns, while a weak permanent member tint keeps crossings legible. Two
+orthogonal `mirror` lenses can impose Xenon 96's exact frame symmetry after projection without
+changing the underlying 3D construction.
 
 `loom` repeats the weave as geometry through all three axes rather than tiling a rendered
 picture of it. Every cell contains three orthogonal four-member loop bundles. Each complete
