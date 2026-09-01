@@ -18,18 +18,18 @@
  */
 :root {
   --signal-p: #3cc8ff;
-  --signal-n: #f0b23c;
+  --signal-n: var(--amber);
   --signal-c: #9b5aff;
 }
 
 .tick {
   padding: 3px 7px;
   border: 1px solid var(--bd3);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   background: var(--surface-control);
-  color: #8b8b93;
+  color: var(--detail);
   font-family: inherit;
-  font-size: 10px;
+  font-size: var(--text-control);
   cursor: pointer;
 }
 
@@ -56,11 +56,11 @@
 .add {
   padding: 4px 10px;
   border: 1px dashed var(--bd3);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: #8b8b93;
+  color: var(--detail);
   font-family: inherit;
-  font-size: 10px;
+  font-size: var(--text-control);
   cursor: pointer;
 }
 
@@ -73,7 +73,7 @@
   margin: 8px 0 0;
   overflow: hidden;
   color: var(--caption);
-  font-size: 10px;
+  font-size: var(--text-control);
   text-overflow: ellipsis;
 }
 
@@ -98,7 +98,7 @@
   aspect-ratio: 16 / 9;
   margin-bottom: 10px;
   border: 1px solid var(--bd3);
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   background: #000;
 }
 
@@ -133,7 +133,7 @@
   --wdg-inside-height: 20px;
   --wdg-port-size: 11px;
   width: 176px;
-  font-size: 10px;
+  font-size: var(--text-control);
 }
 
 .node .wdg-device-head {
@@ -154,19 +154,19 @@
 .node-kind {
   overflow: hidden;
   color: var(--idle);
-  font-size: 8px;
+  font-size: var(--text-annot);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .node-kind.is-flow {
   color: var(--amber);
-  letter-spacing: 0.04em;
+  letter-spacing: var(--track-slight);
 }
 
 .node .enter .wdg-button-body {
   padding: 1px 4px;
-  font-size: 10px;
+  font-size: var(--text-control);
 }
 
 .node .wdg-device-chooser .wdg-select-body,
@@ -183,7 +183,7 @@
   min-width: 0;
   overflow: hidden;
   color: var(--ui);
-  font-size: 9px;
+  font-size: var(--text-label);
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -205,7 +205,7 @@
   max-width: 60%;
   overflow: hidden;
   color: var(--ui);
-  font-size: 9px;
+  font-size: var(--text-label);
   line-height: 1;
   text-align: right;
   text-overflow: ellipsis;
@@ -249,7 +249,7 @@
   background: none;
   color: var(--idle);
   font-family: inherit;
-  font-size: 9px;
+  font-size: var(--text-label);
   line-height: 1;
   cursor: pointer;
 }
@@ -306,7 +306,7 @@
   aspect-ratio: 16 / 9;
   background: #000;
   border: 1px solid var(--bd);
-  border-radius: 1px;
+  border-radius: var(--radius-xs);
 }
 
 .nodeshot[data-picture-state='paused'] {
@@ -344,7 +344,7 @@
 .model-assets span,
 .model-inspector p {
   color: var(--detail);
-  font-size: 11px;
+  font-size: var(--text-body);
 }
 
 .model-library-body {
@@ -377,9 +377,9 @@
 .model-field > span,
 .model-bindings h5 {
   color: var(--detail);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: .04em;
+  font-size: var(--text-control);
+  font-weight: var(--weight-strong);
+  letter-spacing: var(--track-slight);
   text-transform: uppercase;
 }
 
@@ -390,7 +390,7 @@
 .model-inspector > select {
   background: var(--panel);
   border: 1px solid var(--bd);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   color: inherit;
   font: inherit;
   min-width: 0;
@@ -423,14 +423,14 @@
 
 .model-inspector summary {
   cursor: pointer;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--text-body);
+  font-weight: var(--weight-strong);
   margin-bottom: 5px;
 }
 
 .model-capability {
   border-top: 1px solid color-mix(in srgb, var(--bd) 45%, transparent);
-  font-size: 11px;
+  font-size: var(--text-body);
   justify-content: space-between;
   min-width: 0;
   padding: 4px 0;
@@ -457,10 +457,10 @@
 .model-capability button {
   background: var(--panel);
   border: 1px solid var(--bd);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   color: inherit;
   cursor: pointer;
-  font-size: 9px;
+  font-size: var(--text-label);
   padding: 2px 4px;
 }
 
@@ -493,14 +493,14 @@
 
 .model-binding code {
   color: var(--detail);
-  font-size: 9px;
+  font-size: var(--text-label);
   grid-column: 1 / -1;
 }
 
 .model-binding label {
   color: var(--detail);
   display: grid;
-  font-size: 9px;
+  font-size: var(--text-label);
   gap: 2px;
 }
 
