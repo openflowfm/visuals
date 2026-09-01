@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { APPS, serverPort, uiPort } from '@openflow/desktop/apps.ts';
 import { generateNodes } from './tools/generate-nodes.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -12,12 +13,13 @@ generateNodes();
 // a separate build from `set/` because it is a separate app on a separate
 // machine — nothing here ships inside the device.
 //
-// The dev port follows set[flow]'s at +300, continuing the offsets in
-// widgets/docs/bench.md: set 5173, widget bench +100, device bench +200. A
-// worktree that moves OPENFLOW_PORT_BASE takes all four with it.
-const SET_PORT = Number(process.env.OPENFLOW_PORT_BASE) || 5173;
-const PORT = Number(process.env.OPENFLOW_VISUALS_UI_PORT) || SET_PORT + 300;
-const SERVER = process.env.OPENFLOW_VISUALS || 'http://127.0.0.1:17900';
+// The dev port and the server port are both `desktop/src/apps.ts`, which is the
+// same registry the app's own main process reads — the two used to be restated
+// in both files and had no way of disagreeing loudly. A worktree that moves
+// OPENFLOW_PORT_BASE takes every dev server with it; the offsets are in
+// widgets/docs/bench.md.
+const PORT = uiPort(APPS.visuals);
+const SERVER = process.env.OPENFLOW_VISUALS || `http://127.0.0.1:${serverPort(APPS.visuals)}`;
 
 export default defineConfig({
   root: here,

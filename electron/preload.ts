@@ -1,4 +1,5 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { ipcRenderer } from 'electron';
+import { expose } from '@openflow/desktop/preload.ts';
 
 /**
  * The displays, which a renderer cannot see for itself.
@@ -19,7 +20,7 @@ export interface Display {
   height: number;
 }
 
-contextBridge.exposeInMainWorld('openflow', {
+expose({
   displays: (): Promise<Display[]> => ipcRenderer.invoke('openflow:displays'),
   /** A projector plugged in after launch is the ordinary case, not the exotic one. */
   onDisplaysChanged: (run: () => void): (() => void) => {

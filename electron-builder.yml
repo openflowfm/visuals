@@ -1,35 +1,24 @@
 # visual[flow], packaged. `npm run pack:visuals`.
 #
-# The same shape as set[flow]'s, plus the one thing this app has and that one
-# does not: a server, and a native addon under it.
+# The shape is `desktop/electron-builder.base.yml`, plus the one thing this app
+# has and the others do not: a server, and a native addon under it.
+extends: ../desktop/electron-builder.base.yml
+
 appId: com.openflow.visuals
 productName: visual[flow]
-copyright: © Ryan Gavin
 
-# The download name, which is not the app name. `productName` above is what the
-# Dock, the menu bar and ⌘-Tab read, and the brackets are the whole point of it.
-# They are ruinous in a filename: `gh release create` glob-expands every asset
-# path it is given, reads `[flow]` as a character class, matches nothing, and
-# fails with "no matches found" before it has spoken to GitHub at all. A URL
-# would escape them too.
+# The download name, which is not the app name — see the base config for why the
+# brackets cannot survive into a filename.
 artifactName: visual-flow-${version}-${arch}.${ext}
 
 directories:
   output: ../release/visuals
-  buildResources: electron/dist
 
+# Combined with the base list rather than replacing it.
 files:
-  - package.json
-  - dist/**
-  - electron/dist/main.cjs
-  - electron/dist/preload.cjs
   # The server, bundled to ESM and run by Electron's own Node — see
   # `docs/desktop.md` for why it is not `node` off the PATH.
   - electron/dist/server.mjs
-  # Everything else is already inside those bundles, so the dependency tree
-  # electron-builder would otherwise copy in is dead weight — the MCP server's
-  # express tree alone is 46 MB of code this app never runs.
-  - '!node_modules/**'
   # The Ableton Link addon, and the two tiny packages its entry point resolves
   # the binary through. A `.node` file is the one thing a bundle cannot swallow,
   # so this ships beside the others — at `Resources/app/node_modules`, which is
@@ -41,50 +30,15 @@ files:
   # into the binary above at install time and is never read again.
   - '!node_modules/@ktamas77/abletonlink/link/**'
 
-asar: false
-
-# The `.dmg` is the file that actually travels, and electron-builder notarises
-# the `.app` inside it and nothing else. An unsigned disk image is assessed by
-# Gatekeeper on open and fails there, however good the bundle within it is — so
-# this signs it, and `.github/workflows/release.yml` notarises and staples it
-# afterwards. Both halves are needed: the ticket on the app survives being
-# dragged out of the image, the ticket on the image is what lets it open.
-dmg:
-  sign: true
-
 mac:
-  category: public.app-category.music
-  icon: electron/dist/icon.icns
-  target:
-    - dmg
-    - dir
-  # Signed with whatever Developer ID is in the keychain, and notarised when the
-  # notary credentials are in the environment. `.github/workflows/release.yml`
-  # supplies both; nothing else has to, and no flag turns it on.
-  #
-  # A machine with neither still packs — electron-builder warns and leaves the
-  # ad-hoc signature the linker wrote. That bundle is fine for
-  # `npm run install:apps` and worthless anywhere else: it reads
-  # `Identifier=Electron` with `Sealed Resources=none`, so a Mac that did not
-  # build it reports it as damaged rather than as unsigned. Distributing one is
-  # a worse first run than distributing nothing.
-  #
-  #
-  # `npm run qa` overrides both of these — `-c.mac.target=dir -c.mac.identity=null`
-  # — because it installs the `.app` locally and never opens a disk image.
-  # Measured: signing costs about 90s per app and the image about as much again,
-  # against 4.7s for the ad-hoc bundle described above, which is the one QA
-  # wants. `npm run pack` is unchanged and still produces the signed pair.
-  # Hardened runtime and the entitlements notarisation demands are already
-  # electron-builder's defaults for a Developer ID build — JIT, unsigned
-  # executable memory, and library validation off. Electron needs the first two
-  # and the Link addon needs the third, its `.node` binary being a library
-  # loaded after launch. There is no plist of our own to keep in step.
-
   # Link finds its peers over UDP multicast, which macOS 15 gates behind the
   # local-network prompt. Without this string the prompt still appears, worded
   # by the system and explaining nothing — and a refusal is silent afterwards:
   # the clock simply never finds Live.
+  #
+  # The addon's `.node` binary is a library loaded after launch, so this app also
+  # needs the library-validation exception in the base config's hardened runtime
+  # defaults — which is already what electron-builder sets.
   extendInfo:
     NSLocalNetworkUsageDescription: >-
       visual[flow] uses the local network to find Ableton Link peers, so the
