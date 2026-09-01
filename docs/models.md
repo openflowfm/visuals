@@ -211,7 +211,7 @@ does not refetch and reparse the immutable GLB on every keystroke.
 
 ## A representative showcase
 
-The recommended demo uses two assets from Khronos' curated glTF sample library rather than
+The recommended demo uses three assets from Khronos' curated glTF sample library rather than
 presenting the synthetic capsule as the product's model vocabulary:
 
 - **Fox** exposes one 24-joint skin and Survey, Walk and Run clips. The showcase makes separate
@@ -221,8 +221,14 @@ presenting the synthetic capsule as the product's model vocabulary:
   rotation, glass presence, body shine, the optional display cloth and key-light strength, maps
   its parts and rig across the palette, modulates that published light from an LFO, and feeds the
   ordinary array, feedback, blend, bloom and grade graph path.
+- **Damaged Helmet** is the material hero: five authored 2048px PBR images render as the faithful
+  studio setup, while a second setup over the same immutable GLB uses a generated local neon-grid
+  override, triplanar projection, palette mixing, emissive/rim/scan/band treatment and deliberately
+  published material controls. The two helmet flows exercise two concurrent model instances,
+  colour and numeric cords, lens, blend, grade and frame feedback. The generated override
+  is itself an immutable content-addressed texture; it is not embedded in flow JSON.
 
-Install the assets, three setups and two-flow scheme explicitly:
+Install the assets, five setups, local override and four-flow scheme explicitly:
 
 ```sh
 npm --prefix visuals run model:showcase -- --install
@@ -241,7 +247,7 @@ For hidden frame evidence without touching the user library, omit `--install`, t
 ```sh
 npm run frames -- --scheme=/private/tmp/openflow-model-showcase/scheme.json \
   --models=/private/tmp/openflow-model-showcase/models \
-  --flows=model-fox-duet,model-toy-car --at=0,0.5,1,1.5,2,2.5,3,3.5
+  --flows=model-helmet-dual,model-helmet-echo --at=0,0.5,1,1.5,2,2.5,3,3.5
 ```
 
 ## The Xenon 60 regression proof

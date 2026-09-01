@@ -2,11 +2,14 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { deflateSync } from 'node:zlib';
 import {
   modelLightingPreset,
   modelPorts,
+  modelRecipe,
   type ModelAnimationCapability,
   type ModelBinding,
+  type ModelMaterialProperty,
   type ModelSetup,
 } from '../model.ts';
 import type { CircuitNode, FlowDef, Scheme } from '../protocol.ts';
@@ -33,6 +36,11 @@ const SOURCES = {
     sha256: '01a60862de55cd4b9f3acfab0b0def86451800f9c42467fcd61052c16cb9838c',
     file: 'ToyCar.glb',
   },
+  helmet: {
+    url: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/DamagedHelmet/glTF-Binary/DamagedHelmet.glb',
+    sha256: 'a1e3b04de97b11de564ce6e53b95f02954a297f0008183ac63a4f5974f6b32d8',
+    file: 'DamagedHelmet.glb',
+  },
 } as const;
 
 const arg = (name: string): string | null => {
@@ -49,6 +57,58 @@ const schemeFile = path.resolve(arg('scheme') ?? (installing
 const downloadRoot = path.join(scratch, 'downloads');
 
 const digest = (bytes: Uint8Array): string => crypto.createHash('sha256').update(bytes).digest('hex');
+
+const CRC_TABLE = Array.from({ length: 256 }, (_, value) => {
+  let crc = value;
+  for (let bit = 0; bit < 8; bit += 1) crc = (crc & 1) ? (0xedb88320 ^ (crc >>> 1)) : (crc >>> 1);
+  return crc >>> 0;
+});
+
+function pngChunk(name: string, data: Uint8Array): Buffer {
+  const type = Buffer.from(name, 'ascii');
+  const body = Buffer.from(data);
+  const crcInput = Buffer.concat([type, body]);
+  let crc = 0xffffffff;
+  for (const byte of crcInput) crc = CRC_TABLE[(crc ^ byte) & 0xff]! ^ (crc >>> 8);
+  const result = Buffer.alloc(12 + body.length);
+  result.writeUInt32BE(body.length, 0);
+  type.copy(result, 4);
+  body.copy(result, 8);
+  result.writeUInt32BE((crc ^ 0xffffffff) >>> 0, 8 + body.length);
+  return result;
+}
+
+/** A deterministic local override: thick cyan/magenta rails over a dark scan grid. */
+function neonGridPng(): Buffer {
+  const width = 256;
+  const height = 256;
+  const raw = Buffer.alloc(height * (1 + width * 4));
+  for (let y = 0; y < height; y += 1) {
+    const row = y * (1 + width * 4);
+    for (let x = 0; x < width; x += 1) {
+      const at = row + 1 + x * 4;
+      const major = x % 64 < 5 || y % 64 < 5;
+      const minor = x % 16 === 0 || y % 16 === 0;
+      const slash = (x + y) % 128 < 5;
+      const cyan = x % 128 < 64;
+      raw[at] = major || slash ? (cyan ? 18 : 255) : minor ? 24 : 3;
+      raw[at + 1] = major || slash ? (cyan ? 238 : 16) : minor ? 40 : 5;
+      raw[at + 2] = major || slash ? (cyan ? 255 : 186) : minor ? 58 : 12;
+      raw[at + 3] = 255;
+    }
+  }
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8;
+  header[9] = 6;
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    pngChunk('IHDR', header),
+    pngChunk('IDAT', deflateSync(raw)),
+    pngChunk('IEND', new Uint8Array()),
+  ]);
+}
 
 async function bytesFor(kind: keyof typeof SOURCES): Promise<Buffer> {
   const source = SOURCES[kind];
@@ -72,6 +132,8 @@ async function bytesFor(kind: keyof typeof SOURCES): Promise<Buffer> {
 const store = openModelStore(modelPlace(modelRoot));
 const fox = store.import(await bytesFor('fox'), SOURCES.fox.file);
 const car = store.import(await bytesFor('car'), SOURCES.car.file);
+const helmet = store.import(await bytesFor('helmet'), SOURCES.helmet.file);
+const grid = store.importTexture(neonGridPng(), 'neon-scan-grid.png', 'image/png');
 
 const foxRoot = fox.capabilities.nodes.find((node) => node.name === 'root');
 const run = fox.capabilities.animations.find((animation) => animation.name === 'Run');
@@ -85,6 +147,11 @@ const fabricMaterial = car.capabilities.materials.find((material) => material.na
 const glassMaterial = car.capabilities.materials.find((material) => material.name === 'Glass');
 if (!carRoot || !carMaterial || !fabricMaterial || !glassMaterial || car.capabilities.cameras.length < 2) {
   throw new Error('Toy Car did not expose its expected parts, materials and cameras');
+}
+const helmetRoot = helmet.capabilities.nodes[0];
+const helmetMaterial = helmet.capabilities.materials.find((material) => material.name === 'Material_MR');
+if (!helmetRoot || !helmetMaterial || helmet.capabilities.images.length !== 5 || helmet.capabilities.images.some((image) => image.unsupported)) {
+  throw new Error('Damaged Helmet did not expose its expected root, PBR material and five supported images');
 }
 
 const animationBinding = (animation: ModelAnimationCapability): ModelBinding => ({
@@ -207,6 +274,100 @@ const toyCar = store.save({
   camera: car.capabilities.cameras[1]!.index,
 });
 
+const helmetTurn = (id = 'turn'): ModelBinding => ({
+  id,
+  label: 'Turn',
+  group: 'pose',
+  target: {
+    kind: 'node-transform',
+    node: helmetRoot.index,
+    nodePath: helmetRoot.path,
+    property: 'rotation-z',
+  },
+  default: 0.5,
+  min: -Math.PI,
+  max: Math.PI,
+});
+const materialBinding = (
+  id: string,
+  label: string,
+  property: ModelMaterialProperty,
+  min: number,
+  max: number,
+  fallback: number,
+): ModelBinding => ({
+  id,
+  label,
+  group: 'materials',
+  target: { kind: 'material', material: helmetMaterial.index, property },
+  default: (fallback - min) / (max - min),
+  min,
+  max,
+});
+
+const helmetAuthored = store.save({
+  id: 'showcase-helmet-authored',
+  name: 'Damaged Helmet / authored PBR',
+  assetHash: helmet.hash,
+  bindings: [
+    helmetTurn(),
+    materialBinding('surface', 'Surface roughness', 'roughness', 0.05, 1, helmetMaterial.roughness),
+    materialBinding('normal-detail', 'Normal detail', 'normal-strength', 0, 4, 1),
+    lightStrength(12, 3.4 / 12),
+  ],
+  materials: [{
+    material: helmetMaterial.index,
+    source: 'original',
+    amount: 0,
+    recipe: modelRecipe(),
+  }],
+  lighting: modelLightingPreset('studio'),
+  camera: null,
+});
+
+const helmetNeon = store.save({
+  id: 'showcase-helmet-neon',
+  name: 'Damaged Helmet / neon scan',
+  assetHash: helmet.hash,
+  bindings: [
+    helmetTurn(),
+    materialBinding('grid-mix', 'Grid presence', 'texture-mix', 0, 1, 0.78),
+    materialBinding('grid-turn', 'Grid rotation', 'uv-rotation', -Math.PI, Math.PI, 0.28),
+    materialBinding('normal-detail', 'Normal detail', 'normal-strength', 0, 4, 0.72),
+    materialBinding('emission', 'Emission', 'emissive-strength', 0, 10, 5.6),
+    materialBinding('rim-glow', 'Rim glow', 'rim', 0, 1, 0.84),
+    materialBinding('scan', 'Scan', 'scan', 0, 1, 0.72),
+    materialBinding('bands', 'Graphic bands', 'bands', 0, 1, 0.42),
+    lightStrength(20, 11 / 20),
+  ],
+  materials: [{
+    material: helmetMaterial.index,
+    source: 'color-a',
+    amount: 0.82,
+    recipe: modelRecipe({
+      slots: {
+        baseColor: { kind: 'texture', hash: grid.hash },
+        metallicRoughness: { kind: 'authored' },
+        normal: { kind: 'authored' },
+        occlusion: { kind: 'authored' },
+        emissive: { kind: 'texture', hash: grid.hash },
+      },
+      projection: 'triplanar',
+      wrap: 'mirror',
+      uvScale: [2.6, 2.6],
+      uvRotation: 0.28,
+      textureMix: 0.78,
+      normalStrength: 0.72,
+      occlusionStrength: 0.58,
+      rim: 0.84,
+      scan: 0.72,
+      bands: 0.42,
+    }),
+  }],
+  lighting: modelLightingPreset('neon'),
+  camera: null,
+});
+
 const model = (id: string, setup: ModelSetup, x: number, y: number, values: Record<string, number> = {}): CircuitNode => ({
   id,
   kind: 'model',
@@ -280,17 +441,93 @@ const carTrails: FlowDef = {
   },
 };
 
+const helmetDual: FlowDef = {
+  name: 'Models / helmet material duality',
+  circuit: {
+    nodes: [
+      { id: 'palette', kind: 'colorway', x: 20, y: 20, values: { amount: 1, energy: 0.78 } },
+      { id: 'auth-turn', kind: 'lfo', op: 'saw', x: 20, y: 245, values: { rate: 0.24, sync: 1, phase: 0.08 } },
+      { id: 'neon-turn', kind: 'lfo', op: 'saw', x: 20, y: 455, values: { rate: 0.31, sync: 1, phase: 0.54 } },
+      { id: 'scan-pulse', kind: 'lfo', op: 'sine', x: 20, y: 665, values: { rate: 0.67, sync: 1, phase: 0.2 } },
+      model('authored', helmetAuthored, 285, 20, { surface: 0.66, 'normal-detail': 0.28 }),
+      model('neon', helmetNeon, 285, 390, { 'grid-mix': 0.8, 'normal-detail': 0.2, emission: 0.58, 'rim-glow': 0.88 }),
+      { id: 'facet', kind: 'lens', op: 'mirror', x: 555, y: 390, values: { angle: 0.58, offset: 0.51 } },
+      { id: 'merge', kind: 'blend', op: 'screen', x: 810, y: 170, values: { amount: 0.62 } },
+      { id: 'finish', kind: 'grade', op: 'highlights', x: 1050, y: 170, values: { knee: 0.68, amount: 0.34 } },
+      { id: 'out', kind: 'out', x: 1285, y: 170 },
+    ],
+    cords: [
+      { from: 'palette/primary', to: 'authored/color-a' },
+      { from: 'palette/secondary', to: 'authored/color-b' },
+      { from: 'palette/complement', to: 'neon/color-a' },
+      { from: 'palette/accent', to: 'neon/color-b' },
+      { from: 'auth-turn/n', to: 'authored/turn' },
+      { from: 'neon-turn/n', to: 'neon/turn' },
+      { from: 'scan-pulse/n', to: 'neon/scan' },
+      { from: 'authored/c', to: 'merge/base' },
+      { from: 'neon/c', to: 'facet/c' },
+      { from: 'facet/c', to: 'merge/top' },
+      { from: 'merge/c', to: 'finish/c' },
+      { from: 'finish/c', to: 'out/c' },
+    ],
+  },
+};
+
+const helmetEcho: FlowDef = {
+  name: 'Models / helmet scan echoes',
+  circuit: {
+    nodes: [
+      { id: 'palette', kind: 'colorway', x: 20, y: 20, values: { amount: 1, energy: 0.86 } },
+      { id: 'turn-a', kind: 'lfo', op: 'saw', x: 20, y: 245, values: { rate: 0.28, sync: 1, phase: 0.05 } },
+      { id: 'turn-b', kind: 'lfo', op: 'saw', x: 20, y: 455, values: { rate: 0.37, sync: 1, phase: 0.63 } },
+      { id: 'grid', kind: 'lfo', op: 'sine', x: 20, y: 665, values: { rate: 0.49, sync: 1, phase: 0.31 } },
+      model('left', helmetNeon, 285, 20, { emission: 0.22, 'rim-glow': 0.68, bands: 0.34 }),
+      model('right', helmetNeon, 285, 390, { emission: 0.34, 'rim-glow': 0.82, bands: 0.62 }),
+      { id: 'reflect', kind: 'lens', op: 'mirror', x: 555, y: 390, values: { angle: 0.46, offset: 0.6 } },
+      { id: 'pair', kind: 'blend', op: 'screen', x: 800, y: 155, values: { amount: 0.58 } },
+      { id: 'last', kind: 'last', x: 800, y: 480 },
+      { id: 'drift', kind: 'lens', op: 'zoom', x: 1040, y: 480, values: { amount: 0.46 } },
+      { id: 'echo', kind: 'blend', op: 'screen', x: 1280, y: 220, values: { amount: 0.34 } },
+      { id: 'finish', kind: 'grade', op: 'highlights', x: 1515, y: 220, values: { knee: 0.7, amount: 0.26 } },
+      { id: 'out', kind: 'out', x: 1750, y: 220 },
+    ],
+    cords: [
+      { from: 'palette/primary', to: 'left/color-a' },
+      { from: 'palette/secondary', to: 'left/color-b' },
+      { from: 'palette/complement', to: 'right/color-a' },
+      { from: 'palette/accent', to: 'right/color-b' },
+      { from: 'turn-a/n', to: 'left/turn' },
+      { from: 'turn-b/n', to: 'right/turn' },
+      { from: 'grid/n', to: 'left/grid-turn' },
+      { from: 'grid/n', to: 'right/grid-mix' },
+      { from: 'left/c', to: 'pair/base' },
+      { from: 'right/c', to: 'reflect/c' },
+      { from: 'reflect/c', to: 'pair/top' },
+      { from: 'pair/c', to: 'echo/base' },
+      { from: 'last/c', to: 'drift/c' },
+      { from: 'drift/c', to: 'echo/top' },
+      { from: 'echo/c', to: 'finish/c' },
+      { from: 'finish/c', to: 'out/c' },
+    ],
+  },
+};
+
 const scheme = merge({
   responses: RESPONSE_SET_VERSION,
-  flows: { 'model-fox-duet': foxDuet, 'model-toy-car': carTrails },
+  flows: {
+    'model-helmet-dual': helmetDual,
+    'model-helmet-echo': helmetEcho,
+    'model-fox-duet': foxDuet,
+    'model-toy-car': carTrails,
+  },
   colorways: {
     'Electric fauna': ['#ff5d38', '#18d6ff', '#7a3cff', '#f7e65d', '#ffffff'],
     'Midnight circuit': ['#26fff2', '#ff2f92', '#4338ff', '#ffc857', '#f4fbff'],
   },
   moods: { 'Electric fauna': 'flare', 'Midnight circuit': 'neon' },
-  rotation: { flows: ['model-fox-duet', 'model-toy-car'], colorways: ['Electric fauna', 'Midnight circuit'], bars: 8, onClip: false, colorEvery: 1 },
+  rotation: { flows: ['model-helmet-dual', 'model-helmet-echo', 'model-fox-duet', 'model-toy-car'], colorways: ['Electric fauna', 'Midnight circuit'], bars: 8, onClip: false, colorEvery: 1 },
   songs: {},
-  defaults: { flow: 'model-fox-duet', colorway: 'Electric fauna', pace: 0, draws: 'showcase' },
+  defaults: { flow: 'model-helmet-dual', colorway: 'Midnight circuit', pace: 0, draws: 'showcase' },
 } satisfies Partial<Scheme>);
 
 fs.mkdirSync(path.dirname(schemeFile), { recursive: true });
@@ -299,8 +536,10 @@ console.log(JSON.stringify({
   assets: [
     { name: fox.name, hash: fox.hash, bytes: fox.bytes, skins: fox.capabilities.skins.length, animations: fox.capabilities.animations.map((clip) => clip.name) },
     { name: car.name, hash: car.hash, bytes: car.bytes, materials: car.capabilities.materials.length, cameras: car.capabilities.cameras.length },
+    { name: helmet.name, hash: helmet.hash, bytes: helmet.bytes, materials: helmet.capabilities.materials.length, images: helmet.capabilities.images.length },
   ],
-  setups: [foxRun.id, foxSurvey.id, toyCar.id],
+  textures: [{ name: grid.name, hash: grid.hash, bytes: grid.bytes, size: `${grid.width}x${grid.height}` }],
+  setups: [helmetAuthored.id, helmetNeon.id, foxRun.id, foxSurvey.id, toyCar.id],
   flows: Object.keys(scheme.flows),
   modelRoot,
   scheme: schemeFile,
