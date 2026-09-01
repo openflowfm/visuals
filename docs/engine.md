@@ -168,6 +168,11 @@ npm run benchmark -- --sweep           # 1280, 1920, 2560, 3840
 npm run benchmark -- --edges=3840      # whatever you name
 ```
 
+Throughput and sweep runs drive draws directly and stay in a hidden, non-focusable window.
+Only `--paced` is visible: it deliberately measures display-paced
+`requestAnimationFrame`, which Chromium stops delivering to a hidden or fully covered
+window, so hiding that run would change the question rather than merely its presentation.
+
 ## Looking at a frame
 
 `npm run frames` — the benchmark's sibling, and the question it answers is what a flow looks
