@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  MAX_MODEL_LIGHTS,
   bindingDomainValue,
   inspectGlb,
+  modelLightingOf,
+  modelLightingPreset,
   readGlb,
   reconcileBindings,
   type ModelSetup,
@@ -75,5 +78,36 @@ describe('metadata-free GLB inspection', () => {
     expect(preview[0]).toMatchObject({ status: 'matched', binding: { id: 'ring-01-spin', label: 'First rail' } });
     expect(preview[0].suggestion).toMatchObject({ node: 1, nodePath: 'Root/Ring 01' });
     expect(preview[1]).toMatchObject({ status: 'missing', suggestion: null });
+  });
+
+  it('provides bounded reusable lighting presets without sharing mutable rig state', () => {
+    const first = modelLightingPreset('neon');
+    const second = modelLightingPreset('neon');
+    expect(first.lights.length).toBeLessThanOrEqual(MAX_MODEL_LIGHTS);
+    expect(first.lights.filter((light) => light.shadow)).toHaveLength(1);
+    expect(first.lights.map((light) => light.source)).toEqual(['primary', 'secondary', 'accent']);
+    first.lights[0]!.intensity = 0;
+    expect(second.lights[0]!.intensity).toBeGreaterThan(0);
+    expect(modelLightingOf({}).preset).toBe('studio');
+  });
+
+  it('keeps setup-owned lighting bindings stable across GLB reconciliation', () => {
+    const capabilities = inspectGlb(testGlb());
+    const setup = {
+      lighting: modelLightingPreset('studio'),
+      bindings: [
+        {
+          id: 'key-strength', label: 'Key strength', group: 'lighting', default: 0.5, min: 0, max: 8,
+          target: { kind: 'light', light: 'key', property: 'intensity' },
+        },
+        {
+          id: 'environment', label: 'Environment', group: 'lighting', default: 0.25, min: 0, max: 8,
+          target: { kind: 'environment', property: 'intensity' },
+        },
+      ],
+    } as ModelSetup;
+    const preview = reconcileBindings(setup, capabilities);
+    expect(preview.map(({ status }) => status)).toEqual(['matched', 'matched']);
+    expect(preview.map(({ suggestion }) => suggestion)).toEqual(setup.bindings.map(({ target }) => target));
   });
 });

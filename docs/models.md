@@ -19,7 +19,7 @@ The three ownership layers deliberately do not collapse:
 | layer | owns | changes when |
 |---|---|---|
 | immutable asset | content-addressed GLB bytes and derived capabilities | different bytes are imported |
-| reusable setup | display name, selected published bindings, domains, material palette mappings, camera | the setup is edited or explicitly reconciled |
+| reusable setup | display name, selected published bindings, domains, material palette mappings, camera and lighting rig | the setup is edited or explicitly reconciled |
 | flow instance | setup id/revision snapshot, held values, modulation depths and cords | that flow is edited |
 
 A filename is informational, a setup id is reusable configuration, and a binding id is a
@@ -42,8 +42,11 @@ The editor begins with a live preview of the selected setup or unsaved working c
 a second Three renderer: a private one-node `model → out` flow runs through the same compositor,
 bounded HDR/depth model pass and output stage used by Build and the wall. It reads the current
 colourway and the setup's normalized starting values, so changing a material mapping, selected
-camera, published range or `start` value is visible before save. The private flow, setup id and
-instance values never enter the user's scheme or model store.
+camera, lighting rig, published range or `start` value is visible before save. Dragging orbits;
+Shift-dragging, middle-dragging or right-dragging pans; the wheel zooms; and **reset view** returns
+to the setup camera (or automatic framing when none is selected). A selector auditions any scheme colourway. Those viewing choices remain
+local to the preview and do not overwrite the setup camera or active show; the private flow,
+setup id and instance values never enter the user's scheme or model store.
 
 Build no longer contains a model-library drawer. Its ordinary `model` node chooser consumes the
 saved setups and owns only that flow instance's normalized values, depths and cords.
@@ -67,9 +70,20 @@ visible instead of silently following them.
 ## A setup publishes a small, stable surface
 
 The inspector can publish any chosen translation, rotation or scale component; named morph;
-animation clip; or metallic, roughness, opacity or emissive-strength material property. A
+animation clip; metallic, roughness, opacity or emissive-strength material property; selected
+light position, aim, strength, range or cone component; or environment strength and rotation. A
 setup may publish at most 48 controls. This is an authoring ceiling and a faceplate decision:
 skins and all of their joints remain inspectable without dumping every bone into the graph.
+
+Lighting belongs to the reusable setup. **Studio**, **void** and **neon** are editable starting
+rigs, not renderer modes; changing any field makes the rig custom. A rig contains an analytic
+palette-aware HDR environment and at most four enabled directional, point or spot lights. Lights
+may be camera-, world- or model-relative, may follow a colourway role or an authored linear RGB
+colour, and at most one directional or spot light may cast the bounded shadow. A GLB's
+`KHR_lights_punctual` entries remain inert discovered facts until **adopt into rig** is pressed,
+so an exporter's accidental work light cannot make a performance setup black or unpredictable.
+The adopted light receives a stable setup-owned id; its label may then change without cutting a
+published cord.
 
 Every binding has two different names:
 
@@ -108,19 +122,23 @@ instances in one expanded flow. Each instance loads the immutable local GLB, clo
 (including skeleton ownership), applies its normalized setup/instance controls, samples
 animation clips, and rasterizes the scene with depth into a multi-render target. The current
 bounded pass supports node transforms, four morph targets per geometry, skins up to 64 bones,
-authored PBR factors and opacity, the setup's camera or automatic framing. Texture maps and
-extension-specific PBR lobes are not sampled by this bounded stage material pass. Imported lights are
-inspected; the pass presently uses one stable stage key/rim treatment so an exporter's lighting
-rig cannot make a show setup unpredictably black.
+authored PBR factors and opacity, the setup's camera or automatic framing, GGX direct lighting,
+and the analytic HDR environment. Texture maps and extension-specific PBR lobes are not yet
+sampled by this bounded stage material pass; texture import remains stage-safe inspection rather
+than an implied network fetch. Imported lights are inspected and become active only when adopted
+into the reusable rig.
 
 The target is HDR `RGBA16F` where WebGL2 exposes float colour rendering, with an `RGBA8`
 fallback, two colour attachments for authored base plus `color-a`/`color-b` masks, and a 24-bit
-depth buffer. Its longest edge is capped at 1280 independently of the projector. The flow shader
+depth buffer. One optional shadow caster uses one depth-only target capped at 768; point-light
+cube shadows and unbounded per-light targets are deliberately absent. Its longest colour edge is
+capped at 1280 independently of the projector. The flow shader
 samples those textures as one premultiplied colour source, so downstream lenses, grades,
 spreads, blends, feedback, nested flows and the output stage use their existing paths unchanged.
 
-Leaving the flow aborts outstanding loads and releases scene clones, geometry buffers, textures,
-framebuffers and depth renderbuffers. Context loss clears the same bank and restore constructs a
+Leaving the flow aborts outstanding loads and releases scene clones, geometry buffers, colour and
+shadow textures, framebuffers and depth renderbuffers. Removing the caster releases its shadow
+target on the next frame. Context loss clears the same bank and restore constructs a
 new one. Missing, invalid or still-loading models draw transparent and report a visible renderer
 error; they do not take the rest of the graph down.
 
@@ -136,10 +154,11 @@ presenting the synthetic capsule as the product's model vocabulary:
 
 - **Fox** exposes one 24-joint skin and Survey, Walk and Run clips. The showcase makes separate
   Run and Survey setups over the same content-addressed GLB, proving one asset can support more
-  than one performance face, then uses both in a palette-driven kinetic duet.
+  than one performance face, then gives them distinct palette-driven light rigs in a kinetic duet.
 - **Toy Car** exposes three material groups and eight authored cameras. Its setup publishes body
-  rotation, glass presence, body shine and the optional display cloth, maps its parts across the
-  palette, and feeds the ordinary array, feedback, blend, bloom and grade graph path.
+  rotation, glass presence, body shine, the optional display cloth and key-light strength, maps
+  its parts and rig across the palette, modulates that published light from an LFO, and feeds the
+  ordinary array, feedback, blend, bloom and grade graph path.
 
 Install the assets, three setups and two-flow scheme explicitly:
 

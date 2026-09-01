@@ -4,17 +4,25 @@ import path from 'node:path';
 import {
   MAX_MODEL_BINDINGS,
   MAX_MODEL_BYTES,
+  MAX_MODEL_LIGHTS,
   MAX_MODEL_MORPHS,
+  MODEL_LIGHTING_PRESETS,
+  MODEL_LIGHT_SOURCES,
+  MODEL_LIGHT_SPACES,
+  MODEL_LIGHT_TYPES,
   MODEL_HASH,
   MODEL_SETUP_ID,
   bindingTargetKey,
   inspectGlb,
+  modelLightingOf,
+  modelLightingPreset,
   modelPorts,
   reconcileBindings,
   type ModelAsset,
   type ModelBinding,
   type ModelBindingTarget,
   type ModelLibrary,
+  type ModelLightingSetup,
   type ModelMaterialMapping,
   type ModelRevisionDecision,
   type ModelSetup,
@@ -68,6 +76,7 @@ const setupRevision = (setup: Omit<ModelSetup, 'revision' | 'updatedAt'>): strin
     assetHash: setup.assetHash,
     bindings: setup.bindings,
     materials: setup.materials,
+    lighting: modelLightingOf(setup),
     camera: setup.camera,
   })).slice(0, 16);
 
@@ -119,6 +128,7 @@ function setupRecord(file: string): ModelSetup | null {
     if (!value || !MODEL_SETUP_ID.test(value.id) || !MODEL_HASH.test(value.assetHash) ||
         typeof value.name !== 'string' || typeof value.revision !== 'string' ||
         !Array.isArray(value.bindings) || !Array.isArray(value.materials)) return null;
+    if (value.lighting !== undefined) value.lighting = checkedLighting(value.lighting);
     return value;
   } catch {
     return null;
@@ -136,20 +146,38 @@ const readRecords = <T>(dir: string, suffix: string, read: (file: string) => T |
   }
 };
 
-function targetExists(target: ModelBindingTarget, asset: ModelAsset): boolean {
+function targetExists(target: ModelBindingTarget, asset: ModelAsset, lighting: ModelLightingSetup): boolean {
   const c = asset.capabilities;
   if (target.kind === 'node-transform') {
-    return c.nodes[target.node]?.path === target.nodePath;
+    return c.nodes[target.node]?.path === target.nodePath && [
+      'translation-x', 'translation-y', 'translation-z',
+      'rotation-x', 'rotation-y', 'rotation-z',
+      'scale-x', 'scale-y', 'scale-z',
+    ].includes(target.property);
   }
   if (target.kind === 'morph') {
     const mesh = c.meshes[target.mesh];
     return !!mesh && mesh.primitives.some((primitive) => primitive.morphTargets[target.target] === target.name);
   }
   if (target.kind === 'animation') return c.animations[target.animation]?.name === target.name;
-  return c.materials[target.material] !== undefined;
+  if (target.kind === 'material') {
+    return c.materials[target.material] !== undefined &&
+      ['metallic', 'roughness', 'opacity', 'emissive-strength'].includes(target.property);
+  }
+  if (target.kind === 'light') {
+    return lighting.lights.some((light) => light.id === target.light) && [
+      'intensity', 'position-x', 'position-y', 'position-z', 'target-x', 'target-y', 'target-z',
+      'range', 'inner-cone', 'outer-cone',
+    ].includes(target.property);
+  }
+  return target.kind === 'environment' && ['intensity', 'rotation'].includes(target.property);
 }
 
-function checkedBindings(bindings: readonly ModelBinding[], asset: ModelAsset): ModelBinding[] {
+function checkedBindings(
+  bindings: readonly ModelBinding[],
+  asset: ModelAsset,
+  lighting: ModelLightingSetup,
+): ModelBinding[] {
   if (bindings.length > MAX_MODEL_BINDINGS) throw new Error(`a setup may publish at most ${MAX_MODEL_BINDINGS} controls`);
   const ids = new Set<string>();
   return bindings.map((raw, index) => {
@@ -157,7 +185,7 @@ function checkedBindings(bindings: readonly ModelBinding[], asset: ModelAsset): 
     if (ids.has(raw.id)) throw new Error(`binding id ${raw.id} is used more than once`);
     ids.add(raw.id);
     if (!raw.label.trim()) throw new Error(`binding ${raw.id} needs a display name`);
-    if (!targetExists(raw.target, asset)) throw new Error(`binding ${raw.id} points outside ${asset.name}`);
+    if (!targetExists(raw.target, asset, lighting)) throw new Error(`binding ${raw.id} points outside ${asset.name} or its lighting rig`);
     if (raw.target.kind === 'morph' && raw.target.target >= MAX_MODEL_MORPHS) {
       throw new Error(`binding ${raw.id} exceeds the first ${MAX_MODEL_MORPHS} renderable morph targets`);
     }
@@ -171,6 +199,84 @@ function checkedBindings(bindings: readonly ModelBinding[], asset: ModelAsset): 
       group: raw.group.trim().slice(0, 80),
     };
   });
+}
+
+const checkedVec3 = (value: readonly number[], label: string): [number, number, number] => {
+  if (value.length !== 3 || value.some((entry) => !Number.isFinite(entry) || Math.abs(entry) > 64)) {
+    throw new Error(`${label} must be three finite bounded numbers`);
+  }
+  return [value[0]!, value[1]!, value[2]!];
+};
+
+const checkedColour = (value: readonly number[], label: string): [number, number, number] => {
+  const checked = checkedVec3(value, label);
+  if (checked.some((entry) => entry < 0 || entry > 16)) throw new Error(`${label} must be between 0 and 16`);
+  return checked;
+};
+
+function checkedLighting(raw: ModelLightingSetup | undefined): ModelLightingSetup {
+  const lighting = raw ?? modelLightingPreset('studio');
+  if (!MODEL_LIGHTING_PRESETS.includes(lighting.preset)) throw new Error('lighting has an invalid preset');
+  const environment = lighting.environment;
+  if (!environment || !Number.isFinite(environment.intensity) || environment.intensity < 0 || environment.intensity > 8) {
+    throw new Error('environment intensity must be between 0 and 8');
+  }
+  if (!Number.isFinite(environment.rotation) || Math.abs(environment.rotation) > Math.PI * 100) {
+    throw new Error('environment rotation is not finite and bounded');
+  }
+  if (!MODEL_LIGHT_SOURCES.includes(environment.top) || !MODEL_LIGHT_SOURCES.includes(environment.bottom)) {
+    throw new Error('environment has an invalid palette source');
+  }
+  if (!Array.isArray(lighting.lights) || lighting.lights.length > MAX_MODEL_LIGHTS) {
+    throw new Error(`a setup may contain at most ${MAX_MODEL_LIGHTS} direct lights`);
+  }
+  const ids = new Set<string>();
+  let shadows = 0;
+  const lights = lighting.lights.map((entry, index) => {
+    if (!MODEL_SETUP_ID.test(entry.id) || ids.has(entry.id)) throw new Error(`light ${index + 1} needs a unique stable id`);
+    ids.add(entry.id);
+    if (!entry.label.trim()) throw new Error(`light ${entry.id} needs a display name`);
+    if (!MODEL_LIGHT_TYPES.includes(entry.type)) throw new Error(`light ${entry.id} has an invalid type`);
+    if (!MODEL_LIGHT_SPACES.includes(entry.space)) throw new Error(`light ${entry.id} has an invalid coordinate space`);
+    if (!MODEL_LIGHT_SOURCES.includes(entry.source)) throw new Error(`light ${entry.id} has an invalid palette source`);
+    if (!Number.isFinite(entry.intensity) || entry.intensity < 0 || entry.intensity > 64) {
+      throw new Error(`light ${entry.id} intensity must be between 0 and 64`);
+    }
+    if (!Number.isFinite(entry.range) || entry.range <= 0 || entry.range > 64) {
+      throw new Error(`light ${entry.id} range must be between 0 and 64`);
+    }
+    if (!Number.isFinite(entry.innerConeAngle) || !Number.isFinite(entry.outerConeAngle) ||
+        entry.innerConeAngle < 0 || entry.outerConeAngle <= 0 ||
+        entry.innerConeAngle > entry.outerConeAngle || entry.outerConeAngle > Math.PI / 2) {
+      throw new Error(`light ${entry.id} has invalid spot cone angles`);
+    }
+    if (!Number.isFinite(entry.softness) || entry.softness < 0 || entry.softness > 4) {
+      throw new Error(`light ${entry.id} softness must be between 0 and 4`);
+    }
+    if (entry.shadow) {
+      shadows += 1;
+      if (entry.type === 'point') throw new Error(`point light ${entry.id} cannot use the bounded single-view shadow`);
+    }
+    return {
+      ...entry,
+      label: entry.label.trim().slice(0, 80),
+      color: checkedColour(entry.color, `light ${entry.id} colour`),
+      position: checkedVec3(entry.position, `light ${entry.id} position`),
+      target: checkedVec3(entry.target, `light ${entry.id} target`),
+      enabled: entry.enabled === true,
+      shadow: entry.shadow === true,
+    };
+  });
+  if (shadows > 1) throw new Error('a setup may cast at most one model shadow');
+  return {
+    preset: lighting.preset,
+    environment: {
+      ...environment,
+      topColor: checkedColour(environment.topColor, 'environment top colour'),
+      bottomColor: checkedColour(environment.bottomColor, 'environment bottom colour'),
+    },
+    lights,
+  };
 }
 
 function checkedMaterials(materials: readonly ModelMaterialMapping[], asset: ModelAsset): ModelMaterialMapping[] {
@@ -214,12 +320,14 @@ export function openModelStore(place: ModelPlace = modelPlace()): ModelStore {
     const raw = asset(draft.assetHash);
     if (!raw) throw new Error('setup asset is not in the model library');
     const now = new Date().toISOString();
+    const lighting = checkedLighting(draft.lighting);
     const base: Omit<ModelSetup, 'revision' | 'updatedAt'> = {
       id: draft.id,
       name: draft.name.trim().slice(0, 100),
       assetHash: raw.hash,
-      bindings: checkedBindings(draft.bindings, raw),
+      bindings: checkedBindings(draft.bindings, raw, lighting),
       materials: checkedMaterials(draft.materials, raw),
+      lighting,
       camera: draft.camera === undefined ? null : draft.camera,
       createdAt: original?.createdAt ?? now,
     };
@@ -338,6 +446,7 @@ export function openModelStore(place: ModelPlace = modelPlace()): ModelStore {
         assetHash: next.hash,
         bindings,
         materials: carriedMaterials,
+        lighting: modelLightingOf(held),
         camera: decision.camera,
       }, held);
     },

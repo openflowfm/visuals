@@ -123,8 +123,10 @@ export interface FramesReport {
     peakInstances: number;
     peakGeometries: number;
     peakTargets: number;
+    peakShadows: number;
     loadingAtCapture: number;
     instancesAfterRelease: number;
+    shadowsAfterRelease: number;
   };
   errors: string[];
 }
@@ -177,14 +179,17 @@ export async function run(canvas: HTMLCanvasElement): Promise<FramesReport> {
     peakInstances: 0,
     peakGeometries: 0,
     peakTargets: 0,
+    peakShadows: 0,
     loadingAtCapture: 0,
     instancesAfterRelease: 0,
+    shadowsAfterRelease: 0,
   };
   const measureModels = () => {
     const held = compositor.modelResources();
     modelStats.peakInstances = Math.max(modelStats.peakInstances, held.instances);
     modelStats.peakGeometries = Math.max(modelStats.peakGeometries, held.geometries);
     modelStats.peakTargets = Math.max(modelStats.peakTargets, held.targets);
+    modelStats.peakShadows = Math.max(modelStats.peakShadows, held.shadows);
     modelStats.loadingAtCapture = held.loading;
   };
   const dt = 1 / FPS;
@@ -253,7 +258,9 @@ export async function run(canvas: HTMLCanvasElement): Promise<FramesReport> {
   }
 
   compositor.frame(showAt(0, colors, null), loaded, 0, 0, dt, undefined, models);
-  modelStats.instancesAfterRelease = compositor.modelResources().instances;
+  const releasedModels = compositor.modelResources();
+  modelStats.instancesAfterRelease = releasedModels.instances;
+  modelStats.shadowsAfterRelease = releasedModels.shadows;
   compositor.free();
   return { renderer, width: WIDTH, height: HEIGHT, stats, sequences, models: modelStats, errors };
 }

@@ -24,6 +24,8 @@ the set's picture (only if the flow asked for it)
 
 the flow
   render up to two reachable GLB model instances into bounded HDR/depth targets
+    each with an analytic HDR environment, up to four direct lights,
+    and at most one 768px depth-only shadow view
   one full-screen pass, one compiled fragment shader
   reading that target wherever a `tracks` node appears
   sampling model base and palette-mask textures wherever a `model` node appears,
@@ -44,7 +46,11 @@ need a depth buffer, so `client/render/model.ts` draws each reachable instance i
 multi-render target: authored material light in the base texture and separate `color-a` /
 `color-b` masks beside it. The target is `RGBA16F` when the WebGL float-render extension is
 present, `RGBA8` as a visible fallback, carries a 24-bit depth buffer, and is capped at 1280
-on its longest edge. The full-screen flow shader reconstructs the chosen palette colours and
+on its longest edge. Its material shader evaluates bounded GGX direct light from at most four
+setup-owned directional, point or spot lights plus an analytic palette-aware environment. One
+directional or spot light may allocate a separate 768px depth texture with a fixed 3×3 PCF
+lookup; disabling the caster frees that allocation, and point lights never imply six cube-map
+passes. The full-screen flow shader reconstructs the chosen palette colours and
 sees an ordinary premultiplied source. Downstream blend, grade, lens, feedback and output
 paths therefore remain exactly the ones above. See [models](models.md).
 

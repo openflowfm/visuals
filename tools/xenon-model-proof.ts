@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { modelPorts, type ModelBinding } from '../model.ts';
+import { modelLightingPreset, modelPorts, type ModelBinding } from '../model.ts';
 import type { CircuitNode, FlowDef, Scheme } from '../protocol.ts';
 import { RESPONSE_SET_VERSION } from '../response.ts';
 import { openflowHome } from '../server/home.ts';
@@ -46,6 +46,23 @@ if (asset.capabilities.materials.length !== 12) {
 }
 const clip = asset.capabilities.animations.find((animation) => animation.name === 'Capsule roll');
 if (!clip) throw new Error('Xenon proof GLB did not expose its named animation clip');
+const lighting = modelLightingPreset('studio');
+// The reference's topology is emissive railwork suspended in black. A cast
+// shadow invents broken contour endpoints which are foreign to that pack, so
+// this reusable rig keeps a broad neutral environment, palette accents and a
+// published key but no caster or brittle high-intensity highlight.
+lighting.preset = 'custom';
+lighting.environment = {
+  ...lighting.environment,
+  intensity: 0.95,
+  top: 'white',
+  bottom: 'white',
+};
+lighting.lights = lighting.lights.map((light) => ({
+  ...light,
+  shadow: false,
+  intensity: light.id === 'key' ? 1.4 : light.id === 'fill' ? 0.25 : 0.45,
+}));
 
 const bindings: ModelBinding[] = [
   ...rings.map((node, index): ModelBinding => ({
@@ -80,6 +97,15 @@ const bindings: ModelBinding[] = [
     min: 0,
     max: clip.duration,
   },
+  {
+    id: 'key-strength',
+    label: 'Key strength',
+    group: 'lighting',
+    target: { kind: 'light', light: 'key', property: 'intensity' },
+    default: 0.55,
+    min: 0,
+    max: 4,
+  },
 ];
 
 const setup = store.save({
@@ -92,6 +118,7 @@ const setup = store.save({
     source: material.index % 2 === 0 ? 'color-a' : 'color-b',
     amount: 1,
   })),
+  lighting,
   camera: asset.capabilities.cameras[0]?.index ?? null,
 });
 
@@ -144,6 +171,7 @@ function instanceFlow(name: string, phase: number, alternate: boolean): FlowDef 
         { from: alternate ? 'palette/primary' : 'palette/secondary', to: `${named}/color-b` },
         { from: 'ring/n', to: `${named}/${ring}` },
         { from: 'light/n', to: `${named}/${light}` },
+        { from: 'light/n', to: `${named}/key-strength` },
         { from: `${named}/c`, to: 'bloom/c' },
         { from: 'bloom/c', to: 'finish/c' },
         { from: 'finish/c', to: 'out/c' },

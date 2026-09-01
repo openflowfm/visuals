@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  modelLightingPreset,
   modelPorts,
   type ModelAnimationCapability,
   type ModelBinding,
@@ -124,13 +125,24 @@ const foxScale = (axis: 'x' | 'y' | 'z'): ModelBinding => ({
   max: 2.4,
 });
 
+const lightStrength = (max: number, fallback: number): ModelBinding => ({
+  id: 'key-strength',
+  label: 'Key strength',
+  group: 'lighting',
+  target: { kind: 'light', light: 'key', property: 'intensity' },
+  default: fallback,
+  min: 0,
+  max,
+});
+
 function foxSetup(id: string, label: string, animation: ModelAnimationCapability): ModelSetup {
   return store.save({
     id,
     name: label,
     assetHash: fox.hash,
-    bindings: [animationBinding(animation), foxTurn, foxScale('x'), foxScale('y'), foxScale('z')],
+    bindings: [animationBinding(animation), foxTurn, foxScale('x'), foxScale('y'), foxScale('z'), lightStrength(12, 0.58)],
     materials: [{ material: 0, source: 'color-a', amount: 1 }],
+    lighting: modelLightingPreset(id.endsWith('run') ? 'neon' : 'void'),
     camera: null,
   });
 }
@@ -183,12 +195,14 @@ const toyCar = store.save({
       min: 0,
       max: 0.7,
     },
+    lightStrength(18, 0.52),
   ],
   materials: [
     { material: carMaterial.index, source: 'color-a', amount: 1 },
     { material: fabricMaterial.index, source: 'color-b', amount: 0.82 },
     { material: glassMaterial.index, source: 'accent', amount: 0.72 },
   ],
+  lighting: modelLightingPreset('neon'),
   // Camera002 is the model author's recommended composed showcase angle.
   camera: car.capabilities.cameras[1]!.index,
 });
@@ -239,6 +253,7 @@ const carTrails: FlowDef = {
       { id: 'palette', kind: 'colorway', x: 20, y: 20, values: { amount: 1, energy: 0.7 } },
       { id: 'turn', kind: 'lfo', op: 'saw', x: 20, y: 245, values: { rate: 0.32, sync: 1, phase: 0.12 } },
       { id: 'glass', kind: 'lfo', op: 'sine', x: 20, y: 455, values: { rate: 0.42, sync: 1, phase: 0.38 } },
+      { id: 'light', kind: 'lfo', op: 'sine', x: 20, y: 660, values: { rate: 0.2, sync: 1, phase: 0.72 } },
       { id: 'copies', kind: 'array', op: 'mirror', x: 280, y: 45, values: { count: 0.3 } },
       model('car', toyCar, 505, 45, { 'body-shine': 0.12, fabric: 0 }),
       { id: 'last', kind: 'last', x: 505, y: 430 },
@@ -253,6 +268,7 @@ const carTrails: FlowDef = {
       { from: 'palette/secondary', to: 'car/color-b' },
       { from: 'turn/n', to: 'car/turn' },
       { from: 'glass/n', to: 'car/glass' },
+      { from: 'light/n', to: 'car/key-strength' },
       { from: 'copies/p', to: 'car/p' },
       { from: 'car/c', to: 'trail/base' },
       { from: 'last/c', to: 'drift/c' },

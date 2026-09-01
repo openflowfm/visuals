@@ -9,7 +9,7 @@ import { createMeter, type FrameStats, type Meter } from './meter.ts';
 import { columns, warpFor, SQUARE, type Corners } from './output.ts';
 import { createVideoBank, videoControl } from './video.ts';
 import { createImageBank } from './image.ts';
-import { createModelBank, type ModelResourceStats } from './model.ts';
+import { createModelBank, type ModelResourceStats, type ModelView } from './model.ts';
 import {
   responseOverridesSignature,
   type ResponseOverrides,
@@ -46,6 +46,7 @@ export interface Compositor {
     dt: number,
     responses?: ResponseOverrides,
     models?: ModelLibrary,
+    modelViews?: Readonly<Record<string, ModelView>>,
   ): void;
   setOutput(output: Output | null): void;
   /** Draw for a window somebody is looking *at*, rather than for a projector. */
@@ -108,7 +109,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       error: 'WebGL2 is not available in this browser.',
       stats: () => idle.read(),
       resetStats: () => idle.reset(),
-      modelResources: () => ({ instances: 0, geometries: 0, targets: 0, loading: 0 }),
+      modelResources: () => ({ instances: 0, geometries: 0, targets: 0, shadows: 0, loading: 0 }),
     };
   }
 
@@ -394,7 +395,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
         if (!canvas.isConnected) gl.getExtension('WEBGL_lose_context')?.loseContext();
       }
     },
-    frame(show, scheme, beat, seconds, dt, responses, models = EMPTY_MODELS) {
+    frame(show, scheme, beat, seconds, dt, responses, models = EMPTY_MODELS, modelViews) {
       // Nothing to draw into. Every call below would be a no-op anyway; not
       // making them is what keeps a lost context from rebuilding flows that
       // cannot compile, sixty times a second, until it comes back.
@@ -452,6 +453,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
           canvas.width,
           canvas.height,
           id ?? '',
+          modelViews,
         );
         // The model bank rendered into its own depth target. Return to the
         // ordinary flow destination and state before sampling those textures.

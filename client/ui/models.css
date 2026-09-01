@@ -202,6 +202,13 @@
   display: block;
   width: 100%;
   height: clamp(310px, 42vh, 500px);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.model-preview canvas:active {
+  cursor: grabbing;
 }
 
 .model-preview-status {
@@ -238,6 +245,28 @@
   background: var(--alarm);
 }
 
+.model-preview-tools {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--detail);
+  font-size: var(--text-label);
+}
+
+.model-preview-tools button {
+  padding: 4px 7px;
+  border: 1px solid color-mix(in srgb, var(--bd3) 75%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--well) 82%, transparent);
+  color: var(--caption);
+  cursor: pointer;
+  font: inherit;
+  backdrop-filter: blur(8px);
+}
+
 .model-preview figcaption {
   position: absolute;
   right: 12px;
@@ -256,11 +285,27 @@
   backdrop-filter: blur(8px);
 }
 
-.model-preview figcaption > span:first-child {
+.model-preview figcaption label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.model-preview figcaption label > span {
   color: var(--caption);
   font-size: var(--text-label);
   letter-spacing: var(--track-label);
   text-transform: uppercase;
+}
+
+.model-preview figcaption select {
+  max-width: 180px;
+  padding: 3px 6px;
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-xs);
+  background: var(--panel);
+  color: var(--fg);
+  font: inherit;
 }
 
 .model-preview figcaption small {
@@ -406,6 +451,135 @@
   width: 100%;
 }
 
+.model-lighting-head,
+.model-environment,
+.model-light-title,
+.model-light-fields,
+.model-vector,
+.model-light-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-lighting-head {
+  justify-content: space-between;
+  margin-bottom: 9px;
+}
+
+.model-lighting-head p {
+  text-align: right;
+}
+
+.model-environment {
+  flex-wrap: wrap;
+  padding: 9px;
+  border: 1px solid color-mix(in srgb, var(--bd3) 55%, transparent);
+  border-radius: var(--radius-sm);
+  background: var(--well);
+}
+
+.model-environment > label,
+.model-light-fields label,
+.model-light-footer > label {
+  display: grid;
+  gap: 3px;
+  color: var(--detail);
+  font-size: var(--text-label);
+}
+
+.model-environment input,
+.model-environment select,
+.model-light-card input,
+.model-light-card select {
+  min-width: 0;
+  padding: 5px 6px;
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: inherit;
+  font: inherit;
+}
+
+.model-environment input {
+  width: 72px;
+}
+
+.model-lights {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.model-light-card {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--well) 75%, transparent);
+}
+
+.model-light-title input[type='text'],
+.model-light-title > input:not([type]) {
+  flex: 1;
+}
+
+.model-light-title code {
+  color: var(--amber);
+  font-size: var(--text-label);
+}
+
+.model-light-title button {
+  border: 0;
+  background: transparent;
+  color: var(--detail);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--text-label);
+}
+
+.model-light-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.model-light-fields input,
+.model-light-fields select {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.model-vector span {
+  width: 58px;
+  flex: none;
+  color: var(--detail);
+  font-size: var(--text-label);
+  text-transform: uppercase;
+}
+
+.model-vector input {
+  width: 0;
+  flex: 1;
+}
+
+.model-light-footer {
+  justify-content: space-between;
+}
+
+.model-light-footer > label,
+.model-light-title > label {
+  display: flex;
+  align-items: center;
+}
+
+.model-light-footer input[type='checkbox'],
+.model-light-title input[type='checkbox'] {
+  padding: 0;
+}
+
 .model-bindings h5 {
   margin: 0 0 7px;
 }
@@ -457,5 +631,19 @@
 
   .model-preview figcaption small {
     display: none;
+  }
+
+  .model-preview-tools span {
+    display: none;
+  }
+
+  .model-lighting-head,
+  .model-light-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .model-lighting-head p {
+    text-align: left;
   }
 }

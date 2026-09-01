@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { testGlb } from '../test/glb.ts';
+import { modelLightingPreset } from '../model.ts';
 import { modelPlace, openModelStore, setupTargetSignature, suggestedTargetMap } from './models.ts';
 
 const made: string[] = [];
@@ -61,6 +62,46 @@ describe('the content-addressed model library', () => {
     const renamed = store.save({ ...a, name: 'Xenon sixty', bindings: [{ ...binding, label: 'Rail one' }] });
     expect(renamed.bindings[0].id).toBe('ring-01-spin');
     expect(renamed.revision).not.toBe(a.revision);
+  });
+
+  it('persists setup-owned lighting and validates its bounded published controls', () => {
+    const store = openModelStore(place());
+    const asset = store.import(testGlb(), 'lit.glb');
+    const lighting = modelLightingPreset('neon');
+    const first = store.save({
+      id: 'lit', name: 'Lit', assetHash: asset.hash, materials: [], lighting,
+      bindings: [{
+        id: 'key-strength', label: 'Key strength', group: 'lighting', default: 0.5, min: 0, max: 16,
+        target: { kind: 'light', light: 'key', property: 'intensity' },
+      }],
+    });
+    expect(first.lighting?.preset).toBe('neon');
+    expect(first.lighting?.lights[0]).toMatchObject({ id: 'key', shadow: true });
+    const changed = store.save({
+      ...first,
+      lighting: { ...lighting, environment: { ...lighting.environment, intensity: 0.9 } },
+    });
+    expect(changed.revision).not.toBe(first.revision);
+
+    expect(() => store.save({
+      id: 'missing-light', name: 'Missing', assetHash: asset.hash, materials: [], lighting,
+      bindings: [{
+        id: 'gone', label: 'Gone', group: 'lighting', default: 0, min: 0, max: 1,
+        target: { kind: 'light', light: 'gone', property: 'intensity' },
+      }],
+    })).toThrow('outside');
+    expect(() => store.save({
+      id: 'too-many-lights', name: 'Many', assetHash: asset.hash, materials: [], bindings: [],
+      lighting: { ...lighting, lights: [...lighting.lights, lighting.lights[0]!, lighting.lights[1]!] },
+    })).toThrow('at most 4');
+    expect(() => store.save({
+      id: 'two-shadows', name: 'Two shadows', assetHash: asset.hash, materials: [], bindings: [],
+      lighting: { ...lighting, lights: lighting.lights.map((light, index) => ({ ...light, shadow: index !== 1 })) },
+    })).toThrow('at most one');
+    expect(() => store.save({
+      id: 'point-shadow', name: 'Point shadow', assetHash: asset.hash, materials: [], bindings: [],
+      lighting: { ...lighting, lights: [{ ...lighting.lights[0]!, type: 'point', shadow: true }] },
+    })).toThrow('point light');
   });
 
   it('refuses traversal, duplicate ids, missing targets, and symlinked records', () => {

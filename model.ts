@@ -16,6 +16,8 @@ export const MAX_MODEL_COLLECTION = 4096;
 export const MAX_MODEL_PRIMITIVES = 16384;
 export const MAX_MODEL_CHANNELS = 16384;
 export const MAX_MODEL_BINDINGS = 48;
+/** Direct lights are looped in the bounded model fragment shader. */
+export const MAX_MODEL_LIGHTS = 4;
 /** Vertex attributes 2–5 are the bounded morph transport in the model pass. */
 export const MAX_MODEL_MORPHS = 4;
 
@@ -155,6 +157,141 @@ export interface ModelMaterialMapping {
   amount: number;
 }
 
+export const MODEL_LIGHTING_PRESETS = ['studio', 'void', 'neon', 'custom'] as const;
+export type ModelLightingPreset = (typeof MODEL_LIGHTING_PRESETS)[number];
+export const MODEL_LIGHT_TYPES = ['directional', 'point', 'spot'] as const;
+export type ModelLightType = (typeof MODEL_LIGHT_TYPES)[number];
+export const MODEL_LIGHT_SPACES = ['camera', 'world', 'model'] as const;
+export type ModelLightSpace = (typeof MODEL_LIGHT_SPACES)[number];
+export const MODEL_LIGHT_SOURCES = ['white', 'primary', 'secondary', 'complement', 'accent', 'chalk', 'authored'] as const;
+export type ModelLightSource = (typeof MODEL_LIGHT_SOURCES)[number];
+
+export interface ModelEnvironmentSetup {
+  /** Analytic HDR environment contribution; zero is deliberately black. */
+  intensity: number;
+  /** Rotation around the subject's vertical axis, in radians. */
+  rotation: number;
+  top: ModelLightSource;
+  bottom: ModelLightSource;
+  /** Used only when the corresponding source is `authored`. Linear RGB. */
+  topColor: Vec3;
+  bottomColor: Vec3;
+}
+
+export interface ModelLightSetup {
+  /** Stable setup-owned address. Published bindings refer to this, not its label. */
+  id: string;
+  label: string;
+  type: ModelLightType;
+  space: ModelLightSpace;
+  source: ModelLightSource;
+  /** Used only when `source` is `authored`. Linear RGB. */
+  color: Vec3;
+  enabled: boolean;
+  intensity: number;
+  /** Subject-radius units, resolved around the model bounds by the renderer. */
+  position: Vec3;
+  /** Subject-radius units for point/spot aim. Directional lights use the same aim. */
+  target: Vec3;
+  /** Subject radii. Point and spot lights fade to zero here. */
+  range: number;
+  innerConeAngle: number;
+  outerConeAngle: number;
+  /** At most one directional or spot light in a setup may cast one bounded shadow. */
+  shadow: boolean;
+  /** PCF footprint in shadow texels. */
+  softness: number;
+}
+
+export interface ModelLightingSetup {
+  preset: ModelLightingPreset;
+  environment: ModelEnvironmentSetup;
+  lights: ModelLightSetup[];
+}
+
+const light = (
+  id: string,
+  label: string,
+  patch: Partial<ModelLightSetup>,
+): ModelLightSetup => ({
+  id,
+  label,
+  type: 'directional',
+  space: 'camera',
+  source: 'white',
+  color: [1, 1, 1],
+  enabled: true,
+  intensity: 1,
+  position: [-1, 1, 2],
+  target: [0, 0, 0],
+  range: 6,
+  innerConeAngle: 0.35,
+  outerConeAngle: 0.72,
+  shadow: false,
+  softness: 1,
+  ...patch,
+});
+
+/** Fresh setup-owned lighting; callers may edit the returned object. */
+export function modelLightingPreset(preset: ModelLightingPreset = 'studio'): ModelLightingSetup {
+  if (preset === 'void') {
+    return {
+      preset,
+      environment: {
+        intensity: 0.06,
+        rotation: 0,
+        top: 'primary',
+        bottom: 'secondary',
+        topColor: [1, 1, 1],
+        bottomColor: [0.02, 0.02, 0.03],
+      },
+      lights: [
+        light('key', 'Key', { source: 'primary', intensity: 3.6, position: [-1.4, 1.2, 2.2], shadow: true, softness: 1.4 }),
+        light('rim', 'Rim', { source: 'accent', intensity: 4.8, position: [1.1, 1.5, -2.2] }),
+      ],
+    };
+  }
+  if (preset === 'neon') {
+    return {
+      preset,
+      environment: {
+        intensity: 0.28,
+        rotation: 0.45,
+        top: 'primary',
+        bottom: 'secondary',
+        topColor: [1, 1, 1],
+        bottomColor: [0.02, 0.02, 0.03],
+      },
+      lights: [
+        light('key', 'Key', { type: 'spot', source: 'primary', intensity: 11, position: [-1.6, 1.8, 2.2], range: 7, shadow: true, softness: 1.2 }),
+        light('fill', 'Fill', { type: 'point', source: 'secondary', intensity: 8, position: [1.8, -0.4, 1.1], range: 5 }),
+        light('rim', 'Rim', { source: 'accent', intensity: 3.2, position: [0.4, 1.4, -2.2] }),
+      ],
+    };
+  }
+  const studio: ModelLightingSetup = {
+    preset: preset === 'custom' ? 'custom' : 'studio',
+    environment: {
+      intensity: 0.42,
+      rotation: 0.2,
+      top: 'white',
+      bottom: 'primary',
+      topColor: [1, 1, 1],
+      bottomColor: [0.035, 0.04, 0.055],
+    },
+    lights: [
+      light('key', 'Key', { intensity: 3.4, position: [-1.5, 1.7, 2.4], shadow: true, softness: 1.15 }),
+      light('fill', 'Fill', { source: 'secondary', intensity: 0.9, position: [1.8, 0.3, 1.5] }),
+      light('rim', 'Rim', { source: 'accent', intensity: 1.8, position: [0.5, 1.4, -2.3] }),
+    ],
+  };
+  return studio;
+}
+
+/** Old setup records acquire the same explicit neutral rig without a migration write. */
+export const modelLightingOf = (setup: { lighting?: ModelLightingSetup }): ModelLightingSetup =>
+  setup.lighting ?? modelLightingPreset('studio');
+
 export type ModelBindingTarget =
   | {
       kind: 'node-transform';
@@ -177,7 +314,23 @@ export type ModelBindingTarget =
       kind: 'material';
       material: number;
       property: 'metallic' | 'roughness' | 'opacity' | 'emissive-strength';
-    };
+    }
+  | {
+      kind: 'light';
+      light: string;
+      property:
+        | 'intensity'
+        | 'position-x'
+        | 'position-y'
+        | 'position-z'
+        | 'target-x'
+        | 'target-y'
+        | 'target-z'
+        | 'range'
+        | 'inner-cone'
+        | 'outer-cone';
+    }
+  | { kind: 'environment'; property: 'intensity' | 'rotation' };
 
 export interface ModelBinding {
   /** Stable address used by cords and instance values. Never derived from label. */
@@ -200,6 +353,8 @@ export interface ModelSetup {
   revision: string;
   bindings: ModelBinding[];
   materials: ModelMaterialMapping[];
+  /** Optional only so setup JSON written before lighting existed remains readable. */
+  lighting?: ModelLightingSetup;
   camera: number | null;
   createdAt: string;
   updatedAt: string;
@@ -225,6 +380,7 @@ export interface ModelSetupDraft {
   assetHash: string;
   bindings: ModelBinding[];
   materials: ModelMaterialMapping[];
+  lighting?: ModelLightingSetup;
   camera?: number | null;
 }
 
@@ -580,7 +736,9 @@ export function bindingTargetKey(target: ModelBindingTarget): string {
   if (target.kind === 'node-transform') return `node:${target.nodePath}:${target.property}`;
   if (target.kind === 'morph') return `morph:${target.mesh}:${target.name}`;
   if (target.kind === 'animation') return `animation:${target.name}`;
-  return `material:${target.material}:${target.property}`;
+  if (target.kind === 'material') return `material:${target.material}:${target.property}`;
+  if (target.kind === 'light') return `light:${target.light}:${target.property}`;
+  return `environment:${target.property}`;
 }
 
 export function reconcileBindings(
@@ -606,7 +764,19 @@ export function reconcileBindings(
   ];
   const byKey = new Map(candidates.map((target) => [bindingTargetKey(target), target]));
   return setup.bindings.map((binding) => {
-    const suggestion = byKey.get(bindingTargetKey(binding.target)) ?? null;
+    const target = binding.target;
+    if (target.kind === 'environment') {
+      return { binding, status: 'matched' as const, suggestion: { ...target } };
+    }
+    if (target.kind === 'light') {
+      const exists = modelLightingOf(setup).lights.some((light) => light.id === target.light);
+      return {
+        binding,
+        status: exists ? 'matched' as const : 'missing' as const,
+        suggestion: exists ? { ...target } : null,
+      };
+    }
+    const suggestion = byKey.get(bindingTargetKey(target)) ?? null;
     return { binding, status: suggestion ? 'matched' : 'missing', suggestion };
   });
 }

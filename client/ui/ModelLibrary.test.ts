@@ -1,7 +1,7 @@
 import { createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import type { ModelLibrary, ModelSetupDraft } from '../../model.ts';
+import { modelLightingPreset, type ModelLibrary, type ModelSetupDraft } from '../../model.ts';
 import type { Scheme, Show } from '../../protocol.ts';
 import { ModelLibraryView } from './ModelLibrary.tsx';
 import { ModelSetupPreview, modelPreviewDocument } from './ModelSetupPreview.tsx';
@@ -97,6 +97,7 @@ describe('the first-class model library', () => {
         target: { kind: 'node-transform', node: 0, nodePath: 'Root', property: 'rotation-y' },
       }],
       materials: [{ material: 0, source: 'color-a', amount: 0.8 }],
+      lighting: modelLightingPreset('neon'),
       camera: null,
     } satisfies ModelSetupDraft;
     const scheme = { flows: { kept: { name: 'Kept', circuit: { nodes: [], cords: [] } } } } as unknown as Scheme;
@@ -111,12 +112,15 @@ describe('the first-class model library', () => {
       assetHash: hash,
       revision: 'working-copy',
       materials: draft.materials,
+      lighting: { preset: 'neon' },
     });
     expect(preview.show.flow).toBe('~model-setup-preview');
 
     const html = renderToStaticMarkup(h(ModelSetupPreview, { draft, asset, scheme, show: SHOW }));
-    expect(html).toContain('Preview of Creature / stage');
+    expect(html).toContain('Interactive preview of Creature / stage');
     expect(html).toContain('loading model…');
-    expect(html).toContain('Material mappings, camera, and published start values update here before save.');
+    expect(html).toContain('drag orbit · shift/right drag pan · wheel zoom');
+    expect(html).toContain('preview colorway');
+    expect(html).toContain('Preview view and colorway are local; setup lighting and published starts are reusable.');
   });
 });
