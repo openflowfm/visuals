@@ -1,6 +1,7 @@
 # Models
 
-`model.ts`, `server/models.ts`, `client/ui/ModelLibrary.tsx`, `client/ui/models.css`,
+`model.ts`, `server/models.ts`, `client/ui/ModelLibrary.tsx`,
+`client/ui/ModelSetupPreview.tsx`, `client/ui/models.css`,
 `client/nodes/model/`, `client/render/model.ts`. Importing binary glTF, turning discovered
 facts into reusable OpenFlow setups, and rendering setup instances as graph colours.
 
@@ -36,6 +37,13 @@ collections. Setup rows report their published inlet count and how many direct f
 currently select them; asset rows report capability/byte counts and how many setups reuse those
 bytes. Selecting an asset starts a new setup without mutating an existing one. Selecting a setup
 opens the wide capability editor, material mapper, published-inlet face and revision reconciler.
+
+The editor begins with a live preview of the selected setup or unsaved working copy. It is not
+a second Three renderer: a private one-node `model → out` flow runs through the same compositor,
+bounded HDR/depth model pass and output stage used by Build and the wall. It reads the current
+colourway and the setup's normalized starting values, so changing a material mapping, selected
+camera, published range or `start` value is visible before save. The private flow, setup id and
+instance values never enter the user's scheme or model store.
 
 Build no longer contains a model-library drawer. Its ordinary `model` node chooser consumes the
 saved setups and owns only that flow instance's normalized values, depths and cords.
@@ -115,6 +123,11 @@ Leaving the flow aborts outstanding loads and releases scene clones, geometry bu
 framebuffers and depth renderbuffers. Context loss clears the same bank and restore constructs a
 new one. Missing, invalid or still-loading models draw transparent and report a visible renderer
 error; they do not take the rest of the graph down.
+
+The Models preview follows the same lifecycle: it exists only while a setup editor is mounted,
+is capped by the compositor's 960-pixel preview edge, and releases its model and WebGL resources
+on close or view change. Editing setup metadata updates the already loaded working instance; it
+does not refetch and reparse the immutable GLB on every keystroke.
 
 ## A representative showcase
 

@@ -285,6 +285,7 @@ export function Console({
         <ModelLibraryView
           library={models}
           scheme={scheme}
+          show={room.show}
           onImport={importModel}
           onSave={saveModelSetup}
           onReconcile={reconcileModel}

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Euler, Matrix4, Quaternion, Vector3 } from 'three';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
-import type { Scheme } from '../../protocol.ts';
+import type { Scheme, Show } from '../../protocol.ts';
 import './models.css';
 import {
   MODEL_SETUP_ID,
@@ -18,6 +18,7 @@ import {
   type ModelSetup,
   type ModelSetupDraft,
 } from '../../model.ts';
+import { ModelSetupPreview } from './ModelSetupPreview.tsx';
 
 const SOURCES: ModelPaletteSource[] = [
   'color-a', 'color-b', 'primary', 'secondary', 'complement', 'accent', 'chalk', 'original',
@@ -159,12 +160,14 @@ function asDraft(setup: ModelSetup): ModelSetupDraft {
 export function ModelLibraryView({
   library,
   scheme,
+  show,
   onImport,
   onSave,
   onReconcile,
 }: {
   library: ModelLibrary;
   scheme: Scheme;
+  show: Show;
   onImport(file: File): Promise<void>;
   onSave(setup: ModelSetupDraft): void;
   onReconcile(setupId: string, assetHash: string, decision: ModelRevisionDecision): void;
@@ -392,6 +395,7 @@ export function ModelLibraryView({
                   <Button tone="quiet" onPress={() => { setDraft(null); setSavedId(null); }}>close</Button>
                 </div>
               </header>
+              <ModelSetupPreview draft={draft} asset={asset} scheme={scheme} show={show} />
               <div className="model-fields two">
                 <label className="model-field">
                   <span>setup name</span>

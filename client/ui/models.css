@@ -185,6 +185,104 @@
   gap: 4px;
 }
 
+.model-preview {
+  position: relative;
+  display: grid;
+  min-height: 310px;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-md);
+  background:
+    radial-gradient(circle at 50% 44%, color-mix(in srgb, var(--caption) 10%, transparent), transparent 52%),
+    var(--well);
+}
+
+.model-preview canvas {
+  display: block;
+  width: 100%;
+  height: clamp(310px, 42vh, 500px);
+}
+
+.model-preview-status {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid color-mix(in srgb, var(--bd3) 75%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--well) 82%, transparent);
+  color: var(--caption);
+  font-size: var(--text-label);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  backdrop-filter: blur(8px);
+}
+
+.model-preview-light {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--idle);
+}
+
+.model-preview[data-state='ready'] .model-preview-light {
+  background: var(--live);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--live) 75%, transparent);
+}
+
+.model-preview[data-state='error'] .model-preview-light {
+  background: var(--alarm);
+}
+
+.model-preview figcaption {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid color-mix(in srgb, var(--bd3) 75%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--well) 82%, transparent);
+  color: var(--detail);
+  font-size: var(--text-control);
+  backdrop-filter: blur(8px);
+}
+
+.model-preview figcaption > span:first-child {
+  color: var(--caption);
+  font-size: var(--text-label);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+}
+
+.model-preview figcaption small {
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--detail);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-preview-swatches {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-xs);
+}
+
+.model-preview-swatches i {
+  width: 16px;
+  height: 16px;
+}
+
 .model-fields.two > * {
   min-width: 0;
   flex: 1;
@@ -355,5 +453,9 @@
 
   .model-binding code {
     grid-column: 1 / -1;
+  }
+
+  .model-preview figcaption small {
+    display: none;
   }
 }

@@ -4,6 +4,7 @@ import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import {
   MAX_MODEL_MORPHS,
   bindingDomainValue,
+  type ModelAsset,
   type ModelBinding,
   type ModelLibrary,
   type ModelMaterialMapping,
@@ -59,6 +60,7 @@ interface InitialTransform {
 interface Instance {
   key: string;
   setup: ModelSetup;
+  asset: ModelAsset;
   target: ModelTarget;
   abort: AbortController;
   root: THREE.Group | null;
@@ -68,7 +70,6 @@ interface Instance {
   meshes: Map<number, THREE.Mesh[]>;
   materials: Map<number, THREE.Material[]>;
   geometry: Map<THREE.BufferGeometry, GeometryResource>;
-  camera: THREE.Camera | null;
   autoCamera: THREE.PerspectiveCamera;
   trouble: string | null;
 }
@@ -459,12 +460,6 @@ function mapObjects(instance: Instance, asset: ModelLibrary['assets'][number], g
     const found = materials.filter((material) => material.name === capability.name);
     instance.materials.set(capability.index, found.length ? found : (materials[capability.index] ? [materials[capability.index]] : []));
   }
-  const cameraNode = instance.setup.camera === null
-    ? undefined
-    : asset.capabilities.nodes.find((node) => node.camera === instance.setup.camera);
-  const selectedCamera = cameraNode ? instance.nodes.get(cameraNode.index) : undefined;
-  instance.camera = selectedCamera instanceof THREE.Camera ? selectedCamera : null;
-
   const bounds = new THREE.Box3().setFromObject(instance.root);
   const sphere = bounds.getBoundingSphere(new THREE.Sphere());
   const radius = Number.isFinite(sphere.radius) && sphere.radius > 1e-4 ? sphere.radius : 1;
@@ -580,6 +575,7 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
     const instance: Instance = {
       key,
       setup,
+      asset,
       target: modelTarget(gl),
       abort: new AbortController(),
       root: null,
@@ -589,7 +585,6 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
       meshes: new Map(),
       materials: new Map(),
       geometry: new Map(),
-      camera: null,
       autoCamera: new THREE.PerspectiveCamera(42, 1, 0.01, 1000),
       trouble: null,
     };
@@ -645,7 +640,14 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
     if (!instance.root) return;
 
     const overrides = applyBindings(instance, model, sample);
-    const camera = instance.camera ?? instance.autoCamera;
+    // A working setup preview can change cameras without changing or refetching
+    // its immutable GLB. Durable revisions still rebuild as before; this lookup
+    // simply makes the metadata handed to this frame authoritative.
+    const cameraNode = instance.setup.camera === null
+      ? undefined
+      : instance.asset.capabilities.nodes.find((node) => node.camera === instance.setup.camera);
+    const selectedCamera = cameraNode ? instance.nodes.get(cameraNode.index) : undefined;
+    const camera = selectedCamera instanceof THREE.Camera ? selectedCamera : instance.autoCamera;
     if (camera instanceof THREE.PerspectiveCamera) {
       camera.aspect = instance.target.width / instance.target.height;
       camera.updateProjectionMatrix();
@@ -773,6 +775,11 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
           instance = make(key, setup, asset);
           held.set(index, instance);
         }
+        // Material mappings, published defaults and preview camera selection
+        // are setup metadata, not immutable GLB resources. Keep the loaded
+        // instance and apply the current metadata instead of flashing through
+        // a fetch/parse cycle for every setup-editor keystroke.
+        instance.setup = setup;
         try {
           draw(instance, model, sample, palette, width, height);
           instance.trouble = null;
