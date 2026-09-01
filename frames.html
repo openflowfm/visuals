@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>visual[flow] frames</title>
+    <style>
+      html, body { margin: 0; background: #000; color: #ececed; overflow: hidden; }
+      body { font: 13px ui-monospace, monospace; }
+      #out { position: fixed; left: 0; bottom: 0; z-index: 1; padding: 8px 12px;
+             background: #000c; white-space: pre; }
+      canvas { position: fixed; top: 0; left: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="out">rendering…</div>
+    <canvas id="stage"></canvas>
+    <script type="module">
+      import { run } from '/frames.ts';
+      const out = document.getElementById('out');
+      run(document.getElementById('stage')).then(
+        (report) => { window.__frames = report; out.textContent = 'done'; },
+        (err) => { window.__framesError = String(err?.stack ?? err); out.textContent = String(err); },
+      );
+    </script>
+  </body>
+</html>

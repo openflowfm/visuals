@@ -200,9 +200,47 @@ uniform vec2 uRes;
 // Linear below the knee, asymptotic above it. Per channel, so a highlight that
 // has run away in one of them desaturates toward white the way film does,
 // rather than shifting hue on its way to being clipped.
+//
+// It only reaches one for an input well above one, which is the whole design and
+// was starved for as long as the buffer feeding it was eight bits: clamped at one
+// first, the brightest possible output was 0.908, and every white in the app was
+// a 232 grey. See createTarget.
 float shoulder(float x) {
   const float knee = ${KNEE.toFixed(3)};
   return x < knee ? x : knee + (1.0 - knee) * (1.0 - exp(-(x - knee) / (1.0 - knee)));
+}
+
+/*
+ * A little noise, so that eight bits stop being visible as eight bits.
+ *
+ * This is the last stage before the frame is quantised, and a smooth ramp across
+ * a wide area crosses far fewer than 256 levels — so it lands as a staircase of
+ * flat plateaus with a hard step between each, and the eye is extremely good at
+ * finding those. They read as contour lines drawn across something that should
+ * be continuous, which is the single thing that most reliably makes generated
+ * light look cheap next to filmed light.
+ *
+ * Triangular noise of one level, added before the write. It costs a hash and it
+ * turns each hard step into a dissolve between the two levels either side of it,
+ * which the eye integrates back into the gradient that was meant.
+ *
+ * **Spatial, not temporal.** A per-frame seed would dither better on paper and
+ * would also put a fine crawling shimmer across every flat area of a projected
+ * image, which is worse than the banding on a wall the size of a building.
+ */
+float ditherBits(vec2 at) {
+  vec3 seed = fract(vec3(at.xyx) * vec3(0.1031, 0.1030, 0.0973));
+  seed += dot(seed, seed.yzx + 33.33);
+  return fract((seed.x + seed.y) * seed.z);
+}
+
+vec3 dithered(vec3 c, vec2 pixel) {
+  // Two draws differenced gives a triangular distribution across two levels,
+  // which is the shape that leaves no correlation between the noise and the
+  // signal. One uniform draw would bias the plateaus it is trying to break up.
+  float low = ditherBits(pixel);
+  float high = ditherBits(pixel + 71.7);
+  return c + vec3((low - high) / 255.0);
 }
 
 void main() {
@@ -229,5 +267,5 @@ void main() {
     c = mix(c, vec3(1.0), max(line * 0.45, border));
   }
 
-  fragColor = vec4(c, 1.0);
+  fragColor = vec4(dithered(c, gl_FragCoord.xy), 1.0);
 }`;

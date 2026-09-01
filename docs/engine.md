@@ -168,6 +168,73 @@ npm run benchmark -- --sweep           # 1280, 1920, 2560, 3840
 npm run benchmark -- --edges=3840      # whatever you name
 ```
 
+## Looking at a frame
+
+`npm run frames` — the benchmark's sibling, and the question it answers is what a flow looks
+like rather than how fast it draws.
+
+```sh
+npm run frames -- --flows=halo,cage --at=0,1,2,3 --size=1920x1080
+npm run frames -- --flows=comet --at=1.5 --scheme=xenon --out=/tmp/look
+```
+
+It builds `visuals/frames.html` with vite, opens it in Electron, and writes one PNG per flow
+and beat into `visuals/frames-out/`, with a `stats.json` beside them.
+
+**Every shortcut around this has produced a wrong answer.** The obvious way to look at a flow
+is to compile its shader, set its uniforms by hand, and render it in a page — it is quick to
+write, and it is wrong in ways that do not announce themselves:
+
+- It fed `uLevel` where a `track` node reads `uTracks[]`, so every flow whose dynamics come
+  from the music measured as a still image, and a whole round of tuning went into fixing
+  "static" flows that were never static.
+- It drew the flow shader straight to the canvas, skipping the **output stage** — which is
+  where the shoulder is, and therefore where the picture is actually finished. Everything it
+  reported about brightness was about a frame nobody would ever see.
+- It was looked at through a screenshot, which is downscaled and JPEG-compressed. Banding does
+  not survive a JPEG. Neither does a specular highlight two pixels wide.
+
+So this drives the real `Compositor` through a real `Show`, at the real resolution, and writes
+a lossless file. Reading that file is how the two defects below were found, both of which had
+been in every frame the app had ever drawn.
+
+### Eight bits was not enough, in two separate ways
+
+`createTarget` made every intermediate buffer `RGBA8`. Three of them sit between a flow and
+the screen — the set's pass, the flow's own picture, and the feedback history — and eight bits
+in that position cost two things that both looked like the flows being at fault.
+
+**Light above white was discarded before the shoulder could use it.** The renderer carries
+colour past one on purpose, and the output stage's shoulder is asymptotic: it maps 1.0 to
+0.908 and only approaches 1.0 for inputs well above it. Quantised to eight bits first,
+everything above one clamped to one *before* the shoulder saw it, so the brightest pixel the
+app could produce was 232 of 255. Every white on every wall was a grey, by construction, and
+no flow could have fixed it.
+
+**And a gradient had nowhere to be smooth.** A halo falling off across a few hundred pixels
+crosses far fewer than 256 levels, so it arrived at the output stage already stepped. They are
+`RGBA16F` now where the driver allows it, which is what the `EXT_color_buffer_float` check is
+for.
+
+A dither at the final write finishes the job: triangular noise of one level, spatial rather
+than temporal, because a per-frame seed dithers better on paper and puts a crawling shimmer
+across every flat area of a projected image. `stats.json` reports a **terrace** figure — the
+mean length of a run of identical values inside a gradient, which is what a band physically
+is. The flows measured 4.3 and 7.6 before and 2.9 after; the footage this vocabulary was
+built to match measures between 3.9 and 7.1.
+
+### A gain stage inside a feedback loop
+
+Worth knowing because the eight-bit buffer was hiding it. A flow that reads `last`, composites
+the new frame with it and then runs the result through `spread/bloom` has put an amplifier
+inside a loop: each pass adds light to a picture that already contains the previous pass's
+addition. Loop gain above one means the frame runs to white, and it did — in under a second,
+on a float buffer. Clamping at eight bits had been holding two shipped flows up.
+
+The fix is wiring rather than a control: bloom the light being emitted *now* and composite
+that over the fading ghost, so the loop gain is the fade and nothing else. `bloom` and `comet`
+both do it that way.
+
 ## Throughput is not headroom
 
 **The most useful thing this has found, and it invalidated the first table it printed.**

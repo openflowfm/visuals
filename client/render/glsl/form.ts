@@ -152,15 +152,31 @@ vec3 formNormal(vec3 q, int mode, float thick, float extra) {
 // a bright ceiling over a dark floor with a sharp line between them, one hot
 // lamp hanging in it, and a few vertical strips of the accent for the curve to
 // smear as it turns. No environment map, no second pass, no cubemap to ship.
+const vec3 FORM_LAMP = vec3(0.35, 0.85, -0.4);
+const vec3 FORM_FILL = vec3(-0.7, 0.25, 0.62);
+
 vec3 formSky(vec3 ray) {
   float above = ray.y;
   vec3 ceiling = mix(uPrimary * 0.5, uChalk, smoothstep(0.05, 0.75, above));
   vec3 ground = mix(vec3(0.015), uSecondary * 0.45, smoothstep(-0.9, 0.0, above));
   vec3 room = mix(ground, ceiling, smoothstep(-0.02, 0.02, above));
-  float lamp = pow(clamp(dot(ray, normalize(vec3(0.35, 0.85, -0.4))), 0.0, 1.0), 40.0);
+  float lamp = pow(clamp(dot(ray, normalize(FORM_LAMP)), 0.0, 1.0), 40.0)
+           + pow(clamp(dot(ray, normalize(FORM_FILL)), 0.0, 1.0), 18.0) * 0.4;
   float strips = smoothstep(0.45, 0.75, abs(sin(atan(ray.x, ray.z) * 3.0)))
                * smoothstep(0.0, 0.5, above);
-  return room + vec3(1.0) * lamp * 2.0 + uAccent * strips * 0.4;
+  /*
+   * Bars across the ceiling, which is what a curved surface needs to be read as
+   * curved.
+   *
+   * A room made only of a horizon and one lamp gives a tube a single smooth
+   * gradient down its length, and a smooth gradient is what matte plastic looks
+   * like. What says *polished* is the room's own edges sliding along the
+   * surface as it turns: the reflection has to have something in it to smear.
+   * Four soft bars, brightest overhead, and they cost a fract and a smoothstep.
+   */
+  float bars = smoothstep(0.62, 0.98, abs(fract(ray.z * 2.1 + 0.5) * 2.0 - 1.0))
+             * smoothstep(0.1, 0.6, above);
+  return room + vec3(1.0) * lamp * 2.0 + uAccent * strips * 0.4 + uChalk * bars * 0.55;
 }
 
 vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
@@ -191,7 +207,23 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
 
   float tight = mix(120.0, 24.0, clamp(flare, 0.0, 1.0));
   float stride = formStride(mode);
-  float travelled = 0.0;
+  /*
+   * Start each ray a random fraction of a step along, and the contours go away.
+   *
+   * A march accumulates light in lumps, one per step, and with every ray
+   * starting at the same place neighbouring pixels take their lumps at the same
+   * depths. The sum then changes in visible jumps as the surface moves through
+   * a step boundary, and what that draws is a set of smooth contour lines
+   * following the shape — banding that looks exactly like the eight-bit kind
+   * and survives any amount of dithering at the end, because it is in the
+   * geometry rather than in the quantiser.
+   *
+   * Offsetting the start decorrelates the boundaries between neighbours, which
+   * trades the contours for a fine noise the eye integrates away. It costs one
+   * hash, where the alternative is more steps and the step count is what a form
+   * is charged against the shader budget.
+   */
+  float travelled = hash(p * 937.0) * stride * 0.08;
   float gathered = 0.0;
   float hit = 0.0;
   vec3 where = eye;
@@ -235,9 +267,34 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
 
   if (chrome > 0.002) {
     vec3 n = formNormal(where, mode, thick, extra);
-    float facing = pow(1.0 - clamp(dot(-ray, n), 0.0, 1.0), 3.0);
-    vec3 shell = formSky(reflect(ray, n)) * mix(0.45, 1.0, facing)
-               + vec3(1.0) * pow(facing, 2.5) * 0.5;
+    vec3 bounced = reflect(ray, n);
+    /*
+     * Fresnel at five, and a specular lobe that chrome sharpens.
+     *
+     * The surface reflected a room and still read as matte, and the reason is
+     * that a reflection alone is not a material: what the eye uses to judge one
+     * is the *highlight* — how tight it is, and how much brighter than
+     * everything around it. There was no highlight here at all, only the room
+     * scaled by a soft rim, so every tube came out the same flat wash of the
+     * colourway whatever chrome was set to.
+     *
+     * So the lamp gets a real lobe, tightened from a broad sheen to a hard
+     * glint as chrome rises, and driven well past white so it survives the
+     * shoulder as an actual blown highlight rather than a pale patch. Chrome
+     * stops being a mix amount and becomes what it is called: how polished.
+     */
+    float facing = pow(1.0 - clamp(dot(-ray, n), 0.0, 1.0), 5.0);
+    float polish = clamp(chrome, 0.0, 1.0);
+    float gloss = mix(8.0, 90.0, polish);
+    // Two lamps, from opposite quarters. One is a coin toss: a mirror direction
+    // sweeping a corridor of tubes simply misses it for most of the frame, and
+    // a highlight that is absent from nine tubes out of ten is not read as a
+    // sharp material, it is read as no material.
+    float glint = pow(clamp(dot(bounced, normalize(FORM_LAMP)), 0.0, 1.0), gloss)
+                + pow(clamp(dot(bounced, normalize(FORM_FILL)), 0.0, 1.0), gloss * 0.6) * 0.55;
+    vec3 shell = formSky(bounced) * mix(0.35, 1.0, facing)
+               + vec3(1.0) * glint * mix(1.4, 6.0, polish)
+               + uChalk * facing * 0.6;
     // Chrome falls off with how far the ray went to find it. Without this a
     // lattice is equally bright at every depth, so the far cells fill the frame
     // instead of receding into it and the picture has no black in it at all —

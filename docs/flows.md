@@ -520,6 +520,12 @@ it, and the size of that spill is how the eye judges how bright the thing was. C
 stage at one and there is no spill to find — a filament and a merely-lit line come out the
 same value, and the only tool left for saying "brighter" is a wider stroke.
 
+The buffers have to be deep enough to carry it, and for a long time they were not: every
+intermediate target was `RGBA8`, so the excess was quantised away before the output stage's
+shoulder could roll it back down into the top of the range, and the brightest pixel the app
+could draw was 232 of 255. See [the engine](./engine.md) for that and for the dither that
+goes with it.
+
 So three things carry the excess. `glow/neon` drives its filament past one, by an amount its
 `core` chooses; `form` keeps the light it gathered along the ray unclamped before deciding how
 white it is; and `charge` — the contrast every generator passes through — clamps at

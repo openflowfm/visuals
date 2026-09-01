@@ -1098,7 +1098,7 @@ const EXAMPLES: Scheme = {
             dolly: [0.3, 0.35],
             thick: 0.11,
             flare: [0.24, 0.22],
-            chrome: 0.42,
+            chrome: 0.72,
             apart: 0.85,
           },
         ],
@@ -1164,10 +1164,18 @@ const EXAMPLES: Scheme = {
         'pt/p -> creep/p',
         'creep/p -> ghost/p',
         'ghost/c -> stack/base',
-        'lit/c -> stack/top',
-        'stack/c -> prism/c',
+        // **The optics go on the fresh stroke, not on the composite.** A
+        // `spread` after the stack is inside the feedback loop, and a bloom is a
+        // gain stage: each pass adds light to a picture that already contains
+        // the last pass's addition, so the loop gain exceeds one and the frame
+        // runs to white. Eight bits hid it by clamping; a float buffer does not.
+        // Blooming the light being emitted *now* and compositing that over the
+        // fading ghost leaves the loop gain at the fade, which is what the fade
+        // is for.
+        'lit/c -> prism/c',
         'prism/c -> spill/c',
-        'spill/c -> o/c',
+        'spill/c -> stack/top',
+        'stack/c -> o/c',
       ],
     ),
 
@@ -1355,7 +1363,7 @@ const EXAMPLES: Scheme = {
       [
         ['pt', 'point'],
         ['spin', 'playback', 'phase'],
-        ['ring', 'array', 'ring', { count: 0.9, turn: [0, 1] }],
+        ['ring', 'array', 'ring', { count: 0.62, turn: [0, 1] }],
         // `line` rather than a closed shape, because inside a ring wedge a
         // segment is a spoke: the fold is what turns a row of lines into a
         // fountain, and no node had to know that.
@@ -1367,7 +1375,7 @@ const EXAMPLES: Scheme = {
         ['spoke', 'figure', 'line', { turn: 0, span: [0.2, 0.65] }],
         ['reach', 'vary', 'even', { steps: 0.5 }],
         ['spark', 'vary', 'few', { steps: 0.5 }],
-        ['lit', 'glow', 'neon', { core: [0.1, 0.6], halo: 0.22 }],
+        ['lit', 'glow', 'neon', { core: [0.06, 0.5], halo: 0.13 }],
         // **`creep`, not `zoom`, and a short fade.** Two mistakes worth leaving
         // written down, because a feedback loop punishes both silently. A
         // `zoom` is a fixed scale per *frame*, so the wake it draws is a fact
@@ -1377,13 +1385,21 @@ const EXAMPLES: Scheme = {
         // sixtieth of a second, which is not a trail, it is an accumulator —
         // it settled at a mean of 161 out of 255 with 4% black left in the
         // frame. Short enough to actually decay is much shorter than it sounds.
-        ['pull', 'lens', 'creep', { grow: 0.82 }],
+        ['pull', 'lens', 'creep', { grow: 0.95 }],
         ['ghost', 'last', undefined, { fade: 0.05 }],
-        ['stack', 'blend', 'add'],
+        // **`over`, not `add`, and a feedback loop is why.** Adding a frame to a
+        // decayed copy of itself is an accumulator: it only settles where
+        // something clamps it, and for a while something did — the buffer
+        // between the flow and the screen was eight bits, so the loop hit the
+        // ceiling and stopped. Given a float buffer to run in, the same graph
+        // went to a white screen in under a second. Stacking the new frame
+        // *over* the fading one is bounded by what compositing is, so the trail
+        // is as long as the fade says and no longer.
+        ['stack', 'blend', 'over'],
         ['e', 'track', 'level', undefined, undefined, undefined, 'master', 0.35],
         ['hit', 'lfo', 'pulse', { rate: 0.571, sync: 1 }],
         ['lift', 'math', 'max', { a: [0.42, 0.36] }],
-        ['spill', 'spread', 'bloom', { reach: 0.28, floor: 0.55 }],
+        ['spill', 'spread', 'bloom', { reach: 0.2, floor: 0.6 }],
         ['o', 'out'],
       ],
       [
@@ -1405,9 +1421,17 @@ const EXAMPLES: Scheme = {
         'pt/p -> pull/p',
         'pull/p -> ghost/p',
         'ghost/c -> stack/base',
-        'lit/c -> stack/top',
-        'stack/c -> spill/c',
-        'spill/c -> o/c',
+        // **The optics go on the fresh stroke, not on the composite.** A
+        // `spread` after the stack is inside the feedback loop, and a bloom is a
+        // gain stage: each pass adds light to a picture that already contains
+        // the last pass's addition, so the loop gain exceeds one and the frame
+        // runs to white. Eight bits hid it by clamping; a float buffer does not.
+        // Blooming the light being emitted *now* and compositing that over the
+        // fading ghost leaves the loop gain at the fade, which is what the fade
+        // is for.
+        'lit/c -> spill/c',
+        'spill/c -> stack/top',
+        'stack/c -> o/c',
       ],
     ),
   },

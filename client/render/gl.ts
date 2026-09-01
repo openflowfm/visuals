@@ -74,9 +74,51 @@ export interface Target {
   free(): void;
 }
 
+/**
+ * Whether this driver will let us render into half floats.
+ *
+ * Asked once per context and cached, because `getExtension` is not free and this
+ * is asked on every target a resize creates.
+ */
+const floatable = new WeakMap<WebGL2RenderingContext, boolean>();
+function halfFloatOk(gl: WebGL2RenderingContext): boolean {
+  const known = floatable.get(gl);
+  if (known !== undefined) return known;
+  const has = gl.getExtension('EXT_color_buffer_float') !== null;
+  floatable.set(gl, has);
+  return has;
+}
+
+/**
+ * Every intermediate buffer, in half floats where the driver allows it.
+ *
+ * This was RGBA8, and eight bits between the flow and the screen cost two things
+ * that both showed up as "it looks cheaper than the reference" and neither of
+ * which was in the flows.
+ *
+ * **Light above white was thrown away before anything could use it.** The
+ * renderer deliberately carries colour past one — see OVERBRIGHT — and the
+ * output stage's shoulder is built to roll that excess back down into the top of
+ * the range, which is what puts a genuinely white core on a lit stroke. Written
+ * to eight bits first, everything above one clamped to one *before* the shoulder
+ * saw it, and the shoulder maps one to 0.908. So no pixel the app has ever drawn
+ * reached higher than 232 of 255: our whites were grey, by construction, on
+ * every wall.
+ *
+ * **And a gradient had nowhere to be smooth.** A halo falling off over a few
+ * hundred pixels crosses far fewer than 256 levels, so it arrived at the output
+ * stage already stepped, and no amount of dithering at the end can put back
+ * detail that was quantised at the start. The contour rings visible across the
+ * dark side of a lit tube were this.
+ *
+ * Half floats rather than full: the precision needed is a few thousand levels
+ * across the range, not sixteen million, and this is three buffers at the wall's
+ * resolution plus the feedback history — bandwidth a show pays for every frame.
+ */
 export function createTarget(gl: WebGL2RenderingContext): Target {
   const texture = gl.createTexture()!;
   const framebuffer = gl.createFramebuffer()!;
+  const deep = halfFloatOk(gl);
   let w = 0;
   let h = 0;
 
@@ -85,7 +127,11 @@ export function createTarget(gl: WebGL2RenderingContext): Target {
     w = width;
     h = height;
     gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    if (deep) {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, width, height, 0, gl.RGBA, gl.HALF_FLOAT, null);
+    } else {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    }
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     // CLAMP_TO_EDGE and not REPEAT: an effect that samples past the edge should

@@ -143,3 +143,41 @@ describe('the shoulder', () => {
     );
   });
 });
+
+/** The shoulder, mirrored, so what it can and cannot reach is a fact and not a hope. */
+const shoulder = (x: number): number =>
+  x < KNEE ? x : KNEE + (1 - KNEE) * (1 - Math.exp(-(x - KNEE) / (1 - KNEE)));
+
+describe('the last stage before eight bits', () => {
+  it('needs light above white to make white, which is what the buffer feeds it', () => {
+    // The shoulder is asymptotic, so an input of exactly one comes out at 0.908
+    // — 232 of 255. For as long as the buffer between the flow and this stage
+    // was RGBA8, one was also the *most* it could ever be handed, so no pixel
+    // the app drew ever exceeded 232 and every white on every wall was a grey.
+    // Half floats are what let the overbright reach it. See createTarget.
+    expect(shoulder(1)).toBeCloseTo(0.908, 3);
+    expect(Math.round(shoulder(1) * 255)).toBe(232);
+    // Given real headroom it does reach the top of the range.
+    expect(Math.round(shoulder(4) * 255)).toBe(255);
+    // And it is monotone the whole way, or a highlight would fold back on itself.
+    let previous = -1;
+    for (let step = 0; step <= 200; step++) {
+      const at = shoulder((step / 200) * 5);
+      expect(at).toBeGreaterThanOrEqual(previous);
+      previous = at;
+    }
+  });
+
+  it('dithers, because a wide gradient crosses fewer than 256 levels', () => {
+    // The defect this removes is not subtle and is not in the flows: a halo
+    // falling off across a few hundred pixels lands as a staircase of flat
+    // plateaus with a hard step between each, and the eye reads those as contour
+    // lines drawn across something that should be continuous.
+    expect(OUTPUT_SHADER).toContain('dithered(c, gl_FragCoord.xy)');
+    // Triangular, from two draws differenced: one uniform draw would bias the
+    // plateaus it is trying to break up rather than dissolve them.
+    expect(OUTPUT_SHADER).toContain('(low - high) / 255.0');
+    // One level, so it is invisible on its own and never lifts black off zero.
+    expect(OUTPUT_SHADER).not.toContain('/ 128.0');
+  });
+});
