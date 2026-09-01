@@ -55,10 +55,11 @@ configured for it to draw a show.
 npm run visuals          # a show night: build, run the server, open the app — see docs/desktop.md
 npm run visuals:browser  # the same, in a dedicated Chrome instead of the app
 npm run benchmark        # every flow, as fast as this machine draws it — docs/engine.md
-npm run dev              # everything, opening the app on vite HMR; its backend stays local
-npm run dev:visuals      # the server alone: Link peer + bridge client + host, :17900
-npm run dev:visuals-ui   # the renderer with HMR, :5473, proxying /ws to the server
-npm run dev:visuals-app  # the HMR app + its backend, when vite is already running
+npm run dev              # every server in the repo at once, this app's window included
+npm run dev:visuals      # just this app: its vite server and its window, one command
+npm run dev:visuals-ui   # the renderer with HMR alone, :5473, proxying /ws to the server
+npm run dev:visuals-app  # the window alone, when vite is already running
+npm run dev:visuals-server  # the server alone: Link peer + bridge client + host, :17900
 npm run build:visuals    # the renderer into visuals/dist, which the server serves
 npm run dev:fake-live    # a bridge that isn't one, for working without Ableton
 npm --prefix visuals run mcp  # local stdio server for agent-authored flows and nodes
@@ -71,7 +72,7 @@ npm --prefix visuals run mcp  # local stdio server for agent-authored flows and 
 Electron shell. The shell supervises its own backend exactly as it does in production;
 vite proxies `/ws` and `/media` to that local child. The stack uses `concurrently -k`, so a
 port already in use takes the whole dev session down with it — if it dies on startup, look
-for a visuals app or standalone `dev:visuals` you left running.
+for a visuals app or standalone `dev:visuals-server` you left running.
 
 **That `-k` is why `npm run visuals` exists.** Ten dev processes where any one exiting kills
 the other nine is right for a dev loop and wrong for a gig: a watcher falling over would

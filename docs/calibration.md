@@ -28,12 +28,15 @@ server:
 OPENFLOW_CALIBRATION=1 npm run visuals
 ```
 
-For HMR, run the server and UI in two terminals:
+For HMR:
 
 ```sh
 OPENFLOW_CALIBRATION=1 npm run dev:visuals
-npm run dev:visuals-ui
 ```
+
+The app owns the server, so the variable reaches the child it starts. To drive a server of
+your own instead, `OPENFLOW_CALIBRATION=1 npm run dev:visuals-server` in one terminal and
+`npm run dev:visuals-ui` in another.
 
 Press `e`, then choose **calibrate** in the console.
 

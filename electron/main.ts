@@ -121,27 +121,30 @@ if (only(app)) {
     screen.on('display-removed', moved);
     screen.on('display-metrics-changed', moved);
 
-    // In dev the server is already up and opening onto it is the entire point,
-    // so there is nothing to settle for and nothing of ours to supervise.
-    const server = DEV
-      ? null
-      : supervise({
-          app: VISUALS,
-          env: {
-            OPENFLOW_VISUALS_DIST: rendererDist(),
-            // An app-owned backend serves this app, not the LAN. The standalone
-            // browser command may still bind broadly, and an explicit override
-            // wins.
-            OPENFLOW_VISUALS_HOST: process.env.OPENFLOW_VISUALS_HOST ?? '127.0.0.1',
-          },
-        });
+    // **The app owns the server in dev too**, which is the whole reason there is
+    // no second standalone visuals process to race it for 17900 or survive
+    // after the app closes. vite merely proxies `/ws` and `/media` to it.
+    const server = supervise({
+      app: VISUALS,
+      env: {
+        OPENFLOW_VISUALS_DIST: rendererDist(),
+        // An app-owned backend serves this app, not the LAN. The standalone
+        // browser command may still bind broadly, and an explicit override wins.
+        OPENFLOW_VISUALS_HOST: process.env.OPENFLOW_VISUALS_HOST ?? '127.0.0.1',
+      },
+    });
 
-    const up = server
-      ? await server.answered(TARGET, TARGET_HOST)
-      : await waitFor(TARGET, TARGET_HOST);
+    // What the window opens onto is not what was just started: in dev it is
+    // vite, which somebody else is running and which needs no settle — opening
+    // onto what is already there is the entire point. In production it is this
+    // app's own child, and the settle is what stops the window attaching to
+    // whatever else already held the port.
+    const up = DEV
+      ? await waitFor(TARGET, TARGET_HOST)
+      : await server.answered(TARGET, TARGET_HOST);
     // Gone before it ever listened. Its own exit handler has already decided
     // whether that was a restart or a quit; it is not ours to open onto.
-    if (server && !server.running) return;
+    if (!DEV && !server.running) return;
     if (!up) {
       console.error(
         DEV

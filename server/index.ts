@@ -722,8 +722,11 @@ function anchorOf(show: ReturnType<typeof buildShow>) {
  * printed in the middle of seven other processes' startup output, and it does
  * not mention this file, this port, or the visuals server at all.
  *
- * The usual cause is the one thing worth naming: a `dev:visuals` left running
- * from an earlier session, holding 17900 while the rest of the rig comes up.
+ * The usual cause is the one thing worth naming: a visuals app or a
+ * `dev:visuals-server` left running from an earlier session, holding 17900
+ * while the rest of the rig comes up. Every app that opens this port owns one
+ * of these as a child, so "the app is still open" and "a server is still up"
+ * are the same sentence.
  */
 let dying = false;
 const cannotListen = (err: NodeJS.ErrnoException) => {
@@ -736,9 +739,9 @@ const cannotListen = (err: NodeJS.ErrnoException) => {
   if (err.code === 'EADDRINUSE') {
     console.error(
       `visuals: port ${PORT} is already in use — something else is on it.\n` +
-        `visuals: usually a dev:visuals or npm run dev left running from an earlier session.\n` +
+        `visuals: usually a visuals app or npm run dev left running from an earlier session.\n` +
         `visuals: find it with  lsof -nP -iTCP:${PORT} -sTCP:LISTEN\n` +
-        `visuals: or run this one elsewhere with  OPENFLOW_VISUALS_PORT=17901 npm run dev:visuals`,
+        `visuals: or run this one elsewhere with  OPENFLOW_VISUALS_PORT=17901 npm run dev:visuals-server`,
     );
   } else {
     console.error(`visuals: could not listen on ${HOST}:${PORT} — ${err.message}`);

@@ -84,9 +84,10 @@ renderer.
 
 ## The dev loop, in this window
 
-`npm run dev` starts vite and opens this shell on `:5473`, so an edit to a shader, node or
-component lands in the real Electron window with React Fast Refresh intact. `npm run
-dev:visuals-app` remains the narrower command when vite is already running. `npm run
+`npm run dev:visuals` is the one to type: it starts vite and opens this shell on `:5473`,
+so an edit to a shader, node or component lands in the real Electron window with React Fast
+Refresh intact. `npm run dev` does the same alongside every other server in the repo, and
+`npm run dev:visuals-app` is the narrower command when vite is already running. `npm run
 visuals` is a rebuild and relaunch, which is right for checking what ships and wrong for the
 twenty edits before it.
 
