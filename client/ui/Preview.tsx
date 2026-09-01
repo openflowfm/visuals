@@ -36,7 +36,7 @@ export function Bench({
   flow,
   clock,
   live,
-  models = { assets: [], setups: [], notice: null },
+  models = { assets: [], setups: [], textures: [], notice: null },
   responses,
   onError,
 }: {

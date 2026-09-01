@@ -202,7 +202,7 @@ export function useShow(): {
   const [scheme, setScheme] = useState<Scheme | null>(null);
   const [library, setLibrary] = useState<Library | null>(null);
   const [media, setMedia] = useState<MediaAsset[]>([]);
-  const [models, setModels] = useState<ModelLibrary>({ assets: [], setups: [], notice: null });
+  const [models, setModels] = useState<ModelLibrary>({ assets: [], setups: [], textures: [], notice: null });
   const [grid, setGrid] = useState<SetGrid | null>(null);
   const [lab, setLab] = useState<LabState | null>(null);
   const [labLog, setLabLog] = useState<{ reviews: LabReviewRow[]; more: boolean } | null>(null);

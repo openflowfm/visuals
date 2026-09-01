@@ -72,7 +72,7 @@ export function modelPreviewDocument(
         },
       },
     },
-    library: { assets: [asset], setups: [setup], notice: null },
+    library: { assets: [asset], setups: [setup], textures: [], notice: null },
   };
 }
 

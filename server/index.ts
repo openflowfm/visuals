@@ -24,8 +24,8 @@ import { openLibrary } from './library.ts';
 import { buildShow, noTurning } from './show.ts';
 import { buildGrid } from './grid.ts';
 import { listMedia, mediaRoot, serveMedia } from './media.ts';
-import { MAX_MODEL_BYTES, MODEL_HASH } from '../model.ts';
-import { openModelStore, synchronizeModelNodes } from './models.ts';
+import { MAX_MODEL_BYTES, MAX_MODEL_TEXTURE_BYTES, MODEL_HASH } from '../model.ts';
+import { openModelStore, synchronizeModelNodes, type StoredImage } from './models.ts';
 import { readUp } from './up.ts';
 
 /**
@@ -120,8 +120,39 @@ function serve(req: http.IncomingMessage, res: http.ServerResponse): void {
     serveModelImport(req, res);
     return;
   }
+  if (url.pathname === '/models/textures/import') {
+    if (req.method !== 'POST') {
+      res.writeHead(405, { allow: 'POST', 'content-type': 'text/plain; charset=utf-8' });
+      res.end('method not allowed');
+      return;
+    }
+    serveTextureImport(req, res);
+    return;
+  }
+  if (url.pathname.startsWith('/models/textures/')) {
+    const hash = url.pathname.slice('/models/textures/'.length);
+    const stored = MODEL_HASH.test(hash) ? models.textureFile(hash) : null;
+    if (!stored) {
+      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('texture not found');
+      return;
+    }
+    serveStoredImage(res, stored);
+    return;
+  }
   if (url.pathname.startsWith('/models/assets/')) {
     const name = url.pathname.slice('/models/assets/'.length);
+    const thumbnail = name.match(/^([a-f0-9]{64})\/images\/(\d{1,4})$/);
+    if (thumbnail) {
+      const stored = models.assetImage(thumbnail[1]!, Number(thumbnail[2]));
+      if (!stored) {
+        res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+        res.end('image not found');
+        return;
+      }
+      serveStoredImage(res, stored);
+      return;
+    }
     const hash = name.endsWith('.glb') ? name.slice(0, -4) : '';
     const file = MODEL_HASH.test(hash) ? models.assetFile(hash) : null;
     if (!file) {
@@ -167,12 +198,28 @@ function serve(req: http.IncomingMessage, res: http.ServerResponse): void {
   res.end(fs.readFileSync(target));
 }
 
+/** Immutable image bytes, possibly a slice of a GLB, with a year of caching. */
+function serveStoredImage(res: http.ServerResponse, stored: StoredImage): void {
+  res.writeHead(200, {
+    'content-type': stored.mimeType,
+    'content-length': stored.bytes,
+    'cache-control': 'public, max-age=31536000, immutable',
+  });
+  fs.createReadStream(stored.file, { start: stored.byteOffset, end: stored.byteOffset + stored.bytes - 1 }).pipe(res);
+}
+
 /** One bounded same-origin upload. Nothing here accepts a path from the client. */
-function serveModelImport(req: http.IncomingMessage, res: http.ServerResponse): void {
+function collectUpload(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  limit: number,
+  tooLarge: string,
+  accept: (bytes: Buffer, name: string | null) => unknown,
+): void {
   const declared = Number(req.headers['content-length']);
-  if (Number.isFinite(declared) && declared > MAX_MODEL_BYTES) {
+  if (Number.isFinite(declared) && declared > limit) {
     res.writeHead(413, { 'content-type': 'text/plain; charset=utf-8' });
-    res.end('GLB is larger than 128 MiB');
+    res.end(tooLarge);
     req.destroy();
     return;
   }
@@ -187,8 +234,8 @@ function serveModelImport(req: http.IncomingMessage, res: http.ServerResponse): 
   };
   req.on('data', (chunk: Buffer) => {
     bytes += chunk.byteLength;
-    if (bytes > MAX_MODEL_BYTES) {
-      refuse(413, 'GLB is larger than 128 MiB');
+    if (bytes > limit) {
+      refuse(413, tooLarge);
       req.destroy();
       return;
     }
@@ -199,16 +246,28 @@ function serveModelImport(req: http.IncomingMessage, res: http.ServerResponse): 
     if (answered) return;
     try {
       const name = typeof req.headers['x-openflow-name'] === 'string'
-        ? decodeURIComponent(req.headers['x-openflow-name']) : 'model.glb';
-      const asset = models.import(Buffer.concat(chunks), name);
+        ? decodeURIComponent(req.headers['x-openflow-name']) : null;
+      const record = accept(Buffer.concat(chunks), name);
       answered = true;
       res.writeHead(201, { 'content-type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify(asset));
+      res.end(JSON.stringify(record));
       sendModels();
     } catch (error) {
       refuse(400, (error as Error).message);
     }
   });
+}
+
+function serveModelImport(req: http.IncomingMessage, res: http.ServerResponse): void {
+  collectUpload(req, res, MAX_MODEL_BYTES, 'GLB is larger than 128 MiB', (bytes, name) =>
+    models.import(bytes, name ?? 'model.glb'));
+}
+
+function serveTextureImport(req: http.IncomingMessage, res: http.ServerResponse): void {
+  const declaredType = typeof req.headers['content-type'] === 'string'
+    ? req.headers['content-type'].split(';')[0]!.trim().toLowerCase() : null;
+  collectUpload(req, res, MAX_MODEL_TEXTURE_BYTES, 'texture is larger than 32 MiB', (bytes, name) =>
+    models.importTexture(bytes, name ?? 'texture', declaredType === 'application/octet-stream' ? null : declaredType));
 }
 
 const sockets = new WebSocketServer({ server, path: VISUALS_WS_PATH });

@@ -15,7 +15,7 @@ import {
   type ResponseOverrides,
 } from '../../response.ts';
 
-const EMPTY_MODELS: ModelLibrary = { assets: [], setups: [], notice: null };
+const EMPTY_MODELS: ModelLibrary = { assets: [], setups: [], textures: [], notice: null };
 
 /**
  * Two passes and an output stage, where there used to be a stack of them.

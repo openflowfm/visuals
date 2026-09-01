@@ -11,6 +11,7 @@ import {
   type ModelLightSource,
   type ModelLightingSetup,
   type ModelMaterialMapping,
+  type ModelMaterialProperty,
   type ModelPaletteSource,
   type ModelSetup,
 } from '../../model.ts';
@@ -699,12 +700,7 @@ function resetInstance(instance: Instance): void {
 const axisOf = (property: string): 'x' | 'y' | 'z' => property.endsWith('-x') ? 'x' : property.endsWith('-y') ? 'y' : 'z';
 
 interface AppliedBindings {
-  materials: Map<number, Partial<{
-    metallic: number;
-    roughness: number;
-    opacity: number;
-    emissiveStrength: number;
-  }>>;
+  materials: Map<number, Partial<Record<ModelMaterialProperty, number>>>;
   lights: Map<string, Partial<Record<
     'intensity' | 'position-x' | 'position-y' | 'position-z' | 'target-x' | 'target-y' | 'target-z' | 'range' | 'inner-cone' | 'outer-cone',
     number
@@ -747,8 +743,7 @@ function applyBindings(instance: Instance, model: CircuitModel, sample: NumberSa
       actions.push(action);
     } else if (target.kind === 'material') {
       const held = applied.materials.get(target.material) ?? {};
-      if (target.property === 'emissive-strength') held.emissiveStrength = value;
-      else held[target.property] = value;
+      held[target.property] = value;
       applied.materials.set(target.material, held);
     } else if (target.kind === 'light') {
       const held = applied.lights.get(target.light) ?? {};
@@ -1184,7 +1179,7 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
         const color = rgb(palette[paletteIndex(mapped.source)] ?? 0xffffff);
         gl.uniform4f(meshProgram.uniform('uBaseColor'), facts.color.r, facts.color.g, facts.color.b, 1);
         gl.uniform3f(meshProgram.uniform('uEmissive'), facts.emissive.r, facts.emissive.g, facts.emissive.b);
-        gl.uniform1f(meshProgram.uniform('uEmissiveStrength'), override.emissiveStrength ?? facts.emissiveStrength);
+        gl.uniform1f(meshProgram.uniform('uEmissiveStrength'), override['emissive-strength'] ?? facts.emissiveStrength);
         gl.uniform1f(meshProgram.uniform('uMetallic'), override.metallic ?? facts.metallic);
         gl.uniform1f(meshProgram.uniform('uRoughness'), override.roughness ?? facts.roughness);
         gl.uniform1f(meshProgram.uniform('uOpacity'), override.opacity ?? facts.opacity);

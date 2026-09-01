@@ -78,7 +78,7 @@ describe('the reusable model node', () => {
     graph.cords.unshift({ from: 'driver/n', to: 'm/ring-01-spin' });
     graph.nodes.unshift({ id: 'driver', kind: 'value', value: 0.2, x: -100, y: 0 });
     const scheme = { flows: { proof: { name: 'Proof', circuit: graph } } } as unknown as Scheme;
-    const synced = synchronizeModelNodes(scheme, { assets: [], setups: [setup], notice: null } as ModelLibrary);
+    const synced = synchronizeModelNodes(scheme, { assets: [], setups: [setup], textures: [], notice: null } as ModelLibrary);
     const node = synced.flows.proof.circuit.nodes.find((entry) => entry.id === 'm')!;
     expect(node.modelPorts?.[0]).toMatchObject({ id: 'ring-01-spin', label: 'Meridian one' });
     expect(node.values).toEqual({ 'ring-01-spin': 0.3, 'ring-02-spin': 0.7 });

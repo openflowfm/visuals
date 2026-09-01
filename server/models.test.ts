@@ -2,8 +2,19 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { testGlb } from '../test/glb.ts';
-import { modelLightingPreset } from '../model.ts';
+import { testGlb, texturedGlb } from '../test/glb.ts';
+import { encodePng, pngHeaderOnly } from '../test/png.ts';
+import {
+  MAX_MODEL_IMAGE_EDGE,
+  MAX_MODEL_TEXTURE_OVERRIDES,
+  MODEL_CAPABILITY_VERSION,
+  MODEL_SLOTS,
+  modelLightingPreset,
+  modelPorts,
+  modelRecipe,
+  type ModelMaterialRecipe,
+  type ModelSetupDraft,
+} from '../model.ts';
 import { modelPlace, openModelStore, setupTargetSignature, suggestedTargetMap } from './models.ts';
 
 const made: string[] = [];
@@ -186,5 +197,140 @@ describe('the content-addressed model library', () => {
     expect(reconciled.materials[0]).toMatchObject({ material: 0, source: 'color-a' });
     expect(reconciled.camera).toBe(0);
     expect(setupTargetSignature(reconciled)).toBe(setupTargetSignature(original));
+  });
+});
+
+describe('material recipes and local textures', () => {
+  const png = (seed: number) => encodePng(2, 2, new Uint8Array(16).map((_, at) => (at * 37 + seed) & 0xff));
+
+  it('imports a PNG once as an immutable content-addressed override and refuses foreign bytes', () => {
+    const store = openModelStore(place());
+    const bytes = png(1);
+    const first = store.importTexture(bytes, '../Neon grid.png', 'image/png');
+    const second = store.importTexture(bytes, 'copy.png', null);
+    expect(first).toMatchObject({ name: 'Neon grid.png', mimeType: 'image/png', width: 2, height: 2, bytes: bytes.byteLength });
+    expect(second.hash).toBe(first.hash);
+    expect(store.library().textures).toHaveLength(1);
+    const stored = store.textureFile(first.hash)!;
+    expect(stored.mimeType).toBe('image/png');
+    expect(fs.readFileSync(stored.file)).toEqual(Buffer.from(bytes));
+    expect(store.textureFile('../scheme')).toBeNull();
+    expect(() => store.importTexture(pngHeaderOnly(MAX_MODEL_IMAGE_EDGE + 1, 8), 'huge.png', 'image/png'))
+      .toThrow('larger than the 4096 pixel edge ceiling');
+    expect(() => store.importTexture(bytes, 'photo.webp', 'image/webp')).toThrow('not a supported image type');
+    expect(() => store.importTexture(bytes, 'photo.jpg', 'image/jpeg')).toThrow('declared image/jpeg but the bytes are image/png');
+    expect(() => store.importTexture(new Uint8Array([1, 2, 3]), 'junk.png', null)).toThrow('not readable PNG or JPEG');
+    fs.writeFileSync(stored.file, png(2));
+    expect(store.textureFile(first.hash)).toBeNull();
+  });
+
+  it('validates recipes against the library, fills their defaults and bounds their numbers', () => {
+    const store = openModelStore(place());
+    const asset = store.import(texturedGlb(), 'quad.glb');
+    const texture = store.importTexture(png(3), 'grid.png', 'image/png');
+    const draft = (recipe: Partial<ModelMaterialRecipe>): ModelSetupDraft => ({
+      id: 'quad', name: 'Quad', assetHash: asset.hash, bindings: [],
+      materials: [{ material: 0, source: 'color-a', amount: 1, recipe: modelRecipe(recipe) }],
+      camera: null,
+    });
+    expect(() => store.save(draft({ slots: { baseColor: { kind: 'texture', hash: 'd'.repeat(64) } } as never })))
+      .toThrow('not in the model library');
+    expect(() => store.save(draft({ projection: 'spherical' as never }))).toThrow('invalid projection');
+    expect(() => store.save(draft({ textureMix: 2 }))).toThrow('texture mix must be between 0 and 1');
+    expect(() => store.save(draft({ uvScale: [1, Number.NaN] }))).toThrow('UV scale');
+    const saved = store.save(draft({ slots: { emissive: { kind: 'texture', hash: texture.hash } } as never, rim: 0.4 }));
+    expect(saved.materials[0]!.recipe).toMatchObject({
+      slots: { baseColor: { kind: 'authored' }, emissive: { kind: 'texture', hash: texture.hash } },
+      projection: 'uv', wrap: 'authored', rim: 0.4, bands: 0, normalStrength: 1,
+    });
+    const plain = store.save({ ...draft({}), materials: [{ material: 0, source: 'original', amount: 1 }] });
+    expect(plain.materials[0]).not.toHaveProperty('recipe');
+    const overrides = Array.from({ length: MAX_MODEL_TEXTURE_OVERRIDES + 1 }, (_, at) => store.importTexture(png(10 + at), `t${at}.png`, null).hash);
+    const pair = store.import(texturedGlb({
+      json: { materials: [{ name: 'One', pbrMetallicRoughness: {} }, { name: 'Two', pbrMetallicRoughness: {} }] },
+    }), 'pair.glb');
+    const slots = (hashes: string[]) => Object.fromEntries(
+      MODEL_SLOTS.slice(0, hashes.length).map((slot, at) => [slot, { kind: 'texture', hash: hashes[at] }]),
+    );
+    const spread = (count: number): ModelSetupDraft => ({
+      id: 'pair', name: 'Pair', assetHash: pair.hash, bindings: [], camera: null,
+      materials: [
+        { material: 0, source: 'original', amount: 1, recipe: modelRecipe({ slots: slots(overrides.slice(0, 5)) as never }) },
+        { material: 1, source: 'original', amount: 1, recipe: modelRecipe({ slots: slots(overrides.slice(5, count)) as never }) },
+      ],
+    });
+    expect(store.save(spread(MAX_MODEL_TEXTURE_OVERRIDES)).materials).toHaveLength(2);
+    expect(() => store.save(spread(MAX_MODEL_TEXTURE_OVERRIDES + 1)))
+      .toThrow(`at most ${MAX_MODEL_TEXTURE_OVERRIDES} local textures`);
+  });
+
+  it('publishes the new numeric recipe properties as stable bindings and refuses unknown ones', () => {
+    const store = openModelStore(place());
+    const asset = store.import(texturedGlb(), 'quad.glb');
+    const binding = (property: string): ModelSetupDraft => ({
+      id: 'quad', name: 'Quad', assetHash: asset.hash, camera: null, materials: [],
+      bindings: [{
+        id: 'grain', label: 'Grain', group: 'surface', default: 0.5, min: 0, max: 2,
+        target: { kind: 'material', material: 0, property: property as never },
+      }],
+    });
+    for (const property of ['normal-strength', 'texture-mix', 'uv-rotation', 'uv-offset-x', 'rim', 'bands']) {
+      expect(store.save(binding(property)).bindings[0]!.target).toMatchObject({ kind: 'material', property });
+    }
+    expect(() => store.save(binding('sparkle'))).toThrow('points outside');
+    expect(modelPorts(store.save(binding('scan')))).toEqual([{ id: 'grain', label: 'Grain', group: 'surface', default: 0.5 }]);
+  });
+
+  it('rebuilds capability records written by an older inspector from their bytes', () => {
+    const root = place();
+    const store = openModelStore(root);
+    const asset = store.import(texturedGlb(), 'quad.glb');
+    const record = path.join(root.assets, `${asset.hash}.json`);
+    const old = JSON.parse(fs.readFileSync(record, 'utf8'));
+    delete old.capabilities.inspector;
+    delete old.capabilities.images;
+    delete old.capabilities.textures;
+    fs.writeFileSync(record, JSON.stringify(old));
+    const listed = store.library().assets[0]!;
+    expect(listed.capabilities.inspector).toBe(MODEL_CAPABILITY_VERSION);
+    expect(listed.capabilities.images).toHaveLength(3);
+    expect(JSON.parse(fs.readFileSync(record, 'utf8')).capabilities.images).toHaveLength(3);
+  });
+
+  it('flags authored slots the replacement material no longer carries during reconciliation', () => {
+    const store = openModelStore(place());
+    const textured = store.import(texturedGlb(), 'v1.glb');
+    const flat = store.import(texturedGlb({
+      json: { asset: { version: '2.0', generator: 'flat' } },
+      material: { pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1] }, normalTexture: undefined, occlusionTexture: undefined },
+    }), 'v2.glb');
+    store.save({
+      id: 'quad', name: 'Quad', assetHash: textured.hash, bindings: [], camera: null,
+      materials: [{ material: 0, source: 'original', amount: 1, recipe: modelRecipe({ slots: { normal: { kind: 'none' } } as never }) }],
+    });
+    const preview = store.previewReconciliation('quad', flat.hash);
+    expect(preview.materials[0]).toMatchObject({ suggestion: 0, missingSlots: ['baseColor', 'occlusion'] });
+    const reconciled = store.reconcile('quad', flat.hash, { targets: {}, materials: { 0: 0 }, camera: null });
+    expect(reconciled.materials[0]!.recipe!.slots.normal).toEqual({ kind: 'none' });
+  });
+
+  it('locates embedded image bytes for thumbnails without handing out unsupported ones', () => {
+    const store = openModelStore(place());
+    const asset = store.import(texturedGlb({
+      images: [
+        { bytes: png(5), mimeType: 'image/png' },
+        { bytes: pngHeaderOnly(MAX_MODEL_IMAGE_EDGE * 2, 2), mimeType: 'image/png' },
+      ],
+    }), 'quad.glb');
+    const image = store.assetImage(asset.hash, 0)!;
+    expect(image.mimeType).toBe('image/png');
+    const handle = fs.openSync(image.file, 'r');
+    const slice = Buffer.alloc(image.bytes);
+    fs.readSync(handle, slice, 0, image.bytes, image.byteOffset);
+    fs.closeSync(handle);
+    expect(slice).toEqual(Buffer.from(png(5)));
+    expect(store.assetImage(asset.hash, 1)).toBeNull();
+    expect(store.assetImage(asset.hash, 7)).toBeNull();
+    expect(store.assetImage('z'.repeat(64), 0)).toBeNull();
   });
 });

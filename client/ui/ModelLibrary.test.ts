@@ -34,6 +34,10 @@ describe('the first-class model library', () => {
           materials: [],
           cameras: [],
           lights: [],
+          images: [],
+          samplers: [],
+          textures: [],
+          extensions: [],
           warnings: [],
         },
       };
@@ -50,6 +54,7 @@ describe('the first-class model library', () => {
         createdAt: '2026-09-01T00:00:00.000Z',
         updatedAt: '2026-09-01T00:00:00.000Z',
       }],
+      textures: [],
       notice: null,
     } satisfies ModelLibrary;
     const scheme = {
@@ -85,7 +90,7 @@ describe('the first-class model library', () => {
       importedAt: '2026-09-01T00:00:00.000Z',
       capabilities: {
         generator: 'test', version: '2.0', scenes: [], defaultScene: 0,
-        nodes: [], meshes: [], skins: [], animations: [], materials: [], cameras: [], lights: [], warnings: [],
+        nodes: [], meshes: [], skins: [], animations: [], materials: [], cameras: [], lights: [], images: [], samplers: [], textures: [], extensions: [], warnings: [],
       },
     } satisfies ModelLibrary['assets'][number];
     const draft = {

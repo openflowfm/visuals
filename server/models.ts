@@ -6,27 +6,44 @@ import {
   MAX_MODEL_BYTES,
   MAX_MODEL_LIGHTS,
   MAX_MODEL_MORPHS,
+  MAX_MODEL_TEXTURE_BYTES,
+  MAX_MODEL_TEXTURE_OVERRIDES,
+  MODEL_CAPABILITY_VERSION,
   MODEL_LIGHTING_PRESETS,
   MODEL_LIGHT_SOURCES,
   MODEL_LIGHT_SPACES,
   MODEL_LIGHT_TYPES,
   MODEL_HASH,
+  MODEL_MATERIAL_PROPERTIES,
+  MODEL_PROJECTIONS,
+  MODEL_RECIPE_WRAPS,
   MODEL_SETUP_ID,
+  MODEL_SLOTS,
   bindingTargetKey,
+  imageRefusal,
   inspectGlb,
+  materialTextureUse,
   modelLightingOf,
   modelLightingPreset,
   modelPorts,
+  modelRecipe,
   reconcileBindings,
+  setupTextureOverrides,
+  sniffImage,
   type ModelAsset,
   type ModelBinding,
   type ModelBindingTarget,
+  type ModelImageType,
   type ModelLibrary,
   type ModelLightingSetup,
   type ModelMaterialMapping,
+  type ModelMaterialRecipe,
   type ModelRevisionDecision,
   type ModelSetup,
   type ModelSetupDraft,
+  type ModelSlot,
+  type ModelSlotSource,
+  type ModelTextureAsset,
 } from '../model.ts';
 import type { Scheme } from '../protocol.ts';
 import { openflowHome } from './home.ts';
@@ -36,12 +53,20 @@ export interface ModelPlace {
   root: string;
   assets: string;
   setups: string;
+  /** Imported local texture overrides: immutable, content-addressed, never the media directory. */
+  textures: string;
 }
 
 export function modelPlace(root = process.env.OPENFLOW_VISUALS_MODELS ?? path.join(openflowHome(), 'visuals', 'models')): ModelPlace {
-  const place = { root, assets: path.join(root, 'assets'), setups: path.join(root, 'setups') };
+  const place = {
+    root,
+    assets: path.join(root, 'assets'),
+    setups: path.join(root, 'setups'),
+    textures: path.join(root, 'textures'),
+  };
   fs.mkdirSync(place.assets, { recursive: true });
   fs.mkdirSync(place.setups, { recursive: true });
+  fs.mkdirSync(place.textures, { recursive: true });
   return place;
 }
 
@@ -50,14 +75,29 @@ export interface ReconciliationPreview {
   fromAssetHash: string;
   toAssetHash: string;
   bindings: ReturnType<typeof reconcileBindings>;
-  materials: { mapping: ModelMaterialMapping; suggestion: number | null }[];
+  materials: {
+    mapping: ModelMaterialMapping;
+    suggestion: number | null;
+    /** Slots the recipe leaves authored whose suggested replacement carries no texture. */
+    missingSlots: ModelSlot[];
+  }[];
   camera: number | null;
+}
+
+/** Encoded image bytes with the type a browser should be told. */
+export interface StoredImage {
+  file: string;
+  mimeType: ModelImageType;
+  byteOffset: number;
+  bytes: number;
 }
 
 export interface ModelStore {
   library(): ModelLibrary;
   /** Store immutable bytes and their derived capability record. */
   import(bytes: Uint8Array, originalName: string): ModelAsset;
+  /** Store one PNG or JPEG as an immutable local texture override. */
+  importTexture(bytes: Uint8Array, originalName: string, declaredType: string | null): ModelTextureAsset;
   /** Create or replace one reusable OpenFlow-owned setup. */
   save(draft: ModelSetupDraft): ModelSetup;
   /** Preview name/path matches before changing which immutable asset a setup uses. */
@@ -65,8 +105,13 @@ export interface ModelStore {
   /** Explicitly accept a complete binding-id to target reconciliation. */
   reconcile(setupId: string, assetHash: string, decision: ModelRevisionDecision): ModelSetup;
   assetFile(hash: string): string | null;
+  /** Where one decodable embedded image sits inside a stored GLB, for thumbnails. */
+  assetImage(hash: string, index: number): StoredImage | null;
+  textureFile(hash: string): StoredImage | null;
   revision(): number;
 }
+
+const TEXTURE_EXTENSION: Record<ModelImageType, string> = { 'image/png': 'png', 'image/jpeg': 'jpg' };
 
 const sha = (bytes: Uint8Array | string): string => createHash('sha256').update(bytes).digest('hex');
 const setupRevision = (setup: Omit<ModelSetup, 'revision' | 'updatedAt'>): string =>
@@ -121,6 +166,19 @@ function assetRecord(file: string): ModelAsset | null {
   }
 }
 
+function textureRecord(file: string): ModelTextureAsset | null {
+  if (!ordinaryFile(file)) return null;
+  try {
+    const value = JSON.parse(fs.readFileSync(file, 'utf8')) as ModelTextureAsset;
+    if (!value || !MODEL_HASH.test(value.hash) || typeof value.name !== 'string' ||
+        !(value.mimeType in TEXTURE_EXTENSION) || !Number.isFinite(value.bytes) ||
+        !Number.isInteger(value.width) || !Number.isInteger(value.height)) return null;
+    return value;
+  } catch {
+    return null;
+  }
+}
+
 function setupRecord(file: string): ModelSetup | null {
   if (!ordinaryFile(file)) return null;
   try {
@@ -162,7 +220,7 @@ function targetExists(target: ModelBindingTarget, asset: ModelAsset, lighting: M
   if (target.kind === 'animation') return c.animations[target.animation]?.name === target.name;
   if (target.kind === 'material') {
     return c.materials[target.material] !== undefined &&
-      ['metallic', 'roughness', 'opacity', 'emissive-strength'].includes(target.property);
+      (MODEL_MATERIAL_PROPERTIES as readonly string[]).includes(target.property);
   }
   if (target.kind === 'light') {
     return lighting.lights.some((light) => light.id === target.light) && [
@@ -279,9 +337,63 @@ function checkedLighting(raw: ModelLightingSetup | undefined): ModelLightingSetu
   };
 }
 
-function checkedMaterials(materials: readonly ModelMaterialMapping[], asset: ModelAsset): ModelMaterialMapping[] {
+const checkedPair = (value: readonly number[], label: string, limit: number): [number, number] => {
+  if (value.length !== 2 || value.some((entry) => !Number.isFinite(entry) || Math.abs(entry) > limit)) {
+    throw new Error(`${label} must be two finite numbers within ±${limit}`);
+  }
+  return [value[0]!, value[1]!];
+};
+
+const checkedUnit = (value: number, label: string, max = 1): number => {
+  if (!Number.isFinite(value) || value < 0 || value > max) throw new Error(`${label} must be between 0 and ${max}`);
+  return value;
+};
+
+function checkedRecipe(
+  raw: ModelMaterialRecipe | undefined,
+  label: string,
+  textures: ReadonlySet<string>,
+): ModelMaterialRecipe | undefined {
+  if (raw === undefined) return undefined;
+  const recipe = modelRecipe(raw);
+  const slots = Object.fromEntries(MODEL_SLOTS.map((slot): [ModelSlot, ModelSlotSource] => {
+    const source = recipe.slots[slot];
+    if (!source || typeof source !== 'object') throw new Error(`${label} ${slot} slot has no source`);
+    if (source.kind === 'authored' || source.kind === 'none') return [slot, { kind: source.kind }];
+    if (source.kind !== 'texture') throw new Error(`${label} ${slot} slot has an invalid source`);
+    if (!MODEL_HASH.test(source.hash) || !textures.has(source.hash)) {
+      throw new Error(`${label} ${slot} slot points at a texture which is not in the model library`);
+    }
+    return [slot, { kind: 'texture', hash: source.hash }];
+  })) as Record<ModelSlot, ModelSlotSource>;
+  if (!MODEL_PROJECTIONS.includes(recipe.projection)) throw new Error(`${label} has an invalid projection`);
+  if (!MODEL_RECIPE_WRAPS.includes(recipe.wrap)) throw new Error(`${label} has an invalid wrap mode`);
+  if (!Number.isFinite(recipe.uvRotation) || Math.abs(recipe.uvRotation) > Math.PI * 100) {
+    throw new Error(`${label} UV rotation is not finite and bounded`);
+  }
+  return {
+    slots,
+    projection: recipe.projection,
+    wrap: recipe.wrap,
+    uvScale: checkedPair(recipe.uvScale, `${label} UV scale`, 64),
+    uvOffset: checkedPair(recipe.uvOffset, `${label} UV offset`, 64),
+    uvRotation: recipe.uvRotation,
+    textureMix: checkedUnit(recipe.textureMix, `${label} texture mix`),
+    normalStrength: checkedUnit(recipe.normalStrength, `${label} normal strength`, 4),
+    occlusionStrength: checkedUnit(recipe.occlusionStrength, `${label} occlusion strength`),
+    rim: checkedUnit(recipe.rim, `${label} rim`),
+    scan: checkedUnit(recipe.scan, `${label} scan`),
+    bands: checkedUnit(recipe.bands, `${label} bands`),
+  };
+}
+
+function checkedMaterials(
+  materials: readonly ModelMaterialMapping[],
+  asset: ModelAsset,
+  textures: ReadonlySet<string>,
+): ModelMaterialMapping[] {
   const seen = new Set<number>();
-  return materials.map((mapping) => {
+  const checked = materials.map((mapping) => {
     if (!asset.capabilities.materials[mapping.material]) throw new Error(`material ${mapping.material} is not in ${asset.name}`);
     if (seen.has(mapping.material)) throw new Error(`material ${mapping.material} is mapped more than once`);
     seen.add(mapping.material);
@@ -291,8 +403,34 @@ function checkedMaterials(materials: readonly ModelMaterialMapping[], asset: Mod
     if (!Number.isFinite(mapping.amount) || mapping.amount < 0 || mapping.amount > 1) {
       throw new Error(`material ${mapping.material} amount must be normalized`);
     }
-    return { ...mapping };
+    const recipe = checkedRecipe(mapping.recipe, `material ${mapping.material}`, textures);
+    return { material: mapping.material, source: mapping.source, amount: mapping.amount, ...(recipe ? { recipe } : {}) };
   });
+  if (setupTextureOverrides(checked).length > MAX_MODEL_TEXTURE_OVERRIDES) {
+    throw new Error(`a setup may reference at most ${MAX_MODEL_TEXTURE_OVERRIDES} local textures`);
+  }
+  return checked;
+}
+
+/**
+ * Capability records are derived from bytes and may be rebuilt. A record
+ * written by an older inspector is re-read from its GLB once, here, rather
+ * than making every reader tolerate a shape the inspector no longer writes.
+ */
+function freshAssetRecord(place: ModelPlace, file: string): ModelAsset | null {
+  const record = assetRecord(file);
+  if (!record || record.capabilities.inspector === MODEL_CAPABILITY_VERSION) return record;
+  const glb = path.join(place.assets, `${record.hash}.glb`);
+  if (!ordinaryFile(glb)) return record;
+  try {
+    const bytes = fs.readFileSync(glb);
+    if (sha(bytes) !== record.hash) return record;
+    const rebuilt: ModelAsset = { ...record, capabilities: inspectGlb(bytes) };
+    atomicJson(file, rebuilt);
+    return rebuilt;
+  } catch {
+    return record;
+  }
 }
 
 export function openModelStore(place: ModelPlace = modelPlace()): ModelStore {
@@ -300,13 +438,37 @@ export function openModelStore(place: ModelPlace = modelPlace()): ModelStore {
   let notice: string | null = null;
 
   const assets = (): ModelAsset[] =>
-    readRecords(place.assets, '.json', assetRecord).sort((a, b) => a.name.localeCompare(b.name));
+    readRecords(place.assets, '.json', (file) => freshAssetRecord(place, file)).sort((a, b) => a.name.localeCompare(b.name));
   const setups = (): ModelSetup[] =>
     readRecords(place.setups, '.json', setupRecord).sort((a, b) => a.name.localeCompare(b.name));
+  const textures = (): ModelTextureAsset[] =>
+    readRecords(place.textures, '.json', textureRecord).sort((a, b) => a.name.localeCompare(b.name));
   const asset = (hash: string): ModelAsset | null => {
     if (!MODEL_HASH.test(hash)) return null;
-    const found = assetRecord(path.join(place.assets, `${hash}.json`));
+    const found = freshAssetRecord(place, path.join(place.assets, `${hash}.json`));
     return found?.hash === hash ? found : null;
+  };
+  const texture = (hash: string): ModelTextureAsset | null => {
+    if (!MODEL_HASH.test(hash)) return null;
+    const found = textureRecord(path.join(place.textures, `${hash}.json`));
+    return found?.hash === hash ? found : null;
+  };
+  const textureHashes = (): Set<string> => new Set(textures().map((entry) => entry.hash));
+
+  const writeOnce = (file: string, bytes: Uint8Array) => {
+    if (ordinaryFile(file)) return;
+    const temporary = `${file}.${process.pid}.tmp`;
+    try {
+      fs.writeFileSync(temporary, bytes, { flag: 'wx' });
+      fs.renameSync(temporary, file);
+    } catch (error) {
+      try {
+        fs.rmSync(temporary, { force: true });
+      } catch {
+        // Keep the original error.
+      }
+      throw error;
+    }
   };
   const setup = (id: string): ModelSetup | null => {
     if (!MODEL_SETUP_ID.test(id)) return null;
@@ -326,7 +488,7 @@ export function openModelStore(place: ModelPlace = modelPlace()): ModelStore {
       name: draft.name.trim().slice(0, 100),
       assetHash: raw.hash,
       bindings: checkedBindings(draft.bindings, raw, lighting),
-      materials: checkedMaterials(draft.materials, raw),
+      materials: checkedMaterials(draft.materials, raw, textureHashes()),
       lighting,
       camera: draft.camera === undefined ? null : draft.camera,
       createdAt: original?.createdAt ?? now,
@@ -340,7 +502,7 @@ export function openModelStore(place: ModelPlace = modelPlace()): ModelStore {
   };
 
   return {
-    library: () => ({ assets: assets(), setups: setups(), notice }),
+    library: () => ({ assets: assets(), setups: setups(), textures: textures(), notice }),
     revision: () => rev,
     import(bytes, originalName) {
       if (bytes.byteLength === 0) throw new Error('empty GLB');
@@ -349,24 +511,11 @@ export function openModelStore(place: ModelPlace = modelPlace()): ModelStore {
       const hash = sha(bytes);
       const glb = path.join(place.assets, `${hash}.glb`);
       const metadata = path.join(place.assets, `${hash}.json`);
-      let record = assetRecord(metadata);
+      let record = freshAssetRecord(place, metadata);
       if (ordinaryFile(glb) && sha(fs.readFileSync(glb)) !== hash) {
         throw new Error('stored model asset no longer matches its content address');
       }
-      if (!ordinaryFile(glb)) {
-        const temporary = `${glb}.${process.pid}.tmp`;
-        try {
-          fs.writeFileSync(temporary, bytes, { flag: 'wx' });
-          fs.renameSync(temporary, glb);
-        } catch (error) {
-          try {
-            fs.rmSync(temporary, { force: true });
-          } catch {
-            // Keep the original error.
-          }
-          throw error;
-        }
-      }
+      writeOnce(glb, bytes);
       if (!record) {
         record = {
           hash,
@@ -374,6 +523,36 @@ export function openModelStore(place: ModelPlace = modelPlace()): ModelStore {
           bytes: bytes.byteLength,
           importedAt: new Date().toISOString(),
           capabilities,
+        };
+        atomicJson(metadata, record);
+      }
+      rev += 1;
+      notice = null;
+      return record;
+    },
+    importTexture(bytes, originalName, declaredType) {
+      if (bytes.byteLength === 0) throw new Error('empty image');
+      if (bytes.byteLength > MAX_MODEL_TEXTURE_BYTES) throw new Error('texture is larger than 32 MiB');
+      const facts = sniffImage(bytes);
+      const refusal = imageRefusal(facts, declaredType);
+      if (refusal || !facts) throw new Error(refusal ?? 'the image header is not readable PNG or JPEG');
+      const hash = sha(bytes);
+      const file = path.join(place.textures, `${hash}.${TEXTURE_EXTENSION[facts.mimeType]}`);
+      const metadata = path.join(place.textures, `${hash}.json`);
+      let record = textureRecord(metadata);
+      if (ordinaryFile(file) && sha(fs.readFileSync(file)) !== hash) {
+        throw new Error('stored texture no longer matches its content address');
+      }
+      writeOnce(file, bytes);
+      if (!record) {
+        record = {
+          hash,
+          name: cleanName(originalName),
+          bytes: bytes.byteLength,
+          mimeType: facts.mimeType,
+          width: facts.width,
+          height: facts.height,
+          importedAt: new Date().toISOString(),
         };
         atomicJson(metadata, record);
       }
@@ -403,7 +582,12 @@ export function openModelStore(place: ModelPlace = modelPlace()): ModelStore {
           const suggestion = old
             ? next.capabilities.materials.find((material) => material.name === old.name)?.index ?? null
             : null;
-          return { mapping, suggestion };
+          const replacement = suggestion === null ? undefined : next.capabilities.materials[suggestion];
+          const recipe = modelRecipe(mapping.recipe);
+          const missingSlots = MODEL_SLOTS.filter((slot) =>
+            recipe.slots[slot].kind === 'authored' && !!old && materialTextureUse(old, slot) !== null &&
+            (!replacement || materialTextureUse(replacement, slot) === null));
+          return { mapping, suggestion, missingSlots };
         }),
         camera: held.camera === null ? null : (() => {
           const old = asset(held.assetHash)?.capabilities.cameras[held.camera!];
@@ -455,6 +639,41 @@ export function openModelStore(place: ModelPlace = modelPlace()): ModelStore {
       const file = path.join(place.assets, `${hash}.glb`);
       if (!ordinaryFile(file)) return null;
       return sha(fs.readFileSync(file)) === hash ? file : null;
+    },
+    assetImage(hash, index) {
+      const record = asset(hash);
+      const image = record?.capabilities.images?.[index];
+      if (!record || !image || image.unsupported !== null || image.mimeType === null) return null;
+      const file = this.assetFile(hash);
+      if (!file) return null;
+      // Image offsets in the record are relative to the binary chunk; walk the
+      // container again rather than trusting a stored absolute file position.
+      const bytes = fs.readFileSync(file);
+      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      let at = 12;
+      while (at + 8 <= bytes.byteLength) {
+        const length = view.getUint32(at, true);
+        const type = view.getUint32(at + 4, true);
+        at += 8;
+        if (type === 0x004e4942) {
+          if (image.byteOffset + image.bytes > length) return null;
+          return {
+            file,
+            mimeType: image.mimeType as ModelImageType,
+            byteOffset: at + image.byteOffset,
+            bytes: image.bytes,
+          };
+        }
+        at += length;
+      }
+      return null;
+    },
+    textureFile(hash) {
+      const record = texture(hash);
+      if (!record) return null;
+      const file = path.join(place.textures, `${hash}.${TEXTURE_EXTENSION[record.mimeType]}`);
+      if (!ordinaryFile(file) || sha(fs.readFileSync(file)) !== hash) return null;
+      return { file, mimeType: record.mimeType, byteOffset: 0, bytes: record.bytes };
     },
   };
 }

@@ -18,9 +18,16 @@ The three ownership layers deliberately do not collapse:
 
 | layer | owns | changes when |
 |---|---|---|
-| immutable asset | content-addressed GLB bytes and derived capabilities | different bytes are imported |
-| reusable setup | display name, selected published bindings, domains, material palette mappings, camera and lighting rig | the setup is edited or explicitly reconciled |
+| immutable asset | content-addressed GLB bytes, the images, samplers and textures embedded in them, derived capabilities; and any separately imported local texture, content-addressed the same way | different bytes are imported |
+| reusable setup | display name, selected published bindings, domains, material palette mappings and recipes, camera and lighting rig | the setup is edited or explicitly reconciled |
 | flow instance | setup id/revision snapshot, held values, modulation depths and cords | that flow is edited |
+
+A local texture override is an asset, not a setting: import stores its bytes at
+`~/.openflow/visuals/models/textures/<sha256>.<png|jpg>` beside a small record, and a recipe
+refers to it by hash. No image bytes ever sit inside a setup or a flow. The derived capability
+record beside a GLB carries an inspector version; a record written by an older inspector is
+rebuilt from its bytes the first time the library reads it, so an asset imported before texture
+inspection existed shows its textures without being imported again.
 
 A filename is informational, a setup id is reusable configuration, and a binding id is a
 graph address. Treating any two as the same would either duplicate large assets, make one
@@ -55,9 +62,23 @@ saved setups and owns only that flow instance's normalized values, depths and co
 
 `inspectGlb` parses the GLB 2.0 container and its JSON without executing content or resolving a
 URI. It reports scenes and roots; node paths, hierarchy and matrix/TRS transforms; meshes,
-primitive modes, attributes and counts; named morph targets; skins, skeletons and joints;
-named animation clips, channels, interpolation, key counts and duration; material factors;
-cameras; and `KHR_lights_punctual` lights. Those are the facts shown in **Models**.
+primitive modes, attributes (so `TEXCOORD_0`, `TEXCOORD_1` and `TANGENT` are visible per
+primitive) and counts; named morph targets; skins, skeletons and joints; named animation clips,
+channels, interpolation, key counts and duration; material factors, alpha mode and cutoff,
+double-sidedness and `KHR_materials_unlit`; every image, sampler and texture; which texture each
+material's base colour, metallic/roughness, normal, occlusion and emissive slot reads, with its UV
+set, `KHR_texture_transform` offset/scale/rotation and normal scale or occlusion strength; cameras;
+`KHR_lights_punctual` lights; and every extension the file uses or requires, marked supported or
+merely inspected. Those are the facts shown in **Models**.
+
+**An image is measured before it is ever decoded.** The inspector reads only the PNG or JPEG
+header of each embedded image and records its type and size. A picture larger than 4,096 pixels
+on either edge, one whose declared type disagrees with its bytes, an unsupported type such as
+WebP or KTX2, an unreadable header, an external URI, or an image past the 64-per-asset ceiling is
+marked `unsupported` with the reason and never reaches a decoder. The per-asset decode budget is
+256 MiB of RGBA with mips; images past it are marked the same way. The asset still imports and its
+geometry still draws; the affected slot falls back to its flat factor and the warning says why.
+The same header check guards imported local textures, which are capped at 32 MiB encoded.
 
 The import boundary accepts at most 128 MiB, at most 8 MiB of JSON, 4,096 nodes or members in
 the major collections, 16,384 primitives, and 16,384 animation channels. It rejects malformed
@@ -65,15 +86,33 @@ headers, lengths and glTF versions. Library paths accept only safe hashes/setup 
 files; symlinks, traversal and absolute asset addresses do not cross the HTTP boundary. The
 renderer accepts the imported blob itself and blocks external GLB resource URLs, preserving the
 stage rule that nothing is fetched from a CDN. Warnings make unsupported external references
-visible instead of silently following them.
+visible instead of silently following them. Thumbnails in **Models** are served as byte ranges of
+the stored GLB (`/models/assets/<hash>/images/<index>`), only for images the inspector accepted.
 
 ## A setup publishes a small, stable surface
 
 The inspector can publish any chosen translation, rotation or scale component; named morph;
-animation clip; metallic, roughness, opacity or emissive-strength material property; selected
-light position, aim, strength, range or cone component; or environment strength and rotation. A
-setup may publish at most 48 controls. This is an authoring ceiling and a faceplate decision:
-skins and all of their joints remain inspectable without dumping every bone into the graph.
+animation clip; a material's metallic, roughness, opacity, emissive strength, normal strength,
+occlusion strength, texture mix, UV scale, rotation or offset, or its rim, scan or bands amount;
+selected light position, aim, strength, range or cone component; or environment strength and
+rotation. A setup may publish at most 48 controls. This is an authoring ceiling and a faceplate
+decision: skins and all of their joints remain inspectable without dumping every bone into the
+graph, and the full material recipe stays in the editor while only the chosen numbers become
+inlets.
+
+## A material recipe is typed, bounded and never GLSL
+
+Each material mapping may carry a **recipe**: for each of the five slots, whether it reads the
+texture the GLB authored, nothing (the flat factor), or an imported local texture by hash; a
+projection (`uv` or a bounded `triplanar`); a wrap override (authored, repeat, mirror, clamp); a
+UV scale, offset and rotation composed over the authored `KHR_texture_transform`; a texture mix
+between flat factor and full texture; normal and occlusion strength; and three curated effect
+amounts, **rim** (a fresnel glow in the mapped colour), **scan** (moving bands) and **bands**
+(quantised light, a printed look). Every field defaults to the authored look, so a mapping saved
+before recipes existed still reads, and a recipe can gain a field without invalidating a setup.
+A setup may reference at most eight local textures. Arbitrary shader text is deliberately not a
+field: it would compile at stage time, escape every resource bound, and have no stable graph
+contract.
 
 Lighting belongs to the reusable setup. **Studio**, **void** and **neon** are editable starting
 rigs, not renderer modes; changing any field makes the rig custom. A rig contains an analytic
