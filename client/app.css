@@ -22,7 +22,7 @@ html, body, #root {
   max-width: calc(100vw - 24px);
   padding: 8px 12px 6px;
   border: 1px solid #2c2c31;
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   background: rgb(10 10 11 / 0.82);
   color: #b7b7be;
   font-family: var(--mono);
@@ -45,7 +45,7 @@ html, body, #root {
 
 .panel h1 span {
   padding: 1px 6px;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   font-size: var(--text-label);
   letter-spacing: var(--track-label);
 }
@@ -58,7 +58,7 @@ html, body, #root {
 .bad-line {
   margin: 0 0 8px;
   padding: 6px 8px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   background: #3a1418;
   color: #ff8b8b;
   white-space: pre-wrap;
@@ -91,7 +91,7 @@ html, body, #root {
 .boundary button {
   padding: 4px 12px;
   border: 1px solid #2c2c31;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   background: #1c1c20;
   color: #b7b7be;
   font: inherit;
@@ -144,7 +144,7 @@ html, body, #root {
 kbd {
   padding: 0 3px;
   border: 1px solid #2c2c31;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   background: #151517;
 }
 
@@ -163,7 +163,7 @@ kbd {
 .panel dd.wall button {
   padding: 0 4px;
   border: 1px solid #2c2c31;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   background: #151517;
   color: #b7b7be;
   font: inherit;
