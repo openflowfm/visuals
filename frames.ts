@@ -124,9 +124,16 @@ export interface FramesReport {
     peakGeometries: number;
     peakTargets: number;
     peakShadows: number;
+    peakTextures: number;
+    peakTextureBytes: number;
+    /** Texture acquisitions served by an entry another instance or setup already made. */
+    textureReuse: number;
     loadingAtCapture: number;
+    decodingAtCapture: number;
     instancesAfterRelease: number;
     shadowsAfterRelease: number;
+    texturesAfterRelease: number;
+    textureBytesAfterRelease: number;
   };
   errors: string[];
 }
@@ -180,9 +187,15 @@ export async function run(canvas: HTMLCanvasElement): Promise<FramesReport> {
     peakGeometries: 0,
     peakTargets: 0,
     peakShadows: 0,
+    peakTextures: 0,
+    peakTextureBytes: 0,
+    textureReuse: 0,
     loadingAtCapture: 0,
+    decodingAtCapture: 0,
     instancesAfterRelease: 0,
     shadowsAfterRelease: 0,
+    texturesAfterRelease: 0,
+    textureBytesAfterRelease: 0,
   };
   const measureModels = () => {
     const held = compositor.modelResources();
@@ -190,7 +203,11 @@ export async function run(canvas: HTMLCanvasElement): Promise<FramesReport> {
     modelStats.peakGeometries = Math.max(modelStats.peakGeometries, held.geometries);
     modelStats.peakTargets = Math.max(modelStats.peakTargets, held.targets);
     modelStats.peakShadows = Math.max(modelStats.peakShadows, held.shadows);
+    modelStats.peakTextures = Math.max(modelStats.peakTextures, held.textures);
+    modelStats.peakTextureBytes = Math.max(modelStats.peakTextureBytes, held.textureBytes);
+    modelStats.textureReuse = held.textureReuse;
     modelStats.loadingAtCapture = held.loading;
+    modelStats.decodingAtCapture = held.decoding;
   };
   const dt = 1 / FPS;
   const perFrame = TEMPO / 60 / FPS;
@@ -261,6 +278,8 @@ export async function run(canvas: HTMLCanvasElement): Promise<FramesReport> {
   const releasedModels = compositor.modelResources();
   modelStats.instancesAfterRelease = releasedModels.instances;
   modelStats.shadowsAfterRelease = releasedModels.shadows;
+  modelStats.texturesAfterRelease = releasedModels.textures;
+  modelStats.textureBytesAfterRelease = releasedModels.textureBytes;
   compositor.free();
   return { renderer, width: WIDTH, height: HEIGHT, stats, sequences, models: modelStats, errors };
 }

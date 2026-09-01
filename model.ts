@@ -674,6 +674,27 @@ export function readGlb(bytes: ArrayBuffer | Uint8Array): GlbHeader {
   return { json, binary };
 }
 
+/**
+ * The binary chunk alone, found by walking chunk headers. Cheaper than
+ * `readGlb` when the JSON has already been inspected and only image bytes
+ * are wanted; the offsets in `ModelImageCapability` are relative to it.
+ */
+export function glbBinaryChunk(bytes: ArrayBuffer | Uint8Array): Uint8Array {
+  const raw = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  if (raw.byteLength < 20) return new Uint8Array();
+  const view = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+  let at = 12;
+  while (at + 8 <= raw.byteLength) {
+    const length = view.getUint32(at, true);
+    const type = view.getUint32(at + 4, true);
+    at += 8;
+    if (at + length > raw.byteLength) return new Uint8Array();
+    if (type === 0x004e4942) return raw.subarray(at, at + length);
+    at += length;
+  }
+  return new Uint8Array();
+}
+
 type Json = Record<string, unknown>;
 const records = (value: unknown): Json[] =>
   Array.isArray(value) ? value.filter((each): each is Json => !!each && typeof each === 'object' && !Array.isArray(each)) : [];

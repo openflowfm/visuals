@@ -161,11 +161,23 @@ instances in one expanded flow. Each instance loads the immutable local GLB, clo
 (including skeleton ownership), applies its normalized setup/instance controls, samples
 animation clips, and rasterizes the scene with depth into a multi-render target. The current
 bounded pass supports node transforms, four morph targets per geometry, skins up to 64 bones,
-authored PBR factors and opacity, the setup's camera or automatic framing, GGX direct lighting,
-and the analytic HDR environment. Texture maps and extension-specific PBR lobes are not yet
-sampled by this bounded stage material pass; texture import remains stage-safe inspection rather
-than an implied network fetch. Imported lights are inspected and become active only when adopted
-into the reusable rig.
+authored PBR factors, all five core material maps, the setup's camera or automatic framing, GGX
+direct lighting, and the analytic HDR environment. Base-colour and emissive pictures upload as
+sRGB; metallic/roughness, normal and occlusion pictures remain linear data. The pass composes
+`KHR_texture_transform` with the setup recipe, distinguishes UV0 and UV1, derives a tangent frame
+when a normal map has no authored tangents, and falls back to the geometric normal when there is
+no usable UV derivative. `OPAQUE`, `MASK` and sorted `BLEND` draws have deliberate depth-write
+behavior, alpha cutoff and double-sided culling; `KHR_materials_unlit` bypasses lighting. Other
+PBR lobes remain inspected but unsupported rather than silently approximated. Imported lights are
+inspected and become active only when adopted into the reusable rig.
+
+Image bytes are decoded at most four at a time and uploaded once per immutable picture and colour
+interpretation. A shared cache lets two setups or instances over one GLB reuse that upload while
+sampler objects carry each recipe's bounded wrap/filter choice separately. Five fixed material
+units and one fixed shadow unit fit the WebGL2 guaranteed sixteen; a context which cannot supply
+them draws the model transparent with a visible reason. The resource meter and hidden frame
+harness report uploaded texture count, estimated decoded bytes, pending decodes and shared
+acquisitions.
 
 The target is HDR `RGBA16F` where WebGL2 exposes float colour rendering, with an `RGBA8`
 fallback, two colour attachments for authored base plus `color-a`/`color-b` masks, and a 24-bit
@@ -176,10 +188,12 @@ samples those textures as one premultiplied colour source, so downstream lenses,
 spreads, blends, feedback, nested flows and the output stage use their existing paths unchanged.
 
 Leaving the flow aborts outstanding loads and releases scene clones, geometry buffers, colour and
-shadow textures, framebuffers and depth renderbuffers. Removing the caster releases its shadow
-target on the next frame. Context loss clears the same bank and restore constructs a
-new one. Missing, invalid or still-loading models draw transparent and report a visible renderer
-error; they do not take the rest of the graph down.
+shadow textures, framebuffers and depth renderbuffers. A shared image fetch survives one owner
+leaving and is aborted only when its last owner leaves; a decode completing after that point is
+closed without uploading or resurrecting a cache entry. Removing the caster releases its shadow
+target on the next frame. Context loss clears the same bank and restore constructs a new one.
+Missing, invalid or still-loading models draw transparent and report a visible renderer error;
+they do not take the rest of the graph down.
 
 The Models preview follows the same lifecycle: it exists only while a setup editor is mounted,
 is capped by the compositor's 960-pixel preview edge, and releases its model and WebGL resources

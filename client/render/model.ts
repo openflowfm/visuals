@@ -4,20 +4,38 @@ import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import {
   MAX_MODEL_LIGHTS,
   MAX_MODEL_MORPHS,
+  MODEL_SLOTS,
+  MODEL_SLOT_SRGB,
   bindingDomainValue,
+  decodedImageBytes,
+  glbBinaryChunk,
+  materialTextureUse,
   modelLightingOf,
+  modelRecipeOf,
   type ModelAsset,
   type ModelLibrary,
   type ModelLightSource,
   type ModelLightingSetup,
+  type ModelMaterialCapability,
   type ModelMaterialMapping,
   type ModelMaterialProperty,
+  type ModelMaterialRecipe,
   type ModelPaletteSource,
+  type ModelSamplerCapability,
   type ModelSetup,
+  type ModelSlot,
+  type ModelTextureAsset,
+  type ModelTextureUse,
 } from '../../model.ts';
 import { portId, type CircuitModel } from './circuit.ts';
 import type { NumberSample } from './evaluateNumber.ts';
 import type { Program } from './gl.ts';
+import {
+  createTextureCache,
+  textureEntryKey,
+  type TextureCache,
+  type TextureRequest,
+} from './modelTextures.ts';
 
 /** The model pass has a fixed fill-rate ceiling independent of projector size. */
 export const MAX_MODEL_EDGE = 1280;
@@ -25,8 +43,19 @@ export const MAX_MODEL_EDGE = 1280;
 export const MAX_MODEL_SHADOW_EDGE = 768;
 export const MAX_MODEL_BONES = 64;
 export { MAX_MODEL_MORPHS };
+/**
+ * Fragment texture units the pass reserves: five material maps on 0–4 and the
+ * shadow map on 15. WebGL2 guarantees sixteen. Units 0–4 belong to the flow
+ * program's own samplers, which the compositor binds after this pass returns.
+ */
+export const MODEL_MATERIAL_UNITS = [0, 1, 2, 3, 4] as const;
+export const MODEL_SHADOW_UNIT = 15;
+export const MODEL_TEXTURE_UNITS_NEEDED = 16;
+/** Anisotropic filtering, when the extension exists, is capped here. */
+export const MAX_MODEL_ANISOTROPY = 4;
 
 export const modelAssetUrl = (hash: string): string => `/models/assets/${hash}.glb`;
+export const modelTextureUrl = (hash: string): string => `/models/textures/${hash}`;
 
 interface ModelTarget {
   framebuffer: WebGLFramebuffer;
@@ -70,6 +99,7 @@ interface GeometryResource {
   mode: number;
   morphs: number;
   skinned: boolean;
+  uvSets: number;
 }
 
 interface InitialTransform {
@@ -79,8 +109,18 @@ interface InitialTransform {
   morphs: number[] | null;
 }
 
+/** One material slot's resolved picture for this instance and setup. */
+interface SlotUse {
+  key: string;
+  srgb: boolean;
+  sampler: string;
+  /** Authored `KHR_texture_transform`, or identity for an override. */
+  authored: ModelTextureUse | null;
+}
+
 interface Instance {
   key: string;
+  owner: string;
   setup: ModelSetup;
   asset: ModelAsset;
   target: ModelTarget;
@@ -97,6 +137,12 @@ interface Instance {
   boundsRadius: number;
   shadow: ShadowTarget | null;
   trouble: string | null;
+  /** The immutable bytes, kept only until the first texture acquisition is issued. */
+  bytes: ArrayBuffer | null;
+  /** Which material recipes the current slot uses were resolved from. */
+  wantedFor: readonly ModelMaterialMapping[] | null;
+  wantedTextures: readonly ModelTextureAsset[] | null;
+  slots: Map<string, SlotUse>;
 }
 
 export interface ModelBank {
@@ -111,6 +157,7 @@ export interface ModelBank {
     height: number,
     scope?: string,
     views?: Readonly<Record<string, ModelView>>,
+    seconds?: number,
   ): void;
   clear(): void;
   readonly error: string | null;
@@ -123,9 +170,25 @@ export interface ModelResourceStats {
   geometries: number;
   targets: number;
   shadows: number;
-  /** Instances whose immutable bytes or GLTF parse have not completed yet. */
+  /** Instances whose immutable bytes, GLTF parse or wanted textures have not completed yet. */
   loading: number;
+  /** Uploaded GPU textures shared across every instance and setup. */
+  textures: number;
+  /** Estimated decoded bytes of those textures, mips included. */
+  textureBytes: number;
+  /** Image decodes queued or running. */
+  decoding: number;
+  /** Texture acquisitions answered by an upload another owner already made. */
+  textureReuse: number;
 }
+
+const SLOT_UNIFORMS: Record<ModelSlot, string> = {
+  baseColor: 'uBaseMap',
+  metallicRoughness: 'uMetalRoughMap',
+  normal: 'uNormalMap',
+  occlusion: 'uOcclusionMap',
+  emissive: 'uEmissiveMap',
+};
 
 const VERTEX = `#version 300 es
 precision highp float;
@@ -137,10 +200,13 @@ layout(location=4) in vec3 aMorph2;
 layout(location=5) in vec3 aMorph3;
 layout(location=6) in vec4 aSkinIndex;
 layout(location=7) in vec4 aSkinWeight;
+layout(location=8) in vec2 aUv0;
+layout(location=9) in vec2 aUv1;
 
 uniform mat4 uModel;
 uniform mat4 uViewProjection;
 uniform mat4 uShadowMatrix;
+uniform mat4 uRootInverse;
 uniform mat3 uNormal;
 uniform mat4 uBind;
 uniform mat4 uBindInverse;
@@ -149,7 +215,10 @@ uniform vec4 uMorphWeights;
 uniform float uSkinned;
 out vec3 vNormal;
 out vec3 vWorld;
+out vec3 vModel;
 out vec4 vShadow;
+out vec2 vUv0;
+out vec2 vUv1;
 
 void main() {
   vec3 p = aPosition
@@ -168,8 +237,11 @@ void main() {
   }
   vec4 world = uModel * local;
   vWorld = world.xyz;
+  vModel = (uRootInverse * world).xyz;
   vNormal = normalize(uNormal * aNormal);
   vShadow = uShadowMatrix * world;
+  vUv0 = aUv0;
+  vUv1 = aUv1;
   gl_Position = uViewProjection * world;
 }`;
 
@@ -177,7 +249,10 @@ const FRAGMENT = `#version 300 es
 precision highp float;
 in vec3 vNormal;
 in vec3 vWorld;
+in vec3 vModel;
 in vec4 vShadow;
+in vec2 vUv0;
+in vec2 vUv1;
 layout(location=0) out vec4 outBase;
 layout(location=1) out vec4 outMask;
 
@@ -190,6 +265,27 @@ uniform float uOpacity;
 uniform vec3 uPalette;
 uniform float uMappingAmount;
 uniform int uSource;
+uniform int uAlphaMode;
+uniform float uAlphaCutoff;
+uniform int uUnlit;
+uniform sampler2D uBaseMap;
+uniform sampler2D uMetalRoughMap;
+uniform sampler2D uNormalMap;
+uniform sampler2D uOcclusionMap;
+uniform sampler2D uEmissiveMap;
+uniform int uMapOn[5];
+uniform int uMapUv[5];
+uniform mat3 uMapTransform[5];
+uniform int uProjection;
+uniform vec3 uBoundsCenter;
+uniform float uBoundsRadius;
+uniform float uTextureMix;
+uniform float uNormalStrength;
+uniform float uOcclusionStrength;
+uniform float uRim;
+uniform float uScan;
+uniform float uBands;
+uniform float uTime;
 uniform vec3 uCameraPosition;
 uniform int uLightCount;
 uniform int uLightType[${MAX_MODEL_LIGHTS}];
@@ -210,6 +306,84 @@ uniform float uShadowTexel;
 uniform float uShadowSoftness;
 
 const float PI = 3.14159265359;
+const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
+
+// --- pictures -----------------------------------------------------------
+
+vec2 mapUv(int slot) {
+  vec2 uv = uMapUv[slot] == 1 ? vUv1 : vUv0;
+  return (uMapTransform[slot] * vec3(uv, 1.0)).xy;
+}
+
+// Weights for the three projection planes, sharpened so the seams stay short.
+vec3 triplanarWeights() {
+  vec3 w = pow(abs(normalize(vNormal)), vec3(4.0));
+  return w / max(w.x + w.y + w.z, 0.0001);
+}
+
+// Model-space coordinate scaled so the whole subject spans about one repeat.
+vec3 triplanarPoint() {
+  return (vModel - uBoundsCenter) / max(uBoundsRadius, 0.0001) * 0.5 + 0.5;
+}
+
+vec4 readMap(sampler2D map, int slot) {
+  if (uProjection == 1) {
+    vec3 w = triplanarWeights();
+    vec3 p = triplanarPoint();
+    mat3 t = uMapTransform[slot];
+    return texture(map, (t * vec3(p.zy, 1.0)).xy) * w.x
+      + texture(map, (t * vec3(p.xz, 1.0)).xy) * w.y
+      + texture(map, (t * vec3(p.xy, 1.0)).xy) * w.z;
+  }
+  return texture(map, mapUv(slot));
+}
+
+// A tangent frame from position and UV derivatives: no CPU tangents, and a
+// mirrored UV island simply yields a mirrored frame.
+mat3 cotangentFrame(vec3 n, vec3 p, vec2 uv) {
+  vec3 dp1 = dFdx(p);
+  vec3 dp2 = dFdy(p);
+  vec2 duv1 = dFdx(uv);
+  vec2 duv2 = dFdy(uv);
+  vec3 dp2perp = cross(dp2, n);
+  vec3 dp1perp = cross(n, dp1);
+  vec3 t = dp2perp * duv1.x + dp1perp * duv2.x;
+  vec3 b = dp2perp * duv1.y + dp1perp * duv2.y;
+  float det = max(dot(t, t), dot(b, b));
+  float scale = det == 0.0 ? 0.0 : inversesqrt(det);
+  return mat3(t * scale, b * scale, n);
+}
+
+vec3 decodeNormal(vec4 texel) {
+  vec3 tn = texel.xyz * 2.0 - 1.0;
+  // A frame from derivatives turns the picture's up into glTF's down.
+  tn.xy *= vec2(uNormalStrength, -uNormalStrength);
+  return tn;
+}
+
+vec3 mappedNormal(vec3 n) {
+  if (uMapOn[2] == 0) return n;
+  if (uProjection == 1) {
+    vec3 w = triplanarWeights();
+    vec3 p = triplanarPoint();
+    mat3 t = uMapTransform[2];
+    vec2 x = (t * vec3(p.zy, 1.0)).xy;
+    vec2 y = (t * vec3(p.xz, 1.0)).xy;
+    vec2 z = (t * vec3(p.xy, 1.0)).xy;
+    vec3 blended =
+      cotangentFrame(n, vWorld, x) * decodeNormal(texture(uNormalMap, x)) * w.x +
+      cotangentFrame(n, vWorld, y) * decodeNormal(texture(uNormalMap, y)) * w.y +
+      cotangentFrame(n, vWorld, z) * decodeNormal(texture(uNormalMap, z)) * w.z;
+    return normalize(blended);
+  }
+  vec2 uv = mapUv(2);
+  // Without UVs the derivatives vanish and the frame is degenerate; keep the
+  // geometric normal rather than a black or exploding surface.
+  if (dot(dFdx(uv), dFdx(uv)) + dot(dFdy(uv), dFdy(uv)) < 1e-12) return n;
+  return normalize(cotangentFrame(n, vWorld, uv) * decodeNormal(texture(uNormalMap, uv)));
+}
+
+// --- light --------------------------------------------------------------
 
 float distributionGGX(vec3 n, vec3 h, float roughness) {
   float a = roughness * roughness;
@@ -255,11 +429,21 @@ float modelShadow(vec3 n, vec3 l) {
   return visible / 9.0;
 }
 
-vec3 litSurface(vec3 albedo, float metallic, float roughness, vec3 emissive) {
-  vec3 n = normalize(vNormal);
-  vec3 v = normalize(uCameraPosition - vWorld);
-  float nv = max(dot(n, v), 0.0001);
-  vec3 f0 = mix(vec3(0.04), albedo, metallic);
+struct Surface {
+  vec3 n;
+  vec3 v;
+  float nv;
+  float metallic;
+  float roughness;
+  float occlusion;
+  vec3 emissive;
+};
+
+vec3 litSurface(vec3 albedo, Surface s) {
+  vec3 n = s.n;
+  vec3 v = s.v;
+  float nv = s.nv;
+  vec3 f0 = mix(vec3(0.04), albedo, s.metallic);
   vec3 direct = vec3(0.0);
 
   for (int i = 0; i < ${MAX_MODEL_LIGHTS}; i++) {
@@ -284,10 +468,10 @@ vec3 litSurface(vec3 albedo, float metallic, float roughness, vec3 emissive) {
     if (nl <= 0.0 || attenuation <= 0.0) continue;
     vec3 h = normalize(v + l);
     vec3 f = fresnelSchlick(max(dot(h, v), 0.0), f0);
-    float d = distributionGGX(n, h, roughness);
-    float g = geometrySmith(n, v, l, roughness);
+    float d = distributionGGX(n, h, s.roughness);
+    float g = geometrySmith(n, v, l, s.roughness);
     vec3 specular = d * g * f / max(4.0 * nv * nl, 0.0001);
-    vec3 diffuse = (vec3(1.0) - f) * (1.0 - metallic) * albedo / PI;
+    vec3 diffuse = (vec3(1.0) - f) * (1.0 - s.metallic) * albedo / PI;
     float shadow = i == uShadowLight ? modelShadow(n, l) : 1.0;
     direct += (diffuse + specular) * uLightColor[i] * uLightIntensity[i] * attenuation * nl * shadow;
   }
@@ -295,21 +479,66 @@ vec3 litSurface(vec3 albedo, float metallic, float roughness, vec3 emissive) {
   float hemi = clamp(n.y * 0.5 + 0.5, 0.0, 1.0);
   vec3 environment = mix(uEnvironmentBottom, uEnvironmentTop, hemi);
   vec3 reflected = reflect(-v, n);
-  float hot = pow(max(dot(reflected, uEnvironmentDirection), 0.0), mix(72.0, 3.0, roughness));
-  vec3 f = fresnelRoughness(nv, f0, roughness);
-  vec3 diffuseEnvironment = (vec3(1.0) - f) * (1.0 - metallic) * albedo * environment;
-  vec3 specularEnvironment = f * (environment * (0.35 + 0.65 * (1.0 - roughness)) + uEnvironmentTop * hot * 1.6);
-  return direct + (diffuseEnvironment + specularEnvironment) * uEnvironmentIntensity + emissive;
+  float hot = pow(max(dot(reflected, uEnvironmentDirection), 0.0), mix(72.0, 3.0, s.roughness));
+  vec3 f = fresnelRoughness(nv, f0, s.roughness);
+  vec3 diffuseEnvironment = (vec3(1.0) - f) * (1.0 - s.metallic) * albedo * environment;
+  vec3 specularEnvironment = f * (environment * (0.35 + 0.65 * (1.0 - s.roughness)) + uEnvironmentTop * hot * 1.6);
+  return direct + (diffuseEnvironment + specularEnvironment) * uEnvironmentIntensity * s.occlusion;
+}
+
+// The curated looks. All uniform-driven, so there is one shader and no
+// stage-time compile for a recipe change.
+vec3 styled(vec3 lit, vec3 tint, Surface s) {
+  vec3 colour = lit;
+  if (uBands > 0.0) {
+    float l = dot(colour, LUMA);
+    float q = floor(l * 4.0 + 0.5) / 4.0;
+    colour *= mix(1.0, q / max(l, 0.0001), uBands);
+  }
+  if (uScan > 0.0) {
+    float phase = (vModel.y - uBoundsCenter.y) / max(uBoundsRadius, 0.0001) * 18.0 - uTime * 4.0;
+    float band = smoothstep(0.55, 0.95, 0.5 + 0.5 * sin(phase));
+    colour = colour * (1.0 - uScan * 0.5 * (1.0 - band)) + tint * uScan * band * 1.5;
+  }
+  if (uRim > 0.0) colour += tint * uRim * pow(1.0 - s.nv, 3.0) * 2.5;
+  return colour;
+}
+
+vec3 shade(vec3 albedo, Surface s) {
+  vec3 lit = uUnlit == 1 ? albedo : litSurface(albedo, s) + s.emissive;
+  return styled(lit, albedo, s);
 }
 
 void main() {
-  float roughness = clamp(uRoughness, 0.045, 1.0);
-  float metallic = clamp(uMetallic, 0.0, 1.0);
-  vec3 emitted = uEmissive * uEmissiveStrength;
-  vec3 original = litSurface(uBaseColor.rgb, metallic, roughness, emitted);
-  vec3 mapped = litSurface(uPalette, metallic, roughness, emitted);
-  float mappedLight = dot(litSurface(vec3(1.0), metallic, roughness, emitted), vec3(0.2126, 0.7152, 0.0722));
-  float alpha = clamp(uBaseColor.a * uOpacity, 0.0, 1.0);
+  vec3 geometric = normalize(vNormal);
+  if (!gl_FrontFacing) geometric = -geometric;
+
+  vec4 base = uMapOn[0] == 1 ? readMap(uBaseMap, 0) : vec4(1.0);
+  vec3 albedo = uBaseColor.rgb * mix(vec3(1.0), base.rgb, uTextureMix);
+  float coverage = uBaseColor.a * mix(1.0, base.a, uTextureMix);
+  // Authored light/dark structure, read perceptually so a mid-grey texel keeps
+  // roughly half its brightness when the palette replaces its hue.
+  float detail = uMapOn[0] == 1 ? mix(1.0, pow(max(dot(base.rgb, LUMA), 0.0), 0.4545), uTextureMix) : 1.0;
+
+  if (uAlphaMode == 1 && coverage < uAlphaCutoff) discard;
+  float alpha = clamp((uAlphaMode == 2 ? coverage : 1.0) * uOpacity, 0.0, 1.0);
+
+  vec4 metalRough = uMapOn[1] == 1 ? readMap(uMetalRoughMap, 1) : vec4(1.0);
+  vec4 occlusion = uMapOn[3] == 1 ? readMap(uOcclusionMap, 3) : vec4(1.0);
+  vec4 emissiveMap = uMapOn[4] == 1 ? readMap(uEmissiveMap, 4) : vec4(1.0);
+
+  Surface s;
+  s.n = mappedNormal(geometric);
+  s.v = normalize(uCameraPosition - vWorld);
+  s.nv = max(dot(s.n, s.v), 0.0001);
+  s.roughness = clamp(uRoughness * metalRough.g, 0.045, 1.0);
+  s.metallic = clamp(uMetallic * metalRough.b, 0.0, 1.0);
+  s.occlusion = 1.0 + uOcclusionStrength * (occlusion.r - 1.0);
+  s.emissive = uEmissive * uEmissiveStrength * emissiveMap.rgb;
+
+  vec3 original = shade(albedo, s);
+  vec3 mapped = shade(uPalette * detail, s);
+  float mappedLight = dot(shade(vec3(detail), s), LUMA);
 
   outBase = vec4(0.0);
   outMask = vec4(0.0);
@@ -555,6 +784,12 @@ function uploadGeometry(gl: WebGL2RenderingContext, geometry: THREE.BufferGeomet
   // on strict drivers, even though some desktop drivers quietly accept it.
   attribute(6, skinned ? geometry.getAttribute('skinIndex') : undefined);
   attribute(7, skinned ? geometry.getAttribute('skinWeight') : undefined);
+  // GLTFLoader names TEXCOORD_0 `uv` and TEXCOORD_1 `uv1`; an occlusion map
+  // may read the second while everything else reads the first.
+  const uv0 = geometry.getAttribute('uv');
+  const uv1 = geometry.getAttribute('uv1');
+  attribute(8, uv0);
+  attribute(9, uv1 ?? uv0);
 
   const index = geometry.getIndex();
   if (index) {
@@ -574,6 +809,7 @@ function uploadGeometry(gl: WebGL2RenderingContext, geometry: THREE.BufferGeomet
     mode: gl.TRIANGLES,
     morphs: Math.min(MAX_MODEL_MORPHS, morphs.length),
     skinned,
+    uvSets: uv1 ? 2 : uv0 ? 1 : 0,
   };
 }
 
@@ -761,22 +997,53 @@ function applyBindings(instance: Instance, model: CircuitModel, sample: NumberSa
   return applied;
 }
 
-function materialFacts(material: THREE.Material): {
-  color: THREE.Color;
-  emissive: THREE.Color;
+interface MaterialFacts {
+  color: [number, number, number, number];
+  emissive: [number, number, number];
   emissiveStrength: number;
   metallic: number;
   roughness: number;
   opacity: number;
-} {
+  alphaMode: 0 | 1 | 2;
+  alphaCutoff: number;
+  doubleSided: boolean;
+  unlit: boolean;
+}
+
+/**
+ * Authored facts come from the inspected capabilities when the material has
+ * an index, since those carry alpha, sidedness, unlit and texture slots. A
+ * Three material is only the fallback for a malformed association.
+ */
+function materialFacts(material: THREE.Material, capability: ModelMaterialCapability | undefined): MaterialFacts {
+  if (capability) {
+    return {
+      color: [...capability.baseColor] as [number, number, number, number],
+      emissive: [...capability.emissive] as [number, number, number],
+      emissiveStrength: capability.emissiveStrength,
+      metallic: capability.metallic,
+      roughness: capability.roughness,
+      opacity: 1,
+      alphaMode: capability.alphaMode === 'MASK' ? 1 : capability.alphaMode === 'BLEND' ? 2 : 0,
+      alphaCutoff: capability.alphaCutoff,
+      doubleSided: capability.doubleSided,
+      unlit: capability.unlit === true,
+    };
+  }
   const standard = material as THREE.MeshStandardMaterial;
+  const color = standard.color ?? new THREE.Color(1, 1, 1);
+  const emissive = standard.emissive ?? new THREE.Color(0, 0, 0);
   return {
-    color: standard.color?.clone() ?? new THREE.Color(1, 1, 1),
-    emissive: standard.emissive?.clone() ?? new THREE.Color(0, 0, 0),
+    color: [color.r, color.g, color.b, 1],
+    emissive: [emissive.r, emissive.g, emissive.b],
     emissiveStrength: Number.isFinite(standard.emissiveIntensity) ? standard.emissiveIntensity : 1,
     metallic: Number.isFinite(standard.metalness) ? standard.metalness : 0,
     roughness: Number.isFinite(standard.roughness) ? standard.roughness : 0.7,
     opacity: Number.isFinite(standard.opacity) ? standard.opacity : 1,
+    alphaMode: standard.transparent ? 2 : 0,
+    alphaCutoff: 0.5,
+    doubleSided: material.side === THREE.DoubleSide,
+    unlit: false,
   };
 }
 
@@ -894,18 +1161,183 @@ function resolvedLighting(
   };
 }
 
+// --- pictures per material ------------------------------------------------
+
+const DEFAULT_SAMPLER: ModelSamplerCapability = {
+  index: -1,
+  name: 'default',
+  magFilter: 'linear',
+  minFilter: 'linear',
+  mipmap: true,
+  wrapS: 'repeat',
+  wrapT: 'repeat',
+};
+
+const samplerKey = (sampler: ModelSamplerCapability, wrap: ModelMaterialRecipe['wrap']): string => {
+  const wrapS = wrap === 'authored' ? sampler.wrapS : wrap;
+  const wrapT = wrap === 'authored' ? sampler.wrapT : wrap;
+  return `${wrapS}|${wrapT}|${sampler.magFilter}|${sampler.minFilter}|${sampler.mipmap ? 'mip' : 'flat'}`;
+};
+
+/** A material slot's use resolved against this asset, recipe and the local texture library. */
+function slotUse(
+  asset: ModelAsset,
+  material: ModelMaterialCapability,
+  slot: ModelSlot,
+  recipe: ModelMaterialRecipe,
+  textures: readonly ModelTextureAsset[],
+): { use: SlotUse; request: Omit<TextureRequest, 'source'>; embedded: number | null; override: ModelTextureAsset | null } | null {
+  const source = recipe.slots[slot];
+  const srgb = MODEL_SLOT_SRGB[slot];
+  if (source.kind === 'none') return null;
+  if (source.kind === 'texture') {
+    const record = textures.find((entry) => entry.hash === source.hash);
+    if (!record) return null;
+    return {
+      use: { key: `texture:${record.hash}`, srgb, sampler: samplerKey(DEFAULT_SAMPLER, recipe.wrap), authored: null },
+      request: { key: `texture:${record.hash}`, srgb, mimeType: record.mimeType, bytes: decodedImageBytes(record.width, record.height) },
+      embedded: null,
+      override: record,
+    };
+  }
+  const authored = materialTextureUse(material, slot);
+  if (!authored) return null;
+  const texture = asset.capabilities.textures?.[authored.texture];
+  const image = texture && texture.image !== null ? asset.capabilities.images?.[texture.image] : undefined;
+  if (!texture || !image || image.unsupported !== null || image.mimeType === null) return null;
+  const sampler = texture.sampler === null ? DEFAULT_SAMPLER : (asset.capabilities.samplers?.[texture.sampler] ?? DEFAULT_SAMPLER);
+  const key = `asset:${asset.hash}:${image.index}`;
+  return {
+    use: { key, srgb, sampler: samplerKey(sampler, recipe.wrap), authored },
+    request: { key, srgb, mimeType: image.mimeType, bytes: image.decodedBytes },
+    embedded: image.index,
+    override: null,
+  };
+}
+
+const slotId = (material: number, slot: ModelSlot): string => `${material}:${slot}`;
+
+/**
+ * `uv' = T · R · S · uv`, the `KHR_texture_transform` definition, with the
+ * recipe's own transform applied about the picture's centre on top of it.
+ */
+function uvTransform(
+  authored: ModelTextureUse | null,
+  recipe: ModelMaterialRecipe,
+  override: Partial<Record<ModelMaterialProperty, number>>,
+  projection: 'uv' | 'triplanar',
+): THREE.Matrix3 {
+  const matrix = new THREE.Matrix3();
+  const rotation = (angle: number) => new THREE.Matrix3().set(
+    Math.cos(angle), Math.sin(angle), 0,
+    -Math.sin(angle), Math.cos(angle), 0,
+    0, 0, 1,
+  );
+  const translation = (x: number, y: number) => new THREE.Matrix3().set(1, 0, x, 0, 1, y, 0, 0, 1);
+  const scaling = (x: number, y: number) => new THREE.Matrix3().set(x, 0, 0, 0, y, 0, 0, 0, 1);
+  const scale = override['uv-scale'] ?? 1;
+  const offsetX = override['uv-offset-x'] ?? recipe.uvOffset[0];
+  const offsetY = override['uv-offset-y'] ?? recipe.uvOffset[1];
+  const angle = override['uv-rotation'] ?? recipe.uvRotation;
+  matrix
+    .multiply(translation(0.5 + offsetX, 0.5 + offsetY))
+    .multiply(rotation(angle))
+    .multiply(scaling(recipe.uvScale[0] * scale, recipe.uvScale[1] * scale))
+    .multiply(translation(-0.5, -0.5));
+  if (projection === 'uv' && authored) {
+    matrix
+      .multiply(translation(authored.offset[0], authored.offset[1]))
+      .multiply(rotation(authored.rotation))
+      .multiply(scaling(authored.scale[0], authored.scale[1]));
+  }
+  return matrix;
+}
+
 export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
   const held = new Map<number, Instance>();
   const meshProgram = compileMesh(gl);
   const shadowProgram = compileMesh(gl, SHADOW_VERTEX, SHADOW_FRAGMENT, 'model shadow');
   const blank = gl.createTexture()!;
   gl.bindTexture(gl.TEXTURE_2D, blank);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]));
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255, 255, 255, 255]));
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  const maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
+  const textureUnits = gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS) as number;
+  const anisotropic = gl.getExtension('EXT_texture_filter_anisotropic');
+  const anisotropy = anisotropic
+    ? Math.min(MAX_MODEL_ANISOTROPY, gl.getParameter(anisotropic.MAX_TEXTURE_MAX_ANISOTROPY_EXT) as number)
+    : 0;
+  // WebGL2 promises sixteen; a context that reports fewer draws every model
+  // transparent with a reason rather than sampling through a unit it lacks.
+  const limitTrouble = textureUnits < MODEL_TEXTURE_UNITS_NEEDED
+    ? `this GPU exposes ${textureUnits} fragment texture units; the model pass needs ${MODEL_TEXTURE_UNITS_NEEDED}`
+    : null;
+  let serial = 0;
+
+  gl.useProgram(meshProgram.program);
+  MODEL_SLOTS.forEach((slot, at) => gl.uniform1i(meshProgram.uniform(SLOT_UNIFORMS[slot]), MODEL_MATERIAL_UNITS[at]!));
+  gl.uniform1i(meshProgram.uniform('uShadowMap'), MODEL_SHADOW_UNIT);
+  gl.useProgram(null);
+
+  const textures: TextureCache<WebGLTexture> = createTextureCache<WebGLTexture, ImageBitmap>({
+    async decode(bytes, mimeType) {
+      const bitmap = await createImageBitmap(new Blob([bytes as BlobPart], { type: mimeType }), {
+        premultiplyAlpha: 'none',
+        colorSpaceConversion: 'none',
+      });
+      return { image: bitmap, width: bitmap.width, height: bitmap.height, close: () => bitmap.close() };
+    },
+    upload(picture, srgb) {
+      if (picture.width > maxTextureSize || picture.height > maxTextureSize) {
+        throw new Error(`${picture.width}×${picture.height} exceeds this GPU's ${maxTextureSize} pixel texture limit`);
+      }
+      const texture = gl.createTexture()!;
+      gl.activeTexture(gl.TEXTURE0 + MODEL_MATERIAL_UNITS[0]!);
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+      gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
+      gl.texImage2D(gl.TEXTURE_2D, 0, srgb ? gl.SRGB8_ALPHA8 : gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, picture.image);
+      gl.generateMipmap(gl.TEXTURE_2D);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      return texture;
+    },
+    free: (texture) => gl.deleteTexture(texture),
+  });
+
+  const samplers = new Map<string, WebGLSampler>();
+  const samplerFor = (key: string): WebGLSampler => {
+    const found = samplers.get(key);
+    if (found) return found;
+    const [wrapS, wrapT, mag, min, mip] = key.split('|');
+    const wrap = (name: string | undefined) =>
+      name === 'clamp' ? gl.CLAMP_TO_EDGE : name === 'mirror' ? gl.MIRRORED_REPEAT : gl.REPEAT;
+    const sampler = gl.createSampler()!;
+    gl.samplerParameteri(sampler, gl.TEXTURE_WRAP_S, wrap(wrapS));
+    gl.samplerParameteri(sampler, gl.TEXTURE_WRAP_T, wrap(wrapT));
+    gl.samplerParameteri(sampler, gl.TEXTURE_MAG_FILTER, mag === 'nearest' ? gl.NEAREST : gl.LINEAR);
+    gl.samplerParameteri(
+      sampler,
+      gl.TEXTURE_MIN_FILTER,
+      mip === 'mip'
+        ? (min === 'nearest' ? gl.NEAREST_MIPMAP_LINEAR : gl.LINEAR_MIPMAP_LINEAR)
+        : (min === 'nearest' ? gl.NEAREST : gl.LINEAR),
+    );
+    if (anisotropic && anisotropy > 1 && mip === 'mip') {
+      gl.samplerParameterf(sampler, anisotropic.TEXTURE_MAX_ANISOTROPY_EXT, anisotropy);
+    }
+    samplers.set(key, sampler);
+    return sampler;
+  };
 
   const freeInstance = (instance: Instance) => {
     instance.abort.abort();
+    textures.release(instance.owner);
+    instance.slots.clear();
+    instance.bytes = null;
     for (const resource of instance.geometry.values()) {
       gl.deleteVertexArray(resource.vao);
       for (const buffer of resource.buffers) gl.deleteBuffer(buffer);
@@ -917,9 +1349,60 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
     instance.root = null;
   };
 
+  /**
+   * Resolve every slot the current recipes want, acquire the pictures the
+   * instance does not hold yet and release the ones it no longer reads.
+   * Recipes are setup metadata that may change every keystroke in the editor;
+   * the cache makes an unchanged picture free to ask for again.
+   */
+  const wantTextures = (instance: Instance, library: ModelLibrary) => {
+    if (!instance.root) return;
+    if (instance.wantedFor === instance.setup.materials && instance.wantedTextures === library.textures) return;
+    instance.wantedFor = instance.setup.materials;
+    instance.wantedTextures = library.textures;
+    const mapping = new Map(instance.setup.materials.map((entry) => [entry.material, entry]));
+    const keep = new Set<string>();
+    const bytes = instance.bytes;
+    // The bytes fetched for the parse feed the first round of decodes; a later
+    // recipe change reads the immutable asset again through the browser cache
+    // rather than pinning up to 128 MiB per instance for its whole life.
+    const assetBytes = bytes
+      ? (_signal: AbortSignal) => Promise.resolve(bytes)
+      : (signal: AbortSignal) => fetch(modelAssetUrl(instance.asset.hash), { signal }).then((response) => {
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return response.arrayBuffer();
+        });
+    instance.slots.clear();
+    for (const material of instance.asset.capabilities.materials) {
+      const recipe = modelRecipeOf(mapping.get(material.index));
+      for (const slot of MODEL_SLOTS) {
+        const resolved = slotUse(instance.asset, material, slot, recipe, library.textures);
+        if (!resolved) continue;
+        instance.slots.set(slotId(material.index, slot), resolved.use);
+        keep.add(textureEntryKey(resolved.request.key, resolved.request.srgb));
+        const source = resolved.override
+          ? (signal: AbortSignal) => fetch(modelTextureUrl(resolved.override!.hash), { signal }).then((response) => {
+              if (!response.ok) throw new Error(`HTTP ${response.status}`);
+              return response.arrayBuffer();
+            }).then((buffer) => new Uint8Array(buffer))
+          : (signal: AbortSignal) => assetBytes(signal).then((buffer) => {
+              const image = instance.asset.capabilities.images[resolved.embedded!]!;
+              const binary = glbBinaryChunk(buffer);
+              if (image.byteOffset + image.bytes > binary.byteLength) throw new Error('image lies outside the GLB binary chunk');
+              return binary.slice(image.byteOffset, image.byteOffset + image.bytes);
+            });
+        textures.acquire(instance.owner, { ...resolved.request, source });
+      }
+    }
+    textures.keep(instance.owner, keep);
+    instance.bytes = null;
+  };
+
   const make = (key: string, setup: ModelSetup, asset: ModelLibrary['assets'][number]): Instance => {
+    serial += 1;
     const instance: Instance = {
       key,
+      owner: `${key}#${serial}`,
       setup,
       asset,
       target: modelTarget(gl),
@@ -935,8 +1418,13 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
       boundsCenter: new THREE.Vector3(),
       boundsRadius: 1,
       shadow: null,
-      trouble: null,
+      trouble: limitTrouble,
+      bytes: null,
+      wantedFor: null,
+      wantedTextures: null,
+      slots: new Map(),
     };
+    if (limitTrouble) return instance;
     const manager = new THREE.LoadingManager();
     manager.setURLModifier((url) => {
       // A stored GLB is self-contained. Never turn an URI found inside user
@@ -945,13 +1433,22 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
       if (url.startsWith('blob:') || url.startsWith('data:')) return url;
       throw new Error('external GLB resources are not loaded');
     });
+    const loader = new GLTFLoader(manager);
+    // Pictures are OpenFlow's: measured by the inspector, decoded through the
+    // bounded shared cache, uploaded once per asset. Three must not decode
+    // them a second time per instance, so its texture loader answers nothing.
+    loader.register(() => ({
+      name: 'OPENFLOW_owned_textures',
+      loadTexture: () => Promise.resolve(null as unknown as THREE.Texture),
+    }));
     void fetch(modelAssetUrl(asset.hash), { signal: instance.abort.signal })
       .then((response) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return response.arrayBuffer();
       })
       .then((bytes) => new Promise<GLTF>((resolve, reject) => {
-        new GLTFLoader(manager).parse(bytes, '', resolve, reject);
+        instance.bytes = bytes;
+        loader.parse(bytes, '', resolve, reject);
       }))
       .then((gltf) => {
         if (instance.abort.signal.aborted) return;
@@ -1039,12 +1536,14 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
     gl.bindFramebuffer(gl.FRAMEBUFFER, instance.shadow.framebuffer);
     gl.drawBuffers([gl.NONE]);
     gl.viewport(0, 0, MAX_MODEL_SHADOW_EDGE, MAX_MODEL_SHADOW_EDGE);
+    gl.depthMask(true);
     gl.clearDepth(1);
     gl.clear(gl.DEPTH_BUFFER_BIT);
     gl.useProgram(shadowProgram.program);
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
     gl.disable(gl.BLEND);
+    gl.disable(gl.CULL_FACE);
     gl.enable(gl.POLYGON_OFFSET_FILL);
     gl.polygonOffset(2, 4);
     gl.uniformMatrix4fv(shadowProgram.uniform('uViewProjection'), false, matrix.elements);
@@ -1062,6 +1561,27 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
     return { index, matrix, softness: light.softness };
   };
 
+  interface Draw {
+    object: THREE.Mesh;
+    resource: GeometryResource;
+    start: number;
+    count: number;
+    material: THREE.Material;
+    index: number;
+    facts: MaterialFacts;
+    mapped: ModelMaterialMapping;
+    recipe: ModelMaterialRecipe;
+    override: Partial<Record<ModelMaterialProperty, number>>;
+    blended: boolean;
+    depth: number;
+  }
+
+  const bindSlot = (unit: number, texture: WebGLTexture | null, sampler: WebGLSampler | null) => {
+    gl.activeTexture(gl.TEXTURE0 + unit);
+    gl.bindTexture(gl.TEXTURE_2D, texture ?? blank);
+    gl.bindSampler(unit, sampler);
+  };
+
   const draw = (
     instance: Instance,
     model: CircuitModel,
@@ -1069,13 +1589,15 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
     palette: readonly number[],
     width: number,
     height: number,
-    view?: ModelView,
+    view: ModelView | undefined,
+    seconds: number,
   ) => {
     instance.target.resize(width, height);
     if (!instance.root) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, instance.target.framebuffer);
       gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
       gl.viewport(0, 0, instance.target.width, instance.target.height);
+      gl.depthMask(true);
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       return;
@@ -1094,10 +1616,13 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
     const lighting = resolvedLighting(instance, camera, palette, applied);
     const shadow = renderShadow(instance, lighting.lights);
     const mapping = new Map(instance.setup.materials.map((entry) => [entry.material, entry]));
+    const rootInverse = instance.root.matrixWorld.clone().invert();
+    const rootCenter = instance.boundsCenter.clone().applyMatrix4(rootInverse);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, instance.target.framebuffer);
     gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
     gl.viewport(0, 0, instance.target.width, instance.target.height);
+    gl.depthMask(true);
     gl.clearColor(0, 0, 0, 0);
     gl.clearDepth(1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -1109,7 +1634,11 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.uniformMatrix4fv(meshProgram.uniform('uViewProjection'), false, viewProjection.elements);
     gl.uniformMatrix4fv(meshProgram.uniform('uShadowMatrix'), false, shadow.matrix.elements);
+    gl.uniformMatrix4fv(meshProgram.uniform('uRootInverse'), false, rootInverse.elements);
     gl.uniform3f(meshProgram.uniform('uCameraPosition'), cameraPosition.x, cameraPosition.y, cameraPosition.z);
+    gl.uniform3f(meshProgram.uniform('uBoundsCenter'), rootCenter.x, rootCenter.y, rootCenter.z);
+    gl.uniform1f(meshProgram.uniform('uBoundsRadius'), instance.boundsRadius);
+    gl.uniform1f(meshProgram.uniform('uTime'), seconds);
 
     const lightTypes = new Int32Array(MAX_MODEL_LIGHTS);
     const lightPositions = new Float32Array(MAX_MODEL_LIGHTS * 3);
@@ -1150,13 +1679,17 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
     gl.uniform3fv(meshProgram.uniform('uEnvironmentBottom'), bottom);
     gl.uniform3f(meshProgram.uniform('uEnvironmentDirection'), environmentDirection.x, environmentDirection.y, environmentDirection.z);
     gl.uniform1f(meshProgram.uniform('uEnvironmentIntensity'), lighting.environmentIntensity);
-    gl.activeTexture(gl.TEXTURE15);
+    gl.activeTexture(gl.TEXTURE0 + MODEL_SHADOW_UNIT);
     gl.bindTexture(gl.TEXTURE_2D, instance.shadow?.depth ?? blank);
-    gl.uniform1i(meshProgram.uniform('uShadowMap'), 15);
+    gl.bindSampler(MODEL_SHADOW_UNIT, null);
     gl.uniform1i(meshProgram.uniform('uShadowLight'), shadow.index);
     gl.uniform1f(meshProgram.uniform('uShadowTexel'), 1 / MAX_MODEL_SHADOW_EDGE);
     gl.uniform1f(meshProgram.uniform('uShadowSoftness'), shadow.softness);
 
+    // Opaque and cut-out surfaces first with depth writes; everything that
+    // blends afterwards, farthest first, reading depth without writing it.
+    const draws: Draw[] = [];
+    const viewPoint = new THREE.Vector3();
     instance.root.traverse((object) => {
       if (!(object instanceof THREE.Mesh) || !object.visible) return;
       const resource = geometryFor(instance, object);
@@ -1167,66 +1700,155 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
       const groups = object.geometry.groups.length
         ? object.geometry.groups
         : [{ start: 0, count: resource.count, materialIndex: 0 }];
-      pose(meshProgram, object, resource);
-
+      const depth = object.getWorldPosition(viewPoint).distanceTo(cameraPosition);
       for (const group of groups) {
         const material = materials[group.materialIndex] ?? materials[0];
         if (!material || !material.visible) continue;
         const index = materialIndex(instance, material);
+        const facts = materialFacts(material, index >= 0 ? instance.asset.capabilities.materials[index] : undefined);
         const mapped: ModelMaterialMapping = mapping.get(index) ?? { material: index, source: 'original', amount: 1 };
-        const facts = materialFacts(material);
         const override = applied.materials.get(index) ?? {};
-        const color = rgb(palette[paletteIndex(mapped.source)] ?? 0xffffff);
-        gl.uniform4f(meshProgram.uniform('uBaseColor'), facts.color.r, facts.color.g, facts.color.b, 1);
-        gl.uniform3f(meshProgram.uniform('uEmissive'), facts.emissive.r, facts.emissive.g, facts.emissive.b);
-        gl.uniform1f(meshProgram.uniform('uEmissiveStrength'), override['emissive-strength'] ?? facts.emissiveStrength);
-        gl.uniform1f(meshProgram.uniform('uMetallic'), override.metallic ?? facts.metallic);
-        gl.uniform1f(meshProgram.uniform('uRoughness'), override.roughness ?? facts.roughness);
-        gl.uniform1f(meshProgram.uniform('uOpacity'), override.opacity ?? facts.opacity);
-        gl.uniform3f(meshProgram.uniform('uPalette'), color[0], color[1], color[2]);
-        gl.uniform1f(meshProgram.uniform('uMappingAmount'), mapped.amount);
-        gl.uniform1i(meshProgram.uniform('uSource'), sourceIndex(mapped.source));
-        if (resource.indexed) {
-          gl.drawElements(resource.mode, group.count, resource.indexType, group.start * (resource.indexType === gl.UNSIGNED_INT ? 4 : resource.indexType === gl.UNSIGNED_SHORT ? 2 : 1));
-        } else gl.drawArrays(resource.mode, group.start, group.count);
+        const opacity = override.opacity ?? facts.opacity;
+        draws.push({
+          object,
+          resource,
+          start: group.start,
+          count: group.count,
+          material,
+          index,
+          facts,
+          mapped,
+          recipe: modelRecipeOf(mapped),
+          override,
+          blended: facts.alphaMode === 2 || opacity < 1,
+          depth,
+        });
       }
     });
+    draws.sort((a, b) => a.blended === b.blended ? (a.blended ? b.depth - a.depth : 0) : (a.blended ? 1 : -1));
+
+    const transforms = new Float32Array(9 * MODEL_SLOTS.length);
+    const mapOn = new Int32Array(MODEL_SLOTS.length);
+    const mapUv = new Int32Array(MODEL_SLOTS.length);
+    let posed: THREE.Mesh | null = null;
+    for (const entry of draws) {
+      if (posed !== entry.object) {
+        pose(meshProgram, entry.object, entry.resource);
+        posed = entry.object;
+      }
+      const { facts, recipe, override } = entry;
+      const color = rgb(palette[paletteIndex(entry.mapped.source)] ?? 0xffffff);
+      MODEL_SLOTS.forEach((slot, at) => {
+        const use = entry.index >= 0 ? instance.slots.get(slotId(entry.index, slot)) : undefined;
+        const view = use ? textures.lookup(use.key, use.srgb) : null;
+        const ready = view?.texture ?? null;
+        mapOn[at] = ready ? 1 : 0;
+        mapUv[at] = Math.min(use?.authored?.texCoord ?? 0, entry.resource.uvSets > 1 ? 1 : 0);
+        transforms.set(uvTransform(use?.authored ?? null, recipe, override, recipe.projection).elements, at * 9);
+        bindSlot(MODEL_MATERIAL_UNITS[at]!, ready, ready && use ? samplerFor(use.sampler) : null);
+      });
+      gl.uniform1iv(meshProgram.uniform('uMapOn[0]'), mapOn);
+      gl.uniform1iv(meshProgram.uniform('uMapUv[0]'), mapUv);
+      gl.uniformMatrix3fv(meshProgram.uniform('uMapTransform[0]'), false, transforms);
+      gl.uniform1i(meshProgram.uniform('uProjection'), recipe.projection === 'triplanar' ? 1 : 0);
+      gl.uniform4f(meshProgram.uniform('uBaseColor'), facts.color[0], facts.color[1], facts.color[2], facts.color[3]);
+      gl.uniform3f(meshProgram.uniform('uEmissive'), facts.emissive[0], facts.emissive[1], facts.emissive[2]);
+      gl.uniform1f(meshProgram.uniform('uEmissiveStrength'), override['emissive-strength'] ?? facts.emissiveStrength);
+      gl.uniform1f(meshProgram.uniform('uMetallic'), override.metallic ?? facts.metallic);
+      gl.uniform1f(meshProgram.uniform('uRoughness'), override.roughness ?? facts.roughness);
+      gl.uniform1f(meshProgram.uniform('uOpacity'), override.opacity ?? facts.opacity);
+      gl.uniform1i(meshProgram.uniform('uAlphaMode'), facts.alphaMode);
+      gl.uniform1f(meshProgram.uniform('uAlphaCutoff'), facts.alphaCutoff);
+      gl.uniform1i(meshProgram.uniform('uUnlit'), facts.unlit ? 1 : 0);
+      gl.uniform1f(meshProgram.uniform('uTextureMix'), override['texture-mix'] ?? recipe.textureMix);
+      const authoredNormal = entry.index >= 0 ? materialTextureUse(instance.asset.capabilities.materials[entry.index]!, 'normal') : null;
+      const authoredOcclusion = entry.index >= 0 ? materialTextureUse(instance.asset.capabilities.materials[entry.index]!, 'occlusion') : null;
+      gl.uniform1f(meshProgram.uniform('uNormalStrength'), (override['normal-strength'] ?? recipe.normalStrength) * (authoredNormal?.strength ?? 1));
+      gl.uniform1f(meshProgram.uniform('uOcclusionStrength'), (override['occlusion-strength'] ?? recipe.occlusionStrength) * (authoredOcclusion?.strength ?? 1));
+      gl.uniform1f(meshProgram.uniform('uRim'), override.rim ?? recipe.rim);
+      gl.uniform1f(meshProgram.uniform('uScan'), override.scan ?? recipe.scan);
+      gl.uniform1f(meshProgram.uniform('uBands'), override.bands ?? recipe.bands);
+      gl.uniform3f(meshProgram.uniform('uPalette'), color[0], color[1], color[2]);
+      gl.uniform1f(meshProgram.uniform('uMappingAmount'), entry.mapped.amount);
+      gl.uniform1i(meshProgram.uniform('uSource'), sourceIndex(entry.mapped.source));
+
+      if (facts.doubleSided) gl.disable(gl.CULL_FACE);
+      else {
+        gl.enable(gl.CULL_FACE);
+        gl.cullFace(gl.BACK);
+      }
+      gl.frontFace(entry.object.matrixWorld.determinant() < 0 ? gl.CW : gl.CCW);
+      gl.depthMask(!entry.blended);
+      if (entry.resource.indexed) {
+        const size = entry.resource.indexType === gl.UNSIGNED_INT ? 4 : entry.resource.indexType === gl.UNSIGNED_SHORT ? 2 : 1;
+        gl.drawElements(entry.resource.mode, entry.count, entry.resource.indexType, entry.start * size);
+      } else gl.drawArrays(entry.resource.mode, entry.start, entry.count);
+    }
     gl.bindVertexArray(null);
+    gl.depthMask(true);
+    gl.disable(gl.CULL_FACE);
+    gl.frontFace(gl.CCW);
     gl.disable(gl.BLEND);
     gl.disable(gl.DEPTH_TEST);
   };
 
-  const bindTexture = (program: Program, index: number, name: 'Base' | 'Mask', texture: WebGLTexture) => {
+  const bindOutput = (program: Program, index: number, name: 'Base' | 'Mask', texture: WebGLTexture) => {
     const unit = 8 + index * 2 + (name === 'Mask' ? 1 : 0);
     gl.activeTexture(gl.TEXTURE0 + unit);
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.uniform1i(program.uniform(`uModel${name}${index}`), unit);
   };
 
+  const clearTarget = (instance: Instance, width: number, height: number) => {
+    try {
+      instance.target.resize(width, height);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, instance.target.framebuffer);
+      gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
+      gl.viewport(0, 0, instance.target.width, instance.target.height);
+      gl.depthMask(true);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    } catch {
+      // If allocation itself failed, the existing target remains the
+      // safest texture to bind; the compositor still reports the cause.
+    }
+  };
+
   return {
     get error() {
-      return [...held.values()].find((instance) => instance.trouble)?.trouble ?? null;
+      const instance = [...held.values()].find((entry) => entry.trouble);
+      if (instance?.trouble) return instance.trouble;
+      for (const entry of held.values()) {
+        for (const use of entry.slots.values()) {
+          const view = textures.lookup(use.key, use.srgb);
+          if (view?.error) return `${entry.asset.name}: ${view.error}`;
+        }
+      }
+      return null;
     },
     get resources() {
+      const stats = textures.stats();
       return {
         instances: held.size,
         geometries: [...held.values()].reduce((sum, instance) => sum + instance.geometry.size, 0),
         targets: held.size,
         shadows: [...held.values()].filter((instance) => instance.shadow).length,
-        loading: [...held.values()].filter((instance) => !instance.root && !instance.trouble).length,
+        loading: [...held.values()].filter((instance) =>
+          !instance.trouble && (!instance.root || textures.pendingFor(instance.owner) > 0)).length,
+        textures: stats.textures,
+        textureBytes: stats.bytes,
+        decoding: stats.decoding,
+        textureReuse: stats.reuse,
       };
     },
-    bind(program, models, library, sample, palette, width, height, scope = '', views) {
-      // `bindTexture` writes uniforms belonging to the flow program. The model
-      // pass changes the active program while it draws, and a blank slot can be
-      // the first slot visited, so establish the owner before either branch.
-      gl.useProgram(program.program);
+    bind(program, models, library, sample, palette, width, height, scope = '', views, seconds = 0) {
       const active = new Set(models.map((model) => model.index));
       for (const [index, instance] of held) {
         if (active.has(index)) continue;
         freeInstance(instance);
         held.delete(index);
       }
+      const outputs: [WebGLTexture, WebGLTexture][] = [];
       for (let index = 0; index < 2; index++) {
         const model = models.find((entry) => entry.index === index);
         const setup = model ? library.setups.find((entry) => entry.id === model.setup) : undefined;
@@ -1237,8 +1859,7 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
             freeInstance(old);
             held.delete(index);
           }
-          bindTexture(program, index, 'Base', blank);
-          bindTexture(program, index, 'Mask', blank);
+          outputs.push([blank, blank]);
           continue;
         }
         const key = `${scope}:${model.id}:${setup.revision}:${asset.hash}`;
@@ -1248,36 +1869,37 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
           instance = make(key, setup, asset);
           held.set(index, instance);
         }
-        // Material mappings, published defaults and preview camera selection
-        // are setup metadata, not immutable GLB resources. Keep the loaded
-        // instance and apply the current metadata instead of flashing through
-        // a fetch/parse cycle for every setup-editor keystroke.
+        // Material mappings, recipes, published defaults and preview camera
+        // selection are setup metadata, not immutable GLB resources. Keep the
+        // loaded instance and apply the current metadata instead of flashing
+        // through a fetch/parse cycle for every setup-editor keystroke.
         instance.setup = setup;
         try {
-          draw(instance, model, sample, palette, width, height, views?.[model.id]);
-          instance.trouble = null;
+          wantTextures(instance, library);
+          draw(instance, model, sample, palette, width, height, views?.[model.id], seconds);
+          if (!limitTrouble) instance.trouble = null;
         } catch (error) {
           // A malformed geometry or an exhausted target must not take the
           // whole colour graph down. Keep the failure visible through
           // `ModelBank.error`, clear this model to transparent, and let every
           // downstream blend/grade/output continue to draw.
           instance.trouble = `${asset.name}: ${(error as Error).message}`;
-          try {
-            instance.target.resize(width, height);
-            gl.bindFramebuffer(gl.FRAMEBUFFER, instance.target.framebuffer);
-            gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
-            gl.viewport(0, 0, instance.target.width, instance.target.height);
-            gl.clearColor(0, 0, 0, 0);
-            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-          } catch {
-            // If allocation itself failed, the existing target remains the
-            // safest texture to bind; the compositor still reports the cause.
-          }
+          clearTarget(instance, width, height);
         }
-        gl.useProgram(program.program);
-        bindTexture(program, index, 'Base', instance.target.base);
-        bindTexture(program, index, 'Mask', instance.target.mask);
+        outputs.push([instance.target.base, instance.target.mask]);
       }
+      // The material units and their sampler objects are this pass's alone;
+      // hand them back clean, or the flow program's own samplers on 0–4 would
+      // read through a model sampler's wrap and filter state.
+      for (const unit of MODEL_MATERIAL_UNITS) bindSlot(unit, null, null);
+      gl.depthMask(true);
+      // Output bindings write uniforms belonging to the flow program, after
+      // every model draw has changed the active program.
+      gl.useProgram(program.program);
+      outputs.forEach(([base, mask], index) => {
+        bindOutput(program, index, 'Base', base);
+        bindOutput(program, index, 'Mask', mask);
+      });
     },
     clear() {
       for (const instance of held.values()) freeInstance(instance);
@@ -1285,6 +1907,9 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
     },
     free() {
       this.clear();
+      textures.free();
+      for (const sampler of samplers.values()) gl.deleteSampler(sampler);
+      samplers.clear();
       gl.deleteTexture(blank);
       gl.deleteProgram(meshProgram.program);
       gl.deleteProgram(shadowProgram.program);

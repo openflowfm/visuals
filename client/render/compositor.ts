@@ -109,7 +109,10 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       error: 'WebGL2 is not available in this browser.',
       stats: () => idle.read(),
       resetStats: () => idle.reset(),
-      modelResources: () => ({ instances: 0, geometries: 0, targets: 0, shadows: 0, loading: 0 }),
+      modelResources: () => ({
+        instances: 0, geometries: 0, targets: 0, shadows: 0, loading: 0,
+        textures: 0, textureBytes: 0, decoding: 0, textureReuse: 0,
+      }),
     };
   }
 
@@ -454,6 +457,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
           canvas.height,
           id ?? '',
           modelViews,
+          seconds,
         );
         // The model bank rendered into its own depth target. Return to the
         // ordinary flow destination and state before sampling those textures.
