@@ -814,6 +814,64 @@ float formVaultExcitation(vec3 q, float ribs, float arch, float phase) {
   return mix(base, 1.4, max(railWave, pathWave * 0.68));
 }
 
+// A finite equatorial barrel of horizontal circles inset from the prolate
+// meridian cage. Fixed outside members narrow slightly, rounding the projected
+// capsule ends. Folding only finite member identity keeps that barrel bounded
+// instead of repeating hoops above and below its real edges.
+float formGraticuleBelt(vec3 q, float ribs, float belt, float t) {
+  float count = 11.0 + floor(clamp(ribs, 0.0, 1.0) * 4.999) * 2.0;
+  float extent = mix(0.2, 0.39, clamp(belt, 0.0, 1.0));
+  float spacing = extent * 2.0 / (count - 1.0);
+  float member = clamp(round((q.y + extent) / spacing), 0.0, count - 1.0);
+  float height = -extent + member * spacing;
+  float across = height / extent;
+  float radius = 0.75 * (1.0 - across * across * 0.08);
+  return length(vec2(length(q.xz) - radius, q.y - height)) - t;
+}
+
+// Xenon 63 is the graticule that Xenon 59 specifically is not: complete
+// meridians enclose a separate finite horizontal hoop barrel. The vertical
+// planes produce the outer oval and top/bottom fans; the inset circles project
+// into the capsule waist and its two rounded ends without touching the cage.
+float formGraticule(vec3 q, float ribs, float belt, float phase, float t) {
+  float count = 7.0 + floor(clamp(ribs, 0.0, 1.0) * 5.999) * 2.0;
+  float sector = PI / count;
+  float spin = clamp(phase, 0.0, 1.0) * sector;
+  float meridians = formMeridianBank(q, 0.0, 0.86, 1.02, count, spin, t);
+  return min(meridians, formGraticuleBelt(q, ribs, belt, t * 0.82));
+}
+
+// Closed waves are indexed by the permanent plane or height member and then
+// by position around that same rail. Dark stretches remain real intersecting
+// solids, which preserves the graticule's junctions and occlusion order.
+float formGraticuleExcitation(vec3 q, float ribs, float belt, float phase) {
+  float a = clamp(phase, 0.0, 1.0) * 2.0 * PI;
+  float meridianCount = 7.0 + floor(clamp(ribs, 0.0, 1.0) * 5.999) * 2.0;
+  float sector = PI / meridianCount;
+  float spin = clamp(phase, 0.0, 1.0) * sector;
+  float meridianD = formMeridianBank(q, 0.0, 0.86, 1.02,
+                                      meridianCount, spin, 0.0);
+  float azimuth = atan(q.z, q.x);
+  float plane = round((azimuth - spin) / sector);
+  float polar = atan(length(q.xz) / 0.86, q.y / 1.02);
+
+  float latitudeCount = 11.0 + floor(clamp(ribs, 0.0, 1.0) * 4.999) * 2.0;
+  float extent = mix(0.2, 0.39, clamp(belt, 0.0, 1.0));
+  float spacing = extent * 2.0 / (latitudeCount - 1.0);
+  float latitude = clamp(round((q.y + extent) / spacing), 0.0, latitudeCount - 1.0);
+  float latitudeHeight = -extent + latitude * spacing;
+  float latitudeD = formGraticuleBelt(q, ribs, belt, 0.0);
+  float ringAngle = atan(q.z, q.x);
+
+  float identity = meridianD < latitudeD ? plane : latitude + 4.3;
+  float along = meridianD < latitudeD ? polar : ringAngle;
+  float memberWave = pow(0.5 + 0.5 * cos(identity * 0.79 - a * 2.0), 4.0);
+  float pathWave = pow(0.5 + 0.5 * cos(along * 2.0 + identity * 0.31 + a * 3.0), 6.0);
+  float beltEdge = pow(abs(latitudeHeight / extent), 1.5);
+  float base = meridianD < latitudeD ? 0.28 : mix(0.42, 0.78, beltEdge);
+  return mix(base, 1.35, max(memberWave, pathWave * 0.58));
+}
+
 // The woven object repeated as construction rather than copied as pixels.
 // Each cell holds three orthogonal bundles of four rounded loops; folding the
 // point into the cell makes the field infinite without a loop inside the march.
@@ -1046,6 +1104,9 @@ vec3 formBaseColour(vec3 q, int mode, float extra, float detail, float motion) {
   if (mode == 18) {
     return mix(uPrimary * 0.06, uChalk, 0.08);
   }
+  if (mode == 19) {
+    return mix(uPrimary * 0.08, uChalk, 0.12);
+  }
   if (mode == 14 || mode == 15 || mode == 16) {
     // Every hoop is the same pale luminous stock. Recovering a sector from the
     // shaded world point after the shared rocking transform would make colours
@@ -1187,6 +1248,9 @@ float formField(vec3 q, int mode, float thick, float extra, float detail, float 
   if (mode == 18) {
     return formVault(q, extra, detail, motion, t);
   }
+  if (mode == 19) {
+    return formGraticule(q, extra, detail, motion, t);
+  }
   // A helix winding away down the corridor. The one shape here whose distance
   // is an over-estimate along its axis, which is why every march takes half
   // steps: a full one would tunnel through the strand and draw nothing.
@@ -1208,7 +1272,7 @@ float formField(vec3 q, int mode, float thick, float extra, float detail, float 
 float formStride(int mode) {
   if (mode == 5) return 0.85;
   if (mode == 10) return 0.5;
-  return mode == 19 ? 0.5 : 0.9;
+  return mode == 20 ? 0.5 : 0.9;
 }
 
 // The surface direction, from four samples around the point the ray stopped at.
@@ -1370,6 +1434,15 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
     push = pow(push, 0.35);
     away *= mix(1.45, 0.62, push);
   }
+  if (mode == 19) {
+    // Xenon 63 starts with the full cage visible, pushes into the graticule at
+    // mid-loop, then returns to the same eye at the seam. The object and its
+    // junctions remain fixed; only the eye moves through this closed path.
+    float cameraPhase = clamp(motion, 0.0, 1.0);
+    float push = sin(cameraPhase * PI);
+    push = clamp(push * push * (1.0 - cos(cameraPhase * PI) * 0.65), 0.0, 1.0);
+    away *= mix(1.0, 0.95, push);
+  }
   vec3 eye = vec3(cos(pitch) * sin(yaw), sin(pitch), cos(pitch) * cos(yaw)) * away;
   vec3 fwd = normalize(-eye);
   vec3 side = normalize(cross(vec3(0.0, 1.0, 0.0), fwd));
@@ -1416,7 +1489,7 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
     side = rolledSide;
   }
 
-  if (mode == 19) {
+  if (mode == 20) {
     float off = clamp(dolly, 0.0, 1.0) * 0.32;
     float coil = 0.6 + clamp(extra, 0.0, 1.0) * 3.5;
     float cycle = 2.0 * PI / coil;
@@ -1432,7 +1505,8 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
   // orthographic-looking ball.
   float focal = mode == 16 || mode == 18 ? 0.88
     : (mode == 17 ? 1.0
-      : (mode == 13 || mode == 14 || mode == 15 ? 1.1 : 1.4));
+      : (mode == 19 ? 1.05
+        : (mode == 13 || mode == 14 || mode == 15 ? 1.1 : 1.4)));
   vec3 ray = normalize(fwd * focal + side * p.x + up * p.y);
 
   float tight = mix(120.0, 24.0, clamp(flare, 0.0, 1.0));
@@ -1440,6 +1514,7 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
   if (mode == 16) tight *= 0.58;
   if (mode == 17) tight *= 1.8;
   if (mode == 18) tight *= 0.27;
+  if (mode == 19) tight *= 0.2;
   float stride = formStride(mode);
   /*
    * Start each ray a random fraction of a step along, and the contours go away.
@@ -1493,6 +1568,9 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
   if (mode == 16) raw *= formSpindleExcitation(where, extra, motion);
   if (mode == 17) raw *= formMeridianExcitation(where, extra, detail, motion) * 4.5;
   if (mode == 18) raw *= formVaultExcitation(where, extra, detail, motion) * 0.21;
+  float graticuleExcitation = mode == 19
+    ? formGraticuleExcitation(where, extra, detail, motion) : 1.0;
+  if (mode == 19) raw *= graticuleExcitation * 0.16;
   // The armillary is polished black construction in a lit room, not emissive
   // wire. Energy opens a controlled amount of internal light for the bright
   // Xenon 84 treatment; near zero, Xenon 87 is revealed almost entirely by
@@ -1509,6 +1587,7 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
   // light as a grazing ray, which otherwise draws a black cord inside a cyan
   // halo. The footage has the opposite physical ordering: a saturated core
   // with bloom falling away from it.
+  if (mode == 19) raw = max(raw, hit * graticuleExcitation * 0.55);
   if (mode == 14 || mode == 15 || mode == 16 || mode == 17 || mode == 18) {
     raw = max(raw, hit * mix(0.12, 0.32, clamp(e, 0.0, 1.0)));
   }
@@ -1524,7 +1603,7 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
   // That is why its hottest frames remain chromatic instead of becoming a
   // white cage. Other forms retain the harder neutral filament.
   vec3 hot = mode == 8 ? uChalk
-    : (mode == 18 ? mix(uPrimary, uChalk, 0.35) : vec3(1.0));
+    : (mode == 18 || mode == 19 ? mix(uPrimary, uChalk, 0.35) : vec3(1.0));
   vec3 colour = mix(material, hot, clamp(raw * 1.6 - 0.75, 0.0, 1.0));
   colour *= 1.0 + max(raw - 1.0, 0.0) * mix(0.8, 2.6, clamp(flare, 0.0, 1.0));
   if (mode == 8) colour = min(colour, uChalk * 1.02);
@@ -1567,7 +1646,7 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
         : (mode == 13 ? formAstrolabeSky(bounced)
           : (mode == 16 ? formSpindleSky(bounced)
             : (mode == 17 ? formMeridianSky(bounced)
-              : (mode == 18 ? formVaultSky(bounced) : formSky(bounced))))));
+              : (mode == 18 || mode == 19 ? formVaultSky(bounced) : formSky(bounced))))));
     vec3 shell = reflectedRoom * mix(0.35, 1.0, facing) * roomWeight
                + vec3(1.0) * glint * mix(1.4, 6.0, polish) * glintWeight
                + uChalk * facing * 0.6 * rimWeight;

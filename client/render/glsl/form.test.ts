@@ -466,7 +466,8 @@ describe('the astrolabe is one rigid sculpture of variable metal gimbals', () =>
     expect(FORM_LIB).toContain('vec2(width + t, depth + t * 0.32)');
     expect(FORM_LIB).toContain('formRibbonGimbalXY(m0, 0.98, 0.042, 0.012, t)');
     expect(FORM_LIB).not.toContain('formGimbalXY(m0');
-    expect(FORM_LIB).toContain(': (mode == 13 || mode == 14 || mode == 15 ? 1.1 : 1.4));');
+    expect(FORM_LIB).toContain(': (mode == 19 ? 1.05');
+    expect(FORM_LIB).toContain(': (mode == 13 || mode == 14 || mode == 15 ? 1.1 : 1.4)));');
     expect(FORM_LIB).toContain('if (mode == 13) tight *= 0.42;');
   });
 
@@ -765,10 +766,58 @@ describe('the vault is two finite perpendicular stacks of permanent rounded loop
     expect(FORM_LIB).toContain('float formVaultExcitation(');
     expect(FORM_LIB).toContain('float railWave = pow(0.5 + 0.5 * cos(member * 0.86 - a * 2.0), 5.0);');
     expect(FORM_LIB).toContain('raw *= formVaultExcitation(where, extra, detail, motion) * 0.21;');
-    expect(FORM_LIB).toContain('mode == 18 ? mix(uPrimary, uChalk, 0.35)');
+    expect(FORM_LIB).toContain('mode == 18 || mode == 19 ? mix(uPrimary, uChalk, 0.35)');
     expect(FORM_LIB).toContain('return mix(uPrimary * 0.06, uChalk, 0.08);');
     expect(FORM_LIB).toContain('vec3 formVaultSky(vec3 ray)');
-    expect(FORM_LIB).toContain('mode == 18 ? formVaultSky(bounced)');
+    expect(FORM_LIB).toContain('mode == 18 || mode == 19 ? formVaultSky(bounced)');
+  });
+});
+
+describe('the graticule encloses a finite equatorial hoop barrel in complete meridians', () => {
+  it('keeps the hoop barrel inset and gives it a fixed rounded radius hierarchy', () => {
+    const radius = (height: number, extent: number) =>
+      0.75 * (1 - (height / extent) ** 2 * 0.08);
+    expect(radius(0, 0.36)).toBeCloseTo(0.75, 12);
+    expect(radius(0.36, 0.36)).toBeCloseTo(0.69, 12);
+    expect(radius(-0.36, 0.36)).toBeCloseTo(radius(0.36, 0.36), 12);
+    expect(radius(0, 0.36)).toBeLessThan(0.86);
+    expect(FORM_LIB).toContain('float formGraticuleBelt(');
+    expect(FORM_LIB).toContain('11.0 + floor(clamp(ribs, 0.0, 1.0) * 4.999) * 2.0');
+    expect(FORM_LIB).toContain('clamp(round((q.y + extent) / spacing), 0.0, count - 1.0)');
+    expect(FORM_LIB).toContain('float radius = 0.75 * (1.0 - across * across * 0.08);');
+  });
+
+  it('unites distinct vertical-plane and horizontal-circle families at real junctions', () => {
+    const graticule = FORM_LIB.slice(
+      FORM_LIB.indexOf('float formGraticule('),
+      FORM_LIB.indexOf('// Closed waves are indexed'),
+    );
+    expect(graticule).toContain('formMeridianBank(q, 0.0, 0.86, 1.02');
+    expect(graticule).toContain('formGraticuleBelt(q, ribs, belt, t * 0.82)');
+    expect(graticule).not.toMatch(/for\s*\(/);
+    expect(FORM_LIB).toContain('return formGraticule(q, extra, detail, motion, t);');
+  });
+
+  it('rotates the repeated meridian field by one sector and closes at the seam', () => {
+    for (const count of [7, 11, 17]) {
+      const sector = Math.PI / count;
+      expect(Math.cos(sector * count)).toBeCloseTo(-1, 12);
+      expect(Math.sin(sector * count)).toBeCloseTo(0, 12);
+    }
+    expect(FORM_LIB).toContain('float spin = clamp(phase, 0.0, 1.0) * sector;');
+    expect(FORM_LIB).toContain('push * push * (1.0 - cos(cameraPhase * PI) * 0.65)');
+    expect(FORM_LIB).toContain('away *= mix(1.0, 0.95, push);');
+  });
+
+  it('moves light by permanent plane and height identity', () => {
+    expect(FORM_LIB).toContain('float formGraticuleExcitation(');
+    expect(FORM_LIB).toContain('float identity = meridianD < latitudeD ? plane : latitude + 4.3;');
+    expect(FORM_LIB).toContain('float beltEdge = pow(abs(latitudeHeight / extent), 1.5);');
+    expect(FORM_LIB).toContain('mix(0.42, 0.78, beltEdge)');
+    expect(FORM_LIB).toContain('float graticuleExcitation = mode == 19');
+    expect(FORM_LIB).toContain('if (mode == 19) raw *= graticuleExcitation * 0.16;');
+    expect(FORM_LIB).toContain('if (mode == 19) raw = max(raw, hit * graticuleExcitation * 0.55);');
+    expect(FORM_LIB).toContain('mode == 18 || mode == 19 ? formVaultSky(bounced)');
   });
 });
 
@@ -854,7 +903,7 @@ describe('the march is bounded and says so', () => {
       FORM_LIB.indexOf('float formField('),
       FORM_LIB.indexOf('float formStride('),
     );
-    expect(FORM_MODES.length).toBe(20);
+    expect(FORM_MODES.length).toBe(21);
     for (let i = 0; i < FORM_MODES.length - 1; i++) {
       expect(field).toContain(`if (mode == ${i})`);
     }
@@ -865,10 +914,10 @@ describe('the march is bounded and says so', () => {
   it('takes half steps only for the shape whose distance is an over-estimate', () => {
     // The helix measures across the strand while the strand moves away along
     // its own axis, so the true nearest surface can be nearer than it says.
-    expect(FORM_MODES.indexOf('tube')).toBe(19);
+    expect(FORM_MODES.indexOf('tube')).toBe(20);
     expect(FORM_LIB).toContain('if (mode == 5) return 0.85;');
     expect(FORM_LIB).toContain('if (mode == 10) return 0.5;');
-    expect(FORM_LIB).toContain('return mode == 19 ? 0.5 : 0.9;');
+    expect(FORM_LIB).toContain('return mode == 20 ? 0.5 : 0.9;');
   });
 
   it('accumulates glow along the ray rather than once per step', () => {

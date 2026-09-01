@@ -364,7 +364,7 @@ editors listing these differently would be two different vocabularies.
 | `field` | `p` `energy`, plus `balls` `apart` on metaballs | `c` | `cells` `clouds` `metaballs`; fixed work, charged per graph sample and never offered per track |
 | `fractal` | `p` `energy` + its mode's numbers | `c` | `mandelbrot` or `julia`, with bounded zoom, detail and iterative work |
 | `light` | `p` `energy` + its mode's numbers, and `from` on the hung three | `c` | `lamp` `beam` `shafts` `caustics`; 2D lights with fixed work, drifting in seconds rather than beats |
-| `form` | `p` `turn` `tilt` `dolly` `thick` `flare` `chrome` `energy` + its mode's numbers | `c` | `torus` `rings` `frame` `lattice` `weave` `loom` `orbits` `relief` `iris` `truss` `rotor` `armillary` `gyre` `astrolabe` `rosette` `corolla` `spindle` `meridian` `vault` `tube`; the one node with a third coordinate in it, marched and charged like a fractal |
+| `form` | `p` `turn` `tilt` `dolly` `thick` `flare` `chrome` `energy` + its mode's numbers | `c` | `torus` `rings` `frame` `lattice` `weave` `loom` `orbits` `relief` `iris` `truss` `rotor` `armillary` `gyre` `astrolabe` `rosette` `corolla` `spindle` `meridian` `vault` `graticule` `tube`; the one node with a third coordinate in it, marched and charged like a fractal |
 | `glow` | `d` `energy` + its mode's numbers | `c` | `neon` `soft` `band`: a distance becomes a lit stroke |
 | `shade` | `n` `amount` `energy` | `c` | `across` `heat` `filament`: a number becomes a colour off the colourway |
 | `flow` | `p` | `c` | another flow, whole, as one node |
@@ -648,6 +648,21 @@ paths without exchanging members. A member-indexed light wave illuminates whole 
 a weaker wave travels around each same D-loop. Narrow reflected panels expose the remaining dark
 chrome, keeping geometry, member exposure, surface light and the final cyan transfer independently
 controllable.
+
+`graticule` encloses a finite equatorial hoop barrel inside a prolate cage of complete meridians.
+Nine repeated vertical planes produce Xenon 63's outside oval and its crowded top and bottom fans.
+Thirteen horizontal circles occupy fixed heights inside them; their radius narrows slightly toward
+the two outside members, so an elevated eye sees a rounded horizontal capsule inset from the cage.
+This is not a globe whose latitude circles touch its meridian envelope: the persistent gap between
+the barrel ends and outside oval is part of the construction.
+
+`ribs` changes the permanent member hierarchy in both families while retaining four more barrel
+hoops than meridian planes, `belt` changes the barrel's finite height and `phase` rotates the repeated
+meridian field by exactly one plane sector. The belt and cage remain separate solids at every value.
+Light is indexed first by permanent plane or height member and then by position around that same
+rail; the barrel's outside members carry a stable exposure that preserves its capsule boundary.
+The eye makes a small later-weighted closed push during the same phase, then returns exactly at the
+seam. Geometry, camera, member light, reflected cyan room and downstream transfer remain independent.
 
 `loom` repeats the weave as geometry through all three axes rather than tiling a rendered
 picture of it. Every cell contains three orthogonal four-member loop bundles. Each complete
