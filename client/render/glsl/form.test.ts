@@ -466,7 +466,7 @@ describe('the astrolabe is one rigid sculpture of variable metal gimbals', () =>
     expect(FORM_LIB).toContain('vec2(width + t, depth + t * 0.32)');
     expect(FORM_LIB).toContain('formRibbonGimbalXY(m0, 0.98, 0.042, 0.012, t)');
     expect(FORM_LIB).not.toContain('formGimbalXY(m0');
-    expect(FORM_LIB).toContain(': (mode == 13 || mode == 14 || mode == 15 ? 1.1 : 1.4);');
+    expect(FORM_LIB).toContain(': (mode == 13 || mode == 14 || mode == 15 ? 1.1 : 1.4));');
     expect(FORM_LIB).toContain('if (mode == 13) tight *= 0.42;');
   });
 
@@ -631,6 +631,77 @@ describe('the spindle is a finite waist of permanent open coaxial hoops', () => 
   });
 });
 
+describe('the meridian is two pole-sharing banks of complete elliptical rails', () => {
+  const bank = (
+    x: number,
+    y: number,
+    z: number,
+    centre: number,
+    radius: number,
+    halfHeight: number,
+    count: number,
+    spin: number,
+  ) => {
+    const sector = Math.PI / count;
+    const wrapped = Math.atan2(z, x) - spin + sector * 0.5;
+    const angle = ((wrapped % sector) + sector) % sector - sector * 0.5;
+    const radial = Math.hypot(x, z);
+    const alongPlane = radial * Math.cos(angle);
+    const offPlane = radial * Math.sin(angle);
+    const ellipse = (Math.hypot(alongPlane / radius, (y - centre) / halfHeight) - 1)
+      * Math.min(radius, halfHeight);
+    return Math.hypot(ellipse, offPlane);
+  };
+
+  it('makes both lobes meet at one pole while keeping distinct opposite poles', () => {
+    const radius = 1.2;
+    const height = 0.48;
+    const count = 15;
+    expect(bank(0, 0, 0, height, radius, height, count, 0)).toBeCloseTo(0, 12);
+    expect(bank(0, 0, 0, -height, radius, height, count, 0)).toBeCloseTo(0, 12);
+    expect(bank(0, height * 2, 0, height, radius, height, count, 0)).toBeCloseTo(0, 12);
+    expect(bank(0, -height * 2, 0, -height, radius, height, count, 0)).toBeCloseTo(0, 12);
+    expect(bank(radius, height, 0, height, radius, height, count, 0)).toBeCloseTo(0, 12);
+  });
+
+  it('uses only complete meridians, never a false crossing latitude family', () => {
+    expect(FORM_LIB).toContain('float formMeridianBank(');
+    expect(FORM_LIB).toContain('float formMeridian(');
+    expect(FORM_LIB).toContain('float sector = PI / count;');
+    expect(FORM_LIB).toContain('float upper = formMeridianBank(q, halfHeight');
+    expect(FORM_LIB).toContain('float lower = formMeridianBank(q, -halfHeight');
+    expect(FORM_LIB).not.toContain('formLatitudeBank');
+    expect(FORM_LIB).not.toContain('formBouquet');
+  });
+
+  it('counter-rotates one repeated plane spacing and closes exactly at the seam', () => {
+    const count = 15;
+    const sector = Math.PI / count;
+    for (const point of [[0.73, 0.26, 0.41], [-0.4, 0.52, 0.8], [0.2, -0.7, -0.5]]) {
+      const [x, y, z] = point as [number, number, number];
+      const centre = y >= 0 ? 0.48 : -0.48;
+      const direction = y >= 0 ? 1 : -1;
+      expect(bank(x, y, z, centre, 1.2, 0.48, count, direction * sector))
+        .toBeCloseTo(bank(x, y, z, centre, 1.2, 0.48, count, 0), 12);
+    }
+    expect(FORM_LIB).toContain('float spin = clamp(phase, 0.0, 1.0) * sector;');
+    expect(FORM_LIB).toContain('count, -spin, rail');
+    expect(FORM_LIB).toContain('return formMeridian(q, extra, detail, motion, t);');
+  });
+
+  it('moves light along persistent rails rather than revealing them with a screen mask', () => {
+    expect(FORM_LIB).toContain('float formMeridianExcitation(');
+    expect(FORM_LIB).toContain('float polar = atan(radial / radius');
+    expect(FORM_LIB).toContain('float plane = round((azimuth - spin) / sector) * sector + spin;');
+    expect(FORM_LIB).toContain('float travelling = max(along, counter * 0.62) * 0.78;');
+    expect(FORM_LIB).toContain('formMeridianExcitation(where, extra, detail, motion) * 4.5');
+    expect(FORM_LIB).toContain('return mix(uPrimary, uChalk, 0.15);');
+    expect(FORM_LIB).toContain('if (mode == 17) tight *= 1.8;');
+    expect(FORM_LIB).toContain('vec3 formMeridianSky(vec3 ray)');
+    expect(FORM_LIB).toContain('mode == 17 ? formMeridianSky(bounced)');
+  });
+});
+
 describe('the cube is edges, not a brick', () => {
   it('is on the surface along an edge and inside the tube around it', () => {
     expect(cage(0, 1, 1, 1, 0.05)).toBeCloseTo(-0.05, 12);
@@ -713,7 +784,7 @@ describe('the march is bounded and says so', () => {
       FORM_LIB.indexOf('float formField('),
       FORM_LIB.indexOf('float formStride('),
     );
-    expect(FORM_MODES.length).toBe(18);
+    expect(FORM_MODES.length).toBe(19);
     for (let i = 0; i < FORM_MODES.length - 1; i++) {
       expect(field).toContain(`if (mode == ${i})`);
     }
@@ -724,10 +795,10 @@ describe('the march is bounded and says so', () => {
   it('takes half steps only for the shape whose distance is an over-estimate', () => {
     // The helix measures across the strand while the strand moves away along
     // its own axis, so the true nearest surface can be nearer than it says.
-    expect(FORM_MODES.indexOf('tube')).toBe(17);
+    expect(FORM_MODES.indexOf('tube')).toBe(18);
     expect(FORM_LIB).toContain('if (mode == 5) return 0.85;');
     expect(FORM_LIB).toContain('if (mode == 10) return 0.5;');
-    expect(FORM_LIB).toContain('return mode == 17 ? 0.5 : 0.9;');
+    expect(FORM_LIB).toContain('return mode == 18 ? 0.5 : 0.9;');
   });
 
   it('accumulates glow along the ray rather than once per step', () => {

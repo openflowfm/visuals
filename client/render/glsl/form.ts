@@ -635,6 +635,69 @@ float formSpindleExcitation(vec3 q, float ribs, float phase) {
   return mix(0.16, 0.78, wave) * overhead;
 }
 
+// One bank of elliptical meridians. Every member is a complete closed rail in
+// a vertical plane through the y axis; folding azimuth modulo half a sector
+// selects the nearest physical plane, including its opposite radial half. The
+// ellipse approximation is deliberately conservative (scaled by its shorter
+// axis), so the march cannot step through the more strongly bowed side.
+float formMeridianBank(vec3 q, float centre, float radius, float halfHeight,
+                       float count, float spin, float t) {
+  q.y -= centre;
+  float sector = PI / count;
+  float angle = mod(atan(q.z, q.x) - spin + sector * 0.5, sector) - sector * 0.5;
+  float radial = length(q.xz);
+  float alongPlane = radial * cos(angle);
+  float offPlane = radial * sin(angle);
+  float ellipse = (length(vec2(alongPlane / radius, q.y / halfHeight)) - 1.0)
+    * min(radius, halfHeight);
+  return length(vec2(ellipse, offPlane)) - t;
+}
+
+// Xenon 59 is two banks of longitudes, not a flower outline or a latitude grid.
+// The upper and lower oblate banks share the origin as one pole and each has
+// its own opposite pole. Counter-rotating by exactly one repeated plane spacing
+// makes a closed loop without changing, birthing or deleting any rail.
+float formMeridian(vec3 q, float ribs, float bow, float phase, float t) {
+  float count = floor(mix(7.0, 17.0, clamp(ribs, 0.0, 1.0)));
+  float halfHeight = 0.48;
+  float radius = mix(0.7, 1.5, clamp(bow, 0.0, 1.0));
+  float sector = PI / count;
+  float spin = clamp(phase, 0.0, 1.0) * sector;
+  float rail = t * 0.3 + 0.0015;
+  float upper = formMeridianBank(q, halfHeight, radius, halfHeight,
+                                  count, spin, rail);
+  float lower = formMeridianBank(q, -halfHeight, radius, halfHeight,
+                                  count, -spin, rail);
+  return min(upper, lower);
+}
+
+// Light travels along each same complete rail as well as between physical
+// planes. The ellipsoidal polar coordinate selects arc position without a
+// screen mask; plane angle remains the permanent member identity. Horizontal
+// tangencies and central edge-on fans can therefore flare independently while
+// all dark portions remain present geometry.
+float formMeridianExcitation(vec3 q, float ribs, float bow, float phase) {
+  float count = floor(mix(7.0, 17.0, clamp(ribs, 0.0, 1.0)));
+  float sector = PI / count;
+  float spin = (q.y >= 0.0 ? 1.0 : -1.0) * clamp(phase, 0.0, 1.0) * sector;
+  float halfHeight = 0.48;
+  float centre = (q.y >= 0.0 ? 1.0 : -1.0) * halfHeight;
+  float radius = mix(0.7, 1.5, clamp(bow, 0.0, 1.0));
+  float radial = length(q.xz);
+  float azimuth = atan(q.z, q.x);
+  float plane = round((azimuth - spin) / sector) * sector + spin;
+  float polar = atan(radial / radius, (q.y - centre) / halfHeight);
+  float sideArc = pow(abs(cos(plane)), 1.7);
+  float centreFan = pow(abs(sin(plane)), 1.7);
+  float a = phase * 2.0 * PI;
+  float along = pow(0.5 + 0.5 * cos(polar * 3.0 - a * 2.0 + plane * 2.0), 4.0);
+  float counter = pow(0.5 + 0.5 * cos(polar * 2.0 + a * 3.0 - plane * 4.0), 5.0);
+  float travelling = max(along, counter * 0.62) * 0.78;
+  float exposed = max(centreFan * 0.96, max(sideArc * 0.18, travelling));
+  float bank = mix(0.65, 1.25, 0.5 + 0.5 * sin(a + step(0.0, q.y) * PI));
+  return mix(0.07, 1.0, exposed) * bank;
+}
+
 // The woven object repeated as construction rather than copied as pixels.
 // Each cell holds three orthogonal bundles of four rounded loops; folding the
 // point into the cell makes the field infinite without a loop inside the march.
@@ -861,6 +924,9 @@ vec3 formBaseColour(vec3 q, int mode, float extra, float detail, float motion) {
     // than being painted permanently onto whole members.
     return mix(uChalk, role, 0.28);
   }
+  if (mode == 17) {
+    return mix(uPrimary, uChalk, 0.15);
+  }
   if (mode == 14 || mode == 15 || mode == 16) {
     // Every hoop is the same pale luminous stock. Recovering a sector from the
     // shaded world point after the shared rocking transform would make colours
@@ -996,6 +1062,9 @@ float formField(vec3 q, int mode, float thick, float extra, float detail, float 
   if (mode == 16) {
     return formSpindle(q, extra, detail, motion, t);
   }
+  if (mode == 17) {
+    return formMeridian(q, extra, detail, motion, t);
+  }
   // A helix winding away down the corridor. The one shape here whose distance
   // is an over-estimate along its axis, which is why every march takes half
   // steps: a full one would tunnel through the strand and draw nothing.
@@ -1017,7 +1086,7 @@ float formField(vec3 q, int mode, float thick, float extra, float detail, float 
 float formStride(int mode) {
   if (mode == 5) return 0.85;
   if (mode == 10) return 0.5;
-  return mode == 17 ? 0.5 : 0.9;
+  return mode == 18 ? 0.5 : 0.9;
 }
 
 // The surface direction, from four samples around the point the ray stopped at.
@@ -1131,6 +1200,22 @@ vec3 formSpindleSky(vec3 ray) {
   return room;
 }
 
+// A mostly cyan studio for the meridian banks. Narrow pale vertical panels make
+// the pole-sharing rails flash separately as their planes counter-rotate;
+// keeping the lower hemisphere dark preserves the black gaps between them.
+vec3 formMeridianSky(vec3 ray) {
+  float azimuth = atan(ray.x, ray.z);
+  float cyan = pow(0.5 + 0.5 * cos(azimuth * 4.0 - 0.22), 11.0);
+  float pale = pow(clamp(dot(ray, normalize(vec3(-0.18, 0.42, -0.89))),
+                         0.0, 1.0), 14.0);
+  float horizon = 1.0 - smoothstep(0.03, 0.11, abs(ray.y + 0.08));
+  vec3 room = vec3(0.001);
+  room += uPrimary * cyan * 1.18;
+  room += uChalk * pale * 2.4;
+  room += uSecondary * horizon * 0.3;
+  return room;
+}
+
 vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
                 float thick, float flare, float chrome, float extra, float detail, float motion) {
   float yaw = turn * 6.28318530718;
@@ -1192,7 +1277,7 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
     side = rolledSide;
   }
 
-  if (mode == 17) {
+  if (mode == 18) {
     float off = clamp(dolly, 0.0, 1.0) * 0.32;
     float coil = 0.6 + clamp(extra, 0.0, 1.0) * 3.5;
     float cycle = 2.0 * PI / coil;
@@ -1207,12 +1292,14 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
   // closer without widening it merely crops a larger version of the same tidy
   // orthographic-looking ball.
   float focal = mode == 16 ? 0.88
-    : (mode == 13 || mode == 14 || mode == 15 ? 1.1 : 1.4);
+    : (mode == 17 ? 1.0
+      : (mode == 13 || mode == 14 || mode == 15 ? 1.1 : 1.4));
   vec3 ray = normalize(fwd * focal + side * p.x + up * p.y);
 
   float tight = mix(120.0, 24.0, clamp(flare, 0.0, 1.0));
   if (mode == 13) tight *= 0.42;
   if (mode == 16) tight *= 0.58;
+  if (mode == 17) tight *= 1.8;
   float stride = formStride(mode);
   /*
    * Start each ray a random fraction of a step along, and the contours go away.
@@ -1264,6 +1351,7 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
   // spread. See OVERBRIGHT.
   float raw = gathered * mix(8.0, 26.0, clamp(flare, 0.0, 1.0)) * mix(0.7, 1.2, e);
   if (mode == 16) raw *= formSpindleExcitation(where, extra, motion);
+  if (mode == 17) raw *= formMeridianExcitation(where, extra, detail, motion) * 4.5;
   // The armillary is polished black construction in a lit room, not emissive
   // wire. Energy opens a controlled amount of internal light for the bright
   // Xenon 84 treatment; near zero, Xenon 87 is revealed almost entirely by
@@ -1280,7 +1368,7 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
   // light as a grazing ray, which otherwise draws a black cord inside a cyan
   // halo. The footage has the opposite physical ordering: a saturated core
   // with bloom falling away from it.
-  if (mode == 14 || mode == 15 || mode == 16) {
+  if (mode == 14 || mode == 15 || mode == 16 || mode == 17) {
     raw = max(raw, hit * mix(0.12, 0.32, clamp(e, 0.0, 1.0)));
   }
   float lit = clamp(raw, 0.0, 1.0);
@@ -1335,7 +1423,8 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
       ? formArmillarySky(bounced)
       : (mode == 12 ? formArmillarySky(bounced) * 1.18
         : (mode == 13 ? formAstrolabeSky(bounced)
-          : (mode == 16 ? formSpindleSky(bounced) : formSky(bounced))));
+          : (mode == 16 ? formSpindleSky(bounced)
+            : (mode == 17 ? formMeridianSky(bounced) : formSky(bounced)))));
     vec3 shell = reflectedRoom * mix(0.35, 1.0, facing) * roomWeight
                + vec3(1.0) * glint * mix(1.4, 6.0, polish) * glintWeight
                + uChalk * facing * 0.6 * rimWeight;

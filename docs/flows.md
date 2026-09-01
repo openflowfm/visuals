@@ -364,7 +364,7 @@ editors listing these differently would be two different vocabularies.
 | `field` | `p` `energy`, plus `balls` `apart` on metaballs | `c` | `cells` `clouds` `metaballs`; fixed work, charged per graph sample and never offered per track |
 | `fractal` | `p` `energy` + its mode's numbers | `c` | `mandelbrot` or `julia`, with bounded zoom, detail and iterative work |
 | `light` | `p` `energy` + its mode's numbers, and `from` on the hung three | `c` | `lamp` `beam` `shafts` `caustics`; 2D lights with fixed work, drifting in seconds rather than beats |
-| `form` | `p` `turn` `tilt` `dolly` `thick` `flare` `chrome` `energy` + its mode's numbers | `c` | `torus` `rings` `frame` `lattice` `weave` `loom` `orbits` `relief` `iris` `truss` `rotor` `armillary` `gyre` `astrolabe` `rosette` `corolla` `spindle` `tube`; the one node with a third coordinate in it, marched and charged like a fractal |
+| `form` | `p` `turn` `tilt` `dolly` `thick` `flare` `chrome` `energy` + its mode's numbers | `c` | `torus` `rings` `frame` `lattice` `weave` `loom` `orbits` `relief` `iris` `truss` `rotor` `armillary` `gyre` `astrolabe` `rosette` `corolla` `spindle` `meridian` `tube`; the one node with a third coordinate in it, marched and charged like a fractal |
 | `glow` | `d` `energy` + its mode's numbers | `c` | `neon` `soft` `band`: a distance becomes a lit stroke |
 | `shade` | `n` `amount` `energy` | `c` | `across` `heat` `filament`: a number becomes a colour off the colourway |
 | `flow` | `p` | `c` | another flow, whole, as one node |
@@ -616,6 +616,22 @@ render; a permanent overhead bias gives the stack its asymmetric studio exposure
 volumetric halo uses lower gain than the other fine-wire forms, and polished surfaces reflect a
 separate cyan/warm panel room. The graph therefore controls geometry, endpoint motion, light and
 material independently while remaining one bounded march.
+
+`meridian` builds two oblate banks of complete elliptical rails in permanent vertical planes.
+Every upper member shares the waist pole and one upper pole; every lower member shares that same
+waist pole and one lower pole. Their projection explains both parts of Xenon 59 without inventing
+a second structure: near-edge-on planes collect into the narrow central fans, while progressively
+face-on planes become the long nested side arcs. There are no latitude hoops and therefore no
+false grid junctions. `ribs` sets the repeated plane count and `bow` changes the horizontal ellipse
+radius without changing any pole or rail identity.
+
+`phase` counter-rotates the upper and lower plane sets by exactly one repeated plane spacing, so
+the first and last fields are identical. Two closed waves travel around each ellipse in physical
+polar coordinates and across its fixed plane identity. That makes bright segments migrate along
+the same complete rails while the unlit portions remain real occluding geometry rather than being
+deleted by a screen mask. A mostly cyan strip-lit room and a small opposing bank exposure reproduce
+the moving white/cyan emphasis while leaving geometry, excitation and reflected material separately
+controllable.
 
 `loom` repeats the weave as geometry through all three axes rather than tiling a rendered
 picture of it. Every cell contains three orthogonal four-member loop bundles. Each complete
