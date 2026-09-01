@@ -1,4 +1,4 @@
-@import '@openflow/widgets/type.css';
+@import '@openflow/widgets/palette.css';
 
 * { box-sizing: border-box; }
 
@@ -21,10 +21,10 @@ html, body, #root {
   left: 12px;
   max-width: calc(100vw - 24px);
   padding: 8px 12px 6px;
-  border: 1px solid #2c2c31;
+  border: 1px solid var(--bd3);
   border-radius: var(--radius-md);
   background: rgb(10 10 11 / 0.82);
-  color: #b7b7be;
+  color: var(--ui);
   font-family: var(--mono);
   font-size: var(--text-body);
   line-height: 1.5;
@@ -37,7 +37,7 @@ html, body, #root {
   align-items: center;
   gap: 6px;
   margin: 0 0 6px;
-  color: #ececed;
+  color: var(--fg);
   font-size: var(--text-body);
   letter-spacing: var(--track-caps);
   text-transform: uppercase;
@@ -52,8 +52,8 @@ html, body, #root {
 
 .ok { background: #14351f; color: #6ee7a0; }
 .bad { background: #3a1418; color: #ff8b8b; }
-.warn { background: #3a2f14; color: #f0b23c; }
-.idle { background: #1c1c20; color: #5e5e66; }
+.warn { background: #3a2f14; color: var(--amber); }
+.idle { background: var(--sel); color: var(--caption); }
 
 .bad-line {
   margin: 0 0 8px;
@@ -74,7 +74,7 @@ html, body, #root {
   gap: 10px;
   padding: 24px;
   background: rgb(10 10 11 / 0.92);
-  color: #ececed;
+  color: var(--fg);
   font-family: var(--mono);
   font-size: var(--text-lead);
   text-align: center;
@@ -90,10 +90,10 @@ html, body, #root {
 
 .boundary button {
   padding: 4px 12px;
-  border: 1px solid #2c2c31;
+  border: 1px solid var(--bd3);
   border-radius: var(--radius-sm);
-  background: #1c1c20;
-  color: #b7b7be;
+  background: var(--sel);
+  color: var(--ui);
   font: inherit;
   cursor: pointer;
 }
@@ -107,8 +107,8 @@ html, body, #root {
   margin: 0;
 }
 
-.panel dt { color: #5e5e66; font-size: var(--text-label); text-transform: uppercase; letter-spacing: var(--track-label); }
-.panel dd { margin: 0; color: #ececed; white-space: nowrap; }
+.panel dt { color: var(--caption); font-size: var(--text-label); text-transform: uppercase; letter-spacing: var(--track-label); }
+.panel dd { margin: 0; color: var(--fg); white-space: nowrap; }
 
 .panel dd.wide {
   max-width: 14ch;
@@ -119,12 +119,12 @@ html, body, #root {
 .panel dd.beat { display: flex; gap: 4px; }
 
 .panel dd.beat b {
-  color: #3a3a41;
+  color: var(--idle);
   font-weight: var(--weight-normal);
   font-variant-numeric: tabular-nums;
 }
 
-.panel dd.beat b[data-on] { color: #f0b23c; }
+.panel dd.beat b[data-on] { color: var(--amber); }
 
 .panel dd.frames {
   display: flex;
@@ -133,19 +133,19 @@ html, body, #root {
   font-variant-numeric: tabular-nums;
 }
 
-.panel dd.frames small { color: #5e5e66; }
+.panel dd.frames small { color: var(--caption); }
 
-.panel dd.frames.good { color: #ececed; }
-.panel dd.frames.watch { color: #f0b23c; }
+.panel dd.frames.good { color: var(--fg); }
+.panel dd.frames.watch { color: var(--amber); }
 .panel dd.frames.bad { color: #ff8b8b; }
 
-.hint { margin: 6px 0 0; color: #5e5e66; }
+.hint { margin: 6px 0 0; color: var(--caption); }
 
 kbd {
   padding: 0 3px;
-  border: 1px solid #2c2c31;
+  border: 1px solid var(--bd3);
   border-radius: var(--radius-xs);
-  background: #151517;
+  background: var(--surface-control);
 }
 
 .panel dd.wall {
@@ -162,17 +162,17 @@ kbd {
 
 .panel dd.wall button {
   padding: 0 4px;
-  border: 1px solid #2c2c31;
+  border: 1px solid var(--bd3);
   border-radius: var(--radius-xs);
-  background: #151517;
-  color: #b7b7be;
+  background: var(--surface-control);
+  color: var(--ui);
   font: inherit;
   cursor: pointer;
 }
 
 .panel dd.wall button:hover {
   border-color: #45454d;
-  color: #ececed;
+  color: var(--fg);
 }
 
 [data-wall] { cursor: none; }

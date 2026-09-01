@@ -10,7 +10,7 @@
   height: 28px;
   margin: -14px 0 0 -14px;
   padding: 0;
-  border: 2px solid #f0b23c;
+  border: 2px solid var(--amber);
   border-radius: 50%;
   background: rgb(240 178 60 / 0.15);
   cursor: grab;
@@ -26,7 +26,7 @@
   height: 4px;
   margin: -2px 0 0 -2px;
   border-radius: 50%;
-  background: #f0b23c;
+  background: var(--amber);
   content: '';
 }
 
@@ -49,10 +49,10 @@
   align-items: center;
   gap: 12px;
   padding: 8px 12px;
-  border: 1px solid #2c2c31;
+  border: 1px solid var(--bd3);
   border-radius: var(--radius-md);
   background: rgb(10 10 11 / 0.85);
-  color: #b7b7be;
+  color: var(--ui);
   font-family: var(--mono);
   font-size: var(--text-body);
   pointer-events: auto;
@@ -61,48 +61,48 @@
 }
 
 .alignbar b {
-  color: #f0b23c;
+  color: var(--amber);
   font-weight: var(--weight-normal);
   letter-spacing: var(--track-caps);
   text-transform: uppercase;
 }
 
 .alignbar span {
-  color: #5e5e66;
+  color: var(--caption);
 }
 
 .alignbar .gain {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #5e5e66;
+  color: var(--caption);
 }
 
 .alignbar .gain input {
   width: 110px;
-  accent-color: #f0b23c;
+  accent-color: var(--amber);
 }
 
 .alignbar .gain i {
   width: 34px;
-  color: #b7b7be;
+  color: var(--ui);
   font-style: normal;
   text-align: right;
 }
 
 .alignbar button {
   padding: 3px 9px;
-  border: 1px solid #2c2c31;
+  border: 1px solid var(--bd3);
   border-radius: var(--radius-sm);
-  background: #151517;
-  color: #b7b7be;
+  background: var(--surface-control);
+  color: var(--ui);
   font: inherit;
   cursor: pointer;
 }
 
 .alignbar button:hover:not(:disabled) {
-  border-color: #4a4a52;
-  color: #ececed;
+  border-color: var(--focus);
+  color: var(--fg);
 }
 
 .alignbar button:disabled {

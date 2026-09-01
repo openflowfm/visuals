@@ -1,25 +1,13 @@
 .console {
-  --surface-control: #151517;
-  --bd3: #2c2c31;
-  --focus: #4a4a52;
-  --idle: #3a3a41;
-  --amber: #f0b23c;
-  --fg: #ececed;
-  --ui: #b7b7be;
-  --caption: #5e5e66;
-  --panel: #0e0e10;
-  --sel: #1c1c20;
-  --surface-cell: #18181b;
-  --bd: #262629;
-  --radius-xs: 2px;
-  --radius-md: 4px;
+  /* the console sits a step darker than the rest of the suite */
+  --panel: var(--rail);
   --edge: #26262a;
   --rule: #1a1a1d;
+  /* the suite's --panel, which cannot be said as var(--panel) here
+     because the line above overrides that name inside this block */
   --well: #111113;
   --alarm: #ff8b8b;
   --live: #6ee7a0;
-  --detail: #8b8b93;
-  --radius-pill: 999px;
   --scroll-size: 10px;
   --scroll-inset: 3px;
 
@@ -27,7 +15,7 @@
   inset: 0;
   display: flex;
   flex-direction: column;
-  background: #0a0a0b;
+  background: var(--bg);
   color: var(--ui);
   font-family: var(--mono);
   font-size: var(--text-body);
