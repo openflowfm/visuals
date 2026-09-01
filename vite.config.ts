@@ -30,6 +30,18 @@ export default defineConfig({
     emptyOutDir: true,
     target: 'es2022',
     sourcemap: true,
+    // The default 500 kB is a warning about downloading, and this page is not
+    // downloaded: it loads from `visual://app/`, off local disk, with no network
+    // in the path. What is in the 780 kB is react-dom, the node editor —
+    // `@xyflow/react` and its d3 — and this client's own render and ui, which is
+    // to say all of it is used and none of it is a surprise.
+    //
+    // Splitting it would trade a few milliseconds of parse at launch for a chunk
+    // that can fail to arrive *later*, which is the wrong direction for
+    // something running during a set — the same instinct as the rule against
+    // CDNs. Raised rather than turned off, so a dependency that doubles the
+    // bundle still says so.
+    chunkSizeWarningLimit: 1500,
   },
   server: {
     port: PORT,
