@@ -210,7 +210,9 @@ describe('the loom is repeated construction with a closed flight', () => {
 
   it('keeps broad room light off its black chrome while retaining sharp glints', () => {
     expect(FORM_LIB).toContain('float roomWeight = mode == 5 ? 0.65 : 1.0;');
-    expect(FORM_LIB).toContain('float glintWeight = mode == 5 ? 0.3 : (mode == 11 ? 0.12 : 1.0);');
+    expect(FORM_LIB).toContain(
+      'float glintWeight = mode == 5 ? 0.3 : (mode == 11 ? 0.12 : (mode == 12 ? 0.2 : 1.0));',
+    );
   });
 
   it('returns its eye and heading modulo exactly four repeated cells', () => {
@@ -364,12 +366,66 @@ describe('the armillary is a nested bank around a dark body and three gimbals', 
     expect(FORM_LIB).toContain('float role = mod(member, 4.0);');
     expect(FORM_LIB).toContain('vec3 formArmillarySky(vec3 ray)');
     expect(FORM_LIB).toContain('float diagonalDistance = abs(dot(ray.xy, diagonalAxis) - 0.18);');
-    expect(FORM_LIB).toContain('mode == 11 ? formArmillarySky(bounced) : formSky(bounced)');
+    expect(FORM_LIB).toContain('mode == 12 ? formArmillarySky(bounced) * 1.18');
   });
 
   it('turns down emitted wire light before hiding the construction itself', () => {
     expect(FORM_LIB).toContain('if (mode == 11) raw *= mix(0.04, 0.65');
-    expect(FORM_LIB).toContain('mode == 11 ? 0.12 : 1.0');
+    expect(FORM_LIB).toContain('mode == 11 ? 0.12 : (mode == 12 ? 0.2 : 1.0)');
+  });
+});
+
+describe('the gyre is counter-moving nested rounded solids', () => {
+  it('builds four decreasing rounded loops without a shader loop', () => {
+    expect(FORM_LIB).toContain('float formGyreBank(');
+    expect(FORM_LIB).toContain('vec2 second = outer - vec2(stepDown, stepDown * 0.82);');
+    expect(FORM_LIB).toContain('vec2 fourth = outer - vec2(stepDown * 3.0, stepDown * 2.46);');
+    const field = FORM_LIB.slice(
+      FORM_LIB.indexOf('float formGyreBank('),
+      FORM_LIB.indexOf('// Two counter-moving rounded-loop banks'),
+    );
+    expect(field).not.toMatch(/for\s*\(/);
+    expect(FORM_LIB).toContain('t * 1.35 + 0.012');
+  });
+
+  it('keeps both counter-moving banks and the axial bank closed at the seam', () => {
+    const angles = (phase: number) => {
+      const a = phase * Math.PI * 2;
+      return [
+        a * 0.5,
+        (Math.cos(a) - 1) * 0.56,
+        Math.sin(a) * 0.22,
+        -a * 0.5,
+        (Math.cos(a) - 1) * 0.68,
+        -Math.sin(a) * 0.22,
+        a + Math.sin(a) * 0.28,
+        (Math.cos(a) - 1) * 0.34,
+      ];
+    };
+    const start = angles(0);
+    const end = angles(1);
+    expect((end[0]! - start[0]!) / Math.PI).toBeCloseTo(1, 12);
+    expect((end[3]! - start[3]!) / Math.PI).toBeCloseTo(-1, 12);
+    expect((end[6]! - start[6]!) / (Math.PI * 2)).toBeCloseTo(1, 12);
+    for (const index of [1, 2, 4, 5, 7]) {
+      expect(end[index]).toBeCloseTo(start[index]!, 12);
+    }
+    expect(angles(0.5)).not.toEqual(start);
+    expect(FORM_LIB).toContain('return formGyre(q, extra, detail, motion, t);');
+  });
+
+  it('uses the same black strip room without adopting armillary energy suppression', () => {
+    expect(FORM_LIB).toContain('mode == 12 ? formArmillarySky(bounced) * 1.18');
+    expect(FORM_LIB).toContain('mode == 12 ? 0.2 : 1.0');
+    expect(FORM_LIB).not.toContain('mode == 12) raw *= mix(0.04, 0.65');
+  });
+
+  it('assigns bright material by nearest physical member rather than screen radius', () => {
+    expect(FORM_LIB).toContain('float formGyreOuter(');
+    expect(FORM_LIB).toContain('corner, 0.0) - 0.012;');
+    expect(FORM_LIB).toContain('outside - anyMember');
+    expect(FORM_LIB).toContain('raw *= mix(0.14, 0.58, gyreOuter);');
+    expect(FORM_LIB).toContain('material = mix(uPrimary * 0.08, uChalk, gyreOuter);');
   });
 });
 
@@ -455,7 +511,7 @@ describe('the march is bounded and says so', () => {
       FORM_LIB.indexOf('float formField('),
       FORM_LIB.indexOf('float formStride('),
     );
-    expect(FORM_MODES.length).toBe(13);
+    expect(FORM_MODES.length).toBe(14);
     for (let i = 0; i < FORM_MODES.length - 1; i++) {
       expect(field).toContain(`if (mode == ${i})`);
     }
@@ -466,10 +522,10 @@ describe('the march is bounded and says so', () => {
   it('takes half steps only for the shape whose distance is an over-estimate', () => {
     // The helix measures across the strand while the strand moves away along
     // its own axis, so the true nearest surface can be nearer than it says.
-    expect(FORM_MODES.indexOf('tube')).toBe(12);
+    expect(FORM_MODES.indexOf('tube')).toBe(13);
     expect(FORM_LIB).toContain('if (mode == 5) return 0.85;');
     expect(FORM_LIB).toContain('if (mode == 10) return 0.5;');
-    expect(FORM_LIB).toContain('return mode == 12 ? 0.5 : 0.9;');
+    expect(FORM_LIB).toContain('return mode == 13 ? 0.5 : 0.9;');
   });
 
   it('accumulates glow along the ray rather than once per step', () => {

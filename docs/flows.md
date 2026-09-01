@@ -364,7 +364,7 @@ editors listing these differently would be two different vocabularies.
 | `field` | `p` `energy`, plus `balls` `apart` on metaballs | `c` | `cells` `clouds` `metaballs`; fixed work, charged per graph sample and never offered per track |
 | `fractal` | `p` `energy` + its mode's numbers | `c` | `mandelbrot` or `julia`, with bounded zoom, detail and iterative work |
 | `light` | `p` `energy` + its mode's numbers, and `from` on the hung three | `c` | `lamp` `beam` `shafts` `caustics`; 2D lights with fixed work, drifting in seconds rather than beats |
-| `form` | `p` `turn` `tilt` `dolly` `thick` `flare` `chrome` `energy` + its mode's numbers | `c` | `torus` `rings` `frame` `lattice` `weave` `loom` `orbits` `relief` `iris` `truss` `rotor` `armillary` `tube`; the one node with a third coordinate in it, marched and charged like a fractal |
+| `form` | `p` `turn` `tilt` `dolly` `thick` `flare` `chrome` `energy` + its mode's numbers | `c` | `torus` `rings` `frame` `lattice` `weave` `loom` `orbits` `relief` `iris` `truss` `rotor` `armillary` `gyre` `tube`; the one node with a third coordinate in it, marched and charged like a fractal |
 | `glow` | `d` `energy` + its mode's numbers | `c` | `neon` `soft` `band`: a distance becomes a lit stroke |
 | `shade` | `n` `amount` `energy` | `c` | `across` `heat` `filament`: a number becomes a colour off the colourway |
 | `flow` | `p` | `c` | another flow, whole, as one node |
@@ -550,6 +550,18 @@ over the finished image. `ribs` sets the bank's member count, `nest` its outer r
 `tumble` runs the bank and three gimbals through separate closed precessions. Hoop planes are
 half-turn periodic, so their whole- and half-turn paths meet exactly at the loop seam even
 though their bounded excursions produce different intermediate silhouettes.
+
+`gyre` uses three banks of four genuinely nested rounded hoops. Two large banks turn in
+counter-motion and a smaller axial bank runs through them, producing the capsule, diamond,
+crossed waist and rounded-square projections of one continuous construction. The outer hoop
+of each bank has a broader shoulder and is identified by comparing its exact distance with
+the whole bank once at the final shading point. It can therefore carry the pale emissive shell
+while inner members stay black chrome; a radius threshold would wrongly brighten the corners
+and sides of the same rounded rectangle differently. `nest` controls the size hierarchy,
+`corner` changes every member's roundness and `tumble` closes the two half-turn planes and
+axial whole turn at the seam. The Xenon 91 treatment mirrors the rendered projection across
+both frame axes—the source members remain ordinary 3D solids, while the two mirror seams make
+the exact bilateral cusps visible in the reference.
 
 `loom` repeats the weave as geometry through all three axes rather than tiling a rendered
 picture of it. Every cell contains three orthogonal four-member loop bundles. Each complete

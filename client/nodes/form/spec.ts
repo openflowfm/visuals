@@ -26,6 +26,7 @@ const descriptions: Record<Mode, string> = {
   truss: 'Parallel rounded-rectangle rails crossing around three planes as one cuboid armature.',
   rotor: 'Open swept blades repeated around the throat of a double-domed turbine cage.',
   armillary: 'A dark central body inside a precessing nested ring bank and three gimbal hoops.',
+  gyre: 'Paired nested rounded hoops turning through each other as a symmetric chrome gyroscope.',
   tube: 'A helix winding away down a corridor the eye is inside.',
 };
 
@@ -72,6 +73,11 @@ const values: Record<Mode, readonly PortSpec[]> = {
     numberPort('ribs', 'How many coplanar hoops fill the nested central bank.', 0.62),
     numberPort('nest', 'How far the bank extends from its dark central body.', 0.62),
     numberPort('tumble', 'Where the bank and three gimbals sit on their closed precession.', 0),
+  ],
+  gyre: [
+    numberPort('nest', 'How far the nested rounded hoops step down inside each other.', 0.52),
+    numberPort('corner', 'How round the gyroscope hoops become.', 0.68),
+    numberPort('tumble', 'Where the paired hoop families sit on their closed counter-motion.', 0),
   ],
   tube: [
     numberPort('coil', 'How tightly the helix winds as it goes away.', 0.35),

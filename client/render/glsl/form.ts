@@ -242,6 +242,82 @@ float formArmillary(vec3 q, float ribs, float nest, float phase, float t) {
   return min(d, formGimbalXY(inner, 0.76, 0.014, t * 0.74));
 }
 
+// Four nested rounded hoops in one plane. These are true decreasing solids,
+// not four outlines offset in screen space, so a tilted bank keeps depth and
+// lets the near shoulders hide the far ones. Xenon 91 repeatedly resolves into
+// a large capsule around smaller diamonds and rounded rectangles; that is a
+// nested size hierarchy, not a bank of equal parallel rails.
+float formGyreBank(vec3 q, vec2 outer, float stepDown, float corner, float t) {
+  float d = formRoundedLoopSize(q, outer, corner, t * 1.35 + 0.012);
+  vec2 second = outer - vec2(stepDown, stepDown * 0.82);
+  d = min(d, formRoundedLoopSize(q, second, max(corner - stepDown * 0.28, 0.05), t));
+  vec2 third = outer - vec2(stepDown * 2.0, stepDown * 1.64);
+  d = min(d, formRoundedLoopSize(q, third, max(corner - stepDown * 0.56, 0.045), t * 0.82));
+  vec2 fourth = outer - vec2(stepDown * 3.0, stepDown * 2.46);
+  return min(d, formRoundedLoopSize(q, fourth, max(corner - stepDown * 0.84, 0.04), t * 0.66));
+}
+
+// Two counter-moving rounded-loop banks plus one smaller axial bank. The pair
+// is explicit because both projections must coexist at the crossed waist: a
+// nearest-member fold can select only one. The graph mirrors their projection
+// across the two frame axes, which is why the finished object retains exact
+// bilateral symmetry while these real 3D members change occlusion order.
+float formGyre(vec3 q, float nest, float rounded, float phase, float t) {
+  float a = clamp(phase, 0.0, 1.0) * 2.0 * PI;
+  float stepDown = mix(0.065, 0.12, clamp(nest, 0.0, 1.0));
+  float corner = mix(0.18, 0.38, clamp(rounded, 0.0, 1.0));
+
+  vec3 first = q;
+  first.yz = formSpin(a * 0.5) * first.yz;
+  first.xz = formSpin((cos(a) - 1.0) * 0.56) * first.xz;
+  first.xy = formSpin(sin(a) * 0.22) * first.xy;
+  float d = formGyreBank(first, vec2(0.8, 0.67), stepDown, corner, t);
+
+  vec3 second = q;
+  second.xz = formSpin(-a * 0.5) * second.xz;
+  second.yz = formSpin((cos(a) - 1.0) * 0.68) * second.yz;
+  second.xy = formSpin(-sin(a) * 0.22) * second.xy;
+  d = min(d, formGyreBank(second, vec2(0.72, 0.54), stepDown * 0.82, corner * 0.86, t * 0.86));
+
+  vec3 axial = q;
+  axial.yz = formSpin(a + sin(a) * 0.28) * axial.yz;
+  axial.xz = formSpin((cos(a) - 1.0) * 0.34) * axial.xz;
+  return min(d, formGyreBank(axial, vec2(0.46, 0.32), stepDown * 0.52, corner * 0.62, t * 0.62));
+}
+
+// Whether the nearest member belongs to the outside of one of the three real
+// banks. This repeats the fixed distances once at the final shading point, not
+// inside the march. A radius threshold cannot answer the same question on a
+// rounded rectangle — its corners are farther from the origin than its sides —
+// and would make one physical hoop change emissivity around its own path.
+float formGyreOuter(vec3 q, float nest, float rounded, float phase) {
+  float a = clamp(phase, 0.0, 1.0) * 2.0 * PI;
+  float stepDown = mix(0.065, 0.12, clamp(nest, 0.0, 1.0));
+  float corner = mix(0.18, 0.38, clamp(rounded, 0.0, 1.0));
+
+  vec3 first = q;
+  first.yz = formSpin(a * 0.5) * first.yz;
+  first.xz = formSpin((cos(a) - 1.0) * 0.56) * first.xz;
+  first.xy = formSpin(sin(a) * 0.22) * first.xy;
+  float outside = formRoundedLoopSize(first, vec2(0.8, 0.67), corner, 0.0) - 0.012;
+
+  vec3 second = q;
+  second.xz = formSpin(-a * 0.5) * second.xz;
+  second.yz = formSpin((cos(a) - 1.0) * 0.68) * second.yz;
+  second.xy = formSpin(-sin(a) * 0.22) * second.xy;
+  outside = min(outside,
+    formRoundedLoopSize(second, vec2(0.72, 0.54), corner * 0.86, 0.0) - 0.012);
+
+  vec3 axial = q;
+  axial.yz = formSpin(a + sin(a) * 0.28) * axial.yz;
+  axial.xz = formSpin((cos(a) - 1.0) * 0.34) * axial.xz;
+  outside = min(outside,
+    formRoundedLoopSize(axial, vec2(0.46, 0.32), corner * 0.62, 0.0) - 0.012);
+
+  float anyMember = formGyre(q, nest, rounded, phase, 0.0);
+  return 1.0 - smoothstep(0.002, 0.025, outside - anyMember);
+}
+
 // The woven object repeated as construction rather than copied as pixels.
 // Each cell holds three orthogonal bundles of four rounded loops; folding the
 // point into the cell makes the field infinite without a loop inside the march.
@@ -565,6 +641,9 @@ float formField(vec3 q, int mode, float thick, float extra, float detail, float 
   if (mode == 11) {
     return formArmillary(q, extra, detail, motion, t);
   }
+  if (mode == 12) {
+    return formGyre(q, extra, detail, motion, t);
+  }
   // A helix winding away down the corridor. The one shape here whose distance
   // is an over-estimate along its axis, which is why every march takes half
   // steps: a full one would tunnel through the strand and draw nothing.
@@ -586,7 +665,7 @@ float formField(vec3 q, int mode, float thick, float extra, float detail, float 
 float formStride(int mode) {
   if (mode == 5) return 0.85;
   if (mode == 10) return 0.5;
-  return mode == 12 ? 0.5 : 0.9;
+  return mode == 13 ? 0.5 : 0.9;
 }
 
 // The surface direction, from four samples around the point the ray stopped at.
@@ -708,7 +787,7 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
     side = rolledSide;
   }
 
-  if (mode == 12) {
+  if (mode == 13) {
     float off = clamp(dolly, 0.0, 1.0) * 0.32;
     float coil = 0.6 + clamp(extra, 0.0, 1.0) * 3.5;
     float cycle = 2.0 * PI / coil;
@@ -776,12 +855,15 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
   // Xenon 84 treatment; near zero, Xenon 87 is revealed almost entirely by
   // the strips it reflects.
   if (mode == 11) raw *= mix(0.04, 0.65, pow(clamp(e, 0.0, 1.0), 2.0));
+  float gyreOuter = mode == 12 ? formGyreOuter(where, extra, detail, motion) : 1.0;
+  if (mode == 12) raw *= mix(0.14, 0.58, gyreOuter);
   float lit = clamp(raw, 0.0, 1.0);
   // Only what is genuinely saturated goes white. Mixing toward white from
   // halfway up leaves every tube the same pale grey and throws the colourway
   // away, which is the difference between a lit tube and a lit tube-shaped
   // hole.
   vec3 material = formBaseColour(where, mode, extra, detail, motion);
+  if (mode == 12) material = mix(uPrimary * 0.08, uChalk, gyreOuter);
   // Xenon's iris clips through the pale cyan role rather than neutral white:
   // one channel can reach the ceiling while the others keep the spectral rim.
   // That is why its hottest frames remain chromatic instead of becoming a
@@ -820,9 +902,11 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
     float glint = pow(clamp(dot(bounced, normalize(FORM_LAMP)), 0.0, 1.0), gloss)
                 + pow(clamp(dot(bounced, normalize(FORM_FILL)), 0.0, 1.0), gloss * 0.6) * 0.55;
     float roomWeight = mode == 5 ? 0.65 : 1.0;
-    float glintWeight = mode == 5 ? 0.3 : (mode == 11 ? 0.12 : 1.0);
+    float glintWeight = mode == 5 ? 0.3 : (mode == 11 ? 0.12 : (mode == 12 ? 0.2 : 1.0));
     float rimWeight = mode == 5 ? 0.25 : 1.0;
-    vec3 reflectedRoom = mode == 11 ? formArmillarySky(bounced) : formSky(bounced);
+    vec3 reflectedRoom = mode == 11
+      ? formArmillarySky(bounced)
+      : (mode == 12 ? formArmillarySky(bounced) * 1.18 : formSky(bounced));
     vec3 shell = reflectedRoom * mix(0.35, 1.0, facing) * roomWeight
                + vec3(1.0) * glint * mix(1.4, 6.0, polish) * glintWeight
                + uChalk * facing * 0.6 * rimWeight;

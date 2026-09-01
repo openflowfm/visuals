@@ -176,7 +176,7 @@ export const ARRAY_MODES = ['row', 'grid', 'ring', 'mirror'] as const;
  * that cube repeated through space, two compound tube arrangements, one of
  * those repeated into a camera-filling loom, an extruded path field, a lens
  * shell around a changing hoop assembly, a three-plane cuboid truss, a double-domed blade
- * rotor, a nested armillary, then a corridor the eye is inside. The compound forms
+ * rotor, a nested armillary, paired rounded gyroscope banks, then a corridor the eye is inside. The compound forms
  * reuse the same analytic ring and rounded-loop distances rather than
  * introducing another rendering path.
  *
@@ -197,6 +197,7 @@ export const FORM_MODES = [
   'truss',
   'rotor',
   'armillary',
+  'gyre',
   'tube',
 ] as const;
 
