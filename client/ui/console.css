@@ -175,8 +175,8 @@
 
 .console-head .preview-controls > .wdg > .wdg-caption,
 .room-source > .wdg-caption {
-  font-size: 7.5px;
-  letter-spacing: 0.1em;
+  font-size: var(--text-annot);
+  letter-spacing: var(--track-label);
   text-transform: uppercase;
 }
 
@@ -252,7 +252,7 @@
 .console h4 {
   margin: 0 0 6px;
   color: var(--caption);
-  letter-spacing: 0.16em;
+  letter-spacing: var(--track-caps);
   text-transform: uppercase;
   font-size: var(--text-label);
   font-weight: var(--weight-medium);
@@ -319,7 +319,7 @@
   border-radius: var(--radius-xs);
   background: var(--well);
   color: var(--caption);
-  letter-spacing: 0.1em;
+  letter-spacing: var(--track-label);
   text-transform: uppercase;
   font: inherit;
   font-size: var(--text-annot);
@@ -338,7 +338,7 @@
   align-items: center;
   gap: 5px;
   color: var(--caption);
-  letter-spacing: 0.12em;
+  letter-spacing: var(--track-caps);
   text-transform: uppercase;
   font-size: var(--text-label);
 }
@@ -439,7 +439,7 @@
   text-transform: none;
   letter-spacing: var(--track-none);
   line-height: 1.45;
-  font-size: 9.5px;
+  font-size: var(--text-control);
   margin: 0;
 }
 
@@ -691,7 +691,7 @@
   margin-right: 3px;
   font-weight: var(--weight-normal);
   color: var(--caption);
-  letter-spacing: 0.1em;
+  letter-spacing: var(--track-label);
   text-transform: uppercase;
   font-size: var(--text-annot);
 }
@@ -856,7 +856,7 @@
   color: var(--ui);
   text-transform: uppercase;
   font-size: var(--text-label);
-  letter-spacing: 0.06em;
+  letter-spacing: var(--track-slight);
 }
 
 .designer .circuit {
@@ -908,7 +908,7 @@
 
 .designer .bench .hold .wdg-button-body {
   font-size: var(--text-label);
-  letter-spacing: 0.06em;
+  letter-spacing: var(--track-slight);
   text-transform: uppercase;
 }
 
@@ -1166,7 +1166,7 @@
   flex-direction: column;
   gap: 3px;
   color: var(--caption);
-  letter-spacing: 0.12em;
+  letter-spacing: var(--track-caps);
   text-transform: uppercase;
   font-size: var(--text-label);
 }
@@ -1300,20 +1300,20 @@
 }
 
 .console .schemes .shelf .asking {
-  font-size: 9.5px;
+  font-size: var(--text-control);
   padding: 0 8px 4px;
 }
 
 .console .schemes .notice {
   color: var(--alarm);
-  font-size: 9.5px;
+  font-size: var(--text-control);
   max-width: 260px;
 }
 
 .console-head .train-context {
   flex: 1;
   color: var(--caption);
-  font-size: 10.5px;
+  font-size: var(--text-body);
   text-align: right;
   padding-right: 6px;
 }
@@ -1357,7 +1357,7 @@
   color: var(--caption);
   font: 10px var(--mono);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--track-slight);
   cursor: pointer;
 }
 
@@ -1374,7 +1374,7 @@
 .train-mode span {
   margin-left: 8px;
   color: var(--caption);
-  font-size: 9.5px;
+  font-size: var(--text-control);
 }
 
 .train-empty {
@@ -1441,7 +1441,7 @@
 
 .train-room-frozen {
   color: var(--caption);
-  font-size: 10.5px;
+  font-size: var(--text-body);
 }
 
 .train-cohort {
@@ -1519,7 +1519,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--fg);
-  font-size: 11.5px;
+  font-size: var(--text-lead);
   font-weight: var(--weight-medium);
 }
 
@@ -1578,7 +1578,7 @@
   display: flex;
   gap: 8px;
   color: var(--caption);
-  font-size: 9.5px;
+  font-size: var(--text-control);
 }
 
 .train-shared-room {
@@ -1595,7 +1595,7 @@
   align-items: center;
   justify-content: space-between;
   color: var(--caption);
-  font-size: 9.5px;
+  font-size: var(--text-control);
 }
 
 .train-anchor {
@@ -1721,12 +1721,12 @@
 
 .train-thumb span {
   color: var(--fg);
-  font-size: 11.5px;
+  font-size: var(--text-lead);
 }
 
 .train-thumb small {
   color: var(--caption);
-  font-size: 9.5px;
+  font-size: var(--text-control);
 }
 
 .train-thumb-up:hover b {
@@ -1759,13 +1759,13 @@
   color: var(--caption);
   font-size: var(--text-label);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--track-slight);
 }
 
 .train-tally dd {
   margin: 2px 0 0;
   color: var(--fg);
-  font-size: 13px;
+  font-size: var(--text-lead);
 }
 
 .train-choice .train-verbs {
@@ -1864,7 +1864,7 @@
   background: var(--surface-control);
   color: var(--ui);
   font: inherit;
-  font-size: 10.5px;
+  font-size: var(--text-body);
   padding: 2px 9px;
   cursor: pointer;
 }
@@ -1910,13 +1910,13 @@
 .train-notice {
   margin: 0;
   color: var(--alarm);
-  font-size: 10.5px;
+  font-size: var(--text-body);
 }
 
 .train-gate {
   margin: 0;
   color: var(--caption);
-  font-size: 10.5px;
+  font-size: var(--text-body);
 }
 
 .train-verbs {
@@ -1951,7 +1951,7 @@
 .finals-results h2 {
   margin: 0;
   color: var(--fg);
-  font-size: 16px;
+  font-size: var(--text-heading);
   font-weight: var(--weight-medium);
 }
 
@@ -1959,14 +1959,14 @@
 .finals-results p {
   margin: 0;
   color: var(--caption);
-  font-size: 10.5px;
+  font-size: var(--text-body);
 }
 
 .finals-kicker {
   color: var(--amber);
   font: 9px var(--mono);
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: var(--track-caps);
 }
 
 .finals-phase {
@@ -2054,13 +2054,13 @@
 .archive-empty h2 {
   margin: 0;
   color: var(--fg);
-  font-size: 16px;
+  font-size: var(--text-heading);
   font-weight: var(--weight-medium);
 }
 
 .archive-empty p {
   margin: 0;
-  font-size: 10.5px;
+  font-size: var(--text-body);
 }
 
 .archive-stage {
@@ -2078,7 +2078,7 @@
   align-items: center;
   gap: 10px;
   color: var(--caption);
-  font-size: 9.5px;
+  font-size: var(--text-control);
 }
 
 .archive-stage > header strong {
@@ -2126,7 +2126,7 @@
 .archive-choice p {
   margin: 0;
   color: var(--caption);
-  font-size: 10.5px;
+  font-size: var(--text-body);
   line-height: 1.45;
 }
 
@@ -2299,7 +2299,7 @@
   justify-content: space-between;
   gap: 7px;
   color: var(--caption);
-  font-size: 8.5px;
+  font-size: var(--text-label);
 }
 
 .forest-canvas {
@@ -2328,7 +2328,7 @@
   color: var(--caption);
   font: 9.5px var(--mono);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--track-slight);
   cursor: pointer;
 }
 
@@ -2494,7 +2494,7 @@
 .lineage-inspector > header strong {
   overflow: hidden;
   color: var(--fg);
-  font-size: 11.5px;
+  font-size: var(--text-lead);
   font-weight: var(--weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2812,7 +2812,7 @@
 .finals-results li strong {
   overflow: hidden;
   color: var(--fg);
-  font-size: 11.5px;
+  font-size: var(--text-lead);
   font-weight: var(--weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2820,7 +2820,7 @@
 
 .finals-results li small {
   color: var(--caption);
-  font-size: 9.5px;
+  font-size: var(--text-control);
 }
 
 .finals-results li dl {
@@ -2837,9 +2837,9 @@
 
 .finals-results li dt {
   color: var(--caption);
-  font-size: 8.5px;
+  font-size: var(--text-label);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--track-slight);
 }
 
 .finals-results li dd {
@@ -2870,7 +2870,7 @@
 
 .calibration-done h2 {
   color: var(--fg);
-  font-size: 16px;
+  font-size: var(--text-heading);
   font-weight: var(--weight-medium);
 }
 
@@ -2942,7 +2942,7 @@
 .calibration-controls h2 {
   margin: 0;
   color: var(--fg);
-  font-size: 15px;
+  font-size: var(--text-heading);
   font-weight: var(--weight-medium);
 }
 
@@ -3168,7 +3168,7 @@
 
 .reviews-row-name {
   color: var(--fg);
-  font-size: 11.5px;
+  font-size: var(--text-lead);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
