@@ -273,9 +273,11 @@ describe('finding one', () => {
   });
 
   it('reads the search box and the filter together', () => {
-    expect(matching(browser(), 'lens', { takes: ['p'], gives: [] })).toHaveLength(1);
-    // `lens` gives a point and a colour and no number, so this narrows it away
-    // even though the word still matches.
+    const hits = matching(browser(), 'lens', { takes: ['p'], gives: [] });
+    expect(hits.map((each) => each.node.kind)).toEqual(['form', 'lens']);
+    expect(hits[0].presets.map((each) => each.op)).toEqual(['iris']);
+    // Both `lens` and the lens-shaped iris form give a colour and no number, so
+    // asking for a number outlet narrows both away even though the word matches.
     expect(matching(browser(), 'lens', { takes: ['p'], gives: ['n'] })).toEqual([]);
   });
 

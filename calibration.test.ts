@@ -5,12 +5,13 @@ import { CALIBRATION_BASELINE_RESPONSES, responseKey } from './response.ts';
 
 describe('response calibration manifest', () => {
   it('covers the complete subjective visual-control matrix', () => {
-    // 136 rather than 128: `grade/highlights` and the two new `spread` modes
-    // brought eight uncalibrated controls between them — a knee and an amount,
-    // and a reach, a split, two drives and two energies. Like the three lfo
-    // shapes that arrived with `wave`'s merge, they rest on a linear response
-    // until the bench has run their trials — see docs/calibration.md.
-    expect(CALIBRATION_TRIALS).toHaveLength(136);
+    // 138 rather than 128: `grade/highlights`, the two new `spread` modes and
+    // `source/traces` brought ten uncalibrated controls between them — a knee
+    // and an amount; a reach, a split, two drives and two energies; then the
+    // trace density and its energy. Like the three lfo shapes that arrived with
+    // `wave`'s merge, they rest on a linear response until the bench has run
+    // their trials — see docs/calibration.md.
+    expect(CALIBRATION_TRIALS).toHaveLength(138);
     expect(new Set(CALIBRATION_TRIALS.map((trial) => trial.target.kind))).toEqual(
       new Set([
         'source',

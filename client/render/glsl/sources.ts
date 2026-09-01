@@ -29,6 +29,7 @@ export const SOURCE_VALUES = {
   sparks: ['shower'],
   checker: ['tiles'],
   rays: ['spokes'],
+  traces: ['tiles'],
 } as const satisfies Record<Source, readonly string[]>;
 
 /**

@@ -53,4 +53,34 @@ export const PATTERN_BODIES = {
   vec3 ink = mix(uPrimary * 0.55, mix(uPrimary, vec3(1.0), 0.34), parity);
   return vec4(ink * (0.5 + uLevel * 0.65),
               interior * mix(0.18, 0.78, parity));`,
-} satisfies Record<'checker' | 'rays', string>;
+
+  traces: `
+  // Truchet arcs: every square chooses one of two reflected corner pairings,
+  // and every arc meets the next square at its midpoint. The result is one
+  // continuous field of rounded paths rather than a wallpaper of separate
+  // glyphs. A slow diagonal drift lets the field travel without breaking its
+  // joins or turning into a camera pan beside the music.
+  float density = floor(mix(4.0, 10.0, tiles));
+  vec2 q = p * density + vec2(uBeat * rate(e) * 0.08);
+  vec2 id = floor(q);
+  vec2 within = fract(q);
+  if (hash(id + 7.31) < 0.5) within.x = 1.0 - within.x;
+  vec2 local = within - 0.5;
+  float first = abs(length(local - vec2(0.5)) - 0.5);
+  float second = abs(length(local + vec2(0.5)) - 0.5);
+  float distance = min(first, second);
+
+  // A hot filament inside a wider coloured trace. The phase belongs to each
+  // tile, so light travels through the network in pockets while the geometry
+  // stays continuous. edgeDistance keeps the same ordered anti-aliasing
+  // contract as the two patterns beside it.
+  float width = mix(0.085, 0.045, tiles);
+  float feather = max(density / min(uRes.x, uRes.y), 0.001);
+  float edgeDistance = width - distance;
+  float core = smoothstep(0.0, feather, edgeDistance);
+  float halo = 1.0 - smoothstep(width, width * 4.0, distance);
+  float chase = pow(1.0 - fract(uBeat * rate(e) * 0.25 + hash(id + 19.7)), 5.0);
+  vec3 ink = mix(uPrimary, vec3(1.0), core * 0.72 + chase * 0.2);
+  float coverage = max(core * (0.68 + chase * 0.32), halo * (0.12 + chase * 0.24));
+  return vec4(ink * (0.68 + chase * 0.68 + uLevel * 0.38), coverage);`,
+} satisfies Record<'checker' | 'rays' | 'traces', string>;

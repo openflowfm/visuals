@@ -83,13 +83,283 @@ float formCage(vec3 q, float R, float t) {
   return min(min(x, y), z) - t;
 }
 
+// Exact distance to the boundary of a rounded rectangle in its own plane.
+// Absolute value turns the signed distance to the filled box into distance to its
+// outline; adding the plane coordinate sweeps a round tube around the outline
+// rather than extruding a flat ribbon.
+float formRoundedBox2(vec2 p, vec2 halfSize, float corner) {
+  vec2 q = abs(p) - halfSize + vec2(corner);
+  return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - corner;
+}
+
+float formRoundedLoop(vec3 q, float halfSize, float corner, float t) {
+  float outline = abs(formRoundedBox2(q.xy, vec2(halfSize), corner));
+  return length(vec2(outline, q.z)) - t;
+}
+
+// Four parallel planes at -1.5, -0.5, 0.5 and 1.5 times the gap. Folding to
+// the nearest plane is the analytic version of evaluating four separate loops,
+// and keeps the weave exact without putting another loop inside the ray march.
+float formLayerPlane(float q, float gap) {
+  float folded = abs(q);
+  return min(abs(folded - gap * 0.5), abs(folded - gap * 1.5));
+}
+
+float formWeave(vec3 q, float apart, float corner, float t) {
+  float gap = mix(0.08, 0.19, clamp(apart, 0.0, 1.0));
+  float roundness = mix(0.08, 0.3, clamp(corner, 0.0, 1.0));
+  float d = formRoundedLoop(vec3(q.xy, formLayerPlane(q.z, gap)), 0.62, roundness, t);
+  d = min(d, formRoundedLoop(vec3(q.yz, formLayerPlane(q.x, gap)), 0.62, roundness, t));
+  return min(d, formRoundedLoop(vec3(q.xz, formLayerPlane(q.y, gap)), 0.62, roundness, t));
+}
+
+// Three successively smaller rounded frames in one plane. Unlike Weave's four
+// equal-size copies displaced through depth, these members share a plane and
+// step inward in scale. That difference is the truss's visible hierarchy.
+float formNestedFrames(vec3 q, float nest, float corner, float t) {
+  float stepDown = mix(0.075, 0.17, clamp(nest, 0.0, 1.0));
+  float roundness = mix(0.035, 0.22, clamp(corner, 0.0, 1.0));
+  float d = formRoundedLoop(q, 0.72, roundness, t);
+  d = min(d, formRoundedLoop(q, 0.72 - stepDown, roundness * 0.82, t * 0.82));
+  return min(d, formRoundedLoop(q, 0.72 - stepDown * 2.0, roundness * 0.64, t * 0.66));
+}
+
+// Nine real frames: three nested scales on each of three crossing planes.
+// The whole union tumbles before any distance is taken, so every crossing has
+// stable front/back order and the construction never boils or changes identity.
+float formTruss(vec3 q, float nest, float corner, float phase, float t) {
+  float a = clamp(phase, 0.0, 1.0) * 2.0 * PI;
+  q.xy = formSpin(a + sin(a) * 0.31) * q.xy;
+  q.yz = formSpin(a * 2.0 + sin(a * 2.0) * 0.19) * q.yz;
+  float d = formNestedFrames(q, nest, corner, t);
+  d = min(d, formNestedFrames(vec3(q.yz, q.x), nest, corner, t));
+  return min(d, formNestedFrames(vec3(q.xz, q.y), nest, corner, t));
+}
+
+// The woven object repeated as construction rather than copied as pixels.
+// Each cell holds three orthogonal bundles of four rounded loops; folding the
+// point into the cell makes the field infinite without a loop inside the march.
+// The camera can therefore pass between real members and preserve occlusion at
+// every crossing, which a tiled render of the finite weave could not do.
+float formLoom(vec3 q, float apart, float cells, float t) {
+  float cell = mix(0.82, 1.5, clamp(cells, 0.0, 1.0));
+  q -= cell * round(q / cell);
+  float gap = mix(0.055, 0.13, clamp(apart, 0.0, 1.0));
+  float size = cell * 0.4;
+  float corner = cell * 0.13;
+  float lift = t;
+
+  // Each bundle rises and falls continuously out of its nominal plane. The
+  // three phases disagree at a crossing, so the tubes pass at different
+  // depths instead of occupying the same volume and becoming one CSG joint.
+  // Unlike cutting a gap in the lower tube, this leaves every member complete.
+  float xyPlane = q.z - sin(atan(q.y, q.x) * 2.0) * lift;
+  float yzPlane = q.x - sin(atan(q.z, q.y) * 2.0 + 2.0943951) * lift;
+  float xzPlane = q.y - sin(atan(q.z, q.x) * 2.0 + 4.1887902) * lift;
+  float d = formRoundedLoop(vec3(q.xy, formLayerPlane(xyPlane, gap)), size, corner, t);
+  d = min(d, formRoundedLoop(vec3(q.yz, formLayerPlane(yzPlane, gap)), size, corner, t));
+  return min(d, formRoundedLoop(vec3(q.xz, formLayerPlane(xzPlane, gap)), size, corner, t));
+}
+
+// One outer eye/lens and many circular ribs seen edge-on inside it.
+//
+// A lens is the intersection of two equal circles whose centres are separated
+// vertically. max() is that intersection's signed field; abs() turns its
+// boundary into a centreline, and z sweeps a round tube around it. The ribs are
+// a finite bank of equal yz rings. Each one rotates rigidly about y; changing a
+// ring's radius made the bank pinch into a waveform, while the footage keeps a
+// cylindrical envelope and gets its crossed silhouettes from tilted hoops.
+// Folding x selects the nearest ring analytically, preserving the form
+// renderer's one-loop invariant instead of nesting fifteen distances inside
+// every ray-march step.
+float formLens2(vec2 p, float centre, float radius) {
+  float upper = length(p - vec2(0.0, centre)) - radius;
+  float lower = length(p + vec2(0.0, centre)) - radius;
+  return max(upper, lower);
+}
+
+float formIrisRib(vec3 q, float ribs, float open, float phase, float t) {
+  float spacing = mix(0.07, 0.03, clamp(ribs, 0.0, 1.0));
+  float member = round(q.x / spacing);
+  float across = clamp(abs(member * spacing) / 0.24, 0.0, 1.0);
+  float radius = mix(0.12, 0.3, clamp(open, 0.0, 1.0));
+  radius *= 1.0 - across * across * 0.22;
+  vec3 local = q - vec3(member * spacing, 0.0, 0.0);
+  float swing = sin(clamp(phase, 0.0, 1.0) * PI);
+  swing *= swing;
+  // The spatial sine makes neighbouring members form a coherent fan rather
+  // than fifteen unrelated rotations. At phase zero and one every ring is
+  // edge-on again, so the topology and the loop seam both close exactly.
+  local.xz = formSpin(swing * sin(member * 0.43) * 0.92) * local.xz;
+  return length(vec2(length(local.yz) - radius, local.x)) - t * 0.52;
+}
+
+float formIrisHoop(vec3 q, float centre, float angle, float radius, float t) {
+  vec3 local = q - vec3(centre, 0.0, 0.0);
+  local.xz = formSpin(angle) * local.xz;
+  return length(vec2(length(local.yz) - radius, local.x)) - t * 0.52;
+}
+
+float formIris(vec3 q, float ribs, float open, float phase, float t) {
+  float lens = abs(formLens2(q.xy, 0.34, 0.84));
+  float shell = length(vec2(lens, q.z)) - t;
+  float spacing = mix(0.07, 0.03, clamp(ribs, 0.0, 1.0));
+  float radius = mix(0.12, 0.3, clamp(open, 0.0, 1.0)) * 0.97;
+  float swing = sin(clamp(phase, 0.0, 1.0) * PI);
+  swing *= swing;
+
+  // The edge-on state can fold fifteen members into one exact distance. Once
+  // hoops tilt, their projections overlap and a nearest-cell fold cannot draw
+  // both at once. Two explicit symmetric hoops supply that crossed state with
+  // no nested loop; distance offsets crossfade excitation between the complete
+  // bank and the pair while leaving both constructions physically coherent.
+  float bank = formIrisRib(q, ribs, open, phase, t) + swing * 0.052;
+  float pair = formIrisHoop(q, spacing * 2.5, swing * 0.72, radius, t);
+  pair = min(pair, formIrisHoop(q, -spacing * 2.5, -swing * 0.72, radius, t));
+  pair += (1.0 - swing) * 0.065;
+  float rib = max(min(bank, pair), abs(q.x) - 0.24);
+  return min(shell, rib);
+}
+
+float formSegment2(vec2 p, vec2 a, vec2 b) {
+  vec2 line = b - a;
+  float along = clamp(dot(p - a, line) / dot(line, line), 0.0, 1.0);
+  return length(p - a - line * along);
+}
+
+// A deterministic grammar of the objects actually visible in the reference:
+// closed frames, open nested U modules, elbows and stepped hooks. Each is an
+// orthogonal centreline with rounded corners and ends, before extrusion gives
+// it a broad face and sidewalls. The grammar matters. One reflected pair of
+// Truchet arcs made a beautiful continuous field, but it could only ever draw
+// sinuous ribbons; no lighting or camera could turn those into these separate
+// machined glyphs.
+//
+// It is deliberately *not* a round tube. The footage this mode reconstructs is
+// made from broad bands with a face, a short vertical wall and a soft bevel.
+// Sweeping a circle around the path produced neon cable: related vocabulary,
+// but physically a different object. Intersecting the path band with a shallow
+// z slab gives the ray all three surfaces the reference uses to reveal itself.
+float formRelief(vec3 q, float tiles, float raise, float t) {
+  float cell = mix(0.72, 0.28, clamp(tiles, 0.0, 1.0));
+  vec2 grid = q.xy / cell;
+  vec2 id = floor(grid);
+  vec2 local = fract(grid) - 0.5;
+  float quarter = floor(hash(id + 11.7) * 4.0);
+  local = formSpin(quarter * PI * 0.5) * local;
+
+  float motif = hash(id + 7.31);
+  float path;
+  if (motif < 0.2) {
+    path = formSegment2(local, vec2(-0.32, 0.3), vec2(-0.32, -0.24));
+    path = min(path, formSegment2(local, vec2(-0.32, -0.24), vec2(0.32, -0.24)));
+    path = min(path, formSegment2(local, vec2(0.32, -0.24), vec2(0.32, 0.3)));
+    path = min(path, formSegment2(local, vec2(-0.13, 0.16), vec2(-0.13, -0.05)));
+    path = min(path, formSegment2(local, vec2(-0.13, -0.05), vec2(0.13, -0.05)));
+    path = min(path, formSegment2(local, vec2(0.13, -0.05), vec2(0.13, 0.16)));
+  } else if (motif < 0.4) {
+    path = abs(formRoundedBox2(local, vec2(0.31, 0.29), 0.11));
+  } else if (motif < 0.6) {
+    path = formSegment2(local, vec2(-0.31, 0.3), vec2(-0.31, -0.12));
+    path = min(path, formSegment2(local, vec2(-0.31, -0.12), vec2(0.3, -0.12)));
+    path = min(path, formSegment2(local, vec2(-0.1, 0.16), vec2(-0.1, 0.08)));
+    path = min(path, formSegment2(local, vec2(-0.1, 0.08), vec2(0.22, 0.08)));
+  } else if (motif < 0.8) {
+    path = formSegment2(local, vec2(-0.32, 0.24), vec2(0.08, 0.24));
+    path = min(path, formSegment2(local, vec2(0.08, 0.24), vec2(0.08, -0.22)));
+    path = min(path, formSegment2(local, vec2(0.08, -0.22), vec2(0.32, -0.22)));
+  } else {
+    float first = abs(length(local - vec2(0.5)) - 0.5);
+    float second = abs(length(local + vec2(0.5)) - 0.5);
+    path = min(first, second);
+  }
+  path *= cell;
+  float height = mix(0.035, 0.24, clamp(raise, 0.0, 1.0));
+  height *= mix(0.68, 1.08, hash(id + 31.4));
+  float band = min(t, cell * 0.095);
+  float bevel = min(band * 0.38, height * 0.3);
+  vec2 slab = vec2(
+    path - max(band - bevel, 0.002),
+    abs(q.z - height * 0.5) - max(height * 0.5 - bevel, 0.002)
+  );
+  return min(max(slab.x, slab.y), 0.0) + length(max(slab, 0.0)) - bevel;
+}
+
+// Which physical loop a weave ray stopped on. The field only needs distance,
+// but the material needs identity: painting the whole union one cyan turns a
+// woven object back into an undifferentiated cage. Repeating the three analytic
+// distances once at the hit is cheap beside repeating them at every march step.
+vec3 formBaseColour(vec3 q, int mode, float extra, float detail, float motion) {
+  if (mode == 7) {
+    float cell = mix(0.72, 0.28, clamp(extra, 0.0, 1.0));
+    vec2 id = floor(q.xy / cell);
+    float chase = pow(1.0 - fract(motion + hash(id + 19.7)), 5.0);
+    return mix(uPrimary, uChalk, chase * 0.88);
+  }
+  if (mode == 5) {
+    float cell = mix(0.82, 1.5, clamp(detail, 0.0, 1.0));
+    vec3 id = floor(q / cell + 0.5);
+    float key = hash(id.xy + id.z * 17.3);
+    return mix(uPrimary * 0.12, uChalk, pow(key, 8.0) * 0.8);
+  }
+  if (mode == 8) {
+    float spacing = mix(0.07, 0.03, clamp(extra, 0.0, 1.0));
+    float member = round(q.x / spacing);
+    float signedLens = formLens2(q.xy, 0.34, 0.84);
+    float lens = length(vec2(abs(signedLens), q.z));
+    vec3 local = q - vec3(member * spacing, 0.0, 0.0);
+    float swing = sin(clamp(motion, 0.0, 1.0) * PI);
+    swing *= swing;
+    local.xz = formSpin(swing * sin(member * 0.43) * 0.92) * local.xz;
+    float across = clamp(abs(member * spacing) / 0.24, 0.0, 1.0);
+    float radius = mix(0.12, 0.3, clamp(detail, 0.0, 1.0));
+    radius *= 1.0 - across * across * 0.22;
+    float rib = length(vec2(
+      abs(length(local.yz) - radius),
+      local.x));
+    // The two sides of the shell tube carry opposite spectral roles. As the
+    // glowing core washes toward chalk, its inner and outer fringes therefore
+    // separate orange/cyan without re-reading the entire form at shifted
+    // screen coordinates like a post-process dispersion would have to.
+    if (lens < rib) {
+      return mix(uAccent, uPrimary, smoothstep(-0.025, 0.025, signedLens));
+    }
+    float chase = pow(0.5 + 0.5 * sin(motion * 2.0 * PI - member * 0.47), 5.0);
+    return mix(uPrimary * 0.08, uChalk, 0.12 + chase * 0.88);
+  }
+  if (mode != 4) return uPrimary;
+  float a = clamp(motion, 0.0, 1.0) * 2.0 * PI;
+  q.xy = formSpin(a) * q.xy;
+  q.yz = formSpin(a * 2.0) * q.yz;
+  float gap = mix(0.08, 0.19, clamp(extra, 0.0, 1.0));
+  float roundness = mix(0.08, 0.3, clamp(detail, 0.0, 1.0));
+  float xy = formRoundedLoop(vec3(q.xy, formLayerPlane(q.z, gap)), 0.62, roundness, 0.0);
+  float yz = formRoundedLoop(vec3(q.yz, formLayerPlane(q.x, gap)), 0.62, roundness, 0.0);
+  float xz = formRoundedLoop(vec3(q.xz, formLayerPlane(q.y, gap)), 0.62, roundness, 0.0);
+  float orientation = 0.0;
+  float normal = q.z;
+  if (yz < xy && yz < xz) {
+    orientation = 1.0;
+    normal = q.x;
+  } else if (xz < xy) {
+    orientation = 2.0;
+    normal = q.y;
+  }
+  float layer = floor(abs(normal) / gap + 0.5);
+  float key = fract(orientation * 0.271 + layer * 0.193 + step(0.0, normal) * 0.409 + motion);
+  if (key < 0.25) return uPrimary;
+  if (key < 0.5) return uSecondary;
+  if (key < 0.75) return uComplement;
+  return uAccent;
+}
+
 // How far the nearest surface is from a point in the form's own space.
 //
 // The rings turn against each other on the beat rather than with the camera,
 // which is the difference between an object being looked at and an object doing
 // something. One ring on a fixed axis holds the arrangement still enough to
 // read while the other two precess through it.
-float formField(vec3 q, int mode, float thick, float extra) {
+float formField(vec3 q, int mode, float thick, float extra, float detail, float motion) {
   float t = mix(0.012, 0.13, clamp(thick, 0.0, 1.0));
   if (mode == 0) {
     return formRing(q, 0.62, t);
@@ -111,11 +381,64 @@ float formField(vec3 q, int mode, float thick, float extra) {
     float cell = mix(0.7, 1.8, clamp(extra, 0.0, 1.0));
     return formCage(q - cell * round(q / cell), cell * 0.42, t);
   }
+  if (mode == 4) {
+    // Two whole turns on one axis and one on the other return exactly to the
+    // same pose at tumble one. The object moves as a rigid body, so its
+    // crossings keep a real occlusion order instead of sliding independently.
+    // Sinusoidal easing bends the route away from exact 45-degree samples;
+    // without it the object's fourfold symmetry aliases an eight-frame study
+    // into only two apparent poses even though the angle is still changing.
+    float a = clamp(motion, 0.0, 1.0) * 2.0 * PI;
+    q.xy = formSpin(a + sin(a) * 0.35) * q.xy;
+    q.yz = formSpin(a * 2.0 + sin(a * 2.0) * 0.22) * q.yz;
+    return formWeave(q, extra, detail, t);
+  }
+  if (mode == 5) {
+    return formLoom(q, extra, detail, t);
+  }
+  if (mode == 6) {
+    float a = clamp(detail, 0.0, 1.0) * 2.0 * PI;
+    q.xy = formSpin(a) * q.xy;
+    q.yz = formSpin(a * 2.0) * q.yz;
+
+    // One enclosing orbit and five successively smaller rings on crossing,
+    // fixed planes. Descending radii preserve a legible outside, middle and
+    // inside as the rigid assembly tumbles.
+    float stepDown = mix(0.065, 0.14, clamp(extra, 0.0, 1.0));
+    float d = formRing(q, 0.78, t);
+    vec3 b = q;
+    b.yz = formSpin(1.02) * b.yz;
+    d = min(d, formRing(b, 0.78 - stepDown * 1.25, t * 0.95));
+    vec3 c = q;
+    c.xy = formSpin(-0.76) * c.xy;
+    d = min(d, formRing(c, 0.78 - stepDown * 1.5, t * 0.9));
+    vec3 innerA = q;
+    innerA.yz = formSpin(0.72) * innerA.yz;
+    innerA.xy = formSpin(0.9) * innerA.xy;
+    d = min(d, formRing(innerA, 0.78 - stepDown * 2.65, t * 0.52));
+    vec3 innerB = q;
+    innerB.yz = formSpin(-1.18) * innerB.yz;
+    innerB.xy = formSpin(-0.54) * innerB.xy;
+    d = min(d, formRing(innerB, 0.78 - stepDown * 3.0, t * 0.44));
+    vec3 heart = q;
+    heart.yz = formSpin(1.57) * heart.yz;
+    return min(d, formRing(heart, 0.78 - stepDown * 4.0, t * 0.38));
+  }
+  if (mode == 7) {
+    return formRelief(q, extra, detail, t);
+  }
+  if (mode == 8) {
+    return formIris(q, extra, detail, motion, t);
+  }
+  if (mode == 9) {
+    return formTruss(q, extra, detail, motion, t);
+  }
   // A helix winding away down the corridor. The one shape here whose distance
   // is an over-estimate along its axis, which is why every march takes half
   // steps: a full one would tunnel through the strand and draw nothing.
   float coil = 0.6 + clamp(extra, 0.0, 1.0) * 3.5;
-  vec2 centre = vec2(cos(q.z * coil), sin(q.z * coil)) * 0.42;
+  float radius = mix(0.24, 0.62, clamp(detail, 0.0, 1.0));
+  vec2 centre = vec2(cos(q.z * coil), sin(q.z * coil)) * radius;
   return length(q.xy - centre) - t;
 }
 
@@ -129,17 +452,18 @@ float formField(vec3 q, int mode, float thick, float extra) {
 // convergence — a ray that never gets within a thousandth of a surface never
 // reports a hit, and chrome is only mixed in where something was hit.
 float formStride(int mode) {
-  return mode == 4 ? 0.5 : 0.9;
+  if (mode == 5) return 0.85;
+  return mode == 10 ? 0.5 : 0.9;
 }
 
 // The surface direction, from four samples around the point the ray stopped at.
-vec3 formNormal(vec3 q, int mode, float thick, float extra) {
+vec3 formNormal(vec3 q, int mode, float thick, float extra, float detail, float motion) {
   vec2 k = vec2(1.0, -1.0) * 0.0018;
   return normalize(
-    k.xyy * formField(q + k.xyy, mode, thick, extra) +
-    k.yyx * formField(q + k.yyx, mode, thick, extra) +
-    k.yxy * formField(q + k.yxy, mode, thick, extra) +
-    k.xxx * formField(q + k.xxx, mode, thick, extra));
+    k.xyy * formField(q + k.xyy, mode, thick, extra, detail, motion) +
+    k.yyx * formField(q + k.yyx, mode, thick, extra, detail, motion) +
+    k.yxy * formField(q + k.yxy, mode, thick, extra, detail, motion) +
+    k.xxx * formField(q + k.xxx, mode, thick, extra, detail, motion));
 }
 
 // The room a polished surface reflects.
@@ -180,7 +504,7 @@ vec3 formSky(vec3 ray) {
 }
 
 vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
-                float thick, float flare, float chrome, float extra) {
+                float thick, float flare, float chrome, float extra, float detail, float motion) {
   float yaw = turn * 6.28318530718;
   float pitch = (clamp(tilt, 0.0, 1.0) - 0.5) * 2.4;
   float away = mix(1.5, 4.5, clamp(dolly, 0.0, 1.0));
@@ -189,15 +513,52 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
   vec3 side = normalize(cross(vec3(0.0, 1.0, 0.0), fwd));
   vec3 up = cross(fwd, side);
 
-  // The corridor is the one shape you are meant to be inside rather than
-  // looking at, so its eye is not on the orbit. It sits on the axis the helix
-  // winds around and flies down it on the beat, and the two camera numbers
-  // keep their meaning: turn is still where the eye stands around the form,
-  // and dolly is still how far it stands off it — which in here is how far
-  // off the middle of the corridor, out toward the wall.
-  if (mode == 4) {
+  // Travelling constructions put the eye inside or above their repeated
+  // geometry instead of leaving it on the finite-object orbit.
+  if (mode == 5) {
+    // Four cells of forward travel are exactly periodic in the field. The eye
+    // sways on one closed revolution while it advances, so position modulo the
+    // cell, heading and roll all agree at zero and one.
+    float phase = clamp(motion, 0.0, 1.0) * 2.0 * PI;
+    float cell = mix(0.82, 1.5, clamp(detail, 0.0, 1.0));
+    float sway = (clamp(tilt, 0.0, 1.0) - 0.5) * cell * 0.8;
+    float off = (clamp(dolly, 0.0, 1.0) - 0.5) * cell * 0.45;
+    eye = vec3(cos(phase) * sway + off, sin(phase) * sway, clamp(motion, 0.0, 1.0) * cell * 4.0);
+    fwd = normalize(vec3(-sin(phase) * sway * 1.7, cos(phase) * sway * 1.7, 1.0));
+    side = normalize(cross(vec3(0.0, 1.0, 0.0), fwd));
+    up = cross(fwd, side);
+    float roll = turn * 2.0 * PI;
+    vec3 rolledSide = side * cos(roll) + up * sin(roll);
+    up = -side * sin(roll) + up * cos(roll);
+    side = rolledSide;
+  }
+
+  if (mode == 7) {
+    // A closed Lissajous path over the repeated relief. Eye and target share
+    // the same planar centre, so travel moves across the construction rather
+    // than orbiting one fixed tile. Tilt changes grazing angle, turn becomes
+    // camera roll, and travel one returns position, direction and roll to zero.
+    float phase = clamp(motion, 0.0, 1.0) * 2.0 * PI;
+    float cell = mix(0.72, 0.28, clamp(extra, 0.0, 1.0));
+    vec2 centre = vec2(cos(phase), sin(phase * 2.0)) * cell * 2.2;
+    float height = mix(0.5, 2.8, clamp(dolly, 0.0, 1.0));
+    eye = vec3(centre, height);
+    float grazing = (clamp(tilt, 0.0, 1.0) - 0.5) * 1.5;
+    vec2 direction = normalize(vec2(-sin(phase), 2.0 * cos(phase * 2.0)) + vec2(0.0001));
+    fwd = normalize(vec3(direction * grazing, -1.0));
+    side = normalize(cross(vec3(0.0, 1.0, 0.0), fwd));
+    up = cross(fwd, side);
+    float roll = turn * 2.0 * PI;
+    vec3 rolledSide = side * cos(roll) + up * sin(roll);
+    up = -side * sin(roll) + up * cos(roll);
+    side = rolledSide;
+  }
+
+  if (mode == 10) {
     float off = clamp(dolly, 0.0, 1.0) * 0.32;
-    eye = vec3(cos(yaw) * off, sin(yaw) * off, uBeat * 0.45);
+    float coil = 0.6 + clamp(extra, 0.0, 1.0) * 3.5;
+    float cycle = 2.0 * PI / coil;
+    eye = vec3(cos(yaw) * off, sin(yaw) * off, clamp(motion, 0.0, 1.0) * cycle * 2.0);
     fwd = vec3(0.0, 0.0, 1.0);
     side = vec3(-sin(yaw), cos(yaw), 0.0);
     up = cross(fwd, side);
@@ -229,7 +590,7 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
   vec3 where = eye;
   for (int i = 0; i < FORM_STEPS; i++) {
     where = eye + ray * travelled;
-    float d = formField(where, mode, thick, extra);
+    float d = formField(where, mode, thick, extra, detail, motion);
     // Weighted by how far this step carries the ray, not by the fact that a
     // step happened. A march slows to its floor as it closes on a surface, so
     // counting steps counts *deceleration*: a ray grazing a tube took twenty
@@ -261,12 +622,19 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
   // halfway up leaves every tube the same pale grey and throws the colourway
   // away, which is the difference between a lit tube and a lit tube-shaped
   // hole.
-  vec3 colour = mix(uPrimary, vec3(1.0), clamp(raw * 1.6 - 0.75, 0.0, 1.0));
+  vec3 material = formBaseColour(where, mode, extra, detail, motion);
+  // Xenon's iris clips through the pale cyan role rather than neutral white:
+  // one channel can reach the ceiling while the others keep the spectral rim.
+  // That is why its hottest frames remain chromatic instead of becoming a
+  // white cage. Other forms retain the harder neutral filament.
+  vec3 hot = mode == 8 ? uChalk : vec3(1.0);
+  vec3 colour = mix(material, hot, clamp(raw * 1.6 - 0.75, 0.0, 1.0));
   colour *= 1.0 + max(raw - 1.0, 0.0) * mix(0.8, 2.6, clamp(flare, 0.0, 1.0));
+  if (mode == 8) colour = min(colour, uChalk * 1.02);
   float cover = lit;
 
   if (chrome > 0.002) {
-    vec3 n = formNormal(where, mode, thick, extra);
+    vec3 n = formNormal(where, mode, thick, extra, detail, motion);
     vec3 bounced = reflect(ray, n);
     /*
      * Fresnel at five, and a specular lobe that chrome sharpens.
@@ -292,9 +660,12 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
     // sharp material, it is read as no material.
     float glint = pow(clamp(dot(bounced, normalize(FORM_LAMP)), 0.0, 1.0), gloss)
                 + pow(clamp(dot(bounced, normalize(FORM_FILL)), 0.0, 1.0), gloss * 0.6) * 0.55;
-    vec3 shell = formSky(bounced) * mix(0.35, 1.0, facing)
-               + vec3(1.0) * glint * mix(1.4, 6.0, polish)
-               + uChalk * facing * 0.6;
+    float roomWeight = mode == 5 ? 0.65 : 1.0;
+    float glintWeight = mode == 5 ? 0.3 : 1.0;
+    float rimWeight = mode == 5 ? 0.25 : 1.0;
+    vec3 shell = formSky(bounced) * mix(0.35, 1.0, facing) * roomWeight
+               + vec3(1.0) * glint * mix(1.4, 6.0, polish) * glintWeight
+               + uChalk * facing * 0.6 * rimWeight;
     // Chrome falls off with how far the ray went to find it. Without this a
     // lattice is equally bright at every depth, so the far cells fill the frame
     // instead of receding into it and the picture has no black in it at all —

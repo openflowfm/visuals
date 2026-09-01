@@ -360,11 +360,11 @@ editors listing these differently would be two different vocabularies.
 | node | in | out | |
 |---|---|---|---|
 | `tracks` | `p` | `c` | **the Live set**: every playing track, drawn and mixed. Fire a scene, it changes |
-| `source` | `p` `energy` | `c` | one of thirteen, including `checker` and `rays`; all are safe as per-track pictures |
+| `source` | `p` `energy` | `c` | one of fourteen, including `checker`, `rays` and connected `traces`; all are safe as per-track pictures |
 | `field` | `p` `energy`, plus `balls` `apart` on metaballs | `c` | `cells` `clouds` `metaballs`; fixed work, charged per graph sample and never offered per track |
 | `fractal` | `p` `energy` + its mode's numbers | `c` | `mandelbrot` or `julia`, with bounded zoom, detail and iterative work |
 | `light` | `p` `energy` + its mode's numbers, and `from` on the hung three | `c` | `lamp` `beam` `shafts` `caustics`; 2D lights with fixed work, drifting in seconds rather than beats |
-| `form` | `p` `turn` `tilt` `dolly` `thick` `flare` `chrome` `energy` + its mode's number | `c` | `torus` `rings` `frame` `lattice` `tube`; the one node with a third coordinate in it, marched and charged like a fractal |
+| `form` | `p` `turn` `tilt` `dolly` `thick` `flare` `chrome` `energy` + its mode's numbers | `c` | `torus` `rings` `frame` `lattice` `weave` `loom` `orbits` `relief` `iris` `tube`; the one node with a third coordinate in it, marched and charged like a fractal |
 | `glow` | `d` `energy` + its mode's numbers | `c` | `neon` `soft` `band`: a distance becomes a lit stroke |
 | `shade` | `n` `amount` `energy` | `c` | `across` `heat` `filament`: a number becomes a colour off the colourway |
 | `flow` | `p` | `c` | another flow, whole, as one node |
@@ -507,6 +507,54 @@ polished thing reads as polished because it shows you a whole room compressed in
 and a room has edges. A smooth gradient reflected off a tube is indistinguishable from matte
 plastic lit from above, which is what the first version of it was. At `chrome` zero none of
 it is mixed in and the form is pure emission.
+
+`weave` and `orbits` are compound objects rather than more primitives. A weave is twelve
+rounded rectangular tube loops: four parallel layers in each of three orthogonal planes.
+`apart` separates those layers, `corner` runs each loop from square toward round and `tumble`
+rotates the complete union as a rigid body, so crossings keep a real front and back. Orbits
+nests five smaller ring radii across fixed crossing planes inside one enclosing ring; `nest`
+controls the radial hierarchy and its own `tumble` moves the assembly without changing the
+camera. Weave's two-axis route eases away from exact equal-angle steps so its fourfold
+symmetry does not collapse a phase sequence into repeated views, while both axes still close
+exactly at the seam. Both remain analytic unions inside the existing march — they add no hidden loop and
+keep the same declared work ceiling as the five simpler forms.
+
+`loom` repeats the weave as geometry through all three axes rather than tiling a rendered
+picture of it. Every cell contains three orthogonal four-member loop bundles. Each complete
+bundle rises and falls by one member radius around its rounded path, with a different phase
+per orientation; crossings therefore acquire depth order without fusing the members, cutting
+an artificial gap or changing their topology. Its chrome response keeps the broad room dark
+while retaining narrow glints, so these read as black tubes rather than silver bars. `apart`
+sets bundle spacing, `cells` sets construction spacing and `travel` advances through exactly
+four repeated cells while the eye makes one closed sway. Position modulo the field, heading
+and roll therefore agree at zero and one.
+
+`relief` lays out a deterministic grammar of closed frames, nested U modules, elbows,
+stepped hooks and paired circular arcs, then makes their paths into shallow bevelled solids with broad front
+faces and real sidewalls. Cells rotate and vary slightly in height without changing identity,
+so motion is a camera crossing one constructed wall rather than a texture boiling underneath
+it. `tiles` controls the physical cell size, `raise` sets their extrusion and `travel` moves
+the eye around a closed two-axis path over the field. On this
+mode the common `tilt` is the grazing angle, `dolly` is altitude and `turn` is camera roll.
+Member cells carry their own chased material identity, so a bright region travels through the
+geometry instead of a whole rendered frame being flashed.
+
+`iris` encloses a finite barrel of circular hoops inside an exact two-circle lens shell.
+`ribs` changes the spacing of the bank and `open` its radius. `phase` is a seamless physical
+cycle rather than a texture animation: the barrel begins edge-on, progressively gives way to
+an explicit symmetric pair of rigid tilted hoops at the midpoint, then closes back to the
+same edge-on bank. The pair is explicit because tilted hoops overlap in projection and a
+nearest-member repeat can represent only one of them; it is still a fixed analytic union and
+adds no shader loop. The hoop radii follow a permanent barrel profile instead of breathing,
+so the envelope stays constructed while visibility changes. Its hot filament clips through
+the colourway's chalk role rather than neutral white, and opposite sides of the lens tube use
+accent and primary roles to produce surface-bound orange/cyan fringes without a multi-sample
+screen-space dispersion.
+
+`tube` exposes the two quantities its corridor formerly owned: `radius` sets how far the helix
+runs from its axis, and `travel` is normalized distance through exactly two repetitions. Its
+unwired travel retains the old slow beat-driven flight; wiring a phase makes the fly-through
+scrubbable and exactly seamless at zero and one.
 
 ## Light is allowed above white, and that is where a bloom comes from
 

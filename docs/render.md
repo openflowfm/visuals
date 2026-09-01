@@ -125,6 +125,7 @@ five sources all drawing soft noise is one picture, however many of them there a
 | `sparks` | a cell per spark, each firing on its own beat and drifting as it dies |
 | `checker` | square-lattice parity, drifting sideways on a musical division |
 | `rays` | alternating angular sectors turning around an explicitly empty centre |
+| `traces` | joined Truchet arcs with per-cell pockets of light chasing through the field |
 
 | `field` — published procedural algorithms with charged fixed work | work |
 |---|---:|
@@ -151,7 +152,7 @@ through the rest of the control. Their Gaussian fields are summed before the imp
 rather than averaged, so adding a ball does not dim every ball.
 
 The `field` split is a GPU boundary. A `source` may run once per playing track, so only the
-constant-work checker and rays belong there. A field is never offered as a per-track picture,
+constant-work checker, rays and traces belong there. A field is never offered as a per-track picture,
 and its 9/16/7 work charge is counted every time a graph samples it. Four direct cloud samples
 exactly fill the 64-unit graph ceiling; a nine-tap bloom over one is refused before the shader
 reaches the driver. A seven-ball metaball bloom costs 63, so that specific showcase retains its

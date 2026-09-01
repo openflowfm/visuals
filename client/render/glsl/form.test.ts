@@ -28,6 +28,259 @@ const cage = (x: number, y: number, z: number, R: number, t: number): number => 
   );
 };
 
+const roundedBox2 = (x: number, y: number, halfSize: number, corner: number): number => {
+  const qx = Math.abs(x) - halfSize + corner;
+  const qy = Math.abs(y) - halfSize + corner;
+  return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - corner;
+};
+
+const roundedLoop = (
+  x: number,
+  y: number,
+  plane: number,
+  halfSize: number,
+  corner: number,
+  thick: number,
+): number => Math.hypot(Math.abs(roundedBox2(x, y, halfSize, corner)), plane) - thick;
+
+const layerPlane = (value: number, gap: number): number => {
+  const folded = Math.abs(value);
+  return Math.min(Math.abs(folded - gap * 0.5), Math.abs(folded - gap * 1.5));
+};
+
+const segment2 = (
+  x: number,
+  y: number,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+): number => {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const along = clamp(((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy), 0, 1);
+  return Math.hypot(x - ax - dx * along, y - ay - dy * along);
+};
+
+const reliefCamera = (travel: number, cell: number) => {
+  const phase = clamp(travel, 0, 1) * Math.PI * 2;
+  const centre = [Math.cos(phase) * cell * 2.2, Math.sin(phase * 2) * cell * 2.2];
+  const tangent = [-Math.sin(phase) + 0.0001, 2 * Math.cos(phase * 2) + 0.0001];
+  const length = Math.hypot(...tangent);
+  return { centre, direction: tangent.map((each) => each / length) };
+};
+
+describe('the relief is a grammar of bevelled solids', () => {
+  it('contains both open modules and genuinely hollow closed frames', () => {
+    // The outer U owns its floor but leaves the centre of its mouth open.
+    const u = (x: number, y: number) => Math.min(
+      segment2(x, y, -0.32, 0.3, -0.32, -0.24),
+      segment2(x, y, -0.32, -0.24, 0.32, -0.24),
+      segment2(x, y, 0.32, -0.24, 0.32, 0.3),
+    );
+    expect(u(0, -0.24)).toBeCloseTo(0, 12);
+    expect(u(0, 0.3)).toBeGreaterThan(0.3);
+
+    // A rounded frame is its boundary, not a filled tile.
+    expect(Math.abs(roundedBox2(0, 0.29, 0.3, 0.11))).toBeCloseTo(0.01, 12);
+    expect(Math.abs(roundedBox2(0, 0, 0.3, 0.11))).toBeGreaterThan(0.25);
+    expect(FORM_LIB).toContain('float motif = hash(id + 7.31);');
+    expect(FORM_LIB).toContain('formSegment2');
+  });
+
+  it('includes paired circular arcs as a curved member of the module grammar', () => {
+    const paired = (x: number, y: number) => Math.min(
+      Math.abs(Math.hypot(x - 0.5, y - 0.5) - 0.5),
+      Math.abs(Math.hypot(x + 0.5, y + 0.5) - 0.5),
+    );
+    for (const [x, y] of [[-0.5, 0], [0.5, 0], [0, -0.5], [0, 0.5]] as const) {
+      expect(paired(x, y)).toBeCloseTo(0, 12);
+    }
+    expect(FORM_LIB).toContain('float first = abs(length(local - vec2(0.5)) - 0.5);');
+  });
+
+  it('is a shallow slab with a broad face, not a circular neon cord', () => {
+    expect(FORM_LIB).toContain('abs(q.z - height * 0.5)');
+    expect(FORM_LIB).toContain('min(max(slab.x, slab.y), 0.0) + length(max(slab, 0.0)) - bevel');
+    expect(FORM_LIB).not.toContain('length(vec2(path, q.z - height)) - t');
+  });
+
+  it('returns the travelling eye to the same place and heading at the loop seam', () => {
+    const start = reliefCamera(0, 0.5);
+    const end = reliefCamera(1, 0.5);
+    for (let axis = 0; axis < 2; axis++) {
+      expect(end.centre[axis]).toBeCloseTo(start.centre[axis]!, 12);
+      expect(end.direction[axis]).toBeCloseTo(start.direction[axis]!, 12);
+    }
+  });
+});
+
+describe('the helix travel is normalized', () => {
+  it('advances exactly two whole coils from travel zero to one', () => {
+    for (const control of [0, 0.2, 0.5, 0.8, 1]) {
+      const coil = 0.6 + control * 3.5;
+      const end = (Math.PI * 2 / coil) * 2;
+      expect(Math.cos(end * coil)).toBeCloseTo(1, 12);
+      expect(Math.sin(end * coil)).toBeCloseTo(0, 12);
+    }
+    expect(FORM_LIB).toContain('clamp(motion, 0.0, 1.0) * cycle * 2.0');
+  });
+});
+
+describe('the iris is a lens shell around bounded edge-on ribs', () => {
+  const lens2 = (x: number, y: number, centre: number, radius: number) => Math.max(
+    Math.hypot(x, y - centre) - radius,
+    Math.hypot(x, y + centre) - radius,
+  );
+
+  it('puts an exact two-circle lens boundary around an empty middle', () => {
+    const centre = 0.34;
+    const radius = 0.84;
+    const point = Math.sqrt(radius * radius - centre * centre);
+    expect(lens2(point, 0, centre, radius)).toBeCloseTo(0, 12);
+    expect(lens2(0, radius - centre, centre, radius)).toBeCloseTo(0, 12);
+    expect(Math.abs(lens2(0, 0, centre, radius))).toBeCloseTo(0.5, 12);
+  });
+
+  it('folds a finite bank of equal-radius rings without another shader loop', () => {
+    expect(FORM_LIB).toContain('float member = round(q.x / spacing);');
+    expect(FORM_LIB).toContain('length(local.yz) - radius');
+    expect(FORM_LIB).toContain('max(min(bank, pair), abs(q.x) - 0.24)');
+    expect(FORM_LIB).not.toContain('radius *= 0.55 +');
+    expect(FORM_LIB).toContain('return formIris(q, extra, detail, motion, t);');
+  });
+
+  it('returns every rigid rib rotation to its first pose at phase one without moving the shell', () => {
+    const angle = (phase: number, member: number) =>
+      Math.sin(phase * Math.PI) ** 2 * Math.sin(member * 0.43) * 0.92;
+    for (const member of [-7, -2, 0, 3, 8]) {
+      expect(angle(1, member)).toBeCloseTo(angle(0, member), 12);
+    }
+    expect(FORM_LIB).toContain('local.xz = formSpin(');
+    expect(FORM_LIB).toContain('if (mode == 8)');
+    expect(FORM_LIB).toContain('return formIris(q, extra, detail, motion, t);');
+  });
+
+  it('keeps a barrel envelope while its equal hoops twist', () => {
+    const profile = (across: number) => 1 - across ** 2 * 0.22;
+    expect(profile(0)).toBe(1);
+    expect(profile(1)).toBeCloseTo(0.78, 12);
+    expect(FORM_LIB).toContain('radius *= 1.0 - across * across * 0.22;');
+    expect(FORM_LIB).toContain('swing *= swing;');
+  });
+
+  it('crossfades to an explicit symmetric hoop pair at maximum twist', () => {
+    expect(FORM_LIB).toContain('float formIrisHoop(');
+    expect(FORM_LIB).toContain('spacing * 2.5, swing * 0.72');
+    expect(FORM_LIB).toContain('-spacing * 2.5, -swing * 0.72');
+    expect(FORM_LIB).toContain('formIrisRib(q, ribs, open, phase, t) + swing * 0.052');
+    expect(FORM_LIB).toContain('pair += (1.0 - swing) * 0.065;');
+  });
+
+  it('keeps saturated iris highlights in the pale colourway role', () => {
+    expect(FORM_LIB).toContain('vec3 hot = mode == 8 ? uChalk : vec3(1.0);');
+    expect(FORM_LIB).toContain('if (mode == 8) colour = min(colour, uChalk * 1.02);');
+    expect(FORM_LIB).toContain('mix(uAccent, uPrimary, smoothstep(-0.025, 0.025, signedLens))');
+  });
+});
+
+describe('the loom is repeated construction with a closed flight', () => {
+  it('folds every point four cells later onto the same physical member', () => {
+    const fold = (value: number, cell: number) => value - cell * Math.round(value / cell);
+    for (const value of [-1.17, -0.31, 0, 0.28, 1.41]) {
+      expect(fold(value + 4 * 1.13, 1.13)).toBeCloseTo(fold(value, 1.13), 12);
+    }
+    expect(FORM_LIB).toContain('q -= cell * round(q / cell);');
+  });
+
+  it('moves whole bundle planes continuously instead of cutting lower members', () => {
+    const lift = (angle: number, phase: number, thick: number) =>
+      Math.sin(angle * 2 + phase) * thick;
+    expect(lift(-Math.PI, 0, 0.04)).toBeCloseTo(lift(Math.PI, 0, 0.04), 12);
+    expect(lift(0, 0, 0.04)).toBeCloseTo(0, 12);
+    expect(Math.abs(lift(Math.PI / 4, 0, 0.04))).toBeCloseTo(0.04, 12);
+    expect(lift(Math.PI / 4, 0, 0.04)).not.toBeCloseTo(
+      lift(Math.PI / 4, (Math.PI * 2) / 3, 0.04),
+      3,
+    );
+    expect(FORM_LIB).toContain('float lift = t;');
+    expect(FORM_LIB).toContain('sin(atan(q.y, q.x) * 2.0)');
+    expect(FORM_LIB).not.toContain('formUnder');
+  });
+
+  it('keeps broad room light off its black chrome while retaining sharp glints', () => {
+    expect(FORM_LIB).toContain('float roomWeight = mode == 5 ? 0.65 : 1.0;');
+    expect(FORM_LIB).toContain('float glintWeight = mode == 5 ? 0.3 : 1.0;');
+  });
+
+  it('returns its eye and heading modulo exactly four repeated cells', () => {
+    const camera = (travel: number, cell: number, sway: number, off: number) => {
+      const phase = travel * Math.PI * 2;
+      return {
+        eye: [Math.cos(phase) * sway + off, Math.sin(phase) * sway, travel * cell * 4],
+        heading: [-Math.sin(phase) * sway * 0.25, Math.cos(phase) * sway * 0.25, 1],
+      };
+    };
+    const start = camera(0, 1.13, 0.21, -0.08);
+    const end = camera(1, 1.13, 0.21, -0.08);
+    expect(end.eye[0]).toBeCloseTo(start.eye[0]!, 12);
+    expect(end.eye[1]).toBeCloseTo(start.eye[1]!, 12);
+    expect((end.eye[2]! - start.eye[2]!) / 1.13).toBeCloseTo(4, 12);
+    for (let axis = 0; axis < 3; axis++) {
+      expect(end.heading[axis]).toBeCloseTo(start.heading[axis]!, 12);
+    }
+  });
+});
+
+describe('the woven form is twelve hollow loops', () => {
+  it('folds onto four distinct parallel planes', () => {
+    for (const plane of [-0.3, -0.1, 0.1, 0.3]) {
+      expect(layerPlane(plane, 0.2)).toBeCloseTo(0, 12);
+    }
+    expect(layerPlane(0, 0.2)).toBeCloseTo(0.1, 12);
+    expect(layerPlane(0.2, 0.2)).toBeCloseTo(0.1, 12);
+  });
+
+  it('puts round tube on a rounded rectangle and leaves its middle empty', () => {
+    expect(roundedLoop(0, 0.62, 0, 0.62, 0.2, 0.04)).toBeCloseTo(-0.04, 12);
+    expect(roundedLoop(0, 0, 0.1, 0.62, 0.2, 0.04)).toBeGreaterThan(0.5);
+  });
+
+  it('eases its rigid tumble away from fourfold sample aliases and closes the seam', () => {
+    const angles = (phase: number) => {
+      const a = phase * Math.PI * 2;
+      return [a + Math.sin(a) * 0.35, a * 2 + Math.sin(a * 2) * 0.22];
+    };
+    const start = angles(0);
+    const end = angles(1);
+    expect((end[0]! - start[0]!) / (Math.PI * 2)).toBeCloseTo(1, 12);
+    expect((end[1]! - start[1]!) / (Math.PI * 2)).toBeCloseTo(2, 12);
+    expect(FORM_LIB).toContain('formSpin(a + sin(a) * 0.35)');
+    expect(FORM_LIB).toContain('formSpin(a * 2.0 + sin(a * 2.0) * 0.22)');
+  });
+});
+
+describe('the truss is nested frames on three crossing planes', () => {
+  it('uses scale hierarchy rather than displaced equal-size layers', () => {
+    expect(FORM_LIB).toContain('float formNestedFrames(');
+    expect(FORM_LIB).toContain('0.72 - stepDown * 2.0');
+    expect(FORM_LIB).toContain('formNestedFrames(vec3(q.yz, q.x)');
+    expect(FORM_LIB).toContain('formNestedFrames(vec3(q.xz, q.y)');
+  });
+
+  it('moves the complete union on a closed eased rigid path', () => {
+    const angles = (phase: number) => {
+      const a = phase * Math.PI * 2;
+      return [a + Math.sin(a) * 0.31, a * 2 + Math.sin(a * 2) * 0.19];
+    };
+    const start = angles(0);
+    const end = angles(1);
+    expect((end[0]! - start[0]!) / (Math.PI * 2)).toBeCloseTo(1, 12);
+    expect((end[1]! - start[1]!) / (Math.PI * 2)).toBeCloseTo(2, 12);
+    expect(FORM_LIB).toContain('return formTruss(q, extra, detail, motion, t);');
+  });
+});
+
 describe('the cube is edges, not a brick', () => {
   it('is on the surface along an edge and inside the tube around it', () => {
     expect(cage(0, 1, 1, 1, 0.05)).toBeCloseTo(-0.05, 12);
@@ -110,7 +363,7 @@ describe('the march is bounded and says so', () => {
       FORM_LIB.indexOf('float formField('),
       FORM_LIB.indexOf('float formStride('),
     );
-    expect(FORM_MODES.length).toBe(5);
+    expect(FORM_MODES.length).toBe(11);
     for (let i = 0; i < FORM_MODES.length - 1; i++) {
       expect(field).toContain(`if (mode == ${i})`);
     }
@@ -121,8 +374,9 @@ describe('the march is bounded and says so', () => {
   it('takes half steps only for the shape whose distance is an over-estimate', () => {
     // The helix measures across the strand while the strand moves away along
     // its own axis, so the true nearest surface can be nearer than it says.
-    expect(FORM_MODES.indexOf('tube')).toBe(4);
-    expect(FORM_LIB).toContain('return mode == 4 ? 0.5 : 0.9;');
+    expect(FORM_MODES.indexOf('tube')).toBe(10);
+    expect(FORM_LIB).toContain('if (mode == 5) return 0.85;');
+    expect(FORM_LIB).toContain('return mode == 10 ? 0.5 : 0.9;');
   });
 
   it('accumulates glow along the ray rather than once per step', () => {

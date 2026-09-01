@@ -19,6 +19,15 @@ const pointAt = (angle: number, radius = 1): readonly [number, number] => [
   Math.sin(angle) * radius,
 ];
 
+/** Distance to the paired Truchet arcs inside one unit cell. */
+const traceDistance = (x: number, y: number, reflected = false): number => {
+  const localX = (reflected ? 1 - x : x) - 0.5;
+  const localY = y - 0.5;
+  const first = Math.abs(Math.hypot(localX - 0.5, localY - 0.5) - 0.5);
+  const second = Math.abs(Math.hypot(localX + 0.5, localY + 0.5) - 0.5);
+  return Math.min(first, second);
+};
+
 describe('the checker kernel', () => {
   it('is binary on both halves of the centred plane', () => {
     for (const x of [-3.8, -2.1, -0.2, 0, 0.9, 2.7]) {
@@ -85,6 +94,23 @@ describe('the ray kernel', () => {
     for (let i = 0; i < 64; i += 1) {
       const [x, y] = pointAt((i + 0.31) * 0.37, 0.1 + i);
       expect([0, 1]).toContain(ray(x, y, 24));
+    }
+  });
+});
+
+describe('the traces kernel', () => {
+  it('joins neighbouring cells at the middle of every edge', () => {
+    for (const reflected of [false, true]) {
+      expect(traceDistance(0.5, 0, reflected)).toBeCloseTo(0);
+      expect(traceDistance(0.5, 1, reflected)).toBeCloseTo(0);
+      expect(traceDistance(0, 0.5, reflected)).toBeCloseTo(0);
+      expect(traceDistance(1, 0.5, reflected)).toBeCloseTo(0);
+    }
+  });
+
+  it('uses reflection to choose the other pairing without changing line weight', () => {
+    for (const [x, y] of [[0.13, 0.22], [0.37, 0.81], [0.72, 0.46]]) {
+      expect(traceDistance(x, y, false)).toBeCloseTo(traceDistance(1 - x, y, true));
     }
   });
 });

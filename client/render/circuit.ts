@@ -883,6 +883,7 @@ const SOURCE_MODES = documentedModes(SOURCES, {
   sparks: 'A field of cells that fire on their own beats and drift as they fade.',
   checker: 'Alternating square tiles that flip on a musical division.',
   rays: 'Alternating angular beams turning around the centre on the beat.',
+  traces: 'Connected rounded paths with pockets of light chasing through the field.',
 });
 
 const FIELD_MODE_DOCUMENTATION = documentedModes(FIELD_MODES, {
@@ -918,6 +919,7 @@ const TRACK_DRAW_MODES = documentedModes(TRACK_DRAWS, {
   sparks: 'Draw every playing track as a drifting field of sparks.',
   checker: 'Draw every playing track as alternating square tiles.',
   rays: 'Draw every playing track as rotating angular beams.',
+  traces: 'Draw every playing track as connected rounded paths with chasing light.',
 });
 
 const LENS_MODE_DOCUMENTATION = documentedModes(LENS_MODES, {

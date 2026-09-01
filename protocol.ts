@@ -71,6 +71,7 @@ export const SOURCES = [
   'sparks',
   'checker',
   'rays',
+  'traces',
 ] as const;
 
 export type Source = (typeof SOURCES)[number];
@@ -169,18 +170,32 @@ export const FIGURE_MODES = [
 export const ARRAY_MODES = ['row', 'grid', 'ring', 'mirror'] as const;
 
 /**
- * The five shapes the `form` node marches, and the order is the argument.
+ * The ten shapes the `form` node marches, and the order is the argument.
  *
  * One ring, then several turning against each other, then a cube's edges, then
- * that cube repeated through space, then a corridor the eye is inside. Each is
- * the previous one plus one idea, which is what makes the list a vocabulary
- * rather than a catalogue of demos.
+ * that cube repeated through space, two compound tube arrangements, one of
+ * those repeated into a camera-filling loom, an extruded path field, a lens
+ * shell around a changing hoop assembly, a nested frame truss, then a corridor the eye is inside. The compound pair
+ * reuse the same analytic ring and rounded-loop distances rather than
+ * introducing another rendering path.
  *
  * Deliberately not `SOURCES`, for the reason `fractal` and `light` are not:
  * every source is also drawn once per playing track, and a ray march per track
  * is exactly the accidental GPU load the bounded nodes exist to prevent.
  */
-export const FORM_MODES = ['torus', 'rings', 'frame', 'lattice', 'tube'] as const;
+export const FORM_MODES = [
+  'torus',
+  'rings',
+  'frame',
+  'lattice',
+  'weave',
+  'loom',
+  'orbits',
+  'relief',
+  'iris',
+  'truss',
+  'tube',
+] as const;
 
 /** The effects that ship, as `effect` node modes. The other half of the old split. */
 /**

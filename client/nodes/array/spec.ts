@@ -34,6 +34,7 @@ export const ARRAY_NODE_SPEC = {
     pointPort('p', 'The position within the copy this point falls in.'),
     numberPort('which', 'A number naming the copy this point falls in.'),
   ],
+  modes: ARRAY_MODES.map((name) => ({ name, description: descriptions[name] })),
   emit: (ctx) => {
     const op = modeOfNode(ctx.node, ARRAY_MODES);
     const args = [ctx.read('p'), ...values[op].map((port) => ctx.read(port.name))];
