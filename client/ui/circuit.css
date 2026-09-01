@@ -108,6 +108,7 @@
   overflow: hidden;
   color: var(--caption);
   font-family: var(--sans);
+  font-variation-settings: var(--sans-axes);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

@@ -53,7 +53,7 @@
   border-radius: 4px;
   background: rgb(10 10 11 / 0.85);
   color: #b7b7be;
-  font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+  font-family: var(--mono);
   font-size: 11px;
   pointer-events: auto;
   transform: translateX(-50%);
