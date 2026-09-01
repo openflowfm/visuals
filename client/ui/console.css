@@ -17,7 +17,7 @@
   flex-direction: column;
   background: var(--bg);
   color: var(--ui);
-  font-family: var(--mono);
+  font-variation-settings: var(--mono-axes);
   font-size: var(--text-body);
   overflow: hidden;
   scrollbar-width: thin;
@@ -389,7 +389,7 @@
 }
 
 .console .swatches .role span {
-  font-family: var(--mono);
+  font-variation-settings: var(--mono-axes);
   font-size: var(--text-annot);
   line-height: 1;
   color: var(--caption);
@@ -1588,7 +1588,7 @@
 
 .train-anchor {
   margin-top: 7px !important;
-  font-family: var(--mono);
+  font-variation-settings: var(--mono-axes);
   opacity: 0.8;
 }
 

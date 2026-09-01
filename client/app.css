@@ -25,7 +25,7 @@ html, body, #root {
   border-radius: var(--radius-md);
   background: rgb(10 10 11 / 0.82);
   color: var(--ui);
-  font-family: var(--mono);
+  font-variation-settings: var(--mono-axes);
   font-size: var(--text-body);
   line-height: 1.5;
   backdrop-filter: blur(8px);
@@ -75,7 +75,7 @@ html, body, #root {
   padding: 24px;
   background: rgb(10 10 11 / 0.92);
   color: var(--fg);
-  font-family: var(--mono);
+  font-variation-settings: var(--mono-axes);
   font-size: var(--text-lead);
   text-align: center;
 }
