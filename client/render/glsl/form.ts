@@ -551,6 +551,90 @@ float formCorolla(vec3 q, float petals, float rounded, float phase, float t) {
   return formCorollaTake(d, q, 13.0, count, sector, outerSize, outerHinge, innerHinge, innerRadius, outerOpen, innerOpen, corner, t);
 }
 
+// Exact distance to one horizontal circular arc. The ordinary torus distance
+// is valid outside the missing sector. Inside it, the nearest point on the
+// persistent member is one of its two round endpoints rather than an invisible
+// continuation of the circle. Keeping that distinction in the field is what
+// lets Xenon 32's circulating breaks expose real ends instead of a dark mask
+// painted over complete hoops.
+float formArcRingY(vec3 q, float height, float radius, float gapAngle,
+                   float gapHalf, float t) {
+  q.y -= height;
+  float angle = atan(q.z, q.x);
+  float fromGap = mod(angle - gapAngle + PI, 2.0 * PI) - PI;
+  if (abs(fromGap) >= gapHalf) {
+    return length(vec2(length(q.xz) - radius, q.y)) - t;
+  }
+  float endpointAngle = gapAngle + (fromGap < 0.0 ? -gapHalf : gapHalf);
+  vec3 endpoint = vec3(cos(endpointAngle) * radius, 0.0,
+                       sin(endpointAngle) * radius);
+  return length(q - endpoint) - t;
+}
+
+float formSpindleMember(vec3 q, float member, float count, float reach,
+                        float phase, float t) {
+  float across = member / max(count - 1.0, 1.0) * 2.0 - 1.0;
+  float height = across * 0.48;
+  float radius = 0.145 + pow(abs(across), 1.34)
+    * mix(0.72, 1.24, clamp(reach, 0.0, 1.0));
+  float a = clamp(phase, 0.0, 1.0) * 2.0 * PI;
+  // Every open rail completes one physical revolution. A fixed height twist
+  // prevents all gaps from lining up into one screen-space cut, while the
+  // bounded second harmonic gives eight sampled poses distinct silhouettes
+  // and still returns every endpoint exactly at the seam.
+  float gapAngle = a + across * 1.28 + sin(a * 2.0 + across * 2.4) * 0.23;
+  float gapPulse = 0.78 + sin(a * 3.0 + across * 1.7) * 0.28;
+  float gapHalf = mix(0.48, 1.35, pow(abs(across), 0.72)) * gapPulse;
+  return formArcRingY(q, height, radius, gapAngle, gapHalf, t * 0.56 + 0.004);
+}
+
+float formSpindleTake(float best, vec3 q, float member, float count,
+                      float reach, float phase, float t) {
+  if (member >= count) return best;
+  return min(best, formSpindleMember(q, member, count, reach, phase, t));
+}
+
+// A finite stack of permanent coaxial open hoops. The narrow middle and large
+// outer radii are a fixed construction, not a screen warp: perspective turns
+// the middle members into long rays while near outer arcs swell beyond the
+// frame. All seventeen possible members remain explicit because selecting the
+// nearest height plane can miss a farther hoop whose larger radius is closer.
+float formSpindle(vec3 q, float ribs, float reach, float phase, float t) {
+  float count = floor(mix(9.0, 17.0, clamp(ribs, 0.0, 1.0)));
+  float d = 10.0;
+  d = formSpindleTake(d, q, 0.0, count, reach, phase, t);
+  d = formSpindleTake(d, q, 1.0, count, reach, phase, t);
+  d = formSpindleTake(d, q, 2.0, count, reach, phase, t);
+  d = formSpindleTake(d, q, 3.0, count, reach, phase, t);
+  d = formSpindleTake(d, q, 4.0, count, reach, phase, t);
+  d = formSpindleTake(d, q, 5.0, count, reach, phase, t);
+  d = formSpindleTake(d, q, 6.0, count, reach, phase, t);
+  d = formSpindleTake(d, q, 7.0, count, reach, phase, t);
+  d = formSpindleTake(d, q, 8.0, count, reach, phase, t);
+  d = formSpindleTake(d, q, 9.0, count, reach, phase, t);
+  d = formSpindleTake(d, q, 10.0, count, reach, phase, t);
+  d = formSpindleTake(d, q, 11.0, count, reach, phase, t);
+  d = formSpindleTake(d, q, 12.0, count, reach, phase, t);
+  d = formSpindleTake(d, q, 13.0, count, reach, phase, t);
+  d = formSpindleTake(d, q, 14.0, count, reach, phase, t);
+  d = formSpindleTake(d, q, 15.0, count, reach, phase, t);
+  return formSpindleTake(d, q, 16.0, count, reach, phase, t);
+}
+
+// A light chase attached to the fixed height identity of each spindle rail.
+// The reference does not raise the complete object uniformly: bright members
+// migrate through a mostly dark stack. Two closed waves keep that motion quick
+// without moving geometry or changing which rail owns a highlight.
+float formSpindleExcitation(vec3 q, float ribs, float phase) {
+  float count = floor(mix(9.0, 17.0, clamp(ribs, 0.0, 1.0)));
+  float member = clamp(round((q.y / 0.48 + 1.0) * 0.5 * (count - 1.0)),
+                       0.0, count - 1.0);
+  float a = clamp(phase, 0.0, 1.0) * 2.0 * PI;
+  float wave = pow(0.5 + 0.5 * cos(a * 2.0 + member * 0.83), 3.0);
+  float overhead = mix(0.72, 1.28, smoothstep(-0.48, 0.48, q.y));
+  return mix(0.16, 0.78, wave) * overhead;
+}
+
 // The woven object repeated as construction rather than copied as pixels.
 // Each cell holds three orthogonal bundles of four rounded loops; folding the
 // point into the cell makes the field infinite without a loop inside the march.
@@ -777,7 +861,7 @@ vec3 formBaseColour(vec3 q, int mode, float extra, float detail, float motion) {
     // than being painted permanently onto whole members.
     return mix(uChalk, role, 0.28);
   }
-  if (mode == 14 || mode == 15) {
+  if (mode == 14 || mode == 15 || mode == 16) {
     // Every hoop is the same pale luminous stock. Recovering a sector from the
     // shaded world point after the shared rocking transform would make colours
     // jump at sector boundaries; a constant material keeps the mechanism's
@@ -909,6 +993,9 @@ float formField(vec3 q, int mode, float thick, float extra, float detail, float 
   if (mode == 15) {
     return formCorolla(q, extra, detail, motion, t);
   }
+  if (mode == 16) {
+    return formSpindle(q, extra, detail, motion, t);
+  }
   // A helix winding away down the corridor. The one shape here whose distance
   // is an over-estimate along its axis, which is why every march takes half
   // steps: a full one would tunnel through the strand and draw nothing.
@@ -930,7 +1017,7 @@ float formField(vec3 q, int mode, float thick, float extra, float detail, float 
 float formStride(int mode) {
   if (mode == 5) return 0.85;
   if (mode == 10) return 0.5;
-  return mode == 16 ? 0.5 : 0.9;
+  return mode == 17 ? 0.5 : 0.9;
 }
 
 // The surface direction, from four samples around the point the ray stopped at.
@@ -1024,6 +1111,26 @@ vec3 formAstrolabeSky(vec3 ray) {
   return room;
 }
 
+// Saturated panels for the Spindle's polished open rails. Broad cyan and warm
+// fields occupy different reflected azimuths, so colour bends around a member
+// and shifts with the viewing normal rather than being painted onto one whole
+// ring. A narrow pale strip supplies the blown white segments between them.
+vec3 formSpindleSky(vec3 ray) {
+  float azimuth = atan(ray.x, ray.z);
+  float cyan = pow(0.5 + 0.5 * cos(azimuth * 2.0 - 0.28), 7.0);
+  float warm = pow(0.5 + 0.5 * cos(azimuth * 2.0 + 2.18), 8.0);
+  float lower = pow(0.5 + 0.5 * cos(azimuth * 3.0 - 1.1), 10.0)
+    * (1.0 - smoothstep(-0.5, 0.55, ray.y));
+  float strip = pow(clamp(dot(ray, normalize(vec3(-0.42, 0.72, -0.55))),
+                          0.0, 1.0), 16.0);
+  vec3 room = vec3(0.001);
+  room += uPrimary * cyan * 1.5;
+  room += uComplement * warm * 1.55;
+  room += uAccent * lower * 0.8;
+  room += uChalk * strip * 2.0;
+  return room;
+}
+
 vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
                 float thick, float flare, float chrome, float extra, float detail, float motion) {
   float yaw = turn * 6.28318530718;
@@ -1085,7 +1192,7 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
     side = rolledSide;
   }
 
-  if (mode == 16) {
+  if (mode == 17) {
     float off = clamp(dolly, 0.0, 1.0) * 0.32;
     float coil = 0.6 + clamp(extra, 0.0, 1.0) * 3.5;
     float cycle = 2.0 * PI / coil;
@@ -1099,11 +1206,13 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
   // far members collect into the dense inner knot. Pulling the ordinary camera
   // closer without widening it merely crops a larger version of the same tidy
   // orthographic-looking ball.
-  float focal = mode == 13 || mode == 14 || mode == 15 ? 1.1 : 1.4;
+  float focal = mode == 16 ? 0.88
+    : (mode == 13 || mode == 14 || mode == 15 ? 1.1 : 1.4);
   vec3 ray = normalize(fwd * focal + side * p.x + up * p.y);
 
   float tight = mix(120.0, 24.0, clamp(flare, 0.0, 1.0));
   if (mode == 13) tight *= 0.42;
+  if (mode == 16) tight *= 0.58;
   float stride = formStride(mode);
   /*
    * Start each ray a random fraction of a step along, and the contours go away.
@@ -1154,6 +1263,7 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
   // that excess is what makes a core white and gives a bloom something to
   // spread. See OVERBRIGHT.
   float raw = gathered * mix(8.0, 26.0, clamp(flare, 0.0, 1.0)) * mix(0.7, 1.2, e);
+  if (mode == 16) raw *= formSpindleExcitation(where, extra, motion);
   // The armillary is polished black construction in a lit room, not emissive
   // wire. Energy opens a controlled amount of internal light for the bright
   // Xenon 84 treatment; near zero, Xenon 87 is revealed almost entirely by
@@ -1170,7 +1280,9 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
   // light as a grazing ray, which otherwise draws a black cord inside a cyan
   // halo. The footage has the opposite physical ordering: a saturated core
   // with bloom falling away from it.
-  if (mode == 14 || mode == 15) raw = max(raw, hit * mix(0.12, 0.32, clamp(e, 0.0, 1.0)));
+  if (mode == 14 || mode == 15 || mode == 16) {
+    raw = max(raw, hit * mix(0.12, 0.32, clamp(e, 0.0, 1.0)));
+  }
   float lit = clamp(raw, 0.0, 1.0);
   // Only what is genuinely saturated goes white. Mixing toward white from
   // halfway up leaves every tube the same pale grey and throws the colourway
@@ -1222,7 +1334,8 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
     vec3 reflectedRoom = mode == 11
       ? formArmillarySky(bounced)
       : (mode == 12 ? formArmillarySky(bounced) * 1.18
-        : (mode == 13 ? formAstrolabeSky(bounced) : formSky(bounced)));
+        : (mode == 13 ? formAstrolabeSky(bounced)
+          : (mode == 16 ? formSpindleSky(bounced) : formSky(bounced))));
     vec3 shell = reflectedRoom * mix(0.35, 1.0, facing) * roomWeight
                + vec3(1.0) * glint * mix(1.4, 6.0, polish) * glintWeight
                + uChalk * facing * 0.6 * rimWeight;

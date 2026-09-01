@@ -364,7 +364,7 @@ editors listing these differently would be two different vocabularies.
 | `field` | `p` `energy`, plus `balls` `apart` on metaballs | `c` | `cells` `clouds` `metaballs`; fixed work, charged per graph sample and never offered per track |
 | `fractal` | `p` `energy` + its mode's numbers | `c` | `mandelbrot` or `julia`, with bounded zoom, detail and iterative work |
 | `light` | `p` `energy` + its mode's numbers, and `from` on the hung three | `c` | `lamp` `beam` `shafts` `caustics`; 2D lights with fixed work, drifting in seconds rather than beats |
-| `form` | `p` `turn` `tilt` `dolly` `thick` `flare` `chrome` `energy` + its mode's numbers | `c` | `torus` `rings` `frame` `lattice` `weave` `loom` `orbits` `relief` `iris` `truss` `rotor` `armillary` `gyre` `astrolabe` `rosette` `corolla` `tube`; the one node with a third coordinate in it, marched and charged like a fractal |
+| `form` | `p` `turn` `tilt` `dolly` `thick` `flare` `chrome` `energy` + its mode's numbers | `c` | `torus` `rings` `frame` `lattice` `weave` `loom` `orbits` `relief` `iris` `truss` `rotor` `armillary` `gyre` `astrolabe` `rosette` `corolla` `spindle` `tube`; the one node with a third coordinate in it, marched and charged like a fractal |
 | `glow` | `d` `energy` + its mode's numbers | `c` | `neon` `soft` `band`: a distance becomes a lit stroke |
 | `shade` | `n` `amount` `energy` | `c` | `across` `heat` `filament`: a number becomes a colour off the colourway |
 | `flow` | `p` | `c` | another flow, whole, as one node |
@@ -598,6 +598,24 @@ turbine. `petals` changes the permanent sector count and `corner` changes only t
 profile. Both banks retain every member, hinge and distinct profile through the closed cycle,
 and all sectors are explicit for the same ray-distance reason as `rosette`. This is the compound
 compact-cage/large-flower topology of the Xenon 78 treatment, not a 2D repeat of one petal.
+
+`spindle` stacks between nine and seventeen permanent open circular rails on one vertical axis.
+Their heights and radii form a fixed symmetric hierarchy: a narrow middle and progressively
+larger outer members. A close wide-angle eye turns the middle circles into horizontal rays while
+near outer arcs swell beyond the frame, producing Xenon 32's hourglass without a radial screen
+warp. Each member is a true circular arc. Inside its moving gap the field measures distance to
+one of two round endpoints rather than to an invisible complete hoop, and both the gap centre and
+half-width follow closed paths so the same endpoints circulate and change separation through the
+loop. `ribs` changes the permanent member count, `reach` changes the outer radius hierarchy and
+`phase` drives that endpoint circulation. All possible rails are explicit because a nearest
+height-plane fold can miss a more distant member whose larger radius is physically closer.
+
+The material follows that construction too. A two-wave light chase is indexed by the rail's
+fixed height identity, so brightness migrates through members rather than flashing the entire
+render; a permanent overhead bias gives the stack its asymmetric studio exposure. Its broad
+volumetric halo uses lower gain than the other fine-wire forms, and polished surfaces reflect a
+separate cyan/warm panel room. The graph therefore controls geometry, endpoint motion, light and
+material independently while remaining one bounded march.
 
 `loom` repeats the weave as geometry through all three axes rather than tiling a rendered
 picture of it. Every cell contains three orthogonal four-member loop bundles. Each complete

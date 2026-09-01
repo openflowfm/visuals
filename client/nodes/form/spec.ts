@@ -30,6 +30,7 @@ const descriptions: Record<Mode, string> = {
   astrolabe: 'Three to seven flat metal gimbals locked into one rigidly tumbling sculpture.',
   rosette: 'Circular hoops hinged around one axis, opening from a radial wreath into crossed petals.',
   corolla: 'Coaxial banks of tangent rounded loops and circular hoops opening into a layered flower.',
+  spindle: 'Open coaxial hoop rails widening away from a narrow waist while their gaps circulate.',
   tube: 'A helix winding away down a corridor the eye is inside.',
 };
 
@@ -96,6 +97,11 @@ const values: Record<Mode, readonly PortSpec[]> = {
     numberPort('petals', 'How many permanent members repeat in each coaxial bank.', 0.58),
     numberPort('corner', 'How round or faceted the outer bank loops become.', 0.48),
     numberPort('open', 'Where both hinge banks sit on their closed compact-to-flower cycle.', 0),
+  ],
+  spindle: [
+    numberPort('ribs', 'How many permanent open hoops are stacked around the waist.', 0.58),
+    numberPort('reach', 'How far the outer hoop radii expand beyond the waist.', 0.62),
+    numberPort('phase', 'Where the open ends sit on their closed circulation.', 0),
   ],
   tube: [
     numberPort('coil', 'How tightly the helix winds as it goes away.', 0.35),

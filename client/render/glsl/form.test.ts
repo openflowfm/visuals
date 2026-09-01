@@ -466,7 +466,7 @@ describe('the astrolabe is one rigid sculpture of variable metal gimbals', () =>
     expect(FORM_LIB).toContain('vec2(width + t, depth + t * 0.32)');
     expect(FORM_LIB).toContain('formRibbonGimbalXY(m0, 0.98, 0.042, 0.012, t)');
     expect(FORM_LIB).not.toContain('formGimbalXY(m0');
-    expect(FORM_LIB).toContain('float focal = mode == 13 || mode == 14 || mode == 15 ? 1.1 : 1.4;');
+    expect(FORM_LIB).toContain(': (mode == 13 || mode == 14 || mode == 15 ? 1.1 : 1.4);');
     expect(FORM_LIB).toContain('if (mode == 13) tight *= 0.42;');
   });
 
@@ -534,7 +534,7 @@ describe('the rosette is a radial hinge mechanism of permanent circular hoops', 
   it('keeps one continuous pale material instead of assigning colour by a moving sector seam', () => {
     expect(FORM_LIB).toContain('return mix(uPrimary, uChalk, 0.35);');
     expect(FORM_LIB).not.toContain('float member = round(atan(q.y, q.x) / (2.0 * PI / count));');
-    expect(FORM_LIB).toContain('if (mode == 14 || mode == 15) raw = max(raw, hit * mix(0.12, 0.32');
+    expect(FORM_LIB).toContain('if (mode == 14 || mode == 15 || mode == 16) {');
   });
 });
 
@@ -571,6 +571,63 @@ describe('the corolla is two coaxial banks rather than one repeated outline', ()
     for (let axis = 0; axis < 3; axis++) {
       expect(pose(1)[axis]).toBeCloseTo(pose(0)[axis]!, 12);
     }
+  });
+});
+
+describe('the spindle is a finite waist of permanent open coaxial hoops', () => {
+  it('uses actual circular-arc endpoints instead of masking complete rings', () => {
+    expect(FORM_LIB).toContain('float formArcRingY(');
+    expect(FORM_LIB).toContain('if (abs(fromGap) >= gapHalf)');
+    expect(FORM_LIB).toContain('float endpointAngle = gapAngle +');
+    expect(FORM_LIB).toContain('return length(q - endpoint) - t;');
+  });
+
+  it('keeps a symmetric fixed radius hierarchy around a narrow waist', () => {
+    const radius = (member: number, count: number, reach: number) => {
+      const across = member / (count - 1) * 2 - 1;
+      return 0.145 + Math.abs(across) ** 1.34 * (0.72 + (1.24 - 0.72) * reach);
+    };
+    for (const count of [9, 13, 17]) {
+      expect(radius(0, count, 0.62)).toBeCloseTo(radius(count - 1, count, 0.62), 12);
+      expect(radius((count - 1) / 2, count, 0.62)).toBeCloseTo(0.145, 12);
+      expect(radius(0, count, 0.62)).toBeGreaterThan(radius(1, count, 0.62));
+    }
+    expect(FORM_LIB).toContain('floor(mix(9.0, 17.0');
+    expect(FORM_LIB).toContain('float height = across * 0.48;');
+    expect(FORM_LIB).toContain('float gapPulse = 0.78 + sin(a * 3.0 + across * 1.7) * 0.28;');
+    expect(FORM_LIB).toContain('float gapHalf = mix(0.48, 1.35');
+  });
+
+  it('evaluates every possible rail explicitly without a second shader loop', () => {
+    for (let member = 0; member < 17; member++) {
+      expect(FORM_LIB).toContain(`${member}.0, count, reach, phase, t`);
+    }
+    const field = FORM_LIB.slice(
+      FORM_LIB.indexOf('float formSpindle('),
+      FORM_LIB.indexOf('// The woven object repeated'),
+    );
+    expect(field).not.toMatch(/for\s*\(/);
+  });
+
+  it('returns every circulating endpoint to the same angle at the seam', () => {
+    const gap = (phase: number, across: number) => {
+      const a = phase * Math.PI * 2;
+      return a + across * 1.28 + Math.sin(a * 2 + across * 2.4) * 0.23;
+    };
+    for (const across of [-1, -0.4, 0, 0.35, 1]) {
+      expect(Math.cos(gap(1, across))).toBeCloseTo(Math.cos(gap(0, across)), 12);
+      expect(Math.sin(gap(1, across))).toBeCloseTo(Math.sin(gap(0, across)), 12);
+    }
+    expect(FORM_LIB).toContain('return formSpindle(q, extra, detail, motion, t);');
+    expect(FORM_LIB).toContain('float focal = mode == 16 ? 0.88');
+    expect(FORM_LIB).toContain('if (mode == 16) tight *= 0.58;');
+    expect(FORM_LIB).toContain('float formSpindleExcitation(');
+    expect(FORM_LIB).toContain('member * 0.83');
+    expect(FORM_LIB).toContain('float overhead = mix(0.72, 1.28, smoothstep(-0.48, 0.48, q.y));');
+    expect(FORM_LIB).toContain('return mix(0.16, 0.78, wave) * overhead;');
+    expect(FORM_LIB).toContain('raw *= formSpindleExcitation(where, extra, motion);');
+    expect(FORM_LIB).toContain('vec3 formSpindleSky(vec3 ray)');
+    expect(FORM_LIB).toContain('mode == 16 ? formSpindleSky(bounced)');
   });
 });
 
@@ -656,7 +713,7 @@ describe('the march is bounded and says so', () => {
       FORM_LIB.indexOf('float formField('),
       FORM_LIB.indexOf('float formStride('),
     );
-    expect(FORM_MODES.length).toBe(17);
+    expect(FORM_MODES.length).toBe(18);
     for (let i = 0; i < FORM_MODES.length - 1; i++) {
       expect(field).toContain(`if (mode == ${i})`);
     }
@@ -667,10 +724,10 @@ describe('the march is bounded and says so', () => {
   it('takes half steps only for the shape whose distance is an over-estimate', () => {
     // The helix measures across the strand while the strand moves away along
     // its own axis, so the true nearest surface can be nearer than it says.
-    expect(FORM_MODES.indexOf('tube')).toBe(16);
+    expect(FORM_MODES.indexOf('tube')).toBe(17);
     expect(FORM_LIB).toContain('if (mode == 5) return 0.85;');
     expect(FORM_LIB).toContain('if (mode == 10) return 0.5;');
-    expect(FORM_LIB).toContain('return mode == 16 ? 0.5 : 0.9;');
+    expect(FORM_LIB).toContain('return mode == 17 ? 0.5 : 0.9;');
   });
 
   it('accumulates glow along the ray rather than once per step', () => {
