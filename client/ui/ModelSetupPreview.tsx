@@ -4,6 +4,7 @@ import type {
   ModelLibrary,
   ModelSetup,
   ModelSetupDraft,
+  ModelTextureAsset,
 } from '../../model.ts';
 import { modelPorts } from '../../model.ts';
 import { paletteOf, type CircuitNode, type Scheme, type Show } from '../../protocol.ts';
@@ -38,6 +39,7 @@ export function modelPreviewDocument(
   asset: ModelAsset,
   scheme: Scheme,
   show: Show,
+  textures: readonly ModelTextureAsset[] = [],
 ): ModelPreviewDocument {
   const setup: ModelSetup = {
     ...draft,
@@ -72,7 +74,7 @@ export function modelPreviewDocument(
         },
       },
     },
-    library: { assets: [asset], setups: [setup], textures: [], notice: null },
+    library: { assets: [asset], setups: [setup], textures: [...textures], notice: null },
   };
 }
 
@@ -88,11 +90,13 @@ export function ModelSetupPreview({
   asset,
   scheme,
   show,
+  textures = [],
 }: {
   draft: ModelSetupDraft;
   asset: ModelAsset;
   scheme: Scheme;
   show: Show;
+  textures?: readonly ModelTextureAsset[];
 }) {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const colorwayMap = scheme.colorways ?? EMPTY_COLORWAYS;
@@ -105,8 +109,8 @@ export function ModelSetupPreview({
     return { ...show, colorway, colors: paletteOf(chosen).map(packColor) };
   }, [show, colorwayMap, colorway]);
   const document = useMemo(
-    () => modelPreviewDocument(draft, asset, scheme, previewShow),
-    [draft, asset, scheme, previewShow],
+    () => modelPreviewDocument(draft, asset, scheme, previewShow, textures),
+    [draft, asset, scheme, previewShow, textures],
   );
   const current = useRef(document);
   current.current = document;

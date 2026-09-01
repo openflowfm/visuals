@@ -69,6 +69,7 @@ describe('the first-class model library', () => {
       scheme,
       show: SHOW,
       onImport: async () => undefined,
+      onImportTexture: async () => undefined,
       onSave: () => undefined,
       onReconcile: () => undefined,
     }));
@@ -106,7 +107,11 @@ describe('the first-class model library', () => {
       camera: null,
     } satisfies ModelSetupDraft;
     const scheme = { flows: { kept: { name: 'Kept', circuit: { nodes: [], cords: [] } } } } as unknown as Scheme;
-    const preview = modelPreviewDocument(draft, asset, scheme, SHOW);
+    const texture = {
+      hash: 'c'.repeat(64), name: 'grid.png', bytes: 128, mimeType: 'image/png' as const,
+      width: 32, height: 32, importedAt: '2026-09-01T00:00:00.000Z',
+    };
+    const preview = modelPreviewDocument(draft, asset, scheme, SHOW, [texture]);
     const node = Object.values(preview.scheme.flows)[0]!.circuit.nodes[0]!;
 
     expect(Object.keys(preview.scheme.flows)).toEqual(['~model-setup-preview']);
@@ -120,6 +125,7 @@ describe('the first-class model library', () => {
       lighting: { preset: 'neon' },
     });
     expect(preview.show.flow).toBe('~model-setup-preview');
+    expect(preview.library.textures).toEqual([texture]);
 
     const html = renderToStaticMarkup(h(ModelSetupPreview, { draft, asset, scheme, show: SHOW }));
     expect(html).toContain('Interactive preview of Creature / stage');

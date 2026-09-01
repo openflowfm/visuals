@@ -114,6 +114,15 @@ A setup may reference at most eight local textures. Arbitrary shader text is del
 field: it would compile at stage time, escape every resource bound, and have no stable graph
 contract.
 
+The Models material laboratory is the product surface for that vocabulary. It shows every
+accepted embedded image and every refusal reason, thumbnails each of the five slots beside its
+UV set, and keeps separately imported PNG/JPEG overrides on the library shelf. Each slot chooses
+authored, flat/none, or one immutable local texture; projection, wrap, transform, strengths and
+the three curated effects update the production-compositor preview immediately. **Hold authored
+look** feeds a neutral authored working copy to that preview without replacing the edited draft,
+so releasing it restores the exact unsaved recipe. Publish buttons sit beside the numeric recipe
+properties only and disable once that stable material/property target is already an inlet.
+
 Lighting belongs to the reusable setup. **Studio**, **void** and **neon** are editable starting
 rigs, not renderer modes; changing any field makes the rig custom. A rig contains an analytic
 palette-aware HDR environment and at most four enabled directional, point or spot lights. Lights

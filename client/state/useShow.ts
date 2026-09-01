@@ -101,6 +101,7 @@ export function useShow(): {
   /** Immutable GLBs and reusable OpenFlow-owned setup metadata. */
   models: ModelLibrary;
   importModel(file: File): Promise<void>;
+  importModelTexture(file: File): Promise<void>;
   saveModelSetup(setup: ModelSetupDraft): void;
   reconcileModel(
     setupId: string,
@@ -469,6 +470,20 @@ export function useShow(): {
     }
   }).current;
 
+  const importModelTexture = useRef(async (file: File) => {
+    const response = await fetch('/models/textures/import', {
+      method: 'POST',
+      headers: {
+        'content-type': file.type || 'application/octet-stream',
+        'x-openflow-name': encodeURIComponent(file.name),
+      },
+      body: file,
+    });
+    if (!response.ok) {
+      throw new Error((await response.text()) || `texture import failed (${response.status})`);
+    }
+  }).current;
+
   const saveModelSetup = useRef((setup: ModelSetupDraft) => {
     const socket = live.current;
     if (socket?.readyState === WebSocket.OPEN) {
@@ -721,6 +736,7 @@ export function useShow(): {
     nextFlow,
     nextColorway,
     importModel,
+    importModelTexture,
     saveModelSetup,
     reconcileModel,
     lab,

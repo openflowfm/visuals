@@ -9,10 +9,17 @@ import {
   MODEL_LIGHT_SOURCES,
   MODEL_LIGHT_SPACES,
   MODEL_LIGHT_TYPES,
+  MODEL_MATERIAL_PROPERTIES,
+  MODEL_PROJECTIONS,
+  MODEL_RECIPE_WRAPS,
   MODEL_SETUP_ID,
+  MODEL_SLOTS,
   bindingTargetKey,
+  materialTextureUse,
   modelLightingOf,
   modelLightingPreset,
+  modelRecipe,
+  modelRecipeOf,
   reconcileBindings,
   type ModelAsset,
   type ModelBinding,
@@ -21,18 +28,30 @@ import {
   type ModelLightingSetup,
   type ModelLightingPreset,
   type ModelLibrary,
+  type ModelMaterialCapability,
   type ModelMaterialMapping,
+  type ModelMaterialProperty,
   type ModelNodeCapability,
   type ModelPaletteSource,
   type ModelRevisionDecision,
   type ModelSetup,
   type ModelSetupDraft,
+  type ModelSlot,
+  type ModelSlotSource,
 } from '../../model.ts';
 import { ModelSetupPreview } from './ModelSetupPreview.tsx';
 
 const SOURCES: ModelPaletteSource[] = [
   'color-a', 'color-b', 'primary', 'secondary', 'complement', 'accent', 'chalk', 'original',
 ];
+
+const SLOT_LABEL: Record<ModelSlot, string> = {
+  baseColor: 'base colour',
+  metallicRoughness: 'metal / rough',
+  normal: 'normal',
+  occlusion: 'occlusion',
+  emissive: 'emissive',
+};
 
 const slug = (value: string): string => {
   const made = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -77,6 +96,39 @@ function targetLabel(target: ModelBindingTarget, asset: ModelAsset): string {
   return `environment · ${target.property}`;
 }
 
+function materialRange(
+  material: ModelMaterialCapability,
+  property: ModelMaterialProperty,
+  mapping: ModelMaterialMapping,
+): readonly [number, number, number] {
+  const recipe = modelRecipeOf(mapping);
+  if (property === 'emissive-strength') {
+    const max = Math.max(8, material.emissiveStrength * 2);
+    return [0, max, material.emissiveStrength / max];
+  }
+  if (property === 'normal-strength') return [0, 4, recipe.normalStrength / 4];
+  if (property === 'uv-scale') return [0.05, 8, normalized(1, 0.05, 8)];
+  if (property === 'uv-rotation') return [-Math.PI, Math.PI, normalized(recipe.uvRotation, -Math.PI, Math.PI)];
+  if (property === 'uv-offset-x') return [-4, 4, normalized(recipe.uvOffset[0], -4, 4)];
+  if (property === 'uv-offset-y') return [-4, 4, normalized(recipe.uvOffset[1], -4, 4)];
+  const value = property === 'metallic'
+    ? material.metallic
+    : property === 'roughness'
+      ? material.roughness
+      : property === 'opacity'
+        ? material.baseColor[3]
+        : property === 'texture-mix'
+          ? recipe.textureMix
+          : property === 'occlusion-strength'
+            ? recipe.occlusionStrength
+            : property === 'rim'
+              ? recipe.rim
+              : property === 'scan'
+                ? recipe.scan
+                : recipe.bands;
+  return [0, 1, value];
+}
+
 function allTargets(asset: ModelAsset, lighting?: ModelLightingSetup): ModelBindingTarget[] {
   const properties = [
     'translation-x', 'translation-y', 'translation-z',
@@ -100,7 +152,7 @@ function allTargets(asset: ModelAsset, lighting?: ModelLightingSetup): ModelBind
       name: animation.name,
     })),
     ...asset.capabilities.materials.flatMap((material) =>
-      (['metallic', 'roughness', 'opacity', 'emissive-strength'] as const).map((property) => ({
+      MODEL_MATERIAL_PROPERTIES.map((property) => ({
         kind: 'material' as const,
         material: material.index,
         property,
@@ -186,7 +238,10 @@ function asDraft(setup: ModelSetup): ModelSetupDraft {
     name: setup.name,
     assetHash: setup.assetHash,
     bindings: setup.bindings.map((binding) => ({ ...binding, target: { ...binding.target } })),
-    materials: setup.materials.map((mapping) => ({ ...mapping })),
+    materials: setup.materials.map((mapping) => ({
+      ...mapping,
+      ...(mapping.recipe ? { recipe: modelRecipe(mapping.recipe) } : {}),
+    })),
     lighting: cloneLighting(modelLightingOf(setup)),
     camera: setup.camera,
   };
@@ -197,6 +252,7 @@ export function ModelLibraryView({
   scheme,
   show,
   onImport,
+  onImportTexture,
   onSave,
   onReconcile,
 }: {
@@ -204,10 +260,12 @@ export function ModelLibraryView({
   scheme: Scheme;
   show: Show;
   onImport(file: File): Promise<void>;
+  onImportTexture(file: File): Promise<void>;
   onSave(setup: ModelSetupDraft): void;
   onReconcile(setupId: string, assetHash: string, decision: ModelRevisionDecision): void;
 }) {
   const input = useRef<HTMLInputElement | null>(null);
+  const textureInput = useRef<HTMLInputElement | null>(null);
   const [draft, setDraft] = useState<ModelSetupDraft | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [importing, setImporting] = useState<string | null>(null);
@@ -216,6 +274,7 @@ export function ModelLibraryView({
   const [materialReconciled, setMaterialReconciled] = useState<Record<string, number | null>>({});
   const [revisionCamera, setRevisionCamera] = useState<number | null>(null);
   const [query, setQuery] = useState('');
+  const [authoredPreview, setAuthoredPreview] = useState(false);
 
   const asset = draft ? library.assets.find((entry) => entry.hash === draft.assetHash) ?? null : null;
   const saved = savedId ? library.setups.find((entry) => entry.id === savedId) ?? null : null;
@@ -242,6 +301,15 @@ export function ModelLibraryView({
   const visibleAssets = library.assets.filter((entry) =>
     !needle || entry.name.toLowerCase().includes(needle) || entry.hash.includes(needle),
   );
+  const previewDraft = draft && authoredPreview ? {
+    ...draft,
+    materials: draft.materials.map((mapping) => ({
+      ...mapping,
+      source: 'original' as const,
+      amount: 1,
+      recipe: modelRecipe(),
+    })),
+  } : draft;
 
   useEffect(() => {
     if (!preview) {
@@ -281,6 +349,7 @@ export function ModelLibraryView({
     if (!setup) return;
     setSavedId(setup.id);
     setDraft(asDraft(setup));
+    setAuthoredPreview(false);
     setRevisionHash('');
   };
 
@@ -288,6 +357,7 @@ export function ModelLibraryView({
     if (!picked) return;
     setSavedId(null);
     setDraft(draftFor(picked));
+    setAuthoredPreview(false);
     setRevisionHash('');
   };
 
@@ -319,6 +389,17 @@ export function ModelLibraryView({
         { ...held, ...patch },
       ].sort((a, b) => a.material - b.material),
     });
+  };
+
+  const setRecipe = (material: number, patch: Parameters<typeof modelRecipe>[0]) => {
+    const held = draft?.materials.find((mapping) => mapping.material === material);
+    setMaterial(material, { recipe: modelRecipe({ ...modelRecipeOf(held), ...patch }) });
+  };
+
+  const setSlot = (material: number, slot: ModelSlot, source: ModelSlotSource) => {
+    const held = draft?.materials.find((mapping) => mapping.material === material);
+    const recipe = modelRecipeOf(held);
+    setRecipe(material, { slots: { ...recipe.slots, [slot]: source } });
   };
 
   const changeLighting = (change: (lighting: ModelLightingSetup) => ModelLightingSetup) => {
@@ -431,6 +512,7 @@ export function ModelLibraryView({
           <p>Import inert model bytes once, then publish only the controls a flow should see.</p>
           <div className="model-actions">
             <Button tone="quiet" onPress={() => input.current?.click()}>import GLB</Button>
+            <Button tone="quiet" onPress={() => textureInput.current?.click()}>import texture</Button>
             <Button tone="quiet" disabled={library.assets.length === 0} onPress={() => start()}>new setup</Button>
             <input
               ref={input}
@@ -443,6 +525,21 @@ export function ModelLibraryView({
                 if (!file) return;
                 setImporting(`importing ${file.name}…`);
                 void onImport(file)
+                  .then(() => setImporting(`${file.name} imported`))
+                  .catch((error: unknown) => setImporting((error as Error).message));
+              }}
+            />
+            <input
+              ref={textureInput}
+              type="file"
+              accept=".png,.jpg,.jpeg,image/png,image/jpeg"
+              hidden
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = '';
+                if (!file) return;
+                setImporting(`importing ${file.name}…`);
+                void onImportTexture(file)
                   .then(() => setImporting(`${file.name} imported`))
                   .catch((error: unknown) => setImporting((error as Error).message));
               }}
@@ -502,6 +599,17 @@ export function ModelLibraryView({
               );
             })}
           </section>
+
+          <section className="model-catalog-group">
+            <h3>local textures <span>{library.textures.length}</span></h3>
+            {library.textures.length === 0 && <p className="model-empty-small">PNG/JPEG overrides appear here.</p>}
+            {library.textures.map((texture) => (
+              <div className="model-texture-catalog" key={texture.hash}>
+                <img src={`/models/textures/${texture.hash}`} alt="" />
+                <span><b>{texture.name}</b><small>{texture.width}×{texture.height} · {(texture.bytes / 1024).toFixed(0)} KiB</small></span>
+              </div>
+            ))}
+          </section>
         </div>
       </aside>
 
@@ -534,7 +642,20 @@ export function ModelLibraryView({
                   <Button tone="quiet" onPress={() => { setDraft(null); setSavedId(null); }}>close</Button>
                 </div>
               </header>
-              <ModelSetupPreview draft={draft} asset={asset} scheme={scheme} show={show} />
+              <div className="model-preview-compare">
+                <ModelSetupPreview
+                  draft={previewDraft ?? draft}
+                  asset={asset}
+                  scheme={scheme}
+                  show={show}
+                  textures={library.textures}
+                />
+                <button
+                  type="button"
+                  aria-pressed={authoredPreview}
+                  onClick={() => setAuthoredPreview((held) => !held)}
+                >{authoredPreview ? 'show edited look' : 'hold authored look'}</button>
+              </div>
               <div className="model-fields two">
                 <label className="model-field">
                   <span>setup name</span>
@@ -690,42 +811,118 @@ export function ModelLibraryView({
                 ))}
               </details>
 
-              <details className="model-inspector" open>
-                <summary>materials & palette mapping</summary>
+              <details className="model-inspector model-images">
+                <summary>images, textures & extensions</summary>
+                <div className="model-image-grid">
+                  {asset.capabilities.images.map((image) => (
+                    <div className="model-image-card" data-bad={image.unsupported ? '' : undefined} key={image.index}>
+                      {image.unsupported === null
+                        ? <img src={`/models/assets/${asset.hash}/images/${image.index}`} alt={`Embedded ${image.name}`} />
+                        : <span className="model-image-empty">not decoded</span>}
+                      <b>{image.name}</b>
+                      <small>{image.width && image.height ? `${image.width}×${image.height}` : 'unknown size'} · {image.mimeType ?? 'unknown type'}</small>
+                      {image.unsupported && <small>{image.unsupported}</small>}
+                    </div>
+                  ))}
+                </div>
+                {asset.capabilities.images.length === 0 && <p>no embedded images</p>}
+                {asset.capabilities.extensions.length > 0 && <p>{asset.capabilities.extensions.map((extension) => (
+                  `${extension.name} · ${extension.supported ? 'rendered' : 'inspected only'}${extension.required ? ' · required' : ''}`
+                )).join(' / ')}</p>}
+              </details>
+
+              <details className="model-inspector model-materials" open>
+                <summary>material laboratory</summary>
+                <p>Choose each slot's immutable picture, then shape one bounded recipe. Hold the authored look above to compare without losing this working copy.</p>
                 {asset.capabilities.materials.map((material) => {
                   const mapping = draft.materials.find((entry) => entry.material === material.index) ?? {
                     material: material.index, source: 'original' as const, amount: 1,
                   };
+                  const recipe = modelRecipeOf(mapping);
                   return (
                     <div className="model-material" key={material.index}>
-                      <b>{material.name}<small> base {material.baseColor.map((value) => value.toFixed(2)).join(', ')} · metal {material.metallic.toFixed(2)} · rough {material.roughness.toFixed(2)} · {material.alphaMode}</small></b>
-                      <select value={mapping.source} onChange={(event) => setMaterial(material.index, { source: event.target.value as ModelPaletteSource })}>
-                        {SOURCES.map((source) => <option key={source}>{source}</option>)}
-                      </select>
-                      <input
-                        type="range" min="0" max="1" step="0.01" value={mapping.amount}
-                        aria-label={`${material.name} mapping amount`}
-                        onChange={(event) => setMaterial(material.index, { amount: Number(event.target.value) })}
-                      />
+                      <header className="model-material-head">
+                        <b>{material.name}<small>base {material.baseColor.map((value) => value.toFixed(2)).join(', ')} · metal {material.metallic.toFixed(2)} · rough {material.roughness.toFixed(2)} · {material.alphaMode}{material.doubleSided ? ' · double-sided' : ''}{material.unlit ? ' · unlit' : ''}</small></b>
+                        <label>palette source <select value={mapping.source} onChange={(event) => setMaterial(material.index, { source: event.target.value as ModelPaletteSource })}>
+                          {SOURCES.map((source) => <option key={source}>{source}</option>)}
+                        </select></label>
+                        <label>palette amount <input
+                          type="range" min="0" max="1" step="0.01" value={mapping.amount}
+                          aria-label={`${material.name} mapping amount`}
+                          onChange={(event) => setMaterial(material.index, { amount: Number(event.target.value) })}
+                        /></label>
+                      </header>
+
+                      <div className="model-material-slots">
+                        {MODEL_SLOTS.map((slot) => {
+                          const authored = materialTextureUse(material, slot);
+                          const texture = authored ? asset.capabilities.textures[authored.texture] : undefined;
+                          const image = texture?.image === null || texture?.image === undefined
+                            ? undefined : asset.capabilities.images[texture.image];
+                          const source = recipe.slots[slot];
+                          const override = source.kind === 'texture'
+                            ? library.textures.find((entry) => entry.hash === source.hash) : undefined;
+                          const address = source.kind === 'texture' ? `texture:${source.hash}` : source.kind;
+                          const picture = source.kind === 'authored' && image?.unsupported === null
+                            ? `/models/assets/${asset.hash}/images/${image.index}`
+                            : override ? `/models/textures/${override.hash}` : null;
+                          return (
+                            <label className="model-slot" key={slot}>
+                              <span>{SLOT_LABEL[slot]}</span>
+                              {picture
+                                ? <img src={picture} alt={`${material.name} ${SLOT_LABEL[slot]}`} />
+                                : <span className="model-image-empty">flat</span>}
+                              <select
+                                value={address}
+                                aria-label={`${material.name} ${SLOT_LABEL[slot]} source`}
+                                onChange={(event) => {
+                                  const value = event.currentTarget.value;
+                                  setSlot(material.index, slot, value === 'authored' || value === 'none'
+                                    ? { kind: value }
+                                    : { kind: 'texture', hash: value.slice('texture:'.length) });
+                                }}
+                              >
+                                <option value="authored" disabled={!authored}>authored{authored ? ` · UV${authored.texCoord}` : ' · unavailable'}</option>
+                                <option value="none">flat / none</option>
+                                {library.textures.map((entry) => <option key={entry.hash} value={`texture:${entry.hash}`}>{entry.name} · local</option>)}
+                              </select>
+                              <small>{override
+                                ? `${override.width}×${override.height} local override`
+                                : image
+                                  ? image.unsupported ?? `${image.width}×${image.height} · UV${authored?.texCoord ?? 0}`
+                                  : 'no authored map'}</small>
+                            </label>
+                          );
+                        })}
+                      </div>
+
+                      <div className="model-recipe-fields">
+                        <label>projection <select value={recipe.projection} onChange={(event) => setRecipe(material.index, { projection: event.currentTarget.value as typeof recipe.projection })}>{MODEL_PROJECTIONS.map((projection) => <option key={projection}>{projection}</option>)}</select></label>
+                        <label>wrap <select value={recipe.wrap} onChange={(event) => setRecipe(material.index, { wrap: event.currentTarget.value as typeof recipe.wrap })}>{MODEL_RECIPE_WRAPS.map((wrap) => <option key={wrap}>{wrap}</option>)}</select></label>
+                        <label>texture mix <input type="number" min="0" max="1" step="0.05" value={recipe.textureMix} onChange={(event) => setRecipe(material.index, { textureMix: Number(event.currentTarget.value) })} /></label>
+                        <label>normal <input type="number" min="0" max="4" step="0.05" value={recipe.normalStrength} onChange={(event) => setRecipe(material.index, { normalStrength: Number(event.currentTarget.value) })} /></label>
+                        <label>occlusion <input type="number" min="0" max="1" step="0.05" value={recipe.occlusionStrength} onChange={(event) => setRecipe(material.index, { occlusionStrength: Number(event.currentTarget.value) })} /></label>
+                        <label>UV scale X <input type="number" step="0.05" value={recipe.uvScale[0]} onChange={(event) => setRecipe(material.index, { uvScale: [Number(event.currentTarget.value), recipe.uvScale[1]] })} /></label>
+                        <label>UV scale Y <input type="number" step="0.05" value={recipe.uvScale[1]} onChange={(event) => setRecipe(material.index, { uvScale: [recipe.uvScale[0], Number(event.currentTarget.value)] })} /></label>
+                        <label>UV offset X <input type="number" step="0.05" value={recipe.uvOffset[0]} onChange={(event) => setRecipe(material.index, { uvOffset: [Number(event.currentTarget.value), recipe.uvOffset[1]] })} /></label>
+                        <label>UV offset Y <input type="number" step="0.05" value={recipe.uvOffset[1]} onChange={(event) => setRecipe(material.index, { uvOffset: [recipe.uvOffset[0], Number(event.currentTarget.value)] })} /></label>
+                        <label>UV rotation <input type="number" step="0.05" value={recipe.uvRotation} onChange={(event) => setRecipe(material.index, { uvRotation: Number(event.currentTarget.value) })} /></label>
+                        <label>rim <input type="number" min="0" max="1" step="0.05" value={recipe.rim} onChange={(event) => setRecipe(material.index, { rim: Number(event.currentTarget.value) })} /></label>
+                        <label>scan <input type="number" min="0" max="1" step="0.05" value={recipe.scan} onChange={(event) => setRecipe(material.index, { scan: Number(event.currentTarget.value) })} /></label>
+                        <label>bands <input type="number" min="0" max="1" step="0.05" value={recipe.bands} onChange={(event) => setRecipe(material.index, { bands: Number(event.currentTarget.value) })} /></label>
+                      </div>
+
                       <span className="model-publish">
-                        {(['metallic', 'roughness', 'opacity', 'emissive-strength'] as const).map((property) => (
-                          <button
+                        {MODEL_MATERIAL_PROPERTIES.map((property) => {
+                          const target = { kind: 'material' as const, material: material.index, property };
+                          const published = draft.bindings.some((binding) => bindingTargetKey(binding.target) === bindingTargetKey(target));
+                          return <button
                             type="button"
                             key={property}
-                            onClick={() => publish(
-                              { kind: 'material', material: material.index, property },
-                              `${material.name} ${property}`,
-                              'materials',
-                              property === 'emissive-strength'
-                                ? [0, Math.max(8, material.emissiveStrength * 2), material.emissiveStrength / Math.max(8, material.emissiveStrength * 2)]
-                                : [0, 1, property === 'metallic'
-                                  ? material.metallic
-                                  : property === 'roughness'
-                                    ? material.roughness
-                                    : material.baseColor[3]],
-                            )}
-                          >{property}</button>
-                        ))}
+                            disabled={published}
+                            onClick={() => publish(target, `${material.name} ${property}`, 'materials', materialRange(material, property, mapping))}
+                          >{published ? 'published · ' : 'publish · '}{property}</button>;
+                        })}
                       </span>
                     </div>
                   );

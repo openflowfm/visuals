@@ -37,6 +37,7 @@ export function App() {
     media,
     models,
     importModel,
+    importModelTexture,
     saveModelSetup,
     reconcileModel,
     grid,
@@ -340,6 +341,7 @@ export function App() {
             media={media}
             models={models}
             importModel={importModel}
+            importModelTexture={importModelTexture}
             saveModelSetup={saveModelSetup}
             reconcileModel={reconcileModel}
             grid={grid}

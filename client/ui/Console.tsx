@@ -67,6 +67,7 @@ export interface ConsoleProps {
   media: readonly MediaAsset[];
   models: ModelLibrary;
   importModel(file: File): Promise<void>;
+  importModelTexture(file: File): Promise<void>;
   saveModelSetup(setup: ModelSetupDraft): void;
   reconcileModel(setupId: string, assetHash: string, decision: ModelRevisionDecision): void;
   grid: SetGrid | null;
@@ -128,6 +129,7 @@ export function Console({
   media,
   models,
   importModel,
+  importModelTexture,
   saveModelSetup,
   reconcileModel,
   grid,
@@ -287,6 +289,7 @@ export function Console({
           scheme={scheme}
           show={room.show}
           onImport={importModel}
+          onImportTexture={importModelTexture}
           onSave={saveModelSetup}
           onReconcile={reconcileModel}
         />
