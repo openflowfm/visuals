@@ -1,6 +1,6 @@
 {
   "name": "@openflow/visuals",
-  "version": "0.1.0",
+  "version": "0.1.0-dev",
   "private": true,
   "author": "Ryan Gavin",
   "type": "module",
