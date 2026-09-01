@@ -22,6 +22,7 @@
 import type { Scheme, Show, Track } from './protocol.ts';
 import { createCompositor } from './client/render/compositor.ts';
 import { compileFlow } from './client/render/circuit.ts';
+import { cyclicMotion, metricsOf, type FrameMetrics } from './frameMetrics.ts';
 
 const params = new URLSearchParams(location.search);
 const asked = (name: string, fallback: string): string => params.get(name) ?? fallback;
@@ -34,32 +35,15 @@ const SETTLE = Number(asked('settle', '90'));
 const FPS = 60;
 const TRACKS = 4;
 
-export interface FrameStat {
+export interface FrameStat extends FrameMetrics {
   flow: string;
   beat: number;
-  /** Mean luma, 0-255. */
-  lum: number;
-  /** Share of pixels that are pure black. */
-  black: number;
-  /** Share of pixels at or above 250 in every channel. */
-  white: number;
-  /** The brightest single channel value anywhere in the frame. */
-  peak: number;
-  /**
-   * How long a run of *identical* 8-bit values lasts inside a smooth gradient.
-   *
-   * The number that says "banding" out loud. A gradient that steps from one
-   * quantised level to the next in a clean edge holds each level for tens of
-   * pixels, and the eye reads those plateaus as contour lines drawn across
-   * something that should be smooth. Dithered, the same gradient breaks its runs
-   * up and the mean falls to two or three.
-   *
-   * Measured only where the picture *is* a gradient — rows are sampled, runs are
-   * counted along them, and a run is only counted if the value on either side of
-   * it differs by exactly one, which is what separates a quantisation plateau
-   * from a genuinely flat region of the image.
-   */
-  terrace: number;
+}
+
+export interface SequenceStat {
+  flow: string;
+  /** Mean per-channel change across equal phase steps, including the loop seam. */
+  motion: number;
 }
 
 /** A per-beat kick, an accent on two and four, and a slow swell under both. */
@@ -118,34 +102,6 @@ function showAt(beat: number, colors: number[], flow: string | null): Show {
 
 const packColor = (hex: string): number => parseInt(hex.replace('#', ''), 16);
 
-/** Runs of one value inside a gradient, which is what a band is. */
-function terraceOf(pixels: Uint8ClampedArray, width: number, height: number): number {
-  let runs = 0;
-  let total = 0;
-  const rows = Math.min(height, 64);
-  for (let r = 0; r < rows; r++) {
-    const y = Math.floor(((r + 0.5) / rows) * height);
-    let runStart = 0;
-    let held = -1;
-    for (let x = 0; x <= width; x++) {
-      const at = (y * width + x) * 4;
-      // Green carries most of luma and is the channel a gradient bands in first.
-      const value = x < width ? pixels[at + 1] : -999;
-      if (value === held) continue;
-      const length = x - runStart;
-      // A plateau, not a flat area: the step out of it has to be one level, and
-      // the plateau itself has to be lit rather than black background.
-      if (held > 4 && value >= 0 && Math.abs(value - held) === 1 && length > 1) {
-        runs += 1;
-        total += length;
-      }
-      held = value;
-      runStart = x;
-    }
-  }
-  return runs > 0 ? total / runs : 0;
-}
-
 function statOf(
   pixels: Uint8ClampedArray,
   width: number,
@@ -153,31 +109,7 @@ function statOf(
   flow: string,
   beat: number,
 ): FrameStat {
-  let sum = 0;
-  let black = 0;
-  let white = 0;
-  let peak = 0;
-  const count = width * height;
-  for (let i = 0; i < count; i++) {
-    const at = i * 4;
-    const r = pixels[at];
-    const g = pixels[at + 1];
-    const b = pixels[at + 2];
-    sum += 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    const most = r > g ? (r > b ? r : b) : g > b ? g : b;
-    if (most === 0) black += 1;
-    if (r >= 250 && g >= 250 && b >= 250) white += 1;
-    if (most > peak) peak = most;
-  }
-  return {
-    flow,
-    beat,
-    lum: sum / count,
-    black: black / count,
-    white: white / count,
-    peak,
-    terrace: terraceOf(pixels, width, height),
-  };
+  return { flow, beat, ...metricsOf(pixels, width, height) };
 }
 
 export interface FramesReport {
@@ -185,6 +117,7 @@ export interface FramesReport {
   width: number;
   height: number;
   stats: FrameStat[];
+  sequences: SequenceStat[];
   errors: string[];
 }
 
@@ -229,6 +162,7 @@ export async function run(canvas: HTMLCanvasElement): Promise<FramesReport> {
   const flat = shot.getContext('2d', { willReadFrequently: true })!;
 
   const stats: FrameStat[] = [];
+  const sequences: SequenceStat[] = [];
   const errors: string[] = [];
   const dt = 1 / FPS;
   const perFrame = TEMPO / 60 / FPS;
@@ -243,6 +177,7 @@ export async function run(canvas: HTMLCanvasElement): Promise<FramesReport> {
       errors.push(`${id}: ${compiled.error}`);
       continue;
     }
+    const sampled: Uint8ClampedArray[] = [];
     for (const target of beats) {
       // Wind the clock up to the wanted beat from far enough back that anything
       // reading the previous frame has a previous frame to read. A flow with a
@@ -258,17 +193,23 @@ export async function run(canvas: HTMLCanvasElement): Promise<FramesReport> {
         break;
       }
       // Same task as the draw, because the drawing buffer is not preserved.
-      flat.drawImage(canvas, 0, 0);
+      // Be explicit even though the runner pins `maxEdge` to the requested
+      // dimensions. `drawImage(canvas, 0, 0)` copies at the backing buffer's
+      // native size; if a browser ever ignores that cap, the target canvas
+      // would crop its right and bottom instead of scaling the whole wall.
+      flat.drawImage(canvas, 0, 0, WIDTH, HEIGHT);
       const pixels = flat.getImageData(0, 0, WIDTH, HEIGHT).data;
       stats.push(statOf(pixels, WIDTH, HEIGHT, id, target));
+      sampled.push(new Uint8ClampedArray(pixels));
       const png = shot.toDataURL('image/png');
       await fetch(`/write?name=${encodeURIComponent(`${id}@${target}`)}`, {
         method: 'POST',
         body: png,
       });
     }
+    if (sampled.length > 0) sequences.push({ flow: id, motion: cyclicMotion(sampled) });
   }
 
   compositor.free();
-  return { renderer, width: WIDTH, height: HEIGHT, stats, errors };
+  return { renderer, width: WIDTH, height: HEIGHT, stats, sequences, errors };
 }

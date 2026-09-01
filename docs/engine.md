@@ -176,10 +176,36 @@ like rather than how fast it draws.
 ```sh
 npm run frames -- --flows=halo,cage --at=0,1,2,3 --size=1920x1080
 npm run frames -- --flows=comet --at=1.5 --scheme=xenon --out=/tmp/look
+npm run frames -- --scheme=/tmp/scratch.json --flows=halo --at=0,1,2,3
 ```
 
 It builds `visuals/frames.html` with vite, opens it in Electron, and writes one PNG per flow
-and beat into `visuals/frames-out/`, with a `stats.json` beside them.
+and beat into `visuals/frames-out/`, with a `stats.json` and equal-phase HTML index beside
+them.
+
+The requested `--size` is also the compositor's longest-edge cap. That is load-bearing on a
+Retina screen: sizing only the CSS canvas lets `devicePixelRatio` make a larger backing
+buffer, and copying that buffer into a requested-size analysis canvas crops its right and
+bottom instead of sampling the whole wall. The final copy names both target dimensions as a
+second guard, so a frame keeps the same composition at every display density.
+
+For a directory of reference loops, `npm run footage:frames -- --in=/path/to/loops` samples
+the same number of equal phase steps from each file through ffmpeg and writes strips, an HTML
+index and `stats.json`. The footage and graph reports share `frameMetrics.ts`: luma, tolerant
+dark coverage, hot-white coverage, chroma, edge density, brightness centroid and spread,
+horizontal and vertical symmetry, terrace length, and cyclic RGB motion. Reference video
+compression therefore does not get mistaken for a non-black background, and motion means
+the mean change between the same equal phase steps on both sides of a comparison.
+
+Global measurements are rejection tests, not a claim that two pictures share a construction.
+For one reconstruction target, `node tools/structure-compare.ts
+--reference=/path/to/loop.mp4 --graph=/path/to/frames-output --flow=weave` normalizes each
+frame by its own bright material, removes isolated acquisition noise, and compares the
+luminous silhouette and contour skeleton over every cyclic phase alignment in both playback
+directions. It reports bidirectional contour distance and silhouette overlap separately from
+the topology: enclosed regions, curve endpoints and junction clusters. That distinction is
+load-bearing for compound forms — one bright cube and twelve woven loops can have the same
+coverage and centroid, but they cannot have the same skeleton.
 
 **Every shortcut around this has produced a wrong answer.** The obvious way to look at a flow
 is to compile its shader, set its uniforms by hand, and render it in a page — it is quick to
