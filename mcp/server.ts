@@ -20,6 +20,7 @@ const CircuitNodeSchema = z.object({
   x: z.number().finite().describe('Horizontal canvas position in graph units.'),
   y: z.number().finite().describe('Vertical canvas position in graph units.'),
   previewOutlet: z.string().min(1).optional(),
+  bypassed: z.boolean().optional().describe('Disable a transform and pass its dry input through.'),
   op: z.string().min(1).optional().describe('Fixed mode, or the contained flow id on a flow node.'),
   of: z.string().min(1).optional().describe('Exact Live track name for a track node.'),
   asset: z.string().min(1).optional().describe('Relative media-library id for an image or video node.'),

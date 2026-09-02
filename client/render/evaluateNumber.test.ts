@@ -276,6 +276,21 @@ describe('CPU number evaluation', () => {
     expect(sample.inlet('colorway/energy')).toBe(0.6);
   });
 
+  it('passes a disabled number node through in the face readout as well as the shader', () => {
+    const graph = circuit(
+      [
+        node('a', 'value', { value: 0.2 }),
+        node('b', 'value', { value: 0.7 }),
+        node('sum', 'math', { op: 'add', bypassed: true }),
+      ],
+      [
+        { from: 'a/n', to: 'sum/a' },
+        { from: 'b/n', to: 'sum/b' },
+      ],
+    );
+    expect(createNumberEvaluator().sample(graph, inputs()).outlet('sum/n')).toBe(0.2);
+  });
+
   it('returns undefined for per-fragment polar numbers and anything they drive', () => {
     const graph = circuit(
       [node('polar', 'polar'), node('math', 'math', { values: { b: 0.2 } })],

@@ -169,6 +169,20 @@
   font-size: var(--text-control);
 }
 
+.node .bypass .wdg-button-body {
+  padding: 1px 4px;
+  color: var(--idle);
+  font-size: var(--text-annot);
+}
+
+.node.is-bypassed .wdg-device-body {
+  border-style: dashed;
+}
+
+.node.is-bypassed .bypass .wdg-button-body {
+  color: var(--amber);
+}
+
 .node .wdg-device-chooser .wdg-select-body,
 .node .wdg-device-chooser .field {
   width: 100%;
@@ -241,7 +255,10 @@
 
 .cut {
   position: absolute;
-  left: 0;
+  /* Beside the port, never over it. An invisible cut button used to cover an
+     occupied inlet's dot, so dropping a replacement cord hit the button rather
+     than the port and made replacement look unsupported. */
+  left: calc(var(--wdg-port-size) + 2px);
   z-index: 1;
   opacity: 0;
   padding: 0 2px;

@@ -64,11 +64,19 @@ export function signatureOfCircuit(circuit: Circuit): string {
     .map(
       (n) =>
         `${n.id}:${n.kind}:${n.op ?? ''}:${n.asset ?? ''}:${n.setup ?? ''}:${n.setupRevision ?? ''}:` +
-        `${(n.modelPorts ?? []).map((port) => port.id).join('+')}:${Object.keys(n.values ?? {}).sort().join('+')}`,
+        `${n.bypassed ? 'bypassed' : ''}:${(n.modelPorts ?? []).map((port) => port.id).join('+')}`,
     )
     .join(',');
   const cords = circuit.cords.map((c) => `${c.from}>${c.to}`).join(',');
-  return `flow:${nodes}|${cords}`;
+  // The values themselves stay out, but the exact slot ids are structural.
+  // In particular, a wired inlet acquires a base/depth pair the first time its
+  // modulation range moves away from the legacy 0 + 1 behaviour. Caching only
+  // `values` keys missed a depth-only edit, reused a shader with a shorter
+  // uParams declaration, and made WebGL reject the longer upload as a black
+  // preview. Deriving this from `valuesOf` makes the compiler and cache answer
+  // the bank-shape question in one place.
+  const params = valuesOf(circuit).map((value) => value.id).join(',');
+  return `flow:${nodes}|${cords}|params:${params}`;
 }
 
 /**
@@ -103,6 +111,8 @@ export function paramsOf(circuit: Circuit): Float32Array {
 
 /** What one `track` node is asking the set for, in the slot it asks from. */
 export interface TrackAsk {
+  /** Stable node identity, so one source shared by several probes advances once. */
+  id: string;
   /** The track's name, or empty for a slot nobody claimed. */
   name: string;
   /** One of `TRACK_READS`. */
@@ -120,12 +130,18 @@ export interface TrackAsk {
  */
 export function namedTracks(circuit: Circuit): TrackAsk[] {
   const out: TrackAsk[] = Array.from({ length: 8 }, () => ({
+    id: '',
     name: '',
     read: TRACK_READS[0],
     smooth: 0,
   }));
   for (const each of tracksOf(circuit)) {
-    out[each.index] = { name: each.name, read: each.read, smooth: each.smooth };
+    out[each.index] = {
+      id: each.id,
+      name: each.name,
+      read: each.read,
+      smooth: each.smooth,
+    };
   }
   return out;
 }

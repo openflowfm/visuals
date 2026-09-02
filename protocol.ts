@@ -453,6 +453,14 @@ export interface CircuitNode {
    */
   previewOutlet?: string;
   /**
+   * Leave the node in the graph but pass its matching input straight through.
+   *
+   * Only nodes with an unambiguous same-signal route expose this in the editor.
+   * Keeping it on the node rather than rewriting cords makes an A/B reversible
+   * and preserves every setting for when the node is enabled again.
+   */
+  bypassed?: boolean;
+  /**
    * The mode of a node that has one: a source name, an effect name, a maths op,
    * a wave shape, a signal name, a track name, a flow id.
    *

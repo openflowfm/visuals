@@ -46,7 +46,7 @@ Two resources carry context rather than pretending a read is an action:
 
 | resource | contains |
 |---|---|
-| `visual-flow://nodes` | every node, mode, mode-dependent inlet, outlet, signal, description, media target and iterative work ceiling |
+| `visual-flow://nodes` | every node, mode, mode-dependent inlet, outlet, signal, description, media target, bypass availability and iterative work ceiling |
 | `visual-flow://scheme` | the resolved scheme and the exact revision of the file it came from |
 
 Two prompts give a host model the order of work: `build-flow` and `design-node`.
@@ -83,6 +83,7 @@ would hide the most useful feedback from the author. The MCP door therefore repo
 
 - duplicate or malformed node ids;
 - unknown kinds, modes, inlets, outlets, held values and previews;
+- a disabled node with no real dry input to pass through;
 - values outside 0–1 and depths outside -1–1;
 - missing nodes, wrong port direction, incompatible signals and two cords into one inlet;
 - node-level cycles and recursive nested flows;

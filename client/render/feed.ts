@@ -149,6 +149,10 @@ export function createFeed(gl: WebGL2RenderingContext): Feed {
    * release, and which number is yours.
    */
   const followed = new Map<string, number>();
+  /** Track-node followers already advanced during this display frame. */
+  const advanced = new Set<string>();
+  /** Feeding object identity is the frame token shared by all of its probes. */
+  let frame: Feeding | null = null;
 
   const sourceProgram = (mode: string): Program | null => {
     const held = sources.get(mode);
@@ -251,6 +255,10 @@ export function createFeed(gl: WebGL2RenderingContext): Feed {
     },
 
     flow(program, at, banks) {
+      if (frame !== at) {
+        frame = at;
+        advanced.clear();
+      }
       const { show } = at;
       const room = show.master;
       clock(program, at);
@@ -282,12 +290,17 @@ export function createFeed(gl: WebGL2RenderingContext): Feed {
           }
           // Fast up, slow down. An envelope that fell as quickly as it rose
           // would be the number again, and the number is already the node
-          // with its smoothing at zero. Keyed by name *and* reading, so a fader and
-          // a meter off the same track do not share one follower.
-          const key = `${each.name}/${each.read}`;
+          // with its smoothing at zero. Identity is positional on purpose, so
+          // a fader and meter — or two nodes asking for the same reading with
+          // different smoothing — keep independent followers. The preview
+          // draws several probe graphs through this
+          // one Feed, so a node encountered again in the same display frame
+          // reads the value it already advanced instead of stepping twice.
+          const key = `${each.id}/${each.name}/${each.read}/${each.smooth}`;
           const was = followed.get(key) ?? 0;
-          const value = smoothTrack(was, now, each.smooth, at.dt);
+          const value = smoothTrack(was, now, each.smooth, advanced.has(key) ? 0 : at.dt);
           followed.set(key, value);
+          advanced.add(key);
           bank[i] = value;
         });
         gl.uniform1fv(program.uniform('uTracks'), bank);

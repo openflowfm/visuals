@@ -158,6 +158,20 @@ describe('the node face anatomy', () => {
     expect(plain).not.toContain('wdg-device-swap');
   });
 
+  it('disables a transform in place without offering a fake bypass on a source', () => {
+    const active = face({ id: 'e', kind: 'grade', op: 'hue', x: 0, y: 0 });
+    expect(active).toContain('aria-label="Disable hue"');
+    expect(active).toContain('>on</button>');
+
+    const bypassed = face({ id: 'e', kind: 'grade', op: 'hue', bypassed: true, x: 0, y: 0 });
+    expect(bypassed).toContain('is-bypassed');
+    expect(bypassed).toContain('aria-label="Enable hue"');
+    expect(bypassed).toContain('>off</button>');
+
+    const source = face({ id: 's', kind: 'source', op: 'plasma', x: 0, y: 0 });
+    expect(source).not.toContain('Disable plasma');
+  });
+
   it('gives an LFO a real sync toggle and domain-aware rate and phase readings', () => {
     const html = face(
       {

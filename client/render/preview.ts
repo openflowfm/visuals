@@ -1,6 +1,6 @@
 import { TRACK_DRAWS, type Circuit, type FlowDef, type Scheme, type Show } from '../../protocol.ts';
 import { compileCircuit, flatten } from './circuit.ts';
-import { createFeed } from './feed.ts';
+import { createFeed, type Feeding } from './feed.ts';
 import { banksOf, signatureOfCircuit } from './flow.ts';
 import { compile, createTarget, drawFullscreen, type Program } from './gl.ts';
 import { createVideoBank } from './video.ts';
@@ -187,6 +187,8 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
   };
 
   let at: PreviewRoom | null = null;
+  /** One object per display frame, shared by every probe as its frame token. */
+  let feeding: Feeding | null = null;
   let width = 1;
   let height = 1;
 
@@ -264,6 +266,7 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
       at = room;
       width = Math.max(1, canvas.width);
       height = Math.max(1, canvas.height);
+      feeding = { ...room, width, height };
       gl.viewport(0, 0, width, height);
       gl.disable(gl.DEPTH_TEST);
       gl.disable(gl.BLEND);
@@ -287,11 +290,10 @@ export function createPreview(canvas: HTMLCanvasElement): Preview {
     },
 
     draw(circuit) {
-      if (!at) return;
+      if (!at || !feeding) return;
       const graph = whole(circuit, at.scheme.flows);
       const signature = signatureOfCircuit(graph);
       const made = programFor(graph, signature);
-      const feeding = { ...at, width, height };
       const before = made.feedback ? historyFor(signature) : null;
 
       gl.bindFramebuffer(gl.FRAMEBUFFER, out.framebuffer);

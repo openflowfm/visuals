@@ -3,6 +3,7 @@ import type { Circuit, FlowDef } from '../../protocol.ts';
 import { FIELD_MODES, LFO_SHAPES, LIGHT_MODES, SOURCES, TRACK_DRAWS, wouldLoop } from '../../protocol.ts';
 import {
   bareCircuit,
+  canBypass,
   compileCircuit,
   compileFlow,
   flatten,
@@ -19,7 +20,7 @@ import {
   tracksOf,
   wouldFeedItself,
 } from './circuit.ts';
-import { paramsOf } from './flow.ts';
+import { namedTracks, paramsOf, signatureOfCircuit } from './flow.ts';
 import { FIELD_WORK } from './glsl/fields.ts';
 import { FRACTAL_ITERATIONS, TRACK_SHADERS } from './shaders.ts';
 
@@ -260,6 +261,7 @@ describe('compiling a flow', () => {
       [],
     );
     expect(tracksOf(circuit).map((each) => each.index)).toEqual([0, 1]);
+    expect(namedTracks(circuit).slice(0, 2).map((each) => each.id)).toEqual(['t1', 't2']);
   });
 
   it('banks a reading and a smoothing, not just a name', () => {
@@ -281,6 +283,76 @@ describe('compiling a flow', () => {
       // envelope behaves exactly as it did before there was one to ask for.
       { id: 't2', name: 'Drums', read: 'level', index: 1, smooth: 0.6 },
     ]);
+  });
+});
+
+describe('disabling a node', () => {
+  const graded = (bypassed = false): Circuit =>
+    wire(
+      [
+        { id: 'g', kind: 'source', op: 'plasma', x: 0, y: 0 },
+        {
+          id: 'e',
+          kind: 'grade',
+          op: 'hue',
+          values: { shift: 0.8 },
+          bypassed,
+          x: 1,
+          y: 0,
+        },
+        { id: 'o', kind: 'out', x: 2, y: 0 },
+      ],
+      [
+        { from: 'g/c', to: 'e/c' },
+        { from: 'e/c', to: 'o/c' },
+      ],
+    );
+
+  it('passes the matching input through without deleting settings or cords', () => {
+    const active = bodyOf(compileCircuit(graded()).source!);
+    const bypassed = bodyOf(compileCircuit(graded(true)).source!);
+    expect(active).toContain('cHue(');
+    expect(bypassed).toContain('gen_plasma(');
+    expect(bypassed).not.toContain('cHue(');
+    expect(graded(true).nodes[1]).toMatchObject({ values: { shift: 0.8 }, bypassed: true });
+    expect(graded(true).cords).toEqual(graded().cords);
+  });
+
+  it('offers bypass only where a real same-signal route exists', () => {
+    expect(canBypass(graded().nodes[1])).toBe(true);
+    expect(canBypass({ id: 'source', kind: 'source', op: 'plasma', x: 0, y: 0 })).toBe(false);
+    expect(canBypass({ id: 'model', kind: 'model', x: 0, y: 0 })).toBe(false);
+    expect(canBypass({ id: 'figure', kind: 'figure', op: 'circle', x: 0, y: 0 })).toBe(false);
+    expect(canBypass({ id: 'lfo', kind: 'lfo', op: 'sine', x: 0, y: 0 })).toBe(false);
+    expect(canBypass({ id: 'out', kind: 'out', x: 0, y: 0 })).toBe(false);
+  });
+
+  it('makes only the chosen pass-through branch live', () => {
+    const circuit = wire(
+      [
+        { id: 'base', kind: 'source', op: 'plasma', x: 0, y: 0 },
+        { id: 'top', kind: 'source', op: 'rings', x: 0, y: 1 },
+        { id: 'mix', kind: 'blend', op: 'add', bypassed: true, x: 1, y: 0 },
+        { id: 'o', kind: 'out', x: 2, y: 0 },
+      ],
+      [
+        { from: 'base/c', to: 'mix/base' },
+        { from: 'top/c', to: 'mix/top' },
+        { from: 'mix/c', to: 'o/c' },
+      ],
+    );
+    expect(liveNodes(circuit)).toEqual(new Set(['o', 'mix', 'base']));
+  });
+
+  it('still refuses wiring that would loop when the node is enabled again', () => {
+    const circuit = wire(
+      [
+        { id: 'a', kind: 'grade', op: 'hue', bypassed: true, x: 0, y: 0 },
+        { id: 'b', kind: 'grade', op: 'levels', x: 1, y: 0 },
+      ],
+      [{ from: 'a/c', to: 'b/c' }],
+    );
+    expect(wouldFeedItself(circuit, 'b/c', 'a/c')).toBe(true);
   });
 });
 
@@ -779,6 +851,32 @@ describe('an inlet holds a number of its own', () => {
     for (const circuit of [bareCircuit(), starterCircuit(), posterize({ levels: 0.4 })]) {
       expect(paramsOf(circuit).length).toBe(bankOf(compileCircuit(circuit).source!));
     }
+  });
+
+  it('changes the cache signature whenever the uniform-bank shape changes', () => {
+    const plain = posterize(undefined, [{ from: 'k/n', to: 'e/steps' }]);
+    const ranged = {
+      ...plain,
+      nodes: plain.nodes.map((node) =>
+        node.id === 'e' ? { ...node, depths: { steps: 0.4 } } : node,
+      ),
+    };
+    expect(paramsOf(plain)).toHaveLength(1);
+    expect(paramsOf(ranged)).toHaveLength(3);
+    expect(signatureOfCircuit(ranged)).not.toBe(signatureOfCircuit(plain));
+
+    // While the pair remains non-neutral, turning either number changes only
+    // the uploaded values. This is the hot path a slider must keep off the
+    // shader compiler.
+    const turned = {
+      ...ranged,
+      nodes: ranged.nodes.map((node) =>
+        node.id === 'e'
+          ? { ...node, values: { steps: 0.2 }, depths: { steps: -0.7 } }
+          : node,
+      ),
+    };
+    expect(signatureOfCircuit(turned)).toBe(signatureOfCircuit(ranged));
   });
 
   it('gives the slots out in the order the graph reads', () => {

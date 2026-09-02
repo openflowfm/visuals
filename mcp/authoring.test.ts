@@ -73,6 +73,8 @@ describe('the agent-facing node catalog', () => {
     expect(image?.variants.map((variant) => variant.mode)).toEqual(['cover', 'contain']);
     const lfo = catalog.find((node) => node.kind === 'lfo');
     expect(lfo).toMatchObject({ defaultMode: 'sine', target: null });
+    expect(catalog.find((node) => node.kind === 'grade')?.bypassable).toBe(true);
+    expect(catalog.find((node) => node.kind === 'source')?.bypassable).toBe(false);
     // Eight, since the six a `wave` node used to own came across when the two
     // merged — it was the same oscillator with a worse clock.
     expect(lfo?.variants.map((variant) => variant.mode)).toEqual([
@@ -154,6 +156,29 @@ describe('strict flow validation', () => {
     expect(codes).toContain('cord.signal');
     expect(codes).toContain('cord.source.node');
     expect(codes).toContain('cord.target.duplicate');
+  });
+
+  it('accepts a disabled transform and refuses a fake pass-through on a source', () => {
+    const valid = flow();
+    valid.circuit.nodes.splice(1, 0, {
+      id: 'grade',
+      kind: 'grade',
+      op: 'hue',
+      bypassed: true,
+      x: 140,
+      y: 40,
+    });
+    valid.circuit.cords = [
+      { from: 'picture/c', to: 'grade/c' },
+      { from: 'grade/c', to: 'out/c' },
+    ];
+    expect(validateFlow('disabled', valid, {}).valid).toBe(true);
+
+    const invalid = flow();
+    invalid.circuit.nodes[0] = { ...invalid.circuit.nodes[0], bypassed: true };
+    expect(validateFlow('fake', invalid, {}).diagnostics.map((entry) => entry.code)).toContain(
+      'node.bypass.unavailable',
+    );
   });
 
   it('keeps an unselected video drawable but warns about its transparent result', () => {

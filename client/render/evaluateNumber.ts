@@ -5,7 +5,7 @@ import {
   type CircuitNode,
   type Show,
 } from '../../protocol.ts';
-import { NODE_SPECS, inletsOf, splitPort } from './circuit.ts';
+import { NODE_SPECS, bypassInletOf, inletsOf, splitPort } from './circuit.ts';
 import { lfoClock, lfoIdentity, lfoValue } from '../nodes/lfo/algorithm.ts';
 import { evaluateResponse, productionResponse } from '../../response.ts';
 import { clamp, fract, hash, mix } from './scalar.ts';
@@ -254,7 +254,9 @@ export function createNumberEvaluator(): NumberEvaluator {
 
         open.add(id);
         let value: number | undefined;
-        switch (node.kind) {
+        const bypass = node.bypassed ? bypassInletOf(node, name) : undefined;
+        if (bypass?.kind === 'n') value = readInlet(`${node.id}/${bypass.name}`);
+        else switch (node.kind) {
           case 'value':
           case 'take':
             value = inputs.params?.[node.id] ?? node.value ?? 0.5;

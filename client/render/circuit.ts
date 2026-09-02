@@ -1557,6 +1557,39 @@ export function inletsOf(node: CircuitNode): readonly PortSpec[] {
   return typeof spec.inlets === 'function' ? spec.inlets(node) : spec.inlets;
 }
 
+/**
+ * Explicit pass-through routes, because matching signal types is not meaning.
+ *
+ * A model's colour inputs are palette masks, a figure's numbers are dimensions,
+ * and an LFO's first number is a clock; all happen to share an outlet type and
+ * none is what “disable this node” means. These are the transforms with a real
+ * dry path. Multi-outlet lens names both independently.
+ */
+const BYPASS_INLETS: Partial<Record<NodeKind, Readonly<Record<string, string>>>> = {
+  vary: { n: 'n' },
+  lens: { p: 'p', c: 'c' },
+  displace: { p: 'p' },
+  grade: { c: 'c' },
+  spread: { c: 'c' },
+  halftone: { c: 'c' },
+  blend: { c: 'base' },
+  math: { n: 'a' },
+};
+
+/** The inlet an outlet passes through while this transform is disabled. */
+export function bypassInletOf(node: CircuitNode, outletName: string): PortSpec | undefined {
+  const inlet = BYPASS_INLETS[node.kind]?.[outletName];
+  if (!inlet) return undefined;
+  const found = inletsOf(node).find((port) => port.name === inlet);
+  const outlet = NODE_SPECS[node.kind].outlets.find((port) => port.name === outletName);
+  return found?.kind === outlet?.kind ? found : undefined;
+}
+
+/** Whether disabling this node can leave at least one real signal path through it. */
+export function canBypass(node: CircuitNode): boolean {
+  return NODE_SPECS[node.kind].outlets.some((outlet) => bypassInletOf(node, outlet.name));
+}
+
 /** GLSL types, by signal. */
 const TYPES: Record<Signal, string> = { p: 'vec2', n: 'float', c: 'vec4' };
 
@@ -1694,7 +1727,12 @@ function outletsReading(node: CircuitNode, inlet: string): string[] {
   const spec = NODE_SPECS[node.kind];
   return spec.outlets
     .map((port) => port.name)
-    .filter((name) => (spec.reads?.(node, name) ?? inletsOf(node).map((p) => p.name)).includes(inlet));
+    // Wiring is checked against the enabled node even while it is bypassed.
+    // Otherwise a loop could be admitted while off and take the whole flow
+    // down merely by turning the node back on — disabling must be reversible.
+    .filter((name) =>
+      (spec.reads?.(node, name) ?? inletsOf(node).map((port) => port.name)).includes(inlet),
+    );
 }
 
 /** A port address, as cords name it. */
@@ -1751,6 +1789,10 @@ export function reachesOut(circuit: Circuit): boolean {
 
 /** The inlets of this node that outlet depends on. The inverse of `outletsReading`. */
 function inletsRead(node: CircuitNode, outlet: string): readonly string[] {
+  if (node.bypassed) {
+    const through = bypassInletOf(node, outlet);
+    if (through) return [through.name];
+  }
   const spec = NODE_SPECS[node.kind];
   return spec.reads?.(node, outlet) ?? inletsOf(node).map((port) => port.name);
 }
@@ -2414,8 +2456,9 @@ export function compileCircuit(circuit: Circuit, options: CompileOptions = {}): 
       failed ??= 'too big to draw — an effect that takes many samples is nested too deep';
       return null;
     }
-    if (node.kind === 'last') feedback = true;
-    shaderWork += typeof spec.work === 'function' ? spec.work(node) : (spec.work ?? 0);
+    const bypass = node.bypassed ? bypassInletOf(node, port) : undefined;
+    if (!bypass && node.kind === 'last') feedback = true;
+    shaderWork += bypass ? 0 : typeof spec.work === 'function' ? spec.work(node) : (spec.work ?? 0);
     if (shaderWork > MAX_SHADER_WORK) {
       failed ??= 'too expensive to draw — a costly picture is being sampled too many times';
       return null;
@@ -2489,8 +2532,9 @@ export function compileCircuit(circuit: Circuit, options: CompileOptions = {}): 
       readAt,
     };
 
-    const emitted =
-      node.kind === 'value' || node.kind === 'take'
+    const emitted = bypass
+      ? { [port]: readRawAt(bypass.name, at) }
+      : node.kind === 'value' || node.kind === 'take'
         ? { n: `uParams[${slot.get(node.id) ?? 0}]` }
         : node.kind === 'track'
           ? { n: `uTracks[${trackSlot.get(node.id) ?? 0}]` }

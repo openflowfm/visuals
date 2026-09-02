@@ -231,7 +231,14 @@ the other way with nothing wired in to do it.
 what a missing depth means, so a flow written before any of this draws the same picture and
 costs the same slots. A wired inlet at that default takes no room in `uParams` at all;
 give it either half of a range and it takes a pair, both riding the bank so that turning
-one is never a recompile.
+one stays on the uniform path. Returning exactly to the legacy zero-plus-one pair removes
+those two slots and recompiles once; moving away from it creates them once.
+
+The cache signs the **ids of those slots**, not the values in them. Signing `values` keys
+missed the first depth-only edit: the CPU uploaded a new base/depth pair into a shader whose
+array was still shorter, WebGL rejected the upload, and a healthy node face went black when
+its modulation changed. `valuesOf` now supplies both the compiler's bank and the cache's
+shape, so they cannot disagree while the numbers themselves remain on the no-recompile path.
 
 Both are set on the row: drag for the value, **shift-drag for the range**, and the span is
 drawn from the value in the direction of the sign, so which side of the mark it falls on is
@@ -1315,6 +1322,22 @@ in the same browser that created it. Choosing one changes the node already on th
 it does not drop a replacement. A target from outside the vocabulary — the track a `track`
 reads or the flow a `flow` draws — stays in the one chooser band below the title.
 
+**A cord pulls from either end.** Outlet to inlet is the ordinary left-to-right thought and
+is no less valid than starting at the inlet; the graph normalises both gestures before this
+editor sees them. The release is measured against the port buttons immediately rather than
+trusted to React hover state, with a small landing margin around the dot, so a quick release
+cannot outrun the highlight. An inlet takes one cord, and dropping another on it replaces the
+old one in the same gesture. That makes inserting a node two connections and no preliminary
+cleanup: wire the old output into the new node, then wire the new output onto the occupied
+downstream inlet.
+
+**A transform can be disabled in place.** Its `on` button becomes `off`, the face is dashed,
+and every outlet passes through the same-signal inlet it actually depends on — `c` through a
+grade, `p` through a lens, `base` through a blend. Cords, values, depths and mode stay where
+they are, so the button is an A/B rather than a graph rewrite. A source has nothing to pass
+through and gets no dishonest switch. Wiring is still checked against the enabled graph while
+a node is off, so turning it back on can never reveal a loop that bypass had hidden.
+
 **Every node has one anatomy.** Its fixed-size picture is an overlay above the frame, then
 the title, two reserved outlet lines, one chooser band and six reserved inlet lines. Empty
 space is real here: reserving the largest face means changing a mode, wiring a cord or
@@ -1406,6 +1429,13 @@ one has failed at the only thing it is for: you cannot tell whether what you are
 is the node or the renderer. Fourteen separate uniforms had drifted between the two lists,
 in different files, neither of which looked wrong on its own — so there is one list, in
 [`feed.ts`](../client/render/feed.ts), and the stage, the bench and every face read it.
+
+The shared face renderer advances each named-track node's envelope state **once per display
+frame**, not once per face. It still uploads the resulting bank for every probe, but a node
+encountered again in the second through tenth pictures reads the already-advanced value;
+otherwise ten visible faces release a smoothed meter ten times faster than the bench beside
+them. Advancing by node rather than simply declaring the first face authoritative also means
+a track that appears only in a later probe is not starved at zero `dt`.
 
 The faces get the same [`Show`](../client/state/useRoom.ts) the bench does, which at a desk is
 the room, dialled, and therefore steady anyway — including the same stand-in set when there

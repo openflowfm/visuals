@@ -110,6 +110,14 @@ frame. There used to be a third bank for those; `track` and `energy` are one nod
 what goes in a slot is that node's business and the shader reads a number without learning
 which.
 
+The shader signature carries the ordered `uParams` **slot ids**, never their live values.
+That distinction includes modulation ranges: the first non-neutral base/depth pair changes
+the bank shape and recompiles once, while turns that keep the pair non-neutral upload into
+the same slots. Returning exactly to legacy zero-plus-one removes the pair once. Both lists
+come from `valuesOf`; maintaining a parallel approximation in the cache once let a
+depth edit upload a longer array than the cached shader declared, which WebGL correctly
+rejected and presented as a black preview.
+
 An inlet with a `ParameterResponse` is converted from normalized 0–1 only when
 the consuming node reads it, after base-plus-depth modulation. The compiler can
 receive a response override for the development [calibration

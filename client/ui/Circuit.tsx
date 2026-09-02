@@ -15,6 +15,7 @@ import { Slider } from '@openflow/widgets/controls/Slider.tsx';
 import { Toggle } from '@openflow/widgets/controls/Toggle.tsx';
 import {
   flowDoors,
+  canBypass,
   inletsOf,
   modesOf,
   NODE_SPECS,
@@ -487,6 +488,21 @@ export function NodeFace({
       ×
     </Button>
   );
+  const bypassButton = canBypass(node) ? (
+    <Button
+      tone="quiet"
+      className="bypass"
+      label={node.bypassed ? `Enable ${title}` : `Disable ${title}`}
+      title={
+        node.bypassed
+          ? 'Enable this node again'
+          : 'Disable this node and pass its input through without losing its settings'
+      }
+      onPress={() => onChange({ bypassed: !node.bypassed })}
+    >
+      {node.bypassed ? 'off' : 'on'}
+    </Button>
+  ) : null;
 
   /** One line per inlet: the port on its own edge, and what it puts on the row. */
   const inletCells = inlets.map((port) => {
@@ -704,17 +720,18 @@ export function NodeFace({
   return (
     <Device
       name={title}
-      className={`node node-${node.kind}`}
+      className={`node node-${node.kind}${node.bypassed ? ' is-bypassed' : ''}`}
       vars={{ '--wdg-device-port-rows': held.ports }}
       title={spec.description}
       screen={picture?.(node.id)}
       chooser={chooser}
       onHotSwap={spec.modes && onSwap ? () => onSwap(node.id, node.kind) : undefined}
       headerEnd={
-        kindLabel || enterButton || deleteButton ? (
+        kindLabel || enterButton || bypassButton || deleteButton ? (
           <>
             {kindLabel}
             {enterButton}
+            {bypassButton}
             {deleteButton}
           </>
         ) : undefined

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Circuit, Scheme } from '../../protocol.ts';
 import { EXAMPLES } from '../../server/scheme.ts';
 import { inletsOf, starterCircuit } from '../render/circuit.ts';
-import { clearValue, dropNode, forkFlow, setValue, setNode } from './edits.ts';
+import { clearValue, connect, dropNode, forkFlow, setValue, setNode } from './edits.ts';
 import { palette } from './nodes.ts';
 
 /**
@@ -15,6 +15,23 @@ import { palette } from './nodes.ts';
  */
 
 const wire = (nodes: Circuit['nodes'], cords: Circuit['cords']): Circuit => ({ nodes, cords });
+
+describe('connecting cords', () => {
+  it('replaces whatever already feeds an inlet in the same gesture', () => {
+    const held = wire(
+      [
+        { id: 'old', kind: 'source', op: 'plasma', x: 0, y: 0 },
+        { id: 'next', kind: 'source', op: 'rings', x: 0, y: 1 },
+        { id: 'out', kind: 'out', x: 1, y: 0 },
+      ],
+      [{ from: 'old/c', to: 'out/c' }],
+    );
+
+    expect(connect(held, 'next/c', 'out/c').cords).toEqual([
+      { from: 'next/c', to: 'out/c' },
+    ]);
+  });
+});
 
 describe('changing a node’s mode', () => {
   const rippled = () =>

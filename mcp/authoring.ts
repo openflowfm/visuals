@@ -10,6 +10,7 @@ import {
 } from '../protocol.ts';
 import { merge } from '../server/scheme.ts';
 import {
+  canBypass,
   compileFlow,
   flowDoors,
   inletsOf,
@@ -134,6 +135,15 @@ export function validateFlow(
         node.id,
       );
       continue;
+    }
+    if (node.bypassed && !canBypass(node)) {
+      issue(
+        diagnostics,
+        'error',
+        'node.bypass.unavailable',
+        `${node.kind} has no dry input it can pass through while disabled.`,
+        node.id,
+      );
     }
 
     const modes = modesOf(node.kind);
@@ -655,6 +665,13 @@ export function nodeCatalog() {
       /** Worst-case fixed work across its modes; each variant carries its exact charge. */
       work: Math.max(...variants.map((variant) => variant.work)),
       defaultMode: spec.modes?.[0]?.name ?? null,
+      bypassable: canBypass({
+        id: kind,
+        kind,
+        x: 0,
+        y: 0,
+        ...(spec.modes?.[0] ? { op: spec.modes[0].name } : {}),
+      }),
       variants,
       outlets: spec.outlets.map(documentedPort),
     };
