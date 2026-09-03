@@ -135,7 +135,7 @@ export function NodePictures({
     let scopes = new Map<string, string>();
     const traceColor =
       getComputedStyle(document.documentElement).getPropertyValue('--signal-n').trim() ||
-      '#f0b23c';
+      '#f7c65a';
     let raf = 0;
     let last = performance.now();
 
