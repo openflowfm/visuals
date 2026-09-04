@@ -9,6 +9,8 @@ import { ON_WALL, reportFrames, useOnWall, useWall, useWallFrames } from './stat
 import { Align } from './ui/Align.tsx';
 import { Boundary } from './ui/Boundary.tsx';
 import { Console } from './ui/Console.tsx';
+import { Modal } from '@openflow/widgets/chrome/Modal.tsx';
+import { DebugWorkspace } from './debug/Workspace.tsx';
 import './app.css';
 
 /**
@@ -101,6 +103,7 @@ export function App() {
    * the wall's numbers whenever there are any.
    */
   const [frames, setFrames] = useState<FrameStats | null>(null);
+  const [harness, setHarness] = useState(false);
   // The wall's numbers whenever there is a wall, because with one up this
   // window is drawing a quarter-size preview and its frame time describes that
   // preview rather than the show. The readout names which it is showing.
@@ -146,6 +149,9 @@ export function App() {
       // Colourway, next — the same gesture's other half, under the same rules.
       if (e.key === 'c' && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) nextColorway();
       if (e.key === 'i') setPanel((on) => !on);
+      // `d` for the harness. Not on the wall: that window is the picture, and
+      // nothing that is not the picture belongs in front of an audience.
+      if (e.key === 'd' && !ON_WALL) setHarness((on) => !on);
       if (e.key === 'e') setEditing((on) => !on);
       if (e.key === 'k') align(!aligning);
       if (e.key === 'w') {
@@ -243,6 +249,16 @@ export function App() {
   return (
     <>
       <canvas ref={canvas} className="stage" />
+      {harness && !ON_WALL && (
+        <Modal
+          title="debug & experiments"
+          label="Debug workspace"
+          className="vf-harness"
+          onClose={() => setHarness(false)}
+        >
+          <DebugWorkspace subject={{ show, clock, frames, glError }} />
+        </Modal>
+      )}
       {panel && !ON_WALL && (
         <div className="panel">
           <h1>
@@ -257,6 +273,14 @@ export function App() {
             <span className={show.playing ? 'ok' : 'idle'}>
               {show.playing ? 'playing' : 'stopped'}
             </span>
+            <button
+              type="button"
+              className="panel-bug"
+              onClick={() => setHarness(true)}
+              title="Open debugging and experiments — frames, the clock, and what is wired up (d)"
+            >
+              debug
+            </button>
           </h1>
 
           {glError && <p className="bad-line">{glError}</p>}

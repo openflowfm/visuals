@@ -176,3 +176,39 @@ kbd {
 }
 
 [data-wall] { cursor: none; }
+
+.vf-harness {
+  --wdg-modal-width: min(1180px, 94vw);
+
+  width: min(1180px, 94vw);
+  height: min(760px, 88vh);
+}
+
+.vf-harness .wdg-modal-box {
+  width: 100%;
+  height: 100%;
+}
+
+.vf-harness .wdg-modal-body {
+  flex: 1;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.panel-bug {
+  margin-left: auto;
+  padding: 1px 7px;
+  border: 1px solid var(--wdg-edge, #2c2c31);
+  border-radius: 3px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.panel-bug:hover {
+  border-color: var(--wdg-fill, #f0b23c);
+  color: var(--wdg-fill, #f0b23c);
+}
+
