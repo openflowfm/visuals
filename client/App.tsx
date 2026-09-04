@@ -256,7 +256,7 @@ export function App() {
           className="vf-harness"
           onClose={() => setHarness(false)}
         >
-          <DebugWorkspace subject={{ show, clock, frames, glError, online }} />
+          <DebugWorkspace subject={{ show, clock, frames, glError, online, scheme }} />
         </Modal>
       )}
       {panel && !ON_WALL && (

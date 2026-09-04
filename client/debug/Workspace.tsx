@@ -1,12 +1,13 @@
 import { useMemo } from 'react';
 import { Rooms, type Room } from '@openflow/widgets/debug/Rooms.tsx';
 import { useRemembered } from '@openflow/widgets/debug/useRemembered.ts';
-import type { Show } from '../../protocol.ts';
+import type { Scheme, Show } from '../../protocol.ts';
 import type { Clock } from '../state/useShow.ts';
 import type { FrameStats } from '../render/meter.ts';
 import { Frames } from './Frames.tsx';
 import { Beat } from './Beat.tsx';
 import { Wiring } from './Wiring.tsx';
+import { GraphBench } from './GraphBench.tsx';
 
 /**
  * What is wrong, when the picture is wrong.
@@ -30,6 +31,8 @@ export interface Subject {
   glError: string | null;
   /** Whether this app's own server is answering. The first link in the chain. */
   online: boolean;
+  /** What a node picture is rendered through. Null before one compiles. */
+  scheme: Scheme | null;
 }
 
 const ROOMS: readonly Room<Subject>[] = [
@@ -58,6 +61,22 @@ const ROOMS: readonly Room<Subject>[] = [
         description:
           'Link beats as they arrive, drawn against the wall clock. A clock that is running steadily draws a straight ramp; a clock that is being corrected draws the correction.',
         component: ({ context }) => <Beat clock={context.clock} show={context.show} />,
+      },
+    ],
+  },
+  {
+    id: 'graph',
+    title: 'Graph',
+    note: 'the canvas, on its own',
+    experiments: [
+      {
+        id: 'three',
+        title: 'Three nodes',
+        description:
+          'A source, a lens and an out, wired, with none of the designer round them. Three rather than two because two cannot tell a per-node picture from the final one — with a source straight into an out they are the same image, and a preview showing the wrong one looks right.',
+        component: ({ context }) => (
+          <GraphBench show={context.show} scheme={context.scheme} clock={context.clock} />
+        ),
       },
     ],
   },

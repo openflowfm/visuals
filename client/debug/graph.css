@@ -1,0 +1,17 @@
+.vf-graph-bench {
+  position: relative;
+  min-height: 380px;
+  height: 100%;
+}
+
+.vf-graph-promote {
+  display: block;
+  padding: 0;
+  border: 1px solid transparent;
+  background: none;
+  cursor: pointer;
+}
+
+.vf-graph-promote[data-on] {
+  border-color: var(--wdg-fill, #f0b23c);
+}
