@@ -28,6 +28,8 @@ export interface Subject {
   clock: Clock;
   frames: FrameStats | null;
   glError: string | null;
+  /** Whether this app's own server is answering. The first link in the chain. */
+  online: boolean;
 }
 
 const ROOMS: readonly Room<Subject>[] = [
@@ -68,8 +70,10 @@ const ROOMS: readonly Room<Subject>[] = [
         id: 'wiring',
         title: 'Wiring',
         description:
-          'The four things behind a picture — Live, the bridge, Link, the scheme — and which of them is missing. A rig that shows nothing gives no clue which one it was.',
-        component: ({ context }) => <Wiring show={context.show} glError={context.glError} />,
+          'The six things behind a picture — this app’s server, the bridge, Live, Link, the scheme, the graphics context — and which of them is missing. A rig that shows nothing gives no clue which one it was.',
+        component: ({ context }) => (
+          <Wiring show={context.show} glError={context.glError} online={context.online} />
+        ),
       },
     ],
   },
