@@ -159,17 +159,24 @@ describe('the node face anatomy', () => {
   });
 
   it('disables a transform in place without offering a fake bypass on a source', () => {
+    // On and off live on the dot every device in the library already has,
+    // rather than on a word in a header that was already carrying three. The
+    // rule it enforces is unchanged: a node with nothing to pass through is not
+    // offered the choice, and its dot is an indicator rather than a control.
     const active = face({ id: 'e', kind: 'grade', op: 'hue', x: 0, y: 0 });
-    expect(active).toContain('aria-label="Disable hue"');
-    expect(active).toContain('>on</button>');
+    expect(active).toContain('<button type="button" class="wdg-device-power"');
+    expect(active).toContain('aria-label="hue active"');
+    expect(active).toContain('aria-pressed="true"');
 
     const bypassed = face({ id: 'e', kind: 'grade', op: 'hue', bypassed: true, x: 0, y: 0 });
     expect(bypassed).toContain('is-bypassed');
-    expect(bypassed).toContain('aria-label="Enable hue"');
-    expect(bypassed).toContain('>off</button>');
+    expect(bypassed).toContain('aria-pressed="false"');
 
+    // A source has no inlet to pass through, so there is no honest "off" for
+    // it — and the dot must not invite a press that would do nothing.
     const source = face({ id: 's', kind: 'source', op: 'plasma', x: 0, y: 0 });
-    expect(source).not.toContain('Disable plasma');
+    expect(source).not.toContain('aria-label="plasma active"');
+    expect(source).toContain('<span class="wdg-device-power"');
   });
 
   it('gives an LFO a real sync toggle and domain-aware rate and phase readings', () => {

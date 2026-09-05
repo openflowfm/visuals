@@ -488,21 +488,25 @@ export function NodeFace({
       ×
     </Button>
   );
-  const bypassButton = canBypass(node) ? (
-    <Button
-      tone="quiet"
-      className="bypass"
-      label={node.bypassed ? `Enable ${title}` : `Disable ${title}`}
-      title={
-        node.bypassed
-          ? 'Enable this node again'
-          : 'Disable this node and pass its input through without losing its settings'
+  /**
+   * On and off, on the dot every device in this library already has.
+   *
+   * It used to be a word in the header — `on`/`off` beside the kind, the enter
+   * arrow and the delete cross — while the dot in the corner sat there looking
+   * like the control it was not. Four things in a header on a node the size of
+   * a stamp, one of which was a lie.
+   *
+   * Only where the node has an unambiguous route from an inlet to the outlet it
+   * feeds: off means *pass what you were given straight through*, and a node
+   * with nothing to pass through would be answering a different question.
+   * Elsewhere `Device` draws the dot as a plain indicator.
+   */
+  const power = canBypass(node)
+    ? {
+        on: !node.bypassed,
+        onToggle: () => onChange({ bypassed: !node.bypassed }),
       }
-      onPress={() => onChange({ bypassed: !node.bypassed })}
-    >
-      {node.bypassed ? 'off' : 'on'}
-    </Button>
-  ) : null;
+    : { on: !node.bypassed };
 
   /** One line per inlet: the port on its own edge, and what it puts on the row. */
   const inletCells = inlets.map((port) => {
@@ -726,12 +730,12 @@ export function NodeFace({
       screen={picture?.(node.id)}
       chooser={chooser}
       onHotSwap={spec.modes && onSwap ? () => onSwap(node.id, node.kind) : undefined}
+      {...power}
       headerEnd={
-        kindLabel || enterButton || bypassButton || deleteButton ? (
+        kindLabel || enterButton || deleteButton ? (
           <>
             {kindLabel}
             {enterButton}
-            {bypassButton}
             {deleteButton}
           </>
         ) : undefined
