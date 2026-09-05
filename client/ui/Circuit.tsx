@@ -562,6 +562,11 @@ export function NodeFace({
         <Toggle
           on={(driver === undefined ? numberValue : (reading?.value ?? numberValue)) >= 0.5}
           onChange={(on) => onTurn(port.name, on ? 1 : 0)}
+          // The same line every other number row is: the port's name at the
+          // left and what it currently says at the right. Stacked, this was a
+          // caption over a lit pill — a taller row, a centred control, and the
+          // word `sync` printed twice on the one row that says it once.
+          layout="inside"
           name={port.name}
           label={port.name}
           title={
@@ -571,8 +576,8 @@ export function NodeFace({
           }
         >
           {(driver === undefined ? numberValue : (reading?.value ?? numberValue)) >= 0.5
-            ? 'sync'
-            : 'free'}
+            ? 'on'
+            : 'off'}
         </Toggle>
       ) : (
         <Slider

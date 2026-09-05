@@ -225,9 +225,13 @@ describe('the node face anatomy', () => {
         'l/phase': { value: 0.25, display: '90°' },
       },
     );
-    expect(html).toContain('class="wdg wdg-toggle"');
+    // The switch is a row like the rest of them — a name at the left, a reading
+    // at the right — rather than a caption stacked over a lit pill, which made
+    // this one row taller than its neighbours and printed `sync` twice.
+    expect(html).toContain('wdg-toggle" data-layout="inside"');
     expect(html).toContain('aria-pressed="true"');
-    expect(html).toContain('>sync</button>');
+    expect(html).toContain('<span class="wdg-caption">sync</span>');
+    expect(html).toContain('<span class="wdg-readout">on</span>');
     expect(html).toContain('<span class="wdg-readout">1/4</span>');
     expect(html).toContain('<span class="wdg-readout">90°</span>');
   });
