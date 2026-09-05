@@ -2,22 +2,24 @@ import { describe, expect, it } from 'vitest';
 import type { Circuit, FlowDef } from '../../protocol.ts';
 import { FIELD_MODES, LFO_SHAPES, LIGHT_MODES, SOURCES, TRACK_DRAWS, wouldLoop } from '../../protocol.ts';
 import {
+  MAX_VALUES,
   bareCircuit,
   canBypass,
+  canTurnOff,
   compileCircuit,
   compileFlow,
   flatten,
   flowDoors,
   inletsOf,
-  valuesOf,
-  MAX_VALUES,
   liveNodes,
+  outletGivesNothing,
   reachesOut,
   repaired,
-  strandedNodes,
   signalOf,
   starterCircuit,
+  strandedNodes,
   tracksOf,
+  valuesOf,
   wouldFeedItself,
 } from './circuit.ts';
 import { namedTracks, paramsOf, signatureOfCircuit } from './flow.ts';
@@ -2089,5 +2091,62 @@ describe('the circuit a new flow opens with', () => {
         }
       }
     expect(hits).toEqual([]);
+  });
+});
+
+describe('turning a node off', () => {
+  const wire = (nodes: unknown[], cords: unknown[]) => ({ nodes, cords }) as never;
+
+  it('passes straight through where the signal is unchanged', () => {
+    // A lens takes a colour and gives a colour, so off means the picture it was
+    // handed carries on untouched and the flow is whole with one step skipped.
+    const node = { id: 'e', kind: 'lens', op: 'ripple', bypassed: true, x: 0, y: 0 } as never;
+    expect(outletGivesNothing(node, 'c')).toBe(false);
+  });
+
+  it('gives nothing where the signal changes on the way through', () => {
+    // A glow takes a number and gives a colour. There is nothing to pass, so
+    // off breaks the chain rather than shorting it.
+    const node = { id: 'g', kind: 'glow', op: 'neon', bypassed: true, x: 0, y: 0 } as never;
+    expect(outletGivesNothing(node, 'c')).toBe(true);
+  });
+
+  it('leaves what fed a silenced node doing nothing, and says so', () => {
+    // The consequence a person is meant to see: switch the glow off and the
+    // circle feeding it is no longer reaching anywhere.
+    const off = wire(
+      [
+        { id: 'c', kind: 'figure', op: 'circle', x: 0, y: 0 },
+        { id: 'g', kind: 'glow', op: 'neon', bypassed: true, x: 1, y: 0 },
+        { id: 'o', kind: 'out', x: 2, y: 0 },
+      ],
+      [
+        { from: 'c/d', to: 'g/d' },
+        { from: 'g/c', to: 'o/c' },
+      ],
+    );
+    expect([...strandedNodes(off)]).toContain('c');
+  });
+
+  it('leaves nothing stranded when the same flow is switched back on', () => {
+    const on = wire(
+      [
+        { id: 'c', kind: 'figure', op: 'circle', x: 0, y: 0 },
+        { id: 'g', kind: 'glow', op: 'neon', x: 1, y: 0 },
+        { id: 'o', kind: 'out', x: 2, y: 0 },
+      ],
+      [
+        { from: 'c/d', to: 'g/d' },
+        { from: 'g/c', to: 'o/c' },
+      ],
+    );
+    expect([...strandedNodes(on)]).toEqual([]);
+  });
+
+  it('offers the switch on everything except the destination', () => {
+    for (const kind of ['source', 'glow', 'lens', 'figure', 'value', 'blend'] as const) {
+      expect(canTurnOff({ id: 'n', kind, x: 0, y: 0 } as never)).toBe(true);
+    }
+    expect(canTurnOff({ id: 'o', kind: 'out', x: 0, y: 0 } as never)).toBe(false);
   });
 });

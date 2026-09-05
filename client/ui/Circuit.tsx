@@ -16,6 +16,7 @@ import { Toggle } from '@openflow/widgets/controls/Toggle.tsx';
 import {
   flowDoors,
   canBypass,
+  canTurnOff,
   inletsOf,
   modesOf,
   NODE_SPECS,
@@ -496,12 +497,17 @@ export function NodeFace({
    * like the control it was not. Four things in a header on a node the size of
    * a stamp, one of which was a lie.
    *
-   * Only where the node has an unambiguous route from an inlet to the outlet it
-   * feeds: off means *pass what you were given straight through*, and a node
-   * with nothing to pass through would be answering a different question.
-   * Elsewhere `Device` draws the dot as a plain indicator.
+   * On everything but the destination. Off means one of two things depending on
+   * what the node can do: pass what you were given straight through, where the
+   * signals match; give nothing, where they do not. The second breaks the chain
+   * on purpose — which is the reason to reach for the switch — and the canvas
+   * already says when a flow has stopped reaching out.
+   *
+   * `out` keeps a plain indicator. It is where a flow ends rather than
+   * something it does, and a dead one is a black screen with no way to read
+   * why.
    */
-  const power = canBypass(node)
+  const power = canTurnOff(node)
     ? {
         on: !node.bypassed,
         onToggle: () => onChange({ bypassed: !node.bypassed }),

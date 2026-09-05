@@ -158,25 +158,35 @@ describe('the node face anatomy', () => {
     expect(plain).not.toContain('wdg-device-swap');
   });
 
-  it('disables a transform in place without offering a fake bypass on a source', () => {
-    // On and off live on the dot every device in the library already has,
-    // rather than on a word in a header that was already carrying three. The
-    // rule it enforces is unchanged: a node with nothing to pass through is not
-    // offered the choice, and its dot is an indicator rather than a control.
-    const active = face({ id: 'e', kind: 'grade', op: 'hue', x: 0, y: 0 });
-    expect(active).toContain('<button type="button" class="wdg-device-power"');
-    expect(active).toContain('aria-label="hue active"');
-    expect(active).toContain('aria-pressed="true"');
+  it('offers on and off on every node but the destination', () => {
+    // On the dot every device in the library already has, rather than a word
+    // in a header that was already carrying three.
+    //
+    // It used to be offered only where a node could pass its input through
+    // untouched. That was the narrower rule and it withheld the switch exactly
+    // where the question is most interesting: whether a `glow` is earning its
+    // place is a question about a `glow`, which converts a number to a colour
+    // and therefore has nothing to pass. Off now means one of two things —
+    // pass through, or give nothing — and breaking the chain on purpose is a
+    // thing a person is allowed to do.
+    const transform = face({ id: 'e', kind: 'grade', op: 'hue', x: 0, y: 0 });
+    expect(transform).toContain('<button type="button" class="wdg-device-power"');
+    expect(transform).toContain('aria-pressed="true"');
 
     const bypassed = face({ id: 'e', kind: 'grade', op: 'hue', bypassed: true, x: 0, y: 0 });
     expect(bypassed).toContain('is-bypassed');
     expect(bypassed).toContain('aria-pressed="false"');
 
-    // A source has no inlet to pass through, so there is no honest "off" for
-    // it — and the dot must not invite a press that would do nothing.
+    // A source has nothing to pass through and is still switchable: off means
+    // it gives nothing, and the canvas says the flow stopped reaching out.
     const source = face({ id: 's', kind: 'source', op: 'plasma', x: 0, y: 0 });
-    expect(source).not.toContain('aria-label="plasma active"');
-    expect(source).toContain('<span class="wdg-device-power"');
+    expect(source).toContain('aria-label="plasma active"');
+
+    // The destination is where a flow ends rather than something it does, and
+    // a dead one is a black screen with no way to read why.
+    const end = face({ id: 'o', kind: 'out', x: 0, y: 0 });
+    expect(end).not.toContain('<button type="button" class="wdg-device-power"');
+    expect(end).toContain('<span class="wdg-device-power"');
   });
 
   it('gives an LFO a real sync toggle and domain-aware rate and phase readings', () => {

@@ -1590,6 +1590,37 @@ export function canBypass(node: CircuitNode): boolean {
   return NODE_SPECS[node.kind].outlets.some((outlet) => bypassInletOf(node, outlet.name));
 }
 
+/**
+ * Whether this node can be turned off at all.
+ *
+ * Everything except the destination. `out` is where a flow ends rather than
+ * something it does, so switching it off is a question about the flow and not
+ * about a node — and a dead `out` is a black screen with no way to read why.
+ *
+ * Note this is a wider set than `canBypass`. A node whose signal changes on the
+ * way through — a `glow` taking a number and giving a colour — has no honest
+ * pass-through, and turning one off therefore breaks the chain rather than
+ * shorting it. That is allowed: breaking the chain on purpose to see what a
+ * node was contributing is the whole reason to reach for the switch, and the
+ * canvas already says when a flow has stopped reaching out.
+ */
+export function canTurnOff(node: CircuitNode): boolean {
+  return node.kind !== 'out';
+}
+
+/**
+ * An outlet that is off and has nowhere to pass through gives nothing.
+ *
+ * The two halves of "off". Where the signals match, off means *pass what you
+ * were given straight on*, and the graph is whole with one transform skipped.
+ * Where they do not, there is nothing to pass — so the outlet goes quiet, the
+ * nodes feeding it stop reaching anywhere, and the canvas reports that the way
+ * it reports any other loose end.
+ */
+export function outletGivesNothing(node: CircuitNode, outletName: string): boolean {
+  return !!node.bypassed && !bypassInletOf(node, outletName);
+}
+
 /** GLSL types, by signal. */
 const TYPES: Record<Signal, string> = { p: 'vec2', n: 'float', c: 'vec4' };
 
@@ -1792,6 +1823,9 @@ function inletsRead(node: CircuitNode, outlet: string): readonly string[] {
   if (node.bypassed) {
     const through = bypassInletOf(node, outlet);
     if (through) return [through.name];
+    // Off with nowhere to pass through: this outlet depends on nothing, so
+    // everything upstream of it is now doing no work and says so.
+    return [];
   }
   const spec = NODE_SPECS[node.kind];
   return spec.reads?.(node, outlet) ?? inletsOf(node).map((port) => port.name);
@@ -2458,7 +2492,12 @@ export function compileCircuit(circuit: Circuit, options: CompileOptions = {}): 
     }
     const bypass = node.bypassed ? bypassInletOf(node, port) : undefined;
     if (!bypass && node.kind === 'last') feedback = true;
-    shaderWork += bypass ? 0 : typeof spec.work === 'function' ? spec.work(node) : (spec.work ?? 0);
+    shaderWork +=
+      bypass || outletGivesNothing(node, port)
+        ? 0
+        : typeof spec.work === 'function'
+          ? spec.work(node)
+          : (spec.work ?? 0);
     if (shaderWork > MAX_SHADER_WORK) {
       failed ??= 'too expensive to draw — a costly picture is being sampled too many times';
       return null;
@@ -2532,7 +2571,13 @@ export function compileCircuit(circuit: Circuit, options: CompileOptions = {}): 
       readAt,
     };
 
-    const emitted = bypass
+    // Off, with nowhere to pass through: this outlet gives the zero of its own
+    // signal. Not an error — the chain is broken on purpose, and the canvas
+    // already has a way to say a flow has stopped reaching out.
+    const quiet = outletGivesNothing(node, port);
+    const emitted = quiet
+      ? { [port]: `${TYPES[spec.outlets.find((one) => one.name === port)?.kind ?? 'c']}(0.0)` }
+      : bypass
       ? { [port]: readRawAt(bypass.name, at) }
       : node.kind === 'value' || node.kind === 'take'
         ? { n: `uParams[${slot.get(node.id) ?? 0}]` }
