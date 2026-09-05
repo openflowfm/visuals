@@ -245,9 +245,10 @@ describe('the node face anatomy', () => {
     );
     expect(html).toContain('aria-label="Video file"');
     expect(html).toContain('loops/one.mp4');
-    expect(html).toContain('two.webm');
     expect(html).not.toContain('poster.png');
     expect(html).not.toContain('/Users/');
+    // The rest of what it offers is behind the menu, and a menu needs a DOM:
+    // see CircuitFace.chooser.test.ts.
   });
 
   it('offers only server-approved stills on an image face', () => {
