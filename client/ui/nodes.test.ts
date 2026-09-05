@@ -354,3 +354,52 @@ describe('dropping one', () => {
     expect(a.values).not.toBe(b.values);
   });
 });
+
+describe('dropping a node on the canvas', () => {
+  const boxes = (circuit: { nodes: { x: number; y: number }[] }) => circuit.nodes;
+  const overlapping = (circuit: { nodes: { x: number; y: number }[] }) => {
+    // The same box the placement uses: 176 wide, and the tallest a node gets.
+    const hits: string[] = [];
+    const n = boxes(circuit);
+    for (let i = 0; i < n.length; i++)
+      for (let j = i + 1; j < n.length; j++)
+        if (
+          n[i].x < n[j].x + 176 &&
+          n[i].x + 176 > n[j].x &&
+          n[i].y < n[j].y + 224 &&
+          n[i].y + 224 > n[j].y
+        )
+          hits.push(`${i}∩${j}`);
+    return hits;
+  };
+
+  const add = (circuit: { nodes: unknown[]; cords: unknown[] }, times: number) => {
+    let held = circuit;
+    for (let i = 0; i < times; i++) held = drop(held as never, { kind: 'source', op: 'plasma', label: 'plasma' } as never);
+    return held;
+  };
+
+  it('never lands a node on one that is already there', () => {
+    const grown = add({ nodes: [], cords: [] }, 12) as never as { nodes: { x: number; y: number }[] };
+    expect(overlapping(grown)).toEqual([]);
+    expect(grown.nodes).toHaveLength(12);
+  });
+
+  it('steps past a slot somebody has dragged a node into', () => {
+    // The old rule was the node count laid out four to a row, which is only
+    // free on a canvas nobody has touched. One node parked on the second slot
+    // used to be enough to have the next drop land under it.
+    const parked = { nodes: [{ id: 'a', kind: 'source', x: 260, y: 60 }], cords: [] };
+    const after = drop(parked as never, { kind: 'source', op: 'plasma', label: 'plasma' } as never);
+    const placed = after.nodes[after.nodes.length - 1];
+    expect(overlapping(after as never as { nodes: { x: number; y: number }[] })).toEqual([]);
+    expect({ x: placed.x, y: placed.y }).not.toEqual({ x: 260, y: 60 });
+  });
+
+  it('still places somewhere rather than giving up', () => {
+    // A palette click that does nothing is worse than a node to drag.
+    const crowded = { nodes: Array.from({ length: 40 }, (_, i) => ({ id: `n${i}`, kind: 'source', x: 60 + (i % 4) * 200, y: 60 + Math.floor(i / 4) * 240 })), cords: [] };
+    const after = drop(crowded as never, { kind: 'source', op: 'plasma', label: 'plasma' } as never);
+    expect(after.nodes).toHaveLength(41);
+  });
+});

@@ -370,14 +370,56 @@ export function palette(): Entry[] {
 }
 
 /**
- * Drop one on the canvas, somewhere free-ish.
+ * What a node takes up on the canvas, in graph units.
  *
- * Free-ish rather than clever. Every node drags, and a layout algorithm would
- * fight whatever you did by hand — which on a canvas you are actively arranging
- * is worse than a node landing somewhere you have to move it from.
+ * Measured off the rendered faces rather than derived: every node is exactly
+ * this wide, and the tallest seen — a six-row lens carrying a picture — is this
+ * tall. Height does not follow the row count closely enough to compute, because
+ * a `value` node is taller than an `out` with the same one row and a picture
+ * adds more, so the tallest is what a free-space check has to assume.
+ *
+ * Over-estimating only spends air. Under-estimating puts a node on top of
+ * another one, which is the thing this exists to stop.
+ */
+const NODE_WIDE = 176;
+const NODE_TALL = 224;
+
+/** The slots a dropped node is offered, in the order it is offered them. */
+const slotAt = (n: number) => ({ x: 60 + (n % 4) * 200, y: 60 + Math.floor(n / 4) * 240 });
+
+const clashes = (circuit: Circuit, x: number, y: number): boolean =>
+  circuit.nodes.some(
+    (node) =>
+      x < node.x + NODE_WIDE &&
+      x + NODE_WIDE > node.x &&
+      y < node.y + NODE_TALL &&
+      y + NODE_TALL > node.y,
+  );
+
+/**
+ * Drop one on the canvas, somewhere free.
+ *
+ * Still not clever — no layout algorithm, because every node drags and one
+ * would fight whatever you did by hand, which on a canvas you are actively
+ * arranging is worse than a node landing somewhere you have to move it from.
+ *
+ * What it does now is refuse to land *on* something. The slot used to be the
+ * node count laid out four to a row, which is only free on a canvas nobody has
+ * touched: move two nodes and the next drop lands under one of them. So the
+ * count is the first guess, and it walks on until the space is clear.
+ *
+ * It gives up after enough slots to cover any canvas somebody is really
+ * arranging, and takes the last one rather than searching forever — a node
+ * placed awkwardly can be dragged, and a palette click that does nothing
+ * cannot.
  */
 export function drop(circuit: Circuit, pick: Pick): Circuit {
-  const at = circuit.nodes.length;
+  let at = circuit.nodes.length;
+  for (let tried = 0; tried < 64; tried++) {
+    const { x, y } = slotAt(at);
+    if (!clashes(circuit, x, y)) break;
+    at++;
+  }
   // A node dropped from its own row still lands with a mode written on it —
   // the first one, which is what it would have compiled as anyway. Leaving it
   // off would put a node on the canvas whose title said `source` and whose
@@ -397,8 +439,7 @@ export function drop(circuit: Circuit, pick: Pick): Circuit {
         ...(pick.values ? { values: { ...pick.values } } : {}),
         ...(pick.of ? { of: pick.of } : {}),
         ...(pick.kind === 'value' ? { value: 0.5, label: 'value' } : {}),
-        x: 60 + (at % 4) * 200,
-        y: 60 + Math.floor(at / 4) * 220,
+        ...slotAt(at),
       },
     ],
   };

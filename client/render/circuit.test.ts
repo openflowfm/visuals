@@ -2072,3 +2072,22 @@ describe('a flow inside a flow', () => {
     expect(compileFlow(flows, 'outer').error).toMatch(/contains itself/);
   });
 });
+
+describe('the circuit a new flow opens with', () => {
+  it('does not draw two of its nodes on top of each other', () => {
+    // It is the first thing anybody sees of the node graph, and it used to
+    // open with the value node drawn over the source above it. 176 wide and
+    // 224 tall is what a node takes up; `ui/nodes.ts` places against the same.
+    const nodes = starterCircuit().nodes;
+    const hits: string[] = [];
+    for (let i = 0; i < nodes.length; i++)
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = nodes[i];
+        const b = nodes[j];
+        if (a.x < b.x + 176 && a.x + 176 > b.x && a.y < b.y + 224 && a.y + 224 > b.y) {
+          hits.push(`${a.id} over ${b.id}`);
+        }
+      }
+    expect(hits).toEqual([]);
+  });
+});

@@ -2658,9 +2658,12 @@ ${lines.join('\n')}
 export function starterCircuit(): Circuit {
   return {
     nodes: [
+      // 240 apart down the column, which clears the tallest a node gets. At
+      // 150 the value node was drawn over the source above it — the first
+      // thing anybody saw of the graph was two nodes on top of each other.
       { id: 'live', kind: 'tracks', op: 'by name', x: 40, y: 60 },
-      { id: 'wash', kind: 'source', op: 'plasma', x: 40, y: 250 },
-      { id: 'k', kind: 'value', x: 40, y: 400, value: 0.35, label: 'wash' },
+      { id: 'wash', kind: 'source', op: 'plasma', x: 40, y: 300 },
+      { id: 'k', kind: 'value', x: 40, y: 540, value: 0.35, label: 'wash' },
       { id: 'fold', kind: 'lens', op: 'kaleido', x: 260, y: 60 },
       { id: 'mix', kind: 'blend', op: 'screen', x: 500, y: 140 },
       { id: 'o', kind: 'out', x: 720, y: 150 },
