@@ -1988,8 +1988,20 @@ export function repaired(circuit: Circuit, flows?: Readonly<Record<string, FlowD
     const source = byId.get(from.node);
     const sink = byId.get(to.node);
     if (!source || !sink) continue;
-    if (signalOfPort(source, from.port, flows, 'out') === null) continue;
-    if (signalOfPort(sink, to.port, flows, 'in') === null) continue;
+    const gives = signalOfPort(source, from.port, flows, 'out');
+    const takes = signalOfPort(sink, to.port, flows, 'in');
+    if (gives === null || takes === null) continue;
+    // And they have to be the same signal. The editor refuses a point dropped
+    // into a number when the cord is drawn, and that was the only place the
+    // rule lived — so a cord could go bad *after* it was made and nothing
+    // noticed. A `give` is the way in: its one inlet is a number, a point or a
+    // colour depending on its mode, so changing the mode under a wired cord
+    // left a point plugged into a number, which compiled and drew nonsense.
+    //
+    // Only where both are known. A door whose flow is not in hand reads as
+    // null above and is kept, because a cord cannot be judged against a port
+    // nobody can see.
+    if (gives !== takes) continue;
     // An inlet takes one thing, which is the rule `connect` keeps and the rule
     // the compiler resolves by. A file naming two is saying the later one.
     kept.set(cord.to, { from: cord.from, to: cord.to });

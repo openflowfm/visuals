@@ -190,3 +190,44 @@ describe('a value set on an inlet', () => {
     expect(made.scheme.flows.one.circuit.nodes.find((n) => n.id === 'e')?.values?.waves).toBe(0.8);
   });
 });
+
+describe('a mode that changes what an inlet takes', () => {
+  // `give` is the one node whose single inlet changes signal with its mode:
+  // a number, a point or a colour. The editor refuses a point dropped into a
+  // number when the cord is drawn — and that was the only place the rule lived,
+  // so a cord could be made legally and go bad afterwards. It compiled, and
+  // drew nonsense.
+  const wired = () => ({
+    nodes: [
+      { id: 'p', kind: 'point', x: 0, y: 0 },
+      { id: 'g', kind: 'give', op: 'point', x: 1, y: 0, label: 'o' },
+    ],
+    cords: [{ from: 'p/p', to: 'g/in' }],
+  });
+
+  it('cuts a cord the new mode cannot take', () => {
+    expect(setNode(wired() as never, 'g', { op: 'number' }).cords).toEqual([]);
+    expect(setNode(wired() as never, 'g', { op: 'colour' }).cords).toEqual([]);
+  });
+
+  it('keeps one the new mode still takes', () => {
+    expect(setNode(wired() as never, 'g', { op: 'point' }).cords).toEqual([
+      { from: 'p/p', to: 'g/in' },
+    ]);
+  });
+
+  it('leaves cords that have nothing to do with the node being changed', () => {
+    const held = {
+      nodes: [
+        { id: 's', kind: 'source', op: 'plasma', x: 0, y: 0 },
+        { id: 'o', kind: 'out', x: 2, y: 0 },
+        { id: 'g', kind: 'give', op: 'point', x: 1, y: 0, label: 'o' },
+      ],
+      cords: [{ from: 's/c', to: 'o/c' }],
+    };
+    expect(setNode(held as never, 'g', { op: 'number' }).cords).toEqual([
+      { from: 's/c', to: 'o/c' },
+    ]);
+  });
+});
+

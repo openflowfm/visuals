@@ -1,5 +1,12 @@
 import type { Circuit, FlowDef, Scheme } from '../../protocol.ts';
-import { bareCircuit, inletsOf, keepValues, splitPort, starterCircuit } from '../render/circuit.ts';
+import {
+  bareCircuit,
+  inletsOf,
+  keepValues,
+  signalOf,
+  splitPort,
+  starterCircuit,
+} from '../render/circuit.ts';
 
 /**
  * How a scheme gets changed.
@@ -178,12 +185,32 @@ export function setNode(
   // the file door, where the whole library is in hand.
   if (held.kind === 'flow') return { ...circuit, nodes };
   const ports = new Set(inletsOf(held).map((port) => port.name));
+  const settled = { ...circuit, nodes };
+  /**
+   * A cord this mode has made nonsense of.
+   *
+   * Two ways it can happen, and only the first was being caught. An inlet can
+   * *go* — the old mode had it and the new one does not — and an inlet can keep
+   * its name and change what it takes. `give` is the second kind: its one inlet
+   * is a number, a point or a colour depending on the mode, so switching the
+   * mode under a wired cord used to leave a point plugged into a number. The
+   * editor refuses that when the cord is drawn; nothing refused it afterwards.
+   *
+   * Judged only where both ends are known. A flow's doors are not in this
+   * circuit, so a cord touching one is left for `repaired` at the file door,
+   * where the whole library is in hand.
+   */
+  const gone = (cord: { from: string; to: string }): boolean => {
+    const to = splitPort(cord.to);
+    if (to.node === id && !ports.has(to.port)) return true;
+    if (to.node !== id && splitPort(cord.from).node !== id) return false;
+    const gives = signalOf(settled, cord.from);
+    const takes = signalOf(settled, cord.to);
+    return gives !== null && takes !== null && gives !== takes;
+  };
   return {
     nodes: nodes.map((node) => (node.id === id ? keepValues(node) : node)),
-    cords: circuit.cords.filter((cord) => {
-      const to = splitPort(cord.to);
-      return to.node !== id || ports.has(to.port);
-    }),
+    cords: circuit.cords.filter((cord) => !gone(cord)),
   };
 }
 

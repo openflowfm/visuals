@@ -2150,3 +2150,31 @@ describe('turning a node off', () => {
     expect(canTurnOff({ id: 'o', kind: 'out', x: 0, y: 0 } as never)).toBe(false);
   });
 });
+
+describe('repairing a circuit that names a cord it cannot keep', () => {
+  it('drops one whose two ends are different signals', () => {
+    // A file can say anything: hand-edited, written by an older build, or saved
+    // while a `give` was mid-mode-change. Both ports exist here, which is all
+    // the repair used to check, and a point still cannot go into a number.
+    const held = repaired({
+      nodes: [
+        { id: 'p', kind: 'point', x: 0, y: 0 },
+        { id: 'g', kind: 'give', op: 'number', x: 1, y: 0, label: 'o' },
+      ],
+      cords: [{ from: 'p/p', to: 'g/in' }],
+    } as never);
+    expect(held.cords).toEqual([]);
+  });
+
+  it('keeps one whose ends agree', () => {
+    const held = repaired({
+      nodes: [
+        { id: 'p', kind: 'point', x: 0, y: 0 },
+        { id: 'g', kind: 'give', op: 'point', x: 1, y: 0, label: 'o' },
+      ],
+      cords: [{ from: 'p/p', to: 'g/in' }],
+    } as never);
+    expect(held.cords).toEqual([{ from: 'p/p', to: 'g/in' }]);
+  });
+});
+
