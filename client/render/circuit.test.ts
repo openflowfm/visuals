@@ -823,7 +823,12 @@ describe('an inlet holds a number of its own', () => {
     );
 
   it('uses its own answer when nobody has set one', () => {
-    expect(bodyOf(compileCircuit(posterize()).source!)).toContain('fxPosterize(v0, 0.5)');
+    // 0.78 rather than the plain half: posterize at the middle of its one
+    // number is eight steps, which on a projector is invisible. That number
+    // used to ride on the browser row that placed the node, so it only held
+    // for a node dropped that way; it is the mode's own default now, which is
+    // why it shows up here with nothing set.
+    expect(bodyOf(compileCircuit(posterize()).source!)).toContain('fxPosterize(v0, 0.78)');
   });
 
   it('rides a uniform rather than being written into the shader', () => {

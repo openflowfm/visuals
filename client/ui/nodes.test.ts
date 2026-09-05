@@ -317,9 +317,17 @@ describe('hot-swapping one', () => {
     expect(swapEntry('tracks')?.presets.map((each) => each.op)).toContain('plasma');
   });
 
-  it('keeps a preset value with the mode that owns it', () => {
+  it('offers the mode, and lets the mode carry its own starting number', () => {
+    // The value used to ride on the browser row. It is the mode's own default
+    // now, in `VALUE_AT`, so it holds however the node arrives — dropped,
+    // swapped into, or read from a file that never named it. The row only has
+    // to offer the mode.
     const poster = swapEntry('grade')?.presets.find((each) => each.op === 'posterize');
-    expect(poster?.values?.steps).toBeGreaterThan(0.5);
+    expect(poster).toBeTruthy();
+    const steps = inletsOf({ id: 'g', kind: 'grade', op: 'posterize', x: 0, y: 0 }).find(
+      (port) => port.name === 'steps',
+    );
+    expect(steps?.at).toBeGreaterThan(0.5);
   });
 
   it('has nothing to swap on a kind with no modes', () => {
@@ -328,30 +336,28 @@ describe('hot-swapping one', () => {
 });
 
 describe('dropping one', () => {
-  it('gives a bare node its defaults and a preset its values', () => {
-    // A preset is a mode *and* the values that make that mode read. Posterize
-    // at the middle of its one number is eight steps, which on a projector is
-    // invisible — an effect you drop should do the thing it is named after.
+  it('drops a node on the mode asked for, and writes no numbers into it', () => {
+    // Posterize at the middle of its one number is eight steps, which on a
+    // projector is invisible — an effect you drop should do the thing it is
+    // named after. It does, through the mode's own default rather than through
+    // a copy of the number written into every node that is ever dropped.
     const grade = find(browser(), 'grade')!;
     const plain = drop(bareCircuit(), grade.node).nodes.at(-1)!;
     // Spelled out rather than implied, so the face and its dropdown agree.
     expect(plain.op).toBe(GRADE_MODES[0]);
     expect(plain.values).toBeUndefined();
 
-    const poster = grade.presets.find((each) => each.op === 'posterize')!;
+    const poster = matching(browser(), 'posterize')[0]?.presets.find(
+      (each) => each.op === 'posterize',
+    )!;
     const dropped = drop(bareCircuit(), poster).nodes.at(-1)!;
     expect(dropped.op).toBe('posterize');
-    expect(dropped.values?.steps).toBeGreaterThan(0.5);
-  });
-
-  it('gives each dropped preset its own values', () => {
-    // Two nodes off one preset sharing a map is one control turning both of them,
-    // which reads as the canvas editing a node nobody has touched.
-    const poster = find(browser(), 'grade')!.presets.find((each) => each.op === 'posterize')!;
-    const once = drop(bareCircuit(), poster);
-    const twice = drop(once, poster);
-    const [a, b] = twice.nodes.filter((node) => node.kind === 'grade');
-    expect(a.values).not.toBe(b.values);
+    expect(dropped.values).toBeUndefined();
+    expect(
+      inletsOf({ id: 'g', kind: 'grade', op: 'posterize', x: 0, y: 0 }).find(
+        (port) => port.name === 'steps',
+      )?.at,
+    ).toBeGreaterThan(0.5);
   });
 });
 
@@ -403,3 +409,42 @@ describe('dropping a node on the canvas', () => {
     expect(after.nodes).toHaveLength(41);
   });
 });
+
+describe('a kind is one row until somebody asks', () => {
+  it('hangs nothing under a row while the box is empty', () => {
+    // Thirty-five kinds carry a hundred and sixty modes. Offering them all at
+    // rest is offering a hundred and fifty-one things to somebody who has not
+    // said what they want, and the node they place is the same node either way.
+    const idle = matching(browser(), '');
+    expect(idle.length).toBeGreaterThan(20);
+    expect(idle.every((entry) => entry.presets.length === 0)).toBe(true);
+  });
+
+  it('brings back only the mode that was asked for', () => {
+    // The reason the rows can collapse at all: searching still lands you on the
+    // effect you named, rather than on its kind in whichever mode is first.
+    const hits = matching(browser(), 'kaleido');
+    expect(hits).toHaveLength(1);
+    expect(hits[0].node.kind).toBe('lens');
+    expect(hits[0].presets.map((each) => each.op)).toEqual(['kaleido']);
+    // And placing it gives that mode, not the kind's first.
+    const placed = drop(bareCircuit(), hits[0].presets[0]).nodes.at(-1)!;
+    expect(placed.op).toBe('kaleido');
+  });
+
+  it('opens a whole kind when the kind is what was asked for', () => {
+    // "Show me the effects" is a real thing to type, and it should answer with
+    // the effects rather than with one row you then have to open.
+    //
+    // Other kinds come back too, because a description can say `lens` — `form`
+    // has an `iris` and `spread` has a `streak`. Those arrive as the one mode
+    // that matched, which is the same rule from the other side.
+    const hits = matching(browser(), 'lens');
+    const kind = hits.find((entry) => entry.node.kind === 'lens')!;
+    expect(kind.presets.length).toBeGreaterThan(5);
+    for (const other of hits.filter((entry) => entry.node.kind !== 'lens')) {
+      expect(other.presets.length).toBe(1);
+    }
+  });
+});
+

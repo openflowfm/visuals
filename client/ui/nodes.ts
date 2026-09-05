@@ -146,10 +146,6 @@ export interface FlowRow {
  * named after the poster — and it is also the example that started this: an
  * effect you should be able to drop and have *do* something.
  */
-const PRESET_VALUES: Record<string, Record<string, number>> = {
-  posterize: { steps: 0.78 },
-};
-
 /**
  * A row's identity, which is what React keys it by.
  *
@@ -352,7 +348,7 @@ export function palette(): Entry[] {
     out.push({
       node: pick(kind, undefined, label, spec.description),
       presets: (spec.modes ?? []).map((mode) =>
-        pick(kind, mode.name, mode.name, mode.description, PRESET_VALUES[mode.name]),
+        pick(kind, mode.name, mode.name, mode.description),
       ),
     });
   };
@@ -448,11 +444,19 @@ export function drop(circuit: Circuit, pick: Pick): Circuit {
 /**
  * The browser, filtered by what somebody typed.
  *
- * A node matching keeps everything under it, because "show me the effects" is a
- * real thing to type. A preset matching keeps its node with **only** the
- * matching presets under it, so typing `spark` gives one row rather than a
- * `source` you then have to go looking inside. Either way the entry that comes
- * back is drawn open, which is the whole of how search reaches a preset.
+ * **Idle, a kind is one row and nothing hangs under it.** Thirty-five kinds
+ * carry a hundred and sixty modes between them, and a browser that offers them
+ * all at rest is offering a hundred and fifty-one things to somebody who has
+ * not said what they want yet — while the node they will place is the same node
+ * either way, and the mode is a control on it once it is down.
+ *
+ * **Typing brings them back**, because search is the other job. A node matching
+ * keeps everything under it, since "show me the effects" is a real thing to
+ * type. A preset matching keeps its node with **only** the matching presets, so
+ * typing `spark` gives one row rather than a `source` you then go looking
+ * inside — and clicking it places a `sparks`, not whichever mode happened to be
+ * first. Either way the entry that comes back is drawn open, which is the whole
+ * of how search reaches a preset.
  */
 export function matching(
   all: readonly Entry[],
@@ -464,7 +468,7 @@ export function matching(
   // a mode never changes what a kind takes or gives — the ports come off the
   // spec, and every preset under a row shares them.
   const all2 = all.filter((entry) => passes(entry.node.ports, want));
-  if (!typing) return all2;
+  if (!typing) return all2.map((entry) => (entry.presets.length ? { ...entry, presets: [] } : entry));
   const out: Entry[] = [];
   for (const entry of all2) {
     if (entry.node.terms.includes(typing)) {
@@ -503,6 +507,6 @@ export function swapEntry(kind: NodeKind): Entry | null {
   });
   return {
     node: pick(spec.modes[0].name, spec.name),
-    presets: spec.modes.map((mode) => pick(mode.name, mode.name, PRESET_VALUES[mode.name])),
+    presets: spec.modes.map((mode) => pick(mode.name, mode.name)),
   };
 }

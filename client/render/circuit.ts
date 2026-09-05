@@ -539,6 +539,11 @@ const VALUE_AT: Record<string, number> = {
   // A shoulder that starts near the top and rolls hard: anywhere lower and the
   // node is a contrast control wearing the wrong name.
   knee: 0.65,
+  // Was the browser's one preset value, applied only to a node placed from the
+  // mode row that no longer exists. Here it is the mode's own default, so it
+  // holds however the node arrives — dropped, swapped into, or read from a file
+  // that never named it.
+  'posterize/steps': 0.78,
   'highlights/amount': 0.55,
   sides: 0.2,
   weight: 0.6,
