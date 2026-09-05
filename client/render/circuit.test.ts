@@ -241,7 +241,7 @@ describe('compiling a flow', () => {
     // it and a shader whose values were all zero — a lens folded hard left with
     // nothing on the canvas to say why.
     const node = { id: 'e', kind: 'lens' as const, op: 'lasers', x: 0, y: 0 };
-    expect(inletsOf(node).map((port) => port.name)).toEqual(['p', 'c', 'by']);
+    expect(inletsOf(node).map((port) => port.name)).toEqual(['mode', 'p', 'c', 'by']);
   });
 
   it('is a number, so it will not go into a point', () => {
@@ -398,8 +398,11 @@ describe('LFO nodes', () => {
   it('defaults to the calibrated square response at the old midpoint', () => {
     const lfo = { id: 'l', kind: 'lfo', op: 'sine', x: 0, y: 0 } as const;
     expect(inletsOf(lfo).map(({ name, at }) => ({ name, at }))).toEqual([
-      // `clock` first, and with no resting number: it rests on the beat, and
-      // being first is what lets the lab splice one onto a number cord.
+      // The chooser leads on every kind that has modes. `clock` keeps its place
+      // among the parameters, and the lab picks the first of *those* rather
+      // than the first inlet — a chooser is a number on the wire and not a knob
+      // to splice onto.
+      { name: 'mode', at: undefined },
       { name: 'clock', at: undefined },
       { name: 'rate', at: 0.5 },
       { name: 'sync', at: 1 },
@@ -1415,6 +1418,7 @@ describe('a zoom that compounds is a rate, not a distance', () => {
     // every unwired inlet makes. A creep that drifted at rest would be a node
     // that moved the picture by existing.
     expect(inletsOf({ id: 'c', kind: 'lens', op: 'creep', x: 0, y: 0 })).toMatchObject([
+      { name: 'mode' },
       { name: 'p' },
       { name: 'c' },
       { name: 'grow', at: 0.5 },
@@ -1662,7 +1666,7 @@ describe('a point moved by what a picture says', () => {
     const named = (op: string) =>
       inletsOf({ id: 'd', kind: 'displace', op, x: 0, y: 0 }).map((port) => port.name);
     expect(named('map')).toEqual(named('curl'));
-    expect(named('map')).toEqual(['p', 'field', 'amount']);
+    expect(named('map')).toEqual(['mode', 'p', 'field', 'amount']);
   });
 
   it('refuses a picture displaced by itself', () => {
@@ -1719,8 +1723,8 @@ describe('a screen that keeps the picture', () => {
     // laid over a picture, which is a different thing wearing the same word.
     const named = (op: string) =>
       inletsOf({ id: 'h', kind: 'halftone', op, x: 0, y: 0 }).map((port) => port.name);
-    expect(named('dots')).toEqual(['c', 'size', 'tilt']);
-    expect(named('dither')).toEqual(['c', 'size']);
+    expect(named('dots')).toEqual(['mode', 'c', 'size', 'tilt']);
+    expect(named('dither')).toEqual(['mode', 'c', 'size']);
   });
 
   it('dims a scanline where it carves a dot, and the difference is what they are', () => {
@@ -2180,6 +2184,62 @@ describe('repairing a circuit that names a cord it cannot keep', () => {
       cords: [{ from: 'p/p', to: 'g/in' }],
     } as never);
     expect(held.cords).toEqual([{ from: 'p/p', to: 'g/in' }]);
+  });
+});
+
+describe('driving a mode', () => {
+  const glow = (cords: { from: string; to: string }[]) => ({
+    nodes: [
+      { id: 'l', kind: 'lfo', op: 'triangle', x: 0, y: 0 },
+      { id: 'g', kind: 'glow', op: 'neon', x: 1, y: 0 },
+      { id: 'o', kind: 'out', x: 2, y: 0 },
+    ],
+    cords: [{ from: 'g/c', to: 'o/c' }, ...cords],
+  });
+  const main = (source: string) => source.slice(source.indexOf('void main'));
+  const calls = (source: string, fn: string) => (main(source).match(new RegExp(fn + '\\(', 'g')) ?? []).length;
+
+  it('compiles one mode while nobody is driving it', () => {
+    // The shape this has always had, and the reason a chooser can stay a
+    // recompile: nothing is paid for a mode the node is not in.
+    const built = compileCircuit(glow([]) as never);
+    expect(built.error).toBeNull();
+    expect(calls(built.source!, 'glow_neon')).toBe(1);
+    expect(calls(built.source!, 'glow_soft')).toBe(0);
+    expect(calls(built.source!, 'glow_band')).toBe(0);
+  });
+
+  it('compiles every mode it could reach once a cord is on the chooser', () => {
+    // No spec knows this is happening: `inlets` and `emit` are both functions
+    // of `op`, so asking one for another mode is asking the same question with
+    // a different node.
+    const built = compileCircuit(glow([{ from: 'l/n', to: 'g/mode' }]) as never);
+    expect(built.error).toBeNull();
+    for (const mode of ['glow_neon', 'glow_soft', 'glow_band']) {
+      expect(calls(built.source!, mode)).toBe(1);
+    }
+    // Picked, not blended: half a `soft` over half a `band` is two pictures at
+    // once rather than a mode between them.
+    expect(built.source).toContain('step(0.333333');
+    expect(built.source).toContain('step(0.666667');
+  });
+
+  it('costs the modes nothing extra to have compiled', () => {
+    // Every mode's helper is already in the shader — the prelude is written per
+    // kind, not per mode — so the whole set costs the call sites and no more.
+    const still = compileCircuit(glow([]) as never).source!;
+    for (const mode of ['glow_neon', 'glow_soft', 'glow_band']) {
+      expect(still).toContain(mode + '(');
+    }
+  });
+
+  it('offers the chooser only where every mode is affordable', () => {
+    // `form` is 32 a mode against a budget of 64, so two of its twenty-one is
+    // the whole flow's allowance. It keeps a chooser and has no inlet, which
+    // says so before a cord is drawn rather than after it fails to compile.
+    expect(inletsOf({ id: 'g', kind: 'glow', op: 'neon', x: 0, y: 0 })[0].name).toBe('mode');
+    expect(inletsOf({ id: 'f', kind: 'form', x: 0, y: 0 }).some((p) => p.name === 'mode')).toBe(false);
+    expect(inletsOf({ id: 'p', kind: 'point', x: 0, y: 0 }).some((p) => p.name === 'mode')).toBe(false);
   });
 });
 

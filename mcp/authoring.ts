@@ -603,7 +603,7 @@ export interface DocumentedPort {
   settable: boolean;
   default?: number;
   liveDefault?: 'beat' | 'energy' | 'here';
-  control?: 'toggle';
+  control?: 'toggle' | 'modes';
   display?: 'lfo-rate' | 'phase';
 }
 

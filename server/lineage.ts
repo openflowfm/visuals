@@ -10,6 +10,7 @@ import { WORDS } from '../randomize.ts';
 import {
   compileCircuit,
   inletsOf,
+  type PortSpec,
   modesOf,
   NODE_SPECS,
   signalOf,
@@ -55,7 +56,7 @@ function randomNode(kind: NodeKind, id: string, x: number, y: number, rng: Rng):
       : {}),
     ...(kind === 'value' ? { value: rounded(rng()), label: 'value' } : {}),
   };
-  const numbers = inletsOf(node).filter((port) => port.kind === 'n');
+  const numbers = parameters(node).filter((port) => port.kind === 'n');
   if (numbers.length > 0 && chance(rng, 0.55)) {
     const port = pick(rng, numbers);
     node.values = { [port.name]: rounded(0.08 + rng() * 0.84) };
@@ -99,8 +100,21 @@ const outletOf = (node: CircuitNode, signal: Signal): string | null => {
   return port ? `${node.id}/${port.name}` : null;
 };
 
+/**
+ * Numbers this generator may turn or drive.
+ *
+ * Not every number inlet is a parameter. A mode chooser is a number on the wire
+ * and the first inlet on every kind that has one, so a plain search for "the
+ * first `n`" now finds it every time — which would make every generated flow
+ * one that modulates a mode and never one that turns a knob. Driving a mode is
+ * a thing worth generating one day; it should be chosen, not inherited from the
+ * order the ports happen to be in.
+ */
+const parameters = (node: CircuitNode): readonly PortSpec[] =>
+  inletsOf(node).filter((port) => port.control === undefined);
+
 const inletOf = (node: CircuitNode, signal: Signal): string | null => {
-  const port = inletsOf(node).find((candidate) => candidate.kind === signal);
+  const port = parameters(node).find((candidate) => candidate.kind === signal);
   return port ? `${node.id}/${port.name}` : null;
 };
 

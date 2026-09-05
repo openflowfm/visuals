@@ -281,8 +281,12 @@ describe('display-clock readings', () => {
       },
     });
 
-    expect(asked).toEqual(['m/a', 'm/b']);
+    // `mode` is among them, and wants to be: a chooser under a cord is
+    // showing a mode somebody else is picking, and the reading is how it knows
+    // which one is live.
+    expect(asked).toEqual(['m/mode', 'm/a', 'm/b']);
     expect(readings).toEqual({
+      'm/mode': {},
       'm/a': { value: 0.624, display: '62 %' },
       'm/b': {},
     });

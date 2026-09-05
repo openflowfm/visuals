@@ -1556,10 +1556,56 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
   },
 };
 
+/**
+ * The inlet that chooses a mode, on the kinds that can be modulated.
+ *
+ * A mode is `op`, a string on the node, and `signatureOfCircuit` includes it —
+ * so changing one recompiles. That is right for a chooser and wrong for
+ * something a flow drives, which is why this is a number: wire it and the node
+ * compiles every mode it might reach and picks between them per pixel, with no
+ * rebuild.
+ *
+ * Unwired it reads the resting mode, so a node nobody has driven behaves
+ * exactly as it did — the same shader, the same one call.
+ */
+export const MODE_INLET = 'mode';
+
+/**
+ * Whether a kind's mode can be driven.
+ *
+ * Opt-in rather than universal, because compiling every mode means paying for
+ * every mode: for most kinds the mode chooses *which* GLSL runs rather than how
+ * much, and the whole set costs what one does. `form` is the exception at 32
+ * per mode against a budget of 64, so two of its twenty-one is the entire
+ * flow's allowance — it keeps a chooser and says so by having no inlet, which
+ * is a better answer than accepting a cord and then failing to compile.
+ */
+export function modulatesModes(kind: NodeKind): boolean {
+  const spec = NODE_SPECS[kind];
+  if (!spec.modes || spec.modes.length < 2) return false;
+  const work = typeof spec.work === 'function' ? spec.work({ id: '', kind, x: 0, y: 0 }) : (spec.work ?? 0);
+  return work === 0;
+}
+
 /** A node's inlets, whichever way its spec declares them. */
 export function inletsOf(node: CircuitNode): readonly PortSpec[] {
   const spec = NODE_SPECS[node.kind];
-  return typeof spec.inlets === 'function' ? spec.inlets(node) : spec.inlets;
+  const own = typeof spec.inlets === 'function' ? spec.inlets(node) : spec.inlets;
+  if (!modulatesModes(node.kind)) return own;
+  // First, because it is the one that decides what the rest of them mean. A
+  // glow's `core` belongs to `neon` and its `away` to `band`; reading the mode
+  // after the inlets it governs is reading the answer before the question.
+  return [
+    {
+      name: MODE_INLET,
+      kind: 'n',
+      control: 'modes',
+      description: `Which mode this is in — ${(spec.modes ?? [])
+        .map((mode) => mode.name)
+        .join(', ')}. Wire a number to move between them.`,
+    },
+    ...own,
+  ];
 }
 
 /**
@@ -2580,6 +2626,44 @@ export function compileCircuit(circuit: Circuit, options: CompileOptions = {}): 
       return response ? responseGlsl(response, raw) : raw;
     }
 
+    /** Whether a cord feeds this inlet, as opposed to a number sitting on it. */
+    const driven = (inlet: string): boolean => feeds.has(portId(nodeId, inlet));
+
+    /**
+     * Every mode this node might reach, chosen between per pixel.
+     *
+     * No spec knows this is happening. `inlets` and `emit` are both functions
+     * of `node.op`, so asking one for another mode is asking it the same
+     * question with a different node — and every mode's helper is already in
+     * the shader, because the prelude is written per kind rather than per mode.
+     * So this costs the call sites and nothing else.
+     *
+     * Discrete rather than a crossfade: a `step` per boundary picks one mode
+     * and the rest contribute nothing. Dissolving between two of them is a
+     * different feature and a bigger question — a `pixelate` half-mixed with a
+     * `kaleido` is not a mode between them, it is two pictures at once.
+     *
+     * Each mode reads its own inlets. A number held on a name they share —
+     * `halo` is on all three of a glow's — is read by whichever is chosen, and
+     * one only some of them have sits at that mode's own default.
+     */
+    const acrossModes = (): Record<string, string> => {
+      const names = (spec.modes ?? []).map((mode) => mode.name);
+      const each = names.map((op) => spec.emit({ ...ctx, node: { ...subject, op } }));
+      const t = readRawAt(MODE_INLET, at);
+      const out: Record<string, string> = {};
+      for (const outlet of spec.outlets) {
+        const parts = each.map((one) => one[outlet.name]).filter((one): one is string => !!one);
+        if (parts.length === 0) continue;
+        let picked = parts[0];
+        for (let i = 1; i < parts.length; i++) {
+          picked = `mix(${picked}, ${parts[i]}, step(${(i / parts.length).toFixed(6)}, ${t}))`;
+        }
+        out[outlet.name] = picked;
+      }
+      return out;
+    };
+
     const ctx: Emitting = {
       at,
       outlet: port,
@@ -2663,7 +2747,9 @@ export function compileCircuit(circuit: Circuit, options: CompileOptions = {}): 
                   c: `fromModel${index}(${ctx.read('p')}, ${ctx.read('color-a')}, ${ctx.read('color-b')})`,
                 };
               })()
-          : spec.emit(ctx);
+          : driven(MODE_INLET)
+            ? acrossModes()
+            : spec.emit(ctx);
     open.delete(here);
 
     // A serial rather than the node's index, because one node is now several

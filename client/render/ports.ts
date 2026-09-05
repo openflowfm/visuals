@@ -50,8 +50,15 @@ export interface PortSpec extends PortDocumentation {
    * promoting a constant to an inlet changes nothing until a hand does.
    */
   fallbackInlet?: string;
-  /** A binary face control; it remains a number inlet on the wire. */
-  control?: 'toggle';
+  /**
+   * A face control that is not a fader; it remains a number inlet on the wire.
+   *
+   * `modes` is the mode chooser. Unwired, the node's `op` is the answer and the
+   * chooser sets it — one source of truth, the way a held number is the answer
+   * until a cord overrides it. Wired, the number decides and the chooser says
+   * what is driving it.
+   */
+  control?: 'toggle' | 'modes';
   /** A domain-aware readout for values whose useful meaning is not a percent. */
   display?: 'lfo-rate' | 'phase';
   /** How this inlet turns the graph's normalized number into its working domain. */

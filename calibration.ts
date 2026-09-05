@@ -243,7 +243,12 @@ function normalizedBase(target: ResponseTarget): ParameterResponse {
 }
 
 function calibratable(kind: NodeKind, inlet: PortSpec): boolean {
-  if (!CALIBRATABLE_KINDS.has(kind) || inlet.kind !== 'n' || inlet.control === 'toggle') return false;
+  // Any inlet that is not a fader has no response to calibrate: a toggle is
+  // one of two answers and a mode chooser is one of several, and neither is a
+  // curve somebody can have a preference about. Named by absence rather than by
+  // listing the controls, so the next one added is excluded by arriving.
+  if (!CALIBRATABLE_KINDS.has(kind) || inlet.kind !== 'n' || inlet.control !== undefined)
+    return false;
   // Phase is an exact normalized offset. Rate is the LFO's subjective control.
   if (kind === 'lfo' && inlet.name !== 'rate') return false;
   return true;

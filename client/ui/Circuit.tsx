@@ -521,7 +521,9 @@ export function NodeFace({
     const reading = numberReadings[id];
     const held = node.values?.[port.name];
     // A live inlet has no `at`: left alone it reads a signal, not a setting.
-    const alive = port.kind === 'n' && port.at === undefined;
+    // The mode chooser has no `at` either and is not live — its setting is the
+    // node's `op`, which is an answer rather than something it is waiting for.
+    const alive = port.kind === 'n' && port.at === undefined && port.control !== 'modes';
     // Nothing wired, nothing held — the row is showing that signal move.
     const running = alive && held === undefined && driver === undefined;
     const numberValue =
@@ -531,8 +533,32 @@ export function NodeFace({
         ? (reading?.value ??
           (port.name === 'energy' || port.fallbackInlet === 'energy' ? energy : beat()))
         : 0);
+    const modeNames = port.control === 'modes' ? modesOf(node.kind) : [];
     const number =
-      port.kind !== 'n' ? null : port.control === 'toggle' ? (
+      port.kind !== 'n' ? null : port.control === 'modes' ? (
+        /*
+          The chooser, which is what the hot-swap button in the header used to
+          be. Unwired it sets `op`, so the mode has one answer rather than a
+          string and a number disagreeing about it — the same bargain a held
+          number strikes with the cord that overrides it.
+
+          Wired, the cord decides and this goes quiet: the node is compiled with
+          every mode it can reach and picks per pixel, so a chooser claiming one
+          of them would be reporting a thing that is no longer true.
+        */
+        <Select
+          items={[...modeNames]}
+          index={Math.max(0, modeNames.indexOf(node.op ?? modeNames[0]))}
+          onChange={(i) => onChange({ op: modeNames[i] })}
+          label={`Mode of ${title}`}
+          disabled={driver !== undefined}
+          title={
+            driver !== undefined
+              ? `${port.description} — driven by ${driver}`
+              : port.description
+          }
+        />
+      ) : port.control === 'toggle' ? (
         <Toggle
           on={(driver === undefined ? numberValue : (reading?.value ?? numberValue)) >= 0.5}
           onChange={(on) => onTurn(port.name, on ? 1 : 0)}
@@ -600,7 +626,11 @@ export function NodeFace({
       // `wide` is a number's claim on the whole line. A bare name shares it
       // with an outlet on the far side; a fader cannot, and a name squeezed
       // against a moving reading is worse than a coloured dot with a tooltip.
-      wide: port.kind === 'n',
+      // A fader claims its whole line, which is what suppresses the outlet
+      // name sharing it. A chooser does not need that much room, and the mode
+      // row is the first line on every kind that has one — so taking the width
+      // would cost every such node the label on its first outlet.
+      wide: port.kind === 'n' && port.control !== 'modes',
       inlet: (
         <span className="wire">
           <Port
