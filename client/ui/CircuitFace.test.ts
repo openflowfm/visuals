@@ -149,13 +149,32 @@ describe('the node face anatomy', () => {
     expect(html).toContain('aria-valuenow="81"');
   });
 
-  it('puts a fixed mode on the title and offers hot-swap there', () => {
+  it('titles a node by its kind, with the mode beside it', () => {
+    // It used to be titled by the mode with the kind beside it at 1.51:1
+    // against the node's own ground — under a third of what small text needs —
+    // so three modes of one node read as three unrelated nodes.
     const mode = face({ id: 'w', kind: 'lfo', op: 'sine', x: 0, y: 0 });
-    expect(mode).toContain('<span class="wdg-device-name">sine</span>');
-    expect(mode).toContain('Swap sine preset');
+    expect(mode).toContain('<span class="wdg-device-name">lfo</span>');
+    expect(mode).toContain('<span class="node-mode">sine</span>');
+    // The swap reads off the title, so it names the kind whose preset changes.
+    // Which preset you are on is the label beside it, legibly, which is the
+    // whole point of the flip.
+    expect(mode).toContain('Swap lfo preset');
 
     const plain = face({ id: 'p', kind: 'point', x: 0, y: 0 });
     expect(plain).not.toContain('wdg-device-swap');
+    expect(plain).not.toContain('node-mode');
+  });
+
+  it('lets a door and a value keep the name somebody gave it', () => {
+    // A `give`'s label is what the parent face calls the port, so the two must
+    // never disagree — the kind is not the answer for these.
+    expect(face({ id: 'g', kind: 'give', op: 'number', x: 0, y: 0, label: 'pad energy' })).toContain(
+      '<span class="wdg-device-name">pad energy</span>',
+    );
+    expect(face({ id: 'v', kind: 'value', x: 0, y: 0, label: 'wash' })).toContain(
+      '<span class="wdg-device-name">wash</span>',
+    );
   });
 
   it('offers on and off on every node but the destination', () => {
@@ -180,7 +199,7 @@ describe('the node face anatomy', () => {
     // A source has nothing to pass through and is still switchable: off means
     // it gives nothing, and the canvas says the flow stopped reaching out.
     const source = face({ id: 's', kind: 'source', op: 'plasma', x: 0, y: 0 });
-    expect(source).toContain('aria-label="plasma active"');
+    expect(source).toContain('aria-label="source active"');
 
     // The destination is where a flow ends rather than something it does, and
     // a dead one is a black screen with no way to read why.

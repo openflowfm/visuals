@@ -331,7 +331,7 @@ export function NodeFace({
       (door): PortSpec => ({ name: door.name, kind: door.kind, description: door.description }),
     ) ?? []),
   ];
-  const title = faceName(node, spec.name, flows);
+  const title = faceTitle(node, spec.name, flows);
   const previewed = previewOutletOf(circuit, node.id)?.name;
   const targets = tracks.length > 0 ? tracks : ['master'];
   const mediaType = spec.asset;
@@ -453,12 +453,12 @@ export function NodeFace({
    * instance badge, and it is the answer to a `flow` node having been
    * indistinguishable from a `source` in the drawer it used to share.
    */
-  const kindLabel =
+  const modeLabel =
     node.kind === 'flow' ? (
-      <span className="node-kind is-flow">◈ flow</span>
-    ) : title === spec.name ? null : (
-      <span className="node-kind">{spec.name}</span>
-    );
+      <span className="node-mode is-flow">◈ flow</span>
+    ) : node.op && modesOf(node.kind).length > 0 ? (
+      <span className="node-mode">{node.op}</span>
+    ) : null;
 
   /**
    * The way *in*, which the canvas has never had.
@@ -738,9 +738,9 @@ export function NodeFace({
       onHotSwap={spec.modes && onSwap ? () => onSwap(node.id, node.kind) : undefined}
       {...power}
       headerEnd={
-        kindLabel || enterButton || deleteButton ? (
+        modeLabel || enterButton || deleteButton ? (
           <>
-            {kindLabel}
+            {modeLabel}
             {enterButton}
             {deleteButton}
           </>
@@ -849,5 +849,32 @@ function faceName(
   if (node.kind === 'flow') return flows?.find((each) => each.id === node.op)?.def.name ?? 'flow';
   const modes = modesOf(node.kind);
   if (modes.length > 0) return node.op || modes[0] || fallback;
+  return fallback;
+}
+
+/**
+ * What a node calls itself on the canvas: its kind.
+ *
+ * Not the same question as `faceName`, which answers *what is this signal* for
+ * the label on an inlet — and there the mode is the informative half, because
+ * `← pulse` tells two LFOs apart and `← lfo` does not.
+ *
+ * On the face it is the other way round. A node used to be titled by its mode
+ * with the kind beside it at 1.51:1 against the node's own ground, under a
+ * third of the 4.5:1 that small text needs, so `neon`, `soft` and `band` read
+ * as three unrelated nodes rather than three settings of a `glow`. The kind is
+ * the title now and the mode sits beside it, legibly.
+ *
+ * A door and a value keep their own label: `pad energy` on a `give` is what the
+ * parent face will call the port, and the two must never disagree.
+ */
+function faceTitle(
+  node: CircuitNode,
+  fallback: string,
+  flows?: readonly { id: string; def: FlowDef }[],
+): string {
+  if (node.kind === 'value' || node.kind === 'take' || node.kind === 'give' || node.kind === 'flow') {
+    return faceName(node, fallback, flows);
+  }
   return fallback;
 }

@@ -151,15 +151,15 @@
   --wdg-plate-head: #2a2113;
 }
 
-.node-kind {
+.node-mode {
   overflow: hidden;
-  color: var(--idle);
-  font-size: var(--text-annot);
+  color: var(--wdg-text);
+  font-size: var(--text-label);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.node-kind.is-flow {
+.node-mode.is-flow {
   color: var(--amber);
   letter-spacing: var(--track-slight);
 }
