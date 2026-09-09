@@ -200,7 +200,7 @@ kbd {
   margin-left: auto;
   padding: 1px 7px;
   border: 1px solid var(--wdg-edge, #2c2c31);
-  border-radius: 3px;
+  border-radius: var(--radius);
   background: none;
   color: inherit;
   font: inherit;
