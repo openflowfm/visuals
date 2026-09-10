@@ -13,7 +13,7 @@ generateNodes();
 // a separate build from `set/` because it is a separate app on a separate
 // machine — nothing here ships inside the device.
 //
-// The dev port and the server port are both `desktop/src/apps.ts`, which is the
+// The dev port and the server port are both `@openflow/desktop/apps.ts`, which is the
 // same registry the app's own main process reads — the two used to be restated
 // in both files and had no way of disagreeing loudly. A worktree that moves
 // OPENFLOW_PORT_BASE takes every dev server with it; the offsets are in

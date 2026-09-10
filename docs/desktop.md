@@ -2,7 +2,7 @@
 
 `visuals/electron/main.ts`, `visuals/electron/preload.ts`, `visuals/client/state/useWall.ts`,
 and — for the window, the state directory, the updater and the supervision itself —
-[`@openflow/desktop`](../../desktop/README.md).
+[`@openflow/desktop`](https://github.com/openflowfm/desktop/blob/main/README.md).
 
 Three things are only true of this app, and they are what is left in its `main.ts`: it owns
 a server, it must not be throttled, and it opens second windows onto projectors. Everything
@@ -15,7 +15,7 @@ points it at vite so renderer edits arrive through HMR.
 ## The server is a child, not this process
 
 The whole argument, the restart policy, the readiness wait and the three things that bite at
-the worst time are [`desktop/docs/server.md`](../../desktop/docs/server.md) — this is the app
+the worst time are [`desktop/docs/server.md`](https://github.com/openflowfm/desktop/blob/main/docs/server.md) — this is the app
 the code was lifted from, and it is still the only one with a backend of its own.
 
 Two things it says that are worth repeating here. **The reason the server was originally
@@ -76,7 +76,7 @@ window sitting behind the console is exactly that. Electron is the same Chromium
 the same thing. So this app says it twice — `switches(app)` for the three process-wide
 command line switches, and `throttle: false` on every window — and it is the only app here
 that says either. Both halves are needed;
-[`desktop/docs/window.md`](../../desktop/docs/window.md) has the mechanism.
+[`desktop/docs/window.md`](https://github.com/openflowfm/desktop/blob/main/docs/window.md) has the mechanism.
 
 Forget them and the symptom is a projector that stutters whenever somebody brings another
 window to the front — which is a thing that happens constantly, and reads as a bug in the
@@ -146,7 +146,7 @@ and why editing one wants care.
 
 Everything else about the bundle — `asar: false`, signing, notarisation, and what this app's
 own `electron-builder.yml` still has to say for itself — is
-[`desktop/docs/packaging.md`](../../desktop/docs/packaging.md). This app's config adds three
+[`desktop/docs/packaging.md`](https://github.com/openflowfm/desktop/blob/main/docs/packaging.md). This app's config adds three
 things to the shared base: `server.mjs`, the addon and the two packages that resolve it, and
 the `NSLocalNetworkUsageDescription` string macOS puts in front of Link's UDP multicast.
 Without that string the prompt still appears, worded by the system and explaining nothing —

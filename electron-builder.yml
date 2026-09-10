@@ -1,8 +1,8 @@
 # visual[flow], packaged. `npm run pack:visuals`.
 #
-# The shape is `desktop/electron-builder.base.yml`, plus the one thing this app
+# The shape is `@openflow/desktop/electron-builder.base.yml`, plus the one thing this app
 # has and the others do not: a server, and a native addon under it.
-extends: ../desktop/electron-builder.base.yml
+extends: ../node_modules/@openflow/desktop/electron-builder.base.yml
 
 appId: com.openflow.visuals
 productName: visual[flow]
