@@ -41,7 +41,7 @@ export interface NumberReading {
 /**
  * An effect, wired.
  *
- * The first host of [`widgets`' `Graph`](../../../widgets/docs/graph.md), and
+ * The first host of [`widgets`' `Graph`](https://github.com/openflowfm/widgets/blob/main/docs/graph.md), and
  * the thing that module was built without knowing about. Everything about a
  * circuit that is *this app's* — what a port carries, which cords are legal,
  * where a node may go — lives here; the canvas contributes pan, zoom, dragging
