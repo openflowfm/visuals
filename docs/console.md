@@ -417,3 +417,14 @@ picture you click to promote it, which reports that it happened and leaves no va
 `console.css` names those three selectors rather than carrying a blanket rule on `button` —
 a blanket rule outranks `.wdg-toggle-body` on specificity and would quietly redraw any widget
 dropped near it.
+
+## Pointing for screenshots
+
+The shared `@openflow/widgets/controls/Pointing.tsx` pointer button sits with the
+header's settings/utility controls (beside Debug and Settings in mix). It lights while
+active; **Clear** appears alongside it and resets annotation letters to A. It works
+identically in the browser harness and packaged Electron app. No hotkeys, native menu,
+preload integration, audio state, or application subscriptions are involved. Each
+clicked control receives a letter and colored outline while its normal action still
+runs. The pointing controls themselves are excluded. Turning off or unmounting clears
+the marks. The DOM engine and control behavior are owned and tested by Widgets.

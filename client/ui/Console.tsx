@@ -1,3 +1,4 @@
+import { Pointing } from '@openflow/widgets/controls/Pointing.tsx';
 import { useEffect, useState } from 'react';
 import type {
   CalibrationState,
@@ -262,6 +263,7 @@ export function Console({
         {view === 'build' && (
           <PreviewControls room={room} transport={transport} canFollow={canFollow} />
         )}
+        <Pointing />
         <Button tone="quiet" label="Close console" onPress={onClose}>
           ×
         </Button>
