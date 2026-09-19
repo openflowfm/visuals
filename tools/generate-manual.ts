@@ -135,7 +135,7 @@ const render = (catalog: Catalog): string => {
     "> shows on the node. Editing this page by hand edits a copy; run `npm run dev:node-manual`",
     '> in the repo instead.',
     '',
-    '[Visuals](Visuals) is the page to read first: what a flow is, how you wire one, and how',
+    '[Home](Home) is the page to read first: what a flow is, how you wire one, and how',
     'a set becomes a show. This is the reference you come back to.',
     '',
     '## The three signals',
