@@ -63,7 +63,7 @@
     "@types/ws": "^8.5.13",
     "@vitejs/plugin-react": "^6.1.1",
     "@vitest/coverage-v8": "5.0.0",
-    "@vitest/ui": "5.0.0",
+    "@vitest/ui": "5.0.1",
     "concurrently": "^10.0.5",
     "electron": "44.2.0",
     "electron-builder": "26.15.3",
