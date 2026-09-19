@@ -1,5 +1,5 @@
 {
-  "extends": "../tsconfig.base.json",
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "module": "ESNext",
     "moduleResolution": "bundler",
@@ -20,7 +20,7 @@
     "server",
     "mcp",
     "tools",
-    "../node_modules/@openflow/protocol/global.d.ts",
-    "../types/assets.d.ts"
+    "node_modules/@openflow/protocol/global.d.ts",
+    "types/assets.d.ts"
   ]
 }

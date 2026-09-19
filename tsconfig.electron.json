@@ -1,5 +1,5 @@
 {
-  "extends": "../tsconfig.base.json",
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "module": "ESNext",
     "moduleResolution": "Bundler",
@@ -8,5 +8,5 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "include": ["electron/**/*.ts", "protocol.ts", "../node_modules/@openflow/protocol/global.d.ts"]
+  "include": ["electron/**/*.ts", "protocol.ts", "node_modules/@openflow/protocol/global.d.ts"]
 }

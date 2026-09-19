@@ -12,7 +12,6 @@ generateNodes();
 // renders a component, and it has no business inside `visuals/dist`.
 export default defineConfig({
   root: here,
-  cacheDir: path.resolve(here, '../node_modules/.vite/visuals-frames'),
   build: {
     outDir: path.resolve(here, 'frames-dist'),
     emptyOutDir: true,

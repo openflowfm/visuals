@@ -13,6 +13,27 @@ Live ─ SessionBridge :17800 ─WS─> visuals backend :17900 ─WS─> Electro
                                      Ableton Link  <──── Live's Link session
 ```
 
+## Standalone
+
+This repo builds and runs on its own — it needs no checkout of better-session-view.
+
+```sh
+git clone https://github.com/openflowfm/visuals.git
+cd visuals
+npm ci
+npm start       # build, run the server, open the app
+npm run watch   # the dev server and the window, together — the one to type while working
+npm run pack    # the signed, packaged .app and .dmg
+```
+
+The one thing it still borrows from better-session-view is the bridge: **SessionBridge**,
+the Max for Live device that reads a Live set and serves it over WebSocket on port 17800.
+That device — and Live itself — are not part of this repo. Point this app at wherever the
+bridge is running with `OPENFLOW_BRIDGE_WS` (default `ws://127.0.0.1:17800/ws`), or use
+`npm run dev:fake-live` to work without Ableton at all. See
+[better-session-view](https://github.com/ryangavin/better-session-view) for the bridge
+itself, and [the harness](docs/harness.md) for working without one.
+
 ## Where the reasoning lives
 
 **Read the row you need, not the set.**
@@ -53,31 +74,29 @@ configured for it to draw a show.
 ## Running it
 
 ```sh
-npm run visuals            # a show night: build, run the server, open the app — see docs/desktop.md
-npm --prefix visuals run show       # the same, in a dedicated Chrome instead of the app
-npm --prefix visuals run benchmark  # every flow, as fast as this machine draws it — docs/engine.md
-npm run dev              # every server in the repo at once, this app's window included
-npm run dev:visuals      # just this app: its vite server and its window, one command
-npm run dev:visuals-ui   # the renderer with HMR alone, :5473, proxying /ws to the server
-npm run dev:visuals-app  # the window alone, when vite is already running
-npm run dev:visuals-server  # the server alone: Link peer + bridge client + host, :17900
-npm run build:visuals    # the renderer into visuals/dist, which the server serves
-npm run dev:fake-live    # a bridge that isn't one, for working without Ableton
-npm --prefix visuals run mcp  # local stdio server for agent-authored flows and nodes
+npm start           # a show night: build, run the server, open the app — see docs/desktop.md
+npm run show        # the same, in a dedicated Chrome instead of the app
+npm run benchmark   # every flow, as fast as this machine draws it — docs/engine.md
+npm run watch       # the dev server and the window, together — the one to type while working
+npm run dev         # the window alone, when vite is already running
+npx vite --config vite.config.ts  # the renderer with HMR alone, :5473, proxying /ws to the server
+npm run build       # the renderer into dist/, which the server serves
+npm run dev:fake-live  # a bridge that isn't one, for working without Ableton
+npm run mcp         # local stdio server for agent-authored flows and nodes
 ```
 
-`npm run dev` opens the Electron window itself; `:5473` is the HMR page it loads. Open
+`npm run watch` opens the Electron window itself; `:5473` is the HMR page it loads. Open
 `http://localhost:17900` only for the built browser renderer.
 
-`npm run dev` runs vite alongside the bridge and `set/`, then launches the real visuals
-Electron shell. The shell supervises its own backend exactly as it does in production;
-vite proxies `/ws` and `/media` to that local child. The stack uses `concurrently -k`, so a
-port already in use takes the whole dev session down with it — if it dies on startup, look
-for a visuals app or standalone `dev:visuals-server` you left running.
+`npm run watch` runs vite alongside the real visuals Electron shell. The shell supervises
+its own backend exactly as it does in production; vite proxies `/ws` and `/media` to that
+local child. It runs under `concurrently -k`, so vite exiting takes the window with it, and
+a window that cannot open takes vite with it — if it dies on startup, look for a visuals app
+or a standalone server you left running.
 
-**That `-k` is why `npm run visuals` exists.** Ten dev processes where any one exiting kills
-the other nine is right for a dev loop and wrong for a gig: a watcher falling over would
-take the wall with it. It builds `dist/`, runs the server as a supervised child, and opens
+**That is why `npm start` exists for a show.** Two processes where either exiting kills the
+other is right for a dev loop and wrong for a gig: a watcher falling over would take the
+wall with it. `npm start` builds `dist/`, runs the server as a supervised child, and opens
 the rig in a window of its own — see [the desktop app](docs/desktop.md). It also settles
 which URL a projector gets: the app is on the built bundle, where `:5473` has HMR attached
 and reloads the wall on every save.

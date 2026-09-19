@@ -1,0 +1,11 @@
+node_modules/
+dist/
+electron/dist/
+release/
+scheme.json
+bench-dist/
+frames-dist/
+frames-out/
+coverage/
+report/
+.DS_Store

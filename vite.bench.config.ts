@@ -16,7 +16,6 @@ generateNodes();
 // night and a benchmark has no business inside it.
 export default defineConfig({
   root: here,
-  cacheDir: path.resolve(here, '../node_modules/.vite/visuals-bench'),
   build: {
     outDir: path.resolve(here, 'bench-dist'),
     emptyOutDir: true,
