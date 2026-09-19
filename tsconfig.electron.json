@@ -8,5 +8,5 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "include": ["electron/**/*.ts", "protocol.ts", "../protocol/global.d.ts"]
+  "include": ["electron/**/*.ts", "protocol.ts", "../node_modules/@openflow/protocol/global.d.ts"]
 }

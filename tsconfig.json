@@ -20,7 +20,7 @@
     "server",
     "mcp",
     "tools",
-    "../protocol/global.d.ts",
+    "../node_modules/@openflow/protocol/global.d.ts",
     "../types/assets.d.ts"
   ]
 }
