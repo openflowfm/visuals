@@ -52,6 +52,7 @@ itself, and [the harness](docs/harness.md) for working without one.
 | [the harness](docs/harness.md) | working on this with no Ableton, and the Link safety rule | `tools/fake-live.ts` |
 | [the desktop app](docs/desktop.md) | the window, the wall on a projector, the display list, why the server is a child process | `electron/main.ts`, `electron/preload.ts`, `client/state/useWall.ts` |
 | [agent authoring](docs/mcp.md) | the MCP tools for reading nodes, validating and saving flows, and reviewing node designs | `mcp/*` |
+| [storybook](docs/storybook.md) | looking at a piece of the console on its own, and keeping a small experiment | `.storybook/*`, `client/**/*.stories.tsx`, `stories/*` |
 
 ## The one idea
 
@@ -83,6 +84,7 @@ npx vite --config vite.config.ts  # the renderer with HMR alone, :5473, proxying
 npm run build       # the renderer into dist/, which the server serves
 npm run dev:fake-live  # a bridge that isn't one, for working without Ableton
 npm run mcp         # local stdio server for agent-authored flows and nodes
+npm run storybook   # the console's components and the kept experiments, on their own — :5573
 ```
 
 The user manual is [the wiki](https://github.com/openflowfm/visuals/wiki). Its

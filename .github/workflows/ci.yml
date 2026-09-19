@@ -34,6 +34,9 @@ jobs:
       # present on ubuntu-latest) — see `tools/build-link.ts`.
       - run: npm ci
 
+      # The stories project renders every story in headless Chromium.
+      - run: npx playwright install --with-deps chromium
+
       - run: npm run typecheck
 
       # Coverage rather than a plain run: same tests, V8's own counters, and a
@@ -56,6 +59,10 @@ jobs:
       # remembered. A clean checkout is the only place it's honestly tested —
       # a file that's untracked but imported passes locally and fails here.
       - run: npm run build
+
+      # The stories, built rather than only typechecked: a story that imports
+      # something only the app's Vite config can resolve fails here and nowhere else.
+      - run: npm run build:storybook
 
       # Compile the Electron bundle on Linux. Packaging, signing and
       # notarising the macOS app stay in release.yml, on macOS.

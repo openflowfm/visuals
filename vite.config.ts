@@ -17,7 +17,7 @@ generateNodes();
 // same registry the app's own main process reads — the two used to be restated
 // in both files and had no way of disagreeing loudly. A worktree that moves
 // OPENFLOW_PORT_BASE takes every dev server with it; the offsets are in
-// widgets/docs/bench.md.
+// widgets/docs/storybook.md.
 const PORT = uiPort(APPS.visuals);
 const SERVER = process.env.OPENFLOW_VISUALS || `http://127.0.0.1:${serverPort(APPS.visuals)}`;
 

@@ -20,6 +20,8 @@
     "server",
     "mcp",
     "tools",
+    "stories",
+    ".storybook",
     "node_modules/@openflow/protocol/global.d.ts",
     "types/assets.d.ts"
   ]

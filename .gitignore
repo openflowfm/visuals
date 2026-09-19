@@ -4,6 +4,7 @@ electron/dist/
 release/
 scheme.json
 bench-dist/
+storybook-static/
 frames-dist/
 frames-out/
 coverage/

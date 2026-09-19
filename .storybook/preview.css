@@ -1,0 +1,76 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-variation-settings: var(--sans-axes);
+}
+
+/* The console's rules without the console's frame. */
+.console.sb-console {
+  position: static;
+  inset: auto;
+  display: block;
+  overflow: visible;
+  background: transparent;
+}
+
+/* The boundary is a full-window sheet in the app; in a story it is a card. */
+.sb-console .boundary {
+  position: relative;
+  inset: auto;
+  min-height: 180px;
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-md);
+}
+
+/* The card an experiment sits in, and the sentence under it. */
+.sb-note {
+  margin: 12px 0 0;
+  max-width: 70ch;
+  color: var(--caption);
+  font-size: var(--text-body);
+  line-height: 1.5;
+}
+
+.swatch-row {
+  display: grid;
+  grid-template-columns: 7em repeat(5, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.swatch-row-name {
+  color: var(--ui);
+  font-variation-settings: var(--mono-axes);
+  font-size: var(--text-body);
+}
+
+.swatch {
+  display: flex;
+  align-items: flex-end;
+  height: 44px;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  color: rgb(0 0 0 / 0.7);
+  font-size: var(--text-label);
+  font-variation-settings: var(--mono-axes);
+}
+
+.swatch-hex {
+  color: var(--caption);
+  font-variation-settings: var(--mono-axes);
+  font-size: var(--text-label);
+}
+
+/* app.css locks the window for the stage; a story page scrolls. */
+html,
+body {
+  height: auto;
+  overflow: auto;
+}
