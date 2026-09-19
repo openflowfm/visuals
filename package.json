@@ -71,7 +71,7 @@
     "happy-dom": "^20.14.0",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
-    "vitest": "5.0.0"
+    "vitest": "5.0.1"
   },
   "allowScripts": {
     "github:openflowfm/desktop#ff1b05d0f003281c0f3a10e1c096926719cc4285": true,
