@@ -28,15 +28,6 @@ body {
   border-radius: var(--radius-md);
 }
 
-/* The card an experiment sits in, and the sentence under it. */
-.sb-note {
-  margin: 12px 0 0;
-  max-width: 70ch;
-  color: var(--caption);
-  font-size: var(--text-body);
-  line-height: 1.5;
-}
-
 .swatch-row {
   display: grid;
   grid-template-columns: 7em repeat(5, 1fr) auto;

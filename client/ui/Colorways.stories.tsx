@@ -1,26 +1,52 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useState } from 'react';
+import { useArgs } from 'storybook/preview-api';
+import { fn } from 'storybook/test';
 import { Colorways } from './Colorways.tsx';
 import type { Scheme } from '../../protocol.ts';
 import { SCHEME } from '../../stories/fixtures.ts';
 
-/** The editor holding its own scheme, so a deal or a rename lands somewhere. */
-function Editing({ scheme: initial, current }: { scheme: Scheme; current: string | null }) {
-  const [scheme, setScheme] = useState(initial);
-  return <Colorways scheme={scheme} edit={setScheme} current={current} />;
-}
+type Args = { scheme: Scheme; edit(next: Scheme): void; current: string | null };
+
+/** The editor with its scheme arg live, so a deal or a rename lands back in the controls. */
+const live = (args: Args) => {
+  const [, setArgs] = useArgs<Args>();
+  return (
+    <Colorways
+      {...args}
+      edit={(next) => {
+        args.edit(next);
+        setArgs({ scheme: next });
+      }}
+    />
+  );
+};
 
 const meta = {
   title: 'UI/Colorways',
   component: Colorways,
   tags: ['autodocs'],
-} satisfies Meta;
+  render: live,
+  args: { scheme: SCHEME, edit: fn(), current: 'neon' },
+  argTypes: {
+    current: { control: 'text' },
+    scheme: { control: 'object' },
+    // The story wires this one itself, to write the edit back into `scheme`.
+    edit: { control: false },
+  },
+  parameters: {
+    docs: {
+      description: {
+        component:
+          'The colourway editor on its own: a library of palettes, each row re-dealable and renameable. Editing writes the scheme back to the controls, so the panel and the canvas stay the same story.',
+      },
+    },
+  },
+} satisfies Meta<typeof Colorways>;
 
 export default meta;
-type Story = StoryObj;
+type Story = StoryObj<typeof meta>;
 
 export const Library: Story = {
-  render: () => <Editing scheme={SCHEME} current="neon" />,
   parameters: {
     docs: {
       description: {
@@ -32,12 +58,10 @@ export const Library: Story = {
 };
 
 export const One: Story = {
-  render: () => (
-    <Editing
-      scheme={{ ...SCHEME, colorways: { dawn: SCHEME.colorways.dawn }, moods: {} }}
-      current={null}
-    />
-  ),
+  args: {
+    scheme: { ...SCHEME, colorways: { dawn: SCHEME.colorways.dawn }, moods: {} },
+    current: null,
+  },
   parameters: {
     docs: {
       description: {

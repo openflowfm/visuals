@@ -17,17 +17,26 @@ const meta = {
   title: 'UI/Boundary',
   component: Boundary,
   tags: ['autodocs'],
-} satisfies Meta;
+  args: { what: 'the designer', quiet: false, children: <Fragile /> },
+  argTypes: {
+    what: { control: 'text' },
+    quiet: { control: 'boolean' },
+    children: { control: false },
+  },
+  parameters: {
+    docs: {
+      description: {
+        component:
+          'The error boundary with something fragile inside it: press the button and the child throws. `what` names what stopped and `quiet` decides whether anything is drawn at all.',
+      },
+    },
+  },
+} satisfies Meta<typeof Boundary>;
 
 export default meta;
-type Story = StoryObj;
+type Story = StoryObj<typeof meta>;
 
 export const Loud: Story = {
-  render: () => (
-    <Boundary what="the designer">
-      <Fragile />
-    </Boundary>
-  ),
   parameters: {
     docs: {
       description: {
@@ -39,13 +48,7 @@ export const Loud: Story = {
 };
 
 export const Quiet: Story = {
-  render: () => (
-    <div style={{ minHeight: 120, border: '1px dashed var(--bd3)', padding: 12 }}>
-      <Boundary what="the renderer" quiet>
-        <Fragile />
-      </Boundary>
-    </div>
-  ),
+  args: { what: 'the renderer', quiet: true },
   parameters: {
     docs: {
       description: {
