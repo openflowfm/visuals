@@ -7,9 +7,9 @@
 // shows those sentences on the node — so the manual page is a rendering of
 // them rather than a second set of words that can disagree with the first.
 //
-//   node visuals/tools/generate-manual.ts            writes wiki/Nodes.md
-//   node visuals/tools/generate-manual.ts --check    fails if it is stale
-//   node visuals/tools/generate-manual.ts --stdout   prints it instead
+//   node tools/generate-manual.ts            writes visuals.wiki/Nodes.md
+//   node tools/generate-manual.ts --check    fails if it is stale
+//   node tools/generate-manual.ts --stdout   prints it instead
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -18,9 +18,9 @@ import { nodeCatalog } from '../mcp/authoring.ts';
 import { MAX_SHADER_WORK } from '../client/render/circuit.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-// `wiki/` is a sibling of the repo root, not a folder inside it — the checkout
+// `visuals.wiki/` is a sibling of the repo root, not a folder inside it — the checkout
 // of this repo's own GitHub wiki.
-const page = path.resolve(here, '../../wiki/Nodes.md');
+const page = path.resolve(here, '../../visuals.wiki/Nodes.md');
 
 type Catalog = ReturnType<typeof nodeCatalog>;
 type Node = Catalog[number];
@@ -181,13 +181,13 @@ if (process.argv.includes('--stdout')) {
 } else if (process.argv.includes('--check')) {
   const held = fs.existsSync(page) ? fs.readFileSync(page, 'utf8') : '';
   if (held !== text) {
-    console.error('wiki/Nodes.md is stale; run npm run dev:node-manual');
+    console.error('visuals.wiki/Nodes.md is stale; run npm run dev:node-manual');
     process.exit(1);
   }
-  console.log('wiki/Nodes.md is current.');
+  console.log('visuals.wiki/Nodes.md is current.');
 } else {
   if (!fs.existsSync(path.dirname(page))) {
-    console.error(`no wiki checkout at ${path.dirname(page)} — clone the visuals wiki beside this repo`);
+    console.error(`no wiki checkout at ${path.dirname(page)} — git clone git@github.com:openflowfm/visuals.wiki.git beside this repo`);
     process.exit(1);
   }
   fs.writeFileSync(page, text);

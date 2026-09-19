@@ -20,7 +20,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
  *
  * ```sh
  * npm run dev:fake-live                     # :17801
- * OPENFLOW_BRIDGE_WS=ws://127.0.0.1:17801/ws npm run dev:visuals
+ * OPENFLOW_BRIDGE_WS=ws://127.0.0.1:17801/ws npm run watch
  * ```
  *
  * Port 17801 and not 17800, deliberately: the real device may well be running,

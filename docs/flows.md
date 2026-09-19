@@ -326,7 +326,7 @@ folder. The descriptor owns the stable kind, browser family, order, and whether 
 addable, belongs on the flow shelf, or is fixed in every graph. `tools/generate-nodes.ts`
 discovers those folders and writes `client/nodes/generated.ts`, whose static imports work in
 both the Vite browser bundle and the raw Node MCP server. Vite refreshes it at startup,
-`npm --prefix visuals run mcp` refreshes it before serving, and `nodes:check` plus the
+`npm run mcp` refreshes it before serving, and `nodes:check` plus the
 manifest test make a forgotten generated update fail rather than silently hiding a node.
 
 `NodeKind`, the family lists, browser placement, browser order, protocol validation, and the

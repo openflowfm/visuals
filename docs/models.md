@@ -231,8 +231,8 @@ presenting the synthetic capsule as the product's model vocabulary:
 Install the assets, five setups, local override and four-flow scheme explicitly:
 
 ```sh
-npm --prefix visuals run model:showcase -- --install
-npm run visuals
+npm run model:showcase -- --install
+npm start
 ```
 
 The authoring command downloads the upstream GLBs, verifies pinned SHA-256 digests, and imports
@@ -257,9 +257,9 @@ equal-radius capsule-meridian nodes and materials, a named animation, camera and
 it, or install the complete reusable setup and two-instance scheme:
 
 ```sh
-npm --prefix visuals run model:xenon
-npm --prefix visuals run model:proof -- --install
-npm run visuals
+npm run model:xenon
+npm run model:proof -- --install
+npm start
 ```
 
 The install command is additive: it writes the `xenon-60-model-proof` setup and scheme in the

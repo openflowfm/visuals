@@ -231,7 +231,7 @@ the library remembers which scheme is open, so a restart reopens the show you we
 paths are `home.ts`'s business: `OPENFLOW_HOME` moves the `~/.openflow` root wholesale,
 `OPENFLOW_VISUALS_SCHEME` pins one exact file and turns the library off, and a scheme from
 before the library — the single
-`~/.openflow/visuals/scheme.json`, or the `visuals/scheme.json` beside the code before
+`~/.openflow/visuals/scheme.json`, or the `scheme.json` beside the code before
 that — is adopted as `main`, copied once, the first time anything resolves it.
 
 **An edit is not a save.** Every gesture in the editor reaches every screen immediately —

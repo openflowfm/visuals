@@ -35,7 +35,7 @@ export function Wiring({
       name: 'server',
       value: online ? 'up' : 'not running',
       tone: online ? 'good' : 'bad',
-      title: 'This app’s own server — run npm run dev:visuals',
+      title: 'This app’s own server — run npm run watch',
     },
     {
       name: 'bridge',

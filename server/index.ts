@@ -191,7 +191,7 @@ function serve(req: http.IncomingMessage, res: http.ServerResponse): void {
   const target = path.join(ROOT, rel);
   if (!fs.existsSync(target)) {
     res.writeHead(503, { 'content-type': 'text/plain; charset=utf-8' });
-    res.end('The renderer is not built. Run: npm run build:visuals\nOr use the dev server.');
+    res.end('The renderer is not built. Run: npm run build\nOr use the dev server.');
     return;
   }
   res.writeHead(200, { 'content-type': TYPES[path.extname(target)] ?? 'application/octet-stream' });
@@ -912,7 +912,7 @@ const cannotListen = (err: NodeJS.ErrnoException) => {
       `visuals: port ${PORT} is already in use — something else is on it.\n` +
         `visuals: usually a visuals app or npm run dev left running from an earlier session.\n` +
         `visuals: find it with  lsof -nP -iTCP:${PORT} -sTCP:LISTEN\n` +
-        `visuals: or run this one elsewhere with  OPENFLOW_VISUALS_PORT=17901 npm run dev:visuals-server`,
+        `visuals: or run this one elsewhere with  OPENFLOW_VISUALS_PORT=17901 npm run server`,
     );
   } else {
     console.error(`visuals: could not listen on ${HOST}:${PORT} — ${err.message}`);
@@ -920,7 +920,7 @@ const cannotListen = (err: NodeJS.ErrnoException) => {
   link.stop();
   scheme.stop();
   bridge.close();
-  // 2 rather than 1, so `npm run visuals` can tell a failure that waiting fixes
+  // 2 rather than 1, so `npm start` can tell a failure that waiting fixes
   // from one that it never will. Nothing frees a port by trying again.
   process.exit(2);
 };
@@ -976,7 +976,7 @@ server.listen(PORT, HOST, () => {
   if (stale) {
     console.warn(
       `visuals: ⚠ the renderer in dist/ is ${stale} older than its source.\n` +
-        `visuals: ⚠ what the browser gets is that build, not this code — run: npm run build:visuals`,
+        `visuals: ⚠ what the browser gets is that build, not this code — run: npm run build`,
     );
   }
 });

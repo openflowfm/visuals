@@ -1,15 +1,15 @@
 # The desktop app
 
-`visuals/electron/main.ts`, `visuals/electron/preload.ts`, `visuals/client/state/useWall.ts`,
+`electron/main.ts`, `electron/preload.ts`, `client/state/useWall.ts`,
 and — for the window, the state directory, the updater and the supervision itself —
 [`@openflow/desktop`](https://github.com/openflowfm/desktop/blob/main/README.md).
 
 Three things are only true of this app, and they are what is left in its `main.ts`: it owns
 a server, it must not be throttled, and it opens second windows onto projectors. Everything
-else is shared with set[flow] and with every app after it.
+else is shared with the other open[flow] apps through that package.
 
-`npm run visuals` builds the renderer, starts the server, and opens the rig in a window it
-owns. It is the show-night command. `npm run dev` opens the same shell automatically, but
+`npm start` builds the renderer, starts the server, and opens the rig in a window it
+owns. It is the show-night command. `npm run watch` opens the same shell automatically, but
 points it at vite so renderer edits arrive through HMR.
 
 ## The server is a child, not this process
@@ -25,7 +25,7 @@ package wraps Link with node-addon-api, which is N-API, whose entire purpose is 
 holds across both. So hosting it in-process is available if a reason ever appears; the three
 reasons in that doc are why it has not. And **`OPENFLOW_VISUALS_DIST` is how the bundled
 server finds the renderer**, because it otherwise works its own location out from
-`import.meta.url`, which no longer sits one hop from `visuals/dist` once it is bundled.
+`import.meta.url`, which no longer sits one hop from `dist` once it is bundled.
 
 `OPENFLOW_VISUALS_HOST` defaults to `127.0.0.1` here: an app-owned backend serves this app,
 not the LAN, and its console and wall are on the same machine, so advertising an
@@ -36,7 +36,7 @@ path.
 ## Windows, and the one that matters
 
 In production the console window loads `http://localhost:17900`. There is no custom scheme
-here, unlike set[flow], because the server is already serving `visuals/dist` at a stable
+here, unlike set[flow], because the server is already serving `dist` at a stable
 origin — `location.host` works, `/media/*` works, and the `localStorage` that holds the
 keystone corners is on the same origin a browser would have used. In development it loads
 vite on `:5473`; vite owns HMR and proxies socket and media requests to the app's child.
@@ -67,7 +67,7 @@ There is no question to answer now.
 `survey()` branches on the presence of the bridge and falls through to the browser path
 otherwise. **The browser path is not deprecated** — it is what a second machine runs, which
 is the arrangement `README.md` says this rig was always meant for, and it is still reachable
-as `npm run visuals:browser`.
+as `npm run show`.
 
 ## Throttling, which is the easiest thing to get wrong
 
@@ -84,11 +84,10 @@ renderer.
 
 ## The dev loop, in this window
 
-`npm run dev:visuals` is the one to type: it starts vite and opens this shell on `:5473`,
+`npm run watch` is the one to type: it starts vite and opens this shell on `:5473`,
 so an edit to a shader, node or component lands in the real Electron window with React Fast
-Refresh intact. `npm run dev` does the same alongside every other server in the repo, and
-`npm run dev:visuals-app` is the narrower command when vite is already running. `npm run
-visuals` is a rebuild and relaunch, which is right for checking what ships and wrong for the
+Refresh intact. `npm run dev` is the narrower command when vite is already running. `npm
+start` is a rebuild and relaunch, which is right for checking what ships and wrong for the
 twenty edits before it.
 
 **The app starts and supervises the backend in dev too.** The old stack started
@@ -119,30 +118,22 @@ exactly that is the point.
 
 ## Packaging
 
-`npm run pack:visuals` builds the renderer, the shell, an icon, and a `.app` plus a `.dmg`
-under `release/visuals/`. `npm run pack` does every app.
-
-`npm run install:apps` copies what that produced into `/Applications/open[flow]`, or
-`install:apps visuals` for this one alone. It replaces rather than merges, refuses while the
-app is open, and takes `OPENFLOW_APPS` for a machine where `/Applications` is not yours to
-write — see
-[`set/docs/desktop.md`](https://github.com/ryangavin/better-session-view/blob/main/set/docs/desktop.md) for why each of those is the case. The
-`.node` addon and `server.mjs` ride along inside the bundle, so an installed copy needs
-nothing from the repo it was built in.
+`npm run pack` builds the renderer, the shell, an icon, and a `.app` plus a `.dmg`
+under `release/`. Drag the `.app` into `/Applications` to install it; the `.node` addon and
+`server.mjs` ride along inside the bundle, so an installed copy needs nothing from the repo
+it was built in.
 
 **What packaging is for here, and it is not distribution.** Unpackaged, every app reports
 itself as *Electron*: the menu bar says it, the Dock shows Electron's icon, and
 ⌘-Tab cannot tell them apart — a small thing until you are reaching for one of them mid-set.
 A bundle gives each a real identifier, a real name and an icon, and only an `Info.plist` can.
 
-The icons are generated rather than committed: `tools/build-icons.ts` rasterises
-`visuals/public/mark.svg` with `sips` and packs it with `iconutil`. Each app has a mark of
-its own and they are the same disc — one thing split down the middle, a dot on each side of
-the divide — differing in hue and in what the dots do: this one throws rays out of its node,
-set[flow] runs rows of clips into it. The shapes are for the 512 and the **colour** is for
-the 32, because at Dock size hue is the only thing anyone actually reads. See
-[`set/docs/desktop.md`](https://github.com/ryangavin/better-session-view/blob/main/set/docs/desktop.md) for the grid the marks are padded onto
-and why editing one wants care.
+The icons are generated rather than committed: `tools/icons.ts` rasterises
+`public/mark.svg` with `sips` and packs it with `iconutil`. Every open[flow] app has a mark
+of its own and they are the same disc — one thing split down the middle, a dot on each side
+of the divide — differing in hue and in what the dots do: this one throws rays out of its
+node, set[flow] runs rows of clips into it. The shapes are for the 512 and the **colour** is
+for the 32, because at Dock size hue is the only thing anyone actually reads.
 
 Everything else about the bundle — `asar: false`, signing, notarisation, and what this app's
 own `electron-builder.yml` still has to say for itself — is

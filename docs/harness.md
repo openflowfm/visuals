@@ -5,7 +5,7 @@ no Ableton, no device and no set.
 
 ```sh
 npm run dev:fake-live                                          # :17801
-OPENFLOW_BRIDGE_WS=ws://127.0.0.1:17801/ws npm run dev:visuals
+OPENFLOW_BRIDGE_WS=ws://127.0.0.1:17801/ws npm run watch
 ```
 
 It speaks enough of the real protocol to be indistinguishable from the device as far as
@@ -59,7 +59,7 @@ real machine:
 
 ## It answers `clipNotes` and `clipStatus` too
 
-Both were added for `chart/`, and both are the difference between a client that can be
+Both were added for the chart, another client of the bridge, and both are the difference between a client that can be
 worked on without Ableton and one that only *flows* implemented. `clipStatus` drives the
 loop wheels and the roll's playhead; without it a chart connects, shows the song, and draws
 neither — indistinguishable from broken.

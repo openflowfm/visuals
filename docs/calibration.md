@@ -25,18 +25,18 @@ The shortest way in is the ordinary desktop app with the flag inherited by its
 server:
 
 ```sh
-OPENFLOW_CALIBRATION=1 npm run visuals
+OPENFLOW_CALIBRATION=1 npm start
 ```
 
 For HMR:
 
 ```sh
-OPENFLOW_CALIBRATION=1 npm run dev:visuals
+OPENFLOW_CALIBRATION=1 npm run watch
 ```
 
 The app owns the server, so the variable reaches the child it starts. To drive a server of
-your own instead, `OPENFLOW_CALIBRATION=1 npm run dev:visuals-server` in one terminal and
-`npm run dev:visuals-ui` in another.
+your own instead, `OPENFLOW_CALIBRATION=1 npm run server` in one terminal and
+`npm run ui` in another.
 
 Press `e`, then choose **calibrate** in the console.
 

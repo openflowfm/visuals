@@ -30,14 +30,14 @@ mechanics.
 
 Read these files before designing:
 
-- `visuals/docs/flows.md`
-- `visuals/docs/console.md`
-- `visuals/protocol.ts`
-- `visuals/client/render/circuit.ts`
-- `visuals/client/ui/edits.ts`
-- `visuals/client/ui/nodes.ts`
-- `visuals/client/ui/Designer.tsx`
-- `visuals/client/ui/Circuit.tsx`
+- `docs/flows.md`
+- `docs/console.md`
+- `protocol.ts`
+- `client/render/circuit.ts`
+- `client/ui/edits.ts`
+- `client/ui/nodes.ts`
+- `client/ui/Designer.tsx`
+- `client/ui/Circuit.tsx`
 - `widgets/docs/graph.md`
 
 Treat the model and constraints in those files as authoritative. Treat the current UI as

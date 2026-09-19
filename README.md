@@ -85,6 +85,11 @@ npm run dev:fake-live  # a bridge that isn't one, for working without Ableton
 npm run mcp         # local stdio server for agent-authored flows and nodes
 ```
 
+The user manual is [the wiki](https://github.com/openflowfm/visuals/wiki). Its
+[Nodes](https://github.com/openflowfm/visuals/wiki/Nodes) page is generated from the node
+vocabulary: clone `git@github.com:openflowfm/visuals.wiki.git` beside this repo as
+`visuals.wiki/` and `npm run dev:node-manual` rewrites it — see [docs/render.md](docs/render.md).
+
 `npm run watch` opens the Electron window itself; `:5473` is the HMR page it loads. Open
 `http://localhost:17900` only for the built browser renderer.
 

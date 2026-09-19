@@ -286,11 +286,10 @@ Nothing has to be registered in a scheme, because a mode is not a flow.
 **A new node arrives in the manual the same way.** `nodeCatalog()` in `mcp/authoring.ts`
 already assembles the whole vocabulary for an agent — family, modes, every inlet with the
 sentence it carries and the value it starts on — and `npm run dev:node-manual` renders that
-into the user manual's [Nodes](https://github.com/ryangavin/better-session-view/wiki/Nodes)
-page. The page is a rendering of the descriptions the app itself shows on the node, so
-nobody has to remember to describe a mode twice, and a hand-written list cannot quietly fall
-behind the compiler: the one it replaces had counted eleven `lens` modes since the twelfth
-was added.
+into the user manual's [Nodes](https://github.com/openflowfm/visuals/wiki/Nodes) page. The
+page is a rendering of the descriptions the app itself shows on the node, so nobody has to
+remember to describe a mode twice, and a hand-written list cannot quietly fall behind the
+compiler: the one it replaces had counted eleven `lens` modes since the twelfth was added.
 
 ## The clock is a uniform, and so is energy
 
@@ -558,7 +557,7 @@ already documents from the other side.
 in the document is being *reused* rather than discarded, which is precisely what React's
 development double-invoke does: mount, free, mount again on the same element. A context lost
 there is lost permanently, because nothing restores one that was taken deliberately — so
-without the check, `npm run dev` would draw black.
+without the check, `npm run watch` would draw black.
 
 `client/render/flow.ts` holds what both the stage and the node faces need — the shader, the
 banks, the signature. **The bench is not in that list**, because the bench is a whole

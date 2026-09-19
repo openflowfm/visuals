@@ -16,7 +16,7 @@ leaves the choice — save overwrites, load takes it — to a person.
 Run it from the repository root:
 
 ```sh
-npm --prefix visuals run mcp
+npm run mcp
 ```
 
 An MCP host can configure it with an absolute repository path:
@@ -26,7 +26,7 @@ An MCP host can configure it with an absolute repository path:
   "mcpServers": {
     "visual-flow": {
       "command": "npm",
-      "args": ["--prefix", "/absolute/path/to/better-session-view/visuals", "run", "mcp"]
+      "args": ["--prefix", "/absolute/path/to/visuals", "run", "mcp"]
     }
   }
 }
