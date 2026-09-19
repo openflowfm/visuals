@@ -3,14 +3,20 @@
 // `@ktamas77/abletonlink` vendors Ableton's own C++ Link library and wraps it
 // with node-addon-api, which is the right dependency to have — reimplementing
 // Link's protocol from the reverse-engineering notes would be a liability on
-// stage. But its `binding.gyp` pins C++14, and the node-addon-api it resolves
-// against needs C++17, so a plain `npm install` fails to compile with
-// "constexpr if is a C++17 extension" and six template errors after it.
+// stage. But its own `install` script (`node-gyp rebuild`) runs straight off
+// its unpatched `binding.gyp`, which still pins C++14, and the node-addon-api
+// it resolves against needs C++17 — so that script fails with "constexpr if
+// is a C++17 extension" and six template errors after it, on every machine,
+// every time.
 //
-// So the package installs with `--ignore-scripts` and this repairs the one
-// wrong flag, removes a platform define the package applies on every OS, and
-// builds it. Idempotent: it rewrites nothing already correct, and skips the
-// build entirely when the binary is newer than the gyp.
+// `package.json`'s `allowScripts` denies that script — npm 11.19+'s own gate
+// for exactly this, extracting the package but never running it, rather than
+// the whole `npm install` aborting on a failing dependency script the way it
+// would with nothing denied. This repairs the one wrong flag, removes a
+// platform define the package applies on every OS, and builds it — the same
+// repair the denied script would have attempted, done correctly. Idempotent:
+// it rewrites nothing already correct, and skips the build entirely when the
+// binary is newer than the gyp.
 //
 // This is the whole reason `visuals/` has a `node_modules` of its own, the way
 // `bridge/` does for `ws`.
@@ -29,7 +35,7 @@ const built = path.join(addon, 'build/Release/abletonlink.node');
 if (!fs.existsSync(gyp)) {
   console.error(
     `link: ${path.relative(process.cwd(), addon)} is not installed.\n` +
-      `      run: cd visuals && npm install --ignore-scripts`,
+      `      run: cd visuals && npm install`,
   );
   process.exit(1);
 }

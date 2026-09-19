@@ -20,7 +20,7 @@ This repo builds and runs on its own — it needs no checkout of better-session-
 ```sh
 git clone https://github.com/openflowfm/visuals.git
 cd visuals
-npm ci
+npm ci          # also compiles the Ableton Link addon — see tools/build-link.ts
 npm start       # build, run the server, open the app
 npm run watch   # the dev server and the window, together — the one to type while working
 npm run pack    # the signed, packaged .app and .dmg

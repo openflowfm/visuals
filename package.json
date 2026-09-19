@@ -63,6 +63,7 @@
     "@types/ws": "^8.5.13",
     "@vitejs/plugin-react": "^6.1.1",
     "@vitest/coverage-v8": "5.0.0",
+    "@vitest/ui": "5.0.0",
     "concurrently": "^10.0.5",
     "electron": "44.2.0",
     "electron-builder": "26.15.3",
@@ -71,5 +72,12 @@
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
     "vitest": "5.0.0"
+  },
+  "allowScripts": {
+    "github:openflowfm/desktop#ff1b05d0f003281c0f3a10e1c096926719cc4285": true,
+    "esbuild@0.28.2": true,
+    "electron-winstaller@5.4.0": true,
+    "@ktamas77/abletonlink": false,
+    "fsevents@2.3.3": true
   }
 }
