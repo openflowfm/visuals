@@ -115,7 +115,7 @@ never reach a turn on the clock at all — the picture would freeze until somebo
 
 So the rig watches `Scene.is_triggered`, which **is** the launch button, and which a follow
 action never sets. One observer per scene, which is the same order as the play watcher's
-three per track and nothing like the per-slot cost the [protocol rules](../../protocol/README.md)
+three per track and nothing like the per-slot cost the [protocol rules](https://github.com/openflowfm/protocol#readme)
 forbid. It is its own watch — `watchScenes` — rather than a rider on `watchPlay`, because
 only this rig asks and a grid that doesn't care shouldn't pay for it.
 

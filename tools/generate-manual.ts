@@ -18,6 +18,8 @@ import { nodeCatalog } from '../mcp/authoring.ts';
 import { MAX_SHADER_WORK } from '../client/render/circuit.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+// `wiki/` is a sibling of the repo root, not a folder inside it — the checkout
+// of this repo's own GitHub wiki.
 const page = path.resolve(here, '../../wiki/Nodes.md');
 
 type Catalog = ReturnType<typeof nodeCatalog>;
@@ -185,7 +187,7 @@ if (process.argv.includes('--stdout')) {
   console.log('wiki/Nodes.md is current.');
 } else {
   if (!fs.existsSync(path.dirname(page))) {
-    console.error(`no wiki checkout at ${path.dirname(page)} — clone the wiki beside the repo first`);
+    console.error(`no wiki checkout at ${path.dirname(page)} — clone the visuals wiki beside this repo`);
     process.exit(1);
   }
   fs.writeFileSync(page, text);

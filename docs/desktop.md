@@ -126,7 +126,7 @@ under `release/visuals/`. `npm run pack` does every app.
 `install:apps visuals` for this one alone. It replaces rather than merges, refuses while the
 app is open, and takes `OPENFLOW_APPS` for a machine where `/Applications` is not yours to
 write — see
-[`set/docs/desktop.md`](../../set/docs/desktop.md) for why each of those is the case. The
+[`set/docs/desktop.md`](https://github.com/ryangavin/better-session-view/blob/main/set/docs/desktop.md) for why each of those is the case. The
 `.node` addon and `server.mjs` ride along inside the bundle, so an installed copy needs
 nothing from the repo it was built in.
 
@@ -141,7 +141,7 @@ its own and they are the same disc — one thing split down the middle, a dot on
 the divide — differing in hue and in what the dots do: this one throws rays out of its node,
 set[flow] runs rows of clips into it. The shapes are for the 512 and the **colour** is for
 the 32, because at Dock size hue is the only thing anyone actually reads. See
-[`set/docs/desktop.md`](../../set/docs/desktop.md) for the grid the marks are padded onto
+[`set/docs/desktop.md`](https://github.com/ryangavin/better-session-view/blob/main/set/docs/desktop.md) for the grid the marks are padded onto
 and why editing one wants care.
 
 Everything else about the bundle — `asar: false`, signing, notarisation, and what this app's

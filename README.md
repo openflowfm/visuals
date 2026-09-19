@@ -27,7 +27,7 @@ Live ─ SessionBridge :17800 ─WS─> visuals backend :17900 ─WS─> Electro
 | [the lab](docs/lab.md) | the lineage forest, exploring roots, developing a node, frozen editions and the detailed corpus | `lab.ts`, `server/lab.ts`, `server/lineage.ts`, `server/batch.ts`, `server/finals.ts`, `client/ui/TrainView.tsx`, `client/ui/ForestView.tsx`, `client/ui/ExploreView.tsx`, `client/ui/DevelopView.tsx`, `client/ui/FinalsView.tsx`, `client/ui/ReviewsView.tsx` |
 | [parameter calibration](docs/calibration.md) | the development-only A/B/C response bench and its evidence | `response.ts`, `calibration.ts`, `server/calibration.ts`, `client/ui/CalibrationView.tsx` |
 | [the renderer](docs/render.md) | the two passes, blending, fill rate, **pointing a projector** | `client/render/*` |
-| [the engine](docs/engine.md) | where the frame time goes, the meter, the benchmark, why particles need no rewrite | `client/render/meter.ts`, `bench.ts`, `../tools/benchmark.ts` |
+| [the engine](docs/engine.md) | where the frame time goes, the meter, the benchmark, why particles need no rewrite | `client/render/meter.ts`, `bench.ts`, `tools/benchmark.ts` |
 | [the harness](docs/harness.md) | working on this with no Ableton, and the Link safety rule | `tools/fake-live.ts` |
 | [the desktop app](docs/desktop.md) | the window, the wall on a projector, the display list, why the server is a child process | `electron/main.ts`, `electron/preload.ts`, `client/state/useWall.ts` |
 | [agent authoring](docs/mcp.md) | the MCP tools for reading nodes, validating and saving flows, and reviewing node designs | `mcp/*` |
@@ -53,9 +53,9 @@ configured for it to draw a show.
 ## Running it
 
 ```sh
-npm run visuals          # a show night: build, run the server, open the app — see docs/desktop.md
-npm run visuals:browser  # the same, in a dedicated Chrome instead of the app
-npm run benchmark        # every flow, as fast as this machine draws it — docs/engine.md
+npm run visuals            # a show night: build, run the server, open the app — see docs/desktop.md
+npm --prefix visuals run show       # the same, in a dedicated Chrome instead of the app
+npm --prefix visuals run benchmark  # every flow, as fast as this machine draws it — docs/engine.md
 npm run dev              # every server in the repo at once, this app's window included
 npm run dev:visuals      # just this app: its vite server and its window, one command
 npm run dev:visuals-ui   # the renderer with HMR alone, :5473, proxying /ws to the server
@@ -82,8 +82,8 @@ the rig in a window of its own — see [the desktop app](docs/desktop.md). It al
 which URL a projector gets: the app is on the built bundle, where `:5473` has HMR attached
 and reloads the wall on every save.
 
-`npm run visuals:browser` is the same rig in a dedicated Chrome instance instead —
-[`tools/visuals.ts`](../tools/visuals.ts) — kept because a second machine runs a browser
+`npm run show` is the same rig in a dedicated Chrome instance instead —
+[`tools/visuals.ts`](tools/visuals.ts) — kept because a second machine runs a browser
 anyway, and because it is the rollback if the app misbehaves on a show night.
 `i` toggles the panel, `e` the editor, `k` the output stage, `w` the wall, `f` fullscreen, and
 `l` turns to the next flow without changing the colourway. **`1` says
@@ -92,6 +92,43 @@ without changing what is on screen. Live's transport starting does the same thin
 and so does a scene launched somewhere the phrase grid does not already have a line — a set
 that is locked in keeps counting undisturbed. The key is for the rest. See
 [the wheel](docs/wheel.md).
+
+### `npm run show` opens a browser that belongs to the show
+
+Once the server answers, `tools/visuals.ts` opens the rig in **its own Chrome** — macOS
+only, `--no-browse` to skip it, and skipped anyway if one is already up on that profile.
+
+The lever is `--user-data-dir=~/.openflow/visuals/chrome`, which makes it a separate
+*instance* rather than a flag on the browser you read your mail in: no extensions, no forty
+other tabs on the same GPU, its own share of the ~16 WebGL contexts a browser keeps per
+origin, and its own permissions — so the window-management grant the wall needs is given
+once and stays given, rather than being asked for on a stage. `--app=` drops the tab strip
+and the address bar.
+
+It is the lightest Chromium available on a Mac, because it is the Chromium already
+installed — and that argument is why this path existed before there was an app, and why it
+is still here now.
+
+Three of the flags are about a projector specifically:
+
+```
+--disable-background-timer-throttling
+--disable-backgrounding-occluded-windows
+--disable-renderer-backgrounding
+```
+
+Chrome slows and eventually freezes a renderer it decides nobody is looking at, and a wall
+window sitting behind the console is exactly that. Without these, bringing another window to
+the front can drop the projector to a stutter.
+
+**The app needs the same three**, because Electron is the same Chromium — it passes them as
+command-line switches and sets `backgroundThrottling: false` on every window besides. This
+is the easiest thing in either path to forget, and the symptom reads as a renderer bug.
+
+**Only for a server it started.** The readiness poll waits a beat before its first look,
+because a port already in use answers *immediately* — from whatever is on it — and a window
+would open onto somebody else's server a moment before ours died of `EADDRINUSE`. The
+settle gives that failure time to land, and the child going away is what says it did.
 
 **`w` sends the picture to the projector.** There is no such thing as rendering to an HDMI
 port — the port is a display, and something has to own a window on it — so this opens one for
