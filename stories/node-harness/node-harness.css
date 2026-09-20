@@ -15,3 +15,9 @@
 .node-harness-body aside { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 0 20px; align-items: start; }
 .node-harness-body aside h3 { grid-column: 1 / -1; }
 .node-harness-body aside .node-harness-picture { grid-row: span 2; }
+
+.node-harness-graph .circuit .canvas { height: 100%; }
+@media (max-width: 700px) {
+  .node-harness-body aside { display: block; max-width: 100%; }
+  .node-harness-body aside .node-harness-picture { max-width: 320px; }
+}

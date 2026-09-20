@@ -68,7 +68,7 @@ function Session({ example, reset }: { example: GraphExample; reset(): void }) {
       const seconds = clock.seconds();
       const sample = evaluator.sample(current.current.circuit, {
         show: current.current.show, beat: clock.beat(), seconds,
-        dt: Math.max(0, Math.min(seconds - last, 0.25)), pace: SCHEME.defaults.pace,
+        dt: Math.max(0, Math.min(seconds - last, 0.1)), pace: SCHEME.defaults.pace,
       });
       last = seconds;
       const next = readingsOf(current.current.circuit, sample);
@@ -105,6 +105,7 @@ function Session({ example, reset }: { example: GraphExample; reset(): void }) {
         <label><input type="checkbox" checked={playing} onChange={e => setPlaying(e.target.checked)} />Simulated playback</label>
       </>}
     </div>
+    <p>Drag empty canvas to pan · scroll to zoom · edit controls directly on each node.</p>
     <div className="node-harness-body">
       <div className="node-harness-graph" aria-label="Example graph">
         <NodePictures circuit={circuit} show={show} scheme={scheme} transport={clock} transportDelta>

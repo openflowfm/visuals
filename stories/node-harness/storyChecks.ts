@@ -56,11 +56,23 @@ export async function checkTrack(context: { canvasElement: HTMLElement }) {
   const smooth = ui.getByRole('slider', { name: /smooth/i });
   smooth.focus();
   await userEvent.keyboard('{End}');
+  // The new smoothing binding must receive the current meter before it is lowered.
+  for (let i = 0; i < 12; i++) await pixels(output(context.canvasElement));
   await waitFor(async () => expect(await pixels(output(context.canvasElement))).toEqual(before));
   fireEvent.change(ui.getByRole('slider', { name: 'Drums level' }), { target: { value: '0.1' } });
   // A frozen transport must also hold envelope decay despite ongoing browser frames.
   for (let i = 0; i < 12; i++) expect(await pixels(output(context.canvasElement))).toEqual(before);
+  // A frozen seek must advance the readout by the same capped step as GPU previews.
+  fireEvent.change(ui.getByRole('spinbutton', { name: 'Seconds' }), { target: { value: '2.25' } });
+  const amount = ui.getByRole('slider', { name: 'amount' }).closest<HTMLElement>('.wdg')!;
+  const expected = 0.7 + (0.1 - 0.7) * (1 - Math.exp(-0.1 / 2));
+  await waitFor(() => expect(Number(amount.style.getPropertyValue('--wdg-live'))).toBeCloseTo(expected, 4));
   await userEvent.click(ui.getByRole('button', { name: 'Animate' }));
   await waitFor(async () => expect(await pixels(output(context.canvasElement))).not.toEqual(before));
+  await userEvent.click(ui.getByRole('button', { name: 'Freeze' }));
+  // Let the final clock step reach the compositor, then verify decay stays stopped.
+  await pixels(output(context.canvasElement));
+  const held = await pixels(output(context.canvasElement));
+  for (let i = 0; i < 12; i++) expect(await pixels(output(context.canvasElement))).toEqual(held);
   await userEvent.click(ui.getByRole('button', { name: 'Reset example' }));
 }
