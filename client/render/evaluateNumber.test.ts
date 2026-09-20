@@ -273,7 +273,7 @@ describe('CPU number evaluation', () => {
 
     expect(sample.outlet('shape/n')).toBe(0.5);
     expect(sample.inlet('colorway/amount')).toBe(0.5);
-    expect(sample.inlet('colorway/brightness')).toBe(0.5);
+    expect(sample.inlet('colorway/brightness')).toBe(2 / 3);
   });
 
   it('passes a disabled number node through in the face readout as well as the shader', () => {

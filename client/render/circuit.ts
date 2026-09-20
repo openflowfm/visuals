@@ -33,7 +33,6 @@ export {
   C as colourPort,
   N as numberPort,
   ALIVE as livePort,
-  E as energyPort,
 } from './ports.ts';
 import { legacyEnergyTargets, SOURCE_RATE_MODES } from './legacyEnergy.ts';
 import { CIRCUIT_HELPERS } from './glsl/circuit.ts';
@@ -117,9 +116,8 @@ import {
  * face does not. What a set number must never be is *inlined*: it rides
  * `uParams` like every other one, so turning it recompiles nothing.
  *
- * The exceptions are the two number inlets whose answer is already alive —
- * `energy` reads the room and an `lfo`'s `clock` reads the beat. There is no
- * number to set there, only a signal to leave running or replace with a cord.
+ * Clock and camera travel inputs can start from time. Visual controls have
+ * independent fixed defaults; any live modulation is expressed by a cord.
  */
 
 /** What a node's `emit` is handed. */
@@ -316,7 +314,7 @@ const MIXES: Record<string, (a: string, b: string) => string> = {
 };
 
 /**
- * What each effect mode takes beyond its picture and its energy.
+ * What each effect mode takes beyond its picture.
  *
  * The names are what appear on the faceplate, so they are the vocabulary
  * somebody reads the canvas in. They stay the ones the handwritten shaders used.
@@ -1220,12 +1218,12 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     name: 'tracks',
     description:
       'Every playing track in the Live set, drawn in its assigned colour and mixed into one picture.',
-    inlets: [P('p', 'Where in the combined set picture to read.')],
+    inlets: [P('p', 'Where in the combined set picture to read.'), C('tint', 'Multiply the original track colours by this colour.', 'vec4(1.0)')],
     outlets: [C('c', 'The combined picture of every playing track.')],
     modes: TRACK_DRAW_MODES,
     // A pass rather than an expression — see `shaders.ts`. All this does is
     // read the picture that pass left.
-    emit: (c) => ({ c: `fromTracks(${c.read('p')})` }),
+    emit: (c) => ({ c: `(fromTracks(${c.read('p')}) * ${c.read('tint')})` }),
   },
 
   flow: {
@@ -1264,7 +1262,7 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     // whatever you take out of here, which is what `paint`'s was; five would be
     // five controls on a node whose job is to hand out colours, and the graph
     // already has `grade` for dimming one of them on its own.
-    inlets: [N('amount', 'The opacity of every colour taken from here.', 1), N('brightness', 'The brightness of the palette colours.'), N('contrast', 'The contrast of the palette colours.')],
+    inlets: [N('amount', 'The opacity of every colour taken from here.', 1), N('brightness', 'The brightness of the palette colours.', 2 / 3), N('contrast', 'The contrast of the palette colours.', 0)],
     outlets: COLOR_ROLES.map((role) => C(role, COLOR_ROLE_DETAILS[role])),
     emit: (c) => {
       const amount = `clamp(${c.read('amount')}, 0.0, 1.0)`;
@@ -1710,6 +1708,10 @@ export interface CircuitModel {
   id: string;
   setup: string;
   index: number;
+  /** Optional five-role upstream colour program for this instance. */
+  colorSource?: string;
+  /** Model texture slots that must be rendered before its colour prepass. */
+  colorDependencies?: number[];
 }
 
 export interface Compiled {
@@ -2564,6 +2566,7 @@ export function compileCircuit(circuit: Circuit, options: CompileOptions = {}): 
     // Named once for the nested inlet readers; function declarations do not
     // retain the map lookup's narrowing even though they only run in this call.
     const subject = node;
+    let readingSubject = subject;
 
     /**
      * What an inlet reads with nothing wired to it: the number somebody set,
@@ -2583,15 +2586,14 @@ export function compileCircuit(circuit: Circuit, options: CompileOptions = {}): 
       }
       const held = slot.get(portId(nodeId, port.name));
       if (held !== undefined) return `uParams[${held}]`;
-      // A follower with nothing of its own reads its named sibling — through
-      // that inlet's own cord or held number, so `columns` follows whatever
-      // `energy` is actually doing rather than the raw room uniform.
+      // An explicit semantic alias reads the named sibling through its own
+      // cord or held value. Ordinary visual controls have fixed defaults.
       if (port.fallbackInlet !== undefined) return readRawAt(port.fallbackInlet, where);
       return port.fallback ?? (port.kind === 'p' ? where : '0.0');
     }
 
     function readRawAt(inlet: string, where: string): string {
-      const wanted = inletsOf(subject).find((p) => p.name === inlet);
+      const wanted = inletsOf(readingSubject).find((p) => p.name === inlet);
       if (!wanted) return '0.0';
       const id = portId(nodeId, inlet);
       const from = feeds.get(id);
@@ -2615,11 +2617,11 @@ export function compileCircuit(circuit: Circuit, options: CompileOptions = {}): 
     }
 
     function readAt(inlet: string, where: string): string {
-      const wanted = inletsOf(subject).find((p) => p.name === inlet);
+      const wanted = inletsOf(readingSubject).find((p) => p.name === inlet);
       if (!wanted) return '0.0';
       const raw = readRawAt(inlet, where);
       if (wanted.kind !== 'n') return raw;
-      const mode = subject.op ?? '';
+      const mode = readingSubject.op ?? '';
       const target = { kind: subject.kind, mode, inlet };
       const response =
         options.responses?.[responseKey(target)] ?? wanted.response ?? productionResponse(target);
@@ -2649,7 +2651,11 @@ export function compileCircuit(circuit: Circuit, options: CompileOptions = {}): 
      */
     const acrossModes = (): Record<string, string> => {
       const names = (spec.modes ?? []).map((mode) => mode.name);
-      const each = names.map((op) => spec.emit({ ...ctx, node: { ...subject, op } }));
+      const each = names.map((op) => {
+        readingSubject = { ...subject, op };
+        try { return spec.emit({ ...ctx, node: readingSubject }); }
+        finally { readingSubject = subject; }
+      });
       const t = readRawAt(MODE_INLET, at);
       const out: Record<string, string> = {};
       for (const outlet of spec.outlets) {
@@ -2741,7 +2747,18 @@ export function compileCircuit(circuit: Circuit, options: CompileOptions = {}): 
                     return { c: 'vec4(0.0)' };
                   }
                   modelSlot.set(node.id, index);
-                  usedModels.push({ id: node.id, setup: node.setup ?? '', index });
+                  const model: CircuitModel = { id: node.id, setup: node.setup ?? '', index };
+                  usedModels.push(model);
+                  // Only overridden roles need an additional pass. Defaults remain
+                  // the visibly named palette roles, read directly by the mesh.
+                  if (COLOR_ROLES.some(role => feeds.has(portId(node.id, role)) || /^#[0-9a-f]{6}$/i.test(node.colors?.[role] ?? ''))) {
+                    const branches = COLOR_ROLES.map((role, roleIndex) => {
+                      const color = readAt(role, 'centred()');
+                      return `if (uModelRole == ${roleIndex}) {\n${lines.join('\n')}\nfragColor = ${color}; return;\n}`;
+                    }).join('\n');
+                    model.colorDependencies = [...new Set([...branches.matchAll(/fromModel(\d+)\(/g)].map(match => Number(match[1])))];
+                    model.colorSource = `${flowPreamble(values.length)}${CIRCUIT_HELPERS}\nuniform int uModelRole;\nvoid main() {\n${branches}\nfragColor = vec4(0.0);\n}`;
+                  }
                 }
                 return {
                   c: `fromModel${index}(${ctx.read('p')}, ${ctx.read('color-a')}, ${ctx.read('color-b')})`,
@@ -2784,7 +2801,7 @@ ${lines.join('\n')}
     source,
     videos: usedVideos,
     images: usedImages,
-    models: usedModels,
+    models: [...usedModels].sort((a, b) => a.colorDependencies?.includes(b.index) ? 1 : b.colorDependencies?.includes(a.index) ? -1 : a.index - b.index),
     feedback,
     work: shaderWork,
     error: null,

@@ -48,9 +48,8 @@ export interface PortSpec extends PortDocumentation {
    * Another inlet on the same node whose answer this one borrows while it has
    * none of its own — unwired and unheld, it reads whatever that inlet reads.
    *
-   * This is how a source's shape numbers follow its energy: `columns` on a
-   * `bars` compiles to the energy expression until somebody catches it, so
-   * promoting a constant to an inlet changes nothing until a hand does.
+   * Reserved for explicit semantic aliases. Normal node controls use their
+   * own independent defaults.
    */
   fallbackInlet?: string;
   /**
@@ -109,11 +108,8 @@ export const N = (name: string, description: string, at = 0.5): PortSpec => ({
 /**
  * A number inlet whose unwired answer is a **signal** rather than a setting.
  *
- * There are two, and both are the reason this rig is not a screensaver:
- * `energy` reads the room and an `lfo`'s `clock` reads the beat. Neither has an
- * `at`, because their resting state is the signal — a default number here would
- * replace something already moving with a number that is not, which is a worse
- * default than the one it would be replacing.
+ * An LFO's clock and a form's travelling camera are examples: their
+ * resting answer follows time rather than a fixed numeric setting.
  *
  * They can still be **held**. A number set on one of these goes into
  * `node.values` like any other and takes the inlet over until it is cleared,
@@ -127,25 +123,6 @@ export const ALIVE = (name: string, description: string, from: string): PortSpec
   fallback: from,
 });
 
-/** Every room-reactive mode gets one, so `rate` and `charge` have something to run on. */
-export const E = () =>
-  ALIVE('energy', 'How strongly the room drives this movement or brightness.', 'uEnergy');
-
-/**
- * A number inlet that borrows the energy inlet's answer until somebody takes it.
- *
- * The promotion path for a constant with `e` mixed into it: as `FOLLOWS`, it
- * compiles to exactly the coupling it replaced — through a held or wired
- * energy too — and a graph that never touches it draws what it always drew.
- */
-export const FOLLOWS = (name: string, description: string): PortSpec => ({
-  name,
-  kind: 'n',
-  description,
-  fallbackInlet: 'energy',
-});
-
-
 /**
  * The same builders under the names a node's own spec says them by.
  *
@@ -158,6 +135,4 @@ export {
   C as colourPort,
   N as numberPort,
   ALIVE as livePort,
-  E as energyPort,
-  FOLLOWS as followingPort,
 };
