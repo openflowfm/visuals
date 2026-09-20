@@ -79,7 +79,12 @@ export async function searchCode(options: SearchOptions, deps: Dependencies = {}
   if (options.pattern !== undefined && Buffer.byteLength(options.pattern) > 500) throw new Error('pattern exceeds 500 bytes');
   if ((options.globs?.length ?? 0) > 16 || options.globs?.some(glob => Buffer.byteLength(glob) > 200)) throw new Error('globs exceed limits');
   const words = terms(options.query);
-  const files = command(root, 'rg', ['--files', '--hidden', '--null', '-g', '!.git', '-g', '!node_modules', '-g', '!dist', '-g', '!build', '-g', '!storybook-static', ...(options.globs ?? []).flatMap(glob => ['-g', glob])]).split('\0').filter(Boolean).filter(safeName).filter(file => !scopes.length || scopes.some(scope => inside(path.resolve(root, scope), path.resolve(root, file)))).sort();
+  const discoveryArgs = ['--files', '--hidden', '--null', '-g', '!.git', '-g', '!node_modules', '-g', '!dist', '-g', '!build', '-g', '!storybook-static'];
+  // Positive rg globs override ignore rules. Intersect with an unmodified baseline
+  // so user globs can only narrow the ignore-respecting discovery set.
+  const baseline = command(root, 'rg', discoveryArgs).split('\0').filter(Boolean);
+  const globMatches = options.globs?.length ? new Set(command(root, 'rg', [...discoveryArgs, ...options.globs.flatMap(glob => ['-g', glob])]).split('\0')) : null;
+  const files = baseline.filter(file => !globMatches || globMatches.has(file)).filter(safeName).filter(file => !scopes.length || scopes.some(scope => inside(path.resolve(root, scope), path.resolve(root, file)))).sort();
   let revision: string | null = null;
   try { revision = command(root, 'git', ['rev-parse', 'HEAD']).trim(); } catch { /* Non-Git roots are supported. */ }
   const coverage = { eligible_files: files.length, files_scanned: 0, bytes_read: 0, skipped_files: 0, matching_windows: 0, limits_hit: [] as string[], exhaustive: false };
@@ -112,23 +117,29 @@ export async function searchCode(options: SearchOptions, deps: Dependencies = {}
       if (matches.error || (matches.status !== 0 && matches.status !== 1)) throw new Error('pattern matching failed; check ripgrep regex syntax');
       patternLines = new Set(matches.stdout.split('\n').filter(Boolean).map(line => Number(line.slice(0, line.indexOf(':'))) - 1));
     }
-    const windows: { start: number; end: number; relevance: number }[] = [];
+    const windows: { start: number; end: number; anchor: number; relevance: number }[] = [];
     for (let i = 0; i < lines.length; i++) {
       const relevance = rank(lines[i], words);
       if (patternLines ? !patternLines.has(i) : !relevance) continue;
       const start = Math.max(0, i - 4), end = Math.min(lines.length, i + 9);
       const previous = windows.at(-1);
-      if (previous && start < previous.end && end - previous.start <= 40) { previous.end = end; previous.relevance = Math.max(previous.relevance, relevance); }
-      else windows.push({ start: previous ? Math.max(start, previous.end) : start, end, relevance });
+      if (previous && start < previous.end && end - previous.start <= 40) {
+        previous.end = end;
+        if (relevance > previous.relevance) { previous.relevance = relevance; previous.anchor = i; }
+      } else if (!previous || i >= previous.end) windows.push({ start: previous ? Math.max(start, previous.end) : start, end, anchor: i, relevance });
     }
     coverage.matching_windows += windows.length;
     for (const window of windows) {
-      let end = window.end;
-      while (end > window.start && Buffer.byteLength(lines.slice(window.start, end).join('')) > LIMITS.excerptBytes) end--;
-      if (end === window.start) { hit('excerpt_bytes'); continue; }
-      if (end < window.end) hit('excerpt_bytes');
-      const excerpt = lines.slice(window.start, end).join('');
-      candidates.push({ path: file, start_line: window.start + 1, end_line: end, text: excerpt, content_sha256: hash(bytes), excerpt_sha256: hash(excerpt), lexical_score: rank(excerpt, words) + window.relevance + rank(file, words) * 2 });
+      let start = window.start, end = window.end;
+      if (Buffer.byteLength(lines[window.anchor]) > LIMITS.excerptBytes) { hit('excerpt_bytes'); continue; }
+      while (Buffer.byteLength(lines.slice(start, end).join('')) > LIMITS.excerptBytes) {
+        // Trim context on either side, but never discard the matching anchor.
+        if (window.anchor - start > end - window.anchor - 1) start++;
+        else end--;
+      }
+      if (start > window.start || end < window.end) hit('excerpt_bytes');
+      const excerpt = lines.slice(start, end).join('');
+      candidates.push({ path: file, start_line: start + 1, end_line: end, text: excerpt, content_sha256: hash(bytes), excerpt_sha256: hash(excerpt), lexical_score: rank(excerpt, words) + window.relevance + rank(file, words) * 2 });
     }
     candidates.sort((a, b) => b.lexical_score - a.lexical_score || a.path.localeCompare(b.path) || a.start_line - b.start_line);
     if (candidates.length > LIMITS.candidates) { candidates.length = LIMITS.candidates; hit('candidates'); }

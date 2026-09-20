@@ -93,3 +93,25 @@ test('partial valid scores followed by malformed score do not alter ranking', ()
   assert.equal(result.excerpts[0].path, 'src/palette.ts');
   assert.ok(result.excerpts.every(excerpt => excerpt.score === undefined));
 }));
+test('positive globs only narrow ignore-respecting discovery', () => fixture(async root => {
+  await writeFile(path.join(root, 'ignored.ts'), 'export const needle = 1;\n');
+  await writeFile(path.join(root, 'src/visible.ts'), 'export const needle = 2;\n');
+  const result = await searchCode({ root, query: 'needle', globs: ['*.ts'] });
+  assert.deepEqual(result.excerpts.map(excerpt => excerpt.path), ['src/visible.ts']);
+}));
+test('excerpt byte trimming preserves lexical and regex match anchors', () => fixture(async root => {
+  const prefix = ('//' + 'x'.repeat(998) + '\n').repeat(4);
+  await writeFile(path.join(root, 'src/anchor.ts'), prefix + 'export const needle = 1;\n');
+  for (const pattern of [undefined, 'needle']) {
+    const result = await searchCode({ root, query: pattern ? 'unrelated' : 'needle', pattern });
+    assert.equal(result.excerpts.length, 1);
+    assert.ok(result.excerpts[0].text.includes('export const needle = 1;'));
+    assert.equal(result.excerpts[0].end_line, 5);
+    assert.ok(result.excerpts[0].start_line > 1);
+    assert.ok(Buffer.byteLength(result.excerpts[0].text) <= LIMITS.excerptBytes);
+  }
+  await writeFile(path.join(root, 'src/anchor.ts'), 'needle' + 'x'.repeat(LIMITS.excerptBytes));
+  const oversized = await searchCode({ root, query: 'needle' });
+  assert.equal(oversized.excerpts.length, 0);
+  assert.ok(oversized.coverage.limits_hit.includes('excerpt_bytes'));
+}));
