@@ -73,3 +73,44 @@ rendering fails CI rather than rotting quietly. CI installs Chromium with
 The addon is a version ahead of its peer range — Storybook 10.6 declares vitest 3 or 4 and
 this repo is on 5 — and runs fine on it. `.npmrc` sets `legacy-peer-deps` so `npm ci`
 accepts the mismatch; take that line out when Storybook 11, which lists vitest 5, ships.
+
+## Developing a node or shader
+
+Open **Debug / Node Harness**. It renders through the same `Bench` and compositor as the
+console, without a server, media library or Link connection. Choose a node, its mode and
+an outlet; the numeric controls come from `inletsOf`, including mode-specific inlets and
+toggles. Unset live inlets retain their renderer fallback until you move the slider.
+The row's reset restores that fallback rather than writing a guessed default.
+
+Colour inputs receive checker and plasma fixtures so distortions and blends have visible
+structure. Point inputs retain the renderer's position fallback. `probeAt` displays colour
+outputs directly, numbers through colorway brightness, and points through a plasma source;
+the harness labels these projections. Expand **Fixture circuit** to inspect the exact graph.
+
+Stories start frozen at two seconds with a seeded palette and 120 BPM. Set **Seconds** to
+scrub, **Animate** to run, and **Freeze** to retain the current time. **Reset** restores two
+seconds and the selected node/mode's input defaults, and recreates the compositor to clear
+GPU state. Renderer and compiler errors appear below the picture, including missing WebGL2.
+This freezes beat and elapsed time; it is not a general simulation-step controller. History,
+Live, media, model and flow-interface nodes are deliberately unsupported until they have
+purpose-built fixtures. The selector only offers the supported procedural subset.
+
+To develop a new mode of a supported kind, update the production descriptor/compiler and
+run `npm run nodes` if the registry changed. Modes and controls appear automatically. For a
+new kind, add a fixture in [`stories/node-harness/fixture.ts`](../stories/node-harness/fixture.ts),
+review its input and time semantics, then add it to `SUPPORTED` and a representative story.
+Do not add another shader renderer. Asset or stateful nodes need an explicit fixture and
+reset policy before adding them to the list.
+
+```sh
+npm run typecheck
+npx vitest run --project=visuals stories/node-harness/fixture.test.ts
+npx vitest run --project=visuals/stories stories/node-harness/NodeHarness.stories.tsx
+npm run build:storybook
+```
+
+The unit test compiles every supported mode/outlet and checks that fixtures need no external
+assets or track bindings. Story interactions check mode/outlet selection, transport and
+unsupported-state recovery. The lens story reads actual WebGL pixels to verify that a frozen
+frame is stable, a depth change changes it, and resetting the inlet restores it. This is a
+behavior check, not a cross-GPU golden screenshot comparison.
