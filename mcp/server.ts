@@ -24,6 +24,7 @@ const CircuitNodeSchema = z.object({
   op: z.string().min(1).optional().describe('Fixed mode, or the contained flow id on a flow node.'),
   of: z.string().min(1).optional().describe('Exact Live track name for a track node.'),
   asset: z.string().min(1).optional().describe('Relative media-library id for an image or video node.'),
+  colors: z.record(z.string(), z.string().regex(/^#[0-9a-fA-F]{6}$/)).optional().describe('Literal colors by color inlet; cords override them.'),
   values: NumberMapSchema.optional().describe('Held 0–1 values by settable inlet name.'),
   depths: NumberMapSchema.optional().describe('Signed modulation depths, -1–1, by inlet name.'),
   value: z.number().min(0).max(1).optional().describe("A value node's own number."),

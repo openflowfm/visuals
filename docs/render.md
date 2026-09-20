@@ -141,7 +141,7 @@ five sources all drawing soft noise is one picture, however many of them there a
 | `bars` | a bar of music as columns, with the playhead sweeping them |
 | `rings` | rings launched on the beat, expanding out |
 | `noise` | a drifting field that thickens with the sound. Weather, not a metronome |
-| `strobe` | whole-frame flashes on the division energy chose |
+| `strobe` | whole-frame flashes on the division selected by its pulse input |
 | `grid` | cells lighting on their own beats. Structure rather than motion |
 | `tunnel` | a corridor rushing toward you. Depth is `1/r`, which is what makes it perspective rather than rings |
 | `plasma` | four crossed sines. The full-frame wash, in a colour and its complement |
@@ -227,7 +227,7 @@ wall use the real image.
 Each light hangs where its `from` inlet says — wire a `place` to move it — except
 `caustics`, which is a surface the frame is under rather than a point in it. Their motion
 rides `uTime` on purpose: haze, dust and water are the things that should not dance in
-tempo, so `energy` drives brightness alone and the physics never wobbles with the beat.
+tempo, so `intensity` drives coverage alone and the physics never wobbles with the beat.
 
 Both modes share one orbit implementation with a hard ceiling of thirty-two steps and no
 supersampling. `detail` chooses a lower stopping point from eight to thirty-two; `zoom` is
@@ -313,15 +313,13 @@ state or a frame counter.
 `beatPulse(division, energy)` in the preamble is 1 on the beat decaying to 0 across it, and
 everything reactive is built from it so that "on the beat" means one thing everywhere.
 
-**Energy is an argument, not a uniform.** It used to be the one number the whole show agreed
-about — an archetype set it, a cascade biased it, and every shader read `uEnergy` without
-being asked. That made "energy" mean exactly one thing forever, where in practice it means
-whatever you decide and the useful one is often a particular track's.
-
-So `rate`, `beatPulse`, `charge` and every generator take it as a parameter, and every
-mode that reads one has an `energy` inlet. `uEnergy` survives as **the room's** energy
-— a smoothed master meter — which is what an unwired inlet falls back to. A default, not a
-level. See [flows](flows.md).
+**Node controls name their effects.** Brightness and contrast, musical rate,
+coverage/intensity and geometry have independent inputs. Palette colours enter through
+named colour inlets with role defaults, and can be replaced by a literal or any colour
+connection. Generators receive these arguments explicitly; no node exposes the former
+coupled energy control. Legacy room uniforms remain for the separate track-rendering
+pipeline, and older saved graph coupling is expanded into explicit Playback-level cords
+at load time. See [flows](flows.md).
 
 Two things about those that were wrong for a while, and are worth stating because both
 failed in the same direction — *everything at once*:
@@ -332,7 +330,7 @@ a rate *between* an eighth and a triplet is in time with nothing.
 
 | chooses it | why |
 |---|---|
-| **energy** | moves the whole section up the ladder. This is most of what a section *is* |
+| **rate input** | selects a musical division for this node independently of its appearance |
 | **a hash of the pass's seed** | spreads things a couple of rungs either side. One number alone put everything on the same division, and twenty-odd tracks pulsing together is one flash however many are drawing it |
 | **`uPace`** | a whole-rung shift over everything, from `Scheme.defaults.pace`. For a room that wants the show slower or quicker than the ladder assumes |
 

@@ -24,6 +24,7 @@ export function freshMethod(): LabMethod<null> {
         const b = WORDS[Math.floor(rng() * WORDS.length)];
         drafts.push({
           flow: {
+            inputs: 2,
             name: `${a[0].toUpperCase()}${a.slice(1)} ${b}`,
             circuit: randomizeCircuit(rng),
           },

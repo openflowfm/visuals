@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -616,4 +617,23 @@ describe('the fresh method', () => {
     expect(state.candidate!.flow.circuit.nodes.length).toBeGreaterThan(3);
     expect(state.candidate!.method).toBe('fresh');
   });
+});
+
+it('adapts archived input vocabulary without rewriting the historical candidate', () => {
+  const file = scratch();
+  const store = open(file);
+  const old = candidate('legacy-inputs');
+  old.flow.circuit.nodes[0].values = { energy: 0.4 };
+  store.addCandidate(old);
+  const db = new DatabaseSync(file);
+  try {
+    const saved = JSON.stringify(old.flow);
+    db.prepare('UPDATE candidates SET flow_json = ? WHERE id = ?').run(saved, old.id);
+    const loaded = store.candidate(old.id)!;
+    expect(loaded.id).toBe(old.id);
+    expect(loaded.flow.inputs).toBe(2);
+    expect(loaded.flow.circuit.nodes[0].values).toMatchObject({ brightness: 0.4, contrast: 0.4 });
+    expect(loaded.flow.circuit.nodes[0].values).not.toHaveProperty('energy');
+    expect((db.prepare('SELECT flow_json FROM candidates WHERE id = ?').get(old.id) as { flow_json: string }).flow_json).toBe(saved);
+  } finally { db.close(); }
 });

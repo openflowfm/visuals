@@ -111,7 +111,7 @@ that compiles but draws nothing. It makes the agent state the boundary first:
 - why this is a kind rather than a mode of an existing kind;
 - every inlet and outlet with `p`, `n` or `c` and a description;
 - every fixed mode with a description and, where it differs, its complete inlet list;
-- whether each number inlet holds a 0–1 default or follows live beat/energy;
+- whether each number inlet holds a 0–1 default or follows the clock, and which colourway role supplies each colour default;
 - the honest runtime class: expression, multi-tap, render pass, CPU state or set data.
 
 The review rejects missing documentation, duplicate ports and modes, invalid defaults, names
@@ -137,3 +137,9 @@ inlet without its description remains one too.
 That is the important property for agents: the context they read is executable truth. If a
 node's real inlet changes, its MCP schema changes in the same edit or the project does not
 typecheck.
+
+Colour inlet overrides are stored in a node’s `colors` map as `#rrggbb` strings.
+The node catalog reports each palette-backed inlet’s `colorRole`. A colour cord
+takes precedence over a held literal, and removing the literal restores the default.
+Current flows carry `inputs: 2`; loading older files expands energy coupling into
+named controls and explicit master-level wiring before graph repair.

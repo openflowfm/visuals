@@ -297,6 +297,14 @@ export function validateFlow(
         );
       }
     }
+    for (const [name, color] of Object.entries(node.colors ?? {})) {
+      if (!inlets.some(port => port.name === name && port.kind === 'c')) {
+        issue(diagnostics, 'error', 'node.color.unknown', `'${name}' is not a color inlet on this node.`, `${node.id}/${name}`);
+      }
+      if (typeof color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(color)) {
+        issue(diagnostics, 'error', 'node.color.invalid', 'A literal color must use #rrggbb.', `${node.id}/${name}`);
+      }
+    }
     for (const [name, depth] of Object.entries(node.depths ?? {})) {
       if (!settable.has(name)) {
         issue(
@@ -569,7 +577,7 @@ export class FlowAuthoringStore {
     }
     const next: Scheme = {
       ...snapshot.scheme,
-      flows: { ...snapshot.scheme.flows, [id]: flow },
+      flows: { ...snapshot.scheme.flows, [id]: { ...flow, inputs: 2 } },
     };
     let held: Record<string, unknown> = {};
     if (currentText.trim()) {
@@ -602,6 +610,7 @@ export interface DocumentedPort {
   description: string;
   settable: boolean;
   default?: number;
+  colorRole?: import('../protocol.ts').ColorRole;
   liveDefault?: 'beat' | 'energy' | 'here';
   control?: 'toggle' | 'modes';
   display?: 'lfo-rate' | 'phase';
@@ -624,7 +633,8 @@ const documentedPort = (port: PortSpec): DocumentedPort => ({
   description: port.description,
   // Every number is settable. One with a `liveDefault` and no `default` reads
   // that signal until a value is held on it.
-  settable: port.kind === 'n',
+  settable: port.kind === 'n' || port.kind === 'c',
+  ...(port.colorRole ? { colorRole: port.colorRole } : {}),
   ...(port.at !== undefined ? { default: port.at } : {}),
   ...(port.kind === 'n' && port.at === undefined ? { liveDefault: liveSignal(port) } : {}),
   ...(port.control ? { control: port.control } : {}),

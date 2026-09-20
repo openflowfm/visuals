@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode, type Ref } from 'react';
-import type { Circuit, CircuitNode, FlowDef, MediaAsset, NodeKind } from '../../protocol.ts';
+import { COLOR_ROLES, type Circuit, type CircuitNode, type FlowDef, type MediaAsset, type NodeKind } from '../../protocol.ts';
 import { modelPorts, type ModelLibrary } from '../../model.ts';
 import {
   Graph,
@@ -63,6 +63,7 @@ export function CircuitEditor({
   models = { assets: [], setups: [], textures: [], notice: null },
   picture,
   energy = 0,
+  palette = [],
   beat = () => 0,
   numberReadings = {},
   onSwap,
@@ -92,6 +93,8 @@ export function CircuitEditor({
   picture?: (nodeId: string) => ReactNode;
   /** The room's current energy, for an unwired alive inlet. */
   energy?: number;
+  /** Current palette colours, in role order, for unwired colour swatches. */
+  palette?: readonly number[];
   /** The designer's running beat, for a wave's unwired phase. */
   beat?: () => number;
   /** Values latched by the host's display clock, by inlet port id. */
@@ -182,6 +185,7 @@ export function CircuitEditor({
                 models={models}
                 picture={picture}
                 energy={energy}
+                palette={palette}
                 beat={beat}
                 numberReadings={numberReadings}
                 onSwap={onSwap}
@@ -256,6 +260,7 @@ export function NodeFace({
   models = { assets: [], setups: [], textures: [], notice: null },
   picture,
   energy,
+  palette = [],
   beat,
   numberReadings = {},
   onSwap,
@@ -275,6 +280,7 @@ export function NodeFace({
   models?: ModelLibrary;
   picture?: (nodeId: string) => ReactNode;
   energy: number;
+  palette?: readonly number[];
   beat: () => number;
   numberReadings?: Readonly<Record<string, NumberReading>>;
   onSwap?(id: string, kind: NodeKind): void;
@@ -531,7 +537,7 @@ export function NodeFace({
       port.at ??
       (driver === undefined
         ? (reading?.value ??
-          (port.name === 'energy' || port.fallbackInlet === 'energy' ? energy : beat()))
+          (port.fallback === 'uBeat' ? beat() : 0))
         : 0);
     const modeNames = port.control === 'modes' ? modesOf(node.kind) : [];
     const number =
@@ -635,7 +641,7 @@ export function NodeFace({
       // name sharing it. A chooser does not need that much room, and the mode
       // row is the first line on every kind that has one — so taking the width
       // would cost every such node the label on its first outlet.
-      wide: port.kind === 'n' && port.control !== 'modes',
+      wide: (port.kind === 'n' && port.control !== 'modes') || port.kind === 'c',
       inlet: (
         <span className="wire">
           <Port
@@ -669,7 +675,17 @@ export function NodeFace({
         </span>
       ),
       control:
-        port.kind !== 'n' ? (
+        port.kind === 'c' ? (
+          <span className="node-color-input" title={port.description}>
+            <span>{port.label ?? port.name}</span>
+            <input type="color" aria-label={`${port.name} color`} disabled={driver !== undefined}
+              value={node.colors?.[port.name] ?? `#${(palette[COLOR_ROLES.indexOf(port.colorRole!)] ?? (port.fallback === 'vec4(1.0)' ? 0xffffff : 0)).toString(16).padStart(6, '0')}`}
+              onChange={event => onChange({ colors: { ...node.colors, [port.name]: event.target.value } })} />
+            <span className="node-color-default">{driver !== undefined ? 'wired' : node.colors?.[port.name] ? 'custom' : port.colorRole ?? 'default'}</span>
+            {node.colors?.[port.name] !== undefined && <button type="button" aria-label={`Reset ${port.name} color`}
+              onClick={() => { const colors = { ...node.colors }; delete colors[port.name]; onChange({ colors }); }}>↺</button>}
+          </span>
+        ) : port.kind !== 'n' ? (
           <span className="node-inlet-name" title={port.description}>
             {port.label ?? port.name}
           </span>

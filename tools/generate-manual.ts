@@ -42,6 +42,7 @@ const table = (head: string[], rows: string[][]) =>
 // than a setting, which is worth saying here for the same reason the app says
 // it: a row that is already moving looks broken until you know it is a signal.
 const startsOn = (inlet: Inlet): string => {
+  if (inlet.colorRole) return `colourway: ${inlet.colorRole}`;
   if (inlet.default !== undefined) return `\`${inlet.default}\``;
   if (inlet.liveDefault === 'energy') return 'the room';
   if (inlet.liveDefault === 'beat') return 'the beat';
@@ -53,7 +54,7 @@ const portRows = (ports: readonly Inlet[]) =>
   ports.map((port) => [
     `\`${port.name}\``,
     SIGNALS[port.signal] ?? port.signal,
-    port.signal === 'n' ? startsOn(port) : '—',
+    port.signal === 'n' || port.colorRole ? startsOn(port) : '—',
     cell(port.description) + (port.control === 'toggle' ? ' *(a switch)*' : ''),
   ]);
 

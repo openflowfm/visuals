@@ -17,7 +17,7 @@ describe('node harness fixtures', () => {
           expect(compiled.models).toEqual([]);
           expect(compiled.tracks).toEqual([]);
           expect(fixture.node.previewOutlet).toBe(outlet.name);
-          for (const port of inletsOf(fixture.node).filter((port) => port.kind === 'c')) {
+          for (const port of inletsOf(fixture.node).filter((port) => port.kind === 'c' && !port.colorRole)) {
             expect(fixture.circuit.cords.some((cord) => cord.to === `subject/${port.name}`)).toBe(true);
           }
         });

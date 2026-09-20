@@ -377,22 +377,22 @@ editors listing these differently would be two different vocabularies.
 | `tracks` | `p` | `c` | **the Live set**: every playing track, drawn and mixed. Fire a scene, it changes |
 | `source` | `p` `energy` | `c` | one of fourteen, including `checker`, `rays` and connected `traces`; all are safe as per-track pictures |
 | `field` | `p` `energy`, plus `balls` `apart` on metaballs | `c` | `cells` `clouds` `metaballs`; fixed work, charged per graph sample and never offered per track |
-| `fractal` | `p` `energy` + its mode's numbers | `c` | `mandelbrot` or `julia`, with bounded zoom, detail and iterative work |
-| `light` | `p` `energy` + its mode's numbers, and `from` on the hung three | `c` | `lamp` `beam` `shafts` `caustics`; 2D lights with fixed work, drifting in seconds rather than beats |
-| `form` | `p` `turn` `tilt` `dolly` `thick` `flare` `chrome` `energy` + its mode's numbers | `c` | `torus` `rings` `frame` `lattice` `weave` `loom` `orbits` `relief` `iris` `truss` `rotor` `armillary` `gyre` `astrolabe` `rosette` `corolla` `spindle` `meridian` `vault` `graticule` `tube`; procedural 3D marched and charged like a fractal |
+| `fractal` | `p` colour inputs, brightness, contrast + its mode's numbers | `c` | `mandelbrot` or `julia`, with bounded zoom, detail and iterative work |
+| `light` | `p` colour inputs, brightness, contrast + its mode's numbers, and `from` on the hung three | `c` | `lamp` `beam` `shafts` `caustics`; 2D lights with fixed work, drifting in seconds rather than beats |
+| `form` | `p` `turn` `tilt` `dolly` `thick` `flare` `chrome` `emission` `brightness` `contrast` and role colours + its mode's numbers | `c` | `torus` `rings` `frame` `lattice` `weave` `loom` `orbits` `relief` `iris` `truss` `rotor` `armillary` `gyre` `astrolabe` `rosette` `corolla` `spindle` `meridian` `vault` `graticule` `tube`; procedural 3D marched and charged like a fractal |
 | `model` | `p` `color-a` `color-b` + a setup's published numbers | `c` | one reusable setup over an imported GLB; bounded depth-rendered geometry which rejoins the ordinary colour graph |
-| `glow` | `d` `energy` + its mode's numbers | `c` | `neon` `soft` `band`: a distance becomes a lit stroke |
-| `shade` | `n` `amount` `energy` | `c` | `across` `heat` `filament`: a number becomes a colour off the colourway |
+| `glow` | `d` colour inputs, intensity, brightness, contrast + its mode's numbers | `c` | `neon` `soft` `band`: a distance becomes a lit stroke |
+| `shade` | `n` `amount` colour inputs, brightness, contrast | `c` | `across` `heat` `filament`: a number becomes a colour off the colourway |
 | `flow` | `p` | `c` | another flow, whole, as one node |
 | `last` | `p` `fade` | `c` | the frame this flow drew last time, fading as it ages |
-| `colorway` | `amount` `energy` | `primary` `secondary` `complement` `accent` `chalk` | the colourway that is up, one outlet per role |
+| `colorway` | `amount` `brightness` `contrast` | `primary` `secondary` `complement` `accent` `chalk` | the colourway that is up, one outlet per role |
 
 ### transform — everything that gives a picture back where it already is
 
 | node | in | out | |
 |---|---|---|---|
 | `grade` | `c` + its mode's numbers | `c` | `levels` `saturate` `hue` `tint` `posterize` `solarize` `channels` `invert` |
-| `spread` | `c` `energy` + its mode's numbers | `c` | `bloom` `smear` `edge` `shift` `streak` `disperse` |
+| `spread` | `c` explicit intensity/separation + its mode's numbers | `c` | `bloom` `smear` `edge` `shift` `streak` `disperse` |
 | `halftone` | `c` + its mode's numbers | `c` | `dots` `lines` `dither` `scanlines` |
 | `blend` | `base` `top` `amount` | `c` | `over` `add` `screen` `multiply` `stencil` `cut` |
 
@@ -402,7 +402,7 @@ editors listing these differently would be two different vocabularies.
 |---|---|---|---|
 | `point` | — | `p` | where this fragment is being read |
 | `place` | `x` `y` | `p` | how two numbers become a position |
-| `lens` | `p` `c` `energy` + its mode's numbers | `p` `c` | `zoom` `swirl` `fold` `wobble` `tile` `mirror` `kaleido` `twist` `ripple` `slice` `pixelate` `creep` |
+| `lens` | `p` `c` explicit intensity/separation + its mode's numbers | `p` `c` | `zoom` `swirl` `fold` `wobble` `tile` `mirror` `kaleido` `twist` `ripple` `slice` `pixelate` `creep` |
 | `displace` | `p` `field` `amount` | `p` | `map` `curl`: a point moved by what a picture says |
 | `polar` | `p` | `radius` `angle` | how a position becomes a number |
 | `figure` | `p` + its mode's numbers | `d` `along` | `circle` `box` `line` `arc` `polygon` `star` `rose` `lissajous`: how far this point is from a shape |
@@ -1530,3 +1530,23 @@ so it is expressible, and only across a frame.
 
 **Undo.** The scheme is replaced whole on every edit and the file is the record, so `git
 diff` is the undo — and the randomiser keeps one level of its own.
+
+## Independent controls and visible colour defaults
+
+The former `energy` inlet has been retired. Its effects now have separate inputs:
+brightness and contrast, musical rate, light intensity, emission and the relevant
+shape controls. Newly created nodes use independent defaults, so changing one
+parameter does not silently change the others. Wire a meter or oscillator to the
+particular inputs you want to animate.
+
+Every palette-dependent colour is a colour inlet. The face shows the default role;
+it can instead hold a custom `#rrggbb` colour or accept any colour output, including
+one of the Colorway node’s five named outlets. Cords override held colours without
+erasing them. Colour signals are premultiplied pictures; when a generator uses one
+as a hue it reads straight RGB, leaving its own coverage to its shape controls.
+
+Saved flows carry an input-vocabulary stamp (`inputs: 2`). Older energy values and
+cords expand into their named controls; old unwired coupling becomes an explicit
+master-level Playback node. Existing independently set inputs take precedence. This
+transformation happens before invalid-port repair and is idempotent. New colour
+role defaults can differ from the old shaders’ derived white/complement mixtures.

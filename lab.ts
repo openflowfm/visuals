@@ -305,6 +305,7 @@ export function canonicalCandidate(
         ...(node.values
           ? { values: Object.fromEntries(Object.entries(node.values).sort()) }
           : {}),
+        ...(node.colors ? { colors: Object.fromEntries(Object.entries(node.colors).sort()) } : {}),
         ...(node.depths
           ? { depths: Object.fromEntries(Object.entries(node.depths).sort()) }
           : {}),
@@ -315,12 +316,12 @@ export function canonicalCandidate(
     };
   };
 
-  const top = circuitOf(flow.circuit);
+  const top = { inputs: flow.inputs ?? 1, circuit: circuitOf(flow.circuit) };
   const nested: Record<string, unknown> = {};
   for (let at = 0; at < queue.length; at++) {
     const id = queue[at];
     const def = bundle[id];
-    nested[renamed.get(id)!] = def ? circuitOf(def.circuit) : null;
+    nested[renamed.get(id)!] = def ? { inputs: def.inputs ?? 1, circuit: circuitOf(def.circuit) } : null;
   }
   return JSON.stringify({ v: 1, flow: top, bundle: nested });
 }

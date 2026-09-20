@@ -301,7 +301,7 @@ export function GraphBench({
             <CircuitEditor
               circuit={circuit}
               onChange={setCircuit}
-              energy={show.master}
+              energy={show.master} palette={show.colors}
               beat={clock.beat}
               picture={(nodeId) => (
                 <button

@@ -631,7 +631,7 @@ export function Designer({
                   media={media}
                   models={models}
                   viewRef={graphView}
-                  energy={room.show.master}
+                  energy={room.show.master} palette={room.show.colors}
                   beat={transport.beat}
                   numberReadings={numberReadings}
                   onSwap={(nodeId, kind) => {

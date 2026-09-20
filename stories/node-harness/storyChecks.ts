@@ -76,3 +76,13 @@ export async function checkTrack(context: { canvasElement: HTMLElement }) {
   for (let i = 0; i < 12; i++) expect(await pixels(output(context.canvasElement))).toEqual(held);
   await userEvent.click(ui.getByRole('button', { name: 'Reset example' }));
 }
+
+export async function checkColor(context: { canvasElement: HTMLElement }) {
+  await checkGraph(context);
+  const ui = within(context.canvasElement);
+  const before = await pixels(output(context.canvasElement));
+  fireEvent.change(ui.getByLabelText('color color'), { target: { value: '#ff0033' } });
+  await waitFor(async () => expect(await pixels(output(context.canvasElement))).not.toEqual(before));
+  await userEvent.click(ui.getByRole('button', { name: 'Reset color color' }));
+  await waitFor(async () => expect(await pixels(output(context.canvasElement))).toEqual(before));
+}

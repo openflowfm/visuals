@@ -42,7 +42,7 @@ export const trackBrightness: GraphExample = {
   circuit: {
     nodes: [
       { id: 'drums', kind: 'track', op: 'level', of: 'Drums', x: 30, y: 30 },
-      { id: 'palette', kind: 'colorway', x: 270, y: 30, values: { energy: 0.5 } },
+      { id: 'palette', kind: 'colorway', x: 270, y: 30, values: { brightness: 0.5, contrast: 0.5 } },
       { id: 'output', kind: 'out', x: 510, y: 30 },
     ],
     cords: [ { from: 'drums/n', to: 'palette/amount' }, { from: 'palette/primary', to: 'output/c' } ],

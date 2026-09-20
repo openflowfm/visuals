@@ -566,8 +566,8 @@ describe('a file written when the cascade existed', () => {
     } as never).flows.mine.circuit;
     expect(merged.nodes.find((n) => n.id === 'p')?.kind).toBe('colorway');
     // The number on its face is untouched: this is a rename, not a re-dial.
-    expect(merged.nodes.find((n) => n.id === 'p')?.values).toEqual({ amount: 0.4 });
-    expect(merged.cords).toEqual([{ from: 'p/primary', to: 'o/c' }]);
+    expect(merged.nodes.find((n) => n.id === 'p')?.values).toMatchObject({ amount: 0.4 });
+    expect(merged.cords).toContainEqual({ from: 'p/primary', to: 'o/c' });
   });
 
   it('folds an energy node into the track it was following', () => {
@@ -675,7 +675,7 @@ describe('a file written when the cascade existed', () => {
     expect(kindOf('b')).toBe('spread');
     expect(kindOf('p')).toBe('grade');
     expect(kindOf('s')).toBe('spread');
-    expect(kept.cords).toHaveLength(5);
+    expect(kept.cords.filter(cord => !cord.from.startsWith('~master-level/'))).toHaveLength(5);
     // Two of them collided with a name beside them once the families existed:
     // posterize's `levels` with the mode next to it, shift's `spread` with the
     // kind it landed in. A number that kept a stale name would be trimmed away by
@@ -683,7 +683,7 @@ describe('a file written when the cascade existed', () => {
     // the map `knobs`, as a file of that vintage would, so this covers the
     // rename and the split arriving together.
     expect(kept.nodes.find((n) => n.id === 'p')?.values).toEqual({ steps: 0.8 });
-    expect(kept.nodes.find((n) => n.id === 's')?.values).toEqual({ split: 0.4 });
+    expect(kept.nodes.find((n) => n.id === 's')?.values).toMatchObject({ split: 0.4 });
   });
 
   it('reads the numbers on a node whichever of the two names the file uses', () => {
@@ -721,7 +721,7 @@ describe('a file written when the cascade existed', () => {
     // back unchanged; `depth` is carried by the response migration, because a
     // file old enough to say `knobs` was also dialled before inlet responses
     // existed — see `responseMigration.test.ts` for what that carry preserves.
-    expect(Object.keys(ripple?.values ?? {}).sort()).toEqual(['depth', 'waves']);
+    expect(Object.keys(ripple?.values ?? {}).sort()).toEqual(['depth', 'frequency', 'rate', 'waves']);
     expect(ripple?.values?.waves).toBe(0.72);
     // And the old spelling is gone rather than sitting beside the new one:
     // `scheme.json` is read and diffed by hand, and two names for one map in it
@@ -759,7 +759,7 @@ describe('a file written when the cascade existed', () => {
     expect(kept.nodes.find((n) => n.id === 'h')?.kind).toBe('grade');
     // `p` in and `p` out on the lens, `c` on the grade — every port kept its
     // name, so every cord survived.
-    expect(kept.cords).toHaveLength(4);
+    expect(kept.cords.filter(cord => !cord.from.startsWith('~master-level/'))).toHaveLength(4);
   });
 
   it('moves a track name off op, and its cords off level', () => {
@@ -917,4 +917,15 @@ describe('a file written when a flow was called a look', () => {
     expect(now.defaults.colorway).toBe('cold');
     expect(now.defaults.pace).toBe(2);
   });
+});
+
+it('round-trips explicit color overrides and current input stamps', () => {
+  const first = merge({ inputs: 2, flows: { colors: { inputs: 2, name: 'Colors', circuit: {
+    nodes: [{ id: 'source', kind: 'source', op: 'plasma', x: 0, y: 0, colors: { color: '#ff0088' } }, { id: 'out', kind: 'out', x: 200, y: 0 }],
+    cords: [{ from: 'source/c', to: 'out/c' }],
+  } } } });
+  const second = merge(JSON.parse(JSON.stringify(first)));
+  expect(second).toEqual(first);
+  expect(second.flows.colors.circuit.nodes[0].colors).toEqual({ color: '#ff0088' });
+  expect(second.flows.colors.circuit.nodes).toHaveLength(2);
 });

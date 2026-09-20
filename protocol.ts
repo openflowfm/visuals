@@ -509,8 +509,7 @@ export interface CircuitNode {
    *
    * A number stays here while the inlet is wired, dormant rather than lost:
    * wiring and then unwiring gives it back, so a cord is not a destructive
-   * gesture. Only *number* inlets are in here — a point and a colour have no
-   * single control shape and no useful constant.
+   * gesture. Only number inlets are in here; literal colours live in `colors`.
    *
    * Spelled `knobs` in a file written before the word went; `reword` in
    * `server/scheme.ts` carries those across.
@@ -572,6 +571,8 @@ export interface Circuit {
  * twenty-three you did not.
  */
 export interface FlowDef {
+  /** Node-input vocabulary version; absent means the legacy coupled inputs. */
+  inputs?: number;
   /** What it is called in the editor. Ids are stable; names are not. */
   name: string;
   circuit: Circuit;
@@ -811,6 +812,8 @@ export const MOOD_ABOUT: Record<Mood, string> = {
 };
 
 export interface Scheme {
+  /** Default node-input vocabulary version for flows without their own stamp. */
+  inputs?: number;
   /** Every flow, by id. All of them are graphs; none of them ship. */
   flows: Record<string, FlowDef>;
   /** Named colour sets, as `#rrggbb`. Five each, by `COLOR_ROLES`. */

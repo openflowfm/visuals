@@ -55,7 +55,7 @@ function Session({ example, reset }: { example: GraphExample; reset(): void }) {
       playing: playing ? 0 : -1, clipName: 'Story meter' }],
   }), [tempo, level, playing]);
   const scheme = useMemo<Scheme>(() => ({ ...SCHEME, flows: {
-    [FLOW]: { name: example.title, circuit },
+    [FLOW]: { name: example.title, inputs: 2, circuit },
   } }), [circuit, example.title]);
 
   const [numberReadings, setNumberReadings] = useState<Readonly<Record<string, NumberReading>>>({});
@@ -110,7 +110,7 @@ function Session({ example, reset }: { example: GraphExample; reset(): void }) {
       <div className="node-harness-graph" aria-label="Example graph">
         <NodePictures circuit={circuit} show={show} scheme={scheme} transport={clock} transportDelta>
           {picture => <CircuitEditor circuit={circuit} onChange={setCircuit} tracks={['Drums']}
-            energy={show.master} beat={clock.beat} picture={picture} numberReadings={numberReadings} />}
+            energy={show.master} palette={show.colors} beat={clock.beat} picture={picture} numberReadings={numberReadings} />}
         </NodePictures>
       </div>
       <aside><h3>Graph output</h3><div className="node-harness-picture" data-testid="node-preview">

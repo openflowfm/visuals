@@ -323,13 +323,13 @@ rules that were learned the hard way.
 
 **Nothing is only alive when the room is loud, and the shape of that is `max`.** `master` is
 zero with no Live attached and near it when all that is running is a click between songs —
-so a meter wired straight into an energy holds a generator at its dullest: fewest arms,
+so a meter wired directly into every appearance control holds a generator at its dullest: fewest arms,
 slowest rung on the division ladder, least charge. Every one of these now floors that with
 something on the clock:
 
 ```
 lfo / playback ───> a ┐
-                      ├ max ──> energy
+                      ├ max ──> brightness / contrast / rate / shape controls
 track (master) ────> b ┘
 ```
 

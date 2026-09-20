@@ -152,7 +152,7 @@ function instanceFlow(name: string, phase: number, alternate: boolean): FlowDef 
     name,
     circuit: {
       nodes: [
-        { id: 'palette', kind: 'colorway', x: 30, y: 20, values: { amount: 1, energy: 0.42 } },
+        { id: 'palette', kind: 'colorway', x: 30, y: 20, values: { amount: 1, brightness: 0.42, contrast: 0.42 } },
         { id: 'ring', kind: 'lfo', op: 'sine', x: 30, y: 250, values: { rate: 0.37, sync: 1, phase: (phase + 0.21) % 1 } },
         { id: 'light', kind: 'lfo', op: 'pulse', x: 30, y: 470, values: { rate: 0.31, sync: 1, phase: (phase + 0.57) % 1 } },
         model(named, 300, 70, {

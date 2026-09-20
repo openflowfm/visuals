@@ -3243,3 +3243,10 @@
   background: var(--sel);
   color: var(--amber);
 }
+
+/* Colour defaults are visible and replaceable at the same inlet as their cord. */
+.node-color-input { display: flex; align-items: center; gap: 5px; min-width: 0; font-size: 10px; }
+.node-color-input > span:first-child { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.node-color-input input[type=color] { width: 24px; height: 20px; padding: 0; border: 1px solid var(--bd3); background: transparent; }
+.node-color-input .node-color-default { color: var(--caption); font-size: 9px; }
+.node-color-input button { padding: 0 3px; background: transparent; color: inherit; border: 0; cursor: pointer; }

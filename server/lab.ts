@@ -1,3 +1,4 @@
+import { migrateNodeInputs, migrateFlowInputs } from '../nodeInputMigration.ts';
 import { createHash } from 'node:crypto';
 import type { DatabaseSync as Database } from 'node:sqlite';
 
@@ -831,8 +832,8 @@ export function openLab(file: string): LabStore {
         )
         .run(
           candidate.id,
-          JSON.stringify(candidate.flow),
-          JSON.stringify(candidate.bundle),
+          JSON.stringify({ ...candidate.flow, inputs: candidate.flow.inputs ?? 2 }),
+          JSON.stringify(Object.fromEntries(Object.entries(candidate.bundle).map(([id, flow]) => [id, { ...flow, inputs: flow.inputs ?? 2 }]))),
           candidate.generatorVersion,
           now(),
         );
@@ -863,8 +864,8 @@ export function openLab(file: string): LabStore {
       if (!row) return null;
       return {
         id: row.id,
-        flow: JSON.parse(row.flow_json) as FlowDef,
-        bundle: JSON.parse(row.dependency_bundle_json) as Record<string, FlowDef>,
+        flow: migrateNodeInputs(JSON.parse(row.flow_json) as FlowDef),
+        bundle: migrateFlowInputs(JSON.parse(row.dependency_bundle_json) as Record<string, FlowDef>),
         generatorVersion: row.generator_version,
       };
     },
@@ -925,8 +926,8 @@ export function openLab(file: string): LabStore {
         const detail = JSON.parse(row.operation_json) as { cohort?: string };
         return {
           id: row.id,
-          flow: JSON.parse(row.flow) as FlowDef,
-          bundle: JSON.parse(row.bundle) as Record<string, FlowDef>,
+          flow: migrateNodeInputs(JSON.parse(row.flow) as FlowDef),
+          bundle: migrateFlowInputs(JSON.parse(row.bundle) as Record<string, FlowDef>),
           parentId: row.parent,
           operation: row.operation,
           generation: Number(row.generation),
@@ -1368,8 +1369,8 @@ export function openLab(file: string): LabStore {
       return rows.map((row) => ({
         candidate: {
           id: row.id,
-          flow: JSON.parse(row.flow) as FlowDef,
-          bundle: JSON.parse(row.bundle) as Record<string, FlowDef>,
+          flow: migrateNodeInputs(JSON.parse(row.flow) as FlowDef),
+          bundle: migrateFlowInputs(JSON.parse(row.bundle) as Record<string, FlowDef>),
           parentId: row.parent,
           operation: row.operation,
           generation: Number(row.generation),
@@ -1702,7 +1703,7 @@ export function openLab(file: string): LabStore {
         candidateId: row.candidate_id,
         isParent: row.is_parent === 1,
         order: Number(row.entered_order),
-        circuit: (JSON.parse(row.flow) as FlowDef).circuit,
+        circuit: migrateNodeInputs(JSON.parse(row.flow) as FlowDef).circuit,
       }));
     },
 

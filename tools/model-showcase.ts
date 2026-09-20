@@ -383,7 +383,7 @@ const foxDuet: FlowDef = {
   name: 'Models / kinetic fox duet',
   circuit: {
     nodes: [
-      { id: 'palette', kind: 'colorway', x: 20, y: 20, values: { amount: 1, energy: 0.58 } },
+      { id: 'palette', kind: 'colorway', x: 20, y: 20, values: { amount: 1, brightness: 0.58, contrast: 0.58 } },
       { id: 'run-clock', kind: 'lfo', op: 'saw', x: 20, y: 250, values: { rate: 0.53, sync: 1, phase: 0.08 } },
       { id: 'survey-clock', kind: 'lfo', op: 'saw', x: 20, y: 460, values: { rate: 0.39, sync: 1, phase: 0.61 } },
       model('runner', foxRun, 280, 20, { turn: 0.44, 'scale-x': 0.45, 'scale-y': 0.45, 'scale-z': 0.45 }),
@@ -411,7 +411,7 @@ const carTrails: FlowDef = {
   name: 'Models / toy car light trails',
   circuit: {
     nodes: [
-      { id: 'palette', kind: 'colorway', x: 20, y: 20, values: { amount: 1, energy: 0.7 } },
+      { id: 'palette', kind: 'colorway', x: 20, y: 20, values: { amount: 1, brightness: 0.7, contrast: 0.7 } },
       { id: 'turn', kind: 'lfo', op: 'saw', x: 20, y: 245, values: { rate: 0.32, sync: 1, phase: 0.12 } },
       { id: 'glass', kind: 'lfo', op: 'sine', x: 20, y: 455, values: { rate: 0.42, sync: 1, phase: 0.38 } },
       { id: 'light', kind: 'lfo', op: 'sine', x: 20, y: 660, values: { rate: 0.2, sync: 1, phase: 0.72 } },
@@ -445,7 +445,7 @@ const helmetDual: FlowDef = {
   name: 'Models / helmet material duality',
   circuit: {
     nodes: [
-      { id: 'palette', kind: 'colorway', x: 20, y: 20, values: { amount: 1, energy: 0.78 } },
+      { id: 'palette', kind: 'colorway', x: 20, y: 20, values: { amount: 1, brightness: 0.78, contrast: 0.78 } },
       { id: 'auth-turn', kind: 'lfo', op: 'saw', x: 20, y: 245, values: { rate: 0.24, sync: 1, phase: 0.08 } },
       { id: 'neon-turn', kind: 'lfo', op: 'saw', x: 20, y: 455, values: { rate: 0.31, sync: 1, phase: 0.54 } },
       { id: 'scan-pulse', kind: 'lfo', op: 'sine', x: 20, y: 665, values: { rate: 0.67, sync: 1, phase: 0.2 } },
@@ -477,7 +477,7 @@ const helmetEcho: FlowDef = {
   name: 'Models / helmet scan echoes',
   circuit: {
     nodes: [
-      { id: 'palette', kind: 'colorway', x: 20, y: 20, values: { amount: 1, energy: 0.86 } },
+      { id: 'palette', kind: 'colorway', x: 20, y: 20, values: { amount: 1, brightness: 0.86, contrast: 0.86 } },
       { id: 'turn-a', kind: 'lfo', op: 'saw', x: 20, y: 245, values: { rate: 0.28, sync: 1, phase: 0.05 } },
       { id: 'turn-b', kind: 'lfo', op: 'saw', x: 20, y: 455, values: { rate: 0.37, sync: 1, phase: 0.63 } },
       { id: 'grid', kind: 'lfo', op: 'sine', x: 20, y: 665, values: { rate: 0.49, sync: 1, phase: 0.31 } },

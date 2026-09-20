@@ -1,3 +1,4 @@
+import { migrateFlowInputs, migrateNodeInputs, NODE_INPUT_VERSION } from '../nodeInputMigration.ts';
 import { z } from 'zod';
 import {
   LFO_SHAPES,
@@ -99,7 +100,7 @@ function wire(
     wired,
   );
   const row = new Map<number, number>();
-  return {
+  return migrateNodeInputs({
     name,
     circuit: {
       nodes: nodes.map(([id, kind, op, values, value, label, of, smooth]): CircuitNode => {
@@ -121,7 +122,7 @@ function wire(
       }),
       cords: wired,
     },
-  };
+  });
 }
 
 /**
@@ -206,6 +207,7 @@ function columnsOf(ids: readonly string[], cords: readonly { from: string; to: s
  * one left is in `Weather`, feeding two places, which is what that node is for.
  */
 const EXAMPLES: Scheme = {
+  inputs: NODE_INPUT_VERSION,
   // Source, dialled against this build's inlet responses — so a copy of it
   // written to disk is already current and is never carried across a response
   // change. Without this the first library anyone opens is solved backwards.
@@ -1538,7 +1540,7 @@ export function merge(raw: Partial<Scheme>): Scheme {
   const dialled = file.flows
     ? migrateFlowResponses(file.flows, file.responses ?? OLDEST_RESPONSE_SET_VERSION).flows
     : EXAMPLES.flows;
-  const flows = whole(dialled);
+  const flows = whole(migrateFlowInputs(dialled, file.flows ? file.inputs ?? 1 : NODE_INPUT_VERSION));
   // Through `paletteOf`, so every colourway that reaches a show is exactly five
   // in role order. A file may hand-write two and mean it; the roles are what a
   // graph wires to, so the repair belongs here — the one door — rather than in
@@ -1574,6 +1576,7 @@ export function merge(raw: Partial<Scheme>): Scheme {
     ...(file.seed ? { seed: file.seed } : {}),
     // Always this build's version: everything above has just been carried to it,
     // and the stamp is what stops the next load carrying it again.
+    inputs: NODE_INPUT_VERSION,
     responses: RESPONSE_SET_VERSION,
     flows,
     colorways,
@@ -1821,6 +1824,7 @@ const SCHEME_FILE = z.object({
   // Declared so a file saying something other than a number is refused at the
   // door rather than read as version 1 and re-solved a second time.
   responses: z.number().int().positive().optional(),
+  inputs: z.number().int().positive().optional(),
 });
 
 function vetted(raw: Partial<Scheme>): Partial<Scheme> {

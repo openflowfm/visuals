@@ -119,3 +119,11 @@ Fixture tests compile every supported mode/outlet and the modulation/track graph
 stories exercise the actual editor and production WebGL output, stable frozen frames,
 parameter edits, reset, transport controls and simulated track inputs. These are behavior
 checks, not cross-GPU golden screenshot comparisons.
+
+## Explicit inputs
+
+Node examples use independent controls for brightness, contrast, rate, intensity and
+geometry. There is no combined energy inlet. Colour inlets show their default
+colourway role beside a swatch. Pick a custom colour there, reset it to the role,
+or connect any colour output to override it. **Nodes / Source / Palette Wiring**
+shows an explicit Colorway connection; **Custom Color** exercises a literal override.

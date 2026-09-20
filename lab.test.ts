@@ -223,3 +223,15 @@ describe('promotion', () => {
     expect(promotedCandidateId(changed, candidate)).toBeNull();
   });
 });
+
+it('distinguishes candidate color overrides', () => {
+  const red = flow('Red'); const blue = flow('Blue');
+  red.circuit.nodes[0].colors = { color: '#ff0000' };
+  blue.circuit.nodes[0].colors = { color: '#0000ff' };
+  expect(canonicalCandidate(red, {})).not.toBe(canonicalCandidate(blue, {}));
+});
+
+it('distinguishes legacy coupled inputs from current independent defaults', () => {
+  const old = flow('Old'); const current = { ...old, inputs: 2 };
+  expect(canonicalCandidate(old, {})).not.toBe(canonicalCandidate(current, {}));
+});

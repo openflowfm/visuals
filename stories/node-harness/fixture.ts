@@ -25,11 +25,11 @@ export function harnessFixture(
   const previewOutlet = spec.outlets.find((port) => port.name === outlet)?.name ??
     spec.outlets.find((port) => port.kind === 'c')?.name ?? spec.outlets[0]?.name;
   const node: CircuitNode = { id: SUBJECT, kind, op: mode, x: 270, y: 30, values, previewOutlet };
-  const colours = inletsOf(node).filter((port) => port.kind === 'c');
+  const colours = inletsOf(node).filter((port) => port.kind === 'c' && !port.colorRole);
   const circuit: Circuit = {
     nodes: [node, ...colours.map((_, i): CircuitNode => ({
       id: `fixture-${i}`, kind: 'source', op: i % 2 === 0 ? 'checker' : 'plasma',
-      x: 30, y: 30 + i * 330, values: { energy: 0.5 },
+      x: 30, y: 30 + i * 330, values: { brightness: 0.5, contrast: 0.5 },
     }))],
     cords: colours.map((port, i) => ({ from: `fixture-${i}/c`, to: `${SUBJECT}/${port.name}` })),
   };

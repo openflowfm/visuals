@@ -5,13 +5,9 @@ import { CALIBRATION_BASELINE_RESPONSES, responseKey } from './response.ts';
 
 describe('response calibration manifest', () => {
   it('covers the complete subjective visual-control matrix', () => {
-    // 138 rather than 128: `grade/highlights`, the two new `spread` modes and
-    // `source/traces` brought ten uncalibrated controls between them — a knee
-    // and an amount; a reach, a split, two drives and two energies; then the
-    // trace density and its energy. Like the three lfo shapes that arrived with
-    // `wave`'s merge, they rest on a linear response until the bench has run
-    // their trials — see docs/calibration.md.
-    expect(CALIBRATION_TRIALS).toHaveLength(138);
+    // Each former coupled inlet is now independently calibratable.
+    expect(CALIBRATION_TRIALS).toHaveLength(183);
+    expect(CALIBRATION_TRIALS.some(trial => trial.target.inlet === 'energy')).toBe(false);
     expect(new Set(CALIBRATION_TRIALS.map((trial) => trial.target.kind))).toEqual(
       new Set([
         'source',
@@ -30,7 +26,7 @@ describe('response calibration manifest', () => {
       ]),
     );
     expect(
-      CALIBRATION_TRIALS.find((trial) => trial.id === 'parameter-source-bars-energy')?.options
+      CALIBRATION_TRIALS.find((trial) => trial.id === 'parameter-source-bars-brightness')?.options
         .map((option) => option.id),
     ).toContain('root');
     expect(

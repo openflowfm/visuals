@@ -101,7 +101,7 @@ describe('the agent-facing node catalog', () => {
         .find((node) => node.kind === 'field')
         ?.variants.find((variant) => variant.mode === 'metaballs')
         ?.inlets.map((port) => port.name),
-    ).toEqual(['p', 'energy', 'balls', 'apart']);
+    ).toEqual(['p', 'brightness', 'contrast', 'hardness', 'balls', 'apart', 'color', 'contour']);
     expect(
       catalog
         .find((node) => node.kind === 'lfo')
@@ -239,7 +239,7 @@ describe('scheme writes', () => {
     const before = store.read();
     const saved = store.saveFlow('agent', flow(), before.revision);
     expect(saved.revision).not.toBe(before.revision);
-    expect(store.read().scheme.flows.agent).toEqual(flow());
+    expect(store.read().scheme.flows.agent).toEqual({ ...flow(), inputs: 2 });
     expect(JSON.parse(fs.readFileSync(file, 'utf8')).flows.agent.name).toBe('Agent field');
   });
 
@@ -299,5 +299,19 @@ describe('node design review', () => {
     expect(review.diagnostics.map((entry) => entry.code)).toEqual(
       expect.arrayContaining(['node.name.daw', 'node.port.description']),
     );
+  });
+});
+
+describe('literal color inputs', () => {
+  it('validates held colors and rejects unknown ports and malformed literals', () => {
+    const held = flow();
+    held.circuit.nodes[0].colors = { color: '#ff00aa' };
+    expect(validateFlow('held', held, {}).diagnostics.filter(d => d.code.startsWith('node.color.'))).toEqual([]);
+    held.circuit.nodes[0].colors = { absent: '#ff00aa', color: 'red' };
+    expect(validateFlow('held', held, {}).diagnostics.map(d => d.code)).toEqual(expect.arrayContaining(['node.color.unknown', 'node.color.invalid']));
+  });
+  it('publishes the palette role behind each default color inlet', () => {
+    const source = nodeCatalog().find(node => node.kind === 'source')!;
+    expect(source.variants[0].inlets.find(port => port.name === 'color')).toMatchObject({ signal: 'c', colorRole: 'primary', settable: true });
   });
 });

@@ -1201,7 +1201,7 @@ export function randomizeCircuit(rng: Rng): Circuit {
               y: 20,
               values: { amount: round2(between(rng, 0.12, 0.35)) },
             });
-            return `${wash}/c`;
+            return `${wash}/primary`;
           })()
         : (() => {
             const cloud = add({ kind: 'field', op: 'clouds', x: at(), y: 20 });
@@ -1332,7 +1332,7 @@ export function randomizeScheme(
     const [a, b] = shuffled(rng, WORDS);
     const circuit = randomizeCircuit(rng);
     if (!randomising('flows')) continue;
-    flows[id] = { name: `${a[0].toUpperCase()}${a.slice(1)} ${b}`, circuit, randomized: true };
+    flows[id] = { name: `${a[0].toUpperCase()}${a.slice(1)} ${b}`, circuit, inputs: 2, randomized: true };
     wired.push(id);
   }
 
@@ -1353,6 +1353,7 @@ export function randomizeScheme(
 
   return {
     seed,
+    inputs: 2,
     flows,
     colorways,
     // Untouched, for the reason the names are: a mood is what a person asked

@@ -33,6 +33,7 @@ const cloneCircuit = (circuit: Circuit): Circuit => ({
     ...node,
     ...(node.values ? { values: { ...node.values } } : {}),
     ...(node.depths ? { depths: { ...node.depths } } : {}),
+    ...(node.colors ? { colors: { ...node.colors } } : {}),
   })),
   cords: circuit.cords.map((cord) => ({ ...cord })),
 });
@@ -72,9 +73,9 @@ const hasInlet = (node: CircuitNode, signal: Signal): boolean =>
 
 /** Pictures which make something from their own defaults, without a file or library. */
 const COLOUR_TERMINALS = NODE_KINDS.filter((kind) => {
-  if (['flow', 'image', 'video', 'last', 'take', 'give', 'out'].includes(kind)) return false;
+  if (['flow', 'image', 'video', 'model', 'last', 'take', 'give', 'out'].includes(kind)) return false;
   const sample: CircuitNode = { id: '~', kind, x: 0, y: 0, ...(modesOf(kind)[0] ? { op: modesOf(kind)[0] } : {}) };
-  return hasOutlet(kind, 'c') && !hasInlet(sample, 'c');
+  return hasOutlet(kind, 'c') && !inletsOf(sample).some(port => port.kind === 'c' && !port.colorRole && port.fallback !== 'vec4(1.0)');
 });
 
 /** Colour nodes which can be inserted into an existing picture cord. */
@@ -285,6 +286,8 @@ const changeMode: Mutator = (source, rng) => {
   node.depths = Object.fromEntries(
     Object.entries(node.depths ?? {}).filter(([name]) => inlets.has(name)),
   );
+  const colorInlets = new Set(inletsOf(node).filter(port => port.kind === 'c').map(port => port.name));
+  node.colors = Object.fromEntries(Object.entries(node.colors ?? {}).filter(([name]) => colorInlets.has(name)));
   circuit.cords = circuit.cords.filter((cord) => {
     const to = splitPort(cord.to);
     return to.node !== node.id || inlets.has(to.port);
@@ -677,7 +680,7 @@ const family = (rng: Rng): string =>
   `family-${Math.floor(rng() * 0xffffffff).toString(16).padStart(8, '0')}`;
 
 const randomDraft = (rng: Rng): CandidateDraft => ({
-  flow: { name: name(rng), circuit: randomCircuit(rng) },
+  flow: { inputs: 2, name: name(rng), circuit: randomCircuit(rng) },
   bundle: {},
   parents: [],
   operation: 'random',
@@ -755,7 +758,7 @@ export function batchDrafts(
     const mutation = wholeMutation(parent.flow.circuit, rng, limit);
     if (!mutation) continue;
     admit({
-      flow: { name: name(rng), circuit: mutation.circuit },
+      flow: { inputs: 2, name: name(rng), circuit: mutation.circuit },
       bundle: parent.bundle,
       parents: [parent.id],
       operation: mutation.operation,
@@ -849,7 +852,7 @@ function leap(parent: EvidenceCandidate, rng: Rng): Leap | null {
   return {
     distance,
     draft: {
-      flow: { name: name(rng), circuit },
+      flow: { inputs: 2, name: name(rng), circuit },
       bundle: parent.bundle,
       parents: [parent.id],
       operation: 'explore:leap',
@@ -906,7 +909,7 @@ const refine = (
     right: {
       kind: 'draft',
       candidate: {
-        flow: { name: name(rng), circuit: mutation.circuit },
+        flow: { inputs: 2, name: name(rng), circuit: mutation.circuit },
         bundle: parent.bundle,
         parents: [parent.id],
         operation: mutation.operation,
