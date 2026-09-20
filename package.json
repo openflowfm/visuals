@@ -44,9 +44,7 @@
     "pack": "node --disable-warning=ExperimentalWarning tools/app.ts pack",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.electron.json",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
-    "search:code": "node tools/code-search/cli.ts",
-    "test:code-search": "vitest run --project=visuals tools/code-search"
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@ktamas77/abletonlink": "^1.2.3",
