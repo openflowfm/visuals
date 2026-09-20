@@ -189,5 +189,18 @@ vec3 charge(vec3 c, float e) {
   return clamp((lifted - 0.28) * mix(1.0, 1.3, e) + 0.28, 0.0, OVERBRIGHT);
 }
 
+// A graph colour is premultiplied. Colour inputs use its straight RGB hue.
+vec3 colorRGB(vec4 c) {
+  return c.a > 0.00001 ? c.rgb / c.a : vec3(0.0);
+}
+
+// Independent colour controls; generators supply straight RGB and coverage.
+vec4 finishColor(vec4 g, float brightness, float contrast) {
+  float a = clamp(g.a, 0.0, 1.0);
+  vec3 lifted = g.rgb * mix(0.8, 1.1, brightness);
+  vec3 rgb = clamp((lifted - 0.28) * mix(1.0, 1.3, contrast) + 0.28, 0.0, OVERBRIGHT);
+  return vec4(rgb * a, a);
+}
+
 #define OUT(rgb, a) { float _a = (a) * uOpacity; fragColor = vec4(charge(rgb, uEnergy) * _a, _a); }
 `;

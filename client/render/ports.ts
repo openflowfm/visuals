@@ -1,4 +1,5 @@
 import type { ParameterResponse } from '../../response.ts';
+import { COLOR_ROLES, type ColorRole } from '../../protocol.ts';
 
 /**
  * What a port carries, and how one is declared.
@@ -25,6 +26,8 @@ export interface PortSpec extends PortDocumentation {
   name: string;
   /** Cosmetic faceplate name. `name` remains the stable graph address. */
   label?: string;
+  /** Visible palette-role default for an overridable colour inlet. */
+  colorRole?: ColorRole;
   /** Optional visual grouping for setup-published controls. */
   group?: string;
   kind: Signal;
@@ -80,6 +83,12 @@ export const C = (name: string, description: string, fallback = 'vec4(0.0)'): Po
   kind: 'c',
   description,
   fallback,
+});
+
+/** A normal colour inlet whose unwired default is one named palette role. */
+export const roleColorPort = (name: string, description: string, role: ColorRole = 'primary'): PortSpec => ({
+  ...C(name, description, `vec4(uColors[${COLOR_ROLES.indexOf(role)}], 1.0)`),
+  colorRole: role,
 });
 
 /**

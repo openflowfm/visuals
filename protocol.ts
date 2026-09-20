@@ -516,6 +516,8 @@ export interface CircuitNode {
    * `server/scheme.ts` carries those across.
    */
   values?: Record<string, number>;
+  /** Literal sRGB colours by colour inlet, as #rrggbb. A cord overrides the held colour. */
+  colors?: Record<string, string>;
   /**
    * How far a cord is allowed to move each inlet, signed. Keyed as `values` is.
    *
