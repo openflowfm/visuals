@@ -153,6 +153,31 @@ describe('CPU number evaluation', () => {
     expect(one(node('m', 'math', { op, values: { a: 0.8, b: 0.4 } }))).toBeCloseTo(expected);
   });
 
+  it.each([
+    [0.0625, 0, 0.5],
+    [0.25, 0.25, 0.5],
+    [0.37, 0.5, 0.37],
+    [0.5, 0.75, 0.25],
+    [0.5, 1, 0.0625],
+    [-1, 0.5, 0],
+    [2, 0.5, 1],
+    [0.0625, -1, 0.5],
+    [0.5, 2, 0.0625],
+  ])('curves %s by %s with the shader exponent and bounds', (a, b, expected) => {
+    expect(one(node('m', 'math', { op: 'curve', values: { a, b } }))).toBeCloseTo(expected, 12);
+  });
+
+  it('uses the default curve midpoint as identity after a wired modulation range', () => {
+    const graph = circuit([
+      node('v', 'value', { value: 0.8 }),
+      node('m', 'math', { op: 'curve', values: { a: 0.1 }, depths: { a: 0.5 } }),
+    ], [{ from: 'v/n', to: 'm/a' }]);
+    const sample = createNumberEvaluator().sample(graph, inputs());
+    expect(sample.inlet('m/a')).toBeCloseTo(0.5, 12);
+    expect(sample.inlet('m/b')).toBe(0.5);
+    expect(sample.outlet('m/n')).toBeCloseTo(0.5, 12);
+  });
+
   it('falls back unknown math to add and clamps subtraction at zero', () => {
     expect(one(node('m', 'math', { op: 'unknown', values: { a: 0.8, b: 0.4 } }))).toBe(1);
     expect(one(node('m', 'math', { op: 'subtract', values: { a: 0.2, b: 0.4 } }))).toBe(0);

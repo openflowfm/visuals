@@ -171,6 +171,8 @@ function maths(op: string | undefined, a: number, b: number): number {
       return Math.max(a, b);
     case 'average':
       return (a + b) * 0.5;
+    case 'curve':
+      return Math.pow(clamp(a), Math.pow(2, (clamp(b) - 0.5) * 4));
     case 'add':
     default:
       return clamp(a + b);
