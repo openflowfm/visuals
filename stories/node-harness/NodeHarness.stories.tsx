@@ -20,11 +20,24 @@ async function pixels(canvas: HTMLCanvasElement): Promise<number[]> {
     const gl = canvas.getContext('webgl2')!;
     const data = new Uint8Array(canvas.width * canvas.height * 4);
     gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, data);
-    resolve(Array.from(data.filter((_, i) => i % 97 === 0)));
+    const samples: number[] = [];
+    for (let i = 0; i < data.length; i += 4 * 97) samples.push(...data.subarray(i, i + 4));
+    resolve(samples);
   }));
 }
 
-export const Source: Story = {};
+export const Source: Story = {
+  play: async ({ canvasElement }) => {
+    await waitFor(() => expect(canvasElement.querySelector('canvas')?.width).toBeGreaterThan(1));
+    const canvas = canvasElement.querySelector('canvas')!;
+    await waitFor(async () => {
+      const frame = await pixels(canvas);
+      // Alpha and white pixels are not evidence that the seeded palette arrived.
+      expect(frame.some((r, i) => i % 4 === 0 && frame[i + 3] > 0 &&
+        Math.max(r, frame[i + 1], frame[i + 2]) - Math.min(r, frame[i + 1], frame[i + 2]) > 10)).toBe(true);
+    });
+  },
+};
 export const ColourTransform: Story = {
   args: { kind: 'lens', mode: 'ripple' },
   play: async ({ canvasElement }) => {
