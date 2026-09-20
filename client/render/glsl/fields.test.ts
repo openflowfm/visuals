@@ -149,10 +149,10 @@ describe('bounded field work', () => {
 
   it('offers one generator-shaped entry point for every charged mode', () => {
     for (const mode of Object.keys(FIELD_WORK)) {
-      expect(FIELD_LIB).toContain(`vec4 field_${mode}(vec2 p, float e`);
+      expect(FIELD_LIB).toContain(`vec4 field_${mode}(vec2 p, float`);
     }
     expect(FIELD_LIB).toContain(
-      'vec4 field_metaballs(vec2 p, float e, float balls, float apart)',
+      'vec4 field_metaballs(vec2 p, float hardness, float balls, float apart, vec3 color, vec3 contourColor)',
     );
   });
 });

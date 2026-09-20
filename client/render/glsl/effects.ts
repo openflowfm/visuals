@@ -22,8 +22,8 @@ vec2 fxMirror(vec2 p, float line, float angle) {
   return mat2(c, s, -s, c) * q;
 }
 
-vec2 fxKaleido(vec2 p, float segments, float spin, float e) {
-  float n = floor(max(2.0, 2.0 + segments * 10.0 + e * 4.0));
+vec2 fxKaleido(vec2 p, float segments, float spin, float segmentOffset) {
+  float n = floor(max(2.0, 2.0 + segments * 10.0 + segmentOffset * 4.0));
   float a = atan(p.y, p.x) + uBeat * spin * 6.28318530718;
   float r = length(p);
   float wedge = PI / n;
@@ -31,18 +31,18 @@ vec2 fxKaleido(vec2 p, float segments, float spin, float e) {
   return vec2(cos(a), sin(a)) * r;
 }
 
-vec2 fxPixelate(vec2 p, float blocks, float resolve, float e) {
+vec2 fxPixelate(vec2 p, float blocks, float resolve, float resolutionScale) {
   vec2 uv = uncentred(p);
-  float base = mix(4.0 + blocks * 124.0, (4.0 + blocks * 124.0) * 0.45, e);
+  float base = mix(4.0 + blocks * 124.0, (4.0 + blocks * 124.0) * 0.45, resolutionScale);
   float steps = max(2.0, mix(base, base * 4.0, (1.0 - uPhase / uQuantum) * resolve));
   return recentred((floor(uv * steps) + 0.5) / steps);
 }
 
-vec2 fxRipple(vec2 p, float waves, float depth, float speed, float e) {
+vec2 fxRipple(vec2 p, float waves, float depth, float speed, float e, float frequency) {
   vec2 uv = uncentred(p);
   float r = length(p);
   float n = 2.0 + waves * 58.0;
-  float wave = sin(r * mix(n * 0.7, n * 2.0, e) - uBeat * rate(e) * (0.25 + speed * 3.75) * PI * 2.0);
+  float wave = sin(r * mix(n * 0.7, n * 2.0, frequency) - uBeat * rate(e) * (0.25 + speed * 3.75) * PI * 2.0);
   float push = wave * depth * (0.01 + uLevel * 0.04);
   return recentred(uv + normalize(p + 1e-6) * push);
 }
@@ -71,9 +71,9 @@ vec4 fxPosterize(vec4 c, float levels) {
   return vec4(clamp(floor(c.rgb / a * steps + 0.5) / steps, 0.0, 1.0) * c.a, c.a);
 }
 
-vec4 fxInvert(vec4 c, float hold, float speed, float e) {
+vec4 fxInvert(vec4 c, float hold, float speed, float e, float decay) {
   float a = max(c.a, 1e-4);
-  float on = step(1.0 - hold, beatPulse(rate(e) * mix(0.5, 2.0, speed), e));
+  float on = step(1.0 - hold, beatPulse(rate(e) * mix(0.5, 2.0, speed), decay));
   return vec4(mix(c.rgb / a, vec3(1.0) - c.rgb / a, on) * c.a, c.a);
 }
 
@@ -104,13 +104,13 @@ vec4 fxSaturate(vec4 c, float amount) {
 // hue is being decided, so a face is still a face and a logo is still legible
 // while the frame agrees with the colourway. That is the whole trade the video
 // vocabulary is after -- breathe, stay decipherable.
-vec4 fxTint(vec4 c, float amount, float bias) {
+vec4 fxTint(vec4 c, float amount, float bias, vec3 shadow, vec3 highlight) {
   float a = max(c.a, 1e-4);
   vec3 col = c.rgb / a;
   // The bias bends the ramp rather than sliding it, so the tint can be pushed
   // into the shadows or held up in the highlights without clipping either end.
   float shaped = pow(clamp(fxLuma(col), 0.0, 1.0), exp2((0.5 - bias) * 2.4));
-  vec3 duo = mix(uPrimary * 0.12, mix(uPrimary, vec3(1.0), 0.3), shaped);
+  vec3 duo = mix(shadow * 0.12, highlight, shaped);
   return vec4(clamp(mix(col, duo, clamp(amount, 0.0, 1.0)), 0.0, 1.0) * c.a, c.a);
 }
 

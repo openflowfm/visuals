@@ -1,6 +1,6 @@
 import { GLOW_MODES } from '../../../protocol.ts';
 import type { NodeSpec } from '../../render/circuit.ts';
-import { colourPort, energyPort, livePort, numberPort, type PortSpec } from '../../render/ports.ts';
+import { colourPort, roleColorPort, livePort, numberPort, type PortSpec } from '../../render/ports.ts';
 import { modeOfNode } from '../mode.ts';
 
 type Mode = (typeof GLOW_MODES)[number];
@@ -47,7 +47,11 @@ export const GLOW_NODE_SPEC = {
         'How far this point is from the thing being lit. Nothing at zero.',
         'length(centred())',
       ),
-      energyPort(),
+      numberPort('brightness', 'How brightly the light colours are drawn.'),
+      numberPort('contrast', 'How strongly light and dark colours separate.'),
+      numberPort('intensity', 'How strongly the light covers the frame.'),
+      roleColorPort('color', 'The colour of the glow.'),
+      ...(op === 'neon' ? [numberPort('overdrive', 'How far the hot filament exceeds full brightness.'), roleColorPort('highlight', 'The colour of the hot filament.', 'chalk')] : []),
       ...values[op],
     ];
   },
@@ -55,8 +59,8 @@ export const GLOW_NODE_SPEC = {
   modes: GLOW_MODES.map((name) => ({ name, description: descriptions[name] })),
   emit: (ctx) => {
     const op = modeOfNode(ctx.node, GLOW_MODES);
-    const e = ctx.read('energy');
-    const args = [ctx.read('d'), e, ...values[op].map((port) => ctx.read(port.name))];
-    return { c: `laid(glow_${op}(${args.join(', ')}), ${e})` };
+    const intensity = ctx.read('intensity');
+    const args = [ctx.read('d'), intensity, ...values[op].map((port) => ctx.read(port.name)), `colorRGB(${ctx.read('color')})`, ...(op === 'neon' ? [ctx.read('overdrive'), `colorRGB(${ctx.read('highlight')})`] : [])];
+    return { c: `finishColor(glow_${op}(${args.join(', ')}), ${ctx.read('brightness')}, ${ctx.read('contrast')})` };
   },
 } satisfies NodeSpec;

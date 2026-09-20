@@ -75,31 +75,31 @@ float glowBody(float q) {
  * OVERBRIGHT. A white core three pixels wide with a halo bleeding off it is the
  * entire difference between a tube that is lit and a tube that is drawn.
  */
-vec4 glow_neon(float d, float e, float core, float halo) {
+vec4 glow_neon(float d, float e, float core, float halo, vec3 color, float overdrive, vec3 highlight) {
   float q = max(d, 0.0) / glowReach(halo);
   float body = glowBody(q);
   float width = mix(0.10, 0.85, clamp(core, 0.0, 1.0));
   float hot = exp(-(q * q) / (width * width));
   float lit = clamp((body * 0.85 + hot) * mix(0.65, 1.15, e), 0.0, 1.0);
-  vec3 col = mix(uPrimary, vec3(1.0), smoothstep(0.15, 0.6, hot));
-  float over = 1.0 + hot * hot * mix(0.8, 4.0, clamp(core, 0.0, 1.0)) * mix(0.7, 1.3, e);
+  vec3 col = mix(color, highlight, smoothstep(0.15, 0.6, hot));
+  float over = 1.0 + hot * hot * mix(0.8, 4.0, clamp(core, 0.0, 1.0)) * mix(0.7, 1.3, overdrive);
   return vec4(col * over, lit);
 }
 
 // The same falloff with no filament in it: a Gaussian that stays the colour it
 // started. What you want under a neon rather than instead of one.
-vec4 glow_soft(float d, float e, float halo) {
+vec4 glow_soft(float d, float e, float halo, vec3 color) {
   float q = max(d, 0.0) / glowReach(halo);
   float lit = clamp(max(exp(-q * q * 0.7) - 0.02, 0.0) / 0.98 * mix(0.6, 1.15, e), 0.0, 1.0);
-  return vec4(uPrimary, lit);
+  return vec4(color, lit);
 }
 
 // Brightest at a distance rather than at zero, so a shape gets an outline
 // standing off it. At an away of zero it is exactly the soft glow, which is the
 // right thing for a control to do at its bottom.
-vec4 glow_band(float d, float e, float away, float halo) {
+vec4 glow_band(float d, float e, float away, float halo, vec3 color) {
   float q = abs(max(d, 0.0) - clamp(away, 0.0, 1.0) * 0.4) / glowReach(halo);
   float lit = clamp(exp(-q * q * 0.7) * mix(0.6, 1.15, e), 0.0, 1.0);
-  return vec4(uPrimary, lit);
+  return vec4(color, lit);
 }
 `;

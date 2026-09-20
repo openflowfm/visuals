@@ -25,7 +25,7 @@ import {
   type FlowDef,
   type NodeKind,
 } from '../../protocol.ts';
-import { ALIVE, asFloat, C, E, FOLLOWS, N, P } from './ports.ts';
+import { ALIVE, asFloat, C, N, P, roleColorPort } from './ports.ts';
 import type { PortDocumentation, PortSpec, Signal } from './ports.ts';
 export type { PortDocumentation, PortSpec, Signal } from './ports.ts';
 export {
@@ -35,6 +35,7 @@ export {
   ALIVE as livePort,
   E as energyPort,
 } from './ports.ts';
+import { legacyEnergyTargets, SOURCE_RATE_MODES } from './legacyEnergy.ts';
 import { CIRCUIT_HELPERS } from './glsl/circuit.ts';
 import { FIELD_WORK } from './glsl/fields.ts';
 import { SOURCE_VALUES } from './glsl/sources.ts';
@@ -484,7 +485,7 @@ const VALUE_DESCRIPTION: Record<ValueInlet, string> = {
   knee: 'How bright a colour must be before it starts rolling off.',
   reach: 'How far from this point the surrounding picture is sampled.',
   floor: 'How bright something must be before it blooms.',
-  drive: 'How strongly the room energy drives the effect.',
+  drive: 'How strongly the room level drives the effect.',
   width: 'How far apart the samples used to find an edge are.',
   split: 'How far the colour channels separate.',
   zoom: 'How deeply the fractal is magnified, on a bounded logarithmic scale.',
@@ -511,19 +512,6 @@ const VALUE_DESCRIPTION: Record<ValueInlet, string> = {
   lines: 'How many lines rule the frame.',
   shower: 'How thickly the sparks fill the frame.',
 };
-
-/**
- * The numbers that follow the energy inlet until somebody takes them.
- *
- * Every promoted constant is in here, because every one of them had `e` mixed
- * into it — which is what keeps the promotion invisible on a graph nobody has
- * touched. A name absent from this set sits at `VALUE_AT` instead.
- */
-const VALUE_FOLLOWS: ReadonlySet<string> = new Set([
-  ...Object.values(SOURCE_VALUES).flat(),
-  ...FIELD_VALUES.cells,
-  ...FIELD_VALUES.clouds,
-]);
 
 /**
  * Where a number starts when nobody has turned it. A half unless it says.
@@ -559,41 +547,42 @@ const VALUE_AT: Record<string, number> = {
   glint: 0.6,
 };
 
-/** The modes that read an energy. The rest have no such inlet to leave unwired. */
-const NEEDS_ENERGY = new Set([
-  ...SOURCES,
-  'kaleido',
-  'twist',
-  'ripple',
-  'slice',
-  'pixelate',
-  'invert',
-  'bloom',
-  'shift',
-  'streak',
-  'disperse',
-  'mandelbrot',
-  'julia',
-  'cells',
-  'clouds',
-  'metaballs',
-  'lamp',
-  'beam',
-  'shafts',
-  'caustics',
-]);
-
-const valuePorts = (kind: NodeKind, names: readonly ValueInlet[], op: string): PortSpec[] => [
-  ...(NEEDS_ENERGY.has(op) ? [E()] : []),
-  ...names.map((name) => {
-    const port = VALUE_FOLLOWS.has(name)
-      ? FOLLOWS(name, VALUE_DESCRIPTION[name])
-      : N(name, VALUE_DESCRIPTION[name], VALUE_AT[`${op}/${name}`] ?? VALUE_AT[name] ?? 0.5);
-    const response = productionResponse({ kind, mode: op, inlet: name });
-    if (response) port.response = response;
-    return port;
-  }),
-];
+/** Every control has an independent default. Legacy coupling lives in migration only. */
+const valuePorts = (kind: NodeKind, names: readonly ValueInlet[], op: string): PortSpec[] => {
+  const extra = legacyEnergyTargets({ kind, op }).filter(target => target.response === 'energy');
+  return [
+    ...extra.map(({ name }) => N(name, EXTRA_DESCRIPTION[name] ?? `The ${name} of the picture.`, 0.5)),
+    ...names.map(name => N(name, VALUE_DESCRIPTION[name], VALUE_AT[`${op}/${name}`] ?? VALUE_AT[name] ?? 0.5)),
+    ...colorPorts(kind, op),
+  ].map(port => {
+    const response = productionResponse({ kind, mode: op, inlet: port.name });
+    return response && port.kind === 'n' ? { ...port, response } : port;
+  });
+};
+const EXTRA_DESCRIPTION: Record<string, string> = {
+  'segment-offset': 'Additional mirrored wedges in the kaleidoscope.', 'resolution-scale': 'How far to reduce the pixel grid resolution.',
+  brightness: 'How brightly the colours are drawn.', contrast: 'How strongly dark and light colours separate.',
+  rate: 'The beat division that advances the animation.', decay: 'How sharply each flash fades.',
+  hardness: 'How tightly each metaball density is concentrated.',
+  'interior-brightness': 'How brightly the interior of the fractal is filled.',
+  intensity: 'How strongly the light covers the image.', frequency: 'The spacing multiplier of the ripple waves.',
+  division: 'The beat division of the inversion flashes.', separation: 'The separation multiplier of the colour channels.',
+};
+const colorPorts = (kind: NodeKind, op: string): PortSpec[] => {
+  const color = roleColorPort('color', 'The main colour of the picture.');
+  const highlight = roleColorPort('highlight', 'The colour of bright highlights.', 'chalk');
+  const secondary = roleColorPort('secondary', 'The alternate colour of the picture.', 'complement');
+  if (kind === 'source') return [color,
+    ...(['plasma', 'checker'].includes(op) ? [secondary] : []),
+    ...(['strobe', 'tunnel', 'scan', 'sparks', 'rays', 'traces'].includes(op) ? [highlight] : [])];
+  if (kind === 'field') return [color, roleColorPort('contour', 'The colour of the field contours and highlights.', op === 'clouds' ? 'chalk' : 'complement')];
+  if (kind === 'fractal') return [color, secondary, roleColorPort('interior-color', 'The colour inside the fractal.')];
+  if (kind === 'light') return [color, highlight];
+  if (kind === 'grade' && op === 'tint') return [roleColorPort('shadow', 'The colour of tinted shadows.'), highlight];
+  return [];
+};
+const rgb = (c: Emitting, name: string) => `colorRGB(${c.read(name)})`;
+const finished = (c: Emitting, picture: string) => `finishColor(${picture}, ${c.read('brightness')}, ${c.read('contrast')})`;
 
 /**
  * Where each `lens` mode moves the point to.
@@ -612,11 +601,11 @@ const LENS_POINT: Record<string, (ctx: Emitting, e: string, k: (i: number) => st
   wobble: (c, _e, k) => `cWobble(${c.read('p')}, ${k(0)})`,
   tile: (c, _e, k) => `cTile(${c.read('p')}, ${k(0)})`,
   mirror: (c, _e, k) => `fxMirror(${c.read('p')}, ${k(0)}, ${k(1)})`,
-  kaleido: (c, e, k) => `fxKaleido(${c.read('p')}, ${k(0)}, ${k(1)}, ${e})`,
+  kaleido: (c, e, k) => `fxKaleido(${c.read('p')}, ${k(0)}, ${k(1)}, ${c.read('segment-offset')})`,
   twist: (c, e, k) => `fxTwist(${c.read('p')}, ${k(0)}, ${k(1)}, ${e})`,
-  ripple: (c, e, k) => `fxRipple(${c.read('p')}, ${k(0)}, ${k(1)}, ${k(2)}, ${e})`,
+  ripple: (c, e, k) => `fxRipple(${c.read('p')}, ${k(0)}, ${k(1)}, ${k(2)}, ${e}, ${c.read('frequency')})`,
   slice: (c, e, k) => `fxSlice(${c.read('p')}, ${k(0)}, ${k(1)}, ${e})`,
-  pixelate: (c, e, k) => `fxPixelate(${c.read('p')}, ${k(0)}, ${k(1)}, ${e})`,
+  pixelate: (c, e, k) => `fxPixelate(${c.read('p')}, ${k(0)}, ${k(1)}, ${c.read('resolution-scale')})`,
   creep: (c, _e, k) => `fxCreep(${c.read('p')}, ${k(0)})`,
 };
 
@@ -625,11 +614,11 @@ const GRADE_EMIT: Record<string, (ctx: Emitting, e: string, k: (i: number) => st
   levels: (c, _e, k) => `cLevels(${c.read('c')}, ${k(0)}, ${k(1)})`,
   saturate: (c, _e, k) => `fxSaturate(${c.read('c')}, ${k(0)})`,
   hue: (c, _e, k) => `cHue(${c.read('c')}, ${k(0)})`,
-  tint: (c, _e, k) => `fxTint(${c.read('c')}, ${k(0)}, ${k(1)})`,
+  tint: (c, _e, k) => `fxTint(${c.read('c')}, ${k(0)}, ${k(1)}, ${rgb(c, 'shadow')}, ${rgb(c, 'highlight')})`,
   posterize: (c, _e, k) => `fxPosterize(${c.read('c')}, ${k(0)})`,
   solarize: (c, _e, k) => `fxSolarize(${c.read('c')}, ${k(0)}, ${k(1)})`,
   channels: (c, _e, k) => `fxChannels(${c.read('c')}, ${k(0)})`,
-  invert: (c, e, k) => `fxInvert(${c.read('c')}, ${k(0)}, ${k(1)}, ${e})`,
+  invert: (c, e, k) => `fxInvert(${c.read('c')}, ${k(0)}, ${k(1)}, ${e}, ${c.read('decay')})`,
   highlights: (c, _e, k) => `fxHighlights(${c.read('c')}, ${k(0)}, ${k(1)})`,
 };
 
@@ -1104,11 +1093,12 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
       const op = modeOf(c.node, SOURCES);
       const args = [
         c.read('p'),
-        c.read('energy'),
+        ...(SOURCE_RATE_MODES.has(op) ? [c.read('rate')] : op === 'strobe' ? [c.read('decay')] : []),
         ...SOURCE_VALUES[op].map((name) => c.read(name)),
+        ...colorPorts('source', op).map(port => rgb(c, port.name)),
       ];
       return {
-        c: `laid(gen_${op}(${args.join(', ')}), ${c.read('energy')})`,
+        c: finished(c, `gen_${op}(${args.join(', ')})`),
       };
     },
   },
@@ -1130,9 +1120,9 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     emit: (c) => {
       const op = modeOf(c.node, FIELD_MODES);
       const values = FIELD_VALUES[op];
-      const args = [c.read('p'), c.read('energy'), ...values.map((name) => c.read(name))];
+      const args = [c.read('p'), ...(op === 'metaballs' ? [c.read('hardness')] : []), ...values.map((name) => c.read(name)), rgb(c, 'color'), rgb(c, 'contour')];
       return {
-        c: `laid(field_${op}(${args.join(', ')}), ${c.read('energy')})`,
+        c: finished(c, `field_${op}(${args.join(', ')})`),
       };
     },
   },
@@ -1162,9 +1152,9 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
       const common = `${c.read('p')}, ${value('zoom')}, ${value('turn')}, ${value('detail')}`;
       const expression =
         op === 'julia'
-          ? `fractalJulia(${common}, ${value('shape')}, ${c.read('energy')})`
-          : `fractalMandelbrot(${common}, ${c.read('energy')})`;
-      return { c: `laid(${expression}, ${c.read('energy')})` };
+          ? `fractalJulia(${common}, ${value('shape')}, ${c.read('rate')}, ${c.read('interior-brightness')}, ${rgb(c, 'color')}, ${rgb(c, 'secondary')}, ${rgb(c, 'interior-color')})`
+          : `fractalMandelbrot(${common}, ${c.read('rate')}, ${c.read('interior-brightness')}, ${rgb(c, 'color')}, ${rgb(c, 'secondary')}, ${rgb(c, 'interior-color')})`;
+      return { c: finished(c, expression) };
     },
   },
 
@@ -1189,10 +1179,10 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
       const args = [
         c.read('p'),
         ...(LIGHT_HUNG[op] ? [c.read('from')] : []),
-        c.read('energy'),
-        ...LIGHT_VALUES[op].map((name) => c.read(name)),
+        c.read('intensity'),
+        ...LIGHT_VALUES[op].map((name) => c.read(name)), rgb(c, 'color'), rgb(c, 'highlight'),
       ];
-      return { c: `laid(light_${op}(${args.join(', ')}), ${c.read('energy')})` };
+      return { c: finished(c, `light_${op}(${args.join(', ')})`) };
     },
   },
 
@@ -1274,15 +1264,14 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     // whatever you take out of here, which is what `paint`'s was; five would be
     // five controls on a node whose job is to hand out colours, and the graph
     // already has `grade` for dimming one of them on its own.
-    inlets: [N('amount', 'The brightness and opacity of every colour taken from here.'), E()],
+    inlets: [N('amount', 'The opacity of every colour taken from here.', 1), N('brightness', 'The brightness of the palette colours.'), N('contrast', 'The contrast of the palette colours.')],
     outlets: COLOR_ROLES.map((role) => C(role, COLOR_ROLE_DETAILS[role])),
     emit: (c) => {
       const amount = `clamp(${c.read('amount')}, 0.0, 1.0)`;
-      const energy = c.read('energy');
       return Object.fromEntries(
         COLOR_ROLES.map((role, i) => [
           role,
-          `vec4(charge(uColors[${i}], ${energy}) * ${amount}, ${amount})`,
+          finished(c, `vec4(uColors[${i}], ${amount})`),
         ]),
       );
     },
@@ -1320,7 +1309,7 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
     emit: (c) => {
       const op = modeOf(c.node, LENS_MODES);
       const names = LENS_VALUES[op as keyof typeof LENS_VALUES];
-      const moved = LENS_POINT[op](c, c.read('energy'), (i) =>
+      const moved = LENS_POINT[op](c, c.read('rate'), (i) =>
         names[i] ? c.read(names[i]) : '0.0',
       );
       // One outlet, and only the one asked for. Emitting the colour to fill a
@@ -1413,7 +1402,7 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
       const op = modeOf(c.node, GRADE_MODES);
       const names = GRADE_VALUES[op as keyof typeof GRADE_VALUES];
       return {
-        c: GRADE_EMIT[op](c, c.read('energy'), (i) => (names[i] ? c.read(names[i]) : '0.0')),
+        c: GRADE_EMIT[op](c, c.read('division'), (i) => (names[i] ? c.read(names[i]) : '0.0')),
       };
     },
   },
@@ -1436,7 +1425,7 @@ export const NODE_SPECS: Record<NodeKind, NodeSpec> = {
       const op = modeOf(c.node, SPREAD_MODES);
       const names = SPREAD_VALUES[op as keyof typeof SPREAD_VALUES];
       return {
-        c: SPREAD_EMIT[op](c, c.read('energy'), (i) => (names[i] ? c.read(names[i]) : '0.0')),
+        c: SPREAD_EMIT[op](c, c.read(op === 'shift' || op === 'disperse' ? 'separation' : 'intensity'), (i) => (names[i] ? c.read(names[i]) : '0.0')),
       };
     },
   },
@@ -2218,6 +2207,12 @@ export function keepValues(node: CircuitNode): CircuitNode {
   );
   let out = trimmed(node, 'values', numbered);
   out = trimmed(out, 'depths', numbered);
+  if (node.colors) {
+    const ports = new Set(inletsOf(node).filter(port => port.kind === 'c').map(port => port.name));
+    const colors = Object.fromEntries(Object.entries(node.colors).filter(([name, value]) => ports.has(name) && /^#[0-9a-f]{6}$/i.test(value)));
+    out = { ...out };
+    if (Object.keys(colors).length) out.colors = colors; else delete out.colors;
+  }
   return out;
 }
 
@@ -2581,6 +2576,11 @@ export function compileCircuit(circuit: Circuit, options: CompileOptions = {}): 
      * every inlet on the canvas.
      */
     function answer(port: PortSpec, where: string): string {
+      const color = subject.colors?.[port.name];
+      if (port.kind === 'c' && color && /^#[0-9a-f]{6}$/i.test(color)) {
+        const channels = [1, 3, 5].map(start => asFloat(parseInt(color.slice(start, start + 2), 16) / 255));
+        return `vec4(${channels.join(', ')}, 1.0)`;
+      }
       const held = slot.get(portId(nodeId, port.name));
       if (held !== undefined) return `uParams[${held}]`;
       // A follower with nothing of its own reads its named sibling — through

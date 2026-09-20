@@ -45,6 +45,8 @@ export const FORM_STEPS = 28;
 export const FORM_WORK = FORM_STEPS + 4;
 
 export const FORM_LIB = `
+struct FormPalette { vec3 primary; vec3 secondary; vec3 complement; vec3 accent; vec3 chalk; };
+
 const int FORM_STEPS = ${FORM_STEPS};
 
 mat2 formSpin(float a) {
@@ -1025,18 +1027,18 @@ float formRelief(vec3 q, float tiles, float raise, float t) {
 // but the material needs identity: painting the whole union one cyan turns a
 // woven object back into an undifferentiated cage. Repeating the three analytic
 // distances once at the hit is cheap beside repeating them at every march step.
-vec3 formBaseColour(vec3 q, int mode, float extra, float detail, float motion) {
+vec3 formBaseColour(FormPalette palette, vec3 q, int mode, float extra, float detail, float motion) {
   if (mode == 7) {
     float cell = mix(0.72, 0.28, clamp(extra, 0.0, 1.0));
     vec2 id = floor(q.xy / cell);
     float chase = pow(1.0 - fract(motion + hash(id + 19.7)), 5.0);
-    return mix(uPrimary, uChalk, chase * 0.88);
+    return mix(palette.primary, palette.chalk, chase * 0.88);
   }
   if (mode == 5) {
     float cell = mix(0.82, 1.5, clamp(detail, 0.0, 1.0));
     vec3 id = floor(q / cell + 0.5);
     float key = hash(id.xy + id.z * 17.3);
-    return mix(uPrimary * 0.12, uChalk, pow(key, 8.0) * 0.8);
+    return mix(palette.primary * 0.12, palette.chalk, pow(key, 8.0) * 0.8);
   }
   if (mode == 8) {
     float spacing = mix(0.07, 0.03, clamp(extra, 0.0, 1.0));
@@ -1058,10 +1060,10 @@ vec3 formBaseColour(vec3 q, int mode, float extra, float detail, float motion) {
     // separate orange/cyan without re-reading the entire form at shifted
     // screen coordinates like a post-process dispersion would have to.
     if (lens < rib) {
-      return mix(uAccent, uPrimary, smoothstep(-0.025, 0.025, signedLens));
+      return mix(palette.accent, palette.primary, smoothstep(-0.025, 0.025, signedLens));
     }
     float chase = pow(0.5 + 0.5 * sin(motion * 2.0 * PI - member * 0.47), 5.0);
-    return mix(uPrimary * 0.08, uChalk, 0.12 + chase * 0.88);
+    return mix(palette.primary * 0.08, palette.chalk, 0.12 + chase * 0.88);
   }
   if (mode == 11) {
     // Radius is a stable member identity for this construction: the central
@@ -1071,41 +1073,41 @@ vec3 formBaseColour(vec3 q, int mode, float extra, float detail, float motion) {
     // its material throughout the loop.
     float radius = length(q);
     if (radius < 0.23) return vec3(0.002);
-    if (radius > 0.885) return uChalk;
-    if (radius > 0.805) return uPrimary;
-    if (radius > 0.725) return uComplement;
+    if (radius > 0.885) return palette.chalk;
+    if (radius > 0.805) return palette.primary;
+    if (radius > 0.725) return palette.complement;
     float count = floor(mix(7.0, 20.0, clamp(extra, 0.0, 1.0)));
     float outer = mix(0.52, 0.72, clamp(detail, 0.0, 1.0));
     float member = round((radius - 0.24) / ((outer - 0.24) / (count - 1.0)));
     float role = mod(member, 4.0);
-    if (role < 0.5) return uPrimary;
-    if (role < 1.5) return uSecondary;
-    if (role < 2.5) return uComplement;
-    return uAccent;
+    if (role < 0.5) return palette.primary;
+    if (role < 1.5) return palette.secondary;
+    if (role < 2.5) return palette.complement;
+    return palette.accent;
   }
   if (mode == 13) {
     float member = formAstrolabeNearest(q, extra, detail, motion, 0.0).y;
-    vec3 role = uChalk;
-    if (member < 0.5) role = uChalk;
-    else if (member < 1.5) role = uPrimary;
-    else if (member < 2.5) role = uAccent;
-    else if (member < 3.5) role = uComplement;
-    else if (member < 4.5) role = uSecondary;
-    else role = mod(member, 2.0) < 0.5 ? uChalk : uPrimary;
+    vec3 role = palette.chalk;
+    if (member < 0.5) role = palette.chalk;
+    else if (member < 1.5) role = palette.primary;
+    else if (member < 2.5) role = palette.accent;
+    else if (member < 3.5) role = palette.complement;
+    else if (member < 4.5) role = palette.secondary;
+    else role = mod(member, 2.0) < 0.5 ? palette.chalk : palette.primary;
     // The stock is pale metal with only a trace of member tint. Xenon 34's
     // cyan, magenta and orange travel along each *same* hoop as it turns, so
     // most spectral identity has to come from the reflected room below rather
     // than being painted permanently onto whole members.
-    return mix(uChalk, role, 0.28);
+    return mix(palette.chalk, role, 0.28);
   }
   if (mode == 17) {
-    return mix(uPrimary, uChalk, 0.15);
+    return mix(palette.primary, palette.chalk, 0.15);
   }
   if (mode == 18) {
-    return mix(uPrimary * 0.06, uChalk, 0.08);
+    return mix(palette.primary * 0.06, palette.chalk, 0.08);
   }
   if (mode == 19) {
-    return mix(uPrimary * 0.08, uChalk, 0.12);
+    return mix(palette.primary * 0.08, palette.chalk, 0.12);
   }
   if (mode == 14 || mode == 15 || mode == 16) {
     // Every hoop is the same pale luminous stock. Recovering a sector from the
@@ -1113,9 +1115,9 @@ vec3 formBaseColour(vec3 q, int mode, float extra, float detail, float motion) {
     // jump at sector boundaries; a constant material keeps the mechanism's
     // physical continuity and leaves spectral variation to reflected light or
     // an explicit downstream treatment.
-    return mix(uPrimary, uChalk, 0.35);
+    return mix(palette.primary, palette.chalk, 0.35);
   }
-  if (mode != 4) return uPrimary;
+  if (mode != 4) return palette.primary;
   float a = clamp(motion, 0.0, 1.0) * 2.0 * PI;
   q.xy = formSpin(a) * q.xy;
   q.yz = formSpin(a * 2.0) * q.yz;
@@ -1135,10 +1137,10 @@ vec3 formBaseColour(vec3 q, int mode, float extra, float detail, float motion) {
   }
   float layer = floor(abs(normal) / gap + 0.5);
   float key = fract(orientation * 0.271 + layer * 0.193 + step(0.0, normal) * 0.409 + motion);
-  if (key < 0.25) return uPrimary;
-  if (key < 0.5) return uSecondary;
-  if (key < 0.75) return uComplement;
-  return uAccent;
+  if (key < 0.25) return palette.primary;
+  if (key < 0.5) return palette.secondary;
+  if (key < 0.75) return palette.complement;
+  return palette.accent;
 }
 
 // How far the nearest surface is from a point in the form's own space.
@@ -1298,10 +1300,10 @@ vec3 formNormal(vec3 q, int mode, float thick, float extra, float detail, float 
 const vec3 FORM_LAMP = vec3(0.35, 0.85, -0.4);
 const vec3 FORM_FILL = vec3(-0.7, 0.25, 0.62);
 
-vec3 formSky(vec3 ray) {
+vec3 formSky(FormPalette palette, vec3 ray) {
   float above = ray.y;
-  vec3 ceiling = mix(uPrimary * 0.5, uChalk, smoothstep(0.05, 0.75, above));
-  vec3 ground = mix(vec3(0.015), uSecondary * 0.45, smoothstep(-0.9, 0.0, above));
+  vec3 ceiling = mix(palette.primary * 0.5, palette.chalk, smoothstep(0.05, 0.75, above));
+  vec3 ground = mix(vec3(0.015), palette.secondary * 0.45, smoothstep(-0.9, 0.0, above));
   vec3 room = mix(ground, ceiling, smoothstep(-0.02, 0.02, above));
   float lamp = pow(clamp(dot(ray, normalize(FORM_LAMP)), 0.0, 1.0), 40.0)
            + pow(clamp(dot(ray, normalize(FORM_FILL)), 0.0, 1.0), 18.0) * 0.4;
@@ -1319,7 +1321,7 @@ vec3 formSky(vec3 ray) {
    */
   float bars = smoothstep(0.62, 0.98, abs(fract(ray.z * 2.1 + 0.5) * 2.0 - 1.0))
              * smoothstep(0.1, 0.6, above);
-  return room + vec3(1.0) * lamp * 2.0 + uAccent * strips * 0.4 + uChalk * bars * 0.55;
+  return room + palette.chalk * lamp * 2.0 + palette.accent * strips * 0.4 + palette.chalk * bars * 0.55;
 }
 
 // A black studio built specifically for the armillary. Its illumination is
@@ -1328,7 +1330,7 @@ vec3 formSky(vec3 ray) {
 // strip breaks into long travelling arcs on the curved gimbals. Most of the
 // room remains truly black, so lowering energy reveals only reflections rather
 // than a uniformly dim neon drawing of every rail.
-vec3 formArmillarySky(vec3 ray) {
+vec3 formArmillarySky(FormPalette palette, vec3 ray) {
   vec2 diagonalAxis = normalize(vec2(0.72, -0.69));
   float diagonalDistance = abs(dot(ray.xy, diagonalAxis) - 0.18);
   float softbox = 1.0 - smoothstep(0.04, 0.2, diagonalDistance);
@@ -1337,9 +1339,9 @@ vec3 formArmillarySky(vec3 ray) {
   panels *= smoothstep(-0.72, 0.38, ray.y);
   float horizon = 1.0 - smoothstep(0.025, 0.09, abs(ray.y + 0.28));
   vec3 room = vec3(0.0015);
-  room += uChalk * softbox * 2.2;
-  room += uPrimary * panels * 0.92;
-  room += mix(uAccent, uComplement, smoothstep(-0.8, 0.8, ray.x)) * horizon * 0.48;
+  room += palette.chalk * softbox * 2.2;
+  room += palette.primary * panels * 0.92;
+  room += mix(palette.accent, palette.complement, smoothstep(-0.8, 0.8, ray.x)) * horizon * 0.48;
   return room;
 }
 
@@ -1349,7 +1351,7 @@ vec3 formArmillarySky(vec3 ray) {
 // colours by member instead makes flat plastic rings; painting them by screen
 // position makes a filter that slides over the object. Reflection is the only
 // mapping that stays attached to the surface and changes with its orientation.
-vec3 formAstrolabeSky(vec3 ray) {
+vec3 formAstrolabeSky(FormPalette palette, vec3 ray) {
   float azimuth = atan(ray.x, ray.z);
   float cyan = pow(0.5 + 0.5 * cos(azimuth * 2.0 - 0.35), 8.0);
   float rose = pow(0.5 + 0.5 * cos(azimuth * 2.0 + 2.05), 10.0);
@@ -1358,11 +1360,11 @@ vec3 formAstrolabeSky(vec3 ray) {
   float overhead = smoothstep(0.04, 0.5, ray.y);
   float softbox = pow(clamp(dot(ray, normalize(vec3(-0.28, 0.9, -0.32))), 0.0, 1.0), 7.0);
   vec3 room = vec3(0.0015);
-  room += uPrimary * cyan * (0.65 + overhead * 0.7);
-  room += uSecondary * rose * 1.35;
-  room += uComplement * warm * 1.45;
-  room += uAccent * edge * 0.22;
-  room += uChalk * softbox * 2.4;
+  room += palette.primary * cyan * (0.65 + overhead * 0.7);
+  room += palette.secondary * rose * 1.35;
+  room += palette.complement * warm * 1.45;
+  room += palette.accent * edge * 0.22;
+  room += palette.chalk * softbox * 2.4;
   return room;
 }
 
@@ -1370,7 +1372,7 @@ vec3 formAstrolabeSky(vec3 ray) {
 // fields occupy different reflected azimuths, so colour bends around a member
 // and shifts with the viewing normal rather than being painted onto one whole
 // ring. A narrow pale strip supplies the blown white segments between them.
-vec3 formSpindleSky(vec3 ray) {
+vec3 formSpindleSky(FormPalette palette, vec3 ray) {
   float azimuth = atan(ray.x, ray.z);
   float cyan = pow(0.5 + 0.5 * cos(azimuth * 2.0 - 0.28), 7.0);
   float warm = pow(0.5 + 0.5 * cos(azimuth * 2.0 + 2.18), 8.0);
@@ -1379,26 +1381,26 @@ vec3 formSpindleSky(vec3 ray) {
   float strip = pow(clamp(dot(ray, normalize(vec3(-0.42, 0.72, -0.55))),
                           0.0, 1.0), 16.0);
   vec3 room = vec3(0.001);
-  room += uPrimary * cyan * 1.5;
-  room += uComplement * warm * 1.55;
-  room += uAccent * lower * 0.8;
-  room += uChalk * strip * 2.0;
+  room += palette.primary * cyan * 1.5;
+  room += palette.complement * warm * 1.55;
+  room += palette.accent * lower * 0.8;
+  room += palette.chalk * strip * 2.0;
   return room;
 }
 
 // A mostly cyan studio for the meridian banks. Narrow pale vertical panels make
 // the pole-sharing rails flash separately as their planes counter-rotate;
 // keeping the lower hemisphere dark preserves the black gaps between them.
-vec3 formMeridianSky(vec3 ray) {
+vec3 formMeridianSky(FormPalette palette, vec3 ray) {
   float azimuth = atan(ray.x, ray.z);
   float cyan = pow(0.5 + 0.5 * cos(azimuth * 4.0 - 0.22), 11.0);
   float pale = pow(clamp(dot(ray, normalize(vec3(-0.18, 0.42, -0.89))),
                          0.0, 1.0), 14.0);
   float horizon = 1.0 - smoothstep(0.03, 0.11, abs(ray.y + 0.08));
   vec3 room = vec3(0.001);
-  room += uPrimary * cyan * 1.18;
-  room += uChalk * pale * 2.4;
-  room += uSecondary * horizon * 0.3;
+  room += palette.primary * cyan * 1.18;
+  room += palette.chalk * pale * 2.4;
+  room += palette.secondary * horizon * 0.3;
   return room;
 }
 
@@ -1406,20 +1408,20 @@ vec3 formMeridianSky(vec3 ray) {
 // dense banks. Their reflections travel along a whole physical loop as its
 // surface turns; broad ambient light would reveal all twenty rails uniformly
 // and collapse both stacks into two flat luminous bands.
-vec3 formVaultSky(vec3 ray) {
+vec3 formVaultSky(FormPalette palette, vec3 ray) {
   float azimuth = atan(ray.x, ray.z);
   float vertical = pow(0.5 + 0.5 * cos(azimuth * 7.0 - 0.3), 24.0);
   float crown = pow(clamp(dot(ray, normalize(vec3(-0.12, 0.92, -0.38))),
                            0.0, 1.0), 7.0);
   float lowStrip = 1.0 - smoothstep(0.025, 0.095, abs(ray.y + 0.22));
   vec3 room = vec3(0.0008);
-  room += uPrimary * vertical * 1.35;
-  room += uChalk * crown * 2.5;
-  room += mix(uSecondary, uComplement, smoothstep(-0.8, 0.8, ray.x)) * lowStrip * 0.5;
+  room += palette.primary * vertical * 1.35;
+  room += palette.chalk * crown * 2.5;
+  room += mix(palette.secondary, palette.complement, smoothstep(-0.8, 0.8, ray.x)) * lowStrip * 0.5;
   return room;
 }
 
-vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
+vec4 form_march(vec2 p, float emission, float coreBrightness, FormPalette palette, int mode, float turn, float tilt, float dolly,
                 float thick, float flare, float chrome, float extra, float detail, float motion) {
   float yaw = turn * 6.28318530718;
   float pitch = (clamp(tilt, 0.0, 1.0) - 0.5) * 2.4;
@@ -1564,7 +1566,7 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
   // the ray ran down the length of a tube this comes back well above one, and
   // that excess is what makes a core white and gives a bloom something to
   // spread. See OVERBRIGHT.
-  float raw = gathered * mix(8.0, 26.0, clamp(flare, 0.0, 1.0)) * mix(0.7, 1.2, e);
+  float raw = gathered * mix(8.0, 26.0, clamp(flare, 0.0, 1.0)) * mix(0.7, 1.2, emission);
   if (mode == 16) raw *= formSpindleExcitation(where, extra, motion);
   if (mode == 17) raw *= formMeridianExcitation(where, extra, detail, motion) * 4.5;
   if (mode == 18) raw *= formVaultExcitation(where, extra, detail, motion) * 0.21;
@@ -1575,13 +1577,13 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
   // wire. Energy opens a controlled amount of internal light for the bright
   // Xenon 84 treatment; near zero, Xenon 87 is revealed almost entirely by
   // the strips it reflects.
-  if (mode == 11) raw *= mix(0.04, 0.65, pow(clamp(e, 0.0, 1.0), 2.0));
+  if (mode == 11) raw *= mix(0.04, 0.65, pow(clamp(coreBrightness, 0.0, 1.0), 2.0));
   float gyreOuter = mode == 12 ? formGyreOuter(where, extra, detail, motion) : 1.0;
   if (mode == 12) raw *= mix(0.14, 0.58, gyreOuter);
   // Astrolabe is lit metal stock. Enough internal light remains to halo its
   // silhouette, but the face has to disappear when it turns away from the
   // studio strips or the broad/edge distinction in the geometry is erased.
-  if (mode == 13) raw *= mix(0.05, 0.18, pow(clamp(e, 0.0, 1.0), 2.0));
+  if (mode == 13) raw *= mix(0.05, 0.18, pow(clamp(coreBrightness, 0.0, 1.0), 2.0));
   // Rosette and Corolla use genuinely emissive fine wire. On a thin member a
   // direct hit terminates before the volumetric integral has gathered as much
   // light as a grazing ray, which otherwise draws a black cord inside a cyan
@@ -1589,24 +1591,24 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
   // with bloom falling away from it.
   if (mode == 19) raw = max(raw, hit * graticuleExcitation * 0.55);
   if (mode == 14 || mode == 15 || mode == 16 || mode == 17 || mode == 18) {
-    raw = max(raw, hit * mix(0.12, 0.32, clamp(e, 0.0, 1.0)));
+    raw = max(raw, hit * mix(0.12, 0.32, clamp(coreBrightness, 0.0, 1.0)));
   }
   float lit = clamp(raw, 0.0, 1.0);
   // Only what is genuinely saturated goes white. Mixing toward white from
   // halfway up leaves every tube the same pale grey and throws the colourway
   // away, which is the difference between a lit tube and a lit tube-shaped
   // hole.
-  vec3 material = formBaseColour(where, mode, extra, detail, motion);
-  if (mode == 12) material = mix(uPrimary * 0.08, uChalk, gyreOuter);
+  vec3 material = formBaseColour(palette, where, mode, extra, detail, motion);
+  if (mode == 12) material = mix(palette.primary * 0.08, palette.chalk, gyreOuter);
   // Xenon's iris clips through the pale cyan role rather than neutral white:
   // one channel can reach the ceiling while the others keep the spectral rim.
   // That is why its hottest frames remain chromatic instead of becoming a
   // white cage. Other forms retain the harder neutral filament.
-  vec3 hot = mode == 8 ? uChalk
-    : (mode == 18 || mode == 19 ? mix(uPrimary, uChalk, 0.35) : vec3(1.0));
+  vec3 hot = mode == 8 ? palette.chalk
+    : (mode == 18 || mode == 19 ? mix(palette.primary, palette.chalk, 0.35) : palette.chalk);
   vec3 colour = mix(material, hot, clamp(raw * 1.6 - 0.75, 0.0, 1.0));
   colour *= 1.0 + max(raw - 1.0, 0.0) * mix(0.8, 2.6, clamp(flare, 0.0, 1.0));
-  if (mode == 8) colour = min(colour, uChalk * 1.02);
+  if (mode == 8) colour = min(colour, palette.chalk * 1.02);
   float cover = lit;
 
   if (chrome > 0.002) {
@@ -1641,15 +1643,15 @@ vec4 form_march(vec2 p, float e, int mode, float turn, float tilt, float dolly,
       : (mode == 11 ? 0.12 : (mode == 12 ? 0.2 : (mode == 13 ? 0.38 : 1.0)));
     float rimWeight = mode == 5 ? 0.25 : (mode == 13 ? 0.38 : 1.0);
     vec3 reflectedRoom = mode == 11
-      ? formArmillarySky(bounced)
-      : (mode == 12 ? formArmillarySky(bounced) * 1.18
-        : (mode == 13 ? formAstrolabeSky(bounced)
-          : (mode == 16 ? formSpindleSky(bounced)
-            : (mode == 17 ? formMeridianSky(bounced)
-              : (mode == 18 || mode == 19 ? formVaultSky(bounced) : formSky(bounced))))));
+      ? formArmillarySky(palette, bounced)
+      : (mode == 12 ? formArmillarySky(palette, bounced) * 1.18
+        : (mode == 13 ? formAstrolabeSky(palette, bounced)
+          : (mode == 16 ? formSpindleSky(palette, bounced)
+            : (mode == 17 ? formMeridianSky(palette, bounced)
+              : (mode == 18 || mode == 19 ? formVaultSky(palette, bounced) : formSky(palette, bounced))))));
     vec3 shell = reflectedRoom * mix(0.35, 1.0, facing) * roomWeight
-               + vec3(1.0) * glint * mix(1.4, 6.0, polish) * glintWeight
-               + uChalk * facing * 0.6 * rimWeight;
+               + palette.chalk * glint * mix(1.4, 6.0, polish) * glintWeight
+               + palette.chalk * facing * 0.6 * rimWeight;
     // Chrome falls off with how far the ray went to find it. Without this a
     // lattice is equally bright at every depth, so the far cells fill the frame
     // instead of receding into it and the picture has no black in it at all —
