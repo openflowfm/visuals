@@ -9,7 +9,7 @@ const preview: Preview = {
     layout: 'padded',
     backgrounds: { disable: true },
     options: {
-      storySort: { order: ['UI', 'Debug', 'Experiments'] },
+      storySort: { order: ['Nodes', 'UI', 'Debug', 'Experiments'] },
     },
   },
   decorators: [

@@ -38,6 +38,7 @@ opens.
 
 | group | for |
 |---|---|
+| **Nodes** | editable example graphs, one component section per node |
 | **UI** | the colourway editor, the tag picker, the boundary |
 | **Debug** | the wiring checklist in each of its states, and the beat harness on a made clock |
 | **Experiments** | pages that answer a question |
@@ -76,41 +77,45 @@ accepts the mismatch; take that line out when Storybook 11, which lists vitest 5
 
 ## Developing a node or shader
 
-Open **Debug / Node Harness**. It renders through the same `Bench` and compositor as the
-console, without a server, media library or Link connection. Choose a node, its mode and
-an outlet; the numeric controls come from `inletsOf`, including mode-specific inlets and
-toggles. Unset live inlets retain their renderer fallback until you move the slider.
-The row's reset restores that fallback rather than writing a guessed default.
+Open **Nodes** and choose a node, then an example. Each story renders a small connected
+circuit through the real `CircuitEditor`, `NodePictures` and `Bench`. Controls live on the
+nodes: move nodes, wire ports, change modes and inputs, or delete a node. Drag the canvas
+to pan and scroll to zoom. The separate output shows the whole graph; node pictures show
+each step and number nodes show scopes. Connected numeric inputs use the production evaluator.
 
-Colour inputs receive checker and plasma fixtures so distortions and blends have visible
-structure. Point inputs retain the renderer's position fallback. `probeAt` displays colour
-outputs directly, numbers through colorway brightness, and points through a plasma source;
-the harness labels these projections. Expand **Fixture circuit** to inspect the exact graph.
+The shared [`NodeHarness`](../stories/node-harness/NodeHarness.tsx) owns local graph state,
+a seeded palette, a simulated show and one transport used by pictures, readouts and output.
+Stories start frozen at two seconds and 120 BPM. **Seconds** scrubs the clock; **Animate**
+and **Freeze** control time; **Tempo** changes beat speed without jumping the current beat.
+**Reset example** restores the complete graph, simulation inputs and clock, and remounts
+renderers to clear envelopes and scope history. Frozen time also freezes envelope decay.
+Seeking changes clock position; it does not reconstruct historical envelope or scope state.
 
-Stories start frozen at two seconds with a seeded palette and 120 BPM. Set **Seconds** to
-scrub, **Animate** to run, and **Freeze** to retain the current time. **Reset** restores two
-seconds and the selected node/mode's input defaults, and recreates the compositor to clear
-GPU state. Renderer and compiler errors appear below the picture, including missing WebGL2.
-This freezes beat and elapsed time; it is not a general simulation-step controller. History,
-Live, media, model and flow-interface nodes are deliberately unsupported until they have
-purpose-built fixtures. The selector only offers the supported procedural subset.
+The **Track / Meter To Brightness** story supplies a local Drums track. Its meter slider and
+playback checkbox emulate incoming Ableton data; the meter is held, not an automatic pulse.
+No server, Link or Ableton connection is created. A locally connected show flag only prevents
+the renderer replacing this explicit fixture with its usual desk stand-ins. Smoothing uses
+simulation time, so animate before expecting a smoothed meter to decay after lowering it.
 
-To develop a new mode of a supported kind, update the production descriptor/compiler and
-run `npm run nodes` if the registry changed. Modes and controls appear automatically. For a
-new kind, add a fixture in [`stories/node-harness/fixture.ts`](../stories/node-harness/fixture.ts),
-review its input and time semantics, then add it to `SUPPORTED` and a representative story.
-Do not add another shader renderer. Asset or stateful nodes need an explicit fixture and
-reset policy before adding them to the list.
+There are examples for every previously supported procedural kind, plus Track. Lens includes
+a checker ripple, kaleidoscope and an LFO-driven ripple. Number outputs are wired through
+colorway brightness; point outputs drive sampling a plasma source. These adapters are visible
+nodes in the graph. Compiler and renderer errors appear with the graph output.
+
+To add an example, export a story under `Nodes/<Node>` with an `example` containing a title,
+description and circuit. Reuse [`exampleFor`](../stories/node-harness/examples.ts) for the
+basic procedural case, or supply a purpose-built graph. Keep graphs small and connections
+readable; use actual node controls rather than extra story-specific sliders. Asset, history
+and flow-interface nodes still need purpose-built resources and reset policies.
 
 ```sh
 npm run typecheck
 npx vitest run --project=visuals stories/node-harness/fixture.test.ts
-npx vitest run --project=visuals/stories stories/node-harness/NodeHarness.stories.tsx
+npx vitest run --project=visuals/stories stories/node-harness
 npm run build:storybook
 ```
 
-The unit test compiles every supported mode/outlet and checks that fixtures need no external
-assets or track bindings. Story interactions check mode/outlet selection, transport and
-unsupported-state recovery. The lens story reads actual WebGL pixels to verify that a frozen
-frame is stable, a depth change changes it, and resetting the inlet restores it. This is a
-behavior check, not a cross-GPU golden screenshot comparison.
+Fixture tests compile every supported mode/outlet and the modulation/track graphs. Browser
+stories exercise the actual editor and production WebGL output, stable frozen frames,
+parameter edits, reset, transport controls and simulated track inputs. These are behavior
+checks, not cross-GPU golden screenshot comparisons.

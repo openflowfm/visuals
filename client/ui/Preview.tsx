@@ -39,7 +39,10 @@ export function Bench({
   models = { assets: [], setups: [], textures: [], notice: null },
   responses,
   onError,
+  transportDelta = false,
 }: {
+  /** Advance stateful inputs only as the injected clock advances (isolated simulations). */
+  transportDelta?: boolean;
   show: Show;
   scheme: Scheme;
   /** The flow to draw, which is the one being edited rather than the one that is up. */
@@ -58,8 +61,8 @@ export function Bench({
   onError(message: string | null): void;
 }) {
   const canvas = useRef<HTMLCanvasElement | null>(null);
-  const now = useRef({ show, scheme, flow, clock, live: live ?? null, models, responses, onError });
-  now.current = { show, scheme, flow, clock, live: live ?? null, models, responses, onError };
+  const now = useRef({ show, scheme, flow, clock, live: live ?? null, models, responses, onError, transportDelta });
+  now.current = { show, scheme, flow, clock, live: live ?? null, models, responses, onError, transportDelta };
 
   useEffect(() => {
     const el = canvas.current;
@@ -68,10 +71,14 @@ export function Bench({
     let raf = 0;
     let last = performance.now();
     let said: string | null = null;
+    let lastSeconds = now.current.clock.seconds();
 
     const loop = (at: number) => {
       raf = requestAnimationFrame(loop);
-      const dt = Math.min((at - last) / 1000, 0.1);
+      const seconds = now.current.clock.seconds();
+      const dt = now.current.transportDelta ? Math.max(0, Math.min(seconds - lastSeconds, 0.1))
+        : Math.min((at - last) / 1000, 0.1);
+      lastSeconds = seconds;
       last = at;
       const held = now.current;
       const beat = held.clock.beat();
@@ -83,7 +90,7 @@ export function Bench({
         { ...withStandIns(held.live ? held.live.current : held.show, beat), flow: held.flow },
         held.scheme,
         beat,
-        held.clock.seconds(),
+        seconds,
         dt,
         held.responses,
         held.models,

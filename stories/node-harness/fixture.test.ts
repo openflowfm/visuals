@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { compileCircuit, inletsOf, NODE_SPECS } from '../../client/render/circuit.ts';
+import { animatedRipple, trackBrightness } from './examples.ts';
 import { HARNESS_KINDS, harnessFixture } from './fixture.ts';
 
 describe('node harness fixtures', () => {
@@ -33,4 +34,18 @@ describe('node harness fixtures', () => {
       expect(harnessFixture(kind)).toBeNull();
     }
   });
+});
+
+
+describe('connected examples', () => {
+  for (const example of [animatedRipple, trackBrightness]) {
+    it(`compiles ${example.title}`, () => {
+      const compiled = compileCircuit(example.circuit);
+      expect(compiled.error).toBeNull();
+      expect(compiled.images).toEqual([]);
+      expect(compiled.videos).toEqual([]);
+      expect(compiled.models).toEqual([]);
+      expect(compiled.tracks.map(track => track.name)).toEqual(example.track ? ['Drums'] : []);
+    });
+  }
 });

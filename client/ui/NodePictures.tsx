@@ -74,12 +74,15 @@ export function NodePictures({
   scale = FULL_SCALE,
   promoted = null,
   onStatus,
+  transportDelta = false,
   children,
 }: {
   circuit: Circuit;
   show: Show;
   scheme: Scheme;
   transport: Clock;
+  /** Match simulation steps to the supplied clock, including freeze. */
+  transportDelta?: boolean;
   /** One switch for every small picture. The shared preview stays allocated. */
   enabled?: boolean;
   /** Read the graph's current scale without making wheel movement React state. */
@@ -96,9 +99,9 @@ export function NodePictures({
   const faceIds = useRef(new WeakMap<HTMLCanvasElement, string>());
   const visible = useRef(new Set<string>());
   const observer = useRef<IntersectionObserver | null>(null);
-  const now = useRef({ circuit, show, scheme, transport, enabled, scale, promoted, onStatus });
+  const now = useRef({ circuit, show, scheme, transport, enabled, scale, promoted, onStatus, transportDelta });
   const lastStatus = useRef<NodePictureStatus | undefined>(undefined);
-  now.current = { circuit, show, scheme, transport, enabled, scale, promoted, onStatus };
+  now.current = { circuit, show, scheme, transport, enabled, scale, promoted, onStatus, transportDelta };
 
   useEffect(() => {
     const first = faces.current.values().next().value;
@@ -138,14 +141,17 @@ export function NodePictures({
       '#f0b23c';
     let raf = 0;
     let last = performance.now();
+    let lastSeconds = now.current.transport.seconds();
 
     const loop = (stamp: number) => {
       raf = requestAnimationFrame(loop);
-      const dt = Math.min((stamp - last) / 1000, 0.1);
-      last = stamp;
       const at = now.current;
       const beat = at.transport.beat();
       const seconds = at.transport.seconds();
+      const dt = at.transportDelta ? Math.max(0, Math.min(seconds - lastSeconds, 0.1))
+        : Math.min((stamp - last) / 1000, 0.1);
+      last = stamp;
+      lastSeconds = seconds;
       // The same stand-in set the bench uses, so a flow built on the set is
       // not black here and lit there. See [`withStandIns`](../state/useRoom.ts).
       const show = withStandIns(at.show, beat);
