@@ -40,7 +40,6 @@
     "electron": "node --disable-warning=ExperimentalWarning tools/app.ts electron",
     "icons": "node --disable-warning=ExperimentalWarning tools/app.ts icons",
     "start": "node --disable-warning=ExperimentalWarning tools/app.ts run",
-    "watch": "node --disable-warning=ExperimentalWarning tools/app.ts watch",
     "dev": "node --disable-warning=ExperimentalWarning tools/app.ts dev",
     "pack": "node --disable-warning=ExperimentalWarning tools/app.ts pack",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.electron.json",

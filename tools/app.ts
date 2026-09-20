@@ -9,8 +9,7 @@
 //   electron  main, preload and the server, with esbuild
 //   icons     the .icns, from public/mark.svg
 //   run       build, electron, and open it
-//   watch     the dev server and the window, together — the one to type
-//   dev       electron, and open it against a dev server that is already up
+//   dev       the server, vite and the window, together — the one to type
 //   pack      build, electron, icons, and electron-builder
 //
 // Anything that looks like a flag is handed to electron-builder, which is what
@@ -88,25 +87,26 @@ function open(): void {
 }
 
 /**
- * Working on it: the server, the dev server and the window, in one command.
+ * Working on it: the server, vite and the window, in one command — the one to
+ * type. Twice, in two checkouts or in one, and nothing collides.
  *
- * `watch` is `dev` plus everything `dev` refuses to start, and it is the thing
- * to type.
+ * **Nothing here is assigned; everything is discovered.** The server goes first,
+ * on whatever port is free, and says which over the IPC channel it is spawned
+ * with — the same contract the packaged app's `supervise()` uses. vite is run in
+ * this process rather than as a child so the port *it* settles on can be read
+ * off its socket: it prefers the one the registry names, and moves up when that
+ * is taken, exactly as the widgets bench does. Only then does the shell start,
+ * told both — `OPENFLOW_DEV_URL` to open onto, `OPENFLOW_VISUALS_UI_PORT` to
+ * key its profile by. The shell owns no server and takes no instance lock.
  *
- * **The server goes first, on whatever port is free**, and says which over the
- * IPC channel it is spawned with — the same contract the packaged app's
- * `supervise()` uses. Only then do vite and the shell start, each told that
- * port: vite proxies `/ws` and `/media` to it, and the shell opens onto vite.
- * So two worktrees are two servers on two ports, and nothing is assumed.
- * `OPENFLOW_VISUALS_PORT` still names one outright, for a wall on another
- * machine that has to dial in.
+ * `OPENFLOW_VISUALS_PORT` still names the server's port outright, for a wall on
+ * another machine that has to dial in; `OPENFLOW_PORT_BASE` still moves vite's
+ * preference, for a worktree that wants a predictable address.
  *
- * `-k` is what makes the rest one command rather than two in a trench coat:
- * closing the window takes vite with it, and a vite that cannot bind takes the
- * window's retry loop with it rather than leaving it asking forever. The server
- * is this process's child and goes when this does.
+ * Closing the window ends all three: the shell's exit closes vite and kills the
+ * server, and a signal here does the same.
  */
-async function watch(): Promise<void> {
+async function dev(): Promise<void> {
   const server = spawn(
     process.execPath,
     ['--disable-warning=ExperimentalWarning', path.join(root, 'server', 'index.ts')],
@@ -120,52 +120,47 @@ async function watch(): Promise<void> {
       },
     },
   );
+  const stopServer = () => server.kill('SIGTERM');
+  process.on('exit', stopServer);
   const port = await new Promise<number>((resolve, reject) => {
     server.on('message', (said: { type?: string; port?: number }) => {
       if (said.type === 'listening' && typeof said.port === 'number') resolve(said.port);
     });
-    server.on('exit', (code, signal) => reject(new Error(`the server exited (${signal ?? code}) before listening`)));
+    server.on('exit', (code, signal) =>
+      reject(new Error(`the server exited (${signal ?? code}) before listening`)),
+    );
   }).catch((why: Error) => {
     console.error(`app: ${why.message}`);
     process.exit(1);
   });
-  const stop = () => server.kill('SIGTERM');
-  process.on('exit', stop);
-  process.on('SIGINT', () => process.exit(130));
-  process.on('SIGTERM', () => process.exit(143));
 
-  const quoted = (what: string) => `"${what}"`;
-  run(
-    bin('concurrently'),
-    [
-      '-k',
-      '-n',
-      'visuals-ui,visuals-app',
-      '-c',
-      'gray,green',
-      `${quoted(bin('vite'))} --config vite.config.ts`,
-      [
-        quoted(process.execPath),
-        '--disable-warning=ExperimentalWarning',
-        quoted(path.join(root, 'tools', 'app.ts')),
-        'dev',
-      ].join(' '),
-    ],
-    { OPENFLOW_VISUALS: `http://127.0.0.1:${port}`, OPENFLOW_VISUALS_PORT: String(port) },
-  );
-}
+  // The config reads this when it loads, which is inside `createServer`.
+  process.env.OPENFLOW_VISUALS = `http://127.0.0.1:${port}`;
+  const { createServer } = await import('vite');
+  const ui = await createServer({ configFile: path.join(root, 'vite.config.ts') });
+  await ui.listen();
+  const bound = ui.httpServer?.address();
+  if (!bound || typeof bound === 'string') throw new Error('vite listened on no port');
+  ui.printUrls();
 
-/**
- * The window, on a dev server somebody else is running.
- *
- * It starts nothing: the server and vite are `watch`'s to own, and vite is
- * already proxying to the server it was told about. What this does is rebuild
- * the main process — which vite knows nothing about — and open onto whatever
- * is there, retrying until it answers.
- */
-function dev(): void {
   electron();
-  run(bin('electron'), ['.'], { OPENFLOW_DEV: '1' });
+  const shell = spawn(bin('electron'), ['.'], {
+    cwd: root,
+    stdio: 'inherit',
+    env: {
+      ...process.env,
+      OPENFLOW_DEV: '1',
+      OPENFLOW_DEV_URL: `http://localhost:${bound.port}`,
+      OPENFLOW_VISUALS_UI_PORT: String(bound.port),
+    },
+  });
+  const end = (code: number) => {
+    shell.kill('SIGTERM');
+    void ui.close().finally(() => process.exit(code));
+  };
+  shell.on('exit', (code) => end(code ?? 0));
+  process.on('SIGINT', () => end(130));
+  process.on('SIGTERM', () => end(143));
 }
 
 const [command, ...rest] = process.argv.slice(2);
@@ -192,16 +187,13 @@ switch (command) {
   case 'run':
     open();
     break;
-  case 'watch':
-    await watch();
-    break;
   case 'dev':
-    dev();
+    await dev();
     break;
   default:
     console.error(
       `app: no such command — ${command ?? '(none named)'}.\n` +
-        '     Try: build, electron, icons, pack, run, watch, dev',
+        '     Try: build, electron, icons, pack, run, dev',
     );
     process.exit(1);
 }

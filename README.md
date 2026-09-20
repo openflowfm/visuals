@@ -22,7 +22,7 @@ git clone https://github.com/openflowfm/visuals.git
 cd visuals
 npm ci          # also compiles the Ableton Link addon — see tools/build-link.ts
 npm start       # build, run the server, open the app
-npm run watch   # the dev server and the window, together — the one to type while working
+npm run dev     # the server, vite and the window, together — the one to type while working
 npm run pack    # the signed, packaged .app and .dmg
 ```
 
@@ -78,8 +78,7 @@ configured for it to draw a show.
 npm start           # a show night: build, run the server, open the app — see docs/desktop.md
 npm run show        # the same, in a dedicated Chrome instead of the app
 npm run benchmark   # every flow, as fast as this machine draws it — docs/engine.md
-npm run watch       # the dev server and the window, together — the one to type while working
-npm run dev         # the window alone, when vite is already running
+npm run dev         # the server, vite and the window, together — the one to type while working
 npx vite --config vite.config.ts  # the renderer with HMR alone, :5473, proxying /ws to the server
 npm run build       # the renderer into dist/, which the server serves
 npm run dev:fake-live  # a bridge that isn't one, for working without Ableton
@@ -92,15 +91,18 @@ The user manual is [the wiki](https://github.com/openflowfm/visuals/wiki). Its
 vocabulary: clone `git@github.com:openflowfm/visuals.wiki.git` beside this repo as
 `visuals.wiki/` and `npm run dev:node-manual` rewrites it — see [docs/render.md](docs/render.md).
 
-`npm run watch` opens the Electron window itself; `:5473` is the HMR page it loads. Open
-`http://localhost:17900` — `npm run server` — only for the built browser renderer.
+`npm run dev` opens the Electron window itself; the HMR page it loads is vite's, on `:5473`
+or the next free port up. Open `http://localhost:17900` — `npm run server` — only for the
+built browser renderer.
 
-`npm run watch` starts the server first, on whatever port is free, then vite and the real
-visuals Electron shell, both told that port: vite proxies `/ws` and `/media` to it, and the
-shell opens onto vite. So two worktrees on two `OPENFLOW_PORT_BASE`s are two servers on two
-ports, and a dev shell takes no single-instance lock and keeps a profile of its own. vite
-and the shell run under `concurrently -k`, so vite exiting takes the window with it and a
-window that cannot open takes vite with it; the server goes when `watch` does.
+**Nothing in `npm run dev` is assigned; everything is discovered.** It starts the server
+first, on whatever port is free, and is told which. It then runs vite in-process, which
+prefers `:5473` and moves up if that is taken, and reads the port off the socket. Only then
+does it open the shell, told both. So `npm run dev` twice — in two worktrees or in one — is
+two servers, two vites and two shells, each with its own profile under
+`~/.openflow/visuals/dev/<port>/`, and no single-instance lock. Closing the window ends all
+three. `OPENFLOW_DEV_URL=http://localhost:5474 npx electron .` is the escape hatch for a
+shell on a vite you started by hand.
 
 **That is why `npm start` exists for a show.** Two processes where either exiting kills the
 other is right for a dev loop and wrong for a gig: a watcher falling over would take the

@@ -43,8 +43,10 @@ export default defineConfig({
     chunkSizeWarningLimit: 1500,
   },
   server: {
+    // A preference, not a claim: busy, it moves up, and `tools/app.ts dev`
+    // reads the port it settled on off the socket and tells the shell.
     port: PORT,
-    strictPort: true,
+    strictPort: false,
     // Dev serves the page; the visuals server stays authoritative for the show
     // and is the only thing holding the Link peer.
     proxy: {

@@ -557,7 +557,7 @@ already documents from the other side.
 in the document is being *reused* rather than discarded, which is precisely what React's
 development double-invoke does: mount, free, mount again on the same element. A context lost
 there is lost permanently, because nothing restores one that was taken deliberately — so
-without the check, `npm run watch` would draw black.
+without the check, `npm run dev` would draw black.
 
 `client/render/flow.ts` holds what both the stage and the node faces need — the shader, the
 banks, the signature. **The bench is not in that list**, because the bench is a whole

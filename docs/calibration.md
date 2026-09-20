@@ -31,7 +31,7 @@ OPENFLOW_CALIBRATION=1 npm start
 For HMR:
 
 ```sh
-OPENFLOW_CALIBRATION=1 npm run watch
+OPENFLOW_CALIBRATION=1 npm run dev
 ```
 
 The app owns the server, so the variable reaches the child it starts. To drive a server of

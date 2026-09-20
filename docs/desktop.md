@@ -9,7 +9,7 @@ a server, it must not be throttled, and it opens second windows onto projectors.
 else is shared with the other open[flow] apps through that package.
 
 `npm start` builds the renderer, starts the server, and opens the rig in a window it
-owns. It is the show-night command. `npm run watch` opens the same shell automatically, but
+owns. It is the show-night command. `npm run dev` opens the same shell automatically, but
 points it at vite so renderer edits arrive through HMR.
 
 ## The server is a child, not this process
@@ -86,13 +86,14 @@ renderer.
 
 ## The dev loop, in this window
 
-`npm run watch` is the one to type: it starts the server on a free port, then vite told
-that port, then opens this shell on `:5473`, so an edit to a shader, node or component lands
-in the real Electron window with React Fast Refresh intact. **The shell owns no server in
-dev** — `watch` does, and vite proxies to it — and it takes no single-instance lock: a
-second worktree on its own `OPENFLOW_PORT_BASE` is a second server, a second vite and a
-second shell with its own profile under `~/.openflow/visuals/dev/<port>/`. `npm run dev`
-is the narrower command when `watch`'s vite is already running. `npm
+`npm run dev` is the one to type: it starts the server on a free port, then vite told that
+port, then opens this shell on the port vite settled on, so an edit to a shader, node or
+component lands in the real Electron window with React Fast Refresh intact. **The shell
+owns no server in dev** — `tools/app.ts` does, and vite proxies to it — and it takes no
+single-instance lock: `npm run dev` a second time is a second server, a second vite one
+port up, and a second shell with its own profile under `~/.openflow/visuals/dev/<port>/`.
+vite's port is a preference rather than a claim, which is the one place this app differs
+from set[flow]'s dev loop; the shell is told where vite landed rather than computing it. `npm
 start` is a rebuild and relaunch, which is right for checking what ships and wrong for the
 twenty edits before it.
 

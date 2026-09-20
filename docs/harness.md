@@ -5,7 +5,7 @@ no Ableton, no device and no set.
 
 ```sh
 npm run dev:fake-live                                          # :17801
-OPENFLOW_BRIDGE_WS=ws://127.0.0.1:17801/ws npm run watch
+OPENFLOW_BRIDGE_WS=ws://127.0.0.1:17801/ws npm run dev
 ```
 
 It speaks enough of the real protocol to be indistinguishable from the device as far as
