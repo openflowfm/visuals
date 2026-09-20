@@ -4,7 +4,7 @@ import { exampleFor } from './examples.ts';
 import { checkGraph } from './storyChecks.ts';
 
 const meta = {
-  title: 'Nodes/Blend', component: NodeHarness,
+  title: 'Nodes/Transform/Blend', component: NodeHarness,
   args: { example: exampleFor('blend') },
   argTypes: { example: { control: false } },
   parameters: { layout: 'fullscreen' },

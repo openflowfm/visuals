@@ -4,7 +4,7 @@ import { exampleFor } from './examples.ts';
 import { checkGraph } from './storyChecks.ts';
 
 const meta = {
-  title: 'Nodes/Fractal', component: NodeHarness,
+  title: 'Nodes/Draw/Fractal', component: NodeHarness,
   args: { example: exampleFor('fractal') },
   argTypes: { example: { control: false } },
   parameters: { layout: 'fullscreen' },

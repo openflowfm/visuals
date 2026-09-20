@@ -3,7 +3,7 @@ import { NodeHarness } from './NodeHarness.tsx';
 import { trackBrightness } from './examples.ts';
 import { checkTrack } from './storyChecks.ts';
 const meta = {
-  title: 'Nodes/Track', component: NodeHarness,
+  title: 'Nodes/Ableton/Track', component: NodeHarness,
   args: { example: trackBrightness }, argTypes: { example: { control: false } },
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof NodeHarness>;

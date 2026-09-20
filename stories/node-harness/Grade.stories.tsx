@@ -4,7 +4,7 @@ import { exampleFor } from './examples.ts';
 import { checkGraph } from './storyChecks.ts';
 
 const meta = {
-  title: 'Nodes/Grade', component: NodeHarness,
+  title: 'Nodes/Transform/Grade', component: NodeHarness,
   args: { example: exampleFor('grade') },
   argTypes: { example: { control: false } },
   parameters: { layout: 'fullscreen' },

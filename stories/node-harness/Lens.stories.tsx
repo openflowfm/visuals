@@ -4,7 +4,7 @@ import { exampleFor, animatedRipple } from './examples.ts';
 import { checkLens } from './storyChecks.ts';
 
 const meta = {
-  title: 'Nodes/Lens', component: NodeHarness,
+  title: 'Nodes/Geometry/Lens', component: NodeHarness,
   args: { example: exampleFor('lens', 'ripple') },
   argTypes: { example: { control: false } },
   parameters: { layout: 'fullscreen' },

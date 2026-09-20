@@ -4,7 +4,7 @@ import { exampleFor } from './examples.ts';
 import { checkTransport } from './storyChecks.ts';
 
 const meta = {
-  title: 'Nodes/LFO', component: NodeHarness,
+  title: 'Nodes/Numbers/LFO', component: NodeHarness,
   args: { example: exampleFor('lfo') },
   argTypes: { example: { control: false } },
   parameters: { layout: 'fullscreen' },
