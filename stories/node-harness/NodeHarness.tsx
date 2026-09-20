@@ -1,11 +1,17 @@
 import { useMemo, useRef, useState } from 'react';
-import type { NodeKind, Scheme } from '../../protocol.ts';
+import { paletteOf, type NodeKind, type Scheme } from '../../protocol.ts';
 import { inletsOf, NODE_SPECS } from '../../client/render/circuit.ts';
 import { Bench } from '../../client/ui/Preview.tsx';
+import { packColor } from '../../client/state/useRoom.ts';
 import type { Clock } from '../../client/state/useShow.ts';
 import { SCHEME, SHOW } from '../fixtures.ts';
 import { FLOW, HARNESS_KINDS, harnessFixture } from './fixture.ts';
 import './node-harness.css';
+
+const HARNESS_SHOW = {
+  ...SHOW.resting, master: 0.5, tempo: 120, colorway: 'dawn',
+  colors: paletteOf(SCHEME.colorways.dawn).map(packColor),
+};
 
 /** Story args reset local edits as one unit, including the compositor's resources. */
 export function NodeHarness({ kind = 'source', mode = 'plasma' }: { kind?: NodeKind; mode?: string }) {
@@ -74,7 +80,7 @@ function Session({ initialKind, initialMode }: { initialKind: NodeKind; initialM
       <p>{signal === 'n' ? 'Number outlet: visualized through colorway brightness.' : signal === 'p' ? 'Point outlet: visualized by sampling plasma.' : 'Colour outlet: rendered directly.'} {animated ? 'Time is running.' : 'Time is frozen.'}</p>
       <div className="node-harness-body">
         <div className="node-harness-picture" data-testid="node-preview">
-          <Bench key={generation} show={{ ...SHOW.resting, master: 0.5, tempo: 120, colorway: 'dawn' }}
+          <Bench key={generation} show={HARNESS_SHOW}
             scheme={scheme} flow={FLOW} clock={clock} onError={setError} />
         </div>
         <div className="node-harness-controls">
