@@ -46,6 +46,12 @@ describe('explicit node input migration', () => {
     expect(result.circuit.cords.filter(cord => cord.to === 's/brightness')).toEqual([{ from: 'other/n', to: 's/brightness' }]);
     expect(result.circuit.nodes[0].values).not.toHaveProperty('energy');
   });
+  it('preserves legacy Colorway opacity without adding a base to a wired amount', () => {
+    expect(migrateNodeInputs(flow({ kind: 'colorway', op: undefined })).circuit.nodes[0].values?.amount).toBe(0.5);
+    const wired = flow({ kind: 'colorway', op: undefined });
+    wired.circuit.cords.push({ from: 'driver/n', to: 's/amount' });
+    expect(migrateNodeInputs(wired).circuit.nodes[0].values?.amount).toBeUndefined();
+  });
   it('preserves literal colour values while replacing old energy keys', () => {
     expect(migrateNodeInputs(flow({ values: { energy: 0.5 }, colors: { color: '#ff0088' } })).circuit.nodes[0].colors).toEqual({ color: '#ff0088' });
   });

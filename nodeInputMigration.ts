@@ -23,6 +23,7 @@ export function migrateNodeInputs(flow: FlowDef, inheritedVersion = 1): FlowDef 
     if (!targets.length) return original;
     const values = { ...original.values };
     const depths = { ...original.depths };
+    if (original.kind === 'colorway' && values.amount === undefined && !feeds.has(`${original.id}/amount`)) values.amount = 0.5;
     const energy = original.values?.energy;
     const depth = original.depths?.energy;
     const from = feeds.get(`${original.id}/energy`);
