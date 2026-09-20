@@ -16,6 +16,8 @@ export function migrateNodeInputs(flow: FlowDef, inheritedVersion = 1): FlowDef 
   for (let n = 1; ids.has(masterId); n++) masterId = `~master-level-${n}`;
   let needsMaster = false;
   const added: Circuit['cords'] = [];
+  const controls: CircuitNode[] = [];
+  const unique = (stem: string) => { let id = stem; for (let n = 1; ids.has(id); n++) id = `${stem}-${n}`; ids.add(id); return id; };
   const removed = new Set<string>();
   const nodes = circuit.nodes.map(original => {
     const op = original.op ?? NODE_SPECS[original.kind]?.modes?.[0]?.name;
@@ -23,18 +25,39 @@ export function migrateNodeInputs(flow: FlowDef, inheritedVersion = 1): FlowDef 
     if (!targets.length) return original;
     const values = { ...original.values };
     const depths = { ...original.depths };
-    if (original.kind === 'colorway' && values.amount === undefined && !feeds.has(`${original.id}/amount`)) values.amount = 0.5;
+    if (original.kind === 'colorway' && values.amount === undefined && !feeds.has(`${original.id}/amount`)) {
+      const id = unique(`~${original.id}-opacity`);
+      // Average's two default midpoints preserve old opacity without a parameter slot.
+      controls.push({ id, kind: 'math', op: 'average', label: 'Legacy opacity', x: original.x - 220, y: original.y + 220 });
+      values.amount = 0;
+      depths.amount = 1;
+      added.push({ from: `${id}/n`, to: `${original.id}/amount` });
+    }
     const energy = original.values?.energy;
     const depth = original.depths?.energy;
     const from = feeds.get(`${original.id}/energy`);
+    let shared: string | undefined;
     for (const target of targets) {
       const address = `${original.id}/${target.name}`;
       // An independently set input already meant something; migration cannot take it over.
       if (original.values?.[target.name] !== undefined || feeds.has(address)) continue;
-      if (energy !== undefined) values[target.name] = energy;
+      if (energy !== undefined || (from && depth !== undefined && depth !== 1)) {
+        if (!shared) {
+          const id = unique(`~${original.id}-control`);
+          shared = `${id}/n`;
+          controls.push(from
+            ? { id, kind: 'math', op: 'curve', x: original.x - 220, y: original.y, values: { a: energy ?? 0 }, depths: { a: depth ?? 1 } }
+            : { id, kind: 'value', value: energy, x: original.x - 220, y: original.y });
+          if (from) added.push({ from, to: `${id}/a` });
+        }
+        values[target.name] = 0;
+        depths[target.name] = 1;
+        added.push({ from: shared, to: address });
+        continue;
+      }
       if (depth !== undefined) depths[target.name] = depth;
       if (from) added.push({ from, to: address });
-      else if (energy === undefined) {
+      else {
         needsMaster = true;
         added.push({ from: `${masterId}/n`, to: address });
         values[target.name] = 0;
@@ -49,6 +72,7 @@ export function migrateNodeInputs(flow: FlowDef, inheritedVersion = 1): FlowDef 
     if (Object.keys(depths).length) node.depths = depths; else delete node.depths;
     return node;
   });
+  nodes.push(...controls);
   if (needsMaster) nodes.push({ id: masterId, kind: 'playback', op: 'level',
     x: 0, y: Math.max(0, ...nodes.map(node => node.y)) + 220 });
   return { ...flow, inputs: NODE_INPUT_VERSION, circuit: {
