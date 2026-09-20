@@ -101,7 +101,7 @@ describe('the MCP boundary', () => {
       const held = await client.callTool({ name: 'get_flow', arguments: { id: 'mcp-field' } });
       expect(held.structuredContent).toMatchObject({
         id: 'mcp-field',
-        flow: { name: 'MCP field' },
+        flow: { name: 'MCP field', inputs: 2 },
       });
     } finally {
       await client.close();
