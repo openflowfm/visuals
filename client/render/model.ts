@@ -1649,6 +1649,9 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
       bindOutput(program, index, 'Base', base);
       bindOutput(program, index, 'Mask', mask);
     });
+    // A previous model may have left authored mip/wrap samplers on the
+    // units graph media reuse. Graph pictures define their own texture state.
+    for (const unit of MODEL_MATERIAL_UNITS) gl.bindSampler(unit, null);
     bindColors(program);
     for (let role = 0; role < 5; role++) {
       gl.viewport(role * tileWidth, 0, tileWidth, tileHeight);
