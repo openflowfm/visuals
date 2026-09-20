@@ -1546,7 +1546,8 @@ erasing them. Colour signals are premultiplied pictures; when a generator uses o
 as a hue it reads straight RGB, leaving its own coverage to its shape controls.
 
 Saved flows carry an input-vocabulary stamp (`inputs: 2`). Older energy values and
-cords expand into their named controls; old unwired coupling becomes an explicit
+cords expand into their named controls through shared visible Value or Math nodes,
+keeping the original parameter budget; old unwired coupling becomes an explicit
 master-level Playback node. Existing independently set inputs take precedence. This
 transformation happens before invalid-port repair and is idempotent. New colour
 role defaults can differ from the old shaders’ derived white/complement mixtures.

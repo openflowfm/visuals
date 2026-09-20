@@ -632,7 +632,7 @@ it('adapts archived input vocabulary without rewriting the historical candidate'
     const loaded = store.candidate(old.id)!;
     expect(loaded.id).toBe(old.id);
     expect(loaded.flow.inputs).toBe(2);
-    expect(loaded.flow.circuit.nodes[0].values).toMatchObject({ brightness: 0.4, contrast: 0.4 });
+    expect(loaded.flow.circuit.nodes).toContainEqual(expect.objectContaining({ kind: 'value', value: 0.4 }));
     expect(loaded.flow.circuit.nodes[0].values).not.toHaveProperty('energy');
     expect((db.prepare('SELECT flow_json FROM candidates WHERE id = ?').get(old.id) as { flow_json: string }).flow_json).toBe(saved);
   } finally { db.close(); }
