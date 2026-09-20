@@ -458,6 +458,17 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
           id ?? '',
           modelViews,
           seconds,
+          (program) => {
+            feed.flow(program, at, built.banks);
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, live.texture);
+            gl.uniform1i(program.uniform('uTracksTex'), 0);
+            gl.activeTexture(gl.TEXTURE7);
+            gl.bindTexture(gl.TEXTURE_2D, prev.texture);
+            gl.uniform1i(program.uniform('uLastTex'), 7);
+            video.bind(program, built.videos, (binding) => videoControl(sample, binding), id ?? '');
+            image.bind(program, built.images, id ?? '');
+          },
         );
         // The model bank rendered into its own depth target. Return to the
         // ordinary flow destination and state before sampling those textures.

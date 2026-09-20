@@ -29,7 +29,7 @@ import {
 } from '../../model.ts';
 import { portId, type CircuitModel } from './circuit.ts';
 import type { NumberSample } from './evaluateNumber.ts';
-import type { Program } from './gl.ts';
+import { compile, createTarget, drawFullscreen, type Program, type Target } from './gl.ts';
 import {
   createTextureCache,
   textureEntryKey,
@@ -45,11 +45,12 @@ export const MAX_MODEL_BONES = 64;
 export { MAX_MODEL_MORPHS };
 /**
  * Fragment texture units the pass reserves: five material maps on 0–4 and the
- * shadow map on 15. WebGL2 guarantees sixteen. Units 0–4 belong to the flow
+ * graph-colour atlas on 12 and shadow map on 15. WebGL2 guarantees sixteen. Units 0–4 belong to the flow
  * program's own samplers, which the compositor binds after this pass returns.
  */
 export const MODEL_MATERIAL_UNITS = [0, 1, 2, 3, 4] as const;
 export const MODEL_SHADOW_UNIT = 15;
+export const MODEL_ROLE_UNIT = 12;
 export const MODEL_TEXTURE_UNITS_NEEDED = 16;
 /** Anisotropic filtering, when the extension exists, is capped here. */
 export const MAX_MODEL_ANISOTROPY = 4;
@@ -124,6 +125,9 @@ interface Instance {
   setup: ModelSetup;
   asset: ModelAsset;
   target: ModelTarget;
+  roleTarget: Target | null;
+  roleProgram: Program | null;
+  roleSource: string | null;
   abort: AbortController;
   root: THREE.Group | null;
   animations: THREE.AnimationClip[];
@@ -158,6 +162,7 @@ export interface ModelBank {
     scope?: string,
     views?: Readonly<Record<string, ModelView>>,
     seconds?: number,
+    bindColors?: (program: Program) => void,
   ): void;
   clear(): void;
   readonly error: string | null;
@@ -298,6 +303,25 @@ uniform float uLightInner[${MAX_MODEL_LIGHTS}];
 uniform float uLightOuter[${MAX_MODEL_LIGHTS}];
 uniform vec3 uEnvironmentTop;
 uniform vec3 uEnvironmentBottom;
+uniform sampler2D uRoleColors;
+uniform bool uRoleColorsOn;
+uniform vec2 uModelViewport;
+uniform int uLightRole[${MAX_MODEL_LIGHTS}];
+uniform int uEnvironmentTopRole;
+uniform int uEnvironmentBottomRole;
+
+// Per-instance graph colours are evaluated before the mesh and sampled at
+// this pixel. PBR uses them as albedo and incident light, never as a late tint.
+vec3 roleColor(int role, vec3 fallbackColor) {
+  if (!uRoleColorsOn || role < 0 || role > 4) return fallbackColor;
+  vec2 uv = clamp(gl_FragCoord.xy / uModelViewport, 0.0, 1.0);
+  vec2 size = vec2(textureSize(uRoleColors, 0));
+  float tile = size.x / 5.0;
+  vec2 at = vec2((float(role) * tile + clamp(uv.x * tile, 0.5, tile - 0.5)) / size.x,
+                 clamp(uv.y, 0.5 / size.y, 1.0 - 0.5 / size.y));
+  vec4 value = texture(uRoleColors, at);
+  return value.a > 0.00001 ? value.rgb / value.a : vec3(0.0);
+}
 uniform vec3 uEnvironmentDirection;
 uniform float uEnvironmentIntensity;
 uniform sampler2D uShadowMap;
@@ -473,16 +497,16 @@ vec3 litSurface(vec3 albedo, Surface s) {
     vec3 specular = d * g * f / max(4.0 * nv * nl, 0.0001);
     vec3 diffuse = (vec3(1.0) - f) * (1.0 - s.metallic) * albedo / PI;
     float shadow = i == uShadowLight ? modelShadow(n, l) : 1.0;
-    direct += (diffuse + specular) * uLightColor[i] * uLightIntensity[i] * attenuation * nl * shadow;
+    direct += (diffuse + specular) * roleColor(uLightRole[i], uLightColor[i]) * uLightIntensity[i] * attenuation * nl * shadow;
   }
 
   float hemi = clamp(n.y * 0.5 + 0.5, 0.0, 1.0);
-  vec3 environment = mix(uEnvironmentBottom, uEnvironmentTop, hemi);
+  vec3 environment = mix(roleColor(uEnvironmentBottomRole, uEnvironmentBottom), roleColor(uEnvironmentTopRole, uEnvironmentTop), hemi);
   vec3 reflected = reflect(-v, n);
   float hot = pow(max(dot(reflected, uEnvironmentDirection), 0.0), mix(72.0, 3.0, s.roughness));
   vec3 f = fresnelRoughness(nv, f0, s.roughness);
   vec3 diffuseEnvironment = (vec3(1.0) - f) * (1.0 - s.metallic) * albedo * environment;
-  vec3 specularEnvironment = f * (environment * (0.35 + 0.65 * (1.0 - s.roughness)) + uEnvironmentTop * hot * 1.6);
+  vec3 specularEnvironment = f * (environment * (0.35 + 0.65 * (1.0 - s.roughness)) + roleColor(uEnvironmentTopRole, uEnvironmentTop) * hot * 1.6);
   return direct + (diffuseEnvironment + specularEnvironment) * uEnvironmentIntensity * s.occlusion;
 }
 
@@ -537,7 +561,7 @@ void main() {
   s.emissive = uEmissive * uEmissiveStrength * emissiveMap.rgb;
 
   vec3 original = shade(albedo, s);
-  vec3 mapped = shade(uPalette * detail, s);
+  vec3 mapped = shade(roleColor(uSource - 3, uPalette) * detail, s);
   float mappedLight = dot(shade(vec3(detail), s), LUMA);
 
   outBase = vec4(0.0);
@@ -1052,6 +1076,7 @@ interface ResolvedLight {
   position: THREE.Vector3;
   direction: THREE.Vector3;
   color: [number, number, number];
+  role: number;
   intensity: number;
   range: number;
   inner: number;
@@ -1059,6 +1084,8 @@ interface ResolvedLight {
   shadow: boolean;
   softness: number;
 }
+
+const lightRole = (source: string): number => ['primary', 'secondary', 'complement', 'accent', 'chalk'].indexOf(source);
 
 const lightSourceColor = (
   source: ModelLightSource,
@@ -1145,6 +1172,7 @@ function resolvedLighting(
       position,
       direction,
       color: lightSourceColor(light.source, light.color, palette),
+      role: lightRole(light.source),
       intensity: Math.max(0, override.intensity ?? light.intensity),
       range: Math.max(0.001, override.range ?? light.range) * radius,
       inner: Math.cos(inner),
@@ -1346,6 +1374,8 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
     instance.shadow?.free();
     instance.shadow = null;
     instance.target.free();
+    instance.roleTarget?.free();
+    if (instance.roleProgram) gl.deleteProgram(instance.roleProgram.program);
     instance.root = null;
   };
 
@@ -1406,6 +1436,7 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
       setup,
       asset,
       target: modelTarget(gl),
+      roleTarget: null, roleProgram: null, roleSource: null,
       abort: new AbortController(),
       root: null,
       animations: [],
@@ -1582,6 +1613,50 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
     gl.bindSampler(unit, sampler);
   };
 
+  const drawRoles = (
+    instance: Instance, model: CircuitModel, width: number, height: number,
+    bindColors: ((program: Program) => void) | undefined,
+    outputs: readonly [WebGLTexture, WebGLTexture][],
+  ) => {
+    if (!model.colorSource || !bindColors) {
+      if (instance.roleProgram) gl.deleteProgram(instance.roleProgram.program);
+      instance.roleProgram = null;
+      instance.roleTarget?.free();
+      instance.roleTarget = null;
+      instance.roleSource = null;
+      return;
+    }
+    if (instance.roleSource !== model.colorSource) {
+      if (instance.roleProgram) gl.deleteProgram(instance.roleProgram.program);
+      instance.roleProgram = null;
+      instance.roleSource = null;
+      instance.roleProgram = compile(gl, model.colorSource, 'model colour inputs');
+      instance.roleSource = model.colorSource;
+    }
+    const program = instance.roleProgram!;
+    instance.target.resize(width, height);
+    const tileWidth = Math.min(instance.target.width, Math.floor(gl.getParameter(gl.MAX_TEXTURE_SIZE) / 5));
+    const tileHeight = instance.target.height;
+    instance.roleTarget ??= createTarget(gl);
+    instance.roleTarget.resize(tileWidth * 5, tileHeight);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, instance.roleTarget.framebuffer);
+    gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.BLEND);
+    gl.bindVertexArray(null);
+    gl.useProgram(program.program);
+    outputs.forEach(([base, mask], index) => {
+      bindOutput(program, index, 'Base', base);
+      bindOutput(program, index, 'Mask', mask);
+    });
+    bindColors(program);
+    for (let role = 0; role < 5; role++) {
+      gl.viewport(role * tileWidth, 0, tileWidth, tileHeight);
+      gl.uniform1i(program.uniform('uModelRole'), role);
+      drawFullscreen(gl);
+    }
+  };
+
   const draw = (
     instance: Instance,
     model: CircuitModel,
@@ -1640,6 +1715,13 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
     gl.uniform1f(meshProgram.uniform('uBoundsRadius'), instance.boundsRadius);
     gl.uniform1f(meshProgram.uniform('uTime'), seconds);
 
+    gl.uniform1i(meshProgram.uniform('uRoleColorsOn'), instance.roleSource !== null ? 1 : 0);
+    gl.uniform2f(meshProgram.uniform('uModelViewport'), instance.target.width, instance.target.height);
+    gl.activeTexture(gl.TEXTURE0 + MODEL_ROLE_UNIT);
+    gl.bindTexture(gl.TEXTURE_2D, instance.roleTarget?.texture ?? blank);
+    gl.bindSampler(MODEL_ROLE_UNIT, null);
+    gl.uniform1i(meshProgram.uniform('uRoleColors'), MODEL_ROLE_UNIT);
+    const lightRoles = new Int32Array(MAX_MODEL_LIGHTS).fill(-1);
     const lightTypes = new Int32Array(MAX_MODEL_LIGHTS);
     const lightPositions = new Float32Array(MAX_MODEL_LIGHTS * 3);
     const lightDirections = new Float32Array(MAX_MODEL_LIGHTS * 3);
@@ -1650,6 +1732,7 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
     const lightOuters = new Float32Array(MAX_MODEL_LIGHTS);
     lighting.lights.forEach((light, index) => {
       lightTypes[index] = light.type;
+      lightRoles[index] = light.role;
       lightPositions.set(light.position.toArray(), index * 3);
       lightDirections.set(light.direction.toArray(), index * 3);
       lightColors.set(light.color, index * 3);
@@ -1660,6 +1743,7 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
     });
     gl.uniform1i(meshProgram.uniform('uLightCount'), lighting.lights.length);
     gl.uniform1iv(meshProgram.uniform('uLightType[0]'), lightTypes);
+    gl.uniform1iv(meshProgram.uniform('uLightRole[0]'), lightRoles);
     gl.uniform3fv(meshProgram.uniform('uLightPosition[0]'), lightPositions);
     gl.uniform3fv(meshProgram.uniform('uLightDirection[0]'), lightDirections);
     gl.uniform3fv(meshProgram.uniform('uLightColor[0]'), lightColors);
@@ -1675,6 +1759,8 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
       0.35,
       Math.cos(lighting.environmentRotation),
     ).normalize();
+    gl.uniform1i(meshProgram.uniform('uEnvironmentTopRole'), lightRole(environment.top));
+    gl.uniform1i(meshProgram.uniform('uEnvironmentBottomRole'), lightRole(environment.bottom));
     gl.uniform3fv(meshProgram.uniform('uEnvironmentTop'), top);
     gl.uniform3fv(meshProgram.uniform('uEnvironmentBottom'), bottom);
     gl.uniform3f(meshProgram.uniform('uEnvironmentDirection'), environmentDirection.x, environmentDirection.y, environmentDirection.z);
@@ -1831,7 +1917,7 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
       return {
         instances: held.size,
         geometries: [...held.values()].reduce((sum, instance) => sum + instance.geometry.size, 0),
-        targets: held.size,
+        targets: held.size + [...held.values()].filter(instance => instance.roleTarget).length,
         shadows: [...held.values()].filter((instance) => instance.shadow).length,
         loading: [...held.values()].filter((instance) =>
           !instance.trouble && (!instance.root || textures.pendingFor(instance.owner) > 0)).length,
@@ -1841,16 +1927,17 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
         textureReuse: stats.reuse,
       };
     },
-    bind(program, models, library, sample, palette, width, height, scope = '', views, seconds = 0) {
+    bind(program, models, library, sample, palette, width, height, scope = '', views, seconds = 0, bindColors) {
       const active = new Set(models.map((model) => model.index));
       for (const [index, instance] of held) {
         if (active.has(index)) continue;
         freeInstance(instance);
         held.delete(index);
       }
-      const outputs: [WebGLTexture, WebGLTexture][] = [];
-      for (let index = 0; index < 2; index++) {
-        const model = models.find((entry) => entry.index === index);
+      const outputs: [WebGLTexture, WebGLTexture][] = [[blank, blank], [blank, blank]];
+      // Compiler order respects upstream model colour dependencies; slots stay fixed.
+      for (const model of models) {
+        const index = model.index;
         const setup = model ? library.setups.find((entry) => entry.id === model.setup) : undefined;
         const asset = setup ? library.assets.find((entry) => entry.hash === setup.assetHash) : undefined;
         if (!model || !setup || !asset) {
@@ -1859,7 +1946,7 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
             freeInstance(old);
             held.delete(index);
           }
-          outputs.push([blank, blank]);
+          outputs[index] = [blank, blank];
           continue;
         }
         const key = `${scope}:${model.id}:${setup.revision}:${asset.hash}`;
@@ -1876,6 +1963,7 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
         instance.setup = setup;
         try {
           wantTextures(instance, library);
+          drawRoles(instance, model, width, height, bindColors, outputs);
           draw(instance, model, sample, palette, width, height, views?.[model.id], seconds);
           if (!limitTrouble) instance.trouble = null;
         } catch (error) {
@@ -1886,7 +1974,7 @@ export function createModelBank(gl: WebGL2RenderingContext): ModelBank {
           instance.trouble = `${asset.name}: ${(error as Error).message}`;
           clearTarget(instance, width, height);
         }
-        outputs.push([instance.target.base, instance.target.mask]);
+        outputs[index] = [instance.target.base, instance.target.mask];
       }
       // The material units and their sampler objects are this pass's alone;
       // hand them back clean, or the flow program's own samplers on 0–4 would

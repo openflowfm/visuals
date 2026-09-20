@@ -28,6 +28,17 @@ describe('explicit node inputs', () => {
       }
     }
   });
+  it('hands out unchanged palette roles with default Colorway controls', () => {
+    const ports = inletsOf({ id: 'p', kind: 'colorway', x: 0, y: 0 });
+    const brightness = ports.find(port => port.name === 'brightness')!.at!;
+    const contrast = ports.find(port => port.name === 'contrast')!.at!;
+    expect(ports.find(port => port.name === 'amount')!.at).toBe(1);
+    for (const channel of [0, 0.12, 0.5, 0.83, 1]) {
+      const lifted = channel * (0.8 + 0.3 * brightness);
+      expect((lifted - 0.28) * (1 + 0.3 * contrast) + 0.28).toBeCloseTo(channel, 12);
+    }
+  });
+
   it('compiles a literal hue, with a wire taking precedence and deletion restoring the role', () => {
     const circuit = graph({ colors: { color: '#ff0000' } });
     expect(main(circuit)).toContain('colorRGB(vec4(1.0, 0.0, 0.0, 1.0))');

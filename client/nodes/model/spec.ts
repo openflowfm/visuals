@@ -1,3 +1,5 @@
+import { COLOR_ROLES } from '../../../protocol.ts';
+import { roleColorPort } from '../../render/ports.ts';
 import type { NodeSpec } from '../../render/circuit.ts';
 
 /** A reusable setup's stable published controls become this node's number inlets. */
@@ -10,13 +12,16 @@ export const MODEL_NODE_SPEC = {
       kind: 'p' as const,
       description: 'Where in the rendered model picture to read.',
     },
+    ...COLOR_ROLES.map(role => roleColorPort(role, `The ${role} colour used by setup materials, lights and environment.`, role)),
     {
+      colorRole: 'primary' as const,
       name: 'color-a',
       kind: 'c' as const,
       description: 'The setup’s first externally controllable material colour.',
       fallback: 'vec4(uPrimary, 1.0)',
     },
     {
+      colorRole: 'secondary' as const,
       name: 'color-b',
       kind: 'c' as const,
       description: 'The setup’s second externally controllable material colour.',

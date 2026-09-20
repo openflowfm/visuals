@@ -15,17 +15,9 @@
  * could not have fixed it — Link shares a beat timeline, not a host clock, and
  * deriving seconds from the beat would put drift back in tempo.
  *
- * ## Energy is an argument now, not a uniform
- *
- * It used to be the one number the whole show agreed about: an archetype set it,
- * a cascade biased it, and every shader read `uEnergy` without being asked. That
- * made "energy" mean exactly one thing forever, when in practice it means
- * whatever you decide — often a particular track's, often the bass.
- *
- * So `rate`, `beatPulse`, `charge` and every generator take it as a parameter,
- * and a flow decides where it comes from by wiring an `energy` node. `uEnergy`
- * survives as **the room's** energy — a smoothed master meter — which is what an
- * unwired energy inlet falls back to. A default, not a level.
+ * Node brightness, contrast, motion and pulse decay are explicit arguments.
+ * The legacy room-level uniform remains for the Live track drawing pass and
+ * playback pulse signal; it is never a default for a visual node control.
  */
 /**
  * How far past white a colour is allowed to travel before anything composites.

@@ -28,11 +28,11 @@ describe('the reusable model node', () => {
   it('wears stable binding ids as graph addresses and cosmetic labels on its face', () => {
     const ports = inletsOf(model('m'));
     expect(ports.map((port) => port.name)).toEqual([
-      'p', 'color-a', 'color-b', 'ring-01-spin', 'ring-02-spin',
+      'p', 'primary', 'secondary', 'complement', 'accent', 'chalk', 'color-a', 'color-b', 'ring-01-spin', 'ring-02-spin',
     ]);
-    expect(ports[3]).toMatchObject({ name: 'ring-01-spin', label: 'First ring', at: 0.5 });
-    expect(ports[1].fallback).toBe('vec4(uPrimary, 1.0)');
-    expect(ports[2].fallback).toBe('vec4(uSecondary, 1.0)');
+    expect(ports[8]).toMatchObject({ name: 'ring-01-spin', label: 'First ring', at: 0.5 });
+    expect(ports[6].fallback).toBe('vec4(uPrimary, 1.0)');
+    expect(ports[7].fallback).toBe('vec4(uSecondary, 1.0)');
   });
 
   it('compiles to a normal colour expression with bounded model textures', () => {
@@ -43,6 +43,47 @@ describe('the reusable model node', () => {
     expect(built.source).toContain('vec4(uPrimary, 1.0)');
     expect(built.source).toContain('uniform sampler2D uModelBase0;');
     expect(built.source).toContain('base.a + mask.a * max(a.a, b.a)');
+  });
+
+  it('builds an upstream role program only when a role is overridden', () => {
+    const node = model('m');
+    node.colors = { primary: '#ff0000' };
+    const built = compileCircuit(circuit([node]));
+    expect(built.error).toBeNull();
+    expect(built.models[0].colorSource).toContain('uniform int uModelRole;');
+    expect(built.models[0].colorSource).toContain('fragColor = vec4(1.0, 0.0, 0.0, 1.0);');
+    expect(built.models[0].colorSource).toContain('fragColor = vec4(uColors[4], 1.0);');
+    expect(built.models[0].colorDependencies).toEqual([]);
+  });
+
+  it('evaluates wired colours spatially in the model colour prepass', () => {
+    const graph = circuit([model('m')]);
+    graph.nodes.push({ id: 'pattern', kind: 'source', op: 'checker', x: 0, y: 0 });
+    graph.cords.push({ from: 'pattern/c', to: 'm/primary' });
+    const made = compileCircuit(graph);
+    expect(made.error).toBeNull();
+    expect(made.models[0].colorSource).toContain('gen_checker(centred(),');
+    expect(made.models[0].colorSource).toContain('if (uModelRole == 0)');
+  });
+
+  it('orders upstream model colour dependencies without changing their sampler slots', () => {
+    const graph = circuit([model('upstream'), model('downstream')]);
+    graph.cords.push({ from: 'upstream/c', to: 'downstream/primary' });
+    const built = compileCircuit(graph);
+    expect(built.error).toBeNull();
+    expect(built.models.map(entry => entry.id)).toEqual(['upstream', 'downstream']);
+    expect(built.models.map(entry => entry.index)).toEqual([1, 0]);
+    expect(built.models[1].colorDependencies).toEqual([1]);
+    expect(built.models[1].colorSource).toContain('fromModel1(');
+  });
+
+  it('rejects self-dependent model colours and multi-model colour cycles', () => {
+    const self = circuit([model('m')]);
+    self.cords.push({ from: 'm/c', to: 'm/primary' });
+    expect(compileCircuit(self).error).toMatch(/feeds itself/);
+    const pair = circuit([model('a'), model('b')]);
+    pair.cords.push({ from: 'a/c', to: 'b/primary' }, { from: 'b/c', to: 'a/secondary' });
+    expect(compileCircuit(pair).error).toMatch(/feeds itself/);
   });
 
   it('refuses more than two reachable passes by name', () => {
