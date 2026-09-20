@@ -361,7 +361,15 @@ export function useShow(): {
       };
     };
 
-    connect();
+    // A tick later rather than now, for StrictMode. In dev React runs this
+    // effect, its cleanup, then the effect again — and a socket opened on the
+    // first pass is closed while still connecting, which aborts the upgrade
+    // mid-handshake and has vite's proxy log an ECONNRESET on every load. The
+    // timer never fires on the throwaway pass; the real one connects as before.
+    retry = window.setTimeout(() => {
+      retry = null;
+      connect();
+    }, 0);
     return () => {
       closed = true;
       if (retry !== null) window.clearTimeout(retry);
