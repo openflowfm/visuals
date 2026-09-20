@@ -35,7 +35,9 @@ path.
 
 ## Windows, and the one that matters
 
-In production the console window loads `http://localhost:17900`. There is no custom scheme
+In production the console window loads `http://127.0.0.1:<port>`, where the port is the
+one the server child reported — it is started on `0`, any free port, unless
+`OPENFLOW_VISUALS_PORT` names one, so a second copy has nothing to collide on. There is no custom scheme
 here, unlike set[flow], because the server is already serving `dist` at a stable
 origin — `location.host` works, `/media/*` works, and the `localStorage` that holds the
 keystone corners is on the same origin a browser would have used. In development it loads
@@ -84,9 +86,13 @@ renderer.
 
 ## The dev loop, in this window
 
-`npm run watch` is the one to type: it starts vite and opens this shell on `:5473`,
-so an edit to a shader, node or component lands in the real Electron window with React Fast
-Refresh intact. `npm run dev` is the narrower command when vite is already running. `npm
+`npm run watch` is the one to type: it starts the server on a free port, then vite told
+that port, then opens this shell on `:5473`, so an edit to a shader, node or component lands
+in the real Electron window with React Fast Refresh intact. **The shell owns no server in
+dev** — `watch` does, and vite proxies to it — and it takes no single-instance lock: a
+second worktree on its own `OPENFLOW_PORT_BASE` is a second server, a second vite and a
+second shell with its own profile under `~/.openflow/visuals/dev/<port>/`. `npm run dev`
+is the narrower command when `watch`'s vite is already running. `npm
 start` is a rebuild and relaunch, which is right for checking what ships and wrong for the
 twenty edits before it.
 
@@ -101,7 +107,7 @@ becomes a real frameless window on a real projector through `setWindowOpenHandle
 display list arrives over IPC from `screen.getAllDisplays()` instead of from Chrome's window
 management API behind a permission prompt. Both of those paths only exist here.
 
-**17900 is still a backend port, not a second dev UI.** The sandboxed renderer and every
+**The backend port is still a backend port, not a second dev UI.** The sandboxed renderer and every
 wall window share Link, bridge, scheme, lab and wheel state over its WebSocket, and media
 files are streamed over its HTTP side. Removing the listener altogether would mean replacing
 both with Electron IPC plus a custom media protocol, and would also make the browser/remote
@@ -111,10 +117,11 @@ pretending the backend disappeared; the page being developed is only vite's `:54
 `OPENFLOW_DEV=1` is the switch and `OPENFLOW_DEV_URL` overrides the address. The port is
 `OPENFLOW_PORT_BASE` plus this app's offset in `desktop/src/apps.ts`, or
 `OPENFLOW_VISUALS_UI_PORT` outright — and the vite config now reads the same registry rather
-than restating the offset, so the two have no way of disagreeing quietly. The readiness poll watches
-whichever port the window is actually opening onto, and the settle before its first look is
-skipped: it exists to avoid attaching to a server that is not ours, and in dev attaching to
-exactly that is the point.
+than restating the offset, so the two have no way of disagreeing quietly. In dev the shell
+waits for vite to answer and opens onto it; in production it opens onto the port its own
+child reported, which is what stops a window attaching to whatever else already held a
+number — see [server](https://github.com/openflowfm/desktop/blob/main/docs/server.md) in
+`@openflow/desktop`.
 
 ## Packaging
 

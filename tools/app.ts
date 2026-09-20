@@ -16,7 +16,7 @@
 // Anything that looks like a flag is handed to electron-builder, which is what
 // keeps `npm run pack -- -c.mac.identity="Developer ID Application: …"` working.
 
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -88,40 +88,80 @@ function open(): void {
 }
 
 /**
- * Working on it: the dev server and the window, in one command.
+ * Working on it: the server, the dev server and the window, in one command.
  *
- * `watch` is `dev` plus the vite server `dev` refuses to start, and it is the
- * thing to type.
+ * `watch` is `dev` plus everything `dev` refuses to start, and it is the thing
+ * to type.
  *
- * `-k` is what makes it one command rather than two in a trench coat: closing
- * the window takes vite with it, and a vite that cannot bind takes the
- * window's retry loop with it rather than leaving it asking forever.
+ * **The server goes first, on whatever port is free**, and says which over the
+ * IPC channel it is spawned with — the same contract the packaged app's
+ * `supervise()` uses. Only then do vite and the shell start, each told that
+ * port: vite proxies `/ws` and `/media` to it, and the shell opens onto vite.
+ * So two worktrees are two servers on two ports, and nothing is assumed.
+ * `OPENFLOW_VISUALS_PORT` still names one outright, for a wall on another
+ * machine that has to dial in.
+ *
+ * `-k` is what makes the rest one command rather than two in a trench coat:
+ * closing the window takes vite with it, and a vite that cannot bind takes the
+ * window's retry loop with it rather than leaving it asking forever. The server
+ * is this process's child and goes when this does.
  */
-function watch(): void {
+async function watch(): Promise<void> {
+  const server = spawn(
+    process.execPath,
+    ['--disable-warning=ExperimentalWarning', path.join(root, 'server', 'index.ts')],
+    {
+      cwd: root,
+      stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
+      env: {
+        ...process.env,
+        OPENFLOW_VISUALS_PORT: process.env.OPENFLOW_VISUALS_PORT ?? '0',
+        OPENFLOW_VISUALS_HOST: process.env.OPENFLOW_VISUALS_HOST ?? '127.0.0.1',
+      },
+    },
+  );
+  const port = await new Promise<number>((resolve, reject) => {
+    server.on('message', (said: { type?: string; port?: number }) => {
+      if (said.type === 'listening' && typeof said.port === 'number') resolve(said.port);
+    });
+    server.on('exit', (code, signal) => reject(new Error(`the server exited (${signal ?? code}) before listening`)));
+  }).catch((why: Error) => {
+    console.error(`app: ${why.message}`);
+    process.exit(1);
+  });
+  const stop = () => server.kill('SIGTERM');
+  process.on('exit', stop);
+  process.on('SIGINT', () => process.exit(130));
+  process.on('SIGTERM', () => process.exit(143));
+
   const quoted = (what: string) => `"${what}"`;
-  run(bin('concurrently'), [
-    '-k',
-    '-n',
-    'visuals-ui,visuals-app',
-    '-c',
-    'gray,green',
-    `${quoted(bin('vite'))} --config vite.config.ts`,
+  run(
+    bin('concurrently'),
     [
-      quoted(process.execPath),
-      '--disable-warning=ExperimentalWarning',
-      quoted(path.join(root, 'tools', 'app.ts')),
-      'dev',
-    ].join(' '),
-  ]);
+      '-k',
+      '-n',
+      'visuals-ui,visuals-app',
+      '-c',
+      'gray,green',
+      `${quoted(bin('vite'))} --config vite.config.ts`,
+      [
+        quoted(process.execPath),
+        '--disable-warning=ExperimentalWarning',
+        quoted(path.join(root, 'tools', 'app.ts')),
+        'dev',
+      ].join(' '),
+    ],
+    { OPENFLOW_VISUALS: `http://127.0.0.1:${port}`, OPENFLOW_VISUALS_PORT: String(port) },
+  );
 }
 
 /**
  * The window, on a dev server somebody else is running.
  *
- * It does not start one: the dev server is `watch`'s to own, and an app that
- * started its own would race it for the port. What this does is rebuild the
- * main process — which vite knows nothing about — and open onto whatever is
- * there, retrying until it answers.
+ * It starts nothing: the server and vite are `watch`'s to own, and vite is
+ * already proxying to the server it was told about. What this does is rebuild
+ * the main process — which vite knows nothing about — and open onto whatever
+ * is there, retrying until it answers.
  */
 function dev(): void {
   electron();
@@ -153,7 +193,7 @@ switch (command) {
     open();
     break;
   case 'watch':
-    watch();
+    await watch();
     break;
   case 'dev':
     dev();

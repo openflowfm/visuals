@@ -23,22 +23,22 @@ import { lifecycle, only, open, preload, switches } from '@openflow/desktop/wind
  */
 
 const VISUALS = APPS.visuals;
-const PORT = serverPort(VISUALS);
-const RIG = `http://localhost:${PORT}`;
 
 /**
- * **The app owns the server in dev too.** `npm run dev` starts vite and this
- * shell; this shell supervises the same backend the production app does, while
- * vite proxies `/ws` and `/media` to it. There is no second standalone visuals
- * process to race it for 17900 or survive after the app closes.
+ * **In dev the server is `watch`'s, not this shell's.** `npm run watch` starts
+ * the server first, learns the port it took, and hands it to vite — which
+ * proxies `/ws` and `/media` to it — and to this shell in the environment. So
+ * a dev shell owns no server and opens onto vite; two of them, in two
+ * worktrees, are two servers on two free ports with nothing to race for.
  */
 const DEV = devUrl(VISUALS);
-/** Where the window opens, and the port that has to answer before it does. */
-const HOME = DEV || RIG;
-const target = new URL(HOME);
-const TARGET = Number(target.port);
-/** Vite may resolve localhost to IPv6; production's app-owned child is explicitly IPv4. */
-const TARGET_HOST = DEV ? target.hostname : '127.0.0.1';
+/**
+ * The port the packaged app's own server takes: the one named in the
+ * environment, or 0 — any free one, reported back by the child. A packaged app
+ * serves its own window over loopback and nothing else dials it, so a fixed
+ * number would only be something for a second copy to collide on.
+ */
+const PORT = process.env.OPENFLOW_VISUALS_PORT ? String(serverPort(VISUALS)) : '0';
 
 // Before anything can read it — the keystone corners and the last display live
 // there.
@@ -83,11 +83,14 @@ const wall = (features: string): Electron.BrowserWindowConstructorOptions => {
   };
 };
 
+/** Where the window opens: vite in dev, else the port the child reported. */
+let home = DEV;
+
 const window = (): void => {
-  open({ app: VISUALS, home: HOME, dev: DEV, bounds: true, throttle: false, popup: wall });
+  open({ app: VISUALS, home, dev: DEV, bounds: true, throttle: false, popup: wall });
 };
 
-if (only(app)) {
+if (only(app, DEV)) {
   ipcMain.handle('openflow:displays', () => {
     const console_ = BrowserWindow.getAllWindows()[0];
     const mine = console_ ? screen.getDisplayMatching(console_.getBounds()).id : -1;
@@ -121,38 +124,37 @@ if (only(app)) {
     screen.on('display-removed', moved);
     screen.on('display-metrics-changed', moved);
 
-    // **The app owns the server in dev too**, which is the whole reason there is
-    // no second standalone visuals process to race it for 17900 or survive
-    // after the app closes. vite merely proxies `/ws` and `/media` to it.
-    const server = supervise({
-      app: VISUALS,
-      env: {
-        OPENFLOW_VISUALS_DIST: rendererDist(),
-        // An app-owned backend serves this app, not the LAN. The standalone
-        // browser command may still bind broadly, and an explicit override wins.
-        OPENFLOW_VISUALS_HOST: process.env.OPENFLOW_VISUALS_HOST ?? '127.0.0.1',
-      },
-    });
-
-    // What the window opens onto is not what was just started: in dev it is
-    // vite, which somebody else is running and which needs no settle — opening
-    // onto what is already there is the entire point. In production it is this
-    // app's own child, and the settle is what stops the window attaching to
-    // whatever else already held the port.
-    const up = DEV
-      ? await waitFor(TARGET, TARGET_HOST)
-      : await server.answered(TARGET, TARGET_HOST);
-    // Gone before it ever listened. Its own exit handler has already decided
-    // whether that was a restart or a quit; it is not ours to open onto.
-    if (!DEV && !server.running) return;
-    if (!up) {
-      console.error(
-        DEV
-          ? `visuals: nothing answered on ${TARGET} — is the dev server up? (npm run dev)`
-          : `visuals: the server never answered on ${TARGET} — nothing to show`,
-      );
-      app.quit();
-      return;
+    if (DEV) {
+      // vite is somebody else's — `watch`'s, along with the server it proxies
+      // to — and opening onto what is already there is the entire point.
+      const target = new URL(DEV);
+      if (!(await waitFor(Number(target.port), target.hostname))) {
+        console.error(`visuals: nothing answered on ${DEV} — is the dev server up? (npm run watch)`);
+        app.quit();
+        return;
+      }
+    } else {
+      // The app's own child, on whatever port it reports. Opening onto the
+      // reported port rather than an assumed one is what stops the window
+      // attaching to whatever else already held a number.
+      const server = supervise({
+        app: VISUALS,
+        env: {
+          OPENFLOW_VISUALS_DIST: rendererDist(),
+          OPENFLOW_VISUALS_PORT: PORT,
+          // An app-owned backend serves this app, not the LAN. The standalone
+          // browser command may still bind broadly, and an explicit override wins.
+          OPENFLOW_VISUALS_HOST: process.env.OPENFLOW_VISUALS_HOST ?? '127.0.0.1',
+        },
+      });
+      try {
+        home = `http://127.0.0.1:${await server.port}`;
+      } catch (why) {
+        // Gone before it ever listened. Its own exit handler has already decided
+        // whether that was a restart or a quit; it is not ours to open onto.
+        console.error(`visuals: ${(why as Error).message} — nothing to show`);
+        return;
+      }
     }
     window();
     updates(VISUALS);

@@ -49,7 +49,11 @@ import { readUp } from './up.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const HOST = process.env.OPENFLOW_VISUALS_HOST ?? '0.0.0.0';
-const PORT = Number(process.env.OPENFLOW_VISUALS_PORT) || VISUALS_PORT;
+// `0` is a real answer — any free port, reported back once bound — so this
+// cannot be an `||`, which would read it as "unset" and take the default.
+const PORT = process.env.OPENFLOW_VISUALS_PORT === undefined
+  ? VISUALS_PORT
+  : Number(process.env.OPENFLOW_VISUALS_PORT);
 const BRIDGE = process.env.OPENFLOW_BRIDGE_WS ?? 'ws://127.0.0.1:17800/ws';
 // Beside the source in the repo, and wherever the packaged app put it
 // otherwise — a bundled server does not sit one directory up from the renderer.
@@ -893,11 +897,10 @@ function anchorOf(show: ReturnType<typeof buildShow>) {
  * printed in the middle of seven other processes' startup output, and it does
  * not mention this file, this port, or the visuals server at all.
  *
- * The usual cause is the one thing worth naming: a visuals app or a
- * `dev:visuals-server` left running from an earlier session, holding 17900
- * while the rest of the rig comes up. Every app that opens this port owns one
- * of these as a child, so "the app is still open" and "a server is still up"
- * are the same sentence.
+ * The usual cause is the one thing worth naming: an `npm run server` left
+ * running from an earlier session, holding 17900. The app and `watch` start
+ * their child on a free port and never see this; only a server asked for a
+ * number outright can find it taken.
  */
 let dying = false;
 const cannotListen = (err: NodeJS.ErrnoException) => {
@@ -967,7 +970,12 @@ function staleBundle(): string | null {
 }
 
 server.listen(PORT, HOST, () => {
-  console.log(`visuals: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);
+  // `PORT` may have been 0 — take whatever was free — and only the socket
+  // knows what that turned out to be. A parent that spawned this with an IPC
+  // channel is told; `npm run server` bare has no parent and reads the log.
+  const bound = (server.address() as { port: number }).port;
+  process.send?.({ type: 'listening', port: bound });
+  console.log(`visuals: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${bound}`);
   console.log(`visuals: bridge ${BRIDGE}`);
   console.log(`visuals: media ${MEDIA_ROOT}`);
   console.log(`visuals: link ${link.live ? 'on' : 'MISSING — running on the wall clock'}`);

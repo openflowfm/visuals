@@ -8,7 +8,7 @@ is a thing that breaks; the package is `@openflow/visuals`. `visual[flow]` is wh
 calls itself; the paths are what the compiler calls it.
 
 ```
-Live ─ SessionBridge :17800 ─WS─> visuals backend :17900 ─WS─> Electron (WebGL2)
+Live ─ SessionBridge :17800 ─WS─> visuals backend ─WS─> Electron (WebGL2)
                                           |
                                      Ableton Link  <──── Live's Link session
 ```
@@ -93,13 +93,14 @@ vocabulary: clone `git@github.com:openflowfm/visuals.wiki.git` beside this repo 
 `visuals.wiki/` and `npm run dev:node-manual` rewrites it — see [docs/render.md](docs/render.md).
 
 `npm run watch` opens the Electron window itself; `:5473` is the HMR page it loads. Open
-`http://localhost:17900` only for the built browser renderer.
+`http://localhost:17900` — `npm run server` — only for the built browser renderer.
 
-`npm run watch` runs vite alongside the real visuals Electron shell. The shell supervises
-its own backend exactly as it does in production; vite proxies `/ws` and `/media` to that
-local child. It runs under `concurrently -k`, so vite exiting takes the window with it, and
-a window that cannot open takes vite with it — if it dies on startup, look for a visuals app
-or a standalone server you left running.
+`npm run watch` starts the server first, on whatever port is free, then vite and the real
+visuals Electron shell, both told that port: vite proxies `/ws` and `/media` to it, and the
+shell opens onto vite. So two worktrees on two `OPENFLOW_PORT_BASE`s are two servers on two
+ports, and a dev shell takes no single-instance lock and keeps a profile of its own. vite
+and the shell run under `concurrently -k`, so vite exiting takes the window with it and a
+window that cannot open takes vite with it; the server goes when `watch` does.
 
 **That is why `npm start` exists for a show.** Two processes where either exiting kills the
 other is right for a dev loop and wrong for a gig: a watcher falling over would take the
@@ -170,7 +171,7 @@ because they describe this projector in this room and would be wrong everywhere 
 
 | | | |
 |---|---|---|
-| app backend | 17900, loopback | `OPENFLOW_VISUALS_PORT`, `OPENFLOW_VISUALS_HOST` |
+| app backend | any free port, loopback — the child reports it; `npm run server` bare is 17900 | `OPENFLOW_VISUALS_PORT` names one, `OPENFLOW_VISUALS_HOST` |
 | renderer (dev) | UI + 300 | `OPENFLOW_VISUALS_UI_PORT` |
 | bridge it follows | `ws://127.0.0.1:17800/ws` | `OPENFLOW_BRIDGE_WS` |
 | fake bridge | 17801 | `OPENFLOW_FAKE_PORT` |
