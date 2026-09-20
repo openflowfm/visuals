@@ -22,7 +22,8 @@ it('compiles every colour node mode, including driven modes, on WebGL2', async (
       }
     }
   }
-  cases.push(...Object.entries(TRACK_SHADERS).map(([name, source]) => ({ name: `track/${name}`, source })));
+  expect(TRACK_SHADERS.size).toBeGreaterThan(0);
+  cases.push(...[...TRACK_SHADERS].map(([name, source]) => ({ name: `track/${name}`, source })));
   const browser = await chromium.launch({ headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
   try {
     const page = await browser.newPage();
