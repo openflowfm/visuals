@@ -1,3 +1,4 @@
+import { legacyEnergyTargets } from './client/render/legacyEnergy.ts';
 import type { NodeKind } from './protocol.ts';
 
 /**
@@ -225,7 +226,10 @@ export const CALIBRATION_BASELINE_RESPONSES: ResponseOverrides = Object.fromEntr
 );
 
 export function productionResponse(target: ResponseTarget): ParameterResponse | undefined {
-  return PRODUCTION_RESPONSES[responseKey(target)];
+  const direct = PRODUCTION_RESPONSES[responseKey(target)];
+  if (direct) return direct;
+  const oldEnergy = legacyEnergyTargets({ kind: target.kind, op: target.mode }).some(entry => entry.name === target.inlet && entry.response === 'energy');
+  return oldEnergy ? PRODUCTION_RESPONSES[responseKey({ ...target, inlet: 'energy' })] : undefined;
 }
 
 /** The TypeScript half of the response contract, used by readouts and tests. */

@@ -256,7 +256,9 @@ describe('the one node with a third coordinate in it', () => {
       });
       expect(made.error).toBeNull();
       expect(made.work).toBe(FORM_WORK);
-      expect(body(made.source!)).toContain(`form_march(centred(), uEnergy, ${FORM_MODES.indexOf(op)},`);
+      expect(body(made.source!)).toContain('finishColor(form_march(centred(), 0.5,');
+      expect(body(made.source!)).toContain(`)), ${FORM_MODES.indexOf(op)},`);
+      expect(body(made.source!)).not.toContain('uEnergy');
     }
   });
 

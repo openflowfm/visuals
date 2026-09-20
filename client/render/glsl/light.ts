@@ -43,21 +43,21 @@ float lightAngleOff(float angle, float axis) {
 // A soft point of light in haze: a hot Gaussian core over an inverse-square
 // halo, windowed to a finite reach so the picture composes instead of
 // tinting the whole frame forever.
-vec4 light_lamp(vec2 p, vec2 from, float e, float carry, float soft) {
+vec4 light_lamp(vec2 p, vec2 from, float intensity, float carry, float soft, vec3 color, vec3 highlight) {
   float radius = mix(0.22, 1.35, clamp(carry, 0.0, 1.0));
   float q = length(p - from) / radius;
   float window = 1.0 - smoothstep(0.55, 1.0, q);
   float halo = window / (1.0 + 9.0 * q * q);
   float core = exp(-q * q / max(0.0045, soft * soft * 0.22));
-  float lit = clamp((halo + core) * mix(0.55, 1.15, e), 0.0, 1.0);
-  vec3 colour = mix(uPrimary, vec3(1.0), core * 0.75);
+  float lit = clamp((halo + core) * mix(0.55, 1.15, intensity), 0.0, 1.0);
+  vec3 colour = mix(color, highlight, core * 0.75);
   return vec4(colour, lit);
 }
 
 // A stage spotlight: a soft-edged cone swung about straight down, its throw
 // fading exponentially, with two octaves of dust drifting through in seconds
 // rather than beats.
-vec4 light_beam(vec2 p, vec2 from, float e, float aim, float spread) {
+vec4 light_beam(vec2 p, vec2 from, float intensity, float aim, float spread, vec3 color, vec3 highlight) {
   vec2 v = p - from;
   float r = length(v);
   float axis = -PI * 0.5 + (clamp(aim, 0.0, 1.0) - 0.5) * 1.9;
@@ -68,8 +68,8 @@ vec4 light_beam(vec2 p, vec2 from, float e, float aim, float spread) {
   vec2 dustAt = vec2(off * 9.0, r * 5.0 - uTime * 0.6);
   float dust = 0.8 + 0.28 * (fieldGradientNoise(dustAt) +
                              0.5 * fieldGradientNoise(dustAt * 2.3 + vec2(11.7, 3.1)));
-  float lit = clamp(cone * throwFade * dust * mix(0.55, 1.25, e), 0.0, 1.0);
-  vec3 colour = mix(uPrimary, vec3(1.0), lit * 0.45);
+  float lit = clamp(cone * throwFade * dust * mix(0.55, 1.25, intensity), 0.0, 1.0);
+  vec3 colour = mix(color, highlight, lit * 0.45);
   return vec4(colour, lit);
 }
 
@@ -77,7 +77,7 @@ vec4 light_beam(vec2 p, vec2 from, float e, float aim, float spread) {
 // streaks are radial and constant along each ray, fanned downward and fading
 // with distance. The angle is measured from straight down, which parks the
 // fBm seam at +/-PI behind the sector window where it never draws.
-vec4 light_shafts(vec2 p, vec2 from, float e, float blades, float haze) {
+vec4 light_shafts(vec2 p, vec2 from, float intensity, float blades, float haze, vec3 color, vec3 highlight) {
   vec2 v = p - from;
   float r = length(v);
   float off = mod(atan(v.y, v.x) + PI * 0.5 + PI, 2.0 * PI) - PI;
@@ -86,15 +86,15 @@ vec4 light_shafts(vec2 p, vec2 from, float e, float blades, float haze) {
                                 r * 0.4 - uTime * 0.04));
   float rays = smoothstep(0.42, 0.8, streaks);
   float carry = exp(-r * mix(2.6, 0.85, clamp(haze, 0.0, 1.0))) * smoothstep(0.0, 0.05, r);
-  float lit = clamp(rays * fan * carry * mix(0.5, 1.2, e), 0.0, 1.0);
-  vec3 colour = mix(uPrimary, vec3(1.0), lit * 0.35);
+  float lit = clamp(rays * fan * carry * mix(0.5, 1.2, intensity), 0.0, 1.0);
+  vec3 colour = mix(color, highlight, lit * 0.35);
   return vec4(colour, lit);
 }
 
 // Sunlight through water: two Worley layers drifting against each other, the
 // pattern bright where either layer nears a feature point and flashing where
 // both do. The counter-drift is what makes the web dance rather than slide.
-vec4 light_caustics(vec2 p, float e, float weave, float glint) {
+vec4 light_caustics(vec2 p, float intensity, float weave, float glint, vec3 color, vec3 highlight) {
   float scale = mix(2.5, 8.0, clamp(weave, 0.0, 1.0));
   vec2 sway = vec2(uTime * 0.05, uTime * 0.031);
   float w1 = fieldWorleyF1(p * scale + sway);
@@ -102,8 +102,8 @@ vec4 light_caustics(vec2 p, float e, float weave, float glint) {
   float sharp = mix(2.2, 9.0, clamp(glint, 0.0, 1.0));
   float web = pow(clamp(1.0 - min(w1, w2), 0.0, 1.0), sharp);
   float crossings = pow(clamp((1.0 - w1) * (1.0 - w2), 0.0, 1.0), sharp * 0.5);
-  float lit = clamp((web * 0.75 + crossings * 0.55) * mix(0.5, 1.2, e), 0.0, 1.0);
-  vec3 colour = mix(uPrimary, vec3(1.0), lit * lit * 0.5);
+  float lit = clamp((web * 0.75 + crossings * 0.55) * mix(0.5, 1.2, intensity), 0.0, 1.0);
+  vec3 colour = mix(color, highlight, lit * lit * 0.5);
   return vec4(colour, lit);
 }
 `;

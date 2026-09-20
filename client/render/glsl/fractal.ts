@@ -25,7 +25,7 @@ vec2 fractalPoint(vec2 p, float zoom, float turn) {
   return mat2(co, -si, si, co) * p * scale;
 }
 
-vec4 fractalColour(vec2 z, vec2 c, float detail, float e) {
+vec4 fractalColour(vec2 z, vec2 c, float detail, float motionRate, float interiorBrightness, vec3 color, vec3 secondary, vec3 interiorColor) {
   int steps = 8 + int(floor(clamp(detail, 0.0, 1.0) * 24.999));
   float escaped = 0.0;
   float at = float(steps);
@@ -47,14 +47,14 @@ vec4 fractalColour(vec2 z, vec2 c, float detail, float e) {
   float smoothAt = at + 1.0 - log2(log2(max(sqrt(mag2), 2.0001)));
   float orbit = clamp(smoothAt / float(steps), 0.0, 1.0);
   float bands = 0.5 + 0.5 * cos(6.28318530718 *
-                (orbit * 4.0 - uBeat * rate(e) * 0.035));
-  vec3 outside = mix(uPrimary, vec3(1.0) - uPrimary, bands * 0.72);
+                (orbit * 4.0 - uBeat * rate(motionRate) * 0.035));
+  vec3 outside = mix(color, secondary, bands * 0.72);
   outside *= mix(0.35, 1.0, 1.0 - orbit);
-  vec3 inside = uPrimary * mix(0.12, 0.28, e);
+  vec3 inside = interiorColor * mix(0.12, 0.28, interiorBrightness);
   return vec4(mix(inside, outside, escaped), 1.0);
 }
 
-vec4 fractalMandelbrot(vec2 p, float zoom, float turn, float detail, float e) {
+vec4 fractalMandelbrot(vec2 p, float zoom, float turn, float detail, float motionRate, float interiorBrightness, vec3 color, vec3 secondary, vec3 interiorColor) {
   vec2 c = fractalPoint(p, zoom, turn) + vec2(-0.55, 0.0);
 
   // The two large known interior regions. Fragments here can never escape, so
@@ -62,15 +62,15 @@ vec4 fractalMandelbrot(vec2 p, float zoom, float turn, float detail, float e) {
   float q = dot(c - vec2(0.25, 0.0), c - vec2(0.25, 0.0));
   bool cardioid = q * (q + c.x - 0.25) <= 0.25 * c.y * c.y;
   bool bulb = dot(c - vec2(-1.0, 0.0), c - vec2(-1.0, 0.0)) <= 0.0625;
-  if (cardioid || bulb) return vec4(uPrimary * mix(0.12, 0.28, e), 1.0);
+  if (cardioid || bulb) return vec4(interiorColor * mix(0.12, 0.28, interiorBrightness), 1.0);
 
-  return fractalColour(vec2(0.0), c, detail, e);
+  return fractalColour(vec2(0.0), c, detail, motionRate, interiorBrightness, color, secondary, interiorColor);
 }
 
-vec4 fractalJulia(vec2 p, float zoom, float turn, float detail, float shape, float e) {
+vec4 fractalJulia(vec2 p, float zoom, float turn, float detail, float shape, float motionRate, float interiorBrightness, vec3 color, vec3 secondary, vec3 interiorColor) {
   vec2 z = fractalPoint(p, zoom, turn);
   float a = clamp(shape, 0.0, 1.0) * 6.28318530718;
   vec2 c = vec2(cos(a), sin(a)) * 0.7885;
-  return fractalColour(z, c, detail, e);
+  return fractalColour(z, c, detail, motionRate, interiorBrightness, color, secondary, interiorColor);
 }
 `;

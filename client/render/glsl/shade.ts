@@ -12,10 +12,11 @@
 export const SHADE_LIB = `
 // The five roles, evenly spaced, in the order the colourway names them. A
 // sample of the whole palette, indexable by anything.
-vec4 shade_across(float n, float amount) {
+vec4 shade_across(float n, float amount, vec3 primary, vec3 secondary, vec3 complement, vec3 accent, vec3 chalk) {
   float x = clamp(n, 0.0, 1.0) * 4.0;
   float i = floor(min(x, 3.0));
-  vec3 col = mix(uColors[int(i)], uColors[int(i) + 1], x - i);
+  vec3 colors[5] = vec3[5](primary, secondary, complement, accent, chalk);
+  vec3 col = mix(colors[int(i)], colors[int(i) + 1], x - i);
   float a = clamp(amount, 0.0, 1.0);
   return vec4(col, a);
 }
@@ -25,11 +26,11 @@ vec4 shade_across(float n, float amount) {
 // amount asked for, because the cold end of a heat curve is *nothing* — a shade that
 // stayed opaque down there would lay a black rectangle over whatever is under
 // it, which is the one thing a colour node must never do by default.
-vec4 shade_heat(float n, float amount) {
+vec4 shade_heat(float n, float amount, vec3 primary, vec3 secondary, vec3 accent, vec3 chalk) {
   float t = clamp(n, 0.0, 1.0);
-  vec3 col = mix(uSecondary, uPrimary, smoothstep(0.0, 0.45, t));
-  col = mix(col, uAccent, smoothstep(0.4, 0.78, t));
-  col = mix(col, vec3(1.0), smoothstep(0.72, 1.0, t));
+  vec3 col = mix(secondary, primary, smoothstep(0.0, 0.45, t));
+  col = mix(col, accent, smoothstep(0.4, 0.78, t));
+  col = mix(col, chalk, smoothstep(0.72, 1.0, t));
   return vec4(col, clamp(t * 2.5, 0.0, 1.0) * clamp(amount, 0.0, 1.0));
 }
 
@@ -50,10 +51,10 @@ vec4 shade_heat(float n, float amount) {
  * whole curve is one hue and the top of it is where that hue has been
  * overwhelmed. See OVERBRIGHT for where the excess goes.
  */
-vec4 shade_filament(float n, float amount) {
+vec4 shade_filament(float n, float amount, vec3 primary, vec3 chalk) {
   float t = clamp(n, 0.0, 1.0);
-  vec3 col = uPrimary * smoothstep(0.0, 0.55, t);
-  col = mix(col, vec3(1.0), smoothstep(0.55, 0.92, t));
+  vec3 col = primary * smoothstep(0.0, 0.55, t);
+  col = mix(col, chalk, smoothstep(0.55, 0.92, t));
   col *= 1.0 + smoothstep(0.8, 1.0, t) * 2.5;
   return vec4(col, clamp(t * 3.0, 0.0, 1.0) * clamp(amount, 0.0, 1.0));
 }

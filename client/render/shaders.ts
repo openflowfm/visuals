@@ -217,7 +217,7 @@ export const TRACK_SHADERS: ReadonlyMap<string, string> = new Map(
     `${PREAMBLE}
 ${GENERATOR_LIB}
 void main() {
-  vec4 g = gen_${name}(centred(), uEnergy${', uEnergy'.repeat(SOURCE_VALUES[name].length)});
+  vec4 g = gen_${name}(centred()${['rings', 'grid', 'tunnel', 'plasma', 'spiral', 'sparks', 'checker', 'rays', 'traces', 'strobe'].includes(name) ? ', uEnergy' : ''}${', uEnergy'.repeat(SOURCE_VALUES[name].length)}, uPrimary${['plasma', 'checker'].includes(name) ? ', uComplement' : ''}${['strobe', 'tunnel', 'scan', 'sparks', 'rays', 'traces'].includes(name) ? ', uChalk' : ''});
   OUT(g.rgb, g.a)
 }`,
   ]),

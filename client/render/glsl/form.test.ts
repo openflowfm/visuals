@@ -178,9 +178,9 @@ describe('the iris is a lens shell around bounded edge-on ribs', () => {
   });
 
   it('keeps saturated iris highlights in the pale colourway role', () => {
-    expect(FORM_LIB).toContain('vec3 hot = mode == 8 ? uChalk');
-    expect(FORM_LIB).toContain('if (mode == 8) colour = min(colour, uChalk * 1.02);');
-    expect(FORM_LIB).toContain('mix(uAccent, uPrimary, smoothstep(-0.025, 0.025, signedLens))');
+    expect(FORM_LIB).toContain('vec3 hot = mode == 8 ? palette.chalk');
+    expect(FORM_LIB).toContain('if (mode == 8) colour = min(colour, palette.chalk * 1.02);');
+    expect(FORM_LIB).toContain('mix(palette.accent, palette.primary, smoothstep(-0.025, 0.025, signedLens))');
   });
 });
 
@@ -363,9 +363,9 @@ describe('the armillary is a nested bank around a dark body and three gimbals', 
   it('keeps material identity on invariant radii and reflects a black strip-lit room', () => {
     expect(FORM_LIB).toContain('if (radius < 0.23) return vec3(0.002);');
     expect(FORM_LIB).toContain('float role = mod(member, 4.0);');
-    expect(FORM_LIB).toContain('vec3 formArmillarySky(vec3 ray)');
+    expect(FORM_LIB).toContain('vec3 formArmillarySky(FormPalette palette, vec3 ray)');
     expect(FORM_LIB).toContain('float diagonalDistance = abs(dot(ray.xy, diagonalAxis) - 0.18);');
-    expect(FORM_LIB).toContain('mode == 12 ? formArmillarySky(bounced) * 1.18');
+    expect(FORM_LIB).toContain('mode == 12 ? formArmillarySky(palette, bounced) * 1.18');
   });
 
   it('turns down emitted wire light before hiding the construction itself', () => {
@@ -414,7 +414,7 @@ describe('the gyre is counter-moving nested rounded solids', () => {
   });
 
   it('uses the same black strip room without adopting armillary energy suppression', () => {
-    expect(FORM_LIB).toContain('mode == 12 ? formArmillarySky(bounced) * 1.18');
+    expect(FORM_LIB).toContain('mode == 12 ? formArmillarySky(palette, bounced) * 1.18');
     expect(FORM_LIB).toContain('mode == 12 ? 0.2');
     expect(FORM_LIB).not.toContain('mode == 12) raw *= mix(0.04, 0.65');
   });
@@ -424,7 +424,7 @@ describe('the gyre is counter-moving nested rounded solids', () => {
     expect(FORM_LIB).toContain('corner, 0.0) - 0.012;');
     expect(FORM_LIB).toContain('outside - anyMember');
     expect(FORM_LIB).toContain('raw *= mix(0.14, 0.58, gyreOuter);');
-    expect(FORM_LIB).toContain('material = mix(uPrimary * 0.08, uChalk, gyreOuter);');
+    expect(FORM_LIB).toContain('material = mix(palette.primary * 0.08, palette.chalk, gyreOuter);');
   });
 });
 
@@ -473,9 +473,9 @@ describe('the astrolabe is one rigid sculpture of variable metal gimbals', () =>
 
   it('keeps a weak member tint but carries the spectrum in reflected studio panels', () => {
     expect(FORM_LIB).toContain('formAstrolabeNearest(q, extra, detail, motion, 0.0).y');
-    expect(FORM_LIB).toContain('return mix(uChalk, role, 0.28);');
-    expect(FORM_LIB).toContain('vec3 formAstrolabeSky(vec3 ray)');
-    expect(FORM_LIB).toContain('mode == 13 ? formAstrolabeSky(bounced)');
+    expect(FORM_LIB).toContain('return mix(palette.chalk, role, 0.28);');
+    expect(FORM_LIB).toContain('vec3 formAstrolabeSky(FormPalette palette, vec3 ray)');
+    expect(FORM_LIB).toContain('mode == 13 ? formAstrolabeSky(palette, bounced)');
     expect(FORM_LIB).toContain('return formAstrolabeNearest(q, extra, detail, motion, t).x;');
   });
 });
@@ -533,7 +533,7 @@ describe('the rosette is a radial hinge mechanism of permanent circular hoops', 
   });
 
   it('keeps one continuous pale material instead of assigning colour by a moving sector seam', () => {
-    expect(FORM_LIB).toContain('return mix(uPrimary, uChalk, 0.35);');
+    expect(FORM_LIB).toContain('return mix(palette.primary, palette.chalk, 0.35);');
     expect(FORM_LIB).not.toContain('float member = round(atan(q.y, q.x) / (2.0 * PI / count));');
     expect(FORM_LIB).toContain('if (mode == 14 || mode == 15 || mode == 16) {');
   });
@@ -627,8 +627,8 @@ describe('the spindle is a finite waist of permanent open coaxial hoops', () => 
     expect(FORM_LIB).toContain('float overhead = mix(0.72, 1.28, smoothstep(-0.48, 0.48, q.y));');
     expect(FORM_LIB).toContain('return mix(0.16, 0.78, wave) * overhead;');
     expect(FORM_LIB).toContain('raw *= formSpindleExcitation(where, extra, motion);');
-    expect(FORM_LIB).toContain('vec3 formSpindleSky(vec3 ray)');
-    expect(FORM_LIB).toContain('mode == 16 ? formSpindleSky(bounced)');
+    expect(FORM_LIB).toContain('vec3 formSpindleSky(FormPalette palette, vec3 ray)');
+    expect(FORM_LIB).toContain('mode == 16 ? formSpindleSky(palette, bounced)');
   });
 });
 
@@ -696,10 +696,10 @@ describe('the meridian is two pole-sharing banks of complete elliptical rails', 
     expect(FORM_LIB).toContain('float plane = round((azimuth - spin) / sector) * sector + spin;');
     expect(FORM_LIB).toContain('float travelling = max(along, counter * 0.62) * 0.78;');
     expect(FORM_LIB).toContain('formMeridianExcitation(where, extra, detail, motion) * 4.5');
-    expect(FORM_LIB).toContain('return mix(uPrimary, uChalk, 0.15);');
+    expect(FORM_LIB).toContain('return mix(palette.primary, palette.chalk, 0.15);');
     expect(FORM_LIB).toContain('if (mode == 17) tight *= 1.8;');
-    expect(FORM_LIB).toContain('vec3 formMeridianSky(vec3 ray)');
-    expect(FORM_LIB).toContain('mode == 17 ? formMeridianSky(bounced)');
+    expect(FORM_LIB).toContain('vec3 formMeridianSky(FormPalette palette, vec3 ray)');
+    expect(FORM_LIB).toContain('mode == 17 ? formMeridianSky(palette, bounced)');
   });
 });
 
@@ -766,10 +766,10 @@ describe('the vault is two finite perpendicular stacks of permanent rounded loop
     expect(FORM_LIB).toContain('float formVaultExcitation(');
     expect(FORM_LIB).toContain('float railWave = pow(0.5 + 0.5 * cos(member * 0.86 - a * 2.0), 5.0);');
     expect(FORM_LIB).toContain('raw *= formVaultExcitation(where, extra, detail, motion) * 0.21;');
-    expect(FORM_LIB).toContain('mode == 18 || mode == 19 ? mix(uPrimary, uChalk, 0.35)');
-    expect(FORM_LIB).toContain('return mix(uPrimary * 0.06, uChalk, 0.08);');
-    expect(FORM_LIB).toContain('vec3 formVaultSky(vec3 ray)');
-    expect(FORM_LIB).toContain('mode == 18 || mode == 19 ? formVaultSky(bounced)');
+    expect(FORM_LIB).toContain('mode == 18 || mode == 19 ? mix(palette.primary, palette.chalk, 0.35)');
+    expect(FORM_LIB).toContain('return mix(palette.primary * 0.06, palette.chalk, 0.08);');
+    expect(FORM_LIB).toContain('vec3 formVaultSky(FormPalette palette, vec3 ray)');
+    expect(FORM_LIB).toContain('mode == 18 || mode == 19 ? formVaultSky(palette, bounced)');
   });
 });
 
@@ -817,7 +817,7 @@ describe('the graticule encloses a finite equatorial hoop barrel in complete mer
     expect(FORM_LIB).toContain('float graticuleExcitation = mode == 19');
     expect(FORM_LIB).toContain('if (mode == 19) raw *= graticuleExcitation * 0.16;');
     expect(FORM_LIB).toContain('if (mode == 19) raw = max(raw, hit * graticuleExcitation * 0.55);');
-    expect(FORM_LIB).toContain('mode == 18 || mode == 19 ? formVaultSky(bounced)');
+    expect(FORM_LIB).toContain('mode == 18 || mode == 19 ? formVaultSky(palette, bounced)');
   });
 });
 

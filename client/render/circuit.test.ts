@@ -565,12 +565,12 @@ describe('the bounded procedural field node', () => {
       inletsOf({ id: 'cells', kind: 'field', op: 'cells', x: 0, y: 0 }).map(
         (port) => port.name,
       ),
-    ).toEqual(['p', 'energy', 'weave']);
+    ).toEqual(['p', 'brightness', 'contrast', 'weave', 'color', 'contour']);
     expect(
       inletsOf({ id: 'metaballs', kind: 'field', op: 'metaballs', x: 0, y: 0 }).map(
         (port) => port.name,
       ),
-    ).toEqual(['p', 'energy', 'balls', 'apart']);
+    ).toEqual(['p', 'brightness', 'contrast', 'hardness', 'balls', 'apart', 'color', 'contour']);
 
     const built = compileCircuit(field('metaballs'));
     expect(bodyOf(built.source!)).toMatch(/field_metaballs\([^,]+, [^,]+, [^,]+, [^)]+\)/);
@@ -908,7 +908,7 @@ describe('an inlet holds a number of its own', () => {
     expect(wired.nodes.find((node) => node.id === 'e')?.values).toEqual({ levels: 0.78 });
   });
 
-  it('starts a live inlet on its signal, with no number of its own', () => {
+  it('gives explicit animation controls fixed defaults while clock stays live', () => {
     // `energy` reads the room and a wave's `phase` reads the beat, so neither
     // carries an `at`: their resting answer is a signal, and a default number
     // here would replace something moving with something that is not.
@@ -917,6 +917,8 @@ describe('an inlet holds a number of its own', () => {
         .filter((port) => port.at !== undefined)
         .map((port) => port.name);
     expect(starting({ id: 'e', kind: 'lens', op: 'ripple', x: 0, y: 0 })).toEqual([
+      'rate',
+      'frequency',
       'waves',
       'depth',
       'speed',
@@ -931,7 +933,7 @@ describe('an inlet holds a number of its own', () => {
     expect(starting({ id: 'b', kind: 'blend', op: 'over', x: 0, y: 0 })).toEqual(['amount']);
   });
 
-  it('can still hold a number on a live inlet, which takes the signal over', () => {
+  it('lets a motion rate be held independently of its fixed default', () => {
     // The face draws the energy row exactly like every other number row, so
     // the drag it offers has to mean something: a held `energy` reads the
     // held number, and clearing it hands the room back.
@@ -944,44 +946,30 @@ describe('an inlet holds a number of its own', () => {
         [{ from: 'g/c', to: 'o/c' }],
       );
     expect(valuesOf(plasma()).map((each) => each.id)).toEqual([]);
-    expect(bodyOf(compileCircuit(plasma()).source!)).toMatch(/gen_plasma\(.*uEnergy/);
+    expect(bodyOf(compileCircuit(plasma()).source!)).not.toContain('uEnergy');
 
-    const held = plasma({ energy: 0.8 });
-    expect(valuesOf(held).map((each) => each.id)).toEqual(['g/energy']);
+    const held = plasma({ rate: 0.8 });
+    expect(valuesOf(held).map((each) => each.id)).toEqual(['g/rate']);
     expect(paramsOf(held)).toEqual(new Float32Array([0.8]));
     const source = bodyOf(compileCircuit(held).source!);
     expect(source).toMatch(/gen_plasma\(.*uParams\[0\]/);
     expect(source).not.toMatch(/gen_plasma\(.*uEnergy/);
   });
 
-  it('lets a promoted shape number follow energy until somebody takes it', () => {
-    const bars = (values?: Record<string, number>): Circuit =>
-      wire(
-        [
-          { id: 'g', kind: 'source', op: 'bars', x: 0, y: 0, ...(values ? { values } : {}) },
-          { id: 'o', kind: 'out', x: 1, y: 0 },
-        ],
-        [{ from: 'g/c', to: 'o/c' }],
-      );
-    // Both begin from the room's normalized energy. The accepted square energy
-    // response and linear columns response then let the two controls interpret
-    // that shared source independently.
-    const live = bodyOf(compileCircuit(bars()).source!);
-    expect(live).toContain('gen_bars(');
-    expect(live).toContain('pow(');
-    expect(live).toMatch(/, uEnergy\),/);
-    // A held energy is still the raw source for its follower; each inlet then
-    // applies the response calibrated for its own meaning.
-    const heldEnergy = bars({ energy: 0.8 });
-    const heldEnergySource = bodyOf(compileCircuit(heldEnergy).source!);
-    expect(heldEnergySource).toContain('pow(');
-    expect(heldEnergySource).toMatch(/, uParams\[0\]\),/);
-    // A caught `columns` pins the shape and leaves the energy live.
-    const heldColumns = bars({ columns: 0.2 });
-    expect(valuesOf(heldColumns).map((each) => each.id)).toEqual(['g/columns']);
-    const heldColumnsSource = bodyOf(compileCircuit(heldColumns).source!);
-    expect(heldColumnsSource).toContain('pow(');
-    expect(heldColumnsSource).toContain('uParams[0]');
+  it('keeps shape and brightness independent without hidden room coupling', () => {
+    const bars = (values?: Record<string, number>): Circuit => wire([
+      { id: 'g', kind: 'source', op: 'bars', x: 0, y: 0, values },
+      { id: 'o', kind: 'out', x: 1, y: 0 },
+    ], [{ from: 'g/c', to: 'o/c' }]);
+    const ordinary = bodyOf(compileCircuit(bars()).source!);
+    expect(ordinary).toContain('gen_bars(centred(), 0.5,');
+    expect(ordinary).not.toContain('uEnergy');
+    const bright = bodyOf(compileCircuit(bars({ brightness: 0.8 })).source!);
+    expect(bright).toContain('gen_bars(centred(), 0.5,');
+    expect(bright).toContain('uParams[0]');
+    const columns = bars({ columns: 0.2 });
+    expect(valuesOf(columns).map(each => each.id)).toEqual(['g/columns']);
+    expect(bodyOf(compileCircuit(columns).source!)).toContain('gen_bars(centred(), uParams[0],');
   });
 
   it('gives a nested flow its own slots', () => {

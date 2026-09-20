@@ -12,7 +12,7 @@ export const PATTERN_BODIES = {
   // The standard square-lattice parity pattern. GLSL's mod is defined in
   // terms of floor, so this stays a checker on the negative half of centred p.
   float density = mix(7.0, 25.0, tiles);
-  vec2 q = p * density + vec2(uBeat * rate(e) * 0.2, 0.0);
+  vec2 q = p * density + vec2(uBeat * rate(motionRate) * 0.2, 0.0);
   vec2 cell = floor(q);
   float parity = mod(cell.x + cell.y, 2.0);
 
@@ -23,7 +23,7 @@ export const PATTERN_BODIES = {
   float feather = max(density / min(uRes.x, uRes.y), 0.001);
   float inset = smoothstep(0.0, feather, edgeDistance);
 
-  vec3 ink = mix(uPrimary, vec3(1.0) - uPrimary, parity * 0.72);
+  vec3 ink = mix(color, secondary, parity * 0.72);
   return vec4(ink * (0.48 + uLevel * 0.62),
               inset * mix(0.28, 0.82, parity));`,
 
@@ -32,12 +32,12 @@ export const PATTERN_BODIES = {
   // harmless answer before asking for an angle; it also leaves a clean pinhole
   // where all of the sectors meet.
   float radius2 = dot(p, p);
-  if (radius2 < 1e-10) return vec4(uPrimary, 0.0);
+  if (radius2 < 1e-10) return vec4(color, 0.0);
 
   // An even number of equal angular sectors, alternately dark and bright.
   // Positive radial scaling cannot change the sector: only the angle matters.
   float sectors = 2.0 * floor(mix(4.0, 16.0, spokes));
-  float angle = atan(p.y, p.x) + PI + uBeat * rate(e) * 0.16;
+  float angle = atan(p.y, p.x) + PI + uBeat * rate(motionRate) * 0.16;
   float sector = angle * sectors / (2.0 * PI);
   float parity = mod(floor(sector), 2.0);
 
@@ -50,7 +50,7 @@ export const PATTERN_BODIES = {
   float feather = clamp(angularPixel, 0.001, 0.49);
   float interior = smoothstep(0.0, feather, edgeDistance);
 
-  vec3 ink = mix(uPrimary * 0.55, mix(uPrimary, vec3(1.0), 0.34), parity);
+  vec3 ink = mix(color * 0.55, mix(color, highlight, 0.34), parity);
   return vec4(ink * (0.5 + uLevel * 0.65),
               interior * mix(0.18, 0.78, parity));`,
 
@@ -61,7 +61,7 @@ export const PATTERN_BODIES = {
   // glyphs. A slow diagonal drift lets the field travel without breaking its
   // joins or turning into a camera pan beside the music.
   float density = floor(mix(4.0, 10.0, tiles));
-  vec2 q = p * density + vec2(uBeat * rate(e) * 0.08);
+  vec2 q = p * density + vec2(uBeat * rate(motionRate) * 0.08);
   vec2 id = floor(q);
   vec2 within = fract(q);
   if (hash(id + 7.31) < 0.5) within.x = 1.0 - within.x;
@@ -79,8 +79,8 @@ export const PATTERN_BODIES = {
   float edgeDistance = width - distance;
   float core = smoothstep(0.0, feather, edgeDistance);
   float halo = 1.0 - smoothstep(width, width * 4.0, distance);
-  float chase = pow(1.0 - fract(uBeat * rate(e) * 0.25 + hash(id + 19.7)), 5.0);
-  vec3 ink = mix(uPrimary, vec3(1.0), core * 0.72 + chase * 0.2);
+  float chase = pow(1.0 - fract(uBeat * rate(motionRate) * 0.25 + hash(id + 19.7)), 5.0);
+  vec3 ink = mix(color, highlight, core * 0.72 + chase * 0.2);
   float coverage = max(core * (0.68 + chase * 0.32), halo * (0.12 + chase * 0.24));
   return vec4(ink * (0.68 + chase * 0.68 + uLevel * 0.38), coverage);`,
 } satisfies Record<'checker' | 'rays' | 'traces', string>;

@@ -3,7 +3,7 @@ import type { NodeSpec } from '../../render/circuit.ts';
 import { FORM_WORK } from '../../render/glsl/form.ts';
 import {
   colourPort,
-  energyPort,
+  roleColorPort,
   livePort,
   numberPort,
   pointPort,
@@ -153,7 +153,12 @@ export const FORM_NODE_SPEC = {
     numberPort('thick', 'How thick the tube the form is drawn out of is.', 0.3),
     numberPort('flare', 'How far the light bleeds off the tubes as the ray passes them.', 0.4),
     numberPort('chrome', 'How much the surface reflects the room instead of glowing.', 0),
-    energyPort(),
+    numberPort('brightness', 'How brightly the surface colours are drawn.'),
+    numberPort('contrast', 'How strongly light and dark colours separate.'),
+    numberPort('emission', 'How strongly the tubes emit their own light.'),
+    ...(['armillary', 'astrolabe', 'rosette', 'corolla', 'spindle', 'meridian', 'vault'].includes(modeOfNode(node, FORM_MODES))
+      ? [numberPort('core-brightness', 'How brightly the solid tube cores emit light.')] : []),
+    ...(['primary', 'secondary', 'complement', 'accent', 'chalk'] as const).map(role => roleColorPort(role, `The ${role} material and reflection colour.`, role)),
     ...values[modeOfNode(node, FORM_MODES)],
   ],
   outlets: [colourPort('c', 'The form, as a picture.')],
@@ -165,12 +170,14 @@ export const FORM_NODE_SPEC = {
   work: FORM_WORK,
   emit: (ctx) => {
     const op = modeOfNode(ctx.node, FORM_MODES);
-    const e = ctx.read('energy');
+    const emission = ctx.read('emission');
     const extras = [0, 1, 2].map((index) =>
       values[op][index] ? ctx.read(values[op][index].name) : '0.0');
     const args = [
       ctx.read('p'),
-      e,
+      emission,
+      ctx.read('core-brightness'),
+      `FormPalette(${['primary', 'secondary', 'complement', 'accent', 'chalk'].map(name => `colorRGB(${ctx.read(name)})`).join(', ')})`,
       String(FORM_MODES.indexOf(op)),
       ctx.read('turn'),
       ctx.read('tilt'),
@@ -180,6 +187,6 @@ export const FORM_NODE_SPEC = {
       ctx.read('chrome'),
       ...extras,
     ];
-    return { c: `laid(form_march(${args.join(', ')}), ${e})` };
+    return { c: `finishColor(form_march(${args.join(', ')}), ${ctx.read('brightness')}, ${ctx.read('contrast')})` };
   },
 } satisfies NodeSpec;
