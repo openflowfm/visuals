@@ -147,9 +147,9 @@ describe('what the browser lists', () => {
     // The metadata column, and it is this rather than a category because it is
     // the question you have *before* you drop something.
     expect(portsOf('point')).toEqual({ takes: [], gives: ['p'] });
-    expect(portsOf('source')).toEqual({ takes: ['p', 'n'], gives: ['c'] });
-    expect(portsOf('fractal')).toEqual({ takes: ['p', 'n'], gives: ['c'] });
-    expect(portsOf('light')).toEqual({ takes: ['p', 'n'], gives: ['c'] });
+    expect(portsOf('source')).toEqual({ takes: ['p', 'n', 'c'], gives: ['c'] });
+    expect(portsOf('fractal')).toEqual({ takes: ['p', 'n', 'c'], gives: ['c'] });
+    expect(portsOf('light')).toEqual({ takes: ['p', 'n', 'c'], gives: ['c'] });
     expect(portsOf('video')).toEqual({ takes: ['p', 'n'], gives: ['c'] });
     expect(portsOf('math')).toEqual({ takes: ['n'], gives: ['n'] });
     expect(portsOf('out')).toEqual({ takes: ['c'], gives: [] });
