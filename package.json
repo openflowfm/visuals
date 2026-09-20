@@ -46,7 +46,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "search:code": "node tools/code-search/cli.ts",
-    "test:code-search": "node --test tools/code-search/index.test.ts"
+    "test:code-search": "vitest run --project=visuals tools/code-search"
   },
   "dependencies": {
     "@ktamas77/abletonlink": "^1.2.3",
