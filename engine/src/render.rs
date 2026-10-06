@@ -384,6 +384,14 @@ impl Renderer {
         self.size
     }
 
+    pub fn device(&self) -> &wgpu::Device {
+        &self.device
+    }
+
+    pub fn queue(&self) -> &wgpu::Queue {
+        &self.queue
+    }
+
     /// Compile one of a preset's shaders into a pipeline.
     fn stage(&self, kind: Kind, text: &str) -> Result<Stage, shader::Error> {
         let (module, info) = shader::translate(kind, text)?.ok_or(shader::Error::NoBody)?;
