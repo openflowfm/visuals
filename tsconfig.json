@@ -17,6 +17,8 @@
   },
   "include": [
     "client",
+    "app/src",
+    "vite.app.config.ts",
     "server",
     "mcp",
     "tools",

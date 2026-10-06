@@ -1,0 +1,8 @@
+[workspace]
+members = ["engine", "app/src-tauri"]
+resolver = "3"
+
+[profile.dev.package."*"]
+# glslang and naga run thousands of shaders in the pack-wide check, and wgpu draws
+# every frame of the app; debug builds of them make both crawl.
+opt-level = 3

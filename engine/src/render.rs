@@ -476,8 +476,14 @@ impl Renderer {
 
     /// Load a preset. A shader that will not compile draws MilkDrop's default.
     pub fn load(&mut self, text: &str, seed: u64) -> Result<Loaded, crate::runtime::LoadError> {
+        self.load_preset(crate::preset::parse(text), seed)
+    }
+
+    /// Load a preset already read into its parts — what an editor holds. Nothing
+    /// changes when its equations do not compile: the last preset keeps drawing.
+    pub fn load_preset(&mut self, preset: crate::preset::Preset, seed: u64) -> Result<Loaded, crate::runtime::LoadError> {
         let frame = Clock::default().frame_vars(&Audio::default());
-        let runner = crate::runtime::load(text, &frame, &self.size, seed)?;
+        let runner = Runner::new(preset, &frame, &self.size, seed)?;
         let mut loaded = Loaded::default();
         let warp_text = runner.preset.warp.clone();
         let comp_text = runner.preset.comp.clone();

@@ -10,5 +10,8 @@ frames-out/
 coverage/
 report/
 harness/out/
+/target/
 engine/target/
+dist-app/
+app/src-tauri/gen/
 .DS_Store

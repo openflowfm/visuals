@@ -22,10 +22,4 @@ png = "0.17"
 jpeg-decoder = { version = "0.3", default-features = false }
 naga = { version = "30.0.1", features = ["spv-in", "msl-out"] }
 thiserror = "2"
-
-[dev-dependencies]
-
-[profile.dev.package."*"]
-# glslang and naga run thousands of shaders in the pack-wide check; debug builds of
-# them make that check minutes instead of seconds.
-opt-level = 3
+serde = { version = "1", features = ["derive"] }

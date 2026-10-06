@@ -1,0 +1,39 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "visual[flow]",
+  "version": "0.1.0",
+  "identifier": "fm.openflow.visuals",
+  "build": {
+    "frontendDist": "../../dist-app",
+    "devUrl": "http://127.0.0.1:1430",
+    "beforeDevCommand": "npm --prefix .. run app:ui",
+    "beforeBuildCommand": "npm --prefix .. run app:build-ui"
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "visual[flow]",
+        "width": 1600,
+        "height": 1000,
+        "minWidth": 1000,
+        "minHeight": 640,
+        "transparent": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app"],
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.png"],
+    "macOS": {
+      "minimumSystemVersion": "12.0",
+      "entitlements": "Entitlements.plist",
+      "infoPlist": "Info.plist"
+    }
+  }
+}

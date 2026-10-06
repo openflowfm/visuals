@@ -11,11 +11,12 @@
 //! and code is kept as written, because the engine translates it and an editor
 //! will one day write it back.
 
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 pub const SLOTS: usize = 4;
 
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Preset {
     /// Every numeric `key=value`, by the key as the file spells it.
     pub values: BTreeMap<String, f64>,
@@ -33,7 +34,7 @@ pub struct Preset {
     pub comp: String,
 }
 
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Wave {
     /// `wavecode_N_*`, by the part after the prefix.
     pub values: BTreeMap<String, f64>,
@@ -42,7 +43,7 @@ pub struct Wave {
     pub point: String,
 }
 
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Shape {
     /// `shapecode_N_*`, by the part after the prefix.
     pub values: BTreeMap<String, f64>,

@@ -1,0 +1,127 @@
+* { box-sizing: border-box; }
+
+/* Transparent all the way down: the bench is a native view under the page, and
+   shows through wherever nothing here paints. Every panel paints itself. */
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+  color: var(--ui);
+  font-family: var(--sans);
+  font-size: 12px;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr) 440px;
+  grid-template-rows: 36px minmax(0, 1fr);
+  height: 100%;
+}
+
+header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--bd3);
+  white-space: nowrap;
+}
+header h1 { margin: 0 8px 0 0; font-size: 13px; color: var(--fg); }
+header .name { overflow: hidden; text-overflow: ellipsis; color: var(--fg); }
+header .name i { color: var(--caption); font-style: normal; margin-right: 6px; }
+header .fill { flex: 1; }
+header .stats { color: var(--caption); font-family: var(--mono); min-width: 150px; text-align: right; }
+
+button, select, input, textarea {
+  font: inherit;
+  color: var(--fg);
+  background: var(--surface-control);
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius);
+}
+button { padding: 2px 8px; cursor: pointer; }
+button:hover { border-color: var(--focus); }
+select { max-width: 240px; padding: 2px 4px; }
+
+.library {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--panel);
+  border-right: 1px solid var(--bd3);
+}
+.library input { margin: 8px; padding: 4px 6px; }
+.library ul { list-style: none; margin: 0; padding: 0; overflow: auto; flex: 1; }
+.library li { padding: 3px 10px; cursor: pointer; display: flex; flex-direction: column; }
+.library li:hover { background: var(--sel); }
+.library li[data-current] { background: var(--bd); color: var(--fg); }
+.library li i { color: var(--caption); font-style: normal; font-size: 10px; }
+
+main {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The hole. Only the bench itself is unpainted; the bars around a 16:9 picture
+   in a wider row are painted black so the page never shows the window behind. */
+.bench-row {
+  display: flex;
+  justify-content: center;
+  background: #000;
+  border-bottom: 1px solid var(--bd3);
+}
+.bench {
+  aspect-ratio: 16 / 9;
+  height: min(52vh, calc((100vw - 700px) * 9 / 16));
+  background: transparent;
+}
+
+.graph {
+  position: relative;
+  min-height: 0;
+  background: var(--bg);
+}
+.graph > * { position: absolute; inset: 0; }
+
+.stage .wdg-device { min-width: 170px; }
+.stage[data-off] { opacity: 0.45; }
+.stage[data-kind='equations'] .wdg-device-head { box-shadow: inset 3px 0 0 var(--blue); }
+.stage[data-kind='shader'] .wdg-device-head { box-shadow: inset 3px 0 0 var(--amber); }
+.stage[data-kind='picture'] .wdg-device-head { box-shadow: inset 3px 0 0 var(--green); }
+.stage[data-kind='source'] .wdg-device-head,
+.stage[data-kind='out'] .wdg-device-head { box-shadow: inset 3px 0 0 var(--fg); }
+.stage[data-problem] .wdg-device { border-color: var(--red); }
+.stage-face { display: flex; gap: 8px; padding: 4px 6px; color: var(--caption); min-height: 20px; }
+.stage-issue { color: var(--red); }
+
+.side {
+  overflow: auto;
+  background: var(--panel);
+  border-left: 1px solid var(--bd3);
+}
+.inspector { padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+.inspector h2 { margin: 0; font-size: 13px; color: var(--fg); }
+.inspector .code { display: flex; flex-direction: column; gap: 4px; }
+.inspector .code i { color: var(--caption); font-style: normal; }
+.inspector textarea {
+  width: 100%;
+  padding: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.45;
+  resize: vertical;
+  white-space: pre;
+  tab-size: 2;
+}
+.inspector .values { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; }
+.inspector .values label { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.inspector .values span { overflow: hidden; text-overflow: ellipsis; }
+.inspector .values input { width: 80px; padding: 1px 4px; font-family: var(--mono); text-align: right; }
+.problem { color: var(--red); margin: 0; white-space: pre-wrap; }
+.problem b { font-family: var(--mono); }
+.quiet { color: var(--caption); }

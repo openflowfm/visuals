@@ -42,6 +42,24 @@ cargo run --release --bin explain -- preset.milk comp   # why one shader does no
 `play` opens a window, listens to any input — BlackHole is one — and plays the library:
 →/space next, ← previous, R random, F fullscreen.
 
+### The editor app
+
+```sh
+npm run app          # cargo tauri dev in app/src-tauri; starts the page's vite on :1430
+```
+
+`app/` is the Tauri shell. The page (`app/src`, React and the widgets' `Graph`) is the
+editor: the library on the left, the preset as MilkDrop's stage graph, and the selected
+stage's EEL/HLSL and numbers on the right. Every edit reloads the preset on the bench
+within a quarter second, and problems come back per stage and line — a broken equation
+leaves the last good preset drawing, a broken shader draws MilkDrop's default.
+
+The bench is not drawn by the page. `app/src-tauri/src/bench.rs` puts a native `NSView`
+under the webview's content, makes a wgpu surface on it and draws on its own thread,
+paced by the display; the page leaves a transparent hole and reports its rectangle
+(`place_bench`). The engine and the app share one Cargo workspace at the repository
+root, so the engine's tests also run from there as `cargo test -p visuals-engine`.
+
 | module | is |
 |---|---|
 | `preset` | the `.milk` reader, code kept as written |
