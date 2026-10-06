@@ -33,30 +33,35 @@ of it, and Butterchurn regenerates mipmaps of the 4K feedback buffer every frame
 decides 60 fps. What decides it is how many full-resolution passes there are and what
 each one costs.
 
-### Rust, and where it runs
+### A native Tauri app, rendering on Metal
 
-**Recommendation: write the engine in Rust on `wgpu`, and run the same crate two ways.**
+**No WebGL anywhere in the product.** visual[flow] becomes a Tauri app — the shape the
+BlackHole visualizer already has — with the engine as a Rust crate drawing on Metal.
 
-- **In the app**, compiled to WebAssembly and drawing through WebGPU inside the existing
-  Electron windows. The wall, the keystone, the display list, the console's node pictures
-  and the harness all keep working, and there is one renderer, not one per window type.
-- **Natively**, as a `winit` window on Metal, from the same code. Built from the start
-  and benchmarked against the WebGPU build, so if Chromium's overhead turns out to matter
-  at 4K, moving the wall to a native window is a deployment change rather than a rewrite.
+- **`wgpu` on its Metal backend**, not raw Metal. MilkDrop is about twenty passes a frame,
+  so `wgpu`'s overhead over hand-written Metal is noise against a 4K fill-rate budget; what
+  it buys is a safe API, `naga` for shader translation, and compute. If a Metal-only
+  feature is ever worth it, `wgpu`'s hal interop reaches the raw `MTLDevice` without a
+  rewrite.
+- **Native surfaces, webview controls.** The wall is a borderless `tao` window per
+  display with its own Metal surface — no browser in the path, no throttling, real frame
+  pacing. The console's large preview is a Metal surface under a transparent webview
+  that draws the controls. Node pictures are rendered small by the engine and sent to the
+  webview as raw bytes, the way the BlackHole visualizer sends audio.
+- **Audio through CPAL**, the capture code the BlackHole visualizer already has: any Core
+  Audio input, any two channels, a lock-free history the renderer reads each frame.
+- **Shaders translated once, on import.** MilkDrop's HLSL → SPIR-V (glslang's HLSL front
+  end) → `naga` → MSL, with the original text kept. That replaces the Emscripten converter
+  `server/hlsl.ts` works around.
+- **EEL compiled to a register-VM bytecode in Rust**, tested against Butterchurn's
+  results for the same inputs; per-vertex and per-point equations that qualify are
+  compiled to shader code instead (see below).
+- **Link and the Live bridge move to Rust later** — `abl_link` bindings and a WebSocket
+  client. The MVP needs neither: it listens to an audio input.
 
-Why Rust and `wgpu` rather than staying on WebGL 2:
-
-- **Compute shaders.** The blur pyramid, wave points and per-vertex warp can run as
-  compute work. WebGL 2 has none.
-- **Control over the frame.** Explicit render passes, persistent mapped buffers, no
-  automatic mipmap regeneration of the feedback buffer, and real frame pacing.
-- **A shader path that is not broken.** MilkDrop's HLSL goes HLSL → SPIR-V (glslang's
-  HLSL front end) → `naga` → MSL / WGSL, offline, when a preset is imported. That replaces
-  the Emscripten converter whose bugs `server/hlsl.ts` exists to work around. Translation
-  happens once on import, so nothing native has to run inside WebAssembly.
-- **The EEL equations** compile to a compact bytecode run by a register VM in Rust, or to
-  WebAssembly functions in the WebAssembly build. Both are tested against the same EEL
-  semantics.
+Why native rather than staying on WebGL 2: compute shaders for the blur and the wave
+points; explicit passes with no automatic mipmap regeneration of a 4K feedback buffer;
+frame pacing a browser does not give; and a shader path that is not broken.
 
 The risk is that this is a rewrite. That is why phase 1 is a measured spike, not the
 engine.
@@ -101,14 +106,16 @@ harder rather than easier.
 The tool for approving side by sides, built first because every later phase is measured
 by it.
 
-- **Live mode.** One window, two pictures: Butterchurn (the BlackHole visualizer's engine,
-  vendored) and visual[flow], fed **the same audio frames** from one input, on the same
-  preset. Split, side by side, wipe, and a difference view. Next and previous preset,
-  search, and an **approve / reject / note** per preset that is saved.
+- **Live mode.** One window, two pictures: Butterchurn and visual[flow], fed **the same
+  audio frames** from one CPAL input, on the same preset. Butterchurn is the BlackHole
+  visualizer's engine running in the harness's webview — the one place WebGL remains,
+  as the thing being compared against, never as the product. Split, side by side, wipe,
+  and a difference view. Next and previous preset, search, and an **approve / reject /
+  note** per preset that is saved.
 - **Recorded mode.** A fixed audio file, fixed frame times and seeded randomness —
   Butterchurn's `rand()` and `rand_frame` patched to the same seed — rendered offline to
-  frame sequences by both engines. Comparable frame for frame, repeatable, and what CI
-  runs.
+  frame sequences by both engines: Butterchurn in headless Chromium on the GPU, ours
+  natively. Comparable frame for frame, repeatable, and what CI runs.
 - **The internal target.** Recorded mode scores every preset with the structural metrics
   this repo already has (`frameMetrics.ts`, `structuralMetrics.ts`). The score is how work
   knows it is close; the approvals are what says it is done.
@@ -118,9 +125,9 @@ by it.
 0. **Harness and baseline.** Recorded mode with Butterchurn alone: render the pack, and
    profile where Butterchurn's frame goes at 4K on Ryan's machine — equations, mesh, each
    pass, mipmaps. The numbers that decide what to optimise.
-1. **Spike.** The Rust crate draws one shader preset — warp, comp, feedback, blur — through
-   WebGPU in Electron and through a native window, at 4K. Measured against phase 0.
-   **Decision point:** confirm Rust/`wgpu`, and WebGPU versus native for the wall.
+1. **Spike.** A Tauri app whose Rust crate draws one shader preset — warp, comp, feedback,
+   blur — on Metal at 4K, from a CPAL input. Measured against phase 0. **Decision point:**
+   confirm `wgpu` over raw Metal, and the frame budget per pass.
 2. **Engine.** Every stage, the EEL VM, exact audio analysis, the import-time shader
    translation. Live mode in the harness.
 3. **Importer.** `.milk` → flow JSON over the whole pack, recorded scores for all of it.
@@ -130,7 +137,12 @@ by it.
 ## Questions still open
 
 - **Which machine is the 4K/60 target?** Phase 0 measures on it.
-- **Is a native wall window acceptable** if it wins phase 1 — a separate window from the
-  console, not drawn by Electron?
 - **The Live bridge's sound.** It carries meters today, not audio. "A node that provides
   sound" means the bridge device sending PCM, which is bridge work in another repo.
+
+## Where it lives
+
+In this repository, beside what it replaces until it can draw: `engine/` (the Rust
+crate), `app/` (the Tauri shell and its webview UI) and `harness/`. The Electron app, the
+Node server and the old engine are deleted in one change once the new app draws presets —
+confirmed with Ryan before it happens.
