@@ -10,4 +10,5 @@ frames-out/
 coverage/
 report/
 harness/out/
+engine/target/
 .DS_Store
