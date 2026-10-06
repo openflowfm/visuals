@@ -9,4 +9,5 @@ frames-dist/
 frames-out/
 coverage/
 report/
+harness/out/
 .DS_Store
