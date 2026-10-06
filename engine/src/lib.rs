@@ -8,5 +8,6 @@ pub mod audio;
 pub mod eel;
 pub mod noise;
 pub mod preset;
+pub mod render;
 pub mod runtime;
 pub mod shader;

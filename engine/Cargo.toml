@@ -13,6 +13,12 @@ name = "engine"
 glslang = "0.8.1"
 glslang-sys = "0.8.1"
 regex = "1"
+wgpu = { version = "30.0.1", features = ["naga-ir"] }
+bytemuck = { version = "1", features = ["derive"] }
+pollster = "1"
+winit = "0.30"
+cpal = "0.18"
+png = "0.17"
 naga = { version = "30.0.1", features = ["spv-in", "msl-out"] }
 thiserror = "2"
 
