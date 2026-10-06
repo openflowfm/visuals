@@ -40,6 +40,7 @@ itself, and [the harness](docs/harness.md) for working without one.
 
 | doc | read it before touching | source |
 |---|---|---|
+| [MilkDrop](docs/milkdrop.md) | the preset library, the converter and its repairs, Butterchurn in the compositor, what presets hear | `milk.ts`, `server/presets.ts`, `server/hlsl.ts`, `client/render/milk.ts`, `client/render/milkAudio.ts`, `client/ui/PresetsView.tsx` |
 | [the clock](docs/clock.md) | Link, tempo, the beat, why the browser extrapolates, the native addon | `server/link.ts`, `client/state/useShow.ts`, `tools/build-link.ts` |
 | [flows](docs/flows.md) | **the one noun**, the node vocabulary, the compiler, the designer | `protocol.ts`, `client/render/circuit.ts`, `client/ui/Designer.tsx` |
 | [models](docs/models.md) | importing a GLB, the first-class model library, reusable setups, published controls, revision reconciliation | `model.ts`, `server/models.ts`, `client/ui/ModelLibrary.tsx`, `client/render/model.ts` |

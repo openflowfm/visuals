@@ -1,5 +1,15 @@
-import butterchurn, { type AudioLevels, type Visualizer } from 'butterchurn';
+import butterchurnModule, { type AudioLevels, type Visualizer } from 'butterchurn';
 import { presetUrl } from '../../milk.ts';
+
+/**
+ * Butterchurn is a webpack UMD bundle whose export is `{ default: Butterchurn }`.
+ * Which of the two layers an `import` lands on depends on the bundler's CommonJS
+ * interop, so take whichever one has the factory.
+ */
+const butterchurn: typeof butterchurnModule =
+  'createVisualizer' in butterchurnModule
+    ? butterchurnModule
+    : (butterchurnModule as unknown as { default: typeof butterchurnModule }).default;
 
 /**
  * MilkDrop, drawn by Butterchurn, inside the compositor's own GL context.
@@ -19,8 +29,9 @@ import { presetUrl } from '../../milk.ts';
  *   attribute it sets lands in whichever one is bound. It gets one of its own,
  *   and the compositor's attribute-less fullscreen triangle never meets an
  *   attribute array it did not enable.
- * - **What it leaves behind is put back** — blending, the pixel-store flags our
- *   image and video uploads assume, the texture unit and program.
+ * - **What it leaves behind is put back** — sampler objects, blending, the
+ *   pixel-store flags our image and video uploads assume, the texture unit and
+ *   program.
  *
  * Butterchurn is pinned at 2.6.7 because two of those fences, and the FFT fix
  * below, lean on how that version behaves. See `docs/milkdrop.md`.
@@ -45,6 +56,8 @@ export interface Milk {
 
 /** Seconds one preset takes to melt into the next. MilkDrop's own default is 2.7. */
 const BLEND_SECONDS = 2.7;
+/** The texture units Butterchurn 2.6.7 binds sampler objects to. */
+const SAMPLER_UNITS = [0, 1, 2, 3, 4, 12];
 /** Parsed presets kept, so a short rotation never refetches. Each is a clone source. */
 const KEEP = 12;
 
@@ -71,6 +84,11 @@ export function createMilk(gl: WebGL2RenderingContext, canvas: HTMLCanvasElement
     } finally {
       delete (gl as unknown as { bindFramebuffer?: typeof bind }).bindFramebuffer;
       gl.bindVertexArray(null);
+      // Sampler objects outrank a texture's own filtering, and Butterchurn
+      // leaves its mipmapped ones bound on units 0–4 and 12. Left there, the
+      // output stage samples `out` through them and a texture with no mipmaps
+      // reads as black.
+      for (const unit of SAMPLER_UNITS) gl.bindSampler(unit, null);
       gl.disable(gl.BLEND);
       gl.useProgram(null);
       gl.activeTexture(gl.TEXTURE0);
@@ -107,6 +125,43 @@ export function createMilk(gl: WebGL2RenderingContext, canvas: HTMLCanvasElement
     rate = sampleRate;
   };
 
+  /**
+   * Load a preset, falling back to MilkDrop's own warp or comp shader for any
+   * that will not link.
+   *
+   * The converter turns HLSL into GLSL by translation, and HLSL is looser: it
+   * takes `&&` between vectors, for one, which GLSL refuses. Butterchurn draws
+   * black when a shader fails and says nothing, which on a wall is a preset
+   * that silently is not there. MilkDrop's answer to a broken shader is its
+   * default one, and so is this: the equations, waves and shapes still run, so
+   * the preset still moves like itself.
+   *
+   * The first time costs a cut rather than a blend — the broken attempt has to
+   * be replaced before anything blends out of it. After that the repaired copy
+   * is what is cached, and it blends like any other.
+   */
+  const load = (v: Visualizer, target: WebGLFramebuffer | null, preset: string) => {
+    const data = parsed.get(preset) as { warp?: string; comp?: string };
+    // Butterchurn writes compiled functions into what it is handed, so it gets
+    // a copy and the cache stays JSON.
+    fenced(target, () => v.loadPreset(structuredClone(data), showing ? BLEND_SECONDS : 0));
+    const linked = (shader: { shaderProgram: WebGLProgram } | undefined) =>
+      !!shader && !!gl.getProgramParameter(shader.shaderProgram, gl.LINK_STATUS);
+    const warpBroken = !linked(v.renderer.warpShader);
+    const compBroken = !linked(v.renderer.compShader);
+    if (!warpBroken && !compBroken) return;
+    const repaired = {
+      ...data,
+      ...(warpBroken ? { warp: '' } : {}),
+      ...(compBroken ? { comp: '' } : {}),
+    };
+    parsed.set(preset, repaired);
+    fenced(target, () => v.loadPreset(structuredClone(repaired), 0));
+    console.warn(
+      `milkdrop: ${preset} — ${[warpBroken && 'warp', compBroken && 'comp'].filter(Boolean).join(' and ')} shader would not compile; drawing MilkDrop's default instead`,
+    );
+  };
+
   const fetchPreset = (preset: string) => {
     if (parsed.has(preset) || failed.has(preset) || loading.has(preset)) return;
     loading.add(preset);
@@ -131,7 +186,18 @@ export function createMilk(gl: WebGL2RenderingContext, canvas: HTMLCanvasElement
       return showing;
     },
     draw(target, width, height, preset, dt, audio, sampleRate) {
-      const v = ensure(target, width, height);
+      let v: Visualizer;
+      try {
+        v = ensure(target, width, height);
+      } catch (reason) {
+        // Said once in the panel, not thrown sixty times a second into a loop
+        // that would stop drawing everything else with it.
+        error = `MilkDrop could not start: ${(reason as Error).message}`;
+        gl.bindFramebuffer(gl.FRAMEBUFFER, target);
+        gl.clearColor(0, 0, 0, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        return;
+      }
       tune(v, sampleRate);
       if (preset !== showing) {
         if (preset !== wanted) {
@@ -142,11 +208,8 @@ export function createMilk(gl: WebGL2RenderingContext, canvas: HTMLCanvasElement
         if (why) {
           error = `${preset}: ${why}`;
         } else if (parsed.has(preset)) {
-          // Butterchurn writes compiled functions into what it is handed, so it
-          // gets a copy and the cache stays JSON.
-          const data = structuredClone(parsed.get(preset));
           try {
-            fenced(target, () => v.loadPreset(data, showing ? BLEND_SECONDS : 0));
+            load(v, target, preset);
             showing = preset;
             error = null;
           } catch (reason) {
@@ -162,7 +225,16 @@ export function createMilk(gl: WebGL2RenderingContext, canvas: HTMLCanvasElement
         gl.clear(gl.COLOR_BUFFER_BIT);
         return;
       }
-      fenced(target, () => v.render({ audioLevels: audio, elapsedTime: Math.max(0.001, dt) }));
+      try {
+        fenced(target, () => v.render({ audioLevels: audio, elapsedTime: Math.max(0.001, dt) }));
+      } catch (reason) {
+        // An equation that throws throws every frame. Retire the preset rather
+        // than spend the evening on it; the wheel will move on by itself.
+        const broken = showing;
+        failed.set(broken, (reason as Error).message);
+        error = `${broken}: ${(reason as Error).message}`;
+        showing = null;
+      }
       gl.bindFramebuffer(gl.FRAMEBUFFER, target);
       gl.viewport(0, 0, width, height);
     },

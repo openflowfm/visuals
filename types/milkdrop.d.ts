@@ -14,7 +14,11 @@ declare module 'butterchurn' {
     setOutputAA(on: boolean): void;
     render(opts?: { audioLevels?: AudioLevels; elapsedTime?: number }): void;
     /** Private, and pinned with the version: the FFT band edges assume 44.1 kHz. */
-    renderer: { audioLevels: { starts: number[]; stops: number[] } };
+    renderer: {
+      audioLevels: { starts: number[]; stops: number[] };
+      warpShader: { shaderProgram: WebGLProgram };
+      compShader: { shaderProgram: WebGLProgram };
+    };
   }
   const butterchurn: {
     createVisualizer(
@@ -32,6 +36,10 @@ declare module 'butterchurn-presets' {
 }
 
 declare module 'milkdrop-preset-converter' {
-  const converter: { convertPreset(text: string): Promise<any> };
+  const converter: {
+    convertPreset(text: string): Promise<any>;
+    /** One shader's HLSL, `shader_body { … }` included, to Butterchurn's GLSL. */
+    convertShader(text: string): string | Promise<string>;
+  };
   export default converter;
 }

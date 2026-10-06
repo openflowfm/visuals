@@ -31,7 +31,7 @@ export function presetsRoot(): string {
 }
 
 /** Bump with the converter, or when what is cached changes shape. */
-const CONVERTER = 'milkdrop-preset-converter@0.1.2-1';
+const CONVERTER = 'milkdrop-preset-converter@0.1.2-repaired-4';
 /** A preset the converter has not finished with by now is not going to be drawn tonight. */
 const CONVERT_MS = 10_000;
 const RESCAN_MS = 10_000;
