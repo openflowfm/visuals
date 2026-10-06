@@ -11,6 +11,7 @@
 //! unchanged. Only the blit to the window turns the picture the right way up.
 
 use crate::audio::Audio;
+use crate::draw::{Blend, DrawList, Topology, Vertex};
 use crate::runtime::{Clock, Runner, Size};
 use crate::shader::{self, Kind};
 use std::borrow::Cow;
@@ -94,6 +95,10 @@ pub struct Renderer {
     blur_uniforms: Vec<(wgpu::Buffer, wgpu::Buffer)>,
     blits: HashMap<wgpu::TextureFormat, wgpu::RenderPipeline>,
     blit_shader: wgpu::ShaderModule,
+    draw_shader: wgpu::ShaderModule,
+    draw_pipelines: HashMap<(Topology, Blend), wgpu::RenderPipeline>,
+    draw_buffer: Option<(wgpu::Buffer, usize)>,
+    draw_list: DrawList,
     warp: Option<Stage>,
     comp_stage: Option<Stage>,
     blur_passes: usize,
@@ -161,6 +166,25 @@ struct V { texsize: vec4f, wds: vec4f, ed1: f32, ed2: f32, ed3: f32, wdiv: f32 }
   e = sqrt(e);
   e = v.ed1 + v.ed2 * clamp(e * v.ed3, 0.0, 1.0);
   return vec4f(blur * e, 1.0);
+}";
+
+/// Waves, shapes, borders: flat colour, or a textured shape sampling last frame.
+const DRAW: &str = "
+struct In { @location(0) pos: vec2f, @location(1) color: vec4f, @location(2) uv: vec2f, @location(3) textured: f32 }
+struct Out { @builtin(position) pos: vec4f, @location(0) color: vec4f, @location(1) uv: vec2f, @location(2) textured: f32 }
+@vertex fn vs(v: In) -> Out {
+  var o: Out;
+  o.pos = vec4f(v.pos.x, -v.pos.y, 0.0, 1.0);
+  o.color = v.color;
+  o.uv = v.uv;
+  o.textured = v.textured;
+  return o;
+}
+@group(0) @binding(0) var tex: texture_2d<f32>;
+@group(0) @binding(1) var smp: sampler;
+@fragment fn fs(i: Out) -> @location(0) vec4f {
+  let sampled = textureSample(tex, smp, i.uv) * i.color;
+  return select(i.color, sampled, i.textured > 0.5);
 }";
 
 /// The finished picture to the window, the right way up.
@@ -269,6 +293,7 @@ impl Renderer {
         let comp_vs = wgsl(COMP_VS);
         let blur_shader = wgsl(BLUR);
         let blit_shader = wgsl(BLIT);
+        let draw_shader = wgsl(DRAW);
         let fullscreen = |entry: &str| {
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(entry),
@@ -335,6 +360,10 @@ impl Renderer {
             blur_uniforms,
             blits: HashMap::new(),
             blit_shader,
+            draw_shader,
+            draw_pipelines: HashMap::new(),
+            draw_buffer: None,
+            draw_list: DrawList::default(),
             warp: None,
             comp_stage: None,
             blur_passes: 0,
@@ -700,14 +729,13 @@ impl Renderer {
         // Swap: last frame becomes what the warp reads.
         self.current ^= 1;
         let values = self.uniforms(true);
-        let (target, previous) = (&self.feedback[self.current], &self.feedback[self.current ^ 1]);
-        let warp = self.warp.as_ref().unwrap();
-        let comp = self.comp_stage.as_ref().unwrap();
-        self.write_uniforms(warp, &values);
-        self.write_uniforms(comp, &values);
-        let warp_group = self.bind_group(warp, &previous.view, wrap);
         let mut encoder = self.device.create_command_encoder(&Default::default());
         {
+            let (target, previous) = (&self.feedback[self.current], &self.feedback[self.current ^ 1]);
+            let warp = self.warp.as_ref().unwrap();
+            self.write_uniforms(warp, &values);
+            self.write_uniforms(self.comp_stage.as_ref().unwrap(), &values);
+            let warp_group = self.bind_group(warp, &previous.view, wrap);
             let mut pass = begin(&mut encoder, &target.view, true);
             pass.set_pipeline(&warp.pipeline);
             pass.set_bind_group(0, &warp_group, &[]);
@@ -718,7 +746,9 @@ impl Renderer {
             pass.draw_indexed(0..self.warp_indices.1, 0, 0..1);
         }
         self.blur(&mut encoder);
+        self.draw(&mut encoder, &frame, wrap, audio);
         // Comp reads this frame's warp output.
+        let comp = self.comp_stage.as_ref().unwrap();
         let comp_group = self.bind_group(comp, &self.feedback[self.current].view, wrap);
         {
             let mut pass = begin(&mut encoder, &self.comp.view, true);
@@ -730,6 +760,114 @@ impl Renderer {
             pass.draw_indexed(0..self.comp_indices.1, 0, 0..1);
         }
         self.queue.submit([encoder.finish()]);
+    }
+
+    fn draw_pipeline(&mut self, topology: Topology, blend: Blend) -> &wgpu::RenderPipeline {
+        let device = &self.device;
+        let shader = &self.draw_shader;
+        self.draw_pipelines.entry((topology, blend)).or_insert_with(|| {
+            let component = wgpu::BlendComponent {
+                src_factor: wgpu::BlendFactor::SrcAlpha,
+                dst_factor: match blend {
+                    Blend::Alpha => wgpu::BlendFactor::OneMinusSrcAlpha,
+                    Blend::Additive => wgpu::BlendFactor::One,
+                },
+                operation: wgpu::BlendOperation::Add,
+            };
+            let attributes = wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x4, 2 => Float32x2, 3 => Float32];
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("draw"),
+                layout: None,
+                vertex: wgpu::VertexState {
+                    module: shader,
+                    entry_point: Some("vs"),
+                    compilation_options: Default::default(),
+                    buffers: &[Some(wgpu::VertexBufferLayout {
+                        array_stride: std::mem::size_of::<Vertex>() as u64,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &attributes,
+                    })],
+                },
+                primitive: wgpu::PrimitiveState {
+                    topology: match topology {
+                        Topology::Triangles => wgpu::PrimitiveTopology::TriangleList,
+                        Topology::Lines => wgpu::PrimitiveTopology::LineList,
+                        Topology::LineStrip => wgpu::PrimitiveTopology::LineStrip,
+                        Topology::Points => wgpu::PrimitiveTopology::PointList,
+                    },
+                    ..Default::default()
+                },
+                depth_stencil: None,
+                multisample: Default::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: shader,
+                    entry_point: Some("fs"),
+                    compilation_options: Default::default(),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: FORMAT,
+                        blend: Some(wgpu::BlendState { color: component, alpha: component }),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        })
+    }
+
+    /// Motion vectors, shapes, waves, darken centre and borders, blended into
+    /// this frame's feedback target.
+    fn draw(&mut self, encoder: &mut wgpu::CommandEncoder, frame: &crate::runtime::Frame, wrap: bool, audio: &Audio) {
+        let size = self.size;
+        let globals = Runner::globals(frame, &size);
+        let mut list = std::mem::take(&mut self.draw_list);
+        crate::draw::frame(self.runner.as_mut().unwrap(), audio, &self.uvs, &globals, &size, &mut list);
+        if list.cmds.is_empty() {
+            self.draw_list = list;
+            return;
+        }
+        let bytes: &[u8] = bytemuck::cast_slice(&list.vertices);
+        let grow = self.draw_buffer.as_ref().is_none_or(|(_, cap)| *cap < bytes.len());
+        if grow {
+            let capacity = bytes.len().next_power_of_two().max(4096);
+            let buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("draw"),
+                size: capacity as u64,
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            self.draw_buffer = Some((buffer, capacity));
+        }
+        self.queue.write_buffer(&self.draw_buffer.as_ref().unwrap().0, 0, bytes);
+        for cmd in &list.cmds {
+            self.draw_pipeline(cmd.topology, cmd.blend);
+        }
+        let previous = &self.feedback[self.current ^ 1].view;
+        let sampler = &self.samplers[if wrap { "linear_wrap" } else { "linear_clamp" }];
+        let mut groups = HashMap::new();
+        for cmd in &list.cmds {
+            let pipeline = &self.draw_pipelines[&(cmd.topology, cmd.blend)];
+            groups.entry((cmd.topology, cmd.blend)).or_insert_with(|| {
+                self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: None,
+                    layout: &pipeline.get_bind_group_layout(0),
+                    entries: &[
+                        wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(previous) },
+                        wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(sampler) },
+                    ],
+                })
+            });
+        }
+        {
+            let mut pass = begin(encoder, &self.feedback[self.current].view, false);
+            pass.set_vertex_buffer(0, self.draw_buffer.as_ref().unwrap().0.slice(..));
+            for cmd in &list.cmds {
+                pass.set_pipeline(&self.draw_pipelines[&(cmd.topology, cmd.blend)]);
+                pass.set_bind_group(0, &groups[&(cmd.topology, cmd.blend)], &[]);
+                pass.draw(cmd.first..cmd.first + cmd.count, 0..1);
+            }
+        }
+        self.draw_list = list;
     }
 
     /// Butterchurn's blur pyramid: per level, a horizontal pass into a narrower

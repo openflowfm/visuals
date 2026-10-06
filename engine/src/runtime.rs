@@ -141,9 +141,21 @@ pub struct Runner {
     pub frame_vars: Vec<f64>,
     pub rand_start: [f32; 4],
     pub rand_preset: [f32; 4],
+    pub waves: Vec<Option<Scope>>,
+    pub shapes: Vec<Option<Scope>>,
 }
 
 impl Runner {
+    /// The globals a wave or shape reads this frame, as Butterchurn's `globalVars`.
+    pub fn globals(frame: &Frame, size: &Size) -> [f64; 15] {
+        Self::globals_of(frame, size)
+    }
+
+    /// The qs after this frame's equations — what waves and shapes start from.
+    pub fn q_after_frame(&self) -> Vec<f64> {
+        self.q_slots.iter().map(|&s| self.frame_vars[s]).collect()
+    }
+
     pub fn new(preset: Preset, frame: &Frame, size: &Size, seed: u64) -> Result<Self, LoadError> {
         let mut symbols = Symbols::default();
         let values = base_values(&preset.values, BASE_DEFAULTS);
@@ -204,9 +216,47 @@ impl Runner {
         frame_eqs.run(&mut first, &mut memory);
         let user_slots: Slots = (0..symbols.len()).filter(|&s| mentioned(s)).collect();
         let user_values = user_slots.iter().map(|&s| first[s]).collect();
-        let regs = reg_slots.iter().map(|&s| first[s]).collect();
+        let mut regs: Vec<f64> = reg_slots.iter().map(|&s| first[s]).collect();
+
+        // Waves, then shapes, each from the first frame's qs. An init that
+        // writes regs hands them on to the next.
+        let q_after: Vec<f64> = q_slots.iter().map(|&s| first[s]).collect();
+        let mut waves = Vec::new();
+        for (i, w) in preset.waves.iter().enumerate() {
+            let enabled = base_values(&w.values, WAVE_DEFAULTS)["enabled"] != 0.0;
+            waves.push(if enabled {
+                Some(Scope::new(
+                    &w.values,
+                    WAVE_DEFAULTS,
+                    [&w.init, &w.frame, &w.point],
+                    (frame, size, &q_after, &mut regs),
+                    seed ^ (0x100 + i as u64),
+                    &["sample", "value1", "value2", "x", "y"],
+                )?)
+            } else {
+                None
+            });
+        }
+        let mut shapes = Vec::new();
+        for (i, s) in preset.shapes.iter().enumerate() {
+            let enabled = base_values(&s.values, SHAPE_DEFAULTS)["enabled"] != 0.0;
+            shapes.push(if enabled {
+                Some(Scope::new(
+                    &s.values,
+                    SHAPE_DEFAULTS,
+                    [&s.init, &s.frame, ""],
+                    (frame, size, &q_after, &mut regs),
+                    seed ^ (0x200 + i as u64),
+                    &["instance"],
+                )?)
+            } else {
+                None
+            });
+        }
 
         Ok(Self {
+            waves,
+            shapes,
             has_vertex: !vertex.is_empty(),
             preset,
             symbols,
@@ -271,6 +321,11 @@ impl Runner {
 
     pub fn get(&self, name: &str) -> f64 {
         self.symbols.get(name).map_or(0.0, |s| self.frame_vars[s])
+    }
+
+    /// A value as the preset set it, before any equation — Butterchurn's `mdVS`.
+    pub fn base_value(&self, name: &str) -> f64 {
+        self.symbols.get(name).map_or(0.0, |s| self.base[s])
     }
 
     pub fn q(&self) -> [f32; 32] {
@@ -346,6 +401,155 @@ impl Runner {
             self.regs[i] = v[slot];
         }
     }
+}
+
+/// A custom wave's or shape's own variables: Butterchurn gives each its own
+/// object, seeded from the preset's `q`s and `reg`s, with `t1`–`t8` reset to their
+/// init values every frame and the variables its equations made up carried over.
+pub struct Scope {
+    pub symbols: Symbols,
+    pub values: BTreeMap<String, f64>,
+    frame: Program,
+    pub point: Program,
+    base: Vec<f64>,
+    base_value_slots: Vec<(usize, f64)>,
+    t_slots: Slots,
+    t_init: Vec<f64>,
+    q_slots: Slots,
+    reg_slots: Slots,
+    user_slots: Slots,
+    user_values: Vec<f64>,
+    pub memory: Memory,
+}
+
+impl Scope {
+    fn new(
+        raw: &BTreeMap<String, f64>,
+        defaults: &[(&str, f64)],
+        code: [&str; 3],
+        start: (&Frame, &Size, &[f64], &mut Vec<f64>),
+        seed: u64,
+        point_names: &[&str],
+    ) -> Result<Self, LoadError> {
+        let (frame, size, q_after_frame, regs) = start;
+        let values = base_values(raw, defaults);
+        let mut symbols = Symbols::default();
+        for name in values.keys().map(String::as_str).chain(GLOBALS.iter().copied()).chain(point_names.iter().copied()) {
+            symbols.slot(name);
+        }
+        let ts: Vec<String> = (1..=8).map(|i| format!("t{i}")).collect();
+        for name in qs().chain(regs_names()).chain(ts.iter().cloned()) {
+            symbols.slot(&name);
+        }
+        let init = eel::compile(code[0], &mut symbols)?;
+        let frame_eqs = eel::compile(code[1], &mut symbols)?;
+        let point = eel::compile(code[2], &mut symbols)?;
+        let get = |n: &str| symbols.get(n).unwrap();
+        let q_slots: Slots = qs().map(|n| get(&n)).collect();
+        let reg_slots: Slots = regs_names().map(|n| get(&n)).collect();
+        let t_slots: Slots = ts.iter().map(|n| get(n)).collect();
+        let base_value_slots: Vec<(usize, f64)> = values.iter().map(|(n, v)| (get(n), *v)).collect();
+        let global_slots: Slots = GLOBALS.iter().map(|n| get(n)).collect();
+        let mut vars = vec![0.0; symbols.len()];
+        for &(s, v) in &base_value_slots {
+            vars[s] = v;
+        }
+        for (s, v) in global_slots.iter().zip(Runner::globals_of(frame, size)) {
+            vars[*s] = v;
+        }
+        for (i, &s) in q_slots.iter().enumerate() {
+            vars[s] = q_after_frame[i];
+        }
+        for (i, &s) in reg_slots.iter().enumerate() {
+            vars[s] = regs[i];
+        }
+        let mut memory = Memory::new(seed);
+        if !init.is_empty() {
+            init.run(&mut vars, &mut memory);
+            // Init's regs are everyone's regs from here.
+            for (i, &s) in reg_slots.iter().enumerate() {
+                regs[i] = vars[s];
+            }
+            for &(s, v) in &base_value_slots {
+                vars[s] = v;
+            }
+        }
+        let t_init = t_slots.iter().map(|&s| vars[s]).collect();
+        let non_user: std::collections::HashSet<usize> = q_slots
+            .iter()
+            .chain(&reg_slots)
+            .chain(&t_slots)
+            .chain(&global_slots)
+            .copied()
+            .chain(base_value_slots.iter().map(|(s, _)| *s))
+            .collect();
+        let point_slots: std::collections::HashSet<usize> = point_names.iter().map(|n| get(n)).collect();
+        let user_slots: Slots = (0..symbols.len()).filter(|s| !non_user.contains(s) && !point_slots.contains(s)).collect();
+        let user_values = user_slots.iter().map(|&s| vars[s]).collect();
+        Ok(Self { symbols, values, frame: frame_eqs, point, base: vars, base_value_slots, t_slots, t_init, q_slots, reg_slots, user_slots, user_values, memory })
+    }
+
+    /// The variables a frame starts from, after the frame equations.
+    pub fn run_frame(&mut self, globals: &[f64; 15], q: &[f64], regs: &[f64]) -> Vec<f64> {
+        let mut vars = self.run_frame_prelude(globals, q, regs);
+        self.frame.run(&mut vars, &mut self.memory);
+        vars
+    }
+
+    /// The variables a frame starts from, before any equations run — what a
+    /// shape resets each instance's values from.
+    pub fn run_frame_prelude(&mut self, globals: &[f64; 15], q: &[f64], regs: &[f64]) -> Vec<f64> {
+        let mut vars = self.base.clone();
+        for (i, &s) in self.user_slots.iter().enumerate() {
+            vars[s] = self.user_values[i];
+        }
+        for (i, &s) in self.q_slots.iter().enumerate() {
+            vars[s] = q[i];
+        }
+        for (i, &s) in self.t_slots.iter().enumerate() {
+            vars[s] = self.t_init[i];
+        }
+        for (name, value) in GLOBALS.iter().zip(globals) {
+            vars[self.symbols.get(name).unwrap()] = *value;
+        }
+        for (i, &s) in self.reg_slots.iter().enumerate() {
+            vars[s] = regs[i];
+        }
+        vars
+    }
+
+    /// Run the frame equations again on `vars`, as each shape instance does.
+    pub fn rerun_frame(&mut self, vars: &mut [f64]) {
+        self.frame.run(vars, &mut self.memory);
+    }
+
+    pub fn run_point(&mut self, vars: &mut [f64]) {
+        self.point.run(vars, &mut self.memory);
+    }
+
+    /// The base values as they were at the start of the frame, for resetting.
+    pub fn base_value(&self, slot: usize) -> f64 {
+        self.base_value_slots.iter().find(|(s, _)| *s == slot).map_or(0.0, |(_, v)| *v)
+    }
+
+    /// Carry the made-up variables to next frame.
+    pub fn keep(&mut self, vars: &[f64]) {
+        for (i, &s) in self.user_slots.iter().enumerate() {
+            self.user_values[i] = vars[s];
+        }
+    }
+
+    pub fn get(&self, vars: &[f64], name: &str) -> f64 {
+        self.symbols.get(name).map_or(0.0, |s| vars[s])
+    }
+
+    pub fn slot(&self, name: &str) -> usize {
+        self.symbols.get(name).expect("registered")
+    }
+}
+
+fn regs_names() -> impl Iterator<Item = String> {
+    regs()
 }
 
 /// Butterchurn's clock: time advances by one over the estimated frame rate, and

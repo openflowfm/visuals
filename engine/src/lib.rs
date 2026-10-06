@@ -5,6 +5,7 @@
 //! - [`eel`] compiles and runs the equations.
 
 pub mod audio;
+pub mod draw;
 pub mod eel;
 pub mod noise;
 pub mod preset;
