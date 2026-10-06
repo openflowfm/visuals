@@ -6,7 +6,7 @@
 //! stage counts as compiled when it reaches a validated naga module; a preset with
 //! no shader for a stage passes that stage, since MilkDrop draws its default.
 
-use engine::{preset, shader};
+use engine::{eel, preset, shader};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -76,6 +76,25 @@ fn main() {
                 let Some(path) = files.get(i) else { break };
                 let Ok(bytes) = std::fs::read(path) else { continue };
                 let preset = preset::parse(&preset::decode(&bytes));
+                // Every block of equations, compiled. A preset's own blocks share a
+                // symbol table, as they share variables when they run.
+                let mut blocks: Vec<(&str, &String)> = vec![("init", &preset.init), ("frame", &preset.frame), ("vertex", &preset.vertex)];
+                for w in &preset.waves {
+                    blocks.extend([("wave init", &w.init), ("wave frame", &w.frame), ("wave point", &w.point)]);
+                }
+                for s in &preset.shapes {
+                    blocks.extend([("shape init", &s.init), ("shape frame", &s.frame)]);
+                }
+                let mut symbols = eel::Symbols::default();
+                let mut equations = String::new();
+                for (label, code) in blocks {
+                    if let Err(e) = eel::compile(code, &mut symbols) {
+                        let near: String = code.get(e.at.saturating_sub(20)..(e.at + 20).min(code.len())).unwrap_or("").replace('\n', " ");
+                        equations = format!("{label}: {} near «{near}»", e.message);
+                        break;
+                    }
+                }
+                results.lock().unwrap().push((path.clone(), "equations", equations));
                 for (kind, label, text) in [
                     (shader::Kind::Warp, "warp", &preset.warp),
                     (shader::Kind::Comp, "comp", &preset.comp),
@@ -94,11 +113,23 @@ fn main() {
     let results = results.into_inner().unwrap();
     let mut per_preset: BTreeMap<&PathBuf, bool> = BTreeMap::new();
     let (mut compiled, mut absent, mut failed) = (0, 0, 0);
+    let (mut equations_ok, mut equations_bad) = (0, 0);
     let mut groups: BTreeMap<String, usize> = BTreeMap::new();
     let mut lines = Vec::new();
     for (path, label, outcome) in &results {
         let ok = outcome.is_empty() || outcome == "-";
         *per_preset.entry(path).or_insert(true) &= ok;
+        if *label == "equations" {
+            if ok {
+                equations_ok += 1;
+            } else {
+                equations_bad += 1;
+                let kind = outcome.split(" near ").next().unwrap_or("").to_owned();
+                *groups.entry(format!("eel {}", category(&kind))).or_default() += 1;
+                lines.push(format!("{label}\t{}\t{outcome}", path.display()));
+            }
+            continue;
+        }
         match outcome.as_str() {
             "" => compiled += 1,
             "-" => absent += 1,
@@ -110,6 +141,10 @@ fn main() {
         }
     }
     let presets_ok = per_preset.values().filter(|ok| **ok).count();
+    println!(
+        "equations: {equations_ok} presets compiled, {equations_bad} failed ({:.2}%)",
+        100.0 * equations_ok as f64 / (equations_ok + equations_bad).max(1) as f64
+    );
     println!(
         "shaders: {compiled} compiled, {failed} failed, {absent} absent ({:.2}% of present)",
         100.0 * compiled as f64 / (compiled + failed).max(1) as f64
