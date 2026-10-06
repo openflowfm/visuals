@@ -250,6 +250,13 @@ fn texture(device: &wgpu::Device, queue: &wgpu::Queue, data: &[u8], size: u32, d
     texture.create_view(&Default::default())
 }
 
+/// Butterchurn's `clouds2` image, as RGBA.
+fn clouds() -> Vec<u8> {
+    let mut decoder = jpeg_decoder::Decoder::new(&include_bytes!("../assets/clouds2.jpg")[..]);
+    let rgb = decoder.decode().expect("clouds2.jpg decodes");
+    rgb.chunks_exact(3).flat_map(|p| [p[0], p[1], p[2], 255]).collect()
+}
+
 fn sampler(device: &wgpu::Device, linear: bool, wrap: bool) -> wgpu::Sampler {
     let filter = if linear { wgpu::FilterMode::Linear } else { wgpu::FilterMode::Nearest };
     let address = if wrap { wgpu::AddressMode::Repeat } else { wgpu::AddressMode::ClampToEdge };
@@ -279,9 +286,9 @@ impl Renderer {
         textures.insert("noise_hq", texture(&device, &queue, &crate::noise::texture_2d(256, 8, &mut rng), 256, 1));
         textures.insert("noisevol_lq", texture(&device, &queue, &crate::noise::texture_3d(32, 1, &mut rng), 32, 32));
         textures.insert("noisevol_hq", texture(&device, &queue, &crate::noise::texture_3d(32, 4, &mut rng), 32, 32));
-        // Butterchurn's stand-in for a texture it does not have is a cloud
-        // photograph; until that ships, smooth noise stands in for it.
-        textures.insert("image", texture(&device, &queue, &crate::noise::texture_2d(256, 8, &mut rng), 256, 1));
+        // Butterchurn's stand-in for any texture a preset names and it does not
+        // have: a 128×128 photograph of clouds, shipped inside Butterchurn (MIT).
+        textures.insert("image", texture(&device, &queue, &clouds(), 128, 1));
         let mut samplers = HashMap::new();
         samplers.insert("linear_wrap", sampler(&device, true, true));
         samplers.insert("linear_clamp", sampler(&device, true, false));

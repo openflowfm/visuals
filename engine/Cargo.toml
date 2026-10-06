@@ -19,6 +19,7 @@ pollster = "1"
 winit = "0.30"
 cpal = "0.18"
 png = "0.17"
+jpeg-decoder = { version = "0.3", default-features = false }
 naga = { version = "30.0.1", features = ["spv-in", "msl-out"] }
 thiserror = "2"
 
