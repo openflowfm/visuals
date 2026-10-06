@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { Preset, Problem } from './api.ts';
+import type { Owner, Preset, Problem } from './api.ts';
+import { getField, otherValues, problemsOf, setField, settingsOf, type Stage } from './stages.ts';
 
 /** A number field that lets you type `-` or `0.` on the way to a number. */
 function NumberCell({ value, onChange }: { value: number; onChange(n: number): void }) {
@@ -21,25 +22,32 @@ function NumberCell({ value, onChange }: { value: number; onChange(n: number): v
     />
   );
 }
-import { getField, problemsOf, setField, setValue, valuesOf, type Stage } from './stages.ts';
 
 interface Props {
   preset: Preset;
   stage: Stage;
   problems: Problem[];
+  /** Code changed: the preset is applied whole. */
   onChange(next: Preset): void;
+  /** A setting changed: applied live. */
+  onSet(owner: Owner, key: string, value: number): void;
 }
 
-/** One stage's code and numbers, edited in place. */
-export function Inspector({ preset, stage, problems, onChange }: Props) {
+/** One stage's code and every one of its settings, edited in place. */
+export function Inspector({ preset, stage, problems, onChange, onSet }: Props) {
   const issues = problemsOf(problems, stage);
-  const values = valuesOf(preset, stage);
+  const settings = settingsOf(preset, stage);
+  const other = stage.id === 'frame' ? otherValues(preset) : [];
   return (
     <div className="inspector">
       <h2>{stage.label}</h2>
       {issues.map((p, i) => (
         <p key={i} className="problem">
-          <b>{p.stage}{p.line ? `:${p.line}` : ''}</b> {p.message}
+          <b>
+            {p.stage}
+            {p.line ? `:${p.line}` : ''}
+          </b>{' '}
+          {p.message}
         </p>
       ))}
       {stage.code.map((c) => {
@@ -58,17 +66,23 @@ export function Inspector({ preset, stage, problems, onChange }: Props) {
           </label>
         );
       })}
-      {values.length > 0 && (
+      {(settings.length > 0 || other.length > 0) && (
         <div className="values">
-          {values.map(([key, v]) => (
+          {settings.map(([spec, v]) => (
+            <label key={spec.key} title={spec.key}>
+              <span>{spec.label}</span>
+              <NumberCell value={v} onChange={(n) => onSet(stage.owner!, spec.key, n)} />
+            </label>
+          ))}
+          {other.map(([key, v]) => (
             <label key={key}>
               <span>{key}</span>
-              <NumberCell value={v} onChange={(n) => onChange(setValue(preset, stage, key, n))} />
+              <NumberCell value={v} onChange={(n) => onSet({ list: 'base' }, key, n)} />
             </label>
           ))}
         </div>
       )}
-      {stage.code.length === 0 && values.length === 0 && <p className="quiet">Nothing to set here.</p>}
+      {stage.code.length === 0 && settings.length === 0 && other.length === 0 && <p className="quiet">Nothing to set here.</p>}
     </div>
   );
 }

@@ -18,6 +18,9 @@ pub const DRAW: (u32, u32) = (1920, 1080);
 
 pub enum Cmd {
     Load(Box<Preset>, u64, Sender<Result<engine::render::Loaded, String>>),
+    /// One value, live. Replies false when it needs a reload instead.
+    Set(engine::runtime::Owner, String, f64, Sender<bool>),
+    Previews(bool),
     /// The surface's size in physical pixels.
     Resize(u32, u32),
     SampleRate(f32),
@@ -33,7 +36,12 @@ pub struct Stats {
 pub struct Thread {
     pub commands: Sender<Cmd>,
     pub stats: Arc<Mutex<Stats>>,
+    /// The latest stage pictures, packed as [`engine::render::Renderer::read_previews`] packs them.
+    pub previews: Arc<Mutex<Option<Vec<u8>>>>,
 }
+
+/// How often stage pictures are read back: every this many frames.
+const PREVIEW_EVERY: u32 = 4;
 
 /// Start drawing into `surface`. Returns once the device is up.
 pub fn start(instance: wgpu::Instance, surface: wgpu::Surface<'static>, size: (u32, u32), ring: Ring) -> Thread {
@@ -54,12 +62,13 @@ pub fn start(instance: wgpu::Instance, surface: wgpu::Surface<'static>, size: (u
     let renderer = Renderer::new(device, queue, DRAW.0, DRAW.1);
     let (commands, rx) = std::sync::mpsc::channel();
     let stats = Arc::new(Mutex::new(Stats::default()));
-    let out = stats.clone();
+    let previews = Arc::new(Mutex::new(None));
+    let (out, pictures) = (stats.clone(), previews.clone());
     std::thread::Builder::new()
         .name("bench".into())
-        .spawn(move || run(renderer, surface, config, rx, ring, out))
+        .spawn(move || run(renderer, surface, config, rx, ring, out, pictures))
         .expect("bench thread");
-    Thread { commands, stats }
+    Thread { commands, stats, previews }
 }
 
 fn run(
@@ -69,7 +78,10 @@ fn run(
     rx: Receiver<Cmd>,
     ring: Ring,
     stats: Arc<Mutex<Stats>>,
+    previews: Arc<Mutex<Option<Vec<u8>>>>,
 ) {
+    let mut frames = 0u32;
+    let mut logged = Instant::now();
     let mut audio = Audio::default();
     let mut last = Instant::now();
     let mut window = (Instant::now(), 0u32, 0.0f64);
@@ -90,6 +102,15 @@ fn run(
                     surface.configure(renderer.device(), &config);
                 }
                 Cmd::SampleRate(rate) => audio.set_sample_rate(rate),
+                Cmd::Set(owner, key, value, reply) => {
+                    let _ = reply.send(renderer.set_value(owner, &key, value));
+                }
+                Cmd::Previews(on) => {
+                    renderer.set_previews(on);
+                    if !on {
+                        *previews.lock().unwrap() = None;
+                    }
+                }
             }
             continue;
         }
@@ -115,11 +136,22 @@ fn run(
             }
             _ => surface.configure(renderer.device(), &config),
         }
+        frames = frames.wrapping_add(1);
+        if frames % PREVIEW_EVERY == 0 {
+            if let Some(pictures) = renderer.read_previews() {
+                *previews.lock().unwrap() = Some(pictures);
+            }
+        }
         window.1 += 1;
         window.2 += cpu;
         let secs = now.duration_since(window.0).as_secs_f64();
         if secs >= 1.0 {
-            *stats.lock().unwrap() = Stats { fps: window.1 as f64 / secs, cpu_ms: window.2 * 1000.0 / window.1 as f64 };
+            let s = Stats { fps: window.1 as f64 / secs, cpu_ms: window.2 * 1000.0 / window.1 as f64 };
+            if now.duration_since(logged).as_secs() >= 5 {
+                logged = now;
+                eprintln!("bench: {:.0} fps, {:.2} ms cpu, surface {}x{}", s.fps, s.cpu_ms, config.width, config.height);
+            }
+            *stats.lock().unwrap() = s;
             window = (now, 0, 0.0);
         }
     }
@@ -152,6 +184,12 @@ pub mod view {
         let content = window.contentView().expect("content view");
         let rect = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(1.0, 1.0));
         let view = NSView::initWithFrame(mtm.alloc(), rect);
+        // A layer-hosting view whose layer is the Metal layer, so the view's frame
+        // is the layer's frame. Left to itself, wgpu adds a sublayer sized to the
+        // view as it was then — 1×1 here — which never follows the view.
+        let layer = objc2_quartz_core::CAMetalLayer::new();
+        layer.setContentsScale(window.backingScaleFactor());
+        view.setLayer(Some(&layer));
         view.setWantsLayer(true);
         content.addSubview_positioned_relativeTo(&view, NSWindowOrderingMode::Below, None);
         let handle = AppKitWindowHandle::new(NonNull::from(&*view).cast());
@@ -167,6 +205,63 @@ pub mod view {
         surface
     }
 
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct CGRect {
+        x: f64,
+        y: f64,
+        w: f64,
+        h: f64,
+    }
+
+    #[link(name = "CoreGraphics", kind = "framework")]
+    unsafe extern "C" {
+        fn CGWindowListCreateImage(bounds: CGRect, list: u32, window: u32, options: u32) -> *const std::ffi::c_void;
+        fn CGImageGetWidth(image: *const std::ffi::c_void) -> usize;
+        fn CGImageGetHeight(image: *const std::ffi::c_void) -> usize;
+        fn CGImageGetBytesPerRow(image: *const std::ffi::c_void) -> usize;
+        fn CGImageGetDataProvider(image: *const std::ffi::c_void) -> *const std::ffi::c_void;
+        fn CGDataProviderCopyData(provider: *const std::ffi::c_void) -> *const std::ffi::c_void;
+    }
+
+    #[link(name = "CoreFoundation", kind = "framework")]
+    unsafe extern "C" {
+        fn CFDataGetBytePtr(data: *const std::ffi::c_void) -> *const u8;
+        fn CFRelease(object: *const std::ffi::c_void);
+    }
+
+    /// The window as the screen shows it — webview and bench together — as a PNG.
+    /// A development aid: an app may capture its own windows without the screen
+    /// recording permission, so the window can be checked without anyone's eyes.
+    pub fn capture(path: &std::path::Path) -> Result<(), String> {
+        let window = VIEW.with(|v| v.borrow().as_ref().and_then(|v| v.window())).ok_or("no window")?;
+        let number = window.windowNumber() as u32;
+        // `CGRectNull`, `kCGWindowListOptionIncludingWindow`, `kCGWindowImageBoundsIgnoreFraming`.
+        let null = CGRect { x: f64::INFINITY, y: f64::INFINITY, w: 0.0, h: 0.0 };
+        unsafe {
+            let image = CGWindowListCreateImage(null, 1 << 3, number, 1);
+            if image.is_null() {
+                return Err("CGWindowListCreateImage returned nothing".into());
+            }
+            let (w, h, row) = (CGImageGetWidth(image), CGImageGetHeight(image), CGImageGetBytesPerRow(image));
+            let data = CGDataProviderCopyData(CGImageGetDataProvider(image));
+            let bytes = std::slice::from_raw_parts(CFDataGetBytePtr(data), row * h);
+            let mut rgba = Vec::with_capacity(w * h * 4);
+            for y in 0..h {
+                for px in bytes[y * row..y * row + w * 4].chunks_exact(4) {
+                    // BGRA, premultiplied; the window is opaque where it matters.
+                    rgba.extend_from_slice(&[px[2], px[1], px[0], 255]);
+                }
+            }
+            CFRelease(data);
+            CFRelease(image);
+            let file = std::fs::File::create(path).map_err(|e| e.to_string())?;
+            let mut encoder = png::Encoder::new(std::io::BufWriter::new(file), w as u32, h as u32);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.write_header().and_then(|mut w| w.write_image_data(&rgba)).map_err(|e| e.to_string())
+        }
+    }
+
     /// Move the view to `rect`, in the content view's points from its top left.
     /// Returns its size in pixels.
     pub fn place(x: f64, y: f64, width: f64, height: f64) -> Option<(u32, u32)> {
@@ -177,6 +272,12 @@ pub mod view {
             let from_bottom = if parent.isFlipped() { y } else { parent.frame().size.height - y - height };
             view.setFrame(NSRect::new(NSPoint::new(x, from_bottom), NSSize::new(width, height)));
             let scale = view.window().map(|w| w.backingScaleFactor()).unwrap_or(2.0);
+            eprintln!(
+                "bench: placed at {x:.0},{y:.0} {width:.0}x{height:.0} pt (parent {:.0}x{:.0}, flipped {}, scale {scale})",
+                parent.frame().size.width,
+                parent.frame().size.height,
+                parent.isFlipped()
+            );
             Some(((width * scale).round() as u32, (height * scale).round() as u32))
         })
     }

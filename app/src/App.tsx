@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as api from './api.ts';
-import type { Entry, Input, Preset, Problem, Report } from './api.ts';
+import type { Entry, Input, Owner, Preset, Problem, Report } from './api.ts';
 import { Inspector } from './Inspector.tsx';
 import { StageGraph } from './StageGraph.tsx';
-import { STAGES } from './stages.ts';
+import { STAGES, setValue as setValueIn } from './stages.ts';
 
 const problemsOf = (r: Report | null): Problem[] => (r ? [...r.equations, ...r.shaders] : []);
 
@@ -130,10 +130,40 @@ export function App() {
     return () => window.removeEventListener('keydown', key);
   }, [step]);
 
+  // The preset as of the latest edit, for edits that land between renders.
+  const latest = useRef<Preset | null>(null);
+  latest.current = preset;
+
   const edit = (next: Preset) => {
+    latest.current = next;
     setPreset(next);
     apply(next);
   };
+
+  // Settings go to the bench live, at most once a display frame per setting.
+  const pending = useRef(new Map<string, { owner: Owner; key: string; value: number }>());
+  const flushing = useRef(0);
+  const set = useCallback(
+    (owner: Owner, key: string, value: number) => {
+      if (!latest.current) return;
+      const [next, written] = setValueIn(latest.current, owner, key, value);
+      latest.current = next;
+      setPreset(next);
+      pending.current.set(`${JSON.stringify(owner)}:${written}`, { owner, key: written, value });
+      if (flushing.current) return;
+      flushing.current = requestAnimationFrame(() => {
+        flushing.current = 0;
+        const changes = [...pending.current.values()];
+        pending.current.clear();
+        for (const c of changes) {
+          api.setValue(c.owner, c.key, c.value).then((live) => {
+            if (!live && latest.current) apply(latest.current);
+          });
+        }
+      });
+    },
+    [apply],
+  );
 
   const stage = STAGES.find((s) => s.id === selected) ?? STAGES[0];
   const problems = problemsOf(report);
@@ -188,10 +218,10 @@ export function App() {
           <div className="bench" ref={bench} />
         </div>
         <div className="graph">
-          {preset && <StageGraph preset={preset} problems={problems} selected={selected} onSelect={setSelected} onChange={edit} />}
+          {preset && <StageGraph preset={preset} problems={problems} selected={selected} onSelect={setSelected} onSet={set} />}
         </div>
       </main>
-      <aside className="side">{preset && <Inspector preset={preset} stage={stage} problems={problems} onChange={edit} />}</aside>
+      <aside className="side">{preset && <Inspector preset={preset} stage={stage} problems={problems} onChange={edit} onSet={set} />}</aside>
     </div>
   );
 }

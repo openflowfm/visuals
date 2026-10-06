@@ -174,6 +174,31 @@ fn listen_to(name: Option<String>, left: Option<usize>, right: Option<usize>, ap
     Ok(name)
 }
 
+/// Change one value of the running preset. Returns false when it needs a reload
+/// (a wave or shape turned on or off); the page applies the whole preset then.
+#[tauri::command]
+async fn set_value(owner: engine::runtime::Owner, key: String, value: f64, app: State<'_, App>) -> Result<bool, String> {
+    let commands = app.bench.lock().unwrap().as_ref().ok_or("the bench has not started")?.commands.clone();
+    let (tx, rx) = std::sync::mpsc::channel();
+    commands.send(bench::Cmd::Set(owner, key, value, tx)).map_err(|e| e.to_string())?;
+    rx.recv().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_previews(on: bool, app: State<App>) {
+    if let Some(b) = app.bench.lock().unwrap().as_ref() {
+        let _ = b.commands.send(bench::Cmd::Previews(on));
+    }
+}
+
+/// The latest stage pictures as raw bytes: `engine::render::PREVIEWS` in order,
+/// each `PREVIEW` sized RGBA. Empty until there are some.
+#[tauri::command]
+fn previews(app: State<App>) -> tauri::ipc::Response {
+    let bytes = app.bench.lock().unwrap().as_ref().and_then(|b| b.previews.lock().unwrap().clone()).unwrap_or_default();
+    tauri::ipc::Response::new(bytes)
+}
+
 #[tauri::command]
 fn stats(app: State<App>) -> bench::Stats {
     app.bench.lock().unwrap().as_ref().map(|b| *b.stats.lock().unwrap()).unwrap_or_default()
@@ -194,10 +219,22 @@ fn main() {
                 let state = app.state::<App>();
                 let thread = bench::start(instance, surface, (1, 1), state.ring.clone());
                 *state.bench.lock().unwrap() = Some(thread);
+                // Development: write what the window shows to a PNG, after a pause.
+                if let Some(path) = std::env::var_os("VISUALS_CAPTURE").map(PathBuf::from) {
+                    let after = std::env::var("VISUALS_CAPTURE_AFTER").ok().and_then(|s| s.parse().ok()).unwrap_or(8.0);
+                    let handle = app.handle().clone();
+                    std::thread::spawn(move || {
+                        std::thread::sleep(std::time::Duration::from_secs_f64(after));
+                        let _ = handle.run_on_main_thread(move || match bench::view::capture(&path) {
+                            Ok(()) => eprintln!("captured the window to {}", path.display()),
+                            Err(e) => eprintln!("capture failed: {e}"),
+                        });
+                    });
+                }
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![presets, open, apply, place_bench, inputs, listen_to, stats])
+        .invoke_handler(tauri::generate_handler![presets, open, apply, set_value, set_previews, previews, place_bench, inputs, listen_to, stats])
         .run(tauri::generate_context!())
         .expect("visual[flow]");
 }

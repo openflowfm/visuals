@@ -1,4 +1,5 @@
-import type { Preset, Problem } from './api.ts';
+import type { Owner, Preset, Problem } from './api.ts';
+import { claimed, read, specsOf, spelling, type Spec } from './params.ts';
 
 /**
  * A preset as a graph: one node per stage of MilkDrop's pipeline, holding that
@@ -21,12 +22,10 @@ export interface Stage {
   outlets: string[];
   /** Code blocks: `field` is the preset field (`init`, `waves.2.point`…). */
   code: Code[];
-  /** Whether the stage's numbers live in `values` (top level) or a wave/shape slot. */
-  values?: 'base' | `waves.${number}` | `shapes.${number}`;
-  /** Which top-level values this stage shows, when `values` is `base`. */
-  keys?: RegExp;
-  /** A wave or shape slot, which can be off. */
-  slot?: { list: 'waves' | 'shapes'; index: number };
+  /** Whose values this stage's settings are. */
+  owner?: Owner;
+  /** Which of the engine's stage pictures this node shows (`PREVIEWS` order). */
+  picture?: number;
 }
 
 export interface Cord {
@@ -35,44 +34,25 @@ export interface Cord {
   kind?: string;
 }
 
-const COL = 270;
-const ROW = 92;
-
-/** Which top-level settings belong to which stage, by the names `.milk` files use. */
-const KEYS: Record<string, RegExp> = {
-  wave: /^(nwavemode|badditivewaves|bwavedots|bwavethick|bmodwavealphabyvolume|bmaximizewavecolor|fwave|fmodwavealpha|wave_|modwavealpha)/i,
-  motion: /^(nmotionvectors|mv_)/i,
-  border: /^(ob_|ib_)/i,
-  vertex: /^(zoom|rot|warp|cx|cy|dx|dy|sx|sy|fwarpanimspeed|fwarpscale|fzoomexponent)$/i,
-  feedback: /^(fdecay|btexwrap|bdarkencenter)$/i,
-  blur: /^b[123][nx]$/i,
-  comp: /^(fvideoecho|nvideoechoorientation|fgammaadj|bbrighten|bdarken$|bsolarize|binvert|fshader|bredbluestereo)/i,
-};
-
-const claimed = (key: string) => Object.values(KEYS).some((r) => r.test(key));
+/** Column pitch: a face is 216 wide. The picture chain runs along the top row so it
+ * is on screen when a preset opens; what draws into the feedback stacks below. */
+const COL = 240;
+const DRAWN = 330;
+const BASE: Owner = { list: 'base' };
 
 export const STAGES: Stage[] = [
-  { id: 'audio', label: 'audio in', kind: 'source', x: 0, y: ROW * 1, inlets: [], outlets: ['bass/mid/treb'], code: [] },
-  { id: 'init', label: 'per-frame init', kind: 'equations', x: COL, y: 0, inlets: [], outlets: ['q'], code: [{ field: 'init', label: 'per_frame_init', lang: 'eel' }] },
-  {
-    id: 'frame',
-    label: 'per-frame',
-    kind: 'equations',
-    x: COL,
-    y: ROW * 1.6,
-    inlets: ['audio', 'q'],
-    outlets: ['q', 'vars'],
-    code: [{ field: 'frame', label: 'per_frame', lang: 'eel' }],
-    values: 'base',
-    keys: { test: (k: string) => !claimed(k) } as RegExp,
-  },
+  { id: 'audio', label: 'audio in', kind: 'source', x: 0, y: 0, inlets: [], outlets: ['bass/mid/treb'], code: [] },
+  { id: 'init', label: 'per-frame init', kind: 'equations', x: 0, y: 90, inlets: [], outlets: ['q'], code: [{ field: 'init', label: 'per_frame_init', lang: 'eel' }] },
+  { id: 'frame', label: 'per-frame', kind: 'equations', x: 0, y: 250, inlets: ['audio', 'q'], outlets: ['q', 'vars'], code: [{ field: 'frame', label: 'per_frame', lang: 'eel' }], owner: BASE },
+  { id: 'vertex', label: 'warp mesh', kind: 'equations', x: COL, y: 0, inlets: ['vars'], outlets: ['uv'], code: [{ field: 'vertex', label: 'per_vertex', lang: 'eel' }], owner: BASE },
+  { id: 'wave', label: 'waveform', kind: 'picture', x: COL * 2, y: DRAWN, inlets: ['vars'], outlets: ['draw'], code: [], owner: BASE },
   ...[0, 1, 2, 3].map(
     (i): Stage => ({
       id: `wave${i}`,
       label: `custom wave ${i + 1}`,
       kind: 'picture',
       x: COL * 2,
-      y: ROW * (i + 2.4),
+      y: DRAWN + 300 + i * 290,
       inlets: ['q'],
       outlets: ['draw'],
       code: [
@@ -80,8 +60,7 @@ export const STAGES: Stage[] = [
         { field: `waves.${i}.frame`, label: 'per_frame', lang: 'eel' },
         { field: `waves.${i}.point`, label: 'per_point', lang: 'eel' },
       ],
-      values: `waves.${i}`,
-      slot: { list: 'waves', index: i },
+      owner: { list: 'waves', index: i },
     }),
   ),
   ...[0, 1, 2, 3].map(
@@ -90,26 +69,23 @@ export const STAGES: Stage[] = [
       label: `custom shape ${i + 1}`,
       kind: 'picture',
       x: COL * 2,
-      y: ROW * (i + 6.4),
+      y: DRAWN + 1460 + i * 290,
       inlets: ['q'],
       outlets: ['draw'],
       code: [
         { field: `shapes.${i}.init`, label: 'init', lang: 'eel' },
         { field: `shapes.${i}.frame`, label: 'per_frame', lang: 'eel' },
       ],
-      values: `shapes.${i}`,
-      slot: { list: 'shapes', index: i },
+      owner: { list: 'shapes', index: i },
     }),
   ),
-  { id: 'vertex', label: 'warp mesh', kind: 'equations', x: COL * 2, y: 0, inlets: ['vars'], outlets: ['uv'], code: [{ field: 'vertex', label: 'per_vertex', lang: 'eel' }], values: 'base', keys: KEYS.vertex },
-  { id: 'wave', label: 'waveform', kind: 'picture', x: COL * 2, y: ROW * 1.2, inlets: ['vars'], outlets: ['draw'], code: [], values: 'base', keys: KEYS.wave },
-  { id: 'motion', label: 'motion vectors', kind: 'picture', x: COL * 2, y: ROW * 10.4, inlets: ['vars'], outlets: ['draw'], code: [], values: 'base', keys: KEYS.motion },
-  { id: 'border', label: 'borders', kind: 'picture', x: COL * 2, y: ROW * 11.4, inlets: ['vars'], outlets: ['draw'], code: [], values: 'base', keys: KEYS.border },
-  { id: 'warp', label: 'warp shader', kind: 'shader', x: COL * 3, y: 0, inlets: ['uv', 'q', 'last frame'], outlets: ['picture'], code: [{ field: 'warp', label: 'warp', lang: 'hlsl' }] },
-  { id: 'feedback', label: 'feedback', kind: 'picture', x: COL * 4, y: ROW * 1.5, inlets: ['picture', 'draw'], outlets: ['frame'], code: [], values: 'base', keys: KEYS.feedback },
-  { id: 'blur', label: 'blur', kind: 'picture', x: COL * 5, y: ROW * 3, inlets: ['frame'], outlets: ['blur1-3'], code: [], values: 'base', keys: KEYS.blur },
-  { id: 'comp', label: 'comp shader', kind: 'shader', x: COL * 6, y: ROW * 1.5, inlets: ['frame', 'blur', 'q'], outlets: ['picture'], code: [{ field: 'comp', label: 'comp', lang: 'hlsl' }], values: 'base', keys: KEYS.comp },
-  { id: 'out', label: 'out', kind: 'out', x: COL * 7, y: ROW * 1.5, inlets: ['picture'], outlets: [], code: [] },
+  { id: 'motion', label: 'motion vectors', kind: 'picture', x: COL * 2, y: DRAWN + 2620, inlets: ['vars'], outlets: ['draw'], code: [], owner: BASE },
+  { id: 'border', label: 'borders', kind: 'picture', x: COL * 2, y: DRAWN + 2900, inlets: ['vars'], outlets: ['draw'], code: [], owner: BASE },
+  { id: 'warp', label: 'warp shader', kind: 'shader', x: COL * 2, y: 0, inlets: ['uv', 'q', 'last frame'], outlets: ['picture'], code: [{ field: 'warp', label: 'warp', lang: 'hlsl' }], picture: 0 },
+  { id: 'blur', label: 'blur', kind: 'picture', x: COL * 3, y: 0, inlets: ['picture'], outlets: ['blur1-3'], code: [], owner: BASE, picture: 2 },
+  { id: 'feedback', label: 'feedback', kind: 'picture', x: COL * 3, y: DRAWN + 120, inlets: ['picture', 'draw'], outlets: ['frame'], code: [], owner: BASE, picture: 1 },
+  { id: 'comp', label: 'comp shader', kind: 'shader', x: COL * 4, y: 0, inlets: ['frame', 'blur', 'q'], outlets: ['picture'], code: [{ field: 'comp', label: 'comp', lang: 'hlsl' }], owner: BASE, picture: 3 },
+  { id: 'out', label: 'out', kind: 'out', x: COL * 5, y: 0, inlets: ['picture'], outlets: [], code: [], picture: 3 },
 ];
 
 export const port = (stage: string, name: string) => `${stage}:${name}`;
@@ -126,9 +102,9 @@ export function cords(): Cord[] {
     c('frame', 'q', 'warp', 'q', 'q'),
     c('frame', 'q', 'comp', 'q', 'q'),
     c('vertex', 'uv', 'warp', 'uv'),
+    c('warp', 'picture', 'blur', 'picture', 'picture'),
     c('warp', 'picture', 'feedback', 'picture', 'picture'),
     c('feedback', 'frame', 'warp', 'last frame', 'picture'),
-    c('feedback', 'frame', 'blur', 'frame', 'picture'),
     c('feedback', 'frame', 'comp', 'frame', 'picture'),
     c('blur', 'blur1-3', 'comp', 'blur', 'picture'),
     c('comp', 'picture', 'out', 'picture', 'picture'),
@@ -158,26 +134,41 @@ export function setField(p: Preset, field: string, value: unknown): Preset {
   return next;
 }
 
-/** The numbers a stage shows, by the name the file uses. */
-export function valuesOf(p: Preset, s: Stage): [string, number][] {
-  if (!s.values) return [];
-  if (s.values === 'base') return Object.entries(p.values).filter(([k]) => s.keys?.test(k));
-  const [list, i] = s.values.split('.') as ['waves' | 'shapes', string];
-  return Object.entries(p[list][Number(i)].values);
+/** The values object an owner's settings live in. */
+export function valuesFor(p: Preset, owner: Owner): Record<string, number> {
+  return owner.list === 'base' ? p.values : p[owner.list][owner.index].values;
 }
 
-export function setValue(p: Preset, s: Stage, key: string, value: number): Preset {
-  if (s.values === 'base') return setField(p, 'values', { ...p.values, [key]: value });
-  const [list, i] = s.values!.split('.') as ['waves' | 'shapes', string];
-  return setField(p, `${list}.${i}.values`, { ...p[list][Number(i)].values, [key]: value });
+/** A copy of `p` with one setting changed; returns the key as written. */
+export function setValue(p: Preset, owner: Owner, key: string, value: number): [Preset, string] {
+  const values = valuesFor(p, owner);
+  const k = spelling(values, key);
+  const field = owner.list === 'base' ? 'values' : `${owner.list}.${owner.index}.values`;
+  return [setField(p, field, { ...values, [k]: value }), k];
+}
+
+/** A stage's settings, with their current values. */
+export function settingsOf(p: Preset, s: Stage): [Spec, number][] {
+  if (!s.owner) return [];
+  const values = valuesFor(p, s.owner);
+  return specsOf(s.id).map((spec) => [spec, read(values, spec)]);
+}
+
+/** The file's values no stage claims — version numbers and the like — shown on per-frame. */
+export function otherValues(p: Preset): [string, number][] {
+  return Object.entries(p.values).filter(([k]) => !claimed.has(k.toLowerCase()));
 }
 
 /** Whether a stage does anything in this preset. */
 export function isOn(p: Preset, s: Stage): boolean {
-  if (s.slot) return (p[s.slot.list][s.slot.index].values.enabled ?? 0) !== 0;
-  if (s.id === 'motion') return (p.values.bMotionVectorsOn ?? 1) !== 0 && valuesOf(p, s).some(([k, v]) => /^mv_a$/i.test(k) && v > 0);
-  if (s.id === 'warp' || s.id === 'comp') return p[s.id].trim() !== '';
+  if (s.owner && s.owner.list !== 'base') return (valuesFor(p, s.owner).enabled ?? 0) !== 0;
   return true;
+}
+
+/** Whether either shader reads a blur, which is when the engine draws one
+ * (`Renderer::load`, Butterchurn's `getHighestBlur`). */
+export function usesBlur(p: Preset): boolean {
+  return /blur[123]|GetBlur[123]/.test(p.warp + p.comp);
 }
 
 /** The problems that belong to a stage. */
@@ -185,7 +176,8 @@ export function problemsOf(problems: Problem[], s: Stage): Problem[] {
   return problems.filter((p) => p.stage === s.id || p.stage.split('.')[0] === s.id);
 }
 
-/** Code lines in a stage, for its face. */
-export function linesOf(p: Preset, s: Stage): number {
-  return s.code.reduce((n, c) => n + getField(p, c.field).split('\n').filter((l) => l.trim()).length, 0);
+/** The first lines of a stage's code, for its face. */
+export function codeLines(p: Preset, s: Stage, n: number): string[] {
+  const lines = s.code.flatMap((c) => getField(p, c.field).split('\n').map((l) => l.trim()).filter(Boolean));
+  return lines.length > n ? [...lines.slice(0, n - 1), `… ${lines.length - n + 1} more`] : lines;
 }

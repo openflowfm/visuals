@@ -106,7 +106,15 @@ pub struct Renderer {
     pub clock: Clock,
     uvs: Vec<[f32; 2]>,
     rng: crate::eel::Memory,
+    /// Small copies of each stage's picture, when an editor wants them.
+    previews: Option<Vec<Target>>,
 }
+
+/// The size of a stage's preview picture.
+pub const PREVIEW: (u32, u32) = (192, 108);
+/// The stages that have a picture, in the order [`Renderer::read_previews`] packs them:
+/// the warp's output, the feedback after waves and shapes, blur 1, and comp.
+pub const PREVIEWS: [&str; 4] = ["warp", "feedback", "blur", "comp"];
 
 const WARP_VS: &str = "
 struct Out { @builtin(position) pos: vec4f, @location(0) uv: vec2f, @location(1) uv_orig: vec2f, @location(2) color: vec4f }
@@ -378,6 +386,7 @@ impl Renderer {
             clock: Clock::default(),
             uvs: Vec::new(),
             rng,
+            previews: None,
             size,
             device,
             queue,
@@ -766,8 +775,13 @@ impl Renderer {
             pass.set_index_buffer(self.warp_indices.0.slice(..), wgpu::IndexFormat::Uint32);
             pass.draw_indexed(0..self.warp_indices.1, 0, 0..1);
         }
+        self.preview(&mut encoder, 0, &self.feedback[self.current].view);
         self.blur(&mut encoder);
+        if self.blur_passes > 0 {
+            self.preview(&mut encoder, 2, &self.blur[0].1.view);
+        }
         self.draw(&mut encoder, &frame, wrap, audio);
+        self.preview(&mut encoder, 1, &self.feedback[self.current].view);
         // Comp reads this frame's warp output.
         let comp = self.comp_stage.as_ref().unwrap();
         let comp_group = self.bind_group(comp, &self.feedback[self.current].view, wrap);
@@ -780,6 +794,7 @@ impl Renderer {
             pass.set_index_buffer(self.comp_indices.0.slice(..), wgpu::IndexFormat::Uint32);
             pass.draw_indexed(0..self.comp_indices.1, 0, 0..1);
         }
+        self.preview(&mut encoder, 3, &self.comp.view);
         self.queue.submit([encoder.finish()]);
     }
 
@@ -953,8 +968,68 @@ impl Renderer {
         }
     }
 
-    /// Draw the finished picture into `view`, a window's surface, scaled to fit.
-    pub fn present(&mut self, view: &wgpu::TextureView, format: wgpu::TextureFormat) {
+    /// Change one of the running preset's values without reloading it. Returns
+    /// false when the change needs a reload (a wave or shape turned on or off).
+    pub fn set_value(&mut self, owner: crate::runtime::Owner, key: &str, value: f64) -> bool {
+        self.runner.as_mut().is_some_and(|r| r.set_value(owner, key, value))
+    }
+
+    /// Keep small pictures of each stage, for [`Renderer::read_previews`].
+    pub fn set_previews(&mut self, on: bool) {
+        if on && self.previews.is_none() {
+            self.blit_pipeline(FORMAT);
+            self.previews = Some(PREVIEWS.iter().map(|name| Target::new(&self.device, PREVIEW, name)).collect());
+        } else if !on {
+            self.previews = None;
+        }
+    }
+
+    fn preview(&self, encoder: &mut wgpu::CommandEncoder, which: usize, source: &wgpu::TextureView) {
+        if let Some(previews) = &self.previews {
+            self.blit(encoder, source, &previews[which].view, FORMAT);
+        }
+    }
+
+    /// The stage pictures, RGBA rows top to bottom, one after another in
+    /// [`PREVIEWS`] order. Waits for the GPU.
+    pub fn read_previews(&self) -> Option<Vec<u8>> {
+        let previews = self.previews.as_ref()?;
+        let (w, h) = PREVIEW;
+        let row = (w * 4).div_ceil(256) * 256;
+        let each = (row * h) as u64;
+        let staging = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("previews"),
+            size: each * previews.len() as u64,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+        for (i, p) in previews.iter().enumerate() {
+            encoder.copy_texture_to_buffer(
+                p.texture.as_image_copy(),
+                wgpu::TexelCopyBufferInfo {
+                    buffer: &staging,
+                    layout: wgpu::TexelCopyBufferLayout { offset: each * i as u64, bytes_per_row: Some(row), rows_per_image: Some(h) },
+                },
+                wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+            );
+        }
+        self.queue.submit([encoder.finish()]);
+        let slice = staging.slice(..);
+        slice.map_async(wgpu::MapMode::Read, |_| {});
+        self.device.poll(wgpu::PollType::wait_indefinitely()).ok();
+        let data = slice.get_mapped_range().ok()?;
+        let mut out = Vec::with_capacity((w * h * 4) as usize * previews.len());
+        for i in 0..previews.len() {
+            for y in 0..h {
+                let at = (each * i as u64) as usize + (y * row) as usize;
+                out.extend_from_slice(&data[at..at + (w * 4) as usize]);
+            }
+        }
+        Some(out)
+    }
+
+    fn blit_pipeline(&mut self, format: wgpu::TextureFormat) {
         if !self.blits.contains_key(&format) {
             let pipeline = self.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("blit"),
@@ -974,22 +1049,31 @@ impl Renderer {
             });
             self.blits.insert(format, pipeline);
         }
+    }
+
+    /// Draw `source` scaled into `target`, picture side up. The pipeline for
+    /// `format` must already exist ([`Renderer::blit_pipeline`]).
+    fn blit(&self, encoder: &mut wgpu::CommandEncoder, source: &wgpu::TextureView, target: &wgpu::TextureView, format: wgpu::TextureFormat) {
         let pipeline = &self.blits[&format];
         let group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &pipeline.get_bind_group_layout(0),
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&self.comp.view) },
+                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(source) },
                 wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&self.samplers["linear_clamp"]) },
             ],
         });
+        let mut pass = begin(encoder, target, true);
+        pass.set_pipeline(pipeline);
+        pass.set_bind_group(0, &group, &[]);
+        pass.draw(0..4, 0..1);
+    }
+
+    /// Draw the finished picture into `view`, a window's surface, scaled to fit.
+    pub fn present(&mut self, view: &wgpu::TextureView, format: wgpu::TextureFormat) {
+        self.blit_pipeline(format);
         let mut encoder = self.device.create_command_encoder(&Default::default());
-        {
-            let mut pass = begin(&mut encoder, view, true);
-            pass.set_pipeline(pipeline);
-            pass.set_bind_group(0, &group, &[]);
-            pass.draw(0..4, 0..1);
-        }
+        self.blit(&mut encoder, &self.comp.view, view, format);
         self.queue.submit([encoder.finish()]);
     }
 
@@ -1071,5 +1155,32 @@ mod tests {
         let pixels = r.read_back();
         assert_eq!(pixels.len(), 256 * 192 * 4);
         assert!(pixels.chunks(4).all(|p| p[3] == 255), "comp writes opaque pixels");
+    }
+
+    #[test]
+    fn stage_previews_and_live_values() {
+        let Some((device, queue)) = headless() else { return };
+        let mut r = Renderer::new(device, queue, 256, 192);
+        let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../test/fixtures/milk/Fixture - Spiral Test.milk")).unwrap();
+        r.load(&text, 1).unwrap();
+        assert!(r.read_previews().is_none(), "off until asked for");
+        r.set_previews(true);
+        let mut audio = Audio::default();
+        let tone: Vec<f32> = (0..1024).map(|i| (i as f32 * 0.05).sin() * 0.8).collect();
+        for _ in 0..30 {
+            audio.update(&tone, &tone);
+            r.render(&mut audio, 1.0 / 60.0);
+        }
+        let pixels = r.read_previews().unwrap();
+        let each = (PREVIEW.0 * PREVIEW.1 * 4) as usize;
+        assert_eq!(pixels.len(), each * PREVIEWS.len());
+        let comp = &pixels[each * 3..];
+        assert!(comp.chunks(4).any(|p| p[0] > 0 || p[1] > 0 || p[2] > 0), "comp's preview has a picture");
+
+        assert!(r.set_value(crate::runtime::Owner::Base, "fDecay", 0.5));
+        r.render(&mut audio, 1.0 / 60.0);
+        assert_eq!(r.runner.as_ref().unwrap().base_value("decay"), 0.5);
+        assert_eq!(r.runner.as_ref().unwrap().preset.values["fDecay"], 0.5);
+        assert!(!r.set_value(crate::runtime::Owner::Waves(0), "enabled", 1.0), "turning a wave on needs a reload");
     }
 }

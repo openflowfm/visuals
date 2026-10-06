@@ -6,3 +6,8 @@ resolver = "3"
 # glslang and naga run thousands of shaders in the pack-wide check, and wgpu draws
 # every frame of the app; debug builds of them make both crawl.
 opt-level = 3
+
+# `*` is only the dependencies. The engine runs every preset's equations each
+# frame, so the app's dev build needs it optimised too.
+[profile.dev.package.visuals-engine]
+opt-level = 3

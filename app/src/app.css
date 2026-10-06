@@ -14,7 +14,7 @@ html, body, #root {
 
 .app {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr) 440px;
+  grid-template-columns: 220px minmax(0, 1fr) 380px;
   grid-template-rows: 36px minmax(0, 1fr);
   height: 100%;
 }
@@ -67,18 +67,20 @@ main {
   min-height: 0;
 }
 
-/* The hole. Only the bench itself is unpainted; the bars around a 16:9 picture
-   in a wider row are painted black so the page never shows the window behind. */
+/* The hole. Nothing behind the bench may paint — a background on the row would
+   show through it instead of the picture — so the bars beside a 16:9 picture in
+   a wider row are the bench's own shadow, clipped to the row. */
 .bench-row {
   display: flex;
   justify-content: center;
-  background: #000;
+  overflow: hidden;
   border-bottom: 1px solid var(--bd3);
 }
 .bench {
   aspect-ratio: 16 / 9;
-  height: min(52vh, calc((100vw - 700px) * 9 / 16));
+  height: min(40vh, calc((100vw - 700px) * 9 / 16));
   background: transparent;
+  box-shadow: 0 0 0 100vmax #000;
 }
 
 .graph {
@@ -88,15 +90,40 @@ main {
 }
 .graph > * { position: absolute; inset: 0; }
 
-.stage .wdg-device { min-width: 170px; }
+.stage .wdg-device { width: 216px; }
 .stage[data-off] { opacity: 0.45; }
+.stage-screen { position: relative; }
+.stage-screen[data-idle]::after {
+  content: attr(data-idle);
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--caption);
+  background: #000;
+}
+.stage-picture { display: block; width: 100%; aspect-ratio: 16 / 9; background: #000; }
+.stage-code {
+  margin: 0;
+  padding: 3px 4px;
+  width: 100%;
+  max-height: 64px;
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: 9px;
+  line-height: 1.3;
+  color: var(--caption);
+  background: var(--surface-sunken, #101012);
+  white-space: pre;
+  text-overflow: ellipsis;
+  cursor: text;
+}
 .stage[data-kind='equations'] .wdg-device-head { box-shadow: inset 3px 0 0 var(--blue); }
 .stage[data-kind='shader'] .wdg-device-head { box-shadow: inset 3px 0 0 var(--amber); }
 .stage[data-kind='picture'] .wdg-device-head { box-shadow: inset 3px 0 0 var(--green); }
 .stage[data-kind='source'] .wdg-device-head,
 .stage[data-kind='out'] .wdg-device-head { box-shadow: inset 3px 0 0 var(--fg); }
 .stage[data-problem] .wdg-device { border-color: var(--red); }
-.stage-face { display: flex; gap: 8px; padding: 4px 6px; color: var(--caption); min-height: 20px; }
 .stage-issue { color: var(--red); }
 
 .side {

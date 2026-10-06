@@ -60,11 +60,24 @@ pub const SHAPE_DEFAULTS: &[(&str, f64)] = &[
 pub fn base_values(raw: &BTreeMap<String, f64>, defaults: &[(&str, f64)]) -> BTreeMap<String, f64> {
     let mut out: BTreeMap<String, f64> = defaults.iter().map(|(k, v)| (k.to_string(), *v)).collect();
     for (key, value) in raw {
-        let lower = key.to_ascii_lowercase();
-        let name = NAMES.iter().find(|(from, _)| *from == lower).map_or(lower.clone(), |(_, to)| to.to_string());
-        out.insert(name, *value);
+        out.insert(equation_name(key), *value);
     }
     out
+}
+
+/// The name equations use for a `.milk` key: `fDecay` is `decay`.
+pub fn equation_name(key: &str) -> String {
+    let lower = key.to_ascii_lowercase();
+    NAMES.iter().find(|(from, _)| *from == lower).map_or(lower, |(_, to)| to.to_string())
+}
+
+/// Where a value lives: the preset's own, or one custom wave's or shape's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase", tag = "list", content = "index")]
+pub enum Owner {
+    Base,
+    Waves(usize),
+    Shapes(usize),
 }
 
 const GLOBALS: &[&str] = &[
@@ -323,6 +336,37 @@ impl Runner {
         self.symbols.get(name).map_or(0.0, |s| self.frame_vars[s])
     }
 
+    /// Change one of the preset's values while it runs, as if the file had said
+    /// it: equations keep their state, and the next frame starts from it.
+    /// Returns false when the change needs a reload — turning a wave or shape on
+    /// or off, which builds or drops its equations.
+    pub fn set_value(&mut self, owner: Owner, key: &str, value: f64) -> bool {
+        let name = equation_name(key);
+        match owner {
+            Owner::Base => {
+                self.preset.values.insert(key.to_owned(), value);
+                if let Some(s) = self.symbols.get(&name) {
+                    self.base[s] = value;
+                }
+                true
+            }
+            Owner::Waves(i) | Owner::Shapes(i) => {
+                let (values, scope) = match owner {
+                    Owner::Waves(_) => (&mut self.preset.waves[i].values, &mut self.waves[i]),
+                    _ => (&mut self.preset.shapes[i].values, &mut self.shapes[i]),
+                };
+                values.insert(key.to_owned(), value);
+                if name == "enabled" {
+                    return false;
+                }
+                if let Some(scope) = scope {
+                    scope.set_value(&name, value);
+                }
+                true
+            }
+        }
+    }
+
     /// A value as the preset set it, before any equation — Butterchurn's `mdVS`.
     pub fn base_value(&self, name: &str) -> f64 {
         self.symbols.get(name).map_or(0.0, |s| self.base[s])
@@ -516,6 +560,18 @@ impl Scope {
             vars[s] = regs[i];
         }
         vars
+    }
+
+    /// Change a base value while it runs (`name` as equations spell it).
+    pub fn set_value(&mut self, name: &str, value: f64) {
+        self.values.insert(name.to_owned(), value);
+        if let Some(s) = self.symbols.get(name) {
+            self.base[s] = value;
+            match self.base_value_slots.iter_mut().find(|(slot, _)| *slot == s) {
+                Some(entry) => entry.1 = value,
+                None => self.base_value_slots.push((s, value)),
+            }
+        }
     }
 
     /// Run the frame equations again on `vars`, as each shape instance does.
