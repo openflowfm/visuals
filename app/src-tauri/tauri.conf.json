@@ -5,7 +5,6 @@
   "identifier": "fm.openflow.visuals",
   "build": {
     "frontendDist": "../../dist-app",
-    "devUrl": "http://127.0.0.1:1430",
     "beforeDevCommand": "npm --prefix .. run app:ui",
     "beforeBuildCommand": "npm --prefix .. run app:build-ui"
   },

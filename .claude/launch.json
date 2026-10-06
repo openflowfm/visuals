@@ -5,7 +5,8 @@
       "name": "app",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "app"],
-      "port": 1430
+      "port": 1430,
+      "autoPort": true
     }
   ]
 }

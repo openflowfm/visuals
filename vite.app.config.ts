@@ -7,7 +7,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 
 // The editor page of the Tauri app (`app/`). Its own build, because it shares
 // nothing with the Electron renderer it replaces but React and the widgets.
-// The port is `app/src-tauri/tauri.conf.json`'s `devUrl`.
+// No fixed port: `npm run app` (or the launcher, with `autoPort`) picks a free one,
+// hands it here as `PORT` and to Tauri as its `devUrl`. Without one, the OS picks.
 export default defineConfig({
   root: path.resolve(here, 'app'),
   plugins: [react()],
@@ -20,7 +21,8 @@ export default defineConfig({
   },
   server: {
     host: '127.0.0.1',
-    port: 1430,
-    strictPort: true,
+    // Strict, because Tauri was told this port before vite started.
+    port: Number(process.env.PORT) || 0,
+    strictPort: Boolean(process.env.PORT),
   },
 });

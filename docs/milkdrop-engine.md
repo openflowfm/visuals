@@ -45,7 +45,7 @@ cargo run --release --bin explain -- preset.milk comp   # why one shader does no
 ### The editor app
 
 ```sh
-npm run app          # cargo tauri dev in app/src-tauri; starts the page's vite on :1430
+npm run app          # cargo tauri dev in app/src-tauri; the page's vite on $PORT, or a free port
 ```
 
 `app/` is the Tauri shell. The page (`app/src`, React and the widgets' `Graph`) is the
