@@ -9,7 +9,9 @@
 //! What the renderer can rely on in a translated module:
 //!
 //! - one entry point, `_milkdrop_main`, a fragment shader returning the colour;
-//! - inputs, in order: `uv`, `uv_orig`, `rad`, `ang`, and for comp `hue_shader`;
+//! - inputs at locations 0.. : for warp `uv`, `uv_orig` and a colour the output
+//!   is multiplied by; for comp the mesh position and a colour (`hue_shader` and
+//!   the output alpha) — `rad`, `ang` and comp's `uv` are derived per pixel;
 //! - MilkDrop's uniforms in one buffer, each named `_u_<name>` (`_u_time`, `_u__qa`…);
 //! - each texture as `<name>_tex` with a sampler `<name>_smp` (`sampler_main_tex`).
 
@@ -55,7 +57,31 @@ const UNIFORMS: &[(&str, &str)] = &[
     ("float4", "_c5"), ("float4", "_c6"),
     ("float", "blur1_min"), ("float", "blur1_max"), ("float", "blur2_min"),
     ("float", "blur2_max"), ("float", "blur3_min"), ("float", "blur3_max"),
+    // Only MilkDrop's default shaders read these, under names no preset uses:
+    // _d0 = (decay, gammaadj, echo_zoom, echo_alpha),
+    // _d1 = (echo_orient, fshader, brighten, darken), _d2 = (solarize, invert, 0, 0).
+    ("float4", "_d0"), ("float4", "_d1"), ("float4", "_d2"),
 ];
+
+/// Butterchurn's warp shader when a preset has none.
+pub const DEFAULT_WARP: &str = "shader_body { ret = tex2D(sampler_main, uv).xyz * _d0.x; }";
+
+/// Butterchurn's comp shader when a preset has none: video echo, gamma, the hue
+/// shader, and the four output switches.
+pub const DEFAULT_COMP: &str = "shader_body {
+  float orient_horiz = fmod(_d1.x, 2.0);
+  float orient_x = (orient_horiz != 0.0) ? -1.0 : 1.0;
+  float orient_y = (_d1.x >= 2.0) ? -1.0 : 1.0;
+  float2 uv_echo = ((uv - 0.5) * (1.0 / _d0.z) * float2(orient_x, orient_y)) + 0.5;
+  ret = lerp(tex2D(sampler_main, uv).xyz, tex2D(sampler_main, uv_echo).xyz, _d0.w);
+  ret *= _d0.y;
+  if (_d1.y >= 1.0) { ret *= hue_shader; }
+  else if (_d1.y > 0.001) { ret *= (1.0 - _d1.y) + (_d1.y * hue_shader); }
+  if (_d1.z != 0) ret = sqrt(ret);
+  if (_d1.w != 0) ret = ret*ret;
+  if (_d2.x != 0) ret = ret * (1.0 - ret) * 4.0;
+  if (_d2.y != 0) ret = 1.0 - ret;
+}";
 
 /// MilkDrop's random rotation matrices, `float4x3` in its preamble.
 const ROTATIONS: &[&str] = &[
@@ -438,12 +464,24 @@ pub fn hlsl(kind: Kind, text: &str) -> Result<Option<String>, Error> {
     let tidy = |code: &str| truncating(&grouped_initializers(&negatable(&no_doubles(&split_samplers(code)))));
     let head = tidy(&fix_head(&drop_sampler_states(&text[..at])));
     let body = tidy(body_block(&text[at + "shader_body".len()..]));
-    let inputs = match kind {
-        Kind::Warp => "float2 uv : TEXCOORD0, float2 uv_orig : TEXCOORD1, float rad : TEXCOORD2, float ang : TEXCOORD3",
-        Kind::Comp => "float2 uv : TEXCOORD0, float2 uv_orig : TEXCOORD1, float rad : TEXCOORD2, float ang : TEXCOORD3, float3 hue_shader : TEXCOORD4",
+    // As Butterchurn's wrappers: the warp mesh supplies `uv` and `uv_orig`; the
+    // comp mesh supplies its position and a colour, and `uv` is flipped from it.
+    // `rad` and `ang` are per pixel, never interpolated.
+    let (inputs, setup, result) = match kind {
+        Kind::Warp => (
+            "float2 uv : TEXCOORD0, float2 uv_orig : TEXCOORD1, float4 _color : TEXCOORD2",
+            "float rad = length(uv_orig - 0.5); float ang = atan2(uv_orig.x - 0.5, uv_orig.y - 0.5);",
+            "float4(ret, 1) * _color",
+        ),
+        Kind::Comp => (
+            "float2 _uv : TEXCOORD0, float4 _color : TEXCOORD1",
+            "float2 uv = float2(_uv.x, 1.0 - _uv.y); float2 uv_orig = uv; \
+             float rad = length(uv - 0.5); float ang = atan2(uv.x - 0.5, uv.y - 0.5); float3 hue_shader = _color.rgb;",
+            "float4(ret, _color.a)",
+        ),
     };
     Ok(Some(format!(
-        "{}{HELPERS}{OVERLOADS}{}{head}\nfloat4 {ENTRY}({inputs}) : SV_Target {{\n  float3 ret = 0;\n  {}\n{body}\n  return float4(ret, 1);\n}}\n",
+        "{}{HELPERS}{OVERLOADS}{}{head}\nfloat4 {ENTRY}({inputs}) : SV_Target {{\n  float3 ret = 0;\n  {}\n  {setup}\n{body}\n  return {result};\n}}\n",
         preamble(),
         declare_textures(&head, &body),
         copy_uniforms(),
@@ -707,6 +745,12 @@ mod tests {
             .unwrap();
         assert!(source.contains("sampler_fw_main_tex.Sample(sampler_fw_main_smp"), "{source}");
         compiles(Kind::Warp, "#define main sampler_fw_main\n#define base01 sampler_pw_rand00\nsampler base01;\nshader_body { ret = tex2D(main, uv).xyz + tex2D(base01, uv).xyz; }");
+    }
+
+    #[test]
+    fn the_default_shaders_compile() {
+        compiles(Kind::Warp, DEFAULT_WARP);
+        compiles(Kind::Comp, DEFAULT_COMP);
     }
 
     #[test]
