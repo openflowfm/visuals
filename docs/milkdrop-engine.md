@@ -79,6 +79,42 @@ engine.
 | comp shader | GPU, full resolution | GPU. The only full-resolution pass that must stay one. |
 | audio analysis (FFT, `bass`/`mid`/`treb`, `_att`) | CPU | CPU, ported exactly — every preset reads it. |
 
+## Measured so far
+
+**Butterchurn at 4K on the target machine** (M1 Max, 32-core GPU; `npm run
+harness:profile`). Measured through Chromium, because Butterchurn is a WebGL engine, so
+the totals are distorted by Chromium's GPU process — its throughput reading is less than
+its own comp pass. The stage shares are the useful part: **comp** is the largest cost
+(~2.8 ms median at 4K), then **blur** (~0.8), then the feedback buffer's **mipmaps**
+(~0.45); presets with many shape instances add up to 9 ms of CPU. No sampled preset came
+near 16.6 ms. The native engine reads Metal's GPU timestamps per pass instead.
+
+**The spike's target is 1080p.** 4K returns once the native engine is measured, with
+the feedback loop below output resolution and an upscaler as the likely route.
+
+**MilkDrop HLSL → SPIR-V → MSL works.** On 400 presets spread across Cream of the Crop
+(662 shaders): glslang's HLSL front end then `naga` produced valid Metal for **635
+(95.9%)**, against roughly one in ten that the Emscripten converter produced unpatched.
+It takes five rewrites before glslang, each of which becomes a unit test in the engine's
+translation module:
+
+1. **MilkDrop's preamble** — its samplers, uniforms, `q1–q32`, `GetBlur1–3`, `lum` —
+   declared the way MilkDrop declared them.
+2. **Uniforms become mutable.** D3DX9 let a shader assign to a uniform; HLSL now does not.
+   The uniforms live in a buffer under other names, with `static` copies under the real
+   ones assigned at the top of `main`. A preset's own top-level variables are made
+   `static` for the same reason.
+3. **Samplers are split.** `naga` does not read DX9's combined `sampler2D`, so each is a
+   `Texture2D` and a `SamplerState`, and `tex2D(s, uv)` becomes `s_tex.Sample(s_smp, uv)`.
+   A preset declaring a sampler the preamble already has is not declared twice.
+4. **Matrices are stored 4×4** in the buffer and cast to MilkDrop's `float4x3`, or the
+   buffer's layout overlaps.
+5. **Bindings are assigned automatically** (`--auto-map-bindings`), since every DX9
+   resource otherwise lands on register 0.
+
+What is left: `double` (to be rewritten as `float`) and a handful of presets with real
+syntax errors, which MilkDrop's compiler tolerated and these do not.
+
 ## The graph is MilkDrop's pipeline
 
 Nodes are MilkDrop's stages, not arithmetic. Equation and shader nodes hold code, kept
