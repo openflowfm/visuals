@@ -200,6 +200,100 @@ pub fn fix_head(head: &str) -> String {
     out
 }
 
+/// Comments out, newlines kept, so later passes see only code and glslang's line
+/// numbers still match. A comment holding a `;` or `{` was splitting declarations.
+pub fn strip_comments(code: &str) -> String {
+    let mut out = String::with_capacity(code.len());
+    let mut chars = code.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '/' && chars.peek() == Some(&'/') {
+            for c in chars.by_ref() {
+                if c == '\n' {
+                    out.push('\n');
+                    break;
+                }
+            }
+        } else if c == '/' && chars.peek() == Some(&'*') {
+            chars.next();
+            let mut last = ' ';
+            for c in chars.by_ref() {
+                if c == '\n' {
+                    out.push('\n');
+                }
+                if last == '*' && c == '/' {
+                    break;
+                }
+                last = c;
+            }
+            out.push(' ');
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// The shader body is the first balanced `{ … }` after `shader_body`. Anything
+/// after it — authors sign their presets there — was never code.
+pub fn body_block(after: &str) -> &str {
+    let Some(open) = after.find('{') else { return after };
+    let mut depth = 0;
+    for (i, c) in after[open..].char_indices() {
+        match c {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return &after[..open + i + 1];
+                }
+            }
+            _ => {}
+        }
+    }
+    after
+}
+
+/// `sampler s = sampler_state { AddressU = WRAP; … };` is Direct3D effect syntax.
+/// The states are dropped — MilkDrop chooses a texture's filtering and wrapping by
+/// its name prefix (`sampler_fw_…`), not by these — leaving `sampler s;`.
+pub fn drop_sampler_states(code: &str) -> String {
+    static STATE: OnceLock<Regex> = OnceLock::new();
+    re(&STATE, r"(?s)=\s*sampler_state\s*\{.*?\}").replace_all(code, "").into_owned()
+}
+
+/// `-(a < b)`: D3D9 treated a comparison as a float, so negating one was fine; HLSL
+/// will not negate a bool. Every `-(…)` becomes `-(1.0*(…))`, which means the same
+/// for numbers and makes a bool a number.
+pub fn negatable(code: &str) -> String {
+    let bytes = code.as_bytes();
+    let mut out = String::with_capacity(code.len() + 16);
+    let mut stack: Vec<bool> = Vec::new();
+    for (i, c) in code.char_indices() {
+        match c {
+            '(' if i > 0 && bytes[i - 1] == b'-' => {
+                out.push_str("(1.0*(");
+                stack.push(true);
+            }
+            '(' => {
+                out.push('(');
+                stack.push(false);
+            }
+            ')' => {
+                out.push(')');
+                if stack.pop() == Some(true) {
+                    out.push(')');
+                }
+            }
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+/// Intrinsics MilkDrop presets call with arguments current HLSL will not take.
+const OVERLOADS: &str = "\
+float normalize(float x) { return x / abs(x); }\n";
+
 /// `double` is a 64-bit float in HLSL now, and Metal has none; MilkDrop's was 32.
 pub fn no_doubles(code: &str) -> String {
     static DOUBLE: OnceLock<Regex> = OnceLock::new();
@@ -212,15 +306,17 @@ pub fn hlsl(kind: Kind, text: &str) -> Result<Option<String>, Error> {
     if text.trim().is_empty() {
         return Ok(None);
     }
+    let text = strip_comments(text);
     let at = text.find("shader_body").ok_or(Error::NoBody)?;
-    let head = no_doubles(&split_samplers(&fix_head(&text[..at])));
-    let body = no_doubles(&split_samplers(&text[at + "shader_body".len()..]));
+    let tidy = |code: &str| negatable(&no_doubles(&split_samplers(code)));
+    let head = tidy(&fix_head(&drop_sampler_states(&text[..at])));
+    let body = tidy(body_block(&text[at + "shader_body".len()..]));
     let inputs = match kind {
         Kind::Warp => "float2 uv : TEXCOORD0, float2 uv_orig : TEXCOORD1, float rad : TEXCOORD2, float ang : TEXCOORD3",
         Kind::Comp => "float2 uv : TEXCOORD0, float2 uv_orig : TEXCOORD1, float rad : TEXCOORD2, float ang : TEXCOORD3, float3 hue_shader : TEXCOORD4",
     };
     Ok(Some(format!(
-        "{}{HELPERS}{head}\nfloat4 main({inputs}) : SV_Target {{\n  float3 ret = 0;\n  {}\n{body}\n  return float4(ret, 1);\n}}\n",
+        "{}{HELPERS}{OVERLOADS}{head}\nfloat4 main({inputs}) : SV_Target {{\n  float3 ret = 0;\n  {}\n{body}\n  return float4(ret, 1);\n}}\n",
         preamble(),
         copy_uniforms(),
     )))
@@ -377,6 +473,36 @@ mod tests {
     fn doubles_become_floats() {
         assert_eq!(no_doubles("double a; double3 b;"), "float a; float3 b;");
         compiles(Kind::Comp, "shader_body { double k = 0.5; ret = k; }");
+    }
+
+    #[test]
+    fn comments_with_semicolons_do_not_hide_declarations() {
+        compiles(Kind::Comp, "// set up; then draw {\nfloat radi; /* a; b */ float anz;\nshader_body { radi = 1; anz = 2; ret = radi * anz; }");
+    }
+
+    #[test]
+    fn text_after_the_body_is_not_code() {
+        compiles(Kind::Comp, "shader_body { ret = 1; }\nwritten by martin\nEND");
+    }
+
+    #[test]
+    fn effect_sampler_states_are_dropped() {
+        compiles(
+            Kind::Comp,
+            "sampler sampler_grad = sampler_state { AddressU = WRAP; AddressV = WRAP; };\nshader_body { ret = tex2D(sampler_grad, uv).xyz; }",
+        );
+    }
+
+    #[test]
+    fn comparisons_can_be_negated() {
+        assert_eq!(negatable("a-(b<c)*d"), "a-(1.0*(b<c))*d");
+        assert_eq!(negatable("f(x)-(y)"), "f(x)-(1.0*(y))");
+        compiles(Kind::Comp, "shader_body { ret = 1; ret-=-(lum(ret)<0.5)*ret*0.2; }");
+    }
+
+    #[test]
+    fn a_scalar_normalizes() {
+        compiles(Kind::Warp, "shader_body { float2 z = uv; uv += 0.5*z*normalize(z.x); ret = GetPixel(uv); }");
     }
 
     #[test]
