@@ -164,6 +164,12 @@ pub fn fix_head(head: &str) -> String {
     let mut depth = 0usize;
     for ch in head.chars() {
         statement.push(ch);
+        // A preprocessor line ends at its newline and is never a declaration.
+        if ch == '\n' && depth == 0 && statement.trim_start().starts_with('#') {
+            out += &statement;
+            statement.clear();
+            continue;
+        }
         match ch {
             '{' => {
                 if depth == 0 {
@@ -290,9 +296,101 @@ pub fn negatable(code: &str) -> String {
     out
 }
 
-/// Intrinsics MilkDrop presets call with arguments current HLSL will not take.
+/// Intrinsics MilkDrop presets call with arguments current HLSL will not take, and
+/// the truncation helpers [`truncating`] wraps assignments in.
 const OVERLOADS: &str = "\
-float normalize(float x) { return x / abs(x); }\n";
+float normalize(float x) { return x / abs(x); }\n\
+float _t1(float x) { return x; } float _t1(float2 x) { return x.x; } float _t1(float3 x) { return x.x; } float _t1(float4 x) { return x.x; }\n\
+float _t1(int x) { return x; } float _t1(bool x) { return x; }\n\
+float2 _t2(float x) { return x; } float2 _t2(float2 x) { return x; } float2 _t2(float3 x) { return x.xy; } float2 _t2(float4 x) { return x.xy; }\n\
+float3 _t3(float x) { return x; } float3 _t3(float3 x) { return x; } float3 _t3(float4 x) { return x.xyz; }\n";
+
+/// `ret.y += v * 0.02;` with `v` a vector: D3D9 truncated the right side to the
+/// first component(s), and HLSL now refuses. An assignment to a one-, two- or
+/// three-component swizzle gets its right side wrapped in `_t1`/`_t2`/`_t3`,
+/// overloads that truncate exactly as D3D9 did and pass a right-sized value
+/// through unchanged.
+pub fn truncating(code: &str) -> String {
+    static TARGET: OnceLock<Regex> = OnceLock::new();
+    let target = re(&TARGET, r"\.([xyzwrgba]{1,3})\s*([+\-*/]?=)");
+    let mut out = String::with_capacity(code.len() + 64);
+    let mut at = 0;
+    for m in target.captures_iter(code) {
+        let whole = m.get(0).unwrap();
+        if whole.start() < at {
+            continue;
+        }
+        let after = whole.end();
+        let before = code[..whole.start()].chars().last().unwrap_or(' ');
+        // `a.x == b`, `a.x <= b`: comparisons, not assignments.
+        if code[after..].starts_with('=') || !(before.is_alphanumeric() || before == '_' || before == ']' || before == ')') {
+            continue;
+        }
+        // The right side runs to the `;` (or the `)` of a `for`) at depth zero.
+        let mut depth = 0i32;
+        let mut end = None;
+        for (i, c) in code[after..].char_indices() {
+            match c {
+                '(' | '[' => depth += 1,
+                ')' | ']' if depth == 0 => {
+                    end = Some(after + i);
+                    break;
+                }
+                ')' | ']' => depth -= 1,
+                ';' | ',' if depth == 0 => {
+                    end = Some(after + i);
+                    break;
+                }
+                _ => {}
+            }
+        }
+        let Some(end) = end else { continue };
+        out += &code[at..after];
+        out += &format!(" _t{}({})", m[1].len(), code[after..end].trim());
+        at = end;
+    }
+    out += &code[at..];
+    out
+}
+
+/// `float4 a[2] = { 1, 2, 3, 4, 5, 6, 7, 8 };`: D3D9 filled an array of vectors
+/// from a flat list, and HLSL wants one braced group per element.
+pub fn grouped_initializers(code: &str) -> String {
+    static ARRAY: OnceLock<Regex> = OnceLock::new();
+    re(&ARRAY, r"(float([234]))\s+(\w+)\s*\[\s*(\d+)\s*\]\s*=\s*\{([^{}]*)\}")
+        .replace_all(code, |m: &regex::Captures| {
+            let width: usize = m[2].parse().unwrap();
+            let count: usize = m[4].parse().unwrap();
+            // Split on commas outside parentheses: `11.0/3.0` and `f(a, b)` are one item.
+            let mut items = Vec::new();
+            let mut depth = 0;
+            let mut item = String::new();
+            for c in m[5].chars() {
+                match c {
+                    '(' => depth += 1,
+                    ')' => depth -= 1,
+                    ',' if depth == 0 => {
+                        items.push(std::mem::take(&mut item));
+                        continue;
+                    }
+                    _ => {}
+                }
+                item.push(c);
+            }
+            if !item.trim().is_empty() {
+                items.push(item);
+            }
+            if items.len() != width * count {
+                return m[0].to_owned();
+            }
+            let groups: Vec<String> = items
+                .chunks(width)
+                .map(|chunk| format!("{{{}}}", chunk.iter().map(|s| s.trim()).collect::<Vec<_>>().join(", ")))
+                .collect();
+            format!("{} {}[{}] = {{{}}}", &m[1], &m[3], &m[4], groups.join(", "))
+        })
+        .into_owned()
+}
 
 /// `double` is a 64-bit float in HLSL now, and Metal has none; MilkDrop's was 32.
 pub fn no_doubles(code: &str) -> String {
@@ -308,7 +406,7 @@ pub fn hlsl(kind: Kind, text: &str) -> Result<Option<String>, Error> {
     }
     let text = strip_comments(text);
     let at = text.find("shader_body").ok_or(Error::NoBody)?;
-    let tidy = |code: &str| negatable(&no_doubles(&split_samplers(code)));
+    let tidy = |code: &str| truncating(&grouped_initializers(&negatable(&no_doubles(&split_samplers(code)))));
     let head = tidy(&fix_head(&drop_sampler_states(&text[..at])));
     let body = tidy(body_block(&text[at + "shader_body".len()..]));
     let inputs = match kind {
@@ -503,6 +601,28 @@ mod tests {
     #[test]
     fn a_scalar_normalizes() {
         compiles(Kind::Warp, "shader_body { float2 z = uv; uv += 0.5*z*normalize(z.x); ret = GetPixel(uv); }");
+    }
+
+    #[test]
+    fn a_define_above_a_declaration_does_not_hide_it() {
+        compiles(Kind::Comp, "#define K 2\nfloat z, z0, radi;\nshader_body { radi = K; ret = radi; }");
+    }
+
+    #[test]
+    fn swizzle_assignments_truncate_like_d3d9() {
+        assert_eq!(truncating("ret.y += (a - b)*c;"), "ret.y += _t1((a - b)*c);");
+        assert_eq!(truncating("if (a.x == b) c.xy = d;"), "if (a.x == b) c.xy = _t2(d);");
+        assert_eq!(truncating("for (i.x = 0; i.x < 3; i.x += 1)"), "for (i.x = _t1(0); i.x < 3; i.x += _t1(1))");
+        compiles(Kind::Comp, "shader_body { float3 c = 1; float3 b1 = 0; ret = 0; ret.y += (ret.y - b1.y)*0.02 + c; ret.xy = c; }");
+    }
+
+    #[test]
+    fn flat_initializers_are_grouped() {
+        assert_eq!(
+            grouped_initializers("const float4 s[2] = { 0, 0, 11.0/3.0, f(a, b), 1, 2, 3, 4 };"),
+            "const float4 s[2] = {{0, 0, 11.0/3.0, f(a, b)}, {1, 2, 3, 4}};"
+        );
+        compiles(Kind::Comp, "const float4 s[2] = { 0.0, 0.0, 0, 11.0/3.0, 0.0, 1.0, 0, -2.0/3.0 };\nshader_body { ret = s[1].xyz; }");
     }
 
     #[test]
