@@ -24,6 +24,45 @@ same preset draws in the BlackHole visualizer — on our engine, not Butterchurn
   stays, as a node that provides sound and set facts; identical output needs the same
   samples, so a signal synthesised from meters can never be the reference.
 
+## Where it is: the proof of concept
+
+`engine/` is a Rust crate that reads `.milk` files and draws them on wgpu — Metal on a
+Mac — with no Butterchurn and no browser in the path.
+
+```sh
+cd engine
+cargo test --lib                                    # unit tests, including one GPU render
+cargo run --release --bin play -- [folder|files] [--input BlackHole] [--channels 1,2] [--every 30]
+cargo run --release --bin snapshot -- preset.milk 240 out.png 1280x720
+cargo run --release --bin check                     # every preset: equations and shaders compile
+cargo run --release --bin gpucheck                  # every preset: loads and draws on the GPU
+cargo run --release --bin explain -- preset.milk comp   # why one shader does not compile
+```
+
+`play` opens a window, listens to any input — BlackHole is one — and plays the library:
+→/space next, ← previous, R random, F fullscreen.
+
+| module | is |
+|---|---|
+| `preset` | the `.milk` reader, code kept as written |
+| `shader` | MilkDrop HLSL → glslang → SPIR-V → naga, with the rewrites below |
+| `eel` | the equation language: MilkDrop's grammar, Butterchurn's arithmetic |
+| `runtime` | Butterchurn's equation runner — which variables carry, which reset — the clock and the warp mesh |
+| `audio`, `noise` | Butterchurn's FFT and levels, and its noise textures, quirks included |
+| `draw` | motion vectors, shapes, waves, the basic waveform, darken centre, borders |
+| `render` | the frame: warp, blur pyramid, draw, comp, blit |
+
+**On the whole Cream of the Crop pack (9,795 presets), 9,744 (99.48%) load and draw on
+Metal with their own shaders** (`gpucheck`). Metal accepted every module naga validated.
+The rest are punted for now: 45 draw with MilkDrop's default for one shader — vector-size
+mismatches D3D9 truncated silently, user functions called with the wrong vector size,
+functions missing a `return`, one naga bug in a helper — and 6 have equations too garbled
+to parse (an undefined `_aboeq()`, `0 = …`, stray prose).
+
+Not yet: blending from one preset to the next, mipmaps on the feedback and blur textures
+(Butterchurn samples them mipmapped), the song-title text, per-pass GPU timings, and the
+side-by-side harness.
+
 ## Performance: 60 fps at 4K
 
 4K is 8.3 megapixels, and MilkDrop touches each of them several times a frame: the warp
