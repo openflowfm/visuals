@@ -204,6 +204,7 @@ const UP = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('downbeat') }),
   z.object({ kind: z.literal('next-flow') }),
   z.object({ kind: z.literal('next-colorway') }),
+  z.object({ kind: z.literal('play'), id: z.string().min(1).max(1024) }),
   z.object({ kind: z.literal('model-save'), setup: MODEL_SETUP }),
   z.object({
     kind: z.literal('model-reconcile'),

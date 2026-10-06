@@ -15,6 +15,7 @@ import type {
   LabState,
   Library,
   MediaAsset,
+  PresetShelf,
   Scheme,
   SetGrid,
   Show,
@@ -29,6 +30,7 @@ import { Segmented } from '@openflow/widgets/controls/Segmented.tsx';
 import { Designer } from './Designer.tsx';
 import { ReviewsView } from './ReviewsView.tsx';
 import { SetView } from './SetView.tsx';
+import { PresetsView } from './PresetsView.tsx';
 import { TrainView } from './TrainView.tsx';
 import { CalibrationView } from './CalibrationView.tsx';
 import { ModelLibraryView } from './ModelLibrary.tsx';
@@ -74,6 +76,9 @@ export interface ConsoleProps {
   grid: SetGrid | null;
   /** Publish an edit to every screen. Disk is `saveScheme`'s business. */
   edit(next: Scheme): void;
+  /** The MilkDrop library, and the gesture that puts one preset up. */
+  presets: PresetShelf;
+  play(id: string): void;
   saveScheme(): void;
   saveSchemeAs(id: string): void;
   loadScheme(id: string): void;
@@ -120,7 +125,7 @@ export interface ConsoleProps {
  * `server/lab.ts`; neither tab touches the scheme except when a candidate is
  * explicitly copied into it, through the same `edit` the designer uses.
  */
-const VIEWS = ['build', 'models', 'train', 'review', 'set', 'calibrate'] as const;
+const VIEWS = ['milkdrop', 'build', 'models', 'train', 'review', 'set', 'calibrate'] as const;
 export type View = (typeof VIEWS)[number];
 
 export function Console({
@@ -135,6 +140,8 @@ export function Console({
   reconcileModel,
   grid,
   edit,
+  presets,
+  play,
   saveScheme,
   saveSchemeAs,
   loadScheme,
@@ -171,7 +178,7 @@ export function Console({
   clock,
   onClose,
 }: ConsoleProps) {
-  const [view, setView] = useState<View>('build');
+  const [view, setView] = useState<View>('milkdrop');
   const [flow, setFlow] = useState<string | null>(null);
   const [trail, setTrail] = useState<readonly string[]>([]);
   const views: readonly View[] = calibrationAvailable
@@ -295,6 +302,10 @@ export function Console({
           onSave={saveModelSetup}
           onReconcile={reconcileModel}
         />
+      )}
+
+      {view === 'milkdrop' && (
+        <PresetsView show={show} scheme={scheme} presets={presets} edit={edit} play={play} />
       )}
 
       {view === 'set' && <SetView show={show} scheme={scheme} grid={grid} edit={edit} />}

@@ -53,6 +53,7 @@ export default defineConfig({
       '/ws': { target: SERVER.replace('http', 'ws'), ws: true },
       '/media': { target: SERVER },
       '/models': { target: SERVER },
+      '/presets': { target: SERVER },
     },
   },
 });

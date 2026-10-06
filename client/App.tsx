@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { schemeLabel } from '../protocol.ts';
+import { isMilk, presetOf } from '../milk.ts';
 import { createCompositor, type Compositor } from './render/compositor.ts';
 import type { FrameStats } from './render/meter.ts';
 import { describeFrames } from './ui/frames.ts';
@@ -50,6 +51,8 @@ export function App() {
     downbeat,
     nextFlow,
     nextColorway,
+    presets,
+    play,
     lab,
     labOpen,
     labArchiveOpen,
@@ -306,7 +309,11 @@ export function App() {
             </dd>
             <dt>flow</dt>
             <dd className="wide">
-              {show.flow ? (scheme?.flows[show.flow]?.name ?? show.flow) : '—'}
+              {show.flow
+                ? isMilk(show.flow)
+                  ? `milkdrop · ${presetOf(show.flow).replace(/^.*\//, '').replace(/\.milk$/i, '')}`
+                  : (scheme?.flows[show.flow]?.name ?? show.flow)
+                : '—'}
               {show.pinned ? '*' : ''}
             </dd>
             <dt>colours</dt>
@@ -370,6 +377,8 @@ export function App() {
             reconcileModel={reconcileModel}
             grid={grid}
             edit={edit}
+            presets={presets}
+            play={play}
             saveScheme={saveScheme}
             saveSchemeAs={saveSchemeAs}
             loadScheme={loadScheme}

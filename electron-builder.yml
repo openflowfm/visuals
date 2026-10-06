@@ -19,6 +19,8 @@ files:
   # The server, bundled to ESM and run by Electron's own Node — see
   # `docs/desktop.md` for why it is not `node` off the PATH.
   - electron/dist/server.mjs
+  # The MilkDrop converter, run in a worker the server can terminate.
+  - electron/dist/presetWorker.mjs
   # The Ableton Link addon, and the two tiny packages its entry point resolves
   # the binary through. A `.node` file is the one thing a bundle cannot swallow,
   # so this ships beside the others — at `Resources/app/node_modules`, which is
@@ -43,3 +45,12 @@ mac:
     NSLocalNetworkUsageDescription: >-
       visual[flow] uses the local network to find Ableton Link peers, so the
       show follows Live's tempo and downbeat.
+    # MilkDrop presets can listen to an audio input — an interface, or BlackHole
+    # carrying the set. Nothing is recorded or played back.
+    NSMicrophoneUsageDescription: >-
+      visual[flow] listens to the audio input you choose so MilkDrop presets
+      move with the music. Nothing is recorded or sent anywhere.
+  # electron-builder's default entitlements plus audio input, which the hardened
+  # runtime refuses without asking otherwise.
+  entitlements: electron/entitlements.mac.plist
+  entitlementsInherit: electron/entitlements.mac.plist

@@ -23,6 +23,7 @@
     "stories",
     ".storybook",
     "node_modules/@openflow/protocol/global.d.ts",
-    "types/assets.d.ts"
+    "types/assets.d.ts",
+    "types/milkdrop.d.ts"
   ]
 }

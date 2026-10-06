@@ -19,6 +19,7 @@ import type {
   LabSubmission,
   Library,
   MediaAsset,
+  PresetShelf,
   Scheme,
   SetGrid,
   Show,
@@ -126,6 +127,10 @@ export function useShow(): {
   nextFlow(): void;
   /** The mirror gesture: turn only the colourway wheel once. */
   nextColorway(): void;
+  /** The MilkDrop library the wheel can turn through. See `docs/milkdrop.md`. */
+  presets: PresetShelf;
+  /** Put a flow or a `milk:` preset up now, until the wheel next turns. */
+  play(id: string): void;
   /** The active lab search, or null until Train has asked for it. */
   lab: LabState | null;
   /** Ask for the queue's state. The one thing that makes the server deal. */
@@ -203,6 +208,7 @@ export function useShow(): {
   const [scheme, setScheme] = useState<Scheme | null>(null);
   const [library, setLibrary] = useState<Library | null>(null);
   const [media, setMedia] = useState<MediaAsset[]>([]);
+  const [presets, setPresets] = useState<PresetShelf>({ entries: [], root: '', notice: null });
   const [models, setModels] = useState<ModelLibrary>({ assets: [], setups: [], textures: [], notice: null });
   const [grid, setGrid] = useState<SetGrid | null>(null);
   const [lab, setLab] = useState<LabState | null>(null);
@@ -282,6 +288,11 @@ export function useShow(): {
         }
         if (message.kind === 'media') {
           setMedia(message.assets);
+          return;
+        }
+        if (message.kind === 'presets') {
+          const { kind: _, ...shelf } = message;
+          setPresets(shelf);
           return;
         }
         if (message.kind === 'models') {
@@ -462,6 +473,11 @@ export function useShow(): {
     if (socket?.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ kind: 'next-colorway' }));
     }
+  }).current;
+
+  const play = useRef((id: string) => {
+    const socket = live.current;
+    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ kind: 'play', id }));
   }).current;
 
   const importModel = useRef(async (file: File) => {
@@ -743,6 +759,8 @@ export function useShow(): {
     downbeat,
     nextFlow,
     nextColorway,
+    presets,
+    play,
     importModel,
     importModelTexture,
     saveModelSetup,

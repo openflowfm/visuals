@@ -1,7 +1,16 @@
 import { paletteOf, type Scheme, type Show, type Track } from '../protocol.ts';
 import type { SetState } from './bridge.ts';
 import type { LinkFrame } from './link.ts';
-import { atOne, bumped, inPhase, reOne, turnsAt, whatIsUp, type Wheel } from '../resolve.ts';
+import {
+  atOne,
+  bumped,
+  drawable,
+  inPhase,
+  reOne,
+  turnsAt,
+  whatIsUp,
+  type Wheel,
+} from '../resolve.ts';
 import type { SchemeSource } from './scheme.ts';
 
 /**
@@ -102,6 +111,13 @@ export interface Turning {
    * happened.
    */
   launched: number;
+  /**
+   * Something put up by hand — a flow or a preset picked in the console — and
+   * the flow turn it was picked on. It holds until the wheel next turns, so
+   * picking a preset is "show me that now" and never a pin somebody has to
+   * remember to clear.
+   */
+  chosen: { id: string; turn: number } | null;
 }
 
 export const noTurning = (): Turning => ({
@@ -110,7 +126,13 @@ export const noTurning = (): Turning => ({
   rolling: false,
   waiting: null,
   launched: -1,
+  chosen: null,
 });
+
+/** Put `id` up now, until the flow wheel next turns. */
+export function choose(turning: Turning, scheme: Scheme, beat: number, quantum: number, id: string): void {
+  turning.chosen = { id, turn: turnsAt(scheme.rotation, beat, quantum, turning.wheel).flow };
+}
 
 /**
  * The scene most of the set is playing, and whether anyone has departed from it.
@@ -162,6 +184,8 @@ export function buildShow(
   link: LinkFrame,
   source: SchemeSource,
   turning: Turning = noTurning(),
+  presets: readonly string[] = [],
+  presetSet: ReadonlySet<string> = new Set(presets),
 ): Show {
   const scheme: Scheme = source.current();
   const strips = new Map((set.mixer?.tracks ?? []).map((strip) => [strip.t, strip]));
@@ -252,7 +276,11 @@ export function buildShow(
     set.model?.songs?.find((entry) => entry.songKey === songKey)?.key;
 
   const turns = turnsAt(scheme.rotation, link.beat, link.quantum, turning.wheel);
-  const up = whatIsUp(scheme, songKey, turns);
+  const up = whatIsUp(scheme, songKey, turns, presets);
+  const chosen = turning.chosen;
+  if (chosen && chosen.turn === turns.flow && drawable(scheme, presetSet, chosen.id)) {
+    up.flow = chosen.id;
+  } else turning.chosen = null;
 
   // A colourway nobody assigned still has colours: an unstyled song would be a
   // black screen for the one thing nobody remembered to configure. Through

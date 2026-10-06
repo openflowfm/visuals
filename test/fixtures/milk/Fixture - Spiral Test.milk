@@ -1,0 +1,98 @@
+[preset00]
+fRating=3.000000
+fGammaAdj=1.980000
+fDecay=0.950000
+fVideoEchoZoom=1.000000
+fVideoEchoAlpha=0.000000
+nVideoEchoOrientation=0
+nWaveMode=2
+bAdditiveWaves=1
+bWaveDots=0
+bWaveThick=1
+bModWaveAlphaByVolume=0
+bMaximizeWaveColor=1
+bTexWrap=1
+bDarkenCenter=0
+bRedBlueStereo=0
+bBrighten=0
+bDarken=0
+bSolarize=0
+bInvert=0
+fWaveAlpha=0.800000
+fWaveScale=1.200000
+fWaveSmoothing=0.600000
+fWaveParam=0.000000
+fModWaveAlphaStart=0.750000
+fModWaveAlphaEnd=0.950000
+fWarpAnimSpeed=1.000000
+fWarpScale=1.000000
+fZoomExponent=1.000000
+fShader=0.000000
+zoom=1.010000
+rot=0.010000
+cx=0.500000
+cy=0.500000
+dx=0.000000
+dy=0.000000
+warp=0.200000
+sx=1.000000
+sy=1.000000
+wave_r=0.600000
+wave_g=0.400000
+wave_b=1.000000
+wave_x=0.500000
+wave_y=0.500000
+ob_size=0.000000
+ib_size=0.000000
+nMotionVectorsX=0.000000
+nMotionVectorsY=0.000000
+wavecode_0_enabled=1
+wavecode_0_samples=256
+wavecode_0_sep=0
+wavecode_0_bSpectrum=0
+wavecode_0_bUseDots=0
+wavecode_0_bDrawThick=1
+wavecode_0_bAdditive=1
+wavecode_0_scaling=1.000000
+wavecode_0_smoothing=0.500000
+wavecode_0_r=1.000000
+wavecode_0_g=0.500000
+wavecode_0_b=0.200000
+wavecode_0_a=1.000000
+wave_0_per_frame1=t1 = time*0.3;
+wave_0_per_point1=ang = sample*6.2832*3 + t1;
+wave_0_per_point2=rad = 0.1 + sample*0.35 + value1*0.1;
+wave_0_per_point3=x = 0.5 + rad*cos(ang);
+wave_0_per_point4=y = 0.5 + rad*sin(ang);
+shapecode_0_enabled=1
+shapecode_0_sides=6
+shapecode_0_additive=1
+shapecode_0_thickOutline=0
+shapecode_0_textured=0
+shapecode_0_x=0.500000
+shapecode_0_y=0.500000
+shapecode_0_rad=0.100000
+shapecode_0_ang=0.000000
+shapecode_0_r=0.200000
+shapecode_0_g=0.800000
+shapecode_0_b=1.000000
+shapecode_0_a=0.600000
+shapecode_0_border_a=0.000000
+shape_0_per_frame1=ang = time*0.5;
+shape_0_per_frame2=rad = 0.05 + bass_att*0.05;
+per_frame_init_1=q8 = 0;
+per_frame_1=q8 = q8 + bass*0.01;
+per_frame_2=rot = 0.01 + 0.02*sin(q8);
+per_frame_3=zoom = 1.0 + 0.02*bass_att;
+per_frame_4=wave_r = 0.5 + 0.5*sin(time*1.1);
+per_frame_5=monitor = q8;
+per_pixel_1=zoom = zoom + rad*0.02*if(above(bass,1.2),1,0);
+warp_1=`shader_body
+warp_2=`{
+warp_3=`    ret = tex2D(sampler_main, uv).xyz;
+warp_4=`    ret *= 0.97;
+warp_5=`}
+comp_1=`shader_body
+comp_2=`{
+comp_3=`    ret = tex2D(sampler_main, uv).xyz * 1.2;
+comp_4=`}

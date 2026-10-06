@@ -21,7 +21,8 @@ import { labSearchEngine, openLab, type LabEngine } from './lab.ts';
 import { openCalibration, type CalibrationStore } from './calibration.ts';
 import { openLink } from './link.ts';
 import { openLibrary } from './library.ts';
-import { buildShow, noTurning } from './show.ts';
+import { buildShow, choose, noTurning } from './show.ts';
+import { openPresets } from './presets.ts';
 import { buildGrid } from './grid.ts';
 import { listMedia, mediaRoot, serveMedia } from './media.ts';
 import { MAX_MODEL_BYTES, MAX_MODEL_TEXTURE_BYTES, MODEL_HASH } from '../model.ts';
@@ -60,6 +61,7 @@ const BRIDGE = process.env.OPENFLOW_BRIDGE_WS ?? 'ws://127.0.0.1:17800/ws';
 const ROOT = process.env.OPENFLOW_VISUALS_DIST ?? path.resolve(here, '../dist');
 const MEDIA_ROOT = mediaRoot();
 const models = openModelStore();
+const presets = openPresets();
 /** Internal tooling is absent unless the server was deliberately started with it. */
 const CALIBRATION_ENABLED = process.env.OPENFLOW_CALIBRATION === '1';
 
@@ -177,6 +179,10 @@ function serve(req: http.IncomingMessage, res: http.ServerResponse): void {
     serveCalibrationExport(res);
     return;
   }
+  if (url.pathname.startsWith('/presets/')) {
+    presets.serve(res, url.pathname.slice('/presets/'.length));
+    return;
+  }
   if (url.pathname.startsWith('/media/')) {
     if (serveMedia(req, res, MEDIA_ROOT, url.pathname.slice('/media/'.length))) return;
     res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
@@ -288,6 +294,14 @@ const sendLibrary = (socket: WebSocket) => {
 const sendMedia = (socket: WebSocket) => {
   socket.send(JSON.stringify({ kind: 'media', assets: listMedia(MEDIA_ROOT) }));
 };
+
+const sendPresets = (socket: WebSocket) => {
+  socket.send(JSON.stringify({ kind: 'presets', ...presets.shelf() }));
+};
+
+/** The show, with the preset library the wheel turns through. */
+const showNow = () =>
+  buildShow(bridge.state, link.sample(), scheme, turning, presets.ids(), presets.known());
 
 const sendModels = (socket?: WebSocket, notice?: string) => {
   const library = models.library();
@@ -502,13 +516,14 @@ sockets.on('connection', (socket) => {
     sendScheme(socket);
     sendLibrary(socket);
     sendMedia(socket);
+    sendPresets(socket);
     sendModels(socket);
     sendGrid(socket);
     socket.send(
       JSON.stringify({ kind: 'calibration-available', available: CALIBRATION_ENABLED }),
     );
     socket.send(
-      JSON.stringify({ kind: 'show', ...buildShow(bridge.state, link.sample(), scheme, turning) }),
+      JSON.stringify({ kind: 'show', ...showNow() }),
     );
   } catch (err) {
     console.warn(`visuals: could not answer a new client — ${(err as Error).message}`);
@@ -547,6 +562,13 @@ function dispatch(socket: WebSocket, message: Up): void {
   // happen to start together. The colourway deliberately stays where it is.
   if (message.kind === 'next-flow') {
     turning.wheel = nextFlow(turning.wheel);
+    dirty = true;
+    return;
+  }
+  // One flow or preset, picked in the console, up until the wheel next turns.
+  if (message.kind === 'play') {
+    const at = link.sample();
+    choose(turning, scheme.current(), at.beat, at.quantum, message.id);
     dirty = true;
     return;
   }
@@ -804,6 +826,7 @@ let lastRevision = -1;
 let lastShown = '';
 let lastLibrary = '';
 let lastMedia = '';
+let lastPresets = -1;
 
 let sinceShow = 0;
 setInterval(() => {
@@ -837,7 +860,7 @@ function tick(): void {
       if (socket.readyState === socket.OPEN) socket.send(gridWire);
     }
   }
-  const show = buildShow(bridge.state, link.sample(), scheme, turning);
+  const show = showNow();
   show.clock = link.live;
   // The flow and the colourway are in it because the rotation moves them, and a
   // wheel that turned without the renderer being told would be a wheel that
@@ -863,9 +886,16 @@ function tick(): void {
     : lastMedia;
   const mediaMoved = due && mediaWire !== lastMedia ? mediaWire : null;
   if (due) lastMedia = mediaWire;
+  // The preset library rescans on its own clock; this only notices it moved.
+  const presetsWire =
+    presets.revision() !== lastPresets
+      ? JSON.stringify({ kind: 'presets' as const, ...presets.shelf() })
+      : null;
+  lastPresets = presets.revision();
   for (const socket of clients) {
     if (socket.readyState !== socket.OPEN) continue;
     if (schemeWire) socket.send(schemeWire);
+    if (presetsWire) socket.send(presetsWire);
     if (shelf) socket.send(shelf);
     if (mediaMoved) socket.send(mediaMoved);
     socket.send(wire);

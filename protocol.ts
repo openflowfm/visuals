@@ -679,7 +679,17 @@ export interface Rotation {
    * things, and changing both every time makes every change total.
    */
   colorEvery: number;
+  /**
+   * Whether the wheel turns through MilkDrop presets: not at all, alongside the
+   * flows, or instead of them. Absent is `only` — a rig that ships with a
+   * library of drops should draw them before anybody has configured anything.
+   */
+  milk?: MilkMode;
+  /** The presets it turns through, by `PresetEntry.id`. Empty means all of them. */
+  presets?: string[];
 }
+
+export type MilkMode = 'off' | 'mix' | 'only';
 
 /**
  * The five colours a colourway is, named for the job each does in a picture.
@@ -1492,6 +1502,29 @@ export interface MediaAsset {
 }
 
 /**
+ * One MilkDrop preset the library can draw. See `docs/milkdrop.md`.
+ *
+ * `id` is what a rotation, a song pin and `Show.flow` carry, prefixed `milk:`
+ * there so a preset and a flow can never be mistaken for each other. It is the
+ * `.milk` file's path below the preset root, or `@butterchurn/<name>` for the
+ * favourites that ship already converted.
+ */
+export interface PresetEntry {
+  id: string;
+  /** The file name without `.milk`, which is where preset authors sign their work. */
+  name: string;
+  /** The folder it sits in, or `butterchurn` for the bundled favourites. */
+  group: string;
+}
+
+export interface PresetShelf {
+  entries: PresetEntry[];
+  /** Where `.milk` files are discovered, so the console can say where to put them. */
+  root: string;
+  notice: string | null;
+}
+
+/**
  * Server to browser, discriminated by kind, and the show/anchor split is what
  * keeps the renderer smooth — see `docs/clock.md`.
  */
@@ -1512,6 +1545,7 @@ export type Down =
   | { kind: 'scheme'; scheme: Scheme }
   | ({ kind: 'library' } & Library)
   | { kind: 'media'; assets: MediaAsset[] }
+  | ({ kind: 'presets' } & PresetShelf)
   | { kind: 'models'; library: ModelLibrary }
   | { kind: 'grid'; grid: SetGrid }
   | ({ kind: 'lab' } & LabState)
@@ -1553,6 +1587,9 @@ export type Up =
   | { kind: 'downbeat' }
   | { kind: 'next-flow' }
   | { kind: 'next-colorway' }
+  // Put one flow or MilkDrop preset up now. The wheel takes over again at its
+  // next turn, so this is "show me that" rather than a pin.
+  | { kind: 'play'; id: string }
   | { kind: 'model-save'; setup: ModelSetupDraft }
   | {
       kind: 'model-reconcile';

@@ -3243,3 +3243,101 @@
   background: var(--sel);
   color: var(--amber);
 }
+
+/* --- MilkDrop: the preset library. See PresetsView.tsx. ---------------- */
+
+.presetsview {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.presetsview .search {
+  width: 280px;
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-xs);
+  background: var(--surface-control);
+  color: var(--ui);
+  font: inherit;
+  padding: 4px 8px;
+}
+
+.presetsview .chip {
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-xs);
+  background: var(--surface-control);
+  color: var(--ui);
+  font: inherit;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+
+.presetsview .chip[data-on] {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
+.presetsview .presets {
+  list-style: none;
+  margin: 0;
+  padding: 4px 12px;
+  overflow: auto;
+  min-height: 0;
+  flex: 1;
+  columns: 3 320px;
+  column-gap: 18px;
+}
+
+.presetsview .presets li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  break-inside: avoid;
+  padding: 1px 0;
+}
+
+.presetsview .presets button {
+  border: 0;
+  background: none;
+  color: var(--ui);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.presetsview .presets .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.presetsview .presets .name:hover {
+  color: var(--fg);
+}
+
+.presetsview .presets .star[data-on],
+.presetsview .presets li[data-up] .name {
+  color: var(--amber);
+}
+
+.presetsview .presets .group {
+  color: var(--caption);
+  font-size: var(--text-annot);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.presetsview .foot {
+  padding: 6px 12px 10px;
+  border-top: 1px solid var(--rule);
+}
+
+.presetsview .pad-line {
+  padding: 4px 12px;
+  margin: 0;
+}

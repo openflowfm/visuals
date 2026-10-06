@@ -1793,6 +1793,8 @@ const SCHEME_FILE = z.object({
       bars: z.number().optional(),
       onClip: z.boolean().optional(),
       colorEvery: z.number().optional(),
+      milk: z.enum(['off', 'mix', 'only']).optional(),
+      presets: z.array(z.string()).optional(),
     })
     .optional(),
   songs: z

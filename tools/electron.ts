@@ -85,6 +85,24 @@ if (server) {
     legalComments: 'none',
     minify: false,
   });
+  // The MilkDrop converter's worker, beside the server that spawns it — see
+  // `server/presets.ts`. Its own file because a worker is a separate entry.
+  await esbuild.build({
+    entryPoints: [path.join(root, 'server', 'presetWorker.ts')],
+    outfile: path.join(here, 'dist', 'presetWorker.mjs'),
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    target: 'node20',
+    banner: {
+      js: [
+        "import { createRequire as __openflowRequire } from 'node:module';",
+        'const require = __openflowRequire(import.meta.url);',
+      ].join('\n'),
+    },
+    legalComments: 'none',
+    minify: false,
+  });
 }
 
 const size = (file: string) => fs.statSync(path.join(here, 'dist', file)).size;

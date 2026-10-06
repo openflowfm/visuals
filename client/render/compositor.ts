@@ -10,6 +10,9 @@ import { columns, warpFor, SQUARE, type Corners } from './output.ts';
 import { createVideoBank, videoControl } from './video.ts';
 import { createImageBank } from './image.ts';
 import { createModelBank, type ModelResourceStats, type ModelView } from './model.ts';
+import { createMilk, type Milk } from './milk.ts';
+import { milkAudio } from './milkAudio.ts';
+import { isMilk, presetOf } from '../../milk.ts';
 import {
   responseOverridesSignature,
   type ResponseOverrides,
@@ -125,6 +128,9 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
   let video = createVideoBank(gl);
   let image = createImageBank(gl);
   let model = createModelBank(gl);
+  /** MilkDrop, for when what is up is a preset rather than a flow. See `milk.ts`. */
+  let milk: Milk = createMilk(gl, canvas);
+  const audio = milkAudio();
 
   /** Where the set's own picture lands, for the flow to read. */
   let live = createTarget(gl);
@@ -300,6 +306,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
     video.free();
     image.free();
     model.free();
+    milk.free();
     // The timer queries are GL objects like any other, and a pool of them left
     // behind on every console open is exactly the slow leak this file's meter
     // exists to make visible. `onRestored` builds a fresh meter after this.
@@ -346,6 +353,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
     video = createVideoBank(gl);
     image = createImageBank(gl);
     model = createModelBank(gl);
+    milk = createMilk(gl, canvas);
     live = createTarget(gl);
     out = createTarget(gl);
     prev = createTarget(gl);
@@ -360,7 +368,7 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
 
   return {
     get error() {
-      return error ?? feed.error ?? video.error ?? image.error ?? model.error;
+      return error ?? feed.error ?? video.error ?? image.error ?? model.error ?? milk.error;
     },
     stats: () => meter.read(),
     resetStats: () => meter.reset(),
@@ -413,7 +421,9 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
 
       const at = { show, scheme, beat, seconds, dt, width: canvas.width, height: canvas.height };
       const id = show.flow;
-      const built = scheme && id ? flowProgram(scheme, id, responses) : null;
+      const preset = isMilk(id) ? presetOf(id) : null;
+      const built = scheme && id && !preset ? flowProgram(scheme, id, responses) : null;
+      if (preset) error = null;
 
       // --- the set's own picture, when the flow asked for it ---------------
       gl.bindFramebuffer(gl.FRAMEBUFFER, live.framebuffer);
@@ -439,7 +449,22 @@ export function createCompositor(canvas: HTMLCanvasElement): Compositor {
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.disable(gl.BLEND);
 
-      if (built?.program) {
+      if (preset) {
+        // A preset owns its own feedback, so `prev` is not its history; the
+        // swap below still runs so a flow after it starts from black as usual.
+        video.clear();
+        image.clear();
+        model.clear();
+        milk.draw(
+          out.framebuffer,
+          canvas.width,
+          canvas.height,
+          preset,
+          dt,
+          audio.levels(show, beat, seconds),
+          audio.sampleRate,
+        );
+      } else if (built?.program) {
         const sample = built.numbers.sample(built.circuit, {
           show,
           beat,

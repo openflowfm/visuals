@@ -32,6 +32,7 @@ const SAMPLES: Record<string, unknown> = {
   downbeat: { kind: 'downbeat' },
   'next-flow': { kind: 'next-flow' },
   'next-colorway': { kind: 'next-colorway' },
+  play: { kind: 'play', id: 'milk:Geiss/Swirl.milk' },
   'model-save': {
     kind: 'model-save',
     setup: {
