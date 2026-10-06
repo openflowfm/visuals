@@ -8,7 +8,7 @@
 //!
 //! What the renderer can rely on in a translated module:
 //!
-//! - one entry point, `main`, a fragment shader returning the colour;
+//! - one entry point, `_milkdrop_main`, a fragment shader returning the colour;
 //! - inputs, in order: `uv`, `uv_orig`, `rad`, `ang`, and for comp `hue_shader`;
 //! - MilkDrop's uniforms in one buffer, each named `_u_<name>` (`_u_time`, `_u__qa`…);
 //! - each texture as `<name>_tex` with a sampler `<name>_smp` (`sampler_main_tex`).
@@ -109,7 +109,31 @@ pub fn preamble() -> String {
     out += "#define GetBlur2(uv) (sampler_blur2_tex.Sample(sampler_blur2_smp,uv).xyz*_c5.z + _c5.w)\n";
     out += "#define GetBlur3(uv) (sampler_blur3_tex.Sample(sampler_blur3_smp,uv).xyz*_c6.x + _c6.y)\n";
     out += "#define lum(x) (dot(x,float3(0.32,0.49,0.29)))\n";
+    // `tex2D(main, uv)`: presets name built-in textures without the prefix too.
+    for name in TEXTURES_2D.iter().chain(TEXTURES_3D) {
+        let short = name.trim_start_matches("sampler_");
+        out += &format!("#define {short}_tex {name}_tex\n#define {short}_smp {name}_smp\n");
+    }
     out
+}
+
+/// A texture sampled but never declared — MilkDrop loads textures by name, and
+/// some presets never declare theirs — is declared, so the shader compiles and the
+/// renderer binds it like any other preset texture.
+pub fn declare_textures(head: &str, body: &str) -> String {
+    static USE: OnceLock<Regex> = OnceLock::new();
+    let known = |name: &str| {
+        TEXTURES_2D.iter().chain(TEXTURES_3D).any(|t| *t == name || t.trim_start_matches("sampler_") == name)
+            || head.contains(&format!("{name}_tex;"))
+    };
+    let mut seen = std::collections::BTreeSet::new();
+    for m in re(&USE, r"\b(\w+)_tex\.Sample").captures_iter(&format!("{head}\n{body}")) {
+        let name = m[1].to_owned();
+        if !known(&name) {
+            seen.insert(name);
+        }
+    }
+    seen.iter().map(|n| format!("Texture2D {n}_tex; SamplerState {n}_smp;\n")).collect()
 }
 
 /// The statements at the top of `main` that fill the `static` copies.
@@ -271,12 +295,13 @@ pub fn drop_sampler_states(code: &str) -> String {
 /// will not negate a bool. Every `-(…)` becomes `-(1.0*(…))`, which means the same
 /// for numbers and makes a bool a number.
 pub fn negatable(code: &str) -> String {
-    let bytes = code.as_bytes();
     let mut out = String::with_capacity(code.len() + 16);
     let mut stack: Vec<bool> = Vec::new();
-    for (i, c) in code.char_indices() {
+    for c in code.chars() {
+        // The preprocessor spaces tokens out, so `-(` may arrive as `- (`.
+        let negated = out.trim_end().ends_with('-');
         match c {
-            '(' if i > 0 && bytes[i - 1] == b'-' => {
+            '(' if negated => {
                 out.push_str("(1.0*(");
                 stack.push(true);
             }
@@ -300,6 +325,7 @@ pub fn negatable(code: &str) -> String {
 /// the truncation helpers [`truncating`] wraps assignments in.
 const OVERLOADS: &str = "\
 float normalize(float x) { return x / abs(x); }\n\
+float2 mul(float2 a, float b) { return a * b; } float3 mul(float3 a, float b) { return a * b; } float4 mul(float4 a, float b) { return a * b; }\n\
 float _t1(float x) { return x; } float _t1(float2 x) { return x.x; } float _t1(float3 x) { return x.x; } float _t1(float4 x) { return x.x; }\n\
 float _t1(int x) { return x; } float _t1(bool x) { return x; }\n\
 float2 _t2(float x) { return x; } float2 _t2(float2 x) { return x; } float2 _t2(float3 x) { return x.xy; } float2 _t2(float4 x) { return x.xy; }\n\
@@ -405,6 +431,9 @@ pub fn hlsl(kind: Kind, text: &str) -> Result<Option<String>, Error> {
         return Ok(None);
     }
     let text = strip_comments(text);
+    // A preset whose macros the preprocessor refuses is kept as written; the
+    // compile then says what is wrong with it.
+    let text = preprocess(&text).unwrap_or(text);
     let at = text.find("shader_body").ok_or(Error::NoBody)?;
     let tidy = |code: &str| truncating(&grouped_initializers(&negatable(&no_doubles(&split_samplers(code)))));
     let head = tidy(&fix_head(&drop_sampler_states(&text[..at])));
@@ -414,8 +443,9 @@ pub fn hlsl(kind: Kind, text: &str) -> Result<Option<String>, Error> {
         Kind::Comp => "float2 uv : TEXCOORD0, float2 uv_orig : TEXCOORD1, float rad : TEXCOORD2, float ang : TEXCOORD3, float3 hue_shader : TEXCOORD4",
     };
     Ok(Some(format!(
-        "{}{HELPERS}{OVERLOADS}{head}\nfloat4 main({inputs}) : SV_Target {{\n  float3 ret = 0;\n  {}\n{body}\n  return float4(ret, 1);\n}}\n",
+        "{}{HELPERS}{OVERLOADS}{}{head}\nfloat4 {ENTRY}({inputs}) : SV_Target {{\n  float3 ret = 0;\n  {}\n{body}\n  return float4(ret, 1);\n}}\n",
         preamble(),
+        declare_textures(&head, &body),
         copy_uniforms(),
     )))
 }
@@ -429,8 +459,73 @@ pub fn hlsl(kind: Kind, text: &str) -> Result<Option<String>, Error> {
 /// before parsing.
 pub fn spirv(source: &str) -> Result<Vec<u32>, Error> {
     use glslang_sys as sys;
-    use std::ffi::{CStr, CString};
+    with_input(source, |input, messages| unsafe {
+        let shader = sys::glslang_shader_create(input);
+        let entry = std::ffi::CString::new(ENTRY).unwrap();
+        sys::glslang_shader_set_entry_point(shader, entry.as_ptr());
+        sys::glslang_shader_set_options(
+            shader,
+            (sys::glslang_shader_options_t::AUTO_MAP_BINDINGS.0 | sys::glslang_shader_options_t::AUTO_MAP_LOCATIONS.0) as _,
+        );
+        if sys::glslang_shader_preprocess(shader, input) == 0 || sys::glslang_shader_parse(shader, input) == 0 {
+            let message = log(sys::glslang_shader_get_info_log(shader));
+            sys::glslang_shader_delete(shader);
+            return Err(Error::Compile(message));
+        }
+        let program = sys::glslang_program_create();
+        sys::glslang_program_add_shader(program, shader);
+        let ok = sys::glslang_program_link(program, messages as _) != 0 && sys::glslang_program_map_io(program) != 0;
+        if !ok {
+            let message = log(sys::glslang_program_get_info_log(program));
+            sys::glslang_program_delete(program);
+            sys::glslang_shader_delete(shader);
+            return Err(Error::Compile(message));
+        }
+        sys::glslang_program_SPIRV_generate(program, sys::glslang_stage_t::Fragment);
+        let size = sys::glslang_program_SPIRV_get_size(program);
+        let words = std::slice::from_raw_parts(sys::glslang_program_SPIRV_get_ptr(program), size).to_vec();
+        sys::glslang_program_delete(program);
+        sys::glslang_shader_delete(shader);
+        Ok(words)
+    })
+}
 
+/// The preset's own text with its own `#define`s applied, by glslang's
+/// preprocessor. Presets rename things with macros — `#define main
+/// sampler_fw_main` is real — and the textual rewrites must see what the author
+/// meant, not the macro's name.
+pub fn preprocess(source: &str) -> Result<String, Error> {
+    use glslang_sys as sys;
+    with_input(source, |input, _| unsafe {
+        let shader = sys::glslang_shader_create(input);
+        if sys::glslang_shader_preprocess(shader, input) == 0 {
+            let message = log(sys::glslang_shader_get_info_log(shader));
+            sys::glslang_shader_delete(shader);
+            return Err(Error::Compile(message));
+        }
+        let code = log(sys::glslang_shader_get_preprocessed_code(shader));
+        sys::glslang_shader_delete(shader);
+        // glslang marks where it was with `#line`; nothing downstream wants them.
+        Ok(code.lines().filter(|l| !l.trim_start().starts_with("#line")).collect::<Vec<_>>().join("\n"))
+    })
+}
+
+/// The entry point's name: one no preset `#define`s.
+const ENTRY: &str = "_milkdrop_main";
+
+unsafe fn log(text: *const std::os::raw::c_char) -> String {
+    if text.is_null() {
+        return String::new();
+    }
+    unsafe { std::ffi::CStr::from_ptr(text) }.to_string_lossy().trim().to_owned()
+}
+
+/// Build glslang's input for HLSL fragment source and hand it to `run`.
+fn with_input<T>(
+    source: &str,
+    run: impl FnOnce(&glslang_sys::glslang_input_t, i32) -> Result<T, Error>,
+) -> Result<T, Error> {
+    use glslang_sys as sys;
     // Initialises glslang's process-wide state once.
     glslang::Compiler::acquire().ok_or_else(|| Error::Compile("glslang would not initialise".into()))?;
     // The default limits, as the `glslang` crate defines them. A one-field
@@ -440,7 +535,7 @@ pub fn spirv(source: &str) -> Result<Vec<u32>, Error> {
     );
     let limits: sys::glslang_resource_t = unsafe { std::mem::transmute(glslang::limits::DEFAULT_LIMITS) };
 
-    let code = CString::new(source).map_err(|e| Error::Compile(e.to_string()))?;
+    let code = std::ffi::CString::new(source).map_err(|e| Error::Compile(e.to_string()))?;
     let messages = sys::glslang_messages_t::READ_HLSL.0
         | sys::glslang_messages_t::HLSL_DX9_COMPATIBLE.0
         | sys::glslang_messages_t::SPV_RULES.0
@@ -462,37 +557,7 @@ pub fn spirv(source: &str) -> Result<Vec<u32>, Error> {
         callbacks: unsafe { std::mem::zeroed() },
         callbacks_ctx: std::ptr::null_mut(),
     };
-    let log = |text: *const std::os::raw::c_char| unsafe { CStr::from_ptr(text).to_string_lossy().trim().to_owned() };
-
-    unsafe {
-        let shader = sys::glslang_shader_create(&input);
-        let entry = CString::new("main").unwrap();
-        sys::glslang_shader_set_entry_point(shader, entry.as_ptr());
-        sys::glslang_shader_set_options(
-            shader,
-            (sys::glslang_shader_options_t::AUTO_MAP_BINDINGS.0 | sys::glslang_shader_options_t::AUTO_MAP_LOCATIONS.0) as _,
-        );
-        if sys::glslang_shader_preprocess(shader, &input) == 0 || sys::glslang_shader_parse(shader, &input) == 0 {
-            let message = log(sys::glslang_shader_get_info_log(shader));
-            sys::glslang_shader_delete(shader);
-            return Err(Error::Compile(message));
-        }
-        let program = sys::glslang_program_create();
-        sys::glslang_program_add_shader(program, shader);
-        let ok = sys::glslang_program_link(program, messages as _) != 0 && sys::glslang_program_map_io(program) != 0;
-        if !ok {
-            let message = log(sys::glslang_program_get_info_log(program));
-            sys::glslang_program_delete(program);
-            sys::glslang_shader_delete(shader);
-            return Err(Error::Compile(message));
-        }
-        sys::glslang_program_SPIRV_generate(program, sys::glslang_stage_t::Fragment);
-        let size = sys::glslang_program_SPIRV_get_size(program);
-        let words = std::slice::from_raw_parts(sys::glslang_program_SPIRV_get_ptr(program), size).to_vec();
-        sys::glslang_program_delete(program);
-        sys::glslang_shader_delete(shader);
-        Ok(words)
-    }
+    run(&input, messages)
 }
 
 /// SPIR-V to a validated naga module, ready for wgpu.
@@ -623,6 +688,25 @@ mod tests {
             "const float4 s[2] = {{0, 0, 11.0/3.0, f(a, b)}, {1, 2, 3, 4}};"
         );
         compiles(Kind::Comp, "const float4 s[2] = { 0.0, 0.0, 0, 11.0/3.0, 0.0, 1.0, 0, -2.0/3.0 };\nshader_body { ret = s[1].xyz; }");
+    }
+
+    #[test]
+    fn short_and_undeclared_texture_names_compile() {
+        compiles(Kind::Warp, "shader_body { ret = tex2D(main, uv).xyz + tex2D(blur1, uv).xyz + tex2D(snh, uv).xyz; }");
+    }
+
+    #[test]
+    fn a_vector_multiplies_by_a_scalar() {
+        compiles(Kind::Warp, "shader_body { ret = tex2D(sampler_fc_main, mul((uv-0.5)*(1 - rad*0.01),1) + 0.5).xyz; }");
+    }
+
+    #[test]
+    fn a_presets_macros_apply_before_the_rewrites() {
+        let source = hlsl(Kind::Warp, "#define main sampler_fw_main\nsampler base01;\nshader_body { ret = tex2D(main, uv).xyz; }")
+            .unwrap()
+            .unwrap();
+        assert!(source.contains("sampler_fw_main_tex.Sample(sampler_fw_main_smp"), "{source}");
+        compiles(Kind::Warp, "#define main sampler_fw_main\n#define base01 sampler_pw_rand00\nsampler base01;\nshader_body { ret = tex2D(main, uv).xyz + tex2D(base01, uv).xyz; }");
     }
 
     #[test]
