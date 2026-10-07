@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Approval, Listed } from './api.ts';
-import { filter, step, windowAround } from './list.ts';
+import { basename, filter, step, tilde, windowAround } from './list.ts';
 import { bands, xorshift } from './butterchurn.ts';
 import { cacheKey, latin1 } from './convert.ts';
 
@@ -8,6 +8,21 @@ const preset = (group: string, name: string): Listed => ({ path: `/p/${group}/${
 const list = [preset('Geometric', 'Cube'), preset('Geometric', 'Sphere'), preset('Fractal', 'Fern'), preset('Fractal', 'Snow')];
 const verdict = (v: Approval['verdict'], note = ''): Approval => ({ verdict: v, note, score: null, at: '' });
 const approvals = { 'Geometric/Cube.milk': verdict('approve'), 'Fractal/Fern.milk': verdict('reject', 'too dark'), 'Fractal/Snow.milk': verdict(null, 'check') };
+
+describe('the approvals file as the view names it', () => {
+  it('shortens the home directory to ~ and nothing else', () => {
+    expect(tilde('/Users/ryan/.openflow/visuals/compare/approvals.json')).toBe('~/.openflow/visuals/compare/approvals.json');
+    expect(tilde('/home/ryan/a.json')).toBe('~/a.json');
+    expect(tilde('/Users/ryan')).toBe('~');
+    expect(tilde('/opt/Users/ryan/a.json')).toBe('/opt/Users/ryan/a.json');
+    expect(tilde('/Users')).toBe('/Users');
+  });
+  it('says only the file name', () => {
+    expect(basename('/Users/ryan/.openflow/visuals/compare/approvals.json')).toBe('approvals.json');
+    expect(basename('C:\\x\\approvals.json')).toBe('approvals.json');
+    expect(basename('')).toBe('');
+  });
+});
 
 describe('the compare list', () => {
   it('filters by every word and by verdict', () => {

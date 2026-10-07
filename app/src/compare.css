@@ -1,12 +1,14 @@
 /* The compare view: presets on the left, Butterchurn and ours side by side, the
-   verdict under them. Every rule is under .compare, so the editor is untouched. */
+   verdict under them, the hint strip along the bottom. Every rule is under
+   .compare, so the editor is untouched. */
 
 .compare {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
-  grid-template-rows: 36px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   height: 100%;
 }
+.compare > .vf-footer { grid-column: 1 / -1; }
 
 .compare-list {
   display: flex;
@@ -15,15 +17,28 @@
   background: var(--panel);
   border-right: 1px solid var(--bd3);
 }
-.compare-list > input { margin: 8px 8px 4px; padding: 4px 6px; }
+.compare-list > input { margin: 8px 8px 4px; padding: 4px 6px; font-size: var(--text-body); }
 .compare-show { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 8px 6px; }
+.compare-show > .quiet { font-size: var(--text-control); font-variant-numeric: tabular-nums; }
 .compare-list ul { list-style: none; margin: 0; padding: 0; overflow: auto; flex: 1; }
-.compare-list li { padding: 3px 10px 3px 4px; cursor: pointer; display: flex; gap: 4px; align-items: baseline; }
+.compare-list li {
+  padding: 3px 10px 3px 4px;
+  cursor: pointer;
+  display: flex;
+  gap: 4px;
+  align-items: baseline;
+  color: var(--ui);
+  font-size: var(--text-body);
+  outline: none;
+}
 .compare-list li:hover { background: var(--sel); }
+.compare-list li:focus-visible { outline: 1px solid var(--wdg-focus); outline-offset: -1px; }
 .compare-list li[data-current] { background: var(--bd); color: var(--fg); }
+.compare-list li.compare-none { cursor: default; padding: 8px 10px; color: var(--caption); }
+.compare-list li.compare-none:hover { background: none; }
 .compare-entry { display: flex; flex-direction: column; min-width: 0; }
 .compare-entry span, .compare-entry i { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.compare-entry i { color: var(--caption); font-style: normal; font-size: 10px; }
+.compare-entry i { color: var(--caption); font-style: normal; font-size: var(--text-control); letter-spacing: var(--track-slight); }
 .compare-mark { width: 14px; flex: none; text-align: center; color: var(--caption); }
 .compare-list li[data-verdict='approve'] .compare-mark { color: var(--green); }
 .compare-list li[data-verdict='reject'] .compare-mark { color: var(--red); }
@@ -42,8 +57,10 @@
   padding: 6px 8px;
   background: var(--panel);
   border-bottom: 1px solid var(--bd3);
+  font-size: var(--text-body);
 }
-.compare-caption { flex: 1; min-width: 0; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); }
+.compare-caption { flex: 1; min-width: 0; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--detail); }
+.compare-caption b { color: var(--fg); font-weight: var(--weight-strong); }
 .compare-captions[data-swap],
 .compare-feeds[data-swap] { flex-direction: row; }
 .compare-captions[data-flip='theirs'] [data-side='ours'],
@@ -74,6 +91,7 @@
 }
 .compare-feeds[data-flip] .compare-feed { width: min(100cqw, calc(100cqh * 16 / 9)); }
 .compare-hole { background: transparent; box-shadow: 0 0 0 100vmax var(--bg); }
+/* The picture's own black, not a neutral of the interface. */
 .compare-feed canvas { display: block; width: 100%; height: 100%; background: #000; }
 .compare-label {
   position: absolute;
@@ -82,8 +100,10 @@
   max-width: calc(100% - 16px);
   padding: 3px 8px;
   border-radius: var(--radius);
+  /* Darkens the picture under the label, so it reads on any frame. */
   background: rgba(0, 0, 0, 0.75);
-  color: var(--caption);
+  color: var(--detail);
+  font-size: var(--text-body);
 }
 .compare-label[data-bad] { color: var(--red); }
 
@@ -96,12 +116,28 @@
   background: var(--panel);
   border-top: 1px solid var(--bd3);
 }
-.compare-verdict button { padding: 6px 14px; }
-.compare-verdict button kbd { font-family: var(--mono); color: var(--caption); margin-left: 4px; }
-.compare-verdict button.approve[data-on] { background: var(--green); color: #000; }
-.compare-verdict button.reject[data-on] { background: var(--red); color: #000; }
-.compare-verdict button[data-on] kbd { color: #000; }
-.compare-verdict textarea { min-height: 52px; padding: 6px; resize: vertical; }
-.compare-status { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.compare-verdict kbd {
+  font-family: var(--mono);
+  font-variation-settings: var(--mono-axes);
+  font-size: var(--text-label);
+  letter-spacing: var(--track-label);
+  color: var(--caption);
+  margin-left: 4px;
+}
+/* Lit, the switch is filled in its verdict's colour (`ink`), and its text is the
+   ground colour on top of it. */
+.compare-verdict .wdg-toggle-body[data-on],
+.compare-verdict .wdg-toggle-body[data-on] kbd { color: var(--bg); }
+.compare-verdict textarea { min-height: 52px; padding: 6px; resize: vertical; font-size: var(--text-body); }
+.compare-status {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  color: var(--ui);
+  font-size: var(--text-control);
+}
+.compare-status b { font-weight: var(--weight-strong); }
 .compare-status b[data-verdict='approve'] { color: var(--green); }
 .compare-status b[data-verdict='reject'] { color: var(--red); }
