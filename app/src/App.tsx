@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as api from './api.ts';
 import type { Entry, Input, Owner, Preset, Problem, Report } from './api.ts';
+import { Segmented } from '@openflow/widgets/controls/Segmented.tsx';
 import { Inspector } from './Inspector.tsx';
+import { Playlists } from './Playlists.tsx';
+import * as pl from './playlists.ts';
 import { StageGraph } from './StageGraph.tsx';
 import { STAGES, setValue as setValueIn } from './stages.ts';
 
@@ -75,6 +78,9 @@ export function App() {
   const [input, setInput] = useState('');
   const [stats, setStats] = useState<api.Stats>({ fps: 0, cpu_ms: 0 });
   const [error, setError] = useState<string | null>(null);
+  const [lists, setLists] = useState<pl.Lists | null>(null);
+  const [tab, setTab] = useState(0);
+  const [target, setTarget] = useState<string | null>(null);
   const bench = useRef<HTMLDivElement>(null);
   useBench(bench);
   const apply = useApply(setReport);
@@ -97,16 +103,49 @@ export function App() {
     }
   }, []);
 
+  // A playlist is playing: the live action layer steps through it.
+  const playing = lists?.deck.playlist ?? null;
   const step = useCallback(
     (by: number) => {
+      if (playing) {
+        pl.act({ kind: by === 0 ? 'random' : by > 0 ? 'next' : 'previous' }).catch((e) => setError(String(e)));
+        return;
+      }
       const list = shown.length ? shown : library;
       if (!list.length) return;
       const at = current ? list.findIndex((e) => e.path === current.path) : -1;
       const next = by === 0 ? Math.floor(Math.random() * list.length) : (at + by + list.length) % list.length;
       load(list[next]);
     },
-    [shown, library, current, load],
+    [playing, shown, library, current, load],
   );
+
+  // Whatever changed the preset live (a playlist step, auto-advance, a controller),
+  // the page follows it here.
+  const libraryRef = useRef(library);
+  libraryRef.current = library;
+  useEffect(() => {
+    pl.lists().then(setLists, (e) => setError(String(e)));
+    const off = pl.onLive((now) => {
+      setLists((l) => (l ? { ...l, deck: now.deck } : l));
+      if (!now.path) return;
+      const path = now.path;
+      const known = libraryRef.current.find((e) => e.path === path);
+      const name = path.split('/').pop()?.replace(/\.milk$/i, '') ?? path;
+      setCurrent(known ?? { path, name, group: '' });
+      setError(now.error);
+      if (now.opened) {
+        setPreset(now.opened.preset);
+        setReport(now.opened.report);
+      }
+    });
+    return () => {
+      off.then((f) => f());
+    };
+  }, []);
+
+  // The playlist the library's + adds to: the one picked in the panel, or the one playing.
+  const into = lists?.playlists.find((p) => p.id === (target ?? playing)) ?? null;
 
   useEffect(() => {
     api.presets().then((l) => {
@@ -203,15 +242,43 @@ export function App() {
         </span>
       </header>
       <aside className="library">
-        <input placeholder={`search ${library.length} presets`} value={search} onChange={(e) => setSearch(e.target.value)} />
-        <ul>
-          {shown.map((e) => (
-            <li key={e.path} data-current={current?.path === e.path ? '' : undefined} onClick={() => load(e)}>
-              <span>{e.name}</span>
-              <i>{e.group}</i>
-            </li>
-          ))}
-        </ul>
+        <Segmented className="library-tabs" items={['library', 'playlists']} index={tab} onChange={setTab} label="library or playlists" />
+        {tab === 0 ? (
+          <>
+            <input placeholder={`search ${library.length} presets`} value={search} onChange={(e) => setSearch(e.target.value)} />
+            <ul>
+              {shown.map((e) => (
+                <li key={e.path} data-current={current?.path === e.path ? '' : undefined} onClick={() => load(e)}>
+                  <span>{e.name}</span>
+                  <i>{e.group}</i>
+                  {into && (
+                    <button
+                      className="library-add"
+                      title={`add to ${into.name}`}
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        pl.add(into.id, e.path).then(setLists, (err) => setError(String(err)));
+                      }}
+                    >
+                      +
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          lists && (
+            <Playlists
+              lists={lists}
+              current={current?.path ?? null}
+              selected={target ?? playing ?? lists.playlists[0]?.id ?? null}
+              onSelect={setTarget}
+              onLists={setLists}
+              onError={setError}
+            />
+          )
+        )}
       </aside>
       <main>
         <div className="bench-row">

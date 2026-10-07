@@ -1,7 +1,9 @@
 //! visual[flow]: the editor in a webview, the bench drawn natively under it.
 
+mod actions;
 mod bench;
 mod listen;
+mod playlists;
 
 use engine::preset::Preset;
 use serde::Serialize;
@@ -28,7 +30,7 @@ struct Entry {
 }
 
 /// Where a preset stopped compiling, by the stage the editor shows it in.
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 struct Problem {
     stage: String,
     message: String,
@@ -36,7 +38,7 @@ struct Problem {
     line: Option<usize>,
 }
 
-#[derive(Serialize, Default)]
+#[derive(Serialize, Default, Clone)]
 struct Report {
     /// Equations that would not compile. The bench keeps drawing the last preset.
     equations: Vec<Problem>,
@@ -44,7 +46,7 @@ struct Report {
     shaders: Vec<Problem>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 struct Opened {
     preset: Preset,
     report: Report,
@@ -120,13 +122,19 @@ fn load(app: &App, preset: Preset) -> Result<Report, String> {
     }
 }
 
-#[tauri::command]
-async fn open(path: String, app: State<'_, App>) -> Result<Opened, String> {
-    let text = engine::preset::decode(&std::fs::read(&path).map_err(|e| e.to_string())?);
+/// Read `path` and put it on the bench with a new seed.
+fn open_path(app: &App, path: &str) -> Result<Opened, String> {
+    let text = engine::preset::decode(&std::fs::read(path).map_err(|e| e.to_string())?);
     let preset = engine::preset::parse(&text);
     app.seed.store(std::time::UNIX_EPOCH.elapsed().map(|d| d.as_nanos() as u64).unwrap_or(1), Ordering::Relaxed);
-    let report = load(&app, preset.clone())?;
+    let report = load(app, preset.clone())?;
     Ok(Opened { preset, report })
+}
+
+#[tauri::command]
+async fn open(path: String, app: State<'_, App>, deck: State<'_, actions::Deck>) -> Result<Opened, String> {
+    deck.opened(Path::new(&path));
+    open_path(&app, &path)
 }
 
 #[tauri::command]
@@ -208,9 +216,12 @@ fn main() {
     let library = std::env::var_os("OPENFLOW_VISUALS_PRESETS")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".openflow/visuals/presets"));
+    let deck = actions::Deck::new(playlists::Store::open(playlists::default_file(), library.clone()));
     tauri::Builder::default()
         .manage(App { bench: Mutex::new(None), ring: listen::ring(), listening: Mutex::new(None), library, seed: AtomicU64::new(1) })
+        .manage(deck)
         .setup(|app| {
+            actions::start_auto(app.handle().clone());
             #[cfg(target_os = "macos")]
             {
                 let window = app.get_webview_window("main").expect("main window");
@@ -234,7 +245,27 @@ fn main() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![presets, open, apply, set_value, set_previews, previews, place_bench, inputs, listen_to, stats])
+        .invoke_handler(tauri::generate_handler![
+            presets,
+            open,
+            apply,
+            set_value,
+            set_previews,
+            previews,
+            place_bench,
+            inputs,
+            listen_to,
+            stats,
+            actions::act,
+            actions::playlists,
+            actions::playlist_create,
+            actions::playlist_rename,
+            actions::playlist_delete,
+            actions::playlist_add,
+            actions::playlist_remove,
+            actions::playlist_move_item,
+            actions::playlist_move,
+        ])
         .run(tauri::generate_context!())
         .expect("visual[flow]");
 }
