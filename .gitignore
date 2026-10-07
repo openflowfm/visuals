@@ -10,6 +10,8 @@ frames-out/
 coverage/
 report/
 harness/out/
+teaser/out/
+teaser/public/
 /target/
 engine/target/
 dist-app/

@@ -1,0 +1,6 @@
+# The cold open's little 2001 window: presets by Ryan Geiss, who made MilkDrop, drawn
+# at 320x240 and shown pixelated. The last one holds while the window grows, and is
+# the first preset of cuts.txt, so the pixels turn into HD on the downbeat.
+
+0       cream-of-the-crop/Reaction/Liquid Ripples/Geiss - Two-Pointed Pulsagon - mash0000 - bubonic super-fluid centrifuge.milk
+3.75    cream-of-the-crop/Geometric/Wire Circles/Geiss - Many Colors 1.milk
