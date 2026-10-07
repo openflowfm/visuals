@@ -170,22 +170,24 @@ fn inputs() -> Vec<listen::Input> {
 /// Listen to `name` (the system input when absent), channels `left` and `right`
 /// counted from 1. Returns the input's name.
 #[tauri::command]
-fn listen_to(name: Option<String>, left: Option<usize>, right: Option<usize>, app: State<App>) -> Result<String, String> {
-    let l = listen_on(&app, name.as_deref(), left, right)?;
+fn listen_to(name: Option<String>, size: Option<usize>, left: Option<usize>, right: Option<usize>, app: State<App>) -> Result<String, String> {
+    let l = listen_on(&app, name.as_deref(), size, left, right)?;
     listen::save(&l);
     Ok(l.name)
 }
 
-/// Open an input and make it what the bench hears. Channels count from 1.
-fn listen_on(app: &App, name: Option<&str>, left: Option<usize>, right: Option<usize>) -> Result<listen::Choice, String> {
+/// Open an input and make it what the bench hears. Channels count from 1. The
+/// new input opens before the old one closes, so a switch that fails leaves the
+/// bench hearing what it heard.
+fn listen_on(app: &App, name: Option<&str>, size: Option<usize>, left: Option<usize>, right: Option<usize>) -> Result<listen::Choice, String> {
     let channels = (left.unwrap_or(1).max(1) - 1, right.unwrap_or(2).max(1) - 1);
     let mut listening = app.listening.lock().unwrap();
-    *listening = None;
-    let l = listen::listen(name, channels, app.ring.clone())?;
+    let l = listen::listen(name, size, channels, app.ring.clone())?;
     if let Some(b) = app.bench.lock().unwrap().as_ref() {
         let _ = b.commands.send(bench::Cmd::SampleRate(l.rate));
     }
     let choice = l.choice();
+    eprintln!("listening to {} on channels {} and {} of {}, at {} Hz", choice.name, choice.left, choice.right, l.channels, l.rate);
     *listening = Some(l);
     Ok(choice)
 }
@@ -264,9 +266,9 @@ fn main() {
                 let saved = listen::saved();
                 let heard = saved
                     .as_ref()
-                    .and_then(|c| listen_on(&state, Some(&c.name), Some(c.left), Some(c.right)).ok())
+                    .and_then(|c| listen_on(&state, Some(&c.name), Some(c.size), Some(c.left), Some(c.right)).ok())
                     .map(Ok)
-                    .unwrap_or_else(|| listen_on(&state, None, None, None));
+                    .unwrap_or_else(|| listen_on(&state, None, None, None, None));
                 if let Err(e) = heard {
                     eprintln!("no audio input: {e}");
                 }

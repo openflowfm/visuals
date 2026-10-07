@@ -60,8 +60,10 @@ fn options() -> Options {
                 let host = cpal::default_host();
                 for d in host.input_devices().into_iter().flatten() {
                     let name = d.description().map(|d| d.name().to_owned()).unwrap_or_default();
-                    let channels = d.default_input_config().map(|c| c.channels()).unwrap_or(0);
-                    println!("{name} ({channels} channels)");
+                    match d.default_input_config() {
+                        Ok(c) => println!("{name} ({} channels, {:?}, {} Hz)", c.channels(), c.sample_format(), c.sample_rate()),
+                        Err(e) => println!("{name} (no input config: {e})"),
+                    }
                 }
                 std::process::exit(0);
             }

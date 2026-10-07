@@ -51,11 +51,14 @@ pub struct Choice {
     pub name: String,
     pub left: usize,
     pub right: usize,
+    /// The input's channel count, which tells same-named inputs apart.
+    #[serde(default)]
+    pub size: usize,
 }
 
 impl Listening {
     pub fn choice(&self) -> Choice {
-        Choice { name: self.name.clone(), left: self.left + 1, right: self.right + 1 }
+        Choice { name: self.name.clone(), left: self.left + 1, right: self.right + 1, size: self.channels }
     }
 }
 
@@ -90,14 +93,17 @@ pub fn peaks(ring: &Ring) -> (f32, f32) {
 
 /// Open `input` (the system input when `None`) and write channels `left` and
 /// `right` (from 0) into `ring`.
-pub fn listen(input: Option<&str>, (left, right): (usize, usize), ring: Ring) -> Result<Listening, String> {
+/// `size`, when given, picks between inputs that share a name — macOS calls
+/// every aggregate device "Aggregate Device" — by their channel count.
+pub fn listen(input: Option<&str>, size: Option<usize>, (left, right): (usize, usize), ring: Ring) -> Result<Listening, String> {
     let host = cpal::default_host();
     let device = match input {
-        Some(want) => host
-            .input_devices()
-            .map_err(|e| e.to_string())?
-            .find(|d| name_of(d) == want)
-            .ok_or_else(|| format!("no input called {want}"))?,
+        Some(want) => {
+            let named: Vec<cpal::Device> = host.input_devices().map_err(|e| e.to_string())?.filter(|d| name_of(d) == want).collect();
+            let channels_of = |d: &cpal::Device| d.default_input_config().map(|c| c.channels() as usize).unwrap_or(0);
+            let at = named.iter().position(|d| Some(channels_of(d)) == size).unwrap_or(0);
+            named.into_iter().nth(at).ok_or_else(|| format!("no input called {want}"))?
+        }
         None => host.default_input_device().ok_or("no system input")?,
     };
     let config = device.default_input_config().map_err(|e| e.to_string())?;

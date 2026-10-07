@@ -124,8 +124,17 @@ fn run(
         // On a faster display the refreshes in between show the last two frames
         // mixed, so motion stays smooth at the preset's own speed. A quarter
         // frame of slack keeps a 60 Hz display's jitter from skipping frames.
+        // A window that isn't on screen gets no refreshes to wait for, and the
+        // loop would spin; below a 4 ms round it is paced by sleeping instead.
+        let unpaced = !refresh.is_zero() && refresh < std::time::Duration::from_millis(4);
+        if unpaced {
+            let wait = due.saturating_duration_since(Instant::now());
+            if !wait.is_zero() {
+                std::thread::sleep(wait);
+            }
+        }
         let now = Instant::now();
-        let smooth = refresh < FRAME.mul_f64(0.75);
+        let smooth = !unpaced && refresh < FRAME.mul_f64(0.75);
         let mut cpu = None;
         if now + FRAME / 4 >= due {
             due = if now > due + FRAME { now + FRAME } else { due + FRAME };
@@ -175,14 +184,21 @@ fn run(
             let s = Stats { fps: window.1 as f64 / secs, cpu_ms: window.2 * 1000.0 / window.1 as f64 };
             if now.duration_since(logged).as_secs() >= 5 {
                 logged = now;
+                let (l, r) = crate::listen::peaks(&ring);
                 eprintln!(
-                    "bench: {:.0} fps, {:.2} ms cpu, surface {}x{}, display {:.0} Hz{}",
+                    "bench: {:.0} fps, {:.2} ms cpu, surface {}x{}, display {:.0} Hz{}, input peaks {l:.3} {r:.3}",
                     s.fps,
                     s.cpu_ms,
                     config.width,
                     config.height,
                     1.0 / refresh.as_secs_f64().max(1e-6),
-                    if refresh < FRAME.mul_f64(0.75) { ", mixing between frames" } else { "" }
+                    if refresh < std::time::Duration::from_millis(4) {
+                        ", not on screen"
+                    } else if refresh < FRAME.mul_f64(0.75) {
+                        ", mixing between frames"
+                    } else {
+                        ""
+                    }
                 );
             }
             *stats.lock().unwrap() = s;
@@ -303,27 +319,20 @@ pub mod view {
             let view = v.borrow();
             let view = view.as_ref()?;
             let parent = unsafe { view.superview() }?;
-            // The page's coordinates start at the webview's top left, which need
-            // not be the parent's: the webview can be shorter than its parent
-            // (a window held below its full height leaves it ~32pt short). So the
-            // rect is placed relative to the webview — the largest sibling.
-            let webview = parent
-                .subviews()
-                .iter()
-                .filter(|v| !std::ptr::eq(&**v, &**view))
-                .max_by(|a, b| (a.frame().size.width * a.frame().size.height).total_cmp(&(b.frame().size.width * b.frame().size.height)))
-                .map(|v| v.frame())
-                .unwrap_or_else(|| parent.frame());
-            let left = webview.origin.x + x;
-            let bottom = if parent.isFlipped() { webview.origin.y + y } else { webview.origin.y + webview.size.height - y - height };
+            // The page's coordinates start at the top left of the window's content
+            // layout rect, not of the view it sits in: the webview runs up under
+            // the title bar and the page begins below it (32pt here). The layout
+            // rect is in the window's coordinates, which are the content view's.
+            let window = view.window()?;
+            let area = window.contentLayoutRect();
+            let left = area.origin.x + x;
+            let bottom = if parent.isFlipped() {
+                window.frame().size.height - (area.origin.y + area.size.height) + y
+            } else {
+                area.origin.y + area.size.height - y - height
+            };
             view.setFrame(NSRect::new(NSPoint::new(left, bottom), NSSize::new(width, height)));
-            let scale = view.window().map(|w| w.backingScaleFactor()).unwrap_or(2.0);
-            eprintln!(
-                "bench: placed at {x:.0},{y:.0} {width:.0}x{height:.0} pt (parent {:.0}x{:.0}, flipped {}, scale {scale})",
-                parent.frame().size.width,
-                parent.frame().size.height,
-                parent.isFlipped()
-            );
+            let scale = window.backingScaleFactor();
             Some(((width * scale).round() as u32, (height * scale).round() as u32))
         })
     }
