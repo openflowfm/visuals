@@ -115,9 +115,91 @@ const Intro = () => {
   );
 };
 
-/** Three lines, two bars each: long enough to read while the presets change under them. */
+/** Big lines, two bars each: long enough to read while the presets change under them. */
 const FACT_BARS = 2;
-const FACTS = ['9,744 MilkDrop presets', 'Native, on the GPU', 'Full screen, any display'];
+const FACTS = ['9,744 MilkDrop presets', 'Native, on the GPU'];
+
+/** Some of what speaks Ableton Link — ableton.com/link/products, plus Traktor, Serato and Bitwig. */
+const LINKED = [
+  'Ableton Live',
+  'Akai MPC',
+  'Logic Pro',
+  'Pro Tools',
+  'Bitwig Studio',
+  'rekordbox',
+  'Traktor',
+  'Serato DJ',
+  'Denon DJ Prime',
+  'djay',
+];
+
+/** The last two bars of the facts: Link, and the names it brings along, one a half-beat. */
+const LinkWall = () => {
+  const frame = useCurrentFrame();
+  const { u, vertical } = useUnit();
+  const start = bar(SECTIONS.facts[0] + FACTS.length * FACT_BARS);
+  const v = useShow(start, bar(SECTIONS.facts[1]), beat(0.5));
+  if (!v) return null;
+  return (
+    <Center scrim={v}>
+      <div
+        style={{
+          opacity: v,
+          transform: `scale(${1.12 - 0.12 * v})`,
+          fontFamily: sans,
+          fontWeight: 700,
+          fontSize: 104 * u,
+          letterSpacing: -3 * u,
+          lineHeight: 1,
+          color: 'white',
+          textShadow: SHADOW,
+          marginBottom: 48 * u,
+        }}
+      >
+        Synced with <span style={{ color: ACCENT, whiteSpace: 'nowrap' }}>Ableton Link</span>
+      </div>
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          justifyContent: 'center',
+          gap: 18 * u,
+          maxWidth: (vertical ? 920 : 1500) * u,
+          opacity: v,
+        }}
+      >
+        {LINKED.map((name, i) => {
+          const at = start + beat(1 + i * 0.5);
+          const pop = spring({ frame: frame - at, fps: FPS, config: { damping: 12, stiffness: 220 } });
+          // Each name lands lit, then settles to white.
+          const lit = interpolate(frame - at, [0, beat(1)], [1, 0], clamp);
+          return (
+            <div
+              key={name}
+              style={{
+                opacity: pop,
+                transform: `scale(${0.6 + 0.4 * pop})`,
+                fontFamily: sans,
+                fontWeight: 700,
+                fontSize: 42 * u,
+                color: 'white',
+                padding: `${12 * u}px ${28 * u}px`,
+                borderRadius: 999,
+                background: 'rgba(0,0,0,0.6)',
+                border: `${2 * u}px solid`,
+                borderColor: lit > 0.01 ? `rgba(200,255,62,${0.4 + 0.6 * lit})` : 'rgba(255,255,255,0.4)',
+                boxShadow: `0 0 ${32 * u * lit}px rgba(200,255,62,${0.6 * lit})`,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {name}
+            </div>
+          );
+        })}
+      </div>
+    </Center>
+  );
+};
 
 const Fact = ({ index }: { index: number }) => {
   const frame = useCurrentFrame();
@@ -193,18 +275,17 @@ const BarCounter = () => {
   );
 };
 
-// `extra` is the optional part: drawn smaller, dimmer and dashed, after the main line.
-type Node = { id: string; label: string; sub: string; at: number; extra?: boolean };
+type Node = { id: string; label: string; sub: string; at: number };
 const NODES: Node[] = [
   { id: 'audio', label: 'Audio in', sub: 'any music', at: 1 },
   { id: 'flow', label: 'visual[flow]', sub: 'the engine', at: 2 },
   { id: 'out', label: 'Any display', sub: 'full screen', at: 3.5 },
-  { id: 'link', label: '+ Ableton Link', sub: 'optional', at: 5.5, extra: true },
+  { id: 'link', label: 'Ableton Link', sub: 'your whole rig', at: 5 },
 ];
-const EDGES: { from: string; to: string; label: string; at: number; extra?: boolean }[] = [
+const EDGES: { from: string; to: string; label: string; at: number }[] = [
   { from: 'audio', to: 'flow', label: 'the music', at: 2.5 },
   { from: 'flow', to: 'out', label: 'live', at: 4 },
-  { from: 'link', to: 'flow', label: 'tempo', at: 6, extra: true },
+  { from: 'link', to: 'flow', label: 'tempo · beat · bar', at: 5.5 },
 ];
 
 /** The breakdown: how it fits together, a beat at a time. */
@@ -263,11 +344,10 @@ const Diagram = () => {
                 x2={x1 + (x2 - x1) * drawn}
                 y2={y1 + (y2 - y1) * drawn}
                 stroke="white"
-                strokeOpacity={e.extra ? 0.45 : 0.7}
-                strokeWidth={(e.extra ? 2 : 3) * u}
-                strokeDasharray={e.extra ? `${10 * u} ${8 * u}` : undefined}
+                strokeOpacity={0.7}
+                strokeWidth={3 * u}
               />
-              {live && !e.extra && (
+              {live && (
                 <circle cx={x1 + (x2 - x1) * p} cy={y1 + (y2 - y1) * p} r={9 * u} fill={ACCENT} opacity={1 - p * 0.6} />
               )}
               <text
@@ -302,11 +382,11 @@ const Diagram = () => {
               position: 'absolute',
               left: x,
               top: y,
-              transform: `translate(-50%, -50%) scale(${(0.85 + 0.15 * v) * (n.extra ? 0.7 : 1)})`,
-              opacity: v * (n.extra ? 0.8 : 1),
+              transform: `translate(-50%, -50%) scale(${0.85 + 0.15 * v})`,
+              opacity: v,
               padding: `${22 * u}px ${36 * u}px`,
               borderRadius: 18 * u,
-              border: `${2 * u}px ${n.extra ? 'dashed' : 'solid'} ${lit ? ACCENT : 'rgba(255,255,255,0.6)'}`,
+              border: `${2 * u}px solid ${lit ? ACCENT : 'rgba(255,255,255,0.6)'}`,
               background: 'rgba(0,0,0,0.55)',
               backdropFilter: 'blur(6px)',
               textAlign: 'center',
@@ -430,6 +510,7 @@ export const Teaser = () => (
     {FACTS.map((_, i) => (
       <Fact key={i} index={i} />
     ))}
+    <LinkWall />
     <Diagram />
     <Drop />
     <Wordmark />
