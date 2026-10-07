@@ -86,7 +86,10 @@ const Center = ({ children, style, scrim = 0 }: { children: ReactNode; style?: C
         background: 'radial-gradient(ellipse 60% 32% at center, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.35) 55%, transparent 100%)',
       }}
     />
-    {children}
+    {/* Positioned, so the text paints above the pool (which is positioned too) rather than under it. */}
+    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      {children}
+    </div>
   </AbsoluteFill>
 );
 
