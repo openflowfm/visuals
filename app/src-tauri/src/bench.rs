@@ -269,8 +269,20 @@ pub mod view {
             let view = v.borrow();
             let view = view.as_ref()?;
             let parent = unsafe { view.superview() }?;
-            let from_bottom = if parent.isFlipped() { y } else { parent.frame().size.height - y - height };
-            view.setFrame(NSRect::new(NSPoint::new(x, from_bottom), NSSize::new(width, height)));
+            // The page's coordinates start at the webview's top left, which need
+            // not be the parent's: the webview can be shorter than its parent
+            // (a window held below its full height leaves it ~32pt short). So the
+            // rect is placed relative to the webview — the largest sibling.
+            let webview = parent
+                .subviews()
+                .iter()
+                .filter(|v| !std::ptr::eq(&**v, &**view))
+                .max_by(|a, b| (a.frame().size.width * a.frame().size.height).total_cmp(&(b.frame().size.width * b.frame().size.height)))
+                .map(|v| v.frame())
+                .unwrap_or_else(|| parent.frame());
+            let left = webview.origin.x + x;
+            let bottom = if parent.isFlipped() { webview.origin.y + y } else { webview.origin.y + webview.size.height - y - height };
+            view.setFrame(NSRect::new(NSPoint::new(left, bottom), NSSize::new(width, height)));
             let scale = view.window().map(|w| w.backingScaleFactor()).unwrap_or(2.0);
             eprintln!(
                 "bench: placed at {x:.0},{y:.0} {width:.0}x{height:.0} pt (parent {:.0}x{:.0}, flipped {}, scale {scale})",
