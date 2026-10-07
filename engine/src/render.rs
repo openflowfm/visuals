@@ -37,7 +37,10 @@ impl Target {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
         let view = texture.create_view(&Default::default());
@@ -78,6 +81,11 @@ pub struct Renderer {
     feedback: [Target; 2],
     current: usize,
     comp: Target,
+    /// The frame before `comp`, kept for [`Renderer::present_between`].
+    before: Target,
+    blends: HashMap<wgpu::TextureFormat, wgpu::RenderPipeline>,
+    blend_shader: wgpu::ShaderModule,
+    blend_t: wgpu::Buffer,
     blur: Vec<(Target, Target)>,
     textures: HashMap<&'static str, wgpu::TextureView>,
     samplers: HashMap<&'static str, wgpu::Sampler>,
@@ -225,6 +233,25 @@ struct Out { @builtin(position) pos: vec4f, @location(0) uv: vec2f }
 @group(0) @binding(0) var tex: texture_2d<f32>;
 @group(0) @binding(1) var smp: sampler;
 @fragment fn fs(in: Out) -> @location(0) vec4f { return vec4f(textureSample(tex, smp, in.uv).rgb, 1.0); }";
+
+/// Two finished frames mixed: what a display faster than the preset rate shows
+/// between them ([`Renderer::present_between`]).
+const BLEND: &str = "
+struct Out { @builtin(position) pos: vec4f, @location(0) uv: vec2f }
+@vertex fn vs(@builtin(vertex_index) i: u32) -> Out {
+  let p = vec2f(f32(i & 1u) * 2.0 - 1.0, f32(i >> 1u) * 2.0 - 1.0);
+  var o: Out;
+  o.pos = vec4f(p, 0.0, 1.0);
+  o.uv = p * 0.5 + 0.5;
+  return o;
+}
+@group(0) @binding(0) var before: texture_2d<f32>;
+@group(0) @binding(1) var after: texture_2d<f32>;
+@group(0) @binding(2) var smp: sampler;
+@group(0) @binding(3) var<uniform> t: vec4f;
+@fragment fn fs(in: Out) -> @location(0) vec4f {
+  return vec4f(mix(textureSample(before, smp, in.uv).rgb, textureSample(after, smp, in.uv).rgb, t.x), 1.0);
+}";
 
 fn blur_size(size: &Size, ratio: f64) -> (u32, u32) {
     let x = (size.texsize_x * ratio).max(16.0);
@@ -375,6 +402,10 @@ impl Renderer {
             feedback: [Target::new(&device, full, "feedback a"), Target::new(&device, full, "feedback b")],
             current: 0,
             comp: Target::new(&device, full, "comp"),
+            before: Target::new(&device, full, "comp before"),
+            blends: HashMap::new(),
+            blend_shader: wgsl(BLEND),
+            blend_t: buffer(&device, &[0u8; 16], wgpu::BufferUsages::UNIFORM),
             blur,
             textures,
             samplers,
@@ -799,6 +830,12 @@ impl Renderer {
         }
         self.draw(&mut encoder, &frame, wrap, audio);
         self.preview(&mut encoder, 1, &self.feedback[self.current].view);
+        // The last finished frame becomes the one before, for `present_between`.
+        encoder.copy_texture_to_texture(
+            self.comp.texture.as_image_copy(),
+            self.before.texture.as_image_copy(),
+            wgpu::Extent3d { width: self.comp.size.0, height: self.comp.size.1, depth_or_array_layers: 1 },
+        );
         // Comp reads this frame's warp output.
         let comp = self.comp_stage.as_ref().unwrap();
         let comp_group = self.bind_group(comp, &self.feedback[self.current].view, wrap);
@@ -1110,6 +1147,51 @@ impl Renderer {
         pass.draw(0..4, 0..1);
     }
 
+    /// Draw a picture `t` of the way from the frame before to the latest one
+    /// (0 the frame before, 1 the latest): how a display faster than
+    /// [`crate::runtime::FRAME_RATE`] fills the refreshes between frames.
+    pub fn present_between(&mut self, view: &wgpu::TextureView, format: wgpu::TextureFormat, t: f32) {
+        if !self.blends.contains_key(&format) {
+            let pipeline = self.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("blend"),
+                layout: None,
+                vertex: wgpu::VertexState { module: &self.blend_shader, entry_point: Some("vs"), compilation_options: Default::default(), buffers: &[] },
+                primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleStrip, ..Default::default() },
+                depth_stencil: None,
+                multisample: Default::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &self.blend_shader,
+                    entry_point: Some("fs"),
+                    compilation_options: Default::default(),
+                    targets: &[Some(format.into())],
+                }),
+                multiview_mask: None,
+                cache: None,
+            });
+            self.blends.insert(format, pipeline);
+        }
+        self.queue.write_buffer(&self.blend_t, 0, bytemuck::cast_slice(&[t.clamp(0.0, 1.0), 0.0, 0.0, 0.0]));
+        let pipeline = &self.blends[&format];
+        let group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &pipeline.get_bind_group_layout(0),
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&self.before.view) },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&self.comp.view) },
+                wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&self.samplers["linear_clamp"]) },
+                wgpu::BindGroupEntry { binding: 3, resource: self.blend_t.as_entire_binding() },
+            ],
+        });
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+        {
+            let mut pass = begin(&mut encoder, view, true);
+            pass.set_pipeline(pipeline);
+            pass.set_bind_group(0, &group, &[]);
+            pass.draw(0..4, 0..1);
+        }
+        self.queue.submit([encoder.finish()]);
+    }
+
     /// Draw the finished picture into `view`, a window's surface, scaled to fit.
     pub fn present(&mut self, view: &wgpu::TextureView, format: wgpu::TextureFormat) {
         self.blit_pipeline(format);
@@ -1196,6 +1278,52 @@ mod tests {
         let pixels = r.read_back();
         assert_eq!(pixels.len(), 256 * 192 * 4);
         assert!(pixels.chunks(4).all(|p| p[3] == 255), "comp writes opaque pixels");
+    }
+
+    #[test]
+    fn between_frames_mixes_the_last_two() {
+        let Some((device, queue)) = headless() else { return };
+        let mut r = Renderer::new(device, queue, 64, 36);
+        let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../test/fixtures/milk/Fixture - Spiral Test.milk")).unwrap();
+        r.load(&text, 1).unwrap();
+        let mut audio = Audio::default();
+        let tone: Vec<f32> = (0..1024).map(|i| (i as f32 * 0.05).sin() * 0.8).collect();
+        for _ in 0..20 {
+            audio.update(&tone, &tone);
+            r.render(&mut audio, 1.0 / 60.0);
+        }
+        let target = Target::new(r.device(), (64, 36), "shown");
+        let read = |r: &Renderer| {
+            let staging = r.device().create_buffer(&wgpu::BufferDescriptor {
+                label: None,
+                size: 256 * 36,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            });
+            let mut e = r.device().create_command_encoder(&Default::default());
+            e.copy_texture_to_buffer(
+                target.texture.as_image_copy(),
+                wgpu::TexelCopyBufferInfo { buffer: &staging, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(256), rows_per_image: Some(36) } },
+                wgpu::Extent3d { width: 64, height: 36, depth_or_array_layers: 1 },
+            );
+            r.queue().submit([e.finish()]);
+            staging.slice(..).map_async(wgpu::MapMode::Read, |_| {});
+            r.device().poll(wgpu::PollType::wait_indefinitely()).ok();
+            let v = staging.slice(..).get_mapped_range().unwrap().to_vec();
+            v
+        };
+        r.present_between(&target.view, FORMAT, 0.0);
+        let before = read(&r);
+        r.present_between(&target.view, FORMAT, 1.0);
+        let after = read(&r);
+        r.present(&target.view, FORMAT);
+        let latest = read(&r);
+        r.present_between(&target.view, FORMAT, 0.5);
+        let half = read(&r);
+        assert_eq!(after, latest, "t = 1 is the latest frame");
+        assert_ne!(before, after, "t = 0 is the frame before, which differs on a moving preset");
+        let close = half.iter().zip(before.iter().zip(&after)).all(|(&h, (&a, &b))| (h as i32 - ((a as i32 + b as i32) / 2)).abs() <= 2);
+        assert!(close, "t = 0.5 is halfway between them");
     }
 
     #[test]

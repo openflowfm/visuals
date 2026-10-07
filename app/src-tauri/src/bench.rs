@@ -88,6 +88,7 @@ fn run(
     let mut audio = Audio::default();
     let mut last = Instant::now();
     let mut due = Instant::now();
+    let mut refresh = std::time::Duration::ZERO;
     let mut window = (Instant::now(), 0u32, 0.0f64);
     let mut loaded = false;
     loop {
@@ -118,35 +119,49 @@ fn run(
             }
             continue;
         }
-        // Drawn at the preset rate, not the display's (see `FRAME_RATE`): wait
-        // out the rest of this frame's slot, then present at the next refresh.
-        let wait = due.saturating_duration_since(Instant::now());
-        if !wait.is_zero() {
-            std::thread::sleep(wait);
-        }
+        // The display paces this loop (presenting waits for its refresh), but a
+        // frame is only made when one is due at the preset rate (`FRAME_RATE`).
+        // On a faster display the refreshes in between show the last two frames
+        // mixed, so motion stays smooth at the preset's own speed. A quarter
+        // frame of slack keeps a 60 Hz display's jitter from skipping frames.
         let now = Instant::now();
-        due = if now > due + FRAME { now + FRAME } else { due + FRAME };
-        let elapsed = now.duration_since(last).as_secs_f64().clamp(0.001, 0.25);
-        last = now;
-        {
-            let (l, r): (Vec<f32>, Vec<f32>) = {
-                let ring = ring.lock().unwrap();
-                (ring.0.iter().copied().collect(), ring.1.iter().copied().collect())
-            };
-            audio.update(&l, &r);
+        let smooth = refresh < FRAME.mul_f64(0.75);
+        let mut cpu = None;
+        if now + FRAME / 4 >= due {
+            due = if now > due + FRAME { now + FRAME } else { due + FRAME };
+            let elapsed = now.duration_since(last).as_secs_f64().clamp(0.001, 0.25);
+            last = now;
+            {
+                let (l, r): (Vec<f32>, Vec<f32>) = {
+                    let ring = ring.lock().unwrap();
+                    (ring.0.iter().copied().collect(), ring.1.iter().copied().collect())
+                };
+                audio.update(&l, &r);
+            }
+            let started = Instant::now();
+            renderer.render(&mut audio, elapsed);
+            cpu = Some(started.elapsed().as_secs_f64());
         }
-        let started = Instant::now();
-        renderer.render(&mut audio, elapsed);
-        let cpu = started.elapsed().as_secs_f64();
-        // Waits for the display: this is what paces the loop.
         match surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame) | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => {
                 let view = frame.texture.create_view(&Default::default());
-                renderer.present(&view, config.format);
+                if smooth {
+                    // 0 at the refresh a frame was made (the frame before is
+                    // shown), rising to 1 as the next is due: one frame behind,
+                    // and never a jump.
+                    let t = last.elapsed().as_secs_f64() / FRAME.as_secs_f64();
+                    renderer.present_between(&view, config.format, t as f32);
+                } else {
+                    renderer.present(&view, config.format);
+                }
                 renderer.queue().present(frame);
             }
             _ => surface.configure(renderer.device(), &config),
         }
+        // How often the display refreshes: the time round this loop, smoothed.
+        let round = now.elapsed();
+        refresh = if refresh.is_zero() { round } else { refresh.mul_f64(0.9) + round.mul_f64(0.1) };
+        let Some(cpu) = cpu else { continue };
         frames = frames.wrapping_add(1);
         if frames % PREVIEW_EVERY == 0 {
             if let Some(pictures) = renderer.read_previews() {
@@ -160,7 +175,15 @@ fn run(
             let s = Stats { fps: window.1 as f64 / secs, cpu_ms: window.2 * 1000.0 / window.1 as f64 };
             if now.duration_since(logged).as_secs() >= 5 {
                 logged = now;
-                eprintln!("bench: {:.0} fps, {:.2} ms cpu, surface {}x{}", s.fps, s.cpu_ms, config.width, config.height);
+                eprintln!(
+                    "bench: {:.0} fps, {:.2} ms cpu, surface {}x{}, display {:.0} Hz{}",
+                    s.fps,
+                    s.cpu_ms,
+                    config.width,
+                    config.height,
+                    1.0 / refresh.as_secs_f64().max(1e-6),
+                    if refresh < FRAME.mul_f64(0.75) { ", mixing between frames" } else { "" }
+                );
             }
             *stats.lock().unwrap() = s;
             window = (now, 0, 0.0);
