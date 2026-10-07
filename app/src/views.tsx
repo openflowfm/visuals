@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Segmented } from '@openflow/widgets/controls/Segmented.tsx';
 
 export type View = 'editor' | 'compare' | 'live';
@@ -19,5 +20,25 @@ export function ViewSwitch({ view, onChange }: { view: View; onChange(next: View
       onChange={(i) => VIEWS[i] !== view && onChange(VIEWS[i])}
       label={VIEWS.join(', ')}
     />
+  );
+}
+
+/** The suite's wordmark, spelled the way mix[flow] spells its own. */
+export function Mark() {
+  return (
+    <span className="vf-mark">
+      visual<span>[flow]</span>
+    </span>
+  );
+}
+
+/** Every view's header: the mark, the view switch, then whatever the view puts in it. */
+export function Header({ view, onChange, children }: { view: View; onChange(next: View): void; children?: ReactNode }) {
+  return (
+    <header className="vf-header">
+      <Mark />
+      <ViewSwitch view={view} onChange={onChange} />
+      {children}
+    </header>
   );
 }

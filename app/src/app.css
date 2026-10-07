@@ -1,15 +1,19 @@
 * { box-sizing: border-box; }
 
 /* Transparent all the way down: the bench is a native view under the page, and
-   shows through wherever nothing here paints. Every panel paints itself. */
-html, body, #root {
+   shows through wherever nothing here paints. Every panel paints itself — which
+   is why the theme root, which paints --bg elsewhere in the suite, doesn't here. */
+html, body, #root, .vf-root {
   height: 100%;
   margin: 0;
   overflow: hidden;
   background: transparent;
+}
+body {
   color: var(--ui);
   font-family: var(--sans);
-  font-size: 12px;
+  font-variation-settings: var(--sans-axes);
+  font-size: var(--text-lead);
 }
 
 .outside { margin: 0; padding: 24px; background: var(--bg); color: var(--ui); height: 100%; }
@@ -21,7 +25,8 @@ html, body, #root {
   height: 100%;
 }
 
-header {
+/* Every view's header (`Header` in views.tsx): the mark, the view switch, the view's own. */
+.vf-header {
   grid-column: 1 / -1;
   display: flex;
   align-items: center;
@@ -31,14 +36,25 @@ header {
   border-bottom: 1px solid var(--bd3);
   white-space: nowrap;
 }
-header h1 { margin: 0 8px 0 0; font-size: 13px; color: var(--fg); }
-header .name { overflow: hidden; text-overflow: ellipsis; color: var(--fg); }
-header .name i { color: var(--caption); font-style: normal; margin-right: 6px; }
-header .fill { flex: 1; }
-header .stats { color: var(--caption); font-family: var(--mono); min-width: 150px; text-align: right; }
+.vf-header .name { overflow: hidden; text-overflow: ellipsis; color: var(--fg); }
+.vf-header .name i { color: var(--caption); font-style: normal; margin-right: 6px; }
+.vf-header .fill { flex: 1; }
+.vf-header .stats { color: var(--caption); font-family: var(--mono); font-variation-settings: var(--mono-axes); font-size: var(--text-body); min-width: 150px; text-align: right; }
+
+/* The wordmark, as mix[flow] draws its own. */
+.vf-mark {
+  margin-right: 8px;
+  font-family: var(--mono);
+  font-variation-settings: var(--mono-axes);
+  font-size: var(--text-lead);
+  font-weight: var(--weight-strong);
+  color: var(--fg);
+}
+.vf-mark span { color: var(--primary); }
 
 button, select, input, textarea {
   font: inherit;
+  font-variation-settings: inherit;
   color: var(--fg);
   background: var(--surface-control);
   border: 1px solid var(--bd3);
@@ -65,7 +81,22 @@ select { max-width: 240px; padding: 2px 4px; }
 .library li { padding: 3px 10px; cursor: pointer; display: flex; flex-direction: column; }
 .library li:hover { background: var(--sel); }
 .library li[data-current] { background: var(--bd); color: var(--fg); }
-.library li i { color: var(--caption); font-style: normal; font-size: 10px; }
+.library li i { color: var(--caption); font-style: normal; font-size: var(--text-control); }
+
+/* The library column's tabs and its add buttons. */
+.library-tabs { padding: 8px 8px 0; }
+.library-tabs .wdg-segmented-body { display: flex; }
+.library-tabs .wdg-segmented-body button { flex: 1; }
+.library li { position: relative; }
+.library li .library-add {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 0 6px;
+  display: none;
+}
+.library li:hover .library-add { display: block; }
 
 main {
   display: grid;
@@ -97,65 +128,12 @@ main {
 }
 .graph > * { position: absolute; inset: 0; }
 
-.stage .wdg-device { width: 216px; }
-.stage[data-off] { opacity: 0.45; }
-.stage-screen { position: relative; }
-.stage-screen[data-idle]::after {
-  content: attr(data-idle);
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  color: var(--caption);
-  background: #000;
-}
-.stage-picture { display: block; width: 100%; aspect-ratio: 16 / 9; background: #000; }
-.stage-code {
-  margin: 0;
-  padding: 3px 4px;
-  width: 100%;
-  max-height: 64px;
-  overflow: hidden;
-  font-family: var(--mono);
-  font-size: 9px;
-  line-height: 1.3;
-  color: var(--caption);
-  background: var(--surface-sunken, #101012);
-  white-space: pre;
-  text-overflow: ellipsis;
-  cursor: text;
-}
-.stage[data-kind='equations'] .wdg-device-head { box-shadow: inset 3px 0 0 var(--blue); }
-.stage[data-kind='shader'] .wdg-device-head { box-shadow: inset 3px 0 0 var(--amber); }
-.stage[data-kind='picture'] .wdg-device-head { box-shadow: inset 3px 0 0 var(--green); }
-.stage[data-kind='source'] .wdg-device-head,
-.stage[data-kind='out'] .wdg-device-head { box-shadow: inset 3px 0 0 var(--fg); }
-.stage[data-problem] .wdg-device { border-color: var(--red); }
-.stage-issue { color: var(--red); }
-
 .side {
   overflow: auto;
   background: var(--panel);
   border-left: 1px solid var(--bd3);
 }
-.inspector { padding: 10px; display: flex; flex-direction: column; gap: 10px; }
-.inspector h2 { margin: 0; font-size: 13px; color: var(--fg); }
-.inspector .code { display: flex; flex-direction: column; gap: 4px; }
-.inspector .code i { color: var(--caption); font-style: normal; }
-.inspector textarea {
-  width: 100%;
-  padding: 6px;
-  font-family: var(--mono);
-  font-size: 11px;
-  line-height: 1.45;
-  resize: vertical;
-  white-space: pre;
-  tab-size: 2;
-}
-.inspector .values { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; }
-.inspector .values label { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
-.inspector .values span { overflow: hidden; text-overflow: ellipsis; }
-.inspector .values input { width: 80px; padding: 1px 4px; font-family: var(--mono); text-align: right; }
+
 .problem { color: var(--red); margin: 0; white-space: pre-wrap; }
-.problem b { font-family: var(--mono); }
+.problem b { font-family: var(--mono); font-variation-settings: var(--mono-axes); }
 .quiet { color: var(--caption); }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Owner, Preset, Problem } from './api.ts';
-import { getField, otherValues, problemsOf, setField, settingsOf, type Stage } from './stages.ts';
+import { STAGES, getField, otherValues, problemsOf, setField, settingsOf } from './stages.ts';
+import './graph.css';
 
 /** A number field that lets you type `-` or `0.` on the way to a number. */
 function NumberCell({ value, onChange }: { value: number; onChange(n: number): void }) {
@@ -25,7 +26,8 @@ function NumberCell({ value, onChange }: { value: number; onChange(n: number): v
 
 interface Props {
   preset: Preset;
-  stage: Stage;
+  /** The stage selected in the graph, by id; null is the first. */
+  selected: string | null;
   problems: Problem[];
   /** Code changed: the preset is applied whole. */
   onChange(next: Preset): void;
@@ -34,7 +36,8 @@ interface Props {
 }
 
 /** One stage's code and every one of its settings, edited in place. */
-export function Inspector({ preset, stage, problems, onChange, onSet }: Props) {
+export function Inspector({ preset, selected, problems, onChange, onSet }: Props) {
+  const stage = STAGES.find((s) => s.id === selected) ?? STAGES[0];
   const issues = problemsOf(problems, stage);
   const settings = settingsOf(preset, stage);
   const other = stage.id === 'frame' ? otherValues(preset) : [];

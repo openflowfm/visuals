@@ -1,5 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { ThemeRoot } from '@openflow/widgets/theme/ThemeRoot.tsx';
+import { DEFAULT_THEME } from '@openflow/widgets/theme/theme.ts';
 import '@openflow/widgets/palette.css';
 import '@openflow/widgets/tokens.css';
 import './app.css';
@@ -11,10 +13,12 @@ const inApp = '__TAURI_INTERNALS__' in window;
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {inApp ? (
-      <App />
-    ) : (
-      <p className="outside">This is the editor's page without the app behind it. The editor is the window <code>npm run app</code> opened.</p>
-    )}
+    <ThemeRoot theme={DEFAULT_THEME} className="vf-root">
+      {inApp ? (
+        <App />
+      ) : (
+        <p className="outside">This is the editor's page without the app behind it. The editor is the window <code>npm run app</code> opened.</p>
+      )}
+    </ThemeRoot>
   </StrictMode>,
 );
