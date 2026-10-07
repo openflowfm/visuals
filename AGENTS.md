@@ -8,7 +8,7 @@ status.
 | --- | --- | --- |
 | `cargo test -p visuals-engine --lib` | the engine: `.milk` parsing, shader translation, EEL, audio, a GPU render | any change under `engine/` |
 | `cargo build -p visuals-app` | the Tauri app compiles | any change under `app/src-tauri/` |
-| `cargo test -p visuals-app` | the app's Rust: live actions, playlists, the compare view's approvals file and audio bytes, the live output's display choice and fit | any change under `app/src-tauri/` |
+| `cargo test -p visuals-app` | the app's Rust: live actions, playlists, the compare view's approvals file and audio bytes, the live output's display choice and fit, the live effects' timing | any change under `app/src-tauri/` |
 | `npm run typecheck` | the TypeScript (old app, server, editor page) compiles | any `.ts`/`.tsx` change |
 | `npx vitest run <files>` | targeted unit tests | the tests next to what you changed; CI runs the whole suite |
 | `cargo run --release -p visuals-engine --bin gpucheck` | every preset in the pack loads and draws on the GPU | changes to shader translation or the renderer |
@@ -22,6 +22,8 @@ picks display `n`, from 0; otherwise the one chosen last). No dev port is fixed:
 the OS and hands it to vite and Tauri. `VISUALS_CAPTURE=<file.png>` makes the app save a
 picture of its own window, for checking it without screen access, and
 `VISUALS_CAPTURE_OUTPUT=<file.png>` of the live output window (both after
-`VISUALS_CAPTURE_AFTER` seconds, 8 by default).
+`VISUALS_CAPTURE_AFTER` seconds, 8 by default). `VISUALS_FX='[{"kind":"mirror","mode":"quad"}]'`
+sends those live actions (effects, hold…) 5 s after start (`VISUALS_FX_AFTER`), to check
+effects in a capture.
 
 Every agent commit must end with a blank line and a GitHub-compatible co-author trailer naming the agent that actually made it, for example `Co-authored-by: Codex <noreply@openai.com>` or `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Never name an agent that didn't write the commit.

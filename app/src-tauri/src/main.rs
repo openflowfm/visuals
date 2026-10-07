@@ -4,6 +4,7 @@
 mod actions;
 mod bench;
 mod compare;
+mod fx;
 mod listen;
 mod playlists;
 mod output;
@@ -262,7 +263,29 @@ fn main() {
                 let surface = unsafe { bench::view::create(window.ns_window()?, &instance) };
                 let state = app.state::<App>();
                 output::init(app.handle().clone(), instance.clone());
-                let thread = bench::start(instance, surface, (1, 1), state.ring.clone());
+                let effects = app.state::<actions::Deck>().fx.clone();
+                // Development: `VISUALS_FX='[{"kind": "mirror", "mode": "quad"}, …]'` sends
+                // those live actions once the page is up (after `VISUALS_FX_AFTER` seconds, 5
+                // by default), for checking effects in a capture.
+                if let Some(text) = std::env::var_os("VISUALS_FX") {
+                    match serde_json::from_str::<Vec<actions::Action>>(&text.to_string_lossy()) {
+                        Ok(list) => {
+                            let after = std::env::var("VISUALS_FX_AFTER").ok().and_then(|s| s.parse().ok()).unwrap_or(5.0);
+                            let handle = app.handle().clone();
+                            std::thread::spawn(move || {
+                                std::thread::sleep(std::time::Duration::from_secs_f64(after));
+                                for action in list {
+                                    if let Err(e) = actions::dispatch(&handle, action) {
+                                        eprintln!("VISUALS_FX: {e}");
+                                    }
+                                }
+                                eprintln!("VISUALS_FX: sent");
+                            });
+                        }
+                        Err(e) => eprintln!("VISUALS_FX: {e}"),
+                    }
+                }
+                let thread = bench::start(instance, surface, (1, 1), state.ring.clone(), effects);
                 *state.bench.lock().unwrap() = Some(thread);
                 // Come back listening to what was chosen last; the system input
                 // when that is gone or nothing was chosen.
@@ -312,6 +335,7 @@ fn main() {
             levels,
             stats,
             actions::act,
+            actions::fx_state,
             actions::playlists,
             actions::playlist_create,
             actions::playlist_rename,

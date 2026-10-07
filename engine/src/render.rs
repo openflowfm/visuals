@@ -12,6 +12,7 @@
 
 use crate::audio::Audio;
 use crate::draw::{Blend, DrawList, Topology, Vertex};
+use crate::fx::Master;
 use crate::runtime::{Clock, Runner, Size};
 use crate::shader::{self, Kind};
 use std::borrow::Cow;
@@ -83,9 +84,19 @@ pub struct Renderer {
     comp: Target,
     /// The frame before `comp`, kept for [`Renderer::present_between`].
     before: Target,
-    blends: HashMap<wgpu::TextureFormat, wgpu::RenderPipeline>,
-    blend_shader: wgpu::ShaderModule,
-    blend_t: wgpu::Buffer,
+    /// The outgoing preset's snapshot that [`Master::fade`] mixes in, black until
+    /// [`Renderer::keep_outgoing`] keeps one.
+    outgoing: Target,
+    /// The master pass's pipeline for each format it has presented to.
+    masters: HashMap<wgpu::TextureFormat, wgpu::RenderPipeline>,
+    master_shader: wgpu::ShaderModule,
+    master_uniform: wgpu::Buffer,
+    master: Master,
+    /// How much of the frame before echoes into each new one; 0 is off.
+    trails: f32,
+    /// The trails pipeline, its uniform and the target it draws into before it
+    /// is copied back to comp — made the first time trails are on.
+    trails_pass: Option<(wgpu::RenderPipeline, wgpu::Buffer, Target)>,
     blur: Vec<(Target, Target)>,
     textures: HashMap<&'static str, wgpu::TextureView>,
     samplers: HashMap<&'static str, wgpu::Sampler>,
@@ -233,25 +244,6 @@ struct Out { @builtin(position) pos: vec4f, @location(0) uv: vec2f }
 @group(0) @binding(0) var tex: texture_2d<f32>;
 @group(0) @binding(1) var smp: sampler;
 @fragment fn fs(in: Out) -> @location(0) vec4f { return vec4f(textureSample(tex, smp, in.uv).rgb, 1.0); }";
-
-/// Two finished frames mixed: what a display faster than the preset rate shows
-/// between them ([`Renderer::present_between`]).
-const BLEND: &str = "
-struct Out { @builtin(position) pos: vec4f, @location(0) uv: vec2f }
-@vertex fn vs(@builtin(vertex_index) i: u32) -> Out {
-  let p = vec2f(f32(i & 1u) * 2.0 - 1.0, f32(i >> 1u) * 2.0 - 1.0);
-  var o: Out;
-  o.pos = vec4f(p, 0.0, 1.0);
-  o.uv = p * 0.5 + 0.5;
-  return o;
-}
-@group(0) @binding(0) var before: texture_2d<f32>;
-@group(0) @binding(1) var after: texture_2d<f32>;
-@group(0) @binding(2) var smp: sampler;
-@group(0) @binding(3) var<uniform> t: vec4f;
-@fragment fn fs(in: Out) -> @location(0) vec4f {
-  return vec4f(mix(textureSample(before, smp, in.uv).rgb, textureSample(after, smp, in.uv).rgb, t.x), 1.0);
-}";
 
 fn blur_size(size: &Size, ratio: f64) -> (u32, u32) {
     let x = (size.texsize_x * ratio).max(16.0);
@@ -403,9 +395,13 @@ impl Renderer {
             current: 0,
             comp: Target::new(&device, full, "comp"),
             before: Target::new(&device, full, "comp before"),
-            blends: HashMap::new(),
-            blend_shader: wgsl(BLEND),
-            blend_t: buffer(&device, &[0u8; 16], wgpu::BufferUsages::UNIFORM),
+            outgoing: Target::new(&device, full, "outgoing"),
+            masters: HashMap::new(),
+            master_shader: wgsl(crate::fx::MASTER),
+            master_uniform: buffer(&device, &[0u8; 48], wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST),
+            master: Master::default(),
+            trails: 0.0,
+            trails_pass: None,
             blur,
             textures,
             samplers,
@@ -848,7 +844,91 @@ impl Renderer {
             pass.set_index_buffer(self.comp_indices.0.slice(..), wgpu::IndexFormat::Uint32);
             pass.draw_indexed(0..self.comp_indices.1, 0, 0..1);
         }
+        if self.trails > 0.0 {
+            self.echo(&mut encoder);
+        }
         self.preview(&mut encoder, 3, &self.comp.view);
+        self.queue.submit([encoder.finish()]);
+    }
+
+    /// The trails echo: comp becomes the brighter of itself and the frame before
+    /// faded by [`Renderer::set_trails`]'s amount, per channel. The frame before
+    /// is the last finished one, echo included, so the echo accumulates.
+    fn echo(&mut self, encoder: &mut wgpu::CommandEncoder) {
+        if self.trails_pass.is_none() {
+            let shader = self.device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("trails"),
+                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(crate::fx::TRAILS)),
+            });
+            let pipeline = self.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("trails"),
+                layout: None,
+                vertex: wgpu::VertexState { module: &shader, entry_point: Some("vs"), compilation_options: Default::default(), buffers: &[] },
+                primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleStrip, ..Default::default() },
+                depth_stencil: None,
+                multisample: Default::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some("fs"),
+                    compilation_options: Default::default(),
+                    targets: &[Some(FORMAT.into())],
+                }),
+                multiview_mask: None,
+                cache: None,
+            });
+            let uniform = buffer(&self.device, &[0u8; 16], wgpu::BufferUsages::UNIFORM);
+            let scratch = Target::new(&self.device, self.comp.size, "trails");
+            self.trails_pass = Some((pipeline, uniform, scratch));
+        }
+        let (pipeline, uniform, scratch) = self.trails_pass.as_ref().unwrap();
+        self.queue.write_buffer(uniform, 0, bytemuck::cast_slice(&[self.trails, 0.0, 0.0, 0.0]));
+        let group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &pipeline.get_bind_group_layout(0),
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&self.comp.view) },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&self.before.view) },
+                wgpu::BindGroupEntry { binding: 2, resource: uniform.as_entire_binding() },
+            ],
+        });
+        {
+            let mut pass = begin(encoder, &scratch.view, true);
+            pass.set_pipeline(pipeline);
+            pass.set_bind_group(0, &group, &[]);
+            pass.draw(0..4, 0..1);
+        }
+        encoder.copy_texture_to_texture(
+            scratch.texture.as_image_copy(),
+            self.comp.texture.as_image_copy(),
+            wgpu::Extent3d { width: self.comp.size.0, height: self.comp.size.1, depth_or_array_layers: 1 },
+        );
+    }
+
+    /// Echo each finished frame into the next: `k` of the frame before stays
+    /// wherever it is brighter than what was drawn, so moving things leave long
+    /// trails that never get brighter than they were. Clamped to 0..0.98; 0 is off.
+    pub fn set_trails(&mut self, k: f32) {
+        self.trails = if k.is_finite() { k.clamp(0.0, 0.98) } else { 0.0 };
+    }
+
+    /// What the master pass does each time the picture is presented.
+    pub fn set_master(&mut self, m: Master) {
+        self.master = m;
+    }
+
+    pub fn master(&self) -> Master {
+        self.master
+    }
+
+    /// Keep the finished picture as the outgoing snapshot that [`Master::fade`]
+    /// mixes in — taken just before a new preset takes over.
+    pub fn keep_outgoing(&mut self) {
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+        encoder.copy_texture_to_texture(
+            self.comp.texture.as_image_copy(),
+            self.outgoing.texture.as_image_copy(),
+            wgpu::Extent3d { width: self.comp.size.0, height: self.comp.size.1, depth_or_array_layers: 1 },
+        );
         self.queue.submit([encoder.finish()]);
     }
 
@@ -1149,18 +1229,20 @@ impl Renderer {
 
     /// Draw a picture `t` of the way from the frame before to the latest one
     /// (0 the frame before, 1 the latest): how a display faster than
-    /// [`crate::runtime::FRAME_RATE`] fills the refreshes between frames.
+    /// [`crate::runtime::FRAME_RATE`] fills the refreshes between frames. It goes
+    /// through the master pass, so the live effects ([`Renderer::set_master`])
+    /// are on every picture presented.
     pub fn present_between(&mut self, view: &wgpu::TextureView, format: wgpu::TextureFormat, t: f32) {
-        if !self.blends.contains_key(&format) {
+        if !self.masters.contains_key(&format) {
             let pipeline = self.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("blend"),
+                label: Some("master"),
                 layout: None,
-                vertex: wgpu::VertexState { module: &self.blend_shader, entry_point: Some("vs"), compilation_options: Default::default(), buffers: &[] },
+                vertex: wgpu::VertexState { module: &self.master_shader, entry_point: Some("vs"), compilation_options: Default::default(), buffers: &[] },
                 primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleStrip, ..Default::default() },
                 depth_stencil: None,
                 multisample: Default::default(),
                 fragment: Some(wgpu::FragmentState {
-                    module: &self.blend_shader,
+                    module: &self.master_shader,
                     entry_point: Some("fs"),
                     compilation_options: Default::default(),
                     targets: &[Some(format.into())],
@@ -1168,18 +1250,19 @@ impl Renderer {
                 multiview_mask: None,
                 cache: None,
             });
-            self.blends.insert(format, pipeline);
+            self.masters.insert(format, pipeline);
         }
-        self.queue.write_buffer(&self.blend_t, 0, bytemuck::cast_slice(&[t.clamp(0.0, 1.0), 0.0, 0.0, 0.0]));
-        let pipeline = &self.blends[&format];
+        self.queue.write_buffer(&self.master_uniform, 0, bytemuck::cast_slice(&crate::fx::uniforms(&self.master, t)));
+        let pipeline = &self.masters[&format];
         let group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &pipeline.get_bind_group_layout(0),
             entries: &[
                 wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&self.before.view) },
                 wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&self.comp.view) },
-                wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&self.samplers["linear_clamp"]) },
-                wgpu::BindGroupEntry { binding: 3, resource: self.blend_t.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(&self.outgoing.view) },
+                wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::Sampler(&self.samplers["linear_clamp"]) },
+                wgpu::BindGroupEntry { binding: 4, resource: self.master_uniform.as_entire_binding() },
             ],
         });
         let mut encoder = self.device.create_command_encoder(&Default::default());
@@ -1192,12 +1275,10 @@ impl Renderer {
         self.queue.submit([encoder.finish()]);
     }
 
-    /// Draw the finished picture into `view`, a window's surface, scaled to fit.
+    /// Draw the finished picture into `view`, a window's surface, scaled to fit,
+    /// through the master pass: [`Renderer::present_between`] at the latest frame.
     pub fn present(&mut self, view: &wgpu::TextureView, format: wgpu::TextureFormat) {
-        self.blit_pipeline(format);
-        let mut encoder = self.device.create_command_encoder(&Default::default());
-        self.blit(&mut encoder, &self.comp.view, view, format);
-        self.queue.submit([encoder.finish()]);
+        self.present_between(view, format, 1.0);
     }
 
     /// The finished picture, read back as RGBA rows top to bottom — for tests and
@@ -1261,6 +1342,138 @@ pub fn headless() -> Option<(wgpu::Device, wgpu::Queue)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fx::Mirror;
+
+    /// A target's pixels, RGBA rows top to bottom (row 0 of a presented target
+    /// is the top of the picture).
+    fn read_target(r: &Renderer, target: &Target) -> Vec<u8> {
+        let (w, h) = target.size;
+        let padded = (w * 4).div_ceil(256) * 256;
+        let staging = r.device().create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: (padded * h) as u64,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let mut e = r.device().create_command_encoder(&Default::default());
+        e.copy_texture_to_buffer(
+            target.texture.as_image_copy(),
+            wgpu::TexelCopyBufferInfo { buffer: &staging, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(padded), rows_per_image: Some(h) } },
+            wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+        );
+        r.queue().submit([e.finish()]);
+        staging.slice(..).map_async(wgpu::MapMode::Read, |_| {});
+        r.device().poll(wgpu::PollType::wait_indefinitely()).ok();
+        let data = staging.slice(..).get_mapped_range().unwrap();
+        (0..h).flat_map(|y| data[(y * padded) as usize..(y * padded + w * 4) as usize].to_vec()).collect()
+    }
+
+    const W: u32 = 64;
+    const H: u32 = 36;
+
+    /// The Spiral fixture at 64×36, with `frames` frames made.
+    fn spiral(frames: usize) -> Option<(Renderer, Audio)> {
+        let (device, queue) = headless()?;
+        let mut r = Renderer::new(device, queue, W, H);
+        let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../test/fixtures/milk/Fixture - Spiral Test.milk")).unwrap();
+        r.load(&text, 1).unwrap();
+        let mut audio = Audio::default();
+        for _ in 0..frames {
+            frame(&mut r, &mut audio);
+        }
+        Some((r, audio))
+    }
+
+    fn frame(r: &mut Renderer, audio: &mut Audio) {
+        let tone: Vec<f32> = (0..1024).map(|i| (i as f32 * 0.05).sin() * 0.8).collect();
+        audio.update(&tone, &tone);
+        r.render(audio, 1.0 / 60.0);
+    }
+
+    /// The picture presented through the master pass with `m`.
+    fn presented(r: &mut Renderer, m: Master) -> Vec<u8> {
+        let target = Target::new(r.device(), (W, H), "shown");
+        r.set_master(m);
+        r.present(&target.view, FORMAT);
+        read_target(r, &target)
+    }
+
+    fn within(a: &[u8], b: &[u8], by: i32) -> bool {
+        a.len() == b.len() && a.iter().zip(b).all(|(&x, &y)| (x as i32 - y as i32).abs() <= by)
+    }
+
+    #[test]
+    fn the_default_master_is_a_plain_blit() {
+        let Some((mut r, _)) = spiral(20) else { return };
+        let drawn = r.read_back();
+        assert!(drawn.chunks(4).any(|p| p[0] > 0 || p[1] > 0 || p[2] > 0), "the spiral draws something");
+        assert_eq!(r.master(), Master::default());
+        assert!(within(&presented(&mut r, Master::default()), &drawn, 1));
+    }
+
+    #[test]
+    fn master_colour_effects() {
+        let Some((mut r, _)) = spiral(20) else { return };
+        let drawn = r.read_back();
+        let inverted = presented(&mut r, Master { invert: 1.0, ..Default::default() });
+        let ok = inverted.chunks(4).zip(drawn.chunks(4)).all(|(i, d)| (0..3).all(|c| (i[c] as i32 - (255 - d[c] as i32)).abs() <= 2));
+        assert!(ok, "invert = 1 is 255 − x");
+        let zero = |p: &[u8]| p.chunks(4).all(|p| p[0] == 0 && p[1] == 0 && p[2] == 0);
+        assert!(zero(&presented(&mut r, Master { black: 1.0, flash: 1.0, ..Default::default() })), "black = 1 is black, even over a flash");
+        assert!(zero(&presented(&mut r, Master { brightness: 0.0, ..Default::default() })), "brightness 0 is black");
+        let hue0 = presented(&mut r, Master::default());
+        let hue1 = presented(&mut r, Master { hue: 1.0, ..Default::default() });
+        assert!(within(&hue0, &hue1, 2), "a whole turn of hue is the identity");
+        let half = presented(&mut r, Master { hue: 0.5, ..Default::default() });
+        assert!(!within(&hue0, &half, 2), "half a turn changes the colours");
+        let white = presented(&mut r, Master { flash: 1.0, ..Default::default() });
+        assert!(white.chunks(4).all(|p| p[..3] == [255, 255, 255]), "flash = 1 is white");
+    }
+
+    #[test]
+    fn master_mirrors() {
+        let Some((mut r, _)) = spiral(20) else { return };
+        let (w, h) = (W as usize, H as usize);
+        let at = |p: &[u8], x: usize, y: usize| p[(y * w + x) * 4..(y * w + x) * 4 + 3].to_vec();
+        let symmetric_x = |p: &[u8]| (0..h).all(|y| (0..w).all(|x| within(&at(p, x, y), &at(p, w - 1 - x, y), 1)));
+        let symmetric_y = |p: &[u8]| (0..h).all(|y| (0..w).all(|x| within(&at(p, x, y), &at(p, x, h - 1 - y), 1)));
+        let plain = presented(&mut r, Master::default());
+        assert!(!symmetric_x(&plain), "the spiral is not symmetric to begin with");
+        let x = presented(&mut r, Master { mirror: Mirror::X, ..Default::default() });
+        assert!(symmetric_x(&x));
+        let quad = presented(&mut r, Master { mirror: Mirror::Quad, punch: 0.5, ..Default::default() });
+        assert!(symmetric_x(&quad) && symmetric_y(&quad));
+    }
+
+    #[test]
+    fn fade_shows_the_outgoing_snapshot() {
+        let Some((mut r, mut audio)) = spiral(20) else { return };
+        assert!(presented(&mut r, Master { fade: 1.0, ..Default::default() }).chunks(4).all(|p| p[..3] == [0, 0, 0]), "black before any snapshot");
+        let kept = r.read_back();
+        r.keep_outgoing();
+        for _ in 0..10 {
+            frame(&mut r, &mut audio);
+        }
+        assert!(!within(&r.read_back(), &kept, 1), "the picture has moved on");
+        assert!(within(&presented(&mut r, Master { fade: 1.0, ..Default::default() }), &kept, 1));
+    }
+
+    #[test]
+    fn trails_echo_without_brightening() {
+        let Some((mut r, mut audio)) = spiral(20) else { return };
+        r.set_trails(0.9);
+        frame(&mut r, &mut audio);
+        let mut previous = r.read_back();
+        for _ in 0..8 {
+            frame(&mut r, &mut audio);
+            let now = r.read_back();
+            let ok = now.chunks(4).zip(previous.chunks(4)).all(|(n, p)| (0..3).all(|c| n[c] as i32 >= (p[c] as f32 * 0.9).floor() as i32 - 2));
+            assert!(ok, "every pixel keeps at least 0.9 of the frame before");
+            previous = now;
+        }
+        r.set_trails(5.0);
+        assert_eq!(r.trails, 0.98);
+    }
 
     #[test]
     fn a_preset_draws_something() {
@@ -1293,25 +1506,7 @@ mod tests {
             r.render(&mut audio, 1.0 / 60.0);
         }
         let target = Target::new(r.device(), (64, 36), "shown");
-        let read = |r: &Renderer| {
-            let staging = r.device().create_buffer(&wgpu::BufferDescriptor {
-                label: None,
-                size: 256 * 36,
-                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-                mapped_at_creation: false,
-            });
-            let mut e = r.device().create_command_encoder(&Default::default());
-            e.copy_texture_to_buffer(
-                target.texture.as_image_copy(),
-                wgpu::TexelCopyBufferInfo { buffer: &staging, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(256), rows_per_image: Some(36) } },
-                wgpu::Extent3d { width: 64, height: 36, depth_or_array_layers: 1 },
-            );
-            r.queue().submit([e.finish()]);
-            staging.slice(..).map_async(wgpu::MapMode::Read, |_| {});
-            r.device().poll(wgpu::PollType::wait_indefinitely()).ok();
-            let v = staging.slice(..).get_mapped_range().unwrap().to_vec();
-            v
-        };
+        let read = |r: &Renderer| read_target(r, &target);
         r.present_between(&target.view, FORMAT, 0.0);
         let before = read(&r);
         r.present_between(&target.view, FORMAT, 1.0);
