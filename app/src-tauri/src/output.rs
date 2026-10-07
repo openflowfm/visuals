@@ -6,7 +6,8 @@
 //! Live mode in the page opens it and leaving live mode closes it. While it is
 //! open it paces the render thread (it waits for its display's refresh) and the
 //! bench presents without waiting, so the show is the smooth one. The window
-//! sits above the menu bar and the Dock, so neither covers it on its display.
+//! sits above the menu bar and the Dock, so neither covers it on its display,
+//! and the mouse cursor is hidden while it is over it.
 //!
 //! The display it goes to is chosen in live mode and remembered
 //! (`~/.openflow/visuals/output.json`). It closes when live mode ends, or when
@@ -107,7 +108,10 @@ pub fn init(handle: AppHandle, instance: wgpu::Instance) {
     let _ = HANDLE.set(handle);
     let _ = INSTANCE.set(instance);
     #[cfg(target_os = "macos")]
-    native::watch_displays();
+    {
+        native::watch_displays();
+        native::watch_cursor();
+    }
 }
 
 fn tell(status: &Status) {
@@ -392,6 +396,52 @@ pub mod native {
     pub fn watch_displays() {
         // SAFETY: a plain C callback that needs no user data.
         unsafe { CGDisplayRegisterReconfigurationCallback(reconfigured, std::ptr::null_mut()) };
+    }
+
+    thread_local! {
+        static HIDDEN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    }
+
+    /// Hide the mouse cursor while it is over the output, and show it again when
+    /// it leaves or the output closes. `NSCursor`'s hide and unhide are counted, so
+    /// they are only ever called in pairs.
+    fn cursor(_: MainThreadMarker) {
+        let frame = OUTPUT.with(|o| o.borrow().as_ref().map(|o| o.frame));
+        let over = frame.is_some_and(|f| {
+            // SAFETY: a class method returning a plain point, on the main thread.
+            let p: NSPoint = unsafe { objc2::msg_send![objc2::class!(NSEvent), mouseLocation] };
+            p.x >= f.origin.x && p.x < f.origin.x + f.size.width && p.y >= f.origin.y && p.y < f.origin.y + f.size.height
+        });
+        HIDDEN.with(|hidden| {
+            if over == hidden.get() {
+                return;
+            }
+            // SAFETY: class methods with no arguments, on the main thread.
+            unsafe {
+                if over {
+                    let _: () = objc2::msg_send![objc2::class!(NSCursor), hide];
+                } else {
+                    let _: () = objc2::msg_send![objc2::class!(NSCursor), unhide];
+                }
+            }
+            hidden.set(over);
+        });
+    }
+
+    /// Follow the mouse ten times a second: the output never becomes the key
+    /// window, so it gets no mouse-moved events of its own to hide the cursor on.
+    pub fn watch_cursor() {
+        std::thread::Builder::new()
+            .name("output cursor".into())
+            .spawn(|| {
+                loop {
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    if let Some(handle) = HANDLE.get() {
+                        let _ = handle.run_on_main_thread(|| cursor(MainThreadMarker::new().expect("main thread")));
+                    }
+                }
+            })
+            .expect("output cursor thread");
     }
 
     /// The output's window as a PNG (development: `VISUALS_CAPTURE_OUTPUT`).
