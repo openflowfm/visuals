@@ -34,7 +34,7 @@ const describe = (r: Report | null) =>
  * a verdict per preset. Butterchurn draws on a canvas in the page; ours is the
  * native bench, moved under a hole where its picture goes.
  */
-export function Compare({ start, onEditor }: { start: string | null; onEditor: (path: string | null) => void }) {
+export function Compare({ start, onMode }: { start: string | null; onMode: (view: 'editor' | 'live', path: string | null) => void }) {
   const [presets, setPresets] = useState<Listed[]>([]);
   const [approvals, setApprovals] = useState<Record<string, Approval>>({});
   const [file, setFile] = useState('');
@@ -291,7 +291,12 @@ export function Compare({ start, onEditor }: { start: string | null; onEditor: (
     <div className="compare">
       <header>
         <h1>visual[flow]</h1>
-        <Segmented items={['editor', 'compare']} index={1} onChange={(i) => i === 0 && onEditor(current?.path ?? null)} label="editor or compare" />
+        <Segmented
+          items={['editor', 'compare', 'live']}
+          index={1}
+          onChange={(i) => i !== 1 && onMode(i === 0 ? 'editor' : 'live', current?.path ?? null)}
+          label="editor, compare or live"
+        />
         <span className="name">
           {current ? (
             <>

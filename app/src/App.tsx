@@ -89,8 +89,7 @@ export function App() {
     );
   }, []);
   if (!mode) return null;
-  const go = (view: View) => (preset: string | null) => setMode({ view, preset });
-  if (mode.view === 'compare') return <Compare start={mode.preset} onEditor={go('editor')} />;
+  if (mode.view === 'compare') return <Compare start={mode.preset} onMode={(view, preset) => setMode({ view, preset })} />;
   if (mode.view === 'live') return <Live start={mode.preset} onMode={(view, preset) => setMode({ view, preset })} />;
   return <Editor start={mode.preset} onMode={(view, preset) => setMode({ view, preset })} />;
 }
