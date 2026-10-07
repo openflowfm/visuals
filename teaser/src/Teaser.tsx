@@ -109,8 +109,8 @@ const Intro = () => {
   );
   return (
     <Center scrim={first}>
-      {line(first, 'Your music')}
-      {line(second, 'now has eyes.', ACCENT)}
+      {line(first, 'Your music,')}
+      {line(second, 'made visible.', ACCENT)}
     </Center>
   );
 };
