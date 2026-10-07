@@ -21,29 +21,38 @@ body {
 .app {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr) 380px;
-  grid-template-rows: 36px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   height: 100%;
 }
 
-/* Every view's header (`Header` in views.tsx): the mark, the view switch, the view's own. */
+/* Every view's header (`Header` in views.tsx): the mark, the view switch, the
+   view's own. Drawn as mix[flow] draws its own: a rail, 22px controls centred in
+   it, groups 8px apart. */
 .vf-header {
   grid-column: 1 / -1;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 10px;
-  background: var(--panel);
-  border-bottom: 1px solid var(--bd3);
+  height: calc(var(--ctl-h) + 13px);
+  padding: 6px 10px;
+  background: var(--rail);
+  border-bottom: 1px solid var(--bd);
   white-space: nowrap;
+  font-family: var(--mono);
+  font-variation-settings: var(--mono-axes);
+  font-size: var(--text-control);
 }
-.vf-header .name { overflow: hidden; text-overflow: ellipsis; color: var(--fg); }
-.vf-header .name i { color: var(--caption); font-style: normal; margin-right: 6px; }
-.vf-header .fill { flex: 1; }
-.vf-header .stats { color: var(--caption); font-family: var(--mono); font-variation-settings: var(--mono-axes); font-size: var(--text-body); min-width: 150px; text-align: right; }
+.vf-header > * { flex: none; }
+.vf-header .wdg { --wdg-field-height: var(--ctl-h); }
+.vf-header .vf-fill, .vf-header .fill { flex: 1; }
+.vf-transport .wdg-button-body { min-width: 26px; justify-content: center; }
 
 /* The wordmark, as mix[flow] draws its own. */
 .vf-mark {
-  margin-right: 8px;
+  display: inline-flex;
+  align-items: center;
+  height: var(--ctl-h);
+  padding: 0 4px;
   font-family: var(--mono);
   font-variation-settings: var(--mono-axes);
   font-size: var(--text-lead);
@@ -52,7 +61,61 @@ body {
 }
 .vf-mark span { color: var(--primary); }
 
-button, select, input, textarea {
+/* The preset playing: the folder as a caption, then the name. */
+.vf-now {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  height: var(--ctl-h);
+  line-height: var(--ctl-h);
+  padding-left: 8px;
+  border-left: 1px solid var(--bd);
+  overflow: hidden;
+}
+.vf-header > .vf-now { flex: 0 1 auto; }
+.vf-now > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vf-now i { flex: 0 2 auto; font-style: normal; color: var(--caption); font-size: var(--text-label); }
+.vf-now span { flex: 0 1 auto; color: var(--fg); font-size: var(--text-lead); }
+.vf-now.quiet { color: var(--caption); }
+
+/* A failure in a few plain words, dismissible; the raw text is its tooltip. */
+.vf-header > .vf-notice { flex: 0 1 auto; }
+.vf-notice {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: var(--ctl-h);
+  padding-left: 8px;
+  color: var(--red);
+  border: 1px solid color-mix(in srgb, var(--red) 40%, transparent);
+  border-radius: var(--radius);
+}
+.vf-notice-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vf-notice .wdg-button-body { color: var(--red); }
+
+.vf-warning { color: var(--amber); font-size: var(--text-control); }
+
+/* The frame rate: numbers in a dev build, a warning in a release when it drops. */
+.vf-stats, .vf-header .stats {
+  color: var(--detail);
+  font-family: var(--mono);
+  font-variation-settings: var(--mono-axes);
+  font-size: var(--text-label);
+  min-width: 120px;
+  text-align: right;
+}
+.vf-stats[data-slow] { color: var(--amber); }
+
+/* The hint strip, across the bottom of the window. */
+.vf-footer { grid-column: 1 / -1; display: flex; min-width: 0; background: var(--rail); }
+.vf-footer > .wdg-hint { flex: 1; min-width: 0; }
+
+/* Plain form controls still in other views (live, playlists, the inspector).
+   `:where` keeps them below any widget's own class. */
+:where(button, select, input, textarea) {
   font: inherit;
   font-variation-settings: inherit;
   color: var(--fg);
@@ -60,14 +123,14 @@ button, select, input, textarea {
   border: 1px solid var(--bd3);
   border-radius: var(--radius);
 }
-button { padding: 2px 8px; cursor: pointer; }
-button:hover { border-color: var(--focus); }
-select { max-width: 240px; padding: 2px 4px; }
+:where(button) { padding: 2px 8px; cursor: pointer; }
+:where(button):hover { border-color: var(--focus); }
+:where(select) { max-width: 240px; padding: 2px 4px; }
 
 .audio-input { display: inline-flex; align-items: center; gap: 4px; }
-.audio-meters { display: inline-flex; flex-direction: column; gap: 2px; width: 40px; }
-.audio-meters > span { display: block; height: 4px; background: var(--surface-sunken, #101012); border: 1px solid var(--bd3); }
-.audio-meters > span > span { display: block; height: 100%; width: 0; background: var(--green); }
+.vf-meters { display: inline-flex; flex-direction: column; justify-content: center; gap: 2px; margin-left: 2px; }
+.vf-meters .wdg-meter { --wdg-fill: var(--green); }
+.vf-meters .wdg-meter-body { border: 1px solid var(--bd3); }
 
 .library {
   display: flex;
@@ -76,27 +139,11 @@ select { max-width: 240px; padding: 2px 4px; }
   background: var(--panel);
   border-right: 1px solid var(--bd3);
 }
-.library input { margin: 8px; padding: 4px 6px; }
-.library ul { list-style: none; margin: 0; padding: 0; overflow: auto; flex: 1; }
-.library li { padding: 3px 10px; cursor: pointer; display: flex; flex-direction: column; }
-.library li:hover { background: var(--sel); }
-.library li[data-current] { background: var(--bd); color: var(--fg); }
-.library li i { color: var(--caption); font-style: normal; font-size: var(--text-control); }
 
-/* The library column's tabs and its add buttons. */
+/* The library column's tabs. */
 .library-tabs { padding: 8px 8px 0; }
 .library-tabs .wdg-segmented-body { display: flex; }
 .library-tabs .wdg-segmented-body button { flex: 1; }
-.library li { position: relative; }
-.library li .library-add {
-  position: absolute;
-  right: 6px;
-  top: 50%;
-  transform: translateY(-50%);
-  padding: 0 6px;
-  display: none;
-}
-.library li:hover .library-add { display: block; }
 
 main {
   display: grid;
@@ -118,6 +165,7 @@ main {
   aspect-ratio: 16 / 9;
   height: min(40vh, calc((100vw - 700px) * 9 / 16));
   background: transparent;
+  /* Letterbox black: the picture's own, not an interface colour. */
   box-shadow: 0 0 0 100vmax #000;
 }
 

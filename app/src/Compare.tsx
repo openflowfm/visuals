@@ -3,12 +3,15 @@ import type { AudioLevels } from 'butterchurn';
 import * as app from './api.ts';
 import type { Report } from './api.ts';
 import { AudioInput } from './AudioInput.tsx';
-import { Header } from './views.tsx';
+import { Header, Hints, NoticeView, NowPlaying } from './views.tsx';
+import { noticeOf, type Notice } from './shell.ts';
+import { Select } from '@openflow/widgets/controls/Select.tsx';
+import { Toggle } from '@openflow/widgets/controls/Toggle.tsx';
 import * as api from './compare/api.ts';
 import type { Approval, Listed, Verdict } from './compare/api.ts';
 import { createReference, type Reference } from './compare/butterchurn.ts';
 import { convert, stopConverting } from './compare/convert.ts';
-import { filter, SHOWS, step, windowAround, type Show } from './compare/list.ts';
+import { basename, filter, SHOWS, step, tilde, windowAround, type Show } from './compare/list.ts';
 import * as pl from './playlists.ts';
 import './compare.css';
 
@@ -23,6 +26,9 @@ type Theirs =
 type Flip = null | 'theirs' | 'ours';
 
 const ROWS = 400;
+
+/** The hint strip's resting line: every key the compare view answers. */
+const KEYS = '↑↓ preset · R random · A approve · X reject · N note · S swap sides · F full size, Space the other';
 
 const mark = (a: Approval | undefined) => (a?.verdict === 'approve' ? '✓' : a?.verdict === 'reject' ? '✗' : a?.note ? '•' : '');
 
@@ -47,7 +53,7 @@ export function Compare({ start, onMode }: { start: string | null; onMode: (view
   const [ours, setOurs] = useState<Report | null>(null);
   const [note, setNote] = useState('');
   const [status, setStatus] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [swap, setSwap] = useState(false);
   const [flip, setFlip] = useState<Flip>(null);
   const [fps, setFps] = useState({ theirs: 0, ours: 0 });
@@ -137,7 +143,7 @@ export function Compare({ start, onMode }: { start: string | null; onMode: (view
   const pick = useCallback(async (e: Listed, openOurs = true) => {
     const token = ++loads.current;
     setCurrent(e);
-    setError(null);
+    setNotice(null);
     setTheirs({ state: 'converting' });
     const converted = await convert(e.path).catch((err) => ({ ok: false as const, reason: String(err) }));
     if (token !== loads.current) return;
@@ -146,7 +152,7 @@ export function Compare({ start, onMode }: { start: string | null; onMode: (view
     if (openOurs) {
       api.open(e.path).then(
         (o) => token === loads.current && setOurs(o.report),
-        (err) => token === loads.current && setError(String(err)),
+        (err) => token === loads.current && setNotice(noticeOf('couldn’t open that preset', err)),
       );
     }
     if (!ref) return;
@@ -177,7 +183,7 @@ export function Compare({ start, onMode }: { start: string | null; onMode: (view
         const first = found ?? (want ? { path: want, name: want.split('/').pop()!.replace(/\.milk$/i, ''), group: '', id: want } : list[0]);
         if (first) pick(first);
       },
-      (e) => setError(String(e)),
+      (e) => setNotice(noticeOf('couldn’t read the presets or the verdicts', e)),
     );
     return () => {
       cancelled = true;
@@ -220,11 +226,13 @@ export function Compare({ start, onMode }: { start: string | null; onMode: (view
         });
         setStatus('saved');
       } catch (e) {
-        setStatus(`not saved: ${e}`);
+        setStatus('not saved');
+        setNotice(noticeOf('couldn’t save the verdict', e));
       }
     },
     [current],
   );
+  const audioFailed = useCallback((message: string) => setNotice(noticeOf('couldn’t read the audio input', message)), []);
   const toggle = useCallback((v: Verdict) => save(verdict?.verdict === v ? null : v, note), [save, verdict, note]);
   const saveNote = () => {
     if (note.trim() !== (verdict?.note ?? '')) save(verdict?.verdict ?? null, note);
@@ -245,7 +253,7 @@ export function Compare({ start, onMode }: { start: string | null; onMode: (view
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if ((e.target as HTMLElement).closest('input, textarea, select')) {
+      if ((e.target as HTMLElement).closest('input, textarea, select, [role="combobox"]')) {
         if (e.key === 'Escape') (e.target as HTMLElement).blur();
         return;
       }
@@ -290,42 +298,51 @@ export function Compare({ start, onMode }: { start: string | null; onMode: (view
   return (
     <div className="compare">
       <Header view="compare" onChange={(view) => view !== 'compare' && onMode(view, current?.path ?? null)}>
-        <span className="name">
-          {current ? (
-            <>
-              <i>{current.group}</i> {current.name}
-            </>
-          ) : (
-            'no preset'
-          )}
-        </span>
-        {error && <span className="problem">{error}</span>}
+        <NowPlaying group={current?.group} name={current?.name} />
+        <NoticeView notice={notice} onDismiss={() => setNotice(null)} />
         <span className="fill" />
-        <AudioInput onError={setError} />
-        <span className="stats">
+        <AudioInput onError={audioFailed} />
+        <span className="vf-stats" title="frames a second each side draws">
           Butterchurn {fps.theirs.toFixed(0)} fps · ours {fps.ours.toFixed(0)} fps
         </span>
       </Header>
       <aside className="compare-list">
-        <input placeholder={`search ${presets.length} presets`} value={search} onChange={(e) => setSearch(e.target.value)} />
+        <input
+          aria-label="search presets"
+          placeholder={`search ${presets.length.toLocaleString('en-US')} presets`}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
         <div className="compare-show">
-          <select value={show} onChange={(e) => setShow(e.target.value as Show)} title="show presets by verdict">
-            {SHOWS.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
+          <Select
+            items={SHOWS.map((s) => s.label)}
+            index={Math.max(0, SHOWS.findIndex((s) => s.value === show))}
+            onChange={(i) => setShow(SHOWS[i].value)}
+            label="show presets by verdict"
+            title="show presets by verdict"
+          />
           <span className="quiet">
             {at >= 0 ? `${at + 1} of ` : ''}
             {shown.length}
           </span>
         </div>
         <ul>
+          {shown.length === 0 && presets.length > 0 && <li className="compare-none quiet">no presets match</li>}
           {shown.slice(from, to).map((p) => {
             const a = approvals[p.id];
+            const full = p.group ? `${p.group} / ${p.name}` : p.name;
             return (
-              <li key={p.path} data-current={current?.path === p.path ? '' : undefined} data-verdict={a?.verdict ?? undefined} onClick={() => pick(p)} title={a?.note || undefined}>
+              <li
+                key={p.path}
+                tabIndex={0}
+                data-current={current?.path === p.path ? '' : undefined}
+                data-verdict={a?.verdict ?? undefined}
+                onClick={() => pick(p)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') pick(p);
+                }}
+                title={a?.note ? `${full}\n${a.note}` : full}
+              >
                 <span className="compare-mark">{mark(a)}</span>
                 <span className="compare-entry">
                   <span>{p.name}</span>
@@ -361,12 +378,32 @@ export function Compare({ start, onMode }: { start: string | null; onMode: (view
           </div>
         </div>
         <div className="compare-verdict">
-          <button className="approve" data-on={verdict?.verdict === 'approve' ? '' : undefined} onClick={() => toggle('approve')} title="approve (A)">
+          <Toggle
+            className="compare-approve"
+            on={verdict?.verdict === 'approve'}
+            onChange={() => toggle('approve')}
+            disabled={!current}
+            label="approve"
+            title="approve (A)"
+            hint="approve: our picture matches Butterchurn's closely enough (A)"
+            ink="var(--green)"
+            width={96}
+          >
             approve <kbd>A</kbd>
-          </button>
-          <button className="reject" data-on={verdict?.verdict === 'reject' ? '' : undefined} onClick={() => toggle('reject')} title="reject (X)">
+          </Toggle>
+          <Toggle
+            className="compare-reject"
+            on={verdict?.verdict === 'reject'}
+            onChange={() => toggle('reject')}
+            disabled={!current}
+            label="reject"
+            title="reject (X)"
+            hint="reject: our picture is wrong; say how in the note (X)"
+            ink="var(--red)"
+            width={96}
+          >
             reject <kbd>X</kbd>
-          </button>
+          </Toggle>
           <textarea
             ref={noteBox}
             placeholder="note (N to write, Esc to leave; saved when you leave it)"
@@ -384,12 +421,15 @@ export function Compare({ start, onMode }: { start: string | null; onMode: (view
               {verdict?.at && <span className="quiet"> · {new Date(verdict.at).toLocaleString()}</span>}
               {status && <span className="quiet"> · {status}</span>}
             </span>
-            <span className="quiet">
-              ↑↓ preset · R random · S swap sides · F one full size, Space the other · saved to {file}
-            </span>
+            {file && (
+              <span className="quiet" title={tilde(file)}>
+                verdicts saved to {basename(file)}
+              </span>
+            )}
           </div>
         </div>
       </main>
+      <Hints resting={KEYS} />
     </div>
   );
 }
