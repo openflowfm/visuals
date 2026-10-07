@@ -21,9 +21,15 @@ pub enum Cmd {
     /// One value, live. Replies false when it needs a reload instead.
     Set(engine::runtime::Owner, String, f64, Sender<bool>),
     Previews(bool),
-    /// The surface's size in physical pixels.
+    /// The surface's size in physical pixels; 0×0 when the bench is hidden.
     Resize(u32, u32),
     SampleRate(f32),
+    /// Present to the output too (a surface and its size in pixels), or stop
+    /// (`None`). Replies once the old output surface is let go, so its window
+    /// can close.
+    Output(Option<(wgpu::Surface<'static>, (u32, u32))>, Sender<()>),
+    /// The output surface's new size in pixels.
+    OutputResize(u32, u32),
 }
 
 #[derive(Default, Clone, Copy, serde::Serialize)]
@@ -55,12 +61,7 @@ pub fn start(instance: wgpu::Instance, surface: wgpu::Surface<'static>, size: (u
     }))
     .expect("a GPU adapter");
     let (device, queue) = pollster::block_on(adapter.request_device(&Default::default())).expect("a GPU device");
-    let caps = surface.get_capabilities(&adapter);
-    // A plain (not sRGB) format: WebGL writes colour values as they are.
-    let format = caps.formats.iter().copied().find(|f| !f.is_srgb()).unwrap_or(caps.formats[0]);
-    let mut config = surface.get_default_config(&adapter, size.0.max(1), size.1.max(1)).expect("surface config");
-    config.format = format;
-    config.present_mode = wgpu::PresentMode::AutoVsync;
+    let config = configuration(&adapter, &surface, size);
     surface.configure(&device, &config);
     let renderer = Renderer::new(device, queue, DRAW.0, DRAW.1);
     let (commands, rx) = std::sync::mpsc::channel();
@@ -69,13 +70,48 @@ pub fn start(instance: wgpu::Instance, surface: wgpu::Surface<'static>, size: (u
     let (out, pictures) = (stats.clone(), previews.clone());
     std::thread::Builder::new()
         .name("bench".into())
-        .spawn(move || run(renderer, surface, config, rx, ring, out, pictures))
+        .spawn(move || run(renderer, adapter, surface, config, rx, ring, out, pictures))
         .expect("bench thread");
     Thread { commands, stats, previews }
 }
 
+/// How a surface is set up: a plain (not sRGB) format, as WebGL writes colour
+/// values as they are, and presenting on the display's refresh.
+fn configuration(adapter: &wgpu::Adapter, surface: &wgpu::Surface, size: (u32, u32)) -> wgpu::SurfaceConfiguration {
+    let caps = surface.get_capabilities(adapter);
+    let format = caps.formats.iter().copied().find(|f| !f.is_srgb()).unwrap_or(caps.formats[0]);
+    let mut config = surface.get_default_config(adapter, size.0.max(1), size.1.max(1)).expect("surface config");
+    config.format = format;
+    config.present_mode = wgpu::PresentMode::AutoVsync;
+    config
+}
+
+/// Show the latest frame on one surface. `between` mixes the last two frames
+/// (see [`run`]).
+fn show(renderer: &mut Renderer, surface: &wgpu::Surface, config: &wgpu::SurfaceConfiguration, between: Option<f32>) {
+    match surface.get_current_texture() {
+        wgpu::CurrentSurfaceTexture::Success(frame) | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => {
+            let view = frame.texture.create_view(&Default::default());
+            match between {
+                Some(t) => renderer.present_between(&view, config.format, t),
+                None => renderer.present(&view, config.format),
+            }
+            renderer.queue().present(frame);
+        }
+        _ => surface.configure(renderer.device(), config),
+    }
+}
+
+/// The output: a second surface the same picture is presented to.
+struct Output {
+    surface: wgpu::Surface<'static>,
+    config: wgpu::SurfaceConfiguration,
+}
+
+#[allow(clippy::too_many_arguments)]
 fn run(
     mut renderer: Renderer,
+    adapter: wgpu::Adapter,
     surface: wgpu::Surface<'static>,
     mut config: wgpu::SurfaceConfiguration,
     rx: Receiver<Cmd>,
@@ -83,6 +119,10 @@ fn run(
     stats: Arc<Mutex<Stats>>,
     previews: Arc<Mutex<Option<Vec<u8>>>>,
 ) {
+    // With the output open, the output waits for its display's refresh and paces
+    // the loop; the bench presents without waiting, so the show is the smooth one.
+    let mut output: Option<Output> = None;
+    let mut bench_shown = true;
     let mut frames = 0u32;
     let mut logged = Instant::now();
     let mut audio = Audio::default();
@@ -102,9 +142,35 @@ fn run(
                     let _ = reply.send(result);
                 }
                 Cmd::Resize(w, h) => {
-                    config.width = w.max(1);
-                    config.height = h.max(1);
-                    surface.configure(renderer.device(), &config);
+                    bench_shown = w > 0 && h > 0;
+                    if bench_shown {
+                        config.width = w;
+                        config.height = h;
+                        surface.configure(renderer.device(), &config);
+                    }
+                }
+                Cmd::Output(next, done) => {
+                    // The old output's surface goes first: its window closes after the reply.
+                    output = None;
+                    if let Some((s, size)) = next {
+                        let c = configuration(&adapter, &s, size);
+                        s.configure(renderer.device(), &c);
+                        output = Some(Output { surface: s, config: c });
+                    }
+                    config.present_mode = if output.is_some() { wgpu::PresentMode::AutoNoVsync } else { wgpu::PresentMode::AutoVsync };
+                    if bench_shown {
+                        surface.configure(renderer.device(), &config);
+                    }
+                    // Let the measured refresh follow the new pacer.
+                    refresh = std::time::Duration::ZERO;
+                    let _ = done.send(());
+                }
+                Cmd::OutputResize(w, h) => {
+                    if let Some(output) = output.as_mut() {
+                        output.config.width = w.max(1);
+                        output.config.height = h.max(1);
+                        output.surface.configure(renderer.device(), &output.config);
+                    }
                 }
                 Cmd::SampleRate(rate) => audio.set_sample_rate(rate),
                 Cmd::Set(owner, key, value, reply) => {
@@ -119,7 +185,8 @@ fn run(
             }
             continue;
         }
-        // The display paces this loop (presenting waits for its refresh), but a
+        // The display paces this loop (presenting waits for its refresh; the
+        // output's display when the output is open), but a
         // frame is only made when one is due at the preset rate (`FRAME_RATE`).
         // On a faster display the refreshes in between show the last two frames
         // mixed, so motion stays smooth at the preset's own speed. A quarter
@@ -151,21 +218,16 @@ fn run(
             renderer.render(&mut audio, elapsed);
             cpu = Some(started.elapsed().as_secs_f64());
         }
-        match surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(frame) | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => {
-                let view = frame.texture.create_view(&Default::default());
-                if smooth {
-                    // 0 at the refresh a frame was made (the frame before is
-                    // shown), rising to 1 as the next is due: one frame behind,
-                    // and never a jump.
-                    let t = last.elapsed().as_secs_f64() / FRAME.as_secs_f64();
-                    renderer.present_between(&view, config.format, t as f32);
-                } else {
-                    renderer.present(&view, config.format);
-                }
-                renderer.queue().present(frame);
-            }
-            _ => surface.configure(renderer.device(), &config),
+        // 0 at the refresh a frame was made (the frame before is shown), rising
+        // to 1 as the next is due: one frame behind, and never a jump.
+        let between = smooth.then(|| (last.elapsed().as_secs_f64() / FRAME.as_secs_f64()) as f32);
+        // The bench first: it doesn't wait. Then the output, which waits for its
+        // display's refresh when it has one.
+        if bench_shown {
+            show(&mut renderer, &surface, &config, between);
+        }
+        if let Some(output) = &output {
+            show(&mut renderer, &output.surface, &output.config, between);
         }
         // How often the display refreshes: the time round this loop, smoothed.
         let round = now.elapsed();
@@ -186,11 +248,11 @@ fn run(
                 logged = now;
                 let (l, r) = crate::listen::peaks(&ring);
                 eprintln!(
-                    "bench: {:.0} fps, {:.2} ms cpu, surface {}x{}, display {:.0} Hz{}, input peaks {l:.3} {r:.3}",
+                    "bench: {:.0} fps, {:.2} ms cpu, surface {}, output {}, display {:.0} Hz{}, input peaks {l:.3} {r:.3}",
                     s.fps,
                     s.cpu_ms,
-                    config.width,
-                    config.height,
+                    if bench_shown { format!("{}x{}", config.width, config.height) } else { "hidden".into() },
+                    output.as_ref().map_or("closed".into(), |w| format!("{}x{}", w.config.width, w.config.height)),
                     1.0 / refresh.as_secs_f64().max(1e-6),
                     if refresh < std::time::Duration::from_millis(4) {
                         ", not on screen"
@@ -233,26 +295,40 @@ pub mod view {
         let window: &NSWindow = unsafe { &*(ns_window as *const NSWindow) };
         let content = window.contentView().expect("content view");
         let rect = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(1.0, 1.0));
+        let view = metal_view(mtm, rect, window.backingScaleFactor());
+        content.addSubview_positioned_relativeTo(&view, NSWindowOrderingMode::Below, None);
+        let surface = surface_on(&view, instance);
+        VIEW.with(|v| *v.borrow_mut() = Some(view));
+        surface
+    }
+
+    /// A layer-hosting view whose layer is a Metal layer, so the view's frame is
+    /// the layer's frame. Left to itself, wgpu adds a sublayer sized to the view
+    /// as it was then — 1×1 for the bench — which never follows the view.
+    pub fn metal_view(mtm: MainThreadMarker, rect: NSRect, scale: f64) -> Retained<NSView> {
         let view = NSView::initWithFrame(mtm.alloc(), rect);
-        // A layer-hosting view whose layer is the Metal layer, so the view's frame
-        // is the layer's frame. Left to itself, wgpu adds a sublayer sized to the
-        // view as it was then — 1×1 here — which never follows the view.
         let layer = objc2_quartz_core::CAMetalLayer::new();
-        layer.setContentsScale(window.backingScaleFactor());
+        layer.setContentsScale(scale);
+        layer.setOpaque(true);
         view.setLayer(Some(&layer));
         view.setWantsLayer(true);
-        content.addSubview_positioned_relativeTo(&view, NSWindowOrderingMode::Below, None);
-        let handle = AppKitWindowHandle::new(NonNull::from(&*view).cast());
-        let surface = unsafe {
+        view
+    }
+
+    /// A surface on a [`metal_view`].
+    pub fn surface_on(view: &NSView, instance: &wgpu::Instance) -> wgpu::Surface<'static> {
+        let handle = AppKitWindowHandle::new(NonNull::from(view).cast());
+        // SAFETY: the view is live, and is kept until the render thread has let
+        // go of the surface (the bench's for the app's life, the output's until
+        // `Cmd::Output(None)` is answered).
+        unsafe {
             instance
                 .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
                     raw_display_handle: Some(RawDisplayHandle::AppKit(AppKitDisplayHandle::new())),
                     raw_window_handle: RawWindowHandle::AppKit(handle),
                 })
                 .expect("surface")
-        };
-        VIEW.with(|v| *v.borrow_mut() = Some(view));
-        surface
+        }
     }
 
     #[repr(C)]
@@ -285,7 +361,12 @@ pub mod view {
     /// recording permission, so the window can be checked without anyone's eyes.
     pub fn capture(path: &std::path::Path) -> Result<(), String> {
         let window = VIEW.with(|v| v.borrow().as_ref().and_then(|v| v.window())).ok_or("no window")?;
-        let number = window.windowNumber() as u32;
+        capture_window(window.windowNumber() as u32, path)
+    }
+
+    /// Window `number` as the screen shows it, as a PNG — even when another
+    /// window covers it.
+    pub fn capture_window(number: u32, path: &std::path::Path) -> Result<(), String> {
         // `CGRectNull`, `kCGWindowListOptionIncludingWindow`, `kCGWindowImageBoundsIgnoreFraming`.
         let null = CGRect { x: f64::INFINITY, y: f64::INFINITY, w: 0.0, h: 0.0 };
         unsafe {
@@ -313,11 +394,16 @@ pub mod view {
     }
 
     /// Move the view to `rect`, in the content view's points from its top left.
-    /// Returns its size in pixels.
+    /// Returns its size in pixels: 0×0 for an empty rect, which hides the bench.
     pub fn place(x: f64, y: f64, width: f64, height: f64) -> Option<(u32, u32)> {
         VIEW.with(|v| {
             let view = v.borrow();
             let view = view.as_ref()?;
+            let hidden = width < 1.0 || height < 1.0;
+            view.setHidden(hidden);
+            if hidden {
+                return Some((0, 0));
+            }
             let parent = unsafe { view.superview() }?;
             // The page's coordinates start at the top left of the window's content
             // layout rect, not of the view it sits in: the webview runs up under

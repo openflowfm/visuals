@@ -1,10 +1,12 @@
-//! visual[flow]: the editor in a webview, the bench drawn natively under it.
+//! visual[flow]: the editor in a webview, the bench drawn natively under it, and
+//! in live mode the output full screen on a display of its own.
 
 mod actions;
 mod bench;
 mod compare;
 mod listen;
 mod playlists;
+mod output;
 
 use engine::preset::Preset;
 use serde::Serialize;
@@ -259,6 +261,7 @@ fn main() {
                 let instance = wgpu::Instance::default();
                 let surface = unsafe { bench::view::create(window.ns_window()?, &instance) };
                 let state = app.state::<App>();
+                output::init(app.handle().clone(), instance.clone());
                 let thread = bench::start(instance, surface, (1, 1), state.ring.clone());
                 *state.bench.lock().unwrap() = Some(thread);
                 // Come back listening to what was chosen last; the system input
@@ -272,15 +275,23 @@ fn main() {
                 if let Err(e) = heard {
                     eprintln!("no audio input: {e}");
                 }
-                // Development: write what the window shows to a PNG, after a pause.
-                if let Some(path) = std::env::var_os("VISUALS_CAPTURE").map(PathBuf::from) {
+                // Development: write what the window (and the live output) show to PNGs, after a pause.
+                let window = std::env::var_os("VISUALS_CAPTURE").map(PathBuf::from);
+                let output = std::env::var_os("VISUALS_CAPTURE_OUTPUT").map(PathBuf::from);
+                if window.is_some() || output.is_some() {
                     let after = std::env::var("VISUALS_CAPTURE_AFTER").ok().and_then(|s| s.parse().ok()).unwrap_or(8.0);
                     let handle = app.handle().clone();
                     std::thread::spawn(move || {
                         std::thread::sleep(std::time::Duration::from_secs_f64(after));
-                        let _ = handle.run_on_main_thread(move || match bench::view::capture(&path) {
-                            Ok(()) => eprintln!("captured the window to {}", path.display()),
-                            Err(e) => eprintln!("capture failed: {e}"),
+                        let _ = handle.run_on_main_thread(move || {
+                            let shots = [(window, bench::view::capture as fn(&Path) -> Result<(), String>, "window"), (output, output::native::capture, "live output")];
+                            for (path, capture, what) in shots {
+                                let Some(path) = path else { continue };
+                                match capture(&path) {
+                                    Ok(()) => eprintln!("captured the {what} to {}", path.display()),
+                                    Err(e) => eprintln!("capture of the {what} failed: {e}"),
+                                }
+                            }
                         });
                     });
                 }
@@ -318,6 +329,11 @@ fn main() {
             compare::compare_cached,
             compare::compare_cache,
             compare::compare_start,
+            output::live_start,
+            output::displays,
+            output::output_open,
+            output::output_close,
+            output::output_status,
         ])
         .run(tauri::generate_context!())
         .expect("visual[flow]");

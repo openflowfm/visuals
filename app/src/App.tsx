@@ -10,6 +10,8 @@ import { StageGraph } from './StageGraph.tsx';
 import { STAGES, setValue as setValueIn } from './stages.ts';
 import { Compare } from './Compare.tsx';
 import * as compareApi from './compare/api.ts';
+import { Live } from './Live.tsx';
+import * as output from './output.ts';
 
 const problemsOf = (r: Report | null): Problem[] => (r ? [...r.equations, ...r.shaders] : []);
 
@@ -70,24 +72,30 @@ function useApply(onReport: (r: Report) => void) {
   );
 }
 
+type View = 'editor' | 'compare' | 'live';
+
 /**
- * The editor, or the compare view (Butterchurn beside the engine, with verdicts).
- * `VISUALS_COMPARE=1` starts in compare, `VISUALS_PRESET=<path>` on a preset.
+ * The editor, the compare view (Butterchurn beside the engine, with verdicts),
+ * or live mode (performing controls, the output full screen on a display).
+ * `VISUALS_COMPARE=1` starts in compare, `VISUALS_LIVE=1` in live mode,
+ * `VISUALS_PRESET=<path>` on a preset.
  */
 export function App() {
-  const [mode, setMode] = useState<{ compare: boolean; preset: string | null } | null>(null);
+  const [mode, setMode] = useState<{ view: View; preset: string | null } | null>(null);
   useEffect(() => {
-    compareApi.start().then(setMode, () => setMode({ compare: false, preset: null }));
+    Promise.all([compareApi.start(), output.liveStart()]).then(
+      ([s, live]) => setMode({ view: live ? 'live' : s.compare ? 'compare' : 'editor', preset: s.preset }),
+      () => setMode({ view: 'editor', preset: null }),
+    );
   }, []);
   if (!mode) return null;
-  return mode.compare ? (
-    <Compare start={mode.preset} onEditor={(preset) => setMode({ compare: false, preset })} />
-  ) : (
-    <Editor start={mode.preset} onCompare={(preset) => setMode({ compare: true, preset })} />
-  );
+  const go = (view: View) => (preset: string | null) => setMode({ view, preset });
+  if (mode.view === 'compare') return <Compare start={mode.preset} onEditor={go('editor')} />;
+  if (mode.view === 'live') return <Live start={mode.preset} onMode={(view, preset) => setMode({ view, preset })} />;
+  return <Editor start={mode.preset} onMode={(view, preset) => setMode({ view, preset })} />;
 }
 
-function Editor({ start, onCompare }: { start: string | null; onCompare: (path: string | null) => void }) {
+function Editor({ start, onMode }: { start: string | null; onMode: (view: 'compare' | 'live', path: string | null) => void }) {
   const [library, setLibrary] = useState<Entry[]>([]);
   const [search, setSearch] = useState('');
   const [current, setCurrent] = useState<Entry | null>(null);
@@ -229,7 +237,12 @@ function Editor({ start, onCompare }: { start: string | null; onCompare: (path: 
     <div className="app">
       <header>
         <h1>visual[flow]</h1>
-        <Segmented items={['editor', 'compare']} index={0} onChange={(i) => i === 1 && onCompare(current?.path ?? null)} label="editor or compare" />
+        <Segmented
+          items={['editor', 'compare', 'live']}
+          index={0}
+          onChange={(i) => i > 0 && onMode(i === 1 ? 'compare' : 'live', current?.path ?? null)}
+          label="editor, compare or live"
+        />
         <button onClick={() => step(-1)} title="previous (←)">◀</button>
         <button onClick={() => step(1)} title="next (→)">▶</button>
         <button onClick={() => step(0)} title="random (R)">random</button>

@@ -78,6 +78,43 @@ paced by the display; the page leaves a transparent hole and reports its rectang
 (`place_bench`). The engine and the app share one Cargo workspace at the repository
 root, so the engine's tests also run from there as `cargo test -p visuals-engine`.
 
+**Live mode and the output.** The page's switch is *editor | compare | live* (the compare
+view's own switch still has only the first two). Live mode is the show: entering it
+opens the output, leaving it closes it — there is no output while editing. In live mode
+the editor isn't rendered (no graph, no inspector) and stage previews are off
+(`set_previews(false)`); the page shows a small preview of the bench, what's playing and
+what's next in the playing playlist, previous / random / next (all through
+`actions::act`, as a controller would), the playlists panel with play/stop and
+auto-advance, the audio input, and the output's display picker and status. Keys: ← ↑
+previous, → ↓ next, R random. Esc does nothing, so a stray key never stops the show;
+⌘⇧L (or the switch) leaves live mode.
+
+The output (`output.rs`) is a borderless native `NSWindow` with no webview, the size of
+the chosen display (`NSScreen`), at the status window level so neither the menu bar nor
+the Dock covers it. Its content is black with a layer-hosting view on a `CAMetalLayer`
+placed at the preset's 16:9 fitted into the display (`output::fit`), so the bars are the
+window's own black, and its surface is that rectangle in the display's pixels. The bench's
+render thread presents every frame to both surfaces (`bench::Cmd::Output`): while the
+output is open it presents with vsync and paces the loop, and the bench is reconfigured to
+present without waiting (`AutoNoVsync`), so the 60 fps frame making and the mixing between
+frames follow the output's display. A bench hole of zero size hides the bench and it
+isn't presented at all. The display is chosen in live mode and remembered in
+`~/.openflow/visuals/output.json` (by id, then by name); with nothing chosen it is the first
+display without the menu bar, else the main one. A display reconfiguration
+(`CGDisplayRegisterReconfigurationCallback`) refits the output, or closes it cleanly when
+its display has gone; the page shows "not showing" with a button to show it again.
+
+Commands: `displays`, `output_open {id | null}`, `output_close`, `output_status`, and the
+`output` event; `live_start` reads `VISUALS_LIVE`. Development: `VISUALS_LIVE=1` starts in
+live mode (with `VISUALS_PRESET`, on that preset), `VISUALS_DISPLAY=<n>` sends the output
+to display `n` (from 0, the system's order), and `VISUALS_CAPTURE_OUTPUT=<png>` saves the
+output window beside `VISUALS_CAPTURE`'s main window.
+
+Not yet: one output only (no mirroring to several displays); the presets still draw at
+`bench::DRAW` (1920×1080) and are scaled to the display, so a 4K projector gets an
+upscaled picture; the cursor is not hidden over the output; on a single display the
+output covers the editor window, and only the keys (⌘⇧L) get back out.
+
 | module | is |
 |---|---|
 | `preset` | the `.milk` reader, code kept as written |
