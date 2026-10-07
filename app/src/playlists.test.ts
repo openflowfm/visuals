@@ -4,11 +4,11 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }));
 
-import { freshName, upNext, type Deck, type Lists, type Playlist } from './playlists.ts';
+import { freshName, nextSays, upNext, type Deck, type Lists, type Playlist } from './playlists.ts';
 
 const item = (name: string, missing = false) => ({ path: `g/${name}.milk`, name, group: 'g', missing });
 const list = (id: string, names: string[]): Playlist => ({ id, name: id, items: names.map((n) => item(n)) });
-const deck = (over: Partial<Deck> = {}): Deck => ({ playlist: null, index: null, auto: false, seconds: 30, current: null, ...over });
+const deck = (over: Partial<Deck> = {}): Deck => ({ playlist: null, index: null, auto: false, seconds: 30, current: null, hold: false, bars: 0, ...over });
 const lists = (playlists: Playlist[], d: Partial<Deck> = {}): Lists => ({ playlists, deck: deck(d) });
 
 describe('upNext', () => {
@@ -56,6 +56,27 @@ describe('upNext', () => {
   it('does not skip a missing item, as the engine does not', () => {
     const a: Playlist = { id: 'a', name: 'a', items: [item('x'), item('gone', true), item('z')] };
     expect(upNext(lists([a], { playlist: 'a', index: 0 }))?.next?.missing).toBe(true);
+  });
+});
+
+describe('nextSays', () => {
+  const playing = lists([list('a', ['x', 'y'])], { playlist: 'a', index: 0 });
+
+  it('names the item → opens', () => {
+    const says = nextSays(playing, false);
+    expect(says.kind === 'item' && says.item.name).toBe('y');
+  });
+
+  it('names nothing while held, even with a playlist playing', () => {
+    expect(nextSays(playing, true)).toEqual({ kind: 'held' });
+  });
+
+  it('names no file when stepping through the library', () => {
+    expect(nextSays(lists([list('a', ['x'])]), false)).toEqual({ kind: 'library' });
+  });
+
+  it('says so when the playing playlist is empty', () => {
+    expect(nextSays(lists([list('a', [])], { playlist: 'a' }), false).kind).toBe('empty');
   });
 });
 

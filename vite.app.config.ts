@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { realpathSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -24,5 +25,8 @@ export default defineConfig({
     // Strict, because Tauri was told this port before vite started.
     port: Number(process.env.PORT) || 0,
     strictPort: Boolean(process.env.PORT),
+    // A worktree that links the checkout's node_modules: serve its files (the
+    // widgets' font among them) from where the link really points.
+    fs: { allow: [here, realpathSync(path.join(here, 'node_modules'))] },
   },
 });

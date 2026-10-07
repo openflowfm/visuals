@@ -37,6 +37,10 @@ export interface Deck {
   auto: boolean;
   seconds: number;
   current: string | null;
+  /** HOLD: steps, auto-advance and Link's changes are refused until it is let go. */
+  hold: boolean;
+  /** Link's change interval in bars, 0 when off. */
+  bars: number;
 }
 
 /** `actions::Lists`, which every playlist command returns. */
@@ -78,6 +82,29 @@ export function upNext(lists: Lists | null): Up | null {
   if (len === 0) return { playlist, index: null, next: null, nextIndex: null };
   const nextIndex = index === null ? 0 : (index + 1) % len;
   return { playlist, index, next: playlist.items[nextIndex], nextIndex };
+}
+
+/** What live mode's "next" line can honestly say. */
+export type NextSays =
+  /** HOLD is on: next, auto-advance and Link's changes are refused, so nothing is next. */
+  | { kind: 'held' }
+  /** The item → (and auto-advance, and Link's change) opens. */
+  | { kind: 'item'; up: Up; item: Item }
+  /** The playing playlist is empty. */
+  | { kind: 'empty'; up: Up }
+  /** No playlist: the next file in the library, which the page doesn't know by name. */
+  | { kind: 'library' };
+
+/**
+ * What → will open. Only `next` is predictable — R picks any other item, so the
+ * line names what stepping on gives, never a random pick — and while held nothing
+ * steps at all.
+ */
+export function nextSays(lists: Lists | null, held: boolean): NextSays {
+  if (held) return { kind: 'held' };
+  const up = upNext(lists);
+  if (!up) return { kind: 'library' };
+  return up.next ? { kind: 'item', up, item: up.next } : { kind: 'empty', up };
 }
 
 /** The name a new playlist gets: the first "playlist N" not taken. */

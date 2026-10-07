@@ -3,8 +3,9 @@
    paints itself, and the bars beside the 16:9 preview are its own shadow,
    clipped to its cell.
 
-   What a show needs most is the biggest: now, then next, then the transport. The
-   preview, the output and the playlists are around them. */
+   What a show needs most is the biggest: now, then next, then the transport and
+   HOLD, then the effects. The preview, the output, Link and the playlists are
+   around them. */
 
 .live {
   display: grid;
@@ -18,6 +19,7 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  overflow-y: auto;
 }
 
 /* Now and next. */
@@ -59,6 +61,17 @@
   letter-spacing: var(--track-tight);
   line-height: 1.15;
 }
+.live-held {
+  flex: none;
+  align-self: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--caution);
+  color: var(--bg);
+  font-size: var(--text-lead);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--track-label);
+}
 .live-next span {
   color: var(--ui);
   font-size: var(--text-title);
@@ -74,7 +87,7 @@
 }
 .live-where b { color: var(--detail); font-weight: var(--weight-medium); }
 
-/* Previous, random, next: big enough to hit without looking twice. */
+/* Previous, random, next and HOLD: big enough to hit without looking twice. */
 .live-transport {
   display: flex;
   gap: 8px;
@@ -83,7 +96,8 @@
   border-bottom: 1px solid var(--bd3);
 }
 .live-transport .wdg-button { flex: 1; display: flex; }
-.live-transport .wdg-button-body {
+.live-transport .wdg-button-body,
+.live-transport .live-hold {
   width: 100%;
   height: auto;
   padding: 10px 12px;
@@ -91,7 +105,13 @@
   font-size: var(--text-heading);
   font-weight: var(--weight-medium);
 }
-.live .wdg-button-body:focus-visible { outline: 1px solid var(--fg); outline-offset: 1px; }
+.live-transport .live-hold { flex: 0.6; font-weight: var(--weight-bold); letter-spacing: var(--track-label); }
+/* --caution, not --amber: the theme makes amber its (grey) primary, and HOLD must be seen. */
+.live-transport .live-hold[data-on] { color: var(--bg); background: var(--caution); border-color: var(--caution); }
+.live .wdg-button-body:focus-visible,
+.live .live-hold:focus-visible,
+.live .fx-hit:focus-visible,
+.live .fx-tempo:focus-visible { outline: 1px solid var(--fg); outline-offset: 1px; }
 
 /* An error: one plain sentence, the app's own words in its tooltip, and ✕. */
 .live-problem {
@@ -107,6 +127,8 @@
 }
 .live-problem > span { flex: 1; min-width: 0; }
 
+.live-stage > .fx { border-bottom: 1px solid var(--bd3); }
+
 /* The preview: a hole, ringed by its own shadow. */
 .live-preview-cell {
   flex: 1;
@@ -114,7 +136,7 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  min-height: 120px;
+  min-height: 140px;
   padding: 12px;
 }
 .live-preview {
@@ -125,7 +147,7 @@
   box-shadow: 0 0 0 100vmax #000;
 }
 
-/* The side: where the output goes, then the playlists. */
+/* The side: where the output goes, Link, then the playlists. */
 .live-side {
   display: flex;
   flex-direction: column;
