@@ -7,6 +7,8 @@ import { Playlists } from './Playlists.tsx';
 import * as pl from './playlists.ts';
 import { StageGraph } from './StageGraph.tsx';
 import { STAGES, setValue as setValueIn } from './stages.ts';
+import { Compare } from './Compare.tsx';
+import * as compareApi from './compare/api.ts';
 
 const problemsOf = (r: Report | null): Problem[] => (r ? [...r.equations, ...r.shaders] : []);
 
@@ -67,7 +69,24 @@ function useApply(onReport: (r: Report) => void) {
   );
 }
 
+/**
+ * The editor, or the compare view (Butterchurn beside the engine, with verdicts).
+ * `VISUALS_COMPARE=1` starts in compare, `VISUALS_PRESET=<path>` on a preset.
+ */
 export function App() {
+  const [mode, setMode] = useState<{ compare: boolean; preset: string | null } | null>(null);
+  useEffect(() => {
+    compareApi.start().then(setMode, () => setMode({ compare: false, preset: null }));
+  }, []);
+  if (!mode) return null;
+  return mode.compare ? (
+    <Compare start={mode.preset} onEditor={(preset) => setMode({ compare: false, preset })} />
+  ) : (
+    <Editor start={mode.preset} onCompare={(preset) => setMode({ compare: true, preset })} />
+  );
+}
+
+function Editor({ start, onCompare }: { start: string | null; onCompare: (path: string | null) => void }) {
   const [library, setLibrary] = useState<Entry[]>([]);
   const [search, setSearch] = useState('');
   const [current, setCurrent] = useState<Entry | null>(null);
@@ -150,7 +169,9 @@ export function App() {
   useEffect(() => {
     api.presets().then((l) => {
       setLibrary(l);
-      if (l.length) load(l[Math.floor(Math.random() * l.length)]);
+      const first = start ? (l.find((e) => e.path === start) ?? { path: start, name: start.split('/').pop()!.replace(/\.milk$/i, ''), group: '' }) : null;
+      if (first) load(first);
+      else if (l.length) load(l[Math.floor(Math.random() * l.length)]);
     });
     api.inputs().then(setInputs);
     api.listenTo(null).then(setInput, (e) => setError(String(e)));
@@ -211,6 +232,7 @@ export function App() {
     <div className="app">
       <header>
         <h1>visual[flow]</h1>
+        <Segmented items={['editor', 'compare']} index={0} onChange={(i) => i === 1 && onCompare(current?.path ?? null)} label="editor or compare" />
         <button onClick={() => step(-1)} title="previous (←)">◀</button>
         <button onClick={() => step(1)} title="next (→)">▶</button>
         <button onClick={() => step(0)} title="random (R)">random</button>

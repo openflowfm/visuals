@@ -96,8 +96,8 @@ functions missing a `return`, one naga bug in a helper — and 6 have equations 
 to parse (an undefined `_aboeq()`, `0 = …`, stray prose).
 
 Not yet: blending from one preset to the next, mipmaps on the feedback and blur textures
-(Butterchurn samples them mipmapped), the song-title text, per-pass GPU timings, and the
-side-by-side harness.
+(Butterchurn samples them mipmapped), the song-title text, and per-pass GPU timings. The side-by-side harness is the app's
+compare view (below, "Live mode, as built").
 
 ## Performance: 60 fps at 4K
 
@@ -287,9 +287,43 @@ What cannot match, and so is noise in the score rather than an engine bug:
   between WebGL and wgpu into different pictures within seconds; its first capture is
   the one to read.
 
-Live mode is next: a CPAL input feeding the same byte windows to Butterchurn in the app's
-webview and to the engine, one window with split, wipe and difference views, next and
-previous, search, and the same approvals file through the same `/approvals` shape.
+### Live mode, as built: the app's compare view
+
+    VISUALS_COMPARE=1 npm run app                                  # start in it
+    VISUALS_COMPARE=1 VISUALS_PRESET="cream-of-the-crop/Geometric/Cube Fly/x.milk" npm run app
+
+The app's header switches between *editor* and *compare*. The compare view is three
+things: the pack's presets on the left (search, filter by verdict — all, not judged,
+approved, rejected, with a note — each row marked ✓ ✗ or • for a note), the two pictures
+side by side at the same size, and the verdict under them.
+
+- **Butterchurn** (left) is 2.6.7 on a WebGL canvas in the page, drawing at 1920×1080 as
+  the engine does. It is imported only when the view opens (it touches `window` at
+  import), and `Math.random` is the engine's generator while it is open, seeded as
+  recorded mode seeds it (`0x5eed`, then the preset seed as each preset loads). `.milk`
+  is converted in a Web Worker (`app/src/compare/convert.worker.ts`: the converter with
+  `server/hlsl.ts`'s repairs, as `server/presetWorker.ts` runs it), cached in the same
+  `<pack>/.converted/…` files as the server and recorded mode. A shader Butterchurn cannot
+  link is left black, as BlackHole shows it, and labelled on its picture; so is a preset
+  the converter fails on.
+- **Ours** (right) is the native bench, moved under the right picture's hole. Presets
+  picked here open with seed 1 on both sides (`compare_open`), so `rand_start`,
+  `rand_preset` and the init equations agree, as in recorded mode.
+- **Audio.** Both hear the bench's CPAL input. The page asks for `compare_audio` once an
+  animation frame: the input's sample rate, then the mono, left and right 1024-byte
+  windows `Audio::update` would make from the same ring, given to Butterchurn's
+  `render({audioLevels})`; its FFT bands are tuned to the rate as the old app did.
+- **Verdicts** go to the recorded bench's file and shape (`compare.rs`): `approvals.json`
+  under `OPENFLOW_HOME`, keyed by path in the pack, sorted, one-space indented. A verdict
+  given here keeps the recorded score already there. A file that will not parse is never
+  written over.
+
+Keys: ↑ ↓ previous / next in the list, R random from it, A approve, X reject (again to
+clear), N write a note (Esc or ⌘↩ leaves and saves), S swap the sides, F one picture full
+size and Space the other one. Auto-advance and controllers still move the bench; the
+view follows them, with that preset's own seed.
+
+Not there yet: wipe and difference views, and a score in the live view.
 
 ## Phases
 

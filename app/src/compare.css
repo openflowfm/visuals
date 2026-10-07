@@ -1,0 +1,107 @@
+/* The compare view: presets on the left, Butterchurn and ours side by side, the
+   verdict under them. Every rule is under .compare, so the editor is untouched. */
+
+.compare {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-rows: 36px minmax(0, 1fr);
+  height: 100%;
+}
+
+.compare-list {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--panel);
+  border-right: 1px solid var(--bd3);
+}
+.compare-list > input { margin: 8px 8px 4px; padding: 4px 6px; }
+.compare-show { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 8px 6px; }
+.compare-list ul { list-style: none; margin: 0; padding: 0; overflow: auto; flex: 1; }
+.compare-list li { padding: 3px 10px 3px 4px; cursor: pointer; display: flex; gap: 4px; align-items: baseline; }
+.compare-list li:hover { background: var(--sel); }
+.compare-list li[data-current] { background: var(--bd); color: var(--fg); }
+.compare-entry { display: flex; flex-direction: column; min-width: 0; }
+.compare-entry span, .compare-entry i { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.compare-entry i { color: var(--caption); font-style: normal; font-size: 10px; }
+.compare-mark { width: 14px; flex: none; text-align: center; color: var(--caption); }
+.compare-list li[data-verdict='approve'] .compare-mark { color: var(--green); }
+.compare-list li[data-verdict='reject'] .compare-mark { color: var(--red); }
+
+.compare-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.compare-captions {
+  display: flex;
+  flex-direction: row-reverse;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--bd3);
+}
+.compare-caption { flex: 1; min-width: 0; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); }
+.compare-captions[data-swap],
+.compare-feeds[data-swap] { flex-direction: row; }
+.compare-captions[data-flip='theirs'] [data-side='ours'],
+.compare-captions[data-flip='ours'] [data-side='theirs'],
+.compare-feeds[data-flip='theirs'] [data-side='ours'],
+.compare-feeds[data-flip='ours'] [data-side='theirs'] { display: none; }
+
+/* The pictures. Nothing in this row may paint behind the hole: the gaps round
+   the two pictures are the hole's own shadow, clipped to the row. Butterchurn's
+   pane comes after the hole in the page, so it paints over that shadow. */
+.compare-feeds {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  container-type: size;
+}
+.compare-feeds[data-flip='theirs'] { background: var(--bg); }
+.compare-feed {
+  position: relative;
+  flex: none;
+  aspect-ratio: 16 / 9;
+  width: min(calc((100cqw - 8px) / 2), calc(100cqh * 16 / 9));
+}
+.compare-feeds[data-flip] .compare-feed { width: min(100cqw, calc(100cqh * 16 / 9)); }
+.compare-hole { background: transparent; box-shadow: 0 0 0 100vmax var(--bg); }
+.compare-feed canvas { display: block; width: 100%; height: 100%; background: #000; }
+.compare-label {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  max-width: calc(100% - 16px);
+  padding: 3px 8px;
+  border-radius: var(--radius);
+  background: rgba(0, 0, 0, 0.75);
+  color: var(--caption);
+}
+.compare-label[data-bad] { color: var(--red); }
+
+.compare-verdict {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding: 8px;
+  background: var(--panel);
+  border-top: 1px solid var(--bd3);
+}
+.compare-verdict button { padding: 6px 14px; }
+.compare-verdict button kbd { font-family: var(--mono); color: var(--caption); margin-left: 4px; }
+.compare-verdict button.approve[data-on] { background: var(--green); color: #000; }
+.compare-verdict button.reject[data-on] { background: var(--red); color: #000; }
+.compare-verdict button[data-on] kbd { color: #000; }
+.compare-verdict textarea { min-height: 52px; padding: 6px; resize: vertical; }
+.compare-status { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.compare-status b[data-verdict='approve'] { color: var(--green); }
+.compare-status b[data-verdict='reject'] { color: var(--red); }
