@@ -11,6 +11,7 @@ status.
 | `npm run typecheck` | the TypeScript (old app, server, editor page) compiles | any `.ts`/`.tsx` change |
 | `npx vitest run <files>` | targeted unit tests | the tests next to what you changed; CI runs the whole suite |
 | `cargo run --release -p visuals-engine --bin gpucheck` | every preset in the pack loads and draws on the GPU | changes to shader translation or the renderer |
+| `npm run compare -- [presets or folders] [--sample N] [--frames N] [--captures N] [--size WxH] [--no-serve]` | each preset drawn by Butterchurn and by our engine from the same audio, time and seeds; scored side by sides in `harness/out/compare/index.html`, approvals in `~/.openflow/visuals/compare/approvals.json` | after an engine change, to see whether it looks closer (see "The harness" in `docs/milkdrop-engine.md`); `--serve` reopens the last report |
 
 `npm run app` runs the editor. No dev port is fixed: it takes `PORT` or a free port from
 the OS and hands it to vite and Tauri. `VISUALS_CAPTURE=<file.png>` makes the app save a
