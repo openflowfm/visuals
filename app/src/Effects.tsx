@@ -10,12 +10,14 @@ import * as fx from './fx.ts';
 import './effects.css';
 
 const range = (name: string, min: number, max: number, defaultValue: number): Param => ({ kind: 'float', min, max, defaultValue, name });
-const SPEED = range('speed', 0.25, 2, 1);
+// Speed and sensitivity are multipliers on a log taper: the slider holds the
+// position (log2, −2..2, 0 at 1×) and `taper` turns it back into the multiplier.
+const SPEED = range('speed', fx.POSITION_MIN, fx.POSITION_MAX, 0);
 const TRANSITION = range('transition', 0, 10, 2);
 const BRIGHTNESS = range('brightness', 0, 2, 1);
 const HUE = range('hue', 0, 1, 0);
 const TRAILS = range('trails', 0, 1, 0);
-const SENSITIVITY = range('sensitivity', 0.25, 4, 1);
+const SENSITIVITY = range('sensitivity', fx.POSITION_MIN, fx.POSITION_MAX, 0);
 const INTENSITY = range('strobe level', 0, 1, 1);
 const FADE = range('blackout fade', 0, 10, 0);
 const BPM: Param = { kind: 'int', min: 40, max: 240, defaultValue: 120, steps: 201, name: 'bpm' };
@@ -83,6 +85,8 @@ export function Effects({ state, onState, send }: { state: fx.Fx; onState: React
   const slider = (param: Param, value: number, onChange: (v: number) => void, display: string, title: string) => (
     <Slider param={param} value={value} onChange={onChange} display={display} orientation="horizontal" layout="inside" title={`${title} (double-click resets)`} />
   );
+  const taper = (param: Param, multiplier: number, onChange: (m: number) => void, title: string) =>
+    slider(param, fx.multiplierToPosition(multiplier), (p) => onChange(fx.positionToMultiplier(p)), fx.formatMultiplier(multiplier), title);
 
   return (
     // `wdg` on the group: the bare hit faces read the widgets' variables from it.
@@ -143,12 +147,12 @@ export function Effects({ state, onState, send }: { state: fx.Fx; onState: React
         </Toggle>
       </div>
       <div className="fx-grid">
-        {slider(SPEED, state.speed, (v) => set({ kind: 'speed', speed: v }, { speed: v }), `${state.speed.toFixed(2)}×`, 'How fast the preset runs')}
+        {taper(SPEED, state.speed, (v) => set({ kind: 'speed', speed: v }, { speed: v }), 'How fast the preset runs, ¼× to 4×')}
         {slider(TRANSITION, state.transition, (v) => set({ kind: 'transition', seconds: v }, { transition: v }), `${state.transition.toFixed(1)} s`, 'The blend into the next preset; 0 is a hard cut')}
         {slider(BRIGHTNESS, state.brightness, (v) => set({ kind: 'brightness', value: v }, { brightness: v }), state.brightness.toFixed(2), 'Brightness; 1 is as drawn')}
         {slider(HUE, state.hue, (v) => set({ kind: 'hue', value: v }, { hue: v }), `${Math.round(state.hue * 360)}°`, 'Turn the colours round the wheel')}
         {slider(TRAILS, state.trails, (v) => set({ kind: 'trails', value: v }, { trails: v }), state.trails.toFixed(2), 'Trails: how much of the last frames stays')}
-        {slider(SENSITIVITY, state.sensitivity, (v) => set({ kind: 'sensitivity', value: v }, { sensitivity: v }), `${state.sensitivity.toFixed(2)}×`, 'How loud the presets hear the audio')}
+        {taper(SENSITIVITY, state.sensitivity, (v) => set({ kind: 'sensitivity', value: v }, { sensitivity: v }), 'How loud the presets hear the audio, ¼× to 4×')}
         {slider(INTENSITY, state.strobe_intensity, (v) => set({ kind: 'strobe_intensity', value: v }, { strobe_intensity: v }), `${Math.round(state.strobe_intensity * 100)}%`, 'How hard the strobe flashes')}
         {slider(FADE, state.blackout_fade, (v) => set({ kind: 'blackout_fade', seconds: v }, { blackout_fade: v }), `${state.blackout_fade.toFixed(1)} s`, 'How long blackout takes to fade')}
       </div>
