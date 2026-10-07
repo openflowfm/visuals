@@ -64,6 +64,43 @@ export interface Fx {
   bars: number;
 }
 
+/** The effects held while pressed (and latched with Shift), and blackout, which toggles. */
+export type Hit = 'strobe' | 'punch' | 'freeze' | 'blackout';
+export const hitAction = (kind: Hit, on: boolean | null): FxAction => ({ kind, on });
+
+/** The keys that hold an effect while they are down. */
+export const HOLD_KEYS: Readonly<Record<string, Hit>> = { s: 'strobe', p: 'punch', f: 'freeze' };
+
+/** What an effect key does: hold an effect while it is down, or send one action. */
+export type KeyPress = { hold: Hit } | { action: FxAction };
+
+/**
+ * The live effect keys: S, P, F hold strobe, punch, freeze (Shift latches them);
+ * B blackout, T tap, I invert, M mirror and H hold toggle or step; 0 resets the
+ * effects. Null for any other key. `key` is `KeyboardEvent.key`, any case.
+ */
+export function effectKey(key: string, shift: boolean): KeyPress | null {
+  const k = key.toLowerCase();
+  const hit = HOLD_KEYS[k];
+  if (hit) return shift ? { action: hitAction(hit, null) } : { hold: hit };
+  switch (k) {
+    case 'b':
+      return { action: { kind: 'blackout', on: null } };
+    case 't':
+      return { action: { kind: 'tap' } };
+    case 'i':
+      return { action: { kind: 'invert', on: null } };
+    case 'm':
+      return { action: { kind: 'mirror', mode: null } };
+    case 'h':
+      return { action: { kind: 'hold', on: null } };
+    case '0':
+      return { action: { kind: 'fx_reset' } };
+    default:
+      return null;
+  }
+}
+
 export const act = (action: FxAction) => invoke<void>('act', { action });
 export const state = () => invoke<Fx>('fx_state');
 export const onFx = (f: (fx: Fx) => void): Promise<UnlistenFn> => listen<Fx>('fx', (e) => f(e.payload));

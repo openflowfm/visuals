@@ -1,0 +1,88 @@
+/* The live effects: the four hits big enough to hit blind, then tempo and the
+   picture's switches, then its amounts. Lit hits are bright enough to read in the dark. */
+
+.fx {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 22px 14px;
+  background: var(--panel);
+}
+.fx h2 {
+  margin: 0;
+  color: var(--caption);
+  font-size: var(--text-label);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+}
+.fx-head { display: flex; align-items: center; gap: 8px; }
+.fx-fill { flex: 1; }
+
+.fx-hits { display: flex; gap: 8px; }
+.fx .fx-hit {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: auto;
+  min-height: 52px;
+  padding: 8px 6px;
+  color: var(--fg);
+  font-size: var(--text-heading);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--track-label);
+  user-select: none;
+  touch-action: none;
+}
+.fx .fx-hit small {
+  color: var(--caption);
+  font-family: var(--mono);
+  font-variation-settings: var(--mono-axes);
+  font-size: var(--text-label);
+  font-weight: var(--weight-normal);
+  letter-spacing: var(--track-none);
+}
+.fx .fx-hit[data-on] { color: var(--bg); background: var(--fg); border-color: var(--fg); }
+.fx .fx-hit[data-on] small { color: var(--bg); }
+.fx .fx-hit[data-kind='freeze'][data-on] { background: var(--blue); border-color: var(--blue); }
+.fx .fx-hit[data-kind='punch'][data-on] { background: var(--green); border-color: var(--green); }
+.fx .fx-hit[data-kind='blackout'][data-on] { color: var(--fg); background: var(--bg); border-color: var(--red); box-shadow: var(--ring) var(--red); }
+.fx .fx-hit[data-kind='blackout'][data-on] small { color: var(--red); }
+
+.fx-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 14px;
+}
+.fx-row .wdg-toggle { width: 120px; }
+.fx .fx-tempo {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  height: auto;
+  min-width: 96px;
+  padding: 6px 12px;
+  color: var(--ui);
+  font-size: var(--text-lead);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--track-slight);
+}
+.fx span.fx-tempo { border: 1px solid var(--bd3); border-radius: var(--radius); }
+.fx .fx-tempo b {
+  color: var(--green);
+  font-family: var(--mono);
+  font-variation-settings: var(--mono-axes);
+  font-size: var(--text-heading);
+  font-variant-numeric: tabular-nums;
+}
+
+.fx-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 6px 14px;
+}

@@ -1,28 +1,10 @@
 import { useEffect, useState } from 'react';
+import { Button } from '@openflow/widgets/controls/Button.tsx';
+import { Select } from '@openflow/widgets/controls/Select.tsx';
+import { Toggle } from '@openflow/widgets/controls/Toggle.tsx';
 import * as link from './link.ts';
+import { problem, type Problem } from './problems.ts';
 import './link.css';
-
-/** What the interval picker offers, as `every:unit`. */
-const CHOICES: [string, string][] = [
-  ['0:bars', 'off'],
-  ['1:beats', 'every beat'],
-  ['2:beats', 'every 2 beats'],
-  ['1:bars', 'every bar'],
-  ['2:bars', 'every 2 bars'],
-  ['4:bars', 'every 4 bars'],
-  ['8:bars', 'every 8 bars'],
-  ['16:bars', 'every 16 bars'],
-  ['32:bars', 'every 32 bars'],
-];
-
-/** Where the bar is now: the last frame run on at its tempo, so the light moves smoothly between frames. */
-function runOn(frame: link.Frame, now: number): { bar: number; phase: number } {
-  const beats = Math.max(0, now - frame.at) * (frame.tempo / 60000);
-  const q = frame.quantum;
-  const since = frame.bar - 1 + (frame.barPhase + beats) / q;
-  const bar = Math.floor(since);
-  return { bar: bar + 1, phase: (since - bar) * q };
-}
 
 /**
  * Ableton Link and the one: who is in the session and at what tempo, the bar counted
@@ -33,10 +15,10 @@ function runOn(frame: link.Frame, now: number): { bar: number; phase: number } {
 export function LinkPanel() {
   const [frame, setFrame] = useState<link.Frame | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Problem | null>(null);
 
   useEffect(() => {
-    link.state().then(setFrame, (e) => setError(String(e)));
+    link.state().then(setFrame, (e) => setError(problem("Couldn't start Link.", e)));
     const off = link.onFrame(setFrame);
     return () => {
       off.then((f) => f());
@@ -53,90 +35,94 @@ export function LinkPanel() {
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  const run = (p: Promise<link.Frame>) =>
+  const run = (p: Promise<link.Frame>, what: string) =>
     p.then(
       (f) => {
         setFrame(f);
         setError(null);
       },
-      (e) => setError(String(e)),
+      (e) => setError(problem(`Couldn't ${what}.`, e)),
     );
+
+  const trouble = error && (
+    <div className="link-problem" role="alert" title={error.detail ?? undefined}>
+      <span>{error.text}</span>
+      <Button tone="quiet" onPress={() => setError(null)} label="Dismiss" title="Dismiss">
+        ✕
+      </Button>
+    </div>
+  );
 
   if (!frame) {
     return (
-      <div className="link-panel">
-        <h2>link</h2>
-        {error ? <p className="problem">{error}</p> : <p className="quiet">starting…</p>}
-      </div>
+      <section className="link-panel" aria-label="Ableton Link">
+        <h2>Link</h2>
+        {trouble ?? <p className="link-quiet">Starting…</p>}
+      </section>
     );
   }
 
-  const { bar, phase } = runOn(frame, now);
+  const { bar, phase } = link.runOn(frame, now);
   const lit = Math.min(frame.quantum - 1, Math.floor(phase));
-  const every = `${frame.every.every}:${frame.every.unit}`;
-  const toNext = frame.next !== null ? frame.next - (frame.beat + Math.max(0, now - frame.at) * (frame.tempo / 60000)) : null;
+  const choices = link.choicesFor(frame.every);
+  const at = choices.findIndex((c) => c.every === frame.every.every && c.unit === frame.every.unit);
+  const toNext = link.beatsToNext(frame, now);
 
   return (
-    <div className="link-panel">
+    <section className="link-panel" aria-label="Ableton Link">
       <div className="link-head">
-        <h2>link</h2>
-        <label className="link-on">
-          <input type="checkbox" checked={frame.enabled} onChange={(e) => run(link.enable(e.target.checked))} />
-          <span>{frame.enabled ? 'on' : 'off'}</span>
-        </label>
+        <h2>Link</h2>
+        <Toggle
+          on={frame.enabled}
+          onChange={(on) => run(link.enable(on), on ? 'join the Link session' : 'leave the Link session')}
+          layout="inside"
+          name="link"
+          label="Ableton Link"
+          title="Join the Link session on the network, to follow its tempo and bars"
+        >
+          {frame.enabled ? 'on' : 'off'}
+        </Toggle>
       </div>
       <p className="link-status" data-on={frame.enabled && frame.peers > 0 ? '' : undefined}>
-        <b>{frame.tempo.toFixed(1)}</b> bpm ·{' '}
-        {!frame.enabled
-          ? 'not on the network: our own clock'
-          : frame.peers === 0
-            ? 'no peers: our own clock'
-            : `${frame.peers} ${frame.peers === 1 ? 'peer' : 'peers'}`}
-        {frame.playing && ' · playing'}
+        <b>{frame.tempo.toFixed(1)}</b> bpm · {link.statusText(frame)}
       </p>
-      <div className="link-beat">
-        <span className="link-bar" title="the bar, counted from the one">
+      <div className="link-beat" aria-label={`bar ${bar}, beat ${lit + 1} of ${frame.quantum}`} role="img">
+        <span className="link-bar" title="The bar, counted from the one">
           {bar}
         </span>
-        <span className="link-lights">
+        <span className="link-lights" aria-hidden="true">
           {Array.from({ length: frame.quantum }, (_, i) => (
             <span key={i} className="link-light" data-lit={i === lit ? '' : undefined} data-one={i === 0 ? '' : undefined} />
           ))}
         </span>
       </div>
       <div className="link-one">
-        <button onClick={() => run(link.nudge(-1))} title="the one a beat earlier">
+        <Button onPress={() => run(link.nudge(-1), 'move the one')} label="Move the one a beat earlier" title="The one a beat earlier">
           −
-        </button>
-        <button onClick={() => run(link.setOne())} title="the one is the nearest bar line (the coming one, late in a bar)">
+        </Button>
+        <Button onPress={() => run(link.setOne(), 'set the one')} title="The one is the nearest bar line (the coming one, late in a bar)">
           set one
-        </button>
-        <button onClick={() => run(link.nudge(1))} title="the one a beat later">
+        </Button>
+        <Button onPress={() => run(link.nudge(1), 'move the one')} label="Move the one a beat later" title="The one a beat later">
           +
-        </button>
-        <button onClick={() => run(link.resetOne())} title="back to Link's own bar lines">
+        </Button>
+        <Button onPress={() => run(link.resetOne(), 'reset the one')} title="Back to Link's own bar lines">
           reset
-        </button>
+        </Button>
       </div>
-      <label className="link-every">
-        <span>change preset</span>
-        <select
-          value={every}
-          onChange={(e) => {
-            const [n, unit] = e.target.value.split(':');
-            run(link.sync(Number(n), unit as link.Unit));
-          }}
-        >
-          {CHOICES.some(([v]) => v === every) || <option value={every}>every {frame.every.every} {frame.every.unit}</option>}
-          {CHOICES.map(([v, name]) => (
-            <option key={v} value={v}>
-              {name}
-            </option>
-          ))}
-        </select>
-        {toNext !== null && <span className="quiet">in {Math.max(0, Math.ceil(toNext))} beats</span>}
-      </label>
-      {error && <p className="problem">{error}</p>}
-    </div>
+      <div className="link-every">
+        <Select
+          className="link-every-pick"
+          name="change preset"
+          items={choices.map((c) => c.name)}
+          index={Math.max(0, at)}
+          onChange={(i) => run(link.sync(choices[i].every, choices[i].unit), 'change the interval')}
+          label="Change the preset"
+          title="Change the preset on the beat; turns auto-advance off"
+        />
+        {toNext !== null && <span className="link-quiet">in {Math.max(0, Math.ceil(toNext))} beats</span>}
+      </div>
+      {trouble}
+    </section>
   );
 }
