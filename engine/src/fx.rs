@@ -1,5 +1,5 @@
 //! Live effects on the finished picture: the master pass, drawn every time the
-//! picture is presented, and the trails echo, drawn once per made frame.
+//! picture is presented, and the trails echo, drawn once per picture made.
 //!
 //! The master pass is what a VJ plays on top of whatever preset is running —
 //! brightness, hue, invert, mirror, strobe, blackout, a beat punch and the fade
