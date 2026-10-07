@@ -73,4 +73,13 @@ export const apply = (preset: Preset) => invoke<Report>('apply', { preset });
 export const placeBench = (r: { x: number; y: number; width: number; height: number }) => invoke<void>('place_bench', r);
 export const inputs = () => invoke<Input[]>('inputs');
 export const listenTo = (name: string | null, left = 1, right = 2) => invoke<string>('listen_to', { name, left, right });
+
+/** What the bench hears: the input and the two channels, counted from 1. */
+export interface Heard {
+  choice: { name: string; left: number; right: number } | null;
+  channels: number;
+}
+export const listening = () => invoke<Heard>('listening');
+/** The loudest sample in the left and right channels' latest windows, 0–1. */
+export const levels = () => invoke<[number, number]>('levels');
 export const stats = () => invoke<Stats>('stats');

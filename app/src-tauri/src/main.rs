@@ -171,16 +171,44 @@ fn inputs() -> Vec<listen::Input> {
 /// counted from 1. Returns the input's name.
 #[tauri::command]
 fn listen_to(name: Option<String>, left: Option<usize>, right: Option<usize>, app: State<App>) -> Result<String, String> {
+    let l = listen_on(&app, name.as_deref(), left, right)?;
+    listen::save(&l);
+    Ok(l.name)
+}
+
+/// Open an input and make it what the bench hears. Channels count from 1.
+fn listen_on(app: &App, name: Option<&str>, left: Option<usize>, right: Option<usize>) -> Result<listen::Choice, String> {
     let channels = (left.unwrap_or(1).max(1) - 1, right.unwrap_or(2).max(1) - 1);
     let mut listening = app.listening.lock().unwrap();
     *listening = None;
-    let l = listen::listen(name.as_deref(), channels, app.ring.clone())?;
+    let l = listen::listen(name, channels, app.ring.clone())?;
     if let Some(b) = app.bench.lock().unwrap().as_ref() {
         let _ = b.commands.send(bench::Cmd::SampleRate(l.rate));
     }
-    let name = l.name.clone();
+    let choice = l.choice();
     *listening = Some(l);
-    Ok(name)
+    Ok(choice)
+}
+
+#[derive(Serialize)]
+struct Heard {
+    /// The input and the two channels heard, from 1; absent when nothing is open.
+    choice: Option<listen::Choice>,
+    /// How many channels the input has.
+    channels: usize,
+}
+
+/// What the bench is listening to.
+#[tauri::command]
+fn listening(app: State<App>) -> Heard {
+    let l = app.listening.lock().unwrap();
+    Heard { choice: l.as_ref().map(|l| l.choice()), channels: l.as_ref().map_or(0, |l| l.channels) }
+}
+
+/// The loudest sample in the left and right channels' latest windows, for a meter.
+#[tauri::command]
+fn levels(app: State<App>) -> (f32, f32) {
+    listen::peaks(&app.ring)
 }
 
 /// Change one value of the running preset. Returns false when it needs a reload
@@ -231,6 +259,17 @@ fn main() {
                 let state = app.state::<App>();
                 let thread = bench::start(instance, surface, (1, 1), state.ring.clone());
                 *state.bench.lock().unwrap() = Some(thread);
+                // Come back listening to what was chosen last; the system input
+                // when that is gone or nothing was chosen.
+                let saved = listen::saved();
+                let heard = saved
+                    .as_ref()
+                    .and_then(|c| listen_on(&state, Some(&c.name), Some(c.left), Some(c.right)).ok())
+                    .map(Ok)
+                    .unwrap_or_else(|| listen_on(&state, None, None, None));
+                if let Err(e) = heard {
+                    eprintln!("no audio input: {e}");
+                }
                 // Development: write what the window shows to a PNG, after a pause.
                 if let Some(path) = std::env::var_os("VISUALS_CAPTURE").map(PathBuf::from) {
                     let after = std::env::var("VISUALS_CAPTURE_AFTER").ok().and_then(|s| s.parse().ok()).unwrap_or(8.0);
@@ -256,6 +295,8 @@ fn main() {
             place_bench,
             inputs,
             listen_to,
+            listening,
+            levels,
             stats,
             actions::act,
             actions::playlists,
@@ -271,7 +312,6 @@ fn main() {
             compare::compare_judge,
             compare::compare_open,
             compare::compare_audio,
-            compare::compare_input,
             compare::compare_source,
             compare::compare_cached,
             compare::compare_cache,

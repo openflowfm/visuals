@@ -2,7 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { AudioLevels } from 'butterchurn';
 import { Segmented } from '@openflow/widgets/controls/Segmented.tsx';
 import * as app from './api.ts';
-import type { Input, Report } from './api.ts';
+import type { Report } from './api.ts';
+import { AudioInput } from './AudioInput.tsx';
 import * as api from './compare/api.ts';
 import type { Approval, Listed, Verdict } from './compare/api.ts';
 import { createReference, type Reference } from './compare/butterchurn.ts';
@@ -49,8 +50,6 @@ export function Compare({ start, onEditor }: { start: string | null; onEditor: (
   const [error, setError] = useState<string | null>(null);
   const [swap, setSwap] = useState(false);
   const [flip, setFlip] = useState<Flip>(null);
-  const [inputs, setInputs] = useState<Input[]>([]);
-  const [input, setInput] = useState('');
   const [fps, setFps] = useState({ theirs: 0, ours: 0 });
 
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -180,8 +179,6 @@ export function Compare({ start, onEditor }: { start: string | null; onEditor: (
       },
       (e) => setError(String(e)),
     );
-    app.inputs().then(setInputs, () => {});
-    api.input().then((name) => (name ? setInput(name) : app.listenTo(null).then(setInput)), (e) => setError(String(e)));
     return () => {
       cancelled = true;
     };
@@ -306,14 +303,7 @@ export function Compare({ start, onEditor }: { start: string | null; onEditor: (
         </span>
         {error && <span className="problem">{error}</span>}
         <span className="fill" />
-        <select value={input} onChange={(e) => app.listenTo(e.target.value).then(setInput, (err) => setError(String(err)))} title="audio input, heard by both">
-          {!inputs.some((i) => i.name === input) && <option value={input}>{input || 'no input'}</option>}
-          {inputs.map((i, n) => (
-            <option key={`${n}:${i.name}`} value={i.name}>
-              {i.name} ({i.channels} ch)
-            </option>
-          ))}
-        </select>
+        <AudioInput onError={setError} />
         <span className="stats">
           Butterchurn {fps.theirs.toFixed(0)} fps · ours {fps.ours.toFixed(0)} fps
         </span>

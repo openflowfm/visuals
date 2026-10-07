@@ -31,7 +31,6 @@ export const judge = (id: string, verdict: Verdict | null, note: string) => invo
 export const open = (path: string) => invoke<{ preset: Preset; report: Report }>('compare_open', { path });
 /** Sample rate (f32 LE), then mono, left and right byte windows of 1024. */
 export const audio = () => invoke<ArrayBuffer>('compare_audio');
-export const input = () => invoke<string | null>('compare_input');
 export const source = (path: string) => invoke<ArrayBuffer>('compare_source', { path });
 export const cached = (converter: string, hash: string) => invoke<string | null>('compare_cached', { converter, hash });
 export const cache = (converter: string, hash: string, json: string) => invoke<void>('compare_cache', { converter, hash, json });

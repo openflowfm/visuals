@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as api from './api.ts';
-import type { Entry, Input, Owner, Preset, Problem, Report } from './api.ts';
+import type { Entry, Owner, Preset, Problem, Report } from './api.ts';
+import { AudioInput } from './AudioInput.tsx';
 import { Segmented } from '@openflow/widgets/controls/Segmented.tsx';
 import { Inspector } from './Inspector.tsx';
 import { Playlists } from './Playlists.tsx';
@@ -93,8 +94,6 @@ function Editor({ start, onCompare }: { start: string | null; onCompare: (path: 
   const [preset, setPreset] = useState<Preset | null>(null);
   const [report, setReport] = useState<Report | null>(null);
   const [selected, setSelected] = useState('frame');
-  const [inputs, setInputs] = useState<Input[]>([]);
-  const [input, setInput] = useState('');
   const [stats, setStats] = useState<api.Stats>({ fps: 0, cpu_ms: 0 });
   const [error, setError] = useState<string | null>(null);
   const [lists, setLists] = useState<pl.Lists | null>(null);
@@ -173,8 +172,6 @@ function Editor({ start, onCompare }: { start: string | null; onCompare: (path: 
       if (first) load(first);
       else if (l.length) load(l[Math.floor(Math.random() * l.length)]);
     });
-    api.inputs().then(setInputs);
-    api.listenTo(null).then(setInput, (e) => setError(String(e)));
     const t = window.setInterval(() => api.stats().then(setStats), 1000);
     return () => window.clearInterval(t);
   }, [load]);
@@ -247,18 +244,7 @@ function Editor({ start, onCompare }: { start: string | null; onCompare: (path: 
         </span>
         {error && <span className="problem">{error}</span>}
         <span className="fill" />
-        <select
-          value={input}
-          onChange={(e) => api.listenTo(e.target.value).then(setInput, (err) => setError(String(err)))}
-          title="audio input"
-        >
-          {!inputs.some((i) => i.name === input) && <option value={input}>{input || 'no input'}</option>}
-          {inputs.map((i, n) => (
-            <option key={`${n}:${i.name}`} value={i.name}>
-              {i.name} ({i.channels} ch)
-            </option>
-          ))}
-        </select>
+        <AudioInput onError={setError} />
         <span className="stats">
           {stats.fps.toFixed(0)} fps · {stats.cpu_ms.toFixed(2)} ms cpu
         </span>

@@ -242,12 +242,6 @@ pub fn levels(rate: f32, left: &[f32], right: &[f32]) -> Vec<u8> {
     out
 }
 
-/// The input the bench listens to, if any.
-#[tauri::command]
-pub fn compare_input(app: State<App>) -> Option<String> {
-    app.listening.lock().unwrap().as_ref().map(|l| l.name.clone())
-}
-
 /// A preset's bytes, for the page's converter.
 #[tauri::command]
 pub fn compare_source(path: String) -> Result<tauri::ipc::Response, String> {

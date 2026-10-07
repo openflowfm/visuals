@@ -38,6 +38,54 @@ pub struct Listening {
     _stream: cpal::Stream,
     pub name: String,
     pub rate: f32,
+    /// How many channels the input has.
+    pub channels: usize,
+    /// The two it is listening to, from 0.
+    pub left: usize,
+    pub right: usize,
+}
+
+/// What is being listened to, as the page shows it: channels counted from 1.
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
+pub struct Choice {
+    pub name: String,
+    pub left: usize,
+    pub right: usize,
+}
+
+impl Listening {
+    pub fn choice(&self) -> Choice {
+        Choice { name: self.name.clone(), left: self.left + 1, right: self.right + 1 }
+    }
+}
+
+/// Where the last choice is kept, so the app comes back listening to it.
+fn saved_at() -> std::path::PathBuf {
+    let home = std::env::var_os("OPENFLOW_HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".openflow"));
+    home.join("visuals").join("audio.json")
+}
+
+pub fn save(choice: &Choice) {
+    let path = saved_at();
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    if let Ok(text) = serde_json::to_string_pretty(choice) {
+        let _ = std::fs::write(path, text);
+    }
+}
+
+pub fn saved() -> Option<Choice> {
+    serde_json::from_str(&std::fs::read_to_string(saved_at()).ok()?).ok()
+}
+
+/// The loudest sample in each channel's latest window, 0–1, for a meter.
+pub fn peaks(ring: &Ring) -> (f32, f32) {
+    let ring = ring.lock().unwrap();
+    let peak = |d: &VecDeque<f32>| d.iter().fold(0f32, |m, s| m.max(s.abs())).min(1.0);
+    (peak(&ring.0), peak(&ring.1))
 }
 
 /// Open `input` (the system input when `None`) and write channels `left` and
@@ -77,5 +125,5 @@ pub fn listen(input: Option<&str>, (left, right): (usize, usize), ring: Ring) ->
         )
         .map_err(|e| e.to_string())?;
     stream.play().map_err(|e| e.to_string())?;
-    Ok(Listening { _stream: stream, name: name_of(&device), rate })
+    Ok(Listening { _stream: stream, name: name_of(&device), rate, channels, left: l, right: r })
 }

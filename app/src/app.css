@@ -48,6 +48,11 @@ button { padding: 2px 8px; cursor: pointer; }
 button:hover { border-color: var(--focus); }
 select { max-width: 240px; padding: 2px 4px; }
 
+.audio-input { display: inline-flex; align-items: center; gap: 4px; }
+.audio-meters { display: inline-flex; flex-direction: column; gap: 2px; width: 40px; }
+.audio-meters > span { display: block; height: 4px; background: var(--surface-sunken, #101012); border: 1px solid var(--bd3); }
+.audio-meters > span > span { display: block; height: 100%; width: 0; background: var(--green); }
+
 .library {
   display: flex;
   flex-direction: column;
