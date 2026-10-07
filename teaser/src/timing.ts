@@ -1,11 +1,11 @@
 // Everything in the teaser lands on the music's grid. The placeholder beat is
-// 128 bpm, 16 bars; a real track changes BPM and LENGTH and the sections below.
+// 128 bpm, 23 bars (43.1 s); a real track changes BPM, BARS and the sections below.
 
 export const FPS = 60;
 export const BPM = 128;
 export const BEAT = 60 / BPM; // seconds
 export const BAR = BEAT * 4;
-export const BARS = 16;
+export const BARS = 23;
 
 /** The frame at `bars` bars in. */
 export const bar = (bars: number) => Math.round(bars * BAR * FPS);
@@ -14,11 +14,14 @@ export const LENGTH = bar(BARS);
 
 /** The sections, in bars — the same lines as ../cuts.txt and the beat's arrangement. */
 export const SECTIONS = {
-  intro: [0, 2],
-  facts: [2, 8],
-  breakdown: [8, 10],
-  drop: [10, 14],
-  outro: [14, 16],
+  // 2001: MilkDrop in a little Winamp-era window, pad only.
+  origin: [0, 3],
+  intro: [3, 5],
+  // Two facts of two bars, then three bars of Link.
+  facts: [5, 12],
+  breakdown: [12, 15],
+  drop: [15, 19],
+  outro: [19, 23],
 } as const;
 
 export type Section = keyof typeof SECTIONS;
@@ -33,6 +36,6 @@ export const beatPhase = (frame: number) => ((frame / FPS) % BEAT) / BEAT;
 /** The kick's envelope, as the beat draws it: 1 on the beat, decaying. Zero where the kick drops out. */
 export const kick = (frame: number) => {
   const s = sectionAt(frame);
-  if (s === 'breakdown' || s === 'outro') return 0;
+  if (s === 'origin' || s === 'breakdown' || s === 'outro') return 0;
   return Math.exp(-beatPhase(frame) * BEAT * 7);
 };

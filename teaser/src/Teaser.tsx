@@ -42,10 +42,11 @@ const Footage = () => {
   const half = beat(0.5);
   const dim = interpolate(frame, [b0 - half, b0 + half, b1 - beat(1), b1], [0, 1, 1, 0], clamp);
   const pulse = section === 'drop' ? 0.04 : section === 'facts' ? 0.015 : 0;
-  // Black, then the first preset blooms in over the first bar.
-  const open = interpolate(frame, [0, bar(1)], [0, 1], { ...clamp, easing: Easing.in(Easing.quad) });
+  // Hidden behind the 2001 window, then bursting in as the window blows up to fill the screen.
+  const i0 = bar(SECTIONS.intro[0]);
+  const open = interpolate(frame, [i0 - beat(0.5), i0 + beat(0.25)], [0, 1], clamp);
   const close = interpolate(frame, [LENGTH - beat(2), LENGTH], [1, 0], clamp);
-  const outro = interpolate(frame, [bar(14), bar(14.5)], [1, 0.55], clamp);
+  const outro = interpolate(frame, [bar(SECTIONS.outro[0]), bar(SECTIONS.outro[0] + 0.5)], [1, 0.55], clamp);
   return (
     <AbsoluteFill style={{ backgroundColor: 'black' }}>
       <OffthreadVideo
@@ -68,7 +69,7 @@ const Footage = () => {
 const Flash = () => {
   const frame = useCurrentFrame();
   const since = (at: number) => (frame >= at ? Math.exp(-(frame - at) / 10) : 0);
-  let v = since(bar(SECTIONS.drop[0]));
+  let v = Math.max(since(bar(SECTIONS.drop[0])), 0.6 * since(bar(SECTIONS.intro[0])));
   for (let b = SECTIONS.facts[0] + 1; b < SECTIONS.facts[1]; b++) v = Math.max(v, 0.12 * since(bar(b)));
   return <AbsoluteFill style={{ backgroundColor: 'white', opacity: v, mixBlendMode: 'screen' }} />;
 };
@@ -86,10 +87,116 @@ const Center = ({ children, style, scrim = 0 }: { children: ReactNode; style?: C
   </AbsoluteFill>
 );
 
+/**
+ * The cold open: MilkDrop as people first saw it, in a little window on a 2001 desktop,
+ * drawn at 320x240 and blown up with its pixels showing. A generic Windows-era window,
+ * not Winamp's own skin or logo, which are theirs.
+ */
+const Origin = () => {
+  const frame = useCurrentFrame();
+  const { u } = useUnit();
+  const end = bar(SECTIONS.origin[1]);
+  if (frame >= end + beat(0.5)) return null;
+  const boot = spring({ frame, fps: FPS, config: { damping: 16, stiffness: 120 } });
+  const year = rise(frame, beat(1));
+  const line = rise(frame, bar(1));
+  // On the downbeat the window blows up past the edges of the frame and the HD picture takes over.
+  const burst = interpolate(frame, [end - beat(0.5), end + beat(0.5)], [0, 1], {
+    ...clamp,
+    easing: Easing.in(Easing.cubic),
+  });
+  const text = interpolate(frame, [end - beat(1), end - beat(0.25)], [1, 0], clamp);
+  const bevel = (light: string, dark: string) =>
+    `inset ${2 * u}px ${2 * u}px 0 ${light}, inset -${2 * u}px -${2 * u}px 0 ${dark}`;
+  return (
+    <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', gap: 36 * u }}>
+      <div
+        style={{
+          fontFamily: mono,
+          fontWeight: 700,
+          fontSize: 72 * u,
+          letterSpacing: 8 * u,
+          color: ACCENT,
+          opacity: year * text,
+          textShadow: SHADOW,
+        }}
+      >
+        2001
+      </div>
+      <div
+        style={{
+          opacity: boot * (1 - burst),
+          transform: `scale(${(0.9 + 0.1 * boot) * (1 + 3 * burst)})`,
+          background: '#c0c0c0',
+          padding: 4 * u,
+          boxShadow: `${bevel('#ffffff', '#404040')}, 0 ${20 * u}px ${60 * u}px rgba(0,0,0,0.6)`,
+        }}
+      >
+        <div
+          style={{
+            height: 30 * u,
+            background: 'linear-gradient(90deg, #000080, #1084d0)',
+            color: 'white',
+            fontFamily: 'Tahoma, Verdana, sans-serif',
+            fontWeight: 700,
+            fontSize: 18 * u,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: `0 ${4 * u}px 0 ${8 * u}px`,
+            marginBottom: 4 * u,
+          }}
+        >
+          <span>MilkDrop</span>
+          <span style={{ display: 'flex', gap: 3 * u }}>
+            {['_', '□', '×'].map((g) => (
+              <span
+                key={g}
+                style={{
+                  width: 22 * u,
+                  height: 20 * u,
+                  background: '#c0c0c0',
+                  color: 'black',
+                  fontSize: 14 * u,
+                  lineHeight: `${20 * u}px`,
+                  textAlign: 'center',
+                  boxShadow: bevel('#ffffff', '#404040'),
+                }}
+              >
+                {g}
+              </span>
+            ))}
+          </span>
+        </div>
+        <OffthreadVideo
+          src={staticFile('origin.mp4')}
+          muted
+          style={{ display: 'block', width: 768 * u, height: 576 * u, imageRendering: 'pixelated' }}
+        />
+      </div>
+      <div
+        style={{
+          fontFamily: sans,
+          fontWeight: 700,
+          fontSize: 64 * u,
+          letterSpacing: -2 * u,
+          color: 'white',
+          opacity: line * text,
+          transform: `translateY(${(1 - line) * 20 * u}px)`,
+          textShadow: SHADOW,
+        }}
+      >
+        MilkDrop Lights Up Winamp
+      </div>
+    </AbsoluteFill>
+  );
+};
+
 const Intro = () => {
   const { u } = useUnit();
-  const first = useShow(beat(2), bar(2));
-  const second = useShow(bar(1), bar(2));
+  const [i0, i1] = SECTIONS.intro.map(bar);
+  const first = useShow(i0 + beat(1), i1);
+  const second = useShow(i0 + beat(4), i1);
   const line = (v: number, text: string, color = 'white') => (
     <div
       style={{
@@ -109,15 +216,15 @@ const Intro = () => {
   );
   return (
     <Center scrim={first}>
-      {line(first, 'Your music,')}
-      {line(second, 'made visible.', ACCENT)}
+      {line(first, 'Your Music')}
+      {line(second, 'Made Visible', ACCENT)}
     </Center>
   );
 };
 
 /** Big lines, two bars each: long enough to read while the presets change under them. */
 const FACT_BARS = 2;
-const FACTS = ['9,744 MilkDrop presets', 'Native, on the GPU'];
+const FACTS = ['9,744 Community Presets', 'Native on the GPU'];
 
 /** Some of what speaks Ableton Link — ableton.com/link/products, plus Traktor, Serato and Bitwig. */
 const LINKED = [
@@ -169,7 +276,7 @@ const LinkWall = () => {
         }}
       >
         {LINKED.map((name, i) => {
-          const at = start + beat(1 + i * 0.5);
+          const at = start + beat(1 + i * 0.75);
           const pop = spring({ frame: frame - at, fps: FPS, config: { damping: 12, stiffness: 220 } });
           // Each name lands lit, then settles to white.
           const lit = interpolate(frame - at, [0, beat(1)], [1, 0], clamp);
@@ -277,15 +384,15 @@ const BarCounter = () => {
 
 type Node = { id: string; label: string; sub: string; at: number };
 const NODES: Node[] = [
-  { id: 'audio', label: 'Audio in', sub: 'any music', at: 1 },
-  { id: 'flow', label: 'visual[flow]', sub: 'the engine', at: 2 },
-  { id: 'out', label: 'Any display', sub: 'full screen', at: 3.5 },
-  { id: 'link', label: 'Ableton Link', sub: 'your whole rig', at: 5 },
+  { id: 'audio', label: 'Audio In', sub: 'any music', at: 1 },
+  { id: 'flow', label: 'visual[flow]', sub: 'the engine', at: 2.5 },
+  { id: 'out', label: 'Any Display', sub: 'full screen', at: 4.5 },
+  { id: 'link', label: 'Ableton Link', sub: 'your whole rig', at: 7 },
 ];
 const EDGES: { from: string; to: string; label: string; at: number }[] = [
-  { from: 'audio', to: 'flow', label: 'the music', at: 2.5 },
-  { from: 'flow', to: 'out', label: 'live', at: 4 },
-  { from: 'link', to: 'flow', label: 'tempo · beat · bar', at: 5.5 },
+  { from: 'audio', to: 'flow', label: 'the music', at: 3 },
+  { from: 'flow', to: 'out', label: 'live', at: 5 },
+  { from: 'link', to: 'flow', label: 'tempo · beat · bar', at: 7.5 },
 ];
 
 /** The breakdown: how it fits together, a beat at a time. */
@@ -323,7 +430,7 @@ const Diagram = () => {
           textShadow: SHADOW,
         }}
       >
-        Sound in. Light out.
+        Sound In. Light Out.
       </div>
       <svg width={width} height={height} style={{ position: 'absolute' }}>
         {EDGES.map((e) => {
@@ -443,8 +550,10 @@ const Wordmark = () => {
   if (frame < start) return null;
   const word = 'visual[flow]';
   const fade = interpolate(frame, [LENGTH - beat(2), LENGTH - beat(0.5)], [1, 0], clamp);
-  const tag = rise(frame, start + beat(3));
-  const sub = rise(frame, start + beat(5));
+  // Four bars: the name, its line a half-bar later, the suite a bar after that, then a
+  // long hold so the last screen can be read.
+  const tag = rise(frame, start + beat(2));
+  const sub = rise(frame, start + beat(6));
   return (
     <Center style={{ opacity: fade }} scrim={rise(frame, start)}>
       <div style={{ display: 'flex', alignItems: 'baseline', fontSize: 170 * u, textShadow: SHADOW }}>
@@ -480,20 +589,21 @@ const Wordmark = () => {
           textShadow: SHADOW,
         }}
       >
-        MilkDrop, rebuilt for the stage.
+        MilkDrop Rebuilt for the Stage
       </div>
       <div
         style={{
-          fontFamily: mono,
-          fontSize: 26 * u,
-          letterSpacing: 6 * u,
-          color: 'rgba(255,255,255,0.75)',
+          fontFamily: sans,
+          fontWeight: 500,
+          fontSize: 40 * u,
+          color: 'rgba(255,255,255,0.85)',
           opacity: sub,
-          marginTop: 28 * u,
+          transform: `translateY(${(1 - sub) * 20 * u}px)`,
+          marginTop: 56 * u,
           textShadow: SHADOW,
         }}
       >
-        PART OF OPEN[FLOW]
+        Part of the <span style={{ fontFamily: mono, fontWeight: 700, color: ACCENT }}>open[flow]</span> Suite
       </div>
     </Center>
   );
@@ -506,6 +616,7 @@ const rise = (frame: number, at: number) =>
 export const Teaser = () => (
   <AbsoluteFill style={{ backgroundColor: 'black' }}>
     <Footage />
+    <Origin />
     <Intro />
     {FACTS.map((_, i) => (
       <Fact key={i} index={i} />
