@@ -22,19 +22,22 @@ function usePreview(ref: React.RefObject<HTMLDivElement | null>) {
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const send = () => {
+    // Anything above the hole (effects, banner, wrapping text) or a scroll can
+    // move it without resizing it, so check its rect every frame and send it
+    // only when it actually changed.
+    let last = '';
+    let frame = 0;
+    const tick = () => {
       const r = el.getBoundingClientRect();
-      api.placeBench({ x: r.left, y: r.top, width: r.width, height: r.height }).catch(() => {});
+      const key = `${r.left},${r.top},${r.width},${r.height}`;
+      if (key !== last) {
+        last = key;
+        api.placeBench({ x: r.left, y: r.top, width: r.width, height: r.height }).catch(() => {});
+      }
+      frame = requestAnimationFrame(tick);
     };
-    const observer = new ResizeObserver(send);
-    observer.observe(el);
-    observer.observe(document.body);
-    window.addEventListener('resize', send);
-    send();
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', send);
-    };
+    tick();
+    return () => cancelAnimationFrame(frame);
   }, [ref]);
 }
 
