@@ -125,6 +125,7 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'compa
   useBench(bench);
   const apply = useApply(setReport);
   const fail = useCallback((what: string) => (e: unknown) => setNotice(noticeOf(what, e)), []);
+  const audioFailed = useMemo(() => fail('couldn’t read the audio input'), [fail]);
 
   const found = useMemo(() => searchLibrary(library, search), [library, search]);
   const shown = found.shown;
@@ -267,7 +268,7 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'compa
         <NowPlaying group={current?.group} name={current?.name} empty={loaded && !library.length ? 'no presets yet' : 'no preset'} />
         <NoticeView notice={notice} onDismiss={() => setNotice(null)} />
         <span className="vf-fill" />
-        <AudioInput onError={fail('couldn’t read the audio input')} />
+        <AudioInput onError={audioFailed} />
         <FrameRate />
       </Header>
       <aside className="library">

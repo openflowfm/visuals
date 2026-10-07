@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Meter } from '@openflow/widgets/controls/Meter.tsx';
 import { Select } from '@openflow/widgets/controls/Select.tsx';
 import * as api from './api.ts';
@@ -50,7 +50,10 @@ export function AudioInput({ onError }: { onError(message: string): void }) {
   const [heard, setHeard] = useState<api.Heard>({ choice: null, channels: 0 });
   const [problem, setProblem] = useState<string | null>(null);
 
-  const refresh = useCallback(() => api.listening().then(setHeard, (e) => onError(String(e))), [onError]);
+  // Held in a ref so a caller passing a new function each render doesn't refetch (or loop on a failure).
+  const errorRef = useRef(onError);
+  errorRef.current = onError;
+  const refresh = useCallback(() => api.listening().then(setHeard, (e) => errorRef.current(String(e))), []);
 
   useEffect(() => {
     api.inputs().then(setInputs, () => setInputs([]));

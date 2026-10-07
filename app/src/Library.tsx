@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { FocusEvent, KeyboardEvent } from 'react';
-import { Button } from '@openflow/widgets/controls/Button.tsx';
+import { ButtonFace } from '@openflow/widgets/controls/ButtonFace.tsx';
 import type { Entry } from './api.ts';
 import { foundSummary, rowFor, type Found } from './librarySearch.ts';
 import './library.css';
@@ -66,12 +66,14 @@ export function Library({ entries, loaded, search, onSearch, found, current, int
   const move = (to: number) => setActive(to >= 0 ? shown[to].path : null);
 
   const onListKey = (ev: KeyboardEvent<HTMLUListElement>) => {
-    if (ev.target !== ev.currentTarget) return; // a key on a row's + button is the button's
+    if (ev.target !== ev.currentTarget) return; // keys on the list itself, not a row's + button
     const to = rowFor(ev.key, at, shown.length);
     if (to !== null) {
       move(to);
     } else if ((ev.key === 'Enter' || ev.key === ' ') && at >= 0) {
       load(shown[at]);
+    } else if ((ev.key === '+' || ev.key === 'a' || ev.key === 'A') && at >= 0 && into) {
+      onAdd(shown[at]);
     } else {
       return;
     }
@@ -129,7 +131,7 @@ export function Library({ entries, loaded, search, onSearch, found, current, int
           aria-label="presets"
           tabIndex={shown.length ? 0 : -1}
           aria-activedescendant={at >= 0 ? rowId(at) : undefined}
-          data-hint="↑ ↓ Home End PageUp PageDown move, Enter loads the preset"
+          data-hint={`↑ ↓ Home End PageUp PageDown move, Enter loads the preset${into ? `, + or A adds it to ${into.name}` : ''}`}
           onKeyDown={onListKey}
           onFocus={onListFocus}
         >
@@ -177,18 +179,21 @@ const Row = memo(function Row({ id, entry, active, playing, intoName, onLoad, on
       <span className="lib-name">{entry.name}</span>
       {entry.group && <span className="lib-group">{entry.group}</span>}
       {intoName !== null && (
-        <Button
-          className="lib-add"
-          tone="quiet"
-          label={`add “${entry.name}” to ${intoName}`}
-          title={`add “${entry.name}” to ${intoName}`}
-          onPress={(ev) => {
-            ev.stopPropagation();
-            onAdd(entry);
-          }}
-        >
-          +
-        </Button>
+        // Out of the tab order: the listbox is one tab stop, and + on the list adds the active row.
+        <div className="wdg wdg-button lib-add">
+          <ButtonFace
+            tone="quiet"
+            tabIndex={-1}
+            aria-label={`add “${entry.name}” to ${intoName} (+ key)`}
+            title={`add “${entry.name}” to ${intoName} (+ key)`}
+            onClick={(ev) => {
+              ev.stopPropagation();
+              onAdd(entry);
+            }}
+          >
+            +
+          </ButtonFace>
+        </div>
       )}
     </li>
   );
