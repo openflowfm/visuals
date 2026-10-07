@@ -908,7 +908,9 @@ impl Renderer {
         }
         self.position = to;
         let fraction = (to - self.step as f64) as f32;
-        if fraction > 0.0 && !self.pending {
+        // A preset's first drawn refresh has run its equations, frozen or not:
+        // its stages' uniforms are unwritten until then.
+        if (fraction > 0.0 || self.step == 0) && !self.pending {
             self.equations(audio);
         }
         self.show(fraction);
@@ -1609,6 +1611,17 @@ mod tests {
 
     fn within(a: &[u8], b: &[u8], by: i32) -> bool {
         a.len() == b.len() && a.iter().zip(b).all(|(&x, &y)| (x as i32 - y as i32).abs() <= by)
+    }
+
+    #[test]
+    fn a_preset_loaded_while_frozen_draws_after_its_equations() {
+        let Some((mut r, mut audio)) = spiral(0) else { return };
+        assert!(!r.pending);
+        r.render(&mut audio, 0.0);
+        assert!(r.pending, "the first frozen draw has run the equations");
+        let frame = r.clock.frame;
+        r.render(&mut audio, 0.0);
+        assert_eq!(r.clock.frame, frame, "frozen, they run once");
     }
 
     #[test]

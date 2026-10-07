@@ -150,6 +150,10 @@ fn run(
                     if fading && result.is_ok() {
                         fx.lock().unwrap().start_fade(Instant::now());
                     }
+                    // The first preset starts at its step 0, not after the wait for it.
+                    if !loaded {
+                        last = Instant::now();
+                    }
                     loaded |= result.is_ok();
                     let _ = reply.send(result);
                 }
