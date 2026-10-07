@@ -35,7 +35,8 @@ export interface Cord {
 }
 
 /** Column pitch: a face is 216 wide. The picture chain runs along the top row so it
- * is on screen when a preset opens; what draws into the feedback stacks below. */
+ * is on screen when a preset opens; what draws into the feedback stacks below it,
+ * custom waves under the warp mesh and the rest under the waveform. */
 const COL = 240;
 const DRAWN = 330;
 const BASE: Owner = { list: 'base' };
@@ -45,14 +46,14 @@ export const STAGES: Stage[] = [
   { id: 'init', label: 'per-frame init', kind: 'equations', x: 0, y: 90, inlets: [], outlets: ['q'], code: [{ field: 'init', label: 'per_frame_init', lang: 'eel' }] },
   { id: 'frame', label: 'per-frame', kind: 'equations', x: 0, y: 250, inlets: ['audio', 'q'], outlets: ['q', 'vars'], code: [{ field: 'frame', label: 'per_frame', lang: 'eel' }], owner: BASE },
   { id: 'vertex', label: 'warp mesh', kind: 'equations', x: COL, y: 0, inlets: ['vars'], outlets: ['uv'], code: [{ field: 'vertex', label: 'per_vertex', lang: 'eel' }], owner: BASE },
-  { id: 'wave', label: 'waveform', kind: 'picture', x: COL * 2, y: DRAWN, inlets: ['vars'], outlets: ['draw'], code: [], owner: BASE },
+  { id: 'wave', label: 'waveform', kind: 'picture', x: COL * 2, y: DRAWN, inlets: ['vars'], outlets: ['draw'], code: [], owner: BASE, picture: 12 },
   ...[0, 1, 2, 3].map(
     (i): Stage => ({
       id: `wave${i}`,
       label: `custom wave ${i + 1}`,
       kind: 'picture',
-      x: COL * 2,
-      y: DRAWN + 300 + i * 290,
+      x: COL,
+      y: DRAWN + 90 + i * 430,
       inlets: ['q'],
       outlets: ['draw'],
       code: [
@@ -61,6 +62,7 @@ export const STAGES: Stage[] = [
         { field: `waves.${i}.point`, label: 'per_point', lang: 'eel' },
       ],
       owner: { list: 'waves', index: i },
+      picture: 4 + i,
     }),
   ),
   ...[0, 1, 2, 3].map(
@@ -69,7 +71,7 @@ export const STAGES: Stage[] = [
       label: `custom shape ${i + 1}`,
       kind: 'picture',
       x: COL * 2,
-      y: DRAWN + 1460 + i * 290,
+      y: DRAWN + 520 + i * 440,
       inlets: ['q'],
       outlets: ['draw'],
       code: [
@@ -77,10 +79,11 @@ export const STAGES: Stage[] = [
         { field: `shapes.${i}.frame`, label: 'per_frame', lang: 'eel' },
       ],
       owner: { list: 'shapes', index: i },
+      picture: 8 + i,
     }),
   ),
-  { id: 'motion', label: 'motion vectors', kind: 'picture', x: COL * 2, y: DRAWN + 2620, inlets: ['vars'], outlets: ['draw'], code: [], owner: BASE },
-  { id: 'border', label: 'borders', kind: 'picture', x: COL * 2, y: DRAWN + 2900, inlets: ['vars'], outlets: ['draw'], code: [], owner: BASE },
+  { id: 'motion', label: 'motion vectors', kind: 'picture', x: COL * 2, y: DRAWN + 2280, inlets: ['vars'], outlets: ['draw'], code: [], owner: BASE, picture: 13 },
+  { id: 'border', label: 'borders', kind: 'picture', x: COL * 2, y: DRAWN + 2640, inlets: ['vars'], outlets: ['draw'], code: [], owner: BASE, picture: 14 },
   { id: 'warp', label: 'warp shader', kind: 'shader', x: COL * 2, y: 0, inlets: ['uv', 'q', 'last frame'], outlets: ['picture'], code: [{ field: 'warp', label: 'warp', lang: 'hlsl' }], picture: 0 },
   { id: 'blur', label: 'blur', kind: 'picture', x: COL * 3, y: 0, inlets: ['picture'], outlets: ['blur1-3'], code: [], owner: BASE, picture: 2 },
   { id: 'feedback', label: 'feedback', kind: 'picture', x: COL * 3, y: DRAWN + 120, inlets: ['picture', 'draw'], outlets: ['frame'], code: [], owner: BASE, picture: 1 },

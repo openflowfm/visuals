@@ -35,18 +35,33 @@ pub enum Blend {
     Additive,
 }
 
+/// Which stage drew a command — so an editor can show each stage's drawing alone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Source {
+    #[default]
+    Motion,
+    Shape(usize),
+    Wave(usize),
+    Basic,
+    Darken,
+    Border,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct Cmd {
     pub topology: Topology,
     pub blend: Blend,
     pub first: u32,
     pub count: u32,
+    pub source: Source,
 }
 
 #[derive(Debug, Default)]
 pub struct DrawList {
     pub vertices: Vec<Vertex>,
     pub cmds: Vec<Cmd>,
+    /// The stage whose commands are being pushed.
+    source: Source,
 }
 
 impl DrawList {
@@ -55,7 +70,7 @@ impl DrawList {
         self.vertices.extend(vertices);
         let count = self.vertices.len() as u32 - first;
         if count > 0 {
-            self.cmds.push(Cmd { topology, blend, first, count });
+            self.cmds.push(Cmd { topology, blend, first, count, source: self.source });
         }
     }
 
@@ -196,7 +211,8 @@ pub fn shapes(r: &mut Runner, globals: &[f64; 15], size: &Size, list: &mut DrawL
     let regs = r.regs.clone();
     let (ax, ay) = (size.aspect_x(), size.aspect_y());
     let _ = ax;
-    for scope in r.shapes.iter_mut().flatten() {
+    for (slot, scope) in r.shapes.iter_mut().enumerate().filter_map(|(i, s)| s.as_mut().map(|s| (i, s))) {
+        list.source = Source::Shape(slot);
         let mut vars = scope.run_frame_prelude(globals, &q, &regs);
         let start = vars.clone();
         let instances = scope.get(&vars, "num_inst").clamp(1.0, 1024.0) as usize;
@@ -253,7 +269,8 @@ pub fn custom_waves(r: &mut Runner, audio: &Audio, globals: &[f64; 15], size: &S
     let wave_scale = r.base_value("wave_scale");
     let (iax, iay) = (1.0 / size.aspect_x(), 1.0 / size.aspect_y());
     const MAX: usize = 512;
-    for scope in r.waves.iter_mut().flatten() {
+    for (slot, scope) in r.waves.iter_mut().enumerate().filter_map(|(i, s)| s.as_mut().map(|s| (i, s))) {
+        list.source = Source::Wave(slot);
         let mut vars = scope.run_frame(globals, &q, &regs);
         let g = |vars: &[f64], n: &str| scope.get(vars, n);
         let mut samples = (g(&vars, "samples").min(MAX as f64)).floor() as i64;
@@ -549,10 +566,14 @@ pub fn borders(r: &Runner, list: &mut DrawList) {
 /// Everything after the warp, in Butterchurn's order.
 pub fn frame(r: &mut Runner, audio: &Audio, uvs: &[[f32; 2]], globals: &[f64; 15], size: &Size, list: &mut DrawList) {
     list.clear();
+    list.source = Source::Motion;
     motion_vectors(r, uvs, size, list);
     shapes(r, globals, size, list);
     custom_waves(r, audio, globals, size, list);
+    list.source = Source::Basic;
     basic_wave(r, audio, size, list);
+    list.source = Source::Darken;
     darken_center(r, size, list);
+    list.source = Source::Border;
     borders(r, list);
 }

@@ -113,8 +113,25 @@ pub struct Renderer {
 /// The size of a stage's preview picture.
 pub const PREVIEW: (u32, u32) = (192, 108);
 /// The stages that have a picture, in the order [`Renderer::read_previews`] packs them:
-/// the warp's output, the feedback after waves and shapes, blur 1, and comp.
-pub const PREVIEWS: [&str; 4] = ["warp", "feedback", "blur", "comp"];
+/// the warp's output, the feedback after waves and shapes, blur 1 and comp; then what
+/// each drawing stage drew this frame, alone on black.
+pub const PREVIEWS: [&str; 15] = [
+    "warp", "feedback", "blur", "comp", "wave0", "wave1", "wave2", "wave3", "shape0", "shape1", "shape2", "shape3", "wave",
+    "motion", "border",
+];
+
+/// Which preview a drawing stage's commands go to, if it has one.
+fn preview_of(source: crate::draw::Source) -> Option<usize> {
+    use crate::draw::Source;
+    match source {
+        Source::Wave(i) => Some(4 + i),
+        Source::Shape(i) => Some(8 + i),
+        Source::Basic => Some(12),
+        Source::Motion => Some(13),
+        Source::Border => Some(14),
+        Source::Darken => None,
+    }
+}
 
 const WARP_VS: &str = "
 struct Out { @builtin(position) pos: vec4f, @location(0) uv: vec2f, @location(1) uv_orig: vec2f, @location(2) color: vec4f }
@@ -858,6 +875,13 @@ impl Renderer {
         let globals = Runner::globals(frame, &size);
         let mut list = std::mem::take(&mut self.draw_list);
         crate::draw::frame(self.runner.as_mut().unwrap(), audio, &self.uvs, &globals, &size, &mut list);
+        // Every drawing stage's preview starts black: one that drew nothing this
+        // frame shows nothing, not what it drew last.
+        if let Some(previews) = &self.previews {
+            for p in &previews[4..] {
+                drop(begin(encoder, &p.view, true));
+            }
+        }
         if list.cmds.is_empty() {
             self.draw_list = list;
             return;
@@ -901,6 +925,23 @@ impl Renderer {
                 pass.set_pipeline(&self.draw_pipelines[&(cmd.topology, cmd.blend)]);
                 pass.set_bind_group(0, &groups[&(cmd.topology, cmd.blend)], &[]);
                 pass.draw(cmd.first..cmd.first + cmd.count, 0..1);
+            }
+        }
+        // Each drawing stage again, alone, into its own preview. The vertices are in
+        // clip space, so they land the same in a small target as in the big one.
+        if let Some(previews) = &self.previews {
+            for (which, target) in previews.iter().enumerate().skip(4) {
+                let mine: Vec<&crate::draw::Cmd> = list.cmds.iter().filter(|c| preview_of(c.source) == Some(which)).collect();
+                if mine.is_empty() {
+                    continue;
+                }
+                let mut pass = begin(encoder, &target.view, false);
+                pass.set_vertex_buffer(0, self.draw_buffer.as_ref().unwrap().0.slice(..));
+                for cmd in mine {
+                    pass.set_pipeline(&self.draw_pipelines[&(cmd.topology, cmd.blend)]);
+                    pass.set_bind_group(0, &groups[&(cmd.topology, cmd.blend)], &[]);
+                    pass.draw(cmd.first..cmd.first + cmd.count, 0..1);
+                }
             }
         }
         self.draw_list = list;
@@ -1175,7 +1216,12 @@ mod tests {
         let each = (PREVIEW.0 * PREVIEW.1 * 4) as usize;
         assert_eq!(pixels.len(), each * PREVIEWS.len());
         let comp = &pixels[each * 3..];
-        assert!(comp.chunks(4).any(|p| p[0] > 0 || p[1] > 0 || p[2] > 0), "comp's preview has a picture");
+        assert!(comp[..each].chunks(4).any(|p| p[0] > 0 || p[1] > 0 || p[2] > 0), "comp's preview has a picture");
+        let lit = |which: usize| pixels[each * which..each * (which + 1)].chunks(4).any(|p| p[0] > 0 || p[1] > 0 || p[2] > 0);
+        let drew: Vec<&str> = (4..PREVIEWS.len()).filter(|&w| lit(w)).map(|w| PREVIEWS[w]).collect();
+        assert!(!drew.is_empty(), "some drawing stage's preview has its drawing");
+        let off: Vec<&str> = (0..4).filter(|i| r.runner.as_ref().unwrap().waves[*i].is_none()).map(|i| PREVIEWS[4 + i]).collect();
+        assert!(off.iter().all(|w| !drew.contains(w)), "a wave that is off draws nothing: {drew:?}");
 
         assert!(r.set_value(crate::runtime::Owner::Base, "fDecay", 0.5));
         r.render(&mut audio, 1.0 / 60.0);

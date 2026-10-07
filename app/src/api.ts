@@ -61,7 +61,7 @@ export interface Stats {
 export type Owner = { list: 'base' } | { list: 'waves' | 'shapes'; index: number };
 
 /** `engine::render::PREVIEW` and `PREVIEWS`. */
-export const PREVIEW = { width: 192, height: 108, count: 4 };
+export const PREVIEW = { width: 192, height: 108, count: 15 };
 
 export const presets = () => invoke<Entry[]>('presets');
 /** One setting, live. False means the preset needs applying whole instead. */
