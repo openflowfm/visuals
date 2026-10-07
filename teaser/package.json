@@ -1,0 +1,22 @@
+{
+  "name": "@openflow/visuals-teaser",
+  "private": true,
+  "description": "The visual[flow] teaser: the engine's footage under titles, in Remotion.",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "render": "remotion render src/index.ts Teaser out/teaser.mp4",
+    "still": "remotion still src/index.ts Teaser out/still.png",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.534",
+    "@remotion/google-fonts": "4.0.534",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "remotion": "4.0.534"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "typescript": "^5"
+  }
+}

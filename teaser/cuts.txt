@@ -1,0 +1,21 @@
+# The teaser's presets: `<seconds> <preset in the pack>`, on the bar lines of the
+# 128 bpm placeholder (a bar is 1.875 s). The sections match src/timing.ts.
+
+# intro: the title
+0       cream-of-the-crop/Dancer/Aurora/Jc - Crystal Shards.milk
+# a preset a bar, under the facts
+3.75    cream-of-the-crop/Waveform/Wire Flower/Geiss - Drift.milk
+5.625   cream-of-the-crop/Dancer/Aurora/$$$ Royal - Mashup (257).milk
+7.5     cream-of-the-crop/Particles/Points Trails/LuxXx - The Feeder.milk
+9.375   cream-of-the-crop/Dancer/Aurora/Jc - Flower.milk
+11.25   cream-of-the-crop/Supernova/Lasers/ORB - Wheel of Fire.milk
+13.125  cream-of-the-crop/Fractal/Lattice/Fishbrain + Krash - Witchcraft (shifting parchment) - fun balls and fun bags.milk
+# breakdown: the diagram
+15      cream-of-the-crop/Dancer/Aurora/Jc - Crystal Shards.milk
+# the drop
+18.75   cream-of-the-crop/Sparkle/Glimmer Tunnel/$$$ Royal - Mashup (456).milk
+20.625  cream-of-the-crop/Dancer/Aurora/$$$ Royal - Mashup (257).milk
+22.5    cream-of-the-crop/Dancer/Glowsticks/shifter + EoS + phat - static creep 2C [flexis 'stand still' fix].milk
+24.375  cream-of-the-crop/Particles/Points Trails/LuxXx - The Feeder.milk
+# outro: the wordmark
+26.25   cream-of-the-crop/Fractal/Core/Zylot - Crystal Ball (Magical Reaction Mix).milk

@@ -5,10 +5,13 @@
 //!
 //!   --cut <s> <preset>  from `s` seconds on, draw this preset (a path, or one in the
 //!                       pack at ~/.openflow/visuals/presets); give at least one
+//!   --cuts <file>       cuts from a file, one `<seconds> <preset>` a line, `#` comments
 //!   --size WxH          the size it draws at (default 1920x1080)
 //!   --fps N             frames per second (default 60)
 //!   --from <s>          start this far into the audio (default 0)
 //!   --to <s>            stop here (default the end of the audio)
+//!   --warm <s>          run each preset this long, unseen, before its cut, so it
+//!                       lands already drawing (default 2)
 //!
 //! ffmpeg reads the audio (any format it knows) and encodes the video: H.264 for
 //! `.mp4`, ProRes 422 HQ for `.mov`. The audio is muxed in, so the file plays back
@@ -30,10 +33,11 @@ struct Options {
     fps: u32,
     from: f64,
     to: Option<f64>,
+    warm: f64,
 }
 
 fn usage() -> ! {
-    eprintln!("usage: record <audio> <out.mp4|out.mov> --cut <seconds> <file.milk> [--cut …] [--size WxH] [--fps N] [--from s] [--to s]");
+    eprintln!("usage: record <audio> <out.mp4|out.mov> --cut <seconds> <file.milk> [--cut …] [--cuts file] [--size WxH] [--fps N] [--from s] [--to s] [--warm s]");
     std::process::exit(2);
 }
 
@@ -48,6 +52,7 @@ fn options() -> Options {
         fps: 60,
         from: 0.0,
         to: None,
+        warm: 2.0,
     };
     let seconds = |s: Option<String>| s.and_then(|s| s.parse::<f64>().ok()).unwrap_or_else(|| usage());
     while let Some(arg) = args.next() {
@@ -56,6 +61,17 @@ fn options() -> Options {
                 let at = seconds(args.next());
                 let Some(preset) = args.next() else { usage() };
                 o.cuts.push((at, find(&preset)));
+            }
+            "--cuts" => {
+                let Some(file) = args.next() else { usage() };
+                let text = std::fs::read_to_string(&file).unwrap_or_else(|e| {
+                    eprintln!("{file}: {e}");
+                    std::process::exit(1);
+                });
+                for line in text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')) {
+                    let Some((at, preset)) = line.split_once(char::is_whitespace) else { usage() };
+                    o.cuts.push((seconds(Some(at.into())), find(preset.trim())));
+                }
             }
             "--size" => {
                 o.size = args
@@ -66,6 +82,7 @@ fn options() -> Options {
             "--fps" => o.fps = args.next().and_then(|s| s.parse().ok()).unwrap_or_else(|| usage()),
             "--from" => o.from = seconds(args.next()),
             "--to" => o.to = Some(seconds(args.next())),
+            "--warm" => o.warm = seconds(args.next()),
             _ => usage(),
         }
     }
@@ -106,6 +123,22 @@ fn decode(audio: &Path) -> Vec<f32> {
         std::process::exit(1);
     }
     bytes.chunks_exact(4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect()
+}
+
+/// The window the presets hear at time `t`: the samples ending there, as it would
+/// be live. Silence before the start and after the end.
+fn hear(samples: &[f32], t: f64, left: &mut [f32], right: &mut [f32]) {
+    let end = (t * RATE as f64).round() as isize;
+    for i in 0..FFT_SIZE {
+        let at = end - FFT_SIZE as isize + i as isize;
+        let (l, r) = if at >= 0 && (at as usize) * 2 + 1 < samples.len() {
+            (samples[at as usize * 2], samples[at as usize * 2 + 1])
+        } else {
+            (0.0, 0.0)
+        };
+        left[i] = l;
+        right[i] = r;
+    }
 }
 
 fn encoder(o: &Options) -> std::process::Child {
@@ -163,19 +196,15 @@ fn main() {
                 }
             }
             current = Some(cut);
+            // Run it unseen over the music before the cut, so it lands already
+            // drawing rather than from an empty frame.
+            for k in (1..=(o.warm * o.fps as f64).round() as usize).rev() {
+                hear(&samples, t - k as f64 / o.fps as f64, &mut left, &mut right);
+                audio.update(&left, &right);
+                renderer.render(&mut audio, 1.0 / o.fps as f64);
+            }
         }
-        // The window the presets hear ends at this frame's time, as it would live.
-        let end = (t * RATE as f64).round() as isize;
-        for i in 0..FFT_SIZE {
-            let at = end - FFT_SIZE as isize + i as isize;
-            let (l, r) = if at >= 0 && (at as usize) * 2 + 1 < samples.len() {
-                (samples[at as usize * 2], samples[at as usize * 2 + 1])
-            } else {
-                (0.0, 0.0)
-            };
-            left[i] = l;
-            right[i] = r;
-        }
+        hear(&samples, t, &mut left, &mut right);
         audio.update(&left, &right);
         renderer.render(&mut audio, 1.0 / o.fps as f64);
         if pipe.write_all(&renderer.read_back()).is_err() {
