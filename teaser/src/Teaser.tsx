@@ -11,7 +11,7 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from 'remotion';
-import { BARS, bar, beat, beatPhase, FPS, kick, LENGTH, SECTIONS, sectionAt } from './timing';
+import { BAR, BARS, BEAT, bar, beat, beatPhase, FPS, kick, LENGTH, SECTIONS, sectionAt } from './timing';
 
 const { fontFamily: sans } = loadSans('normal', { weights: ['500', '700'], subsets: ['latin'] });
 const { fontFamily: mono } = loadMono('normal', { weights: ['400', '700'], subsets: ['latin'] });
@@ -171,8 +171,9 @@ const BarCounter = () => {
   const { u } = useUnit();
   const section = sectionAt(frame);
   if (section !== 'facts' && section !== 'drop') return null;
-  const n = Math.floor(frame / bar(1)) + 1;
-  const b = Math.floor((frame % bar(1)) / beat(1));
+  const t = frame / FPS;
+  const n = Math.floor(t / BAR) + 1;
+  const b = Math.min(3, Math.floor((t % BAR) / BEAT));
   return (
     <div
       style={{
