@@ -54,6 +54,24 @@ stage's EEL/HLSL and numbers on the right. Every edit reloads the preset on the 
 within a quarter second, and problems come back per stage and line — a broken equation
 leaves the last good preset drawing, a broken shader draws MilkDrop's default.
 
+**Playlists and live actions.** A playlist is a named, ordered list of presets, kept in
+`~/.openflow/visuals/playlists.json` (`OPENFLOW_VISUALS_PLAYLISTS` overrides) with paths
+relative to the library, so the library can move (`playlists.rs`). The page's
+*playlists* tab beside the library creates, renames, deletes and edits them; `+` on a
+library row adds to the selected one. Playing a playlist makes it active: ← → and random
+step through it instead of the library, and auto-advance moves on every N seconds.
+
+Everything that changes what plays live goes through one layer, `actions.rs`: an
+`Action` enum — `next`, `previous`, `random`, `go {index}`, `load {playlist, index}`
+(playlists by their position in the file), `unload`, `auto {on}` (null toggles),
+`seconds {seconds}` — and `actions::dispatch(&AppHandle, Action)`, callable from any
+thread. It moves the live state (the pure `decide`), opens the preset on the bench and
+emits a `live` event (`{deck, opened, path, error}`) that the page follows, whoever sent
+the action: the page (`act` command), the auto-advance thread, or a controller. A MIDI or
+CC mapping only translates messages into actions and calls `dispatch`. Without an active
+playlist, `next`/`previous` step through the whole library; the page's own ← → keep
+stepping through its search results.
+
 The bench is not drawn by the page. `app/src-tauri/src/bench.rs` puts a native `NSView`
 under the webview's content, makes a wgpu surface on it and draws on its own thread,
 paced by the display; the page leaves a transparent hole and reports its rectangle
