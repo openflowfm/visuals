@@ -20,7 +20,7 @@ export const SECTIONS = {
   // Two facts of two bars, then three bars of Link.
   facts: [6, 13],
   breakdown: [13, 16],
-  // SHOW TIME, then presets: a bar each, a half-bar each for the last two.
+  // DROP OUT, then presets: a bar each, a half-bar each for the last two.
   drop: [16, 24],
   // The name, held back until here.
   outro: [24, 28],

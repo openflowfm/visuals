@@ -57,7 +57,7 @@ npx remotion render src/index.ts TeaserVertical out/teaser-vertical.mp4   # 1080
 
 [`src/Teaser.tsx`](src/Teaser.tsx) is the whole edit: the 2001 cold open and "25 Years
 Later", the title, the facts, Link and the gear it syncs, the diagram in the breakdown,
-SHOW TIME and eight bars of presets, and the name, held back until the end.
+DROP OUT and eight bars of presets, and the name, held back until the end.
 Everything is placed in bars and beats from [`src/timing.ts`](src/timing.ts), so it stays
 on the music when the music changes.
 

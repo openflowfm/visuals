@@ -506,7 +506,7 @@ const Diagram = () => {
   );
 };
 
-/** The drop's first bar: SHOW TIME slams in on the one, then the presets have the screen. */
+/** The drop's first bar: DROP OUT slams in on the one, then the presets have the screen. */
 const Drop = () => {
   const frame = useCurrentFrame();
   const { u, vertical } = useUnit();
@@ -533,8 +533,8 @@ const Drop = () => {
           transform: `scale(${(1.6 - 0.6 * pop) * (grow + 0.03 * kick(frame))})`,
         }}
       >
-        <span>SHOW</span>
-        <span>TIME</span>
+        <span>DROP</span>
+        <span>OUT</span>
       </div>
     </Center>
   );
