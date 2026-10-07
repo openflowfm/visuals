@@ -17,6 +17,7 @@
   },
   "include": [
     "client",
+    "harness",
     "app/src",
     "vite.app.config.ts",
     "server",

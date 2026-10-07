@@ -213,6 +213,66 @@ by it.
   this repo already has (`frameMetrics.ts`, `structuralMetrics.ts`). The score is how work
   knows it is close; the approvals are what says it is done.
 
+### Recorded mode, as built
+
+    npm run compare                          # 30 presets spread over the pack's folders
+    npm run compare -- --sample 60 --frames 300 --captures 4 --size 960x540
+    npm run compare -- cream-of-the-crop/Geometric/Cube  path/to/one.milk
+    npm run compare -- --serve               # reopen the last report to approve
+
+`harness/compare.ts` renders each preset twice from the same inputs: Butterchurn 2.6.7 in
+headless Chromium on the GPU (a fresh page per preset; `.milk` converted as the app
+converts it, through `server/presetWorker.ts` and its cache), and ours through
+`engine/src/bin/compare.rs`, which reads the plan and audio the harness writes and
+renders every preset on one device. Both run at once.
+
+- **Audio.** A synthetic track (kick at 120 bpm, a chord, seeded hiss; left and right
+  differ) turned into the three 1024-byte windows Butterchurn reads per frame. Butterchurn
+  gets them through `render({audioLevels})`, ours through `Audio::update_bytes`: the same
+  bytes, frame for frame.
+- **Time.** A fixed 1/60 s step from a fresh renderer, so both clocks and fps estimates
+  start equal.
+- **Randomness.** The page's `Math.random` is the engine's xorshift64*. It is seeded with
+  the engine's noise seed (`0x5eed`) before the visualizer is made, so the noise textures
+  come from the same stream, and with the preset seed as the preset loads, so
+  `rand_start`, `rand_preset` and the init equations start from the same numbers (the page
+  checks `rand_start` and notes it if not).
+- **Captures** at evenly spaced frames (default 80, 160, 240 of 240 at 640×360), read in the
+  same task as the draw and flipped to top-down. Orientation was checked on
+  `Wire Flat/fiShbRaiN - wave rider` and `Geiss - Game of Life`: the waveform rises to the
+  right and the life clusters sit in the same places in both, with the same colours.
+- **Score**, 0–100 per frame on a ≤320-wide copy, then the mean per preset: pixels 30%
+  (`differenceOf`), silhouette IoU 20% and contour distance 20% (`structuralDifference`),
+  regional colour 15% (`materialStructureDifference`), luma and coverage 15% (`metricsOf`).
+- **Output.** `harness/out/compare/`: frame PNGs (Butterchurn, ours, |difference| × 2),
+  `report.json` and `index.html` — worst first, sortable, filtered by score, verdict or
+  name. The command serves it on a free port when run in a terminal (`--no-serve` skips);
+  the server stops with the command.
+- **Approvals** are `~/.openflow/visuals/compare/approvals.json` (under `OPENFLOW_HOME`),
+  keyed by the preset's path in the pack, with the verdict, a note and the score it was
+  given at. The page saves each click there; opened as a file it keeps them in the page
+  and offers a download instead.
+
+What cannot match, and so is noise in the score rather than an engine bug:
+
+- **`rand_frame` and later `rand()`.** Butterchurn draws everything from one global stream
+  — the blend pattern, `rand_frame` each pass, shapes', waves' and every frame's `rand()` —
+  where the engine has a stream per preset, per shape, per wave and one for `rand_frame`.
+  They agree up to the init equations and part after that.
+- **`rand(n)` itself.** Butterchurn returns `Math.random() * floor(n)`, not floored; the
+  engine floors. Presets that use it differ until the engine copies the quirk.
+- **Shaders Butterchurn cannot link.** It draws black where MilkDrop draws its default; the
+  bench compares with the default and says so on the preset, for Ryan to judge.
+- **Unknown textures.** Butterchurn samples its `clouds2` image for any sampler it has no
+  picture for. The bench waits for that image to load, as the app would have.
+- **Chaotic feedback.** A preset that feeds back strongly turns float-level differences
+  between WebGL and wgpu into different pictures within seconds; its first capture is
+  the one to read.
+
+Live mode is next: a CPAL input feeding the same byte windows to Butterchurn in the app's
+webview and to the engine, one window with split, wipe and difference views, next and
+previous, search, and the same approvals file through the same `/approvals` shape.
+
 ## Phases
 
 0. **Harness and baseline.** Recorded mode with Butterchurn alone: render the pack, and
