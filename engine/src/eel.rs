@@ -798,7 +798,8 @@ fn call(f: Func, args: &[Expr], vars: &mut [f64], memory: &mut Memory) -> f64 {
         }
         Func::Rand => {
             let n = a(vars, memory).floor();
-            if n < 1.0 { memory.random() } else { (memory.random() * n).floor() }
+            // Butterchurn's `rand`: the bound is floored, the result is not.
+            if n < 1.0 { memory.random() } else { memory.random() * n }
         }
         Func::Floor | Func::Int => a(vars, memory).floor(),
         Func::Ceil => a(vars, memory).ceil(),
@@ -911,8 +912,9 @@ mod tests {
         assert_eq!(run("a = sqrt(-4); b = pow(-2, 0.5); c = sqr(3); d = sign(-2);", &["a", "b", "c", "d"]), [2.0, 0.0, 9.0, -1.0]);
         assert_eq!(run("a = min(3, 1, 2); b = max(3, 1, 2); c = int(-1.5); d = abs(-2);", &["a", "b", "c", "d"]), [1.0, 3.0, -2.0, 2.0]);
         assert_eq!(run("a = 3 & 5; b = 3 | 5;", &["a", "b"]), [1.0, 7.0]);
-        let r = run("a = rand(10);", &["a"])[0];
-        assert!((0.0..10.0).contains(&r) && r.fract() == 0.0);
+        // Butterchurn's `rand(n)` is `random * floor(n)`: a fraction, not a whole number.
+        let r = run("a = rand(10.7);", &["a"])[0];
+        assert!((0.0..10.0).contains(&r) && r.fract() != 0.0);
     }
 
     #[test]
