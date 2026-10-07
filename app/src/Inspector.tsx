@@ -1,8 +1,10 @@
 import { NumberField } from '@openflow/widgets/controls/NumberField.tsx';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
+import * as api from './api.ts';
 import type { Owner, Preset, Problem } from './api.ts';
+import { range } from './controls.ts';
 import { Setting } from './graph/Setting.tsx';
-import { defaultShader, drivenBy, getField, otherValues, problemsOf, removeLayer, setField, settingsOf, stageFor } from './stages.ts';
+import { drivenBy, getField, otherValues, problemsOf, removeLayer, setField, settingsOf, stageFor } from './stages.ts';
 import './graph.css';
 
 interface Props {
@@ -19,13 +21,7 @@ interface Props {
 const BASE: Owner = { list: 'base' };
 
 /** A file value nothing else claims: any number, typed or dragged. */
-const loose = (key: string, value: number) => ({
-  kind: 'float' as const,
-  min: Math.min(0, value),
-  max: Math.max(1, value * 2),
-  defaultValue: value,
-  name: key,
-});
+const loose = (key: string, value: number) => range(key, Math.min(0, value), Math.max(1, value * 2), value);
 
 /** One stage's code and every one of its settings, edited in place. */
 export function Inspector({ preset, selected, problems, onChange, onSet }: Props) {
@@ -70,7 +66,14 @@ export function Inspector({ preset, selected, problems, onChange, onSet }: Props
       {unwritten && (
         <div className="inspector-default">
           <p className="quiet">This preset uses MilkDrop's default {stage.label} shader.</p>
-          <Button onPress={() => onChange({ ...preset, [stage.id]: defaultShader(preset, stage.id as 'warp' | 'comp') })}>write my own</Button>
+          <Button
+            onPress={() => {
+              const which = stage.id as 'warp' | 'comp';
+              api.defaultShader(preset, which).then((code) => onChange({ ...preset, [which]: code }), console.error);
+            }}
+          >
+            write my own
+          </Button>
         </div>
       )}
       {!unwritten &&

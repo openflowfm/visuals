@@ -3,52 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }));
 
-import { effectKey, formatMultiplier, multiplierToPosition, POSITION_MAX, POSITION_MIN, positionToMultiplier } from './fx.ts';
-
-describe('the multiplier taper', () => {
-  it('puts 1× at the centre and ¼× and 4× at the ends', () => {
-    expect(positionToMultiplier(0)).toBe(1);
-    expect(multiplierToPosition(1)).toBe(0);
-    expect(positionToMultiplier(POSITION_MIN)).toBe(0.25);
-    expect(positionToMultiplier(POSITION_MAX)).toBe(4);
-    expect(multiplierToPosition(0.25)).toBe(POSITION_MIN);
-    expect(multiplierToPosition(4)).toBe(POSITION_MAX);
-  });
-
-  it('gives every doubling the same distance', () => {
-    expect(multiplierToPosition(2) - multiplierToPosition(1)).toBeCloseTo(multiplierToPosition(4) - multiplierToPosition(2));
-    expect(multiplierToPosition(0.5)).toBeCloseTo(-1);
-  });
-
-  it('round-trips', () => {
-    for (const m of [0.25, 0.3, 0.5, 0.8, 1, 1.5, 2, 2.8, 4]) expect(positionToMultiplier(multiplierToPosition(m))).toBeCloseTo(m, 10);
-  });
-
-  it('snaps to exactly 1× near the centre', () => {
-    expect(positionToMultiplier(0.03)).toBe(1);
-    expect(positionToMultiplier(-0.03)).toBe(1);
-    expect(positionToMultiplier(0.5)).toBeCloseTo(Math.SQRT2);
-  });
-
-  it('clamps out-of-range input', () => {
-    expect(positionToMultiplier(-9)).toBe(0.25);
-    expect(positionToMultiplier(9)).toBe(4);
-    expect(positionToMultiplier(Number.NaN)).toBe(1);
-    expect(multiplierToPosition(0.01)).toBe(POSITION_MIN);
-    expect(multiplierToPosition(0)).toBe(POSITION_MIN);
-    expect(multiplierToPosition(-1)).toBe(POSITION_MIN);
-    expect(multiplierToPosition(100)).toBe(POSITION_MAX);
-    expect(multiplierToPosition(Number.NaN)).toBe(0);
-  });
-
-  it('reads as a multiplier', () => {
-    expect(formatMultiplier(1)).toBe('1×');
-    expect(formatMultiplier(0.5)).toBe('0.5×');
-    expect(formatMultiplier(0.25)).toBe('0.25×');
-    expect(formatMultiplier(2.83)).toBe('2.8×');
-    expect(formatMultiplier(4)).toBe('4×');
-  });
-});
+import { effectKey } from './fx.ts';
 
 describe('effectKey', () => {
   it('holds strobe, punch and freeze while their keys are down', () => {

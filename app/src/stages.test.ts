@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Preset, Problem } from './api.ts';
-import { STAGES, addLayer, cords, defaultShader, layersOf, layout, offers, problemsOf, removeLayer, stageFor, stageOfProblem } from './stages.ts';
+import { FEED_GAP, STAGES, WIDE, addLayer, cords, layersOf, layout, offers, problemsOf, removeLayer, stageFor, stageOfProblem } from './stages.ts';
 
 const wave = () => ({ values: { enabled: 0 }, init: '', frame: '', point: '' });
 const shape = () => ({ values: { enabled: 0 }, init: '', frame: '' });
@@ -184,30 +184,28 @@ describe('the drawing', () => {
     ]);
   });
 
-  it('places every node it shows, layers left of the feedback', () => {
-    const p = blank({ fWaveAlpha: 1 });
+  it('stacks the layers under warp, so their cords rise between warp and feedback', () => {
+    const p = blank({ fWaveAlpha: 1, mv_a: 1 });
     for (const i of [0, 1, 2, 3]) p.waves[i].values.enabled = 1;
+    for (const i of [0, 1]) p.shapes[i].values.enabled = 1;
     const layers = layersOf(p);
+    expect(layers.length).toBeGreaterThan(4);
     const at = layout(layers);
-    for (const s of layers) expect(at[s.id].x).toBeLessThan(at.feedback.x);
-    expect(at.add).toBeDefined();
+    // One column, outlets in line with warp's: nothing stands between a layer and the gap.
+    for (const s of layers) {
+      expect(at[s.id].x).toBe(at.warp.x);
+      expect(at[s.id].y).toBeGreaterThan(at.warp.y + 150);
+    }
+    expect(new Set(layers.map((s) => at[s.id].y)).size).toBe(layers.length);
+    // The gap the cords rise through is wider than a cord's 30 px reach either side.
+    expect(at.feedback.x - (at.warp.x + WIDE)).toBe(FEED_GAP);
+    expect(FEED_GAP).toBeGreaterThanOrEqual(60);
+    expect(at.add.x).toBe(at.feedback.x);
   });
 
   it('falls back to motion when the selection is gone', () => {
     expect(stageFor(blank(), 'wave2').id).toBe('motion');
     expect(stageFor(blank(), null).id).toBe('motion');
     expect(stageFor(blank({ fWaveAlpha: 1 }), 'wave').id).toBe('wave');
-  });
-});
-
-describe('a default shader as code', () => {
-  it('writes the preset values in, so the picture is the same', () => {
-    const p = blank({ fDecay: 0.95, fGammaAdj: 1.5, fVideoEchoAlpha: 0.5, fVideoEchoZoom: 2, nVideoEchoOrientation: 1, bInvert: 1 });
-    expect(defaultShader(p, 'warp')).toContain('* 0.95;');
-    const comp = defaultShader(p, 'comp');
-    expect(comp).toContain('ret *= 1.5;');
-    expect(comp).toContain('float2(-1.0, 1.0)');
-    expect(comp).toContain('ret = 1.0 - ret;');
-    expect(comp).not.toMatch(/_d\d/);
   });
 });

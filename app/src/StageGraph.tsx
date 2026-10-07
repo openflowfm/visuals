@@ -4,8 +4,9 @@ import { Graph, GraphNode, type GraphView } from '@openflow/widgets/chrome/Graph
 import { Popup } from '@openflow/widgets/chrome/Popup.tsx';
 import { Port } from '@openflow/widgets/chrome/Port.tsx';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
+import * as api from './api.ts';
 import type { Owner, Preset, Problem } from './api.ts';
-import { show } from './graph/Setting.tsx';
+import { show } from './controls.ts';
 import { usePreview } from './previews.ts';
 import {
   CHAIN,
@@ -13,7 +14,6 @@ import {
   addLayer,
   codeLines,
   cords,
-  defaultShader,
   drivenBy,
   layersOf,
   layout,
@@ -82,12 +82,11 @@ const StageNode = memo(function StageNode({ stage: s, preset, problems, selected
   const written = shader && preset[s.id as 'warp' | 'comp'].trim() !== '';
   const code = codeLines(preset, s, shader ? 3 : 4);
   const blur = s.id === 'feedback' && usesBlur(preset);
+  // The narrow ends have no room for a word beside their port: their name says it.
   const caption =
-    s.kind === 'source'
-      ? 'sound in'
-      : s.kind === 'out'
-        ? 'the bench'
-        : shader
+    s.kind === 'source' || s.kind === 'out'
+      ? undefined
+      : shader
           ? written
             ? `${preset[s.id as 'warp' | 'comp'].split('\n').length} lines`
             : "MilkDrop's default"
@@ -109,7 +108,8 @@ const StageNode = memo(function StageNode({ stage: s, preset, problems, selected
           ) : (
             <Button
               onPress={() => {
-                onChange({ ...preset, [s.id]: defaultShader(preset, s.id as 'warp' | 'comp') });
+                const which = s.id as 'warp' | 'comp';
+                api.defaultShader(preset, which).then((code) => onChange({ ...preset, [which]: code }), console.error);
                 onSelect(s.id);
               }}
               title={`start a ${s.label} shader from MilkDrop's default, as code`}

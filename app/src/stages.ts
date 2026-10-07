@@ -341,55 +341,8 @@ export function removeLayer(p: Preset, id: string): Preset | null {
 }
 
 // --- shaders -----------------------------------------------------------------
-
-const num = (n: number) => (Number.isInteger(n) ? n.toFixed(1) : String(Number(n.toFixed(4))));
-
-/**
- * MilkDrop's default shader for a stage, as code to start from
- * (`engine/src/shader.rs`, `DEFAULT_WARP` and `DEFAULT_COMP`).
- *
- * The engine's defaults read the preset's decay, gamma and echo through
- * uniforms only they know. Written into a preset those would not exist in any
- * other player, so this writes today's values in as numbers instead: the
- * picture is the same the moment it is written, and the code is plain MilkDrop.
- */
-export function defaultShader(p: Preset, which: 'warp' | 'comp'): string {
-  const v = (key: string, def: number) => value(p, BASE, key, def);
-  if (which === 'warp') {
-    return [
-      '// MilkDrop\'s default warp, with this preset\'s decay written in.',
-      'shader_body',
-      '{',
-      `  ret = tex2D(sampler_main, uv).xyz * ${num(v('fDecay', 0.98))};`,
-      '}',
-    ].join('\n');
-  }
-  const orient = Math.round(v('nVideoEchoOrientation', 0));
-  const echo = v('fVideoEchoAlpha', 0);
-  const lines = [
-    '// MilkDrop\'s default composite, with this preset\'s gamma and echo written in.',
-    'shader_body',
-    '{',
-  ];
-  if (echo > 0) {
-    lines.push(
-      `  float2 uv_echo = (uv - 0.5) * ${num(1 / v('fVideoEchoZoom', 2))} * float2(${orient % 2 ? '-1.0' : '1.0'}, ${orient >= 2 ? '-1.0' : '1.0'}) + 0.5;`,
-      `  ret = lerp(tex2D(sampler_main, uv).xyz, tex2D(sampler_main, uv_echo).xyz, ${num(echo)});`,
-    );
-  } else {
-    lines.push('  ret = tex2D(sampler_main, uv).xyz;');
-  }
-  lines.push(`  ret *= ${num(v('fGammaAdj', 2))};`);
-  const hue = v('fShader', 0);
-  if (hue >= 1) lines.push('  ret *= hue_shader;');
-  else if (hue > 0.001) lines.push(`  ret *= ${num(1 - hue)} + ${num(hue)} * hue_shader;`);
-  if (v('bBrighten', 0)) lines.push('  ret = sqrt(ret);');
-  if (v('bDarken', 0)) lines.push('  ret = ret*ret;');
-  if (v('bSolarize', 0)) lines.push('  ret = ret * (1.0 - ret) * 4.0;');
-  if (v('bInvert', 0)) lines.push('  ret = 1.0 - ret;');
-  lines.push('}');
-  return lines.join('\n');
-}
+// MilkDrop's default shaders as code come from the engine (`api.defaultShader`),
+// so the graph keeps no copy of them.
 
 /** The first lines of a stage's code, for its face. */
 export function codeLines(p: Preset, s: Stage, n: number): string[] {
@@ -403,28 +356,29 @@ export function codeLines(p: Preset, s: Stage, n: number): string[] {
 export const WIDE = 168;
 export const NARROW = 88;
 const GAP = 24;
+/** The gap between warp and feedback, wider: the layers' cords rise through it. */
+export const FEED_GAP = 64;
 const PAD = 12;
 /** Where the layers start, under the chain, and how far apart they stack. */
-const LAYER_TOP = 230;
-const LAYER_PITCH = 84;
-/** How many layers stack in a column before the second column starts to its left. */
-const PER_COLUMN = 4;
+const LAYER_TOP = 256;
+const LAYER_PITCH = 120;
 
 /** Where each node sits, with the add button as `add`. The chain runs along the
- * top; layers stack under warp and then under motion, so each feeds the feedback
- * node to its right, and the add button waits under the feedback, where the
- * layers' cords meet. */
+ * top; the layers stack in one column under warp, their outlets in line with
+ * warp's, so every cord to the feedback rises through the gap between warp and
+ * feedback and crosses no node (a cord leaves an outlet rightwards and reaches
+ * an inlet from the left: from a second column further left it would run
+ * through the first and under warp). The add button waits under the feedback,
+ * where the layers' cords meet. */
 export function layout(layers: Stage[]): Record<string, { x: number; y: number }> {
   const at: Record<string, { x: number; y: number }> = {};
   let x = PAD;
   for (const s of CHAIN) {
     at[s.id] = { x, y: PAD };
-    x += (s.kind === 'source' || s.kind === 'out' ? NARROW : WIDE) + GAP;
+    x += (s.kind === 'source' || s.kind === 'out' ? NARROW : WIDE) + (s.id === 'warp' ? FEED_GAP : GAP);
   }
-  const columns = [at.warp.x, at.motion.x];
-  const tall = Math.max(PER_COLUMN, Math.ceil(layers.length / columns.length));
   layers.forEach((s, n) => {
-    at[s.id] = { x: columns[Math.floor(n / tall)], y: LAYER_TOP + (n % tall) * LAYER_PITCH };
+    at[s.id] = { x: at.warp.x, y: LAYER_TOP + n * LAYER_PITCH };
   });
   at.add = { x: at.feedback.x, y: LAYER_TOP };
   return at;

@@ -84,6 +84,97 @@ pub const DEFAULT_COMP: &str = "shader_body {
   if (_d2.y != 0) ret = 1.0 - ret;
 }";
 
+/// Which preset value each `_d` uniform component of the default shaders holds,
+/// by the name equations use (`Renderer::uniforms` fills them the same way).
+const DEFAULT_VALUES: [(&str, &str); 10] = [
+    ("_d0.x", "decay"), ("_d0.y", "gammaadj"), ("_d0.z", "echo_zoom"), ("_d0.w", "echo_alpha"),
+    ("_d1.x", "echo_orient"), ("_d1.y", "fshader"), ("_d1.z", "brighten"), ("_d1.w", "darken"),
+    ("_d2.x", "solarize"), ("_d2.y", "invert"),
+];
+
+/// A number as an HLSL float literal: `2.0`, `0.98`, `(-0.5)`.
+fn literal(v: f64) -> String {
+    let text = if v.fract() == 0.0 && v.abs() < 1e15 {
+        format!("{:.1}", v.abs())
+    } else {
+        let t = format!("{:.6}", v.abs());
+        t.trim_end_matches('0').to_string()
+    };
+    if v < 0.0 { format!("(-{text})") } else { text }
+}
+
+/// Whether `if (a op b)` holds, when both sides are numbers.
+fn constant_condition(condition: &str) -> Option<bool> {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    let re = RE.get_or_init(|| Regex::new(r"^\(?(-?[\d.]+)\)?\s*(!=|>=|>|==)\s*(-?[\d.]+)$").unwrap());
+    let c = re.captures(condition.trim())?;
+    let (a, b): (f64, f64) = (c[1].parse().ok()?, c[3].parse().ok()?);
+    Some(match &c[2] {
+        "!=" => a != b,
+        ">=" => a >= b,
+        ">" => a > b,
+        _ => a == b,
+    })
+}
+
+/// MilkDrop's default warp or comp shader as standalone code for `preset`: the
+/// values the engine passes it in `_d` uniforms (decay, gamma, echo, the hue
+/// shader and the output switches) written in as numbers, and the switches that
+/// numbers now decide folded away. The same picture the moment it is written,
+/// and plain MilkDrop that any player can run — the `_d` uniforms are this
+/// engine's alone.
+pub fn written_default(kind: Kind, preset: &crate::preset::Preset) -> String {
+    let values = crate::runtime::base_values(&preset.values, crate::runtime::BASE_DEFAULTS);
+    let mut text = match kind {
+        Kind::Warp => DEFAULT_WARP,
+        Kind::Comp => DEFAULT_COMP,
+    }
+    .to_string();
+    for (uniform, name) in DEFAULT_VALUES {
+        text = text.replace(uniform, &literal(values.get(name).copied().unwrap_or(0.0)));
+    }
+    // Lines of `if (number op number) statement`, and `else if` after them:
+    // kept as the bare statement when they hold, dropped when they don't.
+    static IF: OnceLock<Regex> = OnceLock::new();
+    let re = IF.get_or_init(|| Regex::new(r"^(\s*)(else\s+)?if\s*\((.+?)\)\s+(.*)$").unwrap());
+    let mut out = Vec::new();
+    let mut taken: Option<bool> = None;
+    for line in text.lines().flat_map(|l| if l.trim_start().starts_with("shader_body {") && l.trim() != "shader_body {" {
+        // `shader_body { body }` on one line: its own lines, so the body reads like the comp's.
+        let body = l.trim().trim_start_matches("shader_body {").trim_end_matches('}').trim().to_string();
+        vec!["shader_body {".to_string(), format!("  {body}"), "}".to_string()]
+    } else {
+        vec![l.to_string()]
+    }) {
+        let folded = re.captures(&line).and_then(|c| {
+            let holds = constant_condition(&c[3])?;
+            Some((c[1].to_string(), c.get(2).is_some(), holds, c[4].to_string()))
+        });
+        match folded {
+            Some((indent, chained, holds, statement)) => {
+                if chained && taken == Some(true) {
+                    continue;
+                }
+                taken = Some(holds);
+                if holds {
+                    let statement = statement.trim();
+                    let statement = statement.strip_prefix('{').and_then(|s| s.strip_suffix('}')).unwrap_or(statement).trim();
+                    out.push(format!("{indent}{statement}"));
+                }
+            }
+            None => {
+                taken = None;
+                out.push(line);
+            }
+        }
+    }
+    let what = match kind {
+        Kind::Warp => "warp, with this preset's decay",
+        Kind::Comp => "composite, with this preset's gamma, echo and switches",
+    };
+    format!("// MilkDrop's default {what} written in.\n{}", out.join("\n").replace("shader_body {", "shader_body\n{"))
+}
+
 /// MilkDrop's random rotation matrices, `float4x3` in its preamble.
 const ROTATIONS: &[&str] = &[
     "rot_s1", "rot_s2", "rot_s3", "rot_s4", "rot_d1", "rot_d2", "rot_d3", "rot_d4",
@@ -752,6 +843,42 @@ mod tests {
     fn the_default_shaders_compile() {
         compiles(Kind::Warp, DEFAULT_WARP);
         compiles(Kind::Comp, DEFAULT_COMP);
+    }
+
+    fn preset(values: &[(&str, f64)]) -> crate::preset::Preset {
+        let mut p = crate::preset::parse("");
+        p.values = values.iter().map(|(k, v)| (k.to_string(), *v)).collect();
+        p
+    }
+
+    #[test]
+    fn a_written_default_has_the_presets_values_as_numbers() {
+        let warp = written_default(Kind::Warp, &preset(&[("fDecay", 0.9)]));
+        assert!(warp.contains("ret = tex2D(sampler_main, uv).xyz * 0.9;"), "{warp}");
+        let comp = written_default(Kind::Comp, &preset(&[("fGammaAdj", 1.5), ("fVideoEchoAlpha", 0.25), ("nVideoEchoOrientation", 3.0), ("bInvert", 1.0)]));
+        for want in ["ret *= 1.5;", "(1.0 / 2.0)", "fmod(3.0, 2.0)", "uv_echo).xyz, 0.25);", "ret = 1.0 - ret;"] {
+            assert!(comp.contains(want), "{want} in\n{comp}");
+        }
+        // Switches the numbers turn off are gone, not left as `if (0.0 != 0)`.
+        for gone in ["_d", "if (", "sqrt", "hue_shader", "ret*ret"] {
+            assert!(!comp.contains(gone), "{gone} in\n{comp}");
+        }
+        compiles(Kind::Warp, &warp);
+        compiles(Kind::Comp, &comp);
+    }
+
+    #[test]
+    fn a_written_default_folds_the_hue_shader_chain() {
+        let full = written_default(Kind::Comp, &preset(&[("fShader", 1.0)]));
+        assert!(full.contains("ret *= hue_shader;") && !full.contains("(1.0 - "), "{full}");
+        let part = written_default(Kind::Comp, &preset(&[("fShader", 0.5), ("bBrighten", 1.0)]));
+        assert!(part.contains("ret *= (1.0 - 0.5) + (0.5 * hue_shader);") && part.contains("ret = sqrt(ret);"), "{part}");
+        assert!(!part.contains("else"), "{part}");
+        compiles(Kind::Comp, &full);
+        compiles(Kind::Comp, &part);
+        // The defaults when the file leaves them out: MilkDrop's 0.98 decay and gamma 2.
+        assert!(written_default(Kind::Warp, &preset(&[])).contains("* 0.98;"));
+        assert!(written_default(Kind::Comp, &preset(&[])).contains("ret *= 2.0;"));
     }
 
     #[test]
