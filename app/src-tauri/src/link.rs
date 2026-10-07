@@ -230,6 +230,12 @@ impl Link {
     }
 
     /// Change what the app holds and wake the scheduler to it.
+    /// Change preset every `bars` bars from the one (0 stops) — the live
+    /// panel's "every N bars", through `actions::Action::Bars`.
+    pub fn sync_bars(&self, bars: u32) {
+        self.change(|h| h.every = Every { every: bars, unit: Unit::Bars });
+    }
+
     fn change(&self, f: impl FnOnce(&mut Held)) {
         let mut held = self.held.lock().unwrap();
         f(&mut held);
@@ -308,6 +314,23 @@ pub fn start(handle: AppHandle) {
         for n in 0u64.. {
             std::thread::sleep(Duration::from_millis(100));
             let frame = ticker.state::<Link>().tick();
+            // With peers, the effects' beat (strobe, punch on beat) is the
+            // session's; alone, it is the tapped tempo again.
+            {
+                let deck = ticker.state::<crate::actions::Deck>();
+                let mut fx = deck.fx.lock().unwrap();
+                let was = fx.linked;
+                if frame.enabled && frame.peers > 0 {
+                    fx.follow(frame.tempo, frame.beat, std::time::Instant::now());
+                } else {
+                    fx.unfollow();
+                }
+                let changed = was != fx.linked || (fx.linked && n % 10 == 0);
+                drop(fx);
+                if changed {
+                    let _ = ticker.emit("fx", deck.fx_view());
+                }
+            }
             if peers != Some((frame.enabled, frame.peers)) {
                 peers = Some((frame.enabled, frame.peers));
                 eprintln!("link: {}, {} peers, {:.1} bpm", if frame.enabled { "on" } else { "off" }, frame.peers, frame.tempo);
@@ -368,7 +391,11 @@ pub fn link_sync(every: u32, unit: Unit, link: State<Link>, handle: AppHandle) -
         return Err("every is at most 256".into());
     }
     link.change(|h| h.every = Every { every, unit });
-    let auto = handle.state::<crate::actions::Deck>().live.lock().unwrap().auto;
+    // The live panel's "every N bars" shows the same schedule.
+    let deck = handle.state::<crate::actions::Deck>();
+    deck.live.lock().unwrap().bars = if matches!(unit, Unit::Bars) { every.min(64) } else { 0 };
+    let _ = handle.emit("fx", deck.fx_view());
+    let auto = deck.live.lock().unwrap().auto;
     if every > 0 && auto {
         crate::actions::dispatch(&handle, crate::actions::Action::Auto { on: Some(false) })?;
     }

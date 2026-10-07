@@ -7,10 +7,11 @@
 //! and what is playing); [`dispatch`] then opens that preset on the bench and tells
 //! the page with a `live` event ([`Now`]), whoever asked.
 
+use crate::fx::{Fx, FxAction};
 use crate::playlists::{Store, View};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -35,6 +36,16 @@ pub enum Action {
     Auto { on: Option<bool> },
     /// How long auto-advance stays on a preset, in seconds (1 to 3600).
     Seconds { seconds: f64 },
+    /// Lock the current preset, or let it go (`null` toggles): while held, stepping,
+    /// loading a playlist and auto-advance change nothing.
+    Hold { on: Option<bool> },
+    /// Change preset every this many bars (1 to 64) on Link's bar lines, counted
+    /// from the one (`crate::link`); 0 stops. Turns the timed auto-advance off.
+    Bars { bars: u32 },
+    /// A live effect (`crate::fx`): `{"kind": "strobe", "on": true}`, `{"kind": "tap"}`…
+    /// The same flat JSON as the others.
+    #[serde(untagged)]
+    Fx(FxAction),
 }
 
 /// What is playing, and how it moves on.
@@ -48,11 +59,24 @@ pub struct Live {
     pub current: Option<PathBuf>,
     /// When the current preset started, for auto-advance.
     pub since: Instant,
+    /// The current preset is locked: nothing moves it on.
+    pub hold: bool,
+    /// Changes every this many bars on Link's grid (`crate::link` keeps the
+    /// schedule; this is what the page shows); 0 is off.
+    pub bars: u32,
 }
 
 impl Default for Live {
     fn default() -> Self {
-        Live { playlist: None, index: None, auto: false, seconds: 30.0, current: None, since: Instant::now() }
+        Live { playlist: None, index: None, auto: false, seconds: 30.0, current: None, since: Instant::now(), hold: false, bars: 0 }
+    }
+}
+
+impl Live {
+    /// How long the timed auto-advance stays on a preset. Changes by bars are
+    /// Link's, landing on its bar lines, not a count from the last change.
+    pub fn period(&self, _bpm: f64) -> f64 {
+        self.seconds
     }
 }
 
@@ -64,6 +88,8 @@ pub struct DeckView {
     pub auto: bool,
     pub seconds: f64,
     pub current: Option<String>,
+    pub hold: bool,
+    pub bars: u32,
 }
 
 impl Live {
@@ -74,6 +100,8 @@ impl Live {
             auto: self.auto,
             seconds: self.seconds,
             current: self.current.as_ref().map(|p| p.to_string_lossy().into_owned()),
+            hold: self.hold,
+            bars: self.bars,
         }
     }
 
@@ -124,6 +152,10 @@ fn other(len: usize, at: Option<usize>, roll: u64) -> usize {
 /// Apply `action` to `live`: returns the preset to open, if it means one.
 /// `library` lists the whole library, asked for only when there is no active playlist.
 pub fn decide(live: &mut Live, action: &Action, store: &Store, library: &dyn Fn() -> Vec<PathBuf>, roll: u64) -> Result<Option<PathBuf>, String> {
+    let steps = matches!(action, Action::Next | Action::Previous | Action::Random | Action::Go { .. } | Action::Load { .. });
+    if live.hold && steps {
+        return Err("held: let go of HOLD to change the preset".into());
+    }
     match action {
         Action::Next | Action::Previous | Action::Random => {
             let by = if *action == Action::Previous { -1 } else { 1 };
@@ -183,18 +215,41 @@ pub fn decide(live: &mut Live, action: &Action, store: &Store, library: &dyn Fn(
             live.seconds = seconds.clamp(1.0, 3600.0);
             Ok(None)
         }
+        Action::Hold { on } => {
+            live.hold = on.unwrap_or(!live.hold);
+            // Let go, auto-advance gives the preset a whole period again.
+            live.since = Instant::now();
+            Ok(None)
+        }
+        Action::Bars { bars } => {
+            live.bars = (*bars).min(64);
+            Ok(None)
+        }
+        // Not the deck's: `dispatch` gives these to the effects.
+        Action::Fx(_) => Ok(None),
     }
 }
 
-/// The playlists and the live state, managed by Tauri beside `crate::App`.
+/// The playlists, the live state and the live effects, managed by Tauri beside
+/// `crate::App`. The effects are shared with the bench's render thread.
 pub struct Deck {
     pub store: Mutex<Store>,
     pub live: Mutex<Live>,
+    pub fx: Arc<Mutex<Fx>>,
 }
 
 impl Deck {
     pub fn new(store: Store) -> Deck {
-        Deck { store: Mutex::new(store), live: Mutex::new(Live::default()) }
+        Deck { store: Mutex::new(store), live: Mutex::new(Live::default()), fx: Arc::new(Mutex::new(Fx::restored())) }
+    }
+
+    /// The effects panel's state: the effects, and the deck's hold and bars.
+    pub fn fx_view(&self) -> crate::fx::View {
+        let (hold, bars) = {
+            let live = self.live.lock().unwrap();
+            (live.hold, live.bars)
+        };
+        self.fx.lock().unwrap().view(hold, bars)
     }
 
     /// The page opened `path` itself (a library click): it is what plays now.
@@ -231,6 +286,35 @@ fn roll() -> u64 {
 /// Callable from any thread — the page's `act`, the auto-advance timer, a MIDI input.
 pub fn dispatch(handle: &AppHandle, action: Action) -> Result<(), String> {
     let deck = handle.state::<Deck>();
+    if let Action::Fx(fx) = &action {
+        let tempo = {
+            let mut state = deck.fx.lock().unwrap();
+            state.apply(fx, Instant::now())?.then_some(state.bpm)
+        };
+        if let Some(bpm) = tempo {
+            crate::fx::save_tempo(bpm);
+        }
+        return handle.emit("fx", deck.fx_view()).map_err(|e| e.to_string());
+    }
+    if matches!(action, Action::Hold { .. } | Action::Bars { .. }) {
+        let view = {
+            let store = deck.store.lock().unwrap();
+            let mut live = deck.live.lock().unwrap();
+            decide(&mut live, &action, &store, &Vec::<PathBuf>::new, 0)?;
+            if let Action::Bars { .. } = action {
+                // Link schedules them, on its bar lines from the one; the timed
+                // advance would change presets as well, so it stops.
+                handle.state::<crate::link::Link>().sync_bars(live.bars);
+                if live.bars > 0 {
+                    live.auto = false;
+                }
+            }
+            live.view()
+        };
+        handle.emit("fx", deck.fx_view()).map_err(|e| e.to_string())?;
+        let now = Now { deck: view, opened: None, path: None, error: None };
+        return handle.emit("live", now).map_err(|e| e.to_string());
+    }
     let app = handle.state::<crate::App>();
     let path = {
         let store = deck.store.lock().unwrap();
@@ -260,9 +344,10 @@ pub fn start_auto(handle: AppHandle) {
         loop {
             std::thread::sleep(Duration::from_millis(100));
             let deck = handle.state::<Deck>();
+            let bpm = deck.fx.lock().unwrap().bpm;
             let due = {
                 let mut live = deck.live.lock().unwrap();
-                let due = live.auto && live.since.elapsed().as_secs_f64() >= live.seconds;
+                let due = live.auto && !live.hold && live.since.elapsed().as_secs_f64() >= live.period(bpm);
                 if due {
                     // Even when Next finds nothing to play, wait a whole period again.
                     live.since = Instant::now();
@@ -301,6 +386,12 @@ fn edit(deck: &Deck, f: impl FnOnce(&mut Store) -> Result<(), String>) -> Result
 #[tauri::command]
 pub async fn act(action: Action, handle: AppHandle) -> Result<(), String> {
     dispatch(&handle, action)
+}
+
+/// The live effects as they are now; then the `fx` event follows them.
+#[tauri::command]
+pub fn fx_state(deck: State<Deck>) -> crate::fx::View {
+    deck.fx_view()
 }
 
 #[tauri::command]
@@ -444,5 +535,35 @@ mod tests {
         assert_eq!(read(r#"{"kind":"go","index":3}"#), Action::Go { index: 3 });
         assert_eq!(read(r#"{"kind":"load","playlist":1,"index":null}"#), Action::Load { playlist: 1, index: None });
         assert_eq!(read(r#"{"kind":"auto","on":null}"#), Action::Auto { on: None });
+        assert_eq!(read(r#"{"kind":"hold","on":true}"#), Action::Hold { on: Some(true) });
+        assert_eq!(read(r#"{"kind":"bars","bars":8}"#), Action::Bars { bars: 8 });
+        // The effects read as actions too, in the same flat shape.
+        assert_eq!(read(r#"{"kind":"strobe","on":true}"#), Action::Fx(FxAction::Strobe { on: Some(true) }));
+        assert_eq!(read(r#"{"kind":"tap"}"#), Action::Fx(FxAction::Tap));
+        assert_eq!(read(r#"{"kind":"speed","speed":0.5}"#), Action::Fx(FxAction::Speed { speed: 0.5 }));
+        assert_eq!(serde_json::to_string(&Action::Fx(FxAction::Tap)).unwrap(), r#"{"kind":"tap"}"#);
+        assert!(serde_json::from_str::<Action>(r#"{"kind":"nonsense"}"#).is_err());
+    }
+
+    #[test]
+    fn hold_ignores_steps_and_bars_set_the_period() {
+        let (s, lib) = store();
+        let mut live = Live::default();
+        decide(&mut live, &Action::Load { playlist: 0, index: None }, &s, &none, 0).unwrap();
+        decide(&mut live, &Action::Hold { on: None }, &s, &none, 0).unwrap();
+        assert!(live.hold);
+        for action in [Action::Next, Action::Previous, Action::Random, Action::Go { index: 2 }, Action::Load { playlist: 0, index: Some(1) }] {
+            assert!(decide(&mut live, &action, &s, &none, 0).is_err(), "{action:?} while held");
+        }
+        assert_eq!(live.current, Some(lib.join("x.milk")));
+        // Settings still change while held.
+        decide(&mut live, &Action::Seconds { seconds: 10.0 }, &s, &none, 0).unwrap();
+        decide(&mut live, &Action::Hold { on: Some(false) }, &s, &none, 0).unwrap();
+        assert_eq!(decide(&mut live, &Action::Next, &s, &none, 0).unwrap(), Some(lib.join("y.milk")));
+        assert_eq!(live.period(120.0), 10.0);
+        decide(&mut live, &Action::Bars { bars: 8 }, &s, &none, 0).unwrap();
+        assert_eq!(live.period(120.0), 10.0, "bars are Link's schedule, not the timed period");
+        decide(&mut live, &Action::Bars { bars: 1000 }, &s, &none, 0).unwrap();
+        assert_eq!(live.bars, 64);
     }
 }
