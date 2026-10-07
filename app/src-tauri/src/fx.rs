@@ -3,8 +3,8 @@
 //! and tap tempo.
 //!
 //! [`Fx`] is the state. Actions change it ([`Fx::apply`], from `actions::dispatch`),
-//! and the bench's render thread reads it every refresh: [`Fx::speed_now`] for how
-//! fast frames are made, [`Fx::master`] for the engine's master pass. Everything
+//! and the bench's render thread reads it every refresh: [`Fx::speed_now`] for the
+//! scale on the preset clock, [`Fx::master`] for the engine's master pass. Everything
 //! that moves over time (a fade, a punch decaying, the strobe's phase) is worked
 //! out from timestamps, so it is the same whenever it is asked for. Only the tempo
 //! is kept across restarts.
@@ -222,7 +222,7 @@ impl Fx {
     pub fn apply(&mut self, action: &FxAction, now: Instant) -> Result<bool, String> {
         let flip = |on: &Option<bool>, was: bool| on.unwrap_or(!was);
         match action {
-            FxAction::Speed { speed } => self.speed = clamped(*speed, 0.25, 2.0, "speed")?,
+            FxAction::Speed { speed } => self.speed = clamped(*speed, 0.25, 4.0, "speed")?,
             FxAction::Freeze { on } => {
                 let to = flip(on, self.freeze);
                 if self.freeze && !to {
@@ -363,8 +363,9 @@ impl Fx {
         }
     }
 
-    /// How fast frames are made, as a share of the preset rate: the speed, and 0
-    /// while frozen, coming back up over [`THAW`] once released.
+    /// The scale on the preset clock (1 is the preset's own 30 steps a second;
+    /// the picture still renders every refresh): the speed, 0.25–4, and 0 while
+    /// frozen, coming back up over [`THAW`] once released.
     pub fn speed_now(&self, now: Instant) -> f64 {
         if self.freeze {
             return 0.0;
@@ -532,7 +533,7 @@ mod tests {
         let mut fx = Fx::default();
         let now = Instant::now();
         fx.apply(&FxAction::Speed { speed: 9.0 }, now).unwrap();
-        assert_eq!(fx.speed, 2.0);
+        assert_eq!(fx.speed, 4.0);
         fx.apply(&FxAction::Speed { speed: 0.0 }, now).unwrap();
         assert_eq!(fx.speed, 0.25);
         assert!(fx.apply(&FxAction::Brightness { value: f64::NAN }, now).is_err());

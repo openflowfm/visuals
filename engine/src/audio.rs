@@ -7,6 +7,14 @@
 pub const FFT_SIZE: usize = 1024;
 pub const NUM_SAMPS: usize = 512;
 
+/// A sample, -1..1, as the byte Butterchurn hears: what a browser's
+/// `AnalyserNode.getByteTimeDomainData` makes of it — `128 × (v + 1)`,
+/// truncated and clamped to 0..255 (Chromium's `RealtimeAnalyser`) — so a
+/// waveform here is the size it is in the BlackHole visualizer for the same input.
+pub fn to_byte(v: f32) -> u8 {
+    (128.0 * (v as f64 + 1.0)).clamp(0.0, 255.0) as u8
+}
+
 /// One frame's audio, as the rest of the engine reads it.
 pub struct Audio {
     /// The mono window, -128..127, as Butterchurn's `timeArray`.
@@ -49,9 +57,9 @@ impl Audio {
     }
 
     /// Take a window of samples, -1..1, as Butterchurn takes its byte arrays:
-    /// each sample becomes an unsigned byte, 0..255, centred at 128.
+    /// each sample becomes an unsigned byte ([`to_byte`]).
     pub fn update(&mut self, left: &[f32], right: &[f32]) {
-        let byte = |v: f32| (128.0 + v.clamp(-1.0, 1.0) * 127.0).round().clamp(0.0, 255.0) as u8;
+        let byte = to_byte;
         let mut mono = [128u8; FFT_SIZE];
         let mut l = [128u8; FFT_SIZE];
         let mut r = [128u8; FFT_SIZE];

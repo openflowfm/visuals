@@ -15,7 +15,11 @@
 //   1024-byte windows Butterchurn reads per frame — `timeByteArray`, `…L`, `…R` —
 //   and written to a file. Butterchurn gets them through `render({audioLevels})`,
 //   the engine through `Audio::update_bytes`: the same bytes.
-// - **Time.** A fixed step (1/60 s) on both, from a fresh renderer per preset.
+// - **Time.** A fresh renderer per preset. Butterchurn makes one frame per
+//   preset step, 1/30 s apart (MilkDrop's pace in Winamp, the engine's
+//   `PRESET_RATE`); ours draws `--refresh` pictures a second (60 by default),
+//   feeding back once a step and drawing between steps in between, and is
+//   captured at the refreshes that land on Butterchurn's frames.
 // - **Randomness.** Butterchurn's `Math.random` is replaced in its page with the
 //   engine's generator (xorshift64*). It is seeded with the engine's noise seed
 //   before the visualizer is made, so the noise textures are drawn from the same
@@ -65,12 +69,15 @@ const FRAMES = Number(flag('frames', '240'));
 const CAPTURES = Number(flag('captures', '3'));
 const [WIDTH, HEIGHT] = flag('size', '640x360').split('x').map(Number);
 const SEED = BigInt(flag('seed', '1'));
-const DT = 1 / 60;
+/** One Butterchurn frame is one preset step: 1/30 s, MilkDrop's pace in Winamp (`PRESET_RATE`). */
+const DT = 1 / 30;
+/** How many pictures a second ours draws; between steps it draws part of the next one. */
+const REFRESH = Number(flag('refresh', '60'));
 /** The engine's noise textures are drawn from this seed (`Renderer::new`). */
 const NOISE_SEED = 0x5eedn;
 const SAMPLE = flags.has('sample') ? Number(flag('sample', '30')) : positional.length ? 0 : 30;
-if (![FRAMES, CAPTURES, WIDTH, HEIGHT].every((n) => Number.isInteger(n) && n > 0)) {
-  throw new Error('--frames, --captures and --size WxH must be positive integers');
+if (![FRAMES, CAPTURES, WIDTH, HEIGHT, REFRESH].every((n) => Number.isInteger(n) && n > 0)) {
+  throw new Error('--frames, --captures, --refresh and --size WxH must be positive integers');
 }
 
 const presetsRoot = path.resolve(
@@ -251,7 +258,7 @@ function music(frames: number): Buffer {
   const out = Buffer.alloc(frames * 3 * 1024);
   const noise = xorshift(0xa0d10n);
   const rate = 44_100;
-  const hop = rate / 60; // 735 new samples a frame at 60 fps
+  const hop = rate * DT; // 1470 new samples a step at 30 a second
   const total = Math.ceil(frames * hop) + 1024;
   const left = new Float32Array(total);
   const right = new Float32Array(total);
@@ -264,10 +271,10 @@ function music(frames: number): Buffer {
     left[s] = Math.max(-1, Math.min(1, 0.6 * kick + 0.3 * 0.25 * (2 * a + cs + e) + hiss));
     right[s] = Math.max(-1, Math.min(1, 0.6 * kick + 0.3 * 0.25 * (a + cs + 2 * e) - hiss));
   }
-  // The engine's `Audio::update`: -1..1 to an unsigned byte centred on 128.
-  const byte = (v: number) => Math.max(0, Math.min(255, Math.round(128 + Math.max(-1, Math.min(1, v)) * 127)));
+  // The engine's `audio::to_byte`, as a browser's AnalyserNode makes bytes: 128 × (v + 1), truncated.
+  const byte = (v: number) => Math.max(0, Math.min(255, Math.floor(128 * (v + 1))));
   for (let f = 0; f < frames; f++) {
-    const end = Math.round((f + 1) * hop) + 1024 - 735;
+    const end = Math.round((f + 1) * hop) + 1024 - Math.round(hop);
     for (let i = 0; i < 1024; i++) {
       const s = end - 1024 + i;
       out[(f * 3) * 1024 + i] = byte((left[s] + right[s]) * 0.5);
@@ -417,6 +424,7 @@ const plan = [
   `size\t${WIDTH}\t${HEIGHT}`,
   `frames\t${FRAMES}`,
   `dt\t${DT}`,
+  `refresh\t${REFRESH}`,
   `seed\t${SEED}`,
   `audio\t${audioFile}`,
   `captures\t${captures.join('\t')}`,
@@ -622,7 +630,7 @@ fs.rmSync(work, { recursive: true, force: true });
 
 const report: Report = {
   generated: new Date().toISOString(),
-  settings: { width: WIDTH, height: HEIGHT, frames: FRAMES, dt: DT, seed: String(SEED), captures, presetsRoot },
+  settings: { width: WIDTH, height: HEIGHT, frames: FRAMES, dt: DT, refresh: REFRESH, seed: String(SEED), captures, presetsRoot },
   weights: WEIGHTS,
   approvalsFile,
   presets,

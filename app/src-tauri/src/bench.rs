@@ -47,13 +47,16 @@ pub struct Thread {
     pub previews: Arc<Mutex<Option<Vec<u8>>>>,
 }
 
-/// How often stage pictures are read back: every this many frames.
-const PREVIEW_EVERY: u32 = 4;
+/// How often stage pictures are read back: every this many preset steps.
+const PREVIEW_EVERY: u64 = 4;
 
-/// One frame at the preset rate.
-const FRAME: std::time::Duration = std::time::Duration::from_nanos((1e9 / engine::runtime::FRAME_RATE) as u64);
+/// One preset step at 1×: how often the levels are still heard while frozen.
+const STEP: std::time::Duration = std::time::Duration::from_nanos((1e9 / engine::runtime::PRESET_RATE) as u64);
 
-/// Below this share of the preset rate, no frames are made at all (frozen).
+/// The pace of a loop no display paces (the window off screen).
+const UNPACED: std::time::Duration = std::time::Duration::from_nanos(1_000_000_000 / 120);
+
+/// Below this speed the preset clock stands still (frozen).
 const STILL: f64 = 0.02;
 
 /// Start drawing into `surface`, with the live effects `fx`. Returns once the device is up.
@@ -90,16 +93,12 @@ fn configuration(adapter: &wgpu::Adapter, surface: &wgpu::Surface, size: (u32, u
     config
 }
 
-/// Show the latest frame on one surface. `between` mixes the last two frames
-/// (see [`run`]).
-fn show(renderer: &mut Renderer, surface: &wgpu::Surface, config: &wgpu::SurfaceConfiguration, between: Option<f32>) {
+/// Show the latest picture on one surface.
+fn show(renderer: &mut Renderer, surface: &wgpu::Surface, config: &wgpu::SurfaceConfiguration) {
     match surface.get_current_texture() {
         wgpu::CurrentSurfaceTexture::Success(frame) | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => {
             let view = frame.texture.create_view(&Default::default());
-            match between {
-                Some(t) => renderer.present_between(&view, config.format, t),
-                None => renderer.present(&view, config.format),
-            }
+            renderer.present(&view, config.format);
             renderer.queue().present(frame);
         }
         _ => surface.configure(renderer.device(), config),
@@ -128,7 +127,6 @@ fn run(
     // the loop; the bench presents without waiting, so the show is the smooth one.
     let mut output: Option<Output> = None;
     let mut bench_shown = true;
-    let mut frames = 0u32;
     let mut logged = Instant::now();
     let mut audio = Audio::default();
     let mut last = Instant::now();
@@ -136,8 +134,6 @@ fn run(
     let mut refresh = std::time::Duration::ZERO;
     let mut window = (Instant::now(), 0u32, 0.0f64);
     let mut loaded = false;
-    // Frozen since the last frame was made: show that frame, not a mix.
-    let mut still = false;
     loop {
         // Block while there is nothing to draw, so a closed window costs nothing.
         let next = if loaded { rx.try_recv().ok() } else { rx.recv().ok() };
@@ -153,6 +149,10 @@ fn run(
                     let result = renderer.load_preset(*preset, seed).map_err(|e| e.to_string());
                     if fading && result.is_ok() {
                         fx.lock().unwrap().start_fade(Instant::now());
+                    }
+                    // The first preset starts at its step 0, not after the wait for it.
+                    if !loaded {
+                        last = Instant::now();
                     }
                     loaded |= result.is_ok();
                     let _ = reply.send(result);
@@ -201,26 +201,19 @@ fn run(
             }
             continue;
         }
-        // The display paces this loop (presenting waits for its refresh; the
-        // output's display when the output is open), but a
-        // frame is only made when one is due at the preset rate (`FRAME_RATE`).
-        // On a faster display the refreshes in between show the last two frames
-        // mixed, so motion stays smooth at the preset's own speed. A quarter
-        // frame of slack keeps a 60 Hz display's jitter from skipping frames.
-        // A window that isn't on screen gets no refreshes to wait for, and the
-        // loop would spin; below a 4 ms round it is paced by sleeping instead.
-        //
-        // The live effects' speed stretches the time between frames (FRAME /
-        // speed) while each frame still moves the preset's clock one preset
-        // frame on, so slow motion is the same motion, slower, and the mixing
-        // between frames keeps it fluid. Frozen, no frames are made and the
-        // last one stays.
+        // The display paces this loop: presenting waits for its refresh (the
+        // output's display when the output is open), and every refresh is drawn.
+        // The preset's clock moves on by the time since the last refresh × the
+        // speed (`Renderer::render`): a step, MilkDrop's frame, every 1/30 s at
+        // 1×, and the refreshes between steps drawn part of the way into the
+        // next one. So speed scales the motion and never the frame rate, and a
+        // 120 Hz display shows the same preset, at the same pace, as a 60 Hz one.
+        // Frozen, the clock stands still and the picture holds. A window that
+        // isn't on screen gets no refreshes to wait for, and the loop would spin;
+        // below a 4 ms round it is paced by sleeping instead.
         let unpaced = !refresh.is_zero() && refresh < std::time::Duration::from_millis(4);
         if unpaced {
-            let wait = due.saturating_duration_since(Instant::now()).min(FRAME);
-            if !wait.is_zero() {
-                std::thread::sleep(wait);
-            }
+            std::thread::sleep(UNPACED.saturating_sub(last.elapsed()));
         }
         let now = Instant::now();
         let (speed, gain, echo) = {
@@ -228,59 +221,44 @@ fn run(
             (fx.speed_now(now), fx.sensitivity as f32, fx.echo())
         };
         let frozen = speed < STILL;
-        let interval = if frozen { FRAME } else { FRAME.div_f64(speed) };
-        let smooth = !unpaced && !frozen && refresh < interval.mul_f64(0.75);
-        let mut cpu = None;
-        let hear = |audio: &mut Audio| {
+        // A stall (a slow load, the machine asleep) moves the preset on at most a quarter second.
+        let elapsed = now.duration_since(last).as_secs_f64().min(0.25);
+        last = now;
+        {
             let (l, r): (Vec<f32>, Vec<f32>) = {
                 let ring = ring.lock().unwrap();
                 // Sensitivity: a gain on what the presets hear.
                 (ring.0.iter().map(|s| s * gain).collect(), ring.1.iter().map(|s| s * gain).collect())
             };
             audio.update(&l, &r);
-        };
-        if frozen {
-            // The latest frame stays up until the next is made, and the clock
-            // picks up from here, not from when it froze.
-            still = true;
-            last = now;
+        }
+        renderer.set_trails(echo);
+        let heard = renderer.clock.frame;
+        let started = Instant::now();
+        renderer.render(&mut audio, if frozen { 0.0 } else { elapsed * speed });
+        let cpu = started.elapsed().as_secs_f64();
+        if renderer.clock.frame != heard {
+            fx.lock().unwrap().listen(audio.bass(), audio.bass_att(), now);
+        } else if frozen && now >= due {
             // Still listening, so beats keep driving the strobe while frozen.
-            if now >= due {
-                due = now + FRAME;
-                hear(&mut audio);
-                audio.update_levels(engine::runtime::FRAME_RATE, renderer.clock.frame);
-                fx.lock().unwrap().listen(audio.bass(), audio.bass_att(), now);
-            }
-        } else if now + interval / 4 >= due {
-            due = if now > due + interval { now + interval } else { due + interval };
-            let elapsed = (now.duration_since(last).as_secs_f64() * speed).clamp(0.001, 0.25);
-            last = now;
-            still = false;
-            hear(&mut audio);
-            renderer.set_trails(echo);
-            let started = Instant::now();
-            renderer.render(&mut audio, elapsed);
-            cpu = Some(started.elapsed().as_secs_f64());
+            due = now + STEP;
+            audio.update_levels(engine::runtime::PRESET_RATE, renderer.clock.frame);
             fx.lock().unwrap().listen(audio.bass(), audio.bass_att(), now);
         }
-        // 0 at the refresh a frame was made (the frame before is shown), rising
-        // to 1 as the next is due: one frame behind, and never a jump.
-        let between = (smooth && !still).then(|| (last.elapsed().as_secs_f64() / interval.as_secs_f64()) as f32);
         renderer.set_master(fx.lock().unwrap().master(Instant::now()));
         // The bench first: it doesn't wait. Then the output, which waits for its
         // display's refresh when it has one.
         if bench_shown {
-            show(&mut renderer, &surface, &config, between);
+            show(&mut renderer, &surface, &config);
         }
         if let Some(output) = &output {
-            show(&mut renderer, &output.surface, &output.config, between);
+            show(&mut renderer, &output.surface, &output.config);
         }
         // How often the display refreshes: the time round this loop, smoothed.
         let round = now.elapsed();
         refresh = if refresh.is_zero() { round } else { refresh.mul_f64(0.9) + round.mul_f64(0.1) };
-        let Some(cpu) = cpu else { continue };
-        frames = frames.wrapping_add(1);
-        if frames % PREVIEW_EVERY == 0 {
+        // Stage pictures change only with a step.
+        if renderer.clock.frame != heard && renderer.clock.frame % PREVIEW_EVERY == 0 {
             if let Some(pictures) = renderer.read_previews() {
                 *previews.lock().unwrap() = Some(pictures);
             }
@@ -294,19 +272,13 @@ fn run(
                 logged = now;
                 let (l, r) = crate::listen::peaks(&ring);
                 eprintln!(
-                    "bench: {:.0} fps, {:.2} ms cpu, surface {}, output {}, display {:.0} Hz{}, input peaks {l:.3} {r:.3}",
+                    "bench: {:.0} fps, {:.2} ms cpu, preset at {speed:.2}×, surface {}, output {}, display {:.0} Hz{}, input peaks {l:.3} {r:.3}",
                     s.fps,
                     s.cpu_ms,
                     if bench_shown { format!("{}x{}", config.width, config.height) } else { "hidden".into() },
                     output.as_ref().map_or("closed".into(), |w| format!("{}x{}", w.config.width, w.config.height)),
                     1.0 / refresh.as_secs_f64().max(1e-6),
-                    if refresh < std::time::Duration::from_millis(4) {
-                        ", not on screen"
-                    } else if refresh < interval.mul_f64(0.75) {
-                        ", mixing between frames"
-                    } else {
-                        ""
-                    }
+                    if unpaced { ", not on screen" } else { "" }
                 );
             }
             *stats.lock().unwrap() = s;

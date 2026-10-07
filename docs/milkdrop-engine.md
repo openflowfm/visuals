@@ -96,8 +96,8 @@ placed at the preset's 16:9 fitted into the display (`output::fit`), so the bars
 window's own black, and its surface is that rectangle in the display's pixels. The bench's
 render thread presents every frame to both surfaces (`bench::Cmd::Output`): while the
 output is open it presents with vsync and paces the loop, and the bench is reconfigured to
-present without waiting (`AutoNoVsync`), so the 60 fps frame making and the mixing between
-frames follow the output's display. A bench hole of zero size hides the bench and it
+present without waiting (`AutoNoVsync`), so the picture is drawn at every refresh of the
+output's display (see "The preset clock"). A bench hole of zero size hides the bench and it
 isn't presented at all. The display is chosen in live mode and remembered in
 `~/.openflow/visuals/output.json` (by id, then by name); with nothing chosen it is the first
 display without the menu bar, else the main one. A display reconfiguration
@@ -157,7 +157,7 @@ effect back to normal (`fx_reset`), keeping the tempo, sensitivity and settings.
 
 | action | does | key |
 |---|---|---|
-| `speed {speed}` | frames are made at 60 × speed (0.25–2); each still moves the preset's clock one frame, and the mixing between frames keeps slow motion fluid | |
+| `speed {speed}` | a scale on the preset clock, ¼×–4× (a log slider, 1× at its centre): the preset makes 30 × speed steps a second, its motion, decay and `time` with them, while the picture is still drawn at every refresh | |
 | `freeze {on}` | no frames are made, the picture holds; let go, it comes back up to speed over 0.4 s | F (hold), ⇧F latches |
 | `transition {seconds}` | while the output is open, a new preset crossfades from a snapshot of the last one's picture over 0–10 s (2 by default; 0 cuts) | |
 | `strobe {on}`, `strobe_rate {rate}`, `strobe_intensity {value}`, `strobe_style {style}` | flashes on the beat, 0.25–4 a beat: `white` over the picture, or `black` between flashes so the picture itself strobes | S (hold), ⇧S latches |
@@ -165,20 +165,20 @@ effect back to normal (`fx_reset`), keeping the tempo, sensitivity and settings.
 | `blackout {on}`, `blackout_fade {seconds}` | to black and back, at once or over 0–10 s; a fade turned round mid-way goes back from where it is | B |
 | `punch {on}`, `punch_on_beat {on}` | a kick: 12% zoom and 35% brighter, held while pressed and dying away over 0.15 s; on every beat too | P (hold) |
 | `brightness {value}`, `hue {value}`, `invert {on}`, `mirror {mode}` | 0–2 ×; a hue turn 0–1; invert; `off`, `x`, `y`, `quad` (null steps through) | I, M |
-| `trails {value}` | an echo on the finished picture, per made frame: max(new, before × k), k 0.75–0.98 | |
-| `sensitivity {value}` | a gain of 0.25–4 on the samples the presets hear (waves and spectrum; `bass`/`mid`/`treb` are relative to their own average and settle back) | |
+| `trails {value}` | an echo on the finished picture: max(new, before × k), k 0.75–0.98 per 1/60 s of preset time (so the same at any refresh rate), kept in half floats | |
+| `sensitivity {value}` | a gain of ¼×–4× (a log slider, 1× at its centre) on the samples the presets hear (waves and spectrum; `bass`/`mid`/`treb` are relative to their own average and settle back). At 1× a waveform is the size Butterchurn draws for the same input: samples become bytes as a browser's `AnalyserNode` makes them (`audio::to_byte`) | |
 | `tap`, `bpm {bpm}` | the tempo: the mean gap of the last taps (a 2 s pause starts afresh), the beat on the last tap; or typed, 40–240 | T |
 | `hold {on}` | locks the preset: next, previous, random, go, load and auto-advance do nothing (the page says so) | H |
 | `bars {bars}` | auto-advance every N bars of four beats at the tempo instead of its seconds; 0 off | |
 | `fx_reset` | everything above back to normal but the tempo, sensitivity, transition and strobe settings | 0 |
 
 The engine draws them (`engine/src/fx.rs`): one **master pass** replaces the blit to the
-window and the mix between frames, so the bench and the output show the same thing. In
-order: mirror, punch zoom, the mix of the last two frames, the outgoing snapshot by the
-transition's share, hue, invert, brightness and punch, flash to white, then black. With
-nothing on it is a plain blit. Trails are a pass after comp, only while on. Speed and
-freeze are the render thread's (`bench.rs`); frozen, it still listens, so beats keep
-driving the strobe. Development: `VISUALS_FX='[{"kind":"mirror","mode":"quad"}, …]'` sends
+window, so the bench and the output show the same thing. In order: mirror, punch zoom,
+the outgoing snapshot by the transition's share, hue, invert, brightness and punch, flash
+to white, then black. With nothing on it is a plain blit. Trails are a pass after comp,
+only while on. Speed and freeze are the preset clock's (`bench.rs` passes the time × the
+speed to `Renderer::render`); frozen, the clock stands still and the thread still
+listens, so beats keep driving the strobe. Development: `VISUALS_FX='[{"kind":"mirror","mode":"quad"}, …]'` sends
 those actions 5 s after start (`VISUALS_FX_AFTER`), for checking effects in a capture.
 
 Not yet: auto-advance by bars is not aligned to the downbeat (it counts from the last
@@ -207,6 +207,79 @@ Not yet: MilkDrop's own blend patterns from one preset to the next (live mode cr
 see "Live effects"), mipmaps on the feedback and blur textures
 (Butterchurn samples them mipmapped), the song-title text, and per-pass GPU timings. The side-by-side harness is the app's
 compare view (below, "Live mode, as built").
+
+## The preset clock
+
+MilkDrop presets move by a fixed amount per *frame*: zoom, rotation, the warp mesh, decay
+and the feedback itself compound once a frame, so the frame rate is a preset's speed.
+Winamp's MilkDrop 2 caps it at **30** by default (`m_max_fps_fs`, `m_max_fps_dm`,
+`m_max_fps_w` in `vis_milk2/pluginshell.cpp`), which is the pace the presets were written
+and are remembered at. The engine used to pin presets to 60, so everything ran twice that,
+and slowing it down meant making fewer frames and mixing the last two.
+
+Now the preset's clock and the picture's are separate (`runtime::PRESET_RATE`,
+`Renderer::render(audio, seconds)`):
+
+- **A step is MilkDrop's frame.** The preset advances `speed × 30 × dt` steps a refresh,
+  fractional. Each whole step runs the per-frame and per-vertex equations once (their
+  state accumulates per step, as in MilkDrop), the clock ticks 1/30 s of preset time (the
+  preset's `time`, `frame` and `fps`, which reads 30), the audio levels move on once, and
+  the feedback is fed back once: warp, blur, motion vectors, shapes, waves, borders. That
+  loop never sees the refresh rate, so **a second of a preset is the same picture, to the
+  bit, at 30, 60, 120 or 144 Hz**, and speed is a plain scale on it
+  (`render::tests::a_second_is_thirty_steps_at_any_refresh_rate`,
+  `speed_scales_the_preset_clock`). Decay, trails' density and brightness, zoom and
+  rotation per second are the step loop's, so none of them depends on the display.
+- **The picture is drawn at every refresh.** A refresh between steps draws, and never
+  feeds back, the last step's feedback carried `f` of the way into the next step (`show`):
+  1. the next step's warp mesh at fraction `f` (`runtime::Mesh::uvs`): each vertex's
+     zoom and stretch to the power `f`, its rotation, translation and warp wobble times
+     `f`, so the parts compose back to the whole — two half steps land within a quarter
+     pixel of a whole one at 512 px on a preset that moves ~10 px a step
+     (`runtime::tests::parts_of_a_step_compose_to_the_whole`);
+  2. the preset's warp shader on that mesh, mixed over the plainly moved picture by `f`
+     (a blend constant), so its colour work (decay, sharpening, `ret -= 0.004`…) comes in
+     in proportion;
+  3. its own blur of that picture, then the next step's drawing with its alpha × `f`;
+  4. comp, at the next step's uniforms.
+
+  Each part reaches the step's own picture as `f` reaches 1, so motion is continuous and
+  a step lands without a jump (`between_steps_the_picture_moves_on_without_a_jump`).
+- **The latency is one step at most.** To draw towards the next step its equations run at
+  the first refresh after the step before, with the audio then. At a refresh landing on a
+  step (30 Hz, or the harness) that is exactly MilkDrop's order; at 120 Hz a step's
+  equations hear the audio up to 1/30 s × 1/speed before it is fed back.
+- **Why not feed back every refresh, a fraction at a time?** Tried on paper and rejected:
+  the feedback is 8-bit, as Butterchurn's is, and a fractional decay rounds back to where
+  it was (`x × 0.98^¼` loses under half a level below `x ≈ 100`), so trails would stop
+  fading at 120 Hz; every pass also resamples the picture bilinearly, so four passes a
+  step blur it four times; and a warp shader's own colour work compounds per pass in ways
+  a fraction can't undo. Feeding back once a step keeps all of that MilkDrop's.
+
+What can't be split exactly, so is approximate between steps only (the steps themselves
+are exact):
+
+- **A warp shader that moves the picture itself** (`uv += …`, sampling at an offset) moves
+  it the whole way at every refresh, mixed in by `f`: between steps that reads as a
+  cross-fade to the next position rather than a slide. The mesh's own motion slides.
+- **Colour work is mixed linearly**: a decay `d` shows as `1 − f(1 − d)` between steps
+  rather than `d^f` (at `d = 0.98`, `f = ½`: 0.9900 against 0.98995).
+- **Waves, shapes and motion vectors** are drawn where the next step puts them, faded in
+  by `f`, not slid there: their equations run once a step and their points can't be
+  interpolated in general. They change position 30 times a second, as in Winamp.
+- **Comp's blur** between steps is of the picture between; the warp shader still reads the
+  last step's blur, as the next step's warp will.
+- **Speed above 1× on a slow display** makes several steps in one refresh, each fed back;
+  only the last is shown.
+
+Measured with the harness (below) on its default 30 presets, 240 frames: before, both
+engines at 60 frames a second, the mean score was 75.9; now, Butterchurn at 30 and ours at
+`--refresh 30`, `60` and `120`, it is **74.5 at all three, preset for preset** — the
+captures land on steps, and the steps don't depend on the refresh rate, so the pace is
+Butterchurn's at any display rate. The 1.4 points against before are the clock, not the
+drawing: at 30 the same 240 frames cover 8 s of the track instead of 4, and the
+strongly chaotic presets move both ways (±12). The harness can't score the pictures between
+steps, which have no reference; the unit tests bound them.
 
 ## Performance: 60 fps at 4K
 
@@ -345,6 +418,7 @@ by it.
     npm run compare                          # 30 presets spread over the pack's folders
     npm run compare -- --sample 60 --frames 300 --captures 4 --size 960x540
     npm run compare -- cream-of-the-crop/Geometric/Cube  path/to/one.milk
+    npm run compare -- --refresh 120         # ours drawn at 120 Hz, four pictures a step
     npm run compare -- --serve               # reopen the last report to approve
 
 `harness/compare.ts` renders each preset twice from the same inputs: Butterchurn 2.6.7 in
@@ -357,8 +431,12 @@ renders every preset on one device. Both run at once.
   differ) turned into the three 1024-byte windows Butterchurn reads per frame. Butterchurn
   gets them through `render({audioLevels})`, ours through `Audio::update_bytes`: the same
   bytes, frame for frame.
-- **Time.** A fixed 1/60 s step from a fresh renderer, so both clocks and fps estimates
-  start equal.
+- **Time.** A fresh renderer on both, so both clocks and fps estimates start equal.
+  Butterchurn makes one frame per preset step, 1/30 s apart ("The preset clock"), and
+  the audio moves on 1470 samples a step. Ours draws `--refresh` pictures a second (60
+  by default; 30 is one per step, as Butterchurn draws), feeding back once a step, and is
+  captured at the refreshes that land on Butterchurn's frames. A step's equations hear
+  the window of Butterchurn's frame for that step.
 - **Randomness.** The page's `Math.random` is the engine's xorshift64*. It is seeded with
   the engine's noise seed (`0x5eed`) before the visualizer is made, so the noise textures
   come from the same stream, and with the preset seed as the preset loads, so

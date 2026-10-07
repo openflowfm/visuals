@@ -13,7 +13,7 @@ export type Sync = 'tempo' | 'audio';
  * release. Values are clamped by the app.
  */
 export type FxAction =
-  | { kind: 'speed'; speed: number } // 0.25–2, 1 normal
+  | { kind: 'speed'; speed: number } // 0.25–4: a scale on the preset clock, 1 normal
   | { kind: 'freeze'; on: boolean | null }
   | { kind: 'transition'; seconds: number } // 0–10, 0 a hard cut
   | { kind: 'strobe'; on: boolean | null }
@@ -30,7 +30,7 @@ export type FxAction =
   | { kind: 'invert'; on: boolean | null }
   | { kind: 'mirror'; mode: Mirror | null } // null steps off → x → y → quad
   | { kind: 'trails'; value: number } // 0–1, 0 off
-  | { kind: 'sensitivity'; value: number } // 0.25–4, gain on what the presets hear
+  | { kind: 'sensitivity'; value: number } // 0.25–4, gain on what the presets hear, 1 as heard
   | { kind: 'tap' }
   | { kind: 'bpm'; bpm: number } // 40–240
   | { kind: 'hold'; on: boolean | null }
@@ -99,6 +99,37 @@ export function effectKey(key: string, shift: boolean): KeyPress | null {
     default:
       return null;
   }
+}
+
+/**
+ * The speed and sensitivity sliders run on a log taper: the position is the
+ * multiplier's log2, from −2 (¼×) to 2 (4×), so 1× is the centre and every
+ * doubling is the same distance. What is sent stays the plain multiplier.
+ */
+export const MULTIPLIER_MIN = 0.25;
+export const MULTIPLIER_MAX = 4;
+export const POSITION_MIN = Math.log2(MULTIPLIER_MIN);
+export const POSITION_MAX = Math.log2(MULTIPLIER_MAX);
+/** Positions this close to the centre land on exactly 1×. */
+export const CENTRE_SNAP = 0.06;
+
+/** A multiplier's place on the slider, −2 to 2; out of range clamps, NaN is the centre. */
+export function multiplierToPosition(multiplier: number): number {
+  if (Number.isNaN(multiplier) || multiplier <= 0) return Number.isNaN(multiplier) ? 0 : POSITION_MIN;
+  return Math.max(POSITION_MIN, Math.min(POSITION_MAX, Math.log2(multiplier)));
+}
+
+/** The multiplier at a slider position, ¼× to 4×; near the centre it is exactly 1. */
+export function positionToMultiplier(position: number): number {
+  if (Number.isNaN(position)) return 1;
+  const p = Math.max(POSITION_MIN, Math.min(POSITION_MAX, position));
+  return Math.abs(p) < CENTRE_SNAP ? 1 : 2 ** p;
+}
+
+/** A multiplier as the panel shows it: `0.25×`, `0.5×`, `1×`, `2.8×`. */
+export function formatMultiplier(multiplier: number): string {
+  const digits = multiplier < 1 ? 2 : 1;
+  return `${Number(multiplier.toFixed(digits))}×`;
 }
 
 export const act = (action: FxAction) => invoke<void>('act', { action });

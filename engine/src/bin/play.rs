@@ -254,12 +254,8 @@ impl ApplicationHandler for App {
                 _ => {}
             },
             WindowEvent::RedrawRequested => {
-                // At the preset rate, not the display's (`runtime::FRAME_RATE`).
-                let frame = 1.0 / engine::runtime::FRAME_RATE;
-                let early = frame - self.last.elapsed().as_secs_f64();
-                if early > 0.0 {
-                    std::thread::sleep(std::time::Duration::from_secs_f64(early));
-                }
+                // Every refresh is drawn; the preset moves at its own rate
+                // (`runtime::PRESET_RATE`) whatever the display's.
                 let now = Instant::now();
                 let elapsed = now.duration_since(self.last).as_secs_f64().clamp(0.001, 0.25);
                 self.last = now;
