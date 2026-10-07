@@ -33,7 +33,7 @@ export interface ReportPreset {
 
 export interface Report {
   generated: string;
-  settings: { width: number; height: number; frames: number; dt: number; seed: string; captures: number[]; presetsRoot: string };
+  settings: { width: number; height: number; frames: number; dt: number; refresh?: number; seed: string; captures: number[]; presetsRoot: string };
   weights: Record<string, number>;
   approvalsFile: string;
   presets: ReportPreset[];

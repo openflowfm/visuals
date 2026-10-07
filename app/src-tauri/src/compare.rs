@@ -228,7 +228,7 @@ pub fn compare_audio(app: State<App>) -> tauri::ipc::Response {
 
 pub fn levels(rate: f32, left: &[f32], right: &[f32]) -> Vec<u8> {
     const N: usize = crate::listen::WINDOW;
-    let byte = |v: f32| (128.0 + v.clamp(-1.0, 1.0) * 127.0).round().clamp(0.0, 255.0) as u8;
+    let byte = engine::audio::to_byte;
     let mut out = vec![128u8; 4 + 3 * N];
     out[..4].copy_from_slice(&rate.to_le_bytes());
     let n = left.len().min(right.len()).min(N);
@@ -380,12 +380,13 @@ mod tests {
         assert_eq!(out.len(), 4 + 3 * 1024);
         assert_eq!(f32::from_le_bytes(out[..4].try_into().unwrap()), 48_000.0);
         // The newest sample is last in each window.
-        assert_eq!(out[4 + 1023], (128.0f32 + 0.5 * 127.0).round() as u8);
+        // As a browser's AnalyserNode makes them: 128 × (v + 1), truncated.
+        assert_eq!(out[4 + 1023], 192);
         assert_eq!(out[4 + 1024 + 1023], 128);
         assert_eq!(out[4 + 2048 + 1023], 255);
         // A short ring is padded with silence at the start.
         let short = levels(0.0, &[1.0], &[-1.0]);
-        assert_eq!((short[4 + 1024], short[4 + 1024 + 1023], short[4 + 2048 + 1023]), (128, 255, 1));
+        assert_eq!((short[4 + 1024], short[4 + 1024 + 1023], short[4 + 2048 + 1023]), (128, 255, 0));
     }
 
     #[test]
