@@ -110,10 +110,81 @@ live mode (with `VISUALS_PRESET`, on that preset), `VISUALS_DISPLAY=<n>` sends t
 to display `n` (from 0, the system's order), and `VISUALS_CAPTURE_OUTPUT=<png>` saves the
 output window beside `VISUALS_CAPTURE`'s main window.
 
+**Link and the one.** `link.rs` is an Ableton Link peer (the `rusty_link` crate: the
+official Link SDK through its C wrapper, built with cmake), the port of the old engine's
+clock (`server/link.ts`, [the clock](clock.md), [the wheel](wheel.md)) with its rules kept.
+**Visuals follow; they never drive**: the session state is only captured, never committed,
+so nothing can set the tempo, the beat or the transport. Link is on at startup
+(`VISUALS_LINK=0` starts it off) with start/stop sync listening, quantum 4. Bars are counted
+from **the one**, a Link beat the app holds (Link's beat has no bar 1): *set one* takes the
+nearest bar line by Link's *phase* (the coming one past half a bar), *nudge* moves it a beat
+either way, *reset* puts it back on Link's own lines (beat 0). A Link transport start takes
+the one from the bar line the music starts on (at or after the start time, as `show.ts`
+waits for the phase to drop); the first read never counts, because a peer joining a session
+already playing is not told so, and `playing` reads false until the next start or stop.
+
+Preset changes on the beat: every 1 or 2 beats or 1–32 bars from the one, through
+`actions::dispatch(Next)` (the playing playlist's next, or the library's). The scheduler
+turns the next boundary's beat into Link's host time (`time_at_beat`) and sleeps to it, so a
+change lands on the line; a boundary missed (a long load, the machine asleep) is skipped,
+never made late. With no peers Link runs its own timeline at the last tempo, and the changes
+carry on at that; Link off only leaves the network. Turning changes on turns time-based
+auto-advance off. Not yet: the next preset is loaded *at* the boundary, so a slow compile
+shows late — preloading it a beat early is the follow-up.
+
+Commands: `link_state`, `link_enable {on}`, `link_set_one`, `link_nudge {beats}`,
+`link_reset_one`, `link_sync {every, unit: "bars" | "beats"}` (0 is off), each returning the
+frame; the `link` event carries it ten times a second (tempo, peers, playing, beat, phase,
+one, bar, beatInBar, barPhase, every, next, at). The page's panel is `app/src/LinkPanel.tsx`.
+Development: `VISUALS_LINK_EVERY=<bars>` starts with changes on, `VISUALS_LINK_LOG=1` prints
+the frame every second and each change's beat.
+
 Not yet: one output only (no mirroring to several displays); the presets still draw at
 `bench::DRAW` (1920×1080) and are scaled to the display, so a 4K projector gets an
-upscaled picture; the cursor is not hidden over the output; on a single display the
-output covers the editor window, and only the keys (⌘⇧L) get back out.
+upscaled picture; on a single display the output covers the editor window, and only the
+keys (⌘⇧L) get back out. The mouse cursor is hidden while it is over the output (a check
+ten times a second on the main thread, as the output never becomes the key window; macOS
+only hides it while the app is the active one).
+
+**Live effects.** In live mode the page is a performance panel: big hits, a tempo, and
+controls for the picture and time. Every effect is an `actions::Action` like `next`, sent
+through `act` and `actions::dispatch`, so a MIDI mapping reaches them the same way; `on:
+null` toggles, and momentary hits are `on: true` while held and `on: false` on release.
+The state is `fx.rs` (`Fx`), shared with the render thread and sent to the page as the
+`fx` event (`fx_state` to start). Values are clamped; nothing but the tempo is kept across
+restarts (`~/.openflow/visuals/tempo.json`). Leaving live mode puts every picture and time
+effect back to normal (`fx_reset`), keeping the tempo, sensitivity and settings.
+
+| action | does | key |
+|---|---|---|
+| `speed {speed}` | frames are made at 60 × speed (0.25–2); each still moves the preset's clock one frame, and the mixing between frames keeps slow motion fluid | |
+| `freeze {on}` | no frames are made, the picture holds; let go, it comes back up to speed over 0.4 s | F (hold), ⇧F latches |
+| `transition {seconds}` | while the output is open, a new preset crossfades from a snapshot of the last one's picture over 0–10 s (2 by default; 0 cuts) | |
+| `strobe {on}`, `strobe_rate {rate}`, `strobe_intensity {value}`, `strobe_style {style}` | flashes on the beat, 0.25–4 a beat: `white` over the picture, or `black` between flashes so the picture itself strobes | S (hold), ⇧S latches |
+| `sync {source}` | what strobe and punch-on-beat follow: `tempo` or `audio` (beats heard in the bass: `bass` over 1.3 and 15% over `bass_att`, rising, at least 0.22 s apart) | |
+| `blackout {on}`, `blackout_fade {seconds}` | to black and back, at once or over 0–10 s; a fade turned round mid-way goes back from where it is | B |
+| `punch {on}`, `punch_on_beat {on}` | a kick: 12% zoom and 35% brighter, held while pressed and dying away over 0.15 s; on every beat too | P (hold) |
+| `brightness {value}`, `hue {value}`, `invert {on}`, `mirror {mode}` | 0–2 ×; a hue turn 0–1; invert; `off`, `x`, `y`, `quad` (null steps through) | I, M |
+| `trails {value}` | an echo on the finished picture, per made frame: max(new, before × k), k 0.75–0.98 | |
+| `sensitivity {value}` | a gain of 0.25–4 on the samples the presets hear (waves and spectrum; `bass`/`mid`/`treb` are relative to their own average and settle back) | |
+| `tap`, `bpm {bpm}` | the tempo: the mean gap of the last taps (a 2 s pause starts afresh), the beat on the last tap; or typed, 40–240 | T |
+| `hold {on}` | locks the preset: next, previous, random, go, load and auto-advance do nothing (the page says so) | H |
+| `bars {bars}` | auto-advance every N bars of four beats at the tempo instead of its seconds; 0 off | |
+| `fx_reset` | everything above back to normal but the tempo, sensitivity, transition and strobe settings | 0 |
+
+The engine draws them (`engine/src/fx.rs`): one **master pass** replaces the blit to the
+window and the mix between frames, so the bench and the output show the same thing. In
+order: mirror, punch zoom, the mix of the last two frames, the outgoing snapshot by the
+transition's share, hue, invert, brightness and punch, flash to white, then black. With
+nothing on it is a plain blit. Trails are a pass after comp, only while on. Speed and
+freeze are the render thread's (`bench.rs`); frozen, it still listens, so beats keep
+driving the strobe. Development: `VISUALS_FX='[{"kind":"mirror","mode":"quad"}, …]'` sends
+those actions 5 s after start (`VISUALS_FX_AFTER`), for checking effects in a capture.
+
+Not yet: auto-advance by bars is not aligned to the downbeat (it counts from the last
+change); a transition started during another snapshots the incoming preset alone, not the
+mix on screen; trails are an echo of the picture, not a change to the preset's own decay
+(most presets' warp shaders never read `decay`).
 
 | module | is |
 |---|---|
@@ -132,7 +203,8 @@ mismatches D3D9 truncated silently, user functions called with the wrong vector 
 functions missing a `return`, one naga bug in a helper — and 6 have equations too garbled
 to parse (an undefined `_aboeq()`, `0 = …`, stray prose).
 
-Not yet: blending from one preset to the next, mipmaps on the feedback and blur textures
+Not yet: MilkDrop's own blend patterns from one preset to the next (live mode crossfades,
+see "Live effects"), mipmaps on the feedback and blur textures
 (Butterchurn samples them mipmapped), the song-title text, and per-pass GPU timings. The side-by-side harness is the app's
 compare view (below, "Live mode, as built").
 
