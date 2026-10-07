@@ -11,7 +11,7 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from 'remotion';
-import { BAR, BARS, BEAT, bar, beat, beatPhase, FPS, kick, LENGTH, SECTIONS, sectionAt } from './timing';
+import { BAR, BARS, BEAT, bar, beat, beatPhase, DROP_CUTS, FPS, kick, LENGTH, SECTIONS, sectionAt } from './timing';
 
 const { fontFamily: sans } = loadSans('normal', { weights: ['500', '700'], subsets: ['latin'] });
 const { fontFamily: mono } = loadMono('normal', { weights: ['400', '700'], subsets: ['latin'] });
@@ -42,11 +42,13 @@ const Footage = () => {
   const half = beat(0.5);
   const dim = interpolate(frame, [b0 - half, b0 + half, b1 - beat(1), b1], [0, 1, 1, 0], clamp);
   const pulse = section === 'drop' ? 0.04 : section === 'facts' ? 0.015 : 0;
-  // Hidden behind the 2001 window, then bursting in as the window blows up to fill the screen.
+  // Hidden behind the 2001 window until it has grown to fill the frame, then the same
+  // preset in HD on the downbeat.
   const i0 = bar(SECTIONS.intro[0]);
-  const open = interpolate(frame, [i0 - beat(0.5), i0 + beat(0.25)], [0, 1], clamp);
+  const open = interpolate(frame, [i0 - beat(0.25), i0 + beat(0.125)], [0, 1], clamp);
   const close = interpolate(frame, [LENGTH - beat(2), LENGTH], [1, 0], clamp);
-  const outro = interpolate(frame, [bar(SECTIONS.outro[0]), bar(SECTIONS.outro[0] + 0.5)], [1, 0.55], clamp);
+  // Darker under the name, so its lines read over a bright preset.
+  const outro = interpolate(frame, [bar(SECTIONS.outro[0]), bar(SECTIONS.outro[0] + 0.5)], [1, 0.32], clamp);
   return (
     <AbsoluteFill style={{ backgroundColor: 'black' }}>
       <OffthreadVideo
@@ -65,12 +67,13 @@ const Footage = () => {
   );
 };
 
-/** White on the drop, and a glint on each preset change under the facts. */
+/** White on the burst and the drop, and a glint on each preset change after them. */
 const Flash = () => {
   const frame = useCurrentFrame();
   const since = (at: number) => (frame >= at ? Math.exp(-(frame - at) / 10) : 0);
   let v = Math.max(since(bar(SECTIONS.drop[0])), 0.6 * since(bar(SECTIONS.intro[0])));
   for (let b = SECTIONS.facts[0] + 1; b < SECTIONS.facts[1]; b++) v = Math.max(v, 0.12 * since(bar(b)));
+  for (const b of DROP_CUTS.slice(1)) v = Math.max(v, 0.2 * since(bar(b)));
   return <AbsoluteFill style={{ backgroundColor: 'white', opacity: v, mixBlendMode: 'screen' }} />;
 };
 
@@ -94,39 +97,51 @@ const Center = ({ children, style, scrim = 0 }: { children: ReactNode; style?: C
  */
 const Origin = () => {
   const frame = useCurrentFrame();
-  const { u } = useUnit();
+  const { width, height } = useVideoConfig();
+  const { u, vertical } = useUnit();
   const end = bar(SECTIONS.origin[1]);
   if (frame >= end + beat(0.5)) return null;
+  const growFrom = bar(SECTIONS.origin[1] - 1);
   const boot = spring({ frame, fps: FPS, config: { damping: 16, stiffness: 120 } });
-  const year = rise(frame, beat(1));
-  const line = rise(frame, bar(1));
-  // On the downbeat the window blows up past the edges of the frame and the HD picture takes over.
-  const burst = interpolate(frame, [end - beat(0.5), end + beat(0.5)], [0, 1], {
+  // Then: the year and what it was, either side of the little window.
+  const then = interpolate(frame, [growFrom - beat(0.75), growFrom], [1, 0], clamp);
+  const year = rise(frame, beat(1)) * then;
+  const line = rise(frame, bar(1)) * then;
+  // Now: over the last bar the window grows until its picture fills the frame, the desktop
+  // goes dark, and on the downbeat the same preset turns from pixels into HD.
+  const cover = Math.max(width / (768 * u), height / (576 * u)) * 1.04;
+  const grow = interpolate(frame, [growFrom, end - beat(0.25)], [0, 1], {
     ...clamp,
-    easing: Easing.in(Easing.cubic),
+    easing: Easing.inOut(Easing.cubic),
   });
-  const text = interpolate(frame, [end - beat(1), end - beat(0.25)], [1, 0], clamp);
+  const later = rise(frame, growFrom + beat(0.5)) * interpolate(frame, [end - beat(0.5), end], [1, 0], clamp);
+  const gone = interpolate(frame, [end - beat(0.125), end + beat(0.25)], [0, 1], clamp);
   const bevel = (light: string, dark: string) =>
     `inset ${2 * u}px ${2 * u}px 0 ${light}, inset -${2 * u}px -${2 * u}px 0 ${dark}`;
+  const caption = (v: number, text: string, style: CSSProperties) => (
+    <div
+      style={{
+        position: 'absolute',
+        width: '100%',
+        textAlign: 'center',
+        color: 'white',
+        opacity: v,
+        textShadow: SHADOW,
+        ...style,
+      }}
+    >
+      {text}
+    </div>
+  );
   return (
-    <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', gap: 36 * u }}>
+    <AbsoluteFill>
+      {/* A 2001 desktop: flat teal, going dark as the window takes over. */}
+      <AbsoluteFill style={{ backgroundColor: '#008080', opacity: boot * (1 - grow) * (1 - gone) }} />
+      <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center' }}>
       <div
         style={{
-          fontFamily: mono,
-          fontWeight: 700,
-          fontSize: 72 * u,
-          letterSpacing: 8 * u,
-          color: ACCENT,
-          opacity: year * text,
-          textShadow: SHADOW,
-        }}
-      >
-        2001
-      </div>
-      <div
-        style={{
-          opacity: boot * (1 - burst),
-          transform: `scale(${(0.9 + 0.1 * boot) * (1 + 3 * burst)})`,
+          opacity: boot * (1 - gone),
+          transform: `scale(${(0.9 + 0.1 * boot) * (1 + (cover - 1) * grow)})`,
           background: '#c0c0c0',
           padding: 4 * u,
           boxShadow: `${bevel('#ffffff', '#404040')}, 0 ${20 * u}px ${60 * u}px rgba(0,0,0,0.6)`,
@@ -174,20 +189,37 @@ const Origin = () => {
           style={{ display: 'block', width: 768 * u, height: 576 * u, imageRendering: 'pixelated' }}
         />
       </div>
-      <div
-        style={{
-          fontFamily: sans,
-          fontWeight: 700,
-          fontSize: 64 * u,
-          letterSpacing: -2 * u,
-          color: 'white',
-          opacity: line * text,
-          transform: `translateY(${(1 - line) * 20 * u}px)`,
-          textShadow: SHADOW,
-        }}
-      >
-        MilkDrop Lights Up Winamp
-      </div>
+      </AbsoluteFill>
+      {caption(year, '2001', {
+        top: (vertical ? 0.24 : 0.035) * height,
+        fontFamily: mono,
+        fontWeight: 700,
+        fontSize: 64 * u,
+        letterSpacing: 8 * u,
+      })}
+      {caption(line, 'MilkDrop Lights Up Winamp', {
+        bottom: (vertical ? 0.24 : 0.035) * height,
+        fontFamily: sans,
+        fontWeight: 700,
+        fontSize: 60 * u,
+        letterSpacing: -2 * u,
+      })}
+      <Center scrim={later}>
+        <div
+          style={{
+            fontFamily: sans,
+            fontWeight: 700,
+            fontSize: 120 * u,
+            letterSpacing: -3 * u,
+            color: 'white',
+            opacity: later,
+            transform: `scale(${1.08 - 0.08 * later})`,
+            textShadow: SHADOW,
+          }}
+        >
+          25 Years Later
+        </div>
+      </Center>
     </AbsoluteFill>
   );
 };
@@ -385,7 +417,8 @@ const BarCounter = () => {
 type Node = { id: string; label: string; sub: string; at: number };
 const NODES: Node[] = [
   { id: 'audio', label: 'Audio In', sub: 'any music', at: 1 },
-  { id: 'flow', label: 'visual[flow]', sub: 'the engine', at: 2.5 },
+  // Not the product's name yet: that is held back for the end.
+  { id: 'flow', label: 'MilkDrop', sub: 'rebuilt native', at: 2.5 },
   { id: 'out', label: 'Any Display', sub: 'full screen', at: 4.5 },
   { id: 'link', label: 'Ableton Link', sub: 'your whole rig', at: 7 },
 ];
@@ -501,7 +534,7 @@ const Diagram = () => {
               boxShadow: lit ? `0 0 ${40 * u}px ${ACCENT}55` : undefined,
             }}
           >
-            <div style={{ fontFamily: lit ? mono : sans, fontWeight: 700, fontSize: 44 * u, color: 'white' }}>
+            <div style={{ fontFamily: sans, fontWeight: 700, fontSize: 44 * u, color: 'white' }}>
               {n.label}
             </div>
             <div style={{ fontFamily: mono, fontSize: 20 * u, letterSpacing: 3 * u, color: 'rgba(255,255,255,0.65)' }}>
@@ -514,22 +547,33 @@ const Diagram = () => {
   );
 };
 
-/** The first bar of the drop. */
+/** The drop's first bar: SHOW on the one, TIME on the two, then the presets have the screen. */
 const Drop = () => {
   const frame = useCurrentFrame();
-  const { u } = useUnit();
+  const { u, vertical } = useUnit();
   const start = bar(SECTIONS.drop[0]);
-  const v = useShow(start, start + bar(1), beat(1));
+  const v = useShow(start, start + bar(1), beat(0.75));
   if (!v) return null;
-  const grow = interpolate(frame - start, [0, bar(1)], [1, 1.12], clamp);
+  const grow = interpolate(frame - start, [0, bar(1)], [1, 1.1], clamp);
+  const word = (text: string, at: number) => {
+    const pop = spring({ frame: frame - start - beat(at), fps: FPS, config: { damping: 11, stiffness: 260 } });
+    return (
+      <span style={{ display: 'inline-block', opacity: Math.min(1, pop * 2), transform: `scale(${1.6 - 0.6 * pop})` }}>
+        {text}
+      </span>
+    );
+  };
   return (
     <Center scrim={v}>
       <div
         style={{
+          display: 'flex',
+          flexDirection: vertical ? 'column' : 'row',
+          gap: (vertical ? 0 : 0.28) * 230 * u,
           fontFamily: sans,
           fontWeight: 700,
-          fontSize: 210 * u,
-          letterSpacing: -6 * u,
+          fontSize: 230 * u,
+          letterSpacing: -4 * u,
           lineHeight: 0.95,
           color: 'white',
           textShadow: SHADOW,
@@ -537,7 +581,8 @@ const Drop = () => {
           transform: `scale(${grow + 0.03 * kick(frame)})`,
         }}
       >
-        ON THE ONE.
+        {word('SHOW', 0)}
+        {word('TIME', 1)}
       </div>
     </Center>
   );

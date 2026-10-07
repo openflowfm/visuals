@@ -1,11 +1,11 @@
 // Everything in the teaser lands on the music's grid. The placeholder beat is
-// 128 bpm, 23 bars (43.1 s); a real track changes BPM, BARS and the sections below.
+// 128 bpm, 28 bars (52.5 s); a real track changes BPM, BARS and the sections below.
 
 export const FPS = 60;
 export const BPM = 128;
 export const BEAT = 60 / BPM; // seconds
 export const BAR = BEAT * 4;
-export const BARS = 23;
+export const BARS = 28;
 
 /** The frame at `bars` bars in. */
 export const bar = (bars: number) => Math.round(bars * BAR * FPS);
@@ -14,15 +14,20 @@ export const LENGTH = bar(BARS);
 
 /** The sections, in bars — the same lines as ../cuts.txt and the beat's arrangement. */
 export const SECTIONS = {
-  // 2001: MilkDrop in a little Winamp-era window, pad only.
-  origin: [0, 3],
-  intro: [3, 5],
+  // 2001: MilkDrop in a little Winamp-era window, pad only; it grows over the last bar.
+  origin: [0, 4],
+  intro: [4, 6],
   // Two facts of two bars, then three bars of Link.
-  facts: [5, 12],
-  breakdown: [12, 15],
-  drop: [15, 19],
-  outro: [19, 23],
+  facts: [6, 13],
+  breakdown: [13, 16],
+  // SHOW TIME, then presets: a bar each, a half-bar each for the last two.
+  drop: [16, 24],
+  // The name, held back until here.
+  outro: [24, 28],
 } as const;
+
+/** Where the drop's presets change, in bars — the same times as the drop in ../cuts.txt. */
+export const DROP_CUTS = [16, 17, 18, 19, 20, 21, 22, 22.5, 23, 23.5];
 
 export type Section = keyof typeof SECTIONS;
 
