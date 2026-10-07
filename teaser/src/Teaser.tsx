@@ -398,7 +398,7 @@ const Diagram = () => {
   const local = frame - start;
   const out = interpolate(frame, [end - beat(0.5), end], [1, 0], clamp);
   const pos: Record<string, [number, number]> = vertical
-    ? { audio: [0.5, 0.36], flow: [0.5, 0.53], out: [0.5, 0.7], link: [0.78, 0.62] }
+    ? { audio: [0.5, 0.36], flow: [0.5, 0.53], out: [0.5, 0.7], link: [0.8, 0.64] }
     : { audio: [0.17, 0.52], flow: [0.5, 0.52], out: [0.83, 0.52], link: [0.5, 0.8] };
   const at = (id: string) => [pos[id][0] * width, pos[id][1] * height] as const;
   const shown = (beats: number) =>
@@ -542,7 +542,7 @@ const Drop = () => {
 
 const Wordmark = () => {
   const frame = useCurrentFrame();
-  const { u } = useUnit();
+  const { u, vertical } = useUnit();
   const start = bar(SECTIONS.outro[0]);
   if (frame < start) return null;
   const word = 'visual[flow]';
@@ -554,7 +554,7 @@ const Wordmark = () => {
   const site = rise(frame, start + beat(8));
   return (
     <Center style={{ opacity: fade }} scrim={rise(frame, start)}>
-      <div style={{ display: 'flex', alignItems: 'baseline', fontSize: 170 * u, textShadow: SHADOW }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', fontSize: (vertical ? 136 : 170) * u, textShadow: SHADOW }}>
         {word.split('').map((ch, i) => {
           const v = spring({ frame: frame - start - i * 2, fps: FPS, config: { damping: 13, stiffness: 160 } });
           const bracket = i >= word.indexOf('[');
