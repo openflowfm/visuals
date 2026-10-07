@@ -9,7 +9,11 @@ import * as pl from './playlists.ts';
 import { StageGraph } from './StageGraph.tsx';
 import { setValue as setValueIn } from './stages.ts';
 import * as compareApi from './compare/api.ts';
-import { Header, type View } from './views.tsx';
+import { FrameRate, Header, Hints, NoticeView, NowPlaying, type View } from './views.tsx';
+import { Button } from '@openflow/widgets/controls/Button.tsx';
+import { Library } from './Library.tsx';
+import { searchLibrary } from './librarySearch.ts';
+import { noticeOf, type Notice } from './shell.ts';
 import { Live } from './Live.tsx';
 import * as output from './output.ts';
 
@@ -112,30 +116,29 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'compa
   const [report, setReport] = useState<Report | null>(null);
   // The stage open in the inspector, by id; null is the graph's own first choice.
   const [selected, setSelected] = useState<string | null>(null);
-  const [stats, setStats] = useState<api.Stats>({ fps: 0, cpu_ms: 0 });
-  const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [lists, setLists] = useState<pl.Lists | null>(null);
   const [tab, setTab] = useState(0);
   const [target, setTarget] = useState<string | null>(null);
   const bench = useRef<HTMLDivElement>(null);
   useBench(bench);
   const apply = useApply(setReport);
+  const fail = useCallback((what: string) => (e: unknown) => setNotice(noticeOf(what, e)), []);
+  const audioFailed = useMemo(() => fail('couldn’t read the audio input'), [fail]);
 
-  const shown = useMemo(() => {
-    const words = search.toLowerCase().split(/\s+/).filter(Boolean);
-    const hits = words.length ? library.filter((e) => words.every((w) => `${e.group} ${e.name}`.toLowerCase().includes(w))) : library;
-    return hits.slice(0, 400);
-  }, [library, search]);
+  const found = useMemo(() => searchLibrary(library, search), [library, search]);
+  const shown = found.shown;
 
   const load = useCallback(async (e: Entry) => {
     setCurrent(e);
-    setError(null);
+    setNotice(null);
     try {
       const opened = await api.open(e.path);
       setPreset(opened.preset);
       setReport(opened.report);
     } catch (err) {
-      setError(String(err));
+      setNotice(noticeOf(`couldn’t open “${e.name}”`, err));
     }
   }, []);
 
@@ -144,7 +147,7 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'compa
   const step = useCallback(
     (by: number) => {
       if (playing) {
-        pl.act({ kind: by === 0 ? 'random' : by > 0 ? 'next' : 'previous' }).catch((e) => setError(String(e)));
+        pl.act({ kind: by === 0 ? 'random' : by > 0 ? 'next' : 'previous' }).catch(fail('couldn’t step the playlist'));
         return;
       }
       const list = shown.length ? shown : library;
@@ -153,7 +156,7 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'compa
       const next = by === 0 ? Math.floor(Math.random() * list.length) : (at + by + list.length) % list.length;
       load(list[next]);
     },
-    [playing, shown, library, current, load],
+    [playing, shown, library, current, load, fail],
   );
 
   // Whatever changed the preset live (a playlist step, auto-advance, a controller),
@@ -161,7 +164,7 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'compa
   const libraryRef = useRef(library);
   libraryRef.current = library;
   useEffect(() => {
-    pl.lists().then(setLists, (e) => setError(String(e)));
+    pl.lists().then(setLists, fail('couldn’t read the playlists'));
     const off = pl.onLive((now) => {
       setLists((l) => (l ? { ...l, deck: now.deck } : l));
       if (!now.path) return;
@@ -169,7 +172,7 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'compa
       const known = libraryRef.current.find((e) => e.path === path);
       const name = path.split('/').pop()?.replace(/\.milk$/i, '') ?? path;
       setCurrent(known ?? { path, name, group: '' });
-      setError(now.error);
+      setNotice(now.error ? noticeOf(`couldn’t open “${known?.name ?? name}”`, now.error) : null);
       if (now.opened) {
         setPreset(now.opened.preset);
         setReport(now.opened.report);
@@ -178,25 +181,31 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'compa
     return () => {
       off.then((f) => f());
     };
-  }, []);
+  }, [fail]);
 
   // The playlist the library's + adds to: the one picked in the panel, or the one playing.
   const into = lists?.playlists.find((p) => p.id === (target ?? playing)) ?? null;
 
   useEffect(() => {
-    api.presets().then((l) => {
-      setLibrary(l);
-      const first = start ? (l.find((e) => e.path === start) ?? { path: start, name: start.split('/').pop()!.replace(/\.milk$/i, ''), group: '' }) : null;
-      if (first) load(first);
-      else if (l.length) load(l[Math.floor(Math.random() * l.length)]);
-    });
-    const t = window.setInterval(() => api.stats().then(setStats), 1000);
-    return () => window.clearInterval(t);
-  }, [load]);
+    api.presets().then(
+      (l) => {
+        setLibrary(l);
+        setLoaded(true);
+        const first = start ? (l.find((e) => e.path === start) ?? { path: start, name: start.split('/').pop()!.replace(/\.milk$/i, ''), group: '' }) : null;
+        if (first) load(first);
+        else if (l.length) load(l[Math.floor(Math.random() * l.length)]);
+      },
+      (e) => {
+        setLoaded(true);
+        fail('couldn’t read the preset folder')(e);
+      },
+    );
+  }, [load, fail]);
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).closest('input, textarea, select')) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if ((e.target as HTMLElement).closest('input, textarea, select, [role="combobox"]')) return;
       if (e.key === 'ArrowRight') step(1);
       else if (e.key === 'ArrowLeft') step(-1);
       else if (e.key.toLowerCase() === 'r') step(0);
@@ -245,51 +254,37 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'compa
   return (
     <div className="app">
       <Header view="editor" onChange={(view) => view !== 'editor' && onMode(view, current?.path ?? null)}>
-        <button onClick={() => step(-1)} title="previous (←)">◀</button>
-        <button onClick={() => step(1)} title="next (→)">▶</button>
-        <button onClick={() => step(0)} title="random (R)">random</button>
-        <span className="name">
-          {current ? (
-            <>
-              <i>{current.group}</i> {current.name}
-            </>
-          ) : (
-            'no preset'
-          )}
-        </span>
-        {error && <span className="problem">{error}</span>}
-        <span className="fill" />
-        <AudioInput onError={setError} />
-        <span className="stats">
-          {stats.fps.toFixed(0)} fps · {stats.cpu_ms.toFixed(2)} ms cpu
-        </span>
+        <div className="wdg wdg-control-group vf-transport" role="group" aria-label="presets">
+          <Button onPress={() => step(-1)} label="previous preset" title="previous preset (←)" hint={`previous preset${playing ? ' in the playlist' : ''} (←)`}>
+            ◀
+          </Button>
+          <Button onPress={() => step(1)} label="next preset" title="next preset (→)" hint={`next preset${playing ? ' in the playlist' : ''} (→)`}>
+            ▶
+          </Button>
+          <Button onPress={() => step(0)} label="random preset" title="random preset (R)">
+            random
+          </Button>
+        </div>
+        <NowPlaying group={current?.group} name={current?.name} empty={loaded && !library.length ? 'no presets yet' : 'no preset'} />
+        <NoticeView notice={notice} onDismiss={() => setNotice(null)} />
+        <span className="vf-fill" />
+        <AudioInput onError={audioFailed} />
+        <FrameRate />
       </Header>
       <aside className="library">
         <Segmented className="library-tabs" items={['library', 'playlists']} index={tab} onChange={setTab} label="library or playlists" />
         {tab === 0 ? (
-          <>
-            <input placeholder={`search ${library.length} presets`} value={search} onChange={(e) => setSearch(e.target.value)} />
-            <ul>
-              {shown.map((e) => (
-                <li key={e.path} data-current={current?.path === e.path ? '' : undefined} onClick={() => load(e)}>
-                  <span>{e.name}</span>
-                  <i>{e.group}</i>
-                  {into && (
-                    <button
-                      className="library-add"
-                      title={`add to ${into.name}`}
-                      onClick={(ev) => {
-                        ev.stopPropagation();
-                        pl.add(into.id, e.path).then(setLists, (err) => setError(String(err)));
-                      }}
-                    >
-                      +
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </>
+          <Library
+            entries={library}
+            loaded={loaded}
+            search={search}
+            onSearch={setSearch}
+            found={found}
+            current={current?.path ?? null}
+            into={into}
+            onLoad={load}
+            onAdd={(e) => into && pl.add(into.id, e.path).then(setLists, fail(`couldn’t add “${e.name}” to ${into.name}`))}
+          />
         ) : (
           lists && (
             <Playlists
@@ -298,7 +293,7 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'compa
               selected={target ?? playing ?? lists.playlists[0]?.id ?? null}
               onSelect={setTarget}
               onLists={setLists}
-              onError={setError}
+              onError={fail('the playlist change didn’t go through')}
             />
           )
         )}
@@ -312,6 +307,7 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'compa
         </div>
       </main>
       <aside className="side">{preset && <Inspector preset={preset} selected={selected} problems={problems} onChange={edit} onSet={set} />}</aside>
+      <Hints />
     </div>
   );
 }

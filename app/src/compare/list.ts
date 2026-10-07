@@ -31,6 +31,16 @@ export function step(list: Listed[], current: string | null, by: number): Listed
   return list[(((at + by) % list.length) + list.length) % list.length];
 }
 
+/** `path` with the home directory (`/Users/<name>` or `/home/<name>`) written `~`. */
+export function tilde(path: string): string {
+  return path.replace(/^\/(?:Users|home)\/[^/]+(?=\/|$)/, '~');
+}
+
+/** The last part of `path`, for saying which file without saying where it is. */
+export function basename(path: string): string {
+  return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+}
+
 /** At most `size` rows to draw around `at`, so a pack of thousands stays quick. */
 export function windowAround(length: number, at: number, size: number): [number, number] {
   if (length <= size) return [0, length];
