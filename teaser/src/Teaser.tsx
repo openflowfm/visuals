@@ -11,7 +11,7 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from 'remotion';
-import { BAR, BARS, BEAT, bar, beat, beatPhase, DROP_CUTS, FPS, kick, LENGTH, SECTIONS, sectionAt } from './timing';
+import { bar, beat, beatPhase, DROP_CUTS, FPS, kick, LENGTH, SECTIONS, sectionAt } from './timing';
 
 const { fontFamily: sans } = loadSans('normal', { weights: ['500', '700'], subsets: ['latin'] });
 const { fontFamily: mono } = loadMono('normal', { weights: ['400', '700'], subsets: ['latin'] });
@@ -373,50 +373,6 @@ const Fact = ({ index }: { index: number }) => {
   );
 };
 
-/** Which bar and beat we are on: the proof that it is all on the grid. */
-const BarCounter = () => {
-  const frame = useCurrentFrame();
-  const { u } = useUnit();
-  const section = sectionAt(frame);
-  if (section !== 'facts' && section !== 'drop') return null;
-  const t = frame / FPS;
-  const n = Math.floor(t / BAR) + 1;
-  const b = Math.min(3, Math.floor((t % BAR) / BEAT));
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        left: 64 * u,
-        bottom: 56 * u,
-        fontFamily: mono,
-        fontSize: 26 * u,
-        letterSpacing: 4 * u,
-        color: 'white',
-        textShadow: SHADOW,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 20 * u,
-      }}
-    >
-      <span>
-        BAR {String(n).padStart(2, '0')} / {BARS}
-      </span>
-      {[0, 1, 2, 3].map((i) => (
-        <span
-          key={i}
-          style={{
-            width: 14 * u,
-            height: 14 * u,
-            borderRadius: '50%',
-            background: i === b ? ACCENT : 'rgba(255,255,255,0.3)',
-            transform: `scale(${i === b ? 1 + 0.5 * (1 - beatPhase(frame)) : 1})`,
-          }}
-        />
-      ))}
-    </div>
-  );
-};
-
 type Node = { id: string; label: string; sub: string; at: number };
 const NODES: Node[] = [
   { id: 'audio', label: 'Audio In', sub: 'any music', at: 1 },
@@ -550,22 +506,15 @@ const Diagram = () => {
   );
 };
 
-/** The drop's first bar: SHOW on the one, TIME on the two, then the presets have the screen. */
+/** The drop's first bar: SHOW TIME slams in on the one, then the presets have the screen. */
 const Drop = () => {
   const frame = useCurrentFrame();
   const { u, vertical } = useUnit();
   const start = bar(SECTIONS.drop[0]);
   const v = useShow(start, start + bar(1), beat(0.75));
   if (!v) return null;
+  const pop = spring({ frame: frame - start, fps: FPS, config: { damping: 11, stiffness: 260 } });
   const grow = interpolate(frame - start, [0, bar(1)], [1, 1.1], clamp);
-  const word = (text: string, at: number) => {
-    const pop = spring({ frame: frame - start - beat(at), fps: FPS, config: { damping: 11, stiffness: 260 } });
-    return (
-      <span style={{ display: 'inline-block', opacity: Math.min(1, pop * 2), transform: `scale(${1.6 - 0.6 * pop})` }}>
-        {text}
-      </span>
-    );
-  };
   return (
     <Center scrim={v}>
       <div
@@ -580,12 +529,12 @@ const Drop = () => {
           lineHeight: 0.95,
           color: 'white',
           textShadow: SHADOW,
-          opacity: v,
-          transform: `scale(${grow + 0.03 * kick(frame)})`,
+          opacity: v * Math.min(1, pop * 2),
+          transform: `scale(${(1.6 - 0.6 * pop) * (grow + 0.03 * kick(frame))})`,
         }}
       >
-        {word('SHOW', 0)}
-        {word('TIME', 1)}
+        <span>SHOW</span>
+        <span>TIME</span>
       </div>
     </Center>
   );
@@ -598,10 +547,11 @@ const Wordmark = () => {
   if (frame < start) return null;
   const word = 'visual[flow]';
   const fade = interpolate(frame, [LENGTH - beat(2), LENGTH - beat(0.5)], [1, 0], clamp);
-  // Four bars: the name, its line a half-bar later, the suite a bar after that, then a
-  // long hold so the last screen can be read.
+  // Four bars: the name, its line a half-bar later, the suite a bar after that, the
+  // address after that, then a hold so the last screen can be read.
   const tag = rise(frame, start + beat(2));
-  const sub = rise(frame, start + beat(6));
+  const sub = rise(frame, start + beat(5));
+  const site = rise(frame, start + beat(8));
   return (
     <Center style={{ opacity: fade }} scrim={rise(frame, start)}>
       <div style={{ display: 'flex', alignItems: 'baseline', fontSize: 170 * u, textShadow: SHADOW }}>
@@ -653,6 +603,24 @@ const Wordmark = () => {
       >
         Part of the <span style={{ fontFamily: mono, fontWeight: 700, color: ACCENT }}>open[flow]</span> Suite
       </div>
+      <div
+        style={{
+          fontFamily: mono,
+          fontWeight: 700,
+          fontSize: 44 * u,
+          letterSpacing: 2 * u,
+          color: 'white',
+          opacity: site,
+          transform: `translateY(${(1 - site) * 20 * u}px)`,
+          marginTop: 40 * u,
+          padding: `${10 * u}px ${28 * u}px`,
+          borderRadius: 999,
+          border: `${2 * u}px solid ${ACCENT}`,
+          background: 'rgba(0,0,0,0.5)',
+        }}
+      >
+        openflow.fm
+      </div>
     </Center>
   );
 };
@@ -673,7 +641,6 @@ export const Teaser = () => (
     <Diagram />
     <Drop />
     <Wordmark />
-    <BarCounter />
     <Flash />
   </AbsoluteFill>
 );
