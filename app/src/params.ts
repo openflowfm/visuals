@@ -16,7 +16,7 @@ export interface Spec {
   def: number;
   kind: 'float' | 'int' | 'bool' | 'enum';
   items?: string[];
-  /** On the face; the rest are in the inspector. */
+  /** Worth a word on the node's face when it is off its default; every setting is in the inspector. */
   face?: boolean;
 }
 
@@ -27,7 +27,7 @@ const rgba = (prefix: string, label: string, defs: number[], face = true): Spec[
   ['r', 'g', 'b', 'a'].map((c, n) => f(`${prefix}${c}`, `${label}${c}`, 0, 1, defs[n], face));
 
 export const PARAMS: Record<string, Spec[]> = {
-  vertex: [
+  motion: [
     f('zoom', 'zoom', 0.5, 1.5, 1),
     f('rot', 'rotate', -1, 1, 0),
     f('warp', 'warp', 0, 2, 1),
@@ -59,7 +59,7 @@ export const PARAMS: Record<string, Spec[]> = {
     b('bModWaveAlphaByVolume', 'alpha by volume', 0, false),
     b('bMaximizeWaveColor', 'maximise colour', 1, false),
   ],
-  motion: [
+  vectors: [
     i('nMotionVectorsX', 'across', 0, 64, 12),
     i('nMotionVectorsY', 'down', 0, 48, 9),
     f('mv_l', 'length', 0, 5, 0.9),
