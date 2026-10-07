@@ -17,7 +17,7 @@ const { fontFamily: sans } = loadSans('normal', { weights: ['500', '700'], subse
 const { fontFamily: mono } = loadMono('normal', { weights: ['400', '700'], subsets: ['latin'] });
 
 const ACCENT = '#c8ff3e';
-const SHADOW = '0 0 48px rgba(0,0,0,0.75), 0 2px 8px rgba(0,0,0,0.6)';
+const SHADOW = '0 2px 6px rgba(0,0,0,0.9), 0 0 24px rgba(0,0,0,0.85), 0 0 72px rgba(0,0,0,0.7)';
 const clamp = { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' } as const;
 
 /** One unit: 1px at 1080 on the short side, so both formats scale alike. */
@@ -69,12 +69,19 @@ const Flash = () => {
   const frame = useCurrentFrame();
   const since = (at: number) => (frame >= at ? Math.exp(-(frame - at) / 10) : 0);
   let v = since(bar(SECTIONS.drop[0]));
-  for (let b = SECTIONS.facts[0] + 1; b < SECTIONS.facts[1]; b++) v = Math.max(v, 0.18 * since(bar(b)));
+  for (let b = SECTIONS.facts[0] + 1; b < SECTIONS.facts[1]; b++) v = Math.max(v, 0.12 * since(bar(b)));
   return <AbsoluteFill style={{ backgroundColor: 'white', opacity: v, mixBlendMode: 'screen' }} />;
 };
 
-const Center = ({ children, style }: { children: ReactNode; style?: CSSProperties }) => (
+/** Centred text, over a soft dark pool (`scrim`, 0..1) that keeps it readable on any preset. */
+const Center = ({ children, style, scrim = 0 }: { children: ReactNode; style?: CSSProperties; scrim?: number }) => (
   <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', textAlign: 'center', ...style }}>
+    <AbsoluteFill
+      style={{
+        opacity: scrim,
+        background: 'radial-gradient(ellipse 60% 32% at center, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.35) 55%, transparent 100%)',
+      }}
+    />
     {children}
   </AbsoluteFill>
 );
@@ -101,65 +108,42 @@ const Intro = () => {
     </div>
   );
   return (
-    <Center>
+    <Center scrim={first}>
       {line(first, 'Your Live set')}
       {line(second, 'now has eyes.', ACCENT)}
     </Center>
   );
 };
 
-const FACTS: [string, string][] = [
-  ['the cream of the crop pack', '9,744 MilkDrop presets'],
-  ['rust · wgpu · metal', 'Native, on the GPU'],
-  ['bass · mid · treble', 'It hears the room'],
-  ['ableton link', 'Locked to Live'],
-  ['not whenever', 'Changes on the bar'],
-  ['live mode', 'Full screen, any display'],
-];
+/** Three lines, two bars each: long enough to read while the presets change under them. */
+const FACT_BARS = 2;
+const FACTS = ['9,744 MilkDrop presets', 'Locked to Live', 'Changes on the bar'];
 
 const Fact = ({ index }: { index: number }) => {
   const frame = useCurrentFrame();
   const { u } = useUnit();
-  const start = bar(SECTIONS.facts[0] + index);
-  const v = useShow(start, start + bar(1), 6);
+  const start = bar(SECTIONS.facts[0] + index * FACT_BARS);
+  const v = useShow(start, bar(SECTIONS.facts[0] + (index + 1) * FACT_BARS), beat(0.5));
   if (!v) return null;
-  const [kicker, title] = FACTS[index];
-  // The kicker types itself out over the first beat.
-  const typed = Math.round(interpolate(frame - start, [0, beat(1)], [0, kicker.length], clamp));
+  // A slow push in while it holds, so two bars don't feel static.
+  const drift = interpolate(frame - start, [0, bar(FACT_BARS)], [0, 0.04], clamp);
   return (
-    <Center>
-      <div style={{ opacity: v, transform: `scale(${1.12 - 0.12 * v})` }}>
-        <div
-          style={{
-            fontFamily: mono,
-            fontSize: 30 * u,
-            letterSpacing: 6 * u,
-            textTransform: 'uppercase',
-            color: ACCENT,
-            background: 'rgba(0,0,0,0.6)',
-            display: 'inline-block',
-            padding: `${8 * u}px ${18 * u}px`,
-            borderRadius: 8 * u,
-            marginBottom: 22 * u,
-          }}
-        >
-          {kicker.slice(0, typed)}
-          <span style={{ opacity: typed < kicker.length ? 1 : 0 }}>▌</span>
-        </div>
-        <div
-          style={{
-            fontFamily: sans,
-            fontWeight: 700,
-            fontSize: 112 * u,
-            letterSpacing: -3 * u,
-            lineHeight: 1,
-            color: 'white',
-            textShadow: SHADOW,
-            maxWidth: 1600 * u,
-          }}
-        >
-          {title}
-        </div>
+    <Center scrim={v}>
+      <div
+        style={{
+          opacity: v,
+          transform: `scale(${1.12 - 0.12 * v + drift})`,
+          fontFamily: sans,
+          fontWeight: 700,
+          fontSize: 120 * u,
+          letterSpacing: -3 * u,
+          lineHeight: 1,
+          color: 'white',
+          textShadow: SHADOW,
+          maxWidth: 1600 * u,
+        }}
+      >
+        {FACTS[index]}
       </div>
     </Center>
   );
@@ -349,7 +333,7 @@ const Drop = () => {
   if (!v) return null;
   const grow = interpolate(frame - start, [0, bar(1)], [1, 1.12], clamp);
   return (
-    <Center>
+    <Center scrim={v}>
       <div
         style={{
           fontFamily: sans,
@@ -357,11 +341,10 @@ const Drop = () => {
           fontSize: 210 * u,
           letterSpacing: -6 * u,
           lineHeight: 0.95,
-          color: 'rgba(0,0,0,0.55)',
-          WebkitTextStroke: `${3 * u}px white`,
+          color: 'white',
+          textShadow: SHADOW,
           opacity: v,
           transform: `scale(${grow + 0.03 * kick(frame)})`,
-          filter: 'drop-shadow(0 0 30px rgba(0,0,0,0.6))',
         }}
       >
         ON THE ONE.
@@ -380,7 +363,7 @@ const Wordmark = () => {
   const tag = rise(frame, start + beat(3));
   const sub = rise(frame, start + beat(5));
   return (
-    <Center style={{ opacity: fade }}>
+    <Center style={{ opacity: fade }} scrim={rise(frame, start)}>
       <div style={{ display: 'flex', alignItems: 'baseline', fontSize: 170 * u, textShadow: SHADOW }}>
         {word.split('').map((ch, i) => {
           const v = spring({ frame: frame - start - i * 2, fps: FPS, config: { damping: 13, stiffness: 160 } });
