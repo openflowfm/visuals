@@ -109,7 +109,7 @@ const Intro = () => {
   );
   return (
     <Center scrim={first}>
-      {line(first, 'Your Live set')}
+      {line(first, 'Your music')}
       {line(second, 'now has eyes.', ACCENT)}
     </Center>
   );
@@ -117,7 +117,7 @@ const Intro = () => {
 
 /** Three lines, two bars each: long enough to read while the presets change under them. */
 const FACT_BARS = 2;
-const FACTS = ['9,744 MilkDrop presets', 'Locked to Live', 'Changes on the bar'];
+const FACTS = ['9,744 MilkDrop presets', 'Native, on the GPU', 'Full screen, any display'];
 
 const Fact = ({ index }: { index: number }) => {
   const frame = useCurrentFrame();
@@ -193,17 +193,18 @@ const BarCounter = () => {
   );
 };
 
-type Node = { id: string; label: string; sub: string; at: number };
+// `extra` is the optional part: drawn smaller, dimmer and dashed, after the main line.
+type Node = { id: string; label: string; sub: string; at: number; extra?: boolean };
 const NODES: Node[] = [
-  { id: 'live', label: 'Ableton Live', sub: 'your set', at: 1 },
-  { id: 'audio', label: 'Audio in', sub: 'the room', at: 2 },
-  { id: 'flow', label: 'visual[flow]', sub: 'the engine', at: 3 },
-  { id: 'out', label: 'Any display', sub: 'live mode', at: 5 },
+  { id: 'audio', label: 'Audio in', sub: 'any music', at: 1 },
+  { id: 'flow', label: 'visual[flow]', sub: 'the engine', at: 2 },
+  { id: 'out', label: 'Any display', sub: 'full screen', at: 3.5 },
+  { id: 'link', label: '+ Ableton Link', sub: 'optional', at: 5.5, extra: true },
 ];
-const EDGES: { from: string; to: string; label: string; at: number }[] = [
-  { from: 'live', to: 'flow', label: 'Link · tempo, beat, bar', at: 4 },
-  { from: 'audio', to: 'flow', label: 'what the presets hear', at: 4 },
-  { from: 'flow', to: 'out', label: 'full screen', at: 6 },
+const EDGES: { from: string; to: string; label: string; at: number; extra?: boolean }[] = [
+  { from: 'audio', to: 'flow', label: 'the music', at: 2.5 },
+  { from: 'flow', to: 'out', label: 'live', at: 4 },
+  { from: 'link', to: 'flow', label: 'tempo', at: 6, extra: true },
 ];
 
 /** The breakdown: how it fits together, a beat at a time. */
@@ -217,8 +218,8 @@ const Diagram = () => {
   const local = frame - start;
   const out = interpolate(frame, [end - beat(0.5), end], [1, 0], clamp);
   const pos: Record<string, [number, number]> = vertical
-    ? { live: [0.27, 0.36], audio: [0.73, 0.36], flow: [0.5, 0.55], out: [0.5, 0.75] }
-    : { live: [0.15, 0.36], audio: [0.15, 0.78], flow: [0.5, 0.57], out: [0.85, 0.57] };
+    ? { audio: [0.5, 0.36], flow: [0.5, 0.53], out: [0.5, 0.7], link: [0.78, 0.62] }
+    : { audio: [0.17, 0.52], flow: [0.5, 0.52], out: [0.83, 0.52], link: [0.5, 0.8] };
   const at = (id: string) => [pos[id][0] * width, pos[id][1] * height] as const;
   const shown = (beats: number) =>
     spring({ frame: local - beat(beats), fps: FPS, config: { damping: 15, stiffness: 180 } }) * out;
@@ -241,7 +242,7 @@ const Diagram = () => {
           textShadow: SHADOW,
         }}
       >
-        One set. One clock.
+        Sound in. Light out.
       </div>
       <svg width={width} height={height} style={{ position: 'absolute' }}>
         {EDGES.map((e) => {
@@ -262,16 +263,18 @@ const Diagram = () => {
                 x2={x1 + (x2 - x1) * drawn}
                 y2={y1 + (y2 - y1) * drawn}
                 stroke="white"
-                strokeOpacity={0.7}
-                strokeWidth={3 * u}
+                strokeOpacity={e.extra ? 0.45 : 0.7}
+                strokeWidth={(e.extra ? 2 : 3) * u}
+                strokeDasharray={e.extra ? `${10 * u} ${8 * u}` : undefined}
               />
-              {live && (
+              {live && !e.extra && (
                 <circle cx={x1 + (x2 - x1) * p} cy={y1 + (y2 - y1) * p} r={9 * u} fill={ACCENT} opacity={1 - p * 0.6} />
               )}
               <text
-                x={(x1 + x2) / 2}
-                y={(y1 + y2) / 2 - 18 * u}
-                textAnchor="middle"
+                // Vertical wires carry their label beside them, horizontal ones above.
+                x={(x1 + x2) / 2 + (x1 === x2 ? 20 * u : 0)}
+                y={(y1 + y2) / 2 + (x1 === x2 ? 8 * u : -18 * u)}
+                textAnchor={x1 === x2 ? 'start' : 'middle'}
                 fill={ACCENT}
                 fontFamily={mono}
                 fontSize={24 * u}
@@ -299,11 +302,11 @@ const Diagram = () => {
               position: 'absolute',
               left: x,
               top: y,
-              transform: `translate(-50%, -50%) scale(${0.85 + 0.15 * v})`,
-              opacity: v,
+              transform: `translate(-50%, -50%) scale(${(0.85 + 0.15 * v) * (n.extra ? 0.7 : 1)})`,
+              opacity: v * (n.extra ? 0.8 : 1),
               padding: `${22 * u}px ${36 * u}px`,
               borderRadius: 18 * u,
-              border: `${2 * u}px solid ${lit ? ACCENT : 'rgba(255,255,255,0.6)'}`,
+              border: `${2 * u}px ${n.extra ? 'dashed' : 'solid'} ${lit ? ACCENT : 'rgba(255,255,255,0.6)'}`,
               background: 'rgba(0,0,0,0.55)',
               backdropFilter: 'blur(6px)',
               textAlign: 'center',
@@ -397,7 +400,7 @@ const Wordmark = () => {
           textShadow: SHADOW,
         }}
       >
-        MilkDrop, live, for Ableton Live.
+        MilkDrop, rebuilt for the stage.
       </div>
       <div
         style={{
