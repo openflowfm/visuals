@@ -15,9 +15,8 @@ generateNodes();
 //
 // The dev port and the server port are both `@openflow/desktop/apps.ts`, which is the
 // same registry the app's own main process reads — the two used to be restated
-// in both files and had no way of disagreeing loudly. A worktree that moves
-// OPENFLOW_PORT_BASE takes every dev server with it; the offsets are in
-// widgets/docs/storybook.md.
+// in both files and had no way of disagreeing loudly. No dev port is assumed:
+// `uiPort` is `$PORT` or 0, a free port, and `npm run dev` reads the real one.
 const PORT = uiPort(APPS.visuals);
 const SERVER = process.env.OPENFLOW_VISUALS || `http://127.0.0.1:${serverPort(APPS.visuals)}`;
 

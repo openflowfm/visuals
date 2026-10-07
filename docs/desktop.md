@@ -41,7 +41,7 @@ one the server child reported — it is started on `0`, any free port, unless
 here, unlike set[flow], because the server is already serving `dist` at a stable
 origin — `location.host` works, `/media/*` works, and the `localStorage` that holds the
 keystone corners is on the same origin a browser would have used. In development it loads
-vite on `:5473`; vite owns HMR and proxies socket and media requests to the app's child.
+vite, on whatever free port `npm run dev` found; vite owns HMR and proxies socket and media requests to the app's child.
 
 **The wall is still `window.open`.** The renderer calls it with a features string carrying a
 position, exactly as it does in a browser. Electron refuses that unless something says what
@@ -113,12 +113,11 @@ wall window share Link, bridge, scheme, lab and wheel state over its WebSocket, 
 files are streamed over its HTTP side. Removing the listener altogether would mean replacing
 both with Electron IPC plus a custom media protocol, and would also make the browser/remote
 wall path a separate transport. The app-owned listener is therefore kept local rather than
-pretending the backend disappeared; the page being developed is only vite's `:5473` page.
+pretending the backend disappeared; the page being developed is only vite's dev page.
 
-`OPENFLOW_DEV=1` is the switch and `OPENFLOW_DEV_URL` overrides the address. The port is
-`OPENFLOW_PORT_BASE` plus this app's offset in `desktop/src/apps.ts`, or
-`OPENFLOW_VISUALS_UI_PORT` outright — and the vite config now reads the same registry rather
-than restating the offset, so the two have no way of disagreeing quietly. In dev the shell
+`OPENFLOW_DEV=1` is the switch and `OPENFLOW_DEV_URL` overrides the address. No port is
+assumed: vite takes `$PORT` or a free one, and `npm run dev` hands the port it found to the
+shell as `OPENFLOW_VISUALS_UI_PORT` (`desktop/src/apps.ts`, "Ports" in its registry doc). In dev the shell
 waits for vite to answer and opens onto it; in production it opens onto the port its own
 child reported, which is what stops a window attaching to whatever else already held a
 number — see [server](https://github.com/openflowfm/desktop/blob/main/docs/server.md) in

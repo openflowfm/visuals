@@ -8,9 +8,8 @@ npm run storybook        # http://localhost:5573
 npm run build:storybook  # the static site CI builds as a smoke check
 ```
 
-The port is `OPENFLOW_PORT_BASE + 400`, or `OPENFLOW_STORYBOOK_PORT` outright — the
-offsets the other servers use are in `@openflow/desktop/apps.ts`, and this one sits clear of
-them (the UI is +300, mix is +500). `--exact-port` is on, so a collision fails loudly.
+The port is `$PORT` when a launcher gives one, otherwise a free one the script asks the OS
+for — never a fixed or default port. `--exact-port` is on, so a collision fails loudly.
 
 ## Two kinds of story
 

@@ -100,8 +100,8 @@ function open(): void {
  * key its profile by. The shell owns no server and takes no instance lock.
  *
  * `OPENFLOW_VISUALS_PORT` still names the server's port outright, for a wall on
- * another machine that has to dial in; `OPENFLOW_PORT_BASE` still moves vite's
- * preference, for a worktree that wants a predictable address.
+ * another machine that has to dial in; `PORT` names vite's, and without it the
+ * OS picks a free one — no dev port is ever assumed.
  *
  * Closing the window ends all three: the shell's exit closes vite and kills the
  * server, and a signal here does the same.

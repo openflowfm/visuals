@@ -80,11 +80,11 @@ npm start           # a show night: build, run the server, open the app — see 
 npm run show        # the same, in a dedicated Chrome instead of the app
 npm run benchmark   # every flow, as fast as this machine draws it — docs/engine.md
 npm run dev         # the server, vite and the window, together — the one to type while working
-npx vite --config vite.config.ts  # the renderer with HMR alone, :5473, proxying /ws to the server
+npx vite --config vite.config.ts  # the renderer with HMR alone, on $PORT or a free port, proxying /ws to the server
 npm run build       # the renderer into dist/, which the server serves
 npm run dev:fake-live  # a bridge that isn't one, for working without Ableton
 npm run mcp         # local stdio server for agent-authored flows and nodes
-npm run storybook   # the console's components and the kept experiments, on their own — :5573
+npm run storybook   # the console's components and the kept experiments, on their own — $PORT or a free port
 ```
 
 The user manual is [the wiki](https://github.com/openflowfm/visuals/wiki). Its
@@ -92,24 +92,24 @@ The user manual is [the wiki](https://github.com/openflowfm/visuals/wiki). Its
 vocabulary: clone `git@github.com:openflowfm/visuals.wiki.git` beside this repo as
 `visuals.wiki/` and `npm run dev:node-manual` rewrites it — see [docs/render.md](docs/render.md).
 
-`npm run dev` opens the Electron window itself; the HMR page it loads is vite's, on `:5473`
-or the next free port up. Open `http://localhost:17900` — `npm run server` — only for the
+`npm run dev` opens the Electron window itself; the HMR page it loads is vite's, on a free
+port. Open `http://localhost:17900` — `npm run server` — only for the
 built browser renderer.
 
 **Nothing in `npm run dev` is assigned; everything is discovered.** It starts the server
-first, on whatever port is free, and is told which. It then runs vite in-process, which
-prefers `:5473` and moves up if that is taken, and reads the port off the socket. Only then
+first, on whatever port is free, and is told which. It then runs vite in-process on
+`$PORT` or a free port, and reads the port off the socket. Only then
 does it open the shell, told both. So `npm run dev` twice — in two worktrees or in one — is
 two servers, two vites and two shells, each with its own profile under
 `~/.openflow/visuals/dev/<port>/`, and no single-instance lock. Closing the window ends all
-three. `OPENFLOW_DEV_URL=http://localhost:5474 npx electron .` is the escape hatch for a
+three. `OPENFLOW_DEV_URL=http://localhost:<port> npx electron .` is the escape hatch for a
 shell on a vite you started by hand.
 
 **That is why `npm start` exists for a show.** Two processes where either exiting kills the
 other is right for a dev loop and wrong for a gig: a watcher falling over would take the
 wall with it. `npm start` builds `dist/`, runs the server as a supervised child, and opens
 the rig in a window of its own — see [the desktop app](docs/desktop.md). It also settles
-which URL a projector gets: the app is on the built bundle, where `:5473` has HMR attached
+which URL a projector gets: the app is on the built bundle, where vite's dev page has HMR attached
 and reloads the wall on every save.
 
 `npm run show` is the same rig in a dedicated Chrome instance instead —

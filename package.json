@@ -32,7 +32,7 @@
     "show": "node --disable-warning=ExperimentalWarning tools/visuals.ts",
     "server": "node --disable-warning=ExperimentalWarning server/index.ts",
     "ui": "vite --config vite.config.ts",
-    "storybook": "storybook dev --exact-port -p \"${OPENFLOW_STORYBOOK_PORT:-$((${OPENFLOW_PORT_BASE:-5173}+400))}\"",
+    "storybook": "storybook dev --exact-port -p \"${PORT:-$(node -e \"const s=require('net').createServer().listen(0,'127.0.0.1',()=>{console.log(s.address().port);s.close()})\")}\"",
     "build:storybook": "storybook build --quiet -o storybook-static",
     "dev:fake-live": "node --disable-warning=ExperimentalWarning tools/fake-live.ts",
     "dev:responses": "node --disable-warning=ExperimentalWarning tools/responses-report.ts",
@@ -54,7 +54,7 @@
   "dependencies": {
     "@ktamas77/abletonlink": "^1.2.3",
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "@openflow/desktop": "github:openflowfm/desktop#68c88b626a18cffb75ad81143742b27e0bfe41ef",
+    "@openflow/desktop": "github:openflowfm/desktop#6e9b5b657a701d91578272efba3ec12ccdd45e54",
     "@openflow/protocol": "github:openflowfm/protocol#918e52b61afcc9945d433a445557a3043e532af1",
     "@openflow/widgets": "git+https://github.com/openflowfm/widgets.git#dc356455e561c7eb9dce337a1e6b6810a5251fcb",
     "@tauri-apps/api": "^2.12.1",

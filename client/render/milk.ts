@@ -1,15 +1,23 @@
-import butterchurnModule, { type AudioLevels, type Visualizer } from 'butterchurn';
+import type butterchurnModule from 'butterchurn';
+import type { AudioLevels, Visualizer } from 'butterchurn';
 import { presetUrl } from '../../milk.ts';
 
 /**
- * Butterchurn is a webpack UMD bundle whose export is `{ default: Butterchurn }`.
- * Which of the two layers an `import` lands on depends on the bundler's CommonJS
- * interop, so take whichever one has the factory.
+ * Butterchurn, loaded the first time a preset is drawn rather than with this
+ * module. Its webpack UMD bundle touches `window` as it loads, so a static import
+ * made every test that reaches the compositor fail in Node before it ran.
+ *
+ * Its export is `{ default: Butterchurn }`, and which layer an `import` lands on
+ * depends on the bundler's CommonJS interop, so take whichever one has the factory.
  */
-const butterchurn: typeof butterchurnModule =
-  'createVisualizer' in butterchurnModule
-    ? butterchurnModule
-    : (butterchurnModule as unknown as { default: typeof butterchurnModule }).default;
+let butterchurn: typeof butterchurnModule | null = null;
+let arriving: Promise<void> | null = null;
+function loadButterchurn(): void {
+  arriving ??= import('butterchurn').then((m) => {
+    const layers = [m, (m as { default?: unknown }).default, ((m as { default?: { default?: unknown } }).default ?? {}).default];
+    butterchurn = (layers.find((l) => l && typeof l === 'object' && 'createVisualizer' in l) ?? null) as typeof butterchurnModule | null;
+  });
+}
 
 /**
  * MilkDrop, drawn by Butterchurn, inside the compositor's own GL context.
@@ -97,10 +105,15 @@ export function createMilk(gl: WebGL2RenderingContext, canvas: HTMLCanvasElement
     }
   };
 
-  const ensure = (target: WebGLFramebuffer | null, width: number, height: number) => {
+  const ensure = (target: WebGLFramebuffer | null, width: number, height: number): Visualizer | null => {
     if (!visualizer) {
+      const factory = butterchurn;
+      if (!factory) {
+        loadButterchurn();
+        return null;
+      }
       visualizer = fenced(target, () =>
-        butterchurn.createVisualizer(null, canvas, { width, height, pixelRatio: 1, textureRatio: 1 }),
+        factory.createVisualizer(null, canvas, { width, height, pixelRatio: 1, textureRatio: 1 }),
       );
       size = { width, height };
       rate = 0;
@@ -186,13 +199,20 @@ export function createMilk(gl: WebGL2RenderingContext, canvas: HTMLCanvasElement
       return showing;
     },
     draw(target, width, height, preset, dt, audio, sampleRate) {
-      let v: Visualizer;
+      let v: Visualizer | null;
       try {
         v = ensure(target, width, height);
       } catch (reason) {
         // Said once in the panel, not thrown sixty times a second into a loop
         // that would stop drawing everything else with it.
         error = `MilkDrop could not start: ${(reason as Error).message}`;
+        gl.bindFramebuffer(gl.FRAMEBUFFER, target);
+        gl.clearColor(0, 0, 0, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        return;
+      }
+      if (!v) {
+        // Butterchurn is still arriving: black for the frame or two it takes.
         gl.bindFramebuffer(gl.FRAMEBUFFER, target);
         gl.clearColor(0, 0, 0, 1);
         gl.clear(gl.COLOR_BUFFER_BIT);
