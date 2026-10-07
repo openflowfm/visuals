@@ -4,6 +4,7 @@
 mod actions;
 mod bench;
 mod compare;
+mod link;
 mod listen;
 mod playlists;
 mod output;
@@ -255,6 +256,7 @@ fn main() {
         .manage(deck)
         .setup(|app| {
             actions::start_auto(app.handle().clone());
+            link::start(app.handle().clone());
             #[cfg(target_os = "macos")]
             {
                 let window = app.get_webview_window("main").expect("main window");
@@ -334,6 +336,12 @@ fn main() {
             output::output_open,
             output::output_close,
             output::output_status,
+            link::link_state,
+            link::link_enable,
+            link::link_set_one,
+            link::link_nudge,
+            link::link_reset_one,
+            link::link_sync,
         ])
         .run(tauri::generate_context!())
         .expect("visual[flow]");

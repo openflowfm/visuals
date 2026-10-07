@@ -1,0 +1,65 @@
+/* The Link panel: tempo and peers, the bar from the one with a light per beat, the
+   one's buttons and the change interval. Paints itself, like every live panel. */
+
+.link-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 18px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--bd3);
+}
+.link-panel h2 { margin: 0; }
+
+.link-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.link-on {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--caption);
+}
+
+.link-status { margin: 0; color: var(--caption); }
+.link-status[data-on] { color: var(--green); }
+.link-status b { color: var(--fg); font-family: var(--mono); }
+
+.link-beat {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.link-bar {
+  min-width: 3ch;
+  font-family: var(--mono);
+  font-size: 22px;
+  color: var(--fg);
+  text-align: right;
+}
+.link-lights { display: flex; gap: 8px; }
+.link-light {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--bd);
+  background: var(--bg);
+}
+.link-light[data-lit] { background: var(--fg); border-color: var(--fg); }
+.link-light[data-one][data-lit] { background: var(--green); border-color: var(--green); }
+
+.link-one { display: flex; gap: 6px; }
+
+.link-every {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.link-every > span:first-child {
+  color: var(--caption);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
