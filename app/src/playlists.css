@@ -1,49 +1,117 @@
-/* The playlists panel. */
+/* The playlists panel. It styles itself wherever it is placed — the editor's
+   library column and live mode's side panel alike — so no rule here hangs off the
+   container. Rules are two classes deep, which outranks a host's own element
+   rules (the library's `.library li`, `.library ul`, `.library input`). */
 
 .playlists {
   display: flex;
   flex-direction: column;
-  min-height: 0;
   flex: 1;
+  min-height: 0;
   gap: 6px;
   padding: 8px 0 0;
+  color: var(--ui);
+  font-size: var(--text-body);
 }
-.playlists .fill { flex: 1; }
-.library .playlists input { margin: 0; }
-.playlists-bar { display: flex; align-items: center; gap: 4px; padding: 0 8px; }
-.playlists-bar button[data-on] { border-color: var(--focus); color: var(--fg); }
-.playlists-bar .danger { border-color: var(--red); color: var(--red); }
-.playlists button:disabled { opacity: 0.4; cursor: default; border-color: var(--bd3); }
+.playlists .playlists-fill { flex: 1; }
 
-/* Scoped under .library to win over its own list rules. */
-.library .playlists ul, .library .playlists ol { list-style: none; margin: 0; padding: 0; overflow-x: hidden; overflow-y: auto; text-align: left; }
-.library .playlists li { padding: 3px 10px; cursor: pointer; display: flex; flex-direction: row; align-items: center; gap: 6px; min-width: 0; }
-.library .playlists li.quiet { cursor: default; }
-.library .playlists li i { color: var(--caption); font-style: normal; font-size: 10px; }
+.playlists .playlists-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 0 8px; }
+.playlists .playlists-confirm { display: inline-flex; gap: 4px; }
+.playlists .playlists-danger .wdg-button-body { border-color: var(--red); color: var(--red); }
+.playlists .playlists-on .wdg-button-body { border-color: var(--green); color: var(--green); }
+.playlists .playlists-count { color: var(--caption); font-family: var(--mono); font-variation-settings: var(--mono-axes); font-size: var(--text-label); }
 
-.library .playlists-names { max-height: 30%; flex: none; border-bottom: 1px solid var(--bd3); padding-bottom: 6px; }
-.playlists-names li:hover { background: var(--sel); }
-.playlists-names li[data-selected] { background: var(--bd); color: var(--fg); }
-.playlists-names input { flex: 1; min-width: 0; padding: 1px 4px; }
-.playlists-mark { width: 10px; color: var(--green); font-size: 9px; }
-.playlists-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Keyboard focus on any button in the panel, as the widgets ring their other controls. */
+.playlists .wdg-button-body:focus-visible { outline: 1px solid var(--fg); outline-offset: 1px; }
 
-.library .playlists-items { flex: 1; min-height: 0; }
-.playlists-items li:hover { background: var(--sel); }
-.playlists-items li[data-current] { background: var(--bd); color: var(--fg); box-shadow: inset 2px 0 0 var(--green); }
-.playlists-items li[data-missing] .playlists-item span { color: var(--red); text-decoration: line-through; }
-.playlists-items b { width: 22px; flex: none; text-align: right; color: var(--caption); font-weight: normal; font-family: var(--mono); font-size: 10px; }
-.playlists-item { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.playlists-item span, .playlists-item i { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.playlists-tools { display: none; gap: 2px; }
-.playlists-tools button { padding: 0 4px; }
-.playlists-items li:hover .playlists-tools { display: flex; }
+/* Lists. */
+.playlists .playlists-names,
+.playlists .playlists-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  text-align: left;
+}
+.playlists .playlists-names { flex: 0 1 auto; max-height: 30%; min-height: 48px; padding-bottom: 6px; border-bottom: 1px solid var(--bd3); }
+.playlists .playlists-items { flex: 1; min-height: 0; }
 
-.playlists-auto {
+.playlists .playlists-row {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 3px 8px 3px 10px;
+  cursor: pointer;
+  outline: none;
+}
+.playlists .playlists-row:hover { background: var(--sel); }
+.playlists .playlists-row:focus-visible { box-shadow: var(--ring) var(--fg); }
+.playlists .playlists-row i { color: var(--caption); font-style: normal; font-size: var(--text-control); }
+
+.playlists .playlists-empty {
+  padding: 6px 10px;
+  color: var(--detail);
+  font-size: var(--text-body);
+  line-height: 1.5;
+  cursor: default;
+}
+.playlists .playlists-empty b { color: var(--ui); font-weight: var(--weight-medium); }
+
+/* A playlist's row: play/stop, its name, how many. */
+.playlists .playlists-names .playlists-row[data-selected] { background: var(--bd); color: var(--fg); }
+.playlists .playlists-names .playlists-row[data-active] .playlists-name { color: var(--green); }
+.playlists .playlists-play .wdg-button-body { width: 18px; padding: 0; font-size: var(--text-label); }
+.playlists .playlists-play .playlists-on .wdg-button-body { color: var(--green); }
+.playlists .playlists-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.playlists .playlists-rename { flex: 1; min-width: 0; margin: 0; padding: 1px 4px; }
+
+/* An item's row: position, name and group, then its tools. */
+.playlists .playlists-items .playlists-row[data-current] { background: var(--bd); color: var(--fg); box-shadow: var(--edge-left) var(--green); }
+.playlists .playlists-items .playlists-row[data-current]:focus-visible { box-shadow: var(--edge-left) var(--green), var(--ring) var(--fg); }
+.playlists .playlists-items .playlists-row > b {
+  flex: none;
+  width: 22px;
+  text-align: right;
+  color: var(--caption);
+  font-family: var(--mono);
+  font-variation-settings: var(--mono-axes);
+  font-weight: var(--weight-normal);
+  font-size: var(--text-control);
+}
+.playlists .playlists-item { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.playlists .playlists-item span,
+.playlists .playlists-item i { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.playlists .playlists-row[data-missing] .playlists-item span { color: var(--detail); text-decoration: line-through; }
+.playlists .playlists-row[data-missing] .playlists-item i { color: var(--caution); }
+
+/* The tools show on the row the pointer or the focus is on — never only on hover —
+   laid over the row's right end, so the names keep the whole width otherwise. */
+.playlists .playlists-tools {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  display: flex;
+  gap: 2px;
+  padding-left: 6px;
+  background: var(--sel);
+  box-shadow: -8px 0 8px -4px var(--sel);
+  visibility: hidden;
+}
+.playlists .playlists-items .playlists-row[data-current] .playlists-tools { background: var(--bd); box-shadow: -8px 0 8px -4px var(--bd); }
+.playlists .playlists-row:hover .playlists-tools,
+.playlists .playlists-row:focus-within .playlists-tools { visibility: visible; }
+.playlists .playlists-tools .wdg-button-body { width: 18px; padding: 0; }
+
+.playlists .playlists-auto {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 6px 8px 8px;
   border-top: 1px solid var(--bd3);
 }
-.playlists-auto .wdg-toggle { flex: 1; }
+.playlists .playlists-auto .wdg-toggle { flex: 1; }

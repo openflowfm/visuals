@@ -1,30 +1,121 @@
 /* Live mode. As in the editor, nothing behind the preview may paint: the bench is
    a native view under the page. The page itself is transparent, every panel
    paints itself, and the bars beside the 16:9 preview are its own shadow,
-   clipped to its cell. */
+   clipped to its cell.
+
+   What a show needs most is the biggest: now, then next, then the transport. The
+   preview, the output and the playlists are around them. */
 
 .live {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
-  grid-template-rows: 36px minmax(0, 1fr);
+  grid-template-rows: 36px minmax(0, 1fr) auto;
   height: 100%;
 }
 
 .live-stage {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto auto;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   min-height: 0;
 }
 
+/* Now and next. */
+.live-deck {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px 22px 14px;
+  background: var(--panel);
+}
+.live-deck i {
+  flex: none;
+  width: 56px;
+  color: var(--caption);
+  font-style: normal;
+  font-size: var(--text-label);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+}
+.live-now,
+.live-next {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+.live-now b,
+.live-next span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.live-now b {
+  color: var(--fg);
+  font-size: calc(var(--text-title) * 2);
+  font-weight: var(--weight-strong);
+  letter-spacing: var(--track-tight);
+  line-height: 1.15;
+}
+.live-next span {
+  color: var(--ui);
+  font-size: var(--text-title);
+  font-weight: var(--weight-medium);
+}
+.live-next span[data-missing] { color: var(--detail); text-decoration: line-through; }
+.live-next em { color: var(--caution); font-style: normal; font-size: var(--text-body); text-decoration: none; display: inline-block; }
+.live-deck .live-none { color: var(--detail); font-size: var(--text-heading); font-weight: var(--weight-normal); letter-spacing: var(--track-none); white-space: normal; }
+.live-where {
+  margin: 0 0 0 68px;
+  color: var(--caption);
+  font-size: var(--text-body);
+}
+.live-where b { color: var(--detail); font-weight: var(--weight-medium); }
+
+/* Previous, random, next: big enough to hit without looking twice. */
+.live-transport {
+  display: flex;
+  gap: 8px;
+  padding: 0 22px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--bd3);
+}
+.live-transport .wdg-button { flex: 1; display: flex; }
+.live-transport .wdg-button-body {
+  width: 100%;
+  height: auto;
+  padding: 10px 12px;
+  color: var(--fg);
+  font-size: var(--text-heading);
+  font-weight: var(--weight-medium);
+}
+.live .wdg-button-body:focus-visible { outline: 1px solid var(--fg); outline-offset: 1px; }
+
+/* An error: one plain sentence, the app's own words in its tooltip, and ✕. */
+.live-problem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px 8px 22px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--bd3);
+  box-shadow: var(--edge-left) var(--red);
+  color: var(--red);
+  font-size: var(--text-body);
+}
+.live-problem > span { flex: 1; min-width: 0; }
+
+/* The preview: a hole, ringed by its own shadow. */
 .live-preview-cell {
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   min-height: 120px;
   padding: 12px;
-  border-bottom: 1px solid var(--bd3);
 }
 .live-preview {
   aspect-ratio: 16 / 9;
@@ -34,57 +125,61 @@
   box-shadow: 0 0 0 100vmax #000;
 }
 
-.live-deck,
-.live-output {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px 18px;
-  background: var(--panel);
-  border-bottom: 1px solid var(--bd3);
-}
-.live-deck i,
-.live-output label > span {
-  color: var(--caption);
-  font-style: normal;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-.live-now,
-.live-next {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  min-width: 0;
-}
-.live-now i,
-.live-next i { min-width: 120px; }
-.live-now b {
-  font-size: 22px;
-  font-weight: 600;
-  color: var(--fg);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.live-next span { color: var(--fg); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-.live-transport { display: flex; gap: 8px; }
-.live-transport button { flex: 1; padding: 10px 12px; font-size: 14px; }
-.live-keys { margin: 0; font-size: 11px; }
-
-.live-output h2 { margin: 0; font-size: 13px; color: var(--fg); }
-.live-output label { display: flex; align-items: center; gap: 10px; }
-.live-output select { max-width: none; flex: 1; }
-.live-status { margin: 0; color: var(--caption); }
-.live-status[data-on] { color: var(--green); }
-
-.live-lists {
+/* The side: where the output goes, then the playlists. */
+.live-side {
   display: flex;
   flex-direction: column;
   min-height: 0;
   background: var(--panel);
   border-left: 1px solid var(--bd3);
 }
-.live-lists .playlists { overflow: auto; }
+.live-output {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--bd3);
+}
+.live-output h2 {
+  margin: 0;
+  color: var(--caption);
+  font-size: var(--text-label);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+}
+.live-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--detail);
+  font-size: var(--text-heading);
+}
+.live-status[data-on] { color: var(--green); }
+.live-display { display: flex; }
+.live-display .wdg-select-body { width: 100%; }
+.live-note { margin: 0; color: var(--detail); font-size: var(--text-body); }
+.live-warn {
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--caution);
+  border-radius: var(--radius);
+  color: var(--caution);
+  font-size: var(--text-body);
+  line-height: 1.45;
+}
+
+.live-lists {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.live-hints {
+  grid-column: 1 / -1;
+  background: var(--panel);
+  border-top-color: var(--bd3);
+}

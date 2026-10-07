@@ -53,6 +53,41 @@ export interface Now {
   error: string | null;
 }
 
+/** What the deck is playing from a playlist, and what `next` will open after it. */
+export interface Up {
+  playlist: Playlist;
+  /** The playing item's position, or null before the first. */
+  index: number | null;
+  /** What `next` opens: null only when the playlist is empty. */
+  next: Item | null;
+  nextIndex: number | null;
+}
+
+/**
+ * The active playlist and its next item, stepping the way `actions::decide`
+ * does: one on from the playing item, round to the first after the last, and
+ * the first when nothing in it has played yet. Missing files are not skipped
+ * (the engine doesn't skip them either). Null when no playlist is playing.
+ */
+export function upNext(lists: Lists | null): Up | null {
+  if (!lists?.deck.playlist) return null;
+  const playlist = lists.playlists.find((p) => p.id === lists.deck.playlist);
+  if (!playlist) return null;
+  const len = playlist.items.length;
+  const index = lists.deck.index !== null && lists.deck.index < len ? lists.deck.index : null;
+  if (len === 0) return { playlist, index: null, next: null, nextIndex: null };
+  const nextIndex = index === null ? 0 : (index + 1) % len;
+  return { playlist, index, next: playlist.items[nextIndex], nextIndex };
+}
+
+/** The name a new playlist gets: the first "playlist N" not taken. */
+export function freshName(playlists: readonly Playlist[]): string {
+  const taken = new Set(playlists.map((p) => p.name));
+  let n = playlists.length + 1;
+  while (taken.has(`playlist ${n}`)) n++;
+  return `playlist ${n}`;
+}
+
 export const act = (action: Action) => invoke<void>('act', { action });
 export const lists = () => invoke<Lists>('playlists');
 export const create = (name: string) => invoke<Lists>('playlist_create', { name });
