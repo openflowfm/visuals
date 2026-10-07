@@ -294,7 +294,9 @@ fn start_from(compare: Option<String>, preset: Option<String>, library: &Path) -
 
 #[tauri::command]
 pub fn compare_start(app: State<App>) -> Start {
-    start_from(std::env::var("VISUALS_COMPARE").ok(), std::env::var("VISUALS_PRESET").ok(), &app.library)
+    // Compare is a development tool: a release build never starts in it.
+    let compare = if cfg!(debug_assertions) { std::env::var("VISUALS_COMPARE").ok() } else { None };
+    start_from(compare, std::env::var("VISUALS_PRESET").ok(), &app.library)
 }
 
 #[cfg(test)]

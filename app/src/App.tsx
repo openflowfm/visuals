@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as api from './api.ts';
 import type { Entry, Owner, Preset, Problem, Report } from './api.ts';
 import { AudioInput } from './AudioInput.tsx';
@@ -8,8 +8,8 @@ import { Playlists } from './Playlists.tsx';
 import * as pl from './playlists.ts';
 import { StageGraph } from './StageGraph.tsx';
 import { STAGES, setValue as setValueIn } from './stages.ts';
-import { Compare } from './Compare.tsx';
 import * as compareApi from './compare/api.ts';
+import { ViewSwitch, type View } from './views.tsx';
 import { Live } from './Live.tsx';
 import * as output from './output.ts';
 
@@ -72,24 +72,34 @@ function useApply(onReport: (r: Report) => void) {
   );
 }
 
-type View = 'editor' | 'compare' | 'live';
+/**
+ * The compare view and Butterchurn behind it, loaded only in the dev build: in
+ * `vite build` this is `null` and the import is dropped from the bundle.
+ */
+const Compare = import.meta.env.DEV ? lazy(() => import('./Compare.tsx').then((m) => ({ default: m.Compare }))) : null;
 
 /**
- * The editor, the compare view (Butterchurn beside the engine, with verdicts),
- * or live mode (performing controls, the output full screen on a display).
- * `VISUALS_COMPARE=1` starts in compare, `VISUALS_LIVE=1` in live mode,
- * `VISUALS_PRESET=<path>` on a preset.
+ * The editor, the compare view (dev builds only: Butterchurn beside the engine,
+ * with verdicts), or live mode (performing controls, the output full screen on a
+ * display). `VISUALS_COMPARE=1` starts in compare, `VISUALS_LIVE=1` in live
+ * mode, `VISUALS_PRESET=<path>` on a preset.
  */
 export function App() {
   const [mode, setMode] = useState<{ view: View; preset: string | null } | null>(null);
   useEffect(() => {
     Promise.all([compareApi.start(), output.liveStart()]).then(
-      ([s, live]) => setMode({ view: live ? 'live' : s.compare ? 'compare' : 'editor', preset: s.preset }),
+      ([s, live]) => setMode({ view: live ? 'live' : s.compare && Compare ? 'compare' : 'editor', preset: s.preset }),
       () => setMode({ view: 'editor', preset: null }),
     );
   }, []);
   if (!mode) return null;
-  if (mode.view === 'compare') return <Compare start={mode.preset} onMode={(view, preset) => setMode({ view, preset })} />;
+  if (mode.view === 'compare' && Compare) {
+    return (
+      <Suspense fallback={null}>
+        <Compare start={mode.preset} onMode={(view, preset) => setMode({ view, preset })} />
+      </Suspense>
+    );
+  }
   if (mode.view === 'live') return <Live start={mode.preset} onMode={(view, preset) => setMode({ view, preset })} />;
   return <Editor start={mode.preset} onMode={(view, preset) => setMode({ view, preset })} />;
 }
@@ -236,12 +246,7 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'compa
     <div className="app">
       <header>
         <h1>visual[flow]</h1>
-        <Segmented
-          items={['editor', 'compare', 'live']}
-          index={0}
-          onChange={(i) => i > 0 && onMode(i === 1 ? 'compare' : 'live', current?.path ?? null)}
-          label="editor, compare or live"
-        />
+        <ViewSwitch view="editor" onChange={(view) => view !== 'editor' && onMode(view, current?.path ?? null)} />
         <button onClick={() => step(-1)} title="previous (←)">◀</button>
         <button onClick={() => step(1)} title="next (→)">▶</button>
         <button onClick={() => step(0)} title="random (R)">random</button>

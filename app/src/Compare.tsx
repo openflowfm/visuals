@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { AudioLevels } from 'butterchurn';
-import { Segmented } from '@openflow/widgets/controls/Segmented.tsx';
 import * as app from './api.ts';
 import type { Report } from './api.ts';
 import { AudioInput } from './AudioInput.tsx';
+import { ViewSwitch } from './views.tsx';
 import * as api from './compare/api.ts';
 import type { Approval, Listed, Verdict } from './compare/api.ts';
 import { createReference, type Reference } from './compare/butterchurn.ts';
@@ -291,12 +291,7 @@ export function Compare({ start, onMode }: { start: string | null; onMode: (view
     <div className="compare">
       <header>
         <h1>visual[flow]</h1>
-        <Segmented
-          items={['editor', 'compare', 'live']}
-          index={1}
-          onChange={(i) => i !== 1 && onMode(i === 0 ? 'editor' : 'live', current?.path ?? null)}
-          label="editor, compare or live"
-        />
+        <ViewSwitch view="compare" onChange={(view) => view !== 'compare' && onMode(view, current?.path ?? null)} />
         <span className="name">
           {current ? (
             <>
