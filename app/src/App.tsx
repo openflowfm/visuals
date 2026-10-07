@@ -7,9 +7,9 @@ import { Inspector } from './Inspector.tsx';
 import { Playlists } from './Playlists.tsx';
 import * as pl from './playlists.ts';
 import { StageGraph } from './StageGraph.tsx';
-import { STAGES, setValue as setValueIn } from './stages.ts';
+import { setValue as setValueIn } from './stages.ts';
 import * as compareApi from './compare/api.ts';
-import { ViewSwitch, type View } from './views.tsx';
+import { Header, type View } from './views.tsx';
 import { Live } from './Live.tsx';
 import * as output from './output.ts';
 
@@ -110,7 +110,8 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'compa
   const [current, setCurrent] = useState<Entry | null>(null);
   const [preset, setPreset] = useState<Preset | null>(null);
   const [report, setReport] = useState<Report | null>(null);
-  const [selected, setSelected] = useState('frame');
+  // The stage open in the inspector, by id; null is the graph's own first choice.
+  const [selected, setSelected] = useState<string | null>(null);
   const [stats, setStats] = useState<api.Stats>({ fps: 0, cpu_ms: 0 });
   const [error, setError] = useState<string | null>(null);
   const [lists, setLists] = useState<pl.Lists | null>(null);
@@ -239,14 +240,11 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'compa
     [apply],
   );
 
-  const stage = STAGES.find((s) => s.id === selected) ?? STAGES[0];
   const problems = problemsOf(report);
 
   return (
     <div className="app">
-      <header>
-        <h1>visual[flow]</h1>
-        <ViewSwitch view="editor" onChange={(view) => view !== 'editor' && onMode(view, current?.path ?? null)} />
+      <Header view="editor" onChange={(view) => view !== 'editor' && onMode(view, current?.path ?? null)}>
         <button onClick={() => step(-1)} title="previous (←)">◀</button>
         <button onClick={() => step(1)} title="next (→)">▶</button>
         <button onClick={() => step(0)} title="random (R)">random</button>
@@ -265,7 +263,7 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'compa
         <span className="stats">
           {stats.fps.toFixed(0)} fps · {stats.cpu_ms.toFixed(2)} ms cpu
         </span>
-      </header>
+      </Header>
       <aside className="library">
         <Segmented className="library-tabs" items={['library', 'playlists']} index={tab} onChange={setTab} label="library or playlists" />
         {tab === 0 ? (
@@ -310,10 +308,10 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'compa
           <div className="bench" ref={bench} />
         </div>
         <div className="graph">
-          {preset && <StageGraph preset={preset} problems={problems} selected={selected} onSelect={setSelected} onSet={set} />}
+          {preset && <StageGraph preset={preset} problems={problems} selected={selected} onSelect={setSelected} onChange={edit} onSet={set} />}
         </div>
       </main>
-      <aside className="side">{preset && <Inspector preset={preset} stage={stage} problems={problems} onChange={edit} onSet={set} />}</aside>
+      <aside className="side">{preset && <Inspector preset={preset} selected={selected} problems={problems} onChange={edit} onSet={set} />}</aside>
     </div>
   );
 }

@@ -8,10 +8,10 @@ import * as api from './api.ts';
 import { AudioInput } from './AudioInput.tsx';
 import * as fx from './fx.ts';
 import { LinkPanel } from './LinkPanel.tsx';
-import { ViewSwitch } from './views.tsx';
 import * as output from './output.ts';
 import { Playlists } from './Playlists.tsx';
 import * as pl from './playlists.ts';
+import { Header } from './views.tsx';
 import './live.css';
 
 const nameOf = (path: string) => path.split('/').pop()?.replace(/\.milk$/i, '') ?? path;
@@ -257,8 +257,7 @@ function usePreview(ref: React.RefObject<HTMLDivElement | null>) {
  * Esc does nothing here, so a stray key never stops the show: leaving is the
  * switch above, or ⌘⇧L.
  */
-export function Live({ start, onMode }: { start: string | null; onMode: (mode: 'editor' | 'compare', path: string | null) => void }) {
-  const [lists, setLists] = useState<pl.Lists | null>(null);
+export function Live({ start, onMode }: { start: string | null; onMode: (mode: 'editor' | 'compare', path: string | null) => void }) {  const [lists, setLists] = useState<pl.Lists | null>(null);
   const [current, setCurrent] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -376,15 +375,13 @@ export function Live({ start, onMode }: { start: string | null; onMode: (mode: '
 
   return (
     <div className="live">
-      <header>
-        <h1>visual[flow]</h1>
-        <ViewSwitch view="live" onChange={(view) => view !== 'live' && onMode(view, current)} />
+      <Header view="live" onChange={(view) => view !== 'live' && onMode(view, current)}>
         <span className="fill" />
         <AudioInput onError={setError} />
         <span className="stats">
           {stats.fps.toFixed(0)} fps · {stats.cpu_ms.toFixed(2)} ms cpu
         </span>
-      </header>
+      </Header>
       <section className="live-stage">
         <div className="live-preview-cell">
           <div className="live-preview" ref={preview} />

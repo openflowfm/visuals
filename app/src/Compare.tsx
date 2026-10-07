@@ -3,7 +3,7 @@ import type { AudioLevels } from 'butterchurn';
 import * as app from './api.ts';
 import type { Report } from './api.ts';
 import { AudioInput } from './AudioInput.tsx';
-import { ViewSwitch } from './views.tsx';
+import { Header } from './views.tsx';
 import * as api from './compare/api.ts';
 import type { Approval, Listed, Verdict } from './compare/api.ts';
 import { createReference, type Reference } from './compare/butterchurn.ts';
@@ -289,9 +289,7 @@ export function Compare({ start, onMode }: { start: string | null; onMode: (view
 
   return (
     <div className="compare">
-      <header>
-        <h1>visual[flow]</h1>
-        <ViewSwitch view="compare" onChange={(view) => view !== 'compare' && onMode(view, current?.path ?? null)} />
+      <Header view="compare" onChange={(view) => view !== 'compare' && onMode(view, current?.path ?? null)}>
         <span className="name">
           {current ? (
             <>
@@ -307,7 +305,7 @@ export function Compare({ start, onMode }: { start: string | null; onMode: (view
         <span className="stats">
           Butterchurn {fps.theirs.toFixed(0)} fps · ours {fps.ours.toFixed(0)} fps
         </span>
-      </header>
+      </Header>
       <aside className="compare-list">
         <input placeholder={`search ${presets.length} presets`} value={search} onChange={(e) => setSearch(e.target.value)} />
         <div className="compare-show">

@@ -97,7 +97,7 @@
   border-top: 1px solid var(--bd3);
 }
 .compare-verdict button { padding: 6px 14px; }
-.compare-verdict button kbd { font-family: var(--mono); color: var(--caption); margin-left: 4px; }
+.compare-verdict button kbd { font-family: var(--mono); font-variation-settings: var(--mono-axes); color: var(--caption); margin-left: 4px; }
 .compare-verdict button.approve[data-on] { background: var(--green); color: #000; }
 .compare-verdict button.reject[data-on] { background: var(--red); color: #000; }
 .compare-verdict button[data-on] kbd { color: #000; }

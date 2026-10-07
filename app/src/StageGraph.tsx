@@ -10,11 +10,16 @@ import type { Spec } from './params.ts';
 import { usePreview } from './previews.ts';
 import { STAGES, codeLines, cords, isOn, port, problemsOf, settingsOf, usesBlur, type Stage } from './stages.ts';
 
+import './graph.css';
+
 interface Props {
   preset: Preset;
   problems: Problem[];
-  selected: string;
+  /** The stage open in the inspector; null is the first. */
+  selected: string | null;
   onSelect(id: string): void;
+  /** The preset changed whole (a stage added or removed): applied as a load. */
+  onChange(next: Preset): void;
   /** One setting turned on a face: applied live, without reloading the preset. */
   onSet(owner: Owner, key: string, value: number): void;
 }
@@ -133,7 +138,7 @@ export function StageGraph({ preset, problems, selected, onSelect, onSet }: Prop
         const at = moved[s.id] ?? s;
         return (
           <GraphNode key={s.id} id={s.id} x={at.x} y={at.y}>
-            <StageNode stage={s} preset={preset} problems={problems} selected={selected === s.id} onSelect={onSelect} onSet={onSet} />
+            <StageNode stage={s} preset={preset} problems={problems} selected={(selected ?? STAGES[0].id) === s.id} onSelect={onSelect} onSet={onSet} />
           </GraphNode>
         );
       })}
