@@ -11,6 +11,7 @@ status.
 | `cargo test -p visuals-app` | the app's Rust: live actions, playlists, the Link one and changes on the beat, the compare view's approvals file and audio bytes (building needs `cmake`, for Ableton Link), the live output's display choice and fit | any change under `app/src-tauri/` |
 | `npm run typecheck` | the TypeScript (old app, server, editor page) compiles | any `.ts`/`.tsx` change |
 | `npx vitest run <files>` | targeted unit tests | the tests next to what you changed; CI runs the whole suite |
+| `cargo run --release -p visuals-engine --bin record -- <audio> <out.mp4> --cut <s> <preset> …` | presets drawn from an audio file into a video, frame by frame — the teaser's footage (see `teaser/README.md`) | after a change to `record.rs`: record a few seconds and look at them |
 | `cargo run --release -p visuals-engine --bin gpucheck` | every preset in the pack loads and draws on the GPU | changes to shader translation or the renderer |
 | `npm run compare -- [presets or folders] [--sample N] [--frames N] [--captures N] [--size WxH] [--no-serve]` | each preset drawn by Butterchurn and by our engine from the same audio, time and seeds; scored side by sides in `harness/out/compare/index.html`, approvals in `~/.openflow/visuals/compare/approvals.json` | after an engine change, to see whether it looks closer (see "The harness" in `docs/milkdrop-engine.md`); `--serve` reopens the last report |
 
