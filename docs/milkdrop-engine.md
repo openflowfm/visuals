@@ -110,6 +110,35 @@ live mode (with `VISUALS_PRESET`, on that preset), `VISUALS_DISPLAY=<n>` sends t
 to display `n` (from 0, the system's order), and `VISUALS_CAPTURE_OUTPUT=<png>` saves the
 output window beside `VISUALS_CAPTURE`'s main window.
 
+**Link and the one.** `link.rs` is an Ableton Link peer (the `rusty_link` crate: the
+official Link SDK through its C wrapper, built with cmake), the port of the old engine's
+clock (`server/link.ts`, [the clock](clock.md), [the wheel](wheel.md)) with its rules kept.
+**Visuals follow; they never drive**: the session state is only captured, never committed,
+so nothing can set the tempo, the beat or the transport. Link is on at startup
+(`VISUALS_LINK=0` starts it off) with start/stop sync listening, quantum 4. Bars are counted
+from **the one**, a Link beat the app holds (Link's beat has no bar 1): *set one* takes the
+nearest bar line by Link's *phase* (the coming one past half a bar), *nudge* moves it a beat
+either way, *reset* puts it back on Link's own lines (beat 0). A Link transport start takes
+the one from the bar line the music starts on (at or after the start time, as `show.ts`
+waits for the phase to drop); the first read never counts, because a peer joining a session
+already playing is not told so, and `playing` reads false until the next start or stop.
+
+Preset changes on the beat: every 1 or 2 beats or 1–32 bars from the one, through
+`actions::dispatch(Next)` (the playing playlist's next, or the library's). The scheduler
+turns the next boundary's beat into Link's host time (`time_at_beat`) and sleeps to it, so a
+change lands on the line; a boundary missed (a long load, the machine asleep) is skipped,
+never made late. With no peers Link runs its own timeline at the last tempo, and the changes
+carry on at that; Link off only leaves the network. Turning changes on turns time-based
+auto-advance off. Not yet: the next preset is loaded *at* the boundary, so a slow compile
+shows late — preloading it a beat early is the follow-up.
+
+Commands: `link_state`, `link_enable {on}`, `link_set_one`, `link_nudge {beats}`,
+`link_reset_one`, `link_sync {every, unit: "bars" | "beats"}` (0 is off), each returning the
+frame; the `link` event carries it ten times a second (tempo, peers, playing, beat, phase,
+one, bar, beatInBar, barPhase, every, next, at). The page's panel is `app/src/LinkPanel.tsx`.
+Development: `VISUALS_LINK_EVERY=<bars>` starts with changes on, `VISUALS_LINK_LOG=1` prints
+the frame every second and each change's beat.
+
 Not yet: one output only (no mirroring to several displays); the presets still draw at
 `bench::DRAW` (1920×1080) and are scaled to the display, so a 4K projector gets an
 upscaled picture; the cursor is not hidden over the output; on a single display the

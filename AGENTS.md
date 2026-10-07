@@ -8,7 +8,7 @@ status.
 | --- | --- | --- |
 | `cargo test -p visuals-engine --lib` | the engine: `.milk` parsing, shader translation, EEL, audio, a GPU render | any change under `engine/` |
 | `cargo build -p visuals-app` | the Tauri app compiles | any change under `app/src-tauri/` |
-| `cargo test -p visuals-app` | the app's Rust: live actions, playlists, the compare view's approvals file and audio bytes, the live output's display choice and fit | any change under `app/src-tauri/` |
+| `cargo test -p visuals-app` | the app's Rust: live actions, playlists, the Link one and changes on the beat, the compare view's approvals file and audio bytes (building needs `cmake`, for Ableton Link), the live output's display choice and fit | any change under `app/src-tauri/` |
 | `npm run typecheck` | the TypeScript (old app, server, editor page) compiles | any `.ts`/`.tsx` change |
 | `npx vitest run <files>` | targeted unit tests | the tests next to what you changed; CI runs the whole suite |
 | `cargo run --release -p visuals-engine --bin gpucheck` | every preset in the pack loads and draws on the GPU | changes to shader translation or the renderer |
