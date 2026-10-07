@@ -608,6 +608,14 @@ fn regs_names() -> impl Iterator<Item = String> {
     regs()
 }
 
+/// The rate presets are drawn at, whatever the display refreshes at.
+///
+/// MilkDrop presets move by a fixed amount per *frame* — zoom, rotation and the
+/// feedback itself compound once a frame — so they are written for one rate, and
+/// that is 60: what MilkDrop and Butterchurn draw at. On a 120 Hz display,
+/// drawing every refresh plays every preset at double speed.
+pub const FRAME_RATE: f64 = 60.0;
+
 /// Butterchurn's clock: time advances by one over the estimated frame rate, and
 /// the estimate follows the real frame times with damping.
 pub struct Clock {

@@ -43,6 +43,9 @@ pub struct Thread {
 /// How often stage pictures are read back: every this many frames.
 const PREVIEW_EVERY: u32 = 4;
 
+/// One frame at the preset rate.
+const FRAME: std::time::Duration = std::time::Duration::from_nanos((1e9 / engine::runtime::FRAME_RATE) as u64);
+
 /// Start drawing into `surface`. Returns once the device is up.
 pub fn start(instance: wgpu::Instance, surface: wgpu::Surface<'static>, size: (u32, u32), ring: Ring) -> Thread {
     let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
@@ -84,6 +87,7 @@ fn run(
     let mut logged = Instant::now();
     let mut audio = Audio::default();
     let mut last = Instant::now();
+    let mut due = Instant::now();
     let mut window = (Instant::now(), 0u32, 0.0f64);
     let mut loaded = false;
     loop {
@@ -114,7 +118,14 @@ fn run(
             }
             continue;
         }
+        // Drawn at the preset rate, not the display's (see `FRAME_RATE`): wait
+        // out the rest of this frame's slot, then present at the next refresh.
+        let wait = due.saturating_duration_since(Instant::now());
+        if !wait.is_zero() {
+            std::thread::sleep(wait);
+        }
         let now = Instant::now();
+        due = if now > due + FRAME { now + FRAME } else { due + FRAME };
         let elapsed = now.duration_since(last).as_secs_f64().clamp(0.001, 0.25);
         last = now;
         {
