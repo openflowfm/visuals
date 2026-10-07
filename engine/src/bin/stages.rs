@@ -27,7 +27,7 @@ fn main() {
     let tone: Vec<f32> = (0..1024).map(|i| (i as f32 * 0.07).sin() * 0.7).collect();
     for _ in 0..frames {
         audio.update(&tone, &tone);
-        renderer.render(&mut audio, 1.0 / 60.0);
+        renderer.render(&mut audio, 1.0 / engine::runtime::PRESET_RATE);
     }
     let pixels = renderer.read_previews().expect("previews");
     let each = (PREVIEW.0 * PREVIEW.1 * 4) as usize;

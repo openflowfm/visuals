@@ -48,7 +48,8 @@ fn main() {
     for frame in 0..frames {
         music(frame, &mut left, &mut right);
         audio.update(&left, &right);
-        renderer.render(&mut audio, 1.0 / 60.0);
+        // One preset step a frame.
+        renderer.render(&mut audio, 1.0 / engine::runtime::PRESET_RATE);
     }
     let pixels = renderer.read_back();
     let per_frame = started.elapsed().as_secs_f64() * 1000.0 / frames as f64;

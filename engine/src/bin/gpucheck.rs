@@ -52,7 +52,9 @@ fn main() {
             let loaded = renderer.load(&text, 1).map_err(|e| e.to_string())?;
             for _ in 0..frames {
                 audio.update(&tone, &tone);
-                renderer.render(&mut audio, 1.0 / 60.0);
+                // Half a step a refresh: every other one feeds back, the rest
+                // draw between steps, so both paths meet every preset's shaders.
+                renderer.render(&mut audio, 0.5 / engine::runtime::PRESET_RATE);
             }
             Ok(loaded.fell_back.iter().map(|(k, why)| format!("{k:?}: {}", why.lines().next().unwrap_or(""))).collect())
         }));
