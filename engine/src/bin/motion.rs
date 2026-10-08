@@ -215,14 +215,15 @@ fn save_png(file: &Path, rgba: &[u8], w: u32, h: u32) -> Result<(), Box<dyn std:
 }
 
 /// A folder name for a preset's pictures: its file name with anything but
-/// letters, digits, `-`, `_` and `.` made `_`, suffixed when already taken.
+/// letters, digits, `-`, `_` and `.` made `_`, suffixed when already taken (ignoring case).
 fn dump_dir(root: &Path, preset: &Path, taken: &mut std::collections::HashSet<String>) -> PathBuf {
     let stem = preset.file_stem().unwrap_or_default().to_string_lossy();
     let safe: String = stem.chars().map(|c| if c.is_ascii_alphanumeric() || "-_.".contains(c) { c } else { '_' }).collect();
     let safe = if safe.trim_matches('.').is_empty() { "preset".to_string() } else { safe };
     let mut name = safe.clone();
     let mut n = 2;
-    while !taken.insert(name.clone()) {
+    // Compared lower-cased: macOS and Windows folders ignore case.
+    while !taken.insert(name.to_ascii_lowercase()) {
         name = format!("{safe}-{n}");
         n += 1;
     }
