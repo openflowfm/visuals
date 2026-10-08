@@ -179,6 +179,21 @@ fn pack_dir_from(set: Option<OsString>, home: Option<OsString>) -> PathBuf {
     set.map(PathBuf::from).unwrap_or_else(|| PathBuf::from(home.unwrap_or_default()).join(".openflow/visuals/presets"))
 }
 
+/// A preset path as given, or else one in the pack ([`pack_dir`]); `None` when
+/// neither exists.
+pub fn find(name: &str) -> Option<PathBuf> {
+    find_in(name, &pack_dir())
+}
+
+fn find_in(name: &str, pack: &Path) -> Option<PathBuf> {
+    let given = PathBuf::from(name);
+    if given.exists() {
+        return Some(given);
+    }
+    let packed = pack.join(name);
+    packed.exists().then_some(packed)
+}
+
 /// Every `.milk` file under `dir` (any case of the extension), searched
 /// recursively, skipping files and folders whose names start with a dot, sorted.
 /// A folder that can't be read counts as empty.
@@ -211,6 +226,24 @@ mod tests {
         assert_eq!(pack_dir_from(Some("/packs".into()), Some("/home/me".into())), PathBuf::from("/packs"));
         assert_eq!(pack_dir_from(None, Some("/home/me".into())), PathBuf::from("/home/me/.openflow/visuals/presets"));
         assert_eq!(pack_dir_from(None, None), PathBuf::from(".openflow/visuals/presets"));
+    }
+
+    #[test]
+    fn find_takes_the_path_as_given_then_the_pack() {
+        let root = std::env::temp_dir().join(format!("visuals-find-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let pack = root.join("pack");
+        std::fs::create_dir_all(pack.join("Author")).unwrap();
+        std::fs::write(pack.join("Author/a.milk"), "").unwrap();
+        let given = root.join("given.milk");
+        std::fs::write(&given, "").unwrap();
+        let found = [
+            find_in(given.to_str().unwrap(), &pack),
+            find_in("Author/a.milk", &pack),
+            find_in("Author/missing.milk", &pack),
+        ];
+        std::fs::remove_dir_all(&root).unwrap();
+        assert_eq!(found, [Some(given), Some(pack.join("Author/a.milk")), None]);
     }
 
     #[test]
