@@ -4,7 +4,7 @@
   "private": true,
   "author": "Ryan Gavin",
   "type": "module",
-  "description": "visual[flow]: an Ableton Link peer that renders a Live set from a node graph.",
+  "description": "visual[flow]: a MilkDrop engine and editor app that follows Ableton Link.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/openflowfm/visuals.git"
@@ -14,30 +14,6 @@
     "node": ">=26"
   },
   "scripts": {
-    "postinstall": "npm run build:link",
-    "build:link": "node --disable-warning=ExperimentalWarning tools/build-link.ts",
-    "nodes": "node --disable-warning=ExperimentalWarning tools/generate-nodes.ts",
-    "nodes:check": "node --disable-warning=ExperimentalWarning tools/generate-nodes.ts --check",
-    "mcp": "npm run nodes && node --disable-warning=ExperimentalWarning mcp/index.ts",
-    "model:xenon": "node --disable-warning=ExperimentalWarning tools/generate-xenon-60-model.ts",
-    "model:proof": "node --disable-warning=ExperimentalWarning tools/xenon-model-proof.ts",
-    "model:showcase": "node --disable-warning=ExperimentalWarning tools/model-showcase.ts",
-    "harness:profile": "node --disable-warning=ExperimentalWarning harness/profile.ts",
-    "presets:cream": "node --disable-warning=ExperimentalWarning tools/presets-cream.ts",
-    "benchmark": "node --disable-warning=ExperimentalWarning tools/benchmark.ts",
-    "frames": "node --disable-warning=ExperimentalWarning tools/frames.ts",
-    "footage:frames": "node --disable-warning=ExperimentalWarning tools/footage-frames.ts",
-    "structure:compare": "node --disable-warning=ExperimentalWarning tools/structure-compare.ts",
-    "show": "node --disable-warning=ExperimentalWarning tools/visuals.ts",
-    "server": "node --disable-warning=ExperimentalWarning server/index.ts",
-    "ui": "vite --config vite.config.ts",
-    "storybook": "storybook dev --exact-port -p \"${PORT:-$(node -e \"const s=require('net').createServer().listen(0,'127.0.0.1',()=>{console.log(s.address().port);s.close()})\")}\"",
-    "build:storybook": "storybook build --quiet -o storybook-static",
-    "dev:fake-live": "node --disable-warning=ExperimentalWarning tools/fake-live.ts",
-    "dev:responses": "node --disable-warning=ExperimentalWarning tools/responses-report.ts",
-    "dev:node-manual": "node --disable-warning=ExperimentalWarning tools/generate-manual.ts",
-    "dev:node-manual:check": "node --disable-warning=ExperimentalWarning tools/generate-manual.ts --check",
-    "build": "vite build --config vite.config.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
@@ -46,50 +22,22 @@
     "app": "cd app/src-tauri && export PORT=${PORT:-$(node -e \"const s=require('net').createServer().listen(0,'127.0.0.1',()=>{console.log(s.address().port);s.close()})\")} && cargo tauri dev --config \"{\\\"build\\\":{\\\"devUrl\\\":\\\"http://127.0.0.1:$PORT\\\"}}\""
   },
   "dependencies": {
-    "@ktamas77/abletonlink": "^1.2.3",
-    "@modelcontextprotocol/sdk": "^1.30.0",
-    "@openflow/protocol": "github:openflowfm/protocol#918e52b61afcc9945d433a445557a3043e532af1",
     "@openflow/widgets": "git+https://github.com/openflowfm/widgets.git#dc356455e561c7eb9dce337a1e6b6810a5251fcb",
     "@tauri-apps/api": "^2.12.1",
-    "@xyflow/react": "^12.11.5",
-    "butterchurn": "2.6.7",
-    "butterchurn-presets": "2.4.7",
-    "d3-hierarchy": "^3.1.2",
-    "milkdrop-preset-converter": "0.1.2",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "three": "^0.180.0",
-    "ws": "^8.18.0",
-    "zod": "^4.4.3"
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "@storybook/addon-docs": "^10.6.0",
-    "@storybook/addon-vitest": "^10.6.0",
-    "@storybook/react-vite": "^10.6.0",
-    "@testing-library/react": "^16.3.3",
-    "@types/d3-hierarchy": "^3.1.7",
     "@types/node": "^26.4.1",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
-    "@types/three": "^0.180.0",
-    "@types/ws": "^8.5.13",
     "@vitejs/plugin-react": "^6.1.1",
-    "@vitest/browser": "^5.0.1",
-    "@vitest/browser-playwright": "^5.0.1",
     "@vitest/coverage-v8": "^5.0.1",
-    "@vitest/ui": "^5.0.3",
-    "happy-dom": "^20.14.0",
-    "node-gyp": "^12.4.0",
-    "playwright": "^1.63.0",
-    "storybook": "^10.6.0",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
     "vitest": "^5.0.1"
   },
   "allowScripts": {
-    "esbuild@0.28.2": true,
-    "@ktamas77/abletonlink": false,
-    "fsevents@2.3.3": true,
-    "core-js@2.6.12": false
+    "fsevents@2.3.3": true
   }
 }

@@ -24,40 +24,28 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
-      # `npm ci` runs the postinstall, which compiles the Ableton Link addon
-      # against this runner's toolchain (python3 and build-essential, both
-      # present on ubuntu-latest) — see `tools/build-link.ts`.
       - run: npm ci
-
-      # The stories project renders every story in headless Chromium.
-      - run: npx playwright install --with-deps chromium
 
       - run: npm run typecheck
 
-      # Coverage rather than a plain run: same tests, V8's own counters, and a
-      # table on the build page instead of a number that only ever existed in
+      # The editor page's tests, with coverage: same tests, V8's own counters,
+      # and a table in the log instead of a number that only ever existed in
       # somebody's terminal.
       - id: coverage
         run: npm run test:coverage
 
-      # report/ is the vitest ui with the coverage report copied in under
-      # coverage/ — one directory that is both the artifact and the site.
       - if: ${{ !cancelled() && steps.coverage.conclusion != 'skipped' }}
         uses: actions/upload-artifact@v7
         with:
-          name: test-report-${{ github.sha }}
-          path: report/
+          name: coverage-${{ github.sha }}
+          path: coverage/
           if-no-files-found: error
           retention-days: 14
 
       # The "must build from a clean tree" rule, enforced rather than
       # remembered. A clean checkout is the only place it's honestly tested —
       # a file that's untracked but imported passes locally and fails here.
-      - run: npm run build
-
-      # The stories, built rather than only typechecked: a story that imports
-      # something only the app's Vite config can resolve fails here and nowhere else.
-      - run: npm run build:storybook
+      - run: npm run app:build-ui
 
   # The engine and the Tauri app. macOS because the app is macOS-only (its
   # output window is an NSScreen), and because the runner has Metal, so the

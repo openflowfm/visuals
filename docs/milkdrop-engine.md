@@ -1,8 +1,8 @@
 # The MilkDrop engine
 
-A plan, not a record. It replaces the colour-at-a-point engine described in
-[flows](flows.md) and [render](render.md); neither is preserved. See [MilkDrop](milkdrop.md)
-for what ships today, which is Butterchurn drawing inside the old compositor.
+A plan and its status. It replaced the old visual[flow] — a Node server and a WebGL2
+renderer with its own colour-at-a-point engine, which drew MilkDrop through Butterchurn —
+and that app is deleted (see "Where it lives").
 
 ## The north star
 
@@ -110,7 +110,8 @@ output window beside `VISUALS_CAPTURE`'s main window.
 
 **Link and the one.** `link.rs` is an Ableton Link peer (the `rusty_link` crate: the
 official Link SDK through its C wrapper, built with cmake), the port of the old engine's
-clock (`server/link.ts`, [the clock](clock.md), [the wheel](wheel.md)) with its rules kept.
+clock (`server/link.ts` and its docs `docs/clock.md` and `docs/wheel.md`, all deleted with
+the old app) with its rules kept.
 **Visuals follow; they never drive**: the session state is only captured, never committed,
 so nothing can set the tempo, the beat or the transport. Link is on at startup
 (`VISUALS_LINK=0` starts it off) with start/stop sync listening, quantum 4. Bars are counted
@@ -416,8 +417,8 @@ BlackHole visualizer already has — with the engine as a Rust crate drawing on 
 - **Audio through CPAL**, the capture code the BlackHole visualizer already has: any Core
   Audio input, any two channels, a lock-free history the renderer reads each frame.
 - **Shaders translated once, on import.** MilkDrop's HLSL → SPIR-V (glslang's HLSL front
-  end) → `naga` → MSL, with the original text kept. That replaces the Emscripten converter
-  `server/hlsl.ts` works around.
+  end) → `naga` → MSL, with the original text kept. That replaced the Emscripten converter
+  the old server worked around.
 - **EEL compiled to a register-VM bytecode in Rust**, tested against Butterchurn's
   results for the same inputs; per-vertex and per-point equations that qualify are
   compiled to shader code instead (see below).
@@ -447,7 +448,7 @@ engine.
 ## Measured so far
 
 **Butterchurn at 4K on the target machine** (M1 Max, 32-core GPU; `npm run
-harness:profile`). Measured through Chromium, because Butterchurn is a WebGL engine, so
+harness:profile`, deleted with the old app). Measured through Chromium, because Butterchurn is a WebGL engine, so
 the totals are distorted by Chromium's GPU process — its throughput reading is less than
 its own comp pass. The stage shares are the useful part: **comp** is the largest cost
 (~2.8 ms median at 4K), then **blur** (~0.8), then the feedback buffer's **mipmaps**
@@ -551,8 +552,9 @@ What can't match Butterchurn, and so is not an engine bug when a preset looks di
 
 ## Where it lives
 
-In this repository, beside what it replaces until it can draw: `engine/` (the Rust
-crate), `app/` (the Tauri shell and its webview UI) and `harness/`. The Electron app is
-gone; the Node server and the old engine are deleted in one change once nothing here needs
-them —
-confirmed with Ryan before it happens.
+`engine/` (the Rust crate) and `app/` (the Tauri shell and its webview UI, `app/src`) are
+the whole product; `teaser/` is the Remotion edit made from the engine's footage. The
+Electron app went first; the Node server, the WebGL2 renderer, their MCP server, stories,
+tools and docs (`client/`, `server/`, `mcp/`, `stories/`, `tools/`, `harness/`, the root
+`*.ts` modules) were deleted in October 2026, with Ryan's go-ahead. The last commit with
+them is `3bcc202`, to read or bring something back from.
