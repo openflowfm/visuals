@@ -346,7 +346,8 @@ are exact):
 - **Speed above 1× on a slow display** makes several steps in one refresh, each fed back;
   only the last is shown.
 
-Measured with the side-by-side harness (since removed; see "Comparing with Butterchurn")
+Measured with the old side-by-side harness (its pixel-and-shape score; the bench that
+replaced it scores differently, see "Comparing with Butterchurn")
 on its default 30 presets, 240 frames: before, both
 engines at 60 frames a second, the mean score was 75.9; now, Butterchurn at 30 and ours at
 `--refresh 30`, `60` and `120`, it is **74.5 at all three, preset for preset** — the
@@ -536,14 +537,37 @@ harder rather than easier.
 
 ## Comparing with Butterchurn
 
-There was a side-by-side harness: `npm run compare` drew presets with Butterchurn in
-headless Chromium and with the engine (`engine/src/bin/compare.rs`) from the same audio,
-time and seeds, and scored the pairs; the app had a compare view with Butterchurn live
-beside the bench and approve / reject / note per preset. Both were removed in October
-2026 as no longer needed: presets are now judged by ear and eye against the BlackHole
-visualizer. The last commit with them is `e941049` (the merge of #38), to bring them back
-from as a separate development-only module if they are wanted again. The verdicts given
-are still in `~/.openflow/visuals/compare/approvals.json`, untouched.
+The compare bench (`compare/`, development only: nothing in `app/` or `engine/` depends
+on it) draws presets with Butterchurn 2.6.7 in headless Chromium and with the engine
+(`compare/src/main.rs`, the `visuals-compare` crate) from the same audio bytes, clock and
+seeds:
+
+```sh
+cd compare && npm ci && npx playwright install chromium   # once
+npm run compare -- <presets or folders> [--sample N] [--frames 240] [--captures 8] [--size 640x360] [--min-score N] [--timeout 30]
+npm run compare -- --serve                                # the last report as a page, with approve / reject / note
+```
+
+It never compares pixels. Each picture is reduced to 8×4 sections (colour, brightness,
+hue, edge energy, motion between captures) and a palette of hues, and ours only counts as
+different where it is further from Butterchurn than the re-runs drift — Butterchurn with
+other seeds against Butterchurn, ours re-seeded and slightly larger against ours, never
+under a minimum — with the first captures weighted most and the worst capture pulling the
+score down. It prints one line per preset (the score, the floor, the worst capture, why
+the preset drifts, a plain-language line), writes `compare/out/report.json` and a
+composite PNG per capture (Butterchurn | ours | beyond the floor, over the re-seeded
+pair), and exits 1 when ours failed to draw a preset or none could be scored; a preset
+stuck over the timeout is killed and reported. Presets whose floor is too high are
+reported as not comparable. `npm run calibrate` checks on 20 presets picked at random,
+and on known cases of ours labelled by eye, that the score separates the same picture
+from deliberately different ones (similar 86.0 and up, different 70.4 and down). `compare/README.md` has how to read the score and the
+calibration numbers; AGENTS.md says when to run it. It came back in October 2026 from
+`e941049`, the harness of #38, rebuilt for agents; the old app's compare view stays gone.
+Verdicts are still in `~/.openflow/visuals/compare/approvals.json`, and `--serve` keeps
+adding to it in the same format.
+
+The scores in "The preset clock" above (74.5) are the old harness's pixel-and-shape score
+and can't be set beside the bench's.
 
 What can't match Butterchurn, and so is not an engine bug when a preset looks different:
 
@@ -554,7 +578,8 @@ What can't match Butterchurn, and so is not an engine bug when a preset looks di
 - **`rand(n)` itself.** Butterchurn returns `Math.random() * floor(n)`, not floored; the
   engine floors. Presets that use it differ until the engine copies the quirk.
 - **Shaders Butterchurn cannot link.** It draws black where MilkDrop draws its default;
-  the engine draws the default, and Ryan judges which is right.
+  the engine draws the default, and Ryan judges which is right. The bench compares
+  against the default and says so.
 - **Unknown textures.** Butterchurn samples its `clouds2` image for any sampler it has no
   picture for.
 - **Chaotic feedback.** A preset that feeds back strongly turns float-level differences

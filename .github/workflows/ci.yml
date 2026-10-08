@@ -99,3 +99,27 @@ jobs:
 
       # The lab build (the editor's commands) compiles too; its tests are the same.
       - run: cargo build -p visuals-app --features lab
+
+      # The compare bench's engine half; its GPU tests draw here (Metal) and skip without a GPU.
+      - run: cargo test -p visuals-compare
+
+  # The compare bench's TypeScript: its metric, its approvals and its HLSL
+  # repairs. compare/ is its own package; neither the root typecheck nor the
+  # root tests reach it, and none of this needs a Playwright browser.
+  compare:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: compare
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: compare/package-lock.json
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test

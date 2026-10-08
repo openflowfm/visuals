@@ -5353,6 +5353,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "visuals-compare"
+version = "0.0.0"
+dependencies = [
+ "visuals-engine",
+ "wgpu",
+]
+
+[[package]]
 name = "visuals-engine"
 version = "0.2.0"
 dependencies = [

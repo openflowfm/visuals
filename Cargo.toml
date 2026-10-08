@@ -1,5 +1,5 @@
 [workspace]
-members = ["engine", "app/src-tauri"]
+members = ["engine", "app/src-tauri", "compare"]
 resolver = "3"
 
 [profile.dev.package."*"]
