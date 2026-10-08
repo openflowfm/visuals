@@ -1,0 +1,282 @@
+/* The welcome flow (`Onboarding`), filling the window, and live mode's silence
+   banner. Every part paints itself except the preview's hole on the listen step:
+   the bench is a native view under the page and shows through wherever nothing
+   paints. */
+
+.ob {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100%;
+  color: var(--ui);
+}
+
+.ob-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: calc(var(--ctl-h) + 13px);
+  padding: 6px 10px;
+  background: var(--rail);
+  border-bottom: 1px solid var(--bd);
+  font-family: var(--mono);
+  font-variation-settings: var(--mono-axes);
+  font-size: var(--text-control);
+  white-space: nowrap;
+}
+
+/* Where you are: each step's name, the one you're on lit. */
+.ob-dots {
+  display: flex;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+  overflow: hidden;
+}
+.ob-dots li {
+  padding: 2px 8px;
+  border-bottom: 2px solid var(--bd3);
+  color: var(--caption);
+}
+.ob-dots li[data-done] {
+  color: var(--detail);
+  border-color: var(--detail);
+}
+.ob-dots li[data-at] {
+  color: var(--fg);
+  border-color: var(--green);
+}
+
+.ob-body {
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+.ob[data-step='listen'] .ob-body {
+  overflow: hidden;
+  align-items: stretch;
+  background: transparent;
+}
+
+.ob-foot {
+  display: flex;
+  padding: 8px 10px;
+  background: var(--bg);
+  border-top: 1px solid var(--bd3);
+}
+
+.ob-step {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: min(560px, 100%);
+  padding: 32px;
+}
+.ob-step h1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--fg);
+  font-size: calc(var(--text-title) * 1.6);
+  font-weight: var(--weight-strong);
+  letter-spacing: var(--track-tight);
+}
+.ob-step h1 .vf-mark {
+  height: auto;
+  padding: 0;
+  font-size: inherit;
+}
+.ob-lead {
+  margin: 0;
+  color: var(--ui);
+  font-size: var(--text-title);
+  line-height: 1.45;
+}
+.ob-note {
+  margin: 0;
+  color: var(--detail);
+  font-size: var(--text-body);
+  line-height: 1.45;
+}
+.ob-cue {
+  margin: 0;
+  color: var(--fg);
+  font-size: var(--text-title);
+  font-weight: var(--weight-medium);
+}
+
+.ob-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.ob-actions > * {
+  flex: none;
+  width: auto;
+}
+/* The one thing to do next: bigger, and in the suite's colour. */
+.ob-main .wdg-button-body {
+  min-width: 120px;
+  height: 30px;
+  padding: 0 18px;
+  border-color: var(--green);
+  background: var(--green);
+  color: var(--on-primary, #000);
+  font-size: var(--text-body);
+  font-weight: var(--weight-strong);
+}
+.ob-actions .wdg-button-body {
+  height: 30px;
+  font-size: var(--text-body);
+}
+
+.ob-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: var(--text-body);
+}
+
+.ob-problem {
+  gap: 8px;
+  font-size: var(--text-body);
+}
+
+/* Listen to: the words on the left, the preview's hole on the right. */
+.ob-listen {
+  flex-direction: row;
+  gap: 0;
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+}
+.ob-listen .ob-text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 16px;
+  flex: 0 0 min(460px, 45%);
+  padding: 32px;
+  background: var(--bg);
+  border-right: 1px solid var(--bd3);
+}
+.ob-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  background: var(--panel);
+  border: 1px solid var(--bd3);
+  font-family: var(--mono);
+  font-variation-settings: var(--mono-axes);
+  font-size: var(--text-control);
+}
+.ob-picker[data-off] {
+  opacity: 0.45;
+}
+.ob-picker .audio-input {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.ob-listen .ob-text {
+  position: relative;
+  z-index: 1;
+}
+/* The rest of the row, clipping the hole's painted surround to itself. */
+.ob-stage {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  overflow: hidden;
+}
+.ob-stage > .ob-preview {
+  aspect-ratio: 16 / 9;
+  width: min(100%, calc((100vh - 200px) * 16 / 9));
+  background: transparent;
+  /* Paints everything round the hole, so only the picture shows through. */
+  box-shadow: 0 0 0 100vmax var(--bg);
+}
+.ob-preview[data-loading] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel);
+}
+
+.ob-warning h1 {
+  color: var(--caution);
+}
+
+/* Pick a vibe: a card per starter playlist, and one for anything at all. */
+.ob-vibes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ob-vibe {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  padding: 14px;
+  background: var(--panel);
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-sm, 2px);
+  color: var(--ui);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ob-vibe b {
+  color: var(--fg);
+  font-size: var(--text-title);
+}
+.ob-vibe span {
+  color: var(--detail);
+  font-size: var(--text-body);
+}
+.ob-vibe:hover:not(:disabled),
+.ob-vibe:focus-visible {
+  border-color: var(--green);
+  outline: none;
+}
+.ob-vibe:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Live mode, after five seconds of nothing: a quiet strip near the bottom. */
+.ob-silence {
+  position: fixed;
+  left: 50%;
+  bottom: 44px;
+  z-index: 10;
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 32px);
+  padding: 8px 12px;
+  background: var(--panel);
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-sm, 2px);
+  box-shadow: var(--shadow-modal, 0 12px 32px rgba(0, 0, 0, 0.5));
+  color: var(--ui);
+  font-size: var(--text-body);
+}

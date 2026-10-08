@@ -14,6 +14,7 @@ import { useLibrary } from './library.ts';
 import { isTyping, nameOf, notice, openFailed } from './shell.ts';
 import { Live } from './Live.tsx';
 import * as output from './output.ts';
+import { Onboarding, useWelcome } from './Onboarding.tsx';
 
 // The editor, only in a lab build: without `VITE_LAB` this is `null` at build
 // time, and the editor's code (the graph, the inspector, the edits) never reaches
@@ -26,7 +27,8 @@ const Editor = import.meta.env.VITE_LAB ? lazy(() => import('./Lab.tsx')) : null
  * `VISUALS_LIVE=1` starts in live mode, `VISUALS_PRESET=<path>` on a preset.
  */
 export function App() {
-  const [mode, setMode] = useState<{ view: View; preset: string | null } | null>(null);
+  const [mode, setMode] = useState<{ view: View; preset: string | null; windowed?: boolean } | null>(null);
+  const welcome = useWelcome();
   useEffect(() => {
     Promise.all([output.startPreset(), output.liveStart()]).then(
       ([preset, live]) => setMode({ view: live ? 'live' : HOME, preset }),
@@ -34,8 +36,18 @@ export function App() {
     );
   }, []);
   const onMode = useCallback((view: View, preset: string | null) => setMode({ view, preset }), []);
-  if (!mode) return null;
-  if (mode.view === 'live') return <Live start={mode.preset} onMode={onMode} />;
+  if (!mode || welcome.shown === null) return null;
+  if (welcome.shown)
+    return (
+      <Onboarding
+        onDone={(end) => {
+          welcome.close();
+          // Arriving from the flow, live mode plays in the window: the output isn't opened on a display.
+          setMode({ view: end === 'live' ? 'live' : HOME, preset: null, windowed: end === 'live' });
+        }}
+      />
+    );
+  if (mode.view === 'live') return <Live start={mode.preset} onMode={onMode} windowed={mode.windowed} />;
   if (mode.view === 'editor' && Editor)
     return (
       <Suspense fallback={null}>
