@@ -17,23 +17,18 @@
 
 mod common;
 
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use cpal::traits::{DeviceTrait, HostTrait};
 use engine::audio::Audio;
+use engine::live::{self, Ring};
 use engine::render::Renderer;
-use std::collections::VecDeque;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Instant;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, KeyEvent, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::{Key, NamedKey};
 use winit::window::{Fullscreen, Window, WindowId};
-
-const WINDOW: usize = 1024;
-
-/// The latest `WINDOW` samples of the two chosen channels.
-type Ring = Arc<Mutex<(VecDeque<f32>, VecDeque<f32>)>>;
 
 struct Options {
     presets: Vec<PathBuf>,
@@ -89,8 +84,8 @@ fn options() -> Options {
     o
 }
 
-/// Open an input and keep the last `WINDOW` samples of two of its channels.
-fn listen(input: Option<&str>, (left, right): (usize, usize)) -> Option<(cpal::Stream, Ring, f32)> {
+/// Open an input and keep the latest samples of two of its channels.
+fn listen(input: Option<&str>, channels: (usize, usize)) -> Option<(cpal::Stream, Ring, f32)> {
     let host = cpal::default_host();
     let device = match input {
         Some(want) => host.input_devices().ok()?.find(|d| {
@@ -98,35 +93,11 @@ fn listen(input: Option<&str>, (left, right): (usize, usize)) -> Option<(cpal::S
         })?,
         None => host.default_input_device()?,
     };
-    let config = device.default_input_config().ok()?;
-    let channels = config.channels() as usize;
-    let rate = config.sample_rate() as f32;
     let name = device.description().map(|d| d.name().to_owned()).unwrap_or_default();
-    let ring: Ring = Arc::new(Mutex::new((VecDeque::from(vec![0.0; WINDOW]), VecDeque::from(vec![0.0; WINDOW]))));
-    let writer = ring.clone();
-    let (l, r) = (left.min(channels - 1), right.min(channels - 1));
-    let stream = device
-        .build_input_stream(
-            config.into(),
-            move |data: &[f32], _| {
-                if let Ok(mut ring) = writer.try_lock() {
-                    for frame in data.chunks_exact(channels) {
-                        ring.0.push_back(frame[l]);
-                        ring.1.push_back(frame[r]);
-                    }
-                    while ring.0.len() > WINDOW {
-                        ring.0.pop_front();
-                        ring.1.pop_front();
-                    }
-                }
-            },
-            |e| eprintln!("audio input stopped: {e}"),
-            None,
-        )
-        .ok()?;
-    stream.play().ok()?;
-    eprintln!("listening to {name}, channels {} and {}, at {rate} Hz", l + 1, r + 1);
-    Some((stream, ring, rate))
+    let ring = live::ring();
+    let open = live::open_input(&device, channels, ring.clone()).ok()?;
+    eprintln!("listening to {name}, channels {} and {}, at {} Hz", open.left + 1, open.right + 1, open.rate);
+    Some((open.stream, ring, open.rate))
 }
 
 struct App {
@@ -199,20 +170,9 @@ impl ApplicationHandler for App {
         );
         let instance = wgpu::Instance::default();
         let surface = instance.create_surface(window.clone()).expect("surface");
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
-            compatible_surface: Some(&surface),
-            ..Default::default()
-        }))
-        .expect("adapter");
-        let (device, queue) = pollster::block_on(adapter.request_device(&Default::default())).expect("device");
-        let caps = surface.get_capabilities(&adapter);
-        // A plain (not sRGB) format: WebGL writes colour values as they are.
-        let format = caps.formats.iter().copied().find(|f| !f.is_srgb()).unwrap_or(caps.formats[0]);
+        let (adapter, device, queue) = live::surface_device(&instance, &surface);
         let size = window.inner_size();
-        let mut config = surface.get_default_config(&adapter, size.width.max(1), size.height.max(1)).expect("surface config");
-        config.format = format;
-        config.present_mode = wgpu::PresentMode::AutoVsync;
+        let config = live::configuration(&adapter, &surface, (size.width, size.height));
         surface.configure(&device, &config);
         self.renderer = Some(Renderer::new(device, queue, self.options.size.0, self.options.size.1));
         self.window = Some(window.clone());
@@ -263,14 +223,7 @@ impl ApplicationHandler for App {
                 let (Some(renderer), Some(surface), Some(config)) = (self.renderer.as_mut(), &self.surface, &self.config) else { return };
                 let started = Instant::now();
                 renderer.render(&mut self.audio, elapsed);
-                match surface.get_current_texture() {
-                    wgpu::CurrentSurfaceTexture::Success(frame) | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => {
-                        let view = frame.texture.create_view(&Default::default());
-                        renderer.present(&view, config.format);
-                        renderer.queue().present(frame);
-                    }
-                    _ => surface.configure(renderer.device(), config),
-                }
+                live::show(renderer, surface, config);
                 self.timing.1 += started.elapsed().as_secs_f64();
                 self.frames += 1;
                 if now.duration_since(self.timing.0).as_secs_f64() >= 5.0 {
