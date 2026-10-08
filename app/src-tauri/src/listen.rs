@@ -1,9 +1,12 @@
 //! Audio in: any Core Audio input, two of its channels, the last `WINDOW` samples
-//! of each kept for the render thread to read once a frame.
+//! of each kept for the render thread to read once a frame. The page's audio
+//! commands, and the choice kept for next time.
 
+use crate::{bench, App};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
+use tauri::State;
 
 pub const WINDOW: usize = 1024;
 
@@ -24,6 +27,7 @@ pub struct Input {
     pub channels: u16,
 }
 
+#[tauri::command]
 pub fn inputs() -> Vec<Input> {
     let host = cpal::default_host();
     host.input_devices()
@@ -62,26 +66,72 @@ impl Listening {
     }
 }
 
-/// Where the last choice is kept, so the app comes back listening to it.
-fn saved_at() -> std::path::PathBuf {
-    let home = std::env::var_os("OPENFLOW_HOME")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".openflow"));
-    home.join("visuals").join("audio.json")
-}
+/// Where the last choice is kept in [`crate::settings::dir`], so the app comes
+/// back listening to it.
+const SAVED: &str = "audio.json";
 
-pub fn save(choice: &Choice) {
-    let path = saved_at();
-    if let Some(dir) = path.parent() {
-        let _ = std::fs::create_dir_all(dir);
-    }
+fn save(choice: &Choice) {
     if let Ok(text) = serde_json::to_string_pretty(choice) {
-        let _ = std::fs::write(path, text);
+        crate::settings::save(SAVED, text);
     }
 }
 
-pub fn saved() -> Option<Choice> {
-    serde_json::from_str(&std::fs::read_to_string(saved_at()).ok()?).ok()
+/// Listen to `name` (the system input when absent), channels `left` and `right`
+/// counted from 1. Returns the input's name.
+#[tauri::command]
+pub fn listen_to(name: Option<String>, size: Option<usize>, left: Option<usize>, right: Option<usize>, app: State<App>) -> Result<String, String> {
+    let l = listen_on(&app, name.as_deref(), size, left, right)?;
+    save(&l);
+    Ok(l.name)
+}
+
+/// Open an input and make it what the bench hears. Channels count from 1. The
+/// new input opens before the old one closes, so a switch that fails leaves the
+/// bench hearing what it heard.
+fn listen_on(app: &App, name: Option<&str>, size: Option<usize>, left: Option<usize>, right: Option<usize>) -> Result<Choice, String> {
+    let channels = (left.unwrap_or(1).max(1) - 1, right.unwrap_or(2).max(1) - 1);
+    let mut listening = app.listening.lock().unwrap();
+    let l = listen(name, size, channels, app.ring.clone())?;
+    app.send(bench::Cmd::SampleRate(l.rate));
+    let choice = l.choice();
+    eprintln!("listening to {} on channels {} and {} of {}, at {} Hz", choice.name, choice.left, choice.right, l.channels, l.rate);
+    *listening = Some(l);
+    Ok(choice)
+}
+
+/// Come back listening to what was chosen last; the system input when that is
+/// gone or nothing was chosen.
+pub fn resume(app: &App) {
+    let saved: Option<Choice> = crate::settings::load(SAVED);
+    let heard = saved
+        .as_ref()
+        .and_then(|c| listen_on(app, Some(&c.name), Some(c.size), Some(c.left), Some(c.right)).ok())
+        .map(Ok)
+        .unwrap_or_else(|| listen_on(app, None, None, None, None));
+    if let Err(e) = heard {
+        eprintln!("no audio input: {e}");
+    }
+}
+
+#[derive(serde::Serialize)]
+pub struct Heard {
+    /// The input and the two channels heard, from 1; absent when nothing is open.
+    choice: Option<Choice>,
+    /// How many channels the input has.
+    channels: usize,
+}
+
+/// What the bench is listening to.
+#[tauri::command]
+pub fn listening(app: State<App>) -> Heard {
+    let l = app.listening.lock().unwrap();
+    Heard { choice: l.as_ref().map(|l| l.choice()), channels: l.as_ref().map_or(0, |l| l.channels) }
+}
+
+/// The loudest sample in the left and right channels' latest windows, for a meter.
+#[tauri::command]
+pub fn levels(app: State<App>) -> (f32, f32) {
+    peaks(&app.ring)
 }
 
 /// The loudest sample in each channel's latest window, 0–1, for a meter.

@@ -10,8 +10,8 @@
 //! is kept across restarts.
 
 use engine::fx::{Master, Mirror as EngineMirror};
+use crate::settings;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 #[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -212,7 +212,7 @@ impl Fx {
     /// With the tempo kept from last time, if there is one.
     pub fn restored() -> Fx {
         let mut fx = Fx::default();
-        if let Some(bpm) = std::fs::read_to_string(tempo_file()).ok().and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()).and_then(|v| v["bpm"].as_f64()) {
+        if let Some(bpm) = settings::load::<serde_json::Value>(TEMPO_FILE).and_then(|v| v["bpm"].as_f64()) {
             fx.bpm = bpm.clamp(40.0, 240.0);
         }
         fx
@@ -485,26 +485,28 @@ impl Fx {
     }
 }
 
-/// `~/.openflow/visuals/tempo.json` (under `OPENFLOW_HOME`).
-fn tempo_file() -> PathBuf {
-    let home = std::env::var_os("OPENFLOW_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".openflow"));
-    home.join("visuals").join("tempo.json")
-}
+/// The tempo's file in [`settings::dir`].
+const TEMPO_FILE: &str = "tempo.json";
 
 /// Keep the tempo for next time. Failing to is not worth stopping the show for.
 pub fn save_tempo(bpm: f64) {
-    let file = tempo_file();
-    if let Some(dir) = file.parent() {
-        let _ = std::fs::create_dir_all(dir);
-    }
-    let _ = std::fs::write(file, format!("{{\"bpm\": {bpm:.2}}}\n"));
+    settings::save(TEMPO_FILE, tempo_text(bpm));
+}
+
+/// The tempo file's bytes, written by hand so they stay `{"bpm": 120.00}`.
+fn tempo_text(bpm: f64) -> String {
+    format!("{{\"bpm\": {bpm:.2}}}\n")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_tempo_file_keeps_its_bytes() {
+        assert_eq!(tempo_text(120.0), "{\"bpm\": 120.00}\n");
+        assert_eq!(tempo_text(128.456), "{\"bpm\": 128.46}\n");
+    }
 
     fn at(start: Instant, s: f64) -> Instant {
         start + Duration::from_secs_f64(s)
