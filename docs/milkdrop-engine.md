@@ -35,7 +35,7 @@ cargo test --lib                                    # unit tests, including one 
 cargo run --release --bin play -- [folder|files] [--input BlackHole] [--channels 1,2] [--every 30]
 cargo run --release --bin snapshot -- preset.milk 240 out.png 1280x720
 cargo run --release --bin check                     # every preset: equations and shaders compile
-cargo run --release --bin gpucheck                  # every preset: loads and draws on the GPU
+cargo run --release --bin gpucheck                  # a 250-preset sample loads and draws on the GPU (--all: every one)
 cargo run --release --bin explain -- preset.milk comp   # why one shader does not compile
 ```
 
