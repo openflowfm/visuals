@@ -74,7 +74,12 @@ export const previews = () => invoke<ArrayBuffer>('previews');
  * preset's decay, gamma and echo written in as numbers so it runs in any player
  * (`engine::shader::written_default`). */
 export const defaultShader = (preset: Preset, which: 'warp' | 'comp') => invoke<string>('default_shader', { preset, which });
-export const open = (path: string) => invoke<{ preset: Preset; report: Report }>('open', { path });
+/** `library::Opened`: a preset opened on the preview, and what of it failed to compile. */
+export interface Opened {
+  preset: Preset;
+  report: Report;
+}
+export const open = (path: string) => invoke<Opened>('open', { path });
 export const apply = (preset: Preset) => invoke<Report>('apply', { preset });
 export const placeBench = (r: { x: number; y: number; width: number; height: number }) => invoke<void>('place_bench', r);
 export const inputs = () => invoke<Input[]>('inputs');
@@ -90,3 +95,43 @@ export const listening = () => invoke<Heard>('listening');
 /** The loudest sample in the left and right channels' latest windows, 0–1. */
 export const levels = () => invoke<[number, number]>('levels');
 export const stats = () => invoke<Stats>('stats');
+
+/** `listen::SourceId`: an app's sound (a running DAW…), everything the Mac plays, or an input device. */
+export type SourceId = { kind: 'app'; bundle: string } | { kind: 'system' } | { kind: 'device'; name: string; size: number };
+
+/** `listen::Source`: something to listen to, as the source picker names it. */
+export interface Source {
+  id: SourceId;
+  name: string;
+  channels: number;
+}
+
+/** `listen::AudioSources`. */
+export interface AudioSources {
+  /** Apps and the whole Mac can be listened to (a Core Audio process tap, macOS 14.4+). */
+  taps: boolean;
+  sources: Source[];
+}
+
+export const audioSources = () => invoke<AudioSources>('audio_sources');
+/** Listen to `source`, channels `left` and `right` counted from 1. Resolves to the source's name. */
+export const listenToSource = (source: SourceId, left = 1, right = 2) => invoke<string>('listen_to', { source, left, right });
+
+/** True until the welcome flow has been finished or skipped once. */
+export const firstRun = () => invoke<boolean>('first_run');
+/** The welcome flow is done: `firstRun` reads false from now on. */
+export const firstRunDone = () => invoke<void>('first_run_done');
+
+/** `updater::Update`: a newer version, and what's new in it. */
+export interface Update {
+  version: string;
+  notes: string;
+  date: string | null;
+}
+/** A newer version on this build's channel, or null when this one is the latest. */
+export const updateCheck = () => invoke<Update | null>('update_check');
+/** Download and install the update `updateCheck` found, then relaunch. */
+export const updateInstall = () => invoke<void>('update_install');
+
+/** Play (or stop) the test sound into the engine, as if it were heard. */
+export const testSound = (on: boolean) => invoke<void>('test_sound', { on });

@@ -24,6 +24,41 @@ pub fn inputs() -> Vec<Input> {
     host.input_devices().into_iter().flatten().map(|d| Input { name: name_of(&d), channels: d.default_input_config().map(|c| c.channels()).unwrap_or(0) }).collect()
 }
 
+/// Something to listen to: an app's sound or the whole system's, through a
+/// process tap ([`crate::tap`]), or an input device as [`inputs`] lists it.
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum SourceId {
+    /// The app with this bundle identifier.
+    App { bundle: String },
+    /// Everything the Mac plays.
+    System,
+    /// An input device, `size` its channel count to tell same-named ones apart.
+    Device { name: String, size: usize },
+}
+
+#[derive(serde::Serialize)]
+pub struct Source {
+    id: SourceId,
+    name: String,
+    channels: u16,
+}
+
+#[derive(serde::Serialize)]
+pub struct AudioSources {
+    /// Whether apps and the system can be listened to on this Mac.
+    taps: bool,
+    sources: Vec<Source>,
+}
+
+/// Everything there is to listen to. For now the input devices; #85 adds the
+/// apps playing sound and the system.
+#[tauri::command]
+pub fn audio_sources() -> AudioSources {
+    let sources = inputs().into_iter().map(|i| Source { id: SourceId::Device { name: i.name.clone(), size: i.channels as usize }, name: i.name, channels: i.channels }).collect();
+    AudioSources { taps: crate::tap::supported(), sources }
+}
+
 /// An open input. Dropping it stops listening.
 pub struct Listening {
     _stream: cpal::Stream,
@@ -57,10 +92,15 @@ impl Listening {
 /// back listening to it.
 const SAVED: &str = "audio.json";
 
-/// Listen to `name` (the system input when absent), channels `left` and `right`
-/// counted from 1. Returns the input's name.
+/// Listen to `source`, or else to the input `name` (the system input when
+/// absent), channels `left` and `right` counted from 1. Returns the input's name.
 #[tauri::command]
-pub fn listen_to(name: Option<String>, size: Option<usize>, left: Option<usize>, right: Option<usize>, app: State<App>) -> Result<String, String> {
+pub fn listen_to(name: Option<String>, size: Option<usize>, left: Option<usize>, right: Option<usize>, source: Option<SourceId>, app: State<App>) -> Result<String, String> {
+    let (name, size) = match source {
+        Some(SourceId::Device { name, size }) => (Some(name), Some(size)),
+        Some(SourceId::App { .. } | SourceId::System) => return Err("listening to an app needs macOS 14.4 or later".into()),
+        None => (name, size),
+    };
     let l = listen_on(&app, name.as_deref(), size, left, right)?;
     crate::settings::save_json(SAVED, &l);
     Ok(l.name)
