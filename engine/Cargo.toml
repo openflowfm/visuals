@@ -23,3 +23,6 @@ jpeg-decoder = { version = "0.3", default-features = false }
 naga = { version = "30.0.1", features = ["spv-in", "msl-out"] }
 thiserror = "2"
 serde = { version = "1", features = ["derive"] }
+webp = { version = "0.3", default-features = false }
+serde_json = "1"
+sha2 = "0.10"

@@ -4,11 +4,14 @@
 //! - [`shader`] turns a preset's warp and comp HLSL into a validated `naga` module.
 //! - [`eel`] compiles and runs the equations.
 //! - [`live`] is what a live player shares: the input ring and the window surface.
+//! - [`index`] is the preset library's index: one row per preset, from [`analyse`].
 
+pub mod analyse;
 pub mod audio;
 pub mod draw;
 pub mod eel;
 pub mod fx;
+pub mod index;
 pub mod live;
 pub mod noise;
 pub mod picture;
