@@ -13,6 +13,8 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::ffi::OsString;
+use std::path::{Path, PathBuf};
 
 pub const SLOTS: usize = 4;
 
@@ -167,9 +169,65 @@ pub fn decode(bytes: &[u8]) -> String {
     bytes.iter().map(|&b| b as char).collect()
 }
 
+/// The preset pack's folder: `OPENFLOW_VISUALS_PRESETS` if set, otherwise
+/// `$HOME/.openflow/visuals/presets`.
+pub fn pack_dir() -> PathBuf {
+    pack_dir_from(std::env::var_os("OPENFLOW_VISUALS_PRESETS"), std::env::var_os("HOME"))
+}
+
+fn pack_dir_from(set: Option<OsString>, home: Option<OsString>) -> PathBuf {
+    set.map(PathBuf::from).unwrap_or_else(|| PathBuf::from(home.unwrap_or_default()).join(".openflow/visuals/presets"))
+}
+
+/// Every `.milk` file under `dir` (any case of the extension), searched
+/// recursively, skipping files and folders whose names start with a dot, sorted.
+/// A folder that can't be read counts as empty.
+pub fn milk_files(dir: &Path) -> Vec<PathBuf> {
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+        for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+            if entry.file_name().to_string_lossy().starts_with('.') {
+                continue;
+            }
+            let path = entry.path();
+            if path.is_dir() {
+                walk(&path, out);
+            } else if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("milk")) {
+                out.push(path);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(dir, &mut out);
+    out.sort();
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pack_dir_prefers_the_variable_over_home() {
+        assert_eq!(pack_dir_from(Some("/packs".into()), Some("/home/me".into())), PathBuf::from("/packs"));
+        assert_eq!(pack_dir_from(None, Some("/home/me".into())), PathBuf::from("/home/me/.openflow/visuals/presets"));
+        assert_eq!(pack_dir_from(None, None), PathBuf::from(".openflow/visuals/presets"));
+    }
+
+    #[test]
+    fn milk_files_walks_sorted_skipping_dot_entries() {
+        let root = std::env::temp_dir().join(format!("visuals-milk-files-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        for dir in ["b/inner", "a", ".hidden"] {
+            std::fs::create_dir_all(root.join(dir)).unwrap();
+        }
+        for file in ["b/inner/z.milk", "b/y.MILK", "a/x.Milk", "a/notes.txt", "a/.dot.milk", ".hidden/h.milk", "top.milk"] {
+            std::fs::write(root.join(file), "").unwrap();
+        }
+        let found: Vec<_> = milk_files(&root).iter().map(|p| p.strip_prefix(&root).unwrap().to_string_lossy().replace('\\', "/")).collect();
+        std::fs::remove_dir_all(&root).unwrap();
+        assert_eq!(found, ["a/x.Milk", "b/inner/z.milk", "b/y.MILK", "top.milk"]);
+        assert!(milk_files(&root).is_empty(), "a missing folder is empty");
+    }
 
     const SAMPLE: &str = "[preset00]\r\nfDecay=0.950000\r\nzoom=1.01\r\n\
         per_frame_init_1=q8 = 0;\r\nper_frame_2=b = 2;\r\nper_frame_1=a = 1;\r\n\

@@ -7,6 +7,9 @@ import type { Spec } from './params.ts';
  * taper the multiplier sliders run on.
  */
 
+/** A count with its noun: `1 item`, `3 items`, or `many` for irregular plurals. */
+export const plural = (n: number, word: string, many = word + 's'): string => `${n} ${n === 1 ? word : many}`;
+
 /** A float control from `min` to `max`, double-click back to `defaultValue`. */
 export const range = (name: string, min: number, max: number, defaultValue: number): Param => ({ kind: 'float', min, max, defaultValue, name });
 

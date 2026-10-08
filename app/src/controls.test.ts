@@ -1,6 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { decimals, formatMultiplier, multiplierToPosition, paramOf, POSITION_MAX, POSITION_MIN, positionToMultiplier, range, show } from './controls.ts';
+import { decimals, formatMultiplier, multiplierToPosition, paramOf, plural, POSITION_MAX, POSITION_MIN, positionToMultiplier, range, show } from './controls.ts';
 import { PARAMS, type Spec } from './params.ts';
+
+describe('plural', () => {
+  it('names one in the singular and every other count in the plural', () => {
+    expect(plural(1, 'item')).toBe('1 item');
+    expect(plural(3, 'item')).toBe('3 items');
+    expect(plural(0, 'item')).toBe('0 items');
+  });
+
+  it('takes an irregular plural', () => {
+    expect(plural(2, 'match', 'matches')).toBe('2 matches');
+    expect(plural(1, 'match', 'matches')).toBe('1 match');
+  });
+});
 
 const spec = (key: string) => Object.values(PARAMS).flat().find((s) => s.key === key)!;
 

@@ -9,6 +9,7 @@ pub mod draw;
 pub mod eel;
 pub mod fx;
 pub mod noise;
+pub mod picture;
 pub mod preset;
 pub mod render;
 pub mod runtime;
