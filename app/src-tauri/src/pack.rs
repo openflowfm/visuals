@@ -1,34 +1,69 @@
 //! Where the presets come from: the starter set bundled with the app, and the
 //! full pack downloaded into the presets folder ([`engine::preset::pack_dir`]).
-//! A stub for now: issue #86 fills in the download.
+//!
+//! The starter set mirrors the pack's layout (`cream-of-the-crop/<Style>/…`), so
+//! a starter preset and the same one downloaded have the same folder-relative
+//! path: playlists follow it into the pack, and nothing is listed twice. The
+//! download unpacks as it arrives, each file written beside its place and then
+//! renamed into it, so the library fills in as it goes and a retry only fetches
+//! what is missing. The presets folder is watched, and the page told when it
+//! changes ([`CHANGED`]).
 
 use crate::App;
-use serde::Serialize;
-use std::path::PathBuf;
-use tauri::{AppHandle, Manager};
+use serde::{Deserialize, Serialize};
+use std::cell::Cell;
+use std::collections::HashSet;
+use std::io::Read;
+use std::path::{Component, Path, PathBuf};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+use tauri::{AppHandle, Emitter, Manager};
 
 /// The event the download's progress goes out on, a [`PackStatus`] each time.
-// Contract placeholder: #86 emits it.
-#[allow(dead_code)]
 pub const PROGRESS: &str = "pack-progress";
 
+/// The event that says the presets folder changed (no payload).
+pub const CHANGED: &str = "presets-changed";
+
+/// The full pack: projectM's cream-of-the-crop, pinned to a commit. #94 swaps it
+/// for our own hosted bundle.
+const SOURCE: &str = "https://github.com/projectM-visualizer/presets-cream-of-the-crop/archive/0180df21f5e0bd39b9060cc5de420ed2f1f9e509.tar.gz";
 /// How many presets the full pack has.
 const TOTAL: usize = 9795;
 /// The full pack's download, in bytes.
-const SIZE: u64 = 130_000_000;
+const SIZE: u64 = 10_847_153;
+/// The pack's folder inside the presets folder (and inside the starter set).
+const FOLDER: &str = "cream-of-the-crop";
 
 /// The folders presets are listed from: the presets folder, and the bundled
-/// starter set when the app has one.
+/// starter set while the presets folder doesn't have all of it.
 pub fn folders(app: &AppHandle) -> Vec<PathBuf> {
-    let mut folders = vec![app.state::<App>().library.clone()];
-    folders.extend(starter(app));
+    let presets = app.state::<App>().library.clone();
+    let starter = starter(app).filter(|s| !covers(&presets, s));
+    let mut folders = vec![presets];
+    folders.extend(starter);
     folders
 }
 
+/// Whether `presets` has every preset of `starter`, at the same relative path.
+fn covers(presets: &Path, starter: &Path) -> bool {
+    engine::preset::milk_files(starter).iter().all(|p| p.strip_prefix(starter).is_ok_and(|rel| presets.join(rel).is_file()))
+}
+
 /// Every preset in `folders`, in order: what the library lists, and what live
-/// actions (random, next, auto-advance) choose from.
+/// actions (random, next, auto-advance) choose from. A preset at a relative path
+/// an earlier folder already has is left out.
 pub fn milk_files_in(folders: &[PathBuf]) -> Vec<PathBuf> {
-    folders.iter().flat_map(|f| engine::preset::milk_files(f)).collect()
+    let mut seen = HashSet::new();
+    let mut out = Vec::new();
+    for folder in folders {
+        for p in engine::preset::milk_files(folder) {
+            if seen.insert(p.strip_prefix(folder).unwrap_or(&p).to_path_buf()) {
+                out.push(p);
+            }
+        }
+    }
+    out
 }
 
 /// Every preset the library lists.
@@ -38,7 +73,7 @@ pub fn milk_files(app: &AppHandle) -> Vec<PathBuf> {
 
 /// Where a folder-relative preset path is: in the first of `folders` that has
 /// it, else in the first folder (the presets folder).
-pub fn resolve_in(folders: &[PathBuf], rel: &std::path::Path) -> PathBuf {
+pub fn resolve_in(folders: &[PathBuf], rel: &Path) -> PathBuf {
     folders.iter().map(|f| f.join(rel)).find(|p| p.exists()).unwrap_or_else(|| folders.first().map(|f| f.join(rel)).unwrap_or_else(|| rel.to_path_buf()))
 }
 
@@ -52,10 +87,7 @@ pub fn starter(app: &AppHandle) -> Option<PathBuf> {
 #[serde(rename_all = "lowercase")]
 pub enum State {
     Idle,
-    // Contract placeholders: #86 sets them.
-    #[allow(dead_code)]
     Downloading,
-    #[allow(dead_code)]
     Failed,
 }
 
@@ -76,34 +108,542 @@ pub struct PackStatus {
     error: Option<String>,
 }
 
+/// The download as it goes, shared by [`pack_download`] and [`pack_status`].
+struct Download {
+    state: State,
+    received: u64,
+    error: Option<String>,
+    /// `.milk` files in the presets folder so far, while downloading.
+    installed: usize,
+}
+
+static DOWNLOAD: Mutex<Download> = Mutex::new(Download { state: State::Idle, received: 0, error: None, installed: 0 });
+
+fn status(d: &Download, starter: usize, installed: usize) -> PackStatus {
+    PackStatus { starter, installed, total: TOTAL, size: SIZE, state: d.state, received: d.received, error: d.error.clone() }
+}
+
+fn starter_count(handle: &AppHandle) -> usize {
+    starter(handle).map_or(0, |d| engine::preset::milk_files(&d).len())
+}
+
 /// How many presets there are and where the full pack's download is.
 #[tauri::command]
 pub fn pack_status(handle: AppHandle, app: tauri::State<App>) -> PackStatus {
-    PackStatus {
-        starter: starter(&handle).map_or(0, |d| engine::preset::milk_files(&d).len()),
-        installed: engine::preset::milk_files(&app.library).len(),
-        total: TOTAL,
-        size: SIZE,
-        state: State::Idle,
-        received: 0,
-        error: None,
-    }
+    let d = DOWNLOAD.lock().unwrap();
+    let installed = if d.state == State::Downloading { d.installed } else { engine::preset::milk_files(&app.library).len() };
+    status(&d, starter_count(&handle), installed)
 }
 
 /// Download the full pack into the presets folder, telling the page how it goes
-/// on [`PROGRESS`].
+/// on [`PROGRESS`]. Resolves when it ends; a call while one runs returns at once.
 #[tauri::command]
-pub async fn pack_download() -> Result<(), String> {
-    Err("the full pack can't be downloaded yet".into())
+pub async fn pack_download(handle: AppHandle) -> Result<(), String> {
+    {
+        let mut d = DOWNLOAD.lock().unwrap();
+        if d.state == State::Downloading {
+            return Ok(());
+        }
+        *d = Download { state: State::Downloading, received: 0, error: None, installed: d.installed };
+    }
+    let thread = std::thread::spawn(move || download(&handle));
+    tauri::async_runtime::spawn_blocking(move || thread.join()).await.map_err(|e| e.to_string())?.unwrap_or_else(|_| Err("the download stopped unexpectedly".into()))
+}
+
+/// The download itself, on its own thread: [`fetch`] with progress going out on
+/// [`PROGRESS`] at most every 100 ms, and a last status when it ends.
+fn download(handle: &AppHandle) -> Result<(), String> {
+    let library = handle.state::<App>().library.clone();
+    let dest = library.join(FOLDER);
+    let starter = starter_count(handle);
+    let others = engine::preset::milk_files(&library).iter().filter(|p| !p.starts_with(&dest)).count();
+    let mut last: Option<Instant> = None;
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        fetch(SOURCE, &dest, |received, files| {
+            let mut d = DOWNLOAD.lock().unwrap();
+            d.received = received;
+            d.installed = others + files;
+            if last.is_none_or(|t| t.elapsed() >= Duration::from_millis(100)) {
+                last = Some(Instant::now());
+                let _ = handle.emit(PROGRESS, status(&d, starter, d.installed));
+            }
+        })
+    }))
+    .unwrap_or_else(|_| Err("the download stopped unexpectedly".into()));
+    let installed = engine::preset::milk_files(&library).len();
+    let mut d = DOWNLOAD.lock().unwrap();
+    d.installed = installed;
+    match &result {
+        Ok(_) => (d.state, d.error) = (State::Idle, None),
+        Err(e) => (d.state, d.error) = (State::Failed, Some(e.clone())),
+    }
+    let _ = handle.emit(PROGRESS, status(&d, starter, installed));
+    result.map(|_| ())
+}
+
+/// Counts the bytes read through it.
+struct Counted<'a, R> {
+    inner: R,
+    count: &'a Cell<u64>,
+}
+
+impl<R: Read> Read for Counted<'_, R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let n = self.inner.read(buf)?;
+        self.count.set(self.count.get() + n as u64);
+        Ok(n)
+    }
+}
+
+/// Download the tar.gz at `url` and unpack it into `dest` as it arrives
+/// ([`extract`]), calling `progress` with the bytes received and the presets
+/// placed so far. Returns how many presets the pack has.
+fn fetch(url: &str, dest: &Path, mut progress: impl FnMut(u64, usize)) -> Result<usize, String> {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    let client = reqwest::blocking::Client::builder()
+        .user_agent(concat!("visual[flow]/", env!("CARGO_PKG_VERSION")))
+        .connect_timeout(Duration::from_secs(15))
+        .timeout(Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("couldn't start the download: {e}"))?;
+    let response = client.get(url).send().map_err(|e| format!("couldn't reach the pack: {e}"))?;
+    if !response.status().is_success() {
+        return Err(format!("the pack's server said {}", response.status()));
+    }
+    let received = Cell::new(0);
+    let files = extract(Counted { inner: response, count: &received }, dest, |files| progress(received.get(), files))?;
+    progress(received.get(), files);
+    Ok(files)
+}
+
+/// Unpack a tar.gz of the pack into `dest`, leaving out its top folder: only
+/// `.milk` and `.md` files, never outside `dest`. Each file is written to a
+/// `.part` beside its place and renamed into it; one already there at the same
+/// size is kept. `placed` hears how many presets are in place so far. Returns how
+/// many presets the archive has.
+fn extract(reader: impl Read, dest: &Path, mut placed: impl FnMut(usize)) -> Result<usize, String> {
+    let broken = |e: std::io::Error| format!("the download broke off: {e}");
+    let mut archive = tar::Archive::new(flate2::read::GzDecoder::new(reader));
+    let mut files = 0;
+    for entry in archive.entries().map_err(broken)? {
+        let mut entry = entry.map_err(broken)?;
+        if !entry.header().entry_type().is_file() {
+            continue;
+        }
+        let path = entry.path().map_err(broken)?.into_owned();
+        let Some(rel) = inside(&path) else { continue };
+        let milk = has_ext(&rel, "milk");
+        if !milk && !has_ext(&rel, "md") {
+            continue;
+        }
+        let target = dest.join(&rel);
+        let size = entry.header().size().map_err(broken)?;
+        if !std::fs::metadata(&target).is_ok_and(|m| m.is_file() && m.len() == size) {
+            if let Some(dir) = target.parent() {
+                std::fs::create_dir_all(dir).map_err(|e| format!("couldn't make {}: {e}", dir.display()))?;
+            }
+            let mut part = target.clone().into_os_string();
+            part.push(".part");
+            let part = PathBuf::from(part);
+            let written = std::fs::File::create(&part).and_then(|mut f| std::io::copy(&mut entry, &mut f));
+            if let Err(e) = written {
+                let _ = std::fs::remove_file(&part);
+                return Err(broken(e));
+            }
+            std::fs::rename(&part, &target).map_err(|e| format!("couldn't write {}: {e}", target.display()))?;
+        }
+        if milk {
+            files += 1;
+            placed(files);
+        }
+    }
+    // Read the gzip stream to its end, so a cut-off download is an error.
+    let mut rest = archive.into_inner();
+    std::io::copy(&mut rest, &mut std::io::sink()).map_err(broken)?;
+    std::io::copy(&mut rest.into_inner(), &mut std::io::sink()).map_err(broken)?;
+    if files == 0 {
+        return Err("the download had no presets in it".into());
+    }
+    Ok(files)
+}
+
+/// An archive path without its top folder, when every part is a plain name.
+fn inside(path: &Path) -> Option<PathBuf> {
+    let mut parts = path.components();
+    matches!(parts.next(), Some(Component::Normal(_))).then_some(())?;
+    let rel = parts.as_path();
+    (rel.components().next().is_some() && rel.components().all(|c| matches!(c, Component::Normal(_)))).then(|| rel.to_path_buf())
+}
+
+fn has_ext(path: &Path, ext: &str) -> bool {
+    path.extension().is_some_and(|e| e.eq_ignore_ascii_case(ext))
+}
+
+/// The starter set's playlists file (`playlists.json` beside its presets).
+#[derive(Deserialize)]
+struct Seed {
+    playlists: Vec<SeedList>,
+}
+
+#[derive(Deserialize)]
+struct SeedList {
+    name: String,
+    presets: Vec<String>,
+}
+
+/// Make the starter set's playlists when the playlists file is new (`fresh`),
+/// and save them. Their presets are stored folder-relative, so they play from the
+/// starter set and from the pack once it is in. Returns how many it made.
+pub fn seed_playlists(store: &mut crate::playlists::Store, starter: &Path, fresh: bool) -> Result<usize, String> {
+    if !fresh {
+        return Ok(0);
+    }
+    let file = starter.join("playlists.json");
+    let seed: Seed = serde_json::from_slice(&std::fs::read(&file).map_err(|e| format!("{}: {e}", file.display()))?).map_err(|e| format!("{}: {e}", file.display()))?;
+    if store.relative(&starter.join("x")) != "x" {
+        store.add_folder(starter.to_path_buf());
+    }
+    for list in &seed.playlists {
+        let id = store.create(&list.name)?;
+        for p in &list.presets {
+            store.add(&id, &starter.join(p), None)?;
+        }
+    }
+    store.save()?;
+    Ok(seed.playlists.len())
+}
+
+/// Presets added by the page: a dropped file or folder (`path`), or a file of a
+/// folder picked in the page, by its name in that folder and its text.
+#[derive(Deserialize, Debug)]
+#[serde(untagged)]
+pub enum Added {
+    Path { path: String },
+    File { name: String, text: String },
+}
+
+/// Copy added presets into the presets folder ([`add`]). Returns how many files
+/// were written.
+#[allow(dead_code)] // registered by the contract (main.rs)
+#[tauri::command]
+pub fn pack_add(items: Vec<Added>, app: tauri::State<App>) -> Result<usize, String> {
+    add(&items, &app.library)
+}
+
+/// Copy added presets into `presets`: a `.milk` file to its name there, a
+/// folder's `.milk` files under the folder's name, a picked file to its name.
+/// Never overwrites: the same content is skipped, other content gets ` (2)`,
+/// ` (3)`… Returns how many files were written.
+fn add(items: &[Added], presets: &Path) -> Result<usize, String> {
+    let mut found = 0;
+    let mut written = 0;
+    for item in items {
+        match item {
+            Added::Path { path } => {
+                let path = Path::new(path);
+                let Some(name) = path.file_name() else { continue };
+                let files: Vec<(PathBuf, PathBuf)> = if path.is_dir() {
+                    engine::preset::milk_files(path).into_iter().filter_map(|f| Some((Path::new(name).join(f.strip_prefix(path).ok()?), f))).collect()
+                } else if has_ext(path, "milk") && path.is_file() {
+                    vec![(PathBuf::from(name), path.to_path_buf())]
+                } else {
+                    Vec::new()
+                };
+                for (rel, file) in files {
+                    found += 1;
+                    let bytes = std::fs::read(&file).map_err(|e| format!("{}: {e}", file.display()))?;
+                    written += put(presets, &rel, &bytes)? as usize;
+                }
+            }
+            Added::File { name, text } => {
+                let rel = Path::new(name);
+                if has_ext(rel, "milk") && rel.components().all(|c| matches!(c, Component::Normal(_))) {
+                    found += 1;
+                    written += put(presets, rel, text.as_bytes())? as usize;
+                }
+            }
+        }
+    }
+    if found == 0 {
+        return Err("no .milk files in what was added".into());
+    }
+    Ok(written)
+}
+
+/// Write `bytes` at `rel` in `presets`, or beside it as `name (n).milk` when a
+/// different file is there. False when the same content is already there.
+fn put(presets: &Path, rel: &Path, bytes: &[u8]) -> Result<bool, String> {
+    let target = presets.join(rel);
+    let dir = target.parent().unwrap_or(presets);
+    let stem = target.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let ext = target.extension().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    for n in 1.. {
+        let candidate = if n == 1 { target.clone() } else { dir.join(format!("{stem} ({n}).{ext}")) };
+        match std::fs::read(&candidate) {
+            Ok(there) if there == bytes => return Ok(false),
+            Ok(_) => continue,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                std::fs::create_dir_all(dir).map_err(|e| format!("couldn't make {}: {e}", dir.display()))?;
+                std::fs::write(&candidate, bytes).map_err(|e| format!("couldn't write {}: {e}", candidate.display()))?;
+                return Ok(true);
+            }
+            Err(e) => return Err(format!("{}: {e}", candidate.display())),
+        }
+    }
+    unreachable!()
+}
+
+/// Seed the starter playlists on a first run, then watch the presets folder and
+/// send [`CHANGED`] when it changes.
+#[allow(dead_code)] // registered by the contract (main.rs)
+pub fn start(handle: &AppHandle) {
+    let fresh = !crate::playlists::default_file().exists();
+    if let Some(starter) = starter(handle) {
+        let deck = handle.state::<crate::actions::Deck>();
+        if let Err(e) = seed_playlists(&mut deck.store.lock().unwrap(), &starter, fresh) {
+            eprintln!("playlists: couldn't make the starter ones: {e}");
+        }
+    }
+    let library = handle.state::<App>().library.clone();
+    if let Err(e) = std::fs::create_dir_all(&library) {
+        eprintln!("presets: couldn't make {}: {e}", library.display());
+    }
+    let handle = handle.clone();
+    std::thread::spawn(move || watch(&handle, &library));
+}
+
+fn watch(handle: &AppHandle, dir: &Path) {
+    use notify::Watcher;
+    let (tx, rx) = std::sync::mpsc::channel();
+    let watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
+        if event.is_ok() {
+            let _ = tx.send(());
+        }
+    });
+    let mut watcher = match watcher {
+        Ok(w) => w,
+        Err(e) => return eprintln!("presets: can't watch {}: {e}", dir.display()),
+    };
+    if let Err(e) = watcher.watch(dir, notify::RecursiveMode::Recursive) {
+        return eprintln!("presets: can't watch {}: {e}", dir.display());
+    }
+    let mut debounce = Debounce::default();
+    loop {
+        let got = match debounce.due() {
+            None => rx.recv().is_ok(),
+            Some(at) => match rx.recv_timeout(at.saturating_duration_since(Instant::now())) {
+                Ok(()) => true,
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => false,
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
+            },
+        };
+        let now = Instant::now();
+        if got {
+            debounce.change(now);
+        }
+        if debounce.fire(now) {
+            let _ = handle.emit(CHANGED, ());
+        }
+    }
+}
+
+/// When to tell the page about changes: once they have stopped for [`QUIET`],
+/// and at least every [`EVERY`] while they keep coming.
+#[derive(Default)]
+struct Debounce {
+    /// The first change not told yet, and the latest.
+    pending: Option<(Instant, Instant)>,
+}
+
+const QUIET: Duration = Duration::from_millis(300);
+const EVERY: Duration = Duration::from_secs(1);
+
+impl Debounce {
+    fn change(&mut self, now: Instant) {
+        let first = self.pending.map_or(now, |(first, _)| first);
+        self.pending = Some((first, now));
+    }
+
+    /// When the pending changes are due to be told, if there are any.
+    fn due(&self) -> Option<Instant> {
+        self.pending.map(|(first, last)| (last + QUIET).min(first + EVERY))
+    }
+
+    /// Whether to tell the page now; clears the pending changes if so.
+    fn fire(&mut self, now: Instant) -> bool {
+        let due = self.due().is_some_and(|at| at <= now);
+        if due {
+            self.pending = None;
+        }
+        due
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    fn temp() -> PathBuf {
+        static N: AtomicU64 = AtomicU64::new(0);
+        let dir = std::env::temp_dir().join(format!("visuals-pack-{}-{}", std::process::id(), N.fetch_add(1, Ordering::Relaxed)));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    /// A tar.gz of `(path, contents)`, paths written as they are (even `..`).
+    fn tar_gz(files: &[(&str, &[u8])]) -> Vec<u8> {
+        let mut builder = tar::Builder::new(flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default()));
+        for (path, data) in files {
+            let mut header = tar::Header::new_gnu();
+            header.set_size(data.len() as u64);
+            header.set_mode(0o644);
+            header.set_entry_type(tar::EntryType::Regular);
+            header.as_old_mut().name[..path.len()].copy_from_slice(path.as_bytes());
+            header.set_cksum();
+            builder.append(&header, *data).unwrap();
+        }
+        builder.into_inner().unwrap().finish().unwrap()
+    }
+
+    /// Bytes that don't compress, so a cut gzip stream is cut mid-file.
+    fn noise(seed: u64, len: usize) -> Vec<u8> {
+        let mut x = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        (0..len)
+            .map(|_| {
+                x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                (x >> 56) as u8
+            })
+            .collect()
+    }
+
+    fn parts(dir: &Path) -> Vec<PathBuf> {
+        fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+            for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    walk(&p, out)
+                } else if has_ext(&p, "part") {
+                    out.push(p)
+                }
+            }
+        }
+        let mut out = Vec::new();
+        walk(dir, &mut out);
+        out
+    }
+
+    #[test]
+    fn extract_strips_the_top_folder_keeps_presets_and_stays_inside() {
+        let dir = temp();
+        let dest = dir.join("presets/cream-of-the-crop");
+        let gz = tar_gz(&[("top/README.md", b"read me"), ("top/A/one.milk", b"one"), ("top/A/B/two.MILK", b"two"), ("top/A/notes.txt", b"no"), ("top/../x.milk", b"escape"), ("../y.milk", b"escape")]);
+        let mut seen = Vec::new();
+        assert_eq!(extract(&gz[..], &dest, |n| seen.push(n)).unwrap(), 2);
+        assert_eq!(seen, [1, 2]);
+        assert_eq!(std::fs::read(dest.join("README.md")).unwrap(), b"read me");
+        assert_eq!(std::fs::read(dest.join("A/one.milk")).unwrap(), b"one");
+        assert_eq!(std::fs::read(dest.join("A/B/two.MILK")).unwrap(), b"two");
+        assert!(!dest.join("A/notes.txt").exists());
+        assert!(!dir.join("presets/x.milk").exists() && !dir.join("x.milk").exists() && !dest.join("x.milk").exists());
+        assert!(!dest.join("y.milk").exists() && !dir.join("presets/y.milk").exists());
+        assert!(parts(&dir).is_empty());
+
+        // A second run keeps what is there (same size) and writes nothing.
+        std::fs::write(dest.join("A/one.milk"), b"ONE").unwrap();
+        assert_eq!(extract(&gz[..], &dest, |_| {}).unwrap(), 2);
+        assert_eq!(std::fs::read(dest.join("A/one.milk")).unwrap(), b"ONE");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// Serve `response` once on a local port; the URL to ask for it.
+    fn serve(response: Vec<u8>) -> String {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/pack.tar.gz", listener.local_addr().unwrap());
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = Vec::new();
+            let mut buf = [0; 1024];
+            while !request.windows(4).any(|w| w == b"\r\n\r\n") {
+                match stream.read(&mut buf) {
+                    Ok(0) | Err(_) => return,
+                    Ok(n) => request.extend_from_slice(&buf[..n]),
+                }
+            }
+            let _ = stream.write_all(&response);
+        });
+        url
+    }
+
+    fn ok(body: &[u8]) -> Vec<u8> {
+        let mut r = b"HTTP/1.1 200 OK\r\nContent-Type: application/x-gzip\r\nConnection: close\r\n\r\n".to_vec();
+        r.extend_from_slice(body);
+        r
+    }
+
+    #[test]
+    fn fetch_downloads_and_unpacks_counting_the_bytes() {
+        let dir = temp();
+        let a = noise(1, 20_000);
+        let b = noise(2, 20_000);
+        let gz = tar_gz(&[("top/LICENSE.md", b"license"), ("top/S/a.milk", &a), ("top/S/b.milk", &b)]);
+        let mut last = (0, 0);
+        assert_eq!(fetch(&serve(ok(&gz)), &dir, |r, n| last = (r, n)).unwrap(), 2);
+        assert_eq!(last, (gz.len() as u64, 2));
+        assert_eq!(std::fs::read(dir.join("S/a.milk")).unwrap(), a);
+        assert_eq!(std::fs::read(dir.join("S/b.milk")).unwrap(), b);
+        assert!(dir.join("LICENSE.md").is_file());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn fetch_fails_on_a_server_error() {
+        let dir = temp();
+        let url = serve(b"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec());
+        let err = fetch(&url, &dir, |_, _| {}).unwrap_err();
+        assert!(err.contains("500"), "{err}");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_cut_off_download_fails_and_a_retry_finishes_it() {
+        let dir = temp();
+        let files: Vec<(String, Vec<u8>)> = (0..6).map(|i| (format!("top/S/{i}.milk"), noise(i, 30_000))).collect();
+        let gz = tar_gz(&files.iter().map(|(p, d)| (p.as_str(), &d[..])).collect::<Vec<_>>());
+        assert!(fetch(&serve(ok(&gz[..gz.len() / 2])), &dir, |_, _| {}).is_err());
+        assert!(parts(&dir).is_empty());
+        assert!(!dir.join("S/5.milk").exists());
+        assert_eq!(fetch(&serve(ok(&gz)), &dir, |_, _| {}).unwrap(), 6);
+        for (i, (_, data)) in files.iter().enumerate() {
+            assert_eq!(&std::fs::read(dir.join(format!("S/{i}.milk"))).unwrap(), data);
+        }
+        assert!(parts(&dir).is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// The real download from [`SOURCE`], over the network: `cargo test -p visuals-app
+    /// the_real_pack -- --ignored`. `VISUALS_PACK_INTO=<presets folder>` keeps it
+    /// there (in `cream-of-the-crop/`), to start the app on; otherwise it's removed.
+    #[test]
+    #[ignore]
+    fn the_real_pack_downloads_whole() {
+        let keep = std::env::var_os("VISUALS_PACK_INTO").map(PathBuf::from);
+        let presets = keep.clone().unwrap_or_else(temp);
+        let mut received = 0;
+        assert_eq!(fetch(SOURCE, &presets.join(FOLDER), |r, _| received = r).unwrap(), TOTAL);
+        assert_eq!(received, SIZE);
+        assert_eq!(engine::preset::milk_files(&presets).len(), TOTAL);
+        assert!(covers(&presets, &Path::new(env!("CARGO_MANIFEST_DIR")).join("presets/starter")));
+        if keep.is_none() {
+            std::fs::remove_dir_all(&presets).unwrap();
+        }
+    }
 
     #[test]
     fn an_empty_presets_folder_still_lists_and_resolves_the_starter_set() {
-        let dir = std::env::temp_dir().join(format!("visuals-pack-{}", std::process::id()));
+        let dir = temp();
         let presets = dir.join("presets");
         let starter = dir.join("starter");
         std::fs::create_dir_all(&presets).unwrap();
@@ -111,8 +651,144 @@ mod tests {
         std::fs::write(starter.join("a/one.milk"), "").unwrap();
         let folders = vec![presets.clone(), starter.clone()];
         assert_eq!(milk_files_in(&folders), vec![starter.join("a/one.milk")]);
-        assert_eq!(resolve_in(&folders, std::path::Path::new("a/one.milk")), starter.join("a/one.milk"));
-        assert_eq!(resolve_in(&folders, std::path::Path::new("b.milk")), presets.join("b.milk"));
+        assert_eq!(resolve_in(&folders, Path::new("a/one.milk")), starter.join("a/one.milk"));
+        assert_eq!(resolve_in(&folders, Path::new("b.milk")), presets.join("b.milk"));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_preset_in_both_folders_is_listed_once_and_the_starter_set_drops_out_when_covered() {
+        let dir = temp();
+        let presets = dir.join("presets");
+        let starter = dir.join("starter");
+        for f in ["a/one.milk", "a/two.milk"] {
+            std::fs::create_dir_all(starter.join(f).parent().unwrap()).unwrap();
+            std::fs::write(starter.join(f), "").unwrap();
+        }
+        std::fs::create_dir_all(presets.join("a")).unwrap();
+        std::fs::write(presets.join("a/one.milk"), "").unwrap();
+        std::fs::write(presets.join("mine.milk"), "").unwrap();
+        let folders = vec![presets.clone(), starter.clone()];
+        let mut listed = milk_files_in(&folders);
+        listed.sort();
+        assert_eq!(listed, vec![presets.join("a/one.milk"), presets.join("mine.milk"), starter.join("a/two.milk")]);
+        assert!(!covers(&presets, &starter));
+        std::fs::write(presets.join("a/two.milk"), "").unwrap();
+        assert!(covers(&presets, &starter));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn starter_playlists_are_made_only_on_a_fresh_file_and_follow_the_pack() {
+        let dir = temp();
+        let presets = dir.join("presets");
+        let starter = dir.join("starter");
+        std::fs::create_dir_all(starter.join("cream-of-the-crop/A")).unwrap();
+        std::fs::write(starter.join("cream-of-the-crop/A/one.milk"), "").unwrap();
+        std::fs::write(starter.join("playlists.json"), r#"{"version":1,"playlists":[{"name":"Chill","presets":["cream-of-the-crop/A/one.milk"]},{"name":"Peak time","presets":[]}]}"#).unwrap();
+        let file = dir.join("playlists.json");
+
+        let mut store = crate::playlists::Store::open(file.clone(), presets.clone());
+        assert_eq!(seed_playlists(&mut store, &starter, false).unwrap(), 0);
+        assert!(store.lists.is_empty() && !file.exists());
+
+        assert_eq!(seed_playlists(&mut store, &starter, true).unwrap(), 2);
+        let mut store = crate::playlists::Store::open(file.clone(), presets.clone());
+        store.add_folder(starter.clone());
+        assert_eq!(store.lists.iter().map(|l| l.name.as_str()).collect::<Vec<_>>(), ["Chill", "Peak time"]);
+        assert_eq!(store.lists[0].presets, ["cream-of-the-crop/A/one.milk"]);
+        let id = store.lists[0].id.clone();
+        assert_eq!(store.paths(&id), [starter.join("cream-of-the-crop/A/one.milk")]);
+        std::fs::create_dir_all(presets.join("cream-of-the-crop/A")).unwrap();
+        std::fs::write(presets.join("cream-of-the-crop/A/one.milk"), "").unwrap();
+        assert_eq!(store.paths(&id), [presets.join("cream-of-the-crop/A/one.milk")]);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn adding_copies_presets_without_overwriting() {
+        let dir = temp();
+        let presets = dir.join("presets");
+        let drop = dir.join("drop");
+        std::fs::create_dir_all(drop.join("Mine/sub")).unwrap();
+        std::fs::write(drop.join("solo.milk"), "solo").unwrap();
+        std::fs::write(drop.join("Mine/a.milk"), "a").unwrap();
+        std::fs::write(drop.join("Mine/sub/b.milk"), "b").unwrap();
+        std::fs::write(drop.join("Mine/notes.txt"), "no").unwrap();
+        std::fs::write(drop.join("other.txt"), "no").unwrap();
+        let path = |p: &Path| Added::Path { path: p.to_string_lossy().into_owned() };
+        let file = |name: &str, text: &str| Added::File { name: name.into(), text: text.into() };
+
+        let items = [path(&drop.join("solo.milk")), path(&drop.join("Mine")), path(&drop.join("other.txt")), file("Picked/sub/c.milk", "c"), file("Picked/x.txt", "x")];
+        assert_eq!(add(&items, &presets).unwrap(), 4);
+        assert_eq!(std::fs::read_to_string(presets.join("solo.milk")).unwrap(), "solo");
+        assert_eq!(std::fs::read_to_string(presets.join("Mine/a.milk")).unwrap(), "a");
+        assert_eq!(std::fs::read_to_string(presets.join("Mine/sub/b.milk")).unwrap(), "b");
+        assert_eq!(std::fs::read_to_string(presets.join("Picked/sub/c.milk")).unwrap(), "c");
+        assert!(!presets.join("Mine/notes.txt").exists() && !presets.join("other.txt").exists() && !presets.join("Picked/x.txt").exists());
+
+        // The same again: nothing new. Different content: a numbered copy.
+        assert_eq!(add(&items, &presets).unwrap(), 0);
+        assert_eq!(add(&[file("solo.milk", "another")], &presets).unwrap(), 1);
+        assert_eq!(std::fs::read_to_string(presets.join("solo.milk")).unwrap(), "solo");
+        assert_eq!(std::fs::read_to_string(presets.join("solo (2).milk")).unwrap(), "another");
+        assert_eq!(add(&[file("solo.milk", "third")], &presets).unwrap(), 1);
+        assert_eq!(std::fs::read_to_string(presets.join("solo (3).milk")).unwrap(), "third");
+        assert_eq!(add(&[file("solo.milk", "another")], &presets).unwrap(), 0);
+
+        // Names that climb out are ignored; nothing to add is an error.
+        assert!(add(&[file("../out.milk", "x"), file("/abs.milk", "x")], &presets).is_err());
+        assert!(!dir.join("out.milk").exists());
+        assert!(add(&[path(&drop.join("other.txt"))], &presets).is_err());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn added_items_read_from_the_page() {
+        let items: Vec<Added> = serde_json::from_str(r#"[{"path":"/a/b.milk"},{"name":"F/c.milk","text":"t"}]"#).unwrap();
+        assert!(matches!(&items[0], Added::Path { path } if path == "/a/b.milk"));
+        assert!(matches!(&items[1], Added::File { name, text } if name == "F/c.milk" && text == "t"));
+    }
+
+    #[test]
+    fn changes_are_told_once_quiet_and_at_least_every_second() {
+        let t = Instant::now();
+        let ms = |n| t + Duration::from_millis(n);
+        let mut d = Debounce::default();
+        assert_eq!(d.due(), None);
+        assert!(!d.fire(ms(5000)));
+        d.change(ms(0));
+        d.change(ms(100));
+        assert_eq!(d.due(), Some(ms(400)));
+        assert!(!d.fire(ms(399)));
+        assert!(d.fire(ms(400)));
+        assert!(!d.fire(ms(401)));
+        // A steady stream of changes is still told every second.
+        for n in (1000..2500).step_by(100) {
+            d.change(ms(n));
+            if n == 2000 {
+                assert!(d.fire(ms(n)));
+            } else {
+                assert!(!d.fire(ms(n)), "{n}");
+            }
+        }
+        assert_eq!(d.due(), Some(ms(2700)));
+    }
+
+    #[test]
+    fn the_bundled_starter_set_mirrors_the_pack() {
+        let starter = Path::new(env!("CARGO_MANIFEST_DIR")).join("presets/starter");
+        let pack = starter.join(FOLDER);
+        assert_eq!(engine::preset::milk_files(&starter).len(), 250);
+        for style in ["Dancer", "Drawing", "Fractal", "Geometric", "Hypnotic", "Particles", "Reaction", "Sparkle", "Supernova", "Waveform"] {
+            assert_eq!(engine::preset::milk_files(&pack.join(style)).len(), 25, "{style}");
+        }
+        assert!(engine::preset::milk_files(&pack.join("! Transition")).is_empty());
+        assert!(pack.join("README.md").is_file() && pack.join("LICENSE.md").is_file());
+        let seed: Seed = serde_json::from_slice(&std::fs::read(starter.join("playlists.json")).unwrap()).unwrap();
+        assert_eq!(seed.playlists.iter().map(|l| l.name.as_str()).collect::<Vec<_>>(), ["Chill", "Warm up", "Peak time"]);
+        for p in seed.playlists.iter().flat_map(|l| &l.presets) {
+            assert!(p.starts_with("cream-of-the-crop/") && starter.join(p).is_file(), "{p}");
+        }
     }
 }

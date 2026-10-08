@@ -31,6 +31,13 @@ raw-window-handle = "0.6"
 rusty_link = "0.4.9"
 # Updates (`src/updater.rs`); set up there by #87.
 tauri-plugin-updater = "2"
+# The full pack (`src/pack.rs`): downloaded over https with rustls and ring (as
+# the updater does, no aws-lc), unpacked as it arrives, and the presets folder watched.
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+flate2 = "1"
+tar = "0.4"
+notify = "8"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
