@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import * as api from './api.ts';
 import type { Entry, Preset, Problem, Report } from './api.ts';
 import { AudioInput } from './AudioInput.tsx';
@@ -11,7 +11,8 @@ import { FrameRate, Header, Hints, NoticeBanner, NowPlaying, type View } from '.
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { Library } from './Library.tsx';
 import { stepIn } from './librarySearch.ts';
-import { useNotice, usePlaceBench, useTauriEvent } from './hooks.ts';
+import { Bench } from './Bench.tsx';
+import { useNotice, useTauriEvent } from './hooks.ts';
 import { useApply, useLibrary, usePresetEdits } from './editor.ts';
 import { isTyping, nameOf, notice, openFailed } from './shell.ts';
 import { Live } from './Live.tsx';
@@ -48,8 +49,6 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live'
   const [lists, setLists] = useState<pl.Lists | null>(null);
   const [tab, setTab] = useState(0);
   const [target, setTarget] = useState<string | null>(null);
-  const bench = useRef<HTMLDivElement>(null);
-  usePlaceBench(bench);
   const apply = useApply(setReport);
   const { edit, set } = usePresetEdits(preset, setPreset, apply);
   const audioFailed = useMemo(() => fail("Couldn't read the audio input."), [fail]);
@@ -162,7 +161,7 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live'
       </aside>
       <main>
         <div className="bench-row">
-          <div className="bench" ref={bench} />
+          <Bench className="bench" />
         </div>
         <div className="graph">{preset && <StageGraph preset={preset} problems={problems} selected={selected} onSelect={setSelected} onChange={edit} onSet={set} />}</div>
       </main>

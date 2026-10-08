@@ -12,7 +12,8 @@ import * as output from './output.ts';
 import { leave, OutputPanel } from './OutputPanel.tsx';
 import { Playlists } from './Playlists.tsx';
 import * as pl from './playlists.ts';
-import { useNotice, usePlaceBench, useTauriEvent } from './hooks.ts';
+import { Bench } from './Bench.tsx';
+import { useNotice, useTauriEvent } from './hooks.ts';
 import { nameOf, notice, openFailed } from './shell.ts';
 import { FrameRate, Header, NoticeBanner } from './views.tsx';
 import './live.css';
@@ -39,8 +40,6 @@ export function Live({ start, onMode }: { start: string | null; onMode: (mode: '
   const [selected, setSelected] = useState<string | null>(null);
   const [status, setStatus] = useState<output.Status>({ display: null, size: null });
   const [effects, setEffects] = useState<fx.Fx | null>(null);
-  const preview = useRef<HTMLDivElement>(null);
-  usePlaceBench(preview);
 
   const held = (effects?.hold ?? lists?.deck.hold) === true;
   const heldNow = useRef(held);
@@ -168,7 +167,7 @@ export function Live({ start, onMode }: { start: string | null; onMode: (mode: '
         <NoticeBanner className="live-problem" notice={error} onDismiss={dismiss} />
         {effects && <Effects state={effects} onState={setEffects} send={actFx} />}
         <div className="live-preview-cell">
-          <div className="live-preview" ref={preview} />
+          <Bench className="live-preview" />
         </div>
       </section>
       <aside className="live-side">
