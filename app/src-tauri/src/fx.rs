@@ -9,29 +9,19 @@
 //! out from timestamps, so it is the same whenever it is asked for. Only the tempo
 //! is kept across restarts.
 
-use engine::fx::{Master, Mirror as EngineMirror};
+pub use engine::fx::Mirror;
+use engine::fx::Master;
 use crate::settings;
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
-#[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum Mirror {
-    #[default]
-    Off,
-    X,
-    Y,
-    Quad,
-}
-
-impl Mirror {
-    fn next(self) -> Mirror {
-        match self {
-            Mirror::Off => Mirror::X,
-            Mirror::X => Mirror::Y,
-            Mirror::Y => Mirror::Quad,
-            Mirror::Quad => Mirror::Off,
-        }
+/// The mirror after `m`: off → x → y → quad → off.
+fn next(m: Mirror) -> Mirror {
+    match m {
+        Mirror::Off => Mirror::X,
+        Mirror::X => Mirror::Y,
+        Mirror::Y => Mirror::Quad,
+        Mirror::Quad => Mirror::Off,
     }
 }
 
@@ -89,6 +79,18 @@ pub enum FxAction {
 /// `bars` are the deck's, carried here so one event has the whole panel.
 #[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct View {
+    #[serde(flatten)]
+    pub settings: Settings,
+    pub bpm: f64,
+    /// The tempo is a Link session's, not the taps'.
+    pub linked: bool,
+    pub hold: bool,
+    pub bars: u32,
+}
+
+/// What the performer has set: every value an action sets directly.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct Settings {
     pub speed: f64,
     pub freeze: bool,
     pub transition: f64,
@@ -107,11 +109,49 @@ pub struct View {
     pub mirror: Mirror,
     pub trails: f64,
     pub sensitivity: f64,
-    pub bpm: f64,
-    /// The tempo is a Link session's, not the taps'.
-    pub linked: bool,
-    pub hold: bool,
-    pub bars: u32,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Settings {
+            speed: 1.0,
+            freeze: false,
+            transition: 2.0,
+            strobe: false,
+            strobe_rate: 1.0,
+            strobe_intensity: 1.0,
+            strobe_style: StrobeStyle::White,
+            sync: Sync::Tempo,
+            blackout: false,
+            blackout_fade: 0.0,
+            punch: false,
+            punch_on_beat: false,
+            brightness: 1.0,
+            hue: 0.0,
+            invert: false,
+            mirror: Mirror::Off,
+            trails: 0.0,
+            sensitivity: 1.0,
+        }
+    }
+}
+
+impl Settings {
+    /// Every picture and time effect back to normal, keeping how the performer set
+    /// them up: the transition, the strobe's rate, intensity and style, the sync,
+    /// the blackout fade and the sensitivity. Punch-on-beat goes off.
+    fn reset_keeping_setup(&mut self) {
+        *self = Settings {
+            transition: self.transition,
+            strobe_rate: self.strobe_rate,
+            strobe_intensity: self.strobe_intensity,
+            strobe_style: self.strobe_style,
+            sync: self.sync,
+            blackout_fade: self.blackout_fade,
+            sensitivity: self.sensitivity,
+            ..Settings::default()
+        };
+    }
 }
 
 /// How long freeze takes to come back up to speed once released.
@@ -126,80 +166,43 @@ const TAP_GAP: f64 = 2.0;
 const BEAT_GAP: f64 = 0.22;
 
 pub struct Fx {
-    pub speed: f64,
-    pub freeze: bool,
+    pub settings: Settings,
+    pub bpm: f64,
+    /// The tempo is a Link session's ([`Fx::follow`]), not the taps'.
+    pub linked: bool,
+    timing: Timing,
+}
+
+/// When things happened, for what moves over time.
+struct Timing {
     /// When freeze was last released.
     thawed: Option<Instant>,
-    pub transition: f64,
     /// The crossfade from the last preset: when it started.
     fading: Option<Instant>,
-    pub strobe: bool,
-    pub strobe_rate: f64,
-    pub strobe_intensity: f64,
-    pub strobe_style: StrobeStyle,
-    pub sync: Sync,
-    pub blackout: bool,
-    pub blackout_fade: f64,
     /// The blackout level when it last changed direction, and when.
     black_from: (f64, Instant),
-    pub punch: bool,
     /// When the last punch was released or kicked.
     kicked: Option<Instant>,
-    pub punch_on_beat: bool,
-    pub brightness: f64,
-    pub hue: f64,
-    pub invert: bool,
-    pub mirror: Mirror,
-    pub trails: f64,
-    pub sensitivity: f64,
-    pub bpm: f64,
     /// Where the tempo's beats fall: the last tap.
     anchor: Instant,
     taps: Vec<Instant>,
     /// The last beat heard in the bass, and whether the bass is above the line now.
     heard: Option<Instant>,
     loud: bool,
-    /// The tempo is a Link session's ([`Fx::follow`]), not the taps'.
-    pub linked: bool,
 }
 
-impl Default for Fx {
-    fn default() -> Self {
-        let now = Instant::now();
-        Fx {
-            speed: 1.0,
-            freeze: false,
-            thawed: None,
-            transition: 2.0,
-            fading: None,
-            strobe: false,
-            strobe_rate: 1.0,
-            strobe_intensity: 1.0,
-            strobe_style: StrobeStyle::White,
-            sync: Sync::Tempo,
-            blackout: false,
-            blackout_fade: 0.0,
-            black_from: (0.0, now),
-            punch: false,
-            kicked: None,
-            punch_on_beat: false,
-            brightness: 1.0,
-            hue: 0.0,
-            invert: false,
-            mirror: Mirror::Off,
-            trails: 0.0,
-            sensitivity: 1.0,
-            bpm: 120.0,
-            anchor: now,
-            taps: Vec::new(),
-            heard: None,
-            loud: false,
-            linked: false,
-        }
+impl Timing {
+    /// Nothing under way: no fade, thaw or punch dying away, and no blackout.
+    /// The tempo's beat and what was heard stay.
+    fn settle(&mut self, now: Instant) {
+        self.thawed = None;
+        self.fading = None;
+        self.kicked = None;
+        self.black_from = (0.0, now);
     }
 }
 
-/// A finite number, clamped; `None` for NaN or infinity.
+/// A finite number, clamped; an error naming `what` for NaN or infinity.
 pub(crate) fn clamped(v: f64, lo: f64, hi: f64, what: &str) -> Result<f64, String> {
     if v.is_finite() { Ok(v.clamp(lo, hi)) } else { Err(format!("{what} must be a number")) }
 }
@@ -209,9 +212,28 @@ fn secs(a: Instant, b: Instant) -> f64 {
 }
 
 impl Fx {
+    /// Everything at its default, with the tempo's beat falling at `now`.
+    pub fn new(now: Instant) -> Fx {
+        Fx {
+            settings: Settings::default(),
+            bpm: 120.0,
+            linked: false,
+            timing: Timing {
+                thawed: None,
+                fading: None,
+                black_from: (0.0, now),
+                kicked: None,
+                anchor: now,
+                taps: Vec::new(),
+                heard: None,
+                loud: false,
+            },
+        }
+    }
+
     /// With the tempo kept from last time, if there is one.
     pub fn restored() -> Fx {
-        let mut fx = Fx::default();
+        let mut fx = Fx::new(Instant::now());
         if let Some(bpm) = settings::load::<serde_json::Value>(TEMPO_FILE).and_then(|v| v["bpm"].as_f64()) {
             fx.bpm = bpm.clamp(40.0, 240.0);
         }
@@ -221,72 +243,58 @@ impl Fx {
     /// Do `action` at `now`. Returns whether the tempo changed (to be saved).
     pub fn apply(&mut self, action: &FxAction, now: Instant) -> Result<bool, String> {
         let flip = |on: &Option<bool>, was: bool| on.unwrap_or(!was);
+        let level = self.black_level(now);
+        let (s, timing) = (&mut self.settings, &mut self.timing);
         match action {
-            FxAction::Speed { speed } => self.speed = clamped(*speed, 0.25, 4.0, "speed")?,
+            FxAction::Speed { speed } => s.speed = clamped(*speed, 0.25, 4.0, "speed")?,
             FxAction::Freeze { on } => {
-                let to = flip(on, self.freeze);
-                if self.freeze && !to {
-                    self.thawed = Some(now);
+                let to = flip(on, s.freeze);
+                if s.freeze && !to {
+                    timing.thawed = Some(now);
                 }
-                self.freeze = to;
+                s.freeze = to;
             }
-            FxAction::Transition { seconds } => self.transition = clamped(*seconds, 0.0, 10.0, "seconds")?,
-            FxAction::Strobe { on } => self.strobe = flip(on, self.strobe),
-            FxAction::StrobeRate { rate } => self.strobe_rate = clamped(*rate, 0.25, 4.0, "rate")?,
-            FxAction::StrobeIntensity { value } => self.strobe_intensity = clamped(*value, 0.0, 1.0, "intensity")?,
-            FxAction::StrobeStyle { style } => self.strobe_style = *style,
-            FxAction::Sync { source } => self.sync = *source,
+            FxAction::Transition { seconds } => s.transition = clamped(*seconds, 0.0, 10.0, "seconds")?,
+            FxAction::Strobe { on } => s.strobe = flip(on, s.strobe),
+            FxAction::StrobeRate { rate } => s.strobe_rate = clamped(*rate, 0.25, 4.0, "rate")?,
+            FxAction::StrobeIntensity { value } => s.strobe_intensity = clamped(*value, 0.0, 1.0, "intensity")?,
+            FxAction::StrobeStyle { style } => s.strobe_style = *style,
+            FxAction::Sync { source } => s.sync = *source,
             FxAction::Blackout { on } => {
-                let to = flip(on, self.blackout);
-                if to != self.blackout {
-                    self.black_from = (self.black_level(now), now);
+                let to = flip(on, s.blackout);
+                if to != s.blackout {
+                    timing.black_from = (level, now);
                 }
-                self.blackout = to;
+                s.blackout = to;
             }
             FxAction::BlackoutFade { seconds } => {
                 // A fade already under way carries on at the new rate from where it is.
-                self.black_from = (self.black_level(now), now);
-                self.blackout_fade = clamped(*seconds, 0.0, 10.0, "seconds")?;
+                timing.black_from = (level, now);
+                s.blackout_fade = clamped(*seconds, 0.0, 10.0, "seconds")?;
             }
             FxAction::Punch { on } => {
-                let to = flip(on, self.punch);
+                let to = flip(on, s.punch);
                 // Pressed: full at once; released: dies away from there.
-                if to != self.punch {
-                    self.kicked = Some(now);
+                if to != s.punch {
+                    timing.kicked = Some(now);
                 }
-                self.punch = to;
+                s.punch = to;
             }
-            FxAction::PunchOnBeat { on } => self.punch_on_beat = flip(on, self.punch_on_beat),
-            FxAction::Brightness { value } => self.brightness = clamped(*value, 0.0, 2.0, "brightness")?,
-            FxAction::Hue { value } => self.hue = clamped(*value, 0.0, 1.0, "hue")?,
-            FxAction::Invert { on } => self.invert = flip(on, self.invert),
-            FxAction::Mirror { mode } => self.mirror = mode.unwrap_or_else(|| self.mirror.next()),
-            FxAction::Trails { value } => self.trails = clamped(*value, 0.0, 1.0, "trails")?,
-            FxAction::Sensitivity { value } => self.sensitivity = clamped(*value, 0.25, 4.0, "sensitivity")?,
+            FxAction::PunchOnBeat { on } => s.punch_on_beat = flip(on, s.punch_on_beat),
+            FxAction::Brightness { value } => s.brightness = clamped(*value, 0.0, 2.0, "brightness")?,
+            FxAction::Hue { value } => s.hue = clamped(*value, 0.0, 1.0, "hue")?,
+            FxAction::Invert { on } => s.invert = flip(on, s.invert),
+            FxAction::Mirror { mode } => s.mirror = mode.unwrap_or_else(|| next(s.mirror)),
+            FxAction::Trails { value } => s.trails = clamped(*value, 0.0, 1.0, "trails")?,
+            FxAction::Sensitivity { value } => s.sensitivity = clamped(*value, 0.25, 4.0, "sensitivity")?,
             FxAction::Tap => return Ok(self.tap(now)),
             FxAction::Bpm { bpm } => {
                 self.bpm = clamped(*bpm, 40.0, 240.0, "bpm")?;
                 return Ok(true);
             }
             FxAction::FxReset => {
-                let keep = Fx {
-                    transition: self.transition,
-                    strobe_rate: self.strobe_rate,
-                    strobe_intensity: self.strobe_intensity,
-                    strobe_style: self.strobe_style,
-                    sync: self.sync,
-                    blackout_fade: self.blackout_fade,
-                    punch_on_beat: false,
-                    sensitivity: self.sensitivity,
-                    bpm: self.bpm,
-                    anchor: self.anchor,
-                    taps: std::mem::take(&mut self.taps),
-                    heard: self.heard,
-                    loud: self.loud,
-                    black_from: (0.0, now),
-                    ..Fx::default()
-                };
-                *self = keep;
+                s.reset_keeping_setup();
+                timing.settle(now);
             }
         }
         Ok(false)
@@ -299,18 +307,20 @@ impl Fx {
         if self.linked {
             return false;
         }
-        if self.taps.last().is_some_and(|&t| secs(t, now) > TAP_GAP) {
-            self.taps.clear();
+        let taps = &mut self.timing.taps;
+        if taps.last().is_some_and(|&t| secs(t, now) > TAP_GAP) {
+            taps.clear();
         }
-        self.taps.push(now);
-        if self.taps.len() > 9 {
-            self.taps.remove(0);
+        taps.push(now);
+        if taps.len() > 9 {
+            taps.remove(0);
         }
-        self.anchor = now;
-        if self.taps.len() < 2 {
+        self.timing.anchor = now;
+        let taps = &self.timing.taps;
+        if taps.len() < 2 {
             return false;
         }
-        let gap = secs(self.taps[0], now) / (self.taps.len() - 1) as f64;
+        let gap = secs(taps[0], now) / (taps.len() - 1) as f64;
         if gap <= 0.0 {
             return false;
         }
@@ -329,7 +339,7 @@ impl Fx {
         self.linked = true;
         self.bpm = bpm.clamp(20.0, 999.0);
         let back = into_beat.rem_euclid(1.0) * self.beat_length();
-        self.anchor = now.checked_sub(Duration::from_secs_f64(back)).unwrap_or(now);
+        self.timing.anchor = now.checked_sub(Duration::from_secs_f64(back)).unwrap_or(now);
     }
 
     /// Back to the tapped tempo when the Link session has no peers left.
@@ -340,7 +350,7 @@ impl Fx {
     /// The last beat of the tempo at or before `now`.
     fn last_tempo_beat(&self, now: Instant) -> Instant {
         let len = self.beat_length();
-        let since = now.saturating_duration_since(self.anchor).as_secs_f64();
+        let since = now.saturating_duration_since(self.timing.anchor).as_secs_f64();
         let back = since - (since / len).floor() * len;
         now.checked_sub(Duration::from_secs_f64(back)).unwrap_or(now)
     }
@@ -349,17 +359,18 @@ impl Fx {
     /// (`bass` well over its running average `bass_att`), not too soon after the last.
     pub fn listen(&mut self, bass: f64, bass_att: f64, now: Instant) {
         let loud = bass > 1.3 && bass > bass_att * 1.15;
-        if loud && !self.loud && self.heard.is_none_or(|t| secs(t, now) >= BEAT_GAP) {
-            self.heard = Some(now);
+        let timing = &mut self.timing;
+        if loud && !timing.loud && timing.heard.is_none_or(|t| secs(t, now) >= BEAT_GAP) {
+            timing.heard = Some(now);
         }
-        self.loud = loud;
+        timing.loud = loud;
     }
 
     /// The last beat, by the chosen sync.
     fn last_beat(&self, now: Instant) -> Option<Instant> {
-        match self.sync {
+        match self.settings.sync {
             Sync::Tempo => Some(self.last_tempo_beat(now)),
-            Sync::Audio => self.heard,
+            Sync::Audio => self.timing.heard,
         }
     }
 
@@ -367,40 +378,40 @@ impl Fx {
     /// the picture still renders every refresh): the speed, 0.25–4, and 0 while
     /// frozen, coming back up over [`THAW`] once released.
     pub fn speed_now(&self, now: Instant) -> f64 {
-        if self.freeze {
+        if self.settings.freeze {
             return 0.0;
         }
-        let thaw = self.thawed.map_or(1.0, |t| (secs(t, now) / THAW).min(1.0));
-        self.speed * thaw * thaw * (3.0 - 2.0 * thaw)
+        let thaw = self.timing.thawed.map_or(1.0, |t| (secs(t, now) / THAW).min(1.0));
+        self.settings.speed * thaw * thaw * (3.0 - 2.0 * thaw)
     }
 
     fn black_level(&self, now: Instant) -> f64 {
-        let (from, at) = self.black_from;
-        let to = if self.blackout { 1.0 } else { 0.0 };
-        if self.blackout_fade <= 0.0 {
+        let (from, at) = self.timing.black_from;
+        let to = if self.settings.blackout { 1.0 } else { 0.0 };
+        if self.settings.blackout_fade <= 0.0 {
             return to;
         }
-        let moved = secs(at, now) / self.blackout_fade;
+        let moved = secs(at, now) / self.settings.blackout_fade;
         if to > from { (from + moved).min(to) } else { (from - moved).max(to) }
     }
 
     /// Whether the strobe is in a flash at `now`.
     fn flashing(&self, now: Instant) -> bool {
-        match self.sync {
+        match self.settings.sync {
             Sync::Tempo => {
-                let every = self.beat_length() / self.strobe_rate;
-                let since = now.saturating_duration_since(self.anchor).as_secs_f64();
+                let every = self.beat_length() / self.settings.strobe_rate;
+                let since = now.saturating_duration_since(self.timing.anchor).as_secs_f64();
                 let phase = since - (since / every).floor() * every;
                 phase < FLASH.min(every * 0.5)
             }
-            Sync::Audio => self.heard.is_some_and(|t| secs(t, now) < FLASH * 1.5),
+            Sync::Audio => self.timing.heard.is_some_and(|t| secs(t, now) < FLASH * 1.5),
         }
     }
 
     fn punch_level(&self, now: Instant) -> f64 {
         let decay = |t: Instant| (-secs(t, now) / PUNCH_DECAY).exp();
-        let mut level: f64 = if self.punch { 1.0 } else { self.kicked.map_or(0.0, decay) };
-        if self.punch_on_beat {
+        let mut level: f64 = if self.settings.punch { 1.0 } else { self.timing.kicked.map_or(0.0, decay) };
+        if self.settings.punch_on_beat {
             if let Some(beat) = self.last_beat(now) {
                 level = level.max(decay(beat));
             }
@@ -410,41 +421,38 @@ impl Fx {
 
     /// A preset was loaded: start the crossfade from the last one's picture.
     pub fn start_fade(&mut self, now: Instant) {
-        self.fading = Some(now);
+        self.timing.fading = Some(now);
     }
 
     /// The share of the outgoing preset still showing.
     fn fade_level(&self, now: Instant) -> f64 {
-        let Some(at) = self.fading else { return 0.0 };
-        if self.transition <= 0.0 {
+        let Some(at) = self.timing.fading else { return 0.0 };
+        let transition = self.settings.transition;
+        if transition <= 0.0 {
             return 0.0;
         }
-        let x = (secs(at, now) / self.transition).min(1.0);
+        let x = (secs(at, now) / transition).min(1.0);
         1.0 - x * x * (3.0 - 2.0 * x)
     }
 
     /// The master pass at `now`.
     pub fn master(&self, now: Instant) -> Master {
+        let s = &self.settings;
         let mut black = self.black_level(now);
         let mut flash = 0.0;
-        if self.strobe {
+        if s.strobe {
             let on = self.flashing(now);
-            match self.strobe_style {
-                StrobeStyle::White if on => flash = self.strobe_intensity,
-                StrobeStyle::Black if !on => black = black.max(self.strobe_intensity),
+            match s.strobe_style {
+                StrobeStyle::White if on => flash = s.strobe_intensity,
+                StrobeStyle::Black if !on => black = black.max(s.strobe_intensity),
                 _ => {}
             }
         }
         Master {
-            brightness: self.brightness as f32,
-            hue: self.hue as f32,
-            invert: if self.invert { 1.0 } else { 0.0 },
-            mirror: match self.mirror {
-                Mirror::Off => EngineMirror::Off,
-                Mirror::X => EngineMirror::X,
-                Mirror::Y => EngineMirror::Y,
-                Mirror::Quad => EngineMirror::Quad,
-            },
+            brightness: s.brightness as f32,
+            hue: s.hue as f32,
+            invert: if s.invert { 1.0 } else { 0.0 },
+            mirror: s.mirror,
             flash: flash as f32,
             black: black as f32,
             punch: self.punch_level(now) as f32,
@@ -454,34 +462,12 @@ impl Fx {
 
     /// The trails echo for the engine: how much of the frame before stays, per frame.
     pub fn echo(&self) -> f32 {
-        if self.trails <= 0.0 { 0.0 } else { (0.75 + 0.23 * self.trails) as f32 }
+        let trails = self.settings.trails;
+        if trails <= 0.0 { 0.0 } else { (0.75 + 0.23 * trails) as f32 }
     }
 
     pub fn view(&self, hold: bool, bars: u32) -> View {
-        View {
-            speed: self.speed,
-            freeze: self.freeze,
-            transition: self.transition,
-            strobe: self.strobe,
-            strobe_rate: self.strobe_rate,
-            strobe_intensity: self.strobe_intensity,
-            strobe_style: self.strobe_style,
-            sync: self.sync,
-            blackout: self.blackout,
-            blackout_fade: self.blackout_fade,
-            punch: self.punch,
-            punch_on_beat: self.punch_on_beat,
-            brightness: self.brightness,
-            hue: self.hue,
-            invert: self.invert,
-            mirror: self.mirror,
-            trails: self.trails,
-            sensitivity: self.sensitivity,
-            bpm: self.bpm,
-            linked: self.linked,
-            hold,
-            bars,
-        }
+        View { settings: self.settings.clone(), bpm: self.bpm, linked: self.linked, hold, bars }
     }
 }
 
@@ -508,23 +494,34 @@ mod tests {
         assert_eq!(tempo_text(128.456), "{\"bpm\": 128.46}\n");
     }
 
-    fn at(start: Instant, s: f64) -> Instant {
-        start + Duration::from_secs_f64(s)
+    /// `s` seconds into a test: every test's clock starts at the same moment, far
+    /// enough ahead of now that going back a beat from it never underflows.
+    fn t(s: f64) -> Instant {
+        static START: std::sync::LazyLock<Instant> = std::sync::LazyLock::new(|| Instant::now() + Duration::from_secs(10));
+        *START + Duration::from_secs_f64(s)
+    }
+
+    /// The effects at their defaults, with the beat falling at `t(0.0)`.
+    fn fx() -> Fx {
+        Fx::new(t(0.0))
+    }
+
+    fn act(fx: &mut Fx, action: FxAction, at: f64) {
+        fx.apply(&action, t(at)).unwrap();
     }
 
     #[test]
     fn a_link_session_with_peers_keeps_the_beat() {
-        let mut fx = Fx::default();
-        let t = Instant::now() + Duration::from_secs(10);
+        let mut fx = fx();
         // Half way through a beat at 120 bpm: the last beat was 0.25 s ago.
-        fx.follow(120.0, 7.5, t);
+        fx.follow(120.0, 7.5, t(0.0));
         assert!(fx.linked);
         assert_eq!(fx.bpm, 120.0);
-        let last = fx.last_tempo_beat(t);
-        assert!((t.duration_since(last).as_secs_f64() - 0.25).abs() < 1e-6);
+        let last = fx.last_tempo_beat(t(0.0));
+        assert!((t(0.0).duration_since(last).as_secs_f64() - 0.25).abs() < 1e-6);
         // Taps don't fight the session's tempo.
-        assert!(!fx.apply(&FxAction::Tap, at(t, 0.1)).unwrap());
-        assert!(!fx.apply(&FxAction::Tap, at(t, 0.4)).unwrap());
+        assert!(!fx.apply(&FxAction::Tap, t(0.1)).unwrap());
+        assert!(!fx.apply(&FxAction::Tap, t(0.4)).unwrap());
         assert_eq!(fx.bpm, 120.0);
         fx.unfollow();
         assert!(!fx.linked);
@@ -532,143 +529,172 @@ mod tests {
 
     #[test]
     fn values_are_clamped_and_toggles_flip() {
-        let mut fx = Fx::default();
-        let now = Instant::now();
-        fx.apply(&FxAction::Speed { speed: 9.0 }, now).unwrap();
-        assert_eq!(fx.speed, 4.0);
-        fx.apply(&FxAction::Speed { speed: 0.0 }, now).unwrap();
-        assert_eq!(fx.speed, 0.25);
-        assert!(fx.apply(&FxAction::Brightness { value: f64::NAN }, now).is_err());
-        fx.apply(&FxAction::Transition { seconds: 99.0 }, now).unwrap();
-        assert_eq!(fx.transition, 10.0);
-        fx.apply(&FxAction::Invert { on: None }, now).unwrap();
-        assert!(fx.invert);
-        fx.apply(&FxAction::Invert { on: Some(true) }, now).unwrap();
-        assert!(fx.invert);
-        fx.apply(&FxAction::Invert { on: None }, now).unwrap();
-        assert!(!fx.invert);
+        let mut fx = fx();
+        act(&mut fx, FxAction::Speed { speed: 9.0 }, 0.0);
+        assert_eq!(fx.settings.speed, 4.0);
+        act(&mut fx, FxAction::Speed { speed: 0.0 }, 0.0);
+        assert_eq!(fx.settings.speed, 0.25);
+        assert_eq!(fx.apply(&FxAction::Brightness { value: f64::NAN }, t(0.0)), Err("brightness must be a number".into()));
+        act(&mut fx, FxAction::Transition { seconds: 99.0 }, 0.0);
+        assert_eq!(fx.settings.transition, 10.0);
+        act(&mut fx, FxAction::Invert { on: None }, 0.0);
+        assert!(fx.settings.invert);
+        act(&mut fx, FxAction::Invert { on: Some(true) }, 0.0);
+        assert!(fx.settings.invert);
+        act(&mut fx, FxAction::Invert { on: None }, 0.0);
+        assert!(!fx.settings.invert);
         for want in [Mirror::X, Mirror::Y, Mirror::Quad, Mirror::Off] {
-            fx.apply(&FxAction::Mirror { mode: None }, now).unwrap();
-            assert_eq!(fx.mirror, want);
+            act(&mut fx, FxAction::Mirror { mode: None }, 0.0);
+            assert_eq!(fx.settings.mirror, want);
         }
-        fx.apply(&FxAction::Bpm { bpm: 1000.0 }, now).unwrap();
+        act(&mut fx, FxAction::Bpm { bpm: 1000.0 }, 0.0);
         assert_eq!(fx.bpm, 240.0);
     }
 
     #[test]
     fn defaults_draw_the_picture_as_it_is() {
-        let fx = Fx::default();
-        assert_eq!(fx.master(Instant::now()), Master::default());
-        assert_eq!(fx.speed_now(Instant::now()), 1.0);
+        let fx = fx();
+        assert_eq!(fx.master(t(0.0)), Master::default());
+        assert_eq!(fx.speed_now(t(0.0)), 1.0);
         assert_eq!(fx.echo(), 0.0);
     }
 
     #[test]
     fn freeze_holds_and_thaws_smoothly() {
-        let mut fx = Fx::default();
-        let t = Instant::now();
-        fx.apply(&FxAction::Speed { speed: 0.5 }, t).unwrap();
-        fx.apply(&FxAction::Freeze { on: Some(true) }, t).unwrap();
-        assert_eq!(fx.speed_now(at(t, 1.0)), 0.0);
-        fx.apply(&FxAction::Freeze { on: Some(false) }, at(t, 1.0)).unwrap();
-        let half = fx.speed_now(at(t, 1.0 + THAW / 2.0));
+        let mut fx = fx();
+        act(&mut fx, FxAction::Speed { speed: 0.5 }, 0.0);
+        act(&mut fx, FxAction::Freeze { on: Some(true) }, 0.0);
+        assert_eq!(fx.speed_now(t(1.0)), 0.0);
+        act(&mut fx, FxAction::Freeze { on: Some(false) }, 1.0);
+        let half = fx.speed_now(t(1.0 + THAW / 2.0));
         assert!(half > 0.0 && half < 0.5, "{half}");
-        assert_eq!(fx.speed_now(at(t, 2.0)), 0.5);
+        assert_eq!(fx.speed_now(t(2.0)), 0.5);
     }
 
     #[test]
     fn blackout_fades_and_turns_back_from_where_it_is() {
-        let mut fx = Fx::default();
-        let t = Instant::now();
-        fx.apply(&FxAction::Blackout { on: None }, t).unwrap();
-        assert_eq!(fx.master(t).black, 1.0, "no fade: at once");
-        fx.apply(&FxAction::Blackout { on: Some(false) }, t).unwrap();
-        fx.apply(&FxAction::BlackoutFade { seconds: 2.0 }, t).unwrap();
-        fx.apply(&FxAction::Blackout { on: Some(true) }, t).unwrap();
-        assert!((fx.master(at(t, 1.0)).black - 0.5).abs() < 1e-3);
-        fx.apply(&FxAction::Blackout { on: Some(false) }, at(t, 1.0)).unwrap();
-        assert!((fx.master(at(t, 1.5)).black - 0.25).abs() < 1e-3);
-        assert_eq!(fx.master(at(t, 3.0)).black, 0.0);
+        let mut fx = fx();
+        act(&mut fx, FxAction::Blackout { on: None }, 0.0);
+        assert_eq!(fx.master(t(0.0)).black, 1.0, "no fade: at once");
+        act(&mut fx, FxAction::Blackout { on: Some(false) }, 0.0);
+        act(&mut fx, FxAction::BlackoutFade { seconds: 2.0 }, 0.0);
+        act(&mut fx, FxAction::Blackout { on: Some(true) }, 0.0);
+        assert!((fx.master(t(1.0)).black - 0.5).abs() < 1e-3);
+        act(&mut fx, FxAction::Blackout { on: Some(false) }, 1.0);
+        assert!((fx.master(t(1.5)).black - 0.25).abs() < 1e-3);
+        assert_eq!(fx.master(t(3.0)).black, 0.0);
     }
 
     #[test]
     fn taps_set_the_tempo_and_the_strobe_follows_it() {
-        let mut fx = Fx::default();
-        let t = Instant::now();
+        let mut fx = fx();
         for i in 0..4 {
-            fx.apply(&FxAction::Tap, at(t, i as f64 * 0.5)).unwrap();
+            act(&mut fx, FxAction::Tap, i as f64 * 0.5);
         }
         assert!((fx.bpm - 120.0).abs() < 0.01, "{}", fx.bpm);
         // A long pause starts a new tempo rather than averaging it in.
-        fx.apply(&FxAction::Tap, at(t, 10.0)).unwrap();
-        fx.apply(&FxAction::Tap, at(t, 10.4)).unwrap();
+        act(&mut fx, FxAction::Tap, 10.0);
+        act(&mut fx, FxAction::Tap, 10.4);
         assert!((fx.bpm - 150.0).abs() < 0.01, "{}", fx.bpm);
         // The beat falls on the last tap: a flash there, none halfway to the next.
-        fx.apply(&FxAction::Strobe { on: Some(true) }, t).unwrap();
-        assert_eq!(fx.master(at(t, 10.4 + 0.4 * 3.0 + 0.01)).flash, 1.0);
-        assert_eq!(fx.master(at(t, 10.4 + 0.2)).flash, 0.0);
+        act(&mut fx, FxAction::Strobe { on: Some(true) }, 0.0);
+        assert_eq!(fx.master(t(10.4 + 0.4 * 3.0 + 0.01)).flash, 1.0);
+        assert_eq!(fx.master(t(10.4 + 0.2)).flash, 0.0);
         // Two flashes a beat: one halfway too.
-        fx.apply(&FxAction::StrobeRate { rate: 2.0 }, t).unwrap();
-        assert_eq!(fx.master(at(t, 10.4 + 0.2 + 0.01)).flash, 1.0);
+        act(&mut fx, FxAction::StrobeRate { rate: 2.0 }, 0.0);
+        assert_eq!(fx.master(t(10.4 + 0.2 + 0.01)).flash, 1.0);
         // Black gaps: the picture shows in the flash and black between.
-        fx.apply(&FxAction::StrobeStyle { style: StrobeStyle::Black }, t).unwrap();
-        assert_eq!(fx.master(at(t, 10.4 + 0.1)).black, 1.0);
-        assert_eq!(fx.master(at(t, 10.4 + 0.01)).black, 0.0);
-        fx.apply(&FxAction::Strobe { on: None }, t).unwrap();
-        assert_eq!(fx.master(at(t, 10.4 + 0.1)).black, 0.0);
+        act(&mut fx, FxAction::StrobeStyle { style: StrobeStyle::Black }, 0.0);
+        assert_eq!(fx.master(t(10.4 + 0.1)).black, 1.0);
+        assert_eq!(fx.master(t(10.4 + 0.01)).black, 0.0);
+        act(&mut fx, FxAction::Strobe { on: None }, 0.0);
+        assert_eq!(fx.master(t(10.4 + 0.1)).black, 0.0);
     }
 
     #[test]
     fn heard_beats_drive_the_strobe_in_audio_sync() {
-        let mut fx = Fx::default();
-        let t = Instant::now();
-        fx.apply(&FxAction::Sync { source: Sync::Audio }, t).unwrap();
-        fx.apply(&FxAction::Strobe { on: Some(true) }, t).unwrap();
-        assert_eq!(fx.master(t).flash, 0.0, "nothing heard yet");
-        fx.listen(1.0, 1.0, t);
-        fx.listen(2.0, 1.0, at(t, 1.0));
-        assert_eq!(fx.master(at(t, 1.01)).flash, 1.0);
-        assert_eq!(fx.master(at(t, 1.2)).flash, 0.0);
+        let mut fx = fx();
+        act(&mut fx, FxAction::Sync { source: Sync::Audio }, 0.0);
+        act(&mut fx, FxAction::Strobe { on: Some(true) }, 0.0);
+        assert_eq!(fx.master(t(0.0)).flash, 0.0, "nothing heard yet");
+        fx.listen(1.0, 1.0, t(0.0));
+        fx.listen(2.0, 1.0, t(1.0));
+        assert_eq!(fx.master(t(1.01)).flash, 1.0);
+        assert_eq!(fx.master(t(1.2)).flash, 0.0);
         // Staying loud is one beat, not one a frame.
-        fx.listen(2.0, 1.0, at(t, 1.5));
-        assert_eq!(fx.master(at(t, 1.51)).flash, 0.0);
+        fx.listen(2.0, 1.0, t(1.5));
+        assert_eq!(fx.master(t(1.51)).flash, 0.0);
     }
 
     #[test]
     fn punch_is_held_then_dies_away() {
-        let mut fx = Fx::default();
-        let t = Instant::now();
-        fx.apply(&FxAction::Punch { on: Some(true) }, t).unwrap();
-        assert_eq!(fx.master(at(t, 2.0)).punch, 1.0);
-        fx.apply(&FxAction::Punch { on: Some(false) }, at(t, 2.0)).unwrap();
-        let p = fx.master(at(t, 2.1)).punch;
+        let mut fx = fx();
+        act(&mut fx, FxAction::Punch { on: Some(true) }, 0.0);
+        assert_eq!(fx.master(t(2.0)).punch, 1.0);
+        act(&mut fx, FxAction::Punch { on: Some(false) }, 2.0);
+        let p = fx.master(t(2.1)).punch;
         assert!(p > 0.2 && p < 1.0, "{p}");
-        assert_eq!(fx.master(at(t, 3.0)).punch, 0.0);
+        assert_eq!(fx.master(t(3.0)).punch, 0.0);
     }
 
     #[test]
     fn a_transition_fades_the_outgoing_picture_out() {
-        let mut fx = Fx::default();
-        let t = Instant::now();
-        fx.apply(&FxAction::Transition { seconds: 2.0 }, t).unwrap();
-        fx.start_fade(t);
-        assert_eq!(fx.master(t).fade, 1.0);
-        assert!((fx.master(at(t, 1.0)).fade - 0.5).abs() < 1e-3);
-        assert_eq!(fx.master(at(t, 2.0)).fade, 0.0);
+        let mut fx = fx();
+        act(&mut fx, FxAction::Transition { seconds: 2.0 }, 0.0);
+        fx.start_fade(t(0.0));
+        assert_eq!(fx.master(t(0.0)).fade, 1.0);
+        assert!((fx.master(t(1.0)).fade - 0.5).abs() < 1e-3);
+        assert_eq!(fx.master(t(2.0)).fade, 0.0);
     }
 
     #[test]
     fn reset_keeps_the_tempo_and_settings() {
-        let mut fx = Fx::default();
-        let t = Instant::now();
-        fx.apply(&FxAction::Bpm { bpm: 128.0 }, t).unwrap();
-        fx.apply(&FxAction::Invert { on: Some(true) }, t).unwrap();
-        fx.apply(&FxAction::Freeze { on: Some(true) }, t).unwrap();
-        fx.apply(&FxAction::Sensitivity { value: 2.0 }, t).unwrap();
-        fx.apply(&FxAction::FxReset, t).unwrap();
-        assert!(!fx.invert && !fx.freeze);
-        assert_eq!((fx.bpm, fx.sensitivity), (128.0, 2.0));
-        assert_eq!(fx.master(t), Master::default());
+        let mut fx = fx();
+        act(&mut fx, FxAction::Bpm { bpm: 128.0 }, 0.0);
+        act(&mut fx, FxAction::Invert { on: Some(true) }, 0.0);
+        act(&mut fx, FxAction::Freeze { on: Some(true) }, 0.0);
+        act(&mut fx, FxAction::Sensitivity { value: 2.0 }, 0.0);
+        act(&mut fx, FxAction::FxReset, 0.0);
+        assert!(!fx.settings.invert && !fx.settings.freeze);
+        assert_eq!((fx.bpm, fx.settings.sensitivity), (128.0, 2.0));
+        assert_eq!(fx.master(t(0.0)), Master::default());
+    }
+
+    #[test]
+    fn reset_settles_what_is_under_way_and_keeps_the_beat() {
+        let mut fx = fx();
+        // Under way at 1 s: a thaw, a punch dying away, a crossfade and a blackout
+        // fading back out, with punch-on-beat on.
+        act(&mut fx, FxAction::Freeze { on: Some(true) }, 0.0);
+        act(&mut fx, FxAction::Freeze { on: Some(false) }, 1.0);
+        act(&mut fx, FxAction::Punch { on: Some(true) }, 0.0);
+        act(&mut fx, FxAction::Punch { on: Some(false) }, 1.0);
+        act(&mut fx, FxAction::PunchOnBeat { on: Some(true) }, 0.0);
+        act(&mut fx, FxAction::BlackoutFade { seconds: 4.0 }, 0.0);
+        act(&mut fx, FxAction::Blackout { on: Some(true) }, 0.0);
+        act(&mut fx, FxAction::Blackout { on: Some(false) }, 1.0);
+        fx.start_fade(t(1.0));
+        // Two taps half a second apart, a beat heard just now, and a Link session.
+        act(&mut fx, FxAction::Tap, 0.0);
+        act(&mut fx, FxAction::Tap, 0.5);
+        fx.listen(2.0, 1.0, t(1.0));
+        fx.follow(120.0, 0.0, t(0.5));
+
+        act(&mut fx, FxAction::FxReset, 1.0);
+        assert!(!fx.settings.punch_on_beat);
+        assert_eq!(fx.speed_now(t(1.0)), 1.0, "no thaw left");
+        assert_eq!(fx.master(t(1.0)), Master::default(), "no punch, fade or blackout left");
+        // A Link session's tempo survives a reset.
+        assert!(fx.linked);
+
+        // The heard beat stays: an audio strobe flashes on it.
+        act(&mut fx, FxAction::Sync { source: Sync::Audio }, 1.0);
+        act(&mut fx, FxAction::Strobe { on: Some(true) }, 1.0);
+        assert_eq!(fx.master(t(1.01)).flash, 1.0);
+        // The taps stay: a third one averages them in (gaps 0.5 and 1.0: 80 bpm).
+        fx.unfollow();
+        assert!(fx.apply(&FxAction::Tap, t(1.5)).unwrap());
+        assert!((fx.bpm - 80.0).abs() < 0.01, "{}", fx.bpm);
     }
 
     #[test]
@@ -678,5 +704,32 @@ mod tests {
         assert_eq!(read(r#"{"kind":"mirror","mode":"quad"}"#), FxAction::Mirror { mode: Some(Mirror::Quad) });
         assert_eq!(read(r#"{"kind":"strobe_style","style":"black"}"#), FxAction::StrobeStyle { style: StrobeStyle::Black });
         assert_eq!(read(r#"{"kind":"fx_reset"}"#), FxAction::FxReset);
+        for (mode, json) in [(Mirror::Off, "off"), (Mirror::X, "x"), (Mirror::Y, "y"), (Mirror::Quad, "quad")] {
+            assert_eq!(serde_json::to_value(mode).unwrap(), json);
+        }
+    }
+
+    /// The fields of `interface Fx` in the page's `fx.ts`, which reads the `fx` event.
+    fn page_fields() -> Vec<String> {
+        let ts = include_str!("../../src/fx.ts");
+        let body = ts.split("export interface Fx {").nth(1).and_then(|s| s.split("\n}").next()).expect("interface Fx in fx.ts");
+        body.lines()
+            .map(str::trim)
+            .filter(|l| !l.starts_with("/*") && !l.starts_with('*') && !l.starts_with("//"))
+            .filter_map(|l| l.split_once(':').map(|(name, _)| name.trim().to_string()))
+            .collect()
+    }
+
+    #[test]
+    fn the_view_is_flat_and_has_the_fields_the_page_reads() {
+        let view = serde_json::to_value(fx().view(true, 4)).unwrap();
+        let mut keys: Vec<String> = view.as_object().unwrap().keys().cloned().collect();
+        let mut want = page_fields();
+        keys.sort();
+        want.sort();
+        assert_eq!(want.len(), 22, "{want:?}");
+        assert_eq!(keys, want);
+        assert!(view.as_object().unwrap().values().all(|v| !v.is_object()), "flat: {view}");
+        assert_eq!((view["mirror"].as_str(), view["hold"].as_bool(), view["bars"].as_u64()), (Some("off"), Some(true), Some(4)));
     }
 }

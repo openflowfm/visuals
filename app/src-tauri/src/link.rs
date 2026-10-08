@@ -330,22 +330,9 @@ pub fn start(handle: AppHandle) {
         for n in 0u64.. {
             std::thread::sleep(Duration::from_millis(100));
             let frame = ticker.state::<Link>().tick();
-            // With peers, the effects' beat (strobe, punch on beat) is the
-            // session's; alone, it is the tapped tempo again.
-            {
-                let deck = ticker.state::<crate::actions::Deck>();
-                let mut fx = deck.fx.lock().unwrap();
-                let was = fx.linked;
-                if frame.enabled && frame.peers > 0 {
-                    fx.follow(frame.tempo, frame.beat, std::time::Instant::now());
-                } else {
-                    fx.unfollow();
-                }
-                let changed = was != fx.linked || (fx.linked && n % 10 == 0);
-                drop(fx);
-                if changed {
-                    let _ = ticker.emit("fx", deck.fx_view());
-                }
+            let deck = ticker.state::<crate::actions::Deck>();
+            if deck.follow_link(&frame, n) {
+                let _ = deck.emit_fx(&ticker);
             }
             if peers != Some((frame.enabled, frame.peers)) {
                 peers = Some((frame.enabled, frame.peers));

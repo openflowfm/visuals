@@ -74,28 +74,6 @@ impl Default for Live {
     }
 }
 
-impl Live {
-    /// How long the timed auto-advance stays on a preset. Changes by bars are
-    /// Link's, landing on its bar lines, not a count from the last change.
-    pub fn period(&self, _bpm: f64) -> f64 {
-        self.seconds
-    }
-
-    /// Change on Link's grid on `every`: the one place a schedule is decided, whether
-    /// it came from the panel's bars, the Link panel or `VISUALS_LINK_EVERY`. Clamps to
-    /// the one limit (64 bars, 256 beats), shows it as `bars` (0 for a beats schedule),
-    /// and turns the timed auto-advance off when on, so the two never both change the
-    /// preset. Returns the schedule Link is to keep.
-    pub fn schedule(&mut self, every: Every) -> Every {
-        let every = every.clamped();
-        self.bars = if every.unit == Unit::Bars { every.every } else { 0 };
-        if every.every > 0 {
-            self.auto = false;
-        }
-        every
-    }
-}
-
 /// [`Live`] as the page sees it.
 #[derive(Serialize, Clone, Debug)]
 pub struct DeckView {
@@ -109,6 +87,20 @@ pub struct DeckView {
 }
 
 impl Live {
+    /// Change on Link's grid on `every`: the one place a schedule is decided, whether
+    /// it came from the panel's bars, the Link panel or `VISUALS_LINK_EVERY`. Clamps to
+    /// the one limit (64 bars, 256 beats), shows it as `bars` (0 for a beats schedule),
+    /// and turns the timed auto-advance off when on, so the two never both change the
+    /// preset. Returns the schedule Link is to keep.
+    pub fn schedule(&mut self, every: Every) -> Every {
+        let every = every.clamped();
+        self.bars = if every.unit == Unit::Bars { every.every } else { 0 };
+        if every.every > 0 {
+            self.auto = false;
+        }
+        every
+    }
+
     pub fn view(&self) -> DeckView {
         DeckView {
             playlist: self.playlist.clone(),
@@ -268,9 +260,27 @@ impl Deck {
 
     /// The page opened `path` itself (a library click): it is what plays now.
     pub fn opened(&self, path: &Path) {
-        let mut live = self.live.lock().unwrap();
-        live.current = Some(path.to_path_buf());
-        live.since = Instant::now();
+        self.live.lock().unwrap().play(path.to_path_buf());
+    }
+
+    /// Tell the page the effects panel moved.
+    pub fn emit_fx(&self, handle: &AppHandle) -> Result<(), String> {
+        handle.emit("fx", self.fx_view()).map_err(|e| e.to_string())
+    }
+
+    /// Follow Link's session `frame` (`n` is the ticker's count): with peers, the
+    /// effects' beat (strobe, punch on beat) is the session's; alone, it is the
+    /// tapped tempo again. Returns whether the page must be sent `fx`: when that
+    /// changed, and once a second while linked.
+    pub fn follow_link(&self, frame: &crate::link::Frame, n: u64) -> bool {
+        let mut fx = self.fx.lock().unwrap();
+        let was = fx.linked;
+        if frame.enabled && frame.peers > 0 {
+            fx.follow(frame.tempo, frame.beat, Instant::now());
+        } else {
+            fx.unfollow();
+        }
+        was != fx.linked || (fx.linked && n % 10 == 0)
     }
 
     fn lists(&self) -> Lists {
@@ -294,7 +304,7 @@ impl Deck {
 /// Tell the page the deck's settings moved: `fx` (the effects panel shows hold and
 /// bars), then `live`.
 fn emit_deck(handle: &AppHandle, deck: &Deck, view: DeckView) -> Result<(), String> {
-    handle.emit("fx", deck.fx_view()).map_err(|e| e.to_string())?;
+    deck.emit_fx(handle)?;
     let now = Now { deck: view, opened: None, path: None, error: None };
     handle.emit("live", now).map_err(|e| e.to_string())
 }
@@ -329,7 +339,7 @@ pub fn dispatch(handle: &AppHandle, action: Action) -> Result<(), String> {
         if let Some(bpm) = tempo {
             crate::fx::save_tempo(bpm);
         }
-        return handle.emit("fx", deck.fx_view()).map_err(|e| e.to_string());
+        return deck.emit_fx(handle);
     }
     if let Action::Bars { bars } = action {
         return deck.set_schedule(handle, Every { every: bars, unit: Unit::Bars });
@@ -367,10 +377,9 @@ pub fn start_auto(handle: AppHandle) {
         loop {
             std::thread::sleep(Duration::from_millis(100));
             let deck = handle.state::<Deck>();
-            let bpm = deck.fx.lock().unwrap().bpm;
             let due = {
                 let mut live = deck.live.lock().unwrap();
-                let due = live.auto && !live.hold && live.since.elapsed().as_secs_f64() >= live.period(bpm);
+                let due = live.auto && !live.hold && live.since.elapsed().as_secs_f64() >= live.seconds;
                 if due {
                     // Even when Next finds nothing to play, wait a whole period again.
                     live.since = Instant::now();
@@ -569,7 +578,7 @@ mod tests {
     }
 
     #[test]
-    fn hold_ignores_steps_and_bars_set_the_period() {
+    fn hold_ignores_steps_and_bars_leave_the_seconds() {
         let (s, lib) = store();
         let mut live = Live::default();
         decide(&mut live, &Action::Load { playlist: 0, index: None }, &s, &none, 0).unwrap();
@@ -583,9 +592,9 @@ mod tests {
         decide(&mut live, &Action::Seconds { seconds: 10.0 }, &s, &none, 0).unwrap();
         decide(&mut live, &Action::Hold { on: Some(false) }, &s, &none, 0).unwrap();
         assert_eq!(decide(&mut live, &Action::Next, &s, &none, 0).unwrap(), Some(lib.join("y.milk")));
-        assert_eq!(live.period(120.0), 10.0);
+        assert_eq!(live.seconds, 10.0);
         decide(&mut live, &Action::Bars { bars: 8 }, &s, &none, 0).unwrap();
-        assert_eq!(live.period(120.0), 10.0, "bars are Link's schedule, not the timed period");
+        assert_eq!(live.seconds, 10.0, "bars are Link's schedule, not the timed period");
         decide(&mut live, &Action::Bars { bars: 1000 }, &s, &none, 0).unwrap();
         assert_eq!(live.bars, 64);
     }
