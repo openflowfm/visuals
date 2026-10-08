@@ -64,6 +64,53 @@ impl Target {
         let view = texture.create_view(&Default::default());
         Self { texture, view, size: (w, h) }
     }
+
+    /// This whole picture into `to`, which is the same size.
+    fn copy_to(&self, encoder: &mut wgpu::CommandEncoder, to: &Target) {
+        let (width, height) = self.size;
+        encoder.copy_texture_to_texture(self.texture.as_image_copy(), to.texture.as_image_copy(), wgpu::Extent3d { width, height, depth_or_array_layers: 1 });
+    }
+}
+
+/// `targets`' pixels as RGBA rows, one picture after another, through one staging
+/// buffer; every target is the size of the first. Rows come top to bottom of the
+/// texture, or bottom to top with `flip`. None when the buffer will not map. Waits
+/// for the GPU.
+fn read_targets(device: &wgpu::Device, queue: &wgpu::Queue, targets: &[Target], flip: bool) -> Option<Vec<u8>> {
+    let (w, h) = targets.first()?.size;
+    let row = (w * 4).div_ceil(256) * 256;
+    let each = (row * h) as u64;
+    let staging = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("read back"),
+        size: each * targets.len() as u64,
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+    let mut encoder = device.create_command_encoder(&Default::default());
+    for (i, t) in targets.iter().enumerate() {
+        encoder.copy_texture_to_buffer(
+            t.texture.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &staging,
+                layout: wgpu::TexelCopyBufferLayout { offset: each * i as u64, bytes_per_row: Some(row), rows_per_image: Some(h) },
+            },
+            wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+        );
+    }
+    queue.submit([encoder.finish()]);
+    let slice = staging.slice(..);
+    slice.map_async(wgpu::MapMode::Read, |_| {});
+    device.poll(wgpu::PollType::wait_indefinitely()).ok();
+    let data = slice.get_mapped_range().ok()?;
+    let mut out = Vec::with_capacity((w * h * 4) as usize * targets.len());
+    for i in 0..targets.len() {
+        for y in 0..h {
+            let y = if flip { h - 1 - y } else { y };
+            let at = (each * i as u64) as usize + (y * row) as usize;
+            out.extend_from_slice(&data[at..at + (w * 4) as usize]);
+        }
+    }
+    Some(out)
 }
 
 /// One of the preset's two shaders, compiled into a pipeline, with what its
@@ -695,22 +742,18 @@ impl Renderer {
         let mut loaded = Loaded::default();
         let warp_text = runner.preset.warp.clone();
         let comp_text = runner.preset.comp.clone();
-        let warp = if warp_text.trim().is_empty() {
-            self.stage(Kind::Warp, shader::DEFAULT_WARP)
-        } else {
-            self.stage(Kind::Warp, &warp_text).or_else(|e| {
-                loaded.fell_back.push((Kind::Warp, e.to_string()));
-                self.stage(Kind::Warp, shader::DEFAULT_WARP)
+        // The preset's shader, else (none, or one that will not compile) the default.
+        let mut compile = |kind: Kind, text: &str, default: &str| {
+            if text.trim().is_empty() {
+                return self.stage(kind, default);
+            }
+            self.stage(kind, text).or_else(|e| {
+                loaded.fell_back.push((kind, e.to_string()));
+                self.stage(kind, default)
             })
         };
-        let comp = if comp_text.trim().is_empty() {
-            self.stage(Kind::Comp, shader::DEFAULT_COMP)
-        } else {
-            self.stage(Kind::Comp, &comp_text).or_else(|e| {
-                loaded.fell_back.push((Kind::Comp, e.to_string()));
-                self.stage(Kind::Comp, shader::DEFAULT_COMP)
-            })
-        };
+        let warp = compile(Kind::Warp, &warp_text, shader::DEFAULT_WARP);
+        let comp = compile(Kind::Comp, &comp_text, shader::DEFAULT_COMP);
         self.warp = Some(warp.expect("default warp compiles"));
         self.comp_stage = Some(comp.expect("default comp compiles"));
         // Butterchurn's `getHighestBlur`, on the shader text.
@@ -735,31 +778,26 @@ impl Renderer {
         Ok(loaded)
     }
 
-    /// Butterchurn's `getBlurValues`.
+    /// Butterchurn's `getBlurValues`: each level's range within the one before
+    /// (as adjusted), and at least 0.1 wide. Butterchurn's quirk is kept: a range
+    /// too narrow becomes `avg - 0.05` at both ends, not `avg ± 0.05`.
     fn blur_values(r: &Runner) -> ([f64; 3], [f64; 3]) {
-        let (mut n1, mut n2, mut n3) = (r.get("b1n"), r.get("b2n"), r.get("b3n"));
-        let (mut x1, mut x2, mut x3) = (r.get("b1x"), r.get("b2x"), r.get("b3x"));
         let min = 0.1;
-        if x1 - n1 < min {
-            let avg = (n1 + x1) * 0.5;
-            n1 = avg - min * 0.5;
-            x1 = avg - min * 0.5;
+        let (mut mins, mut maxs) = ([0f64; 3], [0f64; 3]);
+        for (i, (n_name, x_name)) in [("b1n", "b1x"), ("b2n", "b2x"), ("b3n", "b3x")].into_iter().enumerate() {
+            let (mut n, mut x) = (r.get(n_name), r.get(x_name));
+            if i > 0 {
+                x = maxs[i - 1].min(x);
+                n = mins[i - 1].max(n);
+            }
+            if x - n < min {
+                let avg = (n + x) * 0.5;
+                n = avg - min * 0.5;
+                x = avg - min * 0.5;
+            }
+            (mins[i], maxs[i]) = (n, x);
         }
-        x2 = x1.min(x2);
-        n2 = n1.max(n2);
-        if x2 - n2 < min {
-            let avg = (n2 + x2) * 0.5;
-            n2 = avg - min * 0.5;
-            x2 = avg - min * 0.5;
-        }
-        x3 = x2.min(x3);
-        n3 = n2.max(n3);
-        if x3 - n3 < min {
-            let avg = (n3 + x3) * 0.5;
-            n3 = avg - min * 0.5;
-            x3 = avg - min * 0.5;
-        }
-        ([n1, n2, n3], [x1, x2, x3])
+        (mins, maxs)
     }
 
     /// The uniforms every preset shader reads, for this frame.
@@ -1066,11 +1104,7 @@ impl Renderer {
         }
         if !self.draw_list.cmds.is_empty() {
             // Kept for the refreshes before the next step (`show`).
-            encoder.copy_texture_to_texture(
-                self.feedback[self.current].texture.as_image_copy(),
-                self.bare.texture.as_image_copy(),
-                wgpu::Extent3d { width: self.bare.size.0, height: self.bare.size.1, depth_or_array_layers: 1 },
-            );
+            self.feedback[self.current].copy_to(&mut encoder, &self.bare);
         }
         let (target, previous) = (&self.feedback[self.current].view, &self.feedback[self.current ^ 1].view);
         self.draw(&mut encoder, &self.draw_list, self.draw_buffer.as_ref(), target, previous, wrap, true);
@@ -1263,11 +1297,7 @@ impl Renderer {
     /// mixes in — taken just before a new preset takes over.
     pub fn keep_outgoing(&mut self) {
         let mut encoder = self.device.create_command_encoder(&Default::default());
-        encoder.copy_texture_to_texture(
-            self.comp.texture.as_image_copy(),
-            self.outgoing.texture.as_image_copy(),
-            wgpu::Extent3d { width: self.comp.size.0, height: self.comp.size.1, depth_or_array_layers: 1 },
-        );
+        self.comp.copy_to(&mut encoder, &self.outgoing);
         self.queue.submit([encoder.finish()]);
     }
 
@@ -1496,40 +1526,8 @@ impl Renderer {
     /// The stage pictures, RGBA rows top to bottom, one after another in
     /// [`PREVIEWS`] order. Waits for the GPU.
     pub fn read_previews(&self) -> Option<Vec<u8>> {
-        let previews = self.previews.as_ref()?;
-        let (w, h) = PREVIEW;
-        let row = (w * 4).div_ceil(256) * 256;
-        let each = (row * h) as u64;
-        let staging = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("previews"),
-            size: each * previews.len() as u64,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
-        let mut encoder = self.device.create_command_encoder(&Default::default());
-        for (i, p) in previews.iter().enumerate() {
-            encoder.copy_texture_to_buffer(
-                p.texture.as_image_copy(),
-                wgpu::TexelCopyBufferInfo {
-                    buffer: &staging,
-                    layout: wgpu::TexelCopyBufferLayout { offset: each * i as u64, bytes_per_row: Some(row), rows_per_image: Some(h) },
-                },
-                wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
-            );
-        }
-        self.queue.submit([encoder.finish()]);
-        let slice = staging.slice(..);
-        slice.map_async(wgpu::MapMode::Read, |_| {});
-        self.device.poll(wgpu::PollType::wait_indefinitely()).ok();
-        let data = slice.get_mapped_range().ok()?;
-        let mut out = Vec::with_capacity((w * h * 4) as usize * previews.len());
-        for i in 0..previews.len() {
-            for y in 0..h {
-                let at = (each * i as u64) as usize + (y * row) as usize;
-                out.extend_from_slice(&data[at..at + (w * 4) as usize]);
-            }
-        }
-        Some(out)
+        // Blitted picture side up, so row 0 is already the top.
+        read_targets(&self.device, &self.queue, self.previews.as_ref()?, false)
     }
 
     fn blit_pipeline(&mut self, format: wgpu::TextureFormat) {
@@ -1620,35 +1618,8 @@ impl Renderer {
     /// The finished picture, read back as RGBA rows top to bottom — for tests and
     /// the harness.
     pub fn read_back(&self) -> Vec<u8> {
-        let (w, h) = self.comp.size;
-        let padded = (w * 4).div_ceil(256) * 256;
-        let staging = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: None,
-            size: (padded * h) as u64,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
-        let mut encoder = self.device.create_command_encoder(&Default::default());
-        encoder.copy_texture_to_buffer(
-            self.comp.texture.as_image_copy(),
-            wgpu::TexelCopyBufferInfo {
-                buffer: &staging,
-                layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(padded), rows_per_image: Some(h) },
-            },
-            wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
-        );
-        self.queue.submit([encoder.finish()]);
-        let slice = staging.slice(..);
-        slice.map_async(wgpu::MapMode::Read, |_| {});
-        self.device.poll(wgpu::PollType::wait_indefinitely()).ok();
-        let data = slice.get_mapped_range().expect("mapped");
-        let mut out = Vec::with_capacity((w * h * 4) as usize);
         // GL orientation: the last row is the top of the picture.
-        for row in (0..h).rev() {
-            let at = (row * padded) as usize;
-            out.extend_from_slice(&data[at..at + (w * 4) as usize]);
-        }
-        out
+        read_targets(&self.device, &self.queue, std::slice::from_ref(&self.comp), true).expect("mapped")
     }
 }
 
@@ -1702,47 +1673,42 @@ mod tests {
     /// A target's pixels, RGBA rows top to bottom (row 0 of a presented target
     /// is the top of the picture).
     fn read_target(r: &Renderer, target: &Target) -> Vec<u8> {
-        let (w, h) = target.size;
-        let padded = (w * 4).div_ceil(256) * 256;
-        let staging = r.device().create_buffer(&wgpu::BufferDescriptor {
-            label: None,
-            size: (padded * h) as u64,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
-        let mut e = r.device().create_command_encoder(&Default::default());
-        e.copy_texture_to_buffer(
-            target.texture.as_image_copy(),
-            wgpu::TexelCopyBufferInfo { buffer: &staging, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(padded), rows_per_image: Some(h) } },
-            wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
-        );
-        r.queue().submit([e.finish()]);
-        staging.slice(..).map_async(wgpu::MapMode::Read, |_| {});
-        r.device().poll(wgpu::PollType::wait_indefinitely()).ok();
-        let data = staging.slice(..).get_mapped_range().unwrap();
-        (0..h).flat_map(|y| data[(y * padded) as usize..(y * padded + w * 4) as usize].to_vec()).collect()
+        read_targets(r.device(), r.queue(), std::slice::from_ref(target), false).unwrap()
     }
 
     const W: u32 = 64;
     const H: u32 = 36;
+    const SPIRAL: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../test/fixtures/milk/Fixture - Spiral Test.milk"));
+
+    /// `text` loaded at `w`×`h`, every shader its own; None without a GPU.
+    fn renderer(w: u32, h: u32, text: &str) -> Option<Renderer> {
+        let (device, queue) = headless()?;
+        let mut r = Renderer::new(device, queue, w, h);
+        let loaded = r.load(text, 1).unwrap();
+        assert!(loaded.fell_back.is_empty(), "{:?}", loaded.fell_back);
+        Some(r)
+    }
+
+    /// The tone every test hears.
+    fn tone() -> Vec<f32> {
+        (0..1024).map(|i| (i as f32 * 0.05).sin() * 0.8).collect()
+    }
+
+    /// `n` refreshes `dt` seconds apart, each hearing [`tone`].
+    fn play(r: &mut Renderer, audio: &mut Audio, n: usize, dt: f64) {
+        let tone = tone();
+        for _ in 0..n {
+            audio.update(&tone, &tone);
+            r.render(audio, dt);
+        }
+    }
 
     /// The Spiral fixture at 64×36, with `frames` frames made.
     fn spiral(frames: usize) -> Option<(Renderer, Audio)> {
-        let (device, queue) = headless()?;
-        let mut r = Renderer::new(device, queue, W, H);
-        let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../test/fixtures/milk/Fixture - Spiral Test.milk")).unwrap();
-        r.load(&text, 1).unwrap();
+        let mut r = renderer(W, H, SPIRAL)?;
         let mut audio = Audio::default();
-        for _ in 0..frames {
-            frame(&mut r, &mut audio);
-        }
+        play(&mut r, &mut audio, frames, 1.0 / 60.0);
         Some((r, audio))
-    }
-
-    fn frame(r: &mut Renderer, audio: &mut Audio) {
-        let tone: Vec<f32> = (0..1024).map(|i| (i as f32 * 0.05).sin() * 0.8).collect();
-        audio.update(&tone, &tone);
-        r.render(audio, 1.0 / 60.0);
     }
 
     /// The picture presented through the master pass with `m`.
@@ -1817,9 +1783,7 @@ mod tests {
         assert!(presented(&mut r, Master { fade: 1.0, ..Default::default() }).chunks(4).all(|p| p[..3] == [0, 0, 0]), "black before any snapshot");
         let kept = r.read_back();
         r.keep_outgoing();
-        for _ in 0..10 {
-            frame(&mut r, &mut audio);
-        }
+        play(&mut r, &mut audio, 10, 1.0 / 60.0);
         assert!(!within(&r.read_back(), &kept, 1), "the picture has moved on");
         assert!(within(&presented(&mut r, Master { fade: 1.0, ..Default::default() }), &kept, 1));
     }
@@ -1828,10 +1792,10 @@ mod tests {
     fn trails_echo_without_brightening() {
         let Some((mut r, mut audio)) = spiral(20) else { return };
         r.set_trails(0.9);
-        frame(&mut r, &mut audio);
+        play(&mut r, &mut audio, 1, 1.0 / 60.0);
         let mut previous = r.read_back();
         for _ in 0..8 {
-            frame(&mut r, &mut audio);
+            play(&mut r, &mut audio, 1, 1.0 / 60.0);
             let now = r.read_back();
             let ok = now.chunks(4).zip(previous.chunks(4)).all(|(n, p)| (0..3).all(|c| n[c] as i32 >= (p[c] as f32 * 0.9).floor() as i32 - 2));
             assert!(ok, "every pixel keeps at least 0.9 of the frame before");
@@ -1843,17 +1807,8 @@ mod tests {
 
     #[test]
     fn a_preset_draws_something() {
-        let Some((device, queue)) = headless() else { return };
-        let mut r = Renderer::new(device, queue, 256, 192);
-        let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../test/fixtures/milk/Fixture - Spiral Test.milk")).unwrap();
-        let loaded = r.load(&text, 1).unwrap();
-        assert!(loaded.fell_back.is_empty(), "{:?}", loaded.fell_back);
-        let mut audio = Audio::default();
-        let tone: Vec<f32> = (0..1024).map(|i| (i as f32 * 0.05).sin() * 0.8).collect();
-        for _ in 0..30 {
-            audio.update(&tone, &tone);
-            r.render(&mut audio, 1.0 / 60.0);
-        }
+        let Some(mut r) = renderer(256, 192, SPIRAL) else { return };
+        play(&mut r, &mut Audio::default(), 30, 1.0 / 60.0);
         let pixels = r.read_back();
         assert_eq!(pixels.len(), 256 * 192 * 4);
         assert!(pixels.chunks(4).all(|p| p[3] == 255), "comp writes opaque pixels");
@@ -1867,16 +1822,9 @@ mod tests {
 
     /// [`run_at`], and the audio it heard, to carry on with.
     fn run_with(hz: f64, speed: f64, seconds: f64) -> Option<(Renderer, Audio)> {
-        let (device, queue) = headless()?;
-        let mut r = Renderer::new(device, queue, W, H);
-        let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../test/fixtures/milk/Fixture - Spiral Test.milk")).unwrap();
-        r.load(&text, 1).unwrap();
+        let mut r = renderer(W, H, SPIRAL)?;
         let mut audio = Audio::default();
-        let tone: Vec<f32> = (0..1024).map(|i| (i as f32 * 0.05).sin() * 0.8).collect();
-        for _ in 0..(seconds * hz).round() as usize {
-            audio.update(&tone, &tone);
-            r.render(&mut audio, speed / hz);
-        }
+        play(&mut r, &mut audio, (seconds * hz).round() as usize, speed / hz);
         Some((r, audio))
     }
 
@@ -1976,9 +1924,7 @@ comp_3=`}
     /// `text` drawn at 256×144, `hz` refreshes a second at `speed`: 3 steps, then
     /// each refresh over the next `steps`, measured by `measure`.
     fn each_refresh(text: &str, hz: f64, speed: f64, steps: f64, mut measure: impl FnMut(&[u8]) -> f64) -> Option<Vec<f64>> {
-        let (device, queue) = headless()?;
-        let mut r = Renderer::new(device, queue, 256, 144);
-        r.load(text, 1).unwrap();
+        let mut r = renderer(256, 144, text)?;
         let mut audio = Audio::default();
         let per = speed / hz;
         let warm = (3.0 / PRESET_RATE / per).round() as usize;
@@ -2103,19 +2049,26 @@ comp_3=`}
     }
 
     #[test]
+    fn blur_ranges_nest_and_keep_butterchurns_quirk() {
+        // Level 1 is too narrow: both ends become avg − 0.05 = 0.46. Level 2 is
+        // clamped to that adjusted range (0.46..0.46), then widened the same way
+        // to 0.41. Level 3, clamped to 0.6..0.3, ends at 0.45 − 0.05.
+        let text = "[preset00]\nper_frame_1=b1n = 0.5; b1x = 0.52; b2n = 0; b2x = 1; b3n = 0.6; b3x = 0.3;\n";
+        let Some(mut r) = renderer(W, H, text) else { return };
+        play(&mut r, &mut Audio::default(), 1, 1.0 / 30.0);
+        let (mins, maxs) = Renderer::blur_values(r.runner.as_ref().unwrap());
+        let near = |a: [f64; 3], b: [f64; 3]| a.iter().zip(b).all(|(x, y)| (x - y).abs() < 1e-9);
+        assert!(near(mins, [0.46, 0.41, 0.4]), "{mins:?}");
+        assert!(near(maxs, [0.46, 0.41, 0.4]), "{maxs:?}");
+    }
+
+    #[test]
     fn stage_previews_and_live_values() {
-        let Some((device, queue)) = headless() else { return };
-        let mut r = Renderer::new(device, queue, 256, 192);
-        let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../test/fixtures/milk/Fixture - Spiral Test.milk")).unwrap();
-        r.load(&text, 1).unwrap();
+        let Some(mut r) = renderer(256, 192, SPIRAL) else { return };
         assert!(r.read_previews().is_none(), "off until asked for");
         r.set_previews(true);
         let mut audio = Audio::default();
-        let tone: Vec<f32> = (0..1024).map(|i| (i as f32 * 0.05).sin() * 0.8).collect();
-        for _ in 0..30 {
-            audio.update(&tone, &tone);
-            r.render(&mut audio, 1.0 / 60.0);
-        }
+        play(&mut r, &mut audio, 30, 1.0 / 60.0);
         let pixels = r.read_previews().unwrap();
         let each = (PREVIEW.0 * PREVIEW.1 * 4) as usize;
         assert_eq!(pixels.len(), each * PREVIEWS.len());
