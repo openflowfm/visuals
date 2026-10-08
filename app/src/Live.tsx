@@ -2,21 +2,20 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { HintFooter } from '@openflow/widgets/chrome/HintFooter.tsx';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { ButtonFace } from '@openflow/widgets/controls/ButtonFace.tsx';
-import { Select } from '@openflow/widgets/controls/Select.tsx';
 import * as api from './api.ts';
 import { AudioInput } from './AudioInput.tsx';
 import { Effects } from './Effects.tsx';
 import * as fx from './fx.ts';
 import { LinkPanel } from './LinkPanel.tsx';
+import { useLiveKeys } from './liveKeys.ts';
 import * as output from './output.ts';
+import { leave, OutputPanel } from './OutputPanel.tsx';
 import { Playlists } from './Playlists.tsx';
 import * as pl from './playlists.ts';
 import { useNotice, usePlaceBench, useTauriEvent } from './hooks.ts';
-import { isTyping, nameOf, notice, openFailed } from './shell.ts';
+import { nameOf, notice, openFailed } from './shell.ts';
 import { FrameRate, Header, NoticeBanner } from './views.tsx';
 import './live.css';
-
-const displayName = (d: output.Display) => `${d.index + 1}. ${d.name} (${d.width}×${d.height})${d.main ? ' · menu bar' : ''}`;
 
 /** What the keys do, said by the strip along the bottom when nothing is pointed at. */
 const KEYS =
@@ -39,7 +38,6 @@ export function Live({ start, onMode }: { start: string | null; onMode: (mode: '
   const [current, setCurrent] = useState<string | null>(null);
   const { notice: error, set: setError, fail, dismiss } = useNotice();
   const [selected, setSelected] = useState<string | null>(null);
-  const [displays, setDisplays] = useState<output.Display[]>([]);
   const [status, setStatus] = useState<output.Status>({ display: null, size: null });
   const [effects, setEffects] = useState<fx.Fx | null>(null);
   const preview = useRef<HTMLDivElement>(null);
@@ -56,21 +54,10 @@ export function Live({ start, onMode }: { start: string | null; onMode: (mode: '
     api.setPreviews(false).catch(() => {});
     show(null);
     fx.state().then(setEffects, fail("Couldn't read the effects."));
-    return () => {
-      fx.act({ kind: 'fx_reset' }).catch(() => {});
-      output.close().catch(() => {});
-    };
+    return leave;
   }, [show, fail]);
   useTauriEvent(output.onStatus, setStatus);
   useTauriEvent(fx.onFx, setEffects);
-
-  const refreshDisplays = useCallback(() => output.displays().then(setDisplays, () => {}), []);
-  useEffect(() => {
-    refreshDisplays();
-    // A display plugged in or out shows up in the list next time it is looked at.
-    window.addEventListener('focus', refreshDisplays);
-    return () => window.removeEventListener('focus', refreshDisplays);
-  }, [refreshDisplays, status.display?.id]);
 
   useEffect(() => {
     pl.lists().then((l) => {
@@ -103,59 +90,11 @@ export function Live({ start, onMode }: { start: string | null; onMode: (mode: '
   );
   const actFx = useCallback((action: fx.FxAction) => fx.act(action).catch(fail("Couldn't change that effect.")), [fail]);
 
-  // The hold keys that are down, so their release (or the window losing focus) lets go.
-  const down = useRef(new Set<fx.Hit>());
-  useEffect(() => {
-    const key = (e: KeyboardEvent) => {
-      if (e.metaKey && e.shiftKey && e.key.toLowerCase() === 'l') {
-        e.preventDefault();
-        onMode('editor', current);
-        return;
-      }
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (isTyping(e)) return;
-      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') act({ kind: 'next' });
-      else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') act({ kind: 'previous' });
-      else if (e.key.toLowerCase() === 'r') act({ kind: 'random' });
-      else {
-        const press = fx.effectKey(e.key, e.shiftKey);
-        if (!press) return;
-        e.preventDefault();
-        if (e.repeat) return;
-        if ('hold' in press) {
-          down.current.add(press.hold);
-          actFx(fx.hitAction(press.hold, true));
-        } else actFx(press.action);
-        return;
-      }
-      e.preventDefault();
-    };
-    const up = (e: KeyboardEvent) => {
-      const hit = fx.HOLD_KEYS[e.key.toLowerCase()];
-      if (hit && down.current.delete(hit)) actFx(fx.hitAction(hit, false));
-    };
-    const blur = () => {
-      for (const hit of down.current) actFx(fx.hitAction(hit, false));
-      down.current.clear();
-    };
-    window.addEventListener('keydown', key);
-    window.addEventListener('keyup', up);
-    window.addEventListener('blur', blur);
-    return () => {
-      window.removeEventListener('keydown', key);
-      window.removeEventListener('keyup', up);
-      window.removeEventListener('blur', blur);
-    };
-  }, [act, actFx, onMode, current]);
+  useLiveKeys({ editor: () => onMode('editor', current), act, fx: actFx });
 
   const says = pl.nextSays(lists, held);
   const up = pl.upNext(lists);
   const deck = lists?.deck ?? null;
-  const shown = status.display;
-  const chosen = shown?.id ?? displays.find((d) => !d.main)?.id ?? displays[0]?.id ?? null;
-  const pick = displays.findIndex((d) => d.id === chosen);
-  // Only the display with the menu bar: the output covers this window too.
-  const alone = displays.length === 1 && displays[0].main;
 
   return (
     <div className="live">
@@ -229,45 +168,7 @@ export function Live({ start, onMode }: { start: string | null; onMode: (mode: '
         </div>
       </section>
       <aside className="live-side">
-        <div className="live-output">
-          <h2>Output</h2>
-          {shown ? (
-            <p className="live-status" data-on="" title={status.size ? `The picture is ${status.size[0]}×${status.size[1]} on the display` : undefined}>
-              Showing on {shown.name}
-            </p>
-          ) : (
-            <div className="live-status">
-              <span>Not showing</span>
-              <Button onPress={() => show(chosen)} title="Open the output full screen on the display picked below">
-                Show
-              </Button>
-            </div>
-          )}
-          {displays.length > 0 ? (
-            <Select
-              className="live-display"
-              items={displays.map(displayName)}
-              index={Math.max(0, pick)}
-              onChange={(i) => show(displays[i].id)}
-              label="Display"
-              title="The display the output fills; remembered for next time"
-            />
-          ) : (
-            <p className="live-note">No displays found.</p>
-          )}
-          {alone ? (
-            <p className="live-warn" role="note">
-              Only one display is connected, so the output covers this one — the menu bar and this window too. Connect a projector or a second display and pick it
-              here; ⌘⇧L closes the output.
-            </p>
-          ) : (
-            shown?.main && (
-              <p className="live-warn" role="note">
-                The output is covering the display with the menu bar. Pick another display above.
-              </p>
-            )
-          )}
-        </div>
+        <OutputPanel status={status} show={show} />
         <LinkPanel />
         <div className="live-lists">
           {lists && (
