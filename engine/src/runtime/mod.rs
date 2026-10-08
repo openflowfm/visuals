@@ -13,7 +13,7 @@ pub use clock::{Clock, Pacer, PRESET_RATE};
 pub use mesh::Mesh;
 pub use runner::{Runner, Scope};
 
-use crate::eel;
+use crate::eel::{self, Symbols};
 use crate::preset;
 use std::collections::BTreeMap;
 
@@ -92,11 +92,32 @@ const GLOBALS: &[&str] = &[
     "aspecty", "pixelsx", "pixelsy",
 ];
 
-fn qs() -> impl Iterator<Item = String> {
+/// The values of [`GLOBALS`], in order: what equations read of the frame and
+/// the output, as Butterchurn's `globalVars`.
+pub type Globals = [f64; 15];
+
+fn q_names() -> impl Iterator<Item = String> {
     (1..=32).map(|i| format!("q{i}"))
 }
-fn regs() -> impl Iterator<Item = String> {
+fn reg_names() -> impl Iterator<Item = String> {
     (0..100).map(|i| format!("reg{i:02}"))
+}
+
+/// The slots of `names`, each registered already.
+fn slots<S: AsRef<str>>(symbols: &Symbols, names: impl IntoIterator<Item = S>) -> Slots {
+    names.into_iter().map(|n| symbols.get(n.as_ref()).expect("registered")).collect()
+}
+
+/// Write `values` to `slots`, one for one.
+fn scatter(vars: &mut [f64], slots: &[usize], values: &[f64]) {
+    for (&s, &v) in slots.iter().zip(values) {
+        vars[s] = v;
+    }
+}
+
+/// The values in `slots`, in order.
+fn gather(vars: &[f64], slots: &[usize]) -> Vec<f64> {
+    slots.iter().map(|&s| vars[s]).collect()
 }
 
 /// The renderer's view of the world that equations read.
@@ -153,6 +174,13 @@ mod tests {
         Frame { frame: 1, time: 1.0, fps: 60.0, bass: 1.0, bass_att: 1.0, mid: 1.0, mid_att: 1.0, treb: 1.0, treb_att: 1.0 }
     }
     pub(super) const SIZE: Size = Size { texsize_x: 1920.0, texsize_y: 1080.0, mesh_width: 48, mesh_height: 36 };
+
+    /// `text` loaded at `size` and one frame run on it.
+    pub(super) fn running(text: &str, size: &Size) -> Runner {
+        let mut r = load(text, &frame(), size, 1).unwrap();
+        r.run_frame(&frame(), size);
+        r
+    }
 
     #[test]
     fn names_map_and_defaults_fill() {

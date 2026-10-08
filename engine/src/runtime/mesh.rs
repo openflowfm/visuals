@@ -1,4 +1,4 @@
-use super::{Runner, Size};
+use super::{gather, Runner, Size};
 use crate::eel::Symbols;
 
 impl Runner {
@@ -58,9 +58,7 @@ impl Runner {
             }
         }
         // `regVars` come back from the last vertex.
-        for (i, &slot) in self.reg_slots.iter().enumerate() {
-            self.regs[i] = v[slot];
-        }
+        self.regs = gather(&v, &self.reg_slots);
     }
 }
 
@@ -181,15 +179,13 @@ impl Mesh {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::runtime::load;
-    use crate::runtime::tests::frame;
+    use crate::runtime::tests::running;
 
     #[test]
     fn an_identity_mesh_samples_where_it_draws() {
         let text = "[preset00]\nzoom=1\nrot=0\nwarp=0\ndx=0\ndy=0\nsx=1\nsy=1\ncx=0.5\ncy=0.5";
         let size = Size { texsize_x: 512.0, texsize_y: 512.0, mesh_width: 4, mesh_height: 4 };
-        let mut r = load(text, &frame(), &size, 1).unwrap();
-        r.run_frame(&frame(), &size);
+        let mut r = running(text, &size);
         let mut uvs = Vec::new();
         r.warp_mesh(1.0, &size, &mut uvs);
         assert_eq!(uvs.len(), 25);
@@ -201,8 +197,7 @@ mod tests {
     fn per_vertex_equations_move_the_mesh() {
         let text = "[preset00]\nwarp=0\nper_pixel_1=dx = 0.1;";
         let size = Size { texsize_x: 512.0, texsize_y: 512.0, mesh_width: 2, mesh_height: 2 };
-        let mut r = load(text, &frame(), &size, 1).unwrap();
-        r.run_frame(&frame(), &size);
+        let mut r = running(text, &size);
         let mut uvs = Vec::new();
         r.warp_mesh(1.0, &size, &mut uvs);
         assert!((uvs[4][0] - 0.4).abs() < 1e-6, "{:?}", uvs[4]);
@@ -212,9 +207,7 @@ mod tests {
     fn moving() -> (Runner, Size) {
         let text = "[preset00]\nzoom=1.04\nrot=0.03\nwarp=0\ndx=0.004\ndy=-0.002\nsx=1.01\nsy=0.99\ncx=0.5\ncy=0.5";
         let size = Size { texsize_x: 512.0, texsize_y: 512.0, mesh_width: 8, mesh_height: 8 };
-        let mut r = load(text, &frame(), &size, 1).unwrap();
-        r.run_frame(&frame(), &size);
-        (r, size)
+        (running(text, &size), size)
     }
 
     #[test]
@@ -287,8 +280,7 @@ mod tests {
         assert!(moved == part && shaded == part, "a flow slides");
         // A kaleidoscope's fold: the right half is the left half mirrored.
         let text = "[preset00]\nzoom=1\nrot=0\nwarp=0\nper_pixel_1=dx = above(x, 0.5) * (2*x - 1);";
-        let mut r = load(text, &frame(), &size, 1).unwrap();
-        r.run_frame(&frame(), &size);
+        let mut r = running(text, &size);
         r.warp_motion(1.0, &size, &mut mesh);
         let (mut none, mut whole) = (Vec::new(), Vec::new());
         mesh.uvs(0.0, &mut none);
