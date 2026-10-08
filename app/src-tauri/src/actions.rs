@@ -209,10 +209,7 @@ pub fn decide(live: &mut Live, action: &Action, store: &Store, library: &dyn Fn(
             Ok(None)
         }
         Action::Seconds { seconds } => {
-            if !seconds.is_finite() {
-                return Err("seconds must be a number".into());
-            }
-            live.seconds = seconds.clamp(1.0, 3600.0);
+            live.seconds = crate::fx::clamped(*seconds, 1.0, 3600.0, "seconds")?;
             Ok(None)
         }
         Action::Hold { on } => {
