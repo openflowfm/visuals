@@ -1,12 +1,30 @@
 import { describe, expect, it } from 'vitest';
-import { LAYERS } from '../stages.ts';
+import type { Preset } from '../api.ts';
+import { layersOf } from '../stages.ts';
 import { FEED_GAP, WIDE, cords, layout } from './layout.ts';
 
-const layers = (...ids: string[]) => ids.map((id) => LAYERS.find((s) => s.id === id)!);
+const wave = () => ({ values: { enabled: 0 }, init: '', frame: '', point: '' });
+const shape = () => ({ values: { enabled: 0 }, init: '', frame: '' });
+
+/** A preset that draws nothing but MilkDrop's pipeline: no waveform, no vectors, no borders. */
+function blank(values: Record<string, number> = {}): Preset {
+  return {
+    values: { fWaveAlpha: 0, mv_a: 0, ob_a: 0, ib_a: 0, ...values },
+    init: '',
+    frame: '',
+    vertex: '',
+    waves: [wave(), wave(), wave(), wave()],
+    shapes: [shape(), shape(), shape(), shape()],
+    warp: '',
+    comp: '',
+  };
+}
 
 describe('the drawing', () => {
   it('wires the chain in order and every layer into the feedback, one port a side', () => {
-    const c = cords(layers('wave', 'shape1'));
+    const p = blank({ fWaveAlpha: 1 });
+    p.shapes[1].values.enabled = 1;
+    const c = cords(layersOf(p));
     expect(c.map((x) => `${x.from} ${x.to}`)).toEqual([
       'audio:out motion:in',
       'motion:out warp:in',
@@ -19,7 +37,11 @@ describe('the drawing', () => {
   });
 
   it('stacks the layers under warp, so their cords rise between warp and feedback', () => {
-    const shown = layers('wave', 'wave0', 'wave1', 'wave2', 'wave3', 'shape0', 'shape1', 'vectors');
+    const p = blank({ fWaveAlpha: 1, mv_a: 1 });
+    for (const i of [0, 1, 2, 3]) p.waves[i].values.enabled = 1;
+    for (const i of [0, 1]) p.shapes[i].values.enabled = 1;
+    const shown = layersOf(p);
+    expect(shown.length).toBeGreaterThan(4);
     const at = layout(shown);
     // One column, outlets in line with warp's: nothing stands between a layer and the gap.
     for (const s of shown) {
