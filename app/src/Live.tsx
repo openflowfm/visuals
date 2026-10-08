@@ -50,7 +50,7 @@ export function Live({ start, onMode }: { start: string | null; onMode: (mode: '
 
   // Live mode is the output: open it on the way in, close it (and reset the effects) on the way out.
   useEffect(() => {
-    api.setPreviews(false).catch(() => {});
+    api.setPreviews([]).catch(() => {});
     show(null);
     fx.state().then(setEffects, fail("Couldn't read the effects."));
     return leave;

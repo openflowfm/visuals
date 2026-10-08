@@ -53,6 +53,29 @@ stage's EEL/HLSL and numbers on the right. Every edit reloads the preset on the 
 within a quarter second, and problems come back per stage and line — a broken equation
 leaves the last good preset drawing, a broken shader draws MilkDrop's default.
 
+**Stage pictures.** Each node shows its stage's picture, rendered by the engine
+(`Renderer::set_previews(wanted, size)`, `read_previews`) and polled by the page about
+fifteen times a second (`app/src/previews.ts`). The page asks only for the pictures whose
+canvases are on screen in the graph pane (a layer's also needs the warp's, which it is
+drawn over), and at a size from the device pixels they cover — CSS width × the nodes'
+`--wdg-node-zoom` × the graph's zoom (read from its `viewRef` at each poll) × the display's
+pixel ratio — in three 16:9 steps: 192×108 (`PREVIEW`, the base), 384×216 and 768×432
+(`PREVIEW_MAX`, which the engine clamps to). With the graph at 1× or zoomed out it is
+always the base, so the graph as it opens costs what it always did. A step is taken up
+when the current one would be stretched more than 1.25×, and down only once the smaller
+one covers the picture with 10% to spare, so a zoom between two steps never flips; a new
+step is asked for once it has held for 250 ms, when zooming has settled; and more pictures
+on screen than fit 6 MB at a step (four at 768×432) take the step below. A layer's 32:9
+face shows the middle of the same 16:9 picture, so it has no size of its own. The engine
+keeps targets for the pictures asked for only, made afresh when the size changes. The
+`previews` command's bytes are a 12-byte header — width, height and a mask of the stages
+in it (bit `i` for `PREVIEWS[i]`), little-endian u32s — then those pictures' RGBA rows in
+`PREVIEWS` order (`bench::packed`), so a read taken before the page's last ask is still
+read right. Measured on a 2× display (one preset, 1377×774 bench): at 1× the six pictures
+on screen are 0.50 MB a poll (all fifteen were 1.24 MB) in a 2.1 ms round trip (1.6 ms
+before); zoomed in to 3×, the two on screen are 2.65 MB at 768×432 in 2.3 ms (1.5 ms for
+the blurry 1.24 MB before). At the budget a poll is at most 6 MB, about 90 MB a second.
+
 **Playlists and live actions.** A playlist is a named, ordered list of presets, kept in
 `~/.openflow/visuals/playlists.json` (`OPENFLOW_VISUALS_PLAYLISTS` overrides) with paths
 relative to the library, so the library can move (`playlists.rs`). The page's
@@ -80,7 +103,7 @@ root, so the engine's tests also run from there as `cargo test -p visuals-engine
 **Live mode and the output.** The page's switch is *editor | live*. Live mode is the show: entering it
 opens the output, leaving it closes it — there is no output while editing. In live mode
 the editor isn't rendered (no graph, no inspector) and stage previews are off
-(`set_previews(false)`); the page shows a small preview of the bench, what's playing and
+(`set_previews` with none); the page shows a small preview of the bench, what's playing and
 what's next in the playing playlist, previous / random / next (all through
 `actions::act`, as a controller would), the playlists panel with play/stop and
 auto-advance, the audio input, and the output's display picker and status. Keys: ← ↑
