@@ -141,12 +141,18 @@ pub struct Renderer {
     pub clock: Clock,
     uvs: Vec<[f32; 2]>,
     rng: crate::eel::Memory,
-    /// Small copies of each stage's picture, when an editor wants them.
-    previews: Option<Vec<Target>>,
+    /// Small copies of the stages' pictures an editor asked for, by [`PREVIEWS`]
+    /// index (`None` where not asked for); empty when it asked for none.
+    previews: Vec<Option<Target>>,
 }
 
-/// The size of a stage's preview picture.
+/// The base size of a stage's preview picture: what a node shows at 1×, and
+/// the size [`Renderer::set_previews`] is usually asked for.
 pub const PREVIEW: (u32, u32) = (192, 108);
+/// The largest preview picture [`Renderer::set_previews`] keeps (4× [`PREVIEW`]):
+/// a node at the graph's full zoom on a 2× display, about. A larger ask is
+/// clamped to it, so a read stays at most 1.3 MB a picture.
+pub const PREVIEW_MAX: (u32, u32) = (768, 432);
 /// The stages that have a picture, in the order [`Renderer::read_previews`] packs them:
 /// the warp's output, the feedback after waves and shapes, blur 1 and comp; then what
 /// each drawing stage drew this frame, alone on black.
@@ -295,7 +301,7 @@ impl Renderer {
             clock: Clock::default(),
             uvs: Vec::new(),
             rng,
-            previews: None,
+            previews: Vec::new(),
             size,
             device,
             queue,
@@ -615,21 +621,32 @@ impl Renderer {
         self.runner.as_mut().is_some_and(|r| r.set_value(owner, key, value))
     }
 
-    /// Keep small pictures of each stage, for [`Renderer::read_previews`].
-    pub fn set_previews(&mut self, on: bool) {
-        if on && self.previews.is_none() {
-            self.blit_pipeline(FORMAT);
-            self.previews = Some(PREVIEWS.iter().map(|name| Target::new(&self.device, PREVIEW, name)).collect());
-        } else if !on {
-            self.previews = None;
+    /// Keep pictures of the stages `wanted` ([`PREVIEWS`] indices; others are
+    /// ignored) at `size`, for [`Renderer::read_previews`]; none stops them.
+    /// The size is clamped to 1×1..[`PREVIEW_MAX`]. Pictures already kept at
+    /// that size are kept on; a new size makes them all afresh.
+    pub fn set_previews(&mut self, wanted: &[usize], size: (u32, u32)) {
+        let size = (size.0.clamp(1, PREVIEW_MAX.0), size.1.clamp(1, PREVIEW_MAX.1));
+        if wanted.iter().all(|&w| w >= PREVIEWS.len()) {
+            self.previews.clear();
+            return;
         }
+        self.blit_pipeline(FORMAT);
+        let mut kept = std::mem::take(&mut self.previews);
+        kept.resize_with(PREVIEWS.len(), || None);
+        self.previews =
+            kept.into_iter().enumerate().map(|(i, old)| wanted.contains(&i).then(|| old.filter(|t| t.size == size).unwrap_or_else(|| Target::new(&self.device, size, PREVIEWS[i])))).collect();
     }
 
-    /// The stage pictures, RGBA rows top to bottom, one after another in
-    /// [`PREVIEWS`] order. Waits for the GPU.
-    pub fn read_previews(&self) -> Option<Vec<u8>> {
+    /// The stage pictures asked for ([`Renderer::set_previews`]): RGBA rows top
+    /// to bottom, one after another in [`PREVIEWS`] order. Waits for the GPU.
+    pub fn read_previews(&self) -> Option<Previews> {
+        let kept: Vec<(usize, &Target)> = self.previews.iter().enumerate().filter_map(|(i, t)| Some((i, t.as_ref()?))).collect();
+        let size = kept.first()?.1.size;
+        let targets: Vec<&Target> = kept.iter().map(|(_, t)| *t).collect();
         // Blitted picture side up, so row 0 is already the top.
-        read_targets(&self.device, &self.queue, self.previews.as_ref()?, false)
+        let pixels = read_targets(&self.device, &self.queue, &targets, false)?;
+        Some(Previews { size, which: kept.iter().map(|(i, _)| *i).collect(), pixels })
     }
 
     /// Draw the finished picture into `view`, a window's surface, scaled to fit,
@@ -656,8 +673,18 @@ impl Renderer {
     /// the harness.
     pub fn read_back(&self) -> Vec<u8> {
         // GL orientation: the last row is the top of the picture.
-        read_targets(&self.device, &self.queue, std::slice::from_ref(&self.comp), true).expect("mapped")
+        read_targets(&self.device, &self.queue, &[&self.comp], true).expect("mapped")
     }
+}
+
+/// Stage pictures read back by [`Renderer::read_previews`].
+pub struct Previews {
+    /// Each picture's width and height.
+    pub size: (u32, u32),
+    /// Which stages, as [`PREVIEWS`] indices, ascending: the order of `pixels`.
+    pub which: Vec<usize>,
+    /// Each picture's RGBA rows, top to bottom, one picture after another.
+    pub pixels: Vec<u8>,
 }
 
 /// A device for rendering without a window — tests and the harness.

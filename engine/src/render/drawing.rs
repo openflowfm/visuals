@@ -95,8 +95,8 @@ impl Renderer {
     ) {
         // Every drawing stage's preview starts black: one that drew nothing this
         // step shows nothing, not what it drew last.
-        if let (true, Some(previews)) = (previews, &self.previews) {
-            for p in &previews[4..] {
+        if previews {
+            for p in self.previews.iter().skip(4).flatten() {
                 drop(begin(encoder, &p.view, true));
             }
         }
@@ -118,8 +118,9 @@ impl Renderer {
         }
         // Each drawing stage again, alone, into its own preview. The vertices are in
         // clip space, so they land the same in a small target as in the big one.
-        if let (true, Some(previews)) = (previews, &self.previews) {
-            for (which, target) in previews.iter().enumerate().skip(4) {
+        if previews {
+            for (which, target) in self.previews.iter().enumerate().skip(4) {
+                let Some(target) = target else { continue };
                 let mine: Vec<&crate::draw::Cmd> = list.cmds.iter().filter(|c| preview_of(c.source) == Some(which)).collect();
                 if mine.is_empty() {
                     continue;

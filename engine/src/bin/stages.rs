@@ -23,14 +23,15 @@ fn main() {
     let mut renderer = Renderer::new(device, queue, 1280, 720);
     let text = engine::preset::decode(&std::fs::read(path).expect("read preset"));
     renderer.load(&text, 1).expect("load preset");
-    renderer.set_previews(true);
+    let all: Vec<usize> = (0..PREVIEWS.len()).collect();
+    renderer.set_previews(&all, PREVIEW);
     let mut audio = Audio::default();
     let tone: Vec<f32> = (0..1024).map(|i| (i as f32 * 0.07).sin() * 0.7).collect();
     for _ in 0..frames {
         audio.update(&tone, &tone);
         renderer.render(&mut audio, 1.0 / engine::runtime::PRESET_RATE);
     }
-    let pixels = renderer.read_previews().expect("previews");
+    let pixels = renderer.read_previews().expect("previews").pixels;
     let each = (PREVIEW.0 * PREVIEW.1 * 4) as usize;
     for (i, name) in PREVIEWS.iter().enumerate() {
         save_png(&out.join(format!("{name}.png")), PREVIEW.0, PREVIEW.1, &pixels[each * i..each * (i + 1)]).expect("write png");

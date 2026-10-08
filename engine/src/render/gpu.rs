@@ -37,7 +37,7 @@ impl Target {
 /// buffer; every target is the size of the first. Rows come top to bottom of the
 /// texture, or bottom to top with `flip`. None when the buffer will not map. Waits
 /// for the GPU.
-pub(super) fn read_targets(device: &wgpu::Device, queue: &wgpu::Queue, targets: &[Target], flip: bool) -> Option<Vec<u8>> {
+pub(super) fn read_targets(device: &wgpu::Device, queue: &wgpu::Queue, targets: &[&Target], flip: bool) -> Option<Vec<u8>> {
     let (w, h) = targets.first()?.size;
     let row = (w * 4).div_ceil(256) * 256;
     let each = (row * h) as u64;

@@ -4,12 +4,12 @@ import { Graph, GraphNode, type GraphView } from '@openflow/widgets/chrome/Graph
 import { Popup } from '@openflow/widgets/chrome/Popup.tsx';
 import { Port } from '@openflow/widgets/chrome/Port.tsx';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
-import type { Owner, Preset, Problem } from './api.ts';
+import { PREVIEW, type Owner, type Preset, type Problem } from './api.ts';
 import { plural, show } from './controls.ts';
 import { cords, layout, port } from './graph/layout.ts';
 import { RemoveLayer } from './graph/RemoveLayer.tsx';
 import { writeDefaultShader } from './graph/writeDefaultShader.ts';
-import { usePreview } from './previews.ts';
+import { previewZoom, usePreview } from './previews.ts';
 import { CHAIN, FIRST, addLayer, codeLines, drivenBy, layersOf, offers, problemsOf, shaderCode, summaryOf, usesBlur, type LayerKind, type Stage } from './stages.ts';
 
 import './graph.css';
@@ -26,10 +26,13 @@ interface Props {
   onSet(owner: Owner, key: string, value: number): void;
 }
 
-/** A canvas showing one of the engine's stage pictures. */
+/**
+ * A canvas showing one of the engine's stage pictures. It starts at the base
+ * size; the poll sets its `width` and `height` to the size each picture comes at.
+ */
 function Picture({ which, className }: { which: number; className: string }) {
   const ref = usePreview(which);
-  return <canvas ref={ref} width={192} height={108} className={className} />;
+  return <canvas ref={ref} width={PREVIEW.width} height={PREVIEW.height} className={className} />;
 }
 
 /** The node's one line of wiring: a port in, a port out, and a word between them. */
@@ -219,6 +222,8 @@ export function StageGraph({ preset, problems, selected, onSelect, onChange }: P
   const [size, setSize] = useState(1);
   const sized = useRef(size);
   sized.current = size;
+  // The pictures are asked for at the zoom they're shown at, read at each poll.
+  useEffect(() => previewZoom(() => ({ node: sized.current, graph: view.current?.scale() ?? 1 })), []);
   useEffect(() => {
     // A timer rather than animation frames: a window behind others gets none.
     const timer = window.setTimeout(() => {
