@@ -8,15 +8,17 @@ import { Playlists } from './Playlists.tsx';
 import * as pl from './playlists.ts';
 import { StageGraph } from './StageGraph.tsx';
 import { setValue as setValueIn } from './stages.ts';
-import { FrameRate, Header, Hints, NoticeView, NowPlaying, type View } from './views.tsx';
+import { FrameRate, Header, Hints, NoticeBanner, NowPlaying, type View } from './views.tsx';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { Library } from './Library.tsx';
 import { searchLibrary } from './librarySearch.ts';
-import { noticeOf, type Notice } from './shell.ts';
+import { useNotice, useTauriEvent } from './hooks.ts';
+import { isTyping, nameOf, notice } from './shell.ts';
 import { Live } from './Live.tsx';
 import * as output from './output.ts';
 
-const problemsOf = (r: Report | null): Problem[] => (r ? [...r.equations, ...r.shaders] : []);
+/** What a load or an edit reported wrong, equations then shaders, for the graph and the inspector to mark. */
+const reportProblems = (r: Report | null): Problem[] => (r ? [...r.equations, ...r.shaders] : []);
 
 /** Report the bench's hole to the app, which moves the native view under it. */
 function useBench(ref: React.RefObject<HTMLDivElement | null>) {
@@ -102,14 +104,13 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live'
   // The stage open in the inspector, by id; null is the graph's own first choice.
   const [selected, setSelected] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const [notice, setNotice] = useState<Notice | null>(null);
+  const { notice: banner, set: setNotice, fail, dismiss } = useNotice();
   const [lists, setLists] = useState<pl.Lists | null>(null);
   const [tab, setTab] = useState(0);
   const [target, setTarget] = useState<string | null>(null);
   const bench = useRef<HTMLDivElement>(null);
   useBench(bench);
   const apply = useApply(setReport);
-  const fail = useCallback((what: string) => (e: unknown) => setNotice(noticeOf(what, e)), []);
   const audioFailed = useMemo(() => fail('couldn’t read the audio input'), [fail]);
 
   const found = useMemo(() => searchLibrary(library, search), [library, search]);
@@ -117,15 +118,15 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live'
 
   const load = useCallback(async (e: Entry) => {
     setCurrent(e);
-    setNotice(null);
+    dismiss();
     try {
       const opened = await api.open(e.path);
       setPreset(opened.preset);
       setReport(opened.report);
     } catch (err) {
-      setNotice(noticeOf(`couldn’t open “${e.name}”`, err));
+      setNotice(notice(`couldn’t open “${e.name}”`, err));
     }
-  }, []);
+  }, [dismiss, setNotice]);
 
   // A playlist is playing: the live action layer steps through it.
   const playing = lists?.deck.playlist ?? null;
@@ -144,29 +145,24 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live'
     [playing, shown, library, current, load, fail],
   );
 
-  // Whatever changed the preset live (a playlist step, auto-advance, a controller),
-  // the page follows it here.
-  const libraryRef = useRef(library);
-  libraryRef.current = library;
   useEffect(() => {
     pl.lists().then(setLists, fail('couldn’t read the playlists'));
-    const off = pl.onLive((now) => {
-      setLists((l) => (l ? { ...l, deck: now.deck } : l));
-      if (!now.path) return;
-      const path = now.path;
-      const known = libraryRef.current.find((e) => e.path === path);
-      const name = path.split('/').pop()?.replace(/\.milk$/i, '') ?? path;
-      setCurrent(known ?? { path, name, group: '' });
-      setNotice(now.error ? noticeOf(`couldn’t open “${known?.name ?? name}”`, now.error) : null);
-      if (now.opened) {
-        setPreset(now.opened.preset);
-        setReport(now.opened.report);
-      }
-    });
-    return () => {
-      off.then((f) => f());
-    };
   }, [fail]);
+  // Whatever changed the preset live (a playlist step, auto-advance, a controller),
+  // the page follows it here.
+  useTauriEvent(pl.onLive, (now) => {
+    setLists((l) => (l ? { ...l, deck: now.deck } : l));
+    if (!now.path) return;
+    const path = now.path;
+    const known = library.find((e) => e.path === path);
+    const name = nameOf(path);
+    setCurrent(known ?? { path, name, group: '' });
+    setNotice(now.error ? notice(`couldn’t open “${known?.name ?? name}”`, now.error) : null);
+    if (now.opened) {
+      setPreset(now.opened.preset);
+      setReport(now.opened.report);
+    }
+  });
 
   // The playlist the library's + adds to: the one picked in the panel, or the one playing.
   const into = lists?.playlists.find((p) => p.id === (target ?? playing)) ?? null;
@@ -176,7 +172,7 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live'
       (l) => {
         setLibrary(l);
         setLoaded(true);
-        const first = start ? (l.find((e) => e.path === start) ?? { path: start, name: start.split('/').pop()!.replace(/\.milk$/i, ''), group: '' }) : null;
+        const first = start ? (l.find((e) => e.path === start) ?? { path: start, name: nameOf(start), group: '' }) : null;
         if (first) load(first);
         else if (l.length) load(l[Math.floor(Math.random() * l.length)]);
       },
@@ -190,7 +186,7 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live'
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if ((e.target as HTMLElement).closest('input, textarea, select, [role="combobox"]')) return;
+      if (isTyping(e)) return;
       if (e.key === 'ArrowRight') step(1);
       else if (e.key === 'ArrowLeft') step(-1);
       else if (e.key.toLowerCase() === 'r') step(0);
@@ -234,7 +230,7 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live'
     [apply],
   );
 
-  const problems = problemsOf(report);
+  const problems = reportProblems(report);
 
   return (
     <div className="app">
@@ -251,7 +247,7 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live'
           </Button>
         </div>
         <NowPlaying group={current?.group} name={current?.name} empty={loaded && !library.length ? 'no presets yet' : 'no preset'} />
-        <NoticeView notice={notice} onDismiss={() => setNotice(null)} />
+        <NoticeBanner notice={banner} onDismiss={dismiss} />
         <span className="vf-fill" />
         <AudioInput onError={audioFailed} />
         <FrameRate />
@@ -278,7 +274,7 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live'
               selected={target ?? playing ?? lists.playlists[0]?.id ?? null}
               onSelect={setTarget}
               onLists={setLists}
-              onError={fail('the playlist change didn’t go through')}
+              onError={setNotice}
             />
           )
         )}

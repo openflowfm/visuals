@@ -5,7 +5,8 @@ import { Toggle } from '@openflow/widgets/controls/Toggle.tsx';
 import type { Param } from '@openflow/widgets/param/param.ts';
 import * as pl from './playlists.ts';
 import type { Lists } from './playlists.ts';
-import { detailOf } from './problems.ts';
+import { plural } from './controls.ts';
+import { notice, type Notice } from './shell.ts';
 import './playlists.css';
 
 interface Props {
@@ -16,8 +17,8 @@ interface Props {
   selected: string | null;
   onSelect(id: string | null): void;
   onLists(next: Lists): void;
-  /** A short sentence for the page to show, and what the app said, for its tooltip. */
-  onError(message: string, detail?: string): void;
+  /** A failure for the page to show: a short sentence, and what the app said, for its tooltip. */
+  onError(notice: Notice): void;
   /** A library with a + per row sits beside the panel (the editor's does; live mode has none). */
   library?: boolean;
 }
@@ -53,7 +54,7 @@ export function Playlists({ lists, current, selected, onSelect, onLists, onError
   const list = at >= 0 ? playlists[at] : null;
   const active = list !== null && deck.playlist === list.id;
 
-  const fail = (what: string) => (e: unknown) => onError(`Couldn't ${what}.`, detailOf(e) ?? undefined);
+  const fail = (what: string) => (e: unknown) => onError(notice(`Couldn't ${what}.`, e));
   const run = (p: Promise<Lists | void>, what: string) =>
     p.then((l) => {
       if (l) onLists(l);
@@ -105,7 +106,7 @@ export function Playlists({ lists, current, selected, onSelect, onLists, onError
               }}
               title={`Delete ${list.name} for good`}
             >
-              delete {list.items.length === 1 ? '1 item' : `${list.items.length} items`}?
+              delete {plural(list.items.length, 'item')}?
             </Button>
             <Button onPress={() => setDeleting(null)} title="Keep the playlist">
               keep
@@ -191,7 +192,7 @@ export function Playlists({ lists, current, selected, onSelect, onLists, onError
             </Button>
             <span className="playlists-fill" />
             <span className="playlists-count">
-              {active && deck.index !== null ? `${deck.index + 1} / ${list.items.length}` : list.items.length === 1 ? '1 preset' : `${list.items.length} presets`}
+              {active && deck.index !== null ? `${deck.index + 1} / ${list.items.length}` : plural(list.items.length, 'preset')}
             </span>
           </div>
           <ol className="playlists-items" aria-label={`${list.name}, in order`}>

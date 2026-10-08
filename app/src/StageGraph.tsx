@@ -4,23 +4,22 @@ import { Graph, GraphNode, type GraphView } from '@openflow/widgets/chrome/Graph
 import { Popup } from '@openflow/widgets/chrome/Popup.tsx';
 import { Port } from '@openflow/widgets/chrome/Port.tsx';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
-import * as api from './api.ts';
 import type { Owner, Preset, Problem } from './api.ts';
-import { show } from './controls.ts';
+import { plural, show } from './controls.ts';
+import { cords, layout, port } from './graph/layout.ts';
+import { RemoveLayer } from './graph/RemoveLayer.tsx';
+import { writeDefaultShader } from './graph/writeDefaultShader.ts';
 import { usePreview } from './previews.ts';
 import {
   CHAIN,
   FIRST,
   addLayer,
   codeLines,
-  cords,
   drivenBy,
   layersOf,
-  layout,
   offers,
-  port,
   problemsOf,
-  removeLayer,
+  shaderCode,
   summaryOf,
   usesBlur,
   type LayerKind,
@@ -79,7 +78,7 @@ interface NodeProps {
 const StageNode = memo(function StageNode({ stage: s, preset, problems, selected, onSelect, onChange }: NodeProps) {
   const issues = problemsOf(problems, s);
   const shader = s.kind === 'shader';
-  const written = shader && preset[s.id as 'warp' | 'comp'].trim() !== '';
+  const written = shader && shaderCode(preset, s).trim() !== '';
   const code = codeLines(preset, s, shader ? 3 : 4);
   const blur = s.id === 'feedback' && usesBlur(preset);
   // The narrow ends have no room for a word beside their port: their name says it.
@@ -88,7 +87,7 @@ const StageNode = memo(function StageNode({ stage: s, preset, problems, selected
       ? undefined
       : shader
           ? written
-            ? `${preset[s.id as 'warp' | 'comp'].split('\n').length} lines`
+            ? plural(shaderCode(preset, s).split('\n').length, 'line')
             : "MilkDrop's default"
           : summary(preset, s, 2) || 'as MilkDrop starts';
   return (
@@ -108,8 +107,7 @@ const StageNode = memo(function StageNode({ stage: s, preset, problems, selected
           ) : (
             <Button
               onPress={() => {
-                const which = s.id as 'warp' | 'comp';
-                api.defaultShader(preset, which).then((code) => onChange({ ...preset, [which]: code }), console.error);
+                writeDefaultShader(preset, s, onChange);
                 onSelect(s.id);
               }}
               title={`start a ${s.label} shader from MilkDrop's default, as code`}
@@ -118,11 +116,7 @@ const StageNode = memo(function StageNode({ stage: s, preset, problems, selected
             </Button>
           ))}
         {blur && <span className="stage-caption">blurred too: a shader reads it</span>}
-        {issues.length > 0 && (
-          <span className="stage-issue">
-            {issues.length} problem{issues.length > 1 ? 's' : ''}
-          </span>
-        )}
+        {issues.length > 0 && <span className="stage-issue">{plural(issues.length, 'problem')}</span>}
       </Device>
     </div>
   );
@@ -135,10 +129,10 @@ const LayerNode = memo(function LayerNode({ stage: s, preset, problems, selected
   const driven = drivenBy(preset, s);
   const lines = codeLines(preset, s, 99).length;
   const caption = issues.length
-    ? `${issues.length} problem${issues.length > 1 ? 's' : ''}`
+    ? plural(issues.length, 'problem')
     : custom
       ? lines
-        ? `${lines} line${lines > 1 ? 's' : ''} of code`
+        ? `${plural(lines, 'line')} of code`
         : 'no code'
       : summary(preset, s, 2) || (driven ? `${driven} set by motion` : 'as MilkDrop starts');
   return (
@@ -148,20 +142,7 @@ const LayerNode = memo(function LayerNode({ stage: s, preset, problems, selected
         title={s.term}
         selected={selected}
         onSelect={() => onSelect(s.id)}
-        headerEnd={
-          <Button
-            tone="quiet"
-            label={`remove ${s.label}`}
-            title={driven ? `motion's per-frame code sets ${driven}: change it there to take this off` : `take ${s.label} off (its code is kept)`}
-            disabled={!!driven}
-            onPress={() => {
-              const next = removeLayer(preset, s.id);
-              if (next) onChange(next);
-            }}
-          >
-            ×
-          </Button>
-        }
+        headerEnd={<RemoveLayer preset={preset} stage={s} onChange={onChange} compact />}
         portRows={<Wiring s={s} caption={caption} />}
       >
         <Picture which={s.picture!} className="layer-picture" />

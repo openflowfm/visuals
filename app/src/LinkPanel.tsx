@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { Select } from '@openflow/widgets/controls/Select.tsx';
 import { Toggle } from '@openflow/widgets/controls/Toggle.tsx';
+import { useNotice, useTauriEvent } from './hooks.ts';
 import * as link from './link.ts';
-import { problem, type Problem } from './problems.ts';
+import { NoticeBanner } from './views.tsx';
 import './link.css';
 
 /**
@@ -15,15 +16,12 @@ import './link.css';
 export function LinkPanel() {
   const [frame, setFrame] = useState<link.Frame | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const [error, setError] = useState<Problem | null>(null);
+  const { notice, dismiss, fail } = useNotice();
 
   useEffect(() => {
-    link.state().then(setFrame, (e) => setError(problem("Couldn't start Link.", e)));
-    const off = link.onFrame(setFrame);
-    return () => {
-      off.then((f) => f());
-    };
-  }, []);
+    link.state().then(setFrame, fail("Couldn't start Link."));
+  }, [fail]);
+  useTauriEvent(link.onFrame, setFrame);
 
   useEffect(() => {
     let raf = 0;
@@ -39,19 +37,12 @@ export function LinkPanel() {
     p.then(
       (f) => {
         setFrame(f);
-        setError(null);
+        dismiss();
       },
-      (e) => setError(problem(`Couldn't ${what}.`, e)),
+      fail(`Couldn't ${what}.`),
     );
 
-  const trouble = error && (
-    <div className="link-problem" role="alert" title={error.detail ?? undefined}>
-      <span>{error.text}</span>
-      <Button tone="quiet" onPress={() => setError(null)} label="Dismiss" title="Dismiss">
-        ✕
-      </Button>
-    </div>
-  );
+  const trouble = notice && <NoticeBanner className="link-problem" notice={notice} onDismiss={dismiss} />;
 
   if (!frame) {
     return (

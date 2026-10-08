@@ -1,23 +1,60 @@
 /**
- * The small decisions behind the editor's chrome, kept out of the components so
+ * The small decisions behind the page's chrome, kept out of the components so
  * they can be tested without a window: what a failure says to the person using
- * the app, how full a level meter is, and when the frame rate is worth a word.
+ * the app, how a preset is named, when a key is typing, how full a level meter
+ * is, and when the frame rate is worth a word.
  */
 
-/** A failure as the header shows it: a short sentence, and the raw text for a tooltip. */
+/**
+ * A failure as every view shows it: one short, plain sentence saying what didn't
+ * happen, and what the app actually said, for the tooltip. A raw `String(e)` from
+ * a Tauri command is a Rust message ("no display 3") that means something to us
+ * and little on stage.
+ */
 export interface Notice {
+  /** What didn't happen, in a sentence. */
   message: string;
-  detail: string;
+  /** What was thrown, as text; null when it adds nothing to the message. */
+  detail: string | null;
+}
+
+/** What was thrown, as text: Tauri rejects with the command's error string, a JS failure is an `Error`. */
+function thrownText(e: unknown): string {
+  if (e === null || e === undefined) return '';
+  if (typeof e === 'string') return e;
+  if (e instanceof Error) return e.message;
+  try {
+    return JSON.stringify(e) ?? String(e);
+  } catch {
+    return String(e);
+  }
 }
 
 /**
- * `what` went wrong, in plain words, with whatever was thrown kept as the detail.
- * Tauri rejects with the command's error string; a JS failure is an `Error`.
+ * `message`, with whatever `e` said as the detail: trimmed, without the `Error:`
+ * a thrown Error's text can carry, and null when it is empty or only repeats the
+ * message.
  */
-export function noticeOf(what: string, e: unknown): Notice {
-  const raw = e instanceof Error ? e.message : typeof e === 'string' ? e : e == null ? '' : JSON.stringify(e);
-  const detail = raw.replace(/^(Error|Uncaught \w*Error):\s*/i, '').trim();
-  return { message: what, detail: detail || what };
+export function notice(message: string, e?: unknown): Notice {
+  const detail = thrownText(e)
+    .trim()
+    .replace(/^(Error|Uncaught \w*Error):\s*/i, '')
+    .trim();
+  return { message, detail: detail && detail !== message ? detail : null };
+}
+
+/** A preset's name, from its path in the pack: the file name without `.milk`. */
+export const nameOf = (path: string): string => path.split('/').pop()?.replace(/\.milk$/i, '') ?? path;
+
+/** The `live` event's error: the preset at `path` didn't open, and the last good one keeps drawing. */
+export function openFailed(path: string | null, error: string): Notice {
+  return notice(path ? `Couldn't open ${nameOf(path)} — the last preset keeps playing.` : "Couldn't open that preset.", error);
+}
+
+/** A key pressed while typing in a field or picking from a list, which the page's shortcuts leave alone. */
+export function isTyping(e: { target: EventTarget | null }): boolean {
+  const t = e.target as { closest?: (selector: string) => unknown } | null;
+  return typeof t?.closest === 'function' && t.closest('input, textarea, select, [role="combobox"]') != null;
 }
 
 /**
