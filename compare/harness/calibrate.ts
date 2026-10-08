@@ -34,7 +34,7 @@ import {
   captureFrames,
   convert,
   convertText,
-  floorSeed,
+  floorRuns,
   idOf,
   launchBrowser,
   milkFiles,
@@ -145,7 +145,19 @@ async function main(): Promise<number> {
   };
 
   // The sample: random presets that Butterchurn can draw.
-  const chosen: { file: string; text: string; ref: Map<number, Uint8Array>; drift: Map<number, Uint8Array> }[] = [];
+  type Captures = Map<number, Uint8Array>;
+  const floors = floorRuns(seed).map((run) => ({ seed: run.seed, audio: run.hiss ? music(o.frames, { hiss: run.hiss }) : undefined }));
+  /** The drift floor's re-runs, or null when Butterchurn cannot draw the preset. */
+  const driftsOf = async (text: string): Promise<Captures[] | null> => {
+    const out: Captures[] = [];
+    for (const [k, run] of floors.entries()) {
+      const drawn = await draw({ v: `drift${k}` }, text, run);
+      if (!drawn) return null;
+      out.push(drawn);
+    }
+    return out;
+  };
+  const chosen: { file: string; text: string; ref: Captures; drifts: Captures[] }[] = [];
   const tried = new Set<number>();
   while (chosen.length < o.count && tried.size < pool.length) {
     const at = Math.floor(random() * pool.length);
@@ -154,19 +166,40 @@ async function main(): Promise<number> {
     const file = pool[at];
     const text = fs.readFileSync(file, 'latin1');
     const ref = await draw({ v: 'ref' }, text, { seed });
-    const drift = ref && (await draw({ v: 'drift' }, text, { seed: floorSeed(seed) }));
-    if (ref && drift) chosen.push({ file, text, ref, drift });
+    const drifts = ref && (await driftsOf(text));
+    if (ref && drifts) chosen.push({ file, text, ref, drifts });
     console.error(`sampled ${chosen.length}/${o.count}`);
   }
 
   const pairs: Pair[] = [];
-  const score = (label: Pair['label'], kind: string, id: string, ref: Map<number, Uint8Array>, cand: Map<number, Uint8Array>, drift: Map<number, Uint8Array>) => {
+  /** Pairs labelled different whose perturbation changed nothing visible: the preset ignores that input. */
+  const noEffect: string[] = [];
+  /** Mean per-channel difference, 0–1: only to check that a perturbation took, never in the score. */
+  const changed = (a: Captures, b: Captures) => {
+    let sum = 0, n = 0;
+    for (const f of settings.captures) {
+      const x = a.get(f)!, y = b.get(f)!;
+      for (let i = 0; i < x.length; i += 4) for (let c = 0; c < 3; c++, n++) sum += Math.abs(x[i + c] - y[i + c]);
+    }
+    return sum / n / 255;
+  };
+  /** Pairs labelled different whose perturbation moved the pixels no more than re-seeding does: within drift, so no evidence either way. */
+  const withinDrift: Pair[] = [];
+  const score = (label: Pair['label'], kind: string, id: string, ref: Captures, cand: Captures, drifts: Captures[]) => {
+    const moved = label === 'different' ? changed(ref, cand) : 0;
+    if (label === 'different' && moved < 2 / 255) {
+      noEffect.push(`${kind} ${id}`);
+      return;
+    }
     const result = compareRun(
-      settings.captures.map((frame) => ({ frame, ref: ref.get(frame)!, ours: cand.get(frame)!, drift: drift.get(frame)! })),
+      settings.captures.map((frame) => ({ frame, ref: ref.get(frame)!, ours: cand.get(frame)!, drifts: drifts.map((d) => d.get(frame)!) })),
       width,
       height,
     );
-    pairs.push({ label, kind, id, score: result.score, raw: result.raw, floorRaw: result.floorRaw, notComparable: result.notComparable });
+    const pair = { label, kind, id, score: result.score, raw: result.raw, floorRaw: result.floorRaw, notComparable: result.notComparable };
+    // The label check is pixel-level on purpose: independent of the metric being calibrated.
+    if (label === 'different' && moved <= Math.max(...drifts.map((d) => changed(ref, d)))) withinDrift.push(pair);
+    else pairs.push(pair);
   };
   for (const [i, a] of chosen.entries()) {
     const b = chosen[(i + 1) % chosen.length];
@@ -182,7 +215,7 @@ async function main(): Promise<number> {
     for (const [label, kinds] of [['similar', o.similar], ['different', o.different]] as const) {
       for (const kind of kinds) {
         const cand = await variants[kind]();
-        if (cand) score(label, kind, id, a.ref, cand, a.drift);
+        if (cand) score(label, kind, id, a.ref, cand, a.drifts);
       }
     }
     console.error(`scored ${i + 1}/${chosen.length}`);
@@ -204,14 +237,14 @@ async function main(): Promise<number> {
       const sides = [];
       for (const v of verdicts) {
         const text = fs.readFileSync(v.file, 'latin1');
-        sides.push({ ref: await draw({ v: 'ref' }, text, { seed }), drift: await draw({ v: 'drift' }, text, { seed: floorSeed(seed) }) });
+        sides.push({ ref: await draw({ v: 'ref' }, text, { seed }), drifts: await driftsOf(text) });
       }
       const runs = await engine;
       for (const [i, v] of verdicts.entries()) {
-        const { ref, drift } = sides[i];
-        if (!ref || !drift || !runs[i].ok) continue;
+        const { ref, drifts } = sides[i];
+        if (!ref || !drifts || !runs[i].ok) continue;
         const ours = new Map(settings.captures.map((f) => [f, new Uint8Array(fs.readFileSync(path.join(work, `ours-${i}-${f}.rgba`)))]));
-        const result = compareRun(settings.captures.map((frame) => ({ frame, ref: ref.get(frame)!, ours: ours.get(frame)!, drift: drift.get(frame)! })), width, height);
+        const result = compareRun(settings.captures.map((frame) => ({ frame, ref: ref.get(frame)!, ours: ours.get(frame)!, drifts: drifts.map((d) => d.get(frame)!) })), width, height);
         verdictPairs.push({ label: v.verdict === 'approve' ? 'similar' : 'different', kind: v.verdict, id: v.id, score: result.score, raw: result.raw, floorRaw: result.floorRaw, notComparable: result.notComparable });
       }
       fs.rmSync(work, { recursive: true, force: true });
@@ -221,9 +254,10 @@ async function main(): Promise<number> {
 
   // --- how well they separate ------------------------------------------------
   const line = (p: Pair) => `${p.label.padEnd(9)} ${p.kind.padEnd(14)} ${p.score.toFixed(1).padStart(5)}  (ours ${p.raw.toFixed(1)}, floor ${p.floorRaw.toFixed(1)}${p.notComparable ? ', n/c' : ''})  ${p.id}`;
+  // Pairs on a preset the bench calls not comparable say nothing either way: the bench draws no conclusion there.
   const separation = (list: Pair[]) => {
-    const similar = list.filter((p) => p.label === 'similar').map((p) => p.score);
-    const different = list.filter((p) => p.label === 'different').map((p) => p.score);
+    const similar = list.filter((p) => p.label === 'similar' && !p.notComparable).map((p) => p.score);
+    const different = list.filter((p) => p.label === 'different' && !p.notComparable).map((p) => p.score);
     let overlaps = 0;
     for (const s of similar) for (const d of different) if (s <= d) overlaps++;
     return { similarMin: Math.min(...similar), differentMax: Math.max(...different), overlaps, of: similar.length * different.length, similar: similar.length, different: different.length };
@@ -233,13 +267,18 @@ async function main(): Promise<number> {
   console.log('\nmean by kind: ' + kinds.map((k) => `${k} ${(pairs.filter((p) => p.kind === k).reduce((s, p) => s + p.score, 0) / pairs.filter((p) => p.kind === k).length).toFixed(1)}`).join(', '));
   const sep = separation(pairs);
   console.log(`separation: ${sep.similar} similar, min ${sep.similarMin}; ${sep.different} different, max ${sep.differentMax}; overlapping pairs ${sep.overlaps} of ${sep.of}`);
+  if (noEffect.length) console.log(`left out, the perturbation changed nothing visible (the preset ignores that input): ${noEffect.join('; ')}`);
+  if (withinDrift.length) {
+    console.log('left out, the perturbation moved the pixels no more than re-seeding does (within drift; shown for reference):');
+    for (const p of withinDrift) console.log(`  ${line(p)}`);
+  }
   if (verdictPairs.length) {
     console.log('\nextra check, ours against the verdicts in approvals.json (given against an older engine; not in the exit code):');
     for (const p of [...verdictPairs].sort((a, b) => a.score - b.score)) console.log(line(p));
     const v = separation(verdictPairs);
     console.log(`approved min ${v.similarMin}, rejected max ${v.differentMax}; overlapping pairs ${v.overlaps} of ${v.of}`);
   }
-  fs.writeFileSync(path.join(outDir, 'result.json'), JSON.stringify({ settings: o, captures: settings.captures, pairs, verdictPairs, separation: sep }, null, 1));
+  fs.writeFileSync(path.join(outDir, 'result.json'), JSON.stringify({ settings: o, captures: settings.captures, pairs, verdictPairs, noEffect, withinDrift, separation: sep }, null, 1));
   return sep.overlaps ? 1 : 0;
 }
 

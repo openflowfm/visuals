@@ -44,8 +44,12 @@ const require = createRequire(import.meta.url);
 export const DT = 1 / 30;
 /** The engine's noise textures are drawn from this seed (`textures::noise_data`). */
 export const NOISE_SEED = 0x5eedn;
-/** The seed of the drift floor's Butterchurn run: far from any small seed. */
-export const floorSeed = (seed: bigint) => seed ^ 0x9e3779b97f4a7c15n;
+/**
+ * The drift floor's Butterchurn re-runs: another rand seed, and another rand
+ * seed with the track's noise seeded differently too. Everything a re-run
+ * changes should count as "the same picture"; the floor is the furthest of them.
+ */
+export const floorRuns = (seed: bigint): { seed: bigint; hiss?: bigint }[] => [{ seed: seed ^ 0x9e3779b97f4a7c15n }, { seed: seed ^ 0x2545f4914f6cdd1dn, hiss: 0xf100dn }];
 
 export const presetsRoot = path.resolve(process.env.OPENFLOW_VISUALS_PRESETS ?? path.join(os.homedir(), '.openflow', 'visuals', 'presets'));
 

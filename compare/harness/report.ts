@@ -57,7 +57,7 @@ export interface ReportPreset {
 
 export interface Report {
   generated: string;
-  settings: { width: number; height: number; frames: number; dt: number; refresh: number; seed: string; floorSeed: string; captures: number[]; presetsRoot: string; minScore: number | null };
+  settings: { width: number; height: number; frames: number; dt: number; refresh: number; seed: string; floorRuns: { seed: string; hiss: string | null }[]; captures: number[]; presetsRoot: string; minScore: number | null };
   approvalsFile: string;
   presets: ReportPreset[];
   approvals: Record<string, Approval>;

@@ -14,7 +14,7 @@ export const SECTIONS = { cols: 8, rows: 4 } as const;
 /** The resolution edge/texture energy is measured at: coarse enough to ignore pixel noise. */
 const TEXTURE = { cols: 128, rows: 64 } as const;
 /** Distance beyond the floor at which a section counts as fully different. */
-export const SCALE = 0.25;
+export const SCALE = 0.15;
 /** How the five features make a section's distance (motion only from the second capture). */
 export const FEATURE_WEIGHTS = { brightness: 0.3, colour: 0.2, hue: 0.15, edge: 0.2, motion: 0.15 } as const;
 export type Feature = keyof typeof FEATURE_WEIGHTS;
@@ -198,14 +198,22 @@ export interface Side {
 
 const mean = (xs: number[]) => xs.reduce((s, x) => s + x, 0) / Math.max(1, xs.length);
 
-/** One capture: Butterchurn (`ref`), ours, and Butterchurn re-seeded (`drift`). */
-export function compareCapture(ref: Side, ours: Side, drift: Side): CaptureComparison {
+const furthest = (ds: Distance[]) => ds.reduce((a, b) => (b.total > a.total ? b : a));
+
+/**
+ * One capture: Butterchurn (`ref`), ours, and Butterchurn re-run with other
+ * seeds (`drifts`). The floor per section is the furthest re-run: one re-run
+ * can land close by chance.
+ */
+export function compareCapture(ref: Side, ours: Side, drifts: Side[]): CaptureComparison {
   const sectionDistances = (other: Side) => ref.picture.sections.map((s, i) => distance(s, other.picture.sections[i], ref.motion?.sections[i], other.motion?.sections[i]));
-  const o = sectionDistances(ours), f = sectionDistances(drift);
+  const o = sectionDistances(ours);
+  const each = drifts.map(sectionDistances);
+  const f = o.map((_, i) => furthest(each.map((d) => d[i])));
   const beyond = (d: Distance, fl: Distance) => clamp01(Math.max(0, d.total - fl.total) / SCALE);
   const excess = o.map((d, i) => beyond(d, f[i]));
   const wo = distance(ref.picture.whole, ours.picture.whole, ref.motion?.whole, ours.motion?.whole);
-  const wf = distance(ref.picture.whole, drift.picture.whole, ref.motion?.whole, drift.motion?.whole);
+  const wf = furthest(drifts.map((drift) => distance(ref.picture.whole, drift.picture.whole, ref.motion?.whole, drift.motion?.whole)));
   const we = beyond(wo, wf);
   const round = (v: number) => Math.round(v * 1000) / 10;
   return {
@@ -250,7 +258,7 @@ export interface CaptureSides {
   weight: number;
   ref: Side;
   ours: Side;
-  drift: Side;
+  drifts: Side[];
 }
 
 /**
@@ -266,10 +274,10 @@ export function describe(captures: CaptureSides[]): string {
     const out = new Array<number>(n).fill(0);
     for (const c of captures) {
       for (let i = 0; i < n; i++) {
-        const a = value(c.ref, i), o = value(c.ours, i), f = value(c.drift, i);
-        if (a === null || o === null || f === null) continue;
-        const scale = relative ? Math.max(Math.abs(a), Math.abs(o), Math.abs(f), 0.02) : 1;
-        const d = (o - a) / scale, fl = Math.abs(f - a) / scale;
+        const a = value(c.ref, i), o = value(c.ours, i), fs = c.drifts.map((d) => value(d, i));
+        if (a === null || o === null || fs.some((f) => f === null)) continue;
+        const scale = relative ? Math.max(Math.abs(a), Math.abs(o), ...fs.map((f) => Math.abs(f!)), 0.02) : 1;
+        const d = (o - a) / scale, fl = Math.max(...fs.map((f) => Math.abs(f! - a))) / scale;
         out[i] += (c.weight / total) * Math.sign(d) * Math.max(0, Math.abs(d) - fl);
       }
     }
@@ -301,10 +309,11 @@ export function describe(captures: CaptureSides[]): string {
   let hueOff = 0, chromaOff = 0;
   const last = { ours: 0, ref: 0 };
   for (const c of captures) {
-    const a = dominant(c.ref), o = dominant(c.ours), f = dominant(c.drift);
+    const a = dominant(c.ref), o = dominant(c.ours), fs = c.drifts.map(dominant);
     const w = c.weight / total;
-    if (Math.min(a.chroma, o.chroma) > 0.06) hueOff += w * Math.max(0, hueGap(a.hue, o.hue) - (f.chroma > 0.06 ? hueGap(a.hue, f.hue) : 0));
-    chromaOff += w * Math.sign(o.chroma - a.chroma) * Math.max(0, Math.abs(o.chroma - a.chroma) - Math.abs(f.chroma - a.chroma));
+    const hueFloor = Math.max(0, ...fs.map((f) => (f.chroma > 0.06 ? hueGap(a.hue, f.hue) : 0)));
+    if (Math.min(a.chroma, o.chroma) > 0.06) hueOff += w * Math.max(0, hueGap(a.hue, o.hue) - hueFloor);
+    chromaOff += w * Math.sign(o.chroma - a.chroma) * Math.max(0, Math.abs(o.chroma - a.chroma) - Math.max(...fs.map((f) => Math.abs(f.chroma - a.chroma))));
     if (w > 0) [last.ours, last.ref] = [o.hue, a.hue];
   }
   const colour: string[] = [];
@@ -312,10 +321,11 @@ export function describe(captures: CaptureSides[]): string {
   if (Math.abs(chromaOff) > 0.06) colour.push(chromaOff > 0 ? 'ours more colourful' : 'ours less colourful');
   said.push(colour.length ? colour.join(', ') : 'hue matches');
   // Motion: frozen or runaway first, else where it moves more or less.
-  const moving = captures.filter((c) => c.ref.motion && c.ours.motion && c.drift.motion);
+  const moving = captures.filter((c) => c.ref.motion && c.ours.motion && c.drifts.every((d) => d.motion));
   if (moving.length) {
     const avg = (pick: (c: CaptureSides) => number) => mean(moving.map(pick));
-    const a = avg((c) => c.ref.motion!.whole.change), o = avg((c) => c.ours.motion!.whole.change), f = avg((c) => c.drift.motion!.whole.change);
+    const a = avg((c) => c.ref.motion!.whole.change), o = avg((c) => c.ours.motion!.whole.change);
+    const f = avg((c) => Math.max(...c.drifts.map((d) => d.motion!.whole.change)));
     if (a > 0.02 && o < 0.1 * a && Math.abs(f - a) < 0.5 * a) said.push('ours looks frozen where Butterchurn moves');
     else if (o > 3 * Math.max(a, f) + 0.02) said.push('ours changes far more than Butterchurn (runaway?)');
     else twoWay(gap((s, i) => s.motion?.sections[i].change ?? null, true), 0.35, 'moves more', 'moves less', 'motion matches');
@@ -327,11 +337,13 @@ export function describe(captures: CaptureSides[]): string {
 
 export interface Captured {
   frame: number;
-  /** RGBA rows, top to bottom: Butterchurn, the candidate (ours), Butterchurn re-seeded. */
+  /** RGBA rows, top to bottom: Butterchurn, the candidate (ours), and Butterchurn re-run with other seeds. */
   ref: Uint8Array;
   ours: Uint8Array;
-  drift: Uint8Array;
+  drifts: Uint8Array[];
 }
+
+type SideName = 'ref' | 'ours' | 'drift';
 
 export interface RunComparison {
   /** 0–100, captures weighted early-first: how far ours stays within Butterchurn's own drift. */
@@ -341,40 +353,44 @@ export interface RunComparison {
   /** True when Butterchurn drifts so far from itself that nothing can be concluded. */
   notComparable: boolean;
   sentence: string;
-  captures: (CaptureComparison & { frame: number; weight: number; sides: Record<'ref' | 'ours' | 'drift', { region: Region; motion: Motion | null }> })[];
+  /** `sides.drift` is the first re-run. */
+  captures: (CaptureComparison & { frame: number; weight: number; sides: Record<SideName, { region: Region; motion: Motion | null }> })[];
 }
 
 /** Below this weighted floor similarity, Butterchurn's own drift swamps any difference. */
-export const COMPARABLE_FLOOR = 70;
+export const COMPARABLE_FLOOR = 80;
 
 /** Every capture of one preset, compared section by section against the drift floor. */
 export function compareRun(captured: Captured[], width: number, height: number): RunComparison {
   const ordered = [...captured].sort((a, b) => a.frame - b.frame);
-  const prev: Partial<Record<'ref' | 'ours' | 'drift', Picture>> = {};
+  const prev = new Map<string, Picture>();
   const all: CaptureSides[] = [];
   const captures: RunComparison['captures'] = [];
+  const sideOf = (key: string, rgba: Uint8Array): Side => {
+    const picture = pictureOf(rgba, width, height);
+    const before = prev.get(key);
+    prev.set(key, picture);
+    return { picture, motion: before ? motionOf(before, picture) : undefined };
+  };
   for (const c of ordered) {
-    const sides = {} as Record<'ref' | 'ours' | 'drift', Side>;
-    for (const k of ['ref', 'ours', 'drift'] as const) {
-      const picture = pictureOf(c[k], width, height);
-      sides[k] = { picture, motion: prev[k] ? motionOf(prev[k]!, picture) : undefined };
-      prev[k] = picture;
-    }
+    const ref = sideOf('ref', c.ref), ours = sideOf('ours', c.ours);
+    const drifts = c.drifts.map((d, i) => sideOf(`drift${i}`, d));
     const weight = captureWeight(c.frame);
-    all.push({ weight, ...sides });
+    all.push({ weight, ref, ours, drifts });
     const side = (s: Side) => ({ region: s.picture.whole, motion: s.motion?.whole ?? null });
-    captures.push({ frame: c.frame, weight, ...compareCapture(sides.ref, sides.ours, sides.drift), sides: { ref: side(sides.ref), ours: side(sides.ours), drift: side(sides.drift) } });
+    captures.push({ frame: c.frame, weight, ...compareCapture(ref, ours, drifts), sides: { ref: side(ref), ours: side(ours), drift: side(drifts[0]) } });
   }
   const total = captures.reduce((s, c) => s + c.weight, 0) || 1;
   const weighted = (pick: (c: (typeof captures)[number]) => number) => Math.round((captures.reduce((s, c) => s + c.weight * pick(c), 0) / total) * 10) / 10;
   const floorRaw = weighted((c) => c.floorRaw);
   const notComparable = floorRaw < COMPARABLE_FLOOR;
-  return {
-    score: weighted((c) => c.score),
-    raw: weighted((c) => c.raw),
-    floorRaw,
-    notComparable,
-    sentence: notComparable ? `not comparable: random/chaotic (Butterchurn re-seeded is only ${floorRaw} similar to itself)` : describe(all),
-    captures,
-  };
+  let sentence = notComparable ? `not comparable: random/chaotic (Butterchurn re-seeded is only ${floorRaw} similar to itself)` : describe(all);
+  // No single feature stands out over the run, yet some captures are clearly
+  // off: say where and from when, so the line never reads "all matches" over a bad capture.
+  const off = captures.filter((c) => c.score < 70);
+  if (!notComparable && off.length && !sentence.includes('ours ')) {
+    const sections = off.flatMap((c) => c.excess.flatMap((e, i) => (e >= 0.5 ? [i] : [])));
+    sentence += `; but ${off.length} of ${captures.length} captures differ beyond the floor (from frame ${off[0].frame}${sections.length ? `, mostly ${where([...new Set(sections)])}` : ''}): look at them`;
+  }
+  return { score: weighted((c) => c.score), raw: weighted((c) => c.raw), floorRaw, notComparable, sentence, captures };
 }

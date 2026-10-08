@@ -26,7 +26,7 @@ import {
   convert,
   DT,
   factsOf,
-  floorSeed,
+  floorRuns,
   heat,
   idOf,
   launchBrowser,
@@ -233,9 +233,11 @@ async function run(o: Options): Promise<number> {
     } else {
       try {
         const ref = await butterchurn(browser, converted.json, settings, o.seed, audio);
-        const drift = await butterchurn(browser, converted.json, settings, floorSeed(o.seed), audio);
         for (const [frame, pixels] of ref.captures) fs.writeFileSync(path.join(work, `ref-${i}-${frame}.rgba`), pixels);
-        for (const [frame, pixels] of drift.captures) fs.writeFileSync(path.join(work, `drift-${i}-${frame}.rgba`), pixels);
+        for (const [k, run] of floorRuns(o.seed).entries()) {
+          const drift = await butterchurn(browser, converted.json, settings, run.seed, run.hiss ? music(o.frames, { hiss: run.hiss }) : audio);
+          for (const [frame, pixels] of drift.captures) fs.writeFileSync(path.join(work, `drift${k}-${i}-${frame}.rgba`), pixels);
+        }
         theirs.push({ notes: ref.notes });
       } catch (error) {
         theirs.push({ failed: `butterchurn failed: ${(error as Error).message.split('\n')[0]}` });
@@ -283,7 +285,7 @@ async function run(o: Options): Promise<number> {
     }
     if (entry.status === 'ok') {
       const read = (kind: string, frame: number) => new Uint8Array(fs.readFileSync(path.join(work, `${kind}-${i}-${frame}.rgba`)));
-      const captured = o.captures.map((frame) => ({ frame, ref: read('ref', frame), ours: read('ours', frame), drift: read('drift', frame) }));
+      const captured = o.captures.map((frame) => ({ frame, ref: read('ref', frame), ours: read('ours', frame), drifts: floorRuns(o.seed).map((_, k) => read(`drift${k}`, frame)) }));
       const result: RunComparison = compareRun(captured, o.width, o.height);
       entry.score = result.score;
       entry.raw = result.raw;
@@ -302,8 +304,8 @@ async function run(o: Options): Promise<number> {
             { label: 'Butterchurn', ...picture(captured[k].ref) },
             { label: 'ours', ...picture(captured[k].ours) },
             { label: `ours beyond the drift floor (white = ${'≥'}0.25)`, ...grid(c.excess) },
-            { label: 'Butterchurn re-seeded (drift floor)', ...picture(captured[k].drift) },
-            { label: 'drift floor: re-seeded vs Butterchurn', ...grid(c.floor.map((d) => d.total * 2)) },
+            { label: 'Butterchurn re-seeded (normal drift)', ...picture(captured[k].drifts[0]) },
+            { label: 'drift floor: re-runs vs Butterchurn', ...grid(c.floor.map((d) => d.total * 2)) },
             { label: 'ours vs Butterchurn (same scale)', ...grid(c.ours.map((d) => d.total * 2)) },
           ],
           3,
@@ -347,7 +349,7 @@ async function run(o: Options): Promise<number> {
 
   const report: Report = {
     generated: new Date().toISOString(),
-    settings: { width: o.width, height: o.height, frames: o.frames, dt: DT, refresh: o.refresh, seed: String(o.seed), floorSeed: String(floorSeed(o.seed)), captures: o.captures, presetsRoot, minScore: o.minScore },
+    settings: { width: o.width, height: o.height, frames: o.frames, dt: DT, refresh: o.refresh, seed: String(o.seed), floorRuns: floorRuns(o.seed).map((r) => ({ seed: String(r.seed), hiss: r.hiss === undefined ? null : String(r.hiss) })), captures: o.captures, presetsRoot, minScore: o.minScore },
     approvalsFile,
     presets,
     approvals: readApprovals(),

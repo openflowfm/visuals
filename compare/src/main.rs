@@ -133,11 +133,7 @@ fn main() {
             Ok(Ok(())) => println!("ok\t{index}\t{:.0}", started.elapsed().as_secs_f64() * 1000.0),
             Ok(Err(why)) => println!("fail\t{index}\t{}", why.replace(['\t', '\n'], " ")),
             Err(panic) => {
-                let why = panic
-                    .downcast_ref::<String>()
-                    .map(String::as_str)
-                    .or_else(|| panic.downcast_ref::<&str>().copied())
-                    .unwrap_or("panicked");
+                let why = panic.downcast_ref::<String>().map(String::as_str).or_else(|| panic.downcast_ref::<&str>().copied()).unwrap_or("panicked");
                 println!("fail\t{index}\tthe renderer panicked: {}", why.replace(['\t', '\n'], " "));
                 (device, queue) = headless().expect("a GPU");
             }
