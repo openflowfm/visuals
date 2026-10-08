@@ -18,7 +18,6 @@
   text-transform: uppercase;
 }
 .fx-head { display: flex; align-items: center; gap: 8px; }
-.fx-fill { flex: 1; }
 
 .fx-hits { display: flex; gap: 8px; }
 .fx .fx-hit {

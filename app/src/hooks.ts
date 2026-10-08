@@ -1,6 +1,42 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { UnlistenFn } from '@tauri-apps/api/event';
+import * as api from './api.ts';
 import { notice, type Notice } from './shell.ts';
+
+type Rect = { left: number; top: number; width: number; height: number };
+type Place = { x: number; y: number; width: number; height: number };
+
+/** A check to run with a rect over and over: it calls `send` only when the rect differs from the last one sent. */
+export function sendOnChange(send: (place: Place) => void) {
+  let last = '';
+  return (r: Rect) => {
+    const key = `${r.left},${r.top},${r.width},${r.height}`;
+    if (key === last) return;
+    last = key;
+    send({ x: r.left, y: r.top, width: r.width, height: r.height });
+  };
+}
+
+/**
+ * Report the bench's hole to the app, which moves the native view under it.
+ * Anything above the hole (a notice banner, the effects, wrapping text) or a
+ * scroll can move it without resizing it, so its rect is read every animation
+ * frame and sent only when it actually changed.
+ */
+export function usePlaceBench(ref: React.RefObject<HTMLElement | null>) {
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const check = sendOnChange((place) => api.placeBench(place).catch(() => {}));
+    let frame = 0;
+    const tick = () => {
+      check(el.getBoundingClientRect());
+      frame = requestAnimationFrame(tick);
+    };
+    tick();
+    return () => cancelAnimationFrame(frame);
+  }, [ref]);
+}
 
 /**
  * Follow one of the app's events (`pl.onLive`, `fx.onFx`, `link.onFrame`…) while
