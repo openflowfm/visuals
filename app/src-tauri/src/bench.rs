@@ -351,8 +351,8 @@ impl Loop {
                 let _ = reply.send(self.renderer.set_value(owner, &key, value));
             }
             Cmd::Previews(wanted, size) => {
-                self.renderer.set_previews(&wanted, size);
-                if wanted.is_empty() {
+                // No stage kept, so no pictures: the last poll's bytes would be stale.
+                if !self.renderer.set_previews(&wanted, size) {
                     *self.previews.lock().unwrap() = None;
                 }
             }
