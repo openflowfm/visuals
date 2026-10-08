@@ -14,6 +14,7 @@ import { Playlists } from './Playlists.tsx';
 import * as pl from './playlists.ts';
 import { useNotice, useTauriEvent } from './hooks.ts';
 import { nameOf, notice, openFailed } from './shell.ts';
+import { SilenceBanner } from './Onboarding.tsx';
 import { FrameRate, Header, HOME, NoticeBanner, Preview, type View } from './views.tsx';
 import './live.css';
 
@@ -32,7 +33,15 @@ const KEYS = `← → step · R random · H hold · hold S strobe, P punch, F fr
  * field) or on the output, which tells the page (`output.onEscape`). Leaving
  * also puts the effects back, so the editor is never left inverted or frozen.
  */
-export function Live({ start, onMode }: { start: string | null; onMode: (mode: View, path: string | null) => void }) {
+export function Live({
+  start,
+  onMode,
+  windowed = false,
+}: {
+  start: string | null;
+  onMode: (mode: View, path: string | null) => void;
+  /** Play in the window: don't open the output on the way in. */ windowed?: boolean;
+}) {
   const [lists, setLists] = useState<pl.Lists | null>(null);
   const [current, setCurrent] = useState<string | null>(null);
   const { notice: error, set: setError, fail, dismiss } = useNotice();
@@ -49,10 +58,10 @@ export function Live({ start, onMode }: { start: string | null; onMode: (mode: V
   // Live mode is the output: open it on the way in, close it (and reset the effects) on the way out.
   useEffect(() => {
     api.setPreviews([]).catch(() => {});
-    show(null);
+    if (!windowed) show(null);
     fx.state().then(setEffects, fail("Couldn't read the effects."));
     return leave;
-  }, [show, fail]);
+  }, [show, fail, windowed]);
   useTauriEvent(output.onStatus, setStatus);
   useTauriEvent(fx.onFx, setEffects);
 
@@ -103,6 +112,7 @@ export function Live({ start, onMode }: { start: string | null; onMode: (mode: V
         <AudioInput onError={fail("Couldn't use that audio input.")} />
         <FrameRate always />
       </Header>
+      <SilenceBanner />
       <section className="live-stage">
         <div className="live-deck">
           <div className="live-now" title={current ?? undefined}>
