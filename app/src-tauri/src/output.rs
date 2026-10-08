@@ -88,12 +88,6 @@ fn index_from(value: Option<String>) -> Option<usize> {
 /// The display chosen last, in [`crate::settings::dir`].
 const SAVED: &str = "output.json";
 
-fn save(choice: &Choice) {
-    if let Ok(text) = serde_json::to_string_pretty(choice) {
-        crate::settings::save(SAVED, text);
-    }
-}
-
 fn saved() -> Option<Choice> {
     crate::settings::load(SAVED)
 }
@@ -153,7 +147,7 @@ pub fn output_open(id: Option<u32>, handle: AppHandle) -> Result<Status, String>
         let chosen = id.or_else(|| choose(&displays, saved().as_ref(), index)).ok_or("no display")?;
         if id.is_some() {
             if let Some(d) = displays.iter().find(|d| d.id == chosen) {
-                save(&Choice { id: d.id, name: d.name.clone() });
+                crate::settings::save_json(SAVED, &Choice { id: d.id, name: d.name.clone() });
             }
         }
         native::open(mtm, chosen)
