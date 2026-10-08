@@ -99,17 +99,85 @@ pub(super) fn grid(gx: usize, gy: usize) -> (Vec<[f32; 2]>, Vec<u32>) {
     (vertices, indices)
 }
 
-pub(super) fn sampler(device: &wgpu::Device, linear: bool, wrap: bool) -> wgpu::Sampler {
-    let filter = if linear { wgpu::FilterMode::Linear } else { wgpu::FilterMode::Nearest };
-    let address = if wrap { wgpu::AddressMode::Repeat } else { wgpu::AddressMode::ClampToEdge };
-    device.create_sampler(&wgpu::SamplerDescriptor {
-        address_mode_u: address,
-        address_mode_v: address,
-        address_mode_w: address,
-        mag_filter: filter,
-        min_filter: filter,
-        ..Default::default()
+/// The four samplers MilkDrop's names pick from: filtered or point-sampled,
+/// wrapping or clamped.
+pub(super) struct Samplers {
+    pub(super) linear_wrap: wgpu::Sampler,
+    pub(super) linear_clamp: wgpu::Sampler,
+    pub(super) point_wrap: wgpu::Sampler,
+    pub(super) point_clamp: wgpu::Sampler,
+}
+
+impl Samplers {
+    pub(super) fn new(device: &wgpu::Device) -> Self {
+        let sampler = |linear: bool, wrap: bool| {
+            let filter = if linear { wgpu::FilterMode::Linear } else { wgpu::FilterMode::Nearest };
+            let address = if wrap { wgpu::AddressMode::Repeat } else { wgpu::AddressMode::ClampToEdge };
+            device.create_sampler(&wgpu::SamplerDescriptor {
+                address_mode_u: address,
+                address_mode_v: address,
+                address_mode_w: address,
+                mag_filter: filter,
+                min_filter: filter,
+                ..Default::default()
+            })
+        };
+        Self { linear_wrap: sampler(true, true), linear_clamp: sampler(true, false), point_wrap: sampler(false, true), point_clamp: sampler(false, false) }
+    }
+
+    /// The filtered sampler, wrapping or clamped.
+    pub(super) fn linear(&self, wrap: bool) -> &wgpu::Sampler {
+        if wrap {
+            &self.linear_wrap
+        } else {
+            &self.linear_clamp
+        }
+    }
+}
+
+/// A render pipeline with wgpu's automatic layout (bind group 0 as the shaders
+/// use it): `vertex`'s entry point and buffers, `topology`, and `fragment`'s
+/// entry point drawing into `target`.
+pub(super) fn pipeline(
+    device: &wgpu::Device,
+    label: Option<&str>,
+    (vs, vs_entry, buffers): (&wgpu::ShaderModule, &str, &[Option<wgpu::VertexBufferLayout>]),
+    topology: wgpu::PrimitiveTopology,
+    (fs, fs_entry): (&wgpu::ShaderModule, &str),
+    target: wgpu::ColorTargetState,
+) -> wgpu::RenderPipeline {
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label,
+        layout: None,
+        vertex: wgpu::VertexState { module: vs, entry_point: Some(vs_entry), compilation_options: Default::default(), buffers },
+        primitive: wgpu::PrimitiveState { topology, ..Default::default() },
+        depth_stencil: None,
+        multisample: Default::default(),
+        fragment: Some(wgpu::FragmentState { module: fs, entry_point: Some(fs_entry), compilation_options: Default::default(), targets: &[Some(target)] }),
+        multiview_mask: None,
+        cache: None,
     })
+}
+
+/// A full-screen quad's pipeline: `shader`'s `vs` draws a four-vertex strip from
+/// the vertex index, and `entry` fills it into `format`, unblended.
+pub(super) fn quad(device: &wgpu::Device, label: &str, shader: &wgpu::ShaderModule, entry: &str, format: wgpu::TextureFormat) -> wgpu::RenderPipeline {
+    pipeline(device, Some(label), (shader, "vs", &[]), wgpu::PrimitiveTopology::TriangleStrip, (shader, entry), format.into())
+}
+
+/// A bind group for `pipeline`'s group 0, with `resources` at bindings 0, 1, 2…
+pub(super) fn bind(device: &wgpu::Device, pipeline: &wgpu::RenderPipeline, resources: &[wgpu::BindingResource]) -> wgpu::BindGroup {
+    let entries: Vec<wgpu::BindGroupEntry> = resources.iter().enumerate().map(|(i, r)| wgpu::BindGroupEntry { binding: i as u32, resource: r.clone() }).collect();
+    device.create_bind_group(&wgpu::BindGroupDescriptor { label: None, layout: &pipeline.get_bind_group_layout(0), entries: &entries })
+}
+
+/// A [`quad`] pipeline's pass: `target` cleared to black, then the quad drawn
+/// into it with `group`.
+pub(super) fn quad_pass(encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView, pipeline: &wgpu::RenderPipeline, group: &wgpu::BindGroup) {
+    let mut pass = begin(encoder, target, true);
+    pass.set_pipeline(pipeline);
+    pass.set_bind_group(0, group, &[]);
+    pass.draw(0..4, 0..1);
 }
 
 pub(super) fn buffer(device: &wgpu::Device, contents: &[u8], usage: wgpu::BufferUsages) -> wgpu::Buffer {

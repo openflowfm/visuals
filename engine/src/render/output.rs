@@ -1,4 +1,4 @@
-use super::gpu::{begin, buffer, Target};
+use super::gpu::{bind, buffer, quad, quad_pass, Target};
 use super::{Renderer, FORMAT};
 use crate::runtime::PRESET_RATE;
 use std::borrow::Cow;
@@ -39,21 +39,8 @@ impl Renderer {
                 label: Some("trails"),
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(crate::fx::TRAILS)),
             });
-            let pipeline = |entry: &str, format: wgpu::TextureFormat| {
-                self.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                    label: Some("trails"),
-                    layout: None,
-                    vertex: wgpu::VertexState { module: &shader, entry_point: Some("vs"), compilation_options: Default::default(), buffers: &[] },
-                    primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleStrip, ..Default::default() },
-                    depth_stencil: None,
-                    multisample: Default::default(),
-                    fragment: Some(wgpu::FragmentState { module: &shader, entry_point: Some(entry), compilation_options: Default::default(), targets: &[Some(format.into())] }),
-                    multiview_mask: None,
-                    cache: None,
-                })
-            };
             let half = wgpu::TextureFormat::Rgba16Float;
-            let (echo, copy) = (pipeline("fs", half), pipeline("copy", FORMAT));
+            let (echo, copy) = (quad(&self.device, "trails", &shader, "fs", half), quad(&self.device, "trails", &shader, "copy", FORMAT));
             let uniform = buffer(&self.device, &[0u8; 16], wgpu::BufferUsages::UNIFORM);
             let kept = [Target::of(&self.device, self.comp.size, "trails a", half), Target::of(&self.device, self.comp.size, "trails b", half)];
             self.trails_pass = Some(Trails { echo, copy, uniform, kept, at: 0 });
@@ -64,24 +51,11 @@ impl Renderer {
         t.at = after;
         let t = self.trails_pass.as_ref().unwrap();
         self.queue.write_buffer(&t.uniform, 0, bytemuck::cast_slice(&[k, 0.0, 0.0, 0.0]));
-        let group = |pipeline: &wgpu::RenderPipeline, entries: &[wgpu::BindGroupEntry]| {
-            self.device.create_bind_group(&wgpu::BindGroupDescriptor { label: None, layout: &pipeline.get_bind_group_layout(0), entries })
-        };
-        let echo = group(
-            &t.echo,
-            &[
-                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&self.comp.view) },
-                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&t.kept[before].view) },
-                wgpu::BindGroupEntry { binding: 2, resource: t.uniform.as_entire_binding() },
-            ],
-        );
-        let copy = group(&t.copy, &[wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&t.kept[after].view) }]);
-        for (pipeline, bind, target) in [(&t.echo, &echo, &t.kept[after].view), (&t.copy, &copy, &self.comp.view)] {
-            let mut pass = begin(encoder, target, true);
-            pass.set_pipeline(pipeline);
-            pass.set_bind_group(0, bind, &[]);
-            pass.draw(0..4, 0..1);
-        }
+        let view = wgpu::BindingResource::TextureView;
+        let echo = bind(&self.device, &t.echo, &[view(&self.comp.view), view(&t.kept[before].view), t.uniform.as_entire_binding()]);
+        let copy = bind(&self.device, &t.copy, &[view(&t.kept[after].view)]);
+        quad_pass(encoder, &t.kept[after].view, &t.echo, &echo);
+        quad_pass(encoder, &self.comp.view, &t.copy, &copy);
     }
 
     pub(super) fn preview(&self, encoder: &mut wgpu::CommandEncoder, which: usize, source: &wgpu::TextureView) {
@@ -92,23 +66,7 @@ impl Renderer {
 
     pub(super) fn blit_pipeline(&mut self, format: wgpu::TextureFormat) {
         if !self.blits.contains_key(&format) {
-            let pipeline = self.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("blit"),
-                layout: None,
-                vertex: wgpu::VertexState { module: &self.blit_shader, entry_point: Some("vs"), compilation_options: Default::default(), buffers: &[] },
-                primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleStrip, ..Default::default() },
-                depth_stencil: None,
-                multisample: Default::default(),
-                fragment: Some(wgpu::FragmentState {
-                    module: &self.blit_shader,
-                    entry_point: Some("fs"),
-                    compilation_options: Default::default(),
-                    targets: &[Some(format.into())],
-                }),
-                multiview_mask: None,
-                cache: None,
-            });
-            self.blits.insert(format, pipeline);
+            self.blits.insert(format, quad(&self.device, "blit", &self.blit_shader, "fs", format));
         }
     }
 
@@ -116,17 +74,7 @@ impl Renderer {
     /// `format` must already exist ([`Renderer::blit_pipeline`]).
     fn blit(&self, encoder: &mut wgpu::CommandEncoder, source: &wgpu::TextureView, target: &wgpu::TextureView, format: wgpu::TextureFormat) {
         let pipeline = &self.blits[&format];
-        let group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout: &pipeline.get_bind_group_layout(0),
-            entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(source) },
-                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&self.samplers["linear_clamp"]) },
-            ],
-        });
-        let mut pass = begin(encoder, target, true);
-        pass.set_pipeline(pipeline);
-        pass.set_bind_group(0, &group, &[]);
-        pass.draw(0..4, 0..1);
+        let group = bind(&self.device, pipeline, &[wgpu::BindingResource::TextureView(source), wgpu::BindingResource::Sampler(&self.samplers.linear_clamp)]);
+        quad_pass(encoder, target, pipeline, &group);
     }
 }

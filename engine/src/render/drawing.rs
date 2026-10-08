@@ -1,4 +1,4 @@
-use super::gpu::begin;
+use super::gpu::{begin, bind, pipeline};
 use super::{Renderer, FORMAT};
 use crate::audio::Audio;
 use crate::draw::{Blend, DrawList, Topology, Vertex};
@@ -51,48 +51,18 @@ impl Renderer {
                 operation: wgpu::BlendOperation::Add,
             };
             let attributes = wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x4, 2 => Float32x2, 3 => Float32];
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("draw"),
-                layout: None,
-                vertex: wgpu::VertexState {
-                    module: shader,
-                    entry_point: Some("vs"),
-                    compilation_options: Default::default(),
-                    buffers: &[Some(wgpu::VertexBufferLayout {
-                        array_stride: std::mem::size_of::<Vertex>() as u64,
-                        step_mode: wgpu::VertexStepMode::Vertex,
-                        attributes: &attributes,
-                    })],
-                },
-                primitive: wgpu::PrimitiveState {
-                    topology: match topology {
-                        Topology::Triangles => wgpu::PrimitiveTopology::TriangleList,
-                        Topology::Lines => wgpu::PrimitiveTopology::LineList,
-                        Topology::LineStrip => wgpu::PrimitiveTopology::LineStrip,
-                        Topology::Points => wgpu::PrimitiveTopology::PointList,
-                    },
-                    ..Default::default()
-                },
-                depth_stencil: None,
-                multisample: Default::default(),
-                fragment: Some(wgpu::FragmentState {
-                    module: shader,
-                    entry_point: Some("fs"),
-                    compilation_options: Default::default(),
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: FORMAT,
-                        blend: Some(wgpu::BlendState { color: component, alpha: component }),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
-                }),
-                multiview_mask: None,
-                cache: None,
-            })
+            let buffers = [Some(wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Vertex>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &attributes })];
+            let topology = match topology {
+                Topology::Triangles => wgpu::PrimitiveTopology::TriangleList,
+                Topology::Lines => wgpu::PrimitiveTopology::LineList,
+                Topology::LineStrip => wgpu::PrimitiveTopology::LineStrip,
+                Topology::Points => wgpu::PrimitiveTopology::PointList,
+            };
+            let target = wgpu::ColorTargetState { format: FORMAT, blend: Some(wgpu::BlendState { color: component, alpha: component }), write_mask: wgpu::ColorWrites::ALL };
+            pipeline(device, Some("draw"), (shader, "vs", &buffers), topology, (shader, "fs"), target)
         })
     }
 
-    /// Motion vectors, shapes, waves, darken centre and borders, blended into
-    /// this frame's feedback target.
     /// The step's waves, shapes and the rest, with their equations run once,
     /// uploaded for every [`Renderer::draw`] until the next step.
     pub(super) fn build_draw(&mut self, frame: &crate::runtime::Frame, audio: &Audio) {
@@ -131,20 +101,13 @@ impl Renderer {
             }
         }
         let Some((vertices, _)) = vertices.filter(|_| !list.cmds.is_empty()) else { return };
-        let sampler = &self.samplers[if wrap { "linear_wrap" } else { "linear_clamp" }];
+        let sampler = self.samplers.linear(wrap);
         let mut groups = HashMap::new();
         for cmd in &list.cmds {
             let pipeline = &self.draw_pipelines[&(cmd.topology, cmd.blend)];
-            groups.entry((cmd.topology, cmd.blend)).or_insert_with(|| {
-                self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: None,
-                    layout: &pipeline.get_bind_group_layout(0),
-                    entries: &[
-                        wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(previous) },
-                        wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(sampler) },
-                    ],
-                })
-            });
+            groups
+                .entry((cmd.topology, cmd.blend))
+                .or_insert_with(|| bind(&self.device, pipeline, &[wgpu::BindingResource::TextureView(previous), wgpu::BindingResource::Sampler(sampler)]));
         }
         {
             let mut pass = begin(encoder, target, false);

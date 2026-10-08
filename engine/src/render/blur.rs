@@ -1,4 +1,4 @@
-use super::gpu::begin;
+use super::gpu::{bind, quad_pass};
 use super::Renderer;
 use crate::runtime::{Runner, Size};
 
@@ -119,19 +119,12 @@ impl Renderer {
             v.extend([1.0 - ed, ed, 5.0, wdiv_v]);
             self.queue.write_buffer(v_uniform, 0, bytemuck::cast_slice(&v));
             for (pipeline, uniform, input, output) in [(&self.blur_h, h_uniform, source, &h_target.view), (&self.blur_v, v_uniform, &h_target.view, &v_target.view)] {
-                let group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: None,
-                    layout: &pipeline.get_bind_group_layout(0),
-                    entries: &[
-                        wgpu::BindGroupEntry { binding: 0, resource: uniform.as_entire_binding() },
-                        wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(input) },
-                        wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&self.samplers["linear_clamp"]) },
-                    ],
-                });
-                let mut pass = begin(encoder, output, true);
-                pass.set_pipeline(pipeline);
-                pass.set_bind_group(0, &group, &[]);
-                pass.draw(0..4, 0..1);
+                let group = bind(
+                    &self.device,
+                    pipeline,
+                    &[uniform.as_entire_binding(), wgpu::BindingResource::TextureView(input), wgpu::BindingResource::Sampler(&self.samplers.linear_clamp)],
+                );
+                quad_pass(encoder, output, pipeline, &group);
             }
         }
     }

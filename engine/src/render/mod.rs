@@ -37,7 +37,7 @@ use crate::runtime::{Clock, Mesh, Runner, Size, PRESET_RATE};
 use crate::shader::{self, Kind};
 use blur::{blur_size, BLUR, BLUR_RATIOS};
 use drawing::{upload, DRAW};
-use gpu::{begin, buffer, grid, read_targets, sampler, Target};
+use gpu::{begin, bind, buffer, grid, pipeline, quad, quad_pass, read_targets, Samplers, Target};
 use output::{Trails, BLIT};
 use stage::{warp_layout, Stage, COMP_VS, WARP_VS};
 use std::borrow::Cow;
@@ -115,7 +115,7 @@ pub struct Renderer {
     trails_on: bool,
     blur: Vec<(Target, Target)>,
     textures: HashMap<&'static str, wgpu::TextureView>,
-    samplers: HashMap<&'static str, wgpu::Sampler>,
+    samplers: Samplers,
     warp_vs: wgpu::ShaderModule,
     comp_vs: wgpu::ShaderModule,
     warp_positions: wgpu::Buffer,
@@ -194,11 +194,7 @@ impl Renderer {
         // Butterchurn's stand-in for any texture a preset names and it does not
         // have: a 128×128 photograph of clouds, shipped inside Butterchurn (MIT).
         textures.insert("image", texture(&device, &queue, &clouds(), 128, 1));
-        let mut samplers = HashMap::new();
-        samplers.insert("linear_wrap", sampler(&device, true, true));
-        samplers.insert("linear_clamp", sampler(&device, true, false));
-        samplers.insert("point_wrap", sampler(&device, false, true));
-        samplers.insert("point_clamp", sampler(&device, false, false));
+        let samplers = Samplers::new(&device);
 
         let wgsl = |source: &str| device.create_shader_module(wgpu::ShaderModuleDescriptor { label: None, source: wgpu::ShaderSource::Wgsl(Cow::Owned(source.to_owned())) });
         let warp_vs = wgsl(WARP_VS);
@@ -206,26 +202,8 @@ impl Renderer {
         let blur_shader = wgsl(BLUR);
         let blit_shader = wgsl(BLIT);
         let draw_shader = wgsl(DRAW);
-        let fullscreen = |entry: &str| {
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some(entry),
-                layout: None,
-                vertex: wgpu::VertexState { module: &blur_shader, entry_point: Some("vs"), compilation_options: Default::default(), buffers: &[] },
-                primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleStrip, ..Default::default() },
-                depth_stencil: None,
-                multisample: Default::default(),
-                fragment: Some(wgpu::FragmentState {
-                    module: &blur_shader,
-                    entry_point: Some(entry),
-                    compilation_options: Default::default(),
-                    targets: &[Some(FORMAT.into())],
-                }),
-                multiview_mask: None,
-                cache: None,
-            })
-        };
-        let blur_h = fullscreen("horizontal");
-        let blur_v = fullscreen("vertical");
+        let blur_h = quad(&device, "horizontal", &blur_shader, "horizontal", FORMAT);
+        let blur_v = quad(&device, "vertical", &blur_shader, "vertical", FORMAT);
 
         let (warp_grid, warp_index) = grid(size.mesh_width, size.mesh_height);
         let (comp_grid, comp_index) = grid(COMP_GRID.0, COMP_GRID.1);
@@ -250,31 +228,11 @@ impl Renderer {
         let (blur, display_blur) = (blurs(), blurs());
         let display_uvs = buffer(&device, bytemuck::cast_slice(&vec![[0f32; 2]; warp_grid.len()]), vertex);
         let mix_shader = wgsl(MIX);
-        let mix = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("mix"),
-            layout: None,
-            vertex: wgpu::VertexState { module: &mix_shader, entry_point: Some("vs"), compilation_options: Default::default(), buffers: &[] },
-            primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleStrip, ..Default::default() },
-            depth_stencil: None,
-            multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState { module: &mix_shader, entry_point: Some("fs"), compilation_options: Default::default(), targets: &[Some(FORMAT.into())] }),
-            multiview_mask: None,
-            cache: None,
-        });
+        let mix = quad(&device, "mix", &mix_shader, "fs", FORMAT);
         let mix_uniform = buffer(&device, &[0u8; 16], wgpu::BufferUsages::UNIFORM);
         let display_shaded_uvs = buffer(&device, bytemuck::cast_slice(&vec![[0f32; 2]; warp_grid.len()]), vertex);
         let transport_fs = wgsl(TRANSPORT);
-        let transport = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("transport"),
-            layout: None,
-            vertex: wgpu::VertexState { module: &warp_vs, entry_point: Some("main"), compilation_options: Default::default(), buffers: &warp_layout() },
-            primitive: Default::default(),
-            depth_stencil: None,
-            multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState { module: &transport_fs, entry_point: Some("fs"), compilation_options: Default::default(), targets: &[Some(FORMAT.into())] }),
-            multiview_mask: None,
-            cache: None,
-        });
+        let transport = pipeline(&device, Some("transport"), (&warp_vs, "main", &warp_layout()), wgpu::PrimitiveTopology::TriangleList, (&transport_fs, "fs"), FORMAT.into());
         let blur_uniforms = (0..3)
             .map(|_| {
                 let u = wgpu::BufferUsages::UNIFORM;
@@ -563,8 +521,6 @@ impl Renderer {
             // Measured smoother than the next step's: the warp shader's noise and
             // motion follow `time` and the `q`s rather than holding a step's.
             self.write_uniforms(self.warp.as_ref().unwrap(), &values);
-        }
-        if between {
             let (mut moved, mut shaded) = (Vec::new(), Vec::new());
             self.mesh.between(fraction as f64, &mut moved, &mut shaded);
             self.queue.write_buffer(&self.display_uvs, 0, bytemuck::cast_slice(&moved));
@@ -586,14 +542,7 @@ impl Renderer {
             {
                 let warp = self.warp.as_ref().unwrap();
                 let mixed = warp.mixed.as_ref().unwrap();
-                let moved = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: None,
-                    layout: &self.transport.get_bind_group_layout(0),
-                    entries: &[
-                        wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(bare) },
-                        wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(self.sampler_for("sampler_main", wrap)) },
-                    ],
-                });
+                let moved = bind(&self.device, &self.transport, &[wgpu::BindingResource::TextureView(bare), wgpu::BindingResource::Sampler(self.samplers.linear(wrap))]);
                 let shaded = self.bind_group(warp, mixed, fed, wrap, false);
                 let mut pass = begin(&mut encoder, &self.display.view, true);
                 pass.set_pipeline(&self.transport);
@@ -610,19 +559,9 @@ impl Renderer {
             if textured {
                 let target = self.textured_source.get_or_insert_with(|| Target::new(&self.device, self.feedback[0].size, "textured between steps"));
                 self.queue.write_buffer(&self.mix_uniform, 0, bytemuck::cast_slice(&[fraction, 0.0, 0.0, 0.0]));
-                let group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: None,
-                    layout: &self.mix.get_bind_group_layout(0),
-                    entries: &[
-                        wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&self.feedback[self.current ^ 1].view) },
-                        wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&self.feedback[self.current].view) },
-                        wgpu::BindGroupEntry { binding: 2, resource: self.mix_uniform.as_entire_binding() },
-                    ],
-                });
-                let mut pass = begin(&mut encoder, &target.view, true);
-                pass.set_pipeline(&self.mix);
-                pass.set_bind_group(0, &group, &[]);
-                pass.draw(0..4, 0..1);
+                let view = wgpu::BindingResource::TextureView;
+                let group = bind(&self.device, &self.mix, &[view(&self.feedback[self.current ^ 1].view), view(&self.feedback[self.current].view), self.mix_uniform.as_entire_binding()]);
+                quad_pass(&mut encoder, &target.view, &self.mix, &group);
             }
             let sampled = if textured { &self.textured_source.as_ref().unwrap().view } else { &self.feedback[self.current].view };
             self.draw(&mut encoder, &self.between_list, self.between_buffer.as_ref(), &self.display.view, sampled, wrap, false);
@@ -701,43 +640,18 @@ impl Renderer {
     /// are on every picture presented.
     pub fn present(&mut self, view: &wgpu::TextureView, format: wgpu::TextureFormat) {
         if !self.masters.contains_key(&format) {
-            let pipeline = self.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("master"),
-                layout: None,
-                vertex: wgpu::VertexState { module: &self.master_shader, entry_point: Some("vs"), compilation_options: Default::default(), buffers: &[] },
-                primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleStrip, ..Default::default() },
-                depth_stencil: None,
-                multisample: Default::default(),
-                fragment: Some(wgpu::FragmentState {
-                    module: &self.master_shader,
-                    entry_point: Some("fs"),
-                    compilation_options: Default::default(),
-                    targets: &[Some(format.into())],
-                }),
-                multiview_mask: None,
-                cache: None,
-            });
-            self.masters.insert(format, pipeline);
+            self.masters.insert(format, quad(&self.device, "master", &self.master_shader, "fs", format));
         }
         self.queue.write_buffer(&self.master_uniform, 0, bytemuck::cast_slice(&crate::fx::uniforms(&self.master)));
         let pipeline = &self.masters[&format];
-        let group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout: &pipeline.get_bind_group_layout(0),
-            entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&self.comp.view) },
-                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&self.outgoing.view) },
-                wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&self.samplers["linear_clamp"]) },
-                wgpu::BindGroupEntry { binding: 3, resource: self.master_uniform.as_entire_binding() },
-            ],
-        });
+        let texture = wgpu::BindingResource::TextureView;
+        let group = bind(
+            &self.device,
+            pipeline,
+            &[texture(&self.comp.view), texture(&self.outgoing.view), wgpu::BindingResource::Sampler(&self.samplers.linear_clamp), self.master_uniform.as_entire_binding()],
+        );
         let mut encoder = self.device.create_command_encoder(&Default::default());
-        {
-            let mut pass = begin(&mut encoder, view, true);
-            pass.set_pipeline(pipeline);
-            pass.set_bind_group(0, &group, &[]);
-            pass.draw(0..4, 0..1);
-        }
+        quad_pass(&mut encoder, view, pipeline, &group);
         self.queue.submit([encoder.finish()]);
     }
 
