@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { frameReadout, meterLevel, noticeOf, SLOW_FOR } from './shell.ts';
+import { frameReadout, meterLevel, noticeFrom, noticeOf, SLOW_FOR } from './shell.ts';
+
+describe('noticeFrom', () => {
+  it('shows the sentence it was given, with its detail for the tooltip', () => {
+    expect(noticeFrom("Couldn't rename the playlist.", 'no playlist p9')).toEqual({
+      message: "Couldn't rename the playlist.",
+      detail: 'no playlist p9',
+    });
+  });
+  it('falls back to the sentence when there is no detail', () => {
+    expect(noticeFrom("Couldn't make a playlist.").detail).toBe("Couldn't make a playlist.");
+    expect(noticeFrom("Couldn't make a playlist.", '  ').detail).toBe("Couldn't make a playlist.");
+  });
+});
 
 describe('noticeOf', () => {
   it('keeps the plain words up front and the raw failure as the detail', () => {

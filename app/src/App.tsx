@@ -12,7 +12,7 @@ import { FrameRate, Header, Hints, NoticeView, NowPlaying, type View } from './v
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { Library } from './Library.tsx';
 import { searchLibrary } from './librarySearch.ts';
-import { noticeOf, type Notice } from './shell.ts';
+import { noticeFrom, noticeOf, type Notice } from './shell.ts';
 import { Live } from './Live.tsx';
 import * as output from './output.ts';
 
@@ -278,7 +278,7 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live'
               selected={target ?? playing ?? lists.playlists[0]?.id ?? null}
               onSelect={setTarget}
               onLists={setLists}
-              onError={fail('the playlist change didn’t go through')}
+              onError={(message, detail) => setNotice(noticeFrom(message, detail))}
             />
           )
         )}
