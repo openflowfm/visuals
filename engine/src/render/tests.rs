@@ -451,11 +451,14 @@ fn stage_previews_and_live_values() {
     assert_eq!(read.pixels.len(), each * 3);
     let lit = |i: usize| read.pixels[each * i..each * (i + 1)].chunks(4).any(|p| p[0] > 0 || p[1] > 0 || p[2] > 0);
     assert!((0..3).all(lit), "each picture of the subset has its picture");
-    // Too big is clamped; none stops them.
-    r.set_previews(&[1], (10_000, 10_000));
+    // Too big is clamped; none, or only indices that aren't stages, stops them.
+    assert!(r.set_previews(&[1], (10_000, 10_000)));
     r.render(&mut audio, 1.0 / 30.0);
     assert_eq!(r.read_previews().unwrap().size, PREVIEW_MAX);
-    r.set_previews(&[], PREVIEW);
+    assert!(!r.set_previews(&[99], PREVIEW));
+    assert!(r.read_previews().is_none());
+    assert!(r.set_previews(&[1], PREVIEW));
+    assert!(!r.set_previews(&[], PREVIEW));
     assert!(r.read_previews().is_none());
 
     assert!(r.set_value(crate::runtime::Owner::Base, "fDecay", 0.5));

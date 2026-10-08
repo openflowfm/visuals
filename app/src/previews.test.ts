@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DIM, HEADER, MAX_GAIN, SETTLE_MS, STEPS, layerOver, needed, settler, stepFor, unpack, wanted, withinBudget } from './previews.ts';
+import { DIM, HEADER, MAX_GAIN, SETTLE_MS, STEPS, layerOver, needed, settler, stepFor, unpack, wanted, withinBudget, ZOOM_IN } from './previews.ts';
 
 /** The device pixels a 192 CSS px picture covers, as the poll works it out. */
 const need = (node: number, graph: number, dpr: number) => needed(192, { node, graph }, dpr);
@@ -44,6 +44,20 @@ describe('the size a picture is asked for', () => {
     expect(withinBudget(2, 15)).toBe(1);
     expect(withinBudget(1, 15)).toBe(1);
     expect(withinBudget(0, 15)).toBe(0);
+  });
+
+  it('leaves the base step only past ZOOM_IN, and comes back only at 1×', () => {
+    const at = (graph: number, from: number) => stepFor(needed(192, { node: 1, graph }, 2, from), from);
+    expect(at(1.05, 0)).toBe(0);
+    expect(at(ZOOM_IN + 0.01, 0)).toBe(1);
+    expect(at(1.05, 1)).toBe(1);
+    expect(at(1, 1)).toBe(0);
+    for (let graph = 0.9; graph < 1.3; graph += 0.01) {
+      for (let from = 0; from < STEPS.length; from++) {
+        const once = at(graph, from);
+        expect(at(graph, once)).toBe(once);
+      }
+    }
   });
 
   it('never flips between two steps for one need', () => {
