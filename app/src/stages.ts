@@ -146,6 +146,20 @@ export function settingsOf(p: Preset, s: Stage): [Spec, number][] {
   return specs.map((spec) => [spec, read(values, spec)]);
 }
 
+/**
+ * The settings of a stage a written shader has baked in, so changing them no
+ * longer reaches the picture, and why. MilkDrop applies decay only in its
+ * default warp shader, and gamma, echo and the switches only in its default
+ * composite: "write my own" writes their values in as numbers.
+ */
+export function bakedIn(p: Preset, s: Stage): { keys: Set<string>; why: string } | undefined {
+  if (s.id === 'feedback' && p.warp.trim() !== '')
+    return { keys: new Set(['fDecay']), why: "The warp shader is written, so decay no longer applies: it only reaches the picture through MilkDrop's default warp. Scale ret in the warp shader instead." };
+  if (s.id === 'comp' && p.comp.trim() !== '')
+    return { keys: new Set(specsOf('comp').map((spec) => spec.key)), why: "The composite shader is written, so these no longer apply: they only reach the picture through MilkDrop's default composite." };
+  return undefined;
+}
+
 /** The settings worth a word on a node's face: the ones off their default. */
 export function summaryOf(p: Preset, s: Stage, n: number): [Spec, number][] {
   return settingsOf(p, s)
@@ -165,13 +179,30 @@ const value = (p: Preset, owner: Owner, key: string, def: number) => {
   return values[spelling(values, key)] ?? def;
 };
 
+/** Code with its `//` and `/* *\/` comments taken out (an unclosed block runs to the end). */
+export function uncommented(code: string): string {
+  return code.replace(/\/\*[\s\S]*?(?:\*\/|(?![\s\S]))|\/\/.*$/gm, ' ');
+}
+
+const isZero = (v: string) => /^[-+]?(0+\.?0*|\.0+)$/.test(v);
+
 /** What per-frame code does to a variable: turns it to something (`on`), only
- * ever to zero (`off`), or leaves it to the file (undefined). */
+ * ever to zero (`off`), or leaves it to the file (undefined).
+ *
+ * `x = 0`, `x *= 0` and `x /= 0` (zero in EEL) zero it; `x = …`, `x += …` and
+ * `x -= …` with anything but zero turn it to something whatever the file says;
+ * `x *= k` and `x /= k` otherwise only scale the file's value, and `x += 0`
+ * changes nothing, so those leave it to the file. */
 export function codeSets(code: string, name: string): 'on' | 'off' | undefined {
-  const plain = code.replace(/\/\/.*$/gm, '');
-  const values = [...plain.matchAll(new RegExp(`\\b${name}\\s*=(?!=)([^;]*)`, 'gi'))].map((m) => m[1].trim());
-  if (!values.length) return undefined;
-  return values.every((v) => /^[-+]?(0+\.?0*|\.0+)$/.test(v)) ? 'off' : 'on';
+  const effects = [...uncommented(code).matchAll(new RegExp(`\\b${name}\\s*([-+*/]?)=(?!=)([^;]*)`, 'gi'))].map(([, op, rhs]) => {
+    const zero = isZero(rhs.trim());
+    if (op === '') return zero ? 'off' : 'on';
+    if (op === '*' || op === '/') return zero ? 'off' : undefined;
+    return zero ? undefined : 'on';
+  });
+  const set = effects.filter((e) => e !== undefined);
+  if (!set.length) return undefined;
+  return set.every((e) => e === 'off') ? 'off' : 'on';
 }
 
 /** The per-frame variables that turn each built-in layer up or down, with the
@@ -321,7 +352,12 @@ export function addLayer(p: Preset, kind: LayerKind): { preset: Preset; id: stri
       ...(value(p, BASE, 'nMotionVectorsX', 12) < 1 ? { nMotionVectorsX: 12 } : {}),
       ...(value(p, BASE, 'nMotionVectorsY', 9) < 1 ? { nMotionVectorsY: 9 } : {}),
     },
-    border: { ob_size: 0.01, ob_r: 1, ob_g: 1, ob_b: 1, ob_a: 0.5 },
+    // The outer border, or the inner one when per-frame code zeroes `ob_a`
+    // (it can't zero both: `heldOffBy` stops the add then).
+    border:
+      codeSets(p.frame, 'ob_a') === 'off'
+        ? { ib_size: 0.01, ib_r: 1, ib_g: 1, ib_b: 1, ib_a: 0.5 }
+        : { ob_size: 0.01, ob_r: 1, ob_g: 1, ob_b: 1, ob_a: 0.5 },
   };
   return { preset: setValues(p, BASE, on[id]), id };
 }

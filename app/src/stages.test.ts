@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Preset, Problem } from './api.ts';
-import { FEED_GAP, STAGES, WIDE, addLayer, cords, layersOf, layout, offers, problemsOf, removeLayer, stageFor, stageOfProblem } from './stages.ts';
+import { FEED_GAP, STAGES, WIDE, addLayer, bakedIn, codeSets, cords, layersOf, layout, offers, problemsOf, removeLayer, stageFor, stageOfProblem } from './stages.ts';
 
 const wave = () => ({ values: { enabled: 0 }, init: '', frame: '', point: '' });
 const shape = () => ({ values: { enabled: 0 }, init: '', frame: '' });
@@ -207,5 +207,89 @@ describe('the drawing', () => {
     expect(stageFor(blank(), 'wave2').id).toBe('motion');
     expect(stageFor(blank(), null).id).toBe('motion');
     expect(stageFor(blank({ fWaveAlpha: 1 }), 'wave').id).toBe('wave');
+  });
+});
+
+describe('what per-frame code sets', () => {
+  it('ignores assignments inside block comments, closed or not', () => {
+    expect(codeSets('/* wave_a = bass; */ zoom = 1;', 'wave_a')).toBeUndefined();
+    expect(codeSets('zoom = 1;\n/*\nwave_a = 1;\n*/\nwave_a = 0;', 'wave_a')).toBe('off');
+    expect(codeSets('zoom = 1; /* wave_a = 1;', 'wave_a')).toBeUndefined();
+    expect(codeSets('// a /* b\nwave_a = 1;', 'wave_a')).toBe('on');
+  });
+
+  it('reads compound assignments', () => {
+    expect(codeSets('wave_a += 1;', 'wave_a')).toBe('on');
+    expect(codeSets('wave_a -= bass;', 'wave_a')).toBe('on');
+    expect(codeSets('wave_a *= 0;', 'wave_a')).toBe('off');
+    expect(codeSets('wave_a /= 0;', 'wave_a')).toBe('off');
+    expect(codeSets('wave_a *= 0.5;', 'wave_a')).toBeUndefined();
+    expect(codeSets('wave_a = 0;\nwave_a += bass;', 'wave_a')).toBe('on');
+    expect(codeSets('wave_a == 1; wave_a <= 1; wave_a != 1;', 'wave_a')).toBeUndefined();
+  });
+
+  it('shows a layer only a block comment turns on, and lets it be removed', () => {
+    const p = blank({ fWaveAlpha: 0 });
+    p.frame = '/* wave_a = 1; */';
+    expect(ids(p)).toEqual([]);
+    const q = blank({ fWaveAlpha: 0.8 });
+    q.frame = '/* wave_a = 1; */';
+    expect(ids(removeLayer(q, 'wave')!)).toEqual([]);
+  });
+
+  it('shows a layer compound assignment turns on, and will not remove it', () => {
+    const p = blank();
+    p.frame = 'wave_a += 0.5;';
+    expect(ids(p)).toEqual(['wave']);
+    expect(removeLayer(p, 'wave')).toBeNull();
+  });
+});
+
+describe('adding borders per-frame code half holds off', () => {
+  it('adds the inner border when the code zeroes ob_a', () => {
+    const p = blank();
+    p.frame = 'ob_a = 0;';
+    expect(offers(p).find((o) => o.kind === 'border')!.full).toBeUndefined();
+    const added = addLayer(p, 'border')!;
+    expect(added.preset.values.ib_a).toBeGreaterThan(0);
+    expect(added.preset.values.ib_size).toBeGreaterThan(0);
+    expect(ids(added.preset)).toEqual(['border']);
+  });
+
+  it('adds the outer border when the code zeroes ib_a', () => {
+    const p = blank();
+    p.frame = 'ib_a = 0;';
+    const added = addLayer(p, 'border')!;
+    expect(added.preset.values.ob_a).toBeGreaterThan(0);
+    expect(ids(added.preset)).toEqual(['border']);
+  });
+
+  it('says which variables to change when the code zeroes both', () => {
+    const p = blank();
+    p.frame = 'ob_a = 0; ib_a = 0;';
+    expect(offers(p).find((o) => o.kind === 'border')!.full).toBe("motion's code sets ob_a = 0");
+    expect(addLayer(p, 'border')).toBeNull();
+  });
+});
+
+describe('settings a written shader bakes in', () => {
+  const feedback = STAGES.find((s) => s.id === 'feedback')!;
+  const comp = STAGES.find((s) => s.id === 'comp')!;
+
+  it('marks decay once the warp shader is written, and only then', () => {
+    expect(bakedIn(blank(), feedback)).toBeUndefined();
+    const p = { ...blank(), warp: 'shader_body\n{\n  ret = tex2D(sampler_main, uv).xyz * 0.98;\n}' };
+    const baked = bakedIn(p, feedback)!;
+    expect([...baked.keys]).toEqual(['fDecay']);
+    expect(baked.why).toMatch(/decay/);
+    // Wrap and darken centre still apply.
+    expect(baked.keys.has('bTexWrap')).toBe(false);
+  });
+
+  it("marks the composite's settings once its shader is written", () => {
+    expect(bakedIn(blank(), comp)).toBeUndefined();
+    const baked = bakedIn({ ...blank(), comp: 'shader_body { ret = 1; }' }, comp)!;
+    expect(baked.keys.has('fGammaAdj')).toBe(true);
+    expect(baked.keys.has('fVideoEchoAlpha')).toBe(true);
   });
 });

@@ -95,6 +95,8 @@
 .inspector .values label { display: flex; justify-content: space-between; align-items: center; gap: 6px; min-width: 0; }
 .inspector .values label > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-control); }
 .inspector .values label > :not(span) { flex: none; }
+/* A setting a written shader has baked in: still editable, but it no longer reaches the picture. */
+.inspector .values label.baked > span { color: var(--caption); text-decoration: line-through; }
 .inspector > .quiet, .inspector .file .quiet { margin: 0; font-size: var(--text-label); }
 .inspector .file { border-top: 1px solid var(--bd3); padding-top: 8px; }
 .inspector .file summary { cursor: pointer; font-size: var(--text-label); font-weight: var(--weight-medium); color: var(--caption); }
