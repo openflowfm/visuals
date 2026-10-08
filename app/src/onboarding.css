@@ -45,7 +45,7 @@
 }
 .ob-dots li[data-at] {
   color: var(--fg);
-  border-color: var(--primary);
+  border-color: var(--green);
 }
 
 .ob-body {
@@ -124,8 +124,8 @@
   min-width: 120px;
   height: 30px;
   padding: 0 18px;
-  border-color: var(--primary);
-  background: var(--primary);
+  border-color: var(--green);
+  background: var(--green);
   color: var(--on-primary, #000);
   font-size: var(--text-body);
   font-weight: var(--weight-strong);
@@ -249,7 +249,7 @@
 }
 .ob-vibe:hover:not(:disabled),
 .ob-vibe:focus-visible {
-  border-color: var(--primary);
+  border-color: var(--green);
   outline: none;
 }
 .ob-vibe:disabled {
