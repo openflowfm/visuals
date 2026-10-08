@@ -563,6 +563,48 @@ pub fn borders(r: &Runner, list: &mut DrawList) {
     border([g("ib_r"), g("ib_g"), g("ib_b"), g("ib_a")], g("ib_size"), g("ob_size"), list);
 }
 
+/// What a refresh `f` of the way from one step's drawing to the next draws:
+/// each of `to`'s commands that `from` drew too — the same stage, topology,
+/// blend and number of vertices, in the same place in the list — with every
+/// vertex's position, colour and texture coordinate mixed by `f`, so a wave or
+/// shape slides from where it was to where it will be. A command only one of
+/// them has (a shape whose sides changed, a wave turned on) fades: `from`'s out
+/// by `1 − f`, `to`'s in by `f`.
+pub fn between(from: &DrawList, to: &DrawList, f: f32, out: &mut DrawList) {
+    out.clear();
+    let mix = |a: f32, b: f32| a + (b - a) * f;
+    let faded = |v: &Vertex, k: f32| Vertex { color: [v.color[0], v.color[1], v.color[2], v.color[3] * k], ..*v };
+    for i in 0..from.cmds.len().max(to.cmds.len()) {
+        let (a, b) = (from.cmds.get(i), to.cmds.get(i));
+        match (a, b) {
+            (Some(a), Some(b)) if (a.topology, a.blend, a.source, a.count) == (b.topology, b.blend, b.source, b.count) => {
+                out.source = b.source;
+                let (va, vb) = (&from.vertices[a.first as usize..][..a.count as usize], &to.vertices[b.first as usize..][..b.count as usize]);
+                out.push(
+                    b.topology,
+                    b.blend,
+                    va.iter().zip(vb).map(|(p, q)| Vertex {
+                        pos: [mix(p.pos[0], q.pos[0]), mix(p.pos[1], q.pos[1])],
+                        color: [0, 1, 2, 3].map(|c| mix(p.color[c], q.color[c])),
+                        uv: [mix(p.uv[0], q.uv[0]), mix(p.uv[1], q.uv[1])],
+                        textured: q.textured,
+                    }),
+                );
+            }
+            _ => {
+                if let Some(a) = a {
+                    out.source = a.source;
+                    out.push(a.topology, a.blend, from.vertices[a.first as usize..][..a.count as usize].iter().map(|v| faded(v, 1.0 - f)));
+                }
+                if let Some(b) = b {
+                    out.source = b.source;
+                    out.push(b.topology, b.blend, to.vertices[b.first as usize..][..b.count as usize].iter().map(|v| faded(v, f)));
+                }
+            }
+        }
+    }
+}
+
 /// Everything after the warp, in Butterchurn's order.
 pub fn frame(r: &mut Runner, audio: &Audio, uvs: &[[f32; 2]], globals: &[f64; 15], size: &Size, list: &mut DrawList) {
     list.clear();
@@ -576,4 +618,39 @@ pub fn frame(r: &mut Runner, audio: &Audio, uvs: &[[f32; 2]], globals: &[f64; 15
     darken_center(r, size, list);
     list.source = Source::Border;
     borders(r, list);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn at(x: f32, a: f32) -> Vertex {
+        Vertex { pos: [x, 0.0], color: [1.0, 1.0, 1.0, a], uv: [x, 0.0], textured: 0.0 }
+    }
+
+    fn list(stages: &[(Source, Vec<Vertex>)]) -> DrawList {
+        let mut l = DrawList::default();
+        for (source, vertices) in stages {
+            l.source = *source;
+            l.push(Topology::LineStrip, Blend::Alpha, vertices.clone());
+        }
+        l
+    }
+
+    #[test]
+    fn between_two_steps_drawing_slides_or_fades() {
+        let from = list(&[(Source::Wave(0), vec![at(0.0, 1.0), at(0.2, 1.0)]), (Source::Shape(0), vec![at(0.5, 1.0); 3])]);
+        let to = list(&[(Source::Wave(0), vec![at(0.4, 0.5), at(0.6, 0.5)]), (Source::Shape(0), vec![at(0.5, 1.0); 5])]);
+        let mut out = DrawList::default();
+        between(&from, &to, 0.25, &mut out);
+        // The wave both drew slides a quarter of the way, colour and all.
+        assert_eq!(out.vertices[..2].iter().map(|v| v.pos[0]).collect::<Vec<_>>(), [0.1, 0.3]);
+        assert_eq!(out.vertices[0].color[3], 0.875);
+        assert_eq!(out.vertices[1].uv[0], 0.3);
+        // The shape changed its sides: the last step's fades out, the next one's in.
+        assert_eq!(out.cmds.len(), 3);
+        assert_eq!((out.cmds[1].count, out.vertices[2].color[3]), (3, 0.75));
+        assert_eq!((out.cmds[2].count, out.vertices[5].color[3]), (5, 0.25));
+        assert!(out.cmds.iter().skip(1).all(|c| c.source == Source::Shape(0)));
+    }
 }

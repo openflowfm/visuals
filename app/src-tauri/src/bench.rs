@@ -132,6 +132,7 @@ fn run(
     let mut last = Instant::now();
     let mut due = Instant::now();
     let mut refresh = std::time::Duration::ZERO;
+    let mut pacer = engine::runtime::Pacer::default();
     let mut window = (Instant::now(), 0u32, 0.0f64);
     let mut loaded = false;
     loop {
@@ -221,8 +222,9 @@ fn run(
             (fx.speed_now(now), fx.sensitivity as f32, fx.echo())
         };
         let frozen = speed < STILL;
-        // A stall (a slow load, the machine asleep) moves the preset on at most a quarter second.
-        let elapsed = now.duration_since(last).as_secs_f64().min(0.25);
+        // A stall (a slow load, the machine asleep) moves the preset on at most a
+        // quarter second; otherwise whole refreshes, evened out (`Pacer`).
+        let elapsed = pacer.tick(now.duration_since(last).as_secs_f64()).min(0.25);
         last = now;
         {
             let (l, r): (Vec<f32>, Vec<f32>) = {

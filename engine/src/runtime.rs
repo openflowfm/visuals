@@ -735,6 +735,47 @@ impl Clock {
     }
 }
 
+/// A display loop's time between refreshes, evened out. A loop paced by the
+/// display wakes a little early or late each refresh (0.6–0.7 ms sd, 15% of a
+/// refresh at the 99th percentile, measured on the bench at 60 Hz), but the
+/// pictures reach the screen exactly a refresh apart, so moving the preset clock
+/// by the raw time would move it that unevenly. This gives whole refreshes of the
+/// display's period instead — learnt from the loop, a dropped refresh counted as
+/// two — and pays back what that differs from the real time a little at a time,
+/// so over a second it adds up to the real time. A loop that isn't keeping to
+/// whole refreshes (off screen, or changing rate) gets its raw time.
+#[derive(Debug, Default)]
+pub struct Pacer {
+    period: f64,
+    owed: f64,
+}
+
+impl Pacer {
+    /// The time to move the clock by for a refresh `elapsed` seconds after the last.
+    pub fn tick(&mut self, elapsed: f64) -> f64 {
+        if !(elapsed > 0.0 && elapsed.is_finite()) {
+            return 0.0;
+        }
+        // A display refreshes between 20 and 500 times a second; a loop's first
+        // round, or one after a stall, says nothing about its period.
+        let plausible = (1.0 / 500.0..=1.0 / 20.0).contains(&elapsed);
+        let n = if self.period > 0.0 { (elapsed / self.period).round().max(1.0) } else { 0.0 };
+        if n == 0.0 || n > 4.0 || (elapsed / (n * self.period) - 1.0).abs() > 0.4 {
+            if plausible {
+                self.period = elapsed;
+            }
+            self.owed = 0.0;
+            return elapsed;
+        }
+        self.period += 0.05 * (elapsed / n - self.period);
+        let even = n * self.period;
+        self.owed += elapsed - even;
+        let back = (0.05 * self.owed).clamp(-0.02 * even, 0.02 * even);
+        self.owed -= back;
+        even + back
+    }
+}
+
 /// Read and load a `.milk` file.
 pub fn load(text: &str, frame: &Frame, size: &Size, seed: u64) -> Result<Runner, LoadError> {
     Runner::new(preset::parse(text), frame, size, seed)
@@ -861,6 +902,44 @@ mod tests {
             // A whole step moves these points by up to ~10 px.
             assert!(worst < 0.25, "{parts} parts land {worst:.3} px from a whole step");
         }
+    }
+
+    #[test]
+    fn the_pacer_evens_out_a_display_loop() {
+        for hz in [60.0, 120.0] {
+            let mut pacer = Pacer::default();
+            // The bench's first round after a load is a few microseconds.
+            pacer.tick(0.000006);
+            let mut seed = 7u64;
+            let (mut real, mut paced, mut worst, mut stall) = (0.0, 0.0, 0.0f64, 0.0);
+            for i in 0..1200 {
+                // A stall of 0.76 s half way, as a slow load makes.
+                if i == 600 {
+                    stall = 0.76;
+                }
+                seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                // The loop wakes up to ±1.5 ms off each refresh; the bench's does by 0.6 ms sd.
+                let jitter = ((seed >> 11) as f64 / (1u64 << 53) as f64 * 2.0 - 1.0) * 0.0015;
+                let wake = (i + 1) as f64 / hz + jitter + stall;
+                let elapsed = wake - real;
+                real = wake;
+                let dt = pacer.tick(elapsed);
+                paced += dt;
+                if i >= 120 && i != 600 {
+                    worst = worst.max((dt * hz - 1.0).abs());
+                }
+            }
+            assert!(worst < 0.03, "{hz} Hz: a refresh moves the clock {:.1}% off even", worst * 100.0);
+            assert!((paced - real).abs() < 1.0 / hz, "{hz} Hz: over 1200 refreshes the paced time keeps to the real time");
+        }
+        // A dropped refresh is two refreshes' time; a loop off its rhythm gets its own time.
+        let mut pacer = Pacer::default();
+        for _ in 0..60 {
+            pacer.tick(1.0 / 60.0);
+        }
+        assert!((pacer.tick(2.0 / 60.0) * 60.0 - 2.0).abs() < 0.03);
+        assert_eq!(pacer.tick(0.0071), 0.0071);
+        assert_eq!(pacer.tick(f64::NAN), 0.0);
     }
 
     #[test]
