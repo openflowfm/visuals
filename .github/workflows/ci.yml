@@ -58,3 +58,33 @@ jobs:
       # The stories, built rather than only typechecked: a story that imports
       # something only the app's Vite config can resolve fails here and nowhere else.
       - run: npm run build:storybook
+
+  # The engine and the Tauri app. macOS because the app is macOS-only (its
+  # output window is an NSScreen), and because the runner has Metal, so the
+  # engine's GPU render tests draw rather than skip.
+  rust:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # The app's tauri.conf.json points at dist-app/, which has to exist for
+      # the app crate to compile.
+      - run: npm ci
+      - run: npm run app:build-ui
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ci
+
+      - run: cargo test -p visuals-engine --lib
+
+      # rusty_link builds Ableton Link with cmake, which the macOS image has.
+      - run: cargo test -p visuals-app
