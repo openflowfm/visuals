@@ -495,7 +495,10 @@ pub mod native {
                 };
                 let modifiers = e.modifierFlags().intersects(NSEventModifierFlags::Command | NSEventModifierFlags::Option | NSEventModifierFlags::Control | NSEventModifierFlags::Shift);
                 if escapes(e.keyCode(), modifiers, to, output.is_some()) {
-                    if let Some(h) = HANDLE.get() {
+                    // A held Esc repeats; it leaves once, and its repeats are swallowed.
+                    // SAFETY: a key-down event, which isARepeat applies to.
+                    let repeat = unsafe { e.isARepeat() };
+                    if let (false, Some(h)) = (repeat, HANDLE.get()) {
                         let _ = h.emit("output-escape", ());
                     }
                     return std::ptr::null_mut();

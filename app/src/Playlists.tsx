@@ -94,7 +94,13 @@ export function Playlists({ lists, current, selected, onSelect, onLists, onError
             onBlur={(e) => {
               if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDeleting(null);
             }}
-            onKeyDown={(e) => e.key === 'Escape' && setDeleting(null)}
+            onKeyDown={(e) => {
+              // Taken here, so live mode's Esc doesn't also end the show.
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                setDeleting(null);
+              }
+            }}
           >
             <Button
               tone="danger"
@@ -156,7 +162,10 @@ export function Playlists({ lists, current, selected, onSelect, onLists, onError
                   onClick={(e) => e.stopPropagation()}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') commitName();
-                    else if (e.key === 'Escape') setNaming(null);
+                    else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      setNaming(null);
+                    }
                   }}
                 />
               ) : (
