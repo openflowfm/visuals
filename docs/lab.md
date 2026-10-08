@@ -163,7 +163,7 @@ undone or refused, a rejected cord must cost nothing, and it draws twenty nodes 
 two thousand. Two canvases with different jobs, not one canvas used twice.
 
 Both UI dependencies live in the **root** `package.json`, with React. `visuals/package.json`
-is the server and Electron side — Link, `ws`, `zod`, the MCP SDK — and installing a
+is the server side — Link, `ws`, `zod`, the MCP SDK — and installing a
 React-peered package there gives the tree a second copy of React, which is a null
 `useContext` in every component that reads one.
 

@@ -13,15 +13,14 @@
 // barrier is a one-pixel `readPixels` rather than the `gl.finish()` that does
 // not work.
 //
-// Electron rather than the Chrome in `tools/visuals.ts`, for one reason: it is
-// already a dependency and it is the same Chromium the app ships, so the number
-// this prints is the number the app gets. A benchmark run on a different engine
-// than the product is a benchmark of the wrong thing.
+// Playwright's Chromium, the same one the compare harness drives, so the run
+// needs nothing installed beyond `npx playwright install chromium`.
 
-import { execSync, spawn, spawnSync } from 'node:child_process';
+import { execSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
+import { chromium } from 'playwright';
 import { bin, visualsRoot } from './bin.ts';
 import { mediaRoot, serveMedia } from '../server/media.ts';
 import { MODEL_HASH } from '../model.ts';
@@ -59,7 +58,6 @@ const EDGES = named
   : process.argv.includes('--sweep')
     ? '1280,1920,2560,3840'
     : '1920';
-const runner = path.join(root, 'bench-dist', 'runner.cjs');
 
 interface PacedResult {
   hz: number;
@@ -128,105 +126,66 @@ const run = (cmd: string, args: string[], label: string): void => {
 };
 
 /**
- * The Electron main process, written out rather than kept as a file of its own.
+ * The page in Playwright's Chromium, polled until it has a report; the report's JSON.
  *
- * It exists only for the length of this command and it has no business in
- * `visuals/electron/`, which is the app. Two flags matter and they are the same
- * two the app sets: without them a window that loses focus mid-run is throttled,
- * and every flow after that reports a ceiling that is the throttle rather than
- * the machine.
+ * Three switches matter: without them a window that loses focus mid-run is
+ * throttled, and every flow after that reports a ceiling that is the throttle
+ * rather than the machine. A ceiling run is headless; a paced run is driven by
+ * requestAnimationFrame, which a page nothing can see is given none of, so it
+ * opens a window and should stay in front for the length of the run.
  */
-const MAIN = `
-const { app, BrowserWindow } = require('electron');
-const path = require('node:path');
-
-for (const flag of [
-  'disable-background-timer-throttling',
-  'disable-backgrounding-occluded-windows',
-  'disable-renderer-backgrounding',
-]) app.commandLine.appendSwitch(flag);
-
-app.on('window-all-closed', () => app.quit());
-
-const boot = async () => {
-  const hidden = !!process.env.OPENFLOW_BENCH_HIDDEN;
-  if (hidden && process.platform === 'darwin') app.dock.hide();
-  const win = new BrowserWindow({
+async function drive(url: string): Promise<string> {
+  const browser = await chromium.launch({
+    headless: !PACED,
+    args: [
+      '--disable-background-timer-throttling',
+      '--disable-backgrounding-occluded-windows',
+      '--disable-renderer-backgrounding',
+    ],
+  });
+  try {
     // Big enough that the picture is worth looking at. The page fits its canvas
     // to this, and the drawing buffer is the resolution being measured rather
     // than the size of this window — the readout along the bottom says which.
-    width: 1200,
-    height: 715,
-    show: !hidden,
-    focusable: !hidden,
-    skipTaskbar: hidden,
-    // A paced run is driven by requestAnimationFrame, and a window nothing can
-    // see is given none — so it stays in front for the length of the run rather
-    // than stalling the moment something is opened over it.
-    alwaysOnTop: !!process.env.OPENFLOW_BENCH_PACED,
-    webPreferences: { backgroundThrottling: false, offscreen: false },
-  });
-  // Anything the page says, said out loud. A benchmark that fails silently is
-  // indistinguishable from one that is merely slow, which cost an afternoon.
-  win.webContents.on('console-message', (...args) => {
-    const event = args[0];
-    const said = event && event.message !== undefined ? event.message : args[2];
-    process.stderr.write('  page: ' + said + '\\n');
-  });
-  win.webContents.on('did-fail-load', (_e, code, described) => {
-    process.stderr.write('  page failed to load: ' + code + ' ' + described + '\\n');
-    app.exit(1);
-  });
-  win.webContents.on('render-process-gone', (_e, details) => {
-    process.stderr.write('  page gone: ' + JSON.stringify(details) + '\\n');
-    app.exit(1);
-  });
-  process.stderr.write('  loading ' + process.env.OPENFLOW_BENCH_URL + '\\n');
-  await win.loadURL(process.env.OPENFLOW_BENCH_URL);
+    const page = await browser.newPage({ viewport: { width: 1200, height: 715 } });
+    // Anything the page says, said out loud. A benchmark that fails silently is
+    // indistinguishable from one that is merely slow, which cost an afternoon.
+    page.on('console', (message) => process.stderr.write(`  page: ${message.text()}\n`));
+    let gone = '';
+    page.on('crash', () => (gone = 'the page crashed'));
+    // Electron could keep this window on top; Playwright cannot.
+    if (PACED) console.error('  keep the benchmark window uncovered until it finishes');
+    console.error(`  loading ${url}`);
+    await page.goto(url);
 
-  // Polled rather than messaged: no preload, no IPC channel, and a page that
-  // threw still has an answer to give.
-  const started = Date.now();
-  let said = null;
-  for (;;) {
-    const found = await win.webContents.executeJavaScript(
-      'window.__bench ? JSON.stringify(window.__bench) : (window.__benchError || null)',
-    );
-    const progress = await win.webContents.executeJavaScript('window.__benchProgress || null');
-    if (progress && progress !== said) {
-      said = progress;
-      process.stderr.write('  ' + progress + '\\n');
+    // Polled rather than messaged: a page that threw still has an answer to give.
+    const started = Date.now();
+    let said: string | null = null;
+    for (;;) {
+      if (gone) throw new Error(gone);
+      const { found, progress } = await page.evaluate(() => {
+        const at = window as unknown as Record<string, unknown>;
+        return {
+          found: (at.__bench ? JSON.stringify(at.__bench) : (at.__benchError ?? null)) as string | null,
+          progress: (at.__benchProgress ?? null) as string | null,
+        };
+      });
+      if (progress && progress !== said) {
+        said = progress;
+        console.error(`  ${progress}`);
+      }
+      if (typeof found === 'string' && found.startsWith('{')) return found;
+      if (typeof found === 'string') throw new Error(`benchmark page failed: ${found}`);
+      // Generous, because a full scheme at eight bars is minutes by design and a
+      // --sweep of four resolutions is most of an hour. The flag to reach for when
+      // that is too long is --bars, not this.
+      if (Date.now() - started > 3600000) throw new Error('benchmark timed out after an hour');
+      await new Promise((wake) => setTimeout(wake, 250));
     }
-    if (typeof found === 'string' && found.startsWith('{')) {
-      process.stdout.write('OPENFLOW_BENCH ' + found + '\\n');
-      break;
-    }
-    if (typeof found === 'string') {
-      process.stderr.write('benchmark page failed: ' + found + '\\n');
-      app.exit(1);
-      return;
-    }
-    // Generous, because a full scheme at eight bars is minutes by design and a
-    // --sweep of four resolutions is most of an hour. The flag to reach for when
-    // that is too long is --bars, not this.
-    if (Date.now() - started > 3600000) {
-      process.stderr.write('benchmark timed out after an hour\\n');
-      app.exit(1);
-      return;
-    }
-    await new Promise((wake) => setTimeout(wake, 250));
+  } finally {
+    await browser.close();
   }
-  app.exit(0);
-};
-
-// Every failure said out loud. An unhandled rejection inside whenReady leaves
-// the app alive with no window doing anything and no message anywhere, which is
-// indistinguishable from a slow benchmark until the timeout fires.
-app.whenReady().then(boot).catch((err) => {
-  process.stderr.write('  runner failed: ' + (err && err.stack || err) + '\\n');
-  app.exit(1);
-});
-`;
+}
 
 /**
  * The paced table, which is the one that answers "do we make the budget".
@@ -462,50 +421,5 @@ const port = (serving.address() as { port: number }).port;
 const url =
   `http://127.0.0.1:${port}/bench.html?edges=${EDGES}${passed}` + (PACED ? '&paced=1' : '');
 
-fs.writeFileSync(runner, MAIN);
-
-/**
- * `spawn`, and emphatically not `spawnSync`.
- *
- * The server above lives in *this* process, and `spawnSync` blocks this
- * process's event loop until the child exits — so the page's request for its own
- * HTML would never be answered, the window would sit on a blank document
- * forever, and the run would look exactly like a benchmark that is merely slow.
- * It cost an afternoon. A server and a synchronous wait cannot share a process.
- */
-const collected = await new Promise<string>((done, fail) => {
-  const child = spawn(bin('electron'), [runner], {
-    cwd: root,
-    env: {
-      ...process.env,
-      ELECTRON_DISABLE_SECURITY_WARNINGS: '1',
-      OPENFLOW_BENCH_URL: url,
-      ...(PACED
-        ? { OPENFLOW_BENCH_PACED: '1' }
-        : { OPENFLOW_BENCH_HIDDEN: '1' }),
-    },
-    // stdout is captured for the payload; stderr goes straight through so a
-    // failure inside the window is readable rather than swallowed.
-    stdio: ['ignore', 'pipe', 'inherit'],
-  });
-  let out = '';
-  child.stdout.setEncoding('utf8');
-  child.stdout.on('data', (chunk: string) => {
-    out += chunk;
-  });
-  child.on('error', fail);
-  child.on('close', () => done(out));
-});
-
-serving.close();
-
-const line = collected
-  .split('\n')
-  .find((each) => each.startsWith('OPENFLOW_BENCH '));
-
-if (!line) {
-  console.error('benchmark: the window produced no result');
-  process.exit(1);
-}
-
-report(JSON.parse(line.slice('OPENFLOW_BENCH '.length)) as BenchReport);
+const found = await drive(url).finally(() => serving.close());
+report(JSON.parse(found) as BenchReport);

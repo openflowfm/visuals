@@ -1,7 +1,7 @@
 // Shared by the visuals tools for finding an installed binary and the root
 // they run relative to.
 //
-// BSV hoists `node_modules` today, so `electron`, `vite` and the rest resolve
+// BSV hoists `node_modules` today, so `vite` and the rest resolve
 // from the repo root one level up from `visuals/`. Standalone, once this
 // directory is its own repo, they resolve from `visuals/node_modules` itself.
 // `bin()` tries the local one first and falls back to the hoisted one, so the

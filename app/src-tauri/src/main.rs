@@ -241,6 +241,13 @@ fn previews(app: State<App>) -> tauri::ipc::Response {
     tauri::ipc::Response::new(bytes)
 }
 
+/// MilkDrop's default `warp` or `comp` shader as code for `preset`, its values
+/// written in as numbers (`engine::shader::written_default`).
+#[tauri::command]
+fn default_shader(preset: Preset, which: engine::shader::Kind) -> String {
+    engine::shader::written_default(which, &preset)
+}
+
 #[tauri::command]
 fn stats(app: State<App>) -> bench::Stats {
     app.bench.lock().unwrap().as_ref().map(|b| *b.stats.lock().unwrap()).unwrap_or_default()
@@ -329,6 +336,7 @@ fn main() {
             set_value,
             set_previews,
             previews,
+            default_shader,
             place_bench,
             inputs,
             listen_to,

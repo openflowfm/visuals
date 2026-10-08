@@ -47,8 +47,18 @@ pub struct Thread {
     pub previews: Arc<Mutex<Option<Vec<u8>>>>,
 }
 
-/// How often stage pictures are read back: every this many preset steps.
-const PREVIEW_EVERY: u64 = 4;
+/// How often stage pictures are read back: every this many preset steps, so
+/// fifteen a second at 1× — the editor's poll rate, and what the pictures had
+/// at 60 frames a second before the preset clock.
+const PREVIEW_EVERY: u64 = 2;
+
+/// Whether the stage pictures are due a read, at `steps` into the preset with
+/// the last read at `read`. A refresh can move the preset several steps at
+/// once (fast speeds, slow displays), so this counts steps rather than landing
+/// on multiples; a new preset (back to step 0) is read at once.
+fn pictures_due(steps: u64, read: u64) -> bool {
+    steps < read || steps >= read + PREVIEW_EVERY
+}
 
 /// One preset step at 1×: how often the levels are still heard while frozen.
 const STEP: std::time::Duration = std::time::Duration::from_nanos((1e9 / engine::runtime::PRESET_RATE) as u64);
@@ -135,6 +145,8 @@ fn run(
     let mut pacer = engine::runtime::Pacer::default();
     let mut window = (Instant::now(), 0u32, 0.0f64);
     let mut loaded = false;
+    // The preset step the stage pictures were last read at.
+    let mut pictures_read = 0u64;
     loop {
         // Block while there is nothing to draw, so a closed window costs nothing.
         let next = if loaded { rx.try_recv().ok() } else { rx.recv().ok() };
@@ -260,7 +272,8 @@ fn run(
         let round = now.elapsed();
         refresh = if refresh.is_zero() { round } else { refresh.mul_f64(0.9) + round.mul_f64(0.1) };
         // Stage pictures change only with a step.
-        if renderer.clock.frame != heard && renderer.clock.frame % PREVIEW_EVERY == 0 {
+        if pictures_due(renderer.steps(), pictures_read) {
+            pictures_read = renderer.steps();
             if let Some(pictures) = renderer.read_previews() {
                 *previews.lock().unwrap() = Some(pictures);
             }
@@ -441,5 +454,38 @@ pub mod view {
             let scale = window.backingScaleFactor();
             Some(((width * scale).round() as u32, (height * scale).round() as u32))
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The steps the pictures are read at, for refreshes moving the preset `per` steps each.
+    fn reads(per: u64, refreshes: u64) -> Vec<u64> {
+        let mut read = 0;
+        (1..=refreshes)
+            .map(|n| n * per)
+            .filter(|&steps| {
+                let due = pictures_due(steps, read);
+                if due {
+                    read = steps;
+                }
+                due
+            })
+            .collect()
+    }
+
+    #[test]
+    fn stage_pictures_follow_the_preset_clock_at_any_speed() {
+        // A step a refresh (1× at 30 Hz): pictures every other step.
+        assert_eq!(reads(1, 8), [2, 4, 6, 8]);
+        // 4× on a 30 Hz display: four steps a refresh, and still a picture each time
+        // (counting multiples of four from an odd step would never land).
+        assert_eq!(reads(4, 3), [4, 8, 12]);
+        assert_eq!(reads(3, 4), [3, 6, 9, 12]);
+        // A new preset starts again at step 0 and is read at once.
+        assert!(pictures_due(0, 40));
+        assert!(!pictures_due(41, 40));
     }
 }

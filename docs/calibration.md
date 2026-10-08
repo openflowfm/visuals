@@ -21,21 +21,13 @@ The server advertises the calibration tab only when it starts with
 `OPENFLOW_CALIBRATION=1`. With the flag absent there is no tab, the calibration
 database is never opened, and none of its state is part of the user-facing lab.
 
-The shortest way in is the ordinary desktop app with the flag inherited by its
-server:
+The shortest way in is the show rig with the flag inherited by its server:
 
 ```sh
-OPENFLOW_CALIBRATION=1 npm start
+OPENFLOW_CALIBRATION=1 npm run show
 ```
 
-For HMR:
-
-```sh
-OPENFLOW_CALIBRATION=1 npm run dev
-```
-
-The app owns the server, so the variable reaches the child it starts. To drive a server of
-your own instead, `OPENFLOW_CALIBRATION=1 npm run server` in one terminal and
+For HMR, `OPENFLOW_CALIBRATION=1 npm run server` in one terminal and
 `npm run ui` in another.
 
 Press `e`, then choose **calibrate** in the console.

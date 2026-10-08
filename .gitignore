@@ -1,7 +1,5 @@
 node_modules/
 dist/
-electron/dist/
-release/
 scheme.json
 bench-dist/
 storybook-static/

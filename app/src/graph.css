@@ -1,48 +1,84 @@
 /* The stage graph and the inspector beside it. */
 
-.stage .wdg-device { width: 216px; }
-.stage[data-off] { opacity: 0.45; }
-.stage-screen { position: relative; }
-.stage-screen[data-idle]::after {
-  content: attr(data-idle);
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
+.stage-graph-box > .stage-graph { position: absolute; inset: 0; }
+/* Fitting the pane: StageGraph spaces the nodes by --stage-zoom and draws them that much smaller. */
+.stage-graph .wdg-graph-node > * { zoom: var(--stage-zoom, 1); }
+
+/* Widths are `WIDE` and `NARROW` in stages.ts, which the layout spaces by. */
+.stage .wdg-device { width: 168px; }
+.stage[data-kind='source'] .wdg-device,
+.stage[data-kind='out'] .wdg-device { width: 88px; }
+
+/* Colour by kind, on the title bar's leading edge. */
+.stage { --stage-ink: var(--fg); }
+.stage[data-kind='motion'] { --stage-ink: var(--blue); }
+.stage[data-kind='shader'] { --stage-ink: var(--amber); }
+.stage[data-kind='feedback'] { --stage-ink: var(--fg); }
+.stage[data-kind='layer'] { --stage-ink: var(--green); }
+.stage .wdg-device-head { box-shadow: inset 3px 0 0 var(--stage-ink); }
+.stage .wdg-graph-port, .stage .wdg-port { --wdg-port-ink: var(--stage-ink); }
+.stage[data-problem] .wdg-device { border-color: var(--red); }
+
+.stage-picture { display: block; width: 100%; aspect-ratio: 16 / 9; background: var(--preview, #000); }
+.layer-picture { display: block; width: 100%; aspect-ratio: 32 / 9; object-fit: cover; background: var(--preview, #000); }
+.stage-caption {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-label);
   color: var(--caption);
-  background: #000;
 }
-.stage-picture { display: block; width: 100%; aspect-ratio: 16 / 9; background: #000; }
 .stage-code {
   margin: 0;
   padding: 3px 4px;
-  width: 100%;
-  max-height: 64px;
   overflow: hidden;
   font-family: var(--mono);
   font-variation-settings: var(--mono-axes);
   font-size: var(--text-label);
   line-height: 1.3;
   color: var(--caption);
-  background: var(--surface-sunken, #101012);
+  background: var(--surface-cell);
+  border-radius: var(--radius-sm);
   white-space: pre;
   text-overflow: ellipsis;
   cursor: text;
 }
-.stage[data-kind='equations'] .wdg-device-head { box-shadow: inset 3px 0 0 var(--blue); }
-.stage[data-kind='shader'] .wdg-device-head { box-shadow: inset 3px 0 0 var(--amber); }
-.stage[data-kind='picture'] .wdg-device-head { box-shadow: inset 3px 0 0 var(--green); }
-.stage[data-kind='source'] .wdg-device-head,
-.stage[data-kind='out'] .wdg-device-head { box-shadow: inset 3px 0 0 var(--fg); }
-.stage[data-problem] .wdg-device { border-color: var(--red); }
-.stage-issue { color: var(--red); }
+.stage-issue { font-size: var(--text-label); color: var(--red); }
 
-.inspector { padding: 10px; display: flex; flex-direction: column; gap: 10px; }
-.inspector h2 { margin: 0; font-size: var(--text-heading); color: var(--fg); }
-.inspector .code { display: flex; flex-direction: column; gap: 4px; }
-.inspector .code i { color: var(--caption); font-style: normal; }
+/* The cords, coloured by what they carry. */
+.stage-graph .wdg-graph-cord[data-kind='draw'] { stroke: var(--green); }
+.stage-graph .wdg-graph-cord[data-kind='audio'],
+.stage-graph .wdg-graph-cord[data-kind='motion'] { stroke: var(--blue); }
+
+.stage-add { padding-top: 4px; }
+.stage-add-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-menu);
+}
+.stage-add-menu .wdg-button, .stage-add-menu button { width: 100%; justify-content: flex-start; text-align: left; }
+.stage-add-menu i { color: var(--caption); font-style: normal; }
+
+.stage-graph-tools { position: absolute; inset: auto 8px 8px auto; display: flex; gap: 4px; }
+
+/* The inspector: one column, never wider than its pane. Code scrolls inside its own box. */
+.inspector { padding: 10px; display: flex; flex-direction: column; gap: 10px; min-width: 0; overflow-x: hidden; }
+.inspector header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.inspector h2 { margin: 0; font-size: var(--text-heading); font-weight: var(--weight-strong); color: var(--fg); }
+.inspector .term { margin: 2px 0 0; font-size: var(--text-label); color: var(--caption); }
+.inspector .code { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.inspector .code > span { font-size: var(--text-label); font-weight: var(--weight-medium); color: var(--ui); }
+.inspector .code i { color: var(--caption); font-style: normal; font-family: var(--mono); font-variation-settings: var(--mono-axes); }
 .inspector textarea {
+  display: block;
   width: 100%;
+  max-width: 100%;
   padding: 6px;
   font-family: var(--mono);
   font-variation-settings: var(--mono-axes);
@@ -50,9 +86,18 @@
   line-height: 1.45;
   resize: vertical;
   white-space: pre;
+  overflow: auto;
   tab-size: 2;
 }
-.inspector .values { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; }
-.inspector .values label { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
-.inspector .values span { overflow: hidden; text-overflow: ellipsis; }
-.inspector .values input { width: 80px; padding: 1px 4px; font-family: var(--mono); font-variation-settings: var(--mono-axes); text-align: right; }
+.inspector-default { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.inspector-default p { margin: 0; }
+.inspector .values { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; }
+.inspector .values label { display: flex; justify-content: space-between; align-items: center; gap: 6px; min-width: 0; }
+.inspector .values label > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-control); }
+.inspector .values label > :not(span) { flex: none; }
+.inspector > .quiet, .inspector .file .quiet { margin: 0; font-size: var(--text-label); }
+.inspector .file { border-top: 1px solid var(--bd3); padding-top: 8px; }
+.inspector .file summary { cursor: pointer; font-size: var(--text-label); font-weight: var(--weight-medium); color: var(--caption); }
+.inspector .file[open] summary { margin-bottom: 6px; }
+.inspector .file .values label > span { font-family: var(--mono); font-variation-settings: var(--mono-axes); font-size: var(--text-label); }
+

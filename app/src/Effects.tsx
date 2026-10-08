@@ -6,18 +6,18 @@ import { Segmented } from '@openflow/widgets/controls/Segmented.tsx';
 import { Slider } from '@openflow/widgets/controls/Slider.tsx';
 import { Toggle } from '@openflow/widgets/controls/Toggle.tsx';
 import type { Param } from '@openflow/widgets/param/param.ts';
+import { formatMultiplier, multiplierToPosition, POSITION_MAX, POSITION_MIN, positionToMultiplier, range } from './controls.ts';
 import * as fx from './fx.ts';
 import './effects.css';
 
-const range = (name: string, min: number, max: number, defaultValue: number): Param => ({ kind: 'float', min, max, defaultValue, name });
 // Speed and sensitivity are multipliers on a log taper: the slider holds the
 // position (log2, −2..2, 0 at 1×) and `taper` turns it back into the multiplier.
-const SPEED = range('speed', fx.POSITION_MIN, fx.POSITION_MAX, 0);
+const SPEED = range('speed', POSITION_MIN, POSITION_MAX, 0);
 const TRANSITION = range('transition', 0, 10, 2);
 const BRIGHTNESS = range('brightness', 0, 2, 1);
 const HUE = range('hue', 0, 1, 0);
 const TRAILS = range('trails', 0, 1, 0);
-const SENSITIVITY = range('sensitivity', fx.POSITION_MIN, fx.POSITION_MAX, 0);
+const SENSITIVITY = range('sensitivity', POSITION_MIN, POSITION_MAX, 0);
 const INTENSITY = range('strobe level', 0, 1, 1);
 const FADE = range('blackout fade', 0, 10, 0);
 const BPM: Param = { kind: 'int', min: 40, max: 240, defaultValue: 120, steps: 201, name: 'bpm' };
@@ -86,7 +86,7 @@ export function Effects({ state, onState, send }: { state: fx.Fx; onState: React
     <Slider param={param} value={value} onChange={onChange} display={display} orientation="horizontal" layout="inside" title={`${title} (double-click resets)`} />
   );
   const taper = (param: Param, multiplier: number, onChange: (m: number) => void, title: string) =>
-    slider(param, fx.multiplierToPosition(multiplier), (p) => onChange(fx.positionToMultiplier(p)), fx.formatMultiplier(multiplier), title);
+    slider(param, multiplierToPosition(multiplier), (p) => onChange(positionToMultiplier(p)), formatMultiplier(multiplier), title);
 
   return (
     // `wdg` on the group: the bare hit faces read the widgets' variables from it.

@@ -9,9 +9,8 @@
 // at through a downscaled JPEG screenshot that cannot show banding.
 //
 // So: the real `Compositor`, the real `Show`, the real output stage, at the real
-// resolution, written to PNG files on disk. Electron for the same reason the
-// benchmark uses it — it is the Chromium the app ships, so the picture this
-// writes is the picture the app draws.
+// resolution, written to PNG files on disk, drawn in Playwright's Chromium like
+// the benchmark.
 //
 //   npm run frames -- --flows=halo,cage --at=0,1,2,3 --size=1920x1080
 //   npm run frames -- --flows=halo --at=2 --size=2560x1440 --out=/tmp/look
@@ -20,11 +19,12 @@
 // Files land in `visuals/frames-out/` unless `--out` says otherwise, one PNG per
 // flow and beat, plus a `stats.json` beside them.
 
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import { chromium } from 'playwright';
 import { bin, visualsRoot } from './bin.ts';
 import { EXAMPLES, merge } from '../server/scheme.ts';
 import { MODEL_HASH } from '../model.ts';
@@ -224,87 +224,43 @@ if (FLOWS) query.set('flows', FLOWS);
 if (COLORWAY) query.set('colorway', COLORWAY);
 const url = `http://127.0.0.1:${port}/frames.html?${query}`;
 
-const runner = path.join(root, 'frames-dist', 'runner.cjs');
-fs.writeFileSync(
-  runner,
-  `
-const { app, BrowserWindow } = require('electron');
-for (const flag of [
-  'disable-background-timer-throttling',
-  'disable-backgrounding-occluded-windows',
-  'disable-renderer-backgrounding',
-]) app.commandLine.appendSwitch(flag);
-app.on('window-all-closed', () => app.quit());
-app.whenReady().then(async () => {
-  // This is a capture process, not a presentation window. Keeping it hidden is
-  // also not the same constraint as the paced benchmark: frames.ts drives the
-  // compositor directly and never waits for requestAnimationFrame, while the
-  // three command-line switches above keep Chromium from suspending its hidden
-  // renderer. Do not let an analysis run steal focus from the user's desktop.
-  if (process.platform === 'darwin') app.dock.hide();
-  const win = new BrowserWindow({
-    width: 1200, height: 720,
-    show: false,
-    focusable: false,
-    skipTaskbar: true,
-    webPreferences: { backgroundThrottling: false, offscreen: false },
-  });
-  win.webContents.on('console-message', (...a) => {
-    const e = a[0];
-    process.stderr.write('  page: ' + (e && e.message !== undefined ? e.message : a[2]) + '\\n');
-  });
-  win.webContents.on('did-fail-load', (_e, code, said) => {
-    process.stderr.write('  page failed to load: ' + code + ' ' + said + '\\n');
-    app.exit(1);
-  });
-  win.webContents.on('render-process-gone', (_e, d) => {
-    process.stderr.write('  page gone: ' + JSON.stringify(d) + '\\n');
-    app.exit(1);
-  });
-  await win.loadURL(process.env.OPENFLOW_FRAMES_URL);
+// A capture, not a presentation window, so headless: frames.ts drives the
+// compositor directly and never waits for requestAnimationFrame, and the three
+// switches keep Chromium from suspending a renderer nobody is looking at.
+const browser = await chromium.launch({
+  args: [
+    '--disable-background-timer-throttling',
+    '--disable-backgrounding-occluded-windows',
+    '--disable-renderer-backgrounding',
+  ],
+});
+const captured = await (async (): Promise<FramesReport> => {
+  const page = await browser.newPage({ viewport: { width: 1200, height: 720 } });
+  page.on('console', (message) => process.stderr.write(`  page: ${message.text()}\n`));
+  let gone = '';
+  page.on('crash', () => (gone = 'the page crashed'));
+  await page.goto(url);
   for (;;) {
-    const report = await win.webContents.executeJavaScript('window.__frames || null');
-    if (report) { process.stdout.write('OPENFLOW_FRAMES ' + JSON.stringify(report) + '\\n'); break; }
-    const failed = await win.webContents.executeJavaScript('window.__framesError || null');
-    if (failed) { process.stderr.write(failed + '\\n'); app.exit(1); return; }
-    await new Promise((r) => setTimeout(r, 250));
+    if (gone) throw new Error(gone);
+    const { found, failed } = await page.evaluate(() => {
+      const at = window as unknown as Record<string, unknown>;
+      return { found: at.__frames ?? null, failed: (at.__framesError ?? null) as string | null };
+    });
+    if (found) return found as FramesReport;
+    if (failed) throw new Error(failed);
+    await new Promise((wake) => setTimeout(wake, 250));
   }
-  app.quit();
-});
-`,
+})().then(
+  (found) => found,
+  (why: Error) => why,
 );
-
-// `spawn`, never `spawnSync`: the server above is in this process, and blocking
-// its event loop means the page's request for its own HTML is never answered.
-// The window then sits on a blank document forever and it looks like a slow
-// render rather than a deadlock. The benchmark next door documents the same trap.
-const collected = await new Promise<string>((done, fail) => {
-  const child = spawn(bin('electron'), [runner], {
-    cwd: root,
-    env: {
-      ...process.env,
-      ELECTRON_DISABLE_SECURITY_WARNINGS: '1',
-      OPENFLOW_FRAMES_URL: url,
-    },
-    stdio: ['ignore', 'pipe', 'inherit'],
-  });
-  let out = '';
-  child.stdout.setEncoding('utf8');
-  child.stdout.on('data', (chunk: string) => {
-    out += chunk;
-  });
-  child.on('error', fail);
-  child.on('close', () => done(out));
-});
-
+await browser.close();
 serving.close();
-
-const line = collected.split('\n').find((each) => each.startsWith('OPENFLOW_FRAMES '));
-if (!line) {
-  console.error('frames: the window produced no result');
+if (captured instanceof Error) {
+  console.error(`frames: ${captured.message}`);
   process.exit(1);
 }
-const report = JSON.parse(line.slice('OPENFLOW_FRAMES '.length)) as FramesReport;
+const report = captured;
 fs.writeFileSync(path.join(OUT, 'stats.json'), JSON.stringify(report, null, 2));
 
 // The reference-footage harness presents equal phase samples as one strip per

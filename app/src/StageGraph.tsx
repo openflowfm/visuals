@@ -1,65 +1,70 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Device, DevicePortRow } from '@openflow/widgets/chrome/Device.tsx';
-import { Graph, GraphNode } from '@openflow/widgets/chrome/Graph.tsx';
+import { Graph, GraphNode, type GraphView } from '@openflow/widgets/chrome/Graph.tsx';
+import { Popup } from '@openflow/widgets/chrome/Popup.tsx';
 import { Port } from '@openflow/widgets/chrome/Port.tsx';
-import { Slider } from '@openflow/widgets/controls/Slider.tsx';
-import { Toggle } from '@openflow/widgets/controls/Toggle.tsx';
-import type { Param } from '@openflow/widgets/param/param.ts';
+import { Button } from '@openflow/widgets/controls/Button.tsx';
+import * as api from './api.ts';
 import type { Owner, Preset, Problem } from './api.ts';
-import type { Spec } from './params.ts';
+import { show } from './controls.ts';
 import { usePreview } from './previews.ts';
-import { STAGES, codeLines, cords, isOn, port, problemsOf, settingsOf, usesBlur, type Stage } from './stages.ts';
+import {
+  CHAIN,
+  FIRST,
+  addLayer,
+  codeLines,
+  cords,
+  drivenBy,
+  layersOf,
+  layout,
+  offers,
+  port,
+  problemsOf,
+  removeLayer,
+  summaryOf,
+  usesBlur,
+  type LayerKind,
+  type Stage,
+} from './stages.ts';
 
 import './graph.css';
 
 interface Props {
   preset: Preset;
   problems: Problem[];
-  /** The stage open in the inspector; null is the first. */
+  /** The stage open in the inspector; null is motion. */
   selected: string | null;
   onSelect(id: string): void;
-  /** The preset changed whole (a stage added or removed): applied as a load. */
+  /** The preset changed whole (a layer added or removed, a shader written): applied as a load. */
   onChange(next: Preset): void;
-  /** One setting turned on a face: applied live, without reloading the preset. */
+  /** One setting turned: applied live, without reloading the preset. */
   onSet(owner: Owner, key: string, value: number): void;
 }
 
-/** A control's range: the spec's, stretched to reach what the file says — presets
- * set `sx=100` as readily as `sx=1`, and a slider pinned at its end hides that. */
-const paramOf = (s: Spec, value: number): Param => ({
-  kind: s.kind === 'enum' ? 'enum' : s.kind === 'int' ? 'int' : 'float',
-  min: Math.min(s.min, value),
-  max: Math.max(s.max, value),
-  defaultValue: s.def,
-  steps: s.kind === 'int' || s.kind === 'enum' ? s.max - s.min + 1 : undefined,
-  items: s.items,
-  name: s.label,
-});
+/** A canvas showing one of the engine's stage pictures. */
+function Picture({ which, className }: { which: number; className: string }) {
+  const ref = usePreview(which);
+  return <canvas ref={ref} width={192} height={108} className={className} />;
+}
 
-const show = (s: Spec, v: number) =>
-  s.kind === 'enum' ? (s.items?.[Math.round(v)] ?? String(v)) : s.kind === 'int' ? String(Math.round(v)) : Math.abs(v) >= 10 ? v.toFixed(1) : v.toFixed(3);
-
-function Control({ spec, value, onChange }: { spec: Spec; value: number; onChange(v: number): void }) {
-  if (spec.kind === 'bool') {
-    return (
-      <Toggle on={value >= 0.5} onChange={(on) => onChange(on ? 1 : 0)} layout="inside" name={spec.key} label={spec.label} title={spec.key}>
-        {value >= 0.5 ? 'on' : 'off'}
-      </Toggle>
-    );
-  }
+/** The node's one line of wiring: a port in, a port out, and a word between them. */
+function Wiring({ s, caption }: { s: Stage; caption?: string }) {
+  const into = s.kind !== 'source' && s.kind !== 'layer';
+  const from = s.kind !== 'out';
   return (
-    <Slider
-      param={paramOf(spec, value)}
-      value={value}
-      onChange={(v) => onChange(spec.kind === 'float' ? v : Math.round(v))}
-      name={spec.label}
-      orientation="horizontal"
-      layout="inside"
-      display={show(spec, value)}
-      title={spec.key}
-    />
+    <DevicePortRow
+      inlet={into ? <Port id={port(s.id, 'in')} side="in" label={`into ${s.label}`} showLabel={false} /> : undefined}
+      outlet={from ? <Port id={port(s.id, 'out')} side="out" label={`out of ${s.label}`} showLabel={false} /> : undefined}
+    >
+      <span className="stage-caption">{caption}</span>
+    </DevicePortRow>
   );
 }
+
+const summary = (p: Preset, s: Stage, n: number) =>
+  summaryOf(p, s, n)
+    .map(([spec, v]) => `${spec.label} ${show(spec, v)}`)
+    .join(' · ');
 
 interface NodeProps {
   stage: Stage;
@@ -67,81 +72,256 @@ interface NodeProps {
   problems: Problem[];
   selected: boolean;
   onSelect(id: string): void;
-  onSet(owner: Owner, key: string, value: number): void;
+  onChange(next: Preset): void;
 }
 
-/** One stage: its picture, its settings as controls, and the head of its code. */
-const StageNode = memo(function StageNode({ stage: s, preset, problems, selected, onSelect, onSet }: NodeProps) {
-  const picture = usePreview(s.picture);
-  const on = isOn(preset, s);
+/** One stage of the pipeline: its picture, a word on what it's set to, and the head of its code. */
+const StageNode = memo(function StageNode({ stage: s, preset, problems, selected, onSelect, onChange }: NodeProps) {
   const issues = problemsOf(problems, s);
-  const settings = settingsOf(preset, s).filter(([spec]) => spec.face);
-  const code = codeLines(preset, s, 5);
-  const idle = s.id === 'blur' && !usesBlur(preset);
-  const enabled = s.owner && s.owner.list !== 'base' ? s.owner : undefined;
+  const shader = s.kind === 'shader';
+  const written = shader && preset[s.id as 'warp' | 'comp'].trim() !== '';
+  const code = codeLines(preset, s, shader ? 3 : 4);
+  const blur = s.id === 'feedback' && usesBlur(preset);
+  // The narrow ends have no room for a word beside their port: their name says it.
+  const caption =
+    s.kind === 'source' || s.kind === 'out'
+      ? undefined
+      : shader
+          ? written
+            ? `${preset[s.id as 'warp' | 'comp'].split('\n').length} lines`
+            : "MilkDrop's default"
+          : summary(preset, s, 2) || 'as MilkDrop starts';
   return (
-    <div className="stage" data-kind={s.kind} data-off={on ? undefined : ''} data-problem={issues.length ? '' : undefined}>
+    <div className="stage" data-kind={s.kind} data-problem={issues.length ? '' : undefined} onPointerDown={() => onSelect(s.id)}>
       <Device
         name={s.label}
-        on={on}
-        onToggle={enabled ? (next) => onSet(enabled, 'enabled', next ? 1 : 0) : undefined}
+        title={s.term}
         selected={selected}
         onSelect={() => onSelect(s.id)}
-        screen={
-          s.picture !== undefined ? (
-            <div className="stage-screen" data-idle={idle ? 'no shader reads blur' : undefined}>
-              <canvas ref={picture} width={192} height={108} className="stage-picture" />
-            </div>
-          ) : undefined
-        }
-        outlets={s.outlets.map((o) => (
-          <Port key={o} id={port(s.id, o)} side="out" label={o} />
-        ))}
-        portRows={[
-          ...s.inlets.map((i) => <DevicePortRow key={`in:${i}`} inlet={<Port id={port(s.id, i)} side="in" label={i} />} />),
-          ...(s.code.length
-            ? [
-                <DevicePortRow key="code">
-                  <pre className="stage-code" onPointerDown={() => onSelect(s.id)} title="edit in the inspector">
-                    {code.length ? code.join('\n') : s.code[0].lang === 'hlsl' ? "MilkDrop's default" : 'no code'}
-                  </pre>
-                </DevicePortRow>,
-              ]
-            : []),
-          ...settings.map(([spec, value]) => (
-            <DevicePortRow key={spec.key} inlet={<Port id={port(s.id, spec.key)} side="in" label={spec.label} showLabel={false} />}>
-              <Control spec={spec} value={value} onChange={(v) => onSet(s.owner!, spec.key, v)} />
-            </DevicePortRow>
-          )),
-          ...(issues.length
-            ? [
-                <DevicePortRow key="problems">
-                  <span className="stage-issue">
-                    {issues.length} problem{issues.length > 1 ? 's' : ''}
-                  </span>
-                </DevicePortRow>,
-              ]
-            : []),
-        ]}
-      />
+        screen={s.picture !== undefined && s.kind !== 'out' ? <Picture which={s.picture} className="stage-picture" /> : undefined}
+        portRows={<Wiring s={s} caption={caption} />}
+      >
+        {s.kind === 'motion' && <pre className="stage-code">{code.length ? code.join('\n') : 'no equations'}</pre>}
+        {shader &&
+          (written ? (
+            <pre className="stage-code">{code.join('\n')}</pre>
+          ) : (
+            <Button
+              onPress={() => {
+                const which = s.id as 'warp' | 'comp';
+                api.defaultShader(preset, which).then((code) => onChange({ ...preset, [which]: code }), console.error);
+                onSelect(s.id);
+              }}
+              title={`start a ${s.label} shader from MilkDrop's default, as code`}
+            >
+              write my own
+            </Button>
+          ))}
+        {blur && <span className="stage-caption">blurred too: a shader reads it</span>}
+        {issues.length > 0 && (
+          <span className="stage-issue">
+            {issues.length} problem{issues.length > 1 ? 's' : ''}
+          </span>
+        )}
+      </Device>
     </div>
   );
 });
 
-/** MilkDrop's pipeline, one node per stage, wired the way the frame runs. */
-export function StageGraph({ preset, problems, selected, onSelect, onSet }: Props) {
-  const [moved, setMoved] = useState<Record<string, { x: number; y: number }>>({});
-  const all = useMemo(cords, []);
+/** Something drawn into the feedback: a small picture of it, and a way to take it off. */
+const LayerNode = memo(function LayerNode({ stage: s, preset, problems, selected, onSelect, onChange }: NodeProps) {
+  const issues = problemsOf(problems, s);
+  const custom = s.owner && s.owner.list !== 'base';
+  const driven = drivenBy(preset, s);
+  const lines = codeLines(preset, s, 99).length;
+  const caption = issues.length
+    ? `${issues.length} problem${issues.length > 1 ? 's' : ''}`
+    : custom
+      ? lines
+        ? `${lines} line${lines > 1 ? 's' : ''} of code`
+        : 'no code'
+      : summary(preset, s, 2) || (driven ? `${driven} set by motion` : 'as MilkDrop starts');
   return (
-    <Graph className="stage-graph" cords={all} onMove={(id, x, y) => setMoved((m) => ({ ...m, [id]: { x, y } }))}>
-      {STAGES.map((s) => {
-        const at = moved[s.id] ?? s;
-        return (
-          <GraphNode key={s.id} id={s.id} x={at.x} y={at.y}>
-            <StageNode stage={s} preset={preset} problems={problems} selected={(selected ?? STAGES[0].id) === s.id} onSelect={onSelect} onSet={onSet} />
+    <div className="stage" data-kind={s.kind} data-problem={issues.length ? '' : undefined} onPointerDown={() => onSelect(s.id)}>
+      <Device
+        name={s.label}
+        title={s.term}
+        selected={selected}
+        onSelect={() => onSelect(s.id)}
+        headerEnd={
+          <Button
+            tone="quiet"
+            label={`remove ${s.label}`}
+            title={driven ? `motion's per-frame code sets ${driven}: change it there to take this off` : `take ${s.label} off (its code is kept)`}
+            disabled={!!driven}
+            onPress={() => {
+              const next = removeLayer(preset, s.id);
+              if (next) onChange(next);
+            }}
+          >
+            ×
+          </Button>
+        }
+        portRows={<Wiring s={s} caption={caption} />}
+      >
+        <Picture which={s.picture!} className="layer-picture" />
+      </Device>
+    </div>
+  );
+});
+
+/** The + under the layers: a menu of what can be drawn into the feedback. */
+function AddLayer({ preset, onAdd }: { preset: Preset; onAdd(kind: LayerKind): void }) {
+  const [open, setOpen] = useState(false);
+  const anchor = useRef<HTMLSpanElement>(null);
+  return (
+    <div className="stage-add">
+      <span ref={anchor}>
+        <Button onPress={() => setOpen((o) => !o)} title="draw something more into the feedback">
+          + add layer
+        </Button>
+      </span>
+      {open && (
+        <Popup anchor={anchor} onDismiss={() => setOpen(false)} role="menu" label="add a layer" className="stage-add-menu">
+          {offers(preset).map((o) => (
+            <Button
+              key={o.kind}
+              disabled={!!o.full}
+              onPress={() => {
+                setOpen(false);
+                onAdd(o.kind);
+              }}
+            >
+              {o.label}
+              {o.full && <i> — {o.full}</i>}
+            </Button>
+          ))}
+        </Popup>
+      )}
+    </div>
+  );
+}
+
+/**
+ * How much to shrink the nodes so all of them fit the pane, from where they
+ * stand now at size `size`.
+ *
+ * The widgets `Graph` owns its pan and zoom and has no setter yet (docs/graph.md,
+ * "What isn't built": driving them from outside), so the host fits by drawing
+ * smaller: positions times the factor, faces under CSS `zoom`. Both scale
+ * linearly, so one measurement gives the exact factor.
+ */
+function fitting(box: HTMLElement | null, view: GraphView | null, size: number): number | null {
+  const pane = box?.querySelector<HTMLElement>('.wdg-graph');
+  const content = pane?.querySelector<HTMLElement>('.wdg-graph-content');
+  if (!pane || !content || !view) return null;
+  const k = view.scale();
+  const origin = content.getBoundingClientRect();
+  let right = 0;
+  let bottom = 0;
+  for (const node of content.querySelectorAll<HTMLElement>('.wdg-graph-node')) {
+    const r = node.getBoundingClientRect();
+    right = Math.max(right, r.right - origin.left);
+    bottom = Math.max(bottom, r.bottom - origin.top);
+  }
+  if (right <= 0 || bottom <= 0) return null;
+  const room = pane.getBoundingClientRect();
+  // Measured at `size`, so the whole-size extent is this over `size`.
+  const fits = Math.min(room.width / (right / size + 12), room.height / (bottom / size + 12)) / k;
+  return Math.max(0.5, Math.min(1, fits));
+}
+
+/** MilkDrop's pipeline left to right, with the layers drawn into its feedback beside it. */
+export function StageGraph({ preset, problems, selected, onSelect, onChange }: Props) {
+  const layers = useMemo(() => layersOf(preset, problems), [preset, problems]);
+  const shape = layers.map((s) => s.id).join(' ');
+  const at = useMemo(() => layout(layers), [layers]);
+  const wires = useMemo(() => cords(layers), [layers]);
+  // Where nodes were dragged, for as long as the same nodes are showing.
+  const [moved, setMoved] = useState<{ shape: string; at: Record<string, { x: number; y: number }> }>({ shape, at: {} });
+  const dragged = moved.shape === shape ? moved.at : {};
+  // A new set of nodes, a new pane size or the fit button mounts the graph afresh and fits it.
+  const [fits, setFits] = useState(0);
+  const box = useRef<HTMLDivElement>(null);
+  const view = useRef<GraphView>(null);
+  const key = `${shape}|${fits}`;
+
+  // How small the nodes draw so they all fit; measured after each fresh mount.
+  const [size, setSize] = useState(1);
+  const sized = useRef(size);
+  sized.current = size;
+  useEffect(() => {
+    // A timer rather than animation frames: a window behind others gets none.
+    const timer = window.setTimeout(() => {
+      const next = fitting(box.current, view.current, sized.current);
+      if (next !== null && Math.abs(next - sized.current) > 0.01) setSize(next);
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [key]);
+
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    let last = { w: el.clientWidth, h: el.clientHeight };
+    let timer = 0;
+    const observer = new ResizeObserver(() => {
+      const now = { w: el.clientWidth, h: el.clientHeight };
+      if (Math.abs(now.w - last.w) < 24 && Math.abs(now.h - last.h) < 24) return;
+      last = now;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setFits((n) => n + 1), 150);
+    });
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(timer);
+    };
+  }, []);
+
+  const current = selected ?? FIRST;
+  const add = (kind: LayerKind) => {
+    const added = addLayer(preset, kind);
+    if (!added) return;
+    onChange(added.preset);
+    onSelect(added.id);
+  };
+  const place = (id: string) => dragged[id] ?? { x: at[id].x * size, y: at[id].y * size };
+
+  return (
+    <div className="stage-graph-box" ref={box} style={{ '--stage-zoom': size } as CSSProperties}>
+      <Graph
+        key={key}
+        className="stage-graph"
+        cords={wires}
+        viewRef={view}
+        minZoom={0.4}
+        onMove={(id, x, y) => setMoved((m) => ({ shape, at: { ...(m.shape === shape ? m.at : {}), [id]: { x, y } } }))}
+      >
+        {CHAIN.map((s) => (
+          <GraphNode key={s.id} id={s.id} {...place(s.id)}>
+            <StageNode stage={s} preset={preset} problems={problems} selected={current === s.id} onSelect={onSelect} onChange={onChange} />
           </GraphNode>
-        );
-      })}
-    </Graph>
+        ))}
+        {layers.map((s) => (
+          <GraphNode key={s.id} id={s.id} {...place(s.id)}>
+            <LayerNode stage={s} preset={preset} problems={problems} selected={current === s.id} onSelect={onSelect} onChange={onChange} />
+          </GraphNode>
+        ))}
+        <GraphNode id="add" {...place('add')}>
+          <AddLayer preset={preset} onAdd={add} />
+        </GraphNode>
+      </Graph>
+      <div className="stage-graph-tools">
+        <Button
+          tone="quiet"
+          onPress={() => {
+            setMoved({ shape, at: {} });
+            setFits((n) => n + 1);
+          }}
+          title="put every node back and fit them in the pane">
+          fit
+        </Button>
+      </div>
+    </div>
   );
 }
