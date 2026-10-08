@@ -37,6 +37,11 @@ export function goneNote(was: string | null, now: string | null, sources: api.So
   return `${was} is gone, so listening to ${now} until it's back`;
 }
 
+/** What to say when macOS refused the tap other apps' sound; null when it didn't. */
+export function deniedNote(heard: api.Heard): string | null {
+  return heard.denied ? 'not allowed to hear other apps: allow it in System Settings › Privacy & Security › Screen & System Audio Recording' : null;
+}
+
 /** Channels to keep when moving to `next`: the same pair when it has them, else its first two. */
 export function keepChannels(choice: api.Heard['choice'], next: api.Source): [number, number] {
   if (choice && choice.left <= next.channels && choice.right <= next.channels) return [choice.left, choice.right];
@@ -133,6 +138,7 @@ export function SourcePicker({ onError }: { onError(error: unknown): void }) {
   }, [refresh]);
 
   const choice = heard.choice;
+  const denied = deniedNote(heard);
   const list = sources ?? [];
   const at = current(list, choice);
 
@@ -209,6 +215,11 @@ export function SourcePicker({ onError }: { onError(error: unknown): void }) {
         </span>
       </details>
       <Levels />
+      {denied && (
+        <span className="vf-warning audio-note" title={denied}>
+          {denied}
+        </span>
+      )}
       {note && (
         <span className="vf-warning audio-note" title={note}>
           {note}

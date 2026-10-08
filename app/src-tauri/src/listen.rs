@@ -77,19 +77,29 @@ fn apps(processes: &[Process], me: i32) -> Vec<Playing> {
     for p in processes.iter().filter(|p| p.pid != me && !p.bundle.is_empty()) {
         let bundle = tap::app_of(&p.bundle);
         match found.iter_mut().find(|(a, _)| a.bundle == bundle) {
-            Some((app, playing)) => {
-                *playing |= p.playing;
-                if p.bundle == bundle {
-                    app.pid = p.pid;
-                }
-            }
-            None => found.push((Playing { bundle: bundle.to_owned(), pid: p.pid, daw: tap::daw(bundle).is_some() }, p.playing)),
+            Some((_, playing)) => *playing |= p.playing,
+            None => found.push((Playing { bundle: bundle.to_owned(), pid: pid_of(processes, bundle, me).unwrap_or(p.pid), daw: tap::daw(bundle).is_some() }, p.playing)),
         }
     }
     let mut apps: Vec<Playing> = found.into_iter().filter(|(a, playing)| a.daw || *playing).map(|(a, _)| a).collect();
     // DAWs first; otherwise in Core Audio's order.
     apps.sort_by_key(|a| !a.daw);
     apps
+}
+
+/// The process to name `bundle` by, and whose change means the app restarted:
+/// the app itself when it has opened audio, else its first helper. Not `me`.
+fn pid_of(processes: &[Process], bundle: &str, me: i32) -> Option<i32> {
+    let mut mine = processes.iter().filter(|p| p.pid != me && tap::belongs(&p.bundle, bundle));
+    let first = mine.next()?;
+    Some(std::iter::once(first).chain(mine).find(|p| p.bundle == bundle).unwrap_or(first).pid)
+}
+
+/// Whether a tap on `bundle` that hears `tapped`, named by `main`, should be
+/// opened again: the app's own process changed (it restarted), or a process of
+/// it that the tap misses is playing. Helpers coming and going alone don't count.
+fn retap(processes: &[Process], bundle: &str, me: i32, tapped: &[u32], main: Option<i32>) -> bool {
+    pid_of(processes, bundle, me) != main || processes.iter().any(|p| p.pid != me && tap::belongs(&p.bundle, bundle) && p.playing && !tapped.contains(&p.object))
 }
 
 /// An app's name: the DAW's, or what the Dock calls it.
@@ -122,10 +132,13 @@ pub fn audio_sources() -> AudioSources {
     AudioSources { taps, sources }
 }
 
-/// How sound arrives: an input device's stream, or a tap and the processes it hears.
+/// How sound arrives: an input device's stream, or a tap, the processes it
+/// hears and the app process it is named by.
 enum Stream {
     Input(#[allow(dead_code)] cpal::Stream),
-    Tap(#[allow(dead_code)] tap::Tap, Vec<u32>),
+    Tap(#[allow(dead_code)] tap::Tap, Vec<u32>, Option<i32>),
+    #[cfg(test)]
+    Fake,
 }
 
 /// What is being listened to. Dropping it stops listening.
@@ -157,12 +170,17 @@ impl Listening {
         Choice { name: self.name.clone(), left: self.left + 1, right: self.right + 1, size: self.channels }
     }
 
-    /// The processes a tap hears; empty for an input.
-    fn tapped(&self) -> &[u32] {
+    /// The processes a tap hears and the app process it is named by; nothing for an input.
+    fn tapped(&self) -> (&[u32], Option<i32>) {
         match &self.stream {
-            Stream::Tap(_, objects) => objects,
-            Stream::Input(_) => &[],
+            Stream::Tap(_, objects, main) => (objects, *main),
+            _ => (&[], None),
         }
+    }
+
+    /// Whether this is a tap, which needs the permission to hear other apps.
+    fn is_tap(&self) -> bool {
+        matches!(self.source, SourceId::App { .. } | SourceId::System)
     }
 }
 
@@ -201,35 +219,88 @@ static WANTED: Mutex<Option<Saved>> = Mutex::new(None);
 
 /// Listen to `source`, or else to the input `name` (the system input when
 /// absent), channels `left` and `right` counted from 1. Returns the source's name.
-#[tauri::command]
+/// Runs off the main thread: opening the first tap can wait on macOS's
+/// permission prompt, which must not freeze the window.
+#[tauri::command(async)]
 pub fn listen_to(name: Option<String>, size: Option<usize>, left: Option<usize>, right: Option<usize>, source: Option<SourceId>, app: State<App>) -> Result<String, String> {
     let source = source.or_else(|| name.map(|name| SourceId::Device { name, size: size.unwrap_or(0) }));
-    let (choice, heard) = listen_on(&app, source.as_ref(), left, right)?;
-    let saved = Saved { source: heard, left: choice.left, right: choice.right };
+    let (name, saved) = choose(&Mac, &app, source, left, right)?;
     crate::settings::save_json(SAVED, &saved);
-    *WANTED.lock().unwrap() = Some(saved);
-    Ok(choice.name)
+    Ok(name)
 }
 
-/// Open `source` (the system input when `None`) on channels `left` and `right`
-/// (from 0), writing into `ring`.
-fn open(source: Option<&SourceId>, channels: (usize, usize), ring: Ring) -> Result<Listening, String> {
-    match source {
-        None => listen(None, None, channels, ring),
-        Some(SourceId::Device { name, size }) => listen(Some(name), Some(*size), channels, ring),
-        Some(SourceId::System) => tapped(SourceId::System, Target::Everything, EVERYTHING.into(), vec![], channels, ring),
-        Some(SourceId::App { bundle }) => {
-            let objects = objects_of(bundle);
-            if objects.is_empty() {
-                return Err(format!("{} isn't running", app_name(bundle, None)));
-            }
-            let pid = tap::processes().into_iter().find(|p| p.bundle == *bundle).map(|p| p.pid);
-            tapped(SourceId::App { bundle: bundle.clone() }, Target::Processes(objects.clone()), app_name(bundle, pid), objects, channels, ring)
+/// Make `source` the choice and listen to it, as one step under the listening
+/// lock: the choice is set before opening, so [`follow`] can never act on the
+/// one before it. A failed open puts the choice back. Returns the source's
+/// name and the choice to keep for next time.
+fn choose(world: &dyn World, app: &App, source: Option<SourceId>, left: Option<usize>, right: Option<usize>) -> Result<(String, Saved), String> {
+    let mut slot = app.listening.lock().unwrap();
+    let before = WANTED.lock().unwrap().clone();
+    if let Some(s) = &source {
+        *WANTED.lock().unwrap() = Some(Saved { source: s.clone(), left: left.unwrap_or(1), right: right.unwrap_or(2) });
+    }
+    match listen_on(world, app, &mut slot, source.as_ref(), left, right) {
+        Ok((choice, heard)) => {
+            let saved = Saved { source: heard, left: choice.left, right: choice.right };
+            *WANTED.lock().unwrap() = Some(saved.clone());
+            Ok((choice.name, saved))
+        }
+        Err(e) => {
+            *WANTED.lock().unwrap() = before;
+            Err(e)
         }
     }
 }
 
-fn tapped(source: SourceId, target: Target, name: String, objects: Vec<u32>, channels: (usize, usize), ring: Ring) -> Result<Listening, String> {
+/// Where sound comes from: this Mac, or a stand-in in tests.
+trait World: Sync {
+    /// Open `source` (the system input when `None`) on channels `left` and
+    /// `right` (from 0), writing into `ring`.
+    fn open(&self, source: Option<&SourceId>, channels: (usize, usize), ring: Ring) -> Result<Listening, String>;
+    /// Whether `source` can't be heard any more: its app quit, or its input is unplugged.
+    fn gone(&self, source: &SourceId) -> bool;
+    fn processes(&self) -> Vec<Process>;
+    fn taps_allowed(&self) -> bool;
+}
+
+struct Mac;
+
+impl World for Mac {
+    fn open(&self, source: Option<&SourceId>, channels: (usize, usize), ring: Ring) -> Result<Listening, String> {
+        match source {
+            None => listen(None, None, channels, ring),
+            Some(SourceId::Device { name, size }) => listen(Some(name), Some(*size), channels, ring),
+            Some(SourceId::System) => tapped(SourceId::System, Target::Everything, EVERYTHING.into(), vec![], None, channels, ring),
+            Some(SourceId::App { bundle }) => {
+                let objects = objects_of(bundle);
+                if objects.is_empty() {
+                    return Err(format!("{} isn't running", app_name(bundle, None)));
+                }
+                // Named by the same process as in `audio_sources`, so the picker finds it.
+                let pid = pid_of(&tap::processes(), bundle, std::process::id() as i32);
+                tapped(SourceId::App { bundle: bundle.clone() }, Target::Processes(objects.clone()), app_name(bundle, pid), objects, pid, channels, ring)
+            }
+        }
+    }
+
+    fn gone(&self, source: &SourceId) -> bool {
+        match source {
+            SourceId::App { bundle } => objects_of(bundle).is_empty(),
+            SourceId::System => false,
+            SourceId::Device { name, size } => !inputs().iter().any(|i| i.name == *name && i.channels as usize == *size),
+        }
+    }
+
+    fn processes(&self) -> Vec<Process> {
+        tap::processes()
+    }
+
+    fn taps_allowed(&self) -> bool {
+        tap::supported() && tap::permission() != Permission::Denied
+    }
+}
+
+fn tapped(source: SourceId, target: Target, name: String, objects: Vec<u32>, main: Option<i32>, channels: (usize, usize), ring: Ring) -> Result<Listening, String> {
     if !tap::supported() {
         return Err("listening to apps needs macOS 14.4 or later".into());
     }
@@ -237,22 +308,26 @@ fn tapped(source: SourceId, target: Target, name: String, objects: Vec<u32>, cha
         return Err(NOT_ALLOWED.into());
     }
     let t = tap::open(&target, channels, ring)?;
+    // The first tap asks; a refusal leaves it open but silent, which `listening` reports.
+    if tap::permission() == Permission::Denied {
+        eprintln!("{NOT_ALLOWED}");
+    }
     let last = t.channels.max(1) - 1;
-    Ok(Listening { source, name, rate: t.rate, channels: t.channels, left: channels.0.min(last), right: channels.1.min(last), stream: Stream::Tap(t, objects) })
+    Ok(Listening { source, name, rate: t.rate, channels: t.channels, left: channels.0.min(last), right: channels.1.min(last), stream: Stream::Tap(t, objects, main) })
 }
 
-/// Open a source and make it what the bench hears. Channels count from 1. The
-/// new source opens before the old one closes, so a switch that fails leaves
-/// the bench hearing what it heard. Returns what is heard and its source.
-fn listen_on(app: &App, source: Option<&SourceId>, left: Option<usize>, right: Option<usize>) -> Result<(Choice, SourceId), String> {
+/// Open a source into `slot` (the listening lock, held) and make it what the
+/// bench hears. Channels count from 1. The new source opens before the old one
+/// closes, so a switch that fails leaves the bench hearing what it heard.
+/// Returns what is heard and its source.
+fn listen_on(world: &dyn World, app: &App, slot: &mut Option<Listening>, source: Option<&SourceId>, left: Option<usize>, right: Option<usize>) -> Result<(Choice, SourceId), String> {
     let channels = (left.unwrap_or(1).max(1) - 1, right.unwrap_or(2).max(1) - 1);
-    let mut listening = app.listening.lock().unwrap();
-    let l = open(source, channels, app.ring.clone())?;
+    let l = world.open(source, channels, app.ring.clone())?;
     app.send(bench::Cmd::SampleRate(l.rate));
     let choice = l.choice();
     let heard = l.source.clone();
     eprintln!("listening to {} on channels {} and {} of {}, at {} Hz", choice.name, choice.left, choice.right, l.channels, l.rate);
-    *listening = Some(l);
+    *slot = Some(l);
     Ok((choice, heard))
 }
 
@@ -265,60 +340,52 @@ fn fallback(gone: &SourceId, taps: bool) -> Option<SourceId> {
     }
 }
 
-fn taps_allowed() -> bool {
-    tap::supported() && tap::permission() != Permission::Denied
-}
-
 /// Listen to what stands in for `gone`, keeping its channels; the system input
 /// when that fails too.
-fn fall_back(app: &App, gone: &SourceId, left: usize, right: usize) -> Result<Choice, String> {
-    let instead = fallback(gone, taps_allowed());
+fn fall_back(world: &dyn World, app: &App, slot: &mut Option<Listening>, gone: &SourceId, left: usize, right: usize) -> Result<Choice, String> {
+    let instead = fallback(gone, world.taps_allowed());
     eprintln!("{gone:?} is gone; listening to {} instead", instead.as_ref().map_or("the system input", |_| EVERYTHING));
-    instead.and_then(|s| listen_on(app, Some(&s), Some(left), Some(right)).ok()).map(Ok).unwrap_or_else(|| listen_on(app, None, None, None)).map(|(c, _)| c)
+    if let Some(Ok((c, _))) = instead.map(|s| listen_on(world, app, slot, Some(&s), Some(left), Some(right))) {
+        return Ok(c);
+    }
+    listen_on(world, app, slot, None, None, None).map(|(c, _)| c)
 }
 
 /// Come back listening to what was chosen last, or what stands in for it when
 /// it is gone; the system input when nothing was chosen.
 pub fn resume(app: &App) {
     let saved: Option<Saved> = crate::settings::load::<SavedFile>(SAVED).map(Saved::from);
+    let mut slot = app.listening.lock().unwrap();
     *WANTED.lock().unwrap() = saved.clone();
     let heard = match &saved {
-        Some(s) => listen_on(app, Some(&s.source), Some(s.left), Some(s.right)).map(|(c, _)| c).or_else(|_| fall_back(app, &s.source, s.left, s.right)),
-        None => listen_on(app, None, None, None).map(|(c, _)| c),
+        Some(s) => listen_on(&Mac, app, &mut slot, Some(&s.source), Some(s.left), Some(s.right)).map(|(c, _)| c).or_else(|_| fall_back(&Mac, app, &mut slot, &s.source, s.left, s.right)),
+        None => listen_on(&Mac, app, &mut slot, None, None, None).map(|(c, _)| c),
     };
     if let Err(e) = heard {
         eprintln!("no audio input: {e}");
     }
 }
 
-/// Whether `source` can't be heard any more: its app quit, or its input is unplugged.
-fn gone(source: &SourceId) -> bool {
-    match source {
-        SourceId::App { bundle } => objects_of(bundle).is_empty(),
-        SourceId::System => false,
-        SourceId::Device { name, size } => !inputs().iter().any(|i| i.name == *name && i.channels as usize == *size),
-    }
-}
-
 /// Keep listening to what was chosen: fall back when it goes away, and go back
-/// to it when it returns (or, for an app, restarts with new processes). Run
-/// each time the page asks what is heard, every few seconds.
-fn follow(app: &App) {
+/// to it when it returns (or, for an app, restarts or starts playing from a
+/// process the tap misses). Run each time the page asks what is heard, every
+/// few seconds. The choice is read under the listening lock, so a choice being
+/// made ([`choose`]) is never undone by one made before it.
+fn follow(world: &dyn World, app: &App) {
+    let mut slot = app.listening.lock().unwrap();
     let wanted = WANTED.lock().unwrap().clone();
-    let Some((source, tapped, left, right)) = app.listening.lock().unwrap().as_ref().map(|l| (l.source.clone(), l.tapped().to_vec(), l.left + 1, l.right + 1)) else { return };
+    let Some((source, tapped, main, left, right)) = slot.as_ref().map(|l| (l.source.clone(), l.tapped().0.to_vec(), l.tapped().1, l.left + 1, l.right + 1)) else { return };
     if let Some(w) = wanted {
         let changed = match &w.source {
-            SourceId::App { bundle } if w.source == source => objects_of(bundle) != tapped,
+            SourceId::App { bundle } if w.source == source => retap(&world.processes(), bundle, std::process::id() as i32, &tapped, main),
             _ => w.source != source,
         };
-        if changed && !gone(&w.source) {
-            if listen_on(app, Some(&w.source), Some(w.left), Some(w.right)).is_ok() {
-                return;
-            }
+        if changed && !world.gone(&w.source) && listen_on(world, app, &mut slot, Some(&w.source), Some(w.left), Some(w.right)).is_ok() {
+            return;
         }
     }
-    if gone(&source) {
-        let _ = fall_back(app, &source, left, right);
+    if world.gone(&source) {
+        let _ = fall_back(world, app, &mut slot, &source, left, right);
     }
 }
 
@@ -328,14 +395,17 @@ pub struct Heard {
     choice: Option<Choice>,
     /// How many channels the source has.
     channels: usize,
+    /// Whether a tap is heard but macOS refused it other apps' sound, so it hears silence.
+    denied: bool,
 }
 
 /// What the bench is listening to, after following the chosen source ([`follow`]).
 #[tauri::command(async)]
 pub fn listening(app: State<App>) -> Heard {
-    follow(&app);
+    follow(&Mac, &app);
     let l = app.listening.lock().unwrap();
-    Heard { choice: l.as_ref().map(|l| l.choice()), channels: l.as_ref().map_or(0, |l| l.channels) }
+    let denied = l.as_ref().is_some_and(|l| l.is_tap()) && tap::permission() == Permission::Denied;
+    Heard { choice: l.as_ref().map(|l| l.choice()), channels: l.as_ref().map_or(0, |l| l.channels), denied }
 }
 
 /// The loudest sample in the left and right channels' latest windows, for a meter.
@@ -395,6 +465,73 @@ mod tests {
         let found: Vec<(&str, i32, bool)> = apps.iter().map(|a| (a.bundle.as_str(), a.pid, a.daw)).collect();
         // Chrome is named by its own process, not its helper's.
         assert_eq!(found, vec![("com.ableton.live", 5, true), ("com.spotify.client", 1, false), ("com.google.Chrome", 4, false)]);
+    }
+
+    #[test]
+    fn names_an_app_by_the_same_process_when_offered_and_when_opened() {
+        let processes = [process(3, "com.google.Chrome.helper.Renderer", true), process(4, "com.google.Chrome", false), process(8, "com.vendor.only.helper", true)];
+        assert_eq!(apps(&processes, 0)[0].pid, pid_of(&processes, "com.google.Chrome", 0).unwrap());
+        assert_eq!(pid_of(&processes, "com.google.Chrome", 0), Some(4));
+        // An app heard only through a helper is named by it.
+        assert_eq!(pid_of(&processes, "com.vendor.only", 0), Some(8));
+        assert_eq!(apps(&processes, 0)[1].pid, 8);
+    }
+
+    #[test]
+    fn taps_an_app_again_only_when_it_restarts_or_a_missed_process_plays() {
+        let chrome = "com.google.Chrome";
+        let tapped = [104, 103];
+        let now = [process(4, chrome, false), process(3, "com.google.Chrome.helper.Renderer", true)];
+        assert!(!retap(&now, chrome, 0, &tapped, Some(4)));
+        // A helper that comes and goes silently doesn't count, nor one that left.
+        assert!(!retap(&[process(4, chrome, false), process(9, "com.google.Chrome.helper", false)], chrome, 0, &tapped, Some(4)));
+        // A new helper playing does.
+        assert!(retap(&[process(4, chrome, false), process(9, "com.google.Chrome.helper", true)], chrome, 0, &tapped, Some(4)));
+        // So does the app itself restarting.
+        assert!(retap(&[process(5, chrome, false), process(3, "com.google.Chrome.helper.Renderer", true)], chrome, 0, &tapped, Some(4)));
+    }
+
+    /// Opens anything after a pause, as the permission prompt makes a tap
+    /// wait; says when an open begins.
+    struct Slow(std::sync::Mutex<std::sync::mpsc::Sender<()>>);
+
+    impl World for Slow {
+        fn open(&self, source: Option<&SourceId>, _: (usize, usize), _: Ring) -> Result<Listening, String> {
+            let _ = self.0.lock().unwrap().send(());
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            let source = source.cloned().unwrap_or(SourceId::Device { name: "system input".into(), size: 2 });
+            Ok(Listening { stream: Stream::Fake, name: format!("{source:?}"), source, rate: 48000.0, channels: 2, left: 0, right: 1 })
+        }
+        fn gone(&self, _: &SourceId) -> bool {
+            false
+        }
+        fn processes(&self) -> Vec<Process> {
+            vec![]
+        }
+        fn taps_allowed(&self) -> bool {
+            true
+        }
+    }
+
+    #[test]
+    fn following_never_undoes_a_choice_being_made() {
+        let (said, opening) = std::sync::mpsc::channel();
+        let world = Slow(std::sync::Mutex::new(said));
+        let daw = SourceId::App { bundle: "com.ableton.live".into() };
+        let mic = SourceId::Device { name: "MacBook Pro Microphone".into(), size: 1 };
+        let app = App { bench: Mutex::new(None), ring: ring(), listening: Mutex::new(None), library: Default::default(), seed: Default::default() };
+        *app.listening.lock().unwrap() = Some(world.open(Some(&daw), (0, 1), app.ring.clone()).unwrap());
+        opening.recv().unwrap();
+        *WANTED.lock().unwrap() = Some(Saved { source: daw, left: 1, right: 2 });
+        std::thread::scope(|s| {
+            let choosing = s.spawn(|| choose(&world, &app, Some(mic.clone()), Some(1), Some(2)));
+            // The user's pick is opening (the prompt is up) when the poll comes.
+            opening.recv().unwrap();
+            follow(&world, &app);
+            choosing.join().unwrap().unwrap();
+        });
+        assert_eq!(app.listening.lock().unwrap().as_ref().unwrap().source, mic);
+        assert_eq!(WANTED.lock().unwrap().as_ref().unwrap().source, mic);
     }
 
     #[test]

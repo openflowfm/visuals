@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Source } from './api.ts';
-import { current, goneNote, keepChannels, label } from './SourcePicker.tsx';
+import { current, deniedNote, goneNote, keepChannels, label } from './SourcePicker.tsx';
 
 const daw: Source = { id: { kind: 'app', bundle: 'com.ableton.live' }, name: 'Ableton Live', channels: 2 };
 const mac: Source = { id: { kind: 'system' }, name: 'everything on this Mac', channels: 2 };
@@ -25,6 +25,12 @@ describe('the source picker', () => {
     expect(goneNote('everything on this Mac', 'Ableton Live', sources)).toBeNull();
     expect(goneNote(null, 'Ableton Live', sources)).toBeNull();
     expect(goneNote('Ableton Live', 'Ableton Live', [])).toBeNull();
+  });
+
+  it('says where to allow hearing other apps when macOS refused it', () => {
+    expect(deniedNote({ choice: null, channels: 2, denied: true })).toContain('System Settings › Privacy & Security › Screen & System Audio Recording');
+    expect(deniedNote({ choice: null, channels: 2, denied: false })).toBeNull();
+    expect(deniedNote({ choice: null, channels: 2 })).toBeNull();
   });
 
   it('keeps the channels when the next source has them', () => {

@@ -90,6 +90,8 @@ export const listenTo = (name: string | null, left = 1, right = 2, size: number 
 export interface Heard {
   choice: { name: string; left: number; right: number; size: number } | null;
   channels: number;
+  /** A tap is heard but macOS refused it other apps' sound, so it hears silence. */
+  denied?: boolean;
 }
 export const listening = () => invoke<Heard>('listening');
 /** The loudest sample in the left and right channels' latest windows, 0–1. */
