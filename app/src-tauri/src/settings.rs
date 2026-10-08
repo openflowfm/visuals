@@ -27,6 +27,13 @@ pub fn save(name: &str, contents: impl AsRef<[u8]>) {
     save_at(&dir().join(name), contents.as_ref());
 }
 
+/// Keep `value` in `name` as pretty JSON; one that won't serialize is not kept.
+pub fn save_json(name: &str, value: &impl serde::Serialize) {
+    if let Ok(text) = serde_json::to_string_pretty(value) {
+        save(name, text);
+    }
+}
+
 fn load_at<T: DeserializeOwned>(path: &Path) -> Option<T> {
     serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()
 }

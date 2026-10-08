@@ -70,18 +70,12 @@ impl Listening {
 /// back listening to it.
 const SAVED: &str = "audio.json";
 
-fn save(choice: &Choice) {
-    if let Ok(text) = serde_json::to_string_pretty(choice) {
-        crate::settings::save(SAVED, text);
-    }
-}
-
 /// Listen to `name` (the system input when absent), channels `left` and `right`
 /// counted from 1. Returns the input's name.
 #[tauri::command]
 pub fn listen_to(name: Option<String>, size: Option<usize>, left: Option<usize>, right: Option<usize>, app: State<App>) -> Result<String, String> {
     let l = listen_on(&app, name.as_deref(), size, left, right)?;
-    save(&l);
+    crate::settings::save_json(SAVED, &l);
     Ok(l.name)
 }
 
