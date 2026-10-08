@@ -113,19 +113,15 @@
 .live .fx-hit:focus-visible,
 .live .fx-tempo:focus-visible { outline: 1px solid var(--fg); outline-offset: 1px; }
 
-/* An error: one plain sentence, the app's own words in its tooltip, and ✕. */
+/* An error (a `NoticeBanner`, laid out by .vf-notice): a band across the stage. */
 .live-problem {
-  display: flex;
-  align-items: center;
   gap: 8px;
   padding: 8px 12px 8px 22px;
   background: var(--panel);
   border-bottom: 1px solid var(--bd3);
   box-shadow: var(--edge-left) var(--red);
-  color: var(--red);
   font-size: var(--text-body);
 }
-.live-problem > span { flex: 1; min-width: 0; }
 
 .live-stage > .fx { border-bottom: 1px solid var(--bd3); }
 

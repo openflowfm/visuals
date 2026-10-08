@@ -61,27 +61,36 @@ export function NowPlaying({ group, name, empty = 'no preset' }: { group?: strin
 }
 
 /**
- * Something went wrong, said in a few plain words in the header. What was
- * actually thrown is the tooltip, for whoever needs it; the × puts it away.
+ * Something went wrong, said in a few plain words: in the editor's header, above
+ * live mode's preview, in the Link panel. What the app actually said is the
+ * tooltip (and the hint strip's text), for whoever needs it; the ✕ puts it away.
+ * `className` places it (`live-problem`, `link-problem`); the header's is the
+ * plain `vf-notice`.
  */
-export function NoticeView({ notice, onDismiss }: { notice: Notice | null; onDismiss(): void }) {
+export function NoticeBanner({ notice, onDismiss, className }: { notice: Notice | null; onDismiss(): void; className?: string }) {
   if (!notice) return null;
   return (
-    <span className="vf-notice" role="status" title={notice.detail} data-hint={`${notice.message}: ${notice.detail}`}>
+    <div
+      className={className ? `vf-notice ${className}` : 'vf-notice'}
+      role="alert"
+      title={notice.detail ?? undefined}
+      data-hint={notice.detail ? `${notice.message}: ${notice.detail}` : notice.message}
+    >
       <span className="vf-notice-text">{notice.message}</span>
-      <Button tone="quiet" label="dismiss" title="dismiss" onPress={onDismiss}>
-        ×
+      <Button tone="quiet" label="Dismiss" title="Dismiss" onPress={onDismiss}>
+        ✕
       </Button>
-    </span>
+    </div>
   );
 }
 
 /**
  * The bench's frame rate. Its own leaf, polling once a second, so the reading
  * re-renders nothing else. A developer sees the numbers; a release says nothing
- * unless the picture has been slow for a few seconds.
+ * unless the picture has been slow for a few seconds. `always` shows the numbers
+ * in every build, as live mode's header does.
  */
-export function FrameRate() {
+export function FrameRate({ always = false }: { always?: boolean }) {
   const [history, setHistory] = useState<api.Stats[]>([]);
   useEffect(() => {
     const t = window.setInterval(() => {
@@ -92,6 +101,15 @@ export function FrameRate() {
     }, 1000);
     return () => window.clearInterval(t);
   }, []);
+  if (always) {
+    // Live mode reads 0 fps until the first second's reading arrives.
+    const now = frameReadout(history.length ? history : [{ fps: 0, cpu_ms: 0 }], true)!;
+    return (
+      <span className="stats" title="Frames drawn each second, and the time the engine spends on each">
+        {now.text}
+      </span>
+    );
+  }
   const shown = frameReadout(history, import.meta.env.DEV);
   if (!shown) return null;
   return (

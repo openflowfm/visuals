@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { plural } from './controls.ts';
 
 /** `link::Unit`. */
 export type Unit = 'bars' | 'beats';
@@ -61,8 +62,7 @@ const same = (a: Every, b: Every) => a.every === b.every && (a.every === 0 || a.
 /** The choices, with `current` added first when it is one the picker doesn't offer (set by a controller, say). */
 export function choicesFor(current: Every): Choice[] {
   if (CHOICES.some((c) => same(c, current))) return CHOICES.map((c) => (c.every === 0 && current.every === 0 ? { ...c, unit: current.unit } : c));
-  const unit = current.every === 1 ? current.unit.replace(/s$/, '') : current.unit;
-  return [{ ...current, name: `every ${current.every} ${unit}` }, ...CHOICES];
+  return [{ ...current, name: `every ${plural(current.every, current.unit.replace(/s$/, ''))}` }, ...CHOICES];
 }
 
 /** Where the bar is now: the last frame run on at its tempo, so the light moves smoothly between frames. */
@@ -82,7 +82,7 @@ export function beatsToNext(frame: Frame, now: number): number | null {
 
 /** Who the clock follows, in a few words. */
 export function statusText(frame: Frame): string {
-  const who = !frame.enabled ? 'off the network: our own clock' : frame.peers === 0 ? 'no one else in the session: our own clock' : `${frame.peers} ${frame.peers === 1 ? 'peer' : 'peers'}`;
+  const who = !frame.enabled ? 'off the network: our own clock' : frame.peers === 0 ? 'no one else in the session: our own clock' : plural(frame.peers, 'peer');
   return frame.playing ? `${who} · playing` : who;
 }
 

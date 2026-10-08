@@ -1,8 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
-
-vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
-vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }));
-
+import { describe, expect, it } from 'vitest';
 import { effectKey } from './fx.ts';
 
 describe('effectKey', () => {

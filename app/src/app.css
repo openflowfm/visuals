@@ -80,21 +80,22 @@ body {
 .vf-now span { flex: 0 1 auto; color: var(--fg); font-size: var(--text-lead); }
 .vf-now.quiet { color: var(--caption); }
 
-/* A failure in a few plain words, dismissible; the raw text is its tooltip. */
-.vf-header > .vf-notice { flex: 0 1 auto; }
-.vf-notice {
-  min-width: 0;
+/* A failure in a few plain words, dismissible; the app's own words are its tooltip.
+   Every view's banner (`NoticeBanner`); live.css and link.css place their own. */
+.vf-notice { min-width: 0; display: flex; align-items: center; color: var(--red); }
+.vf-notice-text { flex: 1; min-width: 0; }
+/* In the header: a small outlined chip on one line. */
+.vf-header > .vf-notice {
+  flex: 0 1 auto;
   display: inline-flex;
-  align-items: center;
   gap: 2px;
   height: var(--ctl-h);
   padding-left: 8px;
-  color: var(--red);
   border: 1px solid color-mix(in srgb, var(--red) 40%, transparent);
   border-radius: var(--radius);
 }
-.vf-notice-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.vf-notice .wdg-button-body { color: var(--red); }
+.vf-header > .vf-notice > .vf-notice-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vf-header > .vf-notice .wdg-button-body { color: var(--red); }
 
 .vf-warning { color: var(--amber); font-size: var(--text-control); }
 
