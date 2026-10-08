@@ -23,8 +23,12 @@ macOS, with Node (see `.nvmrc`), Rust, the Tauri CLI (`cargo install tauri-cli`)
 git clone https://github.com/openflowfm/visuals.git
 cd visuals
 npm ci
-npm run app     # cargo tauri dev in app/src-tauri, the page's vite on $PORT or a free port
+npm run app     # app/run.sh: cargo tauri dev in app/src-tauri, the page's vite on $PORT or a free port
 ```
+
+`app/run.sh` runs `cargo tauri dev` (and with it vite and the app) in a process group of
+its own, and stops the whole group when it is stopped (Ctrl-C, SIGTERM, hangup) or
+whatever started it goes away, so nothing is left running.
 
 Presets are read from `~/.openflow/visuals/presets` (`OPENFLOW_VISUALS_PRESETS`
 overrides), playlists kept in `~/.openflow/visuals/playlists.json`
@@ -38,6 +42,7 @@ overrides), playlists kept in `~/.openflow/visuals/playlists.json`
 | `VISUALS_LINK=0` | start with Link off |
 | `VISUALS_LINK_EVERY=<bars>` | start with preset changes on the bar on, every that many bars |
 | `VISUALS_LINK_LOG=1` | print Link's frame every second, and each change's beat |
+| `VISUALS_HEADLESS=1` | keep off the screen: no Dock icon or menu bar, never the active app, and the windows (main and output) drawn beyond every display; with a capture, quit once it is written |
 | `VISUALS_CAPTURE=<file.png>`, `VISUALS_CAPTURE_OUTPUT=<file.png>` | save a picture of the main window, or of the output window, after `VISUALS_CAPTURE_AFTER` seconds (8 by default) |
 | `VISUALS_FX='[{"kind":"mirror","mode":"quad"}]'` | send those live actions `VISUALS_FX_AFTER` seconds (5 by default) after start |
 | `PORT` | the page's dev port; otherwise a free one |

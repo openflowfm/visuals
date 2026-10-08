@@ -298,7 +298,13 @@ pub mod native {
         let view = bench::view::metal_view(mtm, rect, scale);
         content.addSubview(&view);
         let surface = bench::view::surface_on(&view, instance);
-        window.orderFrontRegardless();
+        if crate::dev::headless() {
+            // Drawn as usual, but beyond every display and below the other windows.
+            window.setLevel(0);
+            crate::dev::park(mtm, &window);
+        } else {
+            window.orderFrontRegardless();
+        }
         let (done, _) = std::sync::mpsc::channel();
         commands.send(bench::Cmd::Output(Some((surface, size)), done)).map_err(|e| e.to_string())?;
         eprintln!("output: open on {} ({}x{}), picture {}x{}", display.name, display.width, display.height, size.0, size.1);
@@ -348,7 +354,12 @@ pub mod native {
         OUTPUT.with(|o| {
             let mut o = o.borrow_mut();
             let Some(open) = o.as_mut() else { return };
-            open.window.setFrame_display(new_frame, true);
+            if crate::dev::headless() {
+                open.window.setContentSize(new_frame.size);
+                crate::dev::park(mtm, &open.window);
+            } else {
+                open.window.setFrame_display(new_frame, true);
+            }
             open.picture.setFrame(rect);
             if let Some(layer) = open.picture.layer() {
                 layer.setContentsScale(new_scale);
@@ -391,7 +402,8 @@ pub mod native {
     /// it leaves or the output closes. `NSCursor`'s hide and unhide are counted, so
     /// they are only ever called in pairs.
     fn cursor(_: MainThreadMarker) {
-        let frame = OUTPUT.with(|o| o.borrow().as_ref().map(|o| o.frame));
+        // Where the window is, not its display: headless, it is parked off the screen.
+        let frame = OUTPUT.with(|o| o.borrow().as_ref().map(|o| o.window.frame()));
         let over = frame.is_some_and(|f| {
             // SAFETY: a class method returning a plain point, on the main thread.
             let p: NSPoint = unsafe { objc2::msg_send![objc2::class!(NSEvent), mouseLocation] };
@@ -430,9 +442,10 @@ pub mod native {
     }
 
     /// The output's window as a PNG (development: `VISUALS_CAPTURE_OUTPUT`).
-    pub fn capture(path: &std::path::Path) -> Result<(), String> {
-        let number = OUTPUT.with(|o| o.borrow().as_ref().map(|o| o.window.windowNumber() as u32)).ok_or("the live output is not open")?;
-        bench::view::capture_window(number, path)
+    /// `overlay` is pasted over the picture (see [`bench::view::capture_view`]).
+    pub fn capture(path: &std::path::Path, overlay: Option<&bench::Picture>) -> Result<(), String> {
+        let picture = OUTPUT.with(|o| o.borrow().as_ref().map(|o| o.picture.clone())).ok_or("the live output is not open")?;
+        bench::view::capture_view(&picture, path, overlay)
     }
 }
 
