@@ -42,9 +42,10 @@ body {
   font-variation-settings: var(--mono-axes);
   font-size: var(--text-control);
 }
-.vf-header > * { flex: none; }
+/* A spacer that takes a flex row's free room, pushing what follows to the end. */
+.vf-fill { flex: 1; }
+.vf-header > :not(.vf-fill) { flex: none; }
 .vf-header .wdg { --wdg-field-height: var(--ctl-h); }
-.vf-header .vf-fill, .vf-header .fill { flex: 1; }
 .vf-transport .wdg-button-body { min-width: 26px; justify-content: center; }
 
 /* The wordmark, as mix[flow] draws its own. */
