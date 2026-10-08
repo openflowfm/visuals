@@ -153,6 +153,8 @@ async function drive(url: string): Promise<string> {
     page.on('console', (message) => process.stderr.write(`  page: ${message.text()}\n`));
     let gone = '';
     page.on('crash', () => (gone = 'the page crashed'));
+    // Electron could keep this window on top; Playwright cannot.
+    if (PACED) console.error('  keep the benchmark window uncovered until it finishes');
     console.error(`  loading ${url}`);
     await page.goto(url);
 

@@ -234,7 +234,7 @@ const browser = await chromium.launch({
     '--disable-renderer-backgrounding',
   ],
 });
-const report = await (async (): Promise<FramesReport> => {
+const captured = await (async (): Promise<FramesReport> => {
   const page = await browser.newPage({ viewport: { width: 1200, height: 720 } });
   page.on('console', (message) => process.stderr.write(`  page: ${message.text()}\n`));
   let gone = '';
@@ -250,13 +250,17 @@ const report = await (async (): Promise<FramesReport> => {
     if (failed) throw new Error(failed);
     await new Promise((wake) => setTimeout(wake, 250));
   }
-})().catch((why: Error) => {
-  console.error(`frames: ${why.message}`);
+})().then(
+  (found) => found,
+  (why: Error) => why,
+);
+await browser.close();
+serving.close();
+if (captured instanceof Error) {
+  console.error(`frames: ${captured.message}`);
   process.exit(1);
-}).finally(async () => {
-  await browser.close();
-  serving.close();
-});
+}
+const report = captured;
 fs.writeFileSync(path.join(OUT, 'stats.json'), JSON.stringify(report, null, 2));
 
 // The reference-footage harness presents equal phase samples as one strip per

@@ -179,7 +179,7 @@ ceiling before the run; the companion frame report below records the actual peak
 uploaded geometries, render targets and pending loads, so a fast black frame cannot pass as a
 fast model renderer.
 
-Throughput and sweep runs drive draws directly and stay in a hidden, non-focusable window.
+Throughput and sweep runs drive draws directly and run in headless Chromium.
 Only `--paced` is visible: it deliberately measures display-paced
 `requestAnimationFrame`, which Chromium stops delivering to a hidden or fully covered
 window, so hiding that run would change the question rather than merely its presentation.
@@ -197,7 +197,7 @@ npm run frames -- --scheme=/tmp/scratch.json --flows=halo --at=0,1,2,3
 
 `--models=/path/to/models` supplies the corresponding model library for a scratch scheme.
 `stats.json` records peak and released model resources as well as renderer errors; capture
-waits on readiness and the headless window remains hidden and non-focusable.
+waits on readiness, and the browser is headless, so it never takes focus.
 
 It builds `visuals/frames.html` with vite, runs it in headless Chromium (Playwright's),
 and writes one PNG per flow and beat into `visuals/frames-out/`, with a `stats.json` and
@@ -314,7 +314,8 @@ So the two modes answer two questions and only one of them is about frame budget
 | `--paced` | what one frame costs at the display's rate, and what got dropped | how much room is left over |
 
 `--paced` needs a **visible** window: a hidden or occluded one gets no `requestAnimationFrame`
-at all, and the run simply never advances.
+at all, and the run simply never advances. Playwright cannot keep its window on top, so leave
+it uncovered for the length of the run; the command says so when it starts.
 
 Eight bars at 128bpm is fifteen seconds a flow, so a whole scheme is about seven minutes and
 a `--sweep` is most of an hour. `--bars` is the flag to reach for when that is too long.
