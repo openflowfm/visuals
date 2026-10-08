@@ -3,6 +3,9 @@
 //!
 //!   cargo run --release --bin play -- [folder or .milk files…] [options]
 //!
+//! With no folder or files it plays the pack (`OPENFLOW_VISUALS_PRESETS` if set,
+//! otherwise ~/.openflow/visuals/presets).
+//!
 //!   --input <name>     an input device whose name contains this (default: the system
 //!                      input; `none` for silence)
 //!   --channels L,R     which input channels are left and right, from 1 (default 1,2)
@@ -11,6 +14,8 @@
 //!   --list-inputs      print the inputs and exit
 //!
 //! Keys: → or space next, ← previous, R random, F fullscreen, Esc quit.
+
+mod common;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use engine::audio::Audio;
@@ -51,8 +56,8 @@ fn options() -> Options {
                 }
             }
             "--size" => {
-                if let Some((w, h)) = args.next().as_deref().and_then(|s| s.split_once('x')) {
-                    o.size = (w.parse().unwrap_or(1920), h.parse().unwrap_or(1080));
+                if let Some(size) = args.next().as_deref().and_then(common::parse_size) {
+                    o.size = size;
                 }
             }
             "--every" => o.every = args.next().and_then(|s| s.parse().ok()).unwrap_or(0.0),
@@ -71,31 +76,17 @@ fn options() -> Options {
         }
     }
     if paths.is_empty() {
-        paths.push(PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".openflow/visuals/presets"));
+        paths.push(engine::preset::pack_dir());
     }
     for p in paths {
         if p.is_dir() {
-            walk(&p, &mut o.presets);
+            o.presets.extend(engine::preset::milk_files(&p));
         } else {
             o.presets.push(p);
         }
     }
     o.presets.sort();
     o
-}
-
-fn walk(dir: &std::path::Path, out: &mut Vec<PathBuf>) {
-    for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
-        let path = entry.path();
-        if entry.file_name().to_string_lossy().starts_with('.') {
-            continue;
-        }
-        if path.is_dir() {
-            walk(&path, out);
-        } else if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("milk")) {
-            out.push(path);
-        }
-    }
 }
 
 /// Open an input and keep the last `WINDOW` samples of two of its channels.

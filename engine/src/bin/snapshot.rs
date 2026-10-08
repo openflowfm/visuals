@@ -5,7 +5,10 @@
 //! The audio is fixed — a kick on every beat at 120 bpm under a chord — so a
 //! snapshot repeats.
 
+mod common;
+
 use engine::audio::Audio;
+use engine::picture::save_png;
 use engine::render::{headless, Renderer};
 
 fn music(frame: usize, left: &mut [f32], right: &mut [f32]) {
@@ -30,11 +33,7 @@ fn main() {
     };
     let frames: usize = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(180);
     let out = args.get(2).cloned().unwrap_or_else(|| "snapshot.png".into());
-    let (w, h) = args
-        .get(3)
-        .and_then(|s| s.split_once('x'))
-        .and_then(|(a, b)| Some((a.parse().ok()?, b.parse().ok()?)))
-        .unwrap_or((1280, 720));
+    let (w, h) = args.get(3).and_then(|s| common::parse_size(s)).unwrap_or((1280, 720));
     let (device, queue) = headless().expect("a GPU");
     let mut renderer = Renderer::new(device, queue, w, h);
     let text = engine::preset::decode(&std::fs::read(path).expect("read preset"));
@@ -53,10 +52,6 @@ fn main() {
     }
     let pixels = renderer.read_back();
     let per_frame = started.elapsed().as_secs_f64() * 1000.0 / frames as f64;
-    let file = std::fs::File::create(&out).expect("create png");
-    let mut encoder = png::Encoder::new(std::io::BufWriter::new(file), w, h);
-    encoder.set_color(png::ColorType::Rgba);
-    encoder.set_depth(png::BitDepth::Eight);
-    encoder.write_header().unwrap().write_image_data(&pixels).unwrap();
+    save_png(std::path::Path::new(&out), w, h, &pixels).expect("write png");
     println!("{out}: {frames} frames at {w}x{h}, {per_frame:.2} ms/frame (CPU + submit, not GPU-synced)");
 }

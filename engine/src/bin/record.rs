@@ -4,7 +4,8 @@
 //!   cargo run --release --bin record -- <audio> <out.mp4|out.mov> --cut <seconds> <file.milk> [--cut …] [options]
 //!
 //!   --cut <s> <preset>  from `s` seconds on, draw this preset (a path, or one in the
-//!                       pack at ~/.openflow/visuals/presets); give at least one
+//!                       pack: `OPENFLOW_VISUALS_PRESETS` if set, otherwise
+//!                       ~/.openflow/visuals/presets); give at least one
 //!   --cuts <file>       cuts from a file, one `<seconds> <preset>` a line, `#` comments
 //!   --size WxH          the size it draws at (default 1920x1080)
 //!   --fps N             frames per second (default 60)
@@ -16,6 +17,8 @@
 //! ffmpeg reads the audio (any format it knows) and encodes the video: H.264 for
 //! `.mp4`, ProRes 422 HQ for `.mov`. The audio is muxed in, so the file plays back
 //! with what the presets heard.
+
+mod common;
 
 use engine::audio::{Audio, FFT_SIZE};
 use engine::render::{headless, Renderer};
@@ -74,10 +77,7 @@ fn options() -> Options {
                 }
             }
             "--size" => {
-                o.size = args
-                    .next()
-                    .and_then(|s| s.split_once('x').and_then(|(a, b)| Some((a.parse().ok()?, b.parse().ok()?))))
-                    .unwrap_or_else(|| usage())
+                o.size = args.next().as_deref().and_then(common::parse_size).unwrap_or_else(|| usage())
             }
             "--fps" => o.fps = args.next().and_then(|s| s.parse().ok()).unwrap_or_else(|| usage()),
             "--from" => o.from = seconds(args.next()),
@@ -99,7 +99,7 @@ fn find(preset: &str) -> PathBuf {
     if given.exists() {
         return given;
     }
-    let pack = PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".openflow/visuals/presets").join(preset);
+    let pack = engine::preset::pack_dir().join(preset);
     if pack.exists() {
         return pack;
     }
