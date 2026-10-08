@@ -34,7 +34,7 @@
 # Without them the build goes on without update bundles or `latest.json` and
 # says so; the app then says "Updates aren't set up in this build" if asked.
 # With them, `plugins.updater.pubkey` in tauri.conf.json must hold the matching
-# public key, which the guard checks.
+# public key; the guard checks only that it isn't still the placeholder.
 
 name: release
 
@@ -133,7 +133,7 @@ jobs:
       # Update bundles need the updater's private key. Without it this is a
       # build without updates, said plainly; with it, the config must hold the
       # public key that matches, or every update would fail its signature check
-      # on the user's Mac.
+      # on the user's Mac. This step checks only that it isn't the placeholder.
       - name: Whether this build makes updates
         id: updates
         env:
@@ -446,8 +446,11 @@ jobs:
           gh release edit nightly --prerelease --latest=false --title "$title" --notes "$notes"
 
       # The update bundle goes up before the `latest.json` that names it, so
-      # the app never reads of a bundle that isn't there yet; the bundles of
-      # nightlies before go once nothing points at them.
+      # the app never reads of a bundle that isn't there yet. The bundle the
+      # new `latest.json` names and the two nightlies' before it stay, so a Mac
+      # that read an earlier `latest.json` can still download what it names;
+      # older ones go. A re-run of an older run (a lower run number than the
+      # live `latest.json`'s) publishes nothing, so the nightly never rolls back.
       - name: Publish the nightly's update
         env:
           GH_TOKEN: ${{ github.token }}
@@ -460,12 +463,28 @@ jobs:
             echo "No updater key: the nightly has no update bundle or latest.json this time."
             exit 0
           fi
+          live=0
+          if gh release download nightly --pattern latest.json --output live-latest.json --clobber; then
+            live=$(jq -r '.version' live-latest.json | sed -n 's/.*-nightly\.\([0-9][0-9]*\)$/\1/p')
+            live=${live:-0}
+          fi
+          if [ "$GITHUB_RUN_NUMBER" -lt "$live" ]; then
+            echo "::notice::The live nightly latest.json is build $live, newer than this run ($GITHUB_RUN_NUMBER): not publishing this update."
+            exit 0
+          fi
           gh release upload nightly "assets/$BUNDLE" "assets/$BUNDLE.sig" --clobber
           gh release upload nightly assets/latest.json --clobber
-          gh release view nightly --json assets --jq '.assets[].name' | while IFS= read -r name; do
+          names=$(gh release view nightly --json assets --jq '.assets[].name')
+          # The run numbers of the three newest nightly bundles (this one among them).
+          keep=$(printf '%s\n' "$names" | sed -n 's/^visual-flow-nightly-\([0-9][0-9]*\)_aarch64\.app\.tar\.gz$/\1/p' | sort -rn | head -n 3)
+          printf '%s\n' "$names" | while IFS= read -r name; do
             case "$name" in
               "$BUNDLE"|"$BUNDLE.sig") ;;
               visual-flow-nightly-*_aarch64.app.tar.gz|visual-flow-nightly-*_aarch64.app.tar.gz.sig)
-                gh release delete-asset nightly "$name" --yes ;;
+                run=${name#visual-flow-nightly-}
+                run=${run%%_*}
+                if ! printf '%s\n' "$keep" | grep -qx "$run"; then
+                  gh release delete-asset nightly "$name" --yes
+                fi ;;
             esac
           done

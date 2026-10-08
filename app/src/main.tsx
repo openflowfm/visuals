@@ -6,6 +6,7 @@ import '@openflow/widgets/palette.css';
 import '@openflow/widgets/tokens.css';
 import './app.css';
 import { App } from './App.tsx';
+import { Update } from './Update.tsx';
 
 // Served on its own (a browser tab on the dev port) the page has no app behind it:
 // no engine, no presets, no bench. The window `npm run app` opens is the editor.
@@ -15,7 +16,10 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ThemeRoot theme={DEFAULT_THEME} className="vf-root">
       {inApp ? (
-        <App />
+        <>
+          <App />
+          <Update />
+        </>
       ) : (
         <p className="outside">
           This is the editor's page without the app behind it. The editor is the window <code>npm run app</code> opened.

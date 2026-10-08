@@ -35,7 +35,7 @@ export function day(date: string | null): string | null {
   return date?.match(/^\d{4}-\d{2}-\d{2}/)?.[0] ?? null;
 }
 
-const onUpdateCheck = (f: (payload: unknown) => void): Promise<UnlistenFn> => listen('update-check', (e) => f(e.payload));
+const onUpdateCheck = (f: (payload: unknown) => void): Promise<UnlistenFn> => listen(api.UPDATE_CHECK_EVENT, (e) => f(e.payload));
 
 const check = (): Promise<CheckResult> =>
   api.updateCheck().then(
