@@ -1,54 +1,94 @@
-# Nothing has been released yet. This workflow is modelled on
-# better-session-view's macOS pack job and stays dormant — it does nothing
-# until the first `v*` tag is pushed here, and it needs the same signing
-# secrets (MACOS_CERTIFICATE, MACOS_CERTIFICATE_PASSWORD, APPLE_API_KEY_P8,
-# APPLE_API_KEY_ID, APPLE_API_ISSUER) added to this repo before that tag means
-# anything.
+# The signed, notarised macOS build of the Tauri app (`app/`), the one that
+# replaces the Electron app.
+#
+# - A `v*` tag builds it and opens a draft release with the disk image.
+# - Running it by hand (Actions → release → Run workflow, on any branch) builds
+#   the same signed image and keeps it as a build artifact, with no release —
+#   for trying a build on another Mac before anything is tagged.
+#
+# It needs these repository secrets, the same names the other openflowfm apps
+# use:
+#   MACOS_CERTIFICATE           the Developer ID Application certificate and
+#                               its key, exported as .p12, base64
+#   MACOS_CERTIFICATE_PASSWORD  the .p12's password
+#   APPLE_API_KEY_P8            an App Store Connect API key (.p8), base64
+#   APPLE_API_KEY_ID            that key's ID
+#   APPLE_API_ISSUER            its issuer ID
 
 name: release
 
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 # The runner image is pinned rather than `-latest`. `-latest` migrates to a new
 # OS over a month or two with nothing here changing, which is fine for `ci.yml`
 # and wrong for the job that signs a release — the tag would build on a
 # different macOS than the one it was tried on. `macos-26` is where
-# `macos-latest` currently points.
+# `macos-latest` currently points, and it is Apple Silicon, so the build is
+# aarch64 only.
 
 jobs:
   # The tag and the manifest have to agree before anything is built, because
-  # nothing downstream checks. electron-builder names the .dmg after
-  # package.json's own version, so a `v0.2.0` tag on a tree that still says
-  # 0.1.0 produces a `v0.2.0` release full of `0.1.0` files, signed and
+  # nothing downstream checks. Tauri names the disk image and stamps the bundle
+  # with tauri.conf.json's own version, so a `v0.2.0` tag on a tree that still
+  # says 0.1.0 produces a `v0.2.0` release of a `0.1.0` app, signed and
   # notarised and wrong.
   #
   # Its own job rather than a step, so it fails in fifteen seconds instead of
-  # nine minutes into a notarisation.
+  # twenty minutes into a build.
   guard:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
       - name: The tag is the version
+        if: startsWith(github.ref, 'refs/tags/')
         run: |
           set -eu
           tag="${GITHUB_REF_NAME#v}"
-          found=$(node -p "require('./package.json').version")
+          found=$(node -p "require('./app/src-tauri/tauri.conf.json').version")
           if [ "$found" != "$tag" ]; then
-            echo "::error file=package.json::tag says $tag, package.json says $found."
+            echo "::error file=app/src-tauri/tauri.conf.json::tag says $tag, tauri.conf.json says $found."
             exit 1
           fi
-          echo "tag and package.json agree on $tag"
+          echo "tag and tauri.conf.json agree on $tag"
 
-  # The app, on the only OS that can sign it.
-  apps:
+      # Without the secrets Tauri builds an unsigned app and says nothing, so
+      # their absence is an error here rather than a surprise at the end.
+      - name: The signing secrets are set
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          set -eu
+          missing=0
+          for name in MACOS_CERTIFICATE MACOS_CERTIFICATE_PASSWORD APPLE_API_KEY_P8 APPLE_API_KEY_ID APPLE_API_ISSUER; do
+            if [ -z "${!name}" ]; then
+              echo "::error::the $name secret is not set on this repository."
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+  app:
     needs: guard
     runs-on: macos-26
+    env:
+      # The Electron app's dependencies are still in package.json; its binary
+      # is not needed to build the Tauri app.
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
     steps:
       - uses: actions/checkout@v7
 
@@ -58,64 +98,101 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
-      # No ELECTRON_SKIP_BINARY_DOWNLOAD here — this is the job that needs the
-      # actual binary. postinstall also compiles the Ableton Link addon against
-      # this machine's toolchain.
       - run: npm ci
 
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release
+
+      # The same tauri-cli as the one the app is built with locally. rusty_link
+      # builds Ableton Link with cmake, which the macOS image already has.
+      - run: cargo install tauri-cli --version 2.9.6 --locked
+
+      # The certificate goes into a keychain made for this run, which goes away
+      # with the runner. Tauri signs the app with the identity found in it, and
+      # the disk image is signed with the same identity further down.
+      - name: Import the signing certificate
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          set -eu
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password=$(openssl rand -hex 24)
+          printf '%s' "$MACOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" \
+            -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain"
+          read -r -a existing <<< "$(security list-keychains -d user | tr -d '"' | tr '\n' ' ')"
+          security list-keychains -d user -s "$keychain" "${existing[@]}"
+          rm "$RUNNER_TEMP/certificate.p12"
+          identity=$(security find-identity -v -p codesigning "$keychain" \
+            | sed -n 's/.*"\(Developer ID Application: .*\)"/\1/p' | head -n 1)
+          if [ -z "$identity" ]; then
+            echo "::error::MACOS_CERTIFICATE holds no Developer ID Application identity."
+            exit 1
+          fi
+          echo "APPLE_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
+
       # notarytool wants the App Store Connect key as a file on disk and a
-      # secret is a string, so it lands under RUNNER_TEMP, which goes away with
-      # the runner.
+      # secret is a string, so it lands under RUNNER_TEMP too.
       - name: Write the notary key
         env:
           APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
         run: |
           set -eu
           printf '%s' "$APPLE_API_KEY_P8" | base64 --decode > "$RUNNER_TEMP/notary.p8"
-          echo "APPLE_API_KEY=$RUNNER_TEMP/notary.p8" >> "$GITHUB_ENV"
+          echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/notary.p8" >> "$GITHUB_ENV"
 
-      # electron-builder reads every one of these itself: CSC_* to import the
-      # certificate into a keychain it creates and throws away, APPLE_API_* to
-      # notarise once the bundle is signed. Nothing in `electron-builder.yml`
-      # switches them on — their presence is the switch.
-      - name: Pack the app
+      # Tauri signs the app with APPLE_SIGNING_IDENTITY (hardened runtime,
+      # Entitlements.plist) and, given APPLE_API_*, notarises and staples it
+      # before wrapping it in the disk image. `targets` in tauri.conf.json stays
+      # `app` so local builds don't make an image; the release asks for both.
+      - name: Build the app
         env:
-          CSC_LINK: ${{ secrets.MACOS_CERTIFICATE }}
-          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-        run: npm run pack
+        working-directory: app/src-tauri
+        run: cargo tauri build --bundles app,dmg
 
-      # electron-builder notarises the `.app` and stops there, then wraps it in
-      # a disk image it has only signed. The image is the file that travels,
-      # and Gatekeeper assesses it on open — an un-notarised one is refused
-      # with "Apple cannot check it for malicious software" no matter how good
-      # the bundle inside is. So the image is submitted here, and stapled,
-      # which is what makes it open without a network round trip.
-      - name: Notarise the disk image
+      # The image is the file that travels, and Gatekeeper assesses it on open
+      # — an un-notarised one is refused with "Apple cannot check it for
+      # malicious software" no matter how good the app inside is. So it is
+      # signed, submitted and stapled here, under a name without the brackets
+      # (GitHub rewrites them in asset names).
+      - name: Sign and notarise the disk image
         env:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: |
           set -eux
-          for dmg in release/*.dmg; do
-            xcrun notarytool submit "$dmg" \
-              --key "$APPLE_API_KEY" \
-              --key-id "$APPLE_API_KEY_ID" \
-              --issuer "$APPLE_API_ISSUER" \
-              --wait
-            xcrun stapler staple "$dmg"
-          done
+          version=$(node -p "require('./app/src-tauri/tauri.conf.json').version")
+          mkdir release
+          dmgs=(target/release/bundle/dmg/*.dmg)
+          test "${#dmgs[@]}" -eq 1
+          dmg="release/visual-flow_${version}_aarch64.dmg"
+          cp "${dmgs[0]}" "$dmg"
+          codesign --force --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$dmg"
+          xcrun notarytool submit "$dmg" \
+            --key "$APPLE_API_KEY_PATH" \
+            --key-id "$APPLE_API_KEY_ID" \
+            --issuer "$APPLE_API_ISSUER" \
+            --wait
+          xcrun stapler staple "$dmg"
 
-      # electron-builder warns and carries on when it cannot sign or cannot
-      # notarise, so a green pack step proves nothing. This asks what the
-      # receiving Mac asks, of both artifacts. `spctl` is the one that counts:
-      # it is Gatekeeper itself, and it rejects anything signed but never
-      # notarised — which is the exact failure this release exists to avoid.
+      # A green build step proves little: the check that counts is what the
+      # receiving Mac asks. `spctl` is Gatekeeper itself, and it rejects
+      # anything signed but never notarised — the exact failure this workflow
+      # exists to avoid.
       - name: Verify what a stranger's Mac will see
         run: |
           set -eux
-          for app in release/mac-*/*.app; do
+          for app in target/release/bundle/macos/*.app; do
             codesign --verify --deep --strict --verbose=2 "$app"
             spctl --assess --type execute --verbose=4 "$app"
             xcrun stapler validate "$app"
@@ -133,7 +210,8 @@ jobs:
           if-no-files-found: error
 
   publish:
-    needs: apps
+    needs: app
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -159,5 +237,7 @@ jobs:
           files=()
           while IFS= read -r file; do files+=("$file"); done < <(find assets -type f | sort)
           test "${#files[@]}" -gt 0
+          prerelease=()
+          case "$GITHUB_REF_NAME" in *-*) prerelease=(--prerelease) ;; esac
           gh release create "$GITHUB_REF_NAME" --draft --title "$GITHUB_REF_NAME" \
-            "${notes_args[@]}" "${files[@]}"
+            "${prerelease[@]}" "${notes_args[@]}" "${files[@]}"

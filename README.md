@@ -34,6 +34,13 @@ bridge is running with `OPENFLOW_BRIDGE_WS` (default `ws://127.0.0.1:17800/ws`),
 [better-session-view](https://github.com/ryangavin/better-session-view) for the bridge
 itself, and [the harness](docs/harness.md) for working without one.
 
+## Releases
+
+`.github/workflows/release.yml` builds the Tauri app signed and notarised on macOS. A `v*`
+tag matching `app/src-tauri/tauri.conf.json`'s version opens a draft release with the
+disk image; running the workflow by hand on any branch builds the same image as a build
+artifact, without a release. It needs the signing secrets listed at the top of the file.
+
 ## Where the reasoning lives
 
 **Read the row you need, not the set.**
