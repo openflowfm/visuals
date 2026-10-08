@@ -17,7 +17,7 @@ interface Props {
   onSelect(id: string | null): void;
   onLists(next: Lists): void;
   /** A short sentence for the page to show, and what the app said, for its tooltip. */
-  onError(message: string, detail?: string): void;
+  onError: (message: string, detail?: string) => void;
   /** A library with a + per row sits beside the panel (the editor's does; live mode has none). */
   library?: boolean;
 }
