@@ -14,7 +14,7 @@ export PORT
 # Job control: the background job below gets a process group of its own, whose
 # id is its pid. Its input is /dev/null, so nothing in it waits on the terminal.
 set -m
-cargo tauri dev --config "{\"build\":{\"devUrl\":\"http://127.0.0.1:$PORT\"}}" </dev/null &
+cargo tauri dev --config "{\"build\":{\"devUrl\":\"http://127.0.0.1:$PORT\"}}" "$@" </dev/null &
 group=$!
 
 stop() {
