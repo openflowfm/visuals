@@ -26,6 +26,9 @@ jobs:
 
       - run: npm ci
 
+      # .prettierrc.json sets the house style; `npx prettier --write app/src` fixes a failure.
+      - run: npm run format:check
+
       - run: npm run typecheck
 
       # The editor page's tests, with coverage: same tests, V8's own counters,
@@ -67,6 +70,11 @@ jobs:
       - run: npm run app:build-ui
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      # rustfmt.toml sets the house style; `cargo fmt --all` fixes a failure.
+      - run: cargo fmt --all --check
 
       - uses: Swatinem/rust-cache@v2
         with:

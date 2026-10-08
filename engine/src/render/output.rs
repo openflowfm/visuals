@@ -35,10 +35,7 @@ impl Renderer {
     /// so the echo accumulates; turned on, it starts from comp alone.
     pub(super) fn echo(&mut self, encoder: &mut wgpu::CommandEncoder) {
         if self.trails_pass.is_none() {
-            let shader = self.device.create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("trails"),
-                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(crate::fx::TRAILS)),
-            });
+            let shader = self.device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("trails"), source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(crate::fx::TRAILS)) });
             let half = wgpu::TextureFormat::Rgba16Float;
             let (echo, copy) = (quad(&self.device, "trails", &shader, "fs", half), quad(&self.device, "trails", &shader, "copy", FORMAT));
             let uniform = buffer(&self.device, &[0u8; 16], wgpu::BufferUsages::UNIFORM);

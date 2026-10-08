@@ -67,8 +67,7 @@ export const presets = () => invoke<Entry[]>('presets');
 /** One setting, live. False means the preset needs applying whole instead. */
 export const setValue = (owner: Owner, key: string, value: number) => invoke<boolean>('set_value', { owner, key, value });
 /** Keep the stage pictures `which` (`PREVIEWS` indices) at `width`×`height`; none stops them. */
-export const setPreviews = (which: number[], width = PREVIEW.width, height = PREVIEW.height) =>
-  invoke<void>('set_previews', { which, width, height });
+export const setPreviews = (which: number[], width = PREVIEW.width, height = PREVIEW.height) => invoke<void>('set_previews', { which, width, height });
 /** The latest stage pictures, packed with a header (`unpack` in previews.ts). */
 export const previews = () => invoke<ArrayBuffer>('previews');
 /** MilkDrop's default `warp` or `comp` shader as code to start from, with this
@@ -80,8 +79,7 @@ export const apply = (preset: Preset) => invoke<Report>('apply', { preset });
 export const placeBench = (r: { x: number; y: number; width: number; height: number }) => invoke<void>('place_bench', r);
 export const inputs = () => invoke<Input[]>('inputs');
 /** `size` (the input's channel count) tells apart inputs that share a name. */
-export const listenTo = (name: string | null, left = 1, right = 2, size: number | null = null) =>
-  invoke<string>('listen_to', { name, size, left, right });
+export const listenTo = (name: string | null, left = 1, right = 2, size: number | null = null) => invoke<string>('listen_to', { name, size, left, right });
 
 /** What the bench hears: the input and the two channels, counted from 1. */
 export interface Heard {

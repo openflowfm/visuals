@@ -91,7 +91,11 @@ describe('adding a layer', () => {
 
   it('turns on the waveform, vectors and borders, once', () => {
     const p = blank();
-    for (const [kind, id] of [['waveform', 'wave'], ['vectors', 'vectors'], ['border', 'border']] as const) {
+    for (const [kind, id] of [
+      ['waveform', 'wave'],
+      ['vectors', 'vectors'],
+      ['border', 'border'],
+    ] as const) {
       const added = addLayer(p, kind)!;
       expect(added.id).toBe(id);
       expect(ids(added.preset)).toEqual([id]);
@@ -144,7 +148,11 @@ describe('problems', () => {
       { stage: 'wave1.frame', message: 'a', line: 2 },
       { stage: 'comp', message: 'b', line: null },
     ];
-    const on = (id: string) => problemsOf(problems, STAGES.find((s) => s.id === id)!).map((p) => p.message);
+    const on = (id: string) =>
+      problemsOf(
+        problems,
+        STAGES.find((s) => s.id === id)!,
+      ).map((p) => p.message);
     expect(on('wave1')).toEqual(['a']);
     expect(on('comp')).toEqual(['b']);
     expect(on('wave')).toEqual([]);

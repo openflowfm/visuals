@@ -21,11 +21,7 @@ pub struct Input {
 #[tauri::command]
 pub fn inputs() -> Vec<Input> {
     let host = cpal::default_host();
-    host.input_devices()
-        .into_iter()
-        .flatten()
-        .map(|d| Input { name: name_of(&d), channels: d.default_input_config().map(|c| c.channels()).unwrap_or(0) })
-        .collect()
+    host.input_devices().into_iter().flatten().map(|d| Input { name: name_of(&d), channels: d.default_input_config().map(|c| c.channels()).unwrap_or(0) }).collect()
 }
 
 /// An open input. Dropping it stops listening.
@@ -88,11 +84,7 @@ fn listen_on(app: &App, name: Option<&str>, size: Option<usize>, left: Option<us
 /// gone or nothing was chosen.
 pub fn resume(app: &App) {
     let saved: Option<Choice> = crate::settings::load(SAVED);
-    let heard = saved
-        .as_ref()
-        .and_then(|c| listen_on(app, Some(&c.name), Some(c.size), Some(c.left), Some(c.right)).ok())
-        .map(Ok)
-        .unwrap_or_else(|| listen_on(app, None, None, None, None));
+    let heard = saved.as_ref().and_then(|c| listen_on(app, Some(&c.name), Some(c.size), Some(c.left), Some(c.right)).ok()).map(Ok).unwrap_or_else(|| listen_on(app, None, None, None, None));
     if let Err(e) = heard {
         eprintln!("no audio input: {e}");
     }

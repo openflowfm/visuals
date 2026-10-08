@@ -88,8 +88,7 @@ fn slot<'a>(key: &'a str, prefix: &str) -> Option<(usize, &'a str)> {
 /// neither a number nor a recognised code line, are ignored, as MilkDrop does.
 pub fn parse(text: &str) -> Preset {
     let mut preset = Preset::default();
-    let (mut init, mut frame, mut vertex, mut warp, mut comp) =
-        (Lines::default(), Lines::default(), Lines::default(), Lines::default(), Lines::default());
+    let (mut init, mut frame, mut vertex, mut warp, mut comp) = (Lines::default(), Lines::default(), Lines::default(), Lines::default(), Lines::default());
     let mut waves: [[Lines; 3]; SLOTS] = Default::default();
     let mut shapes: [[Lines; 2]; SLOTS] = Default::default();
 
@@ -237,11 +236,7 @@ mod tests {
         std::fs::write(pack.join("Author/a.milk"), "").unwrap();
         let given = root.join("given.milk");
         std::fs::write(&given, "").unwrap();
-        let found = [
-            find_in(given.to_str().unwrap(), &pack),
-            find_in("Author/a.milk", &pack),
-            find_in("Author/missing.milk", &pack),
-        ];
+        let found = [find_in(given.to_str().unwrap(), &pack), find_in("Author/a.milk", &pack), find_in("Author/missing.milk", &pack)];
         std::fs::remove_dir_all(&root).unwrap();
         assert_eq!(found, [Some(given), Some(pack.join("Author/a.milk")), None]);
     }

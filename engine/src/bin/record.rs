@@ -47,16 +47,7 @@ fn usage() -> ! {
 fn options() -> Options {
     let mut args = std::env::args().skip(1);
     let (Some(audio), Some(out)) = (args.next(), args.next()) else { usage() };
-    let mut o = Options {
-        audio: audio.into(),
-        out: out.into(),
-        cuts: Vec::new(),
-        size: (1920, 1080),
-        fps: 60,
-        from: 0.0,
-        to: None,
-        warm: 2.0,
-    };
+    let mut o = Options { audio: audio.into(), out: out.into(), cuts: Vec::new(), size: (1920, 1080), fps: 60, from: 0.0, to: None, warm: 2.0 };
     let seconds = |s: Option<String>| s.and_then(|s| s.parse::<f64>().ok()).unwrap_or_else(|| usage());
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -76,9 +67,7 @@ fn options() -> Options {
                     o.cuts.push((seconds(Some(at.into())), find(preset.trim())));
                 }
             }
-            "--size" => {
-                o.size = args.next().as_deref().and_then(common::parse_size).unwrap_or_else(|| usage())
-            }
+            "--size" => o.size = args.next().as_deref().and_then(common::parse_size).unwrap_or_else(|| usage()),
             "--fps" => o.fps = args.next().and_then(|s| s.parse().ok()).unwrap_or_else(|| usage()),
             "--from" => o.from = seconds(args.next()),
             "--to" => o.to = Some(seconds(args.next())),
@@ -103,13 +92,7 @@ fn find(preset: &str) -> PathBuf {
 
 /// The whole file as interleaved stereo f32 at 44.1 kHz.
 fn decode(audio: &Path) -> Vec<f32> {
-    let mut child = Command::new("ffmpeg")
-        .args(["-v", "error", "-i"])
-        .arg(audio)
-        .args(["-f", "f32le", "-ac", "2", "-ar", &RATE.to_string(), "-"])
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("run ffmpeg");
+    let mut child = Command::new("ffmpeg").args(["-v", "error", "-i"]).arg(audio).args(["-f", "f32le", "-ac", "2", "-ar", &RATE.to_string(), "-"]).stdout(Stdio::piped()).spawn().expect("run ffmpeg");
     let mut bytes = Vec::new();
     child.stdout.take().unwrap().read_to_end(&mut bytes).expect("read decoded audio");
     if !child.wait().expect("ffmpeg").success() {
@@ -125,11 +108,7 @@ fn hear(samples: &[f32], t: f64, left: &mut [f32], right: &mut [f32]) {
     let end = (t * RATE as f64).round() as isize;
     for i in 0..FFT_SIZE {
         let at = end - FFT_SIZE as isize + i as isize;
-        let (l, r) = if at >= 0 && (at as usize) * 2 + 1 < samples.len() {
-            (samples[at as usize * 2], samples[at as usize * 2 + 1])
-        } else {
-            (0.0, 0.0)
-        };
+        let (l, r) = if at >= 0 && (at as usize) * 2 + 1 < samples.len() { (samples[at as usize * 2], samples[at as usize * 2 + 1]) } else { (0.0, 0.0) };
         left[i] = l;
         right[i] = r;
     }
@@ -144,8 +123,7 @@ fn encoder(o: &Options) -> std::process::Child {
         &["-c:v", "libx264", "-preset", "slow", "-crf", "14", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "320k"]
     };
     let mut cmd = Command::new("ffmpeg");
-    cmd.args(["-y", "-v", "error", "-f", "rawvideo", "-pix_fmt", "rgba", "-s", &format!("{w}x{h}")])
-        .args(["-r", &o.fps.to_string(), "-i", "-", "-ss", &o.from.to_string()]);
+    cmd.args(["-y", "-v", "error", "-f", "rawvideo", "-pix_fmt", "rgba", "-s", &format!("{w}x{h}")]).args(["-r", &o.fps.to_string(), "-i", "-", "-ss", &o.from.to_string()]);
     if let Some(to) = o.to {
         cmd.args(["-t", &(to - o.from).to_string()]);
     }

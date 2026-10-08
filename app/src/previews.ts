@@ -139,11 +139,7 @@ export function wanted(shown: Iterable<number>): number[] {
  * into at `DIM`. Alone on black a thin wave or a small shape is mostly black;
  * over the frame it reads where it lands, and the gain makes a faint one seen.
  */
-export function layerOver(
-  layer: Uint8ClampedArray,
-  under: Uint8ClampedArray,
-  out: Uint8ClampedArray<ArrayBuffer> = new Uint8ClampedArray(layer.length),
-): Uint8ClampedArray<ArrayBuffer> {
+export function layerOver(layer: Uint8ClampedArray, under: Uint8ClampedArray, out: Uint8ClampedArray<ArrayBuffer> = new Uint8ClampedArray(layer.length)): Uint8ClampedArray<ArrayBuffer> {
   let peak = 0;
   for (let i = 0; i < layer.length; i += 4) peak = Math.max(peak, layer[i], layer[i + 1], layer[i + 2]);
   const gain = peak > 0 ? Math.min(MAX_GAIN, 255 / peak) : 1;
@@ -195,9 +191,12 @@ async function loop() {
     const width = STEPS[step];
     const height = Math.round((width * api.PREVIEW.height) / api.PREVIEW.width);
     const ask = `${which.join(',')}@${width}`;
+    // Only a request that reached the engine counts as asked, so a failed one is tried again next poll.
     if (ask !== asked) {
-      asked = ask;
-      await api.setPreviews(which, width, height).catch(() => {});
+      asked = await api.setPreviews(which, width, height).then(
+        () => ask,
+        () => asked,
+      );
     }
     const got = which.length ? unpack(await api.previews().catch(() => new ArrayBuffer(0))) : null;
     if (got) draw(shown, got);

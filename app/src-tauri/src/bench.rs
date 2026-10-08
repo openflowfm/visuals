@@ -479,11 +479,7 @@ pub mod view {
             let window = view.window()?;
             let area = window.contentLayoutRect();
             let left = area.origin.x + x;
-            let bottom = if parent.isFlipped() {
-                window.frame().size.height - (area.origin.y + area.size.height) + y
-            } else {
-                area.origin.y + area.size.height - y - height
-            };
+            let bottom = if parent.isFlipped() { window.frame().size.height - (area.origin.y + area.size.height) + y } else { area.origin.y + area.size.height - y - height };
             view.setFrame(NSRect::new(NSPoint::new(left, bottom), NSSize::new(width, height)));
             let scale = window.backingScaleFactor();
             Some(((width * scale).round() as u32, (height * scale).round() as u32))

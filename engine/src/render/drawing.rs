@@ -105,9 +105,7 @@ impl Renderer {
         let mut groups = HashMap::new();
         for cmd in &list.cmds {
             let pipeline = &self.draw_pipelines[&(cmd.topology, cmd.blend)];
-            groups
-                .entry((cmd.topology, cmd.blend))
-                .or_insert_with(|| bind(&self.device, pipeline, &[wgpu::BindingResource::TextureView(previous), wgpu::BindingResource::Sampler(sampler)]));
+            groups.entry((cmd.topology, cmd.blend)).or_insert_with(|| bind(&self.device, pipeline, &[wgpu::BindingResource::TextureView(previous), wgpu::BindingResource::Sampler(sampler)]));
         }
         {
             let mut pass = begin(encoder, target, false);
@@ -147,12 +145,8 @@ pub(super) fn upload(device: &wgpu::Device, queue: &wgpu::Queue, list: &DrawList
     let bytes: &[u8] = bytemuck::cast_slice(&list.vertices);
     if buffer.as_ref().is_none_or(|(_, cap)| *cap < bytes.len()) {
         let capacity = bytes.len().next_power_of_two().max(4096);
-        let made = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("draw"),
-            size: capacity as u64,
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        let made =
+            device.create_buffer(&wgpu::BufferDescriptor { label: Some("draw"), size: capacity as u64, usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
         *buffer = Some((made, capacity));
     }
     queue.write_buffer(&buffer.as_ref().unwrap().0, 0, bytes);

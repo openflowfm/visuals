@@ -192,9 +192,7 @@ pub mod native {
     use crate::bench;
     use objc2::MainThreadMarker;
     use objc2::rc::Retained;
-    use objc2_app_kit::{
-        NSBackingStoreType, NSColor, NSScreen, NSStatusWindowLevel, NSView, NSWindow, NSWindowCollectionBehavior, NSWindowStyleMask,
-    };
+    use objc2_app_kit::{NSBackingStoreType, NSColor, NSScreen, NSStatusWindowLevel, NSView, NSWindow, NSWindowCollectionBehavior, NSWindowStyleMask};
     use objc2_foundation::{NSNumber, NSPoint, NSRect, NSSize, ns_string};
     use std::cell::RefCell;
     use tauri::{AppHandle, Manager};
@@ -227,11 +225,7 @@ pub mod native {
     }
 
     fn id_of(screen: &NSScreen) -> u32 {
-        screen
-            .deviceDescription()
-            .objectForKey(ns_string!("NSScreenNumber"))
-            .and_then(|n| n.downcast::<NSNumber>().ok())
-            .map_or(0, |n| n.unsignedIntValue())
+        screen.deviceDescription().objectForKey(ns_string!("NSScreenNumber")).and_then(|n| n.downcast::<NSNumber>().ok()).map_or(0, |n| n.unsignedIntValue())
     }
 
     /// The displays, in the system's order: the first has the menu bar.
@@ -286,9 +280,7 @@ pub mod native {
         let frame = screen.frame();
         let scale = screen.backingScaleFactor();
         // SAFETY: a plain borderless window, made and kept on the main thread.
-        let window = unsafe {
-            NSWindow::initWithContentRect_styleMask_backing_defer(mtm.alloc(), frame, NSWindowStyleMask::Borderless, NSBackingStoreType::Buffered, false)
-        };
+        let window = unsafe { NSWindow::initWithContentRect_styleMask_backing_defer(mtm.alloc(), frame, NSWindowStyleMask::Borderless, NSBackingStoreType::Buffered, false) };
         // SAFETY: the window is kept by `OUTPUT` until it is closed, and not after.
         unsafe { window.setReleasedWhenClosed(false) };
         window.setBackgroundColor(Some(&NSColor::blackColor()));
@@ -297,10 +289,7 @@ pub mod native {
         // Above the menu bar (24) and the Dock (20), so neither covers the show.
         window.setLevel(NSStatusWindowLevel);
         window.setCollectionBehavior(
-            NSWindowCollectionBehavior::CanJoinAllSpaces
-                | NSWindowCollectionBehavior::Stationary
-                | NSWindowCollectionBehavior::FullScreenAuxiliary
-                | NSWindowCollectionBehavior::IgnoresCycle,
+            NSWindowCollectionBehavior::CanJoinAllSpaces | NSWindowCollectionBehavior::Stationary | NSWindowCollectionBehavior::FullScreenAuxiliary | NSWindowCollectionBehavior::IgnoresCycle,
         );
         window.setFrame_display(frame, false);
         let content = NSView::initWithFrame(mtm.alloc(), NSRect::new(NSPoint::new(0.0, 0.0), frame.size));

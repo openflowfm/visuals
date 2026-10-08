@@ -119,10 +119,7 @@ export function Library({ entries, loaded, search, onSearch, found, current, int
       {!loaded ? (
         <p className="lib-note">loading presets…</p>
       ) : empty ? (
-        <p className="lib-note lib-first-run">
-          No presets found. Put .milk files in ~/.openflow/visuals/presets (or point OPENFLOW_VISUALS_PRESETS at a
-          folder of them) and restart.
-        </p>
+        <p className="lib-note lib-first-run">No presets found. Put .milk files in ~/.openflow/visuals/presets (or point OPENFLOW_VISUALS_PRESETS at a folder of them) and restart.</p>
       ) : (
         <ul
           ref={list}
@@ -136,16 +133,7 @@ export function Library({ entries, loaded, search, onSearch, found, current, int
           onFocus={onListFocus}
         >
           {shown.map((e, i) => (
-            <Row
-              key={e.path}
-              id={rowId(i)}
-              entry={e}
-              active={i === at}
-              playing={e.path === current}
-              intoName={into?.name ?? null}
-              onLoad={load}
-              onAdd={add}
-            />
+            <Row key={e.path} id={rowId(i)} entry={e} active={i === at} playing={e.path === current} intoName={into?.name ?? null} onLoad={load} onAdd={add} />
           ))}
         </ul>
       )}

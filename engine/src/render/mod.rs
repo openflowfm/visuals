@@ -156,10 +156,7 @@ pub const PREVIEW_MAX: (u32, u32) = (768, 432);
 /// The stages that have a picture, in the order [`Renderer::read_previews`] packs them:
 /// the warp's output, the feedback after waves and shapes, blur 1 and comp; then what
 /// each drawing stage drew this frame, alone on black.
-pub const PREVIEWS: [&str; 15] = [
-    "warp", "feedback", "blur", "comp", "wave0", "wave1", "wave2", "wave3", "shape0", "shape1", "shape2", "shape3", "wave",
-    "motion", "border",
-];
+pub const PREVIEWS: [&str; 15] = ["warp", "feedback", "blur", "comp", "wave0", "wave1", "wave2", "wave3", "shape0", "shape1", "shape2", "shape3", "wave", "motion", "border"];
 
 /// The last step's picture moved by the warp mesh and nothing else: what a
 /// refresh between steps mixes the preset's warp shader over.
@@ -637,13 +634,8 @@ impl Renderer {
         self.blit_pipeline(FORMAT);
         let mut kept = std::mem::take(&mut self.previews);
         kept.resize_with(PREVIEWS.len(), || None);
-        self.previews = kept
-            .into_iter()
-            .enumerate()
-            .map(|(i, old)| {
-                wanted.contains(&i).then(|| old.filter(|t| t.size == size).unwrap_or_else(|| Target::new(&self.device, size, PREVIEWS[i])))
-            })
-            .collect();
+        self.previews =
+            kept.into_iter().enumerate().map(|(i, old)| wanted.contains(&i).then(|| old.filter(|t| t.size == size).unwrap_or_else(|| Target::new(&self.device, size, PREVIEWS[i])))).collect();
     }
 
     /// The stage pictures asked for ([`Renderer::set_previews`]): RGBA rows top

@@ -83,7 +83,11 @@ function polled(w: number, h: number, which: number[], cut = 0): ArrayBuffer {
   const header = new DataView(bytes.buffer);
   header.setUint32(0, w, true);
   header.setUint32(4, h, true);
-  header.setUint32(8, which.reduce((m, i) => m | (1 << i), 0), true);
+  header.setUint32(
+    8,
+    which.reduce((m, i) => m | (1 << i), 0),
+    true,
+  );
   which.forEach((i, n) => bytes.fill(i, HEADER + each * n, Math.min(bytes.length, HEADER + each * (n + 1))));
   return bytes.buffer;
 }

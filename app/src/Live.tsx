@@ -18,8 +18,7 @@ import { FrameRate, Header, NoticeBanner } from './views.tsx';
 import './live.css';
 
 /** What the keys do, said by the strip along the bottom when nothing is pointed at. */
-const KEYS =
-  '← → step · R random · H hold · hold S strobe, P punch, F freeze (⇧ latches) · B blackout · T tap · I invert · M mirror · 0 reset effects · ⌘⇧L editor';
+const KEYS = '← → step · R random · H hold · hold S strobe, P punch, F freeze (⇧ latches) · B blackout · T tap · I invert · M mirror · 0 reset effects · ⌘⇧L editor';
 
 /**
  * Live mode: performing, not editing. The output fills a display of its own
@@ -79,13 +78,15 @@ export function Live({ start, onMode }: { start: string | null; onMode: (mode: '
 
   const act = useCallback(
     (action: pl.Action) =>
-      pl.act(action).catch((e) =>
-        setError(
-          heldNow.current
-            ? notice('HOLD is on, so the preset stays — press H to let go.', e)
-            : notice(`Couldn't ${action.kind === 'random' ? 'pick a random preset' : `go to the ${action.kind} preset`}.`, e),
+      pl
+        .act(action)
+        .catch((e) =>
+          setError(
+            heldNow.current
+              ? notice('HOLD is on, so the preset stays — press H to let go.', e)
+              : notice(`Couldn't ${action.kind === 'random' ? 'pick a random preset' : `go to the ${action.kind} preset`}.`, e),
+          ),
         ),
-      ),
     [setError],
   );
   const actFx = useCallback((action: fx.FxAction) => fx.act(action).catch(fail("Couldn't change that effect.")), [fail]);
@@ -119,7 +120,10 @@ export function Live({ start, onMode }: { start: string | null; onMode: (mode: '
             {says.kind === 'held' ? (
               <span className="live-none">held — nothing changes until you let go of HOLD (H)</span>
             ) : says.kind === 'item' ? (
-              <span data-missing={says.item.missing ? '' : undefined} title={says.item.missing ? `Not in the library any more: ${says.item.path}` : `${says.item.path} — what → opens; R picks any other`}>
+              <span
+                data-missing={says.item.missing ? '' : undefined}
+                title={says.item.missing ? `Not in the library any more: ${says.item.path}` : `${says.item.path} — what → opens; R picks any other`}
+              >
                 {says.item.name}
                 {says.item.missing && <em> — missing from the library, it won't open</em>}
               </span>

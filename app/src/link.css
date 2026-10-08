@@ -19,14 +19,35 @@
   text-transform: uppercase;
 }
 
-.link-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.link-head .wdg-toggle { width: 96px; }
+.link-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.link-head .wdg-toggle {
+  width: 96px;
+}
 
-.link-status { margin: 0; color: var(--detail); }
-.link-status[data-on] { color: var(--green); }
-.link-status b { color: var(--fg); font-family: var(--mono); font-variation-settings: var(--mono-axes); font-size: var(--text-heading); }
+.link-status {
+  margin: 0;
+  color: var(--detail);
+}
+.link-status[data-on] {
+  color: var(--green);
+}
+.link-status b {
+  color: var(--fg);
+  font-family: var(--mono);
+  font-variation-settings: var(--mono-axes);
+  font-size: var(--text-heading);
+}
 
-.link-beat { display: flex; align-items: center; gap: 14px; }
+.link-beat {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
 .link-bar {
   min-width: 3ch;
   color: var(--fg);
@@ -37,7 +58,10 @@
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
-.link-lights { display: flex; gap: 8px; }
+.link-lights {
+  display: flex;
+  gap: 8px;
+}
 .link-light {
   width: 16px;
   height: 16px;
@@ -45,15 +69,38 @@
   border: 1px solid var(--bd3);
   background: var(--bg);
 }
-.link-light[data-lit] { background: var(--fg); border-color: var(--fg); }
-.link-light[data-one][data-lit] { background: var(--green); border-color: var(--green); }
+.link-light[data-lit] {
+  background: var(--fg);
+  border-color: var(--fg);
+}
+.link-light[data-one][data-lit] {
+  background: var(--green);
+  border-color: var(--green);
+}
 
-.link-one { display: flex; gap: 4px; }
-.link-one .wdg-button-body:focus-visible { outline: 1px solid var(--fg); outline-offset: 1px; }
+.link-one {
+  display: flex;
+  gap: 4px;
+}
+.link-one .wdg-button-body:focus-visible {
+  outline: 1px solid var(--fg);
+  outline-offset: 1px;
+}
 
-.link-every { display: flex; align-items: flex-end; gap: 10px; }
-.link-every-pick { justify-items: start; }
-.link-quiet { margin: 0; color: var(--caption); }
+.link-every {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+.link-every-pick {
+  justify-items: start;
+}
+.link-quiet {
+  margin: 0;
+  color: var(--caption);
+}
 
 /* An error: a `NoticeBanner`, laid out by .vf-notice. */
-.link-problem { gap: 6px; }
+.link-problem {
+  gap: 6px;
+}
