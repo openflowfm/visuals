@@ -24,7 +24,6 @@
     "model:proof": "node --disable-warning=ExperimentalWarning tools/xenon-model-proof.ts",
     "model:showcase": "node --disable-warning=ExperimentalWarning tools/model-showcase.ts",
     "harness:profile": "node --disable-warning=ExperimentalWarning harness/profile.ts",
-    "compare": "node --disable-warning=ExperimentalWarning harness/compare.ts",
     "presets:cream": "node --disable-warning=ExperimentalWarning tools/presets-cream.ts",
     "benchmark": "node --disable-warning=ExperimentalWarning tools/benchmark.ts",
     "frames": "node --disable-warning=ExperimentalWarning tools/frames.ts",

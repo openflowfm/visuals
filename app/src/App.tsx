@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as api from './api.ts';
 import type { Entry, Owner, Preset, Problem, Report } from './api.ts';
 import { AudioInput } from './AudioInput.tsx';
@@ -8,7 +8,6 @@ import { Playlists } from './Playlists.tsx';
 import * as pl from './playlists.ts';
 import { StageGraph } from './StageGraph.tsx';
 import { setValue as setValueIn } from './stages.ts';
-import * as compareApi from './compare/api.ts';
 import { FrameRate, Header, Hints, NoticeView, NowPlaying, type View } from './views.tsx';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { Library } from './Library.tsx';
@@ -77,38 +76,24 @@ function useApply(onReport: (r: Report) => void) {
 }
 
 /**
- * The compare view and Butterchurn behind it, loaded only in the dev build: in
- * `vite build` this is `null` and the import is dropped from the bundle.
- */
-const Compare = import.meta.env.DEV ? lazy(() => import('./Compare.tsx').then((m) => ({ default: m.Compare }))) : null;
-
-/**
- * The editor, the compare view (dev builds only: Butterchurn beside the engine,
- * with verdicts), or live mode (performing controls, the output full screen on a
- * display). `VISUALS_COMPARE=1` starts in compare, `VISUALS_LIVE=1` in live
- * mode, `VISUALS_PRESET=<path>` on a preset.
+ * The editor, or live mode (performing controls, the output full screen on a
+ * display). `VISUALS_LIVE=1` starts in live mode, `VISUALS_PRESET=<path>` on a
+ * preset.
  */
 export function App() {
   const [mode, setMode] = useState<{ view: View; preset: string | null } | null>(null);
   useEffect(() => {
-    Promise.all([compareApi.start(), output.liveStart()]).then(
-      ([s, live]) => setMode({ view: live ? 'live' : s.compare && Compare ? 'compare' : 'editor', preset: s.preset }),
+    Promise.all([output.startPreset(), output.liveStart()]).then(
+      ([preset, live]) => setMode({ view: live ? 'live' : 'editor', preset }),
       () => setMode({ view: 'editor', preset: null }),
     );
   }, []);
   if (!mode) return null;
-  if (mode.view === 'compare' && Compare) {
-    return (
-      <Suspense fallback={null}>
-        <Compare start={mode.preset} onMode={(view, preset) => setMode({ view, preset })} />
-      </Suspense>
-    );
-  }
   if (mode.view === 'live') return <Live start={mode.preset} onMode={(view, preset) => setMode({ view, preset })} />;
   return <Editor start={mode.preset} onMode={(view, preset) => setMode({ view, preset })} />;
 }
 
-function Editor({ start, onMode }: { start: string | null; onMode: (view: 'compare' | 'live', path: string | null) => void }) {
+function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live', path: string | null) => void }) {
   const [library, setLibrary] = useState<Entry[]>([]);
   const [search, setSearch] = useState('');
   const [current, setCurrent] = useState<Entry | null>(null);

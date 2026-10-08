@@ -5,19 +5,13 @@ import { HintFooter } from '@openflow/widgets/chrome/HintFooter.tsx';
 import * as api from './api.ts';
 import { frameReadout, type Notice } from './shell.ts';
 
-export type View = 'editor' | 'compare' | 'live';
+export type View = 'editor' | 'live';
 
-/**
- * The views the app offers. Compare (Butterchurn beside the engine, for judging
- * how close a preset is) is a development tool: it exists only in the dev build
- * — `import.meta.env.DEV` is false in `vite build`, so a release neither shows it
- * nor bundles Butterchurn.
- */
-export const VIEWS: View[] = import.meta.env.DEV ? ['editor', 'compare', 'live'] : ['editor', 'live'];
+/** The views the app offers. */
+export const VIEWS: View[] = ['editor', 'live'];
 
 const VIEW_HINTS: Record<View, string> = {
   editor: 'editor: browse presets and change them while they play',
-  compare: 'compare: Butterchurn beside the engine, to judge how close a preset is (dev builds only)',
   live: 'live: the output full screen on a display, with performing controls',
 };
 

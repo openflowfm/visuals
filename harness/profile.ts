@@ -19,8 +19,8 @@
 //
 // The audio is synthetic — a kick on the beat under a chord and noise — so
 // presets move as they would to music. Converted presets come from the library's
-// conversion cache (play them once in the app to fill it); the bundled
-// favourites ship with butterchurn-presets.
+// conversion cache (`<pack>/.converted/`, filled by the old app's server); the
+// bundled favourites ship with butterchurn-presets.
 
 import fs from 'node:fs';
 import os from 'node:os';
