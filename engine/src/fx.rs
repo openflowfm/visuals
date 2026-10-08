@@ -5,8 +5,10 @@
 //! brightness, hue, invert, mirror, strobe, blackout, a beat punch and the fade
 //! to the outgoing preset's snapshot. With [`Master::default`] it is a plain blit.
 
-/// How the master pass folds the picture onto itself.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+/// How the master pass folds the picture onto itself. In JSON: `"off"`, `"x"`,
+/// `"y"`, `"quad"`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Mirror {
     #[default]
     Off,
