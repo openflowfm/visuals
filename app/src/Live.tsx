@@ -19,7 +19,7 @@ import { FrameRate, Header, NoticeBanner } from './views.tsx';
 import './live.css';
 
 /** What the keys do, said by the strip along the bottom when nothing is pointed at. */
-const KEYS = '← → step · R random · H hold · hold S strobe, P punch, F freeze (⇧ latches) · B blackout · T tap · I invert · M mirror · 0 reset effects · ⌘⇧L editor';
+const KEYS = '← → step · R random · H hold · hold S strobe, P punch, F freeze (⇧ latches) · B blackout · T tap · I invert · M mirror · 0 reset effects · Esc or ⌘⇧L editor';
 
 /**
  * Live mode: performing, not editing. The output fills a display of its own
@@ -29,9 +29,9 @@ const KEYS = '← → step · R random · H hold · hold S strobe, P punch, F fr
  * and HOLD (through the live action layer, as a controller would), the effects,
  * Link, the playlists, the audio input, and where the output goes.
  *
- * Esc does nothing here, so a stray key never stops the show: leaving is the
- * switch above, or ⌘⇧L. Leaving also puts the effects back, so the editor is
- * never left inverted or frozen.
+ * Leaving is the switch above, ⌘⇧L, or Esc — here (not while typing in a
+ * field) or on the output, which tells the page (`output.onEscape`). Leaving
+ * also puts the effects back, so the editor is never left inverted or frozen.
  */
 export function Live({ start, onMode }: { start: string | null; onMode: (mode: 'editor', path: string | null) => void }) {
   const [lists, setLists] = useState<pl.Lists | null>(null);
@@ -91,6 +91,7 @@ export function Live({ start, onMode }: { start: string | null; onMode: (mode: '
   const actFx = useCallback((action: fx.FxAction) => fx.act(action).catch(fail("Couldn't change that effect.")), [fail]);
 
   useLiveKeys({ editor: () => onMode('editor', current), act, fx: actFx });
+  useTauriEvent(output.onEscape, () => onMode('editor', current));
 
   const says = pl.nextSays(lists, held);
   const up = pl.upNext(lists);

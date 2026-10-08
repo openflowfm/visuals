@@ -37,7 +37,19 @@ describe('liveKeys', () => {
   it('ignores keys typed into a field', () => {
     const { sent, press } = setup();
     press('r', { target: { closest: () => ({}) } as unknown as EventTarget });
+    press('Escape', { target: { closest: () => ({}) } as unknown as EventTarget });
     expect(sent).toEqual([]);
+  });
+
+  it('goes to the editor on Esc, unless modified or already taken by a menu', () => {
+    const { sent, press, prevented } = setup();
+    press('Escape', { metaKey: true });
+    press('Escape', { altKey: true });
+    press('Escape', { defaultPrevented: true });
+    expect(sent).toEqual([]);
+    press('Escape');
+    expect(sent).toEqual(['editor']);
+    expect(prevented()).toBe(1);
   });
 
   it('holds an effect while its key is down, once however long it repeats', () => {
@@ -81,7 +93,7 @@ describe('liveKeys', () => {
   it('does nothing for a key it has no use for', () => {
     const { sent, press, prevented } = setup();
     press('q');
-    press('Escape');
+    press('Tab');
     expect(sent).toEqual([]);
     expect(prevented()).toBe(0);
   });
