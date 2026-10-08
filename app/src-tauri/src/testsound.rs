@@ -9,7 +9,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
+
+/// Tauri's event when the test sound stops by itself, out of time.
+pub const ENDED: &str = "test-sound-ended";
 
 /// How long the test sound plays at most, so a page that went away never
 /// leaves it on.
@@ -69,6 +72,7 @@ fn play(handle: AppHandle, rate: f32, stop: Arc<AtomicBool>) -> bool {
         let elapsed = start.elapsed();
         if elapsed >= LONGEST {
             finish(&app);
+            let _ = handle.emit(ENDED, ());
             return true;
         }
         let due = (elapsed.as_secs_f64() * rate as f64) as u64;

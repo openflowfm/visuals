@@ -177,6 +177,9 @@
   font-variation-settings: var(--mono-axes);
   font-size: var(--text-control);
 }
+.ob-picker[data-off] {
+  opacity: 0.45;
+}
 .ob-picker .audio-input {
   display: inline-flex;
   flex-wrap: wrap;

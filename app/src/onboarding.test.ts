@@ -1,9 +1,56 @@
 import { describe, expect, it } from 'vitest';
-import { after, before, downloadText, haveAll, libraryLine, QUIET_MS, silenceWatch, sizeText, STEPS, stepsFor, vibes } from './Onboarding.tsx';
+import { after, before, downloadText, haveAll, libraryLine, QUIET_MS, silenceWatch, sizeText, STEPS, stepsFor, testSoundGuard, vibes } from './Onboarding.tsx';
 import type { PackStatus } from './pack.ts';
 import type { Lists } from './playlists.ts';
 
 const status = (s: Partial<PackStatus> = {}): PackStatus => ({ starter: 40, installed: 0, total: 9795, size: 130_000_000, state: 'idle', received: 0, error: null, ...s });
+
+describe('the test sound guard', () => {
+  const recorder = () => {
+    const sent: boolean[] = [];
+    let answer: () => void = () => {};
+    const send = (on: boolean) => {
+      sent.push(on);
+      return new Promise<void>((done) => (answer = done));
+    };
+    return { sent, send, answer: () => answer() };
+  };
+
+  it('stops the sound on leaving before the start has answered', () => {
+    const r = recorder();
+    const g = testSoundGuard(r.send);
+    g.send(true);
+    g.leave();
+    expect(r.sent).toEqual([true, false]);
+  });
+
+  it('sends nothing on leaving when the sound was never started', () => {
+    const r = recorder();
+    testSoundGuard(r.send).leave();
+    expect(r.sent).toEqual([]);
+  });
+
+  it('sends nothing on leaving after the sound ended by itself', () => {
+    const r = recorder();
+    const g = testSoundGuard(r.send);
+    g.send(true);
+    g.ended();
+    g.leave();
+    expect(r.sent).toEqual([true]);
+  });
+
+  it('sends nothing on leaving after a stop has answered', async () => {
+    const r = recorder();
+    const g = testSoundGuard(r.send);
+    g.send(true);
+    r.answer();
+    const stopped = g.send(false);
+    r.answer();
+    await stopped;
+    g.leave();
+    expect(r.sent).toEqual([true, false]);
+  });
+});
 
 describe('the welcome steps', () => {
   it('ask about Ableton only when it is on the network', () => {

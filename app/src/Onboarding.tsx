@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { Select } from '@openflow/widgets/controls/Select.tsx';
@@ -251,23 +251,51 @@ function Welcome({ onStart, onSkip }: { onStart(): void; onSkip(): void }) {
   );
 }
 
+/** Tauri's event when the test sound stops by itself, after a minute. */
+export const TEST_SOUND_ENDED = 'test-sound-ended';
+
+/**
+ * Keeps track of the test sound for leaving the step: once a start has been
+ * asked for, `leave` stops it, whether or not the start has answered yet, so a
+ * quick Continue never leaves the beat playing. A stop that has answered, or
+ * the sound ending by itself, means there is nothing left to stop.
+ */
+export function testSoundGuard(send: (on: boolean) => Promise<void>) {
+  let asked = false;
+  return {
+    send(on: boolean): Promise<void> {
+      if (on) asked = true;
+      return send(on).then(() => {
+        if (!on) asked = false;
+      });
+    },
+    ended() {
+      asked = false;
+    },
+    leave() {
+      if (asked) {
+        asked = false;
+        send(false).catch(() => {});
+      }
+    },
+  };
+}
+
 function Listen({ onNext }: { onNext(): void }) {
   const [testing, setTesting] = useState(false);
   const [problem, setProblem] = useState<Notice | null>(null);
   // Remounted after the test sound, so the picker reads the input it gave back.
   const [picker, setPicker] = useState(0);
-  const playing = useRef(false);
+  const [guard] = useState(() => testSoundGuard(api.testSound));
 
   const test = (on: boolean) => {
     setProblem(null);
-    api.testSound(on).then(
+    guard.send(on).then(
       () => {
-        playing.current = on;
         setTesting(on);
         if (!on) setPicker((n) => n + 1);
       },
       (e) => {
-        playing.current = false;
         setTesting(false);
         setProblem(notice(on ? "The test sound didn't play." : "The test sound didn't stop.", e));
       },
@@ -280,21 +308,28 @@ function Listen({ onNext }: { onNext(): void }) {
       .catch(() => {});
   }, []);
   // Leaving the step stops the test sound: it is a check, not a source.
-  useEffect(
-    () => () => {
-      if (playing.current) api.testSound(false).catch(() => {});
-    },
-    [],
-  );
+  useEffect(() => () => guard.leave(), [guard]);
+  // After a minute it stops by itself and gives the input back.
+  useEffect(() => {
+    const off = listen(TEST_SOUND_ENDED, () => {
+      guard.ended();
+      setTesting(false);
+      setPicker((n) => n + 1);
+    }).catch(() => () => {});
+    return () => {
+      off.then((f) => f());
+    };
+  }, [guard]);
 
   return (
     <section className="ob-step ob-listen">
       <div className="ob-text">
         <h1>{Say('audio input')}</h1>
         <p className="ob-lead">Choose what the visuals hear: your DAW, everything this Mac plays, or a microphone or interface.</p>
-        <div className="ob-picker">
+        <div className="ob-picker" inert={testing} data-off={testing ? '' : undefined}>
           <SourcePicker key={picker} onError={(e) => setProblem(notice("Couldn't read what there is to listen to.", e))} />
         </div>
+        {testing && <p className="ob-note">Stop the test sound to choose what to {say('audio input')}.</p>}
         <p className="ob-note">If macOS asks whether visual[flow] may hear audio, allow it — nothing is recorded or sent anywhere.</p>
         <p className="ob-cue">Play something — watch it move.</p>
         <div className="ob-actions">
