@@ -15,3 +15,5 @@ engine/target/
 dist-app/
 app/src-tauri/gen/
 .DS_Store
+.tmp/
+.claude/worktrees/
