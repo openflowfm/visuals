@@ -136,13 +136,16 @@ pub async fn set_value(owner: engine::runtime::Owner, key: String, value: f64, a
     app.ask(|tx| bench::Cmd::Set(owner, key, value, tx))
 }
 
+/// Keep the stage pictures `which` (`engine::render::PREVIEWS` indices) at
+/// `width`×`height` (clamped to `engine::render::PREVIEW_MAX`); none stops them.
 #[tauri::command]
-pub fn set_previews(on: bool, app: State<App>) {
-    app.send(bench::Cmd::Previews(on));
+pub fn set_previews(which: Vec<usize>, width: u32, height: u32, app: State<App>) {
+    app.send(bench::Cmd::Previews(which, (width, height)));
 }
 
-/// The latest stage pictures as raw bytes: `engine::render::PREVIEWS` in order,
-/// each `PREVIEW` sized RGBA. Empty until there are some.
+/// The latest stage pictures as raw bytes, as `bench::packed` packs them: a
+/// 12-byte header (width, height, which stages), then those pictures in
+/// `PREVIEWS` order. Empty until there are some.
 #[tauri::command]
 pub fn previews(app: State<App>) -> tauri::ipc::Response {
     let bytes = app.bench.lock().unwrap().as_ref().and_then(|b| b.previews.lock().unwrap().clone()).unwrap_or_default();

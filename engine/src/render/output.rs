@@ -59,8 +59,8 @@ impl Renderer {
     }
 
     pub(super) fn preview(&self, encoder: &mut wgpu::CommandEncoder, which: usize, source: &wgpu::TextureView) {
-        if let Some(previews) = &self.previews {
-            self.blit(encoder, source, &previews[which].view, FORMAT);
+        if let Some(Some(preview)) = self.previews.get(which) {
+            self.blit(encoder, source, &preview.view, FORMAT);
         }
     }
 

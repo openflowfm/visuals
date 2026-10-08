@@ -4,7 +4,7 @@ use crate::fx::Mirror;
 /// A target's pixels, RGBA rows top to bottom (row 0 of a presented target
 /// is the top of the picture).
 fn read_target(r: &Renderer, target: &Target) -> Vec<u8> {
-    read_targets(r.device(), r.queue(), std::slice::from_ref(target), false).unwrap()
+    read_targets(r.device(), r.queue(), &[target], false).unwrap()
 }
 
 const W: u32 = 64;
@@ -422,10 +422,13 @@ fn blur_ranges_nest_and_keep_butterchurns_quirk() {
 fn stage_previews_and_live_values() {
     let Some(mut r) = renderer(256, 192, SPIRAL) else { return };
     assert!(r.read_previews().is_none(), "off until asked for");
-    r.set_previews(true);
+    let all: Vec<usize> = (0..PREVIEWS.len()).collect();
+    r.set_previews(&all, PREVIEW);
     let mut audio = Audio::default();
     play(&mut r, &mut audio, 30, 1.0 / 60.0);
-    let pixels = r.read_previews().unwrap();
+    let read = r.read_previews().unwrap();
+    assert_eq!((read.size, read.which), (PREVIEW, all));
+    let pixels = read.pixels;
     let each = (PREVIEW.0 * PREVIEW.1 * 4) as usize;
     assert_eq!(pixels.len(), each * PREVIEWS.len());
     let comp = &pixels[each * 3..];
@@ -435,6 +438,25 @@ fn stage_previews_and_live_values() {
     assert!(!drew.is_empty(), "some drawing stage's preview has its drawing");
     let off: Vec<&str> = (0..4).filter(|i| r.runner.as_ref().unwrap().waves[*i].is_none()).map(|i| PREVIEWS[4 + i]).collect();
     assert!(off.iter().all(|w| !drew.contains(w)), "a wave that is off draws nothing: {drew:?}");
+
+    // A subset at twice the size: only those, ascending, at that size; an
+    // unknown stage is ignored.
+    let big = (PREVIEW.0 * 2, PREVIEW.1 * 2);
+    let layer = PREVIEWS.iter().position(|n| *n == drew[0]).unwrap();
+    r.set_previews(&[layer, 0, 3, 99], big);
+    play(&mut r, &mut audio, 4, 1.0 / 30.0);
+    let read = r.read_previews().unwrap();
+    assert_eq!((read.size, read.which.clone()), (big, vec![0, 3, layer]));
+    let each = (big.0 * big.1 * 4) as usize;
+    assert_eq!(read.pixels.len(), each * 3);
+    let lit = |i: usize| read.pixels[each * i..each * (i + 1)].chunks(4).any(|p| p[0] > 0 || p[1] > 0 || p[2] > 0);
+    assert!((0..3).all(lit), "each picture of the subset has its picture");
+    // Too big is clamped; none stops them.
+    r.set_previews(&[1], (10_000, 10_000));
+    r.render(&mut audio, 1.0 / 30.0);
+    assert_eq!(r.read_previews().unwrap().size, PREVIEW_MAX);
+    r.set_previews(&[], PREVIEW);
+    assert!(r.read_previews().is_none());
 
     assert!(r.set_value(crate::runtime::Owner::Base, "fDecay", 0.5));
     r.render(&mut audio, 1.0 / 60.0);

@@ -21,7 +21,9 @@ pub enum Cmd {
     Load(Box<Preset>, u64, Sender<Result<engine::render::Loaded, String>>),
     /// One value, live. Replies false when it needs a reload instead.
     Set(engine::runtime::Owner, String, f64, Sender<bool>),
-    Previews(bool),
+    /// Keep these stage pictures (`engine::render::PREVIEWS` indices) at this
+    /// size; none stops them.
+    Previews(Vec<usize>, (u32, u32)),
     /// The surface's size in physical pixels; 0×0 when the bench is hidden.
     Resize(u32, u32),
     SampleRate(f32),
@@ -43,8 +45,26 @@ pub struct Stats {
 pub struct Thread {
     pub commands: Sender<Cmd>,
     pub stats: Arc<Mutex<Stats>>,
-    /// The latest stage pictures, packed as [`engine::render::Renderer::read_previews`] packs them.
+    /// The latest stage pictures, as [`packed`] packs them.
     pub previews: Arc<Mutex<Option<Vec<u8>>>>,
+}
+
+/// The bytes before the pictures in [`packed`]: width, height and which.
+pub const HEADER: usize = 12;
+
+/// Stage pictures as the page reads them: a 12-byte header of three
+/// little-endian u32s — each picture's width, its height, and which stages
+/// are in, as a mask (bit `i` for `engine::render::PREVIEWS[i]`) — then each
+/// of those pictures' RGBA rows, top to bottom, in ascending stage order. The
+/// header makes a read taken before the page's last ask still readable.
+pub fn packed(p: &engine::render::Previews) -> Vec<u8> {
+    let mask = p.which.iter().fold(0u32, |m, &i| m | 1 << i);
+    let mut out = Vec::with_capacity(HEADER + p.pixels.len());
+    for n in [p.size.0, p.size.1, mask] {
+        out.extend_from_slice(&n.to_le_bytes());
+    }
+    out.extend_from_slice(&p.pixels);
+    out
 }
 
 /// How often stage pictures are read back: every this many preset steps, so
@@ -211,9 +231,9 @@ impl Loop {
             Cmd::Set(owner, key, value, reply) => {
                 let _ = reply.send(self.renderer.set_value(owner, &key, value));
             }
-            Cmd::Previews(on) => {
-                self.renderer.set_previews(on);
-                if !on {
+            Cmd::Previews(wanted, size) => {
+                self.renderer.set_previews(&wanted, size);
+                if wanted.is_empty() {
                     *self.previews.lock().unwrap() = None;
                 }
             }
@@ -285,7 +305,7 @@ impl Loop {
         if pictures_due(self.renderer.steps(), self.pictures_read) {
             self.pictures_read = self.renderer.steps();
             if let Some(pictures) = self.renderer.read_previews() {
-                *self.previews.lock().unwrap() = Some(pictures);
+                *self.previews.lock().unwrap() = Some(packed(&pictures));
             }
         }
         self.report(now, cpu, speed, unpaced);
@@ -488,6 +508,16 @@ mod tests {
                 due
             })
             .collect()
+    }
+
+    #[test]
+    fn stage_pictures_go_to_the_page_with_their_size_and_which() {
+        let pixels: Vec<u8> = (0..2 * 2 * 4 * 2).map(|n| n as u8).collect();
+        let p = engine::render::Previews { size: (2, 2), which: vec![0, 14], pixels: pixels.clone() };
+        let bytes = packed(&p);
+        let word = |at: usize| u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
+        assert_eq!((word(0), word(4), word(8)), (2, 2, 1 | 1 << 14));
+        assert_eq!(&bytes[HEADER..], &pixels[..]);
     }
 
     #[test]

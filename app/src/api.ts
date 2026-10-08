@@ -60,13 +60,16 @@ export interface Stats {
 /** `engine::runtime::Owner`: whose values a setting is. */
 export type Owner = { list: 'base' } | { list: 'waves' | 'shapes'; index: number };
 
-/** `engine::render::PREVIEW` and `PREVIEWS`. */
-export const PREVIEW = { width: 192, height: 108, count: 15 };
+/** `engine::render::PREVIEW` (the base size), `PREVIEW_MAX` and `PREVIEWS`. */
+export const PREVIEW = { width: 192, height: 108, maxWidth: 768, count: 15 };
 
 export const presets = () => invoke<Entry[]>('presets');
 /** One setting, live. False means the preset needs applying whole instead. */
 export const setValue = (owner: Owner, key: string, value: number) => invoke<boolean>('set_value', { owner, key, value });
-export const setPreviews = (on: boolean) => invoke<void>('set_previews', { on });
+/** Keep the stage pictures `which` (`PREVIEWS` indices) at `width`×`height`; none stops them. */
+export const setPreviews = (which: number[], width = PREVIEW.width, height = PREVIEW.height) =>
+  invoke<void>('set_previews', { which, width, height });
+/** The latest stage pictures, packed with a header (`unpack` in previews.ts). */
 export const previews = () => invoke<ArrayBuffer>('previews');
 /** MilkDrop's default `warp` or `comp` shader as code to start from, with this
  * preset's decay, gamma and echo written in as numbers so it runs in any player
