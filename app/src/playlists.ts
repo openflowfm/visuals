@@ -39,7 +39,7 @@ export interface Deck {
   current: string | null;
   /** HOLD: steps, auto-advance and Link's changes are refused until it is let go. */
   hold: boolean;
-  /** Link's change interval in bars, 0 when off. */
+  /** Link's change interval in bars; 0 when off or when the schedule is in beats. */
   bars: number;
 }
 
