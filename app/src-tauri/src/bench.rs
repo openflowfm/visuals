@@ -155,7 +155,7 @@ fn run(
                 Cmd::Load(preset, seed, reply) => {
                     // In the show (the output open), a new preset crossfades from the
                     // last one's picture; the editor's reloads on every edit never do.
-                    let fading = loaded && output.is_some() && fx.lock().unwrap().transition > 0.0;
+                    let fading = loaded && output.is_some() && fx.lock().unwrap().settings.transition > 0.0;
                     if fading {
                         renderer.keep_outgoing();
                     }
@@ -231,7 +231,7 @@ fn run(
         let now = Instant::now();
         let (speed, gain, echo) = {
             let fx = fx.lock().unwrap();
-            (fx.speed_now(now), fx.sensitivity as f32, fx.echo())
+            (fx.speed_now(now), fx.settings.sensitivity as f32, fx.echo())
         };
         let frozen = speed < STILL;
         // A stall (a slow load, the machine asleep) moves the preset on at most a
