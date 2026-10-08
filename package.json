@@ -27,6 +27,7 @@
   "dependencies": {
     "@openflow/widgets": "git+https://github.com/openflowfm/widgets.git#147983bb76764b2ae8036c7b0f5d5367eed86b83",
     "@tauri-apps/api": "^2.12.1",
+    "@tauri-apps/plugin-opener": "^2.7.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

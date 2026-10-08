@@ -3,6 +3,8 @@ import type { FocusEvent, KeyboardEvent } from 'react';
 import { ButtonFace } from '@openflow/widgets/controls/ButtonFace.tsx';
 import type { Entry } from './api.ts';
 import { foundSummary, rowFor, type Found } from './librarySearch.ts';
+import { Credits } from './Credits.tsx';
+import { PackBar, useCreditsMenu, useDropToAdd } from './Pack.tsx';
 import './library.css';
 
 export interface LibraryProps {
@@ -35,6 +37,9 @@ export function Library({ entries, loaded, search, onSearch, found, current, int
   const rowId = (i: number) => `${id}-row-${i}`;
   const list = useRef<HTMLUListElement>(null);
   const [active, setActive] = useState<string | null>(null);
+  const [credits, setCredits] = useState(false);
+  const drop = useDropToAdd();
+  useCreditsMenu(() => setCredits(true));
   const shown = found.shown;
   const at = active === null ? -1 : shown.findIndex((e) => e.path === active);
 
@@ -98,8 +103,18 @@ export function Library({ entries, loaded, search, onSearch, found, current, int
   const summary = foundSummary(found, search);
   const empty = loaded && entries.length === 0;
 
+  const bar = <PackBar presets={entries.length} dropped={drop.note} credits={credits} onCredits={() => setCredits((c) => !c)} />;
+  if (credits) {
+    return (
+      <div className="lib" data-drop={drop.over ? '' : undefined}>
+        <Credits entries={entries} onBack={() => setCredits(false)} />
+        {bar}
+      </div>
+    );
+  }
+
   return (
-    <div className="lib">
+    <div className="lib" data-drop={drop.over ? '' : undefined}>
       <input
         className="lib-search"
         type="search"
@@ -119,7 +134,7 @@ export function Library({ entries, loaded, search, onSearch, found, current, int
       {!loaded ? (
         <p className="lib-note">loading presets…</p>
       ) : empty ? (
-        <p className="lib-note lib-first-run">No presets found. Put .milk files in ~/.openflow/visuals/presets (or point OPENFLOW_VISUALS_PRESETS at a folder of them) and restart.</p>
+        <p className="lib-note lib-first-run">No presets yet. Drop .milk files or a folder of them here, or use Add a folder… below.</p>
       ) : (
         <ul
           ref={list}
@@ -137,6 +152,7 @@ export function Library({ entries, loaded, search, onSearch, found, current, int
           ))}
         </ul>
       )}
+      {bar}
     </div>
   );
 }

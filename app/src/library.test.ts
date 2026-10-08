@@ -1,6 +1,26 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Entry } from './api.ts';
-import { firstToOpen } from './library.ts';
+import { firstToOpen, rereadOn } from './library.ts';
+
+describe('rereadOn', () => {
+  it('rereads on each change until stopped, then unsubscribes', async () => {
+    let fire = () => {};
+    const unlisten = vi.fn();
+    const reread = vi.fn();
+    const stop = rereadOn((f) => {
+      fire = f;
+      return Promise.resolve(unlisten);
+    }, reread);
+    fire();
+    fire();
+    expect(reread).toHaveBeenCalledTimes(2);
+    stop();
+    fire();
+    expect(reread).toHaveBeenCalledTimes(2);
+    await Promise.resolve();
+    expect(unlisten).toHaveBeenCalledOnce();
+  });
+});
 
 const entry = (path: string): Entry => ({
   path,
