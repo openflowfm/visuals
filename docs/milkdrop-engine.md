@@ -10,12 +10,11 @@ for what ships today, which is Butterchurn drawing inside the old compositor.
 say. Then the Cream of the Crop pack is imported as flows, and each one draws what the
 same preset draws in the BlackHole visualizer — on our engine, not Butterchurn's.
 
-- **Identical is Ryan's call.** The engine targets a similarity score internally, so work
-  can tell when it is getting close; a preset is *done* when Ryan approves its side by
-  side in the harness. The approval is recorded per preset.
+- **Identical is Ryan's call**, by ear and eye: a preset played here beside the same
+  preset in the BlackHole visualizer.
 - **The reference is Butterchurn 2.6.7**, because that is what the BlackHole visualizer
-  is. Where Butterchurn is wrong — the shaders that fall back to its default — the
-  harness says so, and Ryan decides which one is right.
+  is. Where Butterchurn is wrong — the shaders that fall back to its default — Ryan
+  decides which one is right.
 - **Export to `.milk` is out of scope.** Imports keep the original text so it stays
   possible.
 - **The old engine and its flows are abandoned**, not migrated. Versions of them may be
@@ -78,8 +77,7 @@ paced by the display; the page leaves a transparent hole and reports its rectang
 (`place_bench`). The engine and the app share one Cargo workspace at the repository
 root, so the engine's tests also run from there as `cargo test -p visuals-engine`.
 
-**Live mode and the output.** The page's switch is *editor | compare | live* (the compare
-view's own switch still has only the first two). Live mode is the show: entering it
+**Live mode and the output.** The page's switch is *editor | live*. Live mode is the show: entering it
 opens the output, leaving it closes it — there is no output while editing. In live mode
 the editor isn't rendered (no graph, no inspector) and stage previews are off
 (`set_previews(false)`); the page shows a small preview of the bench, what's playing and
@@ -205,8 +203,7 @@ to parse (an undefined `_aboeq()`, `0 = …`, stray prose).
 
 Not yet: MilkDrop's own blend patterns from one preset to the next (live mode crossfades,
 see "Live effects"), mipmaps on the feedback and blur textures
-(Butterchurn samples them mipmapped), the song-title text, and per-pass GPU timings. The side-by-side harness is the app's
-compare view (below, "Live mode, as built").
+(Butterchurn samples them mipmapped), the song-title text, and per-pass GPU timings.
 
 ## The preset clock
 
@@ -284,7 +281,7 @@ Now the preset's clock and the picture's are separate (`runtime::PRESET_RATE`,
   percentile; paced, 0.3% and 2.4% (`runtime::tests::the_pacer_evens_out_a_display_loop`).
 - **The latency is one step at most.** To draw towards the next step its equations run at
   the first refresh after the step before, with the audio then. At a refresh landing on a
-  step (30 Hz, or the harness) that is exactly MilkDrop's order; at 120 Hz a step's
+  step (30 Hz) that is exactly MilkDrop's order; at 120 Hz a step's
   equations hear the audio up to 1/30 s × 1/speed before it is fed back.
 - **Why not feed back every refresh, a fraction at a time?** Tried on paper and rejected:
   the feedback is 8-bit, as Butterchurn's is, and a fractional decay rounds back to where
@@ -317,7 +314,8 @@ are exact):
 - **Speed above 1× on a slow display** makes several steps in one refresh, each fed back;
   only the last is shown.
 
-Measured with the harness (below) on its default 30 presets, 240 frames: before, both
+Measured with the side-by-side harness (since removed; see "Comparing with Butterchurn")
+on its default 30 presets, 240 frames: before, both
 engines at 60 frames a second, the mean score was 75.9; now, Butterchurn at 30 and ours at
 `--refresh 30`, `60` and `120`, it is **74.5 at all three, preset for preset** — the
 captures land on steps, and the steps don't depend on the refresh rate, so the pace is
@@ -384,7 +382,7 @@ presets, the worst that moves at least 0.2 levels a refresh is now 1.68 at 60 Hz
 either version: its motion is a warp shader's noise, which cross-fades (above).
 `between_steps_a_folding_fading_trail_changes_evenly` holds a fold with a fading trail
 and blur in comp to 1.5 (the first version: 2.1 at 120 Hz). The feedback still steps
-once a step, so the compare scores stay 74.51 at `--refresh 60` and `120`.
+once a step, so the side-by-side harness's scores stayed 74.51 at `--refresh 60` and `120`.
 
 Frame times and stage-picture readback were ruled out on the bench (60 Hz, 1377×774,
 20 s): a refresh with a step takes 2.3 ms of CPU and one between 0.7 ms, 1 refresh in
@@ -504,71 +502,18 @@ Breaking EEL and HLSL into arithmetic nodes is deliberately not the plan. A Crea
 would become hundreds of nodes nobody could read, and matching Butterchurn would get
 harder rather than easier.
 
-## The harness
+## Comparing with Butterchurn
 
-The tool for approving side by sides, built first because every later phase is measured
-by it.
+There was a side-by-side harness: `npm run compare` drew presets with Butterchurn in
+headless Chromium and with the engine (`engine/src/bin/compare.rs`) from the same audio,
+time and seeds, and scored the pairs; the app had a compare view with Butterchurn live
+beside the bench and approve / reject / note per preset. Both were removed in October
+2026 as no longer needed: presets are now judged by ear and eye against the BlackHole
+visualizer. The last commit with them is `e941049` (the merge of #38), to bring them back
+from as a separate development-only module if they are wanted again. The verdicts given
+are still in `~/.openflow/visuals/compare/approvals.json`, untouched.
 
-- **Live mode.** One window, two pictures: Butterchurn and visual[flow], fed **the same
-  audio frames** from one CPAL input, on the same preset. Butterchurn is the BlackHole
-  visualizer's engine running in the harness's webview — the one place WebGL remains,
-  as the thing being compared against, never as the product. Split, side by side, wipe,
-  and a difference view. Next and previous preset, search, and an **approve / reject /
-  note** per preset that is saved.
-- **Recorded mode.** A fixed audio file, fixed frame times and seeded randomness —
-  Butterchurn's `rand()` and `rand_frame` patched to the same seed — rendered offline to
-  frame sequences by both engines: Butterchurn in headless Chromium on the GPU, ours
-  natively. Comparable frame for frame, repeatable, and what CI runs.
-- **The internal target.** Recorded mode scores every preset with the structural metrics
-  this repo already has (`frameMetrics.ts`, `structuralMetrics.ts`). The score is how work
-  knows it is close; the approvals are what says it is done.
-
-### Recorded mode, as built
-
-    npm run compare                          # 30 presets spread over the pack's folders
-    npm run compare -- --sample 60 --frames 300 --captures 4 --size 960x540
-    npm run compare -- cream-of-the-crop/Geometric/Cube  path/to/one.milk
-    npm run compare -- --refresh 120         # ours drawn at 120 Hz, four pictures a step
-    npm run compare -- --serve               # reopen the last report to approve
-
-`harness/compare.ts` renders each preset twice from the same inputs: Butterchurn 2.6.7 in
-headless Chromium on the GPU (a fresh page per preset; `.milk` converted as the app
-converts it, through `server/presetWorker.ts` and its cache), and ours through
-`engine/src/bin/compare.rs`, which reads the plan and audio the harness writes and
-renders every preset on one device. Both run at once.
-
-- **Audio.** A synthetic track (kick at 120 bpm, a chord, seeded hiss; left and right
-  differ) turned into the three 1024-byte windows Butterchurn reads per frame. Butterchurn
-  gets them through `render({audioLevels})`, ours through `Audio::update_bytes`: the same
-  bytes, frame for frame.
-- **Time.** A fresh renderer on both, so both clocks and fps estimates start equal.
-  Butterchurn makes one frame per preset step, 1/30 s apart ("The preset clock"), and
-  the audio moves on 1470 samples a step. Ours draws `--refresh` pictures a second (60
-  by default; 30 is one per step, as Butterchurn draws), feeding back once a step, and is
-  captured at the refreshes that land on Butterchurn's frames. A step's equations hear
-  the window of Butterchurn's frame for that step.
-- **Randomness.** The page's `Math.random` is the engine's xorshift64*. It is seeded with
-  the engine's noise seed (`0x5eed`) before the visualizer is made, so the noise textures
-  come from the same stream, and with the preset seed as the preset loads, so
-  `rand_start`, `rand_preset` and the init equations start from the same numbers (the page
-  checks `rand_start` and notes it if not).
-- **Captures** at evenly spaced frames (default 80, 160, 240 of 240 at 640×360), read in the
-  same task as the draw and flipped to top-down. Orientation was checked on
-  `Wire Flat/fiShbRaiN - wave rider` and `Geiss - Game of Life`: the waveform rises to the
-  right and the life clusters sit in the same places in both, with the same colours.
-- **Score**, 0–100 per frame on a ≤320-wide copy, then the mean per preset: pixels 30%
-  (`differenceOf`), silhouette IoU 20% and contour distance 20% (`structuralDifference`),
-  regional colour 15% (`materialStructureDifference`), luma and coverage 15% (`metricsOf`).
-- **Output.** `harness/out/compare/`: frame PNGs (Butterchurn, ours, |difference| × 2),
-  `report.json` and `index.html` — worst first, sortable, filtered by score, verdict or
-  name. The command serves it on a free port when run in a terminal (`--no-serve` skips);
-  the server stops with the command.
-- **Approvals** are `~/.openflow/visuals/compare/approvals.json` (under `OPENFLOW_HOME`),
-  keyed by the preset's path in the pack, with the verdict, a note and the score it was
-  given at. The page saves each click there; opened as a file it keeps them in the page
-  and offers a download instead.
-
-What cannot match, and so is noise in the score rather than an engine bug:
+What can't match Butterchurn, and so is not an engine bug when a preset looks different:
 
 - **`rand_frame` and later `rand()`.** Butterchurn draws everything from one global stream
   — the blend pattern, `rand_frame` each pass, shapes', waves' and every frame's `rand()` —
@@ -576,64 +521,26 @@ What cannot match, and so is noise in the score rather than an engine bug:
   They agree up to the init equations and part after that.
 - **`rand(n)` itself.** Butterchurn returns `Math.random() * floor(n)`, not floored; the
   engine floors. Presets that use it differ until the engine copies the quirk.
-- **Shaders Butterchurn cannot link.** It draws black where MilkDrop draws its default; the
-  bench compares with the default and says so on the preset, for Ryan to judge.
+- **Shaders Butterchurn cannot link.** It draws black where MilkDrop draws its default;
+  the engine draws the default, and Ryan judges which is right.
 - **Unknown textures.** Butterchurn samples its `clouds2` image for any sampler it has no
-  picture for. The bench waits for that image to load, as the app would have.
+  picture for.
 - **Chaotic feedback.** A preset that feeds back strongly turns float-level differences
-  between WebGL and wgpu into different pictures within seconds; its first capture is
-  the one to read.
-
-### Live mode, as built: the app's compare view
-
-    VISUALS_COMPARE=1 npm run app                                  # start in it
-    VISUALS_COMPARE=1 VISUALS_PRESET="cream-of-the-crop/Geometric/Cube Fly/x.milk" npm run app
-
-The app's header switches between *editor* and *compare*. The compare view is three
-things: the pack's presets on the left (search, filter by verdict — all, not judged,
-approved, rejected, with a note — each row marked ✓ ✗ or • for a note), the two pictures
-side by side at the same size, and the verdict under them.
-
-- **Butterchurn** (left) is 2.6.7 on a WebGL canvas in the page, drawing at 1920×1080 as
-  the engine does. It is imported only when the view opens (it touches `window` at
-  import), and `Math.random` is the engine's generator while it is open, seeded as
-  recorded mode seeds it (`0x5eed`, then the preset seed as each preset loads). `.milk`
-  is converted in a Web Worker (`app/src/compare/convert.worker.ts`: the converter with
-  `server/hlsl.ts`'s repairs, as `server/presetWorker.ts` runs it), cached in the same
-  `<pack>/.converted/…` files as the server and recorded mode. A shader Butterchurn cannot
-  link is left black, as BlackHole shows it, and labelled on its picture; so is a preset
-  the converter fails on.
-- **Ours** (right) is the native bench, moved under the right picture's hole. Presets
-  picked here open with seed 1 on both sides (`compare_open`), so `rand_start`,
-  `rand_preset` and the init equations agree, as in recorded mode.
-- **Audio.** Both hear the bench's CPAL input. The page asks for `compare_audio` once an
-  animation frame: the input's sample rate, then the mono, left and right 1024-byte
-  windows `Audio::update` would make from the same ring, given to Butterchurn's
-  `render({audioLevels})`; its FFT bands are tuned to the rate as the old app did.
-- **Verdicts** go to the recorded bench's file and shape (`compare.rs`): `approvals.json`
-  under `OPENFLOW_HOME`, keyed by path in the pack, sorted, one-space indented. A verdict
-  given here keeps the recorded score already there. A file that will not parse is never
-  written over.
-
-Keys: ↑ ↓ previous / next in the list, R random from it, A approve, X reject (again to
-clear), N write a note (Esc or ⌘↩ leaves and saves), S swap the sides, F one picture full
-size and Space the other one. Auto-advance and controllers still move the bench; the
-view follows them, with that preset's own seed.
-
-Not there yet: wipe and difference views, and a score in the live view.
+  between WebGL and wgpu into different pictures within seconds; its first seconds are
+  the ones to judge.
 
 ## Phases
 
-0. **Harness and baseline.** Recorded mode with Butterchurn alone: render the pack, and
-   profile where Butterchurn's frame goes at 4K on Ryan's machine — equations, mesh, each
+0. **Baseline.** Profile where Butterchurn's frame goes at 4K on Ryan's machine — equations, mesh, each
    pass, mipmaps. The numbers that decide what to optimise.
 1. **Spike.** A Tauri app whose Rust crate draws one shader preset — warp, comp, feedback,
    blur — on Metal at 4K, from a CPAL input. Measured against phase 0. **Decision point:**
    confirm `wgpu` over raw Metal, and the frame budget per pass.
 2. **Engine.** Every stage, the EEL VM, exact audio analysis, the import-time shader
-   translation. Live mode in the harness.
-3. **Importer.** `.milk` → flow JSON over the whole pack, recorded scores for all of it.
-4. **Conformance.** Drive the score up, then Ryan's approvals.
+   translation.
+3. **Importer.** `.milk` → flow JSON over the whole pack.
+4. **Conformance.** Ryan judges presets beside the BlackHole visualizer; the engine closes
+   what he finds.
 5. **Editor**, then the Live bridge as a sound node and set facts as ports.
 
 ## Questions still open
@@ -647,5 +554,5 @@ Not there yet: wipe and difference views, and a score in the live view.
 In this repository, beside what it replaces until it can draw: `engine/` (the Rust
 crate), `app/` (the Tauri shell and its webview UI) and `harness/`. The Electron app is
 gone; the Node server and the old engine are deleted in one change once nothing here needs
-them (the app still uses `server/hlsl.ts`, the compare harness `server/presetWorker.ts`) —
+them —
 confirmed with Ryan before it happens.

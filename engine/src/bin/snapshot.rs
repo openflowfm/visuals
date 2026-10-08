@@ -3,7 +3,7 @@
 //!   cargo run --release --bin snapshot -- <file.milk> [frames] [out.png] [WxH]
 //!
 //! The audio is fixed — a kick on every beat at 120 bpm under a chord — so a
-//! snapshot repeats. This is the engine's half of the harness's recorded mode.
+//! snapshot repeats.
 
 use engine::audio::Audio;
 use engine::render::{headless, Renderer};

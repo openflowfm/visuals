@@ -24,6 +24,8 @@ export interface Status {
 
 /** `VISUALS_LIVE=1`: start in live mode. */
 export const liveStart = () => invoke<boolean>('live_start');
+/** `VISUALS_PRESET=<path>`: the preset to start on, as an absolute path. */
+export const startPreset = () => invoke<string | null>('start_preset');
 export const displays = () => invoke<Display[]>('displays');
 /** Open the live output on display `id` and remember it, or (null) on the one chosen last. */
 export const open = (id: number | null) => invoke<Status>('output_open', { id });

@@ -74,6 +74,12 @@ fn live_from(value: Option<String>) -> bool {
     value.is_some_and(|v| !v.is_empty() && v != "0")
 }
 
+/// `VISUALS_PRESET=<path>`: the preset the page starts on, absolute or in the pack.
+fn preset_from(value: Option<String>, library: &std::path::Path) -> Option<String> {
+    let p = PathBuf::from(value.filter(|p| !p.is_empty())?);
+    Some(if p.is_absolute() { p } else { library.join(p) }.to_string_lossy().into_owned())
+}
+
 /// `VISUALS_DISPLAY=<n>`: live mode outputs to display `n` (from 0, the system's order).
 fn index_from(value: Option<String>) -> Option<usize> {
     value?.trim().parse().ok()
@@ -124,6 +130,12 @@ fn tell(status: &Status) {
 #[tauri::command]
 pub fn live_start() -> bool {
     live_from(std::env::var("VISUALS_LIVE").ok())
+}
+
+/// The preset the page starts on, in either mode.
+#[tauri::command]
+pub fn start_preset(app: tauri::State<crate::App>) -> Option<String> {
+    preset_from(std::env::var("VISUALS_PRESET").ok(), &app.library)
 }
 
 #[tauri::command]
@@ -500,5 +512,10 @@ mod tests {
         assert_eq!(index_from(Some(" 0 ".into())), Some(0));
         assert_eq!(index_from(Some("projector".into())), None);
         assert_eq!(index_from(None), None);
+        let library = std::path::Path::new("/p");
+        assert_eq!(preset_from(None, library), None);
+        assert_eq!(preset_from(Some(String::new()), library), None);
+        assert_eq!(preset_from(Some("a/b.milk".into()), library).as_deref(), Some("/p/a/b.milk"));
+        assert_eq!(preset_from(Some("/x.milk".into()), library).as_deref(), Some("/x.milk"));
     }
 }

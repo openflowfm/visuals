@@ -59,7 +59,7 @@ const KEYS =
  * switch above, or ⌘⇧L. Leaving also puts the effects back, so the editor is
  * never left inverted or frozen.
  */
-export function Live({ start, onMode }: { start: string | null; onMode: (mode: 'editor' | 'compare', path: string | null) => void }) {
+export function Live({ start, onMode }: { start: string | null; onMode: (mode: 'editor', path: string | null) => void }) {
   const [lists, setLists] = useState<pl.Lists | null>(null);
   const [current, setCurrent] = useState<string | null>(null);
   const [error, setError] = useState<Problem | null>(null);

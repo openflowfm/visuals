@@ -3,7 +3,6 @@
 
 mod actions;
 mod bench;
-mod compare;
 mod fx;
 mod link;
 mod listen;
@@ -354,15 +353,7 @@ fn main() {
             actions::playlist_remove,
             actions::playlist_move_item,
             actions::playlist_move,
-            compare::compare_presets,
-            compare::compare_approvals,
-            compare::compare_judge,
-            compare::compare_open,
-            compare::compare_audio,
-            compare::compare_source,
-            compare::compare_cached,
-            compare::compare_cache,
-            compare::compare_start,
+            output::start_preset,
             output::live_start,
             output::displays,
             output::output_open,
