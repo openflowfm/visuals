@@ -8,6 +8,7 @@
 //! the page with a `live` event ([`Now`]), whoever asked.
 
 use crate::fx::{Fx, FxAction};
+use crate::link::{Every, Unit};
 use crate::playlists::{Store, View};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -39,8 +40,8 @@ pub enum Action {
     /// Lock the current preset, or let it go (`null` toggles): while held, stepping,
     /// loading a playlist and auto-advance change nothing.
     Hold { on: Option<bool> },
-    /// Change preset every this many bars (1 to 64) on Link's bar lines, counted
-    /// from the one (`crate::link`); 0 stops. Turns the timed auto-advance off.
+    /// Change preset every this many bars on Link's bar lines, counted from the one
+    /// (`crate::link`); 0 stops, more than 64 is 64. Turns the timed auto-advance off.
     Bars { bars: u32 },
     /// A live effect (`crate::fx`): `{"kind": "strobe", "on": true}`, `{"kind": "tap"}`…
     /// The same flat JSON as the others.
@@ -62,7 +63,8 @@ pub struct Live {
     /// The current preset is locked: nothing moves it on.
     pub hold: bool,
     /// Changes every this many bars on Link's grid (`crate::link` keeps the
-    /// schedule; this is what the page shows); 0 is off.
+    /// schedule; this is what the page shows); 0 when off or when the schedule is
+    /// in beats. Set only by [`Live::schedule`].
     pub bars: u32,
 }
 
@@ -77,6 +79,20 @@ impl Live {
     /// Link's, landing on its bar lines, not a count from the last change.
     pub fn period(&self, _bpm: f64) -> f64 {
         self.seconds
+    }
+
+    /// Change on Link's grid on `every`: the one place a schedule is decided, whether
+    /// it came from the panel's bars, the Link panel or `VISUALS_LINK_EVERY`. Clamps to
+    /// the one limit (64 bars, 256 beats), shows it as `bars` (0 for a beats schedule),
+    /// and turns the timed auto-advance off when on, so the two never both change the
+    /// preset. Returns the schedule Link is to keep.
+    pub fn schedule(&mut self, every: Every) -> Every {
+        let every = every.clamped();
+        self.bars = if every.unit == Unit::Bars { every.every } else { 0 };
+        if every.every > 0 {
+            self.auto = false;
+        }
+        every
     }
 }
 
@@ -218,8 +234,9 @@ pub fn decide(live: &mut Live, action: &Action, store: &Store, library: &dyn Fn(
             live.since = Instant::now();
             Ok(None)
         }
+        // `dispatch` gives these to `Deck::set_schedule`, which tells Link too.
         Action::Bars { bars } => {
-            live.bars = (*bars).min(64);
+            live.schedule(Every { every: *bars, unit: Unit::Bars });
             Ok(None)
         }
         // Not the deck's: `dispatch` gives these to the effects.
@@ -259,6 +276,27 @@ impl Deck {
     fn lists(&self) -> Lists {
         Lists { playlists: self.store.lock().unwrap().views(), deck: self.live.lock().unwrap().view() }
     }
+
+    /// Change preset on Link's grid on `every` ([`Live::schedule`]), give Link the
+    /// schedule, and tell the page. Link is told only after the deck's lock is let go,
+    /// so no lock is held while taking Link's.
+    pub fn set_schedule(&self, handle: &AppHandle, every: Every) -> Result<(), String> {
+        let (every, view) = {
+            let mut live = self.live.lock().unwrap();
+            let every = live.schedule(every);
+            (every, live.view())
+        };
+        handle.state::<crate::link::Link>().set_every(every);
+        emit_deck(handle, self, view)
+    }
+}
+
+/// Tell the page the deck's settings moved: `fx` (the effects panel shows hold and
+/// bars), then `live`.
+fn emit_deck(handle: &AppHandle, deck: &Deck, view: DeckView) -> Result<(), String> {
+    handle.emit("fx", deck.fx_view()).map_err(|e| e.to_string())?;
+    let now = Now { deck: view, opened: None, path: None, error: None };
+    handle.emit("live", now).map_err(|e| e.to_string())
 }
 
 /// What an action did, sent to the page as the `live` event.
@@ -293,24 +331,17 @@ pub fn dispatch(handle: &AppHandle, action: Action) -> Result<(), String> {
         }
         return handle.emit("fx", deck.fx_view()).map_err(|e| e.to_string());
     }
-    if matches!(action, Action::Hold { .. } | Action::Bars { .. }) {
+    if let Action::Bars { bars } = action {
+        return deck.set_schedule(handle, Every { every: bars, unit: Unit::Bars });
+    }
+    if let Action::Hold { .. } = action {
         let view = {
             let store = deck.store.lock().unwrap();
             let mut live = deck.live.lock().unwrap();
             decide(&mut live, &action, &store, &Vec::<PathBuf>::new, 0)?;
-            if let Action::Bars { .. } = action {
-                // Link schedules them, on its bar lines from the one; the timed
-                // advance would change presets as well, so it stops.
-                handle.state::<crate::link::Link>().sync_bars(live.bars);
-                if live.bars > 0 {
-                    live.auto = false;
-                }
-            }
             live.view()
         };
-        handle.emit("fx", deck.fx_view()).map_err(|e| e.to_string())?;
-        let now = Now { deck: view, opened: None, path: None, error: None };
-        return handle.emit("live", now).map_err(|e| e.to_string());
+        return emit_deck(handle, &deck, view);
     }
     let app = handle.state::<crate::App>();
     let path = {
@@ -557,5 +588,33 @@ mod tests {
         assert_eq!(live.period(120.0), 10.0, "bars are Link's schedule, not the timed period");
         decide(&mut live, &Action::Bars { bars: 1000 }, &s, &none, 0).unwrap();
         assert_eq!(live.bars, 64);
+    }
+
+    #[test]
+    fn one_schedule_one_limit() {
+        let bars = |every| Every { every, unit: Unit::Bars };
+        let beats = |every| Every { every, unit: Unit::Beats };
+        let mut live = Live::default();
+        // Within the limit: kept, shown, and the timed advance stops.
+        live.auto = true;
+        assert_eq!(live.schedule(bars(8)), bars(8));
+        assert_eq!(live.bars, 8);
+        assert!(!live.auto);
+        // Over it: clamped to 64 bars, or 256 beats (the same length at quantum 4),
+        // for Link and the panel alike.
+        assert_eq!(live.schedule(bars(1000)), bars(64));
+        assert_eq!(live.bars, 64);
+        assert_eq!(live.schedule(beats(1000)), beats(256));
+        assert_eq!(live.schedule(beats(256)), beats(256));
+        // A beats schedule is no whole number of bars: `bars` shows 0.
+        assert_eq!(live.schedule(beats(8)), beats(8));
+        assert_eq!(live.bars, 0);
+        // Off leaves auto-advance as it was.
+        live.auto = true;
+        assert_eq!(live.schedule(Every::OFF), Every::OFF);
+        assert_eq!(live.bars, 0);
+        assert!(live.auto);
+        live.schedule(beats(0));
+        assert!(live.auto, "0 beats is off too");
     }
 }

@@ -93,7 +93,7 @@ export function Effects({ state, onState, send }: { state: fx.Fx; onState: React
     <section className="wdg fx" aria-label="effects">
       <div className="fx-head">
         <h2>Effects</h2>
-        <span className="fx-fill" />
+        <span className="vf-fill" />
         <Button onPress={() => send({ kind: 'fx_reset' })} title="Every effect back to normal; tempo and sensitivity stay (0)">
           reset effects
         </Button>

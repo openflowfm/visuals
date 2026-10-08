@@ -92,8 +92,21 @@ pub struct Every {
     pub unit: Unit,
 }
 
+/// The longest schedule, in bars; in beats it is the same length, `MAX_BARS` times
+/// the quantum (256).
+pub const MAX_BARS: u32 = 64;
+
 impl Every {
     pub const OFF: Every = Every { every: 0, unit: Unit::Bars };
+
+    /// Within the one limit: at most 64 bars, or 256 beats.
+    pub fn clamped(self) -> Every {
+        let max = match self.unit {
+            Unit::Bars => MAX_BARS,
+            Unit::Beats => MAX_BARS * QUANTUM as u32,
+        };
+        Every { every: self.every.min(max), ..self }
+    }
 
     /// In beats; none when off.
     pub fn period(&self, quantum: f64) -> Option<f64> {
@@ -229,13 +242,13 @@ impl Link {
         }
     }
 
-    /// Change what the app holds and wake the scheduler to it.
-    /// Change preset every `bars` bars from the one (0 stops) — the live
-    /// panel's "every N bars", through `actions::Action::Bars`.
-    pub fn sync_bars(&self, bars: u32) {
-        self.change(|h| h.every = Every { every: bars, unit: Unit::Bars });
+    /// Change preset on this schedule, counted from the one. Only
+    /// `actions::Deck::set_schedule` calls it, so the live panel shows the same.
+    pub fn set_every(&self, every: Every) {
+        self.change(|h| h.every = every);
     }
 
+    /// Change what the app holds and wake the scheduler to it.
     fn change(&self, f: impl FnOnce(&mut Held)) {
         let mut held = self.held.lock().unwrap();
         f(&mut held);
@@ -300,12 +313,15 @@ impl Link {
 /// scheduler that changes the preset on the beat.
 pub fn start(handle: AppHandle) {
     let enabled = std::env::var("VISUALS_LINK").map_or(true, |v| v != "0");
-    let link = Link::new(enabled);
-    // `VISUALS_LINK_EVERY=<bars>` starts with changes on.
+    handle.manage(Link::new(enabled));
+    // `VISUALS_LINK_EVERY=<bars>` starts with changes on, like the panel's "every N
+    // bars" — so only once Link is managed, which the deck's schedule reaches.
     if let Some(bars) = std::env::var("VISUALS_LINK_EVERY").ok().and_then(|s| s.parse().ok()) {
-        link.change(|h| h.every = Every { every: bars, unit: Unit::Bars });
+        let deck = handle.state::<crate::actions::Deck>();
+        if let Err(e) = deck.set_schedule(&handle, Every { every: bars, unit: Unit::Bars }) {
+            eprintln!("VISUALS_LINK_EVERY: {e}");
+        }
     }
-    handle.manage(link);
     // Development: `VISUALS_LINK_LOG=1` prints the frame once a second.
     let log = std::env::var_os("VISUALS_LINK_LOG").is_some();
     let ticker = handle.clone();
@@ -380,23 +396,13 @@ pub fn link_reset_one(link: State<Link>) -> Frame {
     link.frame()
 }
 
-/// Change the preset every `every` bars or beats (0: off), through `actions::dispatch`'s
-/// Next — the playing playlist's next, or the library's. Turning it on turns time-based
-/// auto-advance off, so the two never both change the preset.
+/// Change the preset every `every` bars or beats (0: off; at most 64 bars or 256 beats,
+/// more is clamped), through `actions::dispatch`'s Next — the playing playlist's next,
+/// or the library's. The deck's schedule ([`crate::actions::Deck::set_schedule`]) turns
+/// time-based auto-advance off, so the two never both change the preset.
 #[tauri::command]
 pub fn link_sync(every: u32, unit: Unit, link: State<Link>, handle: AppHandle) -> Result<Frame, String> {
-    if every > 256 {
-        return Err("every is at most 256".into());
-    }
-    link.change(|h| h.every = Every { every, unit });
-    // The live panel's "every N bars" shows the same schedule.
-    let deck = handle.state::<crate::actions::Deck>();
-    deck.live.lock().unwrap().bars = if matches!(unit, Unit::Bars) { every.min(64) } else { 0 };
-    let _ = handle.emit("fx", deck.fx_view());
-    let auto = deck.live.lock().unwrap().auto;
-    if every > 0 && auto {
-        crate::actions::dispatch(&handle, crate::actions::Action::Auto { on: Some(false) })?;
-    }
+    handle.state::<crate::actions::Deck>().set_schedule(&handle, Every { every, unit })?;
     Ok(link.frame())
 }
 
