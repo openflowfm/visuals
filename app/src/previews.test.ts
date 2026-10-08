@@ -1,15 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { DIM, HEADER, MAX_GAIN, SETTLE_MS, STEPS, layerOver, settler, stepFor, unpack, wanted } from './previews.ts';
+import { DIM, HEADER, MAX_GAIN, SETTLE_MS, STEPS, layerOver, needed, settler, stepFor, unpack, wanted, withinBudget } from './previews.ts';
 
 /** The device pixels a 192 CSS px picture covers, as the poll works it out. */
-const need = (nodeZoom: number, scale: number, dpr: number) => 192 * nodeZoom * scale * dpr;
+const need = (node: number, graph: number, dpr: number) => needed(192, { node, graph }, dpr);
 
 describe('the size a picture is asked for', () => {
-  it('is the base size at 1×, and steps up with the zoom it is shown at', () => {
+  it('is CSS width × node zoom × graph zoom × pixel ratio, zoomed in', () => {
+    expect(needed(150, { node: 0.5, graph: 3 }, 2)).toBe(450);
+  });
+
+  it('is the base size at 1× or zoomed out, whatever the display', () => {
     expect(STEPS).toEqual([192, 384, 768]);
     expect(stepFor(need(1, 1, 1), 0)).toBe(0);
-    expect(stepFor(need(0.6, 1, 2), 0)).toBe(0);
-    expect(stepFor(need(1, 1, 2), 0)).toBe(1);
+    expect(stepFor(need(1, 1, 2), 0)).toBe(0);
+    expect(stepFor(need(1, 0.4, 3), 0)).toBe(0);
+    expect(stepFor(need(1, 1, 2), 2)).toBe(0);
+  });
+
+  it('steps up with the zoom it is shown at', () => {
+    expect(stepFor(need(0.6, 1.04, 2), 0)).toBe(0);
+    expect(stepFor(need(1, 1.2, 2), 0)).toBe(1);
     expect(stepFor(need(1, 2, 2), 0)).toBe(2);
   });
 
@@ -26,6 +36,14 @@ describe('the size a picture is asked for', () => {
     expect(stepFor(170, 2)).toBe(0);
     expect(stepFor(400, 2)).toBe(2);
     expect(stepFor(300, 2)).toBe(1);
+  });
+
+  it('steps down when more pictures are on screen than fit the budget at that size', () => {
+    expect(withinBudget(2, 4)).toBe(2);
+    expect(withinBudget(2, 5)).toBe(1);
+    expect(withinBudget(2, 15)).toBe(1);
+    expect(withinBudget(1, 15)).toBe(1);
+    expect(withinBudget(0, 15)).toBe(0);
   });
 
   it('never flips between two steps for one need', () => {

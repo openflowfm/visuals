@@ -16,8 +16,15 @@ import * as api from './api.ts';
  */
 const canvases = new Map<HTMLCanvasElement, number>();
 let running = false;
-/** The nodes' zoom × the graph's zoom, read at each poll; 1 with no graph. */
-let zoomOf: (() => number) | null = null;
+/** The nodes' zoom and the graph's zoom, read at each poll; 1 and 1 with no graph. */
+let zoomOf: (() => Zoom) | null = null;
+
+export interface Zoom {
+  /** `--wdg-node-zoom`: how small the nodes draw so they all fit. */
+  node: number;
+  /** The graph's own zoom, from its `viewRef`. */
+  graph: number;
+}
 
 /** The first layer picture (`PREVIEWS` order): the ones before are the chain's. */
 export const FIRST_LAYER = 4;
@@ -40,8 +47,32 @@ export const STRETCH = 1.25;
 export const SHRINK = 0.9;
 /** How long a new step must hold before it's asked for: zooming has settled. */
 export const SETTLE_MS = 250;
+/**
+ * The most bytes of pictures one poll asks for: four pictures at the largest
+ * step (5.3 MB, about 80 MB a second at fifteen polls). More on screen than
+ * that steps down until they fit.
+ */
+export const BUDGET = 6_000_000;
+
+/** `step`, or the largest under it whose `count` pictures fit `BUDGET`. */
+export function withinBudget(step: number, count: number): number {
+  const bytes = (s: number) => STEPS[s] * Math.round((STEPS[s] * api.PREVIEW.height) / api.PREVIEW.width) * 4 * count;
+  while (step > 0 && bytes(step) > BUDGET) step--;
+  return step;
+}
+
 /** The bytes before the pictures in a poll's buffer (`bench::HEADER`). */
 export const HEADER = 12;
+
+/**
+ * The device pixels a picture `css` CSS pixels wide covers at zoom `z` on a
+ * display of pixel ratio `dpr`. Not zoomed in (the graph at 1× or less) it is
+ * 0, which is the base step: the graph as it opens costs what it always did,
+ * even on a 2× display.
+ */
+export function needed(css: number, z: Zoom, dpr: number): number {
+  return z.graph <= 1 ? 0 : css * z.node * z.graph * dpr;
+}
 
 /**
  * Which of `STEPS` to show a picture `need` device pixels wide at, from step
@@ -156,10 +187,11 @@ async function loop() {
     const started = performance.now();
     const shown = [...canvases].filter(([canvas]) => onScreen(canvas));
     // `offsetWidth` is the canvas's CSS width, before any zoom above it.
-    const zoom = (zoomOf?.() ?? 1) * (window.devicePixelRatio || 1);
-    const need = Math.max(0, ...shown.map(([canvas]) => (canvas.offsetWidth || api.PREVIEW.width) * zoom));
-    step = settle(stepFor(need, step), started);
+    const zoom = zoomOf?.() ?? { node: 1, graph: 1 };
+    const dpr = window.devicePixelRatio || 1;
+    const need = Math.max(0, ...shown.map(([canvas]) => needed(canvas.offsetWidth || api.PREVIEW.width, zoom, dpr)));
     const which = wanted(shown.map(([, w]) => w));
+    step = settle(withinBudget(stepFor(need, step), which.length), started);
     const width = STEPS[step];
     const height = Math.round((width * api.PREVIEW.height) / api.PREVIEW.width);
     const ask = `${which.join(',')}@${width}`;
@@ -179,10 +211,10 @@ async function loop() {
 }
 
 /**
- * Where the poll reads the zoom the pictures are shown at: the nodes' zoom ×
+ * Where the poll reads the zoom the pictures are shown at: the nodes' zoom and
  * the graph's, read when it's needed. Returns the way to let go of it.
  */
-export function previewZoom(read: () => number): () => void {
+export function previewZoom(read: () => Zoom): () => void {
   zoomOf = read;
   return () => {
     if (zoomOf === read) zoomOf = null;

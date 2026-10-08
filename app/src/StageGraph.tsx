@@ -237,8 +237,7 @@ export function StageGraph({ preset, problems, selected, onSelect, onChange }: P
   const sized = useRef(size);
   sized.current = size;
   // The pictures are asked for at the zoom they're shown at, read at each poll.
-  useEffect(() => previewZoom(() => sized.current * (view.current?.scale() ?? 1)), []);
-  useEffect(() => {
+  useEffect(() => previewZoom(() => ({ node: sized.current, graph: view.current?.scale() ?? 1 })), []);  useEffect(() => {
     // A timer rather than animation frames: a window behind others gets none.
     const timer = window.setTimeout(() => {
       const next = fitting(box.current, view.current, sized.current);
