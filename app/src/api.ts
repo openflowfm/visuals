@@ -135,3 +135,10 @@ export const updateInstall = () => invoke<void>('update_install');
 
 /** Play (or stop) the test sound into the engine, as if it were heard. */
 export const testSound = (on: boolean) => invoke<void>('test_sound', { on });
+
+/** Menu event: Check for Updates… was chosen. Listened to by #87. */
+export const UPDATE_CHECK_EVENT = 'update-check';
+/** Menu event: Welcome… was chosen. Listened to by #88. */
+export const WELCOME_EVENT = 'welcome';
+/** Menu event: Credits was chosen. Listened to by #86. */
+export const CREDITS_EVENT = 'credits';
