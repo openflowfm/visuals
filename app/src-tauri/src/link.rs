@@ -1,7 +1,7 @@
 //! Ableton Link, the one, and preset changes on the bar.
 //!
-//! The port of the old Node engine's clock (`server/link.ts`, the one in `resolve.ts` and
-//! `server/show.ts`, `docs/clock.md`, `docs/wheel.md`), with its rules kept:
+//! The port of the old Node engine's clock (its Link client, the one, and the show's waits and their
+//! docs; commit `3bcc202` is the last one that has it), with its rules kept:
 //!
 //! - **Visuals follow; they never drive.** Link has no private session — it is every
 //!   machine on the network — so nothing here sets the tempo, the beat or the transport,
@@ -42,7 +42,7 @@ const EPS: f64 = 1e-6;
 /// The bar line nearest here, as Link draws them: `beat` minus Link's `phase`, or the
 /// coming line when more than half the bar has gone. What "set the one now" means — a
 /// hand is as likely to be early as late, and a press three quarters of the way through
-/// a bar means the downbeat that is about to happen. (`barLine` in `resolve.ts`.)
+/// a bar means the downbeat that is about to happen. (`barLine` in the old Node engine, up to commit `3bcc202`.)
 pub fn bar_line(beat: f64, phase: f64, quantum: f64) -> f64 {
     let bar = quantum.max(1.0);
     let phase = phase.rem_euclid(bar);
@@ -51,7 +51,7 @@ pub fn bar_line(beat: f64, phase: f64, quantum: f64) -> f64 {
 
 /// The bar line at `beat` or the first after it. A transport start: with a session up,
 /// pressing play arms the transport and the music starts on the next bar line, so the
-/// one is that line and never the press (`buildShow`'s wait in `server/show.ts`).
+/// one is that line and never the press (`buildShow`'s wait in the old Node engine, up to commit `3bcc202`).
 pub fn line_from(beat: f64, phase: f64, quantum: f64) -> f64 {
     let bar = quantum.max(1.0);
     let phase = phase.rem_euclid(bar);

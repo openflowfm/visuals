@@ -206,8 +206,8 @@ function AddLayer({ preset, onAdd }: { preset: Preset; onAdd(kind: LayerKind): v
  * How much to shrink the nodes so all of them fit the pane, from where they
  * stand now at size `size`.
  *
- * The widgets `Graph` owns its pan and zoom and has no setter yet (docs/graph.md,
- * "What isn't built": driving them from outside), so the host fits by drawing
+ * The widgets `Graph` owns its pan and zoom and has no setter yet (driving them
+ * from outside isn't built), so the host fits by drawing
  * smaller: positions times the factor, faces under CSS `zoom`. Both scale
  * linearly, so one measurement gives the exact factor.
  */
