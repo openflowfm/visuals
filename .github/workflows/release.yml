@@ -1,5 +1,4 @@
-# The signed, notarised macOS build of the Tauri app (`app/`), the one that
-# replaces the Electron app.
+# The signed, notarised macOS build of the Tauri app (`app/`).
 #
 # - A `v*` tag builds it and opens a draft release with the disk image.
 # - Running it by hand (Actions → release → Run workflow, on any branch) builds
@@ -145,10 +144,6 @@ jobs:
     needs: guard
     if: needs.guard.outputs.build == 'true'
     runs-on: macos-26
-    env:
-      # The Electron app's dependencies are still in package.json; its binary
-      # is not needed to build the Tauri app.
-      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
     steps:
       - uses: actions/checkout@v7
 

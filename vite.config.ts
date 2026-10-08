@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { APPS, serverPort, uiPort } from '@openflow/desktop/apps.ts';
+import { VISUALS_PORT } from './protocol.ts';
 import { generateNodes } from './tools/generate-nodes.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -13,12 +13,12 @@ generateNodes();
 // a separate build from `set/` because it is a separate app on a separate
 // machine — nothing here ships inside the device.
 //
-// The dev port and the server port are both `@openflow/desktop/apps.ts`, which is the
-// same registry the app's own main process reads — the two used to be restated
-// in both files and had no way of disagreeing loudly. No dev port is assumed:
-// `uiPort` is `$PORT` or 0, a free port, and `npm run dev` reads the real one.
-const PORT = uiPort(APPS.visuals);
-const SERVER = process.env.OPENFLOW_VISUALS || `http://127.0.0.1:${serverPort(APPS.visuals)}`;
+// No dev port is assumed: `$PORT`, or 0 for a free one. The server is where
+// `server/index.ts` listens — `OPENFLOW_VISUALS_PORT`, or `VISUALS_PORT`.
+const PORT = Number(process.env.PORT) || 0;
+const SERVER =
+  process.env.OPENFLOW_VISUALS ||
+  `http://127.0.0.1:${Number(process.env.OPENFLOW_VISUALS_PORT) || VISUALS_PORT}`;
 
 export default defineConfig({
   root: here,
@@ -42,8 +42,7 @@ export default defineConfig({
     chunkSizeWarningLimit: 1500,
   },
   server: {
-    // A preference, not a claim: busy, it moves up, and `tools/app.ts dev`
-    // reads the port it settled on off the socket and tells the shell.
+    // A preference, not a claim: busy, it moves up.
     port: PORT,
     strictPort: false,
     // Dev serves the page; the visuals server stays authoritative for the show

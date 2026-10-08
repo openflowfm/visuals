@@ -645,6 +645,7 @@ Not there yet: wipe and difference views, and a score in the live view.
 ## Where it lives
 
 In this repository, beside what it replaces until it can draw: `engine/` (the Rust
-crate), `app/` (the Tauri shell and its webview UI) and `harness/`. The Electron app, the
-Node server and the old engine are deleted in one change once the new app draws presets —
+crate), `app/` (the Tauri shell and its webview UI) and `harness/`. The Electron app is
+gone; the Node server and the old engine are deleted in one change once nothing here needs
+them (the app still uses `server/hlsl.ts`, the compare harness `server/presetWorker.ts`) —
 confirmed with Ryan before it happens.

@@ -79,7 +79,8 @@ interface ScreenDetails extends EventTarget {
 type WithScreens = Window & { getScreenDetails?: () => Promise<ScreenDetails> };
 
 /**
- * What the desktop app puts there instead — see `visuals/electron/preload.ts`.
+ * What the Electron app's preload put there instead. That app is gone, so today
+ * this is always absent and the browser path below is the one that runs.
  *
  * Declared as the *absence* of the browser API rather than as a replacement for
  * it: the browser path below is not deprecated, it is what a second machine

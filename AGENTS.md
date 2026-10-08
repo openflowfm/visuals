@@ -1,7 +1,7 @@
 # visual[flow]
 
 Read [`README.md`](README.md) first. The MilkDrop engine and the editor app that replace
-the Electron app are in `engine/` and `app/`; `docs/milkdrop-engine.md` is their plan and
+the old browser renderer and its Node server are in `engine/` and `app/`; `docs/milkdrop-engine.md` is their plan and
 status.
 
 | Command | What it checks | When to run |

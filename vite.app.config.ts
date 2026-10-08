@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 // The editor page of the Tauri app (`app/`). Its own build, because it shares
-// nothing with the Electron renderer it replaces but React and the widgets.
+// nothing with the old renderer it replaces but React and the widgets.
 // No fixed port: `npm run app` (or the launcher, with `autoPort`) picks a free one,
 // hands it here as `PORT` and to Tauri as its `devUrl`. Without one, the OS picks.
 export default defineConfig({

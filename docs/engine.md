@@ -1,8 +1,12 @@
 # The engine, and where it runs
 
-`client/render/*`, `electron/main.ts`. Why the show is drawn by WebGL2 inside a Chromium
+`client/render/*`. Why the show is drawn by WebGL2 inside a Chromium
 renderer, what that costs, and what would have to be true before it stopped being the right
 answer.
+
+> The Electron app this weighs has since been removed in favour of the Tauri app and its own
+> engine ([the MilkDrop engine](milkdrop-engine.md)); the comparison below is kept as the
+> reasoning of the time. The benchmark and frames tools now run in Playwright's Chromium.
 
 This exists because "Electron is heavy" is true and is not, on its own, an argument. The
 weight is real; the question is whether any of it lands on the frame.
@@ -80,8 +84,7 @@ Ranked by whether it lands on a frame:
    is well under a megabyte a frame, and an `IOSurface` share avoids even that — but it is work
    a shell swap never has to do, and getting it wrong costs the panel its whole reason to exist.
 2. **`ELECTRON_RUN_AS_NODE` runs the server child with no system Node**, and the N-API Ableton
-   Link addon loads under it unchanged. See [the desktop app](desktop.md) for why that was
-   checked rather than assumed. Tauri needs a Node or Bun sidecar to stand in.
+   Link addon loads under it unchanged. Tauri needs a Node or Bun sidecar to stand in.
 3. **Signing, notarisation, the hardened-runtime entitlements and the local-network prompt**
    are solved in `electron-builder.yml`, and all of it is redone from scratch on any other
    shell.
@@ -176,7 +179,7 @@ ceiling before the run; the companion frame report below records the actual peak
 uploaded geometries, render targets and pending loads, so a fast black frame cannot pass as a
 fast model renderer.
 
-Throughput and sweep runs drive draws directly and stay in a hidden, non-focusable window.
+Throughput and sweep runs drive draws directly and run in headless Chromium.
 Only `--paced` is visible: it deliberately measures display-paced
 `requestAnimationFrame`, which Chromium stops delivering to a hidden or fully covered
 window, so hiding that run would change the question rather than merely its presentation.
@@ -194,9 +197,9 @@ npm run frames -- --scheme=/tmp/scratch.json --flows=halo --at=0,1,2,3
 
 `--models=/path/to/models` supplies the corresponding model library for a scratch scheme.
 `stats.json` records peak and released model resources as well as renderer errors; capture
-waits on readiness and the headless window remains hidden and non-focusable.
+waits on readiness, and the browser is headless, so it never takes focus.
 
-It builds `visuals/frames.html` with vite, runs it in a hidden, non-focusable Electron window,
+It builds `visuals/frames.html` with vite, runs it in headless Chromium (Playwright's),
 and writes one PNG per flow and beat into `visuals/frames-out/`, with a `stats.json` and
 equal-phase HTML index beside them. Unlike the paced benchmark, this harness drives every
 frame directly instead of waiting for `requestAnimationFrame`, so hiding it does not change
@@ -311,7 +314,8 @@ So the two modes answer two questions and only one of them is about frame budget
 | `--paced` | what one frame costs at the display's rate, and what got dropped | how much room is left over |
 
 `--paced` needs a **visible** window: a hidden or occluded one gets no `requestAnimationFrame`
-at all, and the run simply never advances.
+at all, and the run simply never advances. Playwright cannot keep its window on top, so leave
+it uncovered for the length of the run; the command says so when it starts.
 
 Eight bars at 128bpm is fifteen seconds a flow, so a whole scheme is about seven minutes and
 a `--sweep` is most of an hour. `--bars` is the flag to reach for when that is too long.
@@ -391,9 +395,8 @@ Thirty frames are discarded before timing. The first frame of a flow compiles a 
 which is milliseconds of driver work charged to a frame that never pays it again — and
 charged worst to the flows with the most in them, which are exactly the ones being ranked.
 
-It runs in Electron rather than the Chrome in `tools/visuals.ts` for one reason: it is the
-same Chromium the app ships, and a benchmark run on a different engine than the product is a
-benchmark of the wrong thing. It warns when visual[flow], set[flow] or Live is already on the
+It runs in Playwright's Chromium: headless for the ceiling, in a window for `--paced`, which
+needs `requestAnimationFrame` and so a page that is on screen. It warns when visual[flow], set[flow] or Live is already on the
 GPU, because a contended run reports floors and nothing in the table would say so.
 
 **`work` beside each flow is the compiler's own prediction** against its ceiling of 64, now

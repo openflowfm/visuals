@@ -943,7 +943,7 @@ const cannotListen = (err: NodeJS.ErrnoException) => {
   if (err.code === 'EADDRINUSE') {
     console.error(
       `visuals: port ${PORT} is already in use — something else is on it.\n` +
-        `visuals: usually a visuals app or npm run dev left running from an earlier session.\n` +
+        `visuals: usually npm run server or npm run show left running from an earlier session.\n` +
         `visuals: find it with  lsof -nP -iTCP:${PORT} -sTCP:LISTEN\n` +
         `visuals: or run this one elsewhere with  OPENFLOW_VISUALS_PORT=17901 npm run server`,
     );
@@ -953,7 +953,7 @@ const cannotListen = (err: NodeJS.ErrnoException) => {
   link.stop();
   scheme.stop();
   bridge.close();
-  // 2 rather than 1, so `npm start` can tell a failure that waiting fixes
+  // 2 rather than 1, so a supervisor can tell a failure that waiting fixes
   // from one that it never will. Nothing frees a port by trying again.
   process.exit(2);
 };
