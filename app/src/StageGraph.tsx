@@ -10,21 +10,7 @@ import { cords, layout, port } from './graph/layout.ts';
 import { RemoveLayer } from './graph/RemoveLayer.tsx';
 import { writeDefaultShader } from './graph/writeDefaultShader.ts';
 import { usePreview } from './previews.ts';
-import {
-  CHAIN,
-  FIRST,
-  addLayer,
-  codeLines,
-  drivenBy,
-  layersOf,
-  offers,
-  problemsOf,
-  shaderCode,
-  summaryOf,
-  usesBlur,
-  type LayerKind,
-  type Stage,
-} from './stages.ts';
+import { CHAIN, FIRST, addLayer, codeLines, drivenBy, layersOf, offers, problemsOf, shaderCode, summaryOf, usesBlur, type LayerKind, type Stage } from './stages.ts';
 
 import './graph.css';
 
@@ -86,10 +72,10 @@ const StageNode = memo(function StageNode({ stage: s, preset, problems, selected
     s.kind === 'source' || s.kind === 'out'
       ? undefined
       : shader
-          ? written
-            ? plural(shaderCode(preset, s).split('\n').length, 'line')
-            : "MilkDrop's default"
-          : summary(preset, s, 2) || 'as MilkDrop starts';
+        ? written
+          ? plural(shaderCode(preset, s).split('\n').length, 'line')
+          : "MilkDrop's default"
+        : summary(preset, s, 2) || 'as MilkDrop starts';
   return (
     <div className="stage" data-kind={s.kind} data-problem={issues.length ? '' : undefined} onPointerDown={() => onSelect(s.id)}>
       <Device
@@ -301,7 +287,8 @@ export function StageGraph({ preset, problems, selected, onSelect, onChange }: P
             setMoved({ shape, at: {} });
             setFits((n) => n + 1);
           }}
-          title="put every node back and fit them in the pane">
+          title="put every node back and fit them in the pane"
+        >
           fit
         </Button>
       </div>

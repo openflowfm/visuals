@@ -15,7 +15,10 @@ describe('plural', () => {
   });
 });
 
-const spec = (key: string) => Object.values(PARAMS).flat().find((s) => s.key === key)!;
+const spec = (key: string) =>
+  Object.values(PARAMS)
+    .flat()
+    .find((s) => s.key === key)!;
 
 describe('the multiplier taper', () => {
   it('puts 1× at the centre and ¼× and 4× at the ends', () => {

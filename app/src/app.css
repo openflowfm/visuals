@@ -1,9 +1,14 @@
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
 /* Transparent all the way down: the bench is a native view under the page, and
    shows through wherever nothing here paints. Every panel paints itself — which
    is why the theme root, which paints --bg elsewhere in the suite, doesn't here. */
-html, body, #root, .vf-root {
+html,
+body,
+#root,
+.vf-root {
   height: 100%;
   margin: 0;
   overflow: hidden;
@@ -16,7 +21,13 @@ body {
   font-size: var(--text-lead);
 }
 
-.outside { margin: 0; padding: 24px; background: var(--bg); color: var(--ui); height: 100%; }
+.outside {
+  margin: 0;
+  padding: 24px;
+  background: var(--bg);
+  color: var(--ui);
+  height: 100%;
+}
 
 .app {
   display: grid;
@@ -43,10 +54,19 @@ body {
   font-size: var(--text-control);
 }
 /* A spacer that takes a flex row's free room, pushing what follows to the end. */
-.vf-fill { flex: 1; }
-.vf-header > :not(.vf-fill) { flex: none; }
-.vf-header .wdg { --wdg-field-height: var(--ctl-h); }
-.vf-transport .wdg-button-body { min-width: 26px; justify-content: center; }
+.vf-fill {
+  flex: 1;
+}
+.vf-header > :not(.vf-fill) {
+  flex: none;
+}
+.vf-header .wdg {
+  --wdg-field-height: var(--ctl-h);
+}
+.vf-transport .wdg-button-body {
+  min-width: 26px;
+  justify-content: center;
+}
 
 /* The wordmark, as mix[flow] draws its own. */
 .vf-mark {
@@ -60,7 +80,9 @@ body {
   font-weight: var(--weight-strong);
   color: var(--fg);
 }
-.vf-mark span { color: var(--primary); }
+.vf-mark span {
+  color: var(--primary);
+}
 
 /* The preset playing: the folder as a caption, then the name. */
 .vf-now {
@@ -75,16 +97,41 @@ body {
   border-left: 1px solid var(--bd);
   overflow: hidden;
 }
-.vf-header > .vf-now { flex: 0 1 auto; }
-.vf-now > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.vf-now i { flex: 0 2 auto; font-style: normal; color: var(--caption); font-size: var(--text-label); }
-.vf-now span { flex: 0 1 auto; color: var(--fg); font-size: var(--text-lead); }
-.vf-now.quiet { color: var(--caption); }
+.vf-header > .vf-now {
+  flex: 0 1 auto;
+}
+.vf-now > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vf-now i {
+  flex: 0 2 auto;
+  font-style: normal;
+  color: var(--caption);
+  font-size: var(--text-label);
+}
+.vf-now span {
+  flex: 0 1 auto;
+  color: var(--fg);
+  font-size: var(--text-lead);
+}
+.vf-now.quiet {
+  color: var(--caption);
+}
 
 /* A failure in a few plain words, dismissible; the app's own words are its tooltip.
    Every view's banner (`NoticeBanner`); live.css and link.css place their own. */
-.vf-notice { min-width: 0; display: flex; align-items: center; color: var(--red); }
-.vf-notice-text { flex: 1; min-width: 0; }
+.vf-notice {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  color: var(--red);
+}
+.vf-notice-text {
+  flex: 1;
+  min-width: 0;
+}
 /* In the header: a small outlined chip on one line. */
 .vf-header > .vf-notice {
   flex: 0 1 auto;
@@ -95,13 +142,23 @@ body {
   border: 1px solid color-mix(in srgb, var(--red) 40%, transparent);
   border-radius: var(--radius);
 }
-.vf-header > .vf-notice > .vf-notice-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.vf-header > .vf-notice .wdg-button-body { color: var(--red); }
+.vf-header > .vf-notice > .vf-notice-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vf-header > .vf-notice .wdg-button-body {
+  color: var(--red);
+}
 
-.vf-warning { color: var(--amber); font-size: var(--text-control); }
+.vf-warning {
+  color: var(--amber);
+  font-size: var(--text-control);
+}
 
 /* The frame rate: numbers in a dev build, a warning in a release when it drops. */
-.vf-stats, .vf-header .stats {
+.vf-stats,
+.vf-header .stats {
   color: var(--detail);
   font-family: var(--mono);
   font-variation-settings: var(--mono-axes);
@@ -109,11 +166,21 @@ body {
   min-width: 120px;
   text-align: right;
 }
-.vf-stats[data-slow] { color: var(--amber); }
+.vf-stats[data-slow] {
+  color: var(--amber);
+}
 
 /* The hint strip, across the bottom of the window. */
-.vf-footer { grid-column: 1 / -1; display: flex; min-width: 0; background: var(--rail); }
-.vf-footer > .wdg-hint { flex: 1; min-width: 0; }
+.vf-footer {
+  grid-column: 1 / -1;
+  display: flex;
+  min-width: 0;
+  background: var(--rail);
+}
+.vf-footer > .wdg-hint {
+  flex: 1;
+  min-width: 0;
+}
 
 /* Plain form controls still in other views (live, playlists, the inspector).
    `:where` keeps them below any widget's own class. */
@@ -125,14 +192,36 @@ body {
   border: 1px solid var(--bd3);
   border-radius: var(--radius);
 }
-:where(button) { padding: 2px 8px; cursor: pointer; }
-:where(button):hover { border-color: var(--focus); }
-:where(select) { max-width: 240px; padding: 2px 4px; }
+:where(button) {
+  padding: 2px 8px;
+  cursor: pointer;
+}
+:where(button):hover {
+  border-color: var(--focus);
+}
+:where(select) {
+  max-width: 240px;
+  padding: 2px 4px;
+}
 
-.audio-input { display: inline-flex; align-items: center; gap: 4px; }
-.vf-meters { display: inline-flex; flex-direction: column; justify-content: center; gap: 2px; margin-left: 2px; }
-.vf-meters .wdg-meter { --wdg-fill: var(--green); }
-.vf-meters .wdg-meter-body { border: 1px solid var(--bd3); }
+.audio-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.vf-meters {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  margin-left: 2px;
+}
+.vf-meters .wdg-meter {
+  --wdg-fill: var(--green);
+}
+.vf-meters .wdg-meter-body {
+  border: 1px solid var(--bd3);
+}
 
 .library {
   display: flex;
@@ -143,9 +232,15 @@ body {
 }
 
 /* The library column's tabs. */
-.library-tabs { padding: 8px 8px 0; }
-.library-tabs .wdg-segmented-body { display: flex; }
-.library-tabs .wdg-segmented-body button { flex: 1; }
+.library-tabs {
+  padding: 8px 8px 0;
+}
+.library-tabs .wdg-segmented-body {
+  display: flex;
+}
+.library-tabs .wdg-segmented-body button {
+  flex: 1;
+}
 
 main {
   display: grid;
@@ -176,7 +271,10 @@ main {
   min-height: 0;
   background: var(--bg);
 }
-.graph > * { position: absolute; inset: 0; }
+.graph > * {
+  position: absolute;
+  inset: 0;
+}
 
 .side {
   overflow: auto;
@@ -184,6 +282,15 @@ main {
   border-left: 1px solid var(--bd3);
 }
 
-.problem { color: var(--red); margin: 0; white-space: pre-wrap; }
-.problem b { font-family: var(--mono); font-variation-settings: var(--mono-axes); }
-.quiet { color: var(--caption); }
+.problem {
+  color: var(--red);
+  margin: 0;
+  white-space: pre-wrap;
+}
+.problem b {
+  font-family: var(--mono);
+  font-variation-settings: var(--mono-axes);
+}
+.quiet {
+  color: var(--caption);
+}

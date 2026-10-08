@@ -111,9 +111,39 @@ pub enum Buffer {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Func {
-    Sin, Cos, Tan, Asin, Acos, Atan, Atan2, Sqrt, Sqr, Pow, Exp, Log, Log10, Abs,
-    Min, Max, Sign, Rand, Floor, Int, Ceil, Invsqrt, Sigmoid, Bor, Band, Bnot,
-    Equal, Above, Below, Fmod, Freembuf, Memcpy, Memset,
+    Sin,
+    Cos,
+    Tan,
+    Asin,
+    Acos,
+    Atan,
+    Atan2,
+    Sqrt,
+    Sqr,
+    Pow,
+    Exp,
+    Log,
+    Log10,
+    Abs,
+    Min,
+    Max,
+    Sign,
+    Rand,
+    Floor,
+    Int,
+    Ceil,
+    Invsqrt,
+    Sigmoid,
+    Bor,
+    Band,
+    Bnot,
+    Equal,
+    Above,
+    Below,
+    Fmod,
+    Freembuf,
+    Memcpy,
+    Memset,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -151,8 +181,8 @@ enum Tok {
 }
 
 const SYMBOLS: &[&str] = &[
-    "===", "!==", "==", "!=", "<=", ">=", "&&", "||", "+=", "-=", "*=", "/=", "%=", "^=", "&=", "|=",
-    "+", "-", "*", "/", "%", "^", "<", ">", "=", "!", "&", "|", "(", ")", ",", ";", "?", ":", "[", "]",
+    "===", "!==", "==", "!=", "<=", ">=", "&&", "||", "+=", "-=", "*=", "/=", "%=", "^=", "&=", "|=", "+", "-", "*", "/", "%", "^", "<", ">", "=", "!", "&", "|", "(", ")", ",", ";", "?", ":", "[",
+    "]",
 ];
 
 fn lex(source: &str) -> Result<Vec<(Tok, usize)>, Error> {
@@ -455,9 +485,8 @@ impl Parser<'_> {
     fn call(&mut self, name: &str) -> Result<Expr, Error> {
         let args = self.arguments()?;
         let n = args.len();
-        let arity = |want: std::ops::RangeInclusive<usize>, this: &Self| -> Result<(), Error> {
-            if want.contains(&n) { Ok(()) } else { this.fail(format!("{name}() takes {want:?} arguments, not {n}")) }
-        };
+        let arity =
+            |want: std::ops::RangeInclusive<usize>, this: &Self| -> Result<(), Error> { if want.contains(&n) { Ok(()) } else { this.fail(format!("{name}() takes {want:?} arguments, not {n}")) } };
         let mut args = args.into_iter();
         let mut next = || Box::new(args.next().unwrap_or(Expr::Num(0.0)));
         let func = |f: Func, args: Vec<Expr>| Expr::Call(f, args);

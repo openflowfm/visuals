@@ -97,10 +97,7 @@ impl Renderer {
         });
         let c1 = [wgpu::VertexAttribute { format: wgpu::VertexFormat::Float32x4, offset: 0, shader_location: 1 }];
         let warp_buffers = warp_layout();
-        let comp_buffers = [
-            warp_buffers[0].clone(),
-            Some(wgpu::VertexBufferLayout { array_stride: 16, step_mode: wgpu::VertexStepMode::Vertex, attributes: &c1 }),
-        ];
+        let comp_buffers = [warp_buffers[0].clone(), Some(wgpu::VertexBufferLayout { array_stride: 16, step_mode: wgpu::VertexStepMode::Vertex, attributes: &c1 })];
         let (vs, buffers): (&wgpu::ShaderModule, &[Option<wgpu::VertexBufferLayout>]) = match kind {
             Kind::Warp => (&self.warp_vs, &warp_buffers),
             Kind::Comp => (&self.comp_vs, &comp_buffers),

@@ -5,7 +5,10 @@
  * its `.wdg-*` rules. Fitting the pane: StageGraph sets --wdg-node-zoom on the box
  * and spaces the nodes by the same factor.
  */
-.stage-graph-box > .stage-graph { position: absolute; inset: 0; }
+.stage-graph-box > .stage-graph {
+  position: absolute;
+  inset: 0;
+}
 
 /* The cords, coloured by what they carry. */
 .stage-graph {
@@ -15,20 +18,48 @@
 }
 
 /* Widths are `WIDE` and `NARROW` in stages.ts, which the layout spaces by. */
-.stage { --wdg-device-width: 168px; }
+.stage {
+  --wdg-device-width: 168px;
+}
 .stage[data-kind='source'],
-.stage[data-kind='out'] { --wdg-device-width: 88px; }
+.stage[data-kind='out'] {
+  --wdg-device-width: 88px;
+}
 
 /* Colour by kind: the title bar's leading edge and the ports. */
-.stage { --stage-ink: var(--fg); --wdg-device-accent: var(--stage-ink); }
-.stage[data-kind='motion'] { --stage-ink: var(--blue); }
-.stage[data-kind='shader'] { --stage-ink: var(--amber); }
-.stage[data-kind='feedback'] { --stage-ink: var(--fg); }
-.stage[data-kind='layer'] { --stage-ink: var(--green); }
-.stage[data-problem] { --wdg-device-edge: var(--red); }
+.stage {
+  --stage-ink: var(--fg);
+  --wdg-device-accent: var(--stage-ink);
+}
+.stage[data-kind='motion'] {
+  --stage-ink: var(--blue);
+}
+.stage[data-kind='shader'] {
+  --stage-ink: var(--amber);
+}
+.stage[data-kind='feedback'] {
+  --stage-ink: var(--fg);
+}
+.stage[data-kind='layer'] {
+  --stage-ink: var(--green);
+}
+.stage[data-problem] {
+  --wdg-device-edge: var(--red);
+}
 
-.stage-picture { display: block; width: 100%; aspect-ratio: 16 / 9; background: var(--preview, #000); }
-.layer-picture { display: block; width: 100%; aspect-ratio: 32 / 9; object-fit: cover; background: var(--preview, #000); }
+.stage-picture {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: var(--preview, #000);
+}
+.layer-picture {
+  display: block;
+  width: 100%;
+  aspect-ratio: 32 / 9;
+  object-fit: cover;
+  background: var(--preview, #000);
+}
 .stage-caption {
   display: block;
   overflow: hidden;
@@ -52,9 +83,14 @@
   text-overflow: ellipsis;
   cursor: text;
 }
-.stage-issue { font-size: var(--text-label); color: var(--red); }
+.stage-issue {
+  font-size: var(--text-label);
+  color: var(--red);
+}
 
-.stage-add { padding-top: 4px; }
+.stage-add {
+  padding-top: 4px;
+}
 .stage-add-menu {
   display: flex;
   flex-direction: column;
@@ -65,19 +101,67 @@
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-menu);
 }
-.stage-add-menu .wdg-button, .stage-add-menu button { width: 100%; justify-content: flex-start; text-align: left; }
-.stage-add-menu i { color: var(--caption); font-style: normal; }
+.stage-add-menu .wdg-button,
+.stage-add-menu button {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+}
+.stage-add-menu i {
+  color: var(--caption);
+  font-style: normal;
+}
 
-.stage-graph-tools { position: absolute; inset: auto 8px 8px auto; display: flex; gap: 4px; }
+.stage-graph-tools {
+  position: absolute;
+  inset: auto 8px 8px auto;
+  display: flex;
+  gap: 4px;
+}
 
 /* The inspector: one column, never wider than its pane. Code scrolls inside its own box. */
-.inspector { padding: 10px; display: flex; flex-direction: column; gap: 10px; min-width: 0; overflow-x: hidden; }
-.inspector header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-.inspector h2 { margin: 0; font-size: var(--text-heading); font-weight: var(--weight-strong); color: var(--fg); }
-.inspector .term { margin: 2px 0 0; font-size: var(--text-label); color: var(--caption); }
-.inspector .code { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.inspector .code > span { font-size: var(--text-label); font-weight: var(--weight-medium); color: var(--ui); }
-.inspector .code i { color: var(--caption); font-style: normal; font-family: var(--mono); font-variation-settings: var(--mono-axes); }
+.inspector {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  overflow-x: hidden;
+}
+.inspector header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.inspector h2 {
+  margin: 0;
+  font-size: var(--text-heading);
+  font-weight: var(--weight-strong);
+  color: var(--fg);
+}
+.inspector .term {
+  margin: 2px 0 0;
+  font-size: var(--text-label);
+  color: var(--caption);
+}
+.inspector .code {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.inspector .code > span {
+  font-size: var(--text-label);
+  font-weight: var(--weight-medium);
+  color: var(--ui);
+}
+.inspector .code i {
+  color: var(--caption);
+  font-style: normal;
+  font-family: var(--mono);
+  font-variation-settings: var(--mono-axes);
+}
 .inspector textarea {
   display: block;
   width: 100%;
@@ -92,17 +176,62 @@
   overflow: auto;
   tab-size: 2;
 }
-.inspector-default { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
-.inspector-default p { margin: 0; }
-.inspector .values { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; }
-.inspector .values label { display: flex; justify-content: space-between; align-items: center; gap: 6px; min-width: 0; }
-.inspector .values label > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-control); }
-.inspector .values label > :not(span) { flex: none; }
+.inspector-default {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.inspector-default p {
+  margin: 0;
+}
+.inspector .values {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 12px;
+}
+.inspector .values label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.inspector .values label > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-control);
+}
+.inspector .values label > :not(span) {
+  flex: none;
+}
 /* A setting a written shader has baked in: still editable, but it no longer reaches the picture. */
-.inspector .values label.baked > span { color: var(--caption); text-decoration: line-through; }
-.inspector > .quiet, .inspector .file .quiet { margin: 0; font-size: var(--text-label); }
-.inspector .file { border-top: 1px solid var(--bd3); padding-top: 8px; }
-.inspector .file summary { cursor: pointer; font-size: var(--text-label); font-weight: var(--weight-medium); color: var(--caption); }
-.inspector .file[open] summary { margin-bottom: 6px; }
-.inspector .file .values label > span { font-family: var(--mono); font-variation-settings: var(--mono-axes); font-size: var(--text-label); }
-
+.inspector .values label.baked > span {
+  color: var(--caption);
+  text-decoration: line-through;
+}
+.inspector > .quiet,
+.inspector .file .quiet {
+  margin: 0;
+  font-size: var(--text-label);
+}
+.inspector .file {
+  border-top: 1px solid var(--bd3);
+  padding-top: 8px;
+}
+.inspector .file summary {
+  cursor: pointer;
+  font-size: var(--text-label);
+  font-weight: var(--weight-medium);
+  color: var(--caption);
+}
+.inspector .file[open] summary {
+  margin-bottom: 6px;
+}
+.inspector .file .values label > span {
+  font-family: var(--mono);
+  font-variation-settings: var(--mono-axes);
+  font-size: var(--text-label);
+}

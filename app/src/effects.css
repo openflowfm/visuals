@@ -17,9 +17,16 @@
   letter-spacing: var(--track-caps);
   text-transform: uppercase;
 }
-.fx-head { display: flex; align-items: center; gap: 8px; }
+.fx-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 
-.fx-hits { display: flex; gap: 8px; }
+.fx-hits {
+  display: flex;
+  gap: 8px;
+}
 .fx .fx-hit {
   flex: 1;
   display: flex;
@@ -45,12 +52,31 @@
   font-weight: var(--weight-normal);
   letter-spacing: var(--track-none);
 }
-.fx .fx-hit[data-on] { color: var(--bg); background: var(--fg); border-color: var(--fg); }
-.fx .fx-hit[data-on] small { color: var(--bg); }
-.fx .fx-hit[data-kind='freeze'][data-on] { background: var(--blue); border-color: var(--blue); }
-.fx .fx-hit[data-kind='punch'][data-on] { background: var(--green); border-color: var(--green); }
-.fx .fx-hit[data-kind='blackout'][data-on] { color: var(--fg); background: var(--bg); border-color: var(--red); box-shadow: var(--ring) var(--red); }
-.fx .fx-hit[data-kind='blackout'][data-on] small { color: var(--red); }
+.fx .fx-hit[data-on] {
+  color: var(--bg);
+  background: var(--fg);
+  border-color: var(--fg);
+}
+.fx .fx-hit[data-on] small {
+  color: var(--bg);
+}
+.fx .fx-hit[data-kind='freeze'][data-on] {
+  background: var(--blue);
+  border-color: var(--blue);
+}
+.fx .fx-hit[data-kind='punch'][data-on] {
+  background: var(--green);
+  border-color: var(--green);
+}
+.fx .fx-hit[data-kind='blackout'][data-on] {
+  color: var(--fg);
+  background: var(--bg);
+  border-color: var(--red);
+  box-shadow: var(--ring) var(--red);
+}
+.fx .fx-hit[data-kind='blackout'][data-on] small {
+  color: var(--red);
+}
 
 .fx-row {
   display: flex;
@@ -58,7 +84,9 @@
   align-items: flex-end;
   gap: 8px 14px;
 }
-.fx-row .wdg-toggle { width: 120px; }
+.fx-row .wdg-toggle {
+  width: 120px;
+}
 .fx .fx-tempo {
   display: inline-flex;
   align-items: baseline;
@@ -71,7 +99,10 @@
   font-weight: var(--weight-bold);
   letter-spacing: var(--track-slight);
 }
-.fx span.fx-tempo { border: 1px solid var(--bd3); border-radius: var(--radius); }
+.fx span.fx-tempo {
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius);
+}
 .fx .fx-tempo b {
   color: var(--green);
   font-family: var(--mono);

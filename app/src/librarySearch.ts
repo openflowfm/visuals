@@ -52,13 +52,26 @@ const PAGE = 10;
 export function rowFor(key: string, at: number, length: number): number | null {
   let next: number;
   switch (key) {
-    case 'ArrowDown': next = at + 1; break;
-    case 'ArrowUp': next = at < 0 ? 0 : at - 1; break;
-    case 'PageDown': next = at < 0 ? 0 : at + PAGE; break;
-    case 'PageUp': next = at - PAGE; break;
-    case 'Home': next = 0; break;
-    case 'End': next = length - 1; break;
-    default: return null;
+    case 'ArrowDown':
+      next = at + 1;
+      break;
+    case 'ArrowUp':
+      next = at < 0 ? 0 : at - 1;
+      break;
+    case 'PageDown':
+      next = at < 0 ? 0 : at + PAGE;
+      break;
+    case 'PageUp':
+      next = at - PAGE;
+      break;
+    case 'Home':
+      next = 0;
+      break;
+    case 'End':
+      next = length - 1;
+      break;
+    default:
+      return null;
   }
   if (length <= 0) return -1;
   return Math.max(0, Math.min(length - 1, next));

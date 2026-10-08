@@ -26,11 +26,7 @@ fn main() {
             let lines: Vec<&str> = source.lines().collect();
             for line in message.lines() {
                 // `ERROR: 0:228: …` — the number after `0:`.
-                let Some(at) = line
-                    .split_once("ERROR: 0:")
-                    .and_then(|(_, rest)| rest.split(':').next())
-                    .and_then(|n| n.trim().parse::<usize>().ok())
-                else {
+                let Some(at) = line.split_once("ERROR: 0:").and_then(|(_, rest)| rest.split(':').next()).and_then(|n| n.trim().parse::<usize>().ok()) else {
                     continue;
                 };
                 for n in at.saturating_sub(3)..(at + 2).min(lines.len()) {

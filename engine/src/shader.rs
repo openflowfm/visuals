@@ -45,23 +45,54 @@ fn re(cell: &'static OnceLock<Regex>, pattern: &str) -> &'static Regex {
 
 /// Uniforms MilkDrop declares for every shader, by type.
 const UNIFORMS: &[(&str, &str)] = &[
-    ("float", "time"), ("float", "fps"), ("float", "frame"), ("float", "progress"),
-    ("float", "bass"), ("float", "mid"), ("float", "treb"), ("float", "vol"),
-    ("float", "bass_att"), ("float", "mid_att"), ("float", "treb_att"), ("float", "vol_att"),
-    ("float4", "aspect"), ("float4", "texsize"),
-    ("float4", "texsize_noise_lq"), ("float4", "texsize_noise_mq"), ("float4", "texsize_noise_hq"),
-    ("float4", "texsize_noise_lq_lite"), ("float4", "texsize_noisevol_lq"), ("float4", "texsize_noisevol_hq"),
-    ("float4", "rand_frame"), ("float4", "rand_preset"),
-    ("float4", "roam_cos"), ("float4", "roam_sin"), ("float4", "slow_roam_cos"), ("float4", "slow_roam_sin"),
-    ("float4", "_qa"), ("float4", "_qb"), ("float4", "_qc"), ("float4", "_qd"),
-    ("float4", "_qe"), ("float4", "_qf"), ("float4", "_qg"), ("float4", "_qh"),
-    ("float4", "_c5"), ("float4", "_c6"),
-    ("float", "blur1_min"), ("float", "blur1_max"), ("float", "blur2_min"),
-    ("float", "blur2_max"), ("float", "blur3_min"), ("float", "blur3_max"),
+    ("float", "time"),
+    ("float", "fps"),
+    ("float", "frame"),
+    ("float", "progress"),
+    ("float", "bass"),
+    ("float", "mid"),
+    ("float", "treb"),
+    ("float", "vol"),
+    ("float", "bass_att"),
+    ("float", "mid_att"),
+    ("float", "treb_att"),
+    ("float", "vol_att"),
+    ("float4", "aspect"),
+    ("float4", "texsize"),
+    ("float4", "texsize_noise_lq"),
+    ("float4", "texsize_noise_mq"),
+    ("float4", "texsize_noise_hq"),
+    ("float4", "texsize_noise_lq_lite"),
+    ("float4", "texsize_noisevol_lq"),
+    ("float4", "texsize_noisevol_hq"),
+    ("float4", "rand_frame"),
+    ("float4", "rand_preset"),
+    ("float4", "roam_cos"),
+    ("float4", "roam_sin"),
+    ("float4", "slow_roam_cos"),
+    ("float4", "slow_roam_sin"),
+    ("float4", "_qa"),
+    ("float4", "_qb"),
+    ("float4", "_qc"),
+    ("float4", "_qd"),
+    ("float4", "_qe"),
+    ("float4", "_qf"),
+    ("float4", "_qg"),
+    ("float4", "_qh"),
+    ("float4", "_c5"),
+    ("float4", "_c6"),
+    ("float", "blur1_min"),
+    ("float", "blur1_max"),
+    ("float", "blur2_min"),
+    ("float", "blur2_max"),
+    ("float", "blur3_min"),
+    ("float", "blur3_max"),
     // Only MilkDrop's default shaders read these, under names no preset uses:
     // _d0 = (decay, gammaadj, echo_zoom, echo_alpha),
     // _d1 = (echo_orient, fshader, brighten, darken), _d2 = (solarize, invert, 0, 0).
-    ("float4", "_d0"), ("float4", "_d1"), ("float4", "_d2"),
+    ("float4", "_d0"),
+    ("float4", "_d1"),
+    ("float4", "_d2"),
 ];
 
 /// Butterchurn's warp shader when a preset has none.
@@ -87,9 +118,16 @@ pub const DEFAULT_COMP: &str = "shader_body {
 /// Which preset value each `_d` uniform component of the default shaders holds,
 /// by the name equations use ([`default_uniforms`] fills them from it).
 const DEFAULT_VALUES: [(&str, &str); 10] = [
-    ("_d0.x", "decay"), ("_d0.y", "gammaadj"), ("_d0.z", "echo_zoom"), ("_d0.w", "echo_alpha"),
-    ("_d1.x", "echo_orient"), ("_d1.y", "fshader"), ("_d1.z", "brighten"), ("_d1.w", "darken"),
-    ("_d2.x", "solarize"), ("_d2.y", "invert"),
+    ("_d0.x", "decay"),
+    ("_d0.y", "gammaadj"),
+    ("_d0.z", "echo_zoom"),
+    ("_d0.w", "echo_alpha"),
+    ("_d1.x", "echo_orient"),
+    ("_d1.y", "fshader"),
+    ("_d1.z", "brighten"),
+    ("_d1.w", "darken"),
+    ("_d2.x", "solarize"),
+    ("_d2.y", "invert"),
 ];
 
 /// The `_d0`–`_d2` uniforms, filled per [`DEFAULT_VALUES`] from the preset
@@ -150,12 +188,14 @@ pub fn written_default(kind: Kind, preset: &crate::preset::Preset) -> String {
     let if_line = re(&IF, r"^(\s*)(else\s+)?if\s*\((.+?)\)\s+(.*)$");
     let mut out = Vec::new();
     let mut taken: Option<bool> = None;
-    for line in text.lines().flat_map(|l| if l.trim_start().starts_with("shader_body {") && l.trim() != "shader_body {" {
-        // `shader_body { body }` on one line: its own lines, so the body reads like the comp's.
-        let body = l.trim().trim_start_matches("shader_body {").trim_end_matches('}').trim().to_string();
-        vec!["shader_body {".to_string(), format!("  {body}"), "}".to_string()]
-    } else {
-        vec![l.to_string()]
+    for line in text.lines().flat_map(|l| {
+        if l.trim_start().starts_with("shader_body {") && l.trim() != "shader_body {" {
+            // `shader_body { body }` on one line: its own lines, so the body reads like the comp's.
+            let body = l.trim().trim_start_matches("shader_body {").trim_end_matches('}').trim().to_string();
+            vec!["shader_body {".to_string(), format!("  {body}"), "}".to_string()]
+        } else {
+            vec![l.to_string()]
+        }
     }) {
         let folded = if_line.captures(&line).and_then(|c| {
             let holds = constant_condition(&c[3])?;
@@ -188,16 +228,46 @@ pub fn written_default(kind: Kind, preset: &crate::preset::Preset) -> String {
 
 /// MilkDrop's random rotation matrices, `float4x3` in its preamble.
 const ROTATIONS: &[&str] = &[
-    "rot_s1", "rot_s2", "rot_s3", "rot_s4", "rot_d1", "rot_d2", "rot_d3", "rot_d4",
-    "rot_f1", "rot_f2", "rot_f3", "rot_f4", "rot_vf1", "rot_vf2", "rot_vf3", "rot_vf4",
-    "rot_uf1", "rot_uf2", "rot_uf3", "rot_uf4", "rot_rand1", "rot_rand2", "rot_rand3", "rot_rand4",
+    "rot_s1",
+    "rot_s2",
+    "rot_s3",
+    "rot_s4",
+    "rot_d1",
+    "rot_d2",
+    "rot_d3",
+    "rot_d4",
+    "rot_f1",
+    "rot_f2",
+    "rot_f3",
+    "rot_f4",
+    "rot_vf1",
+    "rot_vf2",
+    "rot_vf3",
+    "rot_vf4",
+    "rot_uf1",
+    "rot_uf2",
+    "rot_uf3",
+    "rot_uf4",
+    "rot_rand1",
+    "rot_rand2",
+    "rot_rand3",
+    "rot_rand4",
 ];
 
 /// Textures every shader can read.
 pub const TEXTURES_2D: &[&str] = &[
-    "sampler_main", "sampler_fw_main", "sampler_fc_main", "sampler_pw_main", "sampler_pc_main",
-    "sampler_blur1", "sampler_blur2", "sampler_blur3",
-    "sampler_noise_lq", "sampler_noise_lq_lite", "sampler_noise_mq", "sampler_noise_hq",
+    "sampler_main",
+    "sampler_fw_main",
+    "sampler_fc_main",
+    "sampler_pw_main",
+    "sampler_pc_main",
+    "sampler_blur1",
+    "sampler_blur2",
+    "sampler_blur3",
+    "sampler_noise_lq",
+    "sampler_noise_lq_lite",
+    "sampler_noise_mq",
+    "sampler_noise_hq",
     "sampler_pw_noise_lq",
 ];
 pub const TEXTURES_3D: &[&str] = &["sampler_noisevol_lq", "sampler_noisevol_hq"];
@@ -251,10 +321,7 @@ pub fn preamble() -> String {
 /// renderer binds it like any other preset texture.
 pub fn declare_textures(head: &str, body: &str) -> String {
     static USE: OnceLock<Regex> = OnceLock::new();
-    let known = |name: &str| {
-        TEXTURES_2D.iter().chain(TEXTURES_3D).any(|t| *t == name || t.trim_start_matches("sampler_") == name)
-            || head.contains(&format!("{name}_tex;"))
-    };
+    let known = |name: &str| TEXTURES_2D.iter().chain(TEXTURES_3D).any(|t| *t == name || t.trim_start_matches("sampler_") == name) || head.contains(&format!("{name}_tex;"));
     let mut seen = std::collections::BTreeSet::new();
     for m in re(&USE, r"\b(\w+)_tex\.Sample").captures_iter(&format!("{head}\n{body}")) {
         let name = m[1].to_owned();
@@ -290,9 +357,7 @@ pub fn split_samplers(code: &str) -> String {
     let code = re(&LOD, r"\btex2D[lL]od\s*\(\s*(\w+)\s*,").replace_all(code, "_tex2Dlod(${1}_tex, ${1}_smp,");
     let code = re(&BIAS, r"\btex2D[bB]ias\s*\(\s*(\w+)\s*,").replace_all(&code, "_tex2Dbias(${1}_tex, ${1}_smp,");
     let code = re(&CALL, r"\btex([23])[dD]\s*\(\s*(\w+)\s*,").replace_all(&code, "${2}_tex.Sample(${2}_smp,");
-    re(&DECL, r"(?m)^(\s*)(?:uniform\s+)?sampler([23])D\s+(\w+)\s*;")
-        .replace_all(&code, "${1}Texture${2}D ${3}_tex; SamplerState ${3}_smp;")
-        .into_owned()
+    re(&DECL, r"(?m)^(\s*)(?:uniform\s+)?sampler([23])D\s+(\w+)\s*;").replace_all(&code, "${1}Texture${2}D ${3}_tex; SamplerState ${3}_smp;").into_owned()
 }
 
 /// Helpers the sampler rewrite calls into. Macros, because glslang's HLSL front
@@ -538,10 +603,7 @@ pub fn grouped_initializers(code: &str) -> String {
             if items.len() != width * count {
                 return m[0].to_owned();
             }
-            let groups: Vec<String> = items
-                .chunks(width)
-                .map(|chunk| format!("{{{}}}", chunk.iter().map(|s| s.trim()).collect::<Vec<_>>().join(", ")))
-                .collect();
+            let groups: Vec<String> = items.chunks(width).map(|chunk| format!("{{{}}}", chunk.iter().map(|s| s.trim()).collect::<Vec<_>>().join(", "))).collect();
             format!("{} {}[{}] = {{{}}}", &m[1], &m[3], &m[4], groups.join(", "))
         })
         .into_owned()
@@ -604,10 +666,7 @@ pub fn spirv(source: &str) -> Result<Vec<u32>, Error> {
         let shader = sys::glslang_shader_create(input);
         let entry = std::ffi::CString::new(ENTRY).unwrap();
         sys::glslang_shader_set_entry_point(shader, entry.as_ptr());
-        sys::glslang_shader_set_options(
-            shader,
-            (sys::glslang_shader_options_t::AUTO_MAP_BINDINGS.0 | sys::glslang_shader_options_t::AUTO_MAP_LOCATIONS.0) as _,
-        );
+        sys::glslang_shader_set_options(shader, (sys::glslang_shader_options_t::AUTO_MAP_BINDINGS.0 | sys::glslang_shader_options_t::AUTO_MAP_LOCATIONS.0) as _);
         if sys::glslang_shader_preprocess(shader, input) == 0 || sys::glslang_shader_parse(shader, input) == 0 {
             let message = log(sys::glslang_shader_get_info_log(shader));
             sys::glslang_shader_delete(shader);
@@ -662,25 +721,17 @@ unsafe fn log(text: *const std::os::raw::c_char) -> String {
 }
 
 /// Build glslang's input for HLSL fragment source and hand it to `run`.
-fn with_input<T>(
-    source: &str,
-    run: impl FnOnce(&glslang_sys::glslang_input_t, i32) -> Result<T, Error>,
-) -> Result<T, Error> {
+fn with_input<T>(source: &str, run: impl FnOnce(&glslang_sys::glslang_input_t, i32) -> Result<T, Error>) -> Result<T, Error> {
     use glslang_sys as sys;
     // Initialises glslang's process-wide state once.
     glslang::Compiler::acquire().ok_or_else(|| Error::Compile("glslang would not initialise".into()))?;
     // The default limits, as the `glslang` crate defines them. A one-field
     // newtype over the C struct; the size check keeps the transmute honest.
-    const _: () = assert!(
-        std::mem::size_of::<glslang::limits::ResourceLimits>() == std::mem::size_of::<sys::glslang_resource_t>()
-    );
+    const _: () = assert!(std::mem::size_of::<glslang::limits::ResourceLimits>() == std::mem::size_of::<sys::glslang_resource_t>());
     let limits: sys::glslang_resource_t = unsafe { std::mem::transmute(glslang::limits::DEFAULT_LIMITS) };
 
     let code = std::ffi::CString::new(source).map_err(|e| Error::Compile(e.to_string()))?;
-    let messages = sys::glslang_messages_t::READ_HLSL.0
-        | sys::glslang_messages_t::HLSL_DX9_COMPATIBLE.0
-        | sys::glslang_messages_t::SPV_RULES.0
-        | sys::glslang_messages_t::VULKAN_RULES.0;
+    let messages = sys::glslang_messages_t::READ_HLSL.0 | sys::glslang_messages_t::HLSL_DX9_COMPATIBLE.0 | sys::glslang_messages_t::SPV_RULES.0 | sys::glslang_messages_t::VULKAN_RULES.0;
     let input = sys::glslang_input_t {
         language: sys::glslang_source_t::HLSL,
         stage: sys::glslang_stage_t::Fragment,
@@ -706,9 +757,7 @@ pub fn module(words: &[u32]) -> Result<(naga::Module, naga::valid::ModuleInfo), 
     let options = naga::front::spv::Options::default();
     let bytes: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
     let module = naga::front::spv::parse_u8_slice(&bytes, &options).map_err(|e| Error::Read(e.to_string()))?;
-    let info = naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::default())
-        .validate(&module)
-        .map_err(|e| Error::Invalid(format!("{:?}", e.into_inner())))?;
+    let info = naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::default()).validate(&module).map_err(|e| Error::Invalid(format!("{:?}", e.into_inner())))?;
     Ok((module, info))
 }
 
@@ -762,10 +811,7 @@ mod tests {
 
     #[test]
     fn functions_and_3d_noise_compile() {
-        compiles(
-            Kind::Warp,
-            "float3 f(float3 x) { return x * x; }\nshader_body { ret = f(tex3D(sampler_noisevol_hq, float3(uv, time)).xyz) + mul(float3(1,0,0), (float3x3)rot_s1); }",
-        );
+        compiles(Kind::Warp, "float3 f(float3 x) { return x * x; }\nshader_body { ret = f(tex3D(sampler_noisevol_hq, float3(uv, time)).xyz) + mul(float3(1,0,0), (float3x3)rot_s1); }");
     }
 
     #[test]
@@ -791,10 +837,7 @@ mod tests {
 
     #[test]
     fn effect_sampler_states_are_dropped() {
-        compiles(
-            Kind::Comp,
-            "sampler sampler_grad = sampler_state { AddressU = WRAP; AddressV = WRAP; };\nshader_body { ret = tex2D(sampler_grad, uv).xyz; }",
-        );
+        compiles(Kind::Comp, "sampler sampler_grad = sampler_state { AddressU = WRAP; AddressV = WRAP; };\nshader_body { ret = tex2D(sampler_grad, uv).xyz; }");
     }
 
     #[test]
@@ -824,10 +867,7 @@ mod tests {
 
     #[test]
     fn flat_initializers_are_grouped() {
-        assert_eq!(
-            grouped_initializers("const float4 s[2] = { 0, 0, 11.0/3.0, f(a, b), 1, 2, 3, 4 };"),
-            "const float4 s[2] = {{0, 0, 11.0/3.0, f(a, b)}, {1, 2, 3, 4}};"
-        );
+        assert_eq!(grouped_initializers("const float4 s[2] = { 0, 0, 11.0/3.0, f(a, b), 1, 2, 3, 4 };"), "const float4 s[2] = {{0, 0, 11.0/3.0, f(a, b)}, {1, 2, 3, 4}};");
         compiles(Kind::Comp, "const float4 s[2] = { 0.0, 0.0, 0, 11.0/3.0, 0.0, 1.0, 0, -2.0/3.0 };\nshader_body { ret = s[1].xyz; }");
     }
 
@@ -843,9 +883,7 @@ mod tests {
 
     #[test]
     fn a_presets_macros_apply_before_the_rewrites() {
-        let source = hlsl(Kind::Warp, "#define main sampler_fw_main\nsampler base01;\nshader_body { ret = tex2D(main, uv).xyz; }")
-            .unwrap()
-            .unwrap();
+        let source = hlsl(Kind::Warp, "#define main sampler_fw_main\nsampler base01;\nshader_body { ret = tex2D(main, uv).xyz; }").unwrap().unwrap();
         assert!(source.contains("sampler_fw_main_tex.Sample(sampler_fw_main_smp"), "{source}");
         compiles(Kind::Warp, "#define main sampler_fw_main\n#define base01 sampler_pw_rand00\nsampler base01;\nshader_body { ret = tex2D(main, uv).xyz + tex2D(base01, uv).xyz; }");
     }

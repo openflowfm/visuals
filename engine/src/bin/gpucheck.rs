@@ -88,9 +88,7 @@ fn main() {
     let mut timeout = 20.0;
     while let Some(arg) = args.next() {
         match arg.as_str() {
-            "--failures" => {
-                failures_out = Some(PathBuf::from(args.next().unwrap_or_else(|| usage("--failures needs a file"))))
-            }
+            "--failures" => failures_out = Some(PathBuf::from(args.next().unwrap_or_else(|| usage("--failures needs a file")))),
             "--frames" => frames = count_arg(&mut args, "--frames"),
             "--sample" => count = Some(count_arg(&mut args, "--sample")),
             "--all" => count = None,
@@ -135,21 +133,19 @@ fn main() {
         let lines = lines.clone();
         let failures_out = failures_out.clone();
         let limit = Duration::from_secs_f64(timeout);
-        std::thread::spawn(move || loop {
-            std::thread::sleep(Duration::from_millis(250));
-            let c = current.lock().unwrap_or_else(|e| e.into_inner());
-            if let Some(path) = &c.path {
-                if c.since.elapsed() > limit {
-                    println!("timed out\t{}\tin {}", path.display(), c.stage);
-                    eprintln!(
-                        "gpucheck: stopped — {} took over {timeout}s in {} (a stuck Metal compile can't be interrupted)",
-                        path.display(),
-                        c.stage
-                    );
-                    let mut l = lines.lock().unwrap_or_else(|e| e.into_inner()).clone();
-                    l.push(format!("timed out\t{}\tin {}", path.display(), c.stage));
-                    write_failures(&failures_out, &l);
-                    std::process::exit(2);
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(Duration::from_millis(250));
+                let c = current.lock().unwrap_or_else(|e| e.into_inner());
+                if let Some(path) = &c.path {
+                    if c.since.elapsed() > limit {
+                        println!("timed out\t{}\tin {}", path.display(), c.stage);
+                        eprintln!("gpucheck: stopped — {} took over {timeout}s in {} (a stuck Metal compile can't be interrupted)", path.display(), c.stage);
+                        let mut l = lines.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                        l.push(format!("timed out\t{}\tin {}", path.display(), c.stage));
+                        write_failures(&failures_out, &l);
+                        std::process::exit(2);
+                    }
                 }
             }
         });

@@ -69,9 +69,7 @@ fn options() -> Options {
             "--warm" => o.warm = one(args.next()),
             "--jitter" => o.jitter = one(args.next()),
             "--dump" => o.dump = Some(args.next().unwrap_or_else(|| usage()).into()),
-            "--size" => {
-                o.size = args.next().as_deref().and_then(common::parse_size).unwrap_or_else(|| usage())
-            }
+            "--size" => o.size = args.next().as_deref().and_then(common::parse_size).unwrap_or_else(|| usage()),
             _ => o.presets.extend(presets(&find(&arg))),
         }
     }
@@ -94,9 +92,7 @@ fn presets(path: &Path) -> Vec<PathBuf> {
     if path.is_file() {
         return vec![path.to_owned()];
     }
-    let mut out: Vec<PathBuf> = std::fs::read_dir(path)
-        .map(|d| d.filter_map(|e| e.ok().map(|e| e.path())).filter(|p| p.extension().is_some_and(|e| e == "milk")).collect())
-        .unwrap_or_default();
+    let mut out: Vec<PathBuf> = std::fs::read_dir(path).map(|d| d.filter_map(|e| e.ok().map(|e| e.path())).filter(|p| p.extension().is_some_and(|e| e == "milk")).collect()).unwrap_or_default();
     out.sort();
     out
 }
@@ -297,14 +293,7 @@ fn main() {
             for &speed in &o.speeds {
                 let m = measure(&mut r, &text, &o, hz, speed, 7, dump.as_deref());
                 let list = |v: &[f64]| v.iter().map(|x| format!("{x:.2}")).collect::<Vec<_>>().join(" ");
-                println!(
-                    "{name}\t{hz}\t{speed}\t{:.2}\t{:.2}\t{}\t{}\t{}",
-                    unevenness(&m.motion),
-                    unevenness(&m.difference),
-                    list(&m.motion),
-                    list(&m.difference),
-                    m.unmeasured
-                );
+                println!("{name}\t{hz}\t{speed}\t{:.2}\t{:.2}\t{}\t{}\t{}", unevenness(&m.motion), unevenness(&m.difference), list(&m.motion), list(&m.difference), m.unmeasured);
             }
         }
     }

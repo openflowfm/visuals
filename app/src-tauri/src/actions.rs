@@ -27,22 +27,35 @@ pub enum Action {
     /// Any other preset of the active playlist (or the library).
     Random,
     /// Item `index` (from 0) of the active playlist.
-    Go { index: usize },
+    Go {
+        index: usize,
+    },
     /// Make playlist number `playlist` (from 0, in the file's order) the active one and
     /// play its item `index`, or its first.
-    Load { playlist: usize, index: Option<usize> },
+    Load {
+        playlist: usize,
+        index: Option<usize>,
+    },
     /// No active playlist: the library steps as a whole again.
     Unload,
     /// Auto-advance on, off, or (`null`) the other way round.
-    Auto { on: Option<bool> },
+    Auto {
+        on: Option<bool>,
+    },
     /// How long auto-advance stays on a preset, in seconds (1 to 3600).
-    Seconds { seconds: f64 },
+    Seconds {
+        seconds: f64,
+    },
     /// Lock the current preset, or let it go (`null` toggles): while held, stepping,
     /// loading a playlist and auto-advance change nothing.
-    Hold { on: Option<bool> },
+    Hold {
+        on: Option<bool>,
+    },
     /// Change preset every this many bars on Link's bar lines, counted from the one
     /// (`crate::link`); 0 stops, more than 64 is 64. Turns the timed auto-advance off.
-    Bars { bars: u32 },
+    Bars {
+        bars: u32,
+    },
     /// A live effect (`crate::fx`): `{"kind": "strobe", "on": true}`, `{"kind": "tap"}`…
     /// The same flat JSON as the others.
     #[serde(untagged)]

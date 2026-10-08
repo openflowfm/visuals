@@ -150,10 +150,7 @@ pub const PREVIEW: (u32, u32) = (192, 108);
 /// The stages that have a picture, in the order [`Renderer::read_previews`] packs them:
 /// the warp's output, the feedback after waves and shapes, blur 1 and comp; then what
 /// each drawing stage drew this frame, alone on black.
-pub const PREVIEWS: [&str; 15] = [
-    "warp", "feedback", "blur", "comp", "wave0", "wave1", "wave2", "wave3", "shape0", "shape1", "shape2", "shape3", "wave",
-    "motion", "border",
-];
+pub const PREVIEWS: [&str; 15] = ["warp", "feedback", "blur", "comp", "wave0", "wave1", "wave2", "wave3", "shape0", "shape1", "shape2", "shape3", "wave", "motion", "border"];
 
 /// The last step's picture moved by the warp mesh and nothing else: what a
 /// refresh between steps mixes the preset's warp shader over.

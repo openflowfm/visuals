@@ -51,9 +51,7 @@ pub struct View {
 
 /// Where playlists live unless `OPENFLOW_VISUALS_PLAYLISTS` says otherwise.
 pub fn default_file() -> PathBuf {
-    std::env::var_os("OPENFLOW_VISUALS_PLAYLISTS")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".openflow/visuals/playlists.json"))
+    std::env::var_os("OPENFLOW_VISUALS_PLAYLISTS").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".openflow/visuals/playlists.json"))
 }
 
 fn new_id() -> String {
@@ -198,12 +196,7 @@ impl Store {
                             Some((dir, _)) if !Path::new(s).is_absolute() => dir.to_string(),
                             _ => path.parent().map(|d| d.to_string_lossy().into_owned()).unwrap_or_default(),
                         };
-                        Item {
-                            name: path.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
-                            group,
-                            missing: !path.is_file(),
-                            path: path.to_string_lossy().into_owned(),
-                        }
+                        Item { name: path.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(), group, missing: !path.is_file(), path: path.to_string_lossy().into_owned() }
                     })
                     .collect(),
             })
