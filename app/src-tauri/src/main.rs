@@ -54,15 +54,39 @@ impl App {
 fn main() {
     let library = engine::preset::pack_dir();
     let deck = actions::Deck::new(playlists::Store::open(playlists::default_file(), library.clone()));
-    tauri::Builder::default()
+    #[cfg(target_os = "macos")]
+    let headless = dev::headless();
+    let builder = tauri::Builder::default();
+    // Headless (`VISUALS_HEADLESS`): never take focus from the app in front.
+    #[cfg(target_os = "macos")]
+    let builder = builder.activate_ignoring_other_apps(!headless);
+    #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
+    let mut app = builder
         .manage(App { bench: Mutex::new(None), ring: listen::ring(), listening: Mutex::new(None), library, seed: AtomicU64::new(1) })
         .manage(deck)
-        .setup(|app| {
+        .setup(move |app| {
             actions::start_auto(app.handle().clone());
             link::start(app.handle().clone());
+            #[cfg(not(target_os = "macos"))]
+            app.get_webview_window("main").expect("main window").show()?;
             #[cfg(target_os = "macos")]
             {
+                // The window starts hidden (`tauri.conf.json`): shown here, or
+                // headless, drawn where no display shows it.
                 let window = app.get_webview_window("main").expect("main window");
+                if headless {
+                    window.with_webview(|webview| {
+                        let mtm = objc2::MainThreadMarker::new().expect("main thread");
+                        // SAFETY: tauri hands over the live WKWebView and NSWindow, on the main thread.
+                        unsafe {
+                            dev::keep_drawing(webview.inner());
+                            dev::park(mtm, &*(webview.ns_window() as *const objc2_app_kit::NSWindow));
+                        }
+                    })?;
+                } else {
+                    window.show()?;
+                    window.set_focus()?;
+                }
                 let instance = wgpu::Instance::default();
                 let surface = unsafe { bench::view::create(window.ns_window()?, &instance) };
                 let state = app.state::<App>();
@@ -113,6 +137,12 @@ fn main() {
             link::link_reset_one,
             link::link_sync,
         ])
-        .run(tauri::generate_context!())
+        .build(tauri::generate_context!())
         .expect("visual[flow]");
+    // Headless: no Dock icon or menu bar, and the app can't be made active.
+    #[cfg(target_os = "macos")]
+    if headless {
+        app.set_activation_policy(tauri::ActivationPolicy::Prohibited);
+    }
+    app.run(|_, _| {});
 }

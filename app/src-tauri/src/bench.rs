@@ -33,6 +33,78 @@ pub enum Cmd {
     Output(Option<(wgpu::Surface<'static>, (u32, u32))>, Sender<()>),
     /// The output surface's new size in pixels.
     OutputResize(u32, u32),
+    /// The picture as the bench (false) or the output (true) is shown it, read
+    /// back from the GPU at that surface's size; `None` when it isn't shown.
+    /// Headless captures use it, since the window server never composes a
+    /// Metal layer on a window that is on no display.
+    Snapshot(bool, Sender<Option<Picture>>),
+}
+
+/// A picture: its width and height in pixels, and its RGBA rows top to bottom.
+pub type Picture = (u32, u32, Vec<u8>);
+
+/// Paste `picture` into `rgba` (an image `size` big), scaled (nearest pixel) to
+/// fill `rect` (x, y, width, height in pixels from the top left), cut off where
+/// it runs past the image's edges.
+pub fn paste(rgba: &mut [u8], size: (u32, u32), rect: (i64, i64, i64, i64), picture: &Picture) {
+    let (x0, y0, rw, rh) = rect;
+    let (pw, ph, pixels) = (picture.0 as i64, picture.1 as i64, &picture.2);
+    if rw <= 0 || rh <= 0 || pw <= 0 || ph <= 0 {
+        return;
+    }
+    for y in y0.max(0)..(y0 + rh).min(size.1 as i64) {
+        let sy = (y - y0) * ph / rh;
+        for x in x0.max(0)..(x0 + rw).min(size.0 as i64) {
+            let sx = (x - x0) * pw / rw;
+            let from = ((sy * pw + sx) * 4) as usize;
+            let to = ((y * size.0 as i64 + x) * 4) as usize;
+            // Opaque, as the bench's layer is.
+            rgba[to..to + 3].copy_from_slice(&pixels[from..from + 3]);
+            rgba[to + 3] = 255;
+        }
+    }
+}
+
+/// Draw the finished picture through the master pass, as [`show`] does, into a
+/// texture of `size`, and read it back; `None` when the read-back won't map.
+fn snapshot(renderer: &mut Renderer, size: (u32, u32)) -> Option<Picture> {
+    let (w, h) = (size.0.max(1), size.1.max(1));
+    let format = wgpu::TextureFormat::Rgba8Unorm;
+    let device = renderer.device().clone();
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("snapshot"),
+        size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    renderer.present(&texture.create_view(&Default::default()), format);
+    let row = (w * 4).div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT) * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+    let staging = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("snapshot read back"),
+        size: (row * h) as u64,
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+    let mut encoder = device.create_command_encoder(&Default::default());
+    encoder.copy_texture_to_buffer(
+        texture.as_image_copy(),
+        wgpu::TexelCopyBufferInfo { buffer: &staging, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(row), rows_per_image: Some(h) } },
+        wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+    );
+    renderer.queue().submit([encoder.finish()]);
+    let slice = staging.slice(..);
+    slice.map_async(wgpu::MapMode::Read, |_| {});
+    device.poll(wgpu::PollType::wait_indefinitely()).ok();
+    let data = slice.get_mapped_range().ok()?;
+    let mut rgba = Vec::with_capacity((w * h * 4) as usize);
+    for y in 0..h as usize {
+        rgba.extend_from_slice(&data[y * row as usize..][..w as usize * 4]);
+    }
+    Some((w, h, rgba))
 }
 
 #[derive(Default, Clone, Copy, serde::Serialize)]
@@ -89,10 +161,22 @@ const UNPACED: Duration = Duration::from_nanos(1_000_000_000 / 120);
 /// Below this speed the preset clock stands still (frozen).
 const STILL: f64 = 0.02;
 
+/// How the bench presents: on its display's refresh, unless the output is open
+/// and paces the loop instead, or the app is headless — its windows are then on
+/// no display, so no refresh comes and a picture waiting for one never shows.
+fn bench_present_mode(output_open: bool) -> wgpu::PresentMode {
+    #[cfg(target_os = "macos")]
+    let headless = crate::dev::headless();
+    #[cfg(not(target_os = "macos"))]
+    let headless = false;
+    if output_open || headless { wgpu::PresentMode::AutoNoVsync } else { wgpu::PresentMode::AutoVsync }
+}
+
 /// Start drawing into `surface`, with the live effects `fx`. Returns once the device is up.
 pub fn start(instance: wgpu::Instance, surface: wgpu::Surface<'static>, size: (u32, u32), ring: Ring, fx: Arc<Mutex<Fx>>) -> Thread {
     let (adapter, device, queue) = engine::live::surface_device(&instance, &surface);
-    let config = configuration(&adapter, &surface, size);
+    let mut config = configuration(&adapter, &surface, size);
+    config.present_mode = bench_present_mode(false);
     surface.configure(&device, &config);
     let renderer = Renderer::new(device, queue, DRAW.0, DRAW.1);
     let (commands, rx) = std::sync::mpsc::channel();
@@ -208,11 +292,16 @@ impl Loop {
                 // The old output's surface goes first: its window closes after the reply.
                 self.output = None;
                 if let Some((s, size)) = next {
-                    let c = configuration(&self.adapter, &s, size);
+                    let mut c = configuration(&self.adapter, &s, size);
+                    #[cfg(target_os = "macos")]
+                    if crate::dev::headless() {
+                        // Off every display: no refresh to wait for.
+                        c.present_mode = wgpu::PresentMode::AutoNoVsync;
+                    }
                     s.configure(self.renderer.device(), &c);
                     self.output = Some(Output { surface: s, config: c });
                 }
-                self.config.present_mode = if self.output.is_some() { wgpu::PresentMode::AutoNoVsync } else { wgpu::PresentMode::AutoVsync };
+                self.config.present_mode = bench_present_mode(self.output.is_some());
                 if self.bench_shown {
                     self.surface.configure(self.renderer.device(), &self.config);
                 }
@@ -226,6 +315,14 @@ impl Loop {
                     output.config.height = h.max(1);
                     output.surface.configure(self.renderer.device(), &output.config);
                 }
+            }
+            Cmd::Snapshot(output, reply) => {
+                let size = match (output, &self.output) {
+                    (true, Some(o)) => Some((o.config.width, o.config.height)),
+                    (false, _) if self.bench_shown => Some((self.config.width, self.config.height)),
+                    _ => None,
+                };
+                let _ = reply.send(size.filter(|_| self.loaded).and_then(|size| snapshot(&mut self.renderer, size)));
             }
             Cmd::SampleRate(rate) => self.audio.set_sample_rate(rate),
             Cmd::Set(owner, key, value, reply) => {
@@ -429,14 +526,35 @@ pub mod view {
     /// The window as the screen shows it — webview and bench together — as a PNG.
     /// A development aid: an app may capture its own windows without the screen
     /// recording permission, so the window can be checked without anyone's eyes.
-    pub fn capture(path: &std::path::Path) -> Result<(), String> {
-        let window = VIEW.with(|v| v.borrow().as_ref().and_then(|v| v.window())).ok_or("no window")?;
-        capture_window(window.windowNumber() as u32, path)
+    /// `overlay` is pasted over the bench (see [`capture_view`]).
+    pub fn capture(path: &std::path::Path, overlay: Option<&super::Picture>) -> Result<(), String> {
+        let view = VIEW.with(|v| v.borrow().clone()).ok_or("no window")?;
+        capture_view(&view, path, overlay)
     }
 
-    /// Window `number` as the screen shows it, as a PNG — even when another
-    /// window covers it.
-    pub fn capture_window(number: u32, path: &std::path::Path) -> Result<(), String> {
+    /// `view`'s window as the screen shows it, as a PNG — even when another
+    /// window covers it — with `overlay` scaled into where `view` is, unless it
+    /// is hidden. Headless, the window is on no display and the window server
+    /// leaves `view`'s Metal layer black, so the picture it was given comes
+    /// from the GPU instead ([`super::Cmd::Snapshot`]).
+    pub fn capture_view(view: &NSView, path: &std::path::Path, overlay: Option<&super::Picture>) -> Result<(), String> {
+        let window = view.window().ok_or("no window")?;
+        let (w, h, mut rgba) = window_image(window.windowNumber() as u32)?;
+        if let Some(picture) = overlay.filter(|_| !view.isHidden()) {
+            // The view's rect in the window, from its bottom left, in points;
+            // the image is the window's frame, from its top left, in pixels.
+            let r = view.convertRect_toView(view.bounds(), None);
+            let frame = window.frame().size;
+            let scale = w as f64 / frame.width;
+            let px = |v: f64| (v * scale).round() as i64;
+            let rect = (px(r.origin.x), px(frame.height - r.origin.y - r.size.height), px(r.size.width), px(r.size.height));
+            super::paste(&mut rgba, (w, h), rect, picture);
+        }
+        engine::picture::save_png(path, w, h, &rgba).map_err(|e| e.to_string())
+    }
+
+    /// Window `number` as the screen shows it, as RGBA rows.
+    fn window_image(number: u32) -> Result<super::Picture, String> {
         // `CGRectNull`, `kCGWindowListOptionIncludingWindow`, `kCGWindowImageBoundsIgnoreFraming`.
         let null = CGRect { x: f64::INFINITY, y: f64::INFINITY, w: 0.0, h: 0.0 };
         unsafe {
@@ -456,7 +574,7 @@ pub mod view {
             }
             CFRelease(data);
             CFRelease(image);
-            engine::picture::save_png(path, w as u32, h as u32, &rgba).map_err(|e| e.to_string())
+            Ok((w as u32, h as u32, rgba))
         }
     }
 
@@ -504,6 +622,26 @@ mod tests {
                 due
             })
             .collect()
+    }
+
+    #[test]
+    fn pastes_a_picture_scaled_and_clipped() {
+        // A 2×1 picture, red then green, into a 4×2 image of grey.
+        let picture = (2, 1, vec![255, 0, 0, 9, 0, 255, 0, 9]);
+        let mut image = vec![7; 4 * 2 * 4];
+        paste(&mut image, (4, 2), (1, 0, 4, 2), &picture);
+        let px = |x: usize, y: usize| image[(y * 4 + x) * 4..][..4].to_vec();
+        assert_eq!(px(0, 0), [7, 7, 7, 7]);
+        // Twice the size: each picture pixel covers two columns, made opaque.
+        assert_eq!(px(1, 0), [255, 0, 0, 255]);
+        assert_eq!(px(2, 1), [255, 0, 0, 255]);
+        // The fourth column would be outside; the third is green.
+        assert_eq!(px(3, 1), [0, 255, 0, 255]);
+        // Wholly outside, or empty: nothing changes.
+        let before = image.clone();
+        paste(&mut image, (4, 2), (9, 9, 2, 2), &picture);
+        paste(&mut image, (4, 2), (0, 0, 0, 2), &picture);
+        assert_eq!(image, before);
     }
 
     #[test]

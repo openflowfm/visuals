@@ -15,6 +15,7 @@ the editor app (`app/`: the Tauri shell in `app/src-tauri`, its page in `app/src
 | `npm run typecheck` | the editor page's TypeScript (`app/src`) and the vite and vitest configs compile | any `.ts`/`.tsx` change |
 | `npx vitest run <files>` | targeted unit tests | the tests next to what you changed; CI runs them all (`npm test`) |
 | `npm run app:build-ui` | the editor page builds into `dist-app/`, which the app crate needs to compile | changes to `app/src`, `app/index.html` or `vite.app.config.ts` |
+| `VISUALS_HEADLESS=1 VISUALS_CAPTURE=<file.png> npm run app` (add `VISUALS_LIVE=1 VISUALS_CAPTURE_OUTPUT=<out.png>` for live mode, `VISUALS_FX=…` for effects) | the app runs and draws: pictures of the main window and the live output, with nothing shown on screen. It quits once the pictures are written, so the command ends by itself (exit 0) | after a change to the app or the page you want to see working: look at the pictures, then check with `ps` that no vite, `cargo-tauri` or `target/debug/visuals` is left |
 | `cargo run --release -p visuals-engine --bin record -- <audio> <out.mp4> --cut <s> <preset> …` | presets drawn from an audio file into a video, frame by frame — the teaser's footage (see `teaser/README.md`) | after a change to `record.rs`: record a few seconds and look at them |
 | `npm run typecheck` in `teaser/` | the teaser's Remotion edit compiles (the root typecheck doesn't reach it) | any change under `teaser/src/` |
 | `cargo run --release -p visuals-engine --bin gpucheck -- [files or folders] [--sample N \| --all] [--timeout S]` | presets load and draw on the GPU: by default a fixed sample of 250 spread over the pack (about a minute); a preset stuck over 20 s ends the run naming it. Exit 0 when every preset drew (fall-backs to MilkDrop's default shader are reported but pass), 1 when any failed to load or draw or panicked, or on a usage error, 2 on a timeout | the default sample locally after changes to shader translation or the renderer; `--all` (all 9,795) only when asked or before a release |
@@ -29,5 +30,15 @@ window, for checking it without screen access, and `VISUALS_CAPTURE_OUTPUT=<file
 the live output window (both after `VISUALS_CAPTURE_AFTER` seconds, 8 by default).
 `VISUALS_FX='[{"kind":"mirror","mode":"quad"}]'` sends those live actions (effects,
 hold…) 5 s after start (`VISUALS_FX_AFTER`), to check effects in a capture.
+
+**Agents always run the app headless** (`VISUALS_HEADLESS=1`), from the first run on: the
+owner is using the screen. Headless, the app has no Dock icon or menu bar, never becomes
+the active app, and draws its windows (the editor and the live output) beyond every
+display; captures still show what was drawn (the presets' pictures are read from the GPU
+and pasted in). With a capture it quits once the pictures are written. `npm run app` is
+`app/run.sh`, which runs `cargo tauri dev` in a process group of its own and stops the
+whole group (vite, `cargo-tauri`, the app) when it is stopped (SIGINT, SIGTERM, hangup)
+or whatever started it goes away; still, never leave a run going, and check with `ps`
+afterwards.
 
 Every agent commit must end with a blank line and a GitHub-compatible co-author trailer naming the agent that actually made it, for example `Co-authored-by: Codex <noreply@openai.com>` or `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Never name an agent that didn't write the commit.
