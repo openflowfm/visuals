@@ -24,7 +24,10 @@
 //! least-moving one, 1.00 for perfectly even, by motion (only where blocks can be
 //! matched: not on noise or soft glows) and by frame difference (every refresh).
 
+mod common;
+
 use engine::audio::{Audio, FFT_SIZE};
+use engine::picture::save_png;
 use engine::render::{headless, Renderer};
 use engine::runtime::PRESET_RATE;
 use std::path::{Path, PathBuf};
@@ -67,10 +70,7 @@ fn options() -> Options {
             "--jitter" => o.jitter = one(args.next()),
             "--dump" => o.dump = Some(args.next().unwrap_or_else(|| usage()).into()),
             "--size" => {
-                o.size = args
-                    .next()
-                    .and_then(|s| s.split_once('x').and_then(|(a, b)| Some((a.parse().ok()?, b.parse().ok()?))))
-                    .unwrap_or_else(|| usage())
+                o.size = args.next().as_deref().and_then(common::parse_size).unwrap_or_else(|| usage())
             }
             _ => o.presets.extend(presets(&find(&arg))),
         }
@@ -81,13 +81,14 @@ fn options() -> Options {
     o
 }
 
-/// A path as given, or else one in the pack.
+/// A path as given, or else one in the pack (`OPENFLOW_VISUALS_PRESETS` if set,
+/// otherwise ~/.openflow/visuals/presets).
 fn find(preset: &str) -> PathBuf {
     let given = PathBuf::from(preset);
     if given.exists() {
         return given;
     }
-    let pack = PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".openflow/visuals/presets").join(preset);
+    let pack = engine::preset::pack_dir().join(preset);
     if pack.exists() {
         return pack;
     }
@@ -206,14 +207,6 @@ struct Measure {
     unmeasured: usize,
 }
 
-fn save_png(file: &Path, rgba: &[u8], w: u32, h: u32) -> Result<(), Box<dyn std::error::Error>> {
-    let mut e = png::Encoder::new(std::io::BufWriter::new(std::fs::File::create(file)?), w, h);
-    e.set_color(png::ColorType::Rgba);
-    e.set_depth(png::BitDepth::Eight);
-    e.write_header()?.write_image_data(rgba)?;
-    Ok(())
-}
-
 /// A folder name for a preset's pictures: its file name with anything but
 /// letters, digits, `-`, `_` and `.` made `_`, suffixed when already taken (ignoring case).
 fn dump_dir(root: &Path, preset: &Path, taken: &mut std::collections::HashSet<String>) -> PathBuf {
@@ -260,7 +253,7 @@ fn measure(r: &mut Renderer, text: &str, o: &Options, hz: f64, speed: f64, seed:
         let rgba = r.read_back();
         if let Some(dir) = dump.filter(|_| (i as f64) < hz) {
             let file = dir.join(format!("{hz}hz-{speed}x-{i:03}.png"));
-            if let Err(e) = save_png(&file, &rgba, w as u32, h as u32) {
+            if let Err(e) = save_png(&file, w as u32, h as u32, &rgba) {
                 eprintln!("motion: can't write {}: {e}", file.display());
                 std::process::exit(1);
             }

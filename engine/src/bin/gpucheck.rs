@@ -4,7 +4,8 @@
 //!   cargo run --release --bin gpucheck -- [files or folders…] [--sample N | --all]
 //!       [--timeout S] [--failures out.txt] [--frames N]
 //!
-//! With no files or folders it takes the pack (~/.openflow/visuals/presets).
+//! With no files or folders it takes the pack (`OPENFLOW_VISUALS_PRESETS` if
+//! set, otherwise ~/.openflow/visuals/presets).
 //! A folder is sampled: by default DEFAULT_SAMPLE presets, the same ones every
 //! run, spread evenly over the sorted paths (so over the pack's folders);
 //! `--all` checks every one. Files named directly are always checked.
@@ -20,27 +21,13 @@
 
 use engine::audio::Audio;
 use engine::render::{headless, Renderer};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 /// Presets checked by default: about a minute when Metal compiles cold
 /// (~4 presets/s); seconds once its shader cache is warm (~65/s).
 const DEFAULT_SAMPLE: usize = 250;
-
-fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
-    for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
-        let path = entry.path();
-        if entry.file_name().to_string_lossy().starts_with('.') {
-            continue;
-        }
-        if path.is_dir() {
-            walk(&path, out);
-        } else if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("milk")) {
-            out.push(path);
-        }
-    }
-}
 
 /// `n` of `files` (sorted), evenly spaced: deterministic and spread over folders.
 fn sample(files: Vec<PathBuf>, n: usize) -> Vec<PathBuf> {
@@ -113,14 +100,14 @@ fn main() {
         }
     }
     if targets.is_empty() {
-        targets.push(PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".openflow/visuals/presets"));
+        targets.push(engine::preset::pack_dir());
     }
     let mut files = Vec::new();
     let mut found = Vec::new();
     for t in &targets {
         if t.is_dir() {
             let before = found.len();
-            walk(t, &mut found);
+            found.extend(engine::preset::milk_files(t));
             if found.len() == before {
                 usage(&format!("no .milk presets in {}", t.display()));
             }

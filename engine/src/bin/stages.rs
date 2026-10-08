@@ -7,6 +7,7 @@
 //! `<out dir>/<stage>.png` for each of `render::PREVIEWS`.
 
 use engine::audio::Audio;
+use engine::picture::save_png;
 use engine::render::{headless, Renderer, PREVIEW, PREVIEWS};
 
 fn main() {
@@ -32,10 +33,7 @@ fn main() {
     let pixels = renderer.read_previews().expect("previews");
     let each = (PREVIEW.0 * PREVIEW.1 * 4) as usize;
     for (i, name) in PREVIEWS.iter().enumerate() {
-        let file = std::fs::File::create(out.join(format!("{name}.png"))).expect("create png");
-        let mut encoder = png::Encoder::new(std::io::BufWriter::new(file), PREVIEW.0, PREVIEW.1);
-        encoder.set_color(png::ColorType::Rgba);
-        encoder.write_header().unwrap().write_image_data(&pixels[each * i..each * (i + 1)]).unwrap();
+        save_png(&out.join(format!("{name}.png")), PREVIEW.0, PREVIEW.1, &pixels[each * i..each * (i + 1)]).expect("write png");
     }
     println!("{}: {} stage pictures", out.display(), PREVIEWS.len());
 }

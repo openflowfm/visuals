@@ -2,30 +2,15 @@
 //!
 //!   cargo run --release --bin check -- [folder] [--failures out.txt]
 //!
-//! The folder defaults to the preset library, `~/.openflow/visuals/presets`. A
+//! The folder defaults to the preset library: `OPENFLOW_VISUALS_PRESETS` if set,
+//! otherwise `~/.openflow/visuals/presets`. A
 //! stage counts as compiled when it reaches a validated naga module; a preset with
 //! no shader for a stage passes that stage, since MilkDrop draws its default.
 
 use engine::{eel, preset, shader};
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Mutex;
-
-fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
-    let Ok(entries) = std::fs::read_dir(dir) else { return };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let name = entry.file_name();
-        if name.to_string_lossy().starts_with('.') {
-            continue;
-        }
-        if path.is_dir() {
-            walk(&path, out);
-        } else if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("milk")) {
-            out.push(path);
-        }
-    }
-}
 
 /// The first line of an error, with names and numbers taken out, so failures group.
 fn category(error: &str) -> String {
@@ -52,7 +37,7 @@ fn regex_lite_strip(line: &str) -> String {
 
 fn main() {
     let mut args = std::env::args().skip(1);
-    let mut folder = PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".openflow/visuals/presets");
+    let mut folder = preset::pack_dir();
     let mut failures_out: Option<PathBuf> = None;
     while let Some(arg) = args.next() {
         if arg == "--failures" {
@@ -61,9 +46,7 @@ fn main() {
             folder = PathBuf::from(arg);
         }
     }
-    let mut files = Vec::new();
-    walk(&folder, &mut files);
-    files.sort();
+    let files = preset::milk_files(&folder);
     eprintln!("check: {} presets in {}", files.len(), folder.display());
 
     let results = Mutex::new(Vec::<(PathBuf, &'static str, String)>::new());
