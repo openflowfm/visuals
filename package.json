@@ -22,7 +22,7 @@
     "app": "cd app/src-tauri && export PORT=${PORT:-$(node -e \"const s=require('net').createServer().listen(0,'127.0.0.1',()=>{console.log(s.address().port);s.close()})\")} && cargo tauri dev --config \"{\\\"build\\\":{\\\"devUrl\\\":\\\"http://127.0.0.1:$PORT\\\"}}\""
   },
   "dependencies": {
-    "@openflow/widgets": "git+https://github.com/openflowfm/widgets.git#dc356455e561c7eb9dce337a1e6b6810a5251fcb",
+    "@openflow/widgets": "git+https://github.com/openflowfm/widgets.git#147983bb76764b2ae8036c7b0f5d5367eed86b83",
     "@tauri-apps/api": "^2.12.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

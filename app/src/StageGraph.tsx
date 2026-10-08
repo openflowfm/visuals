@@ -189,8 +189,10 @@ function AddLayer({ preset, onAdd }: { preset: Preset; onAdd(kind: LayerKind): v
  *
  * The widgets `Graph` owns its pan and zoom and has no setter yet (driving them
  * from outside isn't built), so the host fits by drawing
- * smaller: positions times the factor, faces under CSS `zoom`. Both scale
- * linearly, so one measurement gives the exact factor.
+ * smaller: positions times the factor, faces under `--wdg-node-zoom`. Both scale
+ * linearly, so one measurement gives the exact factor. The graph's own zoom `k`
+ * is CSS `zoom` too, and rectangles under it are screen pixels (WebKit, and
+ * Chromium 128+), so dividing by `k` turns the extent back into graph units.
  */
 function fitting(box: HTMLElement | null, view: GraphView | null, size: number): number | null {
   const pane = box?.querySelector<HTMLElement>('.wdg-graph');
@@ -269,7 +271,7 @@ export function StageGraph({ preset, problems, selected, onSelect, onChange }: P
   const place = (id: string) => dragged[id] ?? { x: at[id].x * size, y: at[id].y * size };
 
   return (
-    <div className="stage-graph-box" ref={box} style={{ '--stage-zoom': size } as CSSProperties}>
+    <div className="stage-graph-box" ref={box} style={{ '--wdg-node-zoom': size } as CSSProperties}>
       <Graph
         key={key}
         className="stage-graph"

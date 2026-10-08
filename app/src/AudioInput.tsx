@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Meter } from '@openflow/widgets/controls/Meter.tsx';
+import { Meter } from '@openflow/widgets/music/Meter.tsx';
 import { Select } from '@openflow/widgets/controls/Select.tsx';
 import * as api from './api.ts';
 import { meterLevel } from './shell.ts';

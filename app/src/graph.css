@@ -1,23 +1,31 @@
 /* The stage graph and the inspector beside it. */
 
+/*
+ * The graph is styled through the widgets' host tokens (widgets docs/graph.md), never
+ * its `.wdg-*` rules. Fitting the pane: StageGraph sets --wdg-node-zoom on the box
+ * and spaces the nodes by the same factor.
+ */
 .stage-graph-box > .stage-graph { position: absolute; inset: 0; }
-/* Fitting the pane: StageGraph spaces the nodes by --stage-zoom and draws them that much smaller. */
-.stage-graph .wdg-graph-node > * { zoom: var(--stage-zoom, 1); }
+
+/* The cords, coloured by what they carry. */
+.stage-graph {
+  --wdg-cord-draw: var(--green);
+  --wdg-cord-audio: var(--blue);
+  --wdg-cord-motion: var(--blue);
+}
 
 /* Widths are `WIDE` and `NARROW` in stages.ts, which the layout spaces by. */
-.stage .wdg-device { width: 168px; }
-.stage[data-kind='source'] .wdg-device,
-.stage[data-kind='out'] .wdg-device { width: 88px; }
+.stage { --wdg-device-width: 168px; }
+.stage[data-kind='source'],
+.stage[data-kind='out'] { --wdg-device-width: 88px; }
 
-/* Colour by kind, on the title bar's leading edge. */
-.stage { --stage-ink: var(--fg); }
+/* Colour by kind: the title bar's leading edge and the ports. */
+.stage { --stage-ink: var(--fg); --wdg-device-accent: var(--stage-ink); }
 .stage[data-kind='motion'] { --stage-ink: var(--blue); }
 .stage[data-kind='shader'] { --stage-ink: var(--amber); }
 .stage[data-kind='feedback'] { --stage-ink: var(--fg); }
 .stage[data-kind='layer'] { --stage-ink: var(--green); }
-.stage .wdg-device-head { box-shadow: inset 3px 0 0 var(--stage-ink); }
-.stage .wdg-graph-port, .stage .wdg-port { --wdg-port-ink: var(--stage-ink); }
-.stage[data-problem] .wdg-device { border-color: var(--red); }
+.stage[data-problem] { --wdg-device-edge: var(--red); }
 
 .stage-picture { display: block; width: 100%; aspect-ratio: 16 / 9; background: var(--preview, #000); }
 .layer-picture { display: block; width: 100%; aspect-ratio: 32 / 9; object-fit: cover; background: var(--preview, #000); }
@@ -45,11 +53,6 @@
   cursor: text;
 }
 .stage-issue { font-size: var(--text-label); color: var(--red); }
-
-/* The cords, coloured by what they carry. */
-.stage-graph .wdg-graph-cord[data-kind='draw'] { stroke: var(--green); }
-.stage-graph .wdg-graph-cord[data-kind='audio'],
-.stage-graph .wdg-graph-cord[data-kind='motion'] { stroke: var(--blue); }
 
 .stage-add { padding-top: 4px; }
 .stage-add-menu {
