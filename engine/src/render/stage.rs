@@ -1,4 +1,4 @@
-use super::gpu::buffer;
+use super::gpu::{buffer, pipeline};
 use super::{Renderer, COMP_GRID, FORMAT};
 use crate::shader::{self, Kind};
 use std::borrow::Cow;
@@ -107,22 +107,8 @@ impl Renderer {
         };
         let scope = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
         let make = |blend: Option<wgpu::BlendState>| {
-            self.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: None,
-                layout: None,
-                vertex: wgpu::VertexState { module: vs, entry_point: Some("main"), compilation_options: Default::default(), buffers },
-                primitive: Default::default(),
-                depth_stencil: None,
-                multisample: Default::default(),
-                fragment: Some(wgpu::FragmentState {
-                    module: &fragment,
-                    entry_point: Some("_milkdrop_main"),
-                    compilation_options: Default::default(),
-                    targets: &[Some(wgpu::ColorTargetState { format: FORMAT, blend, write_mask: wgpu::ColorWrites::ALL })],
-                }),
-                multiview_mask: None,
-                cache: None,
-            })
+            let target = wgpu::ColorTargetState { format: FORMAT, blend, write_mask: wgpu::ColorWrites::ALL };
+            pipeline(&self.device, None, (vs, "main", buffers), wgpu::PrimitiveTopology::TriangleList, (&fragment, "_milkdrop_main"), target)
         };
         let pipeline = make(None);
         // Between steps: the shader's picture × the fraction + what is under it × the rest.
@@ -228,20 +214,20 @@ impl Renderer {
     /// preset's `wrap`.
     pub(super) fn sampler_for(&self, name: &str, wrap: bool) -> &wgpu::Sampler {
         let short = name.trim_start_matches("sampler_");
-        let key = if short == "main" {
-            if wrap { "linear_wrap" } else { "linear_clamp" }
+        let s = &self.samplers;
+        if short == "main" {
+            s.linear(wrap)
         } else if short.starts_with("fw_") {
-            "linear_wrap"
+            &s.linear_wrap
         } else if short.starts_with("fc_") || short.starts_with("blur") {
-            "linear_clamp"
+            &s.linear_clamp
         } else if short.starts_with("pw_") {
-            "point_wrap"
+            &s.point_wrap
         } else if short.starts_with("pc_") {
-            "point_clamp"
+            &s.point_clamp
         } else {
-            "linear_wrap"
-        };
-        &self.samplers[key]
+            &s.linear_wrap
+        }
     }
 
     pub(super) fn bind_group(&self, stage: &Stage, pipeline: &wgpu::RenderPipeline, previous: &wgpu::TextureView, wrap: bool, between: bool) -> wgpu::BindGroup {
