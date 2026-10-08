@@ -77,8 +77,7 @@ paced by the display; the page leaves a transparent hole and reports its rectang
 (`place_bench`). The engine and the app share one Cargo workspace at the repository
 root, so the engine's tests also run from there as `cargo test -p visuals-engine`.
 
-**Live mode and the output.** The page's switch is *editor | compare | live* (the compare
-view's own switch still has only the first two). Live mode is the show: entering it
+**Live mode and the output.** The page's switch is *editor | live*. Live mode is the show: entering it
 opens the output, leaving it closes it — there is no output while editing. In live mode
 the editor isn't rendered (no graph, no inspector) and stage previews are off
 (`set_previews(false)`); the page shows a small preview of the bench, what's playing and
@@ -383,7 +382,7 @@ presets, the worst that moves at least 0.2 levels a refresh is now 1.68 at 60 Hz
 either version: its motion is a warp shader's noise, which cross-fades (above).
 `between_steps_a_folding_fading_trail_changes_evenly` holds a fold with a fading trail
 and blur in comp to 1.5 (the first version: 2.1 at 120 Hz). The feedback still steps
-once a step, so the compare scores stay 74.51 at `--refresh 60` and `120`.
+once a step, so the side-by-side harness's scores stayed 74.51 at `--refresh 60` and `120`.
 
 Frame times and stage-picture readback were ruled out on the bench (60 Hz, 1377×774,
 20 s): a refresh with a step takes 2.3 ms of CPU and one between 0.7 ms, 1 refresh in
@@ -555,5 +554,5 @@ What can't match Butterchurn, and so is not an engine bug when a preset looks di
 In this repository, beside what it replaces until it can draw: `engine/` (the Rust
 crate), `app/` (the Tauri shell and its webview UI) and `harness/`. The Electron app is
 gone; the Node server and the old engine are deleted in one change once nothing here needs
-them (the app still uses `server/hlsl.ts`, the compare harness `server/presetWorker.ts`) —
+them —
 confirmed with Ryan before it happens.
