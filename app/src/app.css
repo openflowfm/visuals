@@ -251,7 +251,8 @@ main {
 
 /* The hole. Nothing behind the bench may paint — a background on the row would
    show through it instead of the picture — so the bars beside a 16:9 picture in
-   a wider row are the bench's own shadow, clipped to the row. */
+   a wider row are the bench's own shadow, clipped to the row. It is a hole only
+   once the bench draws: until then it paints a loading surface, below. */
 .bench-row {
   display: flex;
   justify-content: center;
@@ -264,6 +265,23 @@ main {
   background: transparent;
   /* Letterbox black: the picture's own, not an interface colour. */
   box-shadow: 0 0 0 100vmax #000;
+}
+
+/* Until the bench has drawn (`Bench`), its box and the bars around it are the
+   page's own surface, saying so, instead of a hole onto whatever is under the
+   window. The editor's bench and live mode's preview alike. */
+.bench[data-loading],
+.live-preview[data-loading] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel);
+  box-shadow: 0 0 0 100vmax var(--bg);
+}
+.bench-loading {
+  color: var(--caption);
+  font-size: var(--text-body);
+  user-select: none;
 }
 
 .graph {

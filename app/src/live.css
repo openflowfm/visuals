@@ -159,7 +159,8 @@
   border-bottom: 1px solid var(--bd3);
 }
 
-/* The preview: a hole, ringed by its own shadow. */
+/* The preview: a hole, ringed by its own shadow, once the bench draws; until
+   then a loading surface (`.live-preview[data-loading]` in app.css). */
 .live-preview-cell {
   flex: 1;
   display: flex;
