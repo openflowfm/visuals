@@ -2,13 +2,8 @@
 // The way to run the rig on a show night: the renderer built, the visuals
 // server on its own and kept up, and a browser that belongs to the show.
 //
-// `npm run dev` is the wrong thing to have documented for this. It is
-// `concurrently -k` over ten dev processes, and `-k` means *any one* of them
-// exiting kills all of the others — so a chart server, a vite watcher or a tsc
-// task falling over takes the visuals server down with it, mid-set, for a
-// reason that has nothing to do with the wall.
-//
-// This runs the one process that matters and nothing else. If it exits anyway,
+// It runs the one process that matters and nothing else, so no dev watcher
+// falling over can take the visuals server down mid-set. If it exits anyway,
 // it comes back: with the backstops in `visuals/server`, that should be rare,
 // and a rig that restarts in a second is a rig that loses a bar rather than an
 // evening.

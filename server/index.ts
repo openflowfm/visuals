@@ -920,17 +920,12 @@ function anchorOf(show: ReturnType<typeof buildShow>) {
 /**
  * A port already taken says so, rather than throwing a stack trace.
  *
- * `npm run dev` runs eight things under `concurrently -k`, so **one of them
- * dying takes the session down with it** — which is right, and which makes the
- * message that death produces the only thing anyone reads. An unhandled
- * `EADDRINUSE` is fourteen lines of Node internals ending in `listenInCluster`,
- * printed in the middle of seven other processes' startup output, and it does
- * not mention this file, this port, or the visuals server at all.
+ * An unhandled `EADDRINUSE` is fourteen lines of Node internals ending in
+ * `listenInCluster`, and it does not mention this file, this port, or the
+ * visuals server at all.
  *
- * The usual cause is the one thing worth naming: an `npm run server` left
- * running from an earlier session, holding 17900. The app and `watch` start
- * their child on a free port and never see this; only a server asked for a
- * number outright can find it taken.
+ * The usual cause is the one thing worth naming: an `npm run server` or
+ * `npm run show` left running from an earlier session, holding 17900.
  */
 let dying = false;
 const cannotListen = (err: NodeJS.ErrnoException) => {
