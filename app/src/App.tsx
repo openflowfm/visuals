@@ -1,60 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as api from './api.ts';
-import type { Entry, Owner, Preset, Problem, Report } from './api.ts';
+import type { Entry, Preset, Problem, Report } from './api.ts';
 import { AudioInput } from './AudioInput.tsx';
 import { Segmented } from '@openflow/widgets/controls/Segmented.tsx';
 import { Inspector } from './Inspector.tsx';
 import { Playlists } from './Playlists.tsx';
 import * as pl from './playlists.ts';
 import { StageGraph } from './StageGraph.tsx';
-import { setValue as setValueIn } from './stages.ts';
 import { FrameRate, Header, Hints, NoticeBanner, NowPlaying, type View } from './views.tsx';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { Library } from './Library.tsx';
-import { searchLibrary } from './librarySearch.ts';
+import { stepIn } from './librarySearch.ts';
 import { useNotice, usePlaceBench, useTauriEvent } from './hooks.ts';
+import { useApply, useLibrary, usePresetEdits } from './editor.ts';
 import { isTyping, nameOf, notice } from './shell.ts';
 import { Live } from './Live.tsx';
 import * as output from './output.ts';
 
 /** What a load or an edit reported wrong, equations then shaders, for the graph and the inspector to mark. */
 const reportProblems = (r: Report | null): Problem[] => (r ? [...r.equations, ...r.shaders] : []);
-
-/**
- * Apply edits to the bench, newest first: one load at a time, and while one is
- * running only the latest edit waits behind it.
- */
-function useApply(onReport: (r: Report) => void) {
-  const running = useRef(false);
-  const waiting = useRef<Preset | null>(null);
-  const timer = useRef<number | undefined>(undefined);
-  const run = useCallback(
-    async (p: Preset) => {
-      if (running.current) {
-        waiting.current = p;
-        return;
-      }
-      running.current = true;
-      try {
-        onReport(await api.apply(p));
-      } catch (e) {
-        onReport({ equations: [{ stage: 'equations', message: String(e), line: null }], shaders: [] });
-      }
-      running.current = false;
-      const next = waiting.current;
-      waiting.current = null;
-      if (next) run(next);
-    },
-    [onReport],
-  );
-  return useCallback(
-    (p: Preset) => {
-      window.clearTimeout(timer.current);
-      timer.current = window.setTimeout(() => run(p), 250);
-    },
-    [run],
-  );
-}
 
 /**
  * The editor, or live mode (performing controls, the output full screen on a
@@ -75,14 +39,11 @@ export function App() {
 }
 
 function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live', path: string | null) => void }) {
-  const [library, setLibrary] = useState<Entry[]>([]);
-  const [search, setSearch] = useState('');
   const [current, setCurrent] = useState<Entry | null>(null);
   const [preset, setPreset] = useState<Preset | null>(null);
   const [report, setReport] = useState<Report | null>(null);
   // The stage open in the inspector, by id; null is the graph's own first choice.
   const [selected, setSelected] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
   const { notice: banner, set: setNotice, fail, dismiss } = useNotice();
   const [lists, setLists] = useState<pl.Lists | null>(null);
   const [tab, setTab] = useState(0);
@@ -90,10 +51,8 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live'
   const bench = useRef<HTMLDivElement>(null);
   usePlaceBench(bench);
   const apply = useApply(setReport);
+  const { edit, set } = usePresetEdits(preset, setPreset, apply);
   const audioFailed = useMemo(() => fail('couldn’t read the audio input'), [fail]);
-
-  const found = useMemo(() => searchLibrary(library, search), [library, search]);
-  const shown = found.shown;
 
   const load = useCallback(async (e: Entry) => {
     setCurrent(e);
@@ -106,6 +65,8 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live'
       setNotice(notice(`couldn’t open “${e.name}”`, err));
     }
   }, [dismiss, setNotice]);
+  const { library, loaded, search, setSearch, found } = useLibrary(start, load, fail);
+  const shown = found.shown;
 
   // A playlist is playing: the live action layer steps through it.
   const playing = lists?.deck.playlist ?? null;
@@ -115,11 +76,8 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live'
         pl.act({ kind: by === 0 ? 'random' : by > 0 ? 'next' : 'previous' }).catch(fail('couldn’t step the playlist'));
         return;
       }
-      const list = shown.length ? shown : library;
-      if (!list.length) return;
-      const at = current ? list.findIndex((e) => e.path === current.path) : -1;
-      const next = by === 0 ? Math.floor(Math.random() * list.length) : (at + by + list.length) % list.length;
-      load(list[next]);
+      const next = stepIn(shown.length ? shown : library, current?.path ?? null, by);
+      if (next) load(next);
     },
     [playing, shown, library, current, load, fail],
   );
@@ -147,22 +105,6 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live'
   const into = lists?.playlists.find((p) => p.id === (target ?? playing)) ?? null;
 
   useEffect(() => {
-    api.presets().then(
-      (l) => {
-        setLibrary(l);
-        setLoaded(true);
-        const first = start ? (l.find((e) => e.path === start) ?? { path: start, name: nameOf(start), group: '' }) : null;
-        if (first) load(first);
-        else if (l.length) load(l[Math.floor(Math.random() * l.length)]);
-      },
-      (e) => {
-        setLoaded(true);
-        fail('couldn’t read the preset folder')(e);
-      },
-    );
-  }, [load, fail]);
-
-  useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (isTyping(e)) return;
@@ -173,41 +115,6 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live'
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
   }, [step]);
-
-  // The preset as of the latest edit, for edits that land between renders.
-  const latest = useRef<Preset | null>(null);
-  latest.current = preset;
-
-  const edit = (next: Preset) => {
-    latest.current = next;
-    setPreset(next);
-    apply(next);
-  };
-
-  // Settings go to the bench live, at most once a display frame per setting.
-  const pending = useRef(new Map<string, { owner: Owner; key: string; value: number }>());
-  const flushing = useRef(0);
-  const set = useCallback(
-    (owner: Owner, key: string, value: number) => {
-      if (!latest.current) return;
-      const [next, written] = setValueIn(latest.current, owner, key, value);
-      latest.current = next;
-      setPreset(next);
-      pending.current.set(`${JSON.stringify(owner)}:${written}`, { owner, key: written, value });
-      if (flushing.current) return;
-      flushing.current = requestAnimationFrame(() => {
-        flushing.current = 0;
-        const changes = [...pending.current.values()];
-        pending.current.clear();
-        for (const c of changes) {
-          api.setValue(c.owner, c.key, c.value).then((live) => {
-            if (!live && latest.current) apply(latest.current);
-          });
-        }
-      });
-    },
-    [apply],
-  );
 
   const problems = reportProblems(report);
 

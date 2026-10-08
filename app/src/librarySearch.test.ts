@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Entry } from './api.ts';
-import { CAP, foundSummary, rowFor, searchLibrary } from './librarySearch.ts';
+import { CAP, foundSummary, rowFor, searchLibrary, stepIn } from './librarySearch.ts';
 
 const e = (group: string, name: string): Entry => ({ path: `${group}/${name}.milk`, name, group });
 const lib = [e('Geiss', 'Spiral Dance'), e('Flexi', 'Mandala Spiral'), e('Geiss', 'Warp Field'), e('Rovastar', 'Fractal')];
@@ -71,5 +71,31 @@ describe('rowFor', () => {
     expect(rowFor('a', 2, 5)).toBeNull();
     expect(rowFor('Enter', 2, 5)).toBeNull();
     expect(rowFor('ArrowDown', -1, 0)).toBe(-1);
+  });
+});
+
+describe('stepIn', () => {
+  const at = (i: number) => lib[i].path;
+
+  it('steps forward and back, wrapping round', () => {
+    expect(stepIn(lib, at(1), 1)).toBe(lib[2]);
+    expect(stepIn(lib, at(3), 1)).toBe(lib[0]);
+    expect(stepIn(lib, at(1), -1)).toBe(lib[0]);
+    expect(stepIn(lib, at(0), -1)).toBe(lib[3]);
+  });
+
+  it('starts at the first entry when nothing, or something not in the list, is open', () => {
+    expect(stepIn(lib, null, 1)).toBe(lib[0]);
+    expect(stepIn(lib, 'Elsewhere/Gone.milk', 1)).toBe(lib[0]);
+  });
+
+  it('picks at random for 0', () => {
+    expect(stepIn(lib, at(0), 0, () => 0.99)).toBe(lib[3]);
+    expect(stepIn(lib, at(0), 0, () => 0)).toBe(lib[0]);
+  });
+
+  it('gives null for an empty list', () => {
+    expect(stepIn([], null, 1)).toBeNull();
+    expect(stepIn([], null, 0)).toBeNull();
   });
 });

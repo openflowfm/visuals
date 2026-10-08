@@ -31,6 +31,17 @@ export function foundSummary(found: Found, query: string): string | null {
   return null;
 }
 
+/**
+ * The entry `by` steps from the one at `currentPath` in `list`, wrapping round;
+ * `by` 0 picks one at random. Null for an empty list.
+ */
+export function stepIn(list: Entry[], currentPath: string | null, by: number, random: () => number = Math.random): Entry | null {
+  if (!list.length) return null;
+  const at = currentPath ? list.findIndex((e) => e.path === currentPath) : -1;
+  const next = by === 0 ? Math.floor(random() * list.length) : (at + by + list.length) % list.length;
+  return list[next];
+}
+
 const PAGE = 10;
 
 /**
