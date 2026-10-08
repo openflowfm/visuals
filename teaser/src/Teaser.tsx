@@ -1,5 +1,4 @@
-import { loadFont as loadMono } from '@remotion/google-fonts/JetBrainsMono';
-import { loadFont as loadSans } from '@remotion/google-fonts/SpaceGrotesk';
+import { loadFont } from '@remotion/google-fonts/InterTight';
 import type { CSSProperties, ReactNode } from 'react';
 import {
   AbsoluteFill,
@@ -13,10 +12,21 @@ import {
 } from 'remotion';
 import { bar, beat, beatPhase, DROP_CUTS, FPS, kick, LENGTH, SECTIONS, sectionAt } from './timing';
 
-const { fontFamily: sans } = loadSans('normal', { weights: ['500', '700'], subsets: ['latin'] });
-const { fontFamily: mono } = loadMono('normal', { weights: ['400', '700'], subsets: ['latin'] });
+// The site's look (openflow.fm): one neutral face, Inter Tight; white and grey; the only
+// colour a violet-to-magenta stage light, which the footage then fills in.
+const { fontFamily: sans } = loadFont('normal', { weights: ['400', '500', '600'], subsets: ['latin'] });
 
-const ACCENT = '#c8ff3e';
+const ACCENT = '#b794ff';
+const MUTED = '#acafb9';
+/** Big words lit by the stage light. A drop shadow, not a text shadow, so the gradient shows. */
+const LIT: CSSProperties = {
+  backgroundImage: 'linear-gradient(90deg, #a78bfa, #f472b6)',
+  WebkitBackgroundClip: 'text',
+  backgroundClip: 'text',
+  color: 'transparent',
+  textShadow: 'none',
+  filter: 'drop-shadow(0 2px 10px rgba(0,0,0,0.85))',
+};
 const SHADOW = '0 2px 6px rgba(0,0,0,0.9), 0 0 24px rgba(0,0,0,0.85), 0 0 72px rgba(0,0,0,0.7)';
 const clamp = { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' } as const;
 
@@ -138,8 +148,14 @@ const Origin = () => {
   );
   return (
     <AbsoluteFill>
-      {/* A 2001 desktop: flat teal, going dark as the window takes over. */}
-      <AbsoluteFill style={{ backgroundColor: '#008080', opacity: boot * (1 - grow) * (1 - gone) }} />
+      {/* The desktop behind the window: the site's dark stage, its light from above, going dark as the window takes over. */}
+      <AbsoluteFill
+        style={{
+          background:
+            'radial-gradient(70% 55% at 50% 0%, rgba(150,80,255,0.35), rgba(236,72,153,0.12) 45%, transparent 75%), #0e0e0e',
+          opacity: boot * (1 - grow) * (1 - gone),
+        }}
+      />
       <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center' }}>
       <div
         style={{
@@ -156,7 +172,7 @@ const Origin = () => {
             background: 'linear-gradient(90deg, #000080, #1084d0)',
             color: 'white',
             fontFamily: 'Tahoma, Verdana, sans-serif',
-            fontWeight: 700,
+            fontWeight: 600,
             fontSize: 18 * u,
             display: 'flex',
             alignItems: 'center',
@@ -195,15 +211,15 @@ const Origin = () => {
       </AbsoluteFill>
       {caption(year, '2001', {
         top: (vertical ? 0.24 : 0.035) * height,
-        fontFamily: mono,
-        fontWeight: 700,
+        fontFamily: sans,
+        fontWeight: 600,
         fontSize: 64 * u,
-        letterSpacing: 8 * u,
+        letterSpacing: -1 * u,
       })}
       {caption(line, 'MilkDrop Lights Up Winamp', {
         bottom: (vertical ? 0.24 : 0.035) * height,
         fontFamily: sans,
-        fontWeight: 700,
+        fontWeight: 600,
         fontSize: 60 * u,
         letterSpacing: -2 * u,
       })}
@@ -211,7 +227,7 @@ const Origin = () => {
         <div
           style={{
             fontFamily: sans,
-            fontWeight: 700,
+            fontWeight: 600,
             fontSize: 120 * u,
             letterSpacing: -3 * u,
             color: 'white',
@@ -232,18 +248,19 @@ const Intro = () => {
   const [i0, i1] = SECTIONS.intro.map(bar);
   const first = useShow(i0 + beat(1), i1);
   const second = useShow(i0 + beat(4), i1);
-  const line = (v: number, text: string, color = 'white') => (
+  const line = (v: number, text: string, extra: CSSProperties = {}) => (
     <div
       style={{
         fontFamily: sans,
-        fontWeight: 700,
+        fontWeight: 600,
         fontSize: 120 * u,
         letterSpacing: -3 * u,
         lineHeight: 1.05,
-        color,
+        color: 'white',
         opacity: v,
         transform: `translateY(${(1 - v) * 40 * u}px)`,
         textShadow: SHADOW,
+        ...extra,
       }}
     >
       {text}
@@ -252,7 +269,7 @@ const Intro = () => {
   return (
     <Center scrim={first}>
       {line(first, 'Your Music')}
-      {line(second, 'Made Visible', ACCENT)}
+      {line(second, 'Made Visible', LIT)}
     </Center>
   );
 };
@@ -289,7 +306,7 @@ const LinkWall = () => {
           opacity: v,
           transform: `scale(${1.12 - 0.12 * v})`,
           fontFamily: sans,
-          fontWeight: 700,
+          fontWeight: 600,
           fontSize: 104 * u,
           letterSpacing: -3 * u,
           lineHeight: 1,
@@ -298,7 +315,7 @@ const LinkWall = () => {
           marginBottom: 48 * u,
         }}
       >
-        Synced with <span style={{ color: ACCENT, whiteSpace: 'nowrap' }}>Ableton Link</span>
+        Synced with <span style={{ ...LIT, whiteSpace: 'nowrap' }}>Ableton Link</span>
       </div>
       <div
         style={{
@@ -322,15 +339,15 @@ const LinkWall = () => {
                 opacity: pop,
                 transform: `scale(${0.6 + 0.4 * pop})`,
                 fontFamily: sans,
-                fontWeight: 700,
+                fontWeight: 600,
                 fontSize: 42 * u,
                 color: 'white',
                 padding: `${12 * u}px ${28 * u}px`,
                 borderRadius: 999,
                 background: 'rgba(0,0,0,0.6)',
                 border: `${2 * u}px solid`,
-                borderColor: lit > 0.01 ? `rgba(200,255,62,${0.4 + 0.6 * lit})` : 'rgba(255,255,255,0.4)',
-                boxShadow: `0 0 ${32 * u * lit}px rgba(200,255,62,${0.6 * lit})`,
+                borderColor: lit > 0.01 ? `rgba(183,148,255,${0.4 + 0.6 * lit})` : 'rgba(255,255,255,0.4)',
+                boxShadow: `0 0 ${32 * u * lit}px rgba(183,148,255,${0.6 * lit})`,
                 whiteSpace: 'nowrap',
               }}
             >
@@ -358,7 +375,7 @@ const Fact = ({ index }: { index: number }) => {
           opacity: v,
           transform: `scale(${1.12 - 0.12 * v + drift})`,
           fontFamily: sans,
-          fontWeight: 700,
+          fontWeight: 600,
           fontSize: 120 * u,
           letterSpacing: -3 * u,
           lineHeight: 1,
@@ -413,7 +430,7 @@ const Diagram = () => {
           width: '100%',
           textAlign: 'center',
           fontFamily: sans,
-          fontWeight: 700,
+          fontWeight: 600,
           fontSize: 84 * u,
           letterSpacing: -2 * u,
           color: 'white',
@@ -455,9 +472,9 @@ const Diagram = () => {
                 y={(y1 + y2) / 2 + (x1 === x2 ? 8 * u : -18 * u)}
                 textAnchor={x1 === x2 ? 'start' : 'middle'}
                 fill={ACCENT}
-                fontFamily={mono}
-                fontSize={24 * u}
-                letterSpacing={2 * u}
+                fontFamily={sans}
+                fontWeight={500}
+                fontSize={26 * u}
                 stroke="black"
                 strokeWidth={7 * u}
                 strokeOpacity={0.8}
@@ -493,12 +510,10 @@ const Diagram = () => {
               boxShadow: lit ? `0 0 ${40 * u}px ${ACCENT}55` : undefined,
             }}
           >
-            <div style={{ fontFamily: sans, fontWeight: 700, fontSize: 44 * u, color: 'white' }}>
+            <div style={{ fontFamily: sans, fontWeight: 600, fontSize: 44 * u, color: 'white' }}>
               {n.label}
             </div>
-            <div style={{ fontFamily: mono, fontSize: 20 * u, letterSpacing: 3 * u, color: 'rgba(255,255,255,0.65)' }}>
-              {n.sub.toUpperCase()}
-            </div>
+            <div style={{ fontFamily: sans, fontWeight: 400, fontSize: 22 * u, color: MUTED }}>{n.sub}</div>
           </div>
         );
       })}
@@ -523,7 +538,7 @@ const Drop = () => {
           flexDirection: vertical ? 'column' : 'row',
           gap: (vertical ? 0 : 0.28) * 230 * u,
           fontFamily: sans,
-          fontWeight: 700,
+          fontWeight: 600,
           fontSize: 230 * u,
           letterSpacing: -4 * u,
           lineHeight: 0.95,
@@ -562,10 +577,11 @@ const Wordmark = () => {
             <span
               key={i}
               style={{
-                fontFamily: bracket ? mono : sans,
-                fontWeight: 700,
-                letterSpacing: bracket ? -4 * u : -5 * u,
-                color: bracket ? ACCENT : 'white',
+                // As on the site: [flow] the same face, lighter and grey.
+                fontFamily: sans,
+                fontWeight: bracket ? 400 : 600,
+                letterSpacing: -4 * u,
+                color: bracket ? MUTED : 'white',
                 display: 'inline-block',
                 opacity: v,
                 transform: `translateY(${(1 - v) * 60 * u}px)`,
@@ -601,22 +617,21 @@ const Wordmark = () => {
           textShadow: SHADOW,
         }}
       >
-        Part of the <span style={{ fontFamily: mono, fontWeight: 700, color: ACCENT }}>open[flow]</span> Suite
+        Part of the open<span style={{ fontWeight: 400, color: MUTED }}>[flow]</span> Suite
       </div>
       <div
         style={{
-          fontFamily: mono,
-          fontWeight: 700,
+          // The site's white pill.
+          fontFamily: sans,
+          fontWeight: 500,
           fontSize: 44 * u,
-          letterSpacing: 2 * u,
-          color: 'white',
+          color: '#0e0e0e',
           opacity: site,
           transform: `translateY(${(1 - site) * 20 * u}px)`,
           marginTop: 40 * u,
-          padding: `${10 * u}px ${28 * u}px`,
+          padding: `${12 * u}px ${36 * u}px`,
           borderRadius: 999,
-          border: `${2 * u}px solid ${ACCENT}`,
-          background: 'rgba(0,0,0,0.5)',
+          background: 'linear-gradient(to top, rgba(255,255,255,0.62), #fff)',
         }}
       >
         openflow.fm

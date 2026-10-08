@@ -61,6 +61,11 @@ DROP OUT and eight bars of presets, and the name, held back until the end.
 Everything is placed in bars and beats from [`src/timing.ts`](src/timing.ts), so it stays
 on the music when the music changes.
 
+It wears the openflow.fm site's look: Inter Tight only, titles at 600; white, with `[flow]`
+lighter and grey; the only colour a violet-to-magenta stage light (the cold open's
+desktop, "Made Visible", "Ableton Link"), the footage supplying the rest; the address in
+the site's white pill. The 2001 window keeps its period chrome, which is the point of it.
+
 The cold open names Winamp but draws a generic Windows-era window, not Winamp's skin or
 logo, which are its owner's trademarks.
 
