@@ -1,10 +1,11 @@
 import { NumberField } from '@openflow/widgets/controls/NumberField.tsx';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
-import * as api from './api.ts';
 import type { Owner, Preset, Problem } from './api.ts';
 import { range } from './controls.ts';
+import { RemoveLayer } from './graph/RemoveLayer.tsx';
 import { Setting } from './graph/Setting.tsx';
-import { bakedIn, drivenBy, getField, otherValues, problemsOf, removeLayer, setField, settingsOf, stageFor } from './stages.ts';
+import { writeDefaultShader } from './graph/writeDefaultShader.ts';
+import { BASE, bakedIn, getField, otherValues, problemsOf, setField, settingsOf, shaderCode, stageFor } from './stages.ts';
 import './graph.css';
 
 interface Props {
@@ -18,8 +19,6 @@ interface Props {
   onSet(owner: Owner, key: string, value: number): void;
 }
 
-const BASE: Owner = { list: 'base' };
-
 /** A file value nothing else claims: any number, typed or dragged. */
 const loose = (key: string, value: number) => range(key, Math.min(0, value), Math.max(1, value * 2), value);
 
@@ -30,9 +29,8 @@ export function Inspector({ preset, selected, problems, onChange, onSet }: Props
   const settings = settingsOf(preset, stage);
   const other = otherValues(preset);
   const shader = stage.kind === 'shader';
-  const unwritten = shader && preset[stage.id as 'warp' | 'comp'].trim() === '';
+  const unwritten = shader && shaderCode(preset, stage).trim() === '';
   const removable = stage.kind === 'layer';
-  const driven = drivenBy(preset, stage);
   const baked = bakedIn(preset, stage);
   return (
     <div className="inspector">
@@ -41,19 +39,7 @@ export function Inspector({ preset, selected, problems, onChange, onSet }: Props
           <h2>{stage.label}</h2>
           <p className="term">{stage.term}</p>
         </div>
-        {removable && (
-          <Button
-            tone="danger"
-            disabled={!!driven}
-            title={driven ? `motion's per-frame code sets ${driven}: change it there to take this off` : 'take this layer off; its code is kept'}
-            onPress={() => {
-              const next = removeLayer(preset, stage.id);
-              if (next) onChange(next);
-            }}
-          >
-            remove
-          </Button>
-        )}
+        {removable && <RemoveLayer preset={preset} stage={stage} onChange={onChange} />}
       </header>
       {issues.map((p, i) => (
         <p key={i} className="problem">
@@ -67,12 +53,7 @@ export function Inspector({ preset, selected, problems, onChange, onSet }: Props
       {unwritten && (
         <div className="inspector-default">
           <p className="quiet">This preset uses MilkDrop's default {stage.label} shader.</p>
-          <Button
-            onPress={() => {
-              const which = stage.id as 'warp' | 'comp';
-              api.defaultShader(preset, which).then((code) => onChange({ ...preset, [which]: code }), console.error);
-            }}
-          >
+          <Button onPress={() => writeDefaultShader(preset, stage, onChange)}>
             write my own
           </Button>
         </div>
