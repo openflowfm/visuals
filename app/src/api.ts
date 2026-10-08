@@ -68,6 +68,10 @@ export const presets = () => invoke<Entry[]>('presets');
 export const setValue = (owner: Owner, key: string, value: number) => invoke<boolean>('set_value', { owner, key, value });
 export const setPreviews = (on: boolean) => invoke<void>('set_previews', { on });
 export const previews = () => invoke<ArrayBuffer>('previews');
+/** MilkDrop's default `warp` or `comp` shader as code to start from, with this
+ * preset's decay, gamma and echo written in as numbers so it runs in any player
+ * (`engine::shader::written_default`). */
+export const defaultShader = (preset: Preset, which: 'warp' | 'comp') => invoke<string>('default_shader', { preset, which });
 export const open = (path: string) => invoke<{ preset: Preset; report: Report }>('open', { path });
 export const apply = (preset: Preset) => invoke<Report>('apply', { preset });
 export const placeBench = (r: { x: number; y: number; width: number; height: number }) => invoke<void>('place_bench', r);
