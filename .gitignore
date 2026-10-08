@@ -1,13 +1,5 @@
 node_modules/
-dist/
-scheme.json
-bench-dist/
-storybook-static/
-frames-dist/
-frames-out/
 coverage/
-report/
-harness/out/
 teaser/out/
 teaser/public/
 /target/

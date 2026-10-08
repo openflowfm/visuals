@@ -3,8 +3,10 @@
 Recorded September 20, 2026, following Ryan's design discussion.
 
 **Status: product intent agreed. Visual design unresolved.** The generated studies
-in this folder are explorations, not approved designs or implementation specifications.
-Pause further visual exploration here. This record is the reference for the next pass.
+that sat beside it were explorations, not approved designs or implementation
+specifications; they were drawn around the old renderer's nodes (LFO, Polar, Shade…) and
+were deleted with it — the last commit with them is `3bcc202`. This record is the
+reference for the next pass, now on the editor app's graph.
 
 ## The outcome
 

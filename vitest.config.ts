@@ -1,55 +1,22 @@
 import { defineConfig } from 'vitest/config';
-import { storybookTest } from '@storybook/addon-vitest/vitest-plugin';
-import { playwright } from '@vitest/browser-playwright';
 
-// One project per module, so a run can be read — or taken — a module at a
-// time: `npm test -- --project=client`, and a named group in the report
-// rather than every file in one list.
-const module = (name: string, include: string[], exclude?: string[]) => ({
-  test: { name, include, exclude, environment: 'node' as const },
-});
-
-// Four projects: the renderer, the server, the modules both are built on,
-// and the stories — every one rendered in headless Chromium, failing if it
-// throws, which is the only test the console's look gets. The third is what is left rather than a list, so a test in a directory
-// nobody has thought of yet still runs — vitest's own exclude defaults go
-// with it, since naming one replaces them all.
-const SHARED = ['client/**', 'server/**', '**/node_modules/**', '**/dist/**'];
-
+// The editor page's unit tests, next to what they test in app/src. Named rather
+// than left to vitest's default, which would also walk teaser/ and any worktree
+// under .claude/.
 export default defineConfig({
   test: {
-    projects: [
-      module('visuals', ['**/*.test.ts'], SHARED),
-      module('visuals/client', ['client/**/*.test.ts']),
-      module('visuals/server', ['server/**/*.test.ts']),
-      {
-        plugins: [storybookTest({ configDir: '.storybook' })],
-        test: {
-          name: 'visuals/stories',
-          browser: {
-            enabled: true,
-            headless: true,
-            provider: playwright(),
-            instances: [{ browser: 'chromium' }],
-          },
-        },
-      },
-    ],
-    // Vitest 5's HTML reporter takes a directory rather than outputFile.
-    // Keep report/ as the complete publishable site, including coverage.
-    reporters: ['default', ['html', { outputDir: 'report' }]],
+    include: ['app/src/**/*.test.{ts,tsx}'],
+    environment: 'node',
     coverage: {
       provider: 'v8',
-      // Off by default, which means a failing run writes no report at all —
-      // and a failing run is when the report is most worth having.
+      // A failing run is when the report is most worth having.
       reportOnFailure: true,
-      reporter: ['text', 'html', 'lcov', 'json-summary'],
+      reporter: ['text', 'html'],
       reportsDirectory: 'coverage',
       // Spelled out rather than inferred from what the tests imported: a file
-      // nobody imports is the interesting case, and it should read 0% rather
-      // than go missing.
-      include: ['client/**/*.{ts,tsx}', 'server/**/*.{ts,tsx}'],
-      exclude: ['**/*.test.{ts,tsx}', '**/*.stories.tsx', '**/*.d.ts'],
+      // nobody imports should read 0% rather than go missing.
+      include: ['app/src/**/*.{ts,tsx}'],
+      exclude: ['**/*.test.{ts,tsx}', '**/*.d.ts'],
     },
   },
 });
