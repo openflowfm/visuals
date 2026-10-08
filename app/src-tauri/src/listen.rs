@@ -361,7 +361,15 @@ pub fn listen(input: Option<&str>, size: Option<usize>, channels: (usize, usize)
     };
     let open = engine::live::open_input(&device, channels, ring)?;
     let name = name_of(&device);
-    Ok(Listening { stream: Stream::Input(open.stream), source: SourceId::Device { name: name.clone(), size: open.channels }, name, rate: open.rate, channels: open.channels, left: open.left, right: open.right })
+    Ok(Listening {
+        stream: Stream::Input(open.stream),
+        source: SourceId::Device { name: name.clone(), size: open.channels },
+        name,
+        rate: open.rate,
+        channels: open.channels,
+        left: open.left,
+        right: open.right,
+    })
 }
 
 #[cfg(test)]

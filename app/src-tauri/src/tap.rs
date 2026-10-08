@@ -198,11 +198,7 @@ mod mac {
     }
 
     fn check(what: &str, status: i32) -> Result<(), String> {
-        if status == 0 {
-            Ok(())
-        } else {
-            Err(format!("{what} failed ({status})"))
-        }
+        if status == 0 { Ok(()) } else { Err(format!("{what} failed ({status})")) }
     }
 
     /// A fixed-size property of a Core Audio object.
@@ -314,6 +310,7 @@ mod mac {
         0
     }
 
+    #[cfg(test)]
     impl Tap {
         /// How many times Core Audio has handed the tap's sound over: it keeps
         /// counting while the tap runs, heard or silent.
