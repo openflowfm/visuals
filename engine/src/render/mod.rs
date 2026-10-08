@@ -42,7 +42,7 @@ use output::{Trails, BLIT};
 use stage::{warp_layout, Stage, COMP_VS, WARP_VS};
 use std::borrow::Cow;
 use std::collections::HashMap;
-use textures::{clouds, texture};
+use textures::{clouds, noise_data, texture};
 
 /// What the feedback loop is stored in. Butterchurn's targets are 8-bit RGBA.
 const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
@@ -186,14 +186,11 @@ struct Out { @builtin(position) pos: vec4f }
 impl Renderer {
     pub fn new(device: wgpu::Device, queue: wgpu::Queue, width: u32, height: u32) -> Self {
         let size = Size { texsize_x: width as f64, texsize_y: height as f64, mesh_width: 48, mesh_height: 36 };
-        let mut rng = crate::eel::Memory::new(0x5eed);
+        let (noise, rng) = noise_data();
         let mut textures = HashMap::new();
-        textures.insert("noise_lq", texture(&device, &queue, &crate::noise::texture_2d(256, 1, &mut rng), 256, 1));
-        textures.insert("noise_lq_lite", texture(&device, &queue, &crate::noise::texture_2d(32, 1, &mut rng), 32, 1));
-        textures.insert("noise_mq", texture(&device, &queue, &crate::noise::texture_2d(256, 4, &mut rng), 256, 1));
-        textures.insert("noise_hq", texture(&device, &queue, &crate::noise::texture_2d(256, 8, &mut rng), 256, 1));
-        textures.insert("noisevol_lq", texture(&device, &queue, &crate::noise::texture_3d(32, 1, &mut rng), 32, 32));
-        textures.insert("noisevol_hq", texture(&device, &queue, &crate::noise::texture_3d(32, 4, &mut rng), 32, 32));
+        for (name, data, side, depth) in noise {
+            textures.insert(name, texture(&device, &queue, &data, side, depth));
+        }
         // Butterchurn's stand-in for any texture a preset names and it does not
         // have: a 128×128 photograph of clouds, shipped inside Butterchurn (MIT).
         textures.insert("image", texture(&device, &queue, &clouds(), 128, 1));

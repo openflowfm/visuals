@@ -21,6 +21,22 @@ pub(super) fn texture(device: &wgpu::Device, queue: &wgpu::Queue, data: &[u8], s
     texture.create_view(&Default::default())
 }
 
+/// MilkDrop's six noise textures, as RGBA with their names, sizes and depths,
+/// all drawn from one rng seeded `0x5eed`, in this order; and that rng, to go on
+/// with (`rand_frame`).
+pub(super) fn noise_data() -> (Vec<(&'static str, Vec<u8>, u32, u32)>, crate::eel::Memory) {
+    let mut rng = crate::eel::Memory::new(0x5eed);
+    let noise = vec![
+        ("noise_lq", crate::noise::texture_2d(256, 1, &mut rng), 256, 1),
+        ("noise_lq_lite", crate::noise::texture_2d(32, 1, &mut rng), 32, 1),
+        ("noise_mq", crate::noise::texture_2d(256, 4, &mut rng), 256, 1),
+        ("noise_hq", crate::noise::texture_2d(256, 8, &mut rng), 256, 1),
+        ("noisevol_lq", crate::noise::texture_3d(32, 1, &mut rng), 32, 32),
+        ("noisevol_hq", crate::noise::texture_3d(32, 4, &mut rng), 32, 32),
+    ];
+    (noise, rng)
+}
+
 /// Butterchurn's `clouds2` image, as RGBA.
 pub(super) fn clouds() -> Vec<u8> {
     let mut decoder = jpeg_decoder::Decoder::new(&include_bytes!("../../assets/clouds2.jpg")[..]);

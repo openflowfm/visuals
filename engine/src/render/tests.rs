@@ -54,6 +54,31 @@ fn within(a: &[u8], b: &[u8], by: i32) -> bool {
     a.len() == b.len() && a.iter().zip(b).all(|(&x, &y)| (x as i32 - y as i32).abs() <= by)
 }
 
+/// FNV-1a: a hash that is the same on every machine and Rust version.
+fn fnv(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |h, &b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3))
+}
+
+#[test]
+fn the_noise_textures_and_the_rng_after_them_are_pinned() {
+    // Recorded on main before render.rs was split: any change to how the noise
+    // is made, or to how much of the rng it uses, changes every preset that
+    // samples noise or reads `rand_frame`.
+    let (noise, mut rng) = noise_data();
+    let got: Vec<(&str, usize, u32, u32, u64)> = noise.iter().map(|(name, data, side, depth)| (*name, data.len(), *side, *depth, fnv(data))).collect();
+    let want = [
+        ("noise_lq", 262144, 256, 1, 0x19ee_ef43_76ea_f56a),
+        ("noise_lq_lite", 4096, 32, 1, 0xd5c7_cb99_a777_d320),
+        ("noise_mq", 262144, 256, 1, 0xba08_1da6_7639_cca9),
+        ("noise_hq", 262144, 256, 1, 0x946f_7159_1958_99f5),
+        ("noisevol_lq", 131072, 32, 32, 0xd4d6_1de1_3e80_3e44),
+        ("noisevol_hq", 131072, 32, 32, 0xe355_28bb_1378_a8ec),
+    ];
+    assert_eq!(got, want);
+    let next: Vec<f64> = (0..4).map(|_| rng.random()).collect();
+    assert_eq!(next, [0.407324416723607, 0.9245738508599992, 0.894555663611509, 0.8517825925096167]);
+}
+
 #[test]
 fn a_preset_loaded_while_frozen_draws_after_its_equations() {
     let Some((mut r, mut audio)) = spiral(0) else { return };
