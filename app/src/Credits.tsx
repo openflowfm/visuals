@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import type { Entry } from './api.ts';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { credits, PACK_PAGE, TAKEDOWN } from './pack.ts';
 import './credits.css';
 
@@ -23,14 +24,28 @@ export function Credits({ entries, onBack }: { entries: Entry[]; onBack(): void 
       <div className="credits-body">
         <p>
           The presets come from projectM's{' '}
-          <a href={PACK_PAGE} target="_blank" rel="noreferrer" title={PACK_PAGE}>
+          <a
+            href={PACK_PAGE}
+            title={PACK_PAGE}
+            onClick={(e) => {
+              e.preventDefault();
+              void openUrl(PACK_PAGE);
+            }}
+          >
             Cream of the Crop
           </a>
           , curated by ISOSCELES from decades of MilkDrop presets.
         </p>
         <p>
           Their authors released them freely, with no license; each author keeps their rights. Any author can ask for theirs to be taken out:{' '}
-          <a href={TAKEDOWN} target="_blank" rel="noreferrer" title={TAKEDOWN}>
+          <a
+            href={TAKEDOWN}
+            title={TAKEDOWN}
+            onClick={(e) => {
+              e.preventDefault();
+              void openUrl(TAKEDOWN);
+            }}
+          >
             ask for a takedown
           </a>
           .

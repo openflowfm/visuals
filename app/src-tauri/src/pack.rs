@@ -324,7 +324,6 @@ pub enum Added {
 
 /// Copy added presets into the presets folder ([`add`]). Returns how many files
 /// were written.
-#[allow(dead_code)] // registered by the contract (main.rs)
 #[tauri::command]
 pub fn pack_add(items: Vec<Added>, app: tauri::State<App>) -> Result<usize, String> {
     add(&items, &app.library)
@@ -395,7 +394,6 @@ fn put(presets: &Path, rel: &Path, bytes: &[u8]) -> Result<bool, String> {
 
 /// Seed the starter playlists on a first run, then watch the presets folder and
 /// send [`CHANGED`] when it changes.
-#[allow(dead_code)] // registered by the contract (main.rs)
 pub fn start(handle: &AppHandle) {
     let fresh = !crate::playlists::default_file().exists();
     if let Some(starter) = starter(handle) {

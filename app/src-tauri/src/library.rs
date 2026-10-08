@@ -43,16 +43,43 @@ pub struct Opened {
 /// Every `.milk` file in the folders the app knows, the starter set and the pack.
 #[tauri::command]
 pub fn presets(handle: tauri::AppHandle) -> Vec<Entry> {
-    crate::pack::folders(&handle)
+    presets_in(&crate::pack::folders(&handle))
+}
+
+/// Every preset in `folders`, once each: a preset at a relative path an earlier
+/// folder already has (a starter preset already downloaded) is left out.
+fn presets_in(folders: &[std::path::PathBuf]) -> Vec<Entry> {
+    crate::pack::milk_files_in(folders)
         .into_iter()
-        .flat_map(|folder| {
-            engine::preset::milk_files(&folder).into_iter().map(move |p| Entry {
+        .map(|p| {
+            let folder = folders.iter().find(|f| p.starts_with(f));
+            Entry {
                 name: p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default(),
-                group: p.parent().and_then(|d| d.strip_prefix(&folder).ok()).map(|d| d.to_string_lossy().into_owned()).unwrap_or_default(),
+                group: p.parent().and_then(|d| d.strip_prefix(folder?).ok()).map(|d| d.to_string_lossy().into_owned()).unwrap_or_default(),
                 path: p.to_string_lossy().into_owned(),
-            })
+            }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_downloaded_starter_preset_is_listed_once() {
+        let root = std::env::temp_dir().join(format!("visuals-library-{}", std::process::id()));
+        let (presets, starter) = (root.join("presets"), root.join("starter"));
+        for (dir, rel) in [(&presets, "Geiss/a.milk"), (&starter, "Geiss/a.milk"), (&starter, "Geiss/b.milk")] {
+            std::fs::create_dir_all(dir.join(rel).parent().unwrap()).unwrap();
+            std::fs::write(dir.join(rel), "[preset00]\n").unwrap();
+        }
+        let mut listed: Vec<_> = presets_in(&[presets.clone(), starter.clone()]).into_iter().map(|e| (e.path, e.group)).collect();
+        listed.sort();
+        let _ = std::fs::remove_dir_all(&root);
+        let at = |d: &std::path::PathBuf, r: &str| d.join(r).to_string_lossy().into_owned();
+        assert_eq!(listed, vec![(at(&presets, "Geiss/a.milk"), "Geiss".into()), (at(&starter, "Geiss/b.milk"), "Geiss".into())]);
+    }
 }
 
 /// Which stage's equations fail, compiled one at a time.

@@ -3,6 +3,7 @@ import * as api from './api.ts';
 import type { Entry } from './api.ts';
 import { searchLibrary } from './librarySearch.ts';
 import { nameOf } from './shell.ts';
+import { onChanged } from './pack.ts';
 
 /**
  * The preset to open once the library is read: `start` (found in the library,
@@ -13,6 +14,24 @@ export function firstToOpen(library: Entry[], start: string | null, pick: number
   if (start) return library.find((e) => e.path === start) ?? { path: start, name: nameOf(start), group: '' };
   if (!library.length) return null;
   return library[Math.min(library.length - 1, Math.floor(pick * library.length))];
+}
+
+/**
+ * Call `reread` each time `subscribe` fires, until the returned stop is called;
+ * a stop before the subscription settles still unsubscribes.
+ */
+export function rereadOn(subscribe: (f: () => void) => Promise<() => void>, reread: () => void): () => void {
+  let stopped = false;
+  const unlisten = subscribe(() => {
+    if (!stopped) reread();
+  });
+  return () => {
+    stopped = true;
+    void unlisten.then(
+      (u) => u(),
+      () => {},
+    );
+  };
 }
 
 /**
@@ -39,6 +58,9 @@ export function useLibrary(start: string | null, load: (e: Entry) => void, fail:
       },
     );
   }, [load, fail]);
+
+  // The presets folder changed (a download, a drop): read the library again.
+  useEffect(() => rereadOn(onChanged, () => void api.presets().then(setLibrary, () => {})), []);
 
   return { library, loaded, search, setSearch, found };
 }

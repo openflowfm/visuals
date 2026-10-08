@@ -59,6 +59,7 @@ macro_rules! commands {
             link::link_sync,
             pack::pack_status,
             pack::pack_download,
+            pack::pack_add,
             settings::first_run,
             settings::first_run_done,
             updater::update_check,
@@ -112,7 +113,7 @@ fn main() {
     let deck = actions::Deck::new(playlists::Store::open(playlists::default_file(), library.clone()));
     #[cfg(target_os = "macos")]
     let headless = dev::headless();
-    let builder = tauri::Builder::default();
+    let builder = tauri::Builder::default().plugin(tauri_plugin_opener::init());
     // Headless (`VISUALS_HEADLESS`): never take focus from the app in front.
     #[cfg(target_os = "macos")]
     let builder = builder.activate_ignoring_other_apps(!headless);
@@ -128,6 +129,7 @@ fn main() {
             if let Some(starter) = pack::starter(app.handle()) {
                 app.state::<actions::Deck>().store.lock().unwrap().add_folder(starter);
             }
+            pack::start(app.handle());
             actions::start_auto(app.handle().clone());
             link::start(app.handle().clone());
             updater::start(app.handle().clone());
