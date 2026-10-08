@@ -5,13 +5,14 @@
 // See compare/README.md.
 //
 //   npm run compare -- <presets or folders> [--sample N] [--frames N] [--captures N]
-//                      [--size WxH] [--refresh HZ] [--seed N] [--min-score N]
+//                      [--size WxH] [--refresh HZ] [--seed N] [--min-score N] [--timeout S]
 //   npm run compare -- --serve        # the last report as a page, with approve / reject / note
 //
 // Writes compare/out/: report.json (every number), frames/<preset>/f<frame>.png
 // (one composite per capture) and index.html. One line per preset on stdout,
 // then a summary. Exit 0 when every preset ran, 1 when ours failed to load or
-// draw one (or one scored under --min-score), 2 on a usage error.
+// draw one or timed out (or one scored under --min-score, or none was scored),
+// 2 on a usage error.
 
 import fs from 'node:fs';
 import http from 'node:http';
@@ -32,16 +33,22 @@ import {
   launchBrowser,
   milkFiles,
   music,
+  parseSize,
   presetsRoot,
+  refreshLands,
+  relaunch,
   resolvePreset,
   runEngine,
+  selfDrift,
+  Timeout,
   UsageError,
   atExit,
   type Facts,
   type Settings,
 } from './bench.ts';
-import { compareRun, regionName, SECTIONS, type RunComparison } from './grid.ts';
-import { reportHtml, type Approval, type Report, type ReportPreset } from './report.ts';
+import { compareRun, regionName, SCALE, SECTIONS, type RunComparison } from './grid.ts';
+import { approvalsToShow as showApprovals, readApprovals, saveVerdict } from './approvals.ts';
+import { reportHtml, type Report, type ReportPreset } from './report.ts';
 
 const outDir = path.join(benchDir, 'out');
 const approvalsFile = path.join(process.env.OPENFLOW_HOME ?? path.join(os.homedir(), '.openflow'), 'visuals', 'compare', 'approvals.json');
@@ -58,7 +65,7 @@ interface Options extends Settings {
 function parseArgs(argv: string[]): Options {
   const flags = new Map<string, string>();
   const positional: string[] = [];
-  const known = ['sample', 'frames', 'captures', 'size', 'refresh', 'seed', 'min-score'];
+  const known = ['sample', 'frames', 'captures', 'size', 'refresh', 'seed', 'min-score', 'timeout'];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (!a.startsWith('--')) positional.push(a);
@@ -74,8 +81,11 @@ function parseArgs(argv: string[]): Options {
     return v;
   };
   const frames = int('frames', 240);
-  const [width, height] = (flags.get('size') ?? '640x360').split('x').map(Number);
-  if (![width, height].every((n) => Number.isInteger(n) && n > 0)) throw new UsageError('--size must be WxH, e.g. 640x360');
+  const { width, height } = parseSize(flags.get('size') ?? '640x360');
+  const refresh = int('refresh', 60);
+  const captures = captureFrames(frames, int('captures', 8));
+  if (!refreshLands(refresh, captures)) throw new UsageError(`--refresh ${refresh}: ours' refreshes must land on every capture frame (${captures.join(', ')}; Butterchurn draws 30 a second), so a multiple of 30`);
+  const timeout = int('timeout', 30);
   const minScore = flags.has('min-score') ? Number(flags.get('min-score')) : null;
   if (minScore !== null && !(minScore >= 0 && minScore <= 100)) throw new UsageError('--min-score must be 0–100');
   let seed: bigint;
@@ -87,7 +97,7 @@ function parseArgs(argv: string[]): Options {
   const serve = flags.has('serve');
   const files = serve ? [] : choosePresets(positional, flags.has('sample') ? int('sample', 30) : positional.length ? 0 : 30);
   if (!serve && !files.length) throw new UsageError('no presets chosen');
-  return { width, height, frames, refresh: int('refresh', 60), captures: captureFrames(frames, int('captures', 8)), files, seed, minScore, serve };
+  return { width, height, frames, refresh, captures, timeout, files, seed, minScore, serve };
 }
 
 /** `n` presets spread over the pack's categories, the same ones every run. */
@@ -133,50 +143,34 @@ function choosePresets(positional: string[], n: number): string[] {
 
 // --- approvals and the page --------------------------------------------------
 
-const readApprovals = (): Record<string, Approval> => {
-  try {
-    return JSON.parse(fs.readFileSync(approvalsFile, 'utf8'));
-  } catch {
-    return {};
-  }
-};
-const writeApprovals = (all: Record<string, Approval>) => {
-  fs.mkdirSync(path.dirname(approvalsFile), { recursive: true });
-  const sorted = Object.fromEntries(Object.entries(all).sort(([a], [b]) => a.localeCompare(b)));
-  fs.writeFileSync(`${approvalsFile}.tmp`, `${JSON.stringify(sorted, null, 1)}\n`);
-  fs.renameSync(`${approvalsFile}.tmp`, approvalsFile);
-};
+const approvalsToShow = () => showApprovals(approvalsFile, (m) => console.error(`compare: ${m}`));
 
 /** Serve the last report and take approvals, on a free port, until interrupted. */
 async function serve(): Promise<void> {
   const saved = path.join(outDir, 'report.json');
   if (!fs.existsSync(saved)) throw new UsageError('no report in compare/out: run npm run compare first');
-  fs.writeFileSync(path.join(outDir, 'index.html'), reportHtml({ ...(JSON.parse(fs.readFileSync(saved, 'utf8')) as Report), approvalsFile, approvals: readApprovals() }));
+  fs.writeFileSync(path.join(outDir, 'index.html'), reportHtml({ ...(JSON.parse(fs.readFileSync(saved, 'utf8')) as Report), approvalsFile, approvals: approvalsToShow() }));
   const types: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.png': 'image/png', '.json': 'application/json' };
   const server = http.createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
     if (url.pathname === '/approvals' && req.method === 'GET') {
-      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
-      res.end(JSON.stringify(readApprovals()));
+      try {
+        const all = readApprovals(approvalsFile);
+        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+        res.end(JSON.stringify(all));
+      } catch (error) {
+        res.writeHead(500);
+        res.end((error as Error).message);
+      }
       return;
     }
     if (url.pathname === '/approvals' && req.method === 'POST') {
       let body = '';
       req.on('data', (chunk) => (body += chunk));
       req.on('end', () => {
-        try {
-          const { id, verdict, note, score } = JSON.parse(body) as { id: string; verdict: Approval['verdict']; note: string; score: number | null };
-          if (typeof id !== 'string' || !id || !['approve', 'reject', null].includes(verdict) || typeof note !== 'string') throw new Error('expected {id, verdict, note}');
-          const all = readApprovals();
-          if (!verdict && !note) delete all[id];
-          else all[id] = { verdict, note, score: typeof score === 'number' ? score : null, at: new Date().toISOString() };
-          writeApprovals(all);
-          res.writeHead(200, { 'content-type': 'application/json' });
-          res.end(JSON.stringify(all[id] ?? null));
-        } catch (error) {
-          res.writeHead(400);
-          res.end((error as Error).message);
-        }
+        const saved = saveVerdict(approvalsFile, body);
+        res.writeHead(saved.status, saved.status === 200 ? { 'content-type': 'application/json' } : {});
+        res.end(saved.body);
       });
       return;
     }
@@ -223,8 +217,19 @@ async function run(o: Options): Promise<number> {
     o.seed,
     audioFile,
   );
+  // Ours again, re-seeded and slightly larger: how far ours drifts from itself.
+  const self = selfDrift(o.seed, o.width, o.height);
+  const selfEngine = runEngine(
+    bin,
+    work,
+    'self',
+    o.files.map((file, i) => ({ file, prefix: path.join(work, `self-${i}`) })),
+    { ...settings, width: self.width, height: self.height },
+    self.seed,
+    audioFile,
+  );
 
-  const browser = await launchBrowser();
+  let browser = await launchBrowser();
   const theirs: ({ notes: string[] } | { failed: string })[] = [];
   for (const [i, file] of o.files.entries()) {
     const converted = await convert(file);
@@ -240,6 +245,8 @@ async function run(o: Options): Promise<number> {
         }
         theirs.push({ notes: ref.notes });
       } catch (error) {
+        // A stuck page may leave Chromium busy: the next preset gets a fresh one.
+        if (error instanceof Timeout) browser = await relaunch(browser);
         theirs.push({ failed: `butterchurn failed: ${(error as Error).message.split('\n')[0]}` });
       }
     }
@@ -247,6 +254,7 @@ async function run(o: Options): Promise<number> {
   }
   console.error('waiting for the engine…');
   const ours = await engine;
+  const selfRuns = await selfEngine;
 
   const compose = await composer(browser);
   const panelWidth = Math.min(o.width, 400);
@@ -283,9 +291,16 @@ async function run(o: Options): Promise<number> {
       if (entry.status === 'ok') entry.status = 'reference-failed';
       entry.notes.push(their.failed);
     }
+    if (entry.status === 'ok' && !selfRuns[i].ok) entry.notes.push(`ours' own re-run failed (${selfRuns[i].failure ?? 'did not finish'}): the floor is Butterchurn's re-runs only`);
     if (entry.status === 'ok') {
       const read = (kind: string, frame: number) => new Uint8Array(fs.readFileSync(path.join(work, `${kind}-${i}-${frame}.rgba`)));
-      const captured = o.captures.map((frame) => ({ frame, ref: read('ref', frame), ours: read('ours', frame), drifts: floorRuns(o.seed).map((_, k) => read(`drift${k}`, frame)) }));
+      const captured = o.captures.map((frame) => ({
+        frame,
+        ref: read('ref', frame),
+        ours: read('ours', frame),
+        drifts: floorRuns(o.seed).map((_, k) => read(`drift${k}`, frame)),
+        oursDrifts: selfRuns[i].ok ? [{ rgba: read('self', frame), width: self.width, height: self.height }] : [],
+      }));
       const result: RunComparison = compareRun(captured, o.width, o.height);
       entry.score = result.score;
       entry.raw = result.raw;
@@ -303,9 +318,9 @@ async function run(o: Options): Promise<number> {
           [
             { label: 'Butterchurn', ...picture(captured[k].ref) },
             { label: 'ours', ...picture(captured[k].ours) },
-            { label: `ours beyond the drift floor (white = ${'≥'}0.25)`, ...grid(c.excess) },
+            { label: `ours beyond the drift floor (white = ${SCALE} or more beyond)`, ...grid(c.excess) },
             { label: 'Butterchurn re-seeded (normal drift)', ...picture(captured[k].drifts[0]) },
-            { label: 'drift floor: re-runs vs Butterchurn', ...grid(c.floor.map((d) => d.total * 2)) },
+            { label: 'drift floor: re-runs vs their own side', ...grid(c.floor.map((d) => d.total * 2)) },
             { label: 'ours vs Butterchurn (same scale)', ...grid(c.ours.map((d) => d.total * 2)) },
           ],
           3,
@@ -322,6 +337,7 @@ async function run(o: Options): Promise<number> {
           raw: c.raw,
           floorRaw: c.floorRaw,
           whole: c.whole,
+          palette: c.palette,
           sides: c.sides,
           sections: c.ours.map((d, s) => ({ section: s, region: regionName(s), ours: d, floor: c.floor[s], excess: c.excess[s] })),
         });
@@ -349,10 +365,10 @@ async function run(o: Options): Promise<number> {
 
   const report: Report = {
     generated: new Date().toISOString(),
-    settings: { width: o.width, height: o.height, frames: o.frames, dt: DT, refresh: o.refresh, seed: String(o.seed), floorRuns: floorRuns(o.seed).map((r) => ({ seed: String(r.seed), hiss: r.hiss === undefined ? null : String(r.hiss) })), captures: o.captures, presetsRoot, minScore: o.minScore },
+    settings: { width: o.width, height: o.height, frames: o.frames, dt: DT, refresh: o.refresh, seed: String(o.seed), floorRuns: floorRuns(o.seed).map((r) => ({ seed: String(r.seed), hiss: r.hiss === undefined ? null : String(r.hiss) })), selfDrift: { ...self, seed: String(self.seed) }, captures: o.captures, presetsRoot, minScore: o.minScore, timeout: o.timeout },
     approvalsFile,
     presets,
-    approvals: readApprovals(),
+    approvals: approvalsToShow(),
   };
   fs.writeFileSync(path.join(outDir, 'report.json'), JSON.stringify(report, round3, 1));
   fs.writeFileSync(path.join(outDir, 'index.html'), reportHtml(report));
@@ -366,6 +382,10 @@ async function run(o: Options): Promise<number> {
       `not comparable ${count('not-comparable')}; ours failed ${count('failed')}; under --min-score ${count('low')}; Butterchurn failed ${count('reference-failed')}`,
   );
   console.log(`report: ${path.join(outDir, 'report.json')}  composites: ${path.join(outDir, 'frames')}/`);
+  if (!scored.length) {
+    console.log(`no preset was scored: of ${presets.length}, ${count('not-comparable')} not comparable (Butterchurn drifts too far from itself), ${count('reference-failed')} Butterchurn could not draw, ${count('failed')} ours could not draw`);
+    return 1;
+  }
   return count('failed') || count('low') ? 1 : 0;
 }
 

@@ -20,9 +20,9 @@ the editor app (`app/`: the Tauri shell in `app/src-tauri`, its page in `app/src
 | `npm run typecheck` in `teaser/` | the teaser's Remotion edit compiles (the root typecheck doesn't reach it) | any change under `teaser/src/` |
 | `cargo run --release -p visuals-engine --bin gpucheck -- [files or folders] [--sample N \| --all] [--timeout S]` | presets load and draw on the GPU: by default a fixed sample of 250 spread over the pack (about a minute); a preset stuck over 20 s ends the run naming it. Exit 0 when every preset drew (fall-backs to MilkDrop's default shader are reported but pass), 1 when any failed to load or draw or panicked, or on a usage error, 2 on a timeout | the default sample locally after changes to shader translation or the renderer; `--all` (all 9,795) only when asked or before a release |
 | `cargo run --release -p visuals-engine --bin motion -- <presets or folders> [--hz 60,120] [--speed 0.25,1,4] [--seconds S] [--dump DIR]` | how evenly presets move from one refresh to the next: block-matched motion and frame difference per refresh, averaged by where the refresh lands in its step, as the most-changing phase over the least; `--dump` saves the pictures (see "The preset clock" in `docs/milkdrop-engine.md`) | after a change to how refreshes between steps are drawn |
-| `npm run compare -- <presets or folders> [--sample N] [--frames N] [--captures N] [--size WxH] [--min-score N]` in `compare/` (once: `npm ci && npx playwright install chromium`) | presets drawn by Butterchurn 2.6.7 and by the engine from the same audio, clock and seeds, compared section by section against Butterchurn's own drift (see `compare/README.md`): one line per preset on stdout, `compare/out/report.json`, a composite PNG per capture. Exit 0 when every preset ran, 1 when ours failed to load or draw one or one scored under `--min-score`, 2 on a usage error | after any change that affects how a preset draws (below) |
-| `cargo test -p visuals-compare`, and `npm test` and `npm run typecheck` in `compare/` | the compare bench: its engine half, its section metric and its HLSL repairs (the root typecheck and tests don't reach `compare/`) | any change under `compare/` |
-| `npm run calibrate` in `compare/` | how well the bench's score separates Butterchurn against itself from deliberately different pictures, on 20 presets picked at random (seeded); exit 1 when any pair overlaps | after a change to the bench's metric (`compare/harness/grid.ts`) |
+| `npm run compare -- <presets or folders> [--sample N] [--frames N] [--captures N] [--size WxH] [--min-score N] [--timeout S]` in `compare/` (once: `npm ci && npx playwright install chromium`) | presets drawn by Butterchurn 2.6.7 and by the engine from the same audio, clock and seeds, compared section by section against how far each side drifts from itself (see `compare/README.md`): one line per preset on stdout, `compare/out/report.json`, a composite PNG per capture. A preset stuck over `--timeout` (30 s) on either side is killed and reported, and the run goes on. Exit 0 when every preset ran, 1 when ours failed to load or draw one (or timed out), one scored under `--min-score`, or none could be scored, 2 on a usage error | after any change that affects how a preset draws (below) |
+| `cargo test -p visuals-compare`, and `npm test` and `npm run typecheck` in `compare/` | the compare bench: its engine half, its section metric, its approvals file and its HLSL repairs (the root typecheck and tests don't reach `compare/`; CI runs all three) | any change under `compare/` |
+| `npm run calibrate` in `compare/` | how well the bench's score separates Butterchurn against itself from deliberately different pictures, on 20 presets picked at random (seeded), plus known cases of ours against Butterchurn labelled by eye (`compare/calibration.json`); prints the margin; exit 1 when any pair overlaps or either class is empty | after a change to the bench's metric (`compare/harness/grid.ts`) |
 
 **Compare against Butterchurn before pushing.** After any change that affects how a
 preset draws (shader translation, the renderer, EEL, audio, the runtime), run the compare
@@ -31,9 +31,10 @@ bench on the presets it touches (`npm run compare -- <them>` in `compare/`; a fo
 
 - Each line's score is how far ours is beyond Butterchurn's own drift, not a pixel
   difference: presets drift apart by nature (rand streams part after the init equations,
-  feedback amplifies tiny float differences), so Butterchurn is also drawn re-seeded and
-  only a gap beyond that floor counts. 95 and up is within drift; under about 75, or a
-  capture under 70, is worth a look. `n/c` means Butterchurn drifts too far from itself
+  feedback amplifies tiny float differences), so Butterchurn is also drawn re-seeded, and
+  ours re-seeded and slightly larger, and only a gap beyond that floor counts. The worst
+  capture pulls the score down. 86 and up is within drift; under about 80, or a capture
+  under 70, is worth a look. `n/c` means Butterchurn drifts too far from itself
   to tell; judge its first captures by eye. `[rand,…,strong-feedback]` says why a preset
   drifts.
 - The line after the id says what differs and where ("ours darker in the centre sections;

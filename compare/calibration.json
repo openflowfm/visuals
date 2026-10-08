@@ -5,8 +5,26 @@
   "frames": 120,
   "captures": 6,
   "refresh": 60,
+  "timeout": 30,
   "shiftFrames": 45,
   "similar": ["reseed", "hiss"],
   "different": ["otherPreset", "shiftedClock", "swappedAudio", "otherEquations"],
+  "known": {
+    "size": "640x360",
+    "frames": 240,
+    "captures": 8,
+    "cases": [
+      {
+        "preset": "cream-of-the-crop/Waveform/Wire Spirograph/fat cancer tour meant.milk",
+        "label": "similar",
+        "why": "no rand: ours and Butterchurn look near-identical, yet Butterchurn's re-runs are exactly equal, so a zero floor counted every WebGL-against-wgpu rounding (43.7 at f240)"
+      },
+      {
+        "preset": "cream-of-the-crop/Dancer/Aurora/Jc - Flower.milk",
+        "label": "different",
+        "why": "from f50 ours draws a pink flower blob where Butterchurn draws red stars, yet the early captures held the plain weighted mean at 93.9"
+      }
+    ]
+  },
   "approvals": true
 }

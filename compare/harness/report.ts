@@ -27,6 +27,8 @@ export interface ReportCapture {
   raw: number;
   floorRaw: number;
   whole: { ours: Distance; floor: Distance; excess: number };
+  /** The whole frame's palette distance, ours and the floor's, and how far ours is beyond it (0–1). */
+  palette: { ours: number; floor: number; excess: number };
   /** The whole frame of each side: colour, brightness, hue, edges, and motion since the previous capture. */
   sides: Record<'ref' | 'ours' | 'drift', { region: Region; motion: Motion | null }>;
   /** Per section (8×4, row by row): ours' and the floor's distance from Butterchurn, and ours beyond the floor. */
@@ -57,7 +59,7 @@ export interface ReportPreset {
 
 export interface Report {
   generated: string;
-  settings: { width: number; height: number; frames: number; dt: number; refresh: number; seed: string; floorRuns: { seed: string; hiss: string | null }[]; captures: number[]; presetsRoot: string; minScore: number | null };
+  settings: { width: number; height: number; frames: number; dt: number; refresh: number; seed: string; floorRuns: { seed: string; hiss: string | null }[]; selfDrift: { seed: string; width: number; height: number }; captures: number[]; presetsRoot: string; minScore: number | null; timeout: number };
   approvalsFile: string;
   presets: ReportPreset[];
   approvals: Record<string, Approval>;
@@ -126,7 +128,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 const colour = (s) => s === null ? '#555' : s >= 80 ? 'var(--good)' : s >= 60 ? 'var(--mid)' : 'var(--bad)';
 const s = report.settings;
 $('meta').textContent = report.presets.length + ' presets, ' + s.width + '×' + s.height + ', ' + s.frames + ' frames at ' + (1 / s.dt).toFixed(0) +
-  ' fps, seed ' + s.seed + '. Score 0–100: how far ours stays within Butterchurn\\'s own drift (Butterchurn re-seeded), section by section, early captures weighted most. ' +
+  ' fps, seed ' + s.seed + '. Score 0–100: how far ours stays within the drift floor (Butterchurn re-seeded, ours re-seeded and drawn slightly larger), section by section, early captures weighted most and pulled towards the worst. ' +
   'Approvals: ' + report.approvalsFile + '. Generated ' + new Date(report.generated).toLocaleString() + '.';
 
 function banner(on) { $('banner').style.display = on ? 'block' : 'none'; }

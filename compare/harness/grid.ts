@@ -4,17 +4,36 @@
 // section level: mean colour and brightness, dominant hue, edge/texture energy,
 // and how much and which way the section moved since the previous capture.
 //
-// A difference only counts beyond the drift floor: the same section's distance
-// between Butterchurn and Butterchurn re-run with another random seed. MilkDrop
-// presets drift apart by nature (rand streams, chaotic feedback), so the floor
-// is what "different" has to beat.
+// A difference only counts beyond the drift floor, feature by feature: per
+// section and feature, the furthest of Butterchurn against Butterchurn re-run
+// with other random seeds, and of ours against ours drawn again slightly larger
+// with another seed (how far ours drifts from itself: a preset that feeds back
+// strongly turns float-level differences into different pictures, and
+// Butterchurn's own re-runs may not show it when the preset uses no
+// randomness). Never below `MIN_FLOOR`: a floor of exactly zero would count
+// every WebGL-against-wgpu rounding in full. MilkDrop presets drift apart by
+// nature, so the floor is what "different" has to beat. Beside the sections,
+// the whole frame's palette (which hues and brightnesses it holds) is compared
+// the same way: drift moves shapes about, but rarely turns red into pink.
+//
+// The constants were set by `npm run calibrate` (compare/README.md has the numbers).
 
 export const CELLS = { cols: 32, rows: 16 } as const;
 export const SECTIONS = { cols: 8, rows: 4 } as const;
 /** The resolution edge/texture energy is measured at: coarse enough to ignore pixel noise. */
 const TEXTURE = { cols: 128, rows: 64 } as const;
-/** Distance beyond the floor at which a section counts as fully different. */
-export const SCALE = 0.15;
+/** Weighted distance beyond the floor, over a section's features, at which it counts as fully different. */
+export const SCALE = 0.12;
+/** The least floor each feature of a section is allowed, whatever the re-runs say. */
+export const MIN_FLOOR = 0.2;
+/** How a capture's score is made: its sections' mean excess, the worst `WORST_SECTIONS`' mean, the whole frame's, and the palette's. */
+export const CAPTURE_WEIGHTS = { mean: 0.5, worst: 0.2, whole: 0.1, palette: 0.2 } as const;
+export const WORST_SECTIONS = 4;
+/** Palette distance beyond its floor at which a capture's palette counts as fully different, and the least floor it is allowed. */
+export const PALETTE_SCALE = 0.25;
+export const MIN_PALETTE_FLOOR = 0.05;
+/** How much the worst capture pulls the preset's score from the weighted mean of its captures towards it. */
+export const WORST_CAPTURE = 0.7;
 /** How the five features make a section's distance (motion only from the second capture). */
 export const FEATURE_WEIGHTS = { brightness: 0.3, colour: 0.2, hue: 0.15, edge: 0.2, motion: 0.15 } as const;
 export type Feature = keyof typeof FEATURE_WEIGHTS;
@@ -42,6 +61,32 @@ export interface Picture {
   whole: Region;
   /** Luma per cell, for motion between captures. */
   cells: Float32Array;
+  /** The frame's palette over its cells: `HUE_BINS` hue bins (30° each), each cell adding its chroma, so they sum to the mean chroma. */
+  palette: Float32Array;
+}
+
+const HUE_BINS = 12;
+
+/** The palette of a set of cell colours: how much of each hue, each cell spread linearly over its two nearest bins. */
+function paletteOf(cellRgb: Float32Array): Float32Array {
+  const out = new Float32Array(HUE_BINS);
+  const n = cellRgb.length / 3;
+  for (let i = 0; i < n; i++) {
+    const r = cellRgb[i * 3], g = cellRgb[i * 3 + 1], b = cellRgb[i * 3 + 2];
+    const chroma = Math.max(r, g, b) - Math.min(r, g, b);
+    const h = (hueOf(r, g, b) / 360) * HUE_BINS - 0.5;
+    const h0 = Math.floor(h), hf = h - h0;
+    out[(h0 + HUE_BINS) % HUE_BINS] += (chroma * (1 - hf)) / n;
+    out[(h0 + 1 + HUE_BINS) % HUE_BINS] += (chroma * hf) / n;
+  }
+  return out;
+}
+
+/** How far apart two palettes are, 0–1: the summed bin differences (a vivid frame that changes every hue scores 1). */
+export function paletteDistance(a: Float32Array, b: Float32Array): number {
+  let sum = 0;
+  for (let i = 0; i < HUE_BINS; i++) sum += Math.abs(a[i] - b[i]);
+  return clamp01(sum);
 }
 
 export interface Motion {
@@ -135,7 +180,7 @@ export function pictureOf(rgba: Uint8Array, width: number, height: number): Pict
   const cw = CELLS.cols / SECTIONS.cols, ch = CELLS.rows / SECTIONS.rows;
   const sections: Region[] = [];
   for (let sy = 0; sy < SECTIONS.rows; sy++) for (let sx = 0; sx < SECTIONS.cols; sx++) sections.push(regionOver(sx * cw, (sx + 1) * cw, sy * ch, (sy + 1) * ch));
-  return { sections, whole: regionOver(0, CELLS.cols, 0, CELLS.rows), cells };
+  return { sections, whole: regionOver(0, CELLS.cols, 0, CELLS.rows), cells, palette: paletteOf(cellRgb) };
 }
 
 /** Each section's motion from `before` to `after`, and the whole frame's. */
@@ -179,11 +224,13 @@ export function distance(a: Region, b: Region, ma?: Motion, mb?: Motion): Distan
 export interface CaptureComparison {
   /** Ours against Butterchurn, per section. */
   ours: Distance[];
-  /** Butterchurn re-seeded against Butterchurn, per section: the drift floor. */
+  /** The drift floor per section, feature by feature: the furthest of Butterchurn's re-runs against Butterchurn and ours' against ours (before `MIN_FLOOR`). */
   floor: Distance[];
   /** How far ours is beyond the floor, per section, 0–1 (1 at `SCALE` or more). */
   excess: number[];
   whole: { ours: Distance; floor: Distance; excess: number };
+  /** The whole frame's palette (how much of each hue): drift moves shapes about but rarely changes it. */
+  palette: { ours: number; floor: number; excess: number };
   /** 0–100: 100 when no section is further from Butterchurn than Butterchurn is from itself. */
   score: number;
   /** 0–100 similarity without the floor, ours and the floor's: what the drift looks like. */
@@ -198,30 +245,57 @@ export interface Side {
 
 const mean = (xs: number[]) => xs.reduce((s, x) => s + x, 0) / Math.max(1, xs.length);
 
-const furthest = (ds: Distance[]) => ds.reduce((a, b) => (b.total > a.total ? b : a));
+/** Each feature's furthest re-run: the floor per feature, wherever each re-run drifted most (one re-run can land close by chance). */
+const perFeature = (ds: Distance[]): Distance => {
+  const out = { ...ds[0] };
+  for (const d of ds) for (const k of [...(Object.keys(FEATURE_WEIGHTS) as Feature[]), 'total'] as const) out[k] = Math.max(out[k], d[k]);
+  return out;
+};
+
+/** The mean of the `n` largest values. */
+const meanOfLargest = (xs: number[], n: number) => mean([...xs].sort((a, b) => b - a).slice(0, n));
 
 /**
- * One capture: Butterchurn (`ref`), ours, and Butterchurn re-run with other
- * seeds (`drifts`). The floor per section is the furthest re-run: one re-run
- * can land close by chance.
+ * One capture: Butterchurn (`ref`), ours, Butterchurn re-run with other seeds
+ * (`drifts`) and ours drawn again perturbed (`oursDrifts`). The floor per
+ * section and feature is the furthest of every re-run from its own side, and
+ * a section's excess is how far ours goes beyond it, feature by feature. The
+ * score counts the worst sections as well as the mean, so a defect in a few
+ * sections still costs, and the palette, so a colour gone wrong does.
  */
-export function compareCapture(ref: Side, ours: Side, drifts: Side[]): CaptureComparison {
-  const sectionDistances = (other: Side) => ref.picture.sections.map((s, i) => distance(s, other.picture.sections[i], ref.motion?.sections[i], other.motion?.sections[i]));
-  const o = sectionDistances(ours);
-  const each = drifts.map(sectionDistances);
-  const f = o.map((_, i) => furthest(each.map((d) => d[i])));
-  const beyond = (d: Distance, fl: Distance) => clamp01(Math.max(0, d.total - fl.total) / SCALE);
+export function compareCapture(ref: Side, ours: Side, drifts: Side[], oursDrifts: Side[] = []): CaptureComparison {
+  const sectionDistances = (from: Side, other: Side) => from.picture.sections.map((s, i) => distance(s, other.picture.sections[i], from.motion?.sections[i], other.motion?.sections[i]));
+  const wholeDistance = (from: Side, other: Side) => distance(from.picture.whole, other.picture.whole, from.motion?.whole, other.motion?.whole);
+  const o = sectionDistances(ref, ours);
+  const each = [...drifts.map((d) => sectionDistances(ref, d)), ...oursDrifts.map((d) => sectionDistances(ours, d))];
+  const f = o.map((_, i) => perFeature(each.map((d) => d[i])));
+  // Motion only counts from the second capture, as in `distance`.
+  const hasMotion = !!(ref.motion && ours.motion);
+  const beyond = (d: Distance, fl: Distance) => {
+    let sum = 0, weight = 0;
+    for (const [k, w] of Object.entries(FEATURE_WEIGHTS) as [Feature, number][]) {
+      if (k === 'motion' && !hasMotion) continue;
+      sum += w * Math.max(0, d[k] - Math.max(fl[k], MIN_FLOOR));
+      weight += w;
+    }
+    return clamp01(sum / weight / SCALE);
+  };
   const excess = o.map((d, i) => beyond(d, f[i]));
-  const wo = distance(ref.picture.whole, ours.picture.whole, ref.motion?.whole, ours.motion?.whole);
-  const wf = furthest(drifts.map((drift) => distance(ref.picture.whole, drift.picture.whole, ref.motion?.whole, drift.motion?.whole)));
+  const wo = wholeDistance(ref, ours);
+  const wf = perFeature([...drifts.map((d) => wholeDistance(ref, d)), ...oursDrifts.map((d) => wholeDistance(ours, d))]);
   const we = beyond(wo, wf);
+  const po = paletteDistance(ref.picture.palette, ours.picture.palette);
+  const pf = Math.max(0, ...drifts.map((d) => paletteDistance(ref.picture.palette, d.picture.palette)), ...oursDrifts.map((d) => paletteDistance(ours.picture.palette, d.picture.palette)));
+  const pe = clamp01(Math.max(0, po - Math.max(pf, MIN_PALETTE_FLOOR)) / PALETTE_SCALE);
   const round = (v: number) => Math.round(v * 1000) / 10;
+  const w = CAPTURE_WEIGHTS;
   return {
     ours: o,
     floor: f,
     excess,
     whole: { ours: wo, floor: wf, excess: we },
-    score: round(1 - (0.8 * mean(excess) + 0.2 * we)),
+    palette: { ours: po, floor: pf, excess: pe },
+    score: round(1 - (w.mean * mean(excess) + w.worst * meanOfLargest(excess, WORST_SECTIONS) + w.whole * we + w.palette * pe)),
     raw: round(1 - mean(o.map((d) => d.total))),
     floorRaw: round(1 - mean(f.map((d) => d.total))),
   };
@@ -258,7 +332,17 @@ export interface CaptureSides {
   weight: number;
   ref: Side;
   ours: Side;
+  /** Butterchurn re-run: their distance from `ref` is drift. */
   drifts: Side[];
+  /** Ours drawn again perturbed: their distance from `ours` is drift too. */
+  oursDrifts?: Side[];
+}
+
+/** One clause of the plain-language line, by feature. */
+export interface Clause {
+  feature: 'brightness' | 'edges' | 'colour' | 'motion';
+  text: string;
+  differs: boolean;
 }
 
 /**
@@ -266,35 +350,38 @@ export interface CaptureSides {
  * clearly beyond the drift floor; features that agree are said to match.
  * Gaps are weighted over captures the same way the score is.
  */
-export function describe(captures: CaptureSides[]): string {
+export const describe = (captures: CaptureSides[]): string => clauses(captures).map((c) => c.text).join('; ');
+
+/** The plain-language line's clauses, one per feature. */
+export function clauses(captures: CaptureSides[]): Clause[] {
   const total = captures.reduce((s, c) => s + c.weight, 0) || 1;
   const n = SECTIONS.cols * SECTIONS.rows;
-  // Signed gap beyond the floor: how much further ours is than the re-seeded run, in ours' direction.
+  // Signed gap beyond the floor: how much further ours is than the re-runs drift, in ours' direction.
   const gap = (value: (side: Side, i: number) => number | null, relative: boolean) => {
     const out = new Array<number>(n).fill(0);
     for (const c of captures) {
       for (let i = 0; i < n; i++) {
-        const a = value(c.ref, i), o = value(c.ours, i), fs = c.drifts.map((d) => value(d, i));
-        if (a === null || o === null || fs.some((f) => f === null)) continue;
-        const scale = relative ? Math.max(Math.abs(a), Math.abs(o), ...fs.map((f) => Math.abs(f!)), 0.02) : 1;
-        const d = (o - a) / scale, fl = Math.max(...fs.map((f) => Math.abs(f! - a))) / scale;
+        const a = value(c.ref, i), o = value(c.ours, i), fs = c.drifts.map((d) => value(d, i)), os = (c.oursDrifts ?? []).map((d) => value(d, i));
+        if (a === null || o === null || fs.some((f) => f === null) || os.some((f) => f === null)) continue;
+        const scale = relative ? Math.max(Math.abs(a), Math.abs(o), ...fs.map((f) => Math.abs(f!)), ...os.map((f) => Math.abs(f!)), 0.02) : 1;
+        const d = (o - a) / scale, fl = Math.max(...fs.map((f) => Math.abs(f! - a)), ...os.map((f) => Math.abs(f! - o))) / scale;
         out[i] += (c.weight / total) * Math.sign(d) * Math.max(0, Math.abs(d) - fl);
       }
     }
     return out;
   };
-  const said: string[] = [];
-  const twoWay = (gaps: number[], threshold: number, more: string, less: string, matches: string) => {
+  const said: Clause[] = [];
+  const twoWay = (feature: Clause['feature'], gaps: number[], threshold: number, more: string, less: string, matches: string) => {
     const up = gaps.flatMap((g, i) => (g > threshold ? [i] : []));
     const down = gaps.flatMap((g, i) => (g < -threshold ? [i] : []));
     const parts: string[] = [];
     // Two sections or more: a single one is too easily one shape out of place.
     if (up.length >= 2) parts.push(`ours ${more} in ${where(up)}`);
     if (down.length >= 2) parts.push(`ours ${less} in ${where(down)}`);
-    said.push(parts.length ? parts.join(', ') : matches);
+    said.push({ feature, text: parts.length ? parts.join(', ') : matches, differs: parts.length > 0 });
   };
-  twoWay(gap((s, i) => s.picture.sections[i].lum, false), 0.05, 'brighter', 'darker', 'brightness matches');
-  twoWay(gap((s, i) => s.picture.sections[i].edge, true), 0.3, 'more textured', 'smoother', 'edges match');
+  twoWay('brightness', gap((s, i) => s.picture.sections[i].lum, false), 0.05, 'brighter', 'darker', 'brightness matches');
+  twoWay('edges', gap((s, i) => s.picture.sections[i].edge, true), 0.3, 'more textured', 'smoother', 'edges match');
   // Hue: the whole frame's dominant hue, chroma-weighted over sections.
   const dominant = (side: Side) => {
     let x = 0, y = 0, c = 0;
@@ -306,47 +393,76 @@ export function describe(captures: CaptureSides[]): string {
     return { hue: ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360, chroma: c / side.picture.sections.length };
   };
   const hueGap = (a: number, b: number) => Math.abs(((a - b + 540) % 360) - 180);
-  let hueOff = 0, chromaOff = 0;
-  const last = { ours: 0, ref: 0 };
+  let hueOff = 0, chromaOff = 0, paletteOff = 0;
+  // The capture whose hue is furthest beyond the floor, to name the hues from.
+  let worstHue: { gap: number; ours: number; ref: number; palettes: { ours: Float32Array; ref: Float32Array } } = { gap: -1, ours: 0, ref: 0, palettes: { ours: new Float32Array(0), ref: new Float32Array(0) } };
   for (const c of captures) {
-    const a = dominant(c.ref), o = dominant(c.ours), fs = c.drifts.map(dominant);
+    const a = dominant(c.ref), o = dominant(c.ours), fs = c.drifts.map(dominant), os = (c.oursDrifts ?? []).map(dominant);
     const w = c.weight / total;
-    const hueFloor = Math.max(0, ...fs.map((f) => (f.chroma > 0.06 ? hueGap(a.hue, f.hue) : 0)));
-    if (Math.min(a.chroma, o.chroma) > 0.06) hueOff += w * Math.max(0, hueGap(a.hue, o.hue) - hueFloor);
-    chromaOff += w * Math.sign(o.chroma - a.chroma) * Math.max(0, Math.abs(o.chroma - a.chroma) - Math.max(...fs.map((f) => Math.abs(f.chroma - a.chroma))));
-    if (w > 0) [last.ours, last.ref] = [o.hue, a.hue];
+    const hueFloor = Math.max(0, ...fs.map((f) => (f.chroma > 0.06 ? hueGap(a.hue, f.hue) : 0)), ...os.map((f) => (f.chroma > 0.06 ? hueGap(o.hue, f.hue) : 0)));
+    const beyond = Math.min(a.chroma, o.chroma) > 0.06 ? Math.max(0, hueGap(a.hue, o.hue) - hueFloor) : 0;
+    // The palette says it too when the frame holds several hues and only some changed.
+    const pf = Math.max(MIN_PALETTE_FLOOR, ...c.drifts.map((d) => paletteDistance(c.ref.picture.palette, d.picture.palette)), ...(c.oursDrifts ?? []).map((d) => paletteDistance(c.ours.picture.palette, d.picture.palette)));
+    const paletteBeyond = Math.max(0, paletteDistance(c.ref.picture.palette, c.ours.picture.palette) - pf) / PALETTE_SCALE;
+    hueOff += w * beyond;
+    paletteOff += w * paletteBeyond;
+    const rank = beyond + 40 * paletteBeyond;
+    if (rank > worstHue.gap) worstHue = { gap: rank, ours: o.hue, ref: a.hue, palettes: { ours: c.ours.picture.palette, ref: c.ref.picture.palette } };
+    const chromaFloor = Math.max(...fs.map((f) => Math.abs(f.chroma - a.chroma)), ...os.map((f) => Math.abs(f.chroma - o.chroma)));
+    chromaOff += w * Math.sign(o.chroma - a.chroma) * Math.max(0, Math.abs(o.chroma - a.chroma) - chromaFloor);
   }
   const colour: string[] = [];
-  if (hueOff > 35) colour.push(`hue differs (ours ${hueName(last.ours)}, Butterchurn ${hueName(last.ref)})`);
+  // Hue is a circle: a gap of 25° beyond the floor reads as another colour
+  // (pink against red), as does a palette half its scale beyond its floor.
+  if (hueOff > 25 || paletteOff > 0.5) {
+    const [ours, ref] = [hueName(worstHue.ours), hueName(worstHue.ref)];
+    if (ours !== ref) colour.push(`hue differs (ours ${ours}, Butterchurn ${ref})`);
+    else {
+      // The same dominant hue, a different mix: name the hue ours has most more of, and most less.
+      const gain = Array.from(worstHue.palettes.ours, (v, i) => v - worstHue.palettes.ref[i]);
+      const more = gain.indexOf(Math.max(...gain)), less = gain.indexOf(Math.min(...gain));
+      const name = (bin: number) => hueName(((bin + 0.5) * 360) / gain.length);
+      colour.push(name(more) === name(less) ? `colours differ (ours mostly ${ours} too)` : `colours differ (ours more ${name(more)}, less ${name(less)})`);
+    }
+  }
   if (Math.abs(chromaOff) > 0.06) colour.push(chromaOff > 0 ? 'ours more colourful' : 'ours less colourful');
-  said.push(colour.length ? colour.join(', ') : 'hue matches');
+  said.push({ feature: 'colour', text: colour.length ? colour.join(', ') : 'hue matches', differs: colour.length > 0 });
   // Motion: frozen or runaway first, else where it moves more or less.
   const moving = captures.filter((c) => c.ref.motion && c.ours.motion && c.drifts.every((d) => d.motion));
   if (moving.length) {
     const avg = (pick: (c: CaptureSides) => number) => mean(moving.map(pick));
     const a = avg((c) => c.ref.motion!.whole.change), o = avg((c) => c.ours.motion!.whole.change);
     const f = avg((c) => Math.max(...c.drifts.map((d) => d.motion!.whole.change)));
-    if (a > 0.02 && o < 0.1 * a && Math.abs(f - a) < 0.5 * a) said.push('ours looks frozen where Butterchurn moves');
-    else if (o > 3 * Math.max(a, f) + 0.02) said.push('ours changes far more than Butterchurn (runaway?)');
-    else twoWay(gap((s, i) => s.motion?.sections[i].change ?? null, true), 0.35, 'moves more', 'moves less', 'motion matches');
+    if (a > 0.02 && o < 0.1 * a && Math.abs(f - a) < 0.5 * a) said.push({ feature: 'motion', text: 'ours looks frozen where Butterchurn moves', differs: true });
+    else if (o > 3 * Math.max(a, f) + 0.02) said.push({ feature: 'motion', text: 'ours changes far more than Butterchurn (runaway?)', differs: true });
+    else twoWay('motion', gap((s, i) => s.motion?.sections[i].change ?? null, true), 0.35, 'moves more', 'moves less', 'motion matches');
   }
-  return said.join('; ');
+  return said;
 }
 
 // --- a whole run ---------------------------------------------------------------
 
+/** A picture of its own size: RGBA rows, top to bottom. */
+export interface Image {
+  rgba: Uint8Array;
+  width: number;
+  height: number;
+}
+
 export interface Captured {
   frame: number;
-  /** RGBA rows, top to bottom: Butterchurn, the candidate (ours), and Butterchurn re-run with other seeds. */
+  /** RGBA rows, top to bottom, at the run's size: Butterchurn, the candidate (ours), and Butterchurn re-run with other seeds. */
   ref: Uint8Array;
   ours: Uint8Array;
   drifts: Uint8Array[];
+  /** The candidate drawn again perturbed (another seed, a slightly larger size): how far it drifts from itself. */
+  oursDrifts?: Image[];
 }
 
 type SideName = 'ref' | 'ours' | 'drift';
 
 export interface RunComparison {
-  /** 0–100, captures weighted early-first: how far ours stays within Butterchurn's own drift. */
+  /** 0–100: how far ours stays within the drift floor; the captures' early-first weighted mean, pulled towards the worst capture. */
   score: number;
   raw: number;
   floorRaw: number;
@@ -366,31 +482,47 @@ export function compareRun(captured: Captured[], width: number, height: number):
   const prev = new Map<string, Picture>();
   const all: CaptureSides[] = [];
   const captures: RunComparison['captures'] = [];
-  const sideOf = (key: string, rgba: Uint8Array): Side => {
-    const picture = pictureOf(rgba, width, height);
+  const sideOf = (key: string, image: Image): Side => {
+    const picture = pictureOf(image.rgba, image.width, image.height);
     const before = prev.get(key);
     prev.set(key, picture);
     return { picture, motion: before ? motionOf(before, picture) : undefined };
   };
+  const sized = (rgba: Uint8Array): Image => ({ rgba, width, height });
   for (const c of ordered) {
-    const ref = sideOf('ref', c.ref), ours = sideOf('ours', c.ours);
-    const drifts = c.drifts.map((d, i) => sideOf(`drift${i}`, d));
+    const ref = sideOf('ref', sized(c.ref)), ours = sideOf('ours', sized(c.ours));
+    const drifts = c.drifts.map((d, i) => sideOf(`drift${i}`, sized(d)));
+    const oursDrifts = (c.oursDrifts ?? []).map((d, i) => sideOf(`self${i}`, d));
     const weight = captureWeight(c.frame);
-    all.push({ weight, ref, ours, drifts });
+    all.push({ weight, ref, ours, drifts, oursDrifts });
     const side = (s: Side) => ({ region: s.picture.whole, motion: s.motion?.whole ?? null });
-    captures.push({ frame: c.frame, weight, ...compareCapture(ref, ours, drifts), sides: { ref: side(ref), ours: side(ours), drift: side(drifts[0]) } });
+    captures.push({ frame: c.frame, weight, ...compareCapture(ref, ours, drifts, oursDrifts), sides: { ref: side(ref), ours: side(ours), drift: side(drifts[0]) } });
   }
   const total = captures.reduce((s, c) => s + c.weight, 0) || 1;
-  const weighted = (pick: (c: (typeof captures)[number]) => number) => Math.round((captures.reduce((s, c) => s + c.weight * pick(c), 0) / total) * 10) / 10;
-  const floorRaw = weighted((c) => c.floorRaw);
+  const weighted = (pick: (c: (typeof captures)[number]) => number) => captures.reduce((s, c) => s + c.weight * pick(c), 0) / total;
+  const round1 = (v: number) => Math.round(v * 10) / 10;
+  const floorRaw = round1(weighted((c) => c.floorRaw));
   const notComparable = floorRaw < COMPARABLE_FLOOR;
+  // The worst capture pulls the score towards it: a preset clearly wrong from
+  // frame 50 on is wrong, however well its first second matched.
+  const worst = captures.reduce((a, b) => (b.score < a.score ? b : a));
+  const average = weighted((c) => c.score);
+  const score = round1(average - WORST_CAPTURE * (average - worst.score));
   let sentence = notComparable ? `not comparable: random/chaotic (Butterchurn re-seeded is only ${floorRaw} similar to itself)` : describe(all);
-  // No single feature stands out over the run, yet some captures are clearly
-  // off: say where and from when, so the line never reads "all matches" over a bad capture.
-  const off = captures.filter((c) => c.score < 70);
-  if (!notComparable && off.length && !sentence.includes('ours ')) {
-    const sections = off.flatMap((c) => c.excess.flatMap((e, i) => (e >= 0.5 ? [i] : [])));
-    sentence += `; but ${off.length} of ${captures.length} captures differ beyond the floor (from frame ${off[0].frame}${sections.length ? `, mostly ${where([...new Set(sections)])}` : ''}): look at them`;
+  if (!notComparable && worst.score < 70) {
+    // The run's line averages over captures; a clearly-off capture gets its own
+    // clause, and the run never claims a feature matches that capture shows differs.
+    const at = clauses([{ ...all[captures.indexOf(worst)], weight: 1 }]);
+    const run = clauses(all).filter((c) => c.differs || !at.some((a) => a.differs && a.feature === c.feature));
+    // Only what the run's own clauses don't already say.
+    const differs = at.filter((c) => c.differs && !run.some((r) => r.differs && r.feature === c.feature)).map((c) => c.text);
+    const sections = worst.excess.flatMap((e, i) => (e >= 0.5 ? [i] : []));
+    const where_ = sections.length ? `, mostly ${where(sections)}` : '';
+    const off = captures.filter((c) => c.score < 70).length;
+    sentence = [
+      ...run.map((c) => c.text),
+      `worst at frame ${worst.frame} (${worst.score}${where_}${off > 1 ? `; ${off} of ${captures.length} captures under 70` : ''})${differs.length ? `: ${differs.join(', ')}` : run.some((c) => c.differs) ? '' : ': differs beyond the floor'}`,
+    ].join('; ');
   }
-  return { score: weighted((c) => c.score), raw: weighted((c) => c.raw), floorRaw, notComparable, sentence, captures };
+  return { score, raw: round1(weighted((c) => c.raw)), floorRaw, notComparable, sentence, captures };
 }

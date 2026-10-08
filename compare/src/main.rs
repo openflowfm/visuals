@@ -24,7 +24,10 @@
 //! Each capture is written to `<out prefix>-<frame>.rgba`, rows top to bottom.
 //! Every preset gets a fresh renderer, so its clock, noise and `rand_frame`
 //! stream start where Butterchurn's do on a fresh page. On stdout, one line per
-//! event: `ok <index> <ms>`, `fallback <index> <kind> <why>`, `fail <index> <why>`.
+//! event: `start <index>`, `ok <index> <ms>`, `fallback <index> <kind> <why>`,
+//! `fail <index> <why>`. A preset fails when a capture it was asked for was
+//! never written (no refresh landed on that frame, or the frame is past the
+//! end), so the bench never reads a file that isn't there.
 
 use engine::audio::{Audio, FFT_SIZE};
 use engine::render::{headless, Renderer};
@@ -89,6 +92,7 @@ fn run(plan: &Plan, device: &wgpu::Device, queue: &wgpu::Queue, index: &str, fil
     let hz = plan.refresh.unwrap_or(1.0 / plan.dt);
     let per = 1.0 / (hz * plan.dt);
     let refreshes = (plan.frames as f64 / per).round() as usize;
+    let mut written = Vec::new();
     for j in 0..refreshes {
         // A step's equations run at the first refresh after the step before,
         // so that refresh hears the step's own window, as Butterchurn's frame does.
@@ -100,7 +104,12 @@ fn run(plan: &Plan, device: &wgpu::Device, queue: &wgpu::Queue, index: &str, fil
         if (at - landed).abs() < 1e-6 && plan.captures.contains(&(landed as usize)) {
             let pixels = renderer.read_back();
             std::fs::write(format!("{prefix}-{}.rgba", landed as usize), pixels).map_err(|e| format!("write: {e}"))?;
+            written.push(landed as usize);
         }
+    }
+    let missing: Vec<String> = plan.captures.iter().filter(|f| !written.contains(f)).map(|f| f.to_string()).collect();
+    if !missing.is_empty() {
+        return Err(format!("no refresh at {hz} Hz landed on frame {} of {}: those captures were never drawn", missing.join(", "), plan.frames));
     }
     Ok(())
 }
@@ -128,6 +137,9 @@ fn main() {
     std::panic::set_hook(Box::new(|_| {}));
     for (index, file, prefix) in &plan.presets {
         let started = std::time::Instant::now();
+        // The bench times each preset from here: one that never reports back is killed.
+        println!("start\t{index}");
+        std::io::stdout().flush().ok();
         let outcome = catch_unwind(AssertUnwindSafe(|| run(&plan, &device, &queue, index, file, prefix)));
         match outcome {
             Ok(Ok(())) => println!("ok\t{index}\t{:.0}", started.elapsed().as_secs_f64() * 1000.0),
@@ -188,6 +200,23 @@ mod tests {
             assert_eq!(pixels.len(), 64 * 36 * 4);
         }
         assert!(!std::path::Path::new(&format!("{prefix}-3.rgba")).exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn fails_when_a_capture_is_never_drawn() {
+        let Some((device, queue)) = headless() else { return };
+        let dir = std::env::temp_dir().join(format!("visuals-compare-missing-{}", std::process::id()));
+        // At 45 Hz refreshes land on every other frame only: frame 1 is never drawn.
+        let text = plan_in(&dir, 4, "1\t2", "[preset00]\nzoom=1.02\n").replace("refresh\t60", "refresh\t45");
+        let plan = parse_plan(&text).unwrap();
+        let (index, file, prefix) = &plan.presets[0];
+        let why = run(&plan, &device, &queue, index, file, prefix).unwrap_err();
+        assert!(why.contains("frame 1 of 4"), "{why}");
+        // A capture past the last frame is never drawn either.
+        let plan = parse_plan(&plan_in(&dir, 4, "2\t9", "[preset00]\n")).unwrap();
+        let (index, file, prefix) = &plan.presets[0];
+        assert!(run(&plan, &device, &queue, index, file, prefix).unwrap_err().contains("frame 9 of 4"));
         std::fs::remove_dir_all(&dir).ok();
     }
 }

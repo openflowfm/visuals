@@ -51,6 +51,38 @@ export const NOISE_SEED = 0x5eedn;
  */
 export const floorRuns = (seed: bigint): { seed: bigint; hiss?: bigint }[] => [{ seed: seed ^ 0x9e3779b97f4a7c15n }, { seed: seed ^ 0x2545f4914f6cdd1dn, hiss: 0xf100dn }];
 
+/**
+ * The candidate's own re-run (ours in the bench): another rand seed, drawn
+ * about 2.5% larger. Every pixel lands a fraction of a texel elsewhere, the
+ * size of difference WebGL and wgpu make, and a preset that feeds back strongly
+ * amplifies it as it amplifies theirs; the sections compare at any size.
+ */
+export const selfDrift = (seed: bigint, width: number, height: number) => ({
+  seed: seed ^ 0x5bd1e9955bd1e995n,
+  width: width + Math.max(2, Math.round(width / 40)),
+  height: height + Math.max(1, Math.round(height / 40)),
+});
+
+/** `WxH`, both whole and from 16 to 4096. */
+export function parseSize(text: string): { width: number; height: number } {
+  const m = /^(\d+)x(\d+)$/.exec(text);
+  const [width, height] = m ? [Number(m[1]), Number(m[2])] : [NaN, NaN];
+  if (![width, height].every((n) => Number.isInteger(n) && n >= 16 && n <= 4096)) throw new UsageError(`size must be WxH, each 16–4096, e.g. 640x360 (got ${text})`);
+  return { width, height };
+}
+
+/**
+ * Whether ours, drawing `refresh` pictures a second, has a refresh landing on
+ * every capture frame (Butterchurn's frames are 1/30 s apart): it must, or the
+ * capture is never drawn.
+ */
+export function refreshLands(refresh: number, captures: number[]): boolean {
+  return captures.every((frame) => {
+    const at = frame * refresh * DT;
+    return Math.abs(at - Math.round(at)) < 1e-6;
+  });
+}
+
 export const presetsRoot = path.resolve(process.env.OPENFLOW_VISUALS_PRESETS ?? path.join(os.homedir(), '.openflow', 'visuals', 'presets'));
 
 /** A mistake in how the bench was called: exit 2. */
@@ -63,7 +95,12 @@ export interface Settings {
   refresh: number;
   /** 1-based frames to capture, ascending. */
   captures: number[];
+  /** Seconds one preset may take on either side before it is stopped and reported as timed out. */
+  timeout: number;
 }
+
+/** A preset that took longer than `Settings.timeout`. */
+export class Timeout extends Error {}
 
 /** `n` captures from frame 1 to the last, spaced geometrically: early frames, before streams part, say the most. */
 export function captureFrames(frames: number, n: number): number[] {
@@ -243,22 +280,47 @@ export async function launchBrowser(): Promise<Browser> {
   }
 }
 
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms).unref());
+
+/** A fresh Chromium in place of one a stuck page may have left busy; the old one is closed (killed if it won't close). */
+export async function relaunch(browser: Browser): Promise<Browser> {
+  await Promise.race([browser.close().catch(() => {}), sleep(5000)]);
+  return launchBrowser();
+}
+
 export interface Drawn {
   /** RGBA rows, top to bottom, by 1-based frame. */
   captures: Map<number, Uint8Array>;
   notes: string[];
 }
 
-/** Butterchurn in its own fresh page, so its clock starts where ours does. */
+/**
+ * Butterchurn in its own fresh page, so its clock starts where ours does.
+ * Throws `Timeout` when it takes longer than `settings.timeout`; the page is
+ * closed then, and the caller should `relaunch` the browser in case it is stuck.
+ */
 export async function butterchurn(browser: Browser, json: string, settings: Settings, seed: bigint, audio: Buffer): Promise<Drawn> {
-  const { width, height } = settings;
   const page = await browser.newPage({ viewport: { width: 320, height: 200 } });
+  let timer: NodeJS.Timeout | undefined;
+  const expired = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Timeout(`timed out after ${settings.timeout} s`)), settings.timeout * 1000);
+  });
+  try {
+    return await Promise.race([drawButterchurn(page, json, settings, seed, audio), expired]);
+  } finally {
+    clearTimeout(timer);
+    await Promise.race([page.close().catch(() => {}), sleep(5000)]);
+  }
+}
+
+async function drawButterchurn(page: Page, json: string, settings: Settings, seed: bigint, audio: Buffer): Promise<Drawn> {
+  const { width, height } = settings;
   const consoleErrors: string[] = [];
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text().split('\n')[0].slice(0, 200));
   });
   page.on('pageerror', (error) => consoleErrors.push(error.message.split('\n')[0].slice(0, 200)));
-  try {
+  {
     await page.setContent(`<canvas id="c" width="${width}" height="${height}"></canvas>`);
     await page.addScriptTag({ path: require.resolve('butterchurn/lib/butterchurn.min.js') });
     await page.evaluate(
@@ -350,8 +412,6 @@ export async function butterchurn(browser: Browser, json: string, settings: Sett
     );
     const captures = new Map(Object.entries(result.captures).map(([frame, b64]) => [Number(frame), new Uint8Array(Buffer.from(b64, 'base64'))]));
     return { captures, notes: [...result.notes, ...[...new Set(consoleErrors)].slice(0, 3).map((e) => `butterchurn console: ${e}`)] };
-  } finally {
-    await page.close();
   }
 }
 
@@ -373,48 +433,82 @@ export interface OurRun {
 
 /**
  * Ours over a whole plan, in the background. Each capture lands at
- * `<prefix>-<frame>.rgba`. Resolves when the bin exits; rejects when it fails as a whole.
+ * `<prefix>-<frame>.rgba`. A preset that takes longer than `settings.timeout`
+ * is reported as timed out: the bin is killed and started again on the presets
+ * after it. Resolves when every preset has reported; rejects when the bin
+ * fails as a whole.
  */
 export function runEngine(bin: string, workDir: string, name: string, presets: { file: string; prefix: string }[], settings: Settings, seed: bigint, audioFile: string): Promise<OurRun[]> {
-  const planFile = path.join(workDir, `${name}.plan.txt`);
-  const plan = [
-    `size\t${settings.width}\t${settings.height}`,
-    `frames\t${settings.frames}`,
-    `dt\t${DT}`,
-    `refresh\t${settings.refresh}`,
-    `seed\t${seed}`,
-    `audio\t${audioFile}`,
-    `captures\t${settings.captures.join('\t')}`,
-    ...presets.map((p, i) => `preset\t${i}\t${p.file}\t${p.prefix}`),
-  ];
-  fs.writeFileSync(planFile, `${plan.join('\n')}\n`);
-  const runs: OurRun[] = presets.map(() => ({ ok: false, fallbacks: [], failure: null }));
-  const done = new Promise<OurRun[]>((resolve, reject) => {
-    // stdin stays open while this process lives: the bin ends when it closes.
-    const child = spawn(bin, [planFile, '--parent-stdin'], { stdio: ['pipe', 'pipe', 'pipe'] });
-    children.add(child);
-    let buffered = '';
-    child.stdout!.on('data', (chunk) => {
-      buffered += chunk;
-      const lines = buffered.split('\n');
-      buffered = lines.pop()!;
-      for (const line of lines) {
-        const [kind, index, ...rest] = line.split('\t');
-        const run = runs[Number(index)];
-        if (!run) continue;
-        if (kind === 'ok') run.ok = true;
-        else if (kind === 'fallback') run.fallbacks.push(`${rest[0]}: ${rest[1] ?? ''}`.trim());
-        else if (kind === 'fail') run.failure = rest.join(' ');
-      }
+  const runs: (OurRun & { reported: boolean })[] = presets.map(() => ({ ok: false, fallbacks: [], failure: null, reported: false }));
+  /** One bin over the presets not yet reported; resolves true when it was killed for taking too long. */
+  const pass = (attempt: number) =>
+    new Promise<boolean>((resolve, reject) => {
+      const planFile = path.join(workDir, `${name}.plan${attempt ? `.${attempt}` : ''}.txt`);
+      const plan = [
+        `size\t${settings.width}\t${settings.height}`,
+        `frames\t${settings.frames}`,
+        `dt\t${DT}`,
+        `refresh\t${settings.refresh}`,
+        `seed\t${seed}`,
+        `audio\t${audioFile}`,
+        `captures\t${settings.captures.join('\t')}`,
+        ...presets.flatMap((p, i) => (runs[i].reported ? [] : [`preset\t${i}\t${p.file}\t${p.prefix}`])),
+      ];
+      fs.writeFileSync(planFile, `${plan.join('\n')}\n`);
+      // stdin stays open while this process lives: the bin ends when it closes.
+      const child = spawn(bin, [planFile, '--parent-stdin'], { stdio: ['pipe', 'pipe', 'pipe'] });
+      children.add(child);
+      let current: number | null = null;
+      let stuck: number | null = null;
+      let timer: NodeJS.Timeout | undefined;
+      // The clock starts with the bin (its GPU setup counts towards the first preset) and again at each preset.
+      const arm = () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          stuck = current ?? runs.findIndex((r) => !r.reported);
+          child.kill('SIGKILL');
+        }, settings.timeout * 1000);
+      };
+      arm();
+      let buffered = '';
+      child.stdout!.on('data', (chunk) => {
+        buffered += chunk;
+        const lines = buffered.split('\n');
+        buffered = lines.pop()!;
+        for (const line of lines) {
+          const [kind, index, ...rest] = line.split('\t');
+          const run = runs[Number(index)];
+          if (!run) continue;
+          if (kind === 'start') {
+            current = Number(index);
+            arm();
+          } else if (kind === 'ok') {
+            run.ok = true;
+            run.reported = true;
+          } else if (kind === 'fallback') run.fallbacks.push(`${rest[0]}: ${rest[1] ?? ''}`.trim());
+          else if (kind === 'fail') {
+            run.failure = rest.join(' ');
+            run.reported = true;
+          }
+        }
+      });
+      let stderr = '';
+      child.stderr!.on('data', (chunk) => (stderr = (stderr + chunk).slice(-4000)));
+      child.on('exit', (code) => {
+        clearTimeout(timer);
+        children.delete(child);
+        if (stuck !== null && stuck >= 0) {
+          runs[stuck].failure = `timed out after ${settings.timeout} s`;
+          runs[stuck].reported = true;
+          resolve(true);
+        } else if (code === 0) resolve(false);
+        else reject(new Error(`the engine exited with ${code}: ${stderr.trim().split('\n').slice(-3).join(' ')}`));
+      });
     });
-    let stderr = '';
-    child.stderr!.on('data', (chunk) => (stderr = (stderr + chunk).slice(-4000)));
-    child.on('exit', (code) => {
-      children.delete(child);
-      if (code === 0) resolve(runs);
-      else reject(new Error(`the engine exited with ${code}: ${stderr.trim().split('\n').slice(-3).join(' ')}`));
-    });
-  });
+  const done = (async () => {
+    for (let attempt = 0; runs.some((r) => !r.reported) && (await pass(attempt)); attempt++);
+    return runs.map(({ ok, fallbacks, failure }) => ({ ok, fallbacks, failure }));
+  })();
   // Keep a failure from surfacing as an unhandled rejection before it is awaited.
   done.catch(() => {});
   return done;

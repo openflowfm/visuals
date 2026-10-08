@@ -536,20 +536,23 @@ seeds:
 
 ```sh
 cd compare && npm ci && npx playwright install chromium   # once
-npm run compare -- <presets or folders> [--sample N] [--frames 240] [--captures 8] [--size 640x360] [--min-score N]
+npm run compare -- <presets or folders> [--sample N] [--frames 240] [--captures 8] [--size 640x360] [--min-score N] [--timeout 30]
 npm run compare -- --serve                                # the last report as a page, with approve / reject / note
 ```
 
 It never compares pixels. Each picture is reduced to 8×4 sections (colour, brightness,
-hue, edge energy, motion between captures), and ours only counts as different where it is
-further from Butterchurn than Butterchurn re-run with other seeds is from itself — the
-drift floor — with the first captures weighted most. It prints one line per preset (the
-score, the floor, the worst capture, why the preset drifts, a plain-language line), writes
-`compare/out/report.json` and a composite PNG per capture (Butterchurn | ours | beyond the
-floor, over the re-seeded pair), and exits 1 when ours failed to draw a preset. Presets
-whose floor is too high are reported as not comparable. `npm run calibrate` checks on 20
-presets picked at random that the score separates Butterchurn against itself from
-deliberately different pictures. `compare/README.md` has how to read the score and the
+hue, edge energy, motion between captures) and a palette of hues, and ours only counts as
+different where it is further from Butterchurn than the re-runs drift — Butterchurn with
+other seeds against Butterchurn, ours re-seeded and slightly larger against ours, never
+under a minimum — with the first captures weighted most and the worst capture pulling the
+score down. It prints one line per preset (the score, the floor, the worst capture, why
+the preset drifts, a plain-language line), writes `compare/out/report.json` and a
+composite PNG per capture (Butterchurn | ours | beyond the floor, over the re-seeded
+pair), and exits 1 when ours failed to draw a preset or none could be scored; a preset
+stuck over the timeout is killed and reported. Presets whose floor is too high are
+reported as not comparable. `npm run calibrate` checks on 20 presets picked at random,
+and on known cases of ours labelled by eye, that the score separates the same picture
+from deliberately different ones (similar 86.0 and up, different 70.4 and down). `compare/README.md` has how to read the score and the
 calibration numbers; AGENTS.md says when to run it. It came back in October 2026 from
 `e941049`, the harness of #38, rebuilt for agents; the old app's compare view stays gone.
 Verdicts are still in `~/.openflow/visuals/compare/approvals.json`, and `--serve` keeps
