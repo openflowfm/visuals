@@ -135,7 +135,7 @@ impl Renderer {
         let (bass, mid, treb) = (r.get("bass"), r.get("mid"), r.get("treb"));
         let (ba, ma, ta) = (r.get("bass_att"), r.get("mid_att"), r.get("treb_att"));
         let f = |v: f64| vec![v as f32];
-        vec![
+        let mut values = vec![
             ("time", f(t)),
             ("fps", f(r.get("fps"))),
             ("frame", f(r.get("frame"))),
@@ -149,12 +149,6 @@ impl Renderer {
             ("vol_att", f((ba + ma + ta) / 3.0)),
             ("aspect", vec![ax, ay, 1.0 / ax, 1.0 / ay]),
             ("texsize", vec![s.texsize_x as f32, s.texsize_y as f32, 1.0 / s.texsize_x as f32, 1.0 / s.texsize_y as f32]),
-            ("texsize_noise_lq", vec![256.0, 256.0, 1.0 / 256.0, 1.0 / 256.0]),
-            ("texsize_noise_mq", vec![256.0, 256.0, 1.0 / 256.0, 1.0 / 256.0]),
-            ("texsize_noise_hq", vec![256.0, 256.0, 1.0 / 256.0, 1.0 / 256.0]),
-            ("texsize_noise_lq_lite", vec![32.0, 32.0, 1.0 / 32.0, 1.0 / 32.0]),
-            ("texsize_noisevol_lq", vec![32.0, 32.0, 1.0 / 32.0, 1.0 / 32.0]),
-            ("texsize_noisevol_hq", vec![32.0, 32.0, 1.0 / 32.0, 1.0 / 32.0]),
             ("rand_frame", rand_frame),
             ("rand_preset", r.rand_preset.to_vec()),
             ("roam_cos", roam([0.3, 1.3, 5.0, 20.0], f64::cos)),
@@ -177,10 +171,10 @@ impl Renderer {
             ("blur2_max", f(maxs[1])),
             ("blur3_min", f(mins[2])),
             ("blur3_max", f(maxs[2])),
-            ("_d0", vec![r.get("decay") as f32, r.get("gammaadj") as f32, r.get("echo_zoom") as f32, r.get("echo_alpha") as f32]),
-            ("_d1", vec![r.get("echo_orient") as f32, r.get("fshader") as f32, r.get("brighten") as f32, r.get("darken") as f32]),
-            ("_d2", vec![r.get("solarize") as f32, r.get("invert") as f32, 0.0, 0.0]),
-        ]
+        ];
+        values.extend(super::textures::noise_texsizes());
+        values.extend(shader::default_uniforms(|name| r.get(name)));
+        values
     }
 
     pub(super) fn write_uniforms(&self, stage: &Stage, values: &[(&'static str, Vec<f32>)]) {
