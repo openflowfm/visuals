@@ -7,6 +7,7 @@ the editor app (`app/`: the Tauri shell in `app/src-tauri`, its page in `app/src
 | Command | What it checks | When to run |
 | --- | --- | --- |
 | `cargo test -p visuals-engine --lib` | the engine: `.milk` parsing, shader translation, EEL, audio, a GPU render | any change under `engine/` |
+| `cargo build -p visuals-engine --bins` | the engine's bins compile; `--lib` doesn't build them | any change under `engine/` |
 | `cargo build -p visuals-app` | the Tauri app compiles | any change under `app/src-tauri/` |
 | `cargo test -p visuals-app` | the app's Rust: live actions, playlists, the Link one and changes on the beat, the live output's display choice and fit, the live effects' timing (building needs `cmake`, for Ableton Link) | any change under `app/src-tauri/` |
 | `npm run typecheck` | the editor page's TypeScript (`app/src`) and the vite and vitest configs compile | any `.ts`/`.tsx` change |

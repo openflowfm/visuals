@@ -74,5 +74,8 @@ jobs:
 
       - run: cargo test -p visuals-engine --lib
 
+      # `--lib` never compiles the engine's bins, so this is what catches a broken one.
+      - run: cargo build -p visuals-engine --bins
+
       # rusty_link builds Ableton Link with cmake, which the macOS image has.
       - run: cargo test -p visuals-app
