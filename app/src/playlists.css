@@ -14,14 +14,37 @@
   font-size: var(--text-body);
 }
 
-.playlists .playlists-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 0 8px; }
-.playlists .playlists-confirm { display: inline-flex; gap: 4px; }
-.playlists .playlists-danger .wdg-button-body { border-color: var(--red); color: var(--red); }
-.playlists .playlists-on .wdg-button-body { border-color: var(--green); color: var(--green); }
-.playlists .playlists-count { color: var(--caption); font-family: var(--mono); font-variation-settings: var(--mono-axes); font-size: var(--text-label); }
+.playlists .playlists-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+}
+.playlists .playlists-confirm {
+  display: inline-flex;
+  gap: 4px;
+}
+.playlists .playlists-danger .wdg-button-body {
+  border-color: var(--red);
+  color: var(--red);
+}
+.playlists .playlists-on .wdg-button-body {
+  border-color: var(--green);
+  color: var(--green);
+}
+.playlists .playlists-count {
+  color: var(--caption);
+  font-family: var(--mono);
+  font-variation-settings: var(--mono-axes);
+  font-size: var(--text-label);
+}
 
 /* Keyboard focus on any button in the panel, as the widgets ring their other controls. */
-.playlists .wdg-button-body:focus-visible { outline: 1px solid var(--fg); outline-offset: 1px; }
+.playlists .wdg-button-body:focus-visible {
+  outline: 1px solid var(--fg);
+  outline-offset: 1px;
+}
 
 /* Lists. */
 .playlists .playlists-names,
@@ -33,8 +56,17 @@
   overflow-y: auto;
   text-align: left;
 }
-.playlists .playlists-names { flex: 0 1 auto; max-height: 30%; min-height: 48px; padding-bottom: 6px; border-bottom: 1px solid var(--bd3); }
-.playlists .playlists-items { flex: 1; min-height: 0; }
+.playlists .playlists-names {
+  flex: 0 1 auto;
+  max-height: 30%;
+  min-height: 48px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--bd3);
+}
+.playlists .playlists-items {
+  flex: 1;
+  min-height: 0;
+}
 
 .playlists .playlists-row {
   position: relative;
@@ -47,9 +79,17 @@
   cursor: pointer;
   outline: none;
 }
-.playlists .playlists-row:hover { background: var(--sel); }
-.playlists .playlists-row:focus-visible { box-shadow: var(--ring) var(--fg); }
-.playlists .playlists-row i { color: var(--caption); font-style: normal; font-size: var(--text-control); }
+.playlists .playlists-row:hover {
+  background: var(--sel);
+}
+.playlists .playlists-row:focus-visible {
+  box-shadow: var(--ring) var(--fg);
+}
+.playlists .playlists-row i {
+  color: var(--caption);
+  font-style: normal;
+  font-size: var(--text-control);
+}
 
 .playlists .playlists-empty {
   padding: 6px 10px;
@@ -58,19 +98,51 @@
   line-height: 1.5;
   cursor: default;
 }
-.playlists .playlists-empty b { color: var(--ui); font-weight: var(--weight-medium); }
+.playlists .playlists-empty b {
+  color: var(--ui);
+  font-weight: var(--weight-medium);
+}
 
 /* A playlist's row: play/stop, its name, how many. */
-.playlists .playlists-names .playlists-row[data-selected] { background: var(--bd); color: var(--fg); }
-.playlists .playlists-names .playlists-row[data-active] .playlists-name { color: var(--green); }
-.playlists .playlists-play .wdg-button-body { width: 18px; padding: 0; font-size: var(--text-label); }
-.playlists .playlists-play .playlists-on .wdg-button-body { color: var(--green); }
-.playlists .playlists-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.playlists .playlists-rename { flex: 1; min-width: 0; margin: 0; padding: 1px 4px; }
+.playlists .playlists-names .playlists-row[data-selected] {
+  background: var(--bd);
+  color: var(--fg);
+}
+.playlists .playlists-names .playlists-row[data-active] .playlists-name {
+  color: var(--green);
+}
+.playlists .playlists-play .wdg-button-body {
+  width: 18px;
+  padding: 0;
+  font-size: var(--text-label);
+}
+.playlists .playlists-play .playlists-on .wdg-button-body {
+  color: var(--green);
+}
+.playlists .playlists-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.playlists .playlists-rename {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 1px 4px;
+}
 
 /* An item's row: position, name and group, then its tools. */
-.playlists .playlists-items .playlists-row[data-current] { background: var(--bd); color: var(--fg); box-shadow: var(--edge-left) var(--green); }
-.playlists .playlists-items .playlists-row[data-current]:focus-visible { box-shadow: var(--edge-left) var(--green), var(--ring) var(--fg); }
+.playlists .playlists-items .playlists-row[data-current] {
+  background: var(--bd);
+  color: var(--fg);
+  box-shadow: var(--edge-left) var(--green);
+}
+.playlists .playlists-items .playlists-row[data-current]:focus-visible {
+  box-shadow:
+    var(--edge-left) var(--green),
+    var(--ring) var(--fg);
+}
 .playlists .playlists-items .playlists-row > b {
   flex: none;
   width: 22px;
@@ -81,11 +153,25 @@
   font-weight: var(--weight-normal);
   font-size: var(--text-control);
 }
-.playlists .playlists-item { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.playlists .playlists-item {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
 .playlists .playlists-item span,
-.playlists .playlists-item i { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.playlists .playlists-row[data-missing] .playlists-item span { color: var(--detail); text-decoration: line-through; }
-.playlists .playlists-row[data-missing] .playlists-item i { color: var(--caution); }
+.playlists .playlists-item i {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.playlists .playlists-row[data-missing] .playlists-item span {
+  color: var(--detail);
+  text-decoration: line-through;
+}
+.playlists .playlists-row[data-missing] .playlists-item i {
+  color: var(--caution);
+}
 
 /* The tools show on the row the pointer or the focus is on — never only on hover —
    laid over the row's right end, so the names keep the whole width otherwise. */
@@ -101,10 +187,18 @@
   box-shadow: -8px 0 8px -4px var(--sel);
   visibility: hidden;
 }
-.playlists .playlists-items .playlists-row[data-current] .playlists-tools { background: var(--bd); box-shadow: -8px 0 8px -4px var(--bd); }
+.playlists .playlists-items .playlists-row[data-current] .playlists-tools {
+  background: var(--bd);
+  box-shadow: -8px 0 8px -4px var(--bd);
+}
 .playlists .playlists-row:hover .playlists-tools,
-.playlists .playlists-row:focus-within .playlists-tools { visibility: visible; }
-.playlists .playlists-tools .wdg-button-body { width: 18px; padding: 0; }
+.playlists .playlists-row:focus-within .playlists-tools {
+  visibility: visible;
+}
+.playlists .playlists-tools .wdg-button-body {
+  width: 18px;
+  padding: 0;
+}
 
 .playlists .playlists-auto {
   display: flex;
@@ -113,4 +207,6 @@
   padding: 6px 8px 8px;
   border-top: 1px solid var(--bd3);
 }
-.playlists .playlists-auto .wdg-toggle { flex: 1; }
+.playlists .playlists-auto .wdg-toggle {
+  flex: 1;
+}

@@ -27,11 +27,7 @@ export const MAX_GAIN = 8;
  * into at `DIM`. Alone on black a thin wave or a small shape is mostly black;
  * over the frame it reads where it lands, and the gain makes a faint one seen.
  */
-export function layerOver(
-  layer: Uint8ClampedArray,
-  under: Uint8ClampedArray,
-  out: Uint8ClampedArray<ArrayBuffer> = new Uint8ClampedArray(layer.length),
-): Uint8ClampedArray<ArrayBuffer> {
+export function layerOver(layer: Uint8ClampedArray, under: Uint8ClampedArray, out: Uint8ClampedArray<ArrayBuffer> = new Uint8ClampedArray(layer.length)): Uint8ClampedArray<ArrayBuffer> {
   let peak = 0;
   for (let i = 0; i < layer.length; i += 4) peak = Math.max(peak, layer[i], layer[i + 1], layer[i + 2]);
   const gain = peak > 0 ? Math.min(MAX_GAIN, 255 / peak) : 1;

@@ -51,35 +51,39 @@ export const CHAIN: Stage[] = [
   },
   { id: 'warp', label: 'warp', term: 'warp shader: moves the last frame', kind: 'shader', code: [{ field: 'warp', label: 'warp shader', term: 'warp', lang: 'hlsl' }], picture: 0 },
   { id: 'feedback', label: 'feedback', term: 'the frame kept for the next one: decay, wrap, blur', kind: 'feedback', code: [], owner: BASE, picture: 1 },
-  { id: 'comp', label: 'composite', term: 'comp shader: the frame as you see it', kind: 'shader', code: [{ field: 'comp', label: 'composite shader', term: 'comp', lang: 'hlsl' }], owner: BASE, picture: 3 },
+  {
+    id: 'comp',
+    label: 'composite',
+    term: 'comp shader: the frame as you see it',
+    kind: 'shader',
+    code: [{ field: 'comp', label: 'composite shader', term: 'comp', lang: 'hlsl' }],
+    owner: BASE,
+    picture: 3,
+  },
   { id: 'out', label: 'screen', term: 'output', kind: 'out', code: [] },
 ];
 
 /** Everything that can draw into the feedback. Only the ones drawing in a preset show. */
 export const LAYERS: Stage[] = [
   { id: 'wave', label: 'waveform', term: 'the built-in waveform', kind: 'layer', code: [], owner: BASE, picture: 12 },
-  ...[0, 1, 2, 3].map(
-    (i): Stage => ({
-      id: `wave${i}`,
-      label: `custom wave ${i + 1}`,
-      term: `wavecode_${i}`,
-      kind: 'layer',
-      code: [eel(`waves.${i}.init`, 'once, at the start', 'init'), eel(`waves.${i}.frame`, 'every frame', 'per_frame'), eel(`waves.${i}.point`, 'every point', 'per_point')],
-      owner: { list: 'waves', index: i },
-      picture: 4 + i,
-    }),
-  ),
-  ...[0, 1, 2, 3].map(
-    (i): Stage => ({
-      id: `shape${i}`,
-      label: `custom shape ${i + 1}`,
-      term: `shapecode_${i}`,
-      kind: 'layer',
-      code: [eel(`shapes.${i}.init`, 'once, at the start', 'init'), eel(`shapes.${i}.frame`, 'every frame', 'per_frame')],
-      owner: { list: 'shapes', index: i },
-      picture: 8 + i,
-    }),
-  ),
+  ...[0, 1, 2, 3].map((i): Stage => ({
+    id: `wave${i}`,
+    label: `custom wave ${i + 1}`,
+    term: `wavecode_${i}`,
+    kind: 'layer',
+    code: [eel(`waves.${i}.init`, 'once, at the start', 'init'), eel(`waves.${i}.frame`, 'every frame', 'per_frame'), eel(`waves.${i}.point`, 'every point', 'per_point')],
+    owner: { list: 'waves', index: i },
+    picture: 4 + i,
+  })),
+  ...[0, 1, 2, 3].map((i): Stage => ({
+    id: `shape${i}`,
+    label: `custom shape ${i + 1}`,
+    term: `shapecode_${i}`,
+    kind: 'layer',
+    code: [eel(`shapes.${i}.init`, 'once, at the start', 'init'), eel(`shapes.${i}.frame`, 'every frame', 'per_frame')],
+    owner: { list: 'shapes', index: i },
+    picture: 8 + i,
+  })),
   { id: 'vectors', label: 'motion vectors', term: 'motion vectors', kind: 'layer', code: [], owner: BASE, picture: 13 },
   { id: 'border', label: 'borders', term: 'outer and inner borders', kind: 'layer', code: [], owner: BASE, picture: 14 },
 ];
@@ -147,9 +151,15 @@ export function settingsOf(p: Preset, s: Stage): [Spec, number][] {
  */
 export function bakedIn(p: Preset, s: Stage): { keys: Set<string>; why: string } | undefined {
   if (s.id === 'feedback' && p.warp.trim() !== '')
-    return { keys: new Set(['fDecay']), why: "The warp shader is written, so decay no longer applies: it only reaches the picture through MilkDrop's default warp. Scale ret in the warp shader instead." };
+    return {
+      keys: new Set(['fDecay']),
+      why: "The warp shader is written, so decay no longer applies: it only reaches the picture through MilkDrop's default warp. Scale ret in the warp shader instead.",
+    };
   if (s.id === 'comp' && p.comp.trim() !== '')
-    return { keys: new Set(specsOf('comp').map((spec) => spec.key)), why: "The composite shader is written, so these no longer apply: they only reach the picture through MilkDrop's default composite." };
+    return {
+      keys: new Set(specsOf('comp').map((spec) => spec.key)),
+      why: "The composite shader is written, so these no longer apply: they only reach the picture through MilkDrop's default composite.",
+    };
   return undefined;
 }
 
@@ -203,7 +213,10 @@ export function codeSets(code: string, name: string): 'on' | 'off' | undefined {
 const DRIVERS: Record<string, [name: string, key: string, def: number][]> = {
   wave: [['wave_a', 'fWaveAlpha', 0.8]],
   vectors: [['mv_a', 'mv_a', 1]],
-  border: [['ob_a', 'ob_a', 0], ['ib_a', 'ib_a', 0]],
+  border: [
+    ['ob_a', 'ob_a', 0],
+    ['ib_a', 'ib_a', 0],
+  ],
 };
 
 /** The variable this preset's per-frame code turns a built-in layer on with, if any. */
@@ -281,8 +294,28 @@ const STARTER_WAVE = {
 
 const STARTER_SHAPE = {
   values: {
-    enabled: 1, sides: 5, additive: 1, thickOutline: 0, textured: 0, num_inst: 1, x: 0.5, y: 0.5, rad: 0.15, ang: 0,
-    r: 1, g: 0.5, b: 0.1, a: 0.6, r2: 0.2, g2: 0.1, b2: 1, a2: 0, border_r: 1, border_g: 1, border_b: 1, border_a: 0.5,
+    enabled: 1,
+    sides: 5,
+    additive: 1,
+    thickOutline: 0,
+    textured: 0,
+    num_inst: 1,
+    x: 0.5,
+    y: 0.5,
+    rad: 0.15,
+    ang: 0,
+    r: 1,
+    g: 0.5,
+    b: 0.1,
+    a: 0.6,
+    r2: 0.2,
+    g2: 0.1,
+    b2: 1,
+    a2: 0,
+    border_r: 1,
+    border_g: 1,
+    border_b: 1,
+    border_a: 0.5,
   },
   init: '',
   frame: 'ang = time*0.4;\nrad = 0.12 + 0.08*bass;',
@@ -347,10 +380,7 @@ export function addLayer(p: Preset, kind: LayerKind): { preset: Preset; id: stri
     },
     // The outer border, or the inner one when per-frame code zeroes `ob_a`
     // (it can't zero both: `heldOffBy` stops the add then).
-    border:
-      codeSets(p.frame, 'ob_a') === 'off'
-        ? { ib_size: 0.01, ib_r: 1, ib_g: 1, ib_b: 1, ib_a: 0.5 }
-        : { ob_size: 0.01, ob_r: 1, ob_g: 1, ob_b: 1, ob_a: 0.5 },
+    border: codeSets(p.frame, 'ob_a') === 'off' ? { ib_size: 0.01, ib_r: 1, ib_g: 1, ib_b: 1, ib_a: 0.5 } : { ob_size: 0.01, ob_r: 1, ob_g: 1, ob_b: 1, ob_a: 0.5 },
   };
   return { preset: setValues(p, BASE, on[id]), id };
 }
@@ -375,7 +405,12 @@ export function removeLayer(p: Preset, id: string): Preset | null {
 
 /** The first lines of a stage's code, for its face. */
 export function codeLines(p: Preset, s: Stage, n: number): string[] {
-  const lines = s.code.flatMap((c) => getField(p, c.field).split('\n').map((l) => l.trim()).filter(Boolean));
+  const lines = s.code.flatMap((c) =>
+    getField(p, c.field)
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean),
+  );
   return lines.length > n ? [...lines.slice(0, n - 1), `… ${lines.length - n + 1} more`] : lines;
 }
 

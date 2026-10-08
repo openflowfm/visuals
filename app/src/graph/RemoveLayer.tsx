@@ -18,13 +18,7 @@ export function RemoveLayer({ preset, stage, onChange, compact = false }: Props)
       tone={compact ? 'quiet' : 'danger'}
       label={compact ? `remove ${stage.label}` : undefined}
       disabled={!!driven}
-      title={
-        driven
-          ? `motion's per-frame code sets ${driven}: change it there to take this off`
-          : compact
-            ? `take ${stage.label} off (its code is kept)`
-            : 'take this layer off; its code is kept'
-      }
+      title={driven ? `motion's per-frame code sets ${driven}: change it there to take this off` : compact ? `take ${stage.label} off (its code is kept)` : 'take this layer off; its code is kept'}
       onPress={() => {
         const next = removeLayer(preset, stage.id);
         if (next) onChange(next);

@@ -16,10 +16,7 @@ fn music(frame: usize, left: &mut [f32], right: &mut [f32]) {
     for i in 0..left.len() {
         let t = (frame * 735 + i) as f32 / 44_100.0;
         let kick = (2.0 * std::f32::consts::PI * 55.0 * t).sin() * (-since * 6.0).exp();
-        let chord = 0.25
-            * ((2.0 * std::f32::consts::PI * 220.0 * t).sin()
-                + (2.0 * std::f32::consts::PI * 277.0 * t).sin()
-                + (2.0 * std::f32::consts::PI * 330.0 * t).sin());
+        let chord = 0.25 * ((2.0 * std::f32::consts::PI * 220.0 * t).sin() + (2.0 * std::f32::consts::PI * 277.0 * t).sin() + (2.0 * std::f32::consts::PI * 330.0 * t).sin());
         left[i] = (0.6 * kick + 0.3 * chord).clamp(-1.0, 1.0);
         right[i] = left[i];
     }

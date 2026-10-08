@@ -27,15 +27,7 @@ export const decimals = (v: number) => (Math.abs(v) >= 10 ? v.toFixed(1) : Strin
 
 /** A setting's value as a reading: the item's name, on or off, a whole number, or a few decimals. */
 export const show = (s: Spec, v: number) =>
-  s.kind === 'enum'
-    ? (s.items?.[Math.round(v)] ?? String(v))
-    : s.kind === 'bool'
-      ? v >= 0.5
-        ? 'on'
-        : 'off'
-      : s.kind === 'int'
-        ? String(Math.round(v))
-        : decimals(v);
+  s.kind === 'enum' ? (s.items?.[Math.round(v)] ?? String(v)) : s.kind === 'bool' ? (v >= 0.5 ? 'on' : 'off') : s.kind === 'int' ? String(Math.round(v)) : decimals(v);
 
 /**
  * The speed and sensitivity sliders run on a log taper: the position is the

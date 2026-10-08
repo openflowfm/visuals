@@ -1,7 +1,4 @@
-use super::{
-    base_values, equation_name, gather, q_names, reg_names, scatter, slots, Frame, Globals, LoadError, Owner, Size, Slots, BASE_DEFAULTS, GLOBALS,
-    SHAPE_DEFAULTS, WAVE_DEFAULTS,
-};
+use super::{base_values, equation_name, gather, q_names, reg_names, scatter, slots, Frame, Globals, LoadError, Owner, Size, Slots, BASE_DEFAULTS, GLOBALS, SHAPE_DEFAULTS, WAVE_DEFAULTS};
 use crate::eel::{self, Memory, Program, Symbols};
 use crate::preset::Preset;
 use std::collections::{BTreeMap, HashSet};
@@ -110,9 +107,7 @@ impl Runner {
         // Waves, then shapes, each from the first frame's qs. An init that
         // writes regs hands them on to the next.
         let q_after = gather(&first, &q_slots);
-        let mut scope = |kind: &Kind, i: usize, values: &BTreeMap<String, f64>, code: [&str; 3]| {
-            Scope::build(kind, values, code, (frame, size, &q_after, &mut regs), seed ^ (kind.seed + i as u64))
-        };
+        let mut scope = |kind: &Kind, i: usize, values: &BTreeMap<String, f64>, code: [&str; 3]| Scope::build(kind, values, code, (frame, size, &q_after, &mut regs), seed ^ (kind.seed + i as u64));
         let waves = preset.waves.iter().enumerate().map(|(i, w)| scope(&WAVE, i, &w.values, [&w.init, &w.frame, &w.point])).collect::<Result<_, _>>()?;
         let shapes = preset.shapes.iter().enumerate().map(|(i, s)| scope(&SHAPE, i, &s.values, [&s.init, &s.frame, ""])).collect::<Result<_, _>>()?;
 
@@ -280,33 +275,11 @@ impl Scope {
             }
         }
         let t_init = gather(&vars, &t_slots);
-        let non_user: HashSet<usize> = q_slots
-            .iter()
-            .chain(&reg_slots)
-            .chain(&t_slots)
-            .chain(&global_slots)
-            .copied()
-            .chain(base_value_slots.iter().map(|(s, _)| *s))
-            .chain(slots(&symbols, point_names))
-            .collect();
+        let non_user: HashSet<usize> =
+            q_slots.iter().chain(&reg_slots).chain(&t_slots).chain(&global_slots).copied().chain(base_value_slots.iter().map(|(s, _)| *s)).chain(slots(&symbols, point_names)).collect();
         let user_slots: Slots = (0..symbols.len()).filter(|s| !non_user.contains(s)).collect();
         let user_values = gather(&vars, &user_slots);
-        Ok(Self {
-            symbols,
-            values,
-            frame: frame_eqs,
-            point,
-            base: vars,
-            base_value_slots,
-            t_slots,
-            t_init,
-            q_slots,
-            reg_slots,
-            global_slots,
-            user_slots,
-            user_values,
-            memory,
-        })
+        Ok(Self { symbols, values, frame: frame_eqs, point, base: vars, base_value_slots, t_slots, t_init, q_slots, reg_slots, global_slots, user_slots, user_values, memory })
     }
 
     /// The variables a frame starts from, after the frame equations.

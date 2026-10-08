@@ -19,10 +19,7 @@ impl Target {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                | wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::COPY_SRC
-                | wgpu::TextureUsages::COPY_DST,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
         let view = texture.create_view(&Default::default());
@@ -54,10 +51,7 @@ pub(super) fn read_targets(device: &wgpu::Device, queue: &wgpu::Queue, targets: 
     for (i, t) in targets.iter().enumerate() {
         encoder.copy_texture_to_buffer(
             t.texture.as_image_copy(),
-            wgpu::TexelCopyBufferInfo {
-                buffer: &staging,
-                layout: wgpu::TexelCopyBufferLayout { offset: each * i as u64, bytes_per_row: Some(row), rows_per_image: Some(h) },
-            },
+            wgpu::TexelCopyBufferInfo { buffer: &staging, layout: wgpu::TexelCopyBufferLayout { offset: each * i as u64, bytes_per_row: Some(row), rows_per_image: Some(h) } },
             wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
         );
     }
@@ -113,25 +107,14 @@ impl Samplers {
         let sampler = |linear: bool, wrap: bool| {
             let filter = if linear { wgpu::FilterMode::Linear } else { wgpu::FilterMode::Nearest };
             let address = if wrap { wgpu::AddressMode::Repeat } else { wgpu::AddressMode::ClampToEdge };
-            device.create_sampler(&wgpu::SamplerDescriptor {
-                address_mode_u: address,
-                address_mode_v: address,
-                address_mode_w: address,
-                mag_filter: filter,
-                min_filter: filter,
-                ..Default::default()
-            })
+            device.create_sampler(&wgpu::SamplerDescriptor { address_mode_u: address, address_mode_v: address, address_mode_w: address, mag_filter: filter, min_filter: filter, ..Default::default() })
         };
         Self { linear_wrap: sampler(true, true), linear_clamp: sampler(true, false), point_wrap: sampler(false, true), point_clamp: sampler(false, false) }
     }
 
     /// The filtered sampler, wrapping or clamped.
     pub(super) fn linear(&self, wrap: bool) -> &wgpu::Sampler {
-        if wrap {
-            &self.linear_wrap
-        } else {
-            &self.linear_clamp
-        }
+        if wrap { &self.linear_wrap } else { &self.linear_clamp }
     }
 }
 
@@ -192,10 +175,7 @@ pub(super) fn begin<'a>(encoder: &'a mut wgpu::CommandEncoder, view: &'a wgpu::T
             view,
             depth_slice: None,
             resolve_target: None,
-            ops: wgpu::Operations {
-                load: if clear { wgpu::LoadOp::Clear(wgpu::Color::BLACK) } else { wgpu::LoadOp::Load },
-                store: wgpu::StoreOp::Store,
-            },
+            ops: wgpu::Operations { load: if clear { wgpu::LoadOp::Clear(wgpu::Color::BLACK) } else { wgpu::LoadOp::Load }, store: wgpu::StoreOp::Store },
         })],
         ..Default::default()
     })

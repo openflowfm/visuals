@@ -77,10 +77,7 @@ export function AudioInput({ onError }: { onError(error: unknown): void }) {
   if (inputs && inputs.length === 0) {
     return (
       <span className="audio-input">
-        <span
-          className="vf-warning"
-          title="The presets react to sound. Connect a microphone or an audio interface (or allow microphone access in System Settings › Privacy), then restart."
-        >
+        <span className="vf-warning" title="The presets react to sound. Connect a microphone or an audio interface (or allow microphone access in System Settings › Privacy), then restart.">
           no audio input: connect one and restart
         </span>
       </span>

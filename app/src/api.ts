@@ -77,8 +77,7 @@ export const apply = (preset: Preset) => invoke<Report>('apply', { preset });
 export const placeBench = (r: { x: number; y: number; width: number; height: number }) => invoke<void>('place_bench', r);
 export const inputs = () => invoke<Input[]>('inputs');
 /** `size` (the input's channel count) tells apart inputs that share a name. */
-export const listenTo = (name: string | null, left = 1, right = 2, size: number | null = null) =>
-  invoke<string>('listen_to', { name, size, left, right });
+export const listenTo = (name: string | null, left = 1, right = 2, size: number | null = null) => invoke<string>('listen_to', { name, size, left, right });
 
 /** What the bench hears: the input and the two channels, counted from 1. */
 export interface Heard {

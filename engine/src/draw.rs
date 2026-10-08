@@ -202,10 +202,8 @@ pub fn motion_vectors(r: &Runner, uvs: &[[f32; 2]], size: &Size, list: &mut Draw
     list.push(Topology::Lines, Blend::Alpha, lines);
 }
 
-const SHAPE_RESET: &[&str] = &[
-    "x", "y", "rad", "ang", "r", "g", "b", "a", "r2", "g2", "b2", "a2", "border_r", "border_g", "border_b", "border_a",
-    "thickoutline", "textured", "tex_zoom", "tex_ang", "additive",
-];
+const SHAPE_RESET: &[&str] =
+    &["x", "y", "rad", "ang", "r", "g", "b", "a", "r2", "g2", "b2", "a2", "border_r", "border_g", "border_b", "border_a", "thickoutline", "textured", "tex_zoom", "tex_ang", "additive"];
 
 pub fn shapes(r: &mut Runner, globals: &Globals, size: &Size, list: &mut DrawList) {
     let q = r.q_after_frame();
@@ -329,11 +327,7 @@ pub fn custom_waves(r: &mut Runner, audio: &Audio, globals: &Globals, size: &Siz
         } else {
             // `smoothWaveAndColor`: midpoints take the colour of the point before.
             let xy: Vec<[f64; 2]> = points.iter().map(|v| [v.pos[0] as f64, v.pos[1] as f64]).collect();
-            let smoothed: Vec<Vertex> = smooth(&xy)
-                .into_iter()
-                .enumerate()
-                .map(|(k, p)| Vertex { pos: [p[0] as f32, p[1] as f32], ..points[(k / 2).min(n - 1)] })
-                .collect();
+            let smoothed: Vec<Vertex> = smooth(&xy).into_iter().enumerate().map(|(k, p)| Vertex { pos: [p[0] as f32, p[1] as f32], ..points[(k / 2).min(n - 1)] }).collect();
             strokes(list, &smoothed, None, thick, blend, size);
         }
     }
@@ -372,11 +366,7 @@ pub fn basic_wave(r: &Runner, audio: &Audio, size: &Size, list: &mut DrawList) {
         param = param.abs() * 2.0 - 1.0;
     }
     let by_volume = |a: f64| {
-        if g("modwavealphabyvolume") > 0.0 {
-            a * (vol - g("modwavealphastart")) / (g("modwavealphaend") - g("modwavealphastart"))
-        } else {
-            a
-        }
+        if g("modwavealphabyvolume") > 0.0 { a * (vol - g("modwavealphastart")) / (g("modwavealphaend") - g("modwavealphastart")) } else { a }
     };
     let size_alpha = |small: f64, mid: f64, large: f64| {
         if size.texsize_x < 1024.0 {
@@ -698,11 +688,7 @@ mod tests {
     #[test]
     fn a_wave_turning_on_or_off_leaves_the_others_sliding() {
         let a = list(&[(Source::Wave(1), vec![at(0.0, 1.0); 2]), (Source::Shape(2), vec![at(0.0, 1.0); 3])]);
-        let b = list(&[
-            (Source::Wave(0), vec![at(0.9, 1.0); 4]),
-            (Source::Wave(1), vec![at(0.4, 1.0); 2]),
-            (Source::Shape(2), vec![at(0.4, 1.0); 3]),
-        ]);
+        let b = list(&[(Source::Wave(0), vec![at(0.9, 1.0); 4]), (Source::Wave(1), vec![at(0.4, 1.0); 2]), (Source::Shape(2), vec![at(0.4, 1.0); 3])]);
         let mut out = DrawList::default();
         for (from, to, f, x) in [(&a, &b, 0.25, 0.1), (&b, &a, 0.75, 0.1)] {
             between(from, to, f, &mut out);

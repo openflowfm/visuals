@@ -51,27 +51,65 @@ pub enum Sync {
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum FxAction {
-    Speed { speed: f64 },
-    Freeze { on: Option<bool> },
-    Transition { seconds: f64 },
-    Strobe { on: Option<bool> },
-    StrobeRate { rate: f64 },
-    StrobeIntensity { value: f64 },
-    StrobeStyle { style: StrobeStyle },
-    Sync { source: Sync },
-    Blackout { on: Option<bool> },
-    BlackoutFade { seconds: f64 },
-    Punch { on: Option<bool> },
-    PunchOnBeat { on: Option<bool> },
-    Brightness { value: f64 },
-    Hue { value: f64 },
-    Invert { on: Option<bool> },
+    Speed {
+        speed: f64,
+    },
+    Freeze {
+        on: Option<bool>,
+    },
+    Transition {
+        seconds: f64,
+    },
+    Strobe {
+        on: Option<bool>,
+    },
+    StrobeRate {
+        rate: f64,
+    },
+    StrobeIntensity {
+        value: f64,
+    },
+    StrobeStyle {
+        style: StrobeStyle,
+    },
+    Sync {
+        source: Sync,
+    },
+    Blackout {
+        on: Option<bool>,
+    },
+    BlackoutFade {
+        seconds: f64,
+    },
+    Punch {
+        on: Option<bool>,
+    },
+    PunchOnBeat {
+        on: Option<bool>,
+    },
+    Brightness {
+        value: f64,
+    },
+    Hue {
+        value: f64,
+    },
+    Invert {
+        on: Option<bool>,
+    },
     /// `null` steps off → x → y → quad → off.
-    Mirror { mode: Option<Mirror> },
-    Trails { value: f64 },
-    Sensitivity { value: f64 },
+    Mirror {
+        mode: Option<Mirror>,
+    },
+    Trails {
+        value: f64,
+    },
+    Sensitivity {
+        value: f64,
+    },
     Tap,
-    Bpm { bpm: f64 },
+    Bpm {
+        bpm: f64,
+    },
     FxReset,
 }
 
@@ -218,16 +256,7 @@ impl Fx {
             settings: Settings::default(),
             bpm: 120.0,
             linked: false,
-            timing: Timing {
-                thawed: None,
-                fading: None,
-                black_from: (0.0, now),
-                kicked: None,
-                anchor: now,
-                taps: Vec::new(),
-                heard: None,
-                loud: false,
-            },
+            timing: Timing { thawed: None, fading: None, black_from: (0.0, now), kicked: None, anchor: now, taps: Vec::new(), heard: None, loud: false },
         }
     }
 
@@ -713,11 +742,7 @@ mod tests {
     fn page_fields() -> Vec<String> {
         let ts = include_str!("../../src/fx.ts");
         let body = ts.split("export interface Fx {").nth(1).and_then(|s| s.split("\n}").next()).expect("interface Fx in fx.ts");
-        body.lines()
-            .map(str::trim)
-            .filter(|l| !l.starts_with("/*") && !l.starts_with('*') && !l.starts_with("//"))
-            .filter_map(|l| l.split_once(':').map(|(name, _)| name.trim().to_string()))
-            .collect()
+        body.lines().map(str::trim).filter(|l| !l.starts_with("/*") && !l.starts_with('*') && !l.starts_with("//")).filter_map(|l| l.split_once(':').map(|(name, _)| name.trim().to_string())).collect()
     }
 
     #[test]

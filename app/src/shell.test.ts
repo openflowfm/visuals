@@ -86,6 +86,15 @@ describe('frameReadout', () => {
     expect(frameReadout([...run, fast], false)).toBeNull();
   });
   it('does not call a bench that draws nothing slow', () => {
-    expect(frameReadout([{ fps: 0, cpu_ms: 0 }, { fps: 0, cpu_ms: 0 }, { fps: 0, cpu_ms: 0 }], false)).toBeNull();
+    expect(
+      frameReadout(
+        [
+          { fps: 0, cpu_ms: 0 },
+          { fps: 0, cpu_ms: 0 },
+          { fps: 0, cpu_ms: 0 },
+        ],
+        false,
+      ),
+    ).toBeNull();
   });
 });

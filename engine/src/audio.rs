@@ -140,15 +140,7 @@ impl Levels {
         let bucket = sample_rate / FFT_SIZE as f32;
         let edge = |hz: f32| ((hz / bucket).round() as i64 - 1).clamp(0, NUM_SAMPS as i64 - 1) as usize;
         let (bass_low, bass_high, mid_high, treb_high) = (edge(20.0), edge(320.0), edge(2800.0), edge(11025.0));
-        Self {
-            starts: [bass_low, bass_high, mid_high],
-            stops: [bass_high, mid_high, treb_high],
-            val: [0.0; 3],
-            imm: [0.0; 3],
-            att: [1.0; 3],
-            avg: [1.0; 3],
-            long_avg: [1.0; 3],
-        }
+        Self { starts: [bass_low, bass_high, mid_high], stops: [bass_high, mid_high, treb_high], val: [0.0; 3], imm: [0.0; 3], att: [1.0; 3], avg: [1.0; 3], long_avg: [1.0; 3] }
     }
 
     fn update(&mut self, freq: &[f32], fps: f64, frame: u64) {

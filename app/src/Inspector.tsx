@@ -53,9 +53,7 @@ export function Inspector({ preset, selected, problems, onChange, onSet }: Props
       {unwritten && (
         <div className="inspector-default">
           <p className="quiet">This preset uses MilkDrop's default {stage.label} shader.</p>
-          <Button onPress={() => writeDefaultShader(preset, stage, onChange)}>
-            write my own
-          </Button>
+          <Button onPress={() => writeDefaultShader(preset, stage, onChange)}>write my own</Button>
         </div>
       )}
       {!unwritten &&
@@ -66,12 +64,7 @@ export function Inspector({ preset, selected, problems, onChange, onSet }: Props
               <span>
                 {c.label} <i>{c.term}</i>
               </span>
-              <textarea
-                spellCheck={false}
-                value={text}
-                rows={Math.min(30, Math.max(4, text.split('\n').length + 1))}
-                onChange={(e) => onChange(setField(preset, c.field, e.target.value))}
-              />
+              <textarea spellCheck={false} value={text} rows={Math.min(30, Math.max(4, text.split('\n').length + 1))} onChange={(e) => onChange(setField(preset, c.field, e.target.value))} />
             </label>
           );
         })}
