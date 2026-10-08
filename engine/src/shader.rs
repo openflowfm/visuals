@@ -85,12 +85,24 @@ pub const DEFAULT_COMP: &str = "shader_body {
 }";
 
 /// Which preset value each `_d` uniform component of the default shaders holds,
-/// by the name equations use (`Renderer::uniforms` fills them the same way).
+/// by the name equations use ([`default_uniforms`] fills them from it).
 const DEFAULT_VALUES: [(&str, &str); 10] = [
     ("_d0.x", "decay"), ("_d0.y", "gammaadj"), ("_d0.z", "echo_zoom"), ("_d0.w", "echo_alpha"),
     ("_d1.x", "echo_orient"), ("_d1.y", "fshader"), ("_d1.z", "brighten"), ("_d1.w", "darken"),
     ("_d2.x", "solarize"), ("_d2.y", "invert"),
 ];
+
+/// The `_d0`–`_d2` uniforms, filled per [`DEFAULT_VALUES`] from the preset
+/// values `get` reads; components no value names stay 0.
+pub(crate) fn default_uniforms(get: impl Fn(&str) -> f64) -> [(&'static str, Vec<f32>); 3] {
+    let mut d = [("_d0", vec![0.0; 4]), ("_d1", vec![0.0; 4]), ("_d2", vec![0.0; 4])];
+    for (uniform, name) in DEFAULT_VALUES {
+        let (vector, component) = uniform.split_once('.').unwrap();
+        let i = d.iter().position(|(n, _)| *n == vector).unwrap();
+        d[i].1["xyzw".find(component).unwrap()] = get(name) as f32;
+    }
+    d
+}
 
 /// A number as an HLSL float literal: `2.0`, `0.98`, `(-0.5)`.
 fn literal(v: f64) -> String {
