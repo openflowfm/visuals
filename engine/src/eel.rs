@@ -594,17 +594,54 @@ fn truthy(x: f64) -> bool {
     x.abs() > EPSILON
 }
 
+/// A compound assignment: the shared operators through [`binary`]. `/=` and `%=`
+/// are Butterchurn's raw `/` and `%`, not the guarded [`Op::Div`] and [`Op::Mod`].
 fn apply(op: Assign, old: f64, value: f64) -> f64 {
     match op {
         Assign::Set => value,
-        Assign::Add => old + value,
-        Assign::Sub => old - value,
-        Assign::Mul => old * value,
+        Assign::Add => binary(Op::Add, old, value),
+        Assign::Sub => binary(Op::Sub, old, value),
+        Assign::Mul => binary(Op::Mul, old, value),
         Assign::Div => old / value,
         Assign::Mod => old % value,
-        Assign::Pow => pow(old, value),
-        Assign::BitAnd => ((old.floor() as i64) & (value.floor() as i64)) as f64,
-        Assign::BitOr => ((old.floor() as i64) | (value.floor() as i64)) as f64,
+        Assign::Pow => binary(Op::Pow, old, value),
+        Assign::BitAnd => binary(Op::BitAnd, old, value),
+        Assign::BitOr => binary(Op::BitOr, old, value),
+    }
+}
+
+/// A binary operator on two evaluated operands, as Butterchurn computes it.
+/// `&&` and `||` short-circuit, so [`eval`] handles them before this.
+fn binary(op: Op, x: f64, y: f64) -> f64 {
+    match op {
+        Op::Add => x + y,
+        Op::Sub => x - y,
+        Op::Mul => x * y,
+        Op::Div => {
+            if y == 0.0 {
+                0.0
+            } else {
+                x / y
+            }
+        }
+        Op::Mod => {
+            if y == 0.0 {
+                0.0
+            } else {
+                let (fx, fy) = (x.floor(), y.floor());
+                if fy == 0.0 { f64::NAN } else { fx % fy }
+            }
+        }
+        Op::Pow => pow(x, y),
+        Op::Eq => ((x - y).abs() < EPSILON) as u8 as f64,
+        Op::Ne => ((x - y).abs() >= EPSILON) as u8 as f64,
+        Op::Lt => (x < y) as u8 as f64,
+        Op::Gt => (x > y) as u8 as f64,
+        Op::Le => (x <= y) as u8 as f64,
+        Op::Ge => (x >= y) as u8 as f64,
+        Op::BitAnd => ((x.floor() as i64) & (y.floor() as i64)) as f64,
+        Op::BitOr => ((x.floor() as i64) | (y.floor() as i64)) as f64,
+        Op::And | Op::Or => unreachable!("`&&` and `||` short-circuit in eval"),
     }
 }
 
@@ -657,36 +694,7 @@ pub fn eval(expr: &Expr, vars: &mut [f64], memory: &mut Memory) -> f64 {
             }
             let x = eval(a, vars, memory);
             let y = eval(b, vars, memory);
-            match op {
-                Op::Add => x + y,
-                Op::Sub => x - y,
-                Op::Mul => x * y,
-                Op::Div => {
-                    if y == 0.0 {
-                        0.0
-                    } else {
-                        x / y
-                    }
-                }
-                Op::Mod => {
-                    if y == 0.0 {
-                        0.0
-                    } else {
-                        let (fx, fy) = (x.floor(), y.floor());
-                        if fy == 0.0 { f64::NAN } else { fx % fy }
-                    }
-                }
-                Op::Pow => pow(x, y),
-                Op::Eq => ((x - y).abs() < EPSILON) as u8 as f64,
-                Op::Ne => ((x - y).abs() >= EPSILON) as u8 as f64,
-                Op::Lt => (x < y) as u8 as f64,
-                Op::Gt => (x > y) as u8 as f64,
-                Op::Le => (x <= y) as u8 as f64,
-                Op::Ge => (x >= y) as u8 as f64,
-                Op::BitAnd => ((x.floor() as i64) & (y.floor() as i64)) as f64,
-                Op::BitOr => ((x.floor() as i64) | (y.floor() as i64)) as f64,
-                Op::And | Op::Or => unreachable!(),
-            }
+            binary(*op, x, y)
         }
         Expr::If(c, a, b) => {
             if truthy(eval(c, vars, memory)) {
@@ -765,7 +773,7 @@ fn call(f: Func, args: &[Expr], vars: &mut [f64], memory: &mut Memory) -> f64 {
         }
         Func::Pow => {
             let x = arg(0, vars, memory);
-            pow(x, arg(1, vars, memory))
+            binary(Op::Pow, x, arg(1, vars, memory))
         }
         Func::Exp => a(vars, memory).exp(),
         Func::Log => a(vars, memory).ln(),
@@ -821,15 +829,15 @@ fn call(f: Func, args: &[Expr], vars: &mut [f64], memory: &mut Memory) -> f64 {
         Func::Bnot => (!truthy(a(vars, memory))) as u8 as f64,
         Func::Equal => {
             let x = arg(0, vars, memory);
-            ((x - arg(1, vars, memory)).abs() < EPSILON) as u8 as f64
+            binary(Op::Eq, x, arg(1, vars, memory))
         }
         Func::Above => {
             let x = arg(0, vars, memory);
-            (x > arg(1, vars, memory)) as u8 as f64
+            binary(Op::Gt, x, arg(1, vars, memory))
         }
         Func::Below => {
             let x = arg(0, vars, memory);
-            (x < arg(1, vars, memory)) as u8 as f64
+            binary(Op::Lt, x, arg(1, vars, memory))
         }
         Func::Fmod => {
             let x = arg(0, vars, memory);
@@ -905,6 +913,72 @@ mod tests {
         assert_eq!(run("a = 1 == 1.000001; b = 1 != 1.000001; c = 2 < 3;", &["a", "b", "c"]), [1.0, 0.0, 1.0]);
         assert_eq!(run("a = if(0.000001, 1, 2); b = !0.000001; c = 0.000001 && 1;", &["a", "b", "c"]), [2.0, 1.0, 1.0]);
         assert_eq!(run("a = band(1, 0) + bor(0, 1) + bnot(0) + equal(2, 2) + above(3, 2) + below(3, 2);", &["a"]), [4.0]);
+    }
+
+    #[test]
+    fn every_binary_operator() {
+        let cases = [
+            (Op::Add, 2.5, 1.0, 3.5),
+            (Op::Sub, 2.5, 1.0, 1.5),
+            (Op::Mul, 2.5, -2.0, -5.0),
+            (Op::Div, 5.0, 2.0, 2.5),
+            (Op::Div, 5.0, 0.0, 0.0),
+            (Op::Div, 0.0, 0.0, 0.0),
+            (Op::Mod, 7.5, 2.0, 1.0),
+            (Op::Mod, -7.5, 2.0, 0.0),
+            (Op::Mod, 7.0, -2.5, 1.0),
+            (Op::Mod, 5.0, 0.0, 0.0),
+            (Op::Pow, 2.0, 3.0, 8.0),
+            (Op::Pow, -2.0, 0.5, 0.0),
+            (Op::Pow, 10.0, 400.0, 0.0),
+            (Op::Pow, 0.0, -1.0, 0.0),
+            (Op::Eq, 1.0, 1.000001, 1.0),
+            (Op::Eq, 1.0, 1.0001, 0.0),
+            (Op::Ne, 1.0, 1.000001, 0.0),
+            (Op::Ne, 1.0, 1.0001, 1.0),
+            (Op::Lt, 1.0, 1.000001, 1.0),
+            (Op::Lt, 1.0, 1.0, 0.0),
+            (Op::Gt, 1.000001, 1.0, 1.0),
+            (Op::Gt, 1.0, 1.0, 0.0),
+            (Op::Le, 1.0, 1.0, 1.0),
+            (Op::Le, 1.000001, 1.0, 0.0),
+            (Op::Ge, 1.0, 1.0, 1.0),
+            (Op::Ge, 1.0, 1.000001, 0.0),
+            (Op::BitAnd, 3.7, 5.2, 1.0),
+            (Op::BitAnd, -1.5, 7.0, 6.0),
+            (Op::BitOr, 3.7, 5.2, 7.0),
+            (Op::BitOr, -0.5, 0.0, -1.0),
+        ];
+        for (op, x, y, want) in cases {
+            assert_eq!(binary(op, x, y), want, "{op:?}({x}, {y})");
+        }
+        // `%` floors both sides, so a divisor in (0, 1) floors to zero: NaN, as Butterchurn.
+        assert!(binary(Op::Mod, 5.0, 0.5).is_nan());
+        // `==` and `!=` near the epsilon, in a script.
+        assert_eq!(run("a = 0 == 0.000009; b = 0 == 0.000011; c = 0 != 0.000011;", &["a", "b", "c"]), [1.0, 0.0, 1.0]);
+    }
+
+    #[test]
+    fn compound_assignments() {
+        let v = run("a = 6; a += 2; b = 6; b -= 2; c = 6; c *= 2; d = 2; d ^= 3; e = 3.7; e &= 5.2; f = 3.7; f |= 5.2;", &["a", "b", "c", "d", "e", "f"]);
+        assert_eq!(v, [8.0, 4.0, 12.0, 8.0, 1.0, 7.0]);
+        assert_eq!(run("a = 10; a ^= 400; b = -2; b ^= 0.5;", &["a", "b"]), [0.0, 0.0]);
+        // `/=` and `%=` are raw: no zero guard and no flooring, unlike `/` and `%`.
+        let v = run("a = 0; a /= 0; b = -7.5; b %= 2; c = 5; c %= 0; d = 5; d %= 0.5;", &["a", "b", "c", "d"]);
+        assert!(v[0].is_nan());
+        assert_eq!(v[1], -1.5);
+        assert!(v[2].is_nan());
+        assert_eq!(v[3], 0.0);
+        // The value is evaluated before the old one is read.
+        assert_eq!(run("a = 1; a += (a = 5);", &["a"]), [10.0]);
+        assert_eq!(run("megabuf(0) = 1; megabuf(0) += (megabuf(0) = 5); a = megabuf(0);", &["a"]), [10.0]);
+    }
+
+    #[test]
+    fn comparison_and_power_functions() {
+        let v = run("a = equal(1, 1.000001); b = equal(1, 1.0001); c = above(1, 1); d = below(1, 1); e = above(2, 1); f = below(1, 2);", &["a", "b", "c", "d", "e", "f"]);
+        assert_eq!(v, [1.0, 0.0, 0.0, 0.0, 1.0, 1.0]);
+        assert_eq!(run("a = pow(2, 3); b = pow(10, 400); c = fmod(-7.5, 2);", &["a", "b", "c"]), [8.0, 0.0, -1.5]);
     }
 
     #[test]

@@ -106,8 +106,7 @@ fn literal(v: f64) -> String {
 /// Whether `if (a op b)` holds, when both sides are numbers.
 fn constant_condition(condition: &str) -> Option<bool> {
     static RE: OnceLock<Regex> = OnceLock::new();
-    let re = RE.get_or_init(|| Regex::new(r"^\(?(-?[\d.]+)\)?\s*(!=|>=|>|==)\s*(-?[\d.]+)$").unwrap());
-    let c = re.captures(condition.trim())?;
+    let c = re(&RE, r"^\(?(-?[\d.]+)\)?\s*(!=|>=|>|==)\s*(-?[\d.]+)$").captures(condition.trim())?;
     let (a, b): (f64, f64) = (c[1].parse().ok()?, c[3].parse().ok()?);
     Some(match &c[2] {
         "!=" => a != b,
@@ -136,7 +135,7 @@ pub fn written_default(kind: Kind, preset: &crate::preset::Preset) -> String {
     // Lines of `if (number op number) statement`, and `else if` after them:
     // kept as the bare statement when they hold, dropped when they don't.
     static IF: OnceLock<Regex> = OnceLock::new();
-    let re = IF.get_or_init(|| Regex::new(r"^(\s*)(else\s+)?if\s*\((.+?)\)\s+(.*)$").unwrap());
+    let if_line = re(&IF, r"^(\s*)(else\s+)?if\s*\((.+?)\)\s+(.*)$");
     let mut out = Vec::new();
     let mut taken: Option<bool> = None;
     for line in text.lines().flat_map(|l| if l.trim_start().starts_with("shader_body {") && l.trim() != "shader_body {" {
@@ -146,7 +145,7 @@ pub fn written_default(kind: Kind, preset: &crate::preset::Preset) -> String {
     } else {
         vec![l.to_string()]
     }) {
-        let folded = re.captures(&line).and_then(|c| {
+        let folded = if_line.captures(&line).and_then(|c| {
             let holds = constant_condition(&c[3])?;
             Some((c[1].to_string(), c.get(2).is_some(), holds, c[4].to_string()))
         });
