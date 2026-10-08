@@ -45,7 +45,7 @@ function Levels() {
  * Inputs are told apart by name *and* channel count: macOS names every
  * aggregate device "Aggregate Device".
  */
-export function AudioInput({ onError }: { onError(message: string): void }) {
+export function AudioInput({ onError }: { onError(error: unknown): void }) {
   const [inputs, setInputs] = useState<api.Input[] | null>(null);
   const [heard, setHeard] = useState<api.Heard>({ choice: null, channels: 0 });
   const [problem, setProblem] = useState<string | null>(null);
@@ -53,7 +53,7 @@ export function AudioInput({ onError }: { onError(message: string): void }) {
   // Held in a ref so a caller passing a new function each render doesn't refetch (or loop on a failure).
   const errorRef = useRef(onError);
   errorRef.current = onError;
-  const refresh = useCallback(() => api.listening().then(setHeard, (e) => errorRef.current(String(e))), []);
+  const refresh = useCallback(() => api.listening().then(setHeard, (e) => errorRef.current(e)), []);
 
   useEffect(() => {
     api.inputs().then(setInputs, () => setInputs([]));
