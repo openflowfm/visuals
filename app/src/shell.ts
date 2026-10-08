@@ -21,6 +21,14 @@ export function noticeOf(what: string, e: unknown): Notice {
 }
 
 /**
+ * A failure someone else already put into words, such as the playlists panel's
+ * `onError(message, detail)`: its sentence up front, its detail for the tooltip.
+ */
+export function noticeFrom(message: string, detail?: string): Notice {
+  return { message, detail: detail?.trim() || message };
+}
+
+/**
  * A peak as a meter reads it, 0–1: in decibels, −60 dB empty to 0 dB full. A
  * linear meter shows a signal at −30 dB as a one-pixel sliver.
  */
