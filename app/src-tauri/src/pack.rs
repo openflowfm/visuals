@@ -203,6 +203,9 @@ fn fetch(url: &str, dest: &Path, mut progress: impl FnMut(u64, usize)) -> Result
     let client = reqwest::blocking::Client::builder()
         .user_agent(concat!("visual[flow]/", env!("CARGO_PKG_VERSION")))
         .connect_timeout(Duration::from_secs(15))
+        // No limit on the whole download, so a slow connection can finish it;
+        // only a stall ends it. (The blocking client's `timeout` is per call: on
+        // the response, each `read` waits at most this long for bytes.)
         .timeout(Duration::from_secs(30))
         .build()
         .map_err(|e| format!("couldn't start the download: {e}"))?;
@@ -218,8 +221,7 @@ fn fetch(url: &str, dest: &Path, mut progress: impl FnMut(u64, usize)) -> Result
 
 /// Unpack a tar.gz of the pack into `dest`, leaving out its top folder: only
 /// `.milk` and `.md` files, never outside `dest`. Each file is written to a
-/// `.part` beside its place and renamed into it; one already there at the same
-/// size is kept. `placed` hears how many presets are in place so far. Returns how
+/// `.part` beside its place and renamed into it; one already there is kept. `placed` hears how many presets are in place so far. Returns how
 /// many presets the archive has.
 fn extract(reader: impl Read, dest: &Path, mut placed: impl FnMut(usize)) -> Result<usize, String> {
     let broken = |e: std::io::Error| format!("the download broke off: {e}");
@@ -237,8 +239,9 @@ fn extract(reader: impl Read, dest: &Path, mut placed: impl FnMut(usize)) -> Res
             continue;
         }
         let target = dest.join(&rel);
-        let size = entry.header().size().map_err(broken)?;
-        if !std::fs::metadata(&target).is_ok_and(|m| m.is_file() && m.len() == size) {
+        // Never overwrite a file already there: the user may have edited it. A
+        // cut-off write never leaves one (it lands in the `.part` first).
+        if !target.exists() {
             if let Some(dir) = target.parent() {
                 std::fs::create_dir_all(dir).map_err(|e| format!("couldn't make {}: {e}", dir.display()))?;
             }
@@ -410,11 +413,18 @@ pub fn start(handle: &AppHandle) {
     std::thread::spawn(move || watch(&handle, &library));
 }
 
+/// Whether a watcher event changes the folder: create, modify or remove. Not an
+/// access, so reading the presets after [`CHANGED`] doesn't fire it again.
+fn changes(kind: &notify::EventKind) -> bool {
+    use notify::EventKind::*;
+    matches!(kind, Create(_) | Modify(_) | Remove(_))
+}
+
 fn watch(handle: &AppHandle, dir: &Path) {
     use notify::Watcher;
     let (tx, rx) = std::sync::mpsc::channel();
     let watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
-        if event.is_ok() {
+        if event.is_ok_and(|e| changes(&e.kind)) {
             let _ = tx.send(());
         }
     });
@@ -549,11 +559,25 @@ mod tests {
         assert!(!dest.join("y.milk").exists() && !dir.join("presets/y.milk").exists());
         assert!(parts(&dir).is_empty());
 
-        // A second run keeps what is there (same size) and writes nothing.
+        // A second run keeps what is there, edited or not, and writes nothing.
         std::fs::write(dest.join("A/one.milk"), b"ONE").unwrap();
+        std::fs::write(dest.join("A/B/two.MILK"), b"edited, and longer").unwrap();
         assert_eq!(extract(&gz[..], &dest, |_| {}).unwrap(), 2);
         assert_eq!(std::fs::read(dest.join("A/one.milk")).unwrap(), b"ONE");
+        assert_eq!(std::fs::read(dest.join("A/B/two.MILK")).unwrap(), b"edited, and longer");
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn only_creating_changing_or_removing_counts_as_a_folder_change() {
+        use notify::event::{AccessKind, AccessMode, CreateKind, ModifyKind, RemoveKind};
+        use notify::EventKind;
+        assert!(changes(&EventKind::Create(CreateKind::File)));
+        assert!(changes(&EventKind::Modify(ModifyKind::Any)));
+        assert!(changes(&EventKind::Remove(RemoveKind::Folder)));
+        assert!(!changes(&EventKind::Access(AccessKind::Open(AccessMode::Read))));
+        assert!(!changes(&EventKind::Access(AccessKind::Close(AccessMode::Read))));
+        assert!(!changes(&EventKind::Any) && !changes(&EventKind::Other));
     }
 
     /// Serve `response` once on a local port; the URL to ask for it.
