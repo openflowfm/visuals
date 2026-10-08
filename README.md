@@ -8,7 +8,7 @@ is a thing that breaks; the package is `@openflow/visuals`. `visual[flow]` is wh
 calls itself; the paths are what the compiler calls it.
 
 ```
-Live ─ SessionBridge :17800 ─WS─> visuals backend ─WS─> Electron (WebGL2)
+Live ─ SessionBridge :17800 ─WS─> visuals backend ─WS─> browser (WebGL2)
                                           |
                                      Ableton Link  <──── Live's Link session
 ```
@@ -21,9 +21,8 @@ This repo builds and runs on its own — it needs no checkout of better-session-
 git clone https://github.com/openflowfm/visuals.git
 cd visuals
 npm ci          # also compiles the Ableton Link addon — see tools/build-link.ts
-npm start       # build, run the server, open the app
-npm run dev     # the server, vite and the window, together — the one to type while working
-npm run pack    # the signed, packaged .app and .dmg
+npm run show    # build, run the server, open the rig in its own Chrome
+npm run app     # the Tauri app that replaces it
 ```
 
 The one thing it still borrows from better-session-view is the bridge: **SessionBridge**,
@@ -58,7 +57,6 @@ artifact, without a release. It needs the signing secrets listed at the top of t
 | [the renderer](docs/render.md) | the two passes, blending, fill rate, **pointing a projector** | `client/render/*` |
 | [the engine](docs/engine.md) | where the frame time goes, the meter, the benchmark, why particles need no rewrite | `client/render/meter.ts`, `bench.ts`, `tools/benchmark.ts` |
 | [the harness](docs/harness.md) | working on this with no Ableton, and the Link safety rule | `tools/fake-live.ts` |
-| [the desktop app](docs/desktop.md) | the window, the wall on a projector, the display list, why the server is a child process | `electron/main.ts`, `electron/preload.ts`, `client/state/useWall.ts` |
 | [agent authoring](docs/mcp.md) | the MCP tools for reading nodes, validating and saving flows, and reviewing node designs | `mcp/*` |
 | [storybook](docs/storybook.md) | looking at a piece of the console on its own, and keeping a small experiment | `.storybook/*`, `client/**/*.stories.tsx`, `stories/*` |
 
@@ -83,11 +81,11 @@ configured for it to draw a show.
 ## Running it
 
 ```sh
-npm start           # a show night: build, run the server, open the app — see docs/desktop.md
-npm run show        # the same, in a dedicated Chrome instead of the app
+npm run app         # the Tauri app that replaces this one — docs/milkdrop-engine.md
+npm run show        # a show night: the server, and the rig in a dedicated Chrome
 npm run benchmark   # every flow, as fast as this machine draws it — docs/engine.md
-npm run dev         # the server, vite and the window, together — the one to type while working
-npx vite --config vite.config.ts  # the renderer with HMR alone, on $PORT or a free port, proxying /ws to the server
+npm run server      # the server alone, on 17900
+npm run ui          # the renderer with HMR, on $PORT or a free port, proxying /ws to the server
 npm run build       # the renderer into dist/, which the server serves
 npm run dev:fake-live  # a bridge that isn't one, for working without Ableton
 npm run mcp         # local stdio server for agent-authored flows and nodes
@@ -99,29 +97,12 @@ The user manual is [the wiki](https://github.com/openflowfm/visuals/wiki). Its
 vocabulary: clone `git@github.com:openflowfm/visuals.wiki.git` beside this repo as
 `visuals.wiki/` and `npm run dev:node-manual` rewrites it — see [docs/render.md](docs/render.md).
 
-`npm run dev` opens the Electron window itself; the HMR page it loads is vite's, on a free
-port. Open `http://localhost:17900` — `npm run server` — only for the
-built browser renderer.
+While working, run `npm run server` and `npm run ui` side by side and open the page vite
+prints; `http://localhost:17900` is the built renderer, which the server serves.
 
-**Nothing in `npm run dev` is assigned; everything is discovered.** It starts the server
-first, on whatever port is free, and is told which. It then runs vite in-process on
-`$PORT` or a free port, and reads the port off the socket. Only then
-does it open the shell, told both. So `npm run dev` twice — in two worktrees or in one — is
-two servers, two vites and two shells, each with its own profile under
-`~/.openflow/visuals/dev/<port>/`, and no single-instance lock. Closing the window ends all
-three. `OPENFLOW_DEV_URL=http://localhost:<port> npx electron .` is the escape hatch for a
-shell on a vite you started by hand.
-
-**That is why `npm start` exists for a show.** Two processes where either exiting kills the
-other is right for a dev loop and wrong for a gig: a watcher falling over would take the
-wall with it. `npm start` builds `dist/`, runs the server as a supervised child, and opens
-the rig in a window of its own — see [the desktop app](docs/desktop.md). It also settles
-which URL a projector gets: the app is on the built bundle, where vite's dev page has HMR attached
-and reloads the wall on every save.
-
-`npm run show` is the same rig in a dedicated Chrome instance instead —
-[`tools/visuals.ts`](tools/visuals.ts) — kept because a second machine runs a browser
-anyway, and because it is the rollback if the app misbehaves on a show night.
+`npm run show` is the rig for a show — [`tools/visuals.ts`](tools/visuals.ts): it builds
+`dist/` and opens it in a dedicated Chrome instance, on the built bundle rather than vite's
+dev page, which has HMR attached and reloads the wall on every save.
 `i` toggles the panel, `e` the editor, `k` the output stage, `w` the wall, `f` fullscreen, and
 `l` turns to the next flow without changing the colourway. **`1` says
 "here is the one"** — it re-phases the rotation so changes land on the top of a phrase
@@ -158,15 +139,6 @@ Chrome slows and eventually freezes a renderer it decides nobody is looking at, 
 window sitting behind the console is exactly that. Without these, bringing another window to
 the front can drop the projector to a stutter.
 
-**The app needs the same three**, because Electron is the same Chromium — it passes them as
-command-line switches and sets `backgroundThrottling: false` on every window besides. This
-is the easiest thing in either path to forget, and the symptom reads as a renderer bug.
-
-**Only for a server it started.** The readiness poll waits a beat before its first look,
-because a port already in use answers *immediately* — from whatever is on it — and a window
-would open onto somebody else's server a moment before ours died of `EADDRINUSE`. The
-settle gives that failure time to land, and the child going away is what says it did.
-
 **`w` sends the picture to the projector.** There is no such thing as rendering to an HDMI
 port — the port is a display, and something has to own a window on it — so this opens one for
 you: chrome-less, fullscreen, on the display you pick, remembered for next time. The browser
@@ -181,8 +153,8 @@ because they describe this projector in this room and would be wrong everywhere 
 
 | | | |
 |---|---|---|
-| app backend | any free port, loopback — the child reports it; `npm run server` bare is 17900 | `OPENFLOW_VISUALS_PORT` names one, `OPENFLOW_VISUALS_HOST` |
-| renderer (dev) | UI + 300 | `OPENFLOW_VISUALS_UI_PORT` |
+| backend | 17900 | `OPENFLOW_VISUALS_PORT`, `OPENFLOW_VISUALS_HOST` |
+| renderer (dev) | a free port | `PORT` |
 | bridge it follows | `ws://127.0.0.1:17800/ws` | `OPENFLOW_BRIDGE_WS` |
 | fake bridge | 17801 | `OPENFLOW_FAKE_PORT` |
 
@@ -196,9 +168,8 @@ package needs two repairs before it compiles at all; see [the clock](docs/clock.
 
 **It is meant to run on another machine**, so a GPU drawing sixty frames a second is never
 on the same box as Live's audio thread. A standalone browser server therefore binds
-`0.0.0.0` — a deliberate exposure, on a show LAN and not a hotel one. The Electron app's
-child binds `127.0.0.1` instead because both of its windows are already local; an explicit
-`OPENFLOW_VISUALS_HOST` can still opt it into the LAN.
+`0.0.0.0` — a deliberate exposure, on a show LAN and not a hotel one;
+`OPENFLOW_VISUALS_HOST=127.0.0.1` keeps it local.
 
 Once it is out of the device, being an ordinary bridge client is free, and rule 5 in
 [`AGENTS.md`](../AGENTS.md) already anticipated it: *"a second kind of client — a stage

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import type http from 'node:http';
 import path from 'node:path';
 import { Worker } from 'node:worker_threads';
-// A static import, so the app's server bundle carries them — see `tools/electron.ts`.
+// A static import, so a bundle of the server would carry them.
 import butterchurnPresets from 'butterchurn-presets';
 import type { PresetEntry, PresetShelf } from '../protocol.ts';
 import { BUNDLED } from '../milk.ts';

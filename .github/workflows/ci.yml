@@ -15,11 +15,6 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    # Electron ships a ~200 MB Chromium that no CI job here can run — the
-    # typecheck needs its type declarations and nothing else, and those come
-    # with the package rather than the binary.
-    env:
-      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
     steps:
       - uses: actions/checkout@v7
 
@@ -63,7 +58,3 @@ jobs:
       # The stories, built rather than only typechecked: a story that imports
       # something only the app's Vite config can resolve fails here and nowhere else.
       - run: npm run build:storybook
-
-      # Compile the Electron bundle on Linux. Packaging, signing and
-      # notarising the macOS app stay in release.yml, on macOS.
-      - run: npm run electron

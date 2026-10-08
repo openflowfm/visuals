@@ -232,7 +232,7 @@ Install the assets, five setups, local override and four-flow scheme explicitly:
 
 ```sh
 npm run model:showcase -- --install
-npm start
+npm run show
 ```
 
 The authoring command downloads the upstream GLBs, verifies pinned SHA-256 digests, and imports
@@ -259,7 +259,7 @@ it, or install the complete reusable setup and two-instance scheme:
 ```sh
 npm run model:xenon
 npm run model:proof -- --install
-npm start
+npm run show
 ```
 
 The install command is additive: it writes the `xenon-60-model-proof` setup and scheme in the
@@ -273,7 +273,7 @@ npm run frames -- --scheme=/private/tmp/openflow-xenon-model-proof/scheme.json \
   --flows=xenon-60-a,xenon-60-proof --at=0,0.5,1,1.5,2,2.5,3,3.5
 ```
 
-Both frames and the unpaced benchmark use hidden, non-focusable Electron windows. Their reports
+Both frames and the unpaced benchmark run in headless Chromium. Their reports
 include model loading and resource counts, so the proof covers completed rendering and release as
 well as pixels. `tools/structure-compare.ts` adds projection/contour distance, silhouette overlap,
 holes/endpoints/junction topology, material-layout difference, cyclic motion and topology
