@@ -93,18 +93,12 @@ fn options() -> Options {
     o
 }
 
-/// A preset path as given, or else one in the pack.
+/// [`engine::preset::find`], or the end of the run when there's no such preset.
 fn find(preset: &str) -> PathBuf {
-    let given = PathBuf::from(preset);
-    if given.exists() {
-        return given;
-    }
-    let pack = engine::preset::pack_dir().join(preset);
-    if pack.exists() {
-        return pack;
-    }
-    eprintln!("no preset at {preset}, nor in the pack");
-    std::process::exit(1);
+    engine::preset::find(preset).unwrap_or_else(|| {
+        eprintln!("no preset at {preset}, nor in the pack");
+        std::process::exit(1);
+    })
 }
 
 /// The whole file as interleaved stereo f32 at 44.1 kHz.
