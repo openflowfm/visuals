@@ -12,6 +12,7 @@ mod fx;
 mod library;
 mod link;
 mod listen;
+mod menu;
 mod output;
 mod pack;
 mod playlists;
@@ -125,6 +126,7 @@ fn main() {
         .manage(App { bench: Mutex::new(None), ring: listen::ring(), listening: Mutex::new(None), library, seed: AtomicU64::new(1) })
         .manage(deck)
         .setup(move |app| {
+            menu::install(app)?;
             if let Some(starter) = pack::starter(app.handle()) {
                 app.state::<actions::Deck>().store.lock().unwrap().add_folder(starter);
             }
