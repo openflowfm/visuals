@@ -624,18 +624,20 @@ impl Renderer {
     /// Keep pictures of the stages `wanted` ([`PREVIEWS`] indices; others are
     /// ignored) at `size`, for [`Renderer::read_previews`]; none stops them.
     /// The size is clamped to 1×1..[`PREVIEW_MAX`]. Pictures already kept at
-    /// that size are kept on; a new size makes them all afresh.
-    pub fn set_previews(&mut self, wanted: &[usize], size: (u32, u32)) {
+    /// that size are kept on; a new size makes them all afresh. Returns whether
+    /// any picture is kept, false when none of `wanted` is a stage.
+    pub fn set_previews(&mut self, wanted: &[usize], size: (u32, u32)) -> bool {
         let size = (size.0.clamp(1, PREVIEW_MAX.0), size.1.clamp(1, PREVIEW_MAX.1));
         if wanted.iter().all(|&w| w >= PREVIEWS.len()) {
             self.previews.clear();
-            return;
+            return false;
         }
         self.blit_pipeline(FORMAT);
         let mut kept = std::mem::take(&mut self.previews);
         kept.resize_with(PREVIEWS.len(), || None);
         self.previews =
             kept.into_iter().enumerate().map(|(i, old)| wanted.contains(&i).then(|| old.filter(|t| t.size == size).unwrap_or_else(|| Target::new(&self.device, size, PREVIEWS[i])))).collect();
+        true
     }
 
     /// The stage pictures asked for ([`Renderer::set_previews`]): RGBA rows top

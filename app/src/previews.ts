@@ -68,11 +68,16 @@ export const HEADER = 12;
  * The device pixels a picture `css` CSS pixels wide covers at zoom `z` on a
  * display of pixel ratio `dpr`. Not zoomed in (the graph at 1× or less) it is
  * 0, which is the base step: the graph as it opens costs what it always did,
- * even on a 2× display.
+ * even on a 2× display. Leaving the base step (`current` 0) takes a zoom past
+ * `ZOOM_IN`, and coming back to it takes 1× or less, so a graph held at about
+ * 1× never flips between the base step and the next.
  */
-export function needed(css: number, z: Zoom, dpr: number): number {
-  return z.graph <= 1 ? 0 : css * z.node * z.graph * dpr;
+export function needed(css: number, z: Zoom, dpr: number, current = 0): number {
+  return z.graph <= (current > 0 ? 1 : ZOOM_IN) ? 0 : css * z.node * z.graph * dpr;
 }
+
+/** How far past 1× the graph must zoom before pictures leave the base step. */
+export const ZOOM_IN = 1.1;
 
 /**
  * Which of `STEPS` to show a picture `need` device pixels wide at, from step
@@ -185,7 +190,7 @@ async function loop() {
     // `offsetWidth` is the canvas's CSS width, before any zoom above it.
     const zoom = zoomOf?.() ?? { node: 1, graph: 1 };
     const dpr = window.devicePixelRatio || 1;
-    const need = Math.max(0, ...shown.map(([canvas]) => needed(canvas.offsetWidth || api.PREVIEW.width, zoom, dpr)));
+    const need = Math.max(0, ...shown.map(([canvas]) => needed(canvas.offsetWidth || api.PREVIEW.width, zoom, dpr, step)));
     const which = wanted(shown.map(([, w]) => w));
     step = settle(withinBudget(stepFor(need, step), which.length), started);
     const width = STEPS[step];
