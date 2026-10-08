@@ -1,0 +1,12 @@
+{
+  "count": 20,
+  "seed": 1,
+  "size": "320x180",
+  "frames": 120,
+  "captures": 6,
+  "refresh": 60,
+  "shiftFrames": 45,
+  "similar": ["reseed", "hiss"],
+  "different": ["otherPreset", "shiftedClock", "swappedAudio", "otherEquations"],
+  "approvals": true
+}

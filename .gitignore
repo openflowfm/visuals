@@ -1,6 +1,7 @@
 node_modules/
 coverage/
 teaser/out/
+compare/out/
 teaser/public/
 /target/
 engine/target/

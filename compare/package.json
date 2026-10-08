@@ -1,0 +1,27 @@
+{
+  "name": "@openflow/visuals-compare",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Development-only bench: presets drawn by Butterchurn 2.6.7 and by the engine from the same inputs, scored side by side.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=26"
+  },
+  "scripts": {
+    "compare": "node --disable-warning=ExperimentalWarning harness/compare.ts",
+    "calibrate": "node --disable-warning=ExperimentalWarning harness/calibrate.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "butterchurn": "2.6.7",
+    "milkdrop-preset-converter": "0.1.2",
+    "playwright": "^1.63.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
+  }
+}
