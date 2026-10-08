@@ -512,6 +512,48 @@ impl Mesh {
             uvs.push([u as f32, w as f32]);
         }
     }
+
+    /// The two sets of texture coordinates a refresh `fraction` of the way
+    /// through the step draws with: `moved` for the plainly moved picture and
+    /// `shaded` for the warp shader mixed over it by the fraction.
+    ///
+    /// Where the step's map is a flow — each vertex moved about as far, and the
+    /// same way, as its neighbours: zoom, rotation, translation, the warp's
+    /// wobble — both are [`Mesh::uvs`] at the fraction, so the picture slides.
+    /// Where it tears or folds the picture instead — neighbours sent far apart, a
+    /// kaleidoscope's mirror (`dx = x - ox`), a jump to another place — there is
+    /// no motion to take a part of: a part of a fold is a smear. There `moved`
+    /// stays where it is and `shaded` is the whole step, so the refresh
+    /// cross-fades to exactly what the next step draws. How far a vertex is from
+    /// a flow is how much the step stretches the grid around it: a change in
+    /// displacement under a quarter of the distance between neighbours slides,
+    /// over a half cross-fades, and in between mixes the two.
+    pub fn between(&self, fraction: f64, moved: &mut Vec<[f32; 2]>, shaded: &mut Vec<[f32; 2]>) {
+        let (mut none, mut whole) = (Vec::new(), Vec::new());
+        self.uvs(0.0, &mut none);
+        self.uvs(fraction, moved);
+        self.uvs(1.0, &mut whole);
+        shaded.clear();
+        shaded.extend_from_slice(moved);
+        let (gx, gy) = (self.width + 1, self.height + 1);
+        let d = |i: usize| [whole[i][0] - none[i][0], whole[i][1] - none[i][1]];
+        let apart = |a: [f32; 2], b: [f32; 2]| ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2)).sqrt();
+        for i in 0..moved.len() {
+            let (ix, iz) = (i % gx, i / gx);
+            let mut stretch = 0f32;
+            for (ok, j) in [(ix > 0, i.wrapping_sub(1)), (ix + 1 < gx, i + 1), (iz > 0, i.wrapping_sub(gx)), (iz + 1 < gy, i + gx)] {
+                if ok {
+                    stretch = stretch.max(apart(d(i), d(j)) / apart(none[i], none[j]).max(1e-6));
+                }
+            }
+            let k = ((stretch - 0.25) / 0.25).clamp(0.0, 1.0);
+            if k > 0.0 {
+                let mix = |a: [f32; 2], b: [f32; 2]| [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
+                shaded[i] = mix(moved[i], whole[i]);
+                moved[i] = mix(moved[i], none[i]);
+            }
+        }
+    }
 }
 
 /// A custom wave's or shape's own variables: Butterchurn gives each its own
@@ -735,6 +777,71 @@ impl Clock {
     }
 }
 
+/// A display loop's time between refreshes, evened out. A loop paced by the
+/// display wakes a little early or late each refresh (0.6–0.7 ms sd, 15% of a
+/// refresh at the 99th percentile, measured on the bench at 60 Hz), but the
+/// pictures reach the screen exactly a refresh apart, so moving the preset clock
+/// by the raw time would move it that unevenly. This gives whole refreshes of the
+/// display's period instead — learnt from the loop, a dropped refresh counted as
+/// two — and pays back what that differs from the real time a little at a time,
+/// so over a second it adds up to the real time. A loop that isn't keeping to
+/// whole refreshes (off screen, or changing rate) gets its raw time.
+#[derive(Debug, Default)]
+pub struct Pacer {
+    period: f64,
+    owed: f64,
+    /// A refresh time that isn't the period, and how many in a row agreed with it.
+    candidate: (f64, u32),
+}
+
+impl Pacer {
+    /// The time to move the clock by for a refresh `elapsed` seconds after the last.
+    pub fn tick(&mut self, elapsed: f64) -> f64 {
+        if !(elapsed > 0.0 && elapsed.is_finite()) {
+            return 0.0;
+        }
+        // A display refreshes between 20 and 500 times a second; a loop's first
+        // round, or one after a stall, says nothing about its period.
+        let plausible = (1.0 / 500.0..=1.0 / 20.0).contains(&elapsed);
+        if self.period <= 0.0 {
+            if plausible {
+                self.period = elapsed;
+            }
+            self.owed = 0.0;
+            return elapsed;
+        }
+        let n = (elapsed / self.period).round().max(1.0);
+        let fits = n <= 4.0 && (elapsed / (n * self.period) - 1.0).abs() <= 0.4;
+        if fits && n == 1.0 {
+            self.candidate = (0.0, 0);
+        } else if plausible {
+            // A refresh that isn't one period: a hitch, or the rate changed. Only
+            // several in a row that agree with each other change the period.
+            let (c, k) = self.candidate;
+            self.candidate = if k > 0 && (elapsed / c - 1.0).abs() < 0.2 { (c + (elapsed - c) / (k + 1) as f64, k + 1) } else { (elapsed, 1) };
+            if self.candidate.1 >= 3 {
+                self.period = self.candidate.0;
+                self.candidate = (0.0, 0);
+                self.owed = 0.0;
+                return elapsed;
+            }
+        }
+        if !fits {
+            self.owed = 0.0;
+            return elapsed;
+        }
+        // Only a single refresh refines the period; a late one says little about it.
+        if n == 1.0 {
+            self.period += 0.05 * (elapsed - self.period);
+        }
+        let even = n * self.period;
+        self.owed += elapsed - even;
+        let back = (0.05 * self.owed).clamp(-0.02 * even, 0.02 * even);
+        self.owed -= back;
+        even + back
+    }
+}
+
 /// Read and load a `.milk` file.
 pub fn load(text: &str, frame: &Frame, size: &Size, seed: u64) -> Result<Runner, LoadError> {
     Runner::new(preset::parse(text), frame, size, seed)
@@ -860,6 +967,109 @@ mod tests {
             }
             // A whole step moves these points by up to ~10 px.
             assert!(worst < 0.25, "{parts} parts land {worst:.3} px from a whole step");
+        }
+    }
+
+    #[test]
+    fn between_steps_a_flow_slides_and_a_fold_cross_fades() {
+        // A flow (zoom, rotation, a shift, a stretch): both maps are the part.
+        let (mut r, size) = moving();
+        let mut mesh = Mesh::default();
+        r.warp_motion(1.0, &size, &mut mesh);
+        let (mut part, mut moved, mut shaded) = (Vec::new(), Vec::new(), Vec::new());
+        mesh.uvs(0.5, &mut part);
+        mesh.between(0.5, &mut moved, &mut shaded);
+        assert!(moved == part && shaded == part, "a flow slides");
+        // A kaleidoscope's fold: the right half is the left half mirrored.
+        let text = "[preset00]\nzoom=1\nrot=0\nwarp=0\nper_pixel_1=dx = above(x, 0.5) * (2*x - 1);";
+        let mut r = load(text, &frame(), &size, 1).unwrap();
+        r.run_frame(&frame(), &size);
+        r.warp_motion(1.0, &size, &mut mesh);
+        let (mut none, mut whole) = (Vec::new(), Vec::new());
+        mesh.uvs(0.0, &mut none);
+        mesh.uvs(1.0, &mut whole);
+        mesh.between(0.5, &mut moved, &mut shaded);
+        let n = (size.mesh_width + 1) * (size.mesh_height + 1);
+        let (mut slid, mut faded) = (0, 0);
+        for i in 0..n {
+            let x = (i % (size.mesh_width + 1)) as f64 / size.mesh_width as f64;
+            if x < 0.4 {
+                // Left of the fold nothing moves.
+                assert_eq!((moved[i], shaded[i]), (none[i], none[i]));
+                slid += 1;
+            } else if x > 0.6 {
+                // Mirrored: the moved picture stays put, the shader's is the whole step.
+                assert_eq!((moved[i], shaded[i]), (none[i], whole[i]), "vertex {i}");
+                faded += 1;
+            }
+        }
+        assert!(slid > 0 && faded > 0);
+    }
+
+    #[test]
+    fn the_pacer_evens_out_a_display_loop() {
+        for hz in [60.0, 120.0] {
+            let mut pacer = Pacer::default();
+            // The bench's first round after a load is a few microseconds.
+            pacer.tick(0.000006);
+            let mut seed = 7u64;
+            let (mut real, mut paced, mut worst, mut stall) = (0.0, 0.0, 0.0f64, 0.0);
+            for i in 0..1200 {
+                // A stall of 0.76 s half way, as a slow load makes.
+                if i == 600 {
+                    stall = 0.76;
+                }
+                seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                // The loop wakes up to ±1.5 ms off each refresh; the bench's does by 0.6 ms sd.
+                let jitter = ((seed >> 11) as f64 / (1u64 << 53) as f64 * 2.0 - 1.0) * 0.0015;
+                let wake = (i + 1) as f64 / hz + jitter + stall;
+                let elapsed = wake - real;
+                real = wake;
+                let dt = pacer.tick(elapsed);
+                paced += dt;
+                if i >= 120 && i != 600 {
+                    worst = worst.max((dt * hz - 1.0).abs());
+                }
+            }
+            assert!(worst < 0.03, "{hz} Hz: a refresh moves the clock {:.1}% off even", worst * 100.0);
+            assert!((paced - real).abs() < 1.0 / hz, "{hz} Hz: over 1200 refreshes the paced time keeps to the real time");
+        }
+        // A dropped refresh is two refreshes' time; a loop off its rhythm gets its own time.
+        let mut pacer = Pacer::default();
+        for _ in 0..60 {
+            pacer.tick(1.0 / 60.0);
+        }
+        assert!((pacer.tick(2.0 / 60.0) * 60.0 - 2.0).abs() < 0.03);
+        assert_eq!(pacer.tick(0.0071), 0.0071);
+        assert_eq!(pacer.tick(f64::NAN), 0.0);
+    }
+
+    #[test]
+    fn a_lone_hitch_keeps_the_period_and_a_new_rate_is_learnt() {
+        for hitch in [1.45, 1.5, 2.0, 10.0] {
+            let mut pacer = Pacer::default();
+            for _ in 0..60 {
+                pacer.tick(1.0 / 60.0);
+            }
+            pacer.tick(hitch / 60.0);
+            assert!((pacer.period * 60.0 - 1.0).abs() < 1e-9, "a {hitch}x hitch changed the period");
+            for _ in 0..30 {
+                let dt = pacer.tick(1.0 / 60.0);
+                assert!((dt * 60.0 - 1.0).abs() < 0.03, "after a {hitch}x hitch a refresh moves the clock {dt}");
+            }
+        }
+        for (a, b) in [(60.0, 120.0), (120.0, 60.0), (60.0, 144.0), (144.0, 50.0)] {
+            let mut pacer = Pacer::default();
+            for _ in 0..60 {
+                pacer.tick(1.0 / a);
+            }
+            for _ in 0..4 {
+                pacer.tick(1.0 / b);
+            }
+            assert!((pacer.period * b - 1.0).abs() < 0.01, "{a}->{b} Hz: period {}", pacer.period);
+            for _ in 0..10 {
+                assert!((pacer.tick(1.0 / b) * b - 1.0).abs() < 0.03);
+            }
         }
     }
 
