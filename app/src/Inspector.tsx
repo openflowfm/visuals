@@ -4,7 +4,7 @@ import * as api from './api.ts';
 import type { Owner, Preset, Problem } from './api.ts';
 import { range } from './controls.ts';
 import { Setting } from './graph/Setting.tsx';
-import { drivenBy, getField, otherValues, problemsOf, removeLayer, setField, settingsOf, stageFor } from './stages.ts';
+import { bakedIn, drivenBy, getField, otherValues, problemsOf, removeLayer, setField, settingsOf, stageFor } from './stages.ts';
 import './graph.css';
 
 interface Props {
@@ -33,6 +33,7 @@ export function Inspector({ preset, selected, problems, onChange, onSet }: Props
   const unwritten = shader && preset[stage.id as 'warp' | 'comp'].trim() === '';
   const removable = stage.kind === 'layer';
   const driven = drivenBy(preset, stage);
+  const baked = bakedIn(preset, stage);
   return (
     <div className="inspector">
       <header>
@@ -93,11 +94,11 @@ export function Inspector({ preset, selected, problems, onChange, onSet }: Props
             </label>
           );
         })}
-      {stage.id === 'comp' && !unwritten && settings.length > 0 && <p className="quiet">These settings only reach the picture through MilkDrop's default composite.</p>}
+      {baked && settings.length > 0 && <p className="quiet">{baked.why}</p>}
       {settings.length > 0 && (
         <div className="values">
           {settings.map(([spec, v]) => (
-            <label key={spec.key} title={spec.key}>
+            <label key={spec.key} title={baked?.keys.has(spec.key) ? `${spec.key}: no longer applies` : spec.key} className={baked?.keys.has(spec.key) ? 'baked' : undefined}>
               <span>{spec.label}</span>
               <Setting spec={spec} value={v} onChange={(n) => onSet(stage.owner!, spec.key, n)} />
             </label>
