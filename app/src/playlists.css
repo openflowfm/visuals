@@ -13,7 +13,6 @@
   color: var(--ui);
   font-size: var(--text-body);
 }
-.playlists .playlists-fill { flex: 1; }
 
 .playlists .playlists-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 0 8px; }
 .playlists .playlists-confirm { display: inline-flex; gap: 4px; }

@@ -190,7 +190,7 @@ export function Playlists({ lists, current, selected, onSelect, onLists, onError
             <Button disabled={!current} onPress={() => current && run(pl.add(list.id, current), 'add the preset')} title={`Add the preset that's playing to ${list.name}`}>
               + current
             </Button>
-            <span className="playlists-fill" />
+            <span className="vf-fill" />
             <span className="playlists-count">
               {active && deck.index !== null ? `${deck.index + 1} / ${list.items.length}` : plural(list.items.length, 'preset')}
             </span>
