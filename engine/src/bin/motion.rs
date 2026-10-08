@@ -7,6 +7,7 @@
 //!   --seconds S          how long to measure each (default 4)
 //!   --warm S             run this long first, unmeasured (default 3)
 //!   --size WxH           the size it draws at (default 512x384)
+//!   --dump DIR           also save the first second's pictures as PNGs there
 //!   --jitter MS          vary each refresh's time by up to ± this, as a real
 //!                        display loop does (default 0)
 //!
@@ -19,8 +20,9 @@
 //! motion is averaged per phase. Smooth motion moves as far in every phase of a
 //! step; judder is a phase that moves much more than another (a step drawn as a
 //! cross-fade moves everything in the refresh that crosses half way and nothing
-//! in the others). The figure printed is the most-moving phase over the
-//! least-moving one, 1.00 for perfectly even, and the frame difference beside it.
+//! in the others). The figures printed are the most-moving phase over the
+//! least-moving one, 1.00 for perfectly even, by motion (only where blocks can be
+//! matched: not on noise or soft glows) and by frame difference (every refresh).
 
 use engine::audio::{Audio, FFT_SIZE};
 use engine::render::{headless, Renderer};
@@ -39,10 +41,11 @@ struct Options {
     warm: f64,
     size: (u32, u32),
     jitter: f64,
+    dump: Option<PathBuf>,
 }
 
 fn usage() -> ! {
-    eprintln!("usage: motion <preset or folder> … [--hz 60,120] [--speed 0.25,1,4] [--seconds S] [--warm S] [--size WxH] [--jitter MS]");
+    eprintln!("usage: motion <preset or folder> … [--hz 60,120] [--speed 0.25,1,4] [--seconds S] [--warm S] [--size WxH] [--jitter MS] [--dump DIR]");
     std::process::exit(2);
 }
 
@@ -52,7 +55,7 @@ fn list(s: Option<String>) -> Vec<f64> {
 }
 
 fn options() -> Options {
-    let mut o = Options { presets: Vec::new(), hz: vec![60.0, 120.0], speeds: vec![0.25, 1.0, 4.0], seconds: 4.0, warm: 3.0, size: (512, 384), jitter: 0.0 };
+    let mut o = Options { presets: Vec::new(), hz: vec![60.0, 120.0], speeds: vec![0.25, 1.0, 4.0], seconds: 4.0, warm: 3.0, size: (512, 384), jitter: 0.0, dump: None };
     let mut args = std::env::args().skip(1);
     let one = |s: Option<String>| s.and_then(|s| s.parse::<f64>().ok()).unwrap_or_else(|| usage());
     while let Some(arg) = args.next() {
@@ -62,6 +65,7 @@ fn options() -> Options {
             "--seconds" => o.seconds = one(args.next()),
             "--warm" => o.warm = one(args.next()),
             "--jitter" => o.jitter = one(args.next()),
+            "--dump" => o.dump = Some(args.next().unwrap_or_else(|| usage()).into()),
             "--size" => {
                 o.size = args
                     .next()
@@ -194,9 +198,12 @@ fn flow(a: &[f32], b: &[f32], w: usize, h: usize) -> Option<f64> {
 }
 
 struct Measure {
-    /// Mean motion (px) and frame difference per phase.
-    phases: Vec<(f64, f64, usize)>,
-    hitches: usize,
+    /// Per phase: mean motion (px) over the refreshes it could be measured at,
+    /// and mean frame difference over all of them.
+    motion: Vec<f64>,
+    difference: Vec<f64>,
+    /// Refreshes whose motion could not be measured.
+    unmeasured: usize,
 }
 
 fn measure(r: &mut Renderer, text: &str, o: &Options, hz: f64, speed: f64, seed: u64) -> Measure {
@@ -221,50 +228,64 @@ fn measure(r: &mut Renderer, text: &str, o: &Options, hz: f64, speed: f64, seed:
     // Refreshes per step: the phases a refresh can land in (one when a refresh
     // makes a step or more).
     let per = (hz / (PRESET_RATE * speed)).round().max(1.0) as usize;
-    let mut phases = vec![(0.0, 0.0, 0usize); per];
+    let (mut motion, mut moved, mut difference, mut differed) = (vec![0.0; per], vec![0usize; per], vec![0.0; per], vec![0usize; per]);
     let mut before = luma(&r.read_back());
-    let mut hitches = 0;
-    for _ in 0..(o.seconds * hz).round() as usize {
+    let mut unmeasured = 0;
+    for i in 0..(o.seconds * hz).round() as usize {
         step(r, &mut audio, &mut t, &mut position, &mut rng);
-        let now = luma(&r.read_back());
+        let rgba = r.read_back();
+        if let Some(dir) = o.dump.as_ref().filter(|_| (i as f64) < hz) {
+            let file = std::fs::File::create(dir.join(format!("{hz}hz-{speed}x-{i:03}.png"))).expect("create png");
+            let mut e = png::Encoder::new(std::io::BufWriter::new(file), w as u32, h as u32);
+            e.set_color(png::ColorType::Rgba);
+            e.set_depth(png::BitDepth::Eight);
+            e.write_header().unwrap().write_image_data(&rgba).unwrap();
+        }
+        let now = luma(&rgba);
         let diff = before.iter().zip(&now).map(|(a, b)| (a - b).abs() as f64).sum::<f64>() / now.len() as f64;
+        let phase = ((position.fract() * per as f64).round() as usize) % per;
+        difference[phase] += diff;
+        differed[phase] += 1;
         match flow(&before, &now, w, h) {
             Some(m) => {
-                let phase = ((position.fract() * per as f64).round() as usize) % per;
-                let p = &mut phases[phase];
-                p.0 += m;
-                p.1 += diff;
-                p.2 += 1;
+                motion[phase] += m;
+                moved[phase] += 1;
             }
-            None => hitches += 1,
+            None => unmeasured += 1,
         }
         before = now;
     }
-    for p in &mut phases {
-        if p.2 > 0 {
-            p.0 /= p.2 as f64;
-            p.1 /= p.2 as f64;
-        }
-    }
-    Measure { phases, hitches }
+    let mean = |sum: Vec<f64>, n: &[usize]| sum.iter().zip(n).map(|(s, &n)| if n > 0 { s / n as f64 } else { f64::NAN }).collect();
+    Measure { motion: mean(motion, &moved), difference: mean(difference, &differed), unmeasured }
+}
+
+/// The most over the least of `values`, ignoring phases with nothing measured.
+fn unevenness(values: &[f64]) -> f64 {
+    let v: Vec<f64> = values.iter().copied().filter(|v| v.is_finite()).collect();
+    let (lo, hi) = v.iter().fold((f64::MAX, 0.0f64), |(lo, hi), &x| (lo.min(x), hi.max(x)));
+    if v.is_empty() { f64::NAN } else { hi / lo.max(1e-3) }
 }
 
 fn main() {
     let o = options();
     let (device, queue) = headless().expect("a GPU");
     let mut r = Renderer::new(device, queue, o.size.0, o.size.1);
-    println!("preset\thz\tspeed\tunevenness\tmotion px/refresh by phase\tdifference by phase\tunmeasured");
+    println!("preset\thz\tspeed\tmotion unevenness\tdifference unevenness\tmotion px/refresh by phase\tdifference by phase\tunmeasured");
     for path in &o.presets {
         let text = engine::preset::decode(&std::fs::read(path).expect("read preset"));
         let name = path.file_stem().unwrap_or_default().to_string_lossy();
         for &hz in &o.hz {
             for &speed in &o.speeds {
                 let m = measure(&mut r, &text, &o, hz, speed, 7);
-                let motions: Vec<f64> = m.phases.iter().filter(|p| p.2 > 0).map(|p| p.0).collect();
-                let (lo, hi) = motions.iter().fold((f64::MAX, 0.0f64), |(lo, hi), &v| (lo.min(v), hi.max(v)));
-                let uneven = if motions.is_empty() { f64::NAN } else { hi / lo.max(1e-3) };
-                let list = |f: &dyn Fn(&(f64, f64, usize)) -> f64| m.phases.iter().map(|p| format!("{:.2}", f(p))).collect::<Vec<_>>().join(" ");
-                println!("{name}\t{hz}\t{speed}\t{uneven:.2}\t{}\t{}\t{}", list(&|p| p.0), list(&|p| p.1), m.hitches);
+                let list = |v: &[f64]| v.iter().map(|x| format!("{x:.2}")).collect::<Vec<_>>().join(" ");
+                println!(
+                    "{name}\t{hz}\t{speed}\t{:.2}\t{:.2}\t{}\t{}\t{}",
+                    unevenness(&m.motion),
+                    unevenness(&m.difference),
+                    list(&m.motion),
+                    list(&m.difference),
+                    m.unmeasured
+                );
             }
         }
     }

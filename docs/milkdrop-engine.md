@@ -232,24 +232,36 @@ Now the preset's clock and the picture's are separate (`runtime::PRESET_RATE`,
   rotation per second are the step loop's, so none of them depends on the display.
 - **The picture is drawn at every refresh.** A refresh between steps draws, and never
   feeds back, the last step's feedback carried `f` of the way into the next step (`show`):
-  1. the picture it carries on from: the last step's warp before its waves and shapes,
-     mixed with the feedback by `f` (`CARRY`; the warp is kept, `bare`, when a step
-     draws anything), so the last step's drawing, which is drawn again further on (4),
-     fades into the trail it leaves instead of showing twice;
-  2. the next step's warp mesh at fraction `f` (`runtime::Mesh::uvs`): each vertex's
-     zoom and stretch to the power `f`, its rotation, translation and warp wobble times
-     `f`, so the parts compose back to the whole — two half steps land within a quarter
-     pixel of a whole one at 512 px on a preset that moves ~10 px a step
-     (`runtime::tests::parts_of_a_step_compose_to_the_whole`);
-  3. the preset's warp shader on that mesh, mixed over the plainly moved picture by `f`
-     (a blend constant), so its colour work (decay, sharpening, `ret -= 0.004`…) comes in
-     in proportion;
+  1. the last step's warp before its waves and shapes (kept as `bare` when a step draws
+     anything), moved by the next step's warp mesh at fraction `f`;
+  2. the preset's warp shader on the feedback, drawing and all, through the same mesh,
+     mixed over (1) by `f` (a blend constant), so its colour work (decay, sharpening,
+     `ret -= 0.004`…) comes in in proportion. Both ends are linear in `f`: at 0 it is
+     the last step's warp, which with the drawing (4) over it is the feedback; at 1 the
+     next step's warp of the feedback. The last step's drawing comes in by `f`, as the
+     trail it leaves, while its copy (4) moves on;
+  3. the mesh (`runtime::Mesh::between`). Where the step's map is a flow — each vertex
+     moved about as far, and the same way, as its neighbours — it is the map at
+     fraction `f` (`Mesh::uvs`): each vertex's zoom and stretch to the power `f`, its
+     rotation, translation and warp wobble times `f`, so the parts compose back to the
+     whole — two half steps land within a quarter pixel of a whole one at 512 px on a
+     preset that moves ~10 px a step
+     (`runtime::tests::parts_of_a_step_compose_to_the_whole`). Where the map folds or
+     tears the picture — a kaleidoscope's mirror (`dx = x - ox`), a jump elsewhere —
+     there is no motion to take a part of, and a part of a fold is a smear, so (1)
+     stays put and (2) takes the whole step: the refresh cross-fades to exactly what
+     the next step draws. How far a vertex is from a flow is how much the step
+     stretches the grid around it: a change in displacement under a quarter of the
+     distance to a neighbour slides, over a half cross-fades, in between mixes
+     (`between_steps_a_flow_slides_and_a_fold_cross_fades`);
   4. its own blur of that picture, then the drawing between the two steps'
      (`draw::between`): every wave, shape, motion vector and border both steps drew —
      the same stage, kind and number of points, in the same place in the list — with
      each vertex's position, colour and texture coordinate `f` of the way from the last
      step's to the next's, so it slides; a command only one of them drew fades, out by
-     `1 − f` or in by `f`;
+     `1 − f` or in by `f`. A textured shape samples the picture before the feedback
+     mixed with the feedback by `f`: the last step's shape sampled the one, the
+     next step's will sample the other;
   5. comp. The warp and comp shaders read every uniform `f` of the way from the last
      step's value to the next's (`values_at`): `time`, the audio levels, the `q`s, the
      roam values, the blur ranges; and comp's hue colours follow that `time`.
@@ -286,7 +298,9 @@ are exact):
 
 - **A warp shader that moves the picture itself** (`uv += …`, sampling at an offset) moves
   it the whole way at every refresh, mixed in by `f`: between steps that reads as a
-  cross-fade to the next position rather than a slide. The mesh's own motion slides.
+  cross-fade to the next position rather than a slide. The mesh's own motion slides,
+  except where it folds the picture, which cross-fades (above) — on a kaleidoscope the
+  folded picture is nearly the same each step, so that reads as still.
 - **Colour work is mixed linearly**: a decay `d` shows as `1 − f(1 − d)` between steps
   rather than `d^f` (at `d = 0.98`, `f = ½`: 0.9900 against 0.98995).
 - **Waves, shapes and motion vectors slide in straight lines** between where two steps
@@ -339,6 +353,38 @@ enough motion to match (0.3 px a refresh or more): `cope - drove through ghosts`
 0.55 0.49 0.35 before, 0.41 0.56 0.50 0.43 after; `witchcraft` 0.10 0.20 0.11 0.10, then
 0.21 0.17 0.22 0.20. What is left uneven is warp-shader motion (above) and presets that
 move under 0.2 px a refresh, below what the measure resolves.
+
+**Folds, measured.** That version still left some presets jittery, Dancer/Comet
+Mirror/448 worst. It looked like trails and a hard fade (`× 0.85 − 0.022` a step), but
+the motion tool found a different cause: its per-pixel equations fold the picture into
+a kaleidoscope (`dx = x - ox`), and taking a fraction of a fold smears each segment
+across the picture and back. Its steps differ by 1.4 levels (at 30 Hz), but each refresh
+between them differed by ~50. Folds now cross-fade (`Mesh::between`), and the picture
+between steps is linear in `f` (the last step's warp under the drawing between, the
+shader on the feedback over it), so a trail's newest piece fades in by `f` while its
+copy moves on. Textured shapes sample a mix of the two pictures the steps sampled.
+Measured on 448, its sibling 447, Comet/Mig_036_version3, Glowsticks Mirror/412 and
+Wake Mirror/417 (all hard fades, drawn trails, blur in comp), most-changing phase over
+least, and mean difference a refresh in brackets — main, then the first version, then
+now:
+
+| preset, 120 Hz | ¼× | 1× |
+| --- | --- | --- |
+| 448 | 3.74 (32.6), 3.92 (32.4), **1.08 (0.20)** | 1.52 (45.4), 1.53 (42.6), **1.03 (0.77)** |
+| 447 | 4.17 (17.0), 3.04 (14.7), **1.23 (4.17)** | 1.79 (27.9), 1.70 (20.6), **1.11 (5.72)** |
+| 412 | 5.41 (7.92), 3.61 (7.41), **1.56 (6.41)** | 2.26 (12.8), 1.79 (10.3), **1.18 (9.73)** |
+| Mig_036_version3 | 5.44 (0.32), 1.37 (0.40), **1.32 (0.40)** | 2.13 (1.24), 1.11 (1.37), **1.07 (1.36)** |
+| 417 | 2.42 (2.73), 1.21 (3.12), **1.21 (3.11)** | 1.29 (5.14), 1.06 (4.84), **1.07 (4.83)** |
+
+At 60 Hz 448 went from 2.99 (51.1) to 1.06 (0.35) at ¼× and from 1.00 (51.0, even but
+all flicker) to 1.04 (0.92) at 1×; at 4× every refresh is a step, unchanged. Over all 13
+presets, the worst that moves at least 0.2 levels a refresh is now 1.68 at 60 Hz ¼×,
+1.32 at 60 Hz 1×, 1.99 at 120 Hz ¼× and 1.46 at 120 Hz 1× (from 2.99, 1.97, 5.44 and
+3.15 on main); the worst is `martin + flexi - lock and release bipolar 04`, untouched by
+either version: its motion is a warp shader's noise, which cross-fades (above).
+`between_steps_a_folding_fading_trail_changes_evenly` holds a fold with a fading trail
+and blur in comp to 1.5 (the first version: 2.1 at 120 Hz). The feedback still steps
+once a step, so the compare scores stay 74.51 at `--refresh 60` and `120`.
 
 Frame times and stage-picture readback were ruled out on the bench (60 Hz, 1377×774,
 20 s): a refresh with a step takes 2.3 ms of CPU and one between 0.7 ms, 1 refresh in

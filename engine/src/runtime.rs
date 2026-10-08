@@ -512,6 +512,48 @@ impl Mesh {
             uvs.push([u as f32, w as f32]);
         }
     }
+
+    /// The two sets of texture coordinates a refresh `fraction` of the way
+    /// through the step draws with: `moved` for the plainly moved picture and
+    /// `shaded` for the warp shader mixed over it by the fraction.
+    ///
+    /// Where the step's map is a flow — each vertex moved about as far, and the
+    /// same way, as its neighbours: zoom, rotation, translation, the warp's
+    /// wobble — both are [`Mesh::uvs`] at the fraction, so the picture slides.
+    /// Where it tears or folds the picture instead — neighbours sent far apart, a
+    /// kaleidoscope's mirror (`dx = x - ox`), a jump to another place — there is
+    /// no motion to take a part of: a part of a fold is a smear. There `moved`
+    /// stays where it is and `shaded` is the whole step, so the refresh
+    /// cross-fades to exactly what the next step draws. How far a vertex is from
+    /// a flow is how much the step stretches the grid around it: a change in
+    /// displacement under a quarter of the distance between neighbours slides,
+    /// over a half cross-fades, and in between mixes the two.
+    pub fn between(&self, fraction: f64, moved: &mut Vec<[f32; 2]>, shaded: &mut Vec<[f32; 2]>) {
+        let (mut none, mut whole) = (Vec::new(), Vec::new());
+        self.uvs(0.0, &mut none);
+        self.uvs(fraction, moved);
+        self.uvs(1.0, &mut whole);
+        shaded.clear();
+        shaded.extend_from_slice(moved);
+        let (gx, gy) = (self.width + 1, self.height + 1);
+        let d = |i: usize| [whole[i][0] - none[i][0], whole[i][1] - none[i][1]];
+        let apart = |a: [f32; 2], b: [f32; 2]| ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2)).sqrt();
+        for i in 0..moved.len() {
+            let (ix, iz) = (i % gx, i / gx);
+            let mut stretch = 0f32;
+            for (ok, j) in [(ix > 0, i.wrapping_sub(1)), (ix + 1 < gx, i + 1), (iz > 0, i.wrapping_sub(gx)), (iz + 1 < gy, i + gx)] {
+                if ok {
+                    stretch = stretch.max(apart(d(i), d(j)) / apart(none[i], none[j]).max(1e-6));
+                }
+            }
+            let k = ((stretch - 0.25) / 0.25).clamp(0.0, 1.0);
+            if k > 0.0 {
+                let mix = |a: [f32; 2], b: [f32; 2]| [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
+                shaded[i] = mix(moved[i], whole[i]);
+                moved[i] = mix(moved[i], none[i]);
+            }
+        }
+    }
 }
 
 /// A custom wave's or shape's own variables: Butterchurn gives each its own
@@ -926,6 +968,42 @@ mod tests {
             // A whole step moves these points by up to ~10 px.
             assert!(worst < 0.25, "{parts} parts land {worst:.3} px from a whole step");
         }
+    }
+
+    #[test]
+    fn between_steps_a_flow_slides_and_a_fold_cross_fades() {
+        // A flow (zoom, rotation, a shift, a stretch): both maps are the part.
+        let (mut r, size) = moving();
+        let mut mesh = Mesh::default();
+        r.warp_motion(1.0, &size, &mut mesh);
+        let (mut part, mut moved, mut shaded) = (Vec::new(), Vec::new(), Vec::new());
+        mesh.uvs(0.5, &mut part);
+        mesh.between(0.5, &mut moved, &mut shaded);
+        assert!(moved == part && shaded == part, "a flow slides");
+        // A kaleidoscope's fold: the right half is the left half mirrored.
+        let text = "[preset00]\nzoom=1\nrot=0\nwarp=0\nper_pixel_1=dx = above(x, 0.5) * (2*x - 1);";
+        let mut r = load(text, &frame(), &size, 1).unwrap();
+        r.run_frame(&frame(), &size);
+        r.warp_motion(1.0, &size, &mut mesh);
+        let (mut none, mut whole) = (Vec::new(), Vec::new());
+        mesh.uvs(0.0, &mut none);
+        mesh.uvs(1.0, &mut whole);
+        mesh.between(0.5, &mut moved, &mut shaded);
+        let n = (size.mesh_width + 1) * (size.mesh_height + 1);
+        let (mut slid, mut faded) = (0, 0);
+        for i in 0..n {
+            let x = (i % (size.mesh_width + 1)) as f64 / size.mesh_width as f64;
+            if x < 0.4 {
+                // Left of the fold nothing moves.
+                assert_eq!((moved[i], shaded[i]), (none[i], none[i]));
+                slid += 1;
+            } else if x > 0.6 {
+                // Mirrored: the moved picture stays put, the shader's is the whole step.
+                assert_eq!((moved[i], shaded[i]), (none[i], whole[i]), "vertex {i}");
+                faded += 1;
+            }
+        }
+        assert!(slid > 0 && faded > 0);
     }
 
     #[test]

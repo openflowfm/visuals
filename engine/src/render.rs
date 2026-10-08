@@ -17,7 +17,8 @@
 //! as MilkDrop draws a frame, so the feedback after a second is the same at any
 //! refresh rate. A refresh between steps draws a picture that is not fed back:
 //! the last step's feedback carried that far into the next step (the next step's
-//! warp mesh at that fraction, its warp shader mixed in by it, its waves and
+//! warp mesh at that fraction — cross-faded where it folds the picture — its
+//! warp shader mixed in by it, its waves and
 //! shapes slid that far from where the last step drew them, every shader
 //! uniform that far from the last step's value to the next's), then blur and
 //! comp. See "The preset clock" in docs/milkdrop-engine.md.
@@ -115,15 +116,20 @@ pub struct Renderer {
     /// next step, never fed back; and its blur.
     display: Target,
     display_blur: Vec<(Target, Target)>,
+    /// The mesh between steps: for the moved picture and for the warp shader
+    /// mixed over it ([`Mesh::between`]).
     display_uvs: wgpu::Buffer,
+    display_shaded_uvs: wgpu::Buffer,
     /// The previous picture moved by the mesh alone, under the warp shader's mix.
     transport: wgpu::RenderPipeline,
-    /// The last step's warp before its drawing ([`CARRY`]), the picture carried
-    /// from it and the feedback, and the pass that makes it.
+    /// The last step's warp before its drawing: what a refresh between steps
+    /// moves on, under the drawing between ([`Renderer::show`]).
     bare: Target,
-    carried: Target,
-    carry: wgpu::RenderPipeline,
-    carry_uniform: wgpu::Buffer,
+    /// What textured shapes sample between steps ([`MIX`]), made the first time
+    /// one is drawn there; its pass and fraction.
+    textured_source: Option<Target>,
+    mix: wgpu::RenderPipeline,
+    mix_uniform: wgpu::Buffer,
     /// The drawing in the feedback, the drawing between it and the next step's
     /// ([`crate::draw::between`]), and the latter's vertex buffer.
     shown_list: DrawList,
@@ -299,23 +305,24 @@ struct In { @builtin(position) pos: vec4f, @location(0) uv: vec2f, @location(1) 
 @group(0) @binding(1) var smp: sampler;
 @fragment fn fs(i: In) -> @location(0) vec4f { return vec4f(textureSample(tex, smp, i.uv).rgb, 1.0); }";
 
-/// The picture a refresh between steps carries on from: the last step's warp
-/// before its waves and shapes, mixed with the feedback by `k.x` — so the last
-/// step's drawing, which the refresh draws again on its way to the next step's,
-/// fades into the trail it leaves rather than showing twice.
-const CARRY: &str = "
+/// Two same-sized pictures mixed by `k.x`, pixel for pixel: what a textured
+/// shape samples between steps — the picture before the feedback, which the
+/// last step's shapes sampled, mixed with the feedback, which the next step's
+/// will — so its texture moves on with it rather than jumping at the first
+/// refresh after a step.
+const MIX: &str = "
 struct Out { @builtin(position) pos: vec4f }
 @vertex fn vs(@builtin(vertex_index) i: u32) -> Out {
   var o: Out;
   o.pos = vec4f(f32(i & 1u) * 2.0 - 1.0, f32(i >> 1u) * 2.0 - 1.0, 0.0, 1.0);
   return o;
 }
-@group(0) @binding(0) var bare: texture_2d<f32>;
-@group(0) @binding(1) var fed: texture_2d<f32>;
+@group(0) @binding(0) var a: texture_2d<f32>;
+@group(0) @binding(1) var b: texture_2d<f32>;
 @group(0) @binding(2) var<uniform> k: vec4f;
 @fragment fn fs(o: Out) -> @location(0) vec4f {
   let p = vec2i(o.pos.xy);
-  return mix(textureLoad(bare, p, 0), textureLoad(fed, p, 0), k.x);
+  return mix(textureLoad(a, p, 0), textureLoad(b, p, 0), k.x);
 }";
 
 /// The finished picture to the window, the right way up.
@@ -487,6 +494,20 @@ impl Renderer {
         };
         let (blur, display_blur) = (blurs(), blurs());
         let display_uvs = buffer(&device, bytemuck::cast_slice(&vec![[0f32; 2]; warp_grid.len()]), vertex);
+        let mix_shader = wgsl(MIX);
+        let mix = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("mix"),
+            layout: None,
+            vertex: wgpu::VertexState { module: &mix_shader, entry_point: Some("vs"), compilation_options: Default::default(), buffers: &[] },
+            primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleStrip, ..Default::default() },
+            depth_stencil: None,
+            multisample: Default::default(),
+            fragment: Some(wgpu::FragmentState { module: &mix_shader, entry_point: Some("fs"), compilation_options: Default::default(), targets: &[Some(FORMAT.into())] }),
+            multiview_mask: None,
+            cache: None,
+        });
+        let mix_uniform = buffer(&device, &[0u8; 16], wgpu::BufferUsages::UNIFORM);
+        let display_shaded_uvs = buffer(&device, bytemuck::cast_slice(&vec![[0f32; 2]; warp_grid.len()]), vertex);
         let transport_fs = wgsl(TRANSPORT);
         let transport = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("transport"),
@@ -499,24 +520,6 @@ impl Renderer {
             multiview_mask: None,
             cache: None,
         });
-        let carry_shader = wgsl(CARRY);
-        let carry = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("carry"),
-            layout: None,
-            vertex: wgpu::VertexState { module: &carry_shader, entry_point: Some("vs"), compilation_options: Default::default(), buffers: &[] },
-            primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleStrip, ..Default::default() },
-            depth_stencil: None,
-            multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &carry_shader,
-                entry_point: Some("fs"),
-                compilation_options: Default::default(),
-                targets: &[Some(FORMAT.into())],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
-        let carry_uniform = buffer(&device, &[0u8; 16], wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST);
         let blur_uniforms = (0..3)
             .map(|_| {
                 let u = wgpu::BufferUsages::UNIFORM;
@@ -530,11 +533,12 @@ impl Renderer {
             display: Target::new(&device, full, "between steps"),
             display_blur,
             display_uvs,
+            display_shaded_uvs,
             transport,
             bare: Target::new(&device, full, "warp before drawing"),
-            carried: Target::new(&device, full, "carried between steps"),
-            carry,
-            carry_uniform,
+            textured_source: None,
+            mix,
+            mix_uniform,
             shown_list: DrawList::default(),
             between_list: DrawList::default(),
             between_buffer: None,
@@ -1061,7 +1065,7 @@ impl Renderer {
             self.preview(&mut encoder, 2, &self.blur[0].1.view);
         }
         if !self.draw_list.cmds.is_empty() {
-            // Kept for the refreshes before the next step (`CARRY`).
+            // Kept for the refreshes before the next step (`show`).
             encoder.copy_texture_to_texture(
                 self.feedback[self.current].texture.as_image_copy(),
                 self.bare.texture.as_image_copy(),
@@ -1076,10 +1080,10 @@ impl Renderer {
 
     /// The picture at `fraction` of the way into the next step, through comp.
     /// At 0 it is the feedback as it stands. Otherwise it is drawn, never fed
-    /// back: the feedback, with the last step's drawing faded into it by the
-    /// fraction ([`CARRY`]), carried by the next step's mesh at that fraction
-    /// ([`Mesh::uvs`]) with the preset's warp shader mixed over it by the
-    /// fraction, then its own blur, then the drawing between the two steps'
+    /// back: the last step's warp before its drawing, moved by the next step's
+    /// mesh at that fraction ([`Mesh::between`]), with the preset's warp shader
+    /// on the feedback — drawing and all — mixed over it by the fraction, then
+    /// its own blur, then the drawing between the two steps'
     /// ([`crate::draw::between`]), and comp, with every uniform between the two
     /// steps' ([`Renderer::values_at`]). Each of those is the step's own
     /// picture at a fraction of 1 and the last step's at 0, so the picture moves
@@ -1099,9 +1103,10 @@ impl Renderer {
             self.write_uniforms(self.warp.as_ref().unwrap(), &values);
         }
         if between {
-            let mut uvs = Vec::new();
-            self.mesh.uvs(fraction as f64, &mut uvs);
-            self.queue.write_buffer(&self.display_uvs, 0, bytemuck::cast_slice(&uvs));
+            let (mut moved, mut shaded) = (Vec::new(), Vec::new());
+            self.mesh.between(fraction as f64, &mut moved, &mut shaded);
+            self.queue.write_buffer(&self.display_uvs, 0, bytemuck::cast_slice(&moved));
+            self.queue.write_buffer(&self.display_shaded_uvs, 0, bytemuck::cast_slice(&shaded));
             let mut list = std::mem::take(&mut self.between_list);
             crate::draw::between(&self.shown_list, &self.draw_list, fraction, &mut list);
             upload(&self.device, &self.queue, &list, &mut self.between_buffer);
@@ -1110,26 +1115,12 @@ impl Renderer {
             }
             self.between_list = list;
             let fed = &self.feedback[self.current].view;
-            // The last step drew over its warp: carry on from its warp and its
-            // drawing mixed by the fraction, as the drawing between is drawn again.
-            let carrying = !self.shown_list.cmds.is_empty();
-            if carrying {
-                self.queue.write_buffer(&self.carry_uniform, 0, bytemuck::cast_slice(&[fraction, 0.0, 0.0, 0.0]));
-                let group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: None,
-                    layout: &self.carry.get_bind_group_layout(0),
-                    entries: &[
-                        wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&self.bare.view) },
-                        wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(fed) },
-                        wgpu::BindGroupEntry { binding: 2, resource: self.carry_uniform.as_entire_binding() },
-                    ],
-                });
-                let mut pass = begin(&mut encoder, &self.carried.view, true);
-                pass.set_pipeline(&self.carry);
-                pass.set_bind_group(0, &group, &[]);
-                pass.draw(0..4, 0..1);
-            }
-            let previous = if carrying { &self.carried.view } else { fed };
+            // Both ends are linear in the fraction: at 0 the last step's warp
+            // with the drawing between (then the last step's own) over it, which
+            // is the feedback; at 1 the next step's warp of the feedback, drawing
+            // and all, with the next step's drawing over it. So the last step's
+            // drawing fades into the trail it leaves as its copy moves on.
+            let bare = if self.shown_list.cmds.is_empty() { fed } else { &self.bare.view };
             {
                 let warp = self.warp.as_ref().unwrap();
                 let mixed = warp.mixed.as_ref().unwrap();
@@ -1137,11 +1128,11 @@ impl Renderer {
                     label: None,
                     layout: &self.transport.get_bind_group_layout(0),
                     entries: &[
-                        wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(previous) },
+                        wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(bare) },
                         wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(self.sampler_for("sampler_main", wrap)) },
                     ],
                 });
-                let shaded = self.bind_group(warp, mixed, previous, wrap, false);
+                let shaded = self.bind_group(warp, mixed, fed, wrap, false);
                 let mut pass = begin(&mut encoder, &self.display.view, true);
                 pass.set_pipeline(&self.transport);
                 pass.set_bind_group(0, &moved, &[]);
@@ -1150,10 +1141,29 @@ impl Renderer {
                 pass.set_blend_constant(wgpu::Color { r: f, g: f, b: f, a: f });
                 pass.set_pipeline(mixed);
                 pass.set_bind_group(0, &shaded, &[]);
-                self.mesh_draw(&mut pass, &self.display_uvs);
+                self.mesh_draw(&mut pass, &self.display_shaded_uvs);
             }
             self.blur(&mut encoder, &self.display.view, true);
-            self.draw(&mut encoder, &self.between_list, self.between_buffer.as_ref(), &self.display.view, fed, wrap, false);
+            let textured = self.between_list.vertices.iter().any(|v| v.textured > 0.5);
+            if textured {
+                let target = self.textured_source.get_or_insert_with(|| Target::new(&self.device, self.feedback[0].size, "textured between steps"));
+                self.queue.write_buffer(&self.mix_uniform, 0, bytemuck::cast_slice(&[fraction, 0.0, 0.0, 0.0]));
+                let group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: None,
+                    layout: &self.mix.get_bind_group_layout(0),
+                    entries: &[
+                        wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&self.feedback[self.current ^ 1].view) },
+                        wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&self.feedback[self.current].view) },
+                        wgpu::BindGroupEntry { binding: 2, resource: self.mix_uniform.as_entire_binding() },
+                    ],
+                });
+                let mut pass = begin(&mut encoder, &target.view, true);
+                pass.set_pipeline(&self.mix);
+                pass.set_bind_group(0, &group, &[]);
+                pass.draw(0..4, 0..1);
+            }
+            let sampled = if textured { &self.textured_source.as_ref().unwrap().view } else { &self.feedback[self.current].view };
+            self.draw(&mut encoder, &self.between_list, self.between_buffer.as_ref(), &self.display.view, sampled, wrap, false);
         }
         let source = if between { &self.display.view } else { &self.feedback[self.current].view };
         let comp = self.comp_stage.as_ref().unwrap();
@@ -1965,7 +1975,7 @@ comp_3=`}
 
     /// `text` drawn at 256×144, `hz` refreshes a second at `speed`: 3 steps, then
     /// each refresh over the next `steps`, measured by `measure`.
-    fn each_refresh(text: &str, hz: f64, speed: f64, steps: f64, measure: impl Fn(&[u8]) -> f64) -> Option<Vec<f64>> {
+    fn each_refresh(text: &str, hz: f64, speed: f64, steps: f64, mut measure: impl FnMut(&[u8]) -> f64) -> Option<Vec<f64>> {
         let (device, queue) = headless()?;
         let mut r = Renderer::new(device, queue, 256, 144);
         r.load(text, 1).unwrap();
@@ -2026,6 +2036,69 @@ comp_3=`}
             assert!((levels[levels.len() - 1] - levels[0]) > 40.0, "{hz} Hz at {speed}×: the ramp brightened");
             let off = unevenness(&levels);
             assert!(off < 1.5, "{hz} Hz at {speed}×: a refresh brightens the ramp {off:.2} levels off the mean");
+        }
+    }
+
+    /// Like Dancer/Comet Mirror/448: a square climbing the left half and
+    /// leaving a trail, a hard fade a step (`× 0.85 − 0.02`), a fold that mirrors
+    /// the left half onto the right (`dx = x − ox`), and blur in comp.
+    const FOLD: &str = "[preset00]
+MILKDROP_PRESET_VERSION=201
+PSVERSION=2
+fGammaAdj=1.0
+fWaveAlpha=0.0
+zoom=1.0
+rot=0.0
+warp=0.0
+mv_a=0.0
+shapecode_0_enabled=1
+shapecode_0_sides=4
+shapecode_0_x=0.25
+shapecode_0_y=0.1
+shapecode_0_rad=0.1
+shapecode_0_r=1
+shapecode_0_g=0.6
+shapecode_0_b=0.2
+shapecode_0_a=1
+shapecode_0_r2=1
+shapecode_0_g2=0.6
+shapecode_0_b2=0.2
+shapecode_0_a2=1
+shapecode_0_border_a=0
+shape_0_per_frame1=y = 0.1 + time*1.2;
+per_pixel_1=dx = above(x, 0.5) * (2*x - 1);
+warp_1=`shader_body {
+warp_2=`ret = tex2D(sampler_main, uv).xyz * 0.85 - 0.02;
+warp_3=`}
+comp_1=`shader_body {
+comp_2=`ret = tex2D(sampler_main, uv).xyz + GetBlur1(uv) * 0.5;
+comp_3=`}
+";
+
+    #[test]
+    fn between_steps_a_folding_fading_trail_changes_evenly() {
+        // Each refresh between steps should change the picture about as much as
+        // any other in the step. Moving the fold by a fraction smears the right
+        // half across the picture and back: drawn that way, at 120 Hz one phase
+        // of a step changed this picture 2.1× as much as another (and 448's by
+        // ~50 levels a refresh against 1.4 a step). Now 1.07–1.28.
+        for (hz, speed) in [(60.0, 1.0), (120.0, 1.0), (60.0, 0.25), (120.0, 0.25)] {
+            let mut before: Vec<u8> = Vec::new();
+            let Some(changes) = each_refresh(FOLD, hz, speed, 12.0, |p| {
+                let d = if before.is_empty() { f64::NAN } else { mean_difference(&before, p) };
+                before = p.to_vec();
+                d
+            }) else {
+                return;
+            };
+            let per = (hz / (PRESET_RATE * speed)).round() as usize;
+            let mut by_phase = vec![0.0; per];
+            for (i, d) in changes.iter().enumerate().skip(1) {
+                by_phase[i % per] += d;
+            }
+            let (lo, hi) = by_phase.iter().fold((f64::MAX, 0.0f64), |(lo, hi), &v| (lo.min(v), hi.max(v)));
+            assert!(lo > 0.0, "{hz} Hz at {speed}×: every refresh moves the picture on");
+            assert!(hi / lo < 1.5, "{hz} Hz at {speed}×: one phase of a step changes the picture {:.2}× as much as another: {by_phase:?}", hi / lo);
         }
     }
 
