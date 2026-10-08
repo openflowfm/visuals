@@ -38,6 +38,44 @@ Fluorescent Things: about 120 lines read back as 14 blocks).
 - **Per-pixel equations are "where" pictures.** A block set per pixel (zoom stronger at the
   edges) shows the field evaluated over the mesh, as arrows or a heat map.
 
+## No code, nothing lost, the same picture
+
+Layout A, the loop, is chosen. Code is never shown, and nothing typed is code. The
+`.milk` file stays the single truth: the graph is a lossless view of it and compiles back
+to plain MilkDrop, so any MilkDrop player draws the same picture. Anything the graph can
+express, an LFO included, is written as ordinary equations.
+
+| In the file | In the graph |
+| --- | --- |
+| a built-in variable a line sets (`zoom`, `rot`) | an inlet on its block (Zoom, Spin) |
+| a variable the author named (`ray`) | a named wire |
+| a built-in it reads (`rad`, `bass`, `time`) | an ingredient |
+| a number | a knob you drag; any knob can take a wire (an inlet) |
+| an expression | a formula drawn as maths, with variables as wire ends; open it and it is maths blocks (×, +, sin, bigger of…) |
+| a recognised shape (wobble, rainbow cycle) | one block with knobs, folding the exact maths blocks it stands for |
+| `if`, `?:`, `above` | a Choose block |
+| `x = x + …` across frames | a Remember block: last frame's value comes back in |
+| per-frame, per-pixel, per-point | how often a wire changes, shown on the wire; a per-pixel wire can't feed a per-frame inlet |
+| `rand`, `megabuf` writes, `loop` | blocks that keep their order, because the result depends on it |
+
+**Same picture, checked.** Folding a pattern into a block never rewrites the maths: the
+block keeps the exact expression tree it was read from, numbers keep their original text,
+and an unedited preset saves byte for byte. A `roundtrip` bin reads every preset in the
+pack into the graph, writes it back, and requires the same compiled programs (and, for
+shaders, the same pixels from a fixed run).
+
+**Where it gets hard**, measured over the pack:
+
+- EEL is small (operators, 33 functions, `if`, `loop`, `while`, memory), so all of it maps
+  to blocks. `loop` is in 217 presets (2%), `megabuf`/`gmegabuf` in 435 (4%), `reg00`–`reg99`
+  in 193, `exec2`/`exec3` in 80.
+- HLSL is a real language. `if` is in 2,591 presets, `while` in 625, `for` in 310, its own
+  functions in 403, `#define` in 213. Straight-line shader maths becomes blocks the same
+  way, with pictures (texture reads) as their own kind of wire. Loops and functions become
+  containers that open into their own graph. Until a construct has blocks, its part of the
+  shader shows as one sealed block that still runs exactly and keeps its wires: honest
+  about what it can't open yet, never wrong.
+
 ## Measured on the pack (9,795 presets)
 
 | Where the code is | Presets |
@@ -67,8 +105,10 @@ Most-set per frame: `zoom` 4,964, `decay` 3,889, `warp` 3,795, `rot` 2,454, `dx`
   maths into blocks is later work.
 - **Live values come from the running preset**, polled like the stage previews, so wires
   pulse with real energy (the pulse direction in `../flow-outlet/intent.md`).
-- **Layout is still open.** The mock shows A, the loop (recommended), B, columns, and C,
-  sentences.
+- **Layout A, the loop.** Ryan chose it on October 8, 2026.
+- **Three depths of one graph:** the block (plain words, a picture), formulas (maths
+  notation, variables as wires, numbers as knobs), and maths blocks. The saved text is never
+  part of the editor.
 
 ## Slices
 
