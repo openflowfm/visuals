@@ -39,7 +39,10 @@ itself, and [the harness](docs/harness.md) for working without one.
 `.github/workflows/release.yml` builds the Tauri app signed and notarised on macOS. A `v*`
 tag matching `app/src-tauri/tauri.conf.json`'s version opens a draft release with the
 disk image; running the workflow by hand on any branch builds the same image as a build
-artifact, without a release. It needs the signing secrets listed at the top of the file.
+artifact, without a release. Every day that `main` has moved, it also replaces the
+[nightly](https://github.com/openflowfm/visuals/releases/download/nightly/visual-flow-nightly_aarch64.dmg)
+— a signed prerelease straight from `main`, always at that link. It needs the signing
+secrets listed at the top of the file.
 
 ## Where the reasoning lives
 
