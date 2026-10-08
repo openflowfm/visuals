@@ -22,7 +22,6 @@ wgpu = "30.0.1"
 cpal = "0.18"
 pollster = "1"
 raw-window-handle = "0.6"
-png = "0.17"
 # Ableton Link: the official SDK through its C wrapper (abl_link), built with cmake.
 rusty_link = "0.4.9"
 

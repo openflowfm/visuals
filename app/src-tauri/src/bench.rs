@@ -419,10 +419,7 @@ pub mod view {
             }
             CFRelease(data);
             CFRelease(image);
-            let file = std::fs::File::create(path).map_err(|e| e.to_string())?;
-            let mut encoder = png::Encoder::new(std::io::BufWriter::new(file), w as u32, h as u32);
-            encoder.set_color(png::ColorType::Rgba);
-            encoder.write_header().and_then(|mut w| w.write_image_data(&rgba)).map_err(|e| e.to_string())
+            engine::picture::save_png(path, w as u32, h as u32, &rgba).map_err(|e| e.to_string())
         }
     }
 

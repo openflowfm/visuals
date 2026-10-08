@@ -85,25 +85,17 @@ fn index_from(value: Option<String>) -> Option<usize> {
     value?.trim().parse().ok()
 }
 
-fn saved_at() -> PathBuf {
-    let home = std::env::var_os("OPENFLOW_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".openflow"));
-    home.join("visuals").join("output.json")
-}
+/// The display chosen last, in [`crate::settings::dir`].
+const SAVED: &str = "output.json";
 
 fn save(choice: &Choice) {
-    let path = saved_at();
-    if let Some(dir) = path.parent() {
-        let _ = std::fs::create_dir_all(dir);
-    }
     if let Ok(text) = serde_json::to_string_pretty(choice) {
-        let _ = std::fs::write(path, text);
+        crate::settings::save(SAVED, text);
     }
 }
 
 fn saved() -> Option<Choice> {
-    serde_json::from_str(&std::fs::read_to_string(saved_at()).ok()?).ok()
+    crate::settings::load(SAVED)
 }
 
 static HANDLE: OnceLock<AppHandle> = OnceLock::new();
@@ -270,9 +262,7 @@ pub mod native {
     }
 
     fn commands() -> Option<std::sync::mpsc::Sender<bench::Cmd>> {
-        let app = HANDLE.get()?.state::<crate::App>();
-        let bench = app.bench.lock().unwrap();
-        bench.as_ref().map(|b| b.commands.clone())
+        HANDLE.get()?.state::<crate::App>().commands().ok()
     }
 
     /// The picture's place in a window `frame` big on a display of `scale`: its

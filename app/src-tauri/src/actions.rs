@@ -269,7 +269,7 @@ impl Deck {
 pub(crate) struct Now {
     deck: DeckView,
     /// The preset now on the bench, when the action changed it.
-    opened: Option<crate::Opened>,
+    opened: Option<crate::editor::Opened>,
     path: Option<String>,
     /// Why the preset at `path` did not open.
     error: Option<String>,
@@ -319,16 +319,11 @@ pub fn dispatch(handle: &AppHandle, action: Action) -> Result<(), String> {
     let path = {
         let store = deck.store.lock().unwrap();
         let mut live = deck.live.lock().unwrap();
-        let library = || {
-            let mut files = Vec::new();
-            crate::walk(&app.library, &mut files);
-            files.sort();
-            files
-        };
+        let library = || engine::preset::milk_files(&app.library);
         decide(&mut live, &action, &store, &library, roll())?
     };
     let (opened, error) = match &path {
-        Some(p) => match crate::open_path(&app, &p.to_string_lossy()) {
+        Some(p) => match crate::editor::open_path(&app, &p.to_string_lossy()) {
             Ok(o) => (Some(o), None),
             Err(e) => (None, Some(e)),
         },
