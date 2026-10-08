@@ -168,7 +168,7 @@ export interface VisualFlowServerOptions {
 export function createVisualFlowServer({ schemeFile }: VisualFlowServerOptions): McpServer {
   const store = new FlowAuthoringStore(schemeFile);
   const server = new McpServer(
-    { name: 'visual-flow-authoring', version: '0.1.0' },
+    { name: 'visual-flow-authoring', version: '0.2.0' },
     {
       instructions:
         'Inspect the documented node vocabulary before authoring. Validate a flow before saving it, and pass the latest scheme revision to every write. Node designs are reviews and implementation plans; adding a node still requires a code and wiki change.',
