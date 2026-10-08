@@ -7,7 +7,7 @@
 //!   --seconds S          how long to measure each (default 4)
 //!   --warm S             run this long first, unmeasured (default 3)
 //!   --size WxH           the size it draws at (default 512x384)
-//!   --dump DIR           also save the first second's pictures as PNGs there
+//!   --dump DIR           also save the first second's pictures as PNGs there, one folder per preset
 //!   --jitter MS          vary each refresh's time by up to ± this, as a real
 //!                        display loop does (default 0)
 //!
@@ -206,7 +206,31 @@ struct Measure {
     unmeasured: usize,
 }
 
-fn measure(r: &mut Renderer, text: &str, o: &Options, hz: f64, speed: f64, seed: u64) -> Measure {
+fn save_png(file: &Path, rgba: &[u8], w: u32, h: u32) -> Result<(), Box<dyn std::error::Error>> {
+    let mut e = png::Encoder::new(std::io::BufWriter::new(std::fs::File::create(file)?), w, h);
+    e.set_color(png::ColorType::Rgba);
+    e.set_depth(png::BitDepth::Eight);
+    e.write_header()?.write_image_data(rgba)?;
+    Ok(())
+}
+
+/// A folder name for a preset's pictures: its file name with anything but
+/// letters, digits, `-`, `_` and `.` made `_`, suffixed when already taken (ignoring case).
+fn dump_dir(root: &Path, preset: &Path, taken: &mut std::collections::HashSet<String>) -> PathBuf {
+    let stem = preset.file_stem().unwrap_or_default().to_string_lossy();
+    let safe: String = stem.chars().map(|c| if c.is_ascii_alphanumeric() || "-_.".contains(c) { c } else { '_' }).collect();
+    let safe = if safe.trim_matches('.').is_empty() { "preset".to_string() } else { safe };
+    let mut name = safe.clone();
+    let mut n = 2;
+    // Compared lower-cased: macOS and Windows folders ignore case.
+    while !taken.insert(name.to_ascii_lowercase()) {
+        name = format!("{safe}-{n}");
+        n += 1;
+    }
+    root.join(name)
+}
+
+fn measure(r: &mut Renderer, text: &str, o: &Options, hz: f64, speed: f64, seed: u64, dump: Option<&Path>) -> Measure {
     let (w, h) = (o.size.0 as usize, o.size.1 as usize);
     r.load(text, 1).expect("load");
     let mut audio = Audio::new(RATE as f32);
@@ -234,12 +258,12 @@ fn measure(r: &mut Renderer, text: &str, o: &Options, hz: f64, speed: f64, seed:
     for i in 0..(o.seconds * hz).round() as usize {
         step(r, &mut audio, &mut t, &mut position, &mut rng);
         let rgba = r.read_back();
-        if let Some(dir) = o.dump.as_ref().filter(|_| (i as f64) < hz) {
-            let file = std::fs::File::create(dir.join(format!("{hz}hz-{speed}x-{i:03}.png"))).expect("create png");
-            let mut e = png::Encoder::new(std::io::BufWriter::new(file), w as u32, h as u32);
-            e.set_color(png::ColorType::Rgba);
-            e.set_depth(png::BitDepth::Eight);
-            e.write_header().unwrap().write_image_data(&rgba).unwrap();
+        if let Some(dir) = dump.filter(|_| (i as f64) < hz) {
+            let file = dir.join(format!("{hz}hz-{speed}x-{i:03}.png"));
+            if let Err(e) = save_png(&file, &rgba, w as u32, h as u32) {
+                eprintln!("motion: can't write {}: {e}", file.display());
+                std::process::exit(1);
+            }
         }
         let now = luma(&rgba);
         let diff = before.iter().zip(&now).map(|(a, b)| (a - b).abs() as f64).sum::<f64>() / now.len() as f64;
@@ -271,12 +295,21 @@ fn main() {
     let (device, queue) = headless().expect("a GPU");
     let mut r = Renderer::new(device, queue, o.size.0, o.size.1);
     println!("preset\thz\tspeed\tmotion unevenness\tdifference unevenness\tmotion px/refresh by phase\tdifference by phase\tunmeasured");
+    let mut taken = std::collections::HashSet::new();
     for path in &o.presets {
         let text = engine::preset::decode(&std::fs::read(path).expect("read preset"));
         let name = path.file_stem().unwrap_or_default().to_string_lossy();
+        let dump = o.dump.as_ref().map(|root| {
+            let dir = dump_dir(root, path, &mut taken);
+            if let Err(e) = std::fs::create_dir_all(&dir) {
+                eprintln!("motion: can't create {}: {e}", dir.display());
+                std::process::exit(1);
+            }
+            dir
+        });
         for &hz in &o.hz {
             for &speed in &o.speeds {
-                let m = measure(&mut r, &text, &o, hz, speed, 7);
+                let m = measure(&mut r, &text, &o, hz, speed, 7, dump.as_deref());
                 let list = |v: &[f64]| v.iter().map(|x| format!("{x:.2}")).collect::<Vec<_>>().join(" ");
                 println!(
                     "{name}\t{hz}\t{speed}\t{:.2}\t{:.2}\t{}\t{}\t{}",
