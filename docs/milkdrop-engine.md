@@ -421,6 +421,68 @@ Frame times and stage-picture readback were ruled out on the bench (60 Hz, 1377�
 1200 went over 20 ms, and reading the stage pictures back every 4 steps takes 0.6 ms
 (1.9 ms at most). The loop's wake-up jitter was a small real cause (above, `Pacer`).
 
+## The preset index
+
+The library (0.4) browses the pack by picture, colour, speed and author, from an index
+the `index` bin writes: `index.json` (`engine/src/index.rs`) and a folder of thumbnails.
+
+- **What's in a row.** The path and SHA-256 of the file; style and sub-style, its first
+  two folders; authors and title from the name, `Author [+ Author] - Title [--- Editor
+  edit]` (`engine/src/index/authors.rs`), case-folded and mapped through a hand-checked
+  alias table, `engine/authors.tsv`, so one person's spellings count once (editors and
+  remixers such as AdamFX follow the originals; a name crediting no one reads `unknown`,
+  1,695 of the pack); and, once drawn, its look: up to two dominant hues, brightness,
+  speed and intensity, the last three also as low, mid or high.
+- **How it's drawn.** Each preset runs to the measuring bins' synthetic music (a kick on
+  the beat under a chord), one step a frame, at 384×288, to step 90 (three seconds). The
+  thumbnail is step 90 shrunk to 192×144, WebP at quality 75 (about 6 KB). The look is
+  measured over steps 45–90 on the shrunk pictures (`engine/src/analyse/`): brightness is
+  the mean luma; hues come from a 12-bin histogram weighted by saturation × value
+  (none when under 3% of the picture is coloured; a second hue when a colour not next to
+  the first carries at least half its weight); intensity is the mean frame difference per
+  step; speed is the mean block motion per step, the same block matching as `motion`
+  (16 px blocks, ±8 px). A step whose blocks are textured but not found again counts as 8
+  px (moving faster than the search); a preset with too little to follow on two thirds of
+  its steps (flat colour, soft glows) has no speed, and its speed level is its intensity's.
+- **Robustness.** Presets are drawn in child processes; one that doesn't answer within the
+  timeout (20 s) is killed, listed under `skipped` with the reason, and its child restarted.
+  The run is incremental by content hash: a preset already drawn, or already skipped
+  (unless `--retry`), isn't drawn again; names, styles and levels are always recomputed.
+
+**Cut points** (terciles of the full pack, 9,789 presets drawn; in `engine/src/index.rs`):
+
+| Measure | Low below | High from |
+| --- | --- | --- |
+| brightness (mean luma, 0–1) | 0.186 | 0.434 |
+| speed (block motion per step, thumbnail px) | 1.92 | 4.81 |
+| intensity (frame difference per step, luma 0–255) | 6.97 | 20.34 |
+
+With these cuts the pack splits 3,258 / 3,264 / 3,267 by brightness, 3,581 / 3,107 /
+3,101 by speed (the presets with no measured speed, 564, lean low) and 3,264 / 3,263 /
+3,262 by intensity. 2,117 presets have no dominant hue, 5,675 one and 1,997
+two.
+
+**Timings** (M1 Max, release build, while another lane was building the app):
+
+| Run | Jobs | Time | Rate | Skipped |
+| --- | --- | --- | --- | --- |
+| sample of 250 (`--sample 250`), Metal shader cache cold | 4 | 71 s | 3.5/s | 0 |
+| sample of 250, cache warm | 4 | 33 s | 7.5/s | 0 |
+| full pack (9,795), cache mostly cold | 6 | 38 min | 4.3/s | 93 (87 timed out) |
+| full pack, cache warm | 6 | 17.4 min | 9.4/s | 6 |
+| full pack, nothing changed (hashing and relevelling only) | — | 1.6 s | — | 6 |
+
+The 87 timeouts of the cold run (Sparkle mostly) all drew on a `--retry` (35 s): they were
+cold shader compiles queued behind each other under load, not hangs; each draws in about
+0.6 s alone. The 6 left are equations the EEL compiler refuses (`_aboeq()`, an assignment
+to an expression, two parse errors). The thumbnails for the whole pack take 60 MB.
+
+**Spot check** (30 presets, 10 per speed level spread over the pack, judged from a second
+of pictures at 30 Hz): intensity matched what's seen for about 26 of 30; speed for about
+22. Speed misses go two ways: sparse flicker and noise read as high speed (textured blocks
+that can't be found again count as fast), and soft glows that barely move can come out
+mid. Large slow shapes that move visibly can read low, as block motion is per step.
+
 ## Performance: 60 fps at 4K
 
 4K is 8.3 megapixels, and MilkDrop touches each of them several times a frame: the warp

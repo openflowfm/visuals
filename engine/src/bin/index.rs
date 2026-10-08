@@ -194,21 +194,24 @@ fn run(folder: &Path, out: &Path, count: Option<usize>, jobs: usize, timeout: Du
             eprintln!("{done}/{to_draw} in {secs:.0}s ({:.2} presets/s)", done as f64 / secs);
         }
         if done % 500 == 0 {
-            save(&mut index, &file);
+            save(&index, &file);
         }
     }
     for w in workers {
         let _ = w.join();
     }
     let secs = started.elapsed().as_secs_f64();
-    save(&mut index, &file);
+    save(&index, &file);
     report(&index, to_draw, secs, &file);
 }
 
-fn save(index: &mut Index, file: &Path) {
-    index.rows.sort_by(|a, b| a.path.cmp(&b.path));
-    index.skipped.sort_by(|a, b| a.path.cmp(&b.path));
-    if let Err(e) = index.save(file) {
+/// Writes `index` sorted by path. A sorted copy: `waiting` holds positions in
+/// `index.rows`, so the rows mustn't move while presets are still drawing.
+fn save(index: &Index, file: &Path) {
+    let mut sorted = index.clone();
+    sorted.rows.sort_by(|a, b| a.path.cmp(&b.path));
+    sorted.skipped.sort_by(|a, b| a.path.cmp(&b.path));
+    if let Err(e) = sorted.save(file) {
         eprintln!("index: can't write {}: {e}", file.display());
         std::process::exit(1);
     }

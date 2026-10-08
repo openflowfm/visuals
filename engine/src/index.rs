@@ -57,13 +57,17 @@ impl Cuts {
     }
 }
 
-/// Brightness cut points: mean picture luma, 0–1. Terciles of the full pack
-/// (see "The preset index" in `docs/milkdrop-engine.md`).
-pub const BRIGHTNESS: Cuts = Cuts(0.15, 0.3);
+// The cut points are the terciles of the full cream-of-the-crop pack (9,789
+// presets drawn), as the `index` bin prints them; see "The preset index" in
+// `docs/milkdrop-engine.md`. Levels are recomputed on every run, so changing
+// these needs no redraw.
+
+/// Brightness cut points: mean picture luma, 0–1.
+pub const BRIGHTNESS: Cuts = Cuts(0.186, 0.434);
 /// Speed cut points: mean block motion per step, in thumbnail pixels.
-pub const SPEED: Cuts = Cuts(0.5, 2.0);
+pub const SPEED: Cuts = Cuts(1.92, 4.81);
 /// Intensity cut points: mean frame difference per step, luma 0–255.
-pub const INTENSITY: Cuts = Cuts(3.0, 10.0);
+pub const INTENSITY: Cuts = Cuts(6.97, 20.34);
 
 /// What a preset looks like, measured from the pictures it draws.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -247,7 +251,7 @@ mod tests {
         let mut index = Index::new(90);
         let mut r = row(Path::new("Fractal/Spiral/Geiss + Rovastar - Thing --- Isosceles edit.milk"), hash(b"x"));
         r.thumbnail = Some(thumbnail_name(&r.hash));
-        r.look = Some(Look::new(vec![200, 30], 0.42, Some(1.5), 6.25));
+        r.look = Some(Look::new(vec![200, 30], 0.42, Some((SPEED.0 + SPEED.1) / 2.0), 6.25));
         index.rows.push(r.clone());
         let mut hung = row(Path::new("Waveform/Hang/a - b.milk"), hash(b"y"));
         hung.look = None;
