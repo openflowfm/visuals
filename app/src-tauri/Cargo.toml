@@ -10,6 +10,11 @@ publish = false
 name = "visuals"
 path = "src/main.rs"
 
+[features]
+# The editor: its commands (`src/editor.rs`) and the page's editing. The player
+# is built without it.
+lab = []
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -24,9 +29,12 @@ pollster = "1"
 raw-window-handle = "0.6"
 # Ableton Link: the official SDK through its C wrapper (abl_link), built with cmake.
 rusty_link = "0.4.9"
+# Updates (`src/updater.rs`); set up there by #87.
+tauri-plugin-updater = "2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["NSGeometry", "NSArray", "NSDictionary", "NSString", "NSValue"] }
-objc2-app-kit = { version = "0.3", features = ["NSView", "NSResponder", "NSWindow", "NSGraphics", "NSScreen", "NSColor"] }
+objc2-app-kit = { version = "0.3", features = ["NSView", "NSResponder", "NSWindow", "NSGraphics", "NSScreen", "NSColor", "NSEvent", "block2"] }
+block2 = "0.6"
 objc2-quartz-core = { version = "0.3", features = ["CALayer", "CAMetalLayer"] }

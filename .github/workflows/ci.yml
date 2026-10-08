@@ -48,7 +48,16 @@ jobs:
       # The "must build from a clean tree" rule, enforced rather than
       # remembered. A clean checkout is the only place it's honestly tested —
       # a file that's untracked but imported passes locally and fails here.
+      # The lab page (with the editor) first, then the app's, which must have
+      # none of the editor in it: no Lab chunk, no editor-only command.
+      - run: npm run app:build-ui:lab
       - run: npm run app:build-ui
+      - name: No editor in the app's page
+        run: |
+          if ls dist-app/assets | grep -q '^Lab-' || grep -qE "[\"'\`](apply|set_value|previews|default_shader)[\"'\`]" dist-app/assets/*.js; then
+            echo "the editor's code is in the app's page (dist-app/)"
+            exit 1
+          fi
 
   # The engine and the Tauri app. macOS because the app is macOS-only (its
   # output window is an NSScreen), and because the runner has Metal, so the
@@ -87,6 +96,9 @@ jobs:
 
       # rusty_link builds Ableton Link with cmake, which the macOS image has.
       - run: cargo test -p visuals-app
+
+      # The lab build (the editor's commands) compiles too; its tests are the same.
+      - run: cargo build -p visuals-app --features lab
 
       # The compare bench's engine half; its GPU tests draw here (Metal) and skip without a GPU.
       - run: cargo test -p visuals-compare

@@ -12,14 +12,13 @@ import * as output from './output.ts';
 import { leave, OutputPanel } from './OutputPanel.tsx';
 import { Playlists } from './Playlists.tsx';
 import * as pl from './playlists.ts';
-import { Bench } from './Bench.tsx';
 import { useNotice, useTauriEvent } from './hooks.ts';
 import { nameOf, notice, openFailed } from './shell.ts';
-import { FrameRate, Header, NoticeBanner } from './views.tsx';
+import { FrameRate, Header, HOME, NoticeBanner, Preview, type View } from './views.tsx';
 import './live.css';
 
 /** What the keys do, said by the strip along the bottom when nothing is pointed at. */
-const KEYS = '← → step · R random · H hold · hold S strobe, P punch, F freeze (⇧ latches) · B blackout · T tap · I invert · M mirror · 0 reset effects · ⌘⇧L editor';
+const KEYS = `← → step · R random · H hold · hold S strobe, P punch, F freeze (⇧ latches) · B blackout · T tap · I invert · M mirror · 0 reset effects · Esc or ⌘⇧L ${HOME}`;
 
 /**
  * Live mode: performing, not editing. The output fills a display of its own
@@ -29,11 +28,11 @@ const KEYS = '← → step · R random · H hold · hold S strobe, P punch, F fr
  * and HOLD (through the live action layer, as a controller would), the effects,
  * Link, the playlists, the audio input, and where the output goes.
  *
- * Esc does nothing here, so a stray key never stops the show: leaving is the
- * switch above, or ⌘⇧L. Leaving also puts the effects back, so the editor is
- * never left inverted or frozen.
+ * Leaving is the switch above, ⌘⇧L, or Esc — here (not while typing in a
+ * field) or on the output, which tells the page (`output.onEscape`). Leaving
+ * also puts the effects back, so the editor is never left inverted or frozen.
  */
-export function Live({ start, onMode }: { start: string | null; onMode: (mode: 'editor', path: string | null) => void }) {
+export function Live({ start, onMode }: { start: string | null; onMode: (mode: View, path: string | null) => void }) {
   const [lists, setLists] = useState<pl.Lists | null>(null);
   const [current, setCurrent] = useState<string | null>(null);
   const { notice: error, set: setError, fail, dismiss } = useNotice();
@@ -90,7 +89,8 @@ export function Live({ start, onMode }: { start: string | null; onMode: (mode: '
   );
   const actFx = useCallback((action: fx.FxAction) => fx.act(action).catch(fail("Couldn't change that effect.")), [fail]);
 
-  useLiveKeys({ editor: () => onMode('editor', current), act, fx: actFx });
+  useLiveKeys({ editor: () => onMode(HOME, current), act, fx: actFx });
+  useTauriEvent(output.onEscape, () => onMode(HOME, current));
 
   const says = pl.nextSays(lists, held);
   const up = pl.upNext(lists);
@@ -167,7 +167,7 @@ export function Live({ start, onMode }: { start: string | null; onMode: (mode: '
         <NoticeBanner className="live-problem" notice={error} onDismiss={dismiss} />
         {effects && <Effects state={effects} onState={setEffects} send={actFx} />}
         <div className="live-preview-cell">
-          <Bench className="live-preview" />
+          <Preview className="live-preview" />
         </div>
       </section>
       <aside className="live-side">

@@ -107,14 +107,21 @@ the editor isn't rendered (no graph, no inspector) and stage previews are off
 what's next in the playing playlist, previous / random / next (all through
 `actions::act`, as a controller would), the playlists panel with play/stop and
 auto-advance, the audio input, and the output's display picker and status. Keys: ← ↑
-previous, → ↓ next, R random. Esc does nothing, so a stray key never stops the show;
-⌘⇧L (or the switch) leaves live mode.
+previous, → ↓ next, R random. Esc, ⌘⇧L or the switch leaves live mode (Esc not while
+typing in a field). The output never becomes the key window, so Esc after a click on it
+lands on the main window's page, or on no window, which a local `NSEvent` monitor
+(`output::native::watch_escape`) turns into the page's `output-escape` event.
 
 The output (`output.rs`) is a borderless native `NSWindow` with no webview, the size of
 the chosen display (`NSScreen`), at the status window level so neither the menu bar nor
 the Dock covers it. Its content is black with a layer-hosting view on a `CAMetalLayer`
-placed at the preset's 16:9 fitted into the display (`output::fit`), so the bars are the
-window's own black, and its surface is that rectangle in the display's pixels. The bench's
+placed at the preset's 16:9 fitted into the display (`output::place`), so the bars are the
+window's own black, and its surface is that rectangle in the display's pixels. On a
+portrait display (one rotated 90°) the view fills it, and while the output is open the
+presets draw at the display's aspect (`bench::draw_size`: about `bench::DRAW`'s pixel
+count, 932×2226 on a rotated 3440×1440 ultrawide; `Renderer::resize` carries the picture
+over), so the picture fills the screen; the bench shows it pillarboxed
+(`Renderer::present` fits the picture to each surface). The bench's
 render thread presents every frame to both surfaces (`bench::Cmd::Output`): while the
 output is open it presents with vsync and paces the loop, and the bench is reconfigured to
 present without waiting (`AutoNoVsync`), so the picture is drawn at every refresh of the
@@ -162,9 +169,10 @@ Development: `VISUALS_LINK_EVERY=<bars>` starts with changes on, `VISUALS_LINK_L
 the frame every second and each change's beat.
 
 Not yet: one output only (no mirroring to several displays); the presets still draw at
-`bench::DRAW` (1920×1080) and are scaled to the display, so a 4K projector gets an
-upscaled picture; on a single display the output covers the editor window, and only the
-keys (⌘⇧L) get back out. The mouse cursor is hidden while it is over the output (a check
+about `bench::DRAW`'s 1920×1080 pixels and are scaled to the display, so a 4K projector
+gets an upscaled picture, and a landscape display that isn't 16:9 (an ultrawide) gets
+bars; on a single display the output covers the editor window, and only the keys (Esc,
+⌘⇧L) get back out. The mouse cursor is hidden while it is over the output (a check
 ten times a second on the main thread, as the output never becomes the key window; macOS
 only hides it while the app is the active one).
 

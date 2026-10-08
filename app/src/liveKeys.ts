@@ -5,7 +5,7 @@ import { isTyping } from './shell.ts';
 
 /** Where live mode's keys go. */
 export interface LiveKeyTargets {
-  /** ⌘⇧L: back to the editor. */
+  /** ⌘⇧L or Esc: back to the editor. */
   editor: () => void;
   /** A step: previous, next, random. */
   act: (action: pl.Action) => void;
@@ -14,7 +14,7 @@ export interface LiveKeyTargets {
 }
 
 /** What the handlers read of a key event. */
-export type KeyLike = Pick<KeyboardEvent, 'key' | 'metaKey' | 'shiftKey' | 'ctrlKey' | 'altKey' | 'repeat' | 'target' | 'preventDefault'>;
+export type KeyLike = Pick<KeyboardEvent, 'key' | 'metaKey' | 'shiftKey' | 'ctrlKey' | 'altKey' | 'repeat' | 'target' | 'preventDefault'> & Partial<Pick<KeyboardEvent, 'defaultPrevented'>>;
 
 /**
  * Live mode's keys, without the window: a press, a release, and the window
@@ -33,6 +33,13 @@ export function liveKeys(to: LiveKeyTargets) {
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (isTyping(e)) return;
+      if (e.key === 'Escape') {
+        // A menu or dialog that took its own Esc keeps it.
+        if (e.defaultPrevented) return;
+        e.preventDefault();
+        to.editor();
+        return;
+      }
       if (e.key === 'ArrowRight' || e.key === 'ArrowDown') to.act({ kind: 'next' });
       else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') to.act({ kind: 'previous' });
       else if (e.key.toLowerCase() === 'r') to.act({ kind: 'random' });

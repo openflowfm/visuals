@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+// The editor's edits (lab builds only: `VITE_LAB`, and the app's `lab` feature for the commands).
+import { useCallback, useMemo, useRef } from 'react';
 import * as api from './api.ts';
-import type { Entry, Owner, Preset, Report } from './api.ts';
-import { searchLibrary } from './librarySearch.ts';
-import { nameOf } from './shell.ts';
+import type { Owner, Preset, Report } from './api.ts';
 import { setValue as setValueIn } from './stages.ts';
 
 /**
@@ -39,35 +38,6 @@ export function makeApplier(apply: (p: Preset) => Promise<Report>, onReport: (r:
 /** Apply edits to the bench through `makeApplier`. */
 export function useApply(onReport: (r: Report) => void) {
   return useMemo(() => makeApplier(api.apply, onReport), [onReport]);
-}
-
-/**
- * The preset folder and its search. Once the folder is read it loads `start`, or
- * a random preset when there's none.
- */
-export function useLibrary(start: string | null, load: (e: Entry) => void, fail: (message: string) => (e: unknown) => void) {
-  const [library, setLibrary] = useState<Entry[]>([]);
-  const [search, setSearch] = useState('');
-  const [loaded, setLoaded] = useState(false);
-  const found = useMemo(() => searchLibrary(library, search), [library, search]);
-
-  useEffect(() => {
-    api.presets().then(
-      (l) => {
-        setLibrary(l);
-        setLoaded(true);
-        const first = start ? (l.find((e) => e.path === start) ?? { path: start, name: nameOf(start), group: '' }) : null;
-        if (first) load(first);
-        else if (l.length) load(l[Math.floor(Math.random() * l.length)]);
-      },
-      (e) => {
-        setLoaded(true);
-        fail("Couldn't read the preset folder.")(e);
-      },
-    );
-  }, [load, fail]);
-
-  return { library, loaded, search, setSearch, found };
 }
 
 /**

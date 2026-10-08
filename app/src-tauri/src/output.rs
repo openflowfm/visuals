@@ -1,7 +1,10 @@
 //! The live output: the show, full screen on a display of its own (a projector,
 //! a second screen). A borderless native window with no webview; its content is
 //! a Metal layer the bench's render thread presents the same finished picture
-//! to, scaled to fit the display with the preset's aspect kept, black around it.
+//! to, scaled to fit the display with the preset's aspect kept, black around it
+//! — or, on a display rotated to portrait, drawn at its aspect to fill it
+//! ([`place`]). Esc on it leaves live mode, as Esc in the main window does
+//! (the `output-escape` event).
 //!
 //! Live mode in the page opens it and leaving live mode closes it. While it is
 //! open it paces the render thread (it waits for its display's refresh) and the
@@ -57,6 +60,16 @@ pub fn fit(area: (f64, f64), aspect: (f64, f64)) -> (f64, f64, f64, f64) {
     ((area.0 - w) / 2.0, (area.1 - h) / 2.0, w, h)
 }
 
+/// The picture's place on a display `frame` points big at `scale` pixels a
+/// point: its rect in points (x, y, width, height) and its size in pixels. On a
+/// landscape display the picture keeps [`crate::bench::DRAW`]'s aspect, black
+/// around it; on a portrait one (a display rotated 90°) presets draw at the
+/// display's own aspect ([`crate::bench::draw_size`]), so the picture fills it.
+pub fn place(frame: (f64, f64), scale: f64) -> ((f64, f64, f64, f64), (u32, u32)) {
+    let rect = if frame.1 > frame.0 { (0.0, 0.0, frame.0, frame.1) } else { fit(frame, (crate::bench::DRAW.0 as f64, crate::bench::DRAW.1 as f64)) };
+    (rect, ((rect.2 * scale).round() as u32, (rect.3 * scale).round() as u32))
+}
+
 /// Which display the output goes to: display `index` when one is forced
 /// (`VISUALS_DISPLAY`), else the one chosen last (by id, then by name, as ids
 /// can change when a display is plugged in again), else the first that isn't
@@ -75,9 +88,9 @@ fn live_from(value: Option<String>) -> bool {
 }
 
 /// `VISUALS_PRESET=<path>`: the preset the page starts on, absolute or in the pack.
-fn preset_from(value: Option<String>, library: &std::path::Path) -> Option<String> {
+fn preset_from(value: Option<String>, folders: &[PathBuf]) -> Option<String> {
     let p = PathBuf::from(value.filter(|p| !p.is_empty())?);
-    Some(if p.is_absolute() { p } else { library.join(p) }.to_string_lossy().into_owned())
+    Some(if p.is_absolute() { p } else { crate::pack::resolve_in(folders, &p) }.to_string_lossy().into_owned())
 }
 
 /// `VISUALS_DISPLAY=<n>`: live mode outputs to display `n` (from 0, the system's order).
@@ -103,7 +116,30 @@ pub fn init(handle: AppHandle, instance: wgpu::Instance) {
     {
         native::watch_displays();
         native::watch_cursor();
+        native::watch_escape();
     }
+}
+
+/// The key code of Esc on a Mac keyboard (`kVK_Escape`).
+const ESC: u16 = 53;
+
+/// Where a key press went, for [`escapes`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum KeyWindow {
+    /// The main window: its page has the key, and handles Esc itself (not
+    /// while the user is typing in a field).
+    Main,
+    /// The output window.
+    Output,
+    /// No window: the app is in front with none of its windows key, as after
+    /// a click on the output, which never becomes the key window.
+    None,
+}
+
+/// Whether a key press leaves live mode from outside the page: Esc, with no
+/// modifier, while the output is open, sent to the output or to no window.
+pub fn escapes(key_code: u16, modifiers: bool, to: KeyWindow, open: bool) -> bool {
+    key_code == ESC && !modifiers && open && to != KeyWindow::Main
 }
 
 fn tell(status: &Status) {
@@ -120,8 +156,8 @@ pub fn live_start() -> bool {
 
 /// The preset the page starts on, in either mode.
 #[tauri::command]
-pub fn start_preset(app: tauri::State<crate::App>) -> Option<String> {
-    preset_from(std::env::var("VISUALS_PRESET").ok(), &app.library)
+pub fn start_preset(handle: AppHandle) -> Option<String> {
+    preset_from(std::env::var("VISUALS_PRESET").ok(), &crate::pack::folders(&handle))
 }
 
 #[tauri::command]
@@ -188,14 +224,14 @@ pub fn output_status(handle: AppHandle) -> Result<Status, String> {
 pub mod native {
     //! The window, kept on the main thread.
 
-    use super::{Display, HANDLE, INSTANCE, Status, fit, tell};
+    use super::{Display, HANDLE, INSTANCE, KeyWindow, Status, escapes, place, tell};
     use crate::bench;
     use objc2::MainThreadMarker;
     use objc2::rc::Retained;
-    use objc2_app_kit::{NSBackingStoreType, NSColor, NSScreen, NSStatusWindowLevel, NSView, NSWindow, NSWindowCollectionBehavior, NSWindowStyleMask};
+    use objc2_app_kit::{NSBackingStoreType, NSColor, NSEvent, NSEventMask, NSEventModifierFlags, NSScreen, NSStatusWindowLevel, NSView, NSWindow, NSWindowCollectionBehavior, NSWindowStyleMask};
     use objc2_foundation::{NSNumber, NSPoint, NSRect, NSSize, ns_string};
     use std::cell::RefCell;
-    use tauri::{AppHandle, Manager};
+    use tauri::{AppHandle, Emitter, Manager};
 
     struct Open {
         window: Retained<NSWindow>,
@@ -256,9 +292,8 @@ pub mod native {
     /// The picture's place in a window `frame` big on a display of `scale`: its
     /// rect in points, and its size in pixels.
     fn picture(frame: NSRect, scale: f64) -> (NSRect, (u32, u32)) {
-        let (x, y, w, h) = fit((frame.size.width, frame.size.height), (bench::DRAW.0 as f64, bench::DRAW.1 as f64));
-        let rect = NSRect::new(NSPoint::new(x, y), NSSize::new(w, h));
-        (rect, ((w * scale).round() as u32, (h * scale).round() as u32))
+        let ((x, y, w, h), size) = place((frame.size.width, frame.size.height), scale);
+        (NSRect::new(NSPoint::new(x, y), NSSize::new(w, h)), size)
     }
 
     pub fn status(_: MainThreadMarker) -> Status {
@@ -441,6 +476,39 @@ pub mod native {
             .expect("output cursor thread");
     }
 
+    /// Esc while the output is open, sent to the output or to no window (the
+    /// output never becomes the key window, so a key pressed after clicking it
+    /// can land on none): tell the page, which leaves live mode as its own Esc
+    /// does (`output-escape`). Esc in the main window is the page's to handle.
+    pub fn watch_escape() {
+        let Some(handle) = HANDLE.get() else { return };
+        let _ = handle.run_on_main_thread(|| {
+            let block = block2::RcBlock::new(|event: std::ptr::NonNull<NSEvent>| -> *mut NSEvent {
+                let mtm = MainThreadMarker::new().expect("main thread");
+                // SAFETY: AppKit hands the monitor a live event, on the main thread.
+                let e = unsafe { event.as_ref() };
+                let output = OUTPUT.with(|o| o.borrow().as_ref().map(|o| o.window.clone()));
+                let to = match e.window(mtm) {
+                    None => KeyWindow::None,
+                    Some(w) if output.as_ref().is_some_and(|o| *o == w) => KeyWindow::Output,
+                    Some(_) => KeyWindow::Main,
+                };
+                let modifiers = e.modifierFlags().intersects(NSEventModifierFlags::Command | NSEventModifierFlags::Option | NSEventModifierFlags::Control | NSEventModifierFlags::Shift);
+                if escapes(e.keyCode(), modifiers, to, output.is_some()) {
+                    if let Some(h) = HANDLE.get() {
+                        let _ = h.emit("output-escape", ());
+                    }
+                    return std::ptr::null_mut();
+                }
+                event.as_ptr()
+            });
+            // SAFETY: the handler returns the event it was given, or null to drop it.
+            let monitor = unsafe { NSEvent::addLocalMonitorForEventsMatchingMask_handler(NSEventMask::KeyDown, &block) };
+            // Kept for the app's life.
+            std::mem::forget(monitor);
+        });
+    }
+
     /// The output's window as a PNG (development: `VISUALS_CAPTURE_OUTPUT`).
     /// `overlay` is pasted over the picture (see [`bench::view::capture_view`]).
     pub fn capture(path: &std::path::Path, overlay: Option<&bench::Picture>) -> Result<(), String> {
@@ -465,6 +533,34 @@ mod tests {
         assert_eq!(fit((3440.0, 1440.0), (1920.0, 1080.0)), (440.0, 0.0, 2560.0, 1440.0));
         // The same aspect fills it.
         assert_eq!(fit((3840.0, 2160.0), (1920.0, 1080.0)), (0.0, 0.0, 3840.0, 2160.0));
+    }
+
+    #[test]
+    fn esc_off_the_page_leaves_live_mode() {
+        // On the output, or with no window key (after a click on the output).
+        assert!(escapes(ESC, false, KeyWindow::Output, true));
+        assert!(escapes(ESC, false, KeyWindow::None, true));
+        // The main window's page handles its own Esc, minding fields.
+        assert!(!escapes(ESC, false, KeyWindow::Main, true));
+        // Not with the output closed, with a modifier, or another key.
+        assert!(!escapes(ESC, false, KeyWindow::None, false));
+        assert!(!escapes(ESC, true, KeyWindow::Output, true));
+        assert!(!escapes(36, false, KeyWindow::Output, true));
+    }
+
+    #[test]
+    fn places_the_picture_landscape_as_ever_and_fills_a_rotated_display() {
+        // Landscape, as before: the 4K display (2× backing) gets it all…
+        assert_eq!(place((1920.0, 1080.0), 2.0), ((0.0, 0.0, 1920.0, 1080.0), (3840, 2160)));
+        // …an ultrawide 16:9 with bars at the sides.
+        assert_eq!(place((3440.0, 1440.0), 1.0), ((440.0, 0.0, 2560.0, 1440.0), (2560, 1440)));
+        // The same ultrawide rotated 90°: the whole display, not a 1440×810 strip.
+        assert_eq!(place((1440.0, 3440.0), 1.0), ((0.0, 0.0, 1440.0, 3440.0), (1440, 3440)));
+        // At 2× backing, its pixels are twice its points.
+        assert_eq!(place((1080.0, 1920.0), 2.0), ((0.0, 0.0, 1080.0, 1920.0), (2160, 3840)));
+        // What presets draw at for it has the display's aspect, so it isn't stretched.
+        let (w, h) = crate::bench::draw_size((1440, 3440));
+        assert!((w as f64 / h as f64 - 1440.0 / 3440.0).abs() < 0.001);
     }
 
     #[test]
@@ -498,7 +594,7 @@ mod tests {
         assert_eq!(index_from(Some(" 0 ".into())), Some(0));
         assert_eq!(index_from(Some("projector".into())), None);
         assert_eq!(index_from(None), None);
-        let library = std::path::Path::new("/p");
+        let library = &[PathBuf::from("/p")][..];
         assert_eq!(preset_from(None, library), None);
         assert_eq!(preset_from(Some(String::new()), library), None);
         assert_eq!(preset_from(Some("a/b.milk".into()), library).as_deref(), Some("/p/a/b.milk"));

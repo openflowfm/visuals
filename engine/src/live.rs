@@ -97,7 +97,7 @@ pub fn show(renderer: &mut Renderer, surface: &wgpu::Surface, config: &wgpu::Sur
     match surface.get_current_texture() {
         wgpu::CurrentSurfaceTexture::Success(frame) | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => {
             let view = frame.texture.create_view(&Default::default());
-            renderer.present(&view, config.format);
+            renderer.present(&view, config.format, (config.width, config.height));
             renderer.queue().present(frame);
         }
         _ => surface.configure(renderer.device(), config),
