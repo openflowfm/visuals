@@ -66,7 +66,7 @@ export function OutputPanel({ status, show }: { status: output.Status; show: (id
       )}
       {alone ? (
         <p className="live-warn" role="note">
-          Only one display is connected, so the output covers this one — the menu bar and this window too. Connect a projector or a second display and pick it here; ⌘⇧L closes the output.
+          Only one display is connected, so the output covers this one — the menu bar and this window too. Connect a projector or a second display and pick it here; Esc or ⌘⇧L closes the output.
         </p>
       ) : (
         shown?.main && (

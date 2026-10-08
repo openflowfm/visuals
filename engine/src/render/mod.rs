@@ -38,7 +38,7 @@ use crate::shader::{self, Kind};
 use blur::{blur_size, BLUR, BLUR_RATIOS};
 use drawing::{upload, DRAW};
 use gpu::{begin, bind, buffer, grid, pipeline, quad, quad_pass, read_targets, Samplers, Target};
-use output::{Trails, BLIT};
+use output::{Trails, BLIT, CARRY};
 use stage::{warp_layout, Stage, COMP_VS, WARP_VS};
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -129,6 +129,8 @@ pub struct Renderer {
     blur_v: wgpu::RenderPipeline,
     blur_uniforms: Vec<(wgpu::Buffer, wgpu::Buffer)>,
     blits: HashMap<wgpu::TextureFormat, wgpu::RenderPipeline>,
+    /// One target into another of a different size, the same way up ([`CARRY`]).
+    carry: wgpu::RenderPipeline,
     blit_shader: wgpu::ShaderModule,
     draw_shader: wgpu::ShaderModule,
     draw_pipelines: HashMap<(Topology, Blend), wgpu::RenderPipeline>,
@@ -232,6 +234,7 @@ impl Renderer {
         let display_uvs = buffer(&device, bytemuck::cast_slice(&vec![[0f32; 2]; warp_grid.len()]), vertex);
         let mix_shader = wgsl(MIX);
         let mix = quad(&device, "mix", &mix_shader, "fs", FORMAT);
+        let carry = quad(&device, "carry", &wgsl(CARRY), "fs", FORMAT);
         let mix_uniform = buffer(&device, &[0u8; 16], wgpu::BufferUsages::UNIFORM);
         let display_shaded_uvs = buffer(&device, bytemuck::cast_slice(&vec![[0f32; 2]; warp_grid.len()]), vertex);
         let transport_fs = wgsl(TRANSPORT);
@@ -289,6 +292,7 @@ impl Renderer {
             blur_v,
             blur_uniforms,
             blits: HashMap::new(),
+            carry,
             blit_shader,
             draw_shader,
             draw_pipelines: HashMap::new(),
@@ -313,6 +317,42 @@ impl Renderer {
 
     pub fn size(&self) -> Size {
         self.size
+    }
+
+    /// Draw at `width`×`height` from now on — for a live output in portrait,
+    /// say. The pictures kept so far (the feedback, the finished picture, the
+    /// outgoing snapshot) are carried over, scaled, so the preset goes on
+    /// rather than starting again from black; presets read the new size and
+    /// aspect from the next refresh.
+    pub fn resize(&mut self, width: u32, height: u32) {
+        let full = (width.max(1), height.max(1));
+        if full == self.comp.size {
+            return;
+        }
+        self.size.texsize_x = full.0 as f64;
+        self.size.texsize_y = full.1 as f64;
+        let size = self.size;
+        let device = &self.device;
+        let blurs =
+            || -> Vec<(Target, Target)> { BLUR_RATIOS.iter().map(|r| (Target::new(device, blur_size(&size, r[0]), "blur h"), Target::new(device, blur_size(&size, r[1]), "blur v"))).collect() };
+        let (blur, display_blur) = (blurs(), blurs());
+        let feedback = [Target::new(device, full, "feedback a"), Target::new(device, full, "feedback b")];
+        let comp = Target::new(device, full, "comp");
+        let outgoing = Target::new(device, full, "outgoing");
+        let mut encoder = device.create_command_encoder(&Default::default());
+        for to in &feedback {
+            self.carry(&mut encoder, &self.feedback[self.current].view, &to.view);
+        }
+        self.carry(&mut encoder, &self.comp.view, &comp.view);
+        self.carry(&mut encoder, &self.outgoing.view, &outgoing.view);
+        self.queue.submit([encoder.finish()]);
+        (self.blur, self.display_blur) = (blur, display_blur);
+        (self.feedback, self.comp, self.outgoing) = (feedback, comp, outgoing);
+        self.display = Target::new(&self.device, full, "between steps");
+        self.bare = Target::new(&self.device, full, "warp before drawing");
+        // Both are made again, at the new size, when next needed.
+        self.textured_source = None;
+        self.trails_pass = None;
     }
 
     pub fn device(&self) -> &wgpu::Device {
@@ -649,10 +689,11 @@ impl Renderer {
         Some(Previews { size, which: kept.iter().map(|(i, _)| *i).collect(), pixels })
     }
 
-    /// Draw the finished picture into `view`, a window's surface, scaled to fit,
+    /// Draw the finished picture into `view`, a window's surface `size` pixels
+    /// big: as large as fits with its aspect kept ([`fit`]), black around it,
     /// through the master pass, so the live effects ([`Renderer::set_master`])
     /// are on every picture presented.
-    pub fn present(&mut self, view: &wgpu::TextureView, format: wgpu::TextureFormat) {
+    pub fn present(&mut self, view: &wgpu::TextureView, format: wgpu::TextureFormat, size: (u32, u32)) {
         if !self.masters.contains_key(&format) {
             self.masters.insert(format, quad(&self.device, "master", &self.master_shader, "fs", format));
         }
@@ -665,7 +706,14 @@ impl Renderer {
             &[texture(&self.comp.view), texture(&self.outgoing.view), wgpu::BindingResource::Sampler(&self.samplers.linear_clamp), self.master_uniform.as_entire_binding()],
         );
         let mut encoder = self.device.create_command_encoder(&Default::default());
-        quad_pass(&mut encoder, view, pipeline, &group);
+        {
+            let (x, y, w, h) = fit(size, self.comp.size);
+            let mut pass = begin(&mut encoder, view, true);
+            pass.set_viewport(x, y, w, h, 0.0, 1.0);
+            pass.set_pipeline(pipeline);
+            pass.set_bind_group(0, &group, &[]);
+            pass.draw(0..4, 0..1);
+        }
         self.queue.submit([encoder.finish()]);
     }
 
@@ -685,6 +733,19 @@ pub struct Previews {
     pub which: Vec<usize>,
     /// Each picture's RGBA rows, top to bottom, one picture after another.
     pub pixels: Vec<u8>,
+}
+
+/// Where a picture `picture` pixels big goes in `area`: as large as fits with
+/// its aspect kept, centred. x, y, width and height in pixels; a side within a
+/// pixel of the area's is the area's, so a picture of the area's aspect but for
+/// rounding fills it.
+pub fn fit(area: (u32, u32), picture: (u32, u32)) -> (f32, f32, f32, f32) {
+    let (aw, ah) = (area.0.max(1) as f32, area.1.max(1) as f32);
+    let (pw, ph) = (picture.0.max(1) as f32, picture.1.max(1) as f32);
+    let scale = (aw / pw).min(ah / ph);
+    let snap = |side: f32, of: f32| if of - side < 1.0 { of } else { side };
+    let (w, h) = (snap(pw * scale, aw), snap(ph * scale, ah));
+    ((aw - w) / 2.0, (ah - h) / 2.0, w, h)
 }
 
 /// A device for rendering without a window — tests and the harness.

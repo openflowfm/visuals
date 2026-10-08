@@ -33,3 +33,5 @@ export const close = () => invoke<Status>('output_close');
 export const status = () => invoke<Status>('output_status');
 /** The output opened, moved, resized or closed (its display went away, say). */
 export const onStatus = (f: (s: Status) => void): Promise<UnlistenFn> => listen<Status>('output', (e) => f(e.payload));
+/** Esc pressed off the page: on the output, or with no window of the app's key (after a click on the output). */
+export const onEscape = (f: (payload: null) => void): Promise<UnlistenFn> => listen<null>('output-escape', () => f(null));

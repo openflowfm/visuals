@@ -14,8 +14,25 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-/// The size presets draw at, whatever the size of the hole they are shown in.
+/// The size presets draw at, whatever the size of the hole they are shown in,
+/// and on a landscape output: a 4K display shows it scaled up, an ultrawide
+/// with bars at the sides. It caps the GPU's work per refresh.
 pub const DRAW: (u32, u32) = (1920, 1080);
+
+/// The size presets draw at while the output is open on a display `output`
+/// pixels big. Landscape (or square): [`DRAW`]. Portrait — a display rotated
+/// 90° — the display's own aspect, so the picture fills it, at about
+/// [`DRAW`]'s pixel count (never more than the display's), so it costs the GPU
+/// no more than landscape does: 1080×1920 on a rotated 1080p display,
+/// 932×2226 on a rotated 3440×1440 one.
+pub fn draw_size(output: (u32, u32)) -> (u32, u32) {
+    let (w, h) = (output.0.max(1), output.1.max(1));
+    if w >= h {
+        return DRAW;
+    }
+    let scale = ((DRAW.0 as f64 * DRAW.1 as f64) / (w as f64 * h as f64)).sqrt().min(1.0);
+    (((w as f64 * scale).round() as u32).max(1), ((h as f64 * scale).round() as u32).max(1))
+}
 
 pub enum Cmd {
     Load(Box<Preset>, u64, Sender<Result<engine::render::Loaded, String>>),
@@ -81,7 +98,7 @@ fn snapshot(renderer: &mut Renderer, size: (u32, u32)) -> Option<Picture> {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
         view_formats: &[],
     });
-    renderer.present(&texture.create_view(&Default::default()), format);
+    renderer.present(&texture.create_view(&Default::default()), format, (w, h));
     let row = (w * 4).div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT) * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
     let staging = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("snapshot read back"),
@@ -291,6 +308,7 @@ impl Loop {
             Cmd::Output(next, done) => {
                 // The old output's surface goes first: its window closes after the reply.
                 self.output = None;
+                let next_size = next.as_ref().map(|(_, size)| *size);
                 if let Some((s, size)) = next {
                     let mut c = configuration(&self.adapter, &s, size);
                     #[cfg(target_os = "macos")]
@@ -301,6 +319,8 @@ impl Loop {
                     s.configure(self.renderer.device(), &c);
                     self.output = Some(Output { surface: s, config: c });
                 }
+                let draw = next_size.map_or(DRAW, draw_size);
+                self.renderer.resize(draw.0, draw.1);
                 self.config.present_mode = bench_present_mode(self.output.is_some());
                 if self.bench_shown {
                     self.surface.configure(self.renderer.device(), &self.config);
@@ -314,6 +334,8 @@ impl Loop {
                     output.config.width = w.max(1);
                     output.config.height = h.max(1);
                     output.surface.configure(self.renderer.device(), &output.config);
+                    let draw = draw_size((w, h));
+                    self.renderer.resize(draw.0, draw.1);
                 }
             }
             Cmd::Snapshot(output, reply) => {
@@ -608,6 +630,24 @@ pub mod view {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn draws_landscape_as_ever_and_portrait_at_the_displays_aspect() {
+        // Landscape, any shape: the size presets always drew at.
+        for display in [(1920, 1080), (3840, 2160), (3440, 1440), (2560, 1600), (1080, 1080)] {
+            assert_eq!(draw_size(display), DRAW, "{display:?}");
+        }
+        // A rotated 1080p display: DRAW turned on its side.
+        assert_eq!(draw_size((1080, 1920)), (1080, 1920));
+        // A rotated 3440×1440 ultrawide: its aspect, at DRAW's pixel count.
+        let (w, h) = draw_size((1440, 3440));
+        assert_eq!((w, h), (932, 2226));
+        assert!((w as f64 / h as f64 - 1440.0 / 3440.0).abs() < 0.001);
+        assert!(w * h <= DRAW.0 * DRAW.1 + 2000);
+        // A small portrait display: its own size, never more.
+        assert_eq!(draw_size((600, 800)), (600, 800));
+        assert_eq!(draw_size((0, 0)), DRAW);
+    }
 
     /// The steps the pictures are read at, for refreshes moving the preset `per` steps each.
     fn reads(per: u64, refreshes: u64) -> Vec<u64> {

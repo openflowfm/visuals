@@ -46,8 +46,63 @@ fn spiral(frames: usize) -> Option<(Renderer, Audio)> {
 fn presented(r: &mut Renderer, m: Master) -> Vec<u8> {
     let target = Target::new(r.device(), (W, H), "shown");
     r.set_master(m);
-    r.present(&target.view, FORMAT);
+    r.present(&target.view, FORMAT, (W, H));
     read_target(r, &target)
+}
+
+#[test]
+fn fit_keeps_the_aspect_and_fills_when_it_matches() {
+    // The same aspect fills the area.
+    assert_eq!(fit((3840, 2160), (1920, 1080)), (0.0, 0.0, 3840.0, 2160.0));
+    // A portrait picture in a landscape window: bars at the sides.
+    assert_eq!(fit((1920, 1080), (1080, 1920)), ((1920.0 - 607.5) / 2.0, 0.0, 607.5, 1080.0));
+    // A landscape picture on a portrait display: bars above and below.
+    assert_eq!(fit((1440, 3440), (1920, 1080)), (0.0, (3440.0 - 810.0) / 2.0, 1440.0, 810.0));
+    // The display's aspect but for rounding: it fills, no sliver of a bar.
+    assert_eq!(fit((1440, 3440), (932, 2226)), (0.0, 0.0, 1440.0, 3440.0));
+}
+
+#[test]
+fn resizing_carries_the_picture_on_at_the_new_aspect() {
+    let Some((mut r, mut audio)) = spiral(30) else { return };
+    let lit = |p: &[u8]| p.chunks(4).filter(|p| p[0] > 8 || p[1] > 8 || p[2] > 8).count();
+    r.set_trails(0.9);
+    play(&mut r, &mut audio, 2, 1.0 / 60.0);
+    r.keep_outgoing();
+
+    // Portrait: the presets read the new size and aspect.
+    r.resize(H, W);
+    let size = r.size();
+    assert_eq!((size.texsize_x, size.texsize_y), (H as f64, W as f64));
+    assert!(size.aspect_x() < 1.0 && size.aspect_y() == 1.0);
+    // The picture so far is carried over, not black.
+    let carried = r.read_back();
+    assert_eq!(carried.len(), (H * W * 4) as usize);
+    assert!(lit(&carried) > carried.len() / 4 / 4, "the picture is carried over");
+    // So is the outgoing snapshot a transition fades from.
+    let outgoing = presented(&mut r, Master { fade: 1.0, ..Master::default() });
+    assert!(lit(&outgoing) > 0, "the outgoing snapshot is carried over");
+    // It draws on at the new size, trails included.
+    play(&mut r, &mut audio, 10, 1.0 / 60.0);
+    let drawn = r.read_back();
+    assert_eq!(drawn.len(), (H * W * 4) as usize);
+    assert!(lit(&drawn) > 0);
+
+    // Shown in a landscape window, it keeps its aspect: black at the sides, the
+    // picture in the middle.
+    let shown = presented(&mut r, Master::default());
+    let column = |x: u32| (0..H).map(|y| &shown[((y * W + x) * 4) as usize..][..3]).collect::<Vec<_>>();
+    assert!(column(0).iter().all(|p| p.iter().all(|&c| c == 0)), "a bar at the left");
+    assert!(column(W - 1).iter().all(|p| p.iter().all(|&c| c == 0)), "a bar at the right");
+    assert!(column(W / 2).iter().any(|p| p.iter().any(|&c| c > 8)), "the picture in the middle");
+
+    // The same size again changes nothing; back to landscape draws as before.
+    r.resize(H, W);
+    assert_eq!(r.read_back().len(), (H * W * 4) as usize);
+    r.resize(W, H);
+    play(&mut r, &mut audio, 2, 1.0 / 60.0);
+    assert_eq!(r.read_back().len(), (W * H * 4) as usize);
+    assert!(lit(&presented(&mut r, Master::default())) > 0);
 }
 
 fn within(a: &[u8], b: &[u8], by: i32) -> bool {

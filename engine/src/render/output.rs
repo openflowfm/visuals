@@ -27,7 +27,28 @@ struct Out { @builtin(position) pos: vec4f, @location(0) uv: vec2f }
 @group(0) @binding(1) var smp: sampler;
 @fragment fn fs(in: Out) -> @location(0) vec4f { return vec4f(textureSample(tex, smp, in.uv).rgb, 1.0); }";
 
+/// One target scaled into another, the same way up: row 0 stays row 0, where
+/// [`BLIT`] turns the picture over for a window.
+pub(super) const CARRY: &str = "
+struct Out { @builtin(position) pos: vec4f, @location(0) uv: vec2f }
+@vertex fn vs(@builtin(vertex_index) i: u32) -> Out {
+  let p = vec2f(f32(i & 1u) * 2.0 - 1.0, f32(i >> 1u) * 2.0 - 1.0);
+  var o: Out;
+  o.pos = vec4f(p, 0.0, 1.0);
+  o.uv = vec2f(p.x * 0.5 + 0.5, 0.5 - p.y * 0.5);
+  return o;
+}
+@group(0) @binding(0) var tex: texture_2d<f32>;
+@group(0) @binding(1) var smp: sampler;
+@fragment fn fs(in: Out) -> @location(0) vec4f { return textureSample(tex, smp, in.uv); }";
+
 impl Renderer {
+    /// `source` scaled to fill `target`, the same way up ([`CARRY`]).
+    pub(super) fn carry(&self, encoder: &mut wgpu::CommandEncoder, source: &wgpu::TextureView, target: &wgpu::TextureView) {
+        let group = bind(&self.device, &self.carry, &[wgpu::BindingResource::TextureView(source), wgpu::BindingResource::Sampler(&self.samplers.linear_clamp)]);
+        quad_pass(encoder, target, &self.carry, &group);
+    }
+
     /// The trails echo: the brighter of comp and the picture before faded by
     /// [`Renderer::set_trails`]'s amount — `k` per 1/60 s of preset time, so the
     /// same at any refresh rate — per channel, kept in half floats and copied
