@@ -22,6 +22,19 @@
 #   APPLE_API_KEY_P8            an App Store Connect API key (.p8), base64
 #   APPLE_API_KEY_ID            that key's ID
 #   APPLE_API_ISSUER            its issuer ID
+#
+# Updates (`app/src-tauri/src/updater.rs`): with these two set as well, every
+# build also makes the signed update bundle (`*.app.tar.gz`, its `.sig`) and
+# `latest.json`, the file the app reads to learn of a newer version. A tagged
+# release carries them for the stable channel (live once the draft is
+# published); the nightly carries them for the nightly channel.
+#   TAURI_SIGNING_PRIVATE_KEY           the updater's private key, from
+#                                       `cargo tauri signer generate`
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  its password
+# Without them the build goes on without update bundles or `latest.json` and
+# says so; the app then says "Updates aren't set up in this build" if asked.
+# With them, `plugins.updater.pubkey` in tauri.conf.json must hold the matching
+# public key; the guard checks only that it isn't still the placeholder.
 
 name: release
 
@@ -67,6 +80,9 @@ jobs:
       build: ${{ steps.plan.outputs.build }}
       nightly: ${{ steps.plan.outputs.nightly }}
       dmg: ${{ steps.plan.outputs.dmg }}
+      version: ${{ steps.plan.outputs.version }}
+      bundle: ${{ steps.plan.outputs.bundle }}
+      updates: ${{ steps.updates.outputs.updates }}
     steps:
       - uses: actions/checkout@v7
 
@@ -97,16 +113,47 @@ jobs:
             fi
           fi
           version=$(node -p "require('./app/src-tauri/tauri.conf.json').version")
+          # The nightly's update bundle carries its build number, so the one
+          # `latest.json` points at is never replaced under it mid-download.
           if [ "$nightly" = true ]; then
             dmg=visual-flow-nightly_aarch64.dmg
+            bundle="visual-flow-nightly-${GITHUB_RUN_NUMBER}_aarch64.app.tar.gz"
           else
             dmg="visual-flow_${version}_aarch64.dmg"
+            bundle="visual-flow_${version}_aarch64.app.tar.gz"
           fi
           {
             echo "build=$build"
             echo "nightly=$nightly"
             echo "dmg=$dmg"
+            echo "version=$version"
+            echo "bundle=$bundle"
           } >> "$GITHUB_OUTPUT"
+
+      # Update bundles need the updater's private key. Without it this is a
+      # build without updates, said plainly; with it, the config must hold the
+      # public key that matches, or every update would fail its signature check
+      # on the user's Mac. This step checks only that it isn't the placeholder.
+      - name: Whether this build makes updates
+        id: updates
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          set -eu
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::notice::TAURI_SIGNING_PRIVATE_KEY is not set: building without update bundles or latest.json. The app will say updates aren't set up."
+            echo "updates=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          pubkey=$(node -p "require('./app/src-tauri/tauri.conf.json').plugins.updater.pubkey")
+          case "$pubkey" in
+            ''|REPLACE_WITH*)
+              echo "::error file=app/src-tauri/tauri.conf.json::TAURI_SIGNING_PRIVATE_KEY is set but plugins.updater.pubkey is still the placeholder; put the public key there."
+              exit 1
+              ;;
+          esac
+          echo "update bundles will be signed and latest.json published"
+          echo "updates=true" >> "$GITHUB_OUTPUT"
 
       - name: The tag is the version
         if: startsWith(github.ref, 'refs/tags/')
@@ -208,14 +255,31 @@ jobs:
       # Entitlements.plist) and, given APPLE_API_*, notarises and staples it
       # before wrapping it in the disk image. `targets` in tauri.conf.json stays
       # `app` so local builds don't make an image; the release asks for both.
+      #
+      # With the updater's key it also makes the update bundle (the notarised
+      # app, tarred and signed with that key). VISUALS_CHANNEL and VISUALS_BUILD
+      # are compiled in: which `latest.json` the app reads, and which nightly
+      # it is.
       - name: Build the app
         env:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          UPDATES: ${{ needs.guard.outputs.updates }}
+          VISUALS_CHANNEL: ${{ needs.guard.outputs.nightly == 'true' && 'nightly' || 'stable' }}
         working-directory: app/src-tauri
         run: |
+          set -eu
+          export VISUALS_BUILD="$GITHUB_RUN_NUMBER"
+          updater=false
+          if [ "$UPDATES" = true ]; then
+            updater=true
+          else
+            unset TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+          fi
           cargo tauri build --bundles app,dmg \
-            --config "{\"bundle\":{\"macOS\":{\"bundleVersion\":\"$GITHUB_RUN_NUMBER\"}}}"
+            --config "{\"bundle\":{\"createUpdaterArtifacts\":$updater,\"macOS\":{\"bundleVersion\":\"$GITHUB_RUN_NUMBER\"}}}"
 
       # The image is the file that travels, and Gatekeeper assesses it on open
       # — an un-notarised one is refused with "Apple cannot check it for
@@ -260,10 +324,54 @@ jobs:
             xcrun stapler validate "$dmg"
           done
 
+      # The update bundle Tauri made from the notarised app, renamed without
+      # the brackets, and the `latest.json` that points at it where this run
+      # puts it: the tag's release, or the nightly. A version on the nightly
+      # says its build (`0.3.0-nightly.123`), which is how a nightly knows a
+      # later one (`updater.rs`). A run by hand on a branch makes them for a
+      # look at the run page, pointing where the tag of this version would.
+      - name: The update bundle and latest.json
+        if: needs.guard.outputs.updates == 'true'
+        env:
+          NIGHTLY: ${{ needs.guard.outputs.nightly }}
+          VERSION: ${{ needs.guard.outputs.version }}
+          BUNDLE: ${{ needs.guard.outputs.bundle }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          set -eux
+          bundles=(target/release/bundle/macos/*.app.tar.gz)
+          test "${#bundles[@]}" -eq 1
+          cp "${bundles[0]}" "release/$BUNDLE"
+          cp "${bundles[0]}.sig" "release/$BUNDLE.sig"
+          if [ "$NIGHTLY" = true ]; then
+            version="${VERSION%%-*}-nightly.${GITHUB_RUN_NUMBER}"
+            url="$REPO_URL/releases/download/nightly/$BUNDLE"
+            notes="Nightly build ${GITHUB_RUN_NUMBER}, from ${GITHUB_SHA:0:7} on main. Not a release, and not tested beyond building."
+          else
+            version="$VERSION"
+            tag="v$VERSION"
+            url="$REPO_URL/releases/download/$tag/$BUNDLE"
+            if [ -f ".github/notes/$tag.md" ]; then
+              notes=$(cat ".github/notes/$tag.md")
+            else
+              notes="What's new in $tag: $REPO_URL/releases/tag/$tag"
+            fi
+          fi
+          jq -n \
+            --arg version "$version" \
+            --arg notes "$notes" \
+            --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg url "$url" \
+            --rawfile signature "release/$BUNDLE.sig" \
+            '{version: $version, notes: $notes, pub_date: $date,
+              platforms: {"darwin-aarch64": {signature: $signature, url: $url}}}' \
+            > release/latest.json
+          cat release/latest.json
+
       - uses: actions/upload-artifact@v7
         with:
           name: visual-flow
-          path: release/*.dmg
+          path: release/*
           if-no-files-found: error
 
   publish:
@@ -336,3 +444,47 @@ jobs:
           gh release upload nightly "assets/$DMG" --clobber
           gh api -X PATCH "repos/$GH_REPO/git/refs/tags/nightly" -f sha="$GITHUB_SHA" -F force=true
           gh release edit nightly --prerelease --latest=false --title "$title" --notes "$notes"
+
+      # The update bundle goes up before the `latest.json` that names it, so
+      # the app never reads of a bundle that isn't there yet. The bundle the
+      # new `latest.json` names and the two nightlies' before it stay, so a Mac
+      # that read an earlier `latest.json` can still download what it names;
+      # older ones go. A re-run of an older run (a lower run number than the
+      # live `latest.json`'s) publishes nothing, so the nightly never rolls back.
+      - name: Publish the nightly's update
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          UPDATES: ${{ needs.guard.outputs.updates }}
+          BUNDLE: ${{ needs.guard.outputs.bundle }}
+        run: |
+          set -eux
+          if [ "$UPDATES" != true ]; then
+            echo "No updater key: the nightly has no update bundle or latest.json this time."
+            exit 0
+          fi
+          live=0
+          if gh release download nightly --pattern latest.json --output live-latest.json --clobber; then
+            live=$(jq -r '.version' live-latest.json | sed -n 's/.*-nightly\.\([0-9][0-9]*\)$/\1/p')
+            live=${live:-0}
+          fi
+          if [ "$GITHUB_RUN_NUMBER" -lt "$live" ]; then
+            echo "::notice::The live nightly latest.json is build $live, newer than this run ($GITHUB_RUN_NUMBER): not publishing this update."
+            exit 0
+          fi
+          gh release upload nightly "assets/$BUNDLE" "assets/$BUNDLE.sig" --clobber
+          gh release upload nightly assets/latest.json --clobber
+          names=$(gh release view nightly --json assets --jq '.assets[].name')
+          # The run numbers of the three newest nightly bundles (this one among them).
+          keep=$(printf '%s\n' "$names" | sed -n 's/^visual-flow-nightly-\([0-9][0-9]*\)_aarch64\.app\.tar\.gz$/\1/p' | sort -rn | head -n 3)
+          printf '%s\n' "$names" | while IFS= read -r name; do
+            case "$name" in
+              "$BUNDLE"|"$BUNDLE.sig") ;;
+              visual-flow-nightly-*_aarch64.app.tar.gz|visual-flow-nightly-*_aarch64.app.tar.gz.sig)
+                run=${name#visual-flow-nightly-}
+                run=${run%%_*}
+                if ! printf '%s\n' "$keep" | grep -qx "$run"; then
+                  gh release delete-asset nightly "$name" --yes
+                fi ;;
+            esac
+          done
