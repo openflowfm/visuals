@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { HintFooter } from '@openflow/widgets/chrome/HintFooter.tsx';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { ButtonFace } from '@openflow/widgets/controls/ButtonFace.tsx';
@@ -11,34 +11,10 @@ import { LinkPanel } from './LinkPanel.tsx';
 import * as output from './output.ts';
 import { Playlists } from './Playlists.tsx';
 import * as pl from './playlists.ts';
-import { useNotice, useTauriEvent } from './hooks.ts';
+import { useNotice, usePlaceBench, useTauriEvent } from './hooks.ts';
 import { isTyping, nameOf, notice, openFailed } from './shell.ts';
 import { FrameRate, Header, NoticeBanner } from './views.tsx';
 import './live.css';
-
-/** The bench's small preview: report its hole to the app, as the editor does. */
-function usePlaceBench(ref: React.RefObject<HTMLDivElement | null>) {
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    // Anything above the hole (effects, banner, wrapping text) or a scroll can
-    // move it without resizing it, so check its rect every frame and send it
-    // only when it actually changed.
-    let last = '';
-    let frame = 0;
-    const tick = () => {
-      const r = el.getBoundingClientRect();
-      const key = `${r.left},${r.top},${r.width},${r.height}`;
-      if (key !== last) {
-        last = key;
-        api.placeBench({ x: r.left, y: r.top, width: r.width, height: r.height }).catch(() => {});
-      }
-      frame = requestAnimationFrame(tick);
-    };
-    tick();
-    return () => cancelAnimationFrame(frame);
-  }, [ref]);
-}
 
 const displayName = (d: output.Display) => `${d.index + 1}. ${d.name} (${d.width}×${d.height})${d.main ? ' · menu bar' : ''}`;
 
@@ -184,7 +160,7 @@ export function Live({ start, onMode }: { start: string | null; onMode: (mode: '
   return (
     <div className="live">
       <Header view="live" onChange={(view) => view !== 'live' && onMode(view, current)}>
-        <span className="fill" />
+        <span className="vf-fill" />
         <AudioInput onError={fail("Couldn't use that audio input.")} />
         <FrameRate always />
       </Header>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as api from './api.ts';
 import type { Entry, Owner, Preset, Problem, Report } from './api.ts';
 import { AudioInput } from './AudioInput.tsx';
@@ -12,34 +12,13 @@ import { FrameRate, Header, Hints, NoticeBanner, NowPlaying, type View } from '.
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { Library } from './Library.tsx';
 import { searchLibrary } from './librarySearch.ts';
-import { useNotice, useTauriEvent } from './hooks.ts';
+import { useNotice, usePlaceBench, useTauriEvent } from './hooks.ts';
 import { isTyping, nameOf, notice } from './shell.ts';
 import { Live } from './Live.tsx';
 import * as output from './output.ts';
 
 /** What a load or an edit reported wrong, equations then shaders, for the graph and the inspector to mark. */
 const reportProblems = (r: Report | null): Problem[] => (r ? [...r.equations, ...r.shaders] : []);
-
-/** Report the bench's hole to the app, which moves the native view under it. */
-function useBench(ref: React.RefObject<HTMLDivElement | null>) {
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const send = () => {
-      const r = el.getBoundingClientRect();
-      api.placeBench({ x: r.left, y: r.top, width: r.width, height: r.height }).catch(() => {});
-    };
-    const observer = new ResizeObserver(send);
-    observer.observe(el);
-    observer.observe(document.body);
-    window.addEventListener('resize', send);
-    send();
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', send);
-    };
-  }, [ref]);
-}
 
 /**
  * Apply edits to the bench, newest first: one load at a time, and while one is
@@ -109,7 +88,7 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live'
   const [tab, setTab] = useState(0);
   const [target, setTarget] = useState<string | null>(null);
   const bench = useRef<HTMLDivElement>(null);
-  useBench(bench);
+  usePlaceBench(bench);
   const apply = useApply(setReport);
   const audioFailed = useMemo(() => fail('couldn’t read the audio input'), [fail]);
 
