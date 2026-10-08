@@ -26,15 +26,12 @@
 
 mod common;
 
+use engine::analyse::{flow, luma, music, RATE};
 use engine::audio::{Audio, FFT_SIZE};
 use engine::picture::save_png;
 use engine::render::{headless, Renderer};
 use engine::runtime::PRESET_RATE;
 use std::path::{Path, PathBuf};
-
-const RATE: f64 = 44_100.0;
-const BLOCK: usize = 16;
-const SEARCH: i32 = 8;
 
 struct Options {
     presets: Vec<PathBuf>,
@@ -97,18 +94,6 @@ fn presets(path: &Path) -> Vec<PathBuf> {
     out
 }
 
-/// The music at time `t`: the window ending there.
-fn music(t: f64, left: &mut [f32]) {
-    for (i, s) in left.iter_mut().enumerate() {
-        let at = t - (FFT_SIZE - i) as f64 / RATE;
-        let since = at.rem_euclid(0.5);
-        let tau = std::f64::consts::TAU;
-        let kick = (tau * 55.0 * at).sin() * (-since * 12.0).exp();
-        let chord = 0.25 * ((tau * 220.0 * at).sin() + (tau * 277.0 * at).sin() + (tau * 330.0 * at).sin());
-        *s = (0.6 * kick + 0.3 * chord).clamp(-1.0, 1.0) as f32;
-    }
-}
-
 /// A small, deterministic stream for the jitter.
 struct Lcg(u64);
 impl Lcg {
@@ -116,75 +101,6 @@ impl Lcg {
         self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
         (self.0 >> 11) as f64 / (1u64 << 53) as f64
     }
-}
-
-fn luma(rgba: &[u8]) -> Vec<f32> {
-    rgba.chunks_exact(4).map(|p| 0.299 * p[0] as f32 + 0.587 * p[1] as f32 + 0.114 * p[2] as f32).collect()
-}
-
-/// The mean distance, in pixels, the textured blocks of `a` moved to in `b`, or
-/// `None` if too few were textured enough to find.
-fn flow(a: &[f32], b: &[f32], w: usize, h: usize) -> Option<f64> {
-    let r = SEARCH as usize;
-    let mut total = 0.0;
-    let mut found = 0usize;
-    let mut blocks = 0usize;
-    let mut by = r;
-    while by + BLOCK + r <= h {
-        let mut bx = r;
-        while bx + BLOCK + r <= w {
-            blocks += 1;
-            let mut mean = 0.0;
-            for y in 0..BLOCK {
-                for x in 0..BLOCK {
-                    mean += a[(by + y) * w + bx + x];
-                }
-            }
-            mean /= (BLOCK * BLOCK) as f32;
-            let mut var = 0.0;
-            for y in 0..BLOCK {
-                for x in 0..BLOCK {
-                    let d = a[(by + y) * w + bx + x] - mean;
-                    var += d * d;
-                }
-            }
-            var /= (BLOCK * BLOCK) as f32;
-            if var >= 16.0 {
-                let n = (2 * SEARCH + 1) as usize;
-                let mut sad = vec![0f32; n * n];
-                for (k, cost) in sad.iter_mut().enumerate() {
-                    let (dx, dy) = ((k % n) as i32 - SEARCH, (k / n) as i32 - SEARCH);
-                    let mut s = 0.0;
-                    for y in 0..BLOCK {
-                        let ra = (by + y) * w + bx;
-                        let rb = ((by + y) as i32 + dy) as usize * w + (bx as i32 + dx) as usize;
-                        for x in 0..BLOCK {
-                            s += (a[ra + x] - b[rb + x]).abs();
-                        }
-                    }
-                    *cost = s;
-                }
-                let (best, &min) = sad.iter().enumerate().min_by(|x, y| x.1.total_cmp(y.1)).unwrap();
-                let avg = sad.iter().sum::<f32>() / sad.len() as f32;
-                let (ix, iy) = ((best % n) as i32, (best / n) as i32);
-                // A distinct match, not at the edge of the search.
-                if min < 0.5 * avg && ix > 0 && iy > 0 && ix < n as i32 - 1 && iy < n as i32 - 1 {
-                    let at = |x: i32, y: i32| sad[y as usize * n + x as usize];
-                    let part = |l: f32, c: f32, r: f32| {
-                        let d = l - 2.0 * c + r;
-                        if d > 0.0 { (0.5 * (l - r) / d).clamp(-0.5, 0.5) } else { 0.0 }
-                    };
-                    let fx = (ix - SEARCH) as f32 + part(at(ix - 1, iy), min, at(ix + 1, iy));
-                    let fy = (iy - SEARCH) as f32 + part(at(ix, iy - 1), min, at(ix, iy + 1));
-                    total += ((fx * fx + fy * fy) as f64).sqrt();
-                    found += 1;
-                }
-            }
-            bx += BLOCK;
-        }
-        by += BLOCK;
-    }
-    (found * 10 >= blocks).then(|| total / found as f64)
 }
 
 struct Measure {
@@ -248,11 +164,11 @@ fn measure(r: &mut Renderer, text: &str, o: &Options, hz: f64, speed: f64, seed:
             }
         }
         let now = luma(&rgba);
-        let diff = before.iter().zip(&now).map(|(a, b)| (a - b).abs() as f64).sum::<f64>() / now.len() as f64;
+        let diff = engine::analyse::difference(&before, &now);
         let phase = ((position.fract() * per as f64).round() as usize) % per;
         difference[phase] += diff;
         differed[phase] += 1;
-        match flow(&before, &now, w, h) {
+        match flow(&before, &now, w, h).measured() {
             Some(m) => {
                 motion[phase] += m;
                 moved[phase] += 1;

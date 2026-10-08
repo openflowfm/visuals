@@ -29,14 +29,6 @@ use std::time::{Duration, Instant};
 /// (~4 presets/s); seconds once its shader cache is warm (~65/s).
 const DEFAULT_SAMPLE: usize = 250;
 
-/// `n` of `files` (sorted), evenly spaced: deterministic and spread over folders.
-fn sample(files: Vec<PathBuf>, n: usize) -> Vec<PathBuf> {
-    if n >= files.len() {
-        return files;
-    }
-    (0..n).map(|i| files[i * files.len() / n].clone()).collect()
-}
-
 /// What the watchdog sees: which preset, which stage, since when.
 struct Current {
     path: Option<PathBuf>,
@@ -118,7 +110,7 @@ fn main() {
     found.sort();
     let pool = found.len();
     files.extend(match count {
-        Some(n) => sample(found, n),
+        Some(n) => engine::index::sample(found, n),
         None => found,
     });
     if files.is_empty() {
