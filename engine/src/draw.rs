@@ -8,7 +8,7 @@
 //! shader turns them the renderer's way up.
 
 use crate::audio::Audio;
-use crate::runtime::{Runner, Size};
+use crate::runtime::{Globals, Runner, Size};
 use std::f64::consts::PI;
 
 #[repr(C)]
@@ -207,11 +207,10 @@ const SHAPE_RESET: &[&str] = &[
     "thickoutline", "textured", "tex_zoom", "tex_ang", "additive",
 ];
 
-pub fn shapes(r: &mut Runner, globals: &[f64; 15], size: &Size, list: &mut DrawList) {
+pub fn shapes(r: &mut Runner, globals: &Globals, size: &Size, list: &mut DrawList) {
     let q = r.q_after_frame();
     let regs = r.regs.clone();
-    let (ax, ay) = (size.aspect_x(), size.aspect_y());
-    let _ = ax;
+    let ay = size.aspect_y();
     for (slot, scope) in r.shapes.iter_mut().enumerate().filter_map(|(i, s)| s.as_mut().map(|s| (i, s))) {
         list.source = Source::Shape(slot);
         let mut vars = scope.run_frame_prelude(globals, &q, &regs);
@@ -264,7 +263,7 @@ pub fn shapes(r: &mut Runner, globals: &[f64; 15], size: &Size, list: &mut DrawL
     }
 }
 
-pub fn custom_waves(r: &mut Runner, audio: &Audio, globals: &[f64; 15], size: &Size, list: &mut DrawList) {
+pub fn custom_waves(r: &mut Runner, audio: &Audio, globals: &Globals, size: &Size, list: &mut DrawList) {
     let q = r.q_after_frame();
     let regs = r.regs.clone();
     let wave_scale = r.base_value("wave_scale");
@@ -649,7 +648,7 @@ pub fn between(from: &DrawList, to: &DrawList, f: f32, out: &mut DrawList) {
 }
 
 /// Everything after the warp, in Butterchurn's order.
-pub fn frame(r: &mut Runner, audio: &Audio, uvs: &[[f32; 2]], globals: &[f64; 15], size: &Size, list: &mut DrawList) {
+pub fn frame(r: &mut Runner, audio: &Audio, uvs: &[[f32; 2]], globals: &Globals, size: &Size, list: &mut DrawList) {
     list.clear();
     list.source = Source::Motion;
     motion_vectors(r, uvs, size, list);
