@@ -1,21 +1,12 @@
-//! Audio in: any Core Audio input, two of its channels, the last `WINDOW` samples
-//! of each kept for the render thread to read once a frame. The page's audio
-//! commands, and the choice kept for next time.
+//! Audio in: any Core Audio input, two of its channels, written into the
+//! engine's ring ([`engine::live`]) for the render thread to read once a frame.
+//! The page's audio commands, and the choice kept for next time.
 
 use crate::{bench, App};
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
+use cpal::traits::{DeviceTrait, HostTrait};
+use engine::live::peaks;
+pub use engine::live::{ring, Ring};
 use tauri::State;
-
-pub const WINDOW: usize = 1024;
-
-/// The latest `WINDOW` samples of the left and right channels.
-pub type Ring = Arc<Mutex<(VecDeque<f32>, VecDeque<f32>)>>;
-
-pub fn ring() -> Ring {
-    Arc::new(Mutex::new((VecDeque::from(vec![0.0; WINDOW]), VecDeque::from(vec![0.0; WINDOW]))))
-}
 
 fn name_of(d: &cpal::Device) -> String {
     d.description().map(|d| d.name().to_owned()).unwrap_or_default()
@@ -128,18 +119,11 @@ pub fn levels(app: State<App>) -> (f32, f32) {
     peaks(&app.ring)
 }
 
-/// The loudest sample in each channel's latest window, 0–1, for a meter.
-pub fn peaks(ring: &Ring) -> (f32, f32) {
-    let ring = ring.lock().unwrap();
-    let peak = |d: &VecDeque<f32>| d.iter().fold(0f32, |m, s| m.max(s.abs())).min(1.0);
-    (peak(&ring.0), peak(&ring.1))
-}
-
 /// Open `input` (the system input when `None`) and write channels `left` and
 /// `right` (from 0) into `ring`.
 /// `size`, when given, picks between inputs that share a name — macOS calls
 /// every aggregate device "Aggregate Device" — by their channel count.
-pub fn listen(input: Option<&str>, size: Option<usize>, (left, right): (usize, usize), ring: Ring) -> Result<Listening, String> {
+pub fn listen(input: Option<&str>, size: Option<usize>, channels: (usize, usize), ring: Ring) -> Result<Listening, String> {
     let host = cpal::default_host();
     let device = match input {
         Some(want) => {
@@ -150,30 +134,6 @@ pub fn listen(input: Option<&str>, size: Option<usize>, (left, right): (usize, u
         }
         None => host.default_input_device().ok_or("no system input")?,
     };
-    let config = device.default_input_config().map_err(|e| e.to_string())?;
-    let channels = config.channels() as usize;
-    let rate = config.sample_rate() as f32;
-    let (l, r) = (left.min(channels - 1), right.min(channels - 1));
-    let stream = device
-        .build_input_stream(
-            config.into(),
-            move |data: &[f32], _| {
-                // Never wait on the render thread from the audio thread.
-                if let Ok(mut ring) = ring.try_lock() {
-                    for frame in data.chunks_exact(channels) {
-                        ring.0.push_back(frame[l]);
-                        ring.1.push_back(frame[r]);
-                    }
-                    while ring.0.len() > WINDOW {
-                        ring.0.pop_front();
-                        ring.1.pop_front();
-                    }
-                }
-            },
-            |e| eprintln!("audio input stopped: {e}"),
-            None,
-        )
-        .map_err(|e| e.to_string())?;
-    stream.play().map_err(|e| e.to_string())?;
-    Ok(Listening { _stream: stream, name: name_of(&device), rate, channels, left: l, right: r })
+    let open = engine::live::open_input(&device, channels, ring)?;
+    Ok(Listening { _stream: open.stream, name: name_of(&device), rate: open.rate, channels: open.channels, left: open.left, right: open.right })
 }
