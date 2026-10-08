@@ -122,7 +122,12 @@ export function Playlists({ lists, current, selected, onSelect, onLists, onError
         {playlists.length === 0 && (
           <li className="playlists-empty">
             No playlists yet. <b>new</b> makes one; then add presets to it with <b>+ current</b>
-            {library ? <>, or <b>+</b> beside a preset in the library</> : null}.
+            {library ? (
+              <>
+                , or <b>+</b> beside a preset in the library
+              </>
+            ) : null}
+            .
           </li>
         )}
         {playlists.map((p, n) => {
@@ -191,15 +196,18 @@ export function Playlists({ lists, current, selected, onSelect, onLists, onError
               + current
             </Button>
             <span className="vf-fill" />
-            <span className="playlists-count">
-              {active && deck.index !== null ? `${deck.index + 1} / ${list.items.length}` : plural(list.items.length, 'preset')}
-            </span>
+            <span className="playlists-count">{active && deck.index !== null ? `${deck.index + 1} / ${list.items.length}` : plural(list.items.length, 'preset')}</span>
           </div>
           <ol className="playlists-items" aria-label={`${list.name}, in order`}>
             {list.items.length === 0 && (
               <li className="playlists-empty">
                 {list.name} is empty. <b>+ current</b> adds the preset that's playing
-                {library ? <>; <b>+</b> beside a preset in the library adds that one</> : null}.
+                {library ? (
+                  <>
+                    ; <b>+</b> beside a preset in the library adds that one
+                  </>
+                ) : null}
+                .
               </li>
             )}
             {list.items.map((item, i) => {
@@ -225,7 +233,13 @@ export function Playlists({ lists, current, selected, onSelect, onLists, onError
                     <Button tone="quiet" disabled={i === 0} onPress={() => run(pl.moveItem(list.id, i, i - 1), 'move the preset')} label={`Move ${item.name} up`} title="Move up">
                       ↑
                     </Button>
-                    <Button tone="quiet" disabled={i === list.items.length - 1} onPress={() => run(pl.moveItem(list.id, i, i + 1), 'move the preset')} label={`Move ${item.name} down`} title="Move down">
+                    <Button
+                      tone="quiet"
+                      disabled={i === list.items.length - 1}
+                      onPress={() => run(pl.moveItem(list.id, i, i + 1), 'move the preset')}
+                      label={`Move ${item.name} down`}
+                      title="Move down"
+                    >
                       ↓
                     </Button>
                     <Button tone="quiet" onPress={() => run(pl.removeItem(list.id, i), 'remove the preset')} label={`Remove ${item.name} from ${list.name}`} title="Remove from the playlist">

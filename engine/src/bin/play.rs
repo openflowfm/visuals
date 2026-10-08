@@ -88,9 +88,7 @@ fn options() -> Options {
 fn listen(input: Option<&str>, channels: (usize, usize)) -> Option<(cpal::Stream, Ring, f32)> {
     let host = cpal::default_host();
     let device = match input {
-        Some(want) => host.input_devices().ok()?.find(|d| {
-            d.description().map(|x| x.name().to_lowercase().contains(&want.to_lowercase())).unwrap_or(false)
-        })?,
+        Some(want) => host.input_devices().ok()?.find(|d| d.description().map(|x| x.name().to_lowercase().contains(&want.to_lowercase())).unwrap_or(false))?,
         None => host.default_input_device()?,
     };
     let name = device.description().map(|d| d.name().to_owned()).unwrap_or_default();
@@ -163,11 +161,7 @@ impl ApplicationHandler for App {
         if self.window.is_some() {
             return;
         }
-        let window = Arc::new(
-            event_loop
-                .create_window(Window::default_attributes().with_title("visual[flow]").with_inner_size(winit::dpi::LogicalSize::new(1280, 720)))
-                .expect("window"),
-        );
+        let window = Arc::new(event_loop.create_window(Window::default_attributes().with_title("visual[flow]").with_inner_size(winit::dpi::LogicalSize::new(1280, 720))).expect("window"));
         let instance = wgpu::Instance::default();
         let surface = instance.create_surface(window.clone()).expect("surface");
         let (adapter, device, queue) = live::surface_device(&instance, &surface);

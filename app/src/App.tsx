@@ -54,17 +54,20 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live'
   const { edit, set } = usePresetEdits(preset, setPreset, apply);
   const audioFailed = useMemo(() => fail("Couldn't read the audio input."), [fail]);
 
-  const load = useCallback(async (e: Entry) => {
-    setCurrent(e);
-    dismiss();
-    try {
-      const opened = await api.open(e.path);
-      setPreset(opened.preset);
-      setReport(opened.report);
-    } catch (err) {
-      setNotice(notice(`Couldn't open ${e.name}.`, err));
-    }
-  }, [dismiss, setNotice]);
+  const load = useCallback(
+    async (e: Entry) => {
+      setCurrent(e);
+      dismiss();
+      try {
+        const opened = await api.open(e.path);
+        setPreset(opened.preset);
+        setReport(opened.report);
+      } catch (err) {
+        setNotice(notice(`Couldn't open ${e.name}.`, err));
+      }
+    },
+    [dismiss, setNotice],
+  );
   const { library, loaded, search, setSearch, found } = useLibrary(start, load, fail);
   const shown = found.shown;
 
@@ -153,14 +156,7 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live'
           />
         ) : (
           lists && (
-            <Playlists
-              lists={lists}
-              current={current?.path ?? null}
-              selected={target ?? playing ?? lists.playlists[0]?.id ?? null}
-              onSelect={setTarget}
-              onLists={setLists}
-              onError={setNotice}
-            />
+            <Playlists lists={lists} current={current?.path ?? null} selected={target ?? playing ?? lists.playlists[0]?.id ?? null} onSelect={setTarget} onLists={setLists} onError={setNotice} />
           )
         )}
       </aside>
@@ -168,9 +164,7 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live'
         <div className="bench-row">
           <div className="bench" ref={bench} />
         </div>
-        <div className="graph">
-          {preset && <StageGraph preset={preset} problems={problems} selected={selected} onSelect={setSelected} onChange={edit} onSet={set} />}
-        </div>
+        <div className="graph">{preset && <StageGraph preset={preset} problems={problems} selected={selected} onSelect={setSelected} onChange={edit} onSet={set} />}</div>
       </main>
       <aside className="side">{preset && <Inspector preset={preset} selected={selected} problems={problems} onChange={edit} onSet={set} />}</aside>
       <Hints />

@@ -55,20 +55,7 @@ pub fn uniforms(m: &Master) -> [f32; 12] {
         Mirror::Quad => (1.0, 1.0),
     };
     let unit = |v: f32| v.clamp(0.0, 1.0);
-    [
-        m.brightness.max(0.0),
-        m.hue,
-        unit(m.invert),
-        unit(m.punch),
-        mx,
-        my,
-        unit(m.flash),
-        unit(m.black),
-        unit(m.fade),
-        0.0,
-        0.0,
-        0.0,
-    ]
+    [m.brightness.max(0.0), m.hue, unit(m.invert), unit(m.punch), mx, my, unit(m.flash), unit(m.black), unit(m.fade), 0.0, 0.0, 0.0]
 }
 
 /// The master pass: the picture, the outgoing snapshot mixed in by `fade`, then

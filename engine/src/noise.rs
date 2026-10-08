@@ -46,13 +46,7 @@ pub fn texture_2d(size: usize, zoom: usize, rng: &mut Memory) -> Vec<u8> {
                     let base_x = x / zoom * zoom + size;
                     let base_y = y * size;
                     let at = |k: usize| base_y * 4 + (k % size) * 4;
-                    let r = interpolate(
-                        texel(&tex, at(base_x - zoom)),
-                        texel(&tex, at(base_x)),
-                        texel(&tex, at(base_x + zoom)),
-                        texel(&tex, at(base_x + zoom * 2)),
-                        (x % zoom) as f64 / zoom as f64,
-                    );
+                    let r = interpolate(texel(&tex, at(base_x - zoom)), texel(&tex, at(base_x)), texel(&tex, at(base_x + zoom)), texel(&tex, at(base_x + zoom * 2)), (x % zoom) as f64 / zoom as f64);
                     tex[y * size * 4 + x * 4..][..4].copy_from_slice(&r);
                 }
             }
@@ -62,13 +56,7 @@ pub fn texture_2d(size: usize, zoom: usize, rng: &mut Memory) -> Vec<u8> {
                 if y % zoom != 0 {
                     let base_y = y / zoom * zoom + size;
                     let at = |k: usize| (k % size) * size * 4 + x * 4;
-                    let r = interpolate(
-                        texel(&tex, at(base_y - zoom)),
-                        texel(&tex, at(base_y)),
-                        texel(&tex, at(base_y + zoom)),
-                        texel(&tex, at(base_y + zoom * 2)),
-                        (y % zoom) as f64 / zoom as f64,
-                    );
+                    let r = interpolate(texel(&tex, at(base_y - zoom)), texel(&tex, at(base_y)), texel(&tex, at(base_y + zoom)), texel(&tex, at(base_y + zoom * 2)), (y % zoom) as f64 / zoom as f64);
                     tex[y * size * 4 + x * 4..][..4].copy_from_slice(&r);
                 }
             }
@@ -90,13 +78,8 @@ pub fn texture_3d(size: usize, zoom: usize, rng: &mut Memory) -> Vec<u8> {
                         let base_x = x / zoom * zoom + size;
                         let base_y = z * slice + y * line;
                         let at = |k: usize| base_y * 4 + (k % size) * 4;
-                        let r = interpolate(
-                            texel(&tex, at(base_x - zoom)),
-                            texel(&tex, at(base_x)),
-                            texel(&tex, at(base_x + zoom)),
-                            texel(&tex, at(base_x + zoom * 2)),
-                            (x % zoom) as f64 / zoom as f64,
-                        );
+                        let r =
+                            interpolate(texel(&tex, at(base_x - zoom)), texel(&tex, at(base_x)), texel(&tex, at(base_x + zoom)), texel(&tex, at(base_x + zoom * 2)), (x % zoom) as f64 / zoom as f64);
                         tex[z * slice * 4 + y * line * 4 + x * 4..][..4].copy_from_slice(&r);
                     }
                 }
@@ -109,13 +92,8 @@ pub fn texture_3d(size: usize, zoom: usize, rng: &mut Memory) -> Vec<u8> {
                         let base_y = y / zoom * zoom + size;
                         let base_z = z * slice;
                         let at = |k: usize| (k % size) * line * 4 + x * 4 + base_z * 4;
-                        let r = interpolate(
-                            texel(&tex, at(base_y - zoom)),
-                            texel(&tex, at(base_y)),
-                            texel(&tex, at(base_y + zoom)),
-                            texel(&tex, at(base_y + zoom * 2)),
-                            (y % zoom) as f64 / zoom as f64,
-                        );
+                        let r =
+                            interpolate(texel(&tex, at(base_y - zoom)), texel(&tex, at(base_y)), texel(&tex, at(base_y + zoom)), texel(&tex, at(base_y + zoom * 2)), (y % zoom) as f64 / zoom as f64);
                         tex[y * line * 4 + x * 4 + base_z * 4..][..4].copy_from_slice(&r);
                     }
                 }
@@ -128,13 +106,8 @@ pub fn texture_3d(size: usize, zoom: usize, rng: &mut Memory) -> Vec<u8> {
                         let base_y = y * line;
                         let base_z = z / zoom * zoom + size;
                         let at = |k: usize| (k % size) * slice * 4 + x * 4 + base_y * 4;
-                        let r = interpolate(
-                            texel(&tex, at(base_z - zoom)),
-                            texel(&tex, at(base_z)),
-                            texel(&tex, at(base_z + zoom)),
-                            texel(&tex, at(base_z + zoom * 2)),
-                            (y % zoom) as f64 / zoom as f64,
-                        );
+                        let r =
+                            interpolate(texel(&tex, at(base_z - zoom)), texel(&tex, at(base_z)), texel(&tex, at(base_z + zoom)), texel(&tex, at(base_z + zoom * 2)), (y % zoom) as f64 / zoom as f64);
                         tex[z * slice * 4 + x * 4 + base_y * 4..][..4].copy_from_slice(&r);
                     }
                 }

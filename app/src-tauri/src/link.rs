@@ -209,11 +209,7 @@ impl Link {
         // only listens.
         link.enable_start_stop_sync(true);
         link.enable(enabled);
-        Link {
-            link,
-            held: Mutex::new(Held { one: 0.0, every: Every::OFF, fired: None, generation: 0, was_playing: None }),
-            wake: Condvar::new(),
-        }
+        Link { link, held: Mutex::new(Held { one: 0.0, every: Every::OFF, fired: None, generation: 0, was_playing: None }), wake: Condvar::new() }
     }
 
     fn session(&self) -> (SessionState, i64) {

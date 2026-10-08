@@ -23,8 +23,7 @@ export interface Spec {
 const f = (key: string, label: string, min: number, max: number, def: number, face = true): Spec => ({ key, label, min, max, def, kind: 'float', face });
 const i = (key: string, label: string, min: number, max: number, def: number, face = true): Spec => ({ key, label, min, max, def, kind: 'int', face });
 const b = (key: string, label: string, def: number, face = true): Spec => ({ key, label, min: 0, max: 1, def, kind: 'bool', face });
-const rgba = (prefix: string, label: string, defs: number[], face = true): Spec[] =>
-  ['r', 'g', 'b', 'a'].map((c, n) => f(`${prefix}${c}`, `${label}${c}`, 0, 1, defs[n], face));
+const rgba = (prefix: string, label: string, defs: number[], face = true): Spec[] => ['r', 'g', 'b', 'a'].map((c, n) => f(`${prefix}${c}`, `${label}${c}`, 0, 1, defs[n], face));
 
 export const PARAMS: Record<string, Spec[]> = {
   motion: [
@@ -68,7 +67,15 @@ export const PARAMS: Record<string, Spec[]> = {
     ...rgba('mv_', 'mv ', [1, 1, 1, 1]),
   ],
   border: [f('ob_size', 'outer size', 0, 0.5, 0.01), ...rgba('ob_', 'outer ', [0, 0, 0, 0]), f('ib_size', 'inner size', 0, 0.5, 0.01), ...rgba('ib_', 'inner ', [0.25, 0.25, 0.25, 0])],
-  blur: [f('b1n', 'blur1 min', 0, 1, 0), f('b1x', 'blur1 max', 0, 1, 1), f('b2n', 'blur2 min', 0, 1, 0), f('b2x', 'blur2 max', 0, 1, 1), f('b3n', 'blur3 min', 0, 1, 0), f('b3x', 'blur3 max', 0, 1, 1), f('b1ed', 'edge darken', 0, 1, 0.25)],
+  blur: [
+    f('b1n', 'blur1 min', 0, 1, 0),
+    f('b1x', 'blur1 max', 0, 1, 1),
+    f('b2n', 'blur2 min', 0, 1, 0),
+    f('b2x', 'blur2 max', 0, 1, 1),
+    f('b3n', 'blur3 min', 0, 1, 0),
+    f('b3x', 'blur3 max', 0, 1, 1),
+    f('b1ed', 'edge darken', 0, 1, 0.25),
+  ],
   comp: [
     f('fGammaAdj', 'gamma', 1, 4, 2),
     f('fVideoEchoAlpha', 'echo', 0, 1, 0),
@@ -128,4 +135,8 @@ export function read(values: Record<string, number>, spec: Spec): number {
 }
 
 /** Every key a stage's specs claim, lowercased — what the inspector need not list again. */
-export const claimed = new Set(Object.values(PARAMS).flat().map((s) => s.key.toLowerCase()));
+export const claimed = new Set(
+  Object.values(PARAMS)
+    .flat()
+    .map((s) => s.key.toLowerCase()),
+);

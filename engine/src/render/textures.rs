@@ -25,14 +25,8 @@ pub(super) fn texture(device: &wgpu::Device, queue: &wgpu::Queue, data: &[u8], s
 /// MilkDrop's six noise textures: name, side, zoom (how many texels each random
 /// value spans) and whether it is a volume (as deep as it is wide). All are drawn
 /// from one rng, in this order.
-pub(super) const NOISE: [(&str, u32, usize, bool); 6] = [
-    ("noise_lq", 256, 1, false),
-    ("noise_lq_lite", 32, 1, false),
-    ("noise_mq", 256, 4, false),
-    ("noise_hq", 256, 8, false),
-    ("noisevol_lq", 32, 1, true),
-    ("noisevol_hq", 32, 4, true),
-];
+pub(super) const NOISE: [(&str, u32, usize, bool); 6] =
+    [("noise_lq", 256, 1, false), ("noise_lq_lite", 32, 1, false), ("noise_mq", 256, 4, false), ("noise_hq", 256, 8, false), ("noisevol_lq", 32, 1, true), ("noisevol_hq", 32, 4, true)];
 
 /// The [`NOISE`] textures, as RGBA with their names, sides and depths, all drawn
 /// from one rng seeded `0x5eed`; and that rng, to go on with (`rand_frame`).

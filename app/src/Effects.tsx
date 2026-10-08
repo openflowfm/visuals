@@ -127,7 +127,13 @@ export function Effects({ state, onState, send }: { state: fx.Fx; onState: React
           }}
           title="What strobe and punch-on-beat follow: the tempo, or beats heard in the bass"
         />
-        <Segmented name="strobe per beat" items={RATE_NAMES} index={nearest(RATES, state.strobe_rate)} onChange={(i) => set({ kind: 'strobe_rate', rate: RATES[i] }, { strobe_rate: RATES[i] })} title="Strobe flashes per beat" />
+        <Segmented
+          name="strobe per beat"
+          items={RATE_NAMES}
+          index={nearest(RATES, state.strobe_rate)}
+          onChange={(i) => set({ kind: 'strobe_rate', rate: RATES[i] }, { strobe_rate: RATES[i] })}
+          title="Strobe flashes per beat"
+        />
         <Segmented
           name="strobe"
           items={['white', 'black']}
@@ -138,11 +144,24 @@ export function Effects({ state, onState, send }: { state: fx.Fx; onState: React
           }}
           title="Flash to white, or to black"
         />
-        <Segmented name="mirror" items={['off', 'X', 'Y', '4-way']} index={Math.max(0, MIRRORS.indexOf(state.mirror))} onChange={(i) => set({ kind: 'mirror', mode: MIRRORS[i] }, { mirror: MIRRORS[i] })} title="Mirror the picture (M steps through)" />
+        <Segmented
+          name="mirror"
+          items={['off', 'X', 'Y', '4-way']}
+          index={Math.max(0, MIRRORS.indexOf(state.mirror))}
+          onChange={(i) => set({ kind: 'mirror', mode: MIRRORS[i] }, { mirror: MIRRORS[i] })}
+          title="Mirror the picture (M steps through)"
+        />
         <Toggle on={state.invert} onChange={(on) => set({ kind: 'invert', on }, { invert: on })} layout="inside" name="invert" label="invert" title="Invert the colours (I)">
           {state.invert ? 'on' : 'off'}
         </Toggle>
-        <Toggle on={state.punch_on_beat} onChange={(on) => set({ kind: 'punch_on_beat', on }, { punch_on_beat: on })} layout="inside" name="punch on beat" label="punch on beat" title="Punch on every beat">
+        <Toggle
+          on={state.punch_on_beat}
+          onChange={(on) => set({ kind: 'punch_on_beat', on }, { punch_on_beat: on })}
+          layout="inside"
+          name="punch on beat"
+          label="punch on beat"
+          title="Punch on every beat"
+        >
           {state.punch_on_beat ? 'on' : 'off'}
         </Toggle>
       </div>
@@ -153,7 +172,13 @@ export function Effects({ state, onState, send }: { state: fx.Fx; onState: React
         {slider(HUE, state.hue, (v) => set({ kind: 'hue', value: v }, { hue: v }), `${Math.round(state.hue * 360)}°`, 'Turn the colours round the wheel')}
         {slider(TRAILS, state.trails, (v) => set({ kind: 'trails', value: v }, { trails: v }), state.trails.toFixed(2), 'Trails: how much of the last frames stays')}
         {taper(SENSITIVITY, state.sensitivity, (v) => set({ kind: 'sensitivity', value: v }, { sensitivity: v }), 'How loud the presets hear the audio, ¼× to 4×')}
-        {slider(INTENSITY, state.strobe_intensity, (v) => set({ kind: 'strobe_intensity', value: v }, { strobe_intensity: v }), `${Math.round(state.strobe_intensity * 100)}%`, 'How hard the strobe flashes')}
+        {slider(
+          INTENSITY,
+          state.strobe_intensity,
+          (v) => set({ kind: 'strobe_intensity', value: v }, { strobe_intensity: v }),
+          `${Math.round(state.strobe_intensity * 100)}%`,
+          'How hard the strobe flashes',
+        )}
         {slider(FADE, state.blackout_fade, (v) => set({ kind: 'blackout_fade', seconds: v }, { blackout_fade: v }), `${state.blackout_fade.toFixed(1)} s`, 'How long blackout takes to fade')}
       </div>
     </section>

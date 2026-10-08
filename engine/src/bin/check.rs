@@ -54,40 +54,39 @@ fn main() {
     let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
     std::thread::scope(|scope| {
         for _ in 0..threads {
-            scope.spawn(|| loop {
-                let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                let Some(path) = files.get(i) else { break };
-                let Ok(bytes) = std::fs::read(path) else { continue };
-                let preset = preset::parse(&preset::decode(&bytes));
-                // Every block of equations, compiled. A preset's own blocks share a
-                // symbol table, as they share variables when they run.
-                let mut blocks: Vec<(&str, &String)> = vec![("init", &preset.init), ("frame", &preset.frame), ("vertex", &preset.vertex)];
-                for w in &preset.waves {
-                    blocks.extend([("wave init", &w.init), ("wave frame", &w.frame), ("wave point", &w.point)]);
-                }
-                for s in &preset.shapes {
-                    blocks.extend([("shape init", &s.init), ("shape frame", &s.frame)]);
-                }
-                let mut symbols = eel::Symbols::default();
-                let mut equations = String::new();
-                for (label, code) in blocks {
-                    if let Err(e) = eel::compile(code, &mut symbols) {
-                        let near: String = code.get(e.at.saturating_sub(20)..(e.at + 20).min(code.len())).unwrap_or("").replace('\n', " ");
-                        equations = format!("{label}: {} near «{near}»", e.message);
-                        break;
+            scope.spawn(|| {
+                loop {
+                    let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let Some(path) = files.get(i) else { break };
+                    let Ok(bytes) = std::fs::read(path) else { continue };
+                    let preset = preset::parse(&preset::decode(&bytes));
+                    // Every block of equations, compiled. A preset's own blocks share a
+                    // symbol table, as they share variables when they run.
+                    let mut blocks: Vec<(&str, &String)> = vec![("init", &preset.init), ("frame", &preset.frame), ("vertex", &preset.vertex)];
+                    for w in &preset.waves {
+                        blocks.extend([("wave init", &w.init), ("wave frame", &w.frame), ("wave point", &w.point)]);
                     }
-                }
-                results.lock().unwrap().push((path.clone(), "equations", equations));
-                for (kind, label, text) in [
-                    (shader::Kind::Warp, "warp", &preset.warp),
-                    (shader::Kind::Comp, "comp", &preset.comp),
-                ] {
-                    let outcome = match shader::translate(kind, text) {
-                        Ok(Some(_)) => String::new(),
-                        Ok(None) => "-".into(),
-                        Err(e) => e.to_string(),
-                    };
-                    results.lock().unwrap().push((path.clone(), label, outcome));
+                    for s in &preset.shapes {
+                        blocks.extend([("shape init", &s.init), ("shape frame", &s.frame)]);
+                    }
+                    let mut symbols = eel::Symbols::default();
+                    let mut equations = String::new();
+                    for (label, code) in blocks {
+                        if let Err(e) = eel::compile(code, &mut symbols) {
+                            let near: String = code.get(e.at.saturating_sub(20)..(e.at + 20).min(code.len())).unwrap_or("").replace('\n', " ");
+                            equations = format!("{label}: {} near «{near}»", e.message);
+                            break;
+                        }
+                    }
+                    results.lock().unwrap().push((path.clone(), "equations", equations));
+                    for (kind, label, text) in [(shader::Kind::Warp, "warp", &preset.warp), (shader::Kind::Comp, "comp", &preset.comp)] {
+                        let outcome = match shader::translate(kind, text) {
+                            Ok(Some(_)) => String::new(),
+                            Ok(None) => "-".into(),
+                            Err(e) => e.to_string(),
+                        };
+                        results.lock().unwrap().push((path.clone(), label, outcome));
+                    }
                 }
             });
         }
@@ -124,19 +123,9 @@ fn main() {
         }
     }
     let presets_ok = per_preset.values().filter(|ok| **ok).count();
-    println!(
-        "equations: {equations_ok} presets compiled, {equations_bad} failed ({:.2}%)",
-        100.0 * equations_ok as f64 / (equations_ok + equations_bad).max(1) as f64
-    );
-    println!(
-        "shaders: {compiled} compiled, {failed} failed, {absent} absent ({:.2}% of present)",
-        100.0 * compiled as f64 / (compiled + failed).max(1) as f64
-    );
-    println!(
-        "presets: {presets_ok}/{} fully compiled ({:.2}%)",
-        per_preset.len(),
-        100.0 * presets_ok as f64 / per_preset.len().max(1) as f64
-    );
+    println!("equations: {equations_ok} presets compiled, {equations_bad} failed ({:.2}%)", 100.0 * equations_ok as f64 / (equations_ok + equations_bad).max(1) as f64);
+    println!("shaders: {compiled} compiled, {failed} failed, {absent} absent ({:.2}% of present)", 100.0 * compiled as f64 / (compiled + failed).max(1) as f64);
+    println!("presets: {presets_ok}/{} fully compiled ({:.2}%)", per_preset.len(), 100.0 * presets_ok as f64 / per_preset.len().max(1) as f64);
     let mut sorted: Vec<_> = groups.into_iter().collect();
     sorted.sort_by(|a, b| b.1.cmp(&a.1));
     for (group, n) in sorted.iter().take(25) {

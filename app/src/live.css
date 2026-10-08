@@ -77,15 +77,33 @@
   font-size: var(--text-title);
   font-weight: var(--weight-medium);
 }
-.live-next span[data-missing] { color: var(--detail); text-decoration: line-through; }
-.live-next em { color: var(--caution); font-style: normal; font-size: var(--text-body); text-decoration: none; display: inline-block; }
-.live-deck .live-none { color: var(--detail); font-size: var(--text-heading); font-weight: var(--weight-normal); letter-spacing: var(--track-none); white-space: normal; }
+.live-next span[data-missing] {
+  color: var(--detail);
+  text-decoration: line-through;
+}
+.live-next em {
+  color: var(--caution);
+  font-style: normal;
+  font-size: var(--text-body);
+  text-decoration: none;
+  display: inline-block;
+}
+.live-deck .live-none {
+  color: var(--detail);
+  font-size: var(--text-heading);
+  font-weight: var(--weight-normal);
+  letter-spacing: var(--track-none);
+  white-space: normal;
+}
 .live-where {
   margin: 0 0 0 68px;
   color: var(--caption);
   font-size: var(--text-body);
 }
-.live-where b { color: var(--detail); font-weight: var(--weight-medium); }
+.live-where b {
+  color: var(--detail);
+  font-weight: var(--weight-medium);
+}
 
 /* Previous, random, next and HOLD: big enough to hit without looking twice. */
 .live-transport {
@@ -95,7 +113,10 @@
   background: var(--panel);
   border-bottom: 1px solid var(--bd3);
 }
-.live-transport .wdg-button { flex: 1; display: flex; }
+.live-transport .wdg-button {
+  flex: 1;
+  display: flex;
+}
 .live-transport .wdg-button-body,
 .live-transport .live-hold {
   width: 100%;
@@ -105,13 +126,24 @@
   font-size: var(--text-heading);
   font-weight: var(--weight-medium);
 }
-.live-transport .live-hold { flex: 0.6; font-weight: var(--weight-bold); letter-spacing: var(--track-label); }
+.live-transport .live-hold {
+  flex: 0.6;
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--track-label);
+}
 /* --caution, not --amber: the theme makes amber its (grey) primary, and HOLD must be seen. */
-.live-transport .live-hold[data-on] { color: var(--bg); background: var(--caution); border-color: var(--caution); }
+.live-transport .live-hold[data-on] {
+  color: var(--bg);
+  background: var(--caution);
+  border-color: var(--caution);
+}
 .live .wdg-button-body:focus-visible,
 .live .live-hold:focus-visible,
 .live .fx-hit:focus-visible,
-.live .fx-tempo:focus-visible { outline: 1px solid var(--fg); outline-offset: 1px; }
+.live .fx-tempo:focus-visible {
+  outline: 1px solid var(--fg);
+  outline-offset: 1px;
+}
 
 /* An error (a `NoticeBanner`, laid out by .vf-notice): a band across the stage. */
 .live-problem {
@@ -123,7 +155,9 @@
   font-size: var(--text-body);
 }
 
-.live-stage > .fx { border-bottom: 1px solid var(--bd3); }
+.live-stage > .fx {
+  border-bottom: 1px solid var(--bd3);
+}
 
 /* The preview: a hole, ringed by its own shadow. */
 .live-preview-cell {
@@ -175,10 +209,20 @@
   color: var(--detail);
   font-size: var(--text-heading);
 }
-.live-status[data-on] { color: var(--green); }
-.live-display { display: flex; }
-.live-display .wdg-select-body { width: 100%; }
-.live-note { margin: 0; color: var(--detail); font-size: var(--text-body); }
+.live-status[data-on] {
+  color: var(--green);
+}
+.live-display {
+  display: flex;
+}
+.live-display .wdg-select-body {
+  width: 100%;
+}
+.live-note {
+  margin: 0;
+  color: var(--detail);
+  font-size: var(--text-body);
+}
 .live-warn {
   margin: 0;
   padding: 6px 8px;

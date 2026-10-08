@@ -17,15 +17,7 @@ const VIEW_HINTS: Record<View, string> = {
 
 /** The switch between them, the same in every view's header. */
 export function ViewSwitch({ view, onChange }: { view: View; onChange(next: View): void }) {
-  return (
-    <Segmented
-      items={VIEWS}
-      index={VIEWS.indexOf(view)}
-      onChange={(i) => VIEWS[i] !== view && onChange(VIEWS[i])}
-      label="view"
-      hint={VIEWS.map((v) => VIEW_HINTS[v]).join(' · ')}
-    />
-  );
+  return <Segmented items={VIEWS} index={VIEWS.indexOf(view)} onChange={(i) => VIEWS[i] !== view && onChange(VIEWS[i])} label="view" hint={VIEWS.map((v) => VIEW_HINTS[v]).join(' · ')} />;
 }
 
 /** The suite's wordmark, spelled the way mix[flow] spells its own. */

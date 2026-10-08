@@ -119,11 +119,7 @@ impl Renderer {
             v.extend([1.0 - ed, ed, 5.0, wdiv_v]);
             self.queue.write_buffer(v_uniform, 0, bytemuck::cast_slice(&v));
             for (pipeline, uniform, input, output) in [(&self.blur_h, h_uniform, source, &h_target.view), (&self.blur_v, v_uniform, &h_target.view, &v_target.view)] {
-                let group = bind(
-                    &self.device,
-                    pipeline,
-                    &[uniform.as_entire_binding(), wgpu::BindingResource::TextureView(input), wgpu::BindingResource::Sampler(&self.samplers.linear_clamp)],
-                );
+                let group = bind(&self.device, pipeline, &[uniform.as_entire_binding(), wgpu::BindingResource::TextureView(input), wgpu::BindingResource::Sampler(&self.samplers.linear_clamp)]);
                 quad_pass(encoder, output, pipeline, &group);
             }
         }

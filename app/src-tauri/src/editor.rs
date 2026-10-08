@@ -77,18 +77,10 @@ fn load(app: &App, preset: Preset) -> Result<Report, String> {
     let seed = app.seed.load(Ordering::Relaxed);
     let problems = equation_problems(&preset);
     match app.ask(|tx| bench::Cmd::Load(Box::new(preset), seed, tx))? {
-        Ok(loaded) => Ok(Report {
-            equations: Vec::new(),
-            shaders: loaded
-                .fell_back
-                .into_iter()
-                .map(|(kind, message)| Problem { stage: format!("{kind:?}").to_lowercase(), line: None, message })
-                .collect(),
-        }),
-        Err(message) => Ok(Report {
-            equations: if problems.is_empty() { vec![Problem { stage: "equations".into(), message, line: None }] } else { problems },
-            shaders: Vec::new(),
-        }),
+        Ok(loaded) => {
+            Ok(Report { equations: Vec::new(), shaders: loaded.fell_back.into_iter().map(|(kind, message)| Problem { stage: format!("{kind:?}").to_lowercase(), line: None, message }).collect() })
+        }
+        Err(message) => Ok(Report { equations: if problems.is_empty() { vec![Problem { stage: "equations".into(), message, line: None }] } else { problems }, shaders: Vec::new() }),
     }
 }
 

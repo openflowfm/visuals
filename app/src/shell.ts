@@ -44,7 +44,11 @@ export function notice(message: string, e?: unknown): Notice {
 }
 
 /** A preset's name, from its path in the pack: the file name without `.milk`. */
-export const nameOf = (path: string): string => path.split('/').pop()?.replace(/\.milk$/i, '') ?? path;
+export const nameOf = (path: string): string =>
+  path
+    .split('/')
+    .pop()
+    ?.replace(/\.milk$/i, '') ?? path;
 
 /** The `live` event's error: the preset at `path` didn't open, and the last good one keeps drawing. */
 export function openFailed(path: string | null, error: string): Notice {

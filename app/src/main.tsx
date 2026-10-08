@@ -17,7 +17,9 @@ createRoot(document.getElementById('root')!).render(
       {inApp ? (
         <App />
       ) : (
-        <p className="outside">This is the editor's page without the app behind it. The editor is the window <code>npm run app</code> opened.</p>
+        <p className="outside">
+          This is the editor's page without the app behind it. The editor is the window <code>npm run app</code> opened.
+        </p>
       )}
     </ThemeRoot>
   </StrictMode>,
