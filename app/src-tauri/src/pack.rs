@@ -25,8 +25,25 @@ pub fn folders(app: &AppHandle) -> Vec<PathBuf> {
     folders
 }
 
+/// Every preset in `folders`, in order: what the library lists, and what live
+/// actions (random, next, auto-advance) choose from.
+pub fn milk_files_in(folders: &[PathBuf]) -> Vec<PathBuf> {
+    folders.iter().flat_map(|f| engine::preset::milk_files(f)).collect()
+}
+
+/// Every preset the library lists.
+pub fn milk_files(app: &AppHandle) -> Vec<PathBuf> {
+    milk_files_in(&folders(app))
+}
+
+/// Where a folder-relative preset path is: in the first of `folders` that has
+/// it, else in the first folder (the presets folder).
+pub fn resolve_in(folders: &[PathBuf], rel: &std::path::Path) -> PathBuf {
+    folders.iter().map(|f| f.join(rel)).find(|p| p.exists()).unwrap_or_else(|| folders.first().map(|f| f.join(rel)).unwrap_or_else(|| rel.to_path_buf()))
+}
+
 /// The bundled starter set's folder, when it is there.
-fn starter(app: &AppHandle) -> Option<PathBuf> {
+pub fn starter(app: &AppHandle) -> Option<PathBuf> {
     app.path().resource_dir().ok().map(|d| d.join("presets").join("starter")).filter(|d| d.is_dir())
 }
 
@@ -78,4 +95,24 @@ pub fn pack_status(handle: AppHandle, app: tauri::State<App>) -> PackStatus {
 #[tauri::command]
 pub async fn pack_download() -> Result<(), String> {
     Err("the full pack can't be downloaded yet".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_empty_presets_folder_still_lists_and_resolves_the_starter_set() {
+        let dir = std::env::temp_dir().join(format!("visuals-pack-{}", std::process::id()));
+        let presets = dir.join("presets");
+        let starter = dir.join("starter");
+        std::fs::create_dir_all(&presets).unwrap();
+        std::fs::create_dir_all(starter.join("a")).unwrap();
+        std::fs::write(starter.join("a/one.milk"), "").unwrap();
+        let folders = vec![presets.clone(), starter.clone()];
+        assert_eq!(milk_files_in(&folders), vec![starter.join("a/one.milk")]);
+        assert_eq!(resolve_in(&folders, std::path::Path::new("a/one.milk")), starter.join("a/one.milk"));
+        assert_eq!(resolve_in(&folders, std::path::Path::new("b.milk")), presets.join("b.milk"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

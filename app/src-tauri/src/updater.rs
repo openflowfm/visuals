@@ -22,6 +22,7 @@ pub fn start(app: tauri::AppHandle) {
 /// A newer release, if there is one.
 #[tauri::command]
 pub async fn update_check() -> Result<Option<Update>, String> {
+    // The stub until #87: never reports an update.
     Ok(None)
 }
 

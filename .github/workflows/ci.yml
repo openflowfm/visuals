@@ -54,7 +54,7 @@ jobs:
       - run: npm run app:build-ui
       - name: No editor in the app's page
         run: |
-          if ls dist-app/assets | grep -q '^Lab-' || grep -q default_shader dist-app/assets/*.js; then
+          if ls dist-app/assets | grep -q '^Lab-' || grep -qE "[\"'\`](apply|set_value|previews|default_shader)[\"'\`]" dist-app/assets/*.js; then
             echo "the editor's code is in the app's page (dist-app/)"
             exit 1
           fi

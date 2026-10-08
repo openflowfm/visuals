@@ -98,7 +98,9 @@ const SAVED: &str = "audio.json";
 pub fn listen_to(name: Option<String>, size: Option<usize>, left: Option<usize>, right: Option<usize>, source: Option<SourceId>, app: State<App>) -> Result<String, String> {
     let (name, size) = match source {
         Some(SourceId::Device { name, size }) => (Some(name), Some(size)),
-        Some(SourceId::App { .. } | SourceId::System) => return Err("listening to an app needs macOS 14.4 or later".into()),
+        Some(SourceId::App { .. } | SourceId::System) => {
+            return Err(if crate::tap::supported() { "listening to an app isn't available yet".into() } else { "listening to an app needs macOS 14.4 or later".into() });
+        }
         None => (name, size),
     };
     let l = listen_on(&app, name.as_deref(), size, left, right)?;
