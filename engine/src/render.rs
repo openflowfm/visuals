@@ -207,7 +207,7 @@ fn preview_of(source: crate::draw::Source) -> Option<usize> {
         Source::Shape(i) => Some(8 + i),
         Source::Basic => Some(12),
         Source::Motion => Some(13),
-        Source::Border => Some(14),
+        Source::Border(_) => Some(14),
         Source::Darken => None,
     }
 }

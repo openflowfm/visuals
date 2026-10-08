@@ -748,6 +748,8 @@ impl Clock {
 pub struct Pacer {
     period: f64,
     owed: f64,
+    /// A refresh time that isn't the period, and how many in a row agreed with it.
+    candidate: (f64, u32),
 }
 
 impl Pacer {
@@ -759,15 +761,37 @@ impl Pacer {
         // A display refreshes between 20 and 500 times a second; a loop's first
         // round, or one after a stall, says nothing about its period.
         let plausible = (1.0 / 500.0..=1.0 / 20.0).contains(&elapsed);
-        let n = if self.period > 0.0 { (elapsed / self.period).round().max(1.0) } else { 0.0 };
-        if n == 0.0 || n > 4.0 || (elapsed / (n * self.period) - 1.0).abs() > 0.4 {
+        if self.period <= 0.0 {
             if plausible {
                 self.period = elapsed;
             }
             self.owed = 0.0;
             return elapsed;
         }
-        self.period += 0.05 * (elapsed / n - self.period);
+        let n = (elapsed / self.period).round().max(1.0);
+        let fits = n <= 4.0 && (elapsed / (n * self.period) - 1.0).abs() <= 0.4;
+        if fits && n == 1.0 {
+            self.candidate = (0.0, 0);
+        } else if plausible {
+            // A refresh that isn't one period: a hitch, or the rate changed. Only
+            // several in a row that agree with each other change the period.
+            let (c, k) = self.candidate;
+            self.candidate = if k > 0 && (elapsed / c - 1.0).abs() < 0.2 { (c + (elapsed - c) / (k + 1) as f64, k + 1) } else { (elapsed, 1) };
+            if self.candidate.1 >= 3 {
+                self.period = self.candidate.0;
+                self.candidate = (0.0, 0);
+                self.owed = 0.0;
+                return elapsed;
+            }
+        }
+        if !fits {
+            self.owed = 0.0;
+            return elapsed;
+        }
+        // Only a single refresh refines the period; a late one says little about it.
+        if n == 1.0 {
+            self.period += 0.05 * (elapsed - self.period);
+        }
         let even = n * self.period;
         self.owed += elapsed - even;
         let back = (0.05 * self.owed).clamp(-0.02 * even, 0.02 * even);
@@ -940,6 +964,35 @@ mod tests {
         assert!((pacer.tick(2.0 / 60.0) * 60.0 - 2.0).abs() < 0.03);
         assert_eq!(pacer.tick(0.0071), 0.0071);
         assert_eq!(pacer.tick(f64::NAN), 0.0);
+    }
+
+    #[test]
+    fn a_lone_hitch_keeps_the_period_and_a_new_rate_is_learnt() {
+        for hitch in [1.45, 1.5, 2.0, 10.0] {
+            let mut pacer = Pacer::default();
+            for _ in 0..60 {
+                pacer.tick(1.0 / 60.0);
+            }
+            pacer.tick(hitch / 60.0);
+            assert!((pacer.period * 60.0 - 1.0).abs() < 1e-9, "a {hitch}x hitch changed the period");
+            for _ in 0..30 {
+                let dt = pacer.tick(1.0 / 60.0);
+                assert!((dt * 60.0 - 1.0).abs() < 0.03, "after a {hitch}x hitch a refresh moves the clock {dt}");
+            }
+        }
+        for (a, b) in [(60.0, 120.0), (120.0, 60.0), (60.0, 144.0), (144.0, 50.0)] {
+            let mut pacer = Pacer::default();
+            for _ in 0..60 {
+                pacer.tick(1.0 / a);
+            }
+            for _ in 0..4 {
+                pacer.tick(1.0 / b);
+            }
+            assert!((pacer.period * b - 1.0).abs() < 0.01, "{a}->{b} Hz: period {}", pacer.period);
+            for _ in 0..10 {
+                assert!((pacer.tick(1.0 / b) * b - 1.0).abs() < 0.03);
+            }
+        }
     }
 
     #[test]

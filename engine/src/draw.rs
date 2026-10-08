@@ -44,7 +44,8 @@ pub enum Source {
     Wave(usize),
     Basic,
     Darken,
-    Border,
+    /// The outer border (0) or the inner one (1).
+    Border(usize),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -559,13 +560,17 @@ fn border(color: [f64; 4], size: f64, prev: f64, list: &mut DrawList) {
 
 pub fn borders(r: &Runner, list: &mut DrawList) {
     let g = |n: &str| r.get(n);
+    list.source = Source::Border(0);
     border([g("ob_r"), g("ob_g"), g("ob_b"), g("ob_a")], g("ob_size"), 0.0, list);
+    list.source = Source::Border(1);
     border([g("ib_r"), g("ib_g"), g("ib_b"), g("ib_a")], g("ib_size"), g("ob_size"), list);
 }
 
 /// What a refresh `f` of the way from one step's drawing to the next draws:
-/// each of `to`'s commands that `from` drew too — the same stage, topology,
-/// blend and number of vertices, in the same place in the list — with every
+/// each of `to`'s commands that `from` drew too — the same stage and slot (wave
+/// `i`, shape `i`'s `k`th instance, …; not the place in the list, so one turning
+/// on or off doesn't disturb the others), topology, blend and number of
+/// vertices — with every
 /// vertex's position, colour and texture coordinate mixed by `f`, so a wave or
 /// shape slides from where it was to where it will be. A command only one of
 /// them has (a shape whose sides changed, a wave turned on) fades: `from`'s out
@@ -574,8 +579,46 @@ pub fn between(from: &DrawList, to: &DrawList, f: f32, out: &mut DrawList) {
     out.clear();
     let mix = |a: f32, b: f32| a + (b - a) * f;
     let faded = |v: &Vertex, k: f32| Vertex { color: [v.color[0], v.color[1], v.color[2], v.color[3] * k], ..*v };
-    for i in 0..from.cmds.len().max(to.cmds.len()) {
-        let (a, b) = (from.cmds.get(i), to.cmds.get(i));
+    // Each command's key: its stage and how many of that stage's came before it.
+    let keys = |l: &DrawList| -> Vec<(Source, usize)> {
+        let mut seen: Vec<(Source, usize)> = Vec::new();
+        l.cmds
+            .iter()
+            .map(|c| match seen.iter_mut().find(|(s, _)| *s == c.source) {
+                Some((_, k)) => {
+                    *k += 1;
+                    (c.source, *k)
+                }
+                None => {
+                    seen.push((c.source, 0));
+                    (c.source, 0)
+                }
+            })
+            .collect()
+    };
+    let (ka, kb) = (keys(from), keys(to));
+    let mut pairs: Vec<(Option<&Cmd>, Option<&Cmd>)> = Vec::new();
+    let mut next = 0;
+    for (j, b) in to.cmds.iter().enumerate() {
+        if let Some(i) = ka.iter().position(|k| *k == kb[j]) {
+            // `from`'s commands before the match that `to` doesn't have fade out here.
+            for i2 in next..i {
+                if !kb.contains(&ka[i2]) {
+                    pairs.push((Some(&from.cmds[i2]), None));
+                }
+            }
+            next = next.max(i + 1);
+            pairs.push((Some(&from.cmds[i]), Some(b)));
+        } else {
+            pairs.push((None, Some(b)));
+        }
+    }
+    for i2 in next..from.cmds.len() {
+        if !kb.contains(&ka[i2]) {
+            pairs.push((Some(&from.cmds[i2]), None));
+        }
+    }
+    for (a, b) in pairs {
         match (a, b) {
             (Some(a), Some(b)) if (a.topology, a.blend, a.source, a.count) == (b.topology, b.blend, b.source, b.count) => {
                 out.source = b.source;
@@ -616,7 +659,6 @@ pub fn frame(r: &mut Runner, audio: &Audio, uvs: &[[f32; 2]], globals: &[f64; 15
     basic_wave(r, audio, size, list);
     list.source = Source::Darken;
     darken_center(r, size, list);
-    list.source = Source::Border;
     borders(r, list);
 }
 
@@ -652,5 +694,24 @@ mod tests {
         assert_eq!((out.cmds[1].count, out.vertices[2].color[3]), (3, 0.75));
         assert_eq!((out.cmds[2].count, out.vertices[5].color[3]), (5, 0.25));
         assert!(out.cmds.iter().skip(1).all(|c| c.source == Source::Shape(0)));
+    }
+
+    #[test]
+    fn a_wave_turning_on_or_off_leaves_the_others_sliding() {
+        let a = list(&[(Source::Wave(1), vec![at(0.0, 1.0); 2]), (Source::Shape(2), vec![at(0.0, 1.0); 3])]);
+        let b = list(&[
+            (Source::Wave(0), vec![at(0.9, 1.0); 4]),
+            (Source::Wave(1), vec![at(0.4, 1.0); 2]),
+            (Source::Shape(2), vec![at(0.4, 1.0); 3]),
+        ]);
+        let mut out = DrawList::default();
+        for (from, to, f, x) in [(&a, &b, 0.25, 0.1), (&b, &a, 0.75, 0.1)] {
+            between(from, to, f, &mut out);
+            assert_eq!(out.cmds.len(), 3);
+            for c in out.cmds.iter().filter(|c| c.source != Source::Wave(0)) {
+                let v = &out.vertices[c.first as usize];
+                assert!((v.pos[0] - x).abs() < 1e-6 && v.color[3] == 1.0, "{:?} slides at full alpha: {v:?}", c.source);
+            }
+        }
     }
 }
