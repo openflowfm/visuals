@@ -200,7 +200,7 @@ impl Default for Fx {
 }
 
 /// A finite number, clamped; `None` for NaN or infinity.
-fn clamped(v: f64, lo: f64, hi: f64, what: &str) -> Result<f64, String> {
+pub(crate) fn clamped(v: f64, lo: f64, hi: f64, what: &str) -> Result<f64, String> {
     if v.is_finite() { Ok(v.clamp(lo, hi)) } else { Err(format!("{what} must be a number")) }
 }
 

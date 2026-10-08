@@ -368,10 +368,8 @@ pub fn link_set_one(link: State<Link>) -> Frame {
 /// Move the one by `beats` (a beat either way, from the page), within a bar.
 #[tauri::command]
 pub fn link_nudge(beats: f64, link: State<Link>) -> Result<Frame, String> {
-    if !beats.is_finite() {
-        return Err("beats must be a number".into());
-    }
-    link.change(|h| h.one += beats.clamp(-QUANTUM, QUANTUM));
+    let beats = crate::fx::clamped(beats, -QUANTUM, QUANTUM, "beats")?;
+    link.change(|h| h.one += beats);
     Ok(link.frame())
 }
 
