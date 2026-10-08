@@ -1,17 +1,73 @@
-//! visual[flow]: the editor in a webview, the bench drawn natively under it, and
-//! in live mode the output full screen on a display of its own.
+//! visual[flow]: the player in a webview, the bench drawn natively under it, and
+//! in live mode the output full screen on a display of its own. Built with the
+//! `lab` feature, the page is the editor too ([`editor`]).
 
 mod actions;
 mod bench;
 #[cfg(target_os = "macos")]
 mod dev;
+#[cfg(feature = "lab")]
 mod editor;
 mod fx;
+mod library;
 mod link;
 mod listen;
 mod output;
+mod pack;
 mod playlists;
+mod preview;
 mod settings;
+mod tap;
+mod testsound;
+mod updater;
+
+/// The page's commands: the player's, then `lab`'s (the editor's, from
+/// [`editor`]) as given.
+macro_rules! commands {
+    ($($lab:ident),* $(,)?) => {
+        tauri::generate_handler![
+            library::presets,
+            library::open,
+            preview::place_bench,
+            preview::stats,
+            listen::inputs,
+            listen::audio_sources,
+            listen::listen_to,
+            listen::listening,
+            listen::levels,
+            actions::act,
+            actions::fx_state,
+            actions::playlists,
+            actions::playlist_create,
+            actions::playlist_rename,
+            actions::playlist_delete,
+            actions::playlist_add,
+            actions::playlist_remove,
+            actions::playlist_move_item,
+            actions::playlist_move,
+            output::start_preset,
+            output::live_start,
+            output::displays,
+            output::output_open,
+            output::output_close,
+            output::output_status,
+            link::link_state,
+            link::link_enable,
+            link::link_set_one,
+            link::link_nudge,
+            link::link_reset_one,
+            link::link_sync,
+            pack::pack_status,
+            pack::pack_download,
+            settings::first_run,
+            settings::first_run_done,
+            updater::update_check,
+            updater::update_install,
+            testsound::test_sound,
+            $(editor::$lab,)*
+        ]
+    };
+}
 
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
@@ -60,13 +116,21 @@ fn main() {
     // Headless (`VISUALS_HEADLESS`): never take focus from the app in front.
     #[cfg(target_os = "macos")]
     let builder = builder.activate_ignoring_other_apps(!headless);
+    #[cfg(feature = "lab")]
+    let builder = builder.invoke_handler(commands!(apply, set_value, set_previews, previews, default_shader));
+    #[cfg(not(feature = "lab"))]
+    let builder = builder.invoke_handler(commands!());
     #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
     let mut app = builder
         .manage(App { bench: Mutex::new(None), ring: listen::ring(), listening: Mutex::new(None), library, seed: AtomicU64::new(1) })
         .manage(deck)
         .setup(move |app| {
+            if let Some(starter) = pack::starter(app.handle()) {
+                app.state::<actions::Deck>().store.lock().unwrap().add_folder(starter);
+            }
             actions::start_auto(app.handle().clone());
             link::start(app.handle().clone());
+            updater::start(app.handle().clone());
             #[cfg(not(target_os = "macos"))]
             app.get_webview_window("main").expect("main window").show()?;
             #[cfg(target_os = "macos")]
@@ -100,43 +164,6 @@ fn main() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![
-            editor::presets,
-            editor::open,
-            editor::apply,
-            editor::set_value,
-            editor::set_previews,
-            editor::previews,
-            editor::default_shader,
-            editor::place_bench,
-            listen::inputs,
-            listen::listen_to,
-            listen::listening,
-            listen::levels,
-            editor::stats,
-            actions::act,
-            actions::fx_state,
-            actions::playlists,
-            actions::playlist_create,
-            actions::playlist_rename,
-            actions::playlist_delete,
-            actions::playlist_add,
-            actions::playlist_remove,
-            actions::playlist_move_item,
-            actions::playlist_move,
-            output::start_preset,
-            output::live_start,
-            output::displays,
-            output::output_open,
-            output::output_close,
-            output::output_status,
-            link::link_state,
-            link::link_enable,
-            link::link_set_one,
-            link::link_nudge,
-            link::link_reset_one,
-            link::link_sync,
-        ])
         .build(tauri::generate_context!())
         .expect("visual[flow]");
     // Headless: no Dock icon or menu bar, and the app can't be made active.

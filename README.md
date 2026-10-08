@@ -2,14 +2,14 @@
 
 The visuals module of **open[flow]**: a native MilkDrop engine and the macOS app built on
 it. The engine (`engine/`, Rust on wgpu — Metal on a Mac) reads `.milk` presets and draws
-them from any Core Audio input; the app (`app/`, Tauri) is an editor for them, with
+them from any Core Audio input; the app (`app/`, Tauri) plays them, with a library,
 playlists, live effects, a full-screen output window and an Ableton Link peer that changes
-presets on the bar.
+presets on the bar. The preset editor is in lab builds only (below).
 
 ```
 Core Audio input ──> engine (wgpu/Metal) ──> bench and output window
                          ^
-Ableton Link ──> the app (Tauri) <──> editor page (React, app/src)
+Ableton Link ──> the app (Tauri) <──> its page (React, app/src)
 ```
 
 The package is `@openflow/visuals`; `visual[flow]` is what the app calls itself.
@@ -24,7 +24,12 @@ git clone https://github.com/openflowfm/visuals.git
 cd visuals
 npm ci
 npm run app     # app/run.sh: cargo tauri dev in app/src-tauri, the page's vite on $PORT or a free port
+npm run app:lab # the same with the editor: VITE_LAB=1 for the page, the `lab` feature for the app
 ```
+
+The app people get has the library and live mode. The editor (the stage graph and the
+inspector, changing a preset while it plays) is built only into a lab build: the `lab`
+Cargo feature on `visuals-app` adds its commands, and `VITE_LAB=1` its page code.
 
 `app/run.sh` runs `cargo tauri dev` (and with it vite and the app) in a process group of
 its own, and stops the whole group when it is stopped (Ctrl-C, SIGTERM, hangup) or
@@ -58,8 +63,9 @@ The engine also runs on its own, without the app: `cargo run --release -p visual
 ## Tests and checks
 
 [`AGENTS.md`](AGENTS.md) lists every command and when to run it. In short:
-`npm run typecheck`, `npm test` (the editor page's unit tests), `npm run app:build-ui`,
-`cargo test -p visuals-engine --lib` and `cargo test -p visuals-app`.
+`npm run typecheck`, `npm test` (the page's unit tests), `npm run app:build-ui` (and
+`app:build-ui:lab`), `cargo test -p visuals-engine --lib`, `cargo test -p visuals-app`
+and `cargo build -p visuals-app --features lab`.
 
 ## Releases
 

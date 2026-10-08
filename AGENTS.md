@@ -1,28 +1,35 @@
 # visual[flow]
 
 Read [`README.md`](README.md) first. The product is the MilkDrop engine (`engine/`) and
-the editor app (`app/`: the Tauri shell in `app/src-tauri`, its page in `app/src`);
-`docs/milkdrop-engine.md` is their plan and status.
+the player app (`app/`: the Tauri shell in `app/src-tauri`, its page in `app/src`);
+`docs/milkdrop-engine.md` is their plan and status. The preset editor is in **lab** builds
+only: the `lab` Cargo feature on `visuals-app` (its commands, `app/src-tauri/src/editor.rs`)
+and `VITE_LAB=1` for the page (`app/src/Lab.tsx`, `editor.ts`, the graph and the inspector).
+The app people get is built without both.
 
 | Command | What it checks | When to run |
 | --- | --- | --- |
 | `cargo test -p visuals-engine --lib` | the engine: `.milk` parsing, shader translation, EEL, audio, a GPU render | any change under `engine/` |
 | `cargo test -p visuals-engine --bins` | the engine's bins compile and their tests (`engine/src/bin/`) pass; `--lib` doesn't build them | any change under `engine/` |
 | `cargo build -p visuals-app` | the Tauri app compiles | any change under `app/src-tauri/` |
-| `cargo test -p visuals-app` | the app's Rust: live actions, playlists, the Link one and changes on the beat, the live output's display choice and fit, the live effects' timing (building needs `cmake`, for Ableton Link) | any change under `app/src-tauri/` |
+| `cargo test -p visuals-app` | the app's Rust: live actions, playlists, the Link one and changes on the beat, the live output's display choice and fit, the live effects' timing, the first-run state (building needs `cmake`, for Ableton Link) | any change under `app/src-tauri/` |
+| `cargo build -p visuals-app --features lab` | the lab app (with the editor's commands) compiles | any change under `app/src-tauri/` |
 | `cargo fmt --all --check` | the Rust is formatted (`rustfmt.toml`: width 200; `cargo fmt --all` fixes it) | any `.rs` change |
 | `npm run format:check` | the editor page (`app/src`) is formatted with Prettier (`.prettierrc.json`: single quotes, width 200; `npx prettier --write app/src` fixes it) | any change under `app/src` |
 | `npm run typecheck` | the editor page's TypeScript (`app/src`) and the vite and vitest configs compile | any `.ts`/`.tsx` change |
 | `npx vitest run <files>` | targeted unit tests | the tests next to what you changed; CI runs them all (`npm test`) |
-| `npm run app:build-ui` | the editor page builds into `dist-app/`, which the app crate needs to compile | changes to `app/src`, `app/index.html` or `vite.app.config.ts` |
+| `npm run app:build-ui` | the app's page builds into `dist-app/`, which the app crate needs to compile; it must have no `Lab-*` chunk and no editor command (CI checks) | changes to `app/src`, `app/index.html` or `vite.app.config.ts` |
+| `npm run app:build-ui:lab` | the lab page (with the editor, as its own `Lab-*` chunk) builds into `dist-app/` | changes to `app/src`, `app/index.html` or `vite.app.config.ts`; run it before `app:build-ui`, which leaves the app's page in `dist-app/` |
 | `VISUALS_HEADLESS=1 VISUALS_CAPTURE=<file.png> npm run app` (add `VISUALS_LIVE=1 VISUALS_CAPTURE_OUTPUT=<out.png>` for live mode, `VISUALS_FX=…` for effects) | the app runs and draws: pictures of the main window and the live output, with nothing shown on screen. It quits once the pictures are written, so the command ends by itself (exit 0) | after a change to the app or the page you want to see working: look at the pictures, then check with `ps` that no vite, `cargo-tauri` or `target/debug/visuals` is left |
 | `cargo run --release -p visuals-engine --bin record -- <audio> <out.mp4> --cut <s> <preset> …` | presets drawn from an audio file into a video, frame by frame — the teaser's footage (see `teaser/README.md`) | after a change to `record.rs`: record a few seconds and look at them |
 | `npm run typecheck` in `teaser/` | the teaser's Remotion edit compiles (the root typecheck doesn't reach it) | any change under `teaser/src/` |
 | `cargo run --release -p visuals-engine --bin gpucheck -- [files or folders] [--sample N \| --all] [--timeout S]` | presets load and draw on the GPU: by default a fixed sample of 250 spread over the pack (about a minute); a preset stuck over 20 s ends the run naming it. Exit 0 when every preset drew (fall-backs to MilkDrop's default shader are reported but pass), 1 when any failed to load or draw or panicked, or on a usage error, 2 on a timeout | the default sample locally after changes to shader translation or the renderer; `--all` (all 9,795) only when asked or before a release |
 | `cargo run --release -p visuals-engine --bin motion -- <presets or folders> [--hz 60,120] [--speed 0.25,1,4] [--seconds S] [--dump DIR]` | how evenly presets move from one refresh to the next: block-matched motion and frame difference per refresh, averaged by where the refresh lands in its step, as the most-changing phase over the least; `--dump` saves the pictures (see "The preset clock" in `docs/milkdrop-engine.md`) | after a change to how refreshes between steps are drawn |
 
-`npm run app` runs the editor; `VISUALS_PRESET=<path in the pack>` starts it on a given
-preset. `VISUALS_LIVE=1` starts it in live mode, which opens the output window full screen
+`npm run app` runs the app (the library and live mode); `npm run app:lab` runs the lab
+build, which starts in the editor (`VITE_LAB=1 app/run.sh --features lab`; the headless
+capture above works with it too). `VISUALS_PRESET=<path in the pack>` starts either on a
+given preset. `VISUALS_LIVE=1` starts it in live mode, which opens the output window full screen
 on a display (`VISUALS_DISPLAY=<n>` picks display `n`, from 0; otherwise the one chosen
 last). No dev port is fixed: it takes `PORT` or a free port from the OS and hands it to
 vite and Tauri. `VISUALS_CAPTURE=<file.png>` makes the app save a picture of its own
@@ -40,5 +47,18 @@ and pasted in). With a capture it quits once the pictures are written. `npm run 
 whole group (vite, `cargo-tauri`, the app) when it is stopped (SIGINT, SIGTERM, hangup)
 or whatever started it goes away; still, never leave a run going, and check with `ps`
 afterwards.
+
+**Contract files.** These are the shared surface every feature's parts would otherwise
+all touch. A change to them lands as its own small PR (a milestone's contract) before the
+lanes that need it; a lane that needs one asks for it rather than making it:
+`app/src/api.ts` (the commands' TS types), `app/src/App.tsx`, `app/src/views.tsx`,
+`app/src/words.ts` (the plain words all UI copy uses: bench → preview, the one → bar
+start…), `app/src-tauri/src/main.rs` (modules and the command list),
+`app/src-tauri/src/settings.rs`, `app/src-tauri/Cargo.toml`, `Cargo.lock`,
+`app/src-tauri/tauri.conf.json` (each lane owns its own section, such as `plugins.updater`),
+`package.json`, `vite.app.config.ts`, `.github/workflows/ci.yml`, `AGENTS.md`, `README.md`.
+Stubs for a lane's commands live in the lane's own file (`pack.rs`, `updater.rs`,
+`testsound.rs`, `tap.rs`, `pack.ts`, `SourcePicker.tsx`) so the lane fills them in
+without touching these.
 
 Every agent commit must end with a blank line and a GitHub-compatible co-author trailer naming the agent that actually made it, for example `Co-authored-by: Codex <noreply@openai.com>` or `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Never name an agent that didn't write the commit.

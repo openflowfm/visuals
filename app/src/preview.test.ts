@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Stats } from './api.ts';
-import { whenDrawing } from './Bench.tsx';
+import { whenDrawing } from './preview.ts';
 
 const idle: Stats = { fps: 0, cpu_ms: 0 };
 const drawing: Stats = { fps: 60, cpu_ms: 1.5 };
