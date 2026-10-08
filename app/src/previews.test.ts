@@ -1,7 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
-
-vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
-
+import { describe, expect, it } from 'vitest';
 import { DIM, MAX_GAIN, layerOver } from './previews.ts';
 
 const pixels = (...rgb: [number, number, number][]) => new Uint8ClampedArray(rgb.flatMap(([r, g, b]) => [r, g, b, 0]));

@@ -11,14 +11,13 @@ import { LinkPanel } from './LinkPanel.tsx';
 import * as output from './output.ts';
 import { Playlists } from './Playlists.tsx';
 import * as pl from './playlists.ts';
-import { openFailed, problem, type Problem } from './problems.ts';
-import { Header } from './views.tsx';
+import { useNotice, useTauriEvent } from './hooks.ts';
+import { isTyping, nameOf, notice, openFailed } from './shell.ts';
+import { FrameRate, Header, NoticeBanner } from './views.tsx';
 import './live.css';
 
-const nameOf = (path: string) => path.split('/').pop()?.replace(/\.milk$/i, '') ?? path;
-
 /** The bench's small preview: report its hole to the app, as the editor does. */
-function usePreview(ref: React.RefObject<HTMLDivElement | null>) {
+function usePlaceBench(ref: React.RefObject<HTMLDivElement | null>) {
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -62,36 +61,32 @@ const KEYS =
 export function Live({ start, onMode }: { start: string | null; onMode: (mode: 'editor', path: string | null) => void }) {
   const [lists, setLists] = useState<pl.Lists | null>(null);
   const [current, setCurrent] = useState<string | null>(null);
-  const [error, setError] = useState<Problem | null>(null);
+  const { notice: error, set: setError, fail, dismiss } = useNotice();
   const [selected, setSelected] = useState<string | null>(null);
   const [displays, setDisplays] = useState<output.Display[]>([]);
   const [status, setStatus] = useState<output.Status>({ display: null, size: null });
-  const [stats, setStats] = useState<api.Stats>({ fps: 0, cpu_ms: 0 });
   const [effects, setEffects] = useState<fx.Fx | null>(null);
   const preview = useRef<HTMLDivElement>(null);
-  usePreview(preview);
+  usePlaceBench(preview);
 
   const held = (effects?.hold ?? lists?.deck.hold) === true;
   const heldNow = useRef(held);
   heldNow.current = held;
 
-  const fail = useCallback((what: string) => (e: unknown) => setError(problem(what, e)), []);
   const show = useCallback((id: number | null) => output.open(id).then(setStatus, fail("Couldn't show the output on that display.")), [fail]);
 
   // Live mode is the output: open it on the way in, close it (and reset the effects) on the way out.
   useEffect(() => {
     api.setPreviews(false).catch(() => {});
     show(null);
-    const off = output.onStatus(setStatus);
     fx.state().then(setEffects, fail("Couldn't read the effects."));
-    const offFx = fx.onFx(setEffects);
     return () => {
-      off.then((f) => f());
-      offFx.then((f) => f());
       fx.act({ kind: 'fx_reset' }).catch(() => {});
       output.close().catch(() => {});
     };
   }, [show, fail]);
+  useTauriEvent(output.onStatus, setStatus);
+  useTauriEvent(fx.onFx, setEffects);
 
   const refreshDisplays = useCallback(() => output.displays().then(setDisplays, () => {}), []);
   useEffect(() => {
@@ -110,30 +105,25 @@ export function Live({ start, onMode }: { start: string | null; onMode: (mode: '
       if (start) api.open(start).catch((e) => setError(openFailed(start, String(e))));
       else pl.act({ kind: 'random' }).catch(fail("Couldn't pick a preset to start on."));
     }, fail("Couldn't read the playlists."));
-    const off = pl.onLive((now) => {
-      setLists((l) => (l ? { ...l, deck: now.deck } : l));
-      if (now.path) setCurrent(now.path);
-      // A preset that opened clears a failure to open the last one.
-      if (now.error) setError(openFailed(now.path, now.error));
-      else if (now.path) setError(null);
-    });
-    const t = window.setInterval(() => api.stats().then(setStats, () => {}), 1000);
-    return () => {
-      off.then((f) => f());
-      window.clearInterval(t);
-    };
-  }, [fail, start]);
+  }, [fail, setError, start]);
+  useTauriEvent(pl.onLive, (now) => {
+    setLists((l) => (l ? { ...l, deck: now.deck } : l));
+    if (now.path) setCurrent(now.path);
+    // A preset that opened clears a failure to open the last one.
+    if (now.error) setError(openFailed(now.path, now.error));
+    else if (now.path) dismiss();
+  });
 
   const act = useCallback(
     (action: pl.Action) =>
       pl.act(action).catch((e) =>
         setError(
           heldNow.current
-            ? problem('HOLD is on, so the preset stays — press H to let go.', e)
-            : problem(`Couldn't ${action.kind === 'random' ? 'pick a random preset' : `go to the ${action.kind} preset`}.`, e),
+            ? notice('HOLD is on, so the preset stays — press H to let go.', e)
+            : notice(`Couldn't ${action.kind === 'random' ? 'pick a random preset' : `go to the ${action.kind} preset`}.`, e),
         ),
       ),
-    [],
+    [setError],
   );
   const actFx = useCallback((action: fx.FxAction) => fx.act(action).catch(fail("Couldn't change that effect.")), [fail]);
 
@@ -147,7 +137,7 @@ export function Live({ start, onMode }: { start: string | null; onMode: (mode: '
         return;
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if ((e.target as HTMLElement).closest('input, textarea, select, [role="combobox"]')) return;
+      if (isTyping(e)) return;
       if (e.key === 'ArrowRight' || e.key === 'ArrowDown') act({ kind: 'next' });
       else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') act({ kind: 'previous' });
       else if (e.key.toLowerCase() === 'r') act({ kind: 'random' });
@@ -195,10 +185,8 @@ export function Live({ start, onMode }: { start: string | null; onMode: (mode: '
     <div className="live">
       <Header view="live" onChange={(view) => view !== 'live' && onMode(view, current)}>
         <span className="fill" />
-        <AudioInput onError={(m) => setError(problem("Couldn't use that audio input.", m))} />
-        <span className="stats" title="Frames drawn each second, and the time the engine spends on each">
-          {stats.fps.toFixed(0)} fps · {stats.cpu_ms.toFixed(2)} ms cpu
-        </span>
+        <AudioInput onError={fail("Couldn't use that audio input.")} />
+        <FrameRate always />
       </Header>
       <section className="live-stage">
         <div className="live-deck">
@@ -258,14 +246,7 @@ export function Live({ start, onMode }: { start: string | null; onMode: (mode: '
             HOLD
           </ButtonFace>
         </div>
-        {error && (
-          <div className="live-problem" role="alert" title={error.detail ?? undefined}>
-            <span>{error.text}</span>
-            <Button tone="quiet" onPress={() => setError(null)} label="Dismiss" title="Dismiss">
-              ✕
-            </Button>
-          </div>
-        )}
+        <NoticeBanner className="live-problem" notice={error} onDismiss={dismiss} />
         {effects && <Effects state={effects} onState={setEffects} send={actFx} />}
         <div className="live-preview-cell">
           <div className="live-preview" ref={preview} />
@@ -320,7 +301,7 @@ export function Live({ start, onMode }: { start: string | null; onMode: (mode: '
               selected={selected ?? deck?.playlist ?? lists.playlists[0]?.id ?? null}
               onSelect={setSelected}
               onLists={setLists}
-              onError={(text, detail) => setError({ text, detail: detail ?? null })}
+              onError={setError}
               library={false}
             />
           )}

@@ -1,20 +1,57 @@
 import { describe, expect, it } from 'vitest';
-import { frameReadout, meterLevel, noticeOf, SLOW_FOR } from './shell.ts';
+import { frameReadout, isTyping, meterLevel, nameOf, notice, openFailed, SLOW_FOR } from './shell.ts';
 
-describe('noticeOf', () => {
-  it('keeps the plain words up front and the raw failure as the detail', () => {
-    expect(noticeOf('couldn’t open that preset', 'No such file or directory (os error 2)')).toEqual({
+describe('notice', () => {
+  it('keeps the plain words up front and what the app said as the detail', () => {
+    expect(notice('couldn’t open that preset', 'No such file or directory (os error 2)')).toEqual({
       message: 'couldn’t open that preset',
       detail: 'No such file or directory (os error 2)',
     });
   });
   it('drops the Error: prefix a thrown Error carries', () => {
-    expect(noticeOf('x', new Error('boom')).detail).toBe('boom');
-    expect(noticeOf('x', 'Error: boom').detail).toBe('boom');
+    expect(notice('x', new Error('boom')).detail).toBe('boom');
+    expect(notice('x', '  Error: boom ').detail).toBe('boom');
   });
-  it('falls back to the message when nothing useful was thrown', () => {
-    expect(noticeOf('couldn’t save', undefined).detail).toBe('couldn’t save');
-    expect(noticeOf('couldn’t save', '').detail).toBe('couldn’t save');
+  it('has no detail when nothing useful was thrown', () => {
+    expect(notice('couldn’t save').detail).toBeNull();
+    expect(notice('couldn’t save', undefined).detail).toBeNull();
+    expect(notice('couldn’t save', '  ').detail).toBeNull();
+    expect(notice('same', 'same').detail).toBeNull();
+  });
+  it('writes out anything else that was thrown', () => {
+    expect(notice('x', { code: 3 }).detail).toBe('{"code":3}');
+    expect(notice('x', 42).detail).toBe('42');
+  });
+});
+
+describe('nameOf', () => {
+  it('is the file name without .milk', () => {
+    expect(nameOf('Geiss/Spiral Galaxy.milk')).toBe('Spiral Galaxy');
+    expect(nameOf('loose.MILK')).toBe('loose');
+    expect(nameOf('no-extension')).toBe('no-extension');
+  });
+});
+
+describe('openFailed', () => {
+  it('names the preset, not its path', () => {
+    const n = openFailed('Geiss/Spiral Galaxy.milk', 'shader: line 3: bad token');
+    expect(n.message).toBe("Couldn't open Spiral Galaxy — the last preset keeps playing.");
+    expect(n.detail).toBe('shader: line 3: bad token');
+  });
+  it('says something without a path', () => {
+    expect(openFailed(null, 'x').message).toBe("Couldn't open that preset.");
+  });
+});
+
+describe('isTyping', () => {
+  const on = (match: boolean) => ({ target: { closest: (s: string) => (match && s.includes('input') ? {} : null) } as unknown as EventTarget });
+  it('is a key landing in a field', () => {
+    expect(isTyping(on(true))).toBe(true);
+  });
+  it('is not a key anywhere else, or with no element behind it', () => {
+    expect(isTyping(on(false))).toBe(false);
+    expect(isTyping({ target: null })).toBe(false);
+    expect(isTyping({ target: {} as EventTarget })).toBe(false);
   });
 });
 

@@ -1,8 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
-
-vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
-vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }));
-
+import { describe, expect, it } from 'vitest';
 import { beatsToNext, CHOICES, choicesFor, runOn, statusText, type Frame } from './link.ts';
 
 const frame = (over: Partial<Frame> = {}): Frame => ({
@@ -60,6 +56,10 @@ describe('choicesFor', () => {
     const c = choicesFor({ every: 3, unit: 'bars' });
     expect(c).toHaveLength(CHOICES.length + 1);
     expect(c[0]).toEqual({ every: 3, unit: 'bars', name: 'every 3 bars' });
+  });
+
+  it('names an interval in beats too', () => {
+    expect(choicesFor({ every: 3, unit: 'beats' })[0].name).toBe('every 3 beats');
   });
 });
 

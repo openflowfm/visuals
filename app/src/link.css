@@ -55,5 +55,5 @@
 .link-every-pick { justify-items: start; }
 .link-quiet { margin: 0; color: var(--caption); }
 
-.link-problem { display: flex; align-items: center; gap: 6px; color: var(--red); }
-.link-problem > span { flex: 1; min-width: 0; }
+/* An error: a `NoticeBanner`, laid out by .vf-notice. */
+.link-problem { gap: 6px; }

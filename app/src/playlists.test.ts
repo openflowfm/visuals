@@ -1,9 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
-
-// The module's commands go through Tauri; these tests touch only its pure helpers.
-vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
-vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }));
-
+import { describe, expect, it } from 'vitest';
 import { freshName, nextSays, upNext, type Deck, type Lists, type Playlist } from './playlists.ts';
 
 const item = (name: string, missing = false) => ({ path: `g/${name}.milk`, name, group: 'g', missing });
