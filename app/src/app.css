@@ -267,6 +267,22 @@ main {
   box-shadow: 0 0 0 100vmax #000;
 }
 
+/* The library view (`Browse` with nothing below or beside the preview): the
+   library column and the preview, as big as the room left allows. */
+.app[data-view='library'] {
+  grid-template-columns: 220px minmax(0, 1fr);
+}
+.app[data-view='library'] main {
+  grid-template-rows: minmax(0, 1fr);
+}
+.app[data-view='library'] .bench-row {
+  align-items: center;
+  border-bottom: 0;
+}
+.app[data-view='library'] .bench {
+  height: min(calc(100vh - 160px), calc((100vw - 300px) * 9 / 16));
+}
+
 /* Until the bench has drawn (`Bench`), its box and the bars around it are the
    page's own surface, saying so, instead of a hole onto whatever is under the
    window. The editor's bench and live mode's preview alike. */

@@ -1,56 +1,73 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import * as api from './api.ts';
-import type { Entry, Preset, Problem, Report } from './api.ts';
+import type { Entry, Opened } from './api.ts';
 import { AudioInput } from './AudioInput.tsx';
 import { Segmented } from '@openflow/widgets/controls/Segmented.tsx';
-import { Inspector } from './Inspector.tsx';
 import { Playlists } from './Playlists.tsx';
 import * as pl from './playlists.ts';
-import { StageGraph } from './StageGraph.tsx';
-import { FrameRate, Header, Hints, NoticeBanner, NowPlaying, type View } from './views.tsx';
+import { FrameRate, Header, Hints, HOME, NoticeBanner, NowPlaying, Preview, type View } from './views.tsx';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { Library } from './Library.tsx';
 import { stepIn } from './librarySearch.ts';
-import { Bench } from './Bench.tsx';
 import { useNotice, useTauriEvent } from './hooks.ts';
-import { useApply, useLibrary, usePresetEdits } from './editor.ts';
+import { useLibrary } from './library.ts';
 import { isTyping, nameOf, notice, openFailed } from './shell.ts';
 import { Live } from './Live.tsx';
 import * as output from './output.ts';
 
-/** What a load or an edit reported wrong, equations then shaders, for the graph and the inspector to mark. */
-const reportProblems = (r: Report | null): Problem[] => (r ? [...r.equations, ...r.shaders] : []);
+// The editor, only in a lab build: without `VITE_LAB` this is `null` at build
+// time, and the editor's code (the graph, the inspector, the edits) never reaches
+// the bundle.
+const Editor = import.meta.env.VITE_LAB ? lazy(() => import('./Lab.tsx')) : null;
 
 /**
- * The editor, or live mode (performing controls, the output full screen on a
- * display). `VISUALS_LIVE=1` starts in live mode, `VISUALS_PRESET=<path>` on a
- * preset.
+ * The library (browse presets, play them in the preview), live mode (performing
+ * controls, the output full screen on a display), and in a lab build the editor.
+ * `VISUALS_LIVE=1` starts in live mode, `VISUALS_PRESET=<path>` on a preset.
  */
 export function App() {
   const [mode, setMode] = useState<{ view: View; preset: string | null } | null>(null);
   useEffect(() => {
     Promise.all([output.startPreset(), output.liveStart()]).then(
-      ([preset, live]) => setMode({ view: live ? 'live' : 'editor', preset }),
-      () => setMode({ view: 'editor', preset: null }),
+      ([preset, live]) => setMode({ view: live ? 'live' : HOME, preset }),
+      () => setMode({ view: HOME, preset: null }),
     );
   }, []);
+  const onMode = useCallback((view: View, preset: string | null) => setMode({ view, preset }), []);
   if (!mode) return null;
-  if (mode.view === 'live') return <Live start={mode.preset} onMode={(view, preset) => setMode({ view, preset })} />;
-  return <Editor start={mode.preset} onMode={(view, preset) => setMode({ view, preset })} />;
+  if (mode.view === 'live') return <Live start={mode.preset} onMode={onMode} />;
+  if (mode.view === 'editor' && Editor)
+    return (
+      <Suspense fallback={null}>
+        <Editor start={mode.preset} onMode={onMode} />
+      </Suspense>
+    );
+  return <Browse view="library" start={mode.preset} onMode={onMode} />;
 }
 
-function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live', path: string | null) => void }) {
+export interface BrowseProps {
+  view: View;
+  start: string | null;
+  onMode(view: View, path: string | null): void;
+  /** Each preset as it opens, from the library or live (a playlist step, auto-advance, a controller). */
+  onOpened?(opened: Opened): void;
+  /** Under the preview. */
+  below?: ReactNode;
+  /** A column to the right. */
+  side?: ReactNode;
+}
+
+/**
+ * Browsing: the library and the playlists, the preview, previous / next /
+ * random. The library view is this alone; the lab's editor puts its graph
+ * `below` and its inspector at the `side`.
+ */
+export function Browse({ view, start, onMode, onOpened, below, side }: BrowseProps) {
   const [current, setCurrent] = useState<Entry | null>(null);
-  const [preset, setPreset] = useState<Preset | null>(null);
-  const [report, setReport] = useState<Report | null>(null);
-  // The stage open in the inspector, by id; null is the graph's own first choice.
-  const [selected, setSelected] = useState<string | null>(null);
   const { notice: banner, set: setNotice, fail, dismiss } = useNotice();
   const [lists, setLists] = useState<pl.Lists | null>(null);
   const [tab, setTab] = useState(0);
   const [target, setTarget] = useState<string | null>(null);
-  const apply = useApply(setReport);
-  const { edit, set } = usePresetEdits(preset, setPreset, apply);
   const audioFailed = useMemo(() => fail("Couldn't read the audio input."), [fail]);
 
   const load = useCallback(
@@ -59,13 +76,12 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live'
       dismiss();
       try {
         const opened = await api.open(e.path);
-        setPreset(opened.preset);
-        setReport(opened.report);
+        onOpened?.(opened);
       } catch (err) {
         setNotice(notice(`Couldn't open ${e.name}.`, err));
       }
     },
-    [dismiss, setNotice],
+    [dismiss, setNotice, onOpened],
   );
   const { library, loaded, search, setSearch, found } = useLibrary(start, load, fail);
   const shown = found.shown;
@@ -96,10 +112,7 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live'
     const known = library.find((e) => e.path === path);
     setCurrent(known ?? { path, name: nameOf(path), group: '' });
     setNotice(now.error ? openFailed(path, now.error) : null);
-    if (now.opened) {
-      setPreset(now.opened.preset);
-      setReport(now.opened.report);
-    }
+    if (now.opened) onOpened?.(now.opened);
   });
 
   // The playlist the library's + adds to: the one picked in the panel, or the one playing.
@@ -117,11 +130,9 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live'
     return () => window.removeEventListener('keydown', key);
   }, [step]);
 
-  const problems = reportProblems(report);
-
   return (
-    <div className="app">
-      <Header view="editor" onChange={(view) => view !== 'editor' && onMode(view, current?.path ?? null)}>
+    <div className="app" data-view={view}>
+      <Header view={view} onChange={(next) => next !== view && onMode(next, current?.path ?? null)}>
         <div className="wdg wdg-control-group vf-transport" role="group" aria-label="presets">
           <Button onPress={() => step(-1)} label="previous preset" title="previous preset (←)" hint={`previous preset${playing ? ' in the playlist' : ''} (←)`}>
             ◀
@@ -161,11 +172,11 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live'
       </aside>
       <main>
         <div className="bench-row">
-          <Bench className="bench" />
+          <Preview className="bench" />
         </div>
-        <div className="graph">{preset && <StageGraph preset={preset} problems={problems} selected={selected} onSelect={setSelected} onChange={edit} onSet={set} />}</div>
+        {below}
       </main>
-      <aside className="side">{preset && <Inspector preset={preset} selected={selected} problems={problems} onChange={edit} onSet={set} />}</aside>
+      {side}
       <Hints />
     </div>
   );

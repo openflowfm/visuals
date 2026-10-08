@@ -1,5 +1,5 @@
 //! The small files the app keeps its choices in between runs (the audio input,
-//! the output's display, the tempo), in `~/.openflow/visuals` (under
+//! the output's display, the tempo, whether the first run is done), in `~/.openflow/visuals` (under
 //! `OPENFLOW_HOME`). Failing to read or write one is not worth stopping the show
 //! for: a missing or broken file reads as nothing kept.
 
@@ -34,6 +34,36 @@ pub fn save_json(name: &str, value: &impl serde::Serialize) {
     }
 }
 
+/// Where the first run is marked done, in [`dir`].
+const FIRST_RUN: &str = "first_run.json";
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct FirstRun {
+    done: bool,
+}
+
+/// Whether this is the first run: true until the page says it is done.
+#[tauri::command]
+pub fn first_run() -> bool {
+    first_run_in(&dir())
+}
+
+/// Mark the first run done, so the app starts straight on the show next time.
+#[tauri::command]
+pub fn first_run_done() {
+    first_run_done_in(&dir());
+}
+
+fn first_run_in(dir: &Path) -> bool {
+    !load_at::<FirstRun>(&dir.join(FIRST_RUN)).is_some_and(|f| f.done)
+}
+
+fn first_run_done_in(dir: &Path) {
+    if let Ok(text) = serde_json::to_string_pretty(&FirstRun { done: true }) {
+        save_at(&dir.join(FIRST_RUN), text.as_bytes());
+    }
+}
+
 fn load_at<T: DeserializeOwned>(path: &Path) -> Option<T> {
     serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()
 }
@@ -65,6 +95,22 @@ mod tests {
         assert!(load_at::<serde_json::Value>(&root.join("missing.json")).is_none());
         std::fs::write(&path, "not json").unwrap();
         assert!(load_at::<serde_json::Value>(&path).is_none());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn first_run_until_marked_done() {
+        let root = std::env::temp_dir().join(format!("visuals-first-run-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        assert!(first_run_in(&root));
+        first_run_done_in(&root);
+        assert!(!first_run_in(&root));
+        let v: serde_json::Value = load_at(&root.join(FIRST_RUN)).unwrap();
+        assert_eq!(v["done"], serde_json::Value::Bool(true));
+        std::fs::write(root.join(FIRST_RUN), r#"{"done": false}"#).unwrap();
+        assert!(first_run_in(&root));
+        std::fs::write(root.join(FIRST_RUN), "not json").unwrap();
+        assert!(first_run_in(&root));
         let _ = std::fs::remove_dir_all(root);
     }
 }

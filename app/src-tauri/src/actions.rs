@@ -327,7 +327,7 @@ fn emit_deck(handle: &AppHandle, deck: &Deck, view: DeckView) -> Result<(), Stri
 pub(crate) struct Now {
     deck: DeckView,
     /// The preset now on the bench, when the action changed it.
-    opened: Option<crate::editor::Opened>,
+    opened: Option<crate::library::Opened>,
     path: Option<String>,
     /// Why the preset at `path` did not open.
     error: Option<String>,
@@ -367,14 +367,15 @@ pub fn dispatch(handle: &AppHandle, action: Action) -> Result<(), String> {
         return emit_deck(handle, &deck, view);
     }
     let app = handle.state::<crate::App>();
+    let all = crate::pack::milk_files(handle);
     let path = {
         let store = deck.store.lock().unwrap();
         let mut live = deck.live.lock().unwrap();
-        let library = || engine::preset::milk_files(&app.library);
+        let library = || all.clone();
         decide(&mut live, &action, &store, &library, roll())?
     };
     let (opened, error) = match &path {
-        Some(p) => match crate::editor::open_path(&app, &p.to_string_lossy()) {
+        Some(p) => match crate::library::open_path(&app, &p.to_string_lossy()) {
             Ok(o) => (Some(o), None),
             Err(e) => (None, Some(e)),
         },

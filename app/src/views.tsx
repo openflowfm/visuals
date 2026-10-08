@@ -1,19 +1,50 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Segmented } from '@openflow/widgets/controls/Segmented.tsx';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { HintFooter } from '@openflow/widgets/chrome/HintFooter.tsx';
 import * as api from './api.ts';
+import { usePreview } from './preview.ts';
 import { frameReadout, type Notice } from './shell.ts';
 
-export type View = 'editor' | 'live';
+/**
+ * A lab build (`npm run app:lab`: `VITE_LAB=1` here, the `lab` feature in the
+ * app) has the editor; the app people get doesn't.
+ */
+export const LAB = Boolean(import.meta.env.VITE_LAB);
 
-/** The views the app offers. */
-export const VIEWS: View[] = ['editor', 'live'];
+export type View = 'library' | 'editor' | 'live';
+
+/** The views the app offers: the editor only in a lab build. */
+export const VIEWS: View[] = LAB ? ['library', 'editor', 'live'] : ['library', 'live'];
+
+/** The view the app starts in, and live mode goes back to. */
+export const HOME: View = LAB ? 'editor' : 'library';
 
 const VIEW_HINTS: Record<View, string> = {
+  library: 'library: browse presets and play them in the preview',
   editor: 'editor: browse presets and change them while they play',
   live: 'live: the output full screen on a display, with performing controls',
 };
+
+/**
+ * Where the preview goes: the native view the engine draws in is placed under
+ * this box, and shows through it. Until it has drawn, the box is a plain surface
+ * saying the display is loading, so the page never shows a hole; once it draws,
+ * the box paints nothing over the picture.
+ */
+export function Preview({ className }: { className: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const drawing = usePreview(ref);
+  return (
+    <div className={className} ref={ref} data-loading={drawing ? undefined : ''}>
+      {!drawing && (
+        <span className="bench-loading" role="status">
+          Loading the display…
+        </span>
+      )}
+    </div>
+  );
+}
 
 /** The switch between them, the same in every view's header. */
 export function ViewSwitch({ view, onChange }: { view: View; onChange(next: View): void }) {
@@ -108,7 +139,7 @@ export function FrameRate({ always = false }: { always?: boolean }) {
     <span
       className="vf-stats"
       data-slow={shown.slow ? '' : undefined}
-      title={shown.slow ? 'the picture is drawing fewer frames than the display shows: try a simpler preset or close other apps' : 'frames a second the bench draws, and the CPU time each takes'}
+      title={shown.slow ? 'the picture is drawing fewer frames than the display shows: try a simpler preset or close other apps' : 'frames a second the preview draws, and the CPU time each takes'}
     >
       {shown.text}
     </span>

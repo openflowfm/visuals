@@ -28,7 +28,8 @@ struct File {
 
 pub struct Store {
     file: PathBuf,
-    library: PathBuf,
+    /// The folders presets are relative to: the presets folder first, then the starter set.
+    folders: Vec<PathBuf>,
     pub lists: Vec<Playlist>,
 }
 
@@ -81,7 +82,7 @@ impl Store {
             },
             Err(_) => Vec::new(),
         };
-        Store { file, library, lists }
+        Store { file, folders: vec![library], lists }
     }
 
     /// Write the whole file, through a temporary file so a crash never leaves half of one.
@@ -95,18 +96,23 @@ impl Store {
         std::fs::rename(&tmp, &self.file).map_err(|e| e.to_string())
     }
 
+    /// Also resolve presets against `folder` (the bundled starter set).
+    pub fn add_folder(&mut self, folder: PathBuf) {
+        self.folders.push(folder);
+    }
+
     /// How a preset is written in the file.
     pub fn relative(&self, path: &Path) -> String {
-        match path.strip_prefix(&self.library) {
-            Ok(rel) => rel.components().map(|c| c.as_os_str().to_string_lossy()).collect::<Vec<_>>().join("/"),
-            Err(_) => path.to_string_lossy().into_owned(),
+        match self.folders.iter().find_map(|f| path.strip_prefix(f).ok()) {
+            Some(rel) => rel.components().map(|c| c.as_os_str().to_string_lossy()).collect::<Vec<_>>().join("/"),
+            None => path.to_string_lossy().into_owned(),
         }
     }
 
     /// Where a preset written in the file is now.
     pub fn resolve(&self, stored: &str) -> PathBuf {
         let p = Path::new(stored);
-        if p.is_absolute() { p.to_path_buf() } else { self.library.join(p) }
+        if p.is_absolute() { p.to_path_buf() } else { crate::pack::resolve_in(&self.folders, p) }
     }
 
     pub fn position(&self, id: &str) -> Option<usize> {

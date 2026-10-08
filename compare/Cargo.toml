@@ -1,0 +1,15 @@
+[package]
+name = "visuals-compare"
+version = "0.0.0"
+edition = "2024"
+description = "The engine's half of the development-only compare bench: presets drawn from a plan, captures written as RGBA."
+license = "MIT"
+publish = false
+
+[[bin]]
+name = "visuals-compare"
+path = "src/main.rs"
+
+[dependencies]
+visuals-engine = { path = "../engine" }
+wgpu = "30.0.1"

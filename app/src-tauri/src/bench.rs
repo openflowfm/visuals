@@ -37,9 +37,11 @@ pub fn draw_size(output: (u32, u32)) -> (u32, u32) {
 pub enum Cmd {
     Load(Box<Preset>, u64, Sender<Result<engine::render::Loaded, String>>),
     /// One value, live. Replies false when it needs a reload instead.
+    #[cfg_attr(not(feature = "lab"), allow(dead_code))]
     Set(engine::runtime::Owner, String, f64, Sender<bool>),
     /// Keep these stage pictures (`engine::render::PREVIEWS` indices) at this
     /// size; none stops them.
+    #[cfg_attr(not(feature = "lab"), allow(dead_code))]
     Previews(Vec<usize>, (u32, u32)),
     /// The surface's size in physical pixels; 0×0 when the bench is hidden.
     Resize(u32, u32),
@@ -135,6 +137,7 @@ pub struct Thread {
     pub commands: Sender<Cmd>,
     pub stats: Arc<Mutex<Stats>>,
     /// The latest stage pictures, as [`packed`] packs them.
+    #[cfg_attr(not(feature = "lab"), allow(dead_code))]
     pub previews: Arc<Mutex<Option<Vec<u8>>>>,
 }
 
