@@ -62,7 +62,7 @@ export function useLibrary(start: string | null, load: (e: Entry) => void, fail:
       },
       (e) => {
         setLoaded(true);
-        fail('couldn’t read the preset folder')(e);
+        fail("Couldn't read the preset folder.")(e);
       },
     );
   }, [load, fail]);

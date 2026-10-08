@@ -13,7 +13,7 @@ import { Library } from './Library.tsx';
 import { stepIn } from './librarySearch.ts';
 import { useNotice, usePlaceBench, useTauriEvent } from './hooks.ts';
 import { useApply, useLibrary, usePresetEdits } from './editor.ts';
-import { isTyping, nameOf, notice } from './shell.ts';
+import { isTyping, nameOf, notice, openFailed } from './shell.ts';
 import { Live } from './Live.tsx';
 import * as output from './output.ts';
 
@@ -52,7 +52,7 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live'
   usePlaceBench(bench);
   const apply = useApply(setReport);
   const { edit, set } = usePresetEdits(preset, setPreset, apply);
-  const audioFailed = useMemo(() => fail('couldn’t read the audio input'), [fail]);
+  const audioFailed = useMemo(() => fail("Couldn't read the audio input."), [fail]);
 
   const load = useCallback(async (e: Entry) => {
     setCurrent(e);
@@ -62,7 +62,7 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live'
       setPreset(opened.preset);
       setReport(opened.report);
     } catch (err) {
-      setNotice(notice(`couldn’t open “${e.name}”`, err));
+      setNotice(notice(`Couldn't open ${e.name}.`, err));
     }
   }, [dismiss, setNotice]);
   const { library, loaded, search, setSearch, found } = useLibrary(start, load, fail);
@@ -73,7 +73,7 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live'
   const step = useCallback(
     (by: number) => {
       if (playing) {
-        pl.act({ kind: by === 0 ? 'random' : by > 0 ? 'next' : 'previous' }).catch(fail('couldn’t step the playlist'));
+        pl.act({ kind: by === 0 ? 'random' : by > 0 ? 'next' : 'previous' }).catch(fail("Couldn't step the playlist."));
         return;
       }
       const next = stepIn(shown.length ? shown : library, current?.path ?? null, by);
@@ -83,7 +83,7 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live'
   );
 
   useEffect(() => {
-    pl.lists().then(setLists, fail('couldn’t read the playlists'));
+    pl.lists().then(setLists, fail("Couldn't read the playlists."));
   }, [fail]);
   // Whatever changed the preset live (a playlist step, auto-advance, a controller),
   // the page follows it here.
@@ -92,9 +92,8 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live'
     if (!now.path) return;
     const path = now.path;
     const known = library.find((e) => e.path === path);
-    const name = nameOf(path);
-    setCurrent(known ?? { path, name, group: '' });
-    setNotice(now.error ? notice(`couldn’t open “${known?.name ?? name}”`, now.error) : null);
+    setCurrent(known ?? { path, name: nameOf(path), group: '' });
+    setNotice(now.error ? openFailed(path, now.error) : null);
     if (now.opened) {
       setPreset(now.opened.preset);
       setReport(now.opened.report);
@@ -150,7 +149,7 @@ function Editor({ start, onMode }: { start: string | null; onMode: (view: 'live'
             current={current?.path ?? null}
             into={into}
             onLoad={load}
-            onAdd={(e) => into && pl.add(into.id, e.path).then(setLists, fail(`couldn’t add “${e.name}” to ${into.name}`))}
+            onAdd={(e) => into && pl.add(into.id, e.path).then(setLists, fail(`Couldn't add ${e.name} to ${into.name}.`))}
           />
         ) : (
           lists && (
