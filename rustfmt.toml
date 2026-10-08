@@ -1,0 +1,4 @@
+# Matches the code as written: long lines, few breaks, imports in the order they were written.
+max_width = 200
+use_small_heuristics = "Max"
+reorder_imports = false
