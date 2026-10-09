@@ -89,4 +89,12 @@ Stubs for a lane's commands live in the lane's own file (`pack.rs`, `updater.rs`
 `testsound.rs`, `tap.rs`, `pack.ts`, `SourcePicker.tsx`) so the lane fills them in
 without touching these.
 
+The 0.4 (library) contract adds: `app/src-tauri/src/catalog.rs` (`library_index`: the
+rows of every pack's `index.json` and the `thumb:` scheme its thumbnails are served on),
+the starter set's index (`app/src-tauri/presets/starter/cream-of-the-crop/index.json`
+and `thumbnails/`, made with the `index` bin), and the types in `api.ts`. Its stubs:
+`app/src-tauri/src/userlib.rs` (`library_data`, `library_set`, the `library-changed`
+event, `playable`, and the `library.json` format; #93 fills it in) and
+`smartPlaylistSave` in `api.ts` (0.5).
+
 Every agent commit must end with a blank line and a GitHub-compatible co-author trailer naming the agent that actually made it, for example `Co-authored-by: Codex <noreply@openai.com>` or `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Never name an agent that didn't write the commit.

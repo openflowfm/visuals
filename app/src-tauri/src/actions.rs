@@ -367,7 +367,7 @@ pub fn dispatch(handle: &AppHandle, action: Action) -> Result<(), String> {
         return emit_deck(handle, &deck, view);
     }
     let app = handle.state::<crate::App>();
-    let all = crate::pack::milk_files(handle);
+    let all = crate::userlib::playable(handle, crate::pack::milk_files(handle));
     let path = {
         let store = deck.store.lock().unwrap();
         let mut live = deck.live.lock().unwrap();

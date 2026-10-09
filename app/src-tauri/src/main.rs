@@ -4,6 +4,7 @@
 
 mod actions;
 mod bench;
+mod catalog;
 #[cfg(target_os = "macos")]
 mod dev;
 #[cfg(feature = "lab")]
@@ -21,6 +22,7 @@ mod settings;
 mod tap;
 mod testsound;
 mod updater;
+mod userlib;
 
 /// The page's commands: the player's, then `lab`'s (the editor's, from
 /// [`editor`]) as given.
@@ -29,6 +31,9 @@ macro_rules! commands {
         tauri::generate_handler![
             library::presets,
             library::open,
+            catalog::library_index,
+            userlib::library_data,
+            userlib::library_set,
             preview::place_bench,
             preview::stats,
             listen::inputs,
@@ -126,6 +131,8 @@ fn main() {
     let mut app = builder
         .manage(App { bench: Mutex::new(None), ring: listen::ring(), listening: Mutex::new(None), library, seed: AtomicU64::new(1) })
         .manage(deck)
+        .manage(userlib::Store::open(userlib::default_file()))
+        .register_uri_scheme_protocol(catalog::SCHEME, |ctx, request| catalog::serve(ctx.app_handle(), &request))
         .setup(move |app| {
             menu::install(app)?;
             if let Some(starter) = pack::starter(app.handle()) {

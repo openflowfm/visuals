@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
 /** `engine::preset::Wave`. */
 export interface Wave {
@@ -135,6 +136,108 @@ export const updateInstall = () => invoke<void>('update_install');
 
 /** Play (or stop) the test sound into the engine, as if it were heard. */
 export const testSound = (on: boolean) => invoke<void>('test_sound', { on });
+
+/** `engine::index::Level`. */
+export type Level = 'low' | 'mid' | 'high';
+
+/** `engine::index::Look`: what a preset looks like, measured from its pictures. */
+export interface Look {
+  /** Dominant hues in degrees, the strongest first; empty when it's grey. */
+  hues: number[];
+  /** Mean luma, 0–1. */
+  brightness: number;
+  /** Mean block motion per step; null when there was nothing to follow. */
+  speed: number | null;
+  /** Mean frame difference per step, luma 0–255. */
+  intensity: number;
+  brightness_level: Level;
+  speed_level: Level;
+  intensity_level: Level;
+}
+
+/** `catalog::Row`: one preset in the library, as its index has it. */
+export interface LibraryRow {
+  /** Folder-relative, `/`-separated (`cream-of-the-crop/Dancer/…/x.milk`); what `LibraryData` is keyed by. */
+  key: string;
+  /** The file, to `open`. */
+  path: string;
+  /** SHA-256 of the file in hex; empty when no index lists it. */
+  hash: string;
+  style: string;
+  sub_style: string | null;
+  /** Case-folded, originals first; `unknown` when the name doesn't credit one. */
+  authors: string[];
+  title: string;
+  /** A URL for an `<img>` (`thumb:` scheme); null when there's none. */
+  thumbnail: string | null;
+  /** Null when it hasn't been drawn. */
+  look: Look | null;
+  /** From the bundled starter set rather than the presets folder. */
+  starter: boolean;
+}
+
+/** Every preset in the library (the starter set and the presets folder, once each), sorted by key. */
+export const libraryIndex = () => invoke<LibraryRow[]>('library_index');
+
+/** `userlib::Overrides`: the user's own values for a preset's automatic groups; one left out keeps the index's. */
+export interface Overrides {
+  style?: string;
+  sub_style?: string;
+  authors?: string[];
+  title?: string;
+  hues?: number[];
+  brightness?: Level;
+  speed?: Level;
+  intensity?: Level;
+}
+
+/** `userlib::Mine`: what the user keeps about one preset; a field left out is false, empty or none. */
+export interface Mine {
+  hash?: string;
+  star?: boolean;
+  tags?: string[];
+  /** Never played by random or auto-advance. */
+  hidden?: boolean;
+  overrides?: Overrides;
+}
+
+/** `userlib::LibraryData` (`library.json`): only the presets the user has touched, by key. */
+export interface LibraryData {
+  version: number;
+  presets: Record<string, Mine>;
+}
+
+/** `userlib::Change`: made to each preset `librarySet` is given; a field left out changes nothing. */
+export interface LibraryChange {
+  star?: boolean;
+  hidden?: boolean;
+  add_tags?: string[];
+  remove_tags?: string[];
+  /** Drop the preset's overrides before `overrides` is applied. */
+  clear_overrides?: boolean;
+  /** Values to set; the ones left out stay. */
+  overrides?: Overrides;
+}
+
+export const libraryData = () => invoke<LibraryData>('library_data');
+/** Make `change` to each preset at `keys`; resolves to the data after it, also sent as `LIBRARY_CHANGED_EVENT`. */
+export const librarySet = (keys: string[], change: LibraryChange) => invoke<LibraryData>('library_set', { keys, change });
+
+/** `userlib::CHANGED`: the user's library data changed; the payload is the whole `LibraryData`. */
+export const LIBRARY_CHANGED_EVENT = 'library-changed';
+export const onLibraryChanged = (f: (data: LibraryData) => void): Promise<UnlistenFn> => listen<LibraryData>(LIBRARY_CHANGED_EVENT, (e) => f(e.payload));
+
+/** The library's groups, as its chips name them. */
+export type LibraryGroup = 'style' | 'author' | 'colour' | 'speed' | 'intensity' | 'star' | 'tags';
+
+/** A library filter: AND across groups, OR within one, and the search text. */
+export interface LibraryQuery {
+  groups: Partial<Record<LibraryGroup, string[]>>;
+  text: string;
+}
+
+/** Save `query` as a smart playlist named `name`. A stub until 0.5: it always fails. */
+export const smartPlaylistSave = (_name: string, _query: LibraryQuery): Promise<string> => Promise.reject(new Error('Smart playlists come in 0.5.'));
 
 /** Menu event: Check for Updates… was chosen. Listened to by #87. */
 export const UPDATE_CHECK_EVENT = 'update-check';

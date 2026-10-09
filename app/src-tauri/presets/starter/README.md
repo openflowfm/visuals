@@ -9,6 +9,12 @@ with `gpucheck`. `CREDITS.md` says who made them and on what terms.
   with its README and LICENSE, so a starter preset and the same preset downloaded
   have the same folder-relative path: playlists keep working once the pack is in,
   and the starter set drops out of the library then (`src/pack.rs`).
+- `cream-of-the-crop/index.json` and `cream-of-the-crop/thumbnails/`: the library's
+  index of the starter set (`engine/src/index.rs`), read by `src/catalog.rs`. Made
+  with `cargo run --release -p visuals-engine --bin index --
+  app/src-tauri/presets/starter/cream-of-the-crop --out
+  app/src-tauri/presets/starter/cream-of-the-crop`; run it again after changing the
+  starter presets.
 - `playlists.json`: three playlists ("Chill", "Warm up", "Peak time") made from the
   starter set on a fresh install (`pack::seed_playlists`).
 
