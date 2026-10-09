@@ -50,6 +50,9 @@ name: release
 on:
   push:
     branches: [main]
+    # Docs-only pushes to main don't build a latest. GitHub applies path
+    # filters only to branch pushes, never to tags, so a tag always builds.
+    paths-ignore: ['docs/**', '**/*.md', 'teaser/**']
     tags: ['v*']
   workflow_dispatch:
   # Publishing a tag's draft (by hand) feeds the `beta` prerelease.
@@ -292,6 +295,14 @@ jobs:
           else
             unset TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
           fi
+          # Tauri's macOS bundler writes the whole version (`1.0.0-rc.1`) as
+          # CFBundleShortVersionString, which Apple defines as three integers;
+          # only its iOS path strips the suffix. Our Info.plist is merged over
+          # the bundler's, so it carries the numeric X.Y.Z. The app's own
+          # version, which the updater compares with `latest.json`, still
+          # comes from tauri.conf.json, suffix and all.
+          version=$(node -p "require('./tauri.conf.json').version")
+          plutil -replace CFBundleShortVersionString -string "${version%%-*}" Info.plist
           cargo tauri build --bundles app,dmg \
             --config "{\"bundle\":{\"createUpdaterArtifacts\":$updater,\"macOS\":{\"bundleVersion\":\"$GITHUB_RUN_NUMBER\"}}}"
 
