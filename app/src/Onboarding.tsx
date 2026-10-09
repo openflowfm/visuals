@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { Select } from '@openflow/widgets/controls/Select.tsx';
@@ -157,19 +157,17 @@ export type Ending = 'live' | 'skipped';
  * hears how it ended, finished or skipped; either way the first run is marked
  * done, so it doesn't come back by itself.
  */
-export function Onboarding({ onDone: done, start = 'welcome' }: { onDone(ending: Ending): void; start?: Step }) {
+export function Onboarding({ onDone: done, start = 'welcome', store = kept }: { onDone(ending: Ending): void; start?: Step; store?: WarningStore }) {
   const [step, setStep] = useState<Step>(start);
   const [peers, setPeers] = useState(0);
-  // Whether the warning step's "I understand" was pressed: skipped before it, the warning is owed.
-  const understood = useRef(false);
   const onDone = (ending: Ending) => {
     api.firstRunDone().catch(() => {});
-    welcomeEnded(understood.current);
+    welcomeEnded();
     done(ending);
   };
+  // The warning step's "I understand": kept at once. Skipped before it, the warning is owed.
   const understand = () => {
-    understood.current = true;
-    warningUnderstood();
+    store.understand();
     next();
   };
 
@@ -517,64 +515,95 @@ export const FLASH_WARNING = 'flash-warning';
 export const showFlashWarning = () => window.dispatchEvent(new Event(FLASH_WARNING));
 
 /**
- * Where the warning's state is kept: `'seen'` once its "I understand" has been
- * pressed, `'owed'` when the first run ended (skipped) before it was.
+ * Where the page kept the warning's answer before the app did (`'seen'` once
+ * "I understand" was pressed): carried over to the app once, then removed.
  */
-export const WARNING_KEY = 'flash-warning';
+export const OLD_KEY = 'flash-warning';
 
-/** What the warning's state is kept in. */
-export type WarningStore = Pick<Storage, 'getItem' | 'setItem'>;
+/** Whether the warning's "I understand" was chosen, and keeping that it was. Neither rejects. */
+export interface WarningStore {
+  /** At this launch or any before. */
+  understood(): Promise<boolean>;
+  /** Kept for every launch after (and for this one even if it couldn't be). */
+  understand(): Promise<void>;
+}
 
-const remembered = new Map<string, string>();
+/** What the app answers (`api.flashWarningUnderstood` and `api.flashWarningUnderstand`). */
+export interface WarningApp {
+  understood(): Promise<boolean>;
+  understand(): Promise<void>;
+}
+
+type PageStorage = Pick<Storage, 'getItem' | 'removeItem'>;
 
 /**
- * The page's storage, with this run's writes kept in memory first: when storage
- * is out of reach or refuses, an owed warning still shows this run.
+ * The warning's answer, kept by the app in `access.json`, so it holds across
+ * launches whatever the page's origin (dev runs and captures included). This
+ * run's answer is also held here, so a refusal to keep it still closes the
+ * warning until quit. An answer the page kept in its own storage before is
+ * carried over to the app once.
  */
-const kept: WarningStore = {
-  getItem(key) {
-    const here = remembered.get(key);
-    if (here !== undefined) return here;
+export function warningStore(
+  app: WarningApp = { understood: api.flashWarningUnderstood, understand: api.flashWarningUnderstand },
+  page: () => PageStorage | undefined = () => globalThis.localStorage,
+): WarningStore {
+  let here = false;
+  const old = () => {
     try {
-      return globalThis.localStorage?.getItem(key) ?? null;
+      return page()?.getItem(OLD_KEY) ?? null;
     } catch {
       return null;
     }
-  },
-  setItem(key, value) {
-    remembered.set(key, value);
-    try {
-      globalThis.localStorage?.setItem(key, value);
-    } catch {
-      // Not kept past this run.
-    }
-  },
-};
-
-/** Whether the warning is owed: the first run was skipped before its "I understand", and it hasn't been pressed since. */
-export const warningOwed = (store: WarningStore = kept): boolean => store.getItem(WARNING_KEY) === 'owed';
-
-/** The warning's "I understand" was pressed: remembered, so it isn't owed again. */
-export const warningUnderstood = (store: WarningStore = kept): void => store.setItem(WARNING_KEY, 'seen');
-
-/**
- * Whether a first run done before the warning existed owes it: the first run is
- * done (`first` false) and the warning has no state yet. Marks it owed if so. A
- * fresh install (`first` true) goes through the welcome's warning step instead.
- */
-export function owedFromBefore(first: boolean, store: WarningStore = kept): boolean {
-  if (!first && store.getItem(WARNING_KEY) === null) store.setItem(WARNING_KEY, 'owed');
-  return !first && warningOwed(store);
+  };
+  const store: WarningStore = {
+    async understood() {
+      if (here) return true;
+      if (await app.understood().catch(() => false)) return (here = true);
+      if (old() !== 'seen') return false;
+      await store.understand();
+      return true;
+    },
+    async understand() {
+      here = true;
+      try {
+        await app.understand();
+      } catch {
+        // Not kept: it holds until quit, and shows again at the next launch.
+        return;
+      }
+      try {
+        page()?.removeItem(OLD_KEY);
+      } catch {
+        // Carried over; the old copy is only read when the app says no.
+      }
+    },
+  };
+  return store;
 }
 
+const kept = warningStore();
+
+/** The welcome flow ended this run: the first run is done, whatever the app has written yet. */
+let welcomeDone = false;
+
 /**
- * The welcome flow ended, finished or skipped; `understood` when its warning's
- * "I understand" was pressed. Unless it was, then or ever before, the warning is
- * owed: `FlashWarning` shows it before anything else can be done.
+ * The welcome flow ended, finished or skipped. Unless its warning's "I
+ * understand" was pressed (then or ever before), the warning is owed:
+ * `FlashWarning` shows it before anything else can be done.
  */
-export function welcomeEnded(understood: boolean, store: WarningStore = kept): void {
-  if (understood) warningUnderstood(store);
-  else if (store.getItem(WARNING_KEY) !== 'seen') store.setItem(WARNING_KEY, 'owed');
+export function welcomeEnded(): void {
+  welcomeDone = true;
+}
+
+/** For tests: forget that the welcome ended this run. */
+export function resetWelcomeEnded(): void {
+  welcomeDone = false;
+}
+
+/** Whether the warning is owed: the first run is done (skipped, or done before the warning existed) and it hasn't been understood. */
+export async function warningOwed(store: WarningStore = kept, firstRun: () => Promise<boolean> = api.firstRun): Promise<boolean> {
+  const first = welcomeDone ? false : await firstRun().catch(() => false);
+  return !first && !(await store.understood());
 }
 
 /**
@@ -616,22 +645,36 @@ export function FlashWarningDialog({ onClose, onUnderstood, required = false }: 
   );
 }
 
+/** The warning, as `App` holds it (`useFlashWarning`). */
+export interface Warning {
+  /** Showing: owed (it must be answered), asked for from the menu, or not. */
+  open: 'owed' | 'asked' | null;
+  /** Whether it is owed; null until known (and while the welcome flow shows). */
+  owed: boolean | null;
+  close(): void;
+  understood(): void;
+}
+
 /**
- * Mounted by `App` once the welcome flow is away: the warning dialog, at once
- * when it is owed (the first run was skipped before it), and whenever the menu
- * (or `showFlashWarning`) asks for it. Its "I understand" is remembered.
+ * The warning, once the welcome flow is away (`away`): open at once when it is
+ * owed (the first run was skipped before it, or done before it existed), and
+ * whenever the menu (or `showFlashWarning`) asks for it. Its "I understand" is kept.
  */
-export function FlashWarning({ store = kept }: { store?: WarningStore }) {
-  const [open, setOpen] = useState<'owed' | 'asked' | null>(() => (warningOwed(store) ? 'owed' : null));
+export function useFlashWarning(away: boolean, store: WarningStore = kept, firstRun: () => Promise<boolean> = api.firstRun): Warning {
+  const [open, setOpen] = useState<Warning['open']>(null);
+  const [owed, setOwed] = useState<boolean | null>(null);
   useEffect(() => {
-    // A first run finished before the warning existed is owed it once.
-    api.firstRun().then(
-      (first) => {
-        if (owedFromBefore(first, store)) setOpen('owed');
-      },
-      () => {},
-    );
-  }, [store]);
+    if (!away) return;
+    let gone = false;
+    warningOwed(store, firstRun).then((owes) => {
+      if (gone) return;
+      setOwed(owes);
+      if (owes) setOpen('owed');
+    });
+    return () => {
+      gone = true;
+    };
+  }, [away, store, firstRun]);
   useEffect(() => {
     const show = () => setOpen((o) => o ?? 'asked');
     window.addEventListener(FLASH_WARNING, show);
@@ -641,12 +684,30 @@ export function FlashWarning({ store = kept }: { store?: WarningStore }) {
       off.then((f) => f());
     };
   }, []);
-  const close = useCallback(() => setOpen(null), []);
+  const close = useCallback(() => setOpen((o) => (o === 'owed' ? o : null)), []);
   const understood = useCallback(() => {
-    warningUnderstood(store);
+    store.understand();
+    setOwed(false);
     setOpen(null);
   }, [store]);
-  return open ? <FlashWarningDialog onClose={close} onUnderstood={understood} required={open === 'owed'} /> : null;
+  return { open, owed, close, understood };
+}
+
+/**
+ * The warning dialog over `children`, while `warning` is open. With `live`,
+ * nothing plays behind an owed warning: `children` (live mode) wait for its "I
+ * understand", and for the app to say whether it is owed.
+ */
+export function FlashWarning({ warning, live = false, children }: { warning: Warning; live?: boolean; children?: ReactNode }) {
+  const { open, close, understood } = warning;
+  const dialog = open ? <FlashWarningDialog onClose={close} onUnderstood={understood} required={open === 'owed'} /> : null;
+  if (live && warning.owed !== false) return dialog;
+  return (
+    <>
+      {children}
+      {dialog}
+    </>
+  );
 }
 
 function PickVibe({ onPicked }: { onPicked(): void }) {

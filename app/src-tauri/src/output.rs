@@ -87,6 +87,16 @@ fn live_from(value: Option<String>) -> bool {
     value.is_some_and(|v| !v.is_empty() && v != "0")
 }
 
+/// The views the page can start in (`VISUALS_VIEW`), as the page names them.
+const VIEWS: [&str; 4] = ["home", "library", "live", "live-windowed"];
+
+/// The view the page starts in: `VISUALS_VIEW` (`view`) when it names one, else
+/// live mode with `VISUALS_LIVE=1` (`live`), else none (the page's own start).
+fn view_from(view: Option<String>, live: Option<String>) -> Option<&'static str> {
+    let named = view.and_then(|v| VIEWS.into_iter().find(|n| v.trim().eq_ignore_ascii_case(n)));
+    named.or_else(|| live_from(live).then_some("live"))
+}
+
 /// `VISUALS_PRESET=<path>`: the preset the page starts on, absolute or in the pack.
 fn preset_from(value: Option<String>, folders: &[PathBuf]) -> Option<String> {
     let p = PathBuf::from(value.filter(|p| !p.is_empty())?);
@@ -148,10 +158,14 @@ fn tell(status: &Status) {
     }
 }
 
-/// Whether the page starts in live mode.
+/// The view the page starts in (`VISUALS_VIEW`, or `VISUALS_LIVE=1`), or none.
 #[tauri::command]
-pub fn live_start() -> bool {
-    live_from(std::env::var("VISUALS_LIVE").ok())
+pub fn live_start() -> Option<&'static str> {
+    let view = std::env::var("VISUALS_VIEW").ok();
+    if view.as_deref().is_some_and(|v| !v.is_empty() && view_from(Some(v.into()), None).is_none()) {
+        eprintln!("VISUALS_VIEW: not one of {}", VIEWS.join(", "));
+    }
+    view_from(view, std::env::var("VISUALS_LIVE").ok())
 }
 
 /// The preset the page starts on, in either mode.
@@ -590,6 +604,14 @@ mod tests {
         assert!(!live_from(Some("0".into())));
         assert!(!live_from(Some(String::new())));
         assert!(!live_from(None));
+        // VISUALS_VIEW names the view, and wins over VISUALS_LIVE; anything else is ignored.
+        assert_eq!(view_from(Some("live-windowed".into()), None), Some("live-windowed"));
+        assert_eq!(view_from(Some(" Library ".into()), Some("1".into())), Some("library"));
+        assert_eq!(view_from(Some("home".into()), None), Some("home"));
+        assert_eq!(view_from(Some("editor".into()), Some("1".into())), Some("live"));
+        assert_eq!(view_from(None, Some("1".into())), Some("live"));
+        assert_eq!(view_from(None, Some("0".into())), None);
+        assert_eq!(view_from(None, None), None);
         assert_eq!(index_from(Some("1".into())), Some(1));
         assert_eq!(index_from(Some(" 0 ".into())), Some(0));
         assert_eq!(index_from(Some("projector".into())), None);

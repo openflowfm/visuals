@@ -39,8 +39,13 @@ const FILE: &str = "access.json";
 
 /// The choice made in the app, and what's in force.
 struct State {
-    /// `None` follows macOS. Read from [`FILE`] at [`start`].
+    /// `None` follows macOS. Read from [`FILE`] at [`start`]; a damaged file
+    /// makes it the fail-safe `Some(true)`.
     choice: Mutex<Option<bool>>,
+    /// The choice as the user made it (in [`FILE`] or in Settings since), which
+    /// is what's written back: never the fail-safe. Its lock is held while
+    /// [`FILE`] is written, so the file ends with what's in force.
+    chosen: Mutex<Option<bool>>,
     /// What the render thread reads every refresh, through [`reduced`].
     reduced: AtomicBool,
     /// "I understand" chosen on the flashing warning. Read from [`FILE`] at [`start`].
@@ -49,7 +54,33 @@ struct State {
 
 impl State {
     const fn new() -> State {
-        State { choice: Mutex::new(None), reduced: AtomicBool::new(false), understood: AtomicBool::new(false) }
+        State { choice: Mutex::new(None), chosen: Mutex::new(None), reduced: AtomicBool::new(false), understood: AtomicBool::new(false) }
+    }
+
+    /// Take what [`FILE`] read as (`kept`; `found` when it was there): the
+    /// warning's answer, the choice as made, and the choice to start with.
+    fn load(&self, kept: Option<Kept>, found: bool, system: impl FnOnce() -> bool) -> Motion {
+        self.understood.store(kept.as_ref().is_some_and(|k| k.flash_warning_understood), Ordering::Relaxed);
+        *self.chosen.lock().unwrap_or_else(|e| e.into_inner()) = kept.as_ref().and_then(|k| k.reduce);
+        self.update(Some(first_choice(kept, found)), system)
+    }
+
+    /// Put the choice `on` in force and `save` it with the warning's answer;
+    /// false when it couldn't be saved.
+    fn choose(&self, on: Option<bool>, system: impl FnOnce() -> bool, save: impl FnOnce(&Kept) -> bool) -> (Motion, bool) {
+        let mut chosen = self.chosen.lock().unwrap_or_else(|e| e.into_inner());
+        *chosen = on;
+        let motion = self.update(Some(on), system);
+        let saved = save(&Kept { reduce: on, flash_warning_understood: self.understood.load(Ordering::Relaxed) });
+        (motion, saved)
+    }
+
+    /// "I understand" was chosen: in force now, and `save`d beside the choice
+    /// as the user made it; false when it couldn't be saved.
+    fn understand(&self, save: impl FnOnce(&Kept) -> bool) -> bool {
+        let chosen = self.chosen.lock().unwrap_or_else(|e| e.into_inner());
+        self.understood.store(true, Ordering::Relaxed);
+        save(&Kept { reduce: *chosen, flash_warning_understood: true })
     }
 
     /// Work out what's in effect from the choice (changed first by `change`, if
@@ -115,21 +146,16 @@ pub fn reduced_motion() -> Motion {
 /// couldn't be kept, the error says so (and the settings' problems too).
 #[tauri::command]
 pub fn reduced_motion_set(on: Option<bool>) -> Result<Motion, String> {
-    let _one = SETTING.lock().unwrap_or_else(|e| e.into_inner());
-    let motion = update_with(Some(on));
-    if !keep(on) {
+    let (motion, kept) = STATE.choose(on, system_reduces_motion, keep);
+    if !kept {
         return Err(NOT_KEPT.into());
     }
     Ok(motion)
 }
 
-/// One change to [`FILE`] at a time, so the file ends with what's in force.
-static SETTING: Mutex<()> = Mutex::new(());
-
-/// Write [`FILE`]: the choice `reduce`, and the flashing warning's answer in force.
-/// Call it holding [`SETTING`].
-fn keep(reduce: Option<bool>) -> bool {
-    settings::save_json(FILE, &Kept { reduce, flash_warning_understood: STATE.understood.load(Ordering::Relaxed) })
+/// Write [`FILE`].
+fn keep(kept: &Kept) -> bool {
+    settings::save_json(FILE, kept)
 }
 
 /// What [`reduced_motion_set`] says when the choice couldn't be kept.
@@ -143,13 +169,11 @@ pub fn flash_warning_understood() -> bool {
 
 /// "I understand" was chosen on the flashing warning: kept for every launch
 /// after. It holds until visual[flow] quits even if it couldn't be kept, which
-/// the error says.
+/// the error says. The reduce-flashing choice is written back as the user made
+/// it: after a damaged `access.json`, not the fail-safe in force.
 #[tauri::command]
 pub fn flash_warning_understand() -> Result<(), String> {
-    let _one = SETTING.lock().unwrap_or_else(|e| e.into_inner());
-    STATE.understood.store(true, Ordering::Relaxed);
-    let choice = *STATE.choice.lock().unwrap_or_else(|e| e.into_inner());
-    if !keep(choice) {
+    if !STATE.understand(keep) {
         return Err(NOT_KEPT_WARNING.into());
     }
     Ok(())
@@ -163,9 +187,7 @@ const NOT_KEPT_WARNING: &str = "Couldn't save that you've read the flashing warn
 /// setting, and keeps reading macOS's while the app runs.
 pub fn start(_handle: &AppHandle) {
     let found = settings::dir().join(FILE).exists();
-    let kept = settings::load::<Kept>(FILE);
-    STATE.understood.store(kept.as_ref().is_some_and(|k| k.flash_warning_understood), Ordering::Relaxed);
-    update_with(Some(first_choice(kept, found)));
+    STATE.load(settings::load::<Kept>(FILE), found, system_reduces_motion);
     let _ = std::thread::Builder::new().name("reduce-motion".into()).spawn(|| {
         loop {
             std::thread::sleep(POLL);
@@ -232,6 +254,30 @@ mod tests {
         let json = serde_json::to_string(&kept).unwrap();
         assert_eq!(json, r#"{"reduce":null,"flash_warning_understood":true}"#);
         assert_eq!(serde_json::from_str::<Kept>(&json).unwrap(), kept);
+    }
+
+    #[test]
+    fn understanding_the_warning_keeps_the_saved_choice_as_it_was() {
+        let saved = Mutex::new(None::<Kept>);
+        let save = |k: &Kept| {
+            *saved.lock().unwrap() = Some(Kept { reduce: k.reduce, flash_warning_understood: k.flash_warning_understood });
+            true
+        };
+        // A damaged file: motion is reduced to be safe, but "I understand" doesn't save that as the user's choice.
+        let damaged = State::new();
+        assert!(damaged.load(None, true, || false).reduced);
+        assert!(damaged.understand(save));
+        assert_eq!(saved.lock().unwrap().take(), Some(Kept { reduce: None, flash_warning_understood: true }));
+        assert!(damaged.reduced.load(Ordering::Relaxed), "the fail-safe stays in force this run");
+        // A kept choice of off is written back as off, whatever macOS says.
+        let off = State::new();
+        off.load(Some(Kept { reduce: Some(false), flash_warning_understood: false }), true, || true);
+        assert!(off.understand(save));
+        assert_eq!(saved.lock().unwrap().take(), Some(Kept { reduce: Some(false), flash_warning_understood: true }));
+        // A choice made after a damaged file is the user's, and is kept with the answer.
+        let (motion, _) = damaged.choose(Some(false), || false, save);
+        assert!(!motion.reduced);
+        assert_eq!(saved.lock().unwrap().take(), Some(Kept { reduce: Some(false), flash_warning_understood: true }));
     }
 
     #[test]

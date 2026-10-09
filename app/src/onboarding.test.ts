@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import {
@@ -6,15 +6,14 @@ import {
   before,
   downloadText,
   FLASH_WARNING,
-  FlashWarning,
   FlashWarningDialog,
+  OLD_KEY,
   REDUCE_HINT,
-  WARNING_KEY,
   WARNING_TEXT,
-  owedFromBefore,
   warningOwed,
-  warningUnderstood,
+  warningStore,
   welcomeEnded,
+  resetWelcomeEnded,
   type WarningStore,
   haveAll,
   ReduceFlashing,
@@ -174,63 +173,104 @@ describe('the silence watch', () => {
   });
 });
 
-describe('the flashing-lights warning, when the first run is skipped', () => {
-  const memory = (): WarningStore => {
-    const m = new Map<string, string>();
-    return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => void m.set(k, v) };
+describe("the flashing-lights warning's answer, kept by the app", () => {
+  /** The app's `access.json`, as `flash_warning_understood` and `flash_warning_understand` answer; `refuse` when it can't be written or read. */
+  const app = (saved = false, refuse = false) => {
+    const a = {
+      saved,
+      writes: 0,
+      understood: () => (refuse ? Promise.reject(new Error('unreadable')) : Promise.resolve(a.saved)),
+      understand: () => {
+        a.writes++;
+        if (refuse) return Promise.reject(new Error("Couldn't save"));
+        a.saved = true;
+        return Promise.resolve();
+      },
+    };
+    return a;
   };
-  const shown = (store: WarningStore) => renderToStaticMarkup(createElement(FlashWarning, { store }));
+  /** The page's own storage, where the answer was kept before. */
+  const page = (old: string | null = null) => {
+    const m = new Map<string, string>(old === null ? [] : [[OLD_KEY, old]]);
+    return { getItem: (k: string) => m.get(k) ?? null, removeItem: (k: string) => void m.delete(k) };
+  };
 
-  it('is not shown before the first run has ended', () => {
-    expect(shown(memory())).toBe('');
+  it('is asked of the app, and kept there for the next launch', async () => {
+    const files = app();
+    const store = warningStore(files, () => page());
+    expect(await store.understood()).toBe(false);
+    await store.understand();
+    expect(files.saved).toBe(true);
+    // The next launch, with a fresh page (a dev run's new origin, say): still understood.
+    expect(await warningStore(files, () => page()).understood()).toBe(true);
   });
 
-  it('shows at once after a skip from the welcome, and stays away once understood', () => {
-    const store = memory();
-    // Welcome's "Skip setup": the flow ends before its warning step.
-    welcomeEnded(false, store);
-    expect(warningOwed(store)).toBe(true);
-    const html = shown(store);
-    expect(html).toContain('role="dialog"');
-    expect(html).toContain('photosensitive epilepsy');
-    expect(html).toContain('I understand');
-    // "I understand" is remembered: not shown at the next launch, nor after another skip.
-    warningUnderstood(store);
-    expect(store.getItem(WARNING_KEY)).toBe('seen');
-    expect(shown(store)).toBe('');
-    welcomeEnded(false, store);
-    expect(warningOwed(store)).toBe(false);
+  it('carries an answer the page kept over to the app once, then forgets the old copy', async () => {
+    const files = app();
+    const storage = page('seen');
+    expect(await warningStore(files, () => storage).understood()).toBe(true);
+    expect(files.saved).toBe(true);
+    expect(storage.getItem(OLD_KEY)).toBe(null);
+    expect(await warningStore(files, () => storage).understood()).toBe(true);
+    expect(files.writes).toBe(1);
   });
 
-  it('is not owed when the flow went through its warning', () => {
-    const store = memory();
-    welcomeEnded(true, store);
-    expect(warningOwed(store)).toBe(false);
-    expect(shown(store)).toBe('');
+  it('carries nothing over from a warning that was only owed', async () => {
+    const files = app();
+    expect(await warningStore(files, () => page('owed')).understood()).toBe(false);
+    expect(files.writes).toBe(0);
   });
 
-  it('is owed once to a first run done before the warning existed', () => {
-    const store = memory();
-    // first_run.json says done, and nothing kept about the warning.
-    expect(owedFromBefore(false, store)).toBe(true);
-    expect(shown(store)).toContain('role="dialog"');
-    warningUnderstood(store);
-    expect(owedFromBefore(false, store)).toBe(false);
-    expect(shown(store)).toBe('');
+  it('holds this run when the app refuses to keep it, and asks again next launch', async () => {
+    const files = app(false, true);
+    const storage = page('seen');
+    const store = warningStore(files, () => storage);
+    // Carried over, but not kept: the old copy stays to carry over next time.
+    expect(await store.understood()).toBe(true);
+    expect(storage.getItem(OLD_KEY)).toBe('seen');
+    const fresh = warningStore(files, () => page());
+    expect(await fresh.understood()).toBe(false);
+    await fresh.understand();
+    expect(await fresh.understood()).toBe(true);
+    expect(await warningStore(files, () => page()).understood()).toBe(false);
   });
 
-  it('is not owed on a fresh install: the welcome shows it', () => {
-    const store = memory();
-    expect(owedFromBefore(true, store)).toBe(false);
-    expect(store.getItem(WARNING_KEY)).toBe(null);
-    expect(shown(store)).toBe('');
+  it('reads as not understood when the app can’t say, so the warning shows', async () => {
+    expect(await warningStore(app(true, true), () => undefined).understood()).toBe(false);
   });
 
-  it('stays owed until understood, launch after launch', () => {
-    const store = memory();
-    welcomeEnded(false, store);
-    expect(shown(store)).toContain('role="dialog"');
-    expect(shown(store)).toContain('role="dialog"');
+  it('survives page storage that throws', async () => {
+    const throwing = () => {
+      throw new Error('denied');
+    };
+    const files = app();
+    expect(await warningStore(files, throwing).understood()).toBe(false);
+    await warningStore(files, throwing).understand();
+    expect(files.saved).toBe(true);
+  });
+});
+
+describe('the flashing-lights warning, when it is owed', () => {
+  const store = (understood: boolean): WarningStore => ({ understood: () => Promise.resolve(understood), understand: () => Promise.resolve() });
+  beforeEach(() => resetWelcomeEnded());
+
+  it('is owed once the first run is done, until understood', async () => {
+    expect(await warningOwed(store(false), () => Promise.resolve(false))).toBe(true);
+    expect(await warningOwed(store(true), () => Promise.resolve(false))).toBe(false);
+  });
+
+  it('is not owed on a fresh install: the welcome shows it', async () => {
+    expect(await warningOwed(store(false), () => Promise.resolve(true))).toBe(false);
+  });
+
+  it('is owed when the app can’t say whether the first run is done', async () => {
+    expect(await warningOwed(store(false), () => Promise.reject(new Error('no')))).toBe(true);
+  });
+
+  it('is owed after the welcome ended this run, whatever the first-run file says yet', async () => {
+    welcomeEnded();
+    expect(await warningOwed(store(false), () => Promise.resolve(true))).toBe(true);
+    expect(await warningOwed(store(true), () => Promise.resolve(true))).toBe(false);
   });
 });
 
