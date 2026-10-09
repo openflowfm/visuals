@@ -10,6 +10,22 @@ impl Runner {
         mesh.uvs(1.0, uvs);
     }
 
+    /// [`Runner::warp_motion`] again for a step whose equations already ran, on
+    /// another mesh: what the equations write besides variables (megabuf,
+    /// gmegabuf, the random source) is put back afterwards, so the preset goes
+    /// on as if they had run once.
+    pub fn rewarp_motion(&mut self, time: f64, size: &Size, mesh: &mut Mesh) {
+        let memory = self.memory.clone();
+        self.warp_motion(time, size, mesh);
+        self.memory = memory;
+    }
+
+    /// The megabuf slot `index` holds, for tests.
+    #[cfg(test)]
+    pub fn megabuf(&self, index: usize) -> f64 {
+        self.memory.local.get(index).copied().unwrap_or(0.0)
+    }
+
     /// The per-vertex equations, once: what each vertex's motion is this step,
     /// kept in `mesh` so the step can be drawn at any fraction ([`Mesh::uvs`]).
     pub fn warp_motion(&mut self, time: f64, size: &Size, mesh: &mut Mesh) {

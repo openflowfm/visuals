@@ -646,7 +646,8 @@ per vertex, `(w + 1) × (h + 1)` a step. Like MilkDrop's texture-size option, th
 changes what presets read as `texsize`. Changing quality on a running renderer takes
 effect at once, without a reload: the feedback, the finished picture and the outgoing
 snapshot are carried over at the new size, as on a resize; a new mesh's buffers replace
-the old, and the pending step's per-vertex equations run again on it. The old textures
+the old, and the pending step's per-vertex equations run again on it, with megabuf,
+gmegabuf and the random source put back afterwards so the preset doesn't drift. The old textures
 and buffers are let go (`bench --churn 200` at 4K: 422 MB of footprint before, 445 MB
 after 200 switches to low and back, where keeping one 4K picture a switch would add
 6.6 GB).
@@ -658,6 +659,9 @@ after 200 switches to low and back, where keeping one 4K picture a switch would 
 | high | 1 | 100% | 48×36, MilkDrop's and Butterchurn's default |
 
 High is the engine as it drew before there was a setting, and the default.
+
+Lines and dots (waves, shape borders) keep their pixel width at lower scales, so once
+scaled up they look thicker, as in MilkDrop at a smaller texture size.
 
 **Auto** (`quality::auto(machine, output)`) picks the best level whose estimated GPU
 time a refresh, for the slowest preset of the bench's starter sample, is at most

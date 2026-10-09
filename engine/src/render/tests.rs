@@ -536,6 +536,26 @@ fn held(r: &Renderer) -> (Vec<(u32, u32)>, Vec<u64>) {
 }
 
 #[test]
+fn a_mesh_change_does_not_run_the_vertex_equations_twice() {
+    use crate::quality::Level;
+    let text = SPIRAL.replace("per_pixel_1=", "per_pixel_2=megabuf(0)=megabuf(0)+1;\nper_pixel_1=");
+    let run = |change: bool| -> Option<f64> {
+        let mut r = renderer(W, H, &text)?;
+        let mut audio = Audio::default();
+        play(&mut r, &mut audio, 3, 0.5 / PRESET_RATE);
+        if change {
+            r.set_quality(Level::Low.quality());
+            r.set_quality(Level::High.quality());
+            r.resize(H, W);
+        }
+        Some(r.runner.as_ref().unwrap().megabuf(0))
+    };
+    let (Some(plain), Some(changed)) = (run(false), run(true)) else { return };
+    assert!(plain > 0.0);
+    assert_eq!(plain, changed);
+}
+
+#[test]
 fn quality_changes_while_running_without_a_reload() {
     use crate::quality::Level;
     let Some((mut r, mut audio)) = spiral(30) else { return };

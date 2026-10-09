@@ -575,6 +575,7 @@ pub fn compile(source: &str, symbols: &mut Symbols) -> Result<Program, Error> {
 // --- running ----------------------------------------------------------------
 
 /// What equations write besides variables: the two buffers, and the random source.
+#[derive(Clone)]
 pub struct Memory {
     pub local: Vec<f64>,
     pub global: Vec<f64>,

@@ -332,7 +332,9 @@ impl Renderer {
     /// ([`Renderer::set_quality`]); [`Renderer::present`] scales it up to it.
     pub fn resize(&mut self, width: u32, height: u32) {
         self.output = (width.max(1), height.max(1));
-        self.retarget();
+        if self.retarget() {
+            self.remesh();
+        }
     }
 
     /// The size asked for ([`Renderer::new`], [`Renderer::resize`]): what the
@@ -348,23 +350,27 @@ impl Renderer {
     /// Draw at `quality` from now on (clamped, [`Quality::clamped`]), without
     /// a reload: the pictures kept so far are carried over at the new scale, as
     /// by [`Renderer::resize`], and a new mesh takes over at once — the pending
-    /// step's per-vertex equations run again on it. The old size's textures and
-    /// the old mesh's buffers are let go.
+    /// step's per-vertex equations run again on it, with what they write besides
+    /// variables put back. The old size's textures and the old mesh's buffers
+    /// are let go.
     pub fn set_quality(&mut self, quality: Quality) {
         let quality = quality.clamped();
-        if quality.mesh != self.quality.mesh {
+        let new_mesh = quality.mesh != self.quality.mesh;
+        if new_mesh {
             let buffers = WarpBuffers::new(&self.device, quality.mesh);
             (self.warp_positions, self.warp_uvs, self.warp_colors, self.warp_indices) = (buffers.positions, buffers.uvs, buffers.colors, buffers.indices);
             (self.display_uvs, self.display_shaded_uvs) = (buffers.display_uvs, buffers.display_shaded_uvs);
             (self.size.mesh_width, self.size.mesh_height) = quality.mesh;
-            self.remesh();
         }
         self.quality = quality;
-        self.retarget();
+        if self.retarget() || new_mesh {
+            self.remesh();
+        }
     }
 
-    /// The pending step's motion again, on the mesh [`Renderer::size`] now
-    /// says, so a refresh before the next step draws on the new mesh.
+    /// The pending step's motion and size-dependent uniforms again, for the
+    /// mesh and size [`Renderer::size`] now says, so a refresh before the next
+    /// step draws with them.
     fn remesh(&mut self) {
         let size = self.size;
         let time = self.clock.time;
@@ -372,20 +378,32 @@ impl Renderer {
             self.mesh = Mesh::default();
             return;
         };
-        runner.warp_motion(time, &size, &mut self.mesh);
+        runner.rewarp_motion(time, &size, &mut self.mesh);
         let mut uvs = std::mem::take(&mut self.uvs);
         self.mesh.uvs(1.0, &mut uvs);
         self.queue.write_buffer(&self.warp_uvs, 0, bytemuck::cast_slice(&uvs));
         self.uvs = uvs;
+        let (ax, ay) = (size.aspect_x() as f32, size.aspect_y() as f32);
+        let (tx, ty) = (size.texsize_x as f32, size.texsize_y as f32);
+        for values in [&mut self.next_values, &mut self.shown_values] {
+            for (name, value) in values.iter_mut() {
+                match *name {
+                    "aspect" => *value = vec![ax, ay, 1.0 / ax, 1.0 / ay],
+                    "texsize" => *value = vec![tx, ty, 1.0 / tx, 1.0 / ty],
+                    _ => {}
+                }
+            }
+        }
+        self.write_uniforms(self.warp.as_ref().unwrap(), &self.next_values);
     }
 
     /// The pictures made again at the size presets draw at now — the output
     /// size times the quality's scale — with the ones kept carried over, scaled.
-    /// Nothing changes when that size has not.
-    fn retarget(&mut self) {
+    /// Nothing changes when that size has not; true when it has.
+    fn retarget(&mut self) -> bool {
         let full = self.quality.scaled(self.output);
         if full == self.comp.size {
-            return;
+            return false;
         }
         self.size.texsize_x = full.0 as f64;
         self.size.texsize_y = full.1 as f64;
@@ -411,6 +429,7 @@ impl Renderer {
         // Both are made again, at the new size, when next needed.
         self.textured_source = None;
         self.trails_pass = None;
+        true
     }
 
     pub fn device(&self) -> &wgpu::Device {
