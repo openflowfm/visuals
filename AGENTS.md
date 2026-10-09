@@ -60,7 +60,12 @@ build, which starts in the editor (`VITE_LAB=1 app/run.sh --features lab`; the h
 capture above works with it too). `VISUALS_PRESET=<path in the pack>` starts either on a
 given preset. `VISUALS_LIVE=1` starts it in live mode, which opens the output window full screen
 on a display (`VISUALS_DISPLAY=<n>` picks display `n`, from 0; otherwise the one chosen
-last). No dev port is fixed: it takes `PORT` or a free port from the OS and hands it to
+last). `VISUALS_VIEW=home|library|live|live-windowed` starts it in that view and wins over
+`VISUALS_LIVE`; `live-windowed` plays live in the main window without opening the output, so
+its "Go full screen on…" overlay can be captured. With the flashing warning owed (first run
+done, "I understand" not yet chosen), live mode waits behind it; the answer is kept in
+`access.json`, so once answered in one dev run it holds for later runs, headless captures
+included. No dev port is fixed: it takes `PORT` or a free port from the OS and hands it to
 vite and Tauri. `VISUALS_CAPTURE=<file.png>` makes the app save a picture of its own
 window, for checking it without screen access, and `VISUALS_CAPTURE_OUTPUT=<file.png>` of
 the live output window (both after `VISUALS_CAPTURE_AFTER` seconds, 8 by default).
@@ -69,9 +74,12 @@ hold…) 5 s after start (`VISUALS_FX_AFTER`), to check effects in a capture.
 `VISUALS_WINDOW_SIZE=WxH` (e.g. `800x900`) opens the main window at that size, to check a layout.
 In a debug build `VISUALS_PACK_URL=<url>` replaces the full pack's download URL (a bundle
 served locally; `docs/pack.md`), and `VISUALS_PACK_DOWNLOAD=1` starts the download at
-launch, for headless tests. Beside the user's settings and `library.json`, the app keeps
+launch, for headless tests. In a debug build, or in any headless run, the app doesn't bring
+an existing full pack up to the pinned bundle at launch; in a debug build
+`VISUALS_PACK_UPDATE=1` turns that background update back on, to test it headless with
+`VISUALS_PACK_URL`. Beside the user's settings and `library.json`, the app keeps
 `resume.json` (what to resume at the next launch), `failed.json` (presets that wouldn't load)
-and `access.json` (the reduce-flashing choice; none means follow macOS).
+and `access.json` (the reduce-flashing choice, none meaning follow macOS, and the flashing warning's answer).
 
 **Agents always run the app headless** (`VISUALS_HEADLESS=1`), from the first run on: the
 owner is using the screen. Headless, the app has no Dock icon or menu bar, never becomes
