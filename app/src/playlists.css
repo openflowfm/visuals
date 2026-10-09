@@ -210,3 +210,41 @@
 .playlists .playlists-auto .wdg-toggle {
   flex: 1;
 }
+
+/* Dragging (drag.ts): the grip says a row can be dragged; the row it would land on
+   draws a line where it would go, and a playlist's name lights up to take it. */
+.playlists .playlists-grip {
+  flex: none;
+  width: 8px;
+  margin-left: -6px;
+  color: var(--detail);
+  font-size: var(--text-label);
+  letter-spacing: -3px;
+  cursor: grab;
+  visibility: hidden;
+}
+.playlists .playlists-row:hover .playlists-grip,
+.playlists .playlists-row:focus-visible .playlists-grip {
+  visibility: visible;
+}
+.playlists .playlists-items .playlists-row {
+  user-select: none;
+}
+.playlists .playlists-row[data-dragged] {
+  opacity: 0.4;
+}
+.playlists .playlists-row[data-over='before'] {
+  box-shadow: inset 0 2px 0 var(--amber);
+}
+.playlists .playlists-row[data-over='after'] {
+  box-shadow: inset 0 -2px 0 var(--amber);
+}
+.playlists .playlists-names .playlists-row[data-over] {
+  background: var(--sel);
+  box-shadow: inset 0 0 0 1px var(--amber);
+}
+body[data-dragging],
+body[data-dragging] * {
+  cursor: grabbing !important;
+  user-select: none;
+}
