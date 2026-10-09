@@ -12,9 +12,10 @@
 use crate::App;
 use engine::index::{Index, Look};
 use serde::Serialize;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Component, Path, PathBuf};
-use tauri::{AppHandle, Manager};
+use std::sync::{Mutex, Once};
+use tauri::{AppHandle, Listener, Manager};
 
 /// The URI scheme thumbnails are served on (`main.rs` registers it).
 pub const SCHEME: &str = "thumb";
@@ -46,6 +47,7 @@ pub struct Row {
 }
 
 /// A folder of packs, and the name its thumbnails are served under.
+#[derive(Clone)]
 struct Root {
     label: &'static str,
     dir: PathBuf,
@@ -57,15 +59,54 @@ fn roots(app: &AppHandle) -> Vec<Root> {
     crate::pack::folders(app).into_iter().map(|dir| Root { label: if Some(&dir) == starter.as_ref() { "starter" } else { "presets" }, dir }).collect()
 }
 
+/// [`roots`] as last worked out, for [`serve`]: working them out walks the
+/// starter files, too slow for every thumbnail. Cleared on [`crate::pack::CHANGED`].
+static CACHED: Mutex<Option<Vec<Root>>> = Mutex::new(None);
+static LISTENING: Once = Once::new();
+
+fn cached_roots(app: &AppHandle) -> Vec<Root> {
+    LISTENING.call_once(|| {
+        app.listen_any(crate::pack::CHANGED, |_| *CACHED.lock().unwrap() = None);
+    });
+    let mut cached = CACHED.lock().unwrap();
+    cached.get_or_insert_with(|| roots(app)).clone()
+}
+
 /// Every preset the library lists, with what its index says of it.
 #[tauri::command]
 pub async fn library_index(handle: AppHandle) -> Vec<Row> {
-    rows_in(&roots(&handle))
+    let roots = roots(&handle);
+    *CACHED.lock().unwrap() = Some(roots.clone());
+    rows_in(&roots, &dropped_starter(&handle, &roots))
+}
+
+/// The starter set as a root when it isn't one of `roots`: still the source of
+/// thumbnails and looks for its presets downloaded but not yet indexed.
+fn dropped_starter(app: &AppHandle, roots: &[Root]) -> Vec<Root> {
+    crate::pack::starter(app).filter(|_| !roots.iter().any(|r| r.label == "starter")).map(|dir| Root { label: "starter", dir }).into_iter().collect()
+}
+
+/// What an index says of a key, and where its thumbnail lives.
+struct Known {
+    label: &'static str,
+    pack: String,
+    row: engine::index::Row,
 }
 
 /// The rows for `roots`, in order: a preset at a key an earlier root already
-/// has is left out. Sorted by key.
-fn rows_in(roots: &[Root]) -> Vec<Row> {
+/// has is left out, but a copy no index lists takes what any root's index says
+/// of its key (its look, and that root's thumbnail). Sorted by key.
+/// `also` are folders only looked up for index data (the starter set once it
+/// drops out of the list), never listed.
+fn rows_in(roots: &[Root], also: &[Root]) -> Vec<Row> {
+    let mut known: HashMap<String, Known> = HashMap::new();
+    for root in roots.iter().chain(also) {
+        for (pack, index) in packs(&root.dir) {
+            for r in index.rows {
+                known.entry(format!("{pack}/{}", r.path)).or_insert(Known { label: root.label, pack: pack.clone(), row: r });
+            }
+        }
+    }
     let mut seen = HashSet::new();
     let mut rows = Vec::new();
     for root in roots {
@@ -79,7 +120,7 @@ fn rows_in(roots: &[Root]) -> Vec<Row> {
                 if !file.is_file() || !seen.insert(key.clone()) {
                     continue;
                 }
-                let thumbnail = r.thumbnail.map(|t| url(root.label, &pack, &t));
+                let thumbnail = thumbnail(root, &pack, r.thumbnail.as_deref());
                 rows.push(Row {
                     key,
                     path: file.to_string_lossy().into_owned(),
@@ -98,6 +139,23 @@ fn rows_in(roots: &[Root]) -> Vec<Row> {
             let Ok(rel) = file.strip_prefix(&root.dir) else { continue };
             let key = rel.components().map(|c| c.as_os_str().to_string_lossy()).collect::<Vec<_>>().join("/");
             if indexed.contains(&file) || !seen.insert(key.clone()) {
+                continue;
+            }
+            if let Some(k) = known.get(&key) {
+                let r = k.row.clone();
+                let from = roots.iter().chain(also).find(|x| x.label == k.label).unwrap_or(root);
+                rows.push(Row {
+                    key,
+                    path: file.to_string_lossy().into_owned(),
+                    hash: r.hash,
+                    style: r.style,
+                    sub_style: r.sub_style,
+                    authors: r.authors,
+                    title: r.title,
+                    thumbnail: thumbnail(from, &k.pack, r.thumbnail.as_deref()),
+                    look: r.look,
+                    starter,
+                });
                 continue;
             }
             // Within a pack, the style is the folder under the pack's.
@@ -125,6 +183,12 @@ fn rows_in(roots: &[Root]) -> Vec<Row> {
     }
     rows.sort_by(|a, b| a.key.cmp(&b.key));
     rows
+}
+
+/// The URL of `file` in `root`'s `pack`, only when that thumbnail exists.
+fn thumbnail(root: &Root, pack: &str, file: Option<&str>) -> Option<String> {
+    let file = file?;
+    root.dir.join(pack).join(THUMBNAILS).join(file).is_file().then(|| url(root.label, pack, file))
 }
 
 /// The packs in `dir` with an `index.json` of this version, by folder name.
@@ -188,10 +252,12 @@ fn thumbnail_file(roots: &[Root], path: &str) -> Option<PathBuf> {
 /// Answers a `thumb:` request with the thumbnail, or 404.
 pub fn serve(app: &AppHandle, request: &tauri::http::Request<Vec<u8>>) -> tauri::http::Response<Vec<u8>> {
     // The presets folder is always served, even once the starter set drops out of the list.
-    let mut roots = roots(app);
+    let mut roots = cached_roots(app);
     if !roots.iter().any(|r| r.label == "presets") {
         roots.push(Root { label: "presets", dir: app.state::<App>().library.clone() });
     }
+    let also = dropped_starter(app, &roots);
+    roots.extend(also);
     let found = thumbnail_file(&roots, request.uri().path()).and_then(|f| std::fs::read(f).ok());
     let response = tauri::http::Response::builder().header("Access-Control-Allow-Origin", "*");
     match found {
@@ -239,7 +305,7 @@ mod tests {
         indexed(&starter, &["Dancer/Whirl/ORB - Xenon.milk", "Fractal/a - b.milk"]);
         put(&presets.join("pack/Sparkle/Geiss - Hand Added.milk"), b"");
         put(&presets.join("loose.milk"), b"");
-        let rows = rows_in(&[Root { label: "presets", dir: presets.clone() }, Root { label: "starter", dir: starter.clone() }]);
+        let rows = rows_in(&[Root { label: "presets", dir: presets.clone() }, Root { label: "starter", dir: starter.clone() }], &[]);
         let _ = std::fs::remove_dir_all(&root);
 
         let keys: Vec<_> = rows.iter().map(|r| (r.key.as_str(), r.starter)).collect();
@@ -253,6 +319,42 @@ mod tests {
         assert_eq!((added.style.as_str(), added.hash.as_str(), added.thumbnail.is_none()), ("Sparkle", "", true));
         assert_eq!(added.authors, ["geiss"]);
         assert_eq!(rows[0].style, "");
+    }
+
+    #[test]
+    fn an_unindexed_copy_of_a_starter_preset_keeps_its_thumbnail_and_look() {
+        let root = temp("unindexed-copy");
+        let (presets, starter) = (root.join("presets"), root.join("starter"));
+        let rel = "Dancer/Whirl/ORB - Xenon.milk";
+        indexed(&starter, &[rel]);
+        let mut index = Index::load(&starter.join("pack/index.json")).unwrap();
+        index.rows[0].look = Some(Look::new(vec![30], 0.5, None, 10.0));
+        index.save(&starter.join("pack/index.json")).unwrap();
+        put(&presets.join("pack").join(rel), b"[preset00]\n");
+        let p = Root { label: "presets", dir: presets.clone() };
+        let s = Root { label: "starter", dir: starter.clone() };
+        let listed = rows_in(&[p.clone(), s.clone()], &[]);
+        let dropped = rows_in(std::slice::from_ref(&p), &[s]);
+        let _ = std::fs::remove_dir_all(&root);
+
+        for rows in [listed, dropped] {
+            assert_eq!(rows.len(), 1);
+            let r = &rows[0];
+            assert_eq!(r.path, presets.join("pack").join(rel).to_string_lossy());
+            assert!(!r.starter);
+            assert_eq!(r.thumbnail.as_deref(), Some(url("starter", "pack", "29.webp").as_str()));
+            assert_eq!(r.look, Some(Look::new(vec![30], 0.5, None, 10.0)));
+        }
+    }
+
+    #[test]
+    fn a_missing_thumbnail_file_gives_no_url() {
+        let root = temp("missing-thumb");
+        indexed(&root, &["a.milk"]);
+        std::fs::remove_file(root.join("pack/thumbnails/6.webp")).unwrap();
+        let rows = rows_in(&[Root { label: "presets", dir: root.clone() }], &[]);
+        let _ = std::fs::remove_dir_all(&root);
+        assert_eq!(rows[0].thumbnail, None);
     }
 
     #[test]

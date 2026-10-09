@@ -132,7 +132,11 @@ fn main() {
         .manage(App { bench: Mutex::new(None), ring: listen::ring(), listening: Mutex::new(None), library, seed: AtomicU64::new(1) })
         .manage(deck)
         .manage(userlib::Store::open(userlib::default_file()))
-        .register_uri_scheme_protocol(catalog::SCHEME, |ctx, request| catalog::serve(ctx.app_handle(), &request))
+        .register_asynchronous_uri_scheme_protocol(catalog::SCHEME, |ctx, request, responder| {
+            // Off the main thread, so a grid asking for many thumbnails doesn't stall it.
+            let app = ctx.app_handle().clone();
+            std::thread::spawn(move || responder.respond(catalog::serve(&app, &request)));
+        })
         .setup(move |app| {
             menu::install(app)?;
             if let Some(starter) = pack::starter(app.handle()) {
