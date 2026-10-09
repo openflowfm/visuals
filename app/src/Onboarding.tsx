@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { Select } from '@openflow/widgets/controls/Select.tsx';
+import { Toggle } from '@openflow/widgets/controls/Toggle.tsx';
+import { setMotion, useMotion } from './access.ts';
 import * as api from './api.ts';
+import { useFocusTrap } from './focusTrap.ts';
 import { plural } from './controls.ts';
 import { useNotice, useTauriEvent } from './hooks.ts';
 import * as link from './link.ts';
@@ -179,13 +182,25 @@ export function Onboarding({ onDone: done, start = 'welcome' }: { onDone(ending:
   const back = before(step, peers);
   const shown = stepsFor(peers);
 
+  // A new step replaces the button that was pressed: focus goes to the step, so
+  // the keyboard and VoiceOver carry on from its top rather than from nowhere.
+  const body = useRef<HTMLElement>(null);
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    body.current?.focus();
+  }, [step]);
+
   return (
     <div className="ob" data-step={step}>
       <header className="ob-head">
         <Mark />
         <ol className="ob-dots" aria-label="setup steps">
           {shown.map((s) => (
-            <li key={s} data-at={s === step ? '' : undefined} data-done={shown.indexOf(s) < shown.indexOf(step) ? '' : undefined}>
+            <li key={s} data-at={s === step ? '' : undefined} aria-current={s === step ? 'step' : undefined} data-done={shown.indexOf(s) < shown.indexOf(step) ? '' : undefined}>
               <span>{TITLES[s]}</span>
             </li>
           ))}
@@ -197,7 +212,7 @@ export function Onboarding({ onDone: done, start = 'welcome' }: { onDone(ending:
           </Button>
         )}
       </header>
-      <main className="ob-body">
+      <main className="ob-body" ref={body} tabIndex={-1} aria-label={TITLES[step]}>
         {step === 'welcome' && <Welcome onStart={next} onSkip={() => onDone('skipped')} />}
         {step === 'listen' && <Listen onNext={next} />}
         {step === 'link' && <KeepTime onNext={next} />}
@@ -207,7 +222,7 @@ export function Onboarding({ onDone: done, start = 'welcome' }: { onDone(ending:
       </main>
       {back && (
         <footer className="ob-foot">
-          <Button tone="quiet" onPress={() => setStep(back)}>
+          <Button tone="quiet" label="Back" onPress={() => setStep(back)}>
             ← back
           </Button>
         </footer>
@@ -438,18 +453,113 @@ function FullLibrary({ onNext }: { onNext(): void }) {
   );
 }
 
+/** The photosensitivity warning, as the first run and the menu's Flashing Lights Warning… both say it. */
+export const WARNING_TEXT =
+  'Many presets flash, strobe and change colour fast. If you or anyone watching may be sensitive to flashing light (photosensitive epilepsy), take care — on a big screen most of all.';
+
+/** What the reduce-flashing switch says it does, beside the warning. */
+export const REDUCE_HINT = 'Calms the strobe and flashes, whatever the effects are set to. It follows macOS’s Reduce motion until you choose here; it’s in Settings too.';
+
+/** The reduce-flashing switch, shown with the warning: off and disabled until the app has said. */
+export function ReduceFlashing({ motion, onChange }: { motion: api.Motion | null; onChange(on: boolean): void }) {
+  return (
+    <div className="ob-reduce">
+      <Toggle on={motion?.reduced === true} onChange={onChange} disabled={!motion} layout="inside" name={say('reduced motion')} label={Say('reduced motion')} title={REDUCE_HINT}>
+        {motion?.reduced ? 'on' : 'off'}
+      </Toggle>
+      <span>{Say('reduced motion')}</span>
+    </div>
+  );
+}
+
+/** The switch, wired to the app's setting; a refusal is said under it. */
+function ReduceFlashingSetting() {
+  const motion = useMotion();
+  const [problem, setProblem] = useState<Notice | null>(null);
+  const change = (on: boolean) => {
+    setProblem(null);
+    setMotion(on).catch((e) => setProblem(notice(`Couldn't ${on ? 'turn on' : 'turn off'} ${say('reduced motion')}.`, e)));
+  };
+  return (
+    <>
+      <ReduceFlashing motion={motion} onChange={change} />
+      <p className="ob-note">{REDUCE_HINT}</p>
+      <NoticeBanner className="ob-problem" notice={problem} onDismiss={() => setProblem(null)} />
+    </>
+  );
+}
+
 function Warning({ onNext }: { onNext(): void }) {
   return (
     <section className="ob-step ob-warning">
       <h1>Flashing lights</h1>
-      <p className="ob-lead">
-        Many presets flash, strobe and change colour fast. If you or anyone watching may be sensitive to flashing light (photosensitive epilepsy), take care — on a big screen most of all.
-      </p>
+      <p className="ob-lead">{WARNING_TEXT}</p>
+      <ReduceFlashingSetting />
       <div className="ob-actions">
         <Main onPress={onNext}>I understand</Main>
       </div>
     </section>
   );
+}
+
+/** Tauri's event, for the menu's Flashing Lights Warning…: show the first run's warning again. */
+export const FLASH_WARNING = 'flash-warning';
+
+/** Show the warning again, from the page. */
+export const showFlashWarning = () => window.dispatchEvent(new Event(FLASH_WARNING));
+
+/**
+ * The first run's photosensitivity warning as a dialog over any view, with the
+ * reduce-flashing switch: modal, focus kept inside and given back on close,
+ * Esc or "I understand" closes it.
+ */
+export function FlashWarningDialog({ onClose }: { onClose(): void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const title = useId();
+  const text = useId();
+  useFocusTrap(ref);
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      onClose();
+    };
+    // Capturing, so live mode's own Esc (leave) doesn't hear it.
+    window.addEventListener('keydown', key, true);
+    return () => window.removeEventListener('keydown', key, true);
+  }, [onClose]);
+  return (
+    <>
+      <div className="ob-dialog-scrim" aria-hidden="true" onClick={onClose} />
+      <div ref={ref} tabIndex={-1} className="ob-dialog ob-warning" role="dialog" aria-modal="true" aria-labelledby={title} aria-describedby={text}>
+        <h2 id={title}>Flashing lights</h2>
+        <p id={text} className="ob-lead">
+          {WARNING_TEXT}
+        </p>
+        <ReduceFlashingSetting />
+        <div className="ob-actions">
+          <Main onPress={onClose}>I understand</Main>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/** Mounted by `App`: the warning dialog, whenever the menu (or `showFlashWarning`) asks for it. */
+export function FlashWarning() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const show = () => setOpen(true);
+    window.addEventListener(FLASH_WARNING, show);
+    const off = listen(FLASH_WARNING, show).catch(() => () => {});
+    return () => {
+      window.removeEventListener(FLASH_WARNING, show);
+      off.then((f) => f());
+    };
+  }, []);
+  const close = useCallback(() => setOpen(false), []);
+  return open ? <FlashWarningDialog onClose={close} /> : null;
 }
 
 function PickVibe({ onPicked }: { onPicked(): void }) {

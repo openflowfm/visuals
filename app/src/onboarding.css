@@ -214,8 +214,48 @@
   background: var(--panel);
 }
 
-.ob-warning h1 {
+.ob-warning h1,
+.ob-warning h2 {
   color: var(--caution);
+}
+
+/* The reduce-flashing switch under the warning. */
+.ob-reduce {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--fg);
+  font-size: var(--text-body);
+}
+
+/* The warning again, from the menu: a dialog over whatever view is showing. */
+.ob-dialog-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgb(0 0 0 / 0.55);
+}
+.ob-dialog {
+  position: fixed;
+  z-index: 41;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  display: grid;
+  gap: 16px;
+  padding: 24px;
+  background: var(--panel);
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-modal);
+  color: var(--ui);
+}
+.ob-dialog h2 {
+  margin: 0;
+  font-size: var(--text-title);
 }
 
 /* Pick a vibe: a card per starter playlist, and one for anything at all. */

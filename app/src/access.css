@@ -1,0 +1,34 @@
+/*
+ * Accessibility (#100), for every view. Keyboard focus shows as a ring in
+ * --ui, which stands out on every surface (the theme's --focus grey doesn't);
+ * views that draw their own ring (a tile's picture, a grid's active cell) keep it.
+ * Pointer clicks don't light it: only :focus-visible.
+ */
+:root {
+  --vf-focus-ring: var(--ui);
+}
+
+.vf-root :is(button, a[href], input, select, textarea, summary, [tabindex]:not([tabindex='-1']), [role='slider'], [role='switch'], [role='tab'], [role='option'], [role='menuitem']):focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 1px;
+}
+
+/* A composite widget pointing at its active item (the library grid) rings that item, not itself. */
+.vf-root [aria-activedescendant]:focus-visible {
+  outline: none;
+}
+
+/* A dialog or sheet focused as a whole (on open) is announced, not ringed. */
+.vf-root [tabindex='-1']:focus {
+  outline: none;
+}
+
+/* Reduced motion: no animations or slides; changes land at once. */
+:root[data-reduced-motion] *,
+:root[data-reduced-motion] *::before,
+:root[data-reduced-motion] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
