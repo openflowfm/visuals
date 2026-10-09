@@ -47,8 +47,10 @@ nothing is recorded or sent anywhere.
 
 If you said no, or the question never appeared, turn it on yourself:
 
-1. Open **System Settings › Privacy & Security › Screen & System Audio Recording**.
-2. Find **visual[flow]** in the list for system audio recording and turn it on.
+1. Open **System Settings › Privacy & Security › Screen & System Audio Recording**
+   (on older macOS the name may differ slightly).
+2. Find **visual[flow]** and turn it on. It only needs audio, so it may be listed
+   among the apps allowed to record audio only.
 
 If it still doesn't hear your DAW after you allow it, quit and reopen visual[flow].
 
@@ -64,14 +66,16 @@ follows: it never changes your tempo, your beat or your transport.
 
 Turn Link on in your DAW:
 
-- **Ableton Live:** turn on the **Link** toggle in Live's Control Bar. If it isn't there:
-  Settings › Link, Tempo & MIDI (Live 11: Preferences) › **Show Link Toggle**.
-- **Logic Pro:** File › Project Settings › Synchronization, set **Sync Mode** to
-  **Ableton Link** (or Control-click the control bar's Sync button and choose Ableton
-  Link).
-- **Bitwig Studio:** Dashboard › Settings › Synchronization › Transport Sync (IN) ›
-  Sync Method: **Ableton Link**. The Link button then appears at the top of the window;
-  make sure it's on.
+- **Ableton Live:** click the **Link** toggle in the upper left of Live's Control Bar. If
+  it isn't there, open Live's Settings (Live 11 and earlier: Preferences), go to the
+  Link tab and set **Show Link Toggle** to **Show**.
+- **Logic Pro:** Control-click the **Sync** button in the control bar and choose
+  **Ableton Link**. If there's no Sync button, Control-click the control bar, choose
+  **Customize Control Bar** and select **Sync**.
+- **Bitwig Studio:** in the Dashboard, open Settings › Synchronization and, under
+  Transport Sync (IN), set **Sync Method** to **Ableton Link**. A Link button then
+  appears between the transport and the display at the top of the window; make sure
+  it's on.
 
 If Link is on when you first open visual[flow], the welcome offers **Keep in time with
 Ableton** and how often to change the preset. Later, the **Link** panel in live mode has
@@ -90,9 +94,12 @@ Listening to an app or to everything on this Mac needs macOS 14.4 or later. On o
 macOS, only inputs are listed, so route your DAW's sound into an input with
 [BlackHole](https://existential.audio/blackhole/), a free virtual audio device:
 
-1. Install BlackHole 2ch.
-2. In Audio MIDI Setup, make a **Multi-Output Device** with your speakers or interface
-   and BlackHole 2ch, so you still hear the music.
+1. Install BlackHole 2ch, with the installer from its website or
+   `brew install blackhole-2ch`. Restart if the installer asks you to.
+2. In Audio MIDI Setup, click **+** at the bottom of the device list and choose
+   **Create Multi-Output Device**. Tick **Use** for your speakers or interface and for
+   BlackHole 2ch, so you still hear the music. Keep your speakers or interface at the
+   top as the primary device, and turn on **Drift Correction** for BlackHole 2ch.
 3. Set your DAW's output to that Multi-Output Device.
 4. In visual[flow], choose **BlackHole 2ch** in the audio picker.
 
