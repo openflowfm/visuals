@@ -6,7 +6,6 @@ import * as api from './api.ts';
 import { usePreview } from './preview.ts';
 import { say } from './words.ts';
 import { frameReadout, type Notice } from './shell.ts';
-import { HOME_READY } from './homeReady.ts';
 
 /**
  * A lab build (`npm run app:lab`: `VITE_LAB=1` here, the `lab` feature in the
@@ -14,27 +13,26 @@ import { HOME_READY } from './homeReady.ts';
  */
 export const LAB = Boolean(import.meta.env.VITE_LAB);
 
-export type View = 'home' | 'library' | 'editor' | 'live';
+export type View = 'home' | 'editor' | 'live';
 
-/** The views a build offers: the home first once it is ready, the editor only in a lab build. */
-export function viewsFor(lab: boolean, homeReady: boolean): View[] {
-  return [...(homeReady ? (['home'] as const) : []), 'library', ...(lab ? (['editor'] as const) : []), 'live'];
+/** The views a build offers: the home, the editor only in a lab build, and live. */
+export function viewsFor(lab: boolean): View[] {
+  return ['home', ...(lab ? (['editor'] as const) : []), 'live'];
 }
 
-/** The view a build starts in, and live mode goes back to: the editor in a lab build, else the home once it is ready, else the library. */
-export function homeFor(lab: boolean, homeReady: boolean): View {
-  return lab ? 'editor' : homeReady ? 'home' : 'library';
+/** The view a build starts in, and live mode goes back to: the editor in a lab build, else the home. */
+export function homeFor(lab: boolean): View {
+  return lab ? 'editor' : 'home';
 }
 
 /** The views the app offers. */
-export const VIEWS: View[] = viewsFor(LAB, HOME_READY);
+export const VIEWS: View[] = viewsFor(LAB);
 
 /** The view the app starts in, and live mode goes back to. */
-export const HOME: View = homeFor(LAB, HOME_READY);
+export const HOME: View = homeFor(LAB);
 
 const VIEW_HINTS: Record<View, string> = {
-  home: 'home: your playlists and what you played last, to pick up where you left off',
-  library: 'library: browse presets and play them in the preview',
+  home: 'home: your playlists and the library, with the preview of the preset playing',
   editor: 'editor: browse presets and change them while they play',
   live: 'live: the output full screen on a display, with performing controls',
 };

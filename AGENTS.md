@@ -55,13 +55,14 @@ bench on the presets it touches (`npm run compare -- <them>` in `compare/`; a fo
 Butterchurn is the reference, not the truth: Ryan judging beside the BlackHole visualizer
 remains the final call, and `compare/README.md` lists what can't match.
 
-`npm run app` runs the app (the library and live mode); `npm run app:lab` runs the lab
+`npm run app` runs the app (the home and live mode); `npm run app:lab` runs the lab
 build, which starts in the editor (`VITE_LAB=1 app/run.sh --features lab`; the headless
 capture above works with it too). `VISUALS_PRESET=<path in the pack>` starts either on a
 given preset. `VISUALS_LIVE=1` starts it in live mode, which opens the output window full screen
 on a display (`VISUALS_DISPLAY=<n>` picks display `n`, from 0; otherwise the one chosen
 last). `VISUALS_VIEW=home|library|live|live-windowed` starts it in that view and wins over
-`VISUALS_LIVE`; `live-windowed` plays live in the main window without opening the output, so
+`VISUALS_LIVE`; `library` is the home opened on its library pane (there is no library view
+of its own since decision 66), and `live-windowed` plays live in the main window without opening the output, so
 its "Go full screen on…" overlay can be captured. With the flashing warning owed (first run
 done, "I understand" not yet chosen), live mode waits behind it; the answer is kept in
 `access.json`, so once answered in one dev run it holds for later runs, headless captures
@@ -119,8 +120,8 @@ import), `app/src-tauri/src/actions.rs` (the deck: a playlist's settings taken o
 live tweaks reported in `differs`, shuffle, smart playlists and filters resolved on load,
 recently played), `app/src-tauri/src/query.rs` (a `LibraryQuery` worked out in Rust,
 mirroring the page's filter), and `app/src/playlists.ts`. Its stubs, each in the lane's
-own file: `Home.tsx` and `homeReady.ts` (#96: the home view, shown once `HOME_READY`
-is on), `Settings.tsx` and `MoreEffects.tsx` (#98, opened with `openSheet` from
+own file: `Home.tsx` (#96: the home view, since decision 66 the only one that browses),
+`Settings.tsx` and `MoreEffects.tsx` (#98, opened with `openSheet` from
 `views.tsx`), `app/src-tauri/src/resume.rs` (#99: `resume_state`, and the deck's
 `note` and `open_failed` hooks), `access.rs` and `access.ts` (#100: `reduced_motion`),
 `quality.rs` (#101: `quality_get`, `quality_set`), and `crash.rs` and `CrashPrompt.tsx`

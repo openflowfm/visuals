@@ -25,14 +25,20 @@ export interface Status {
 /**
  * The view to start in: `VISUALS_VIEW=home|library|live|live-windowed`, or
  * `live` with `VISUALS_LIVE=1`; null for the page's own start. `live-windowed`
- * plays live in the window, without opening the output on a display.
+ * plays live in the window, without opening the output on a display, and
+ * `library` is the home opened on its library pane.
  */
 export type StartView = 'home' | 'library' | 'live' | 'live-windowed';
 export const liveStart = () => invoke<StartView | null>('live_start');
 
-/** The page's view (and whether live plays in the window) for `liveStart`'s answer; `home` when it names none. */
-export function startIn<V extends string>(view: StartView | null, home: V): { view: V | 'live' | 'home' | 'library'; windowed?: boolean } {
+/**
+ * The page's view for `liveStart`'s answer, with whether live plays in the window
+ * and whether the home opens on its library pane; `home` (the build's own start)
+ * when it names none.
+ */
+export function startIn<V extends string>(view: StartView | null, home: V): { view: V | 'live' | 'home'; windowed?: boolean; library?: boolean } {
   if (view === 'live-windowed') return { view: 'live', windowed: true };
+  if (view === 'library') return { view: 'home', library: true };
   return { view: view ?? home };
 }
 /** `VISUALS_PRESET=<path>`: the preset to start on, as an absolute path. */

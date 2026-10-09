@@ -4,8 +4,6 @@ import type { LibraryRow, Mine } from './api.ts';
 import { prepareRow } from './librarySearch.ts';
 import { chipSays, groupSays, valueSays, Values } from './Library.tsx';
 import { PresetDrawer, pressedFor } from './PresetDrawer.tsx';
-import { Playlists, itemSays, listSays } from './Playlists.tsx';
-import { DEFAULT_SETTINGS, manual, type Deck, type Lists } from './playlists.ts';
 
 const row = (key: string): LibraryRow => ({ key, path: `/p/${key}`, hash: '', style: 'A', sub_style: null, authors: [], title: key, thumbnail: null, look: null, starter: false });
 const p = (key: string, mine?: Mine) => prepareRow(row(key), mine);
@@ -77,52 +75,5 @@ describe('the preset drawer, read aloud', () => {
     const html = drawer([p('a', { star: true, tags: ['warm'] }), p('b')]);
     expect(html).toMatch(/aria-label="star" aria-pressed="mixed"/);
     expect(html).toContain('aria-label="take the tag warm off (on 1 of 2)"');
-  });
-});
-
-describe('the playlists panel, read aloud', () => {
-  const item = (name: string, missing = false) => ({ path: `/p/${name}.milk`, name, group: 'g', missing, hash: null });
-  const deck = (over: Partial<Deck> = {}): Deck => ({
-    playlist: null,
-    index: null,
-    auto: false,
-    seconds: 30,
-    current: null,
-    hold: false,
-    bars: 0,
-    order: 'in_order',
-    settings: null,
-    differs: [],
-    next: null,
-    next_index: null,
-    count: 0,
-    query: null,
-    ...over,
-  });
-  const lists: Lists = { playlists: [manual('1', 'Warm up', [item('x'), item('y', true)]), { ...manual('2', 'Peak', []), kind: 'smart' }], deck: deck({ playlist: '1', index: 0 }) };
-
-  it('says each row in words', () => {
-    expect(listSays(lists.playlists[0], true)).toBe('Warm up, 2 presets, playing');
-    expect(listSays(lists.playlists[1], false)).toBe('Peak, smart playlist');
-    expect(itemSays(1, item('y', true), false)).toBe('2. y, missing, file not found');
-    expect(itemSays(0, item('x'), true)).toBe('1. x, g, playing');
-  });
-
-  it('labels the rows, the symbol buttons, the switch and the seconds', () => {
-    const html = renderToStaticMarkup(<Playlists lists={lists} current={null} selected="1" onSelect={none} onLists={none} onError={none} />);
-    const labels = attrs(html, 'aria-label');
-    for (const want of [
-      'Warm up, 2 presets, playing',
-      'Stop Warm up',
-      'Peak, smart playlist',
-      'Play Peak',
-      '1. x, g, playing',
-      'Remove x from Warm up',
-      '2. y, missing, file not found',
-      'move on by itself',
-      'seconds on each preset',
-    ])
-      expect(labels).toContain(want);
-    expect(html).toMatch(/aria-pressed="false" aria-label="move on by itself"|aria-label="move on by itself"[^>]*aria-pressed="false"/);
   });
 });

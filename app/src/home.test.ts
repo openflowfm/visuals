@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LibraryQuery, LibraryRow, Level } from './api.ts';
 import { prepareRow, type Prepared } from './librarySearch.ts';
 import { DEFAULT_SETTINGS, EMPTY_DECK, type Lists, type Playlist } from './playlists.ts';
-import { changeUnit, matches, RECENT, sections, seedStarters, SEEDED_KEY, STARTERS, STRIP_CAP, strip, NameEdit, tileFocus, withSetting, type Mark } from './home.ts';
+import { changeUnit, matches, playsFrom, RECENT, sections, seedStarters, SEEDED_KEY, STARTERS, STRIP_CAP, strip, NameEdit, tileFocus, withSetting, type Mark } from './home.ts';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { firstPane, openSettings, PlaylistPane, rowSays, SettingsBar, Sidebar, stripTileSays } from './Home.tsx';
@@ -289,6 +289,27 @@ describe('firstPane', () => {
     expect(firstPane(lists([manual('a', []), manual('b', [])], 'b'))).toEqual({ kind: 'list', id: 'b' });
     expect(firstPane(lists([manual('a', []), manual('b', [])]))).toEqual({ kind: 'list', id: 'a' });
     expect(firstPane(lists([]))).toEqual({ kind: 'library' });
+  });
+
+  it('opens on the library while the deck follows its filter (one the app picked up, say), so the library can show it', () => {
+    const following: Lists = { playlists: [manual('a', [])], deck: { ...EMPTY_DECK, query: { groups: { style: ['g'] }, text: '' } } };
+    expect(firstPane(following)).toEqual({ kind: 'library' });
+    // A playlist playing still wins.
+    expect(firstPane({ ...following, deck: { ...following.deck, playlist: 'a' } })).toEqual({ kind: 'list', id: 'a' });
+  });
+});
+
+describe('playsFrom', () => {
+  const warm = manual('w', ['/p/x.milk', '/p/y.milk', '/p/z.milk'], { name: 'Warm up' });
+
+  it('names the playlist playing and where in it', () => {
+    expect(playsFrom({ ...EMPTY_DECK, playlist: 'w', index: 1 }, [warm])).toBe('From Warm up, 2 of 3');
+    expect(playsFrom({ ...EMPTY_DECK, playlist: 'w', index: null }, [warm])).toBe('From Warm up');
+  });
+
+  it('says the library while the deck follows the grid, and nothing for a preset opened on its own', () => {
+    expect(playsFrom({ ...EMPTY_DECK, query: { groups: {}, text: 'x' } }, [warm])).toBe("From the library, in the grid's order");
+    expect(playsFrom(EMPTY_DECK, [warm])).toBe('');
   });
 });
 
