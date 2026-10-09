@@ -1,0 +1,36 @@
+/* The source picker (SourcePicker.tsx): Advanced holds the channel pickers. */
+.audio-advanced {
+  position: relative;
+  display: inline-block;
+}
+.audio-advanced > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 2px 4px;
+  color: var(--caption);
+  font-size: var(--text-label);
+}
+.audio-advanced > summary::-webkit-details-marker {
+  display: none;
+}
+.audio-advanced[open] > summary {
+  color: var(--fg);
+}
+.audio-advanced-body {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 20;
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--bd3);
+  border-radius: 4px;
+}
+.audio-note {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -124,4 +124,6 @@ export const add = (id: string, path: string, at: number | null = null) => invok
 export const removeItem = (id: string, index: number) => invoke<Lists>('playlist_remove', { id, index });
 export const moveItem = (id: string, from: number, to: number) => invoke<Lists>('playlist_move_item', { id, from, to });
 export const move = (id: string, to: number) => invoke<Lists>('playlist_move', { id, to });
+/** The playlists, when they change other than by a command here (presets that moved). */
+export const onLists = (f: (lists: Lists) => void): Promise<UnlistenFn> => listen<Lists>('lists', (e) => f(e.payload));
 export const onLive = (f: (now: Now) => void): Promise<UnlistenFn> => listen<Now>('live', (e) => f(e.payload));
