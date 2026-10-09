@@ -73,6 +73,8 @@ the live output window (both after `VISUALS_CAPTURE_AFTER` seconds, 8 by default
 `VISUALS_FX='[{"kind":"mirror","mode":"quad"}]'` sends those live actions (effects,
 hold…) 5 s after start (`VISUALS_FX_AFTER`), to check effects in a capture.
 `VISUALS_WINDOW_SIZE=WxH` (e.g. `800x900`) opens the main window at that size, to check a layout.
+In a dev run `VITE_HOME_PANEL=1` opens the home's Now Playing panel at start in a window under
+900 px too (where it starts closed), to capture it.
 In a debug build `VISUALS_PACK_URL=<url>` replaces the full pack's download URL (a bundle
 served locally; `docs/pack.md`), and `VISUALS_PACK_DOWNLOAD=1` starts the download at
 launch, for headless tests. In a debug build, or in any headless run, the app doesn't bring
