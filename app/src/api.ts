@@ -293,6 +293,22 @@ export interface Resume {
 }
 /** Where the last session left off; null on a first run or when nothing was playing. */
 export const resumeState = () => invoke<Resume | null>('resume_state');
+/** `resume::presets_failed`: the presets (by `path`) that failed to open or draw; live skips them, the library marks them. */
+export const presetsFailed = () => invoke<string[]>('presets_failed');
+/** Sent with the whole list each time a preset fails. */
+export const PRESETS_FAILED_EVENT = 'presets-failed';
+export const onPresetsFailed = (f: (paths: string[]) => void): Promise<UnlistenFn> => listen<string[]>(PRESETS_FAILED_EVENT, (e) => f(e.payload));
+
+/** `settings::Problem`: a settings file (`audio.json`, `playlists.json`…) that couldn't be read or kept, in plain words. */
+export interface SettingsProblem {
+  file: string;
+  message: string;
+}
+/** The settings files that couldn't be read or kept this run; empty when all is well. */
+export const settingsProblems = () => invoke<SettingsProblem[]>('settings_problems');
+/** Sent with the whole list each time it changes. */
+export const SETTINGS_PROBLEMS_EVENT = 'settings-problems';
+export const onSettingsProblems = (f: (problems: SettingsProblem[]) => void): Promise<UnlistenFn> => listen<SettingsProblem[]>(SETTINGS_PROBLEMS_EVENT, (e) => f(e.payload));
 
 /** Menu event: Check for Updates… was chosen. Listened to by #87. */
 export const UPDATE_CHECK_EVENT = 'update-check';

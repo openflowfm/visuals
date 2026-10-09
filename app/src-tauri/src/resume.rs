@@ -1,12 +1,33 @@
-//! Picking up where the app left off: after a crash or relaunch it reopens on
-//! the last playlist, position and source (#99).
+//! A show that never stops (#99).
 //!
-//! A stub for now: nothing is kept, so there's never anything to resume, and a
-//! preset that fails to open is reported as before.
+//! **Picking up where the app left off.** Every change to the deck ([`note`])
+//! keeps the playlist, the position in it and the preset playing in
+//! `resume.json` (`crate::settings`). On the next launch, after a crash or a
+//! quit, [`start`] loads that playlist again at that position (or, for a smart
+//! playlist worked out again, wherever that preset now is), or opens that
+//! preset when no playlist was playing. The source needs nothing here:
+//! `crate::listen` already comes back listening to the one chosen last
+//! (`audio.json`), which [`resume_state`] reports. Nothing is resumed on the
+//! first run, or when the app is started on a given preset (`VISUALS_PRESET`).
+//!
+//! **Skipping what fails.** A preset the deck opens that can't be read, or that
+//! the bench won't load, is kept in `failed.json` with its file's size and
+//! modification time, and sent to the page ([`FAILED`], [`presets_failed`]),
+//! which marks it in the library. Stepping (next, previous, random, and
+//! auto-advance) moves on past it without a word ([`open_failed`]); nothing is
+//! ever shown on the output. The mark goes when the file changes or the preset
+//! opens after all (a newer engine).
 
+use crate::actions::{Action, Deck, DeckView};
+use crate::library::Opened;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
-use tauri::AppHandle;
+use serde_json::Value;
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
+use tauri::{AppHandle, Emitter, Manager};
 
 /// Where the app was: the playlist and the position in it, the preset on screen and what it listened to.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
@@ -17,39 +38,333 @@ pub struct Resume {
     pub source: Option<crate::listen::SourceId>,
 }
 
-/// Where the app was last time, if it should pick up there. Always `None` for now.
+/// Where the deck is kept, in `crate::settings::dir`.
+const FILE: &str = "resume.json";
+/// The presets that failed, in `crate::settings::dir`.
+const FAILED_FILE: &str = "failed.json";
+/// The event the whole list of failed presets goes out on when it changes.
+pub const FAILED: &str = "presets-failed";
+
+/// What the launch found to pick up, for [`resume_state`].
+static FOUND: OnceLock<Option<Resume>> = OnceLock::new();
+/// Set once the deck is back where it was (or there was nothing to do): until then
+/// [`note`] keeps nothing, so a page acting early can't overwrite where the show was.
+static RESTORED: AtomicBool = AtomicBool::new(false);
+/// What [`note`] kept last, so an unchanged deck isn't written again.
+static KEPT: Mutex<Option<Resume>> = Mutex::new(None);
+
+/// Where the app was last time, if it should pick up there; `None` when nothing was playing.
 #[tauri::command]
 pub fn resume_state() -> Option<Resume> {
-    None
+    FOUND.get().cloned().flatten()
 }
 
-/// Called once at setup. Does nothing yet.
-pub fn start(_handle: &AppHandle) {}
+/// Whether there's anything to pick up in `r`.
+fn worth(r: &Resume) -> bool {
+    r.playlist.is_some() || r.current.is_some()
+}
 
-/// Called after every change to the deck, to keep where it is. Does nothing yet.
-pub fn note(_handle: &AppHandle, _deck: &crate::actions::DeckView) {}
+/// Whether to pick up at all: never on the first run, nor when started on a given preset.
+fn wanted(first_run: bool, preset: Option<&str>) -> bool {
+    !first_run && preset.is_none_or(str::is_empty)
+}
+
+/// Called once at setup: problems with settings go to the page from now on, the
+/// failed presets are read, and the deck is put back where it was once the bench is there.
+pub fn start(handle: &AppHandle) {
+    crate::settings::install(handle);
+    let failed = crate::settings::load::<FailedFile>(FAILED_FILE).map(|f| still_failing(f.presets)).unwrap_or_default();
+    *FAILURES.lock().unwrap() = failed;
+    let found = crate::settings::load::<Resume>(FILE).filter(worth).map(|r| Resume { source: kept_source(), ..r });
+    let _ = FOUND.set(found.clone());
+    let go = found.filter(|_| wanted(crate::settings::first_run(), std::env::var("VISUALS_PRESET").ok().as_deref()));
+    let Some(r) = go else {
+        RESTORED.store(true, Ordering::SeqCst);
+        return;
+    };
+    let handle = handle.clone();
+    std::thread::spawn(move || {
+        // The bench starts later in setup; give it a moment.
+        let until = Instant::now() + Duration::from_secs(10);
+        while handle.state::<crate::App>().commands().is_err() && Instant::now() < until {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        restore(&handle, &r);
+        RESTORED.store(true, Ordering::SeqCst);
+    });
+}
+
+/// The source `crate::listen` comes back to (`audio.json`).
+fn kept_source() -> Option<crate::listen::SourceId> {
+    let audio = crate::settings::load::<Value>("audio.json")?;
+    serde_json::from_value(audio.get("source")?.clone()).ok()
+}
+
+/// What putting the deck back takes.
+#[derive(Debug, PartialEq)]
+enum Plan {
+    /// Load playlist number `playlist`, at item `index`.
+    Load {
+        playlist: usize,
+        index: Option<usize>,
+    },
+    /// No playlist (or it's gone): open this preset.
+    Open(PathBuf),
+    Nothing,
+}
+
+/// The plan for `r`, given the playlists' ids in order.
+fn plan(r: &Resume, ids: &[String]) -> Plan {
+    if let Some(n) = r.playlist.as_ref().and_then(|id| ids.iter().position(|i| i == id)) {
+        return Plan::Load { playlist: n, index: r.index };
+    }
+    match &r.current {
+        Some(c) => Plan::Open(PathBuf::from(c)),
+        None => Plan::Nothing,
+    }
+}
+
+fn restore(handle: &AppHandle, r: &Resume) {
+    let deck = handle.state::<Deck>();
+    let ids: Vec<String> = deck.store.lock().unwrap().lists.iter().map(|l| l.id.clone()).collect();
+    let said = |what: &str, e: String| eprintln!("resume: {what}: {e}");
+    match plan(r, &ids) {
+        Plan::Load { playlist, index } => {
+            // The position may be gone (items removed since): the playlist's start, then.
+            if let Err(e) = crate::actions::dispatch(handle, Action::Load { playlist, index }) {
+                said("loading the playlist at its position", e);
+                if let Err(e) = crate::actions::dispatch(handle, Action::Load { playlist, index: None }) {
+                    return said("loading the playlist", e);
+                }
+            }
+            // A smart playlist is worked out again: go to where that preset is now.
+            let elsewhere = r.current.as_ref().and_then(|c| {
+                let live = deck.live.lock().unwrap();
+                let here = live.current.as_ref().is_some_and(|p| p.as_os_str() == c.as_str());
+                if here { None } else { live.items.iter().position(|p| p.as_os_str() == c.as_str()) }
+            });
+            if let Some(index) = elsewhere {
+                if let Err(e) = crate::actions::dispatch(handle, Action::Go { index }) {
+                    said("going back to the preset", e);
+                }
+            }
+        }
+        Plan::Open(path) if path.is_file() => {
+            let (opened, error) = open(handle, &handle.state::<crate::App>(), &path);
+            if opened.is_some() {
+                deck.opened(&path);
+            } else if let Some(e) = error {
+                said("opening the preset", e);
+            }
+        }
+        Plan::Open(_) | Plan::Nothing => {}
+    }
+}
+
+/// Where `deck` is, to keep.
+fn kept_from(deck: &DeckView) -> Resume {
+    Resume { playlist: deck.playlist.clone(), index: deck.index, current: deck.current.clone(), source: None }
+}
+
+/// Called after every change to the deck: keep where it is, when that changed.
+pub fn note(_handle: &AppHandle, deck: &DeckView) {
+    if !RESTORED.load(Ordering::SeqCst) {
+        return;
+    }
+    let now = kept_from(deck);
+    {
+        let mut kept = KEPT.lock().unwrap();
+        if kept.as_ref() == Some(&now) {
+            return;
+        }
+        *kept = Some(now.clone());
+    }
+    crate::settings::save_json(FILE, &now);
+}
 
 /// What the deck does about a preset that failed to open.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Failed {
-    /// Say so, as now.
+    /// Say so. Not answered now that every failure steps on, but the deck still handles it.
+    #[allow(dead_code)]
     Report,
     /// Step on to the next one without a word.
     Skip,
 }
 
-/// Asked by the deck when the preset at `path` failed to open. Always [`Failed::Report`] for now.
+/// Asked by the deck when the preset at `path` failed to open while stepping
+/// (next, previous, random, auto-advance): always skip it. [`open`] has already marked it.
 pub fn open_failed(_handle: &AppHandle, _path: &Path, _error: &str) -> Failed {
-    Failed::Report
+    WHEN_FAILED
+}
+
+/// [`open_failed`]'s answer.
+const WHEN_FAILED: Failed = Failed::Skip;
+
+/// A preset's file when it failed: its size and modification time (seconds),
+/// so the mark goes when the file changes.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+struct Mark {
+    size: u64,
+    modified: u64,
+}
+
+/// `failed.json`.
+#[derive(Serialize, Deserialize, Default)]
+struct FailedFile {
+    /// By path.
+    presets: BTreeMap<String, Mark>,
+}
+
+static FAILURES: Mutex<BTreeMap<String, Mark>> = Mutex::new(BTreeMap::new());
+
+fn mark_of(path: &Path) -> Option<Mark> {
+    let meta = std::fs::metadata(path).ok().filter(|m| m.is_file())?;
+    let modified = meta.modified().ok()?.duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    Some(Mark { size: meta.len(), modified })
+}
+
+/// The failures whose file is still as it was when it failed.
+fn still_failing(mut presets: BTreeMap<String, Mark>) -> BTreeMap<String, Mark> {
+    presets.retain(|path, mark| mark_of(Path::new(path)) == Some(*mark));
+    presets
+}
+
+/// Mark `path` failed (`true`) or not; returns whether that changed anything.
+fn mark(failures: &mut BTreeMap<String, Mark>, path: &Path, failed: bool) -> bool {
+    let key = path.to_string_lossy().into_owned();
+    match (failed, mark_of(path)) {
+        // A file that's gone isn't a preset that fails: the library has lost it.
+        (true, Some(m)) => failures.insert(key, m) != Some(m),
+        _ => failures.remove(&key).is_some(),
+    }
+}
+
+/// Keep and tell the page the new list when marking `path` changed it.
+fn set_failed(handle: &AppHandle, path: &Path, failed: bool) {
+    let list = {
+        let mut failures = FAILURES.lock().unwrap();
+        if !mark(&mut failures, path, failed) {
+            return;
+        }
+        failures.clone()
+    };
+    if failed {
+        eprintln!("resume: {} failed; marked, and skipped in live", path.display());
+    }
+    crate::settings::save_json(FAILED_FILE, &FailedFile { presets: list.clone() });
+    let _ = handle.emit(FAILED, list.into_keys().collect::<Vec<_>>());
+}
+
+/// The presets (by path) that failed to open, for the library to mark.
+#[tauri::command]
+pub fn presets_failed() -> Vec<String> {
+    FAILURES.lock().unwrap().keys().cloned().collect()
+}
+
+/// Why an opened preset didn't load on the bench, from its report (`library::Report`):
+/// its equations or shaders failed to build, so the bench kept the last one.
+fn load_problem(opened: &Value) -> Option<String> {
+    let message = opened.pointer("/report/equations/0/message")?.as_str()?;
+    Some(format!("it didn't load ({message})"))
+}
+
+/// Open the preset at `path` on the bench for the deck: what opened, or why it
+/// didn't. A preset that can't be read or that the bench won't load is marked failed.
+pub fn open(handle: &AppHandle, app: &crate::App, path: &Path) -> (Option<Opened>, Option<String>) {
+    let result = crate::library::open_path(app, &path.to_string_lossy()).and_then(|o| match serde_json::to_value(&o).ok().as_ref().and_then(load_problem) {
+        Some(e) => Err(e),
+        None => Ok(o),
+    });
+    set_failed(handle, path, result.is_err());
+    match result {
+        Ok(o) => (Some(o), None),
+        Err(e) => (None, Some(e)),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn r(playlist: Option<&str>, index: Option<usize>, current: Option<&str>) -> Resume {
+        Resume { playlist: playlist.map(Into::into), index, current: current.map(Into::into), source: None }
+    }
+
     #[test]
-    fn there_is_nothing_to_resume_yet() {
-        assert_eq!(resume_state(), None);
+    fn resume_reads_and_writes_as_the_page_expects() {
         assert_eq!(serde_json::to_string(&Resume::default()).unwrap(), r#"{"playlist":null,"index":null,"current":null,"source":null}"#);
+        let kept: Resume = serde_json::from_str(r#"{"version":1,"playlist":"a","index":3,"current":"/p/x.milk","source":{"kind":"system"}}"#).unwrap();
+        assert_eq!(kept.source, Some(crate::listen::SourceId::System));
+        assert!(worth(&kept));
+        assert!(!worth(&Resume::default()));
+    }
+
+    #[test]
+    fn picks_up_except_on_the_first_run_or_a_given_preset() {
+        assert!(wanted(false, None));
+        assert!(wanted(false, Some("")));
+        assert!(!wanted(true, None));
+        assert!(!wanted(false, Some("cream-of-the-crop/x.milk")));
+    }
+
+    #[test]
+    fn plans_the_playlist_by_id_then_the_preset() {
+        let ids = vec!["a".to_string(), "b".to_string()];
+        assert_eq!(plan(&r(Some("b"), Some(4), Some("/x.milk")), &ids), Plan::Load { playlist: 1, index: Some(4) });
+        // The playlist moved in the file: still found by its id.
+        assert_eq!(plan(&r(Some("a"), None, None), &ids), Plan::Load { playlist: 0, index: None });
+        // Deleted since: the preset that was playing.
+        assert_eq!(plan(&r(Some("gone"), Some(1), Some("/x.milk")), &ids), Plan::Open("/x.milk".into()));
+        assert_eq!(plan(&r(None, None, Some("/y.milk")), &ids), Plan::Open("/y.milk".into()));
+        assert_eq!(plan(&r(None, None, None), &ids), Plan::Nothing);
+    }
+
+    #[test]
+    fn keeps_the_deck_s_playlist_position_and_preset() {
+        let deck: DeckView = {
+            let mut live = crate::actions::Live::default();
+            live.playlist = Some("p".into());
+            live.index = Some(2);
+            live.current = Some("/a/b.milk".into());
+            live.view(&crate::fx::Settings::default())
+        };
+        assert_eq!(kept_from(&deck), r(Some("p"), Some(2), Some("/a/b.milk")));
+    }
+
+    #[test]
+    fn a_failed_preset_is_marked_until_its_file_changes_or_it_opens() {
+        let root = std::env::temp_dir().join(format!("visuals-resume-failed-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let bad = root.join("bad.milk");
+        std::fs::write(&bad, "[preset00]\nper_frame_1=zoom=(;\n").unwrap();
+        let mut failures = BTreeMap::new();
+        assert!(mark(&mut failures, &bad, true));
+        assert!(!mark(&mut failures, &bad, true), "marked once");
+        assert_eq!(still_failing(failures.clone()).len(), 1);
+        // Kept and read back as the file has it.
+        let text = serde_json::to_string(&FailedFile { presets: failures.clone() }).unwrap();
+        let back: FailedFile = serde_json::from_str(&text).unwrap();
+        assert_eq!(back.presets, failures);
+        // Edited (another size): no longer marked.
+        std::fs::write(&bad, "[preset00]\nper_frame_1=zoom=1.01;\n").unwrap();
+        assert!(still_failing(failures.clone()).is_empty());
+        // It opened after all: unmarked.
+        assert!(mark(&mut failures, &bad, false));
+        assert!(failures.is_empty());
+        // A missing file is never marked.
+        assert!(!mark(&mut failures, &root.join("gone.milk"), true));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_preset_the_bench_would_not_load_is_a_failure_and_stepping_skips_it() {
+        let opened = serde_json::json!({ "preset": {}, "report": { "equations": [{ "stage": "equations", "message": "unexpected (", "line": null }], "shaders": [] } });
+        assert_eq!(load_problem(&opened).as_deref(), Some("it didn't load (unexpected ()"));
+        // Shaders that fell back to MilkDrop's default still draw: not a failure.
+        let fell_back = serde_json::json!({ "preset": {}, "report": { "equations": [], "shaders": [{ "stage": "warp", "message": "x", "line": null }] } });
+        assert_eq!(load_problem(&fell_back), None);
+        assert_eq!(WHEN_FAILED, Failed::Skip, "stepping moves on past it without a word");
     }
 }
