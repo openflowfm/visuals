@@ -30,15 +30,24 @@ where `crate::catalog` looks for each pack's `index.json` and `thumbnails/`.
 - **Where from.** `BUNDLE` in `pack.rs`:
   `https://github.com/openflowfm/visual-presets/archive/<commit>.tar.gz`, pinned to one
   commit, so a later push to visual-presets changes nothing for apps already out.
-  When that can't be reached (no answer, or an error from the server), the app downloads
-  projectM's bare pack at its pinned commit instead (`PROJECTM`): the same presets, without
-  the index or thumbnails. A download that breaks off part-way isn't taken up from the
-  fallback; trying again carries on from the bundle, keeping what's already in place.
+  When that can't be had (no answer, an error from the server, or an answer that isn't a
+  whole tar.gz of presets: it won't gunzip or untar, or has no presets in it), the app
+  downloads projectM's bare pack at its pinned commit instead (`PROJECTM`): the same
+  presets, without the index or thumbnails. A download that breaks off part-way (the
+  connection drops or stalls) isn't taken up from the fallback; trying again carries on
+  from the bundle, keeping what's already in place.
 - **What it keeps.** Only `.milk` and `.md` files, the top-level `index.json` and the `.webp`
   files directly in `thumbnails/`; nothing outside the pack's folder, and no `._*` files
-  (macOS's tar metadata). A preset or thumbnail already there is kept (the user may have
-  edited the preset). The index is always replaced, and only once the whole archive has
+  (macOS's tar metadata). The index is always replaced, and only once the whole archive has
   arrived, so the library regroups once, with every thumbnail in place.
+- **What it replaces and removes.** The `index.json` already in the pack's folder records
+  each preset's content hash as it was downloaded. A file already there is replaced by the
+  new archive's only while its content still has that hash: a preset the user edited is
+  kept, and so is everything when there's no old index. Once the whole archive has arrived,
+  and only when it is our bundle (it has an `index.json`; projectM's bare pack only adds),
+  what the old index listed and the new bundle doesn't have is removed: presets still as
+  downloaded, and their thumbnails. An edited preset is never removed. Presets the user
+  added beside the pack, and its `.md` files, aren't in the index and are left alone.
 - **The size shown.** The server's `Content-Length` when it sends one; GitHub makes large
   archives as it sends them, without one, so the bar runs on `BUNDLE.size`, the archive's
   size when it was pinned (53,005,539 bytes for `fd71ac2`). It's only for the progress
@@ -152,11 +161,48 @@ A new index analysis (`index::ANALYSIS`), a newer projectM commit or new thumbna
 new bundle: a new commit in visual-presets, pinned in `BUNDLE` as above. Apps already out
 keep downloading the commit they know, which stays in the repo's history. A new projectM
 commit also changes `PROJECTM` in `pack.rs` (its URL and size) and the curl above, and
-`TOTAL` in `pack.rs` if the count changes. An app that already has the pack doesn't
-download it again.
+`TOTAL` in `pack.rs` if the count changes.
+
+**Re-index the full pack when the starter set or the index format changes.** The starter
+set's index (`app/src-tauri/presets/starter/cream-of-the-crop/index.json`) and the full
+pack's describe the same presets at the same paths, and the app reads both with the same
+code, so a change to either the starter set's presets or the index format
+(`index::VERSION`, `index::ANALYSIS`, the thumbnail size or step, or what a row holds)
+means drawing the full pack again as above and pushing it as a new visual-presets commit,
+pinned in `BUNDLE`. Otherwise people who download the pack get an index the app no longer
+reads the same way as the one it ships.
+
+An app that already has the whole pack doesn't offer to download it again (the button goes
+once the presets folder has `TOTAL` of them). When the pack is downloaded again (a retry,
+or presets missing), it is downloaded from the `BUNDLE` that app build pins, and changed
+presets replace the ones still as downloaded, as described above.
+
+### How existing users get a new bundle
+
+Once a whole archive is unpacked, the app notes its URL (which names the commit) in
+`.bundle` in the pack's folder. At each launch, in the background, it compares that with
+the `BUNDLE` its build pins. When they differ, or there is no `.bundle` (a pack downloaded
+before the record was kept, or one that came from projectM's fallback), it downloads the
+pinned bundle again over the pack, quietly: the same download as the button's, with its
+events and its rules (only untouched files are overwritten, only untouched dropped presets
+removed, nothing removed after a download that breaks off). The page's count stays at the
+pack's while it runs, so the pack bar doesn't come back. It only runs on a pack that is
+there whole (it has its `index.json`, or all `TOTAL` presets), never during another
+download, and never twice at once. It tries the bundle alone, not the fallback; when it
+fails, the pack stays as it is and `.bundle` keeps naming the old archive, so the next
+launch tries again. So a new pinned `BUNDLE` (a takedown, changed presets, a new index)
+reaches everyone who has the pack the first time they open the new app build.
+
+Paths are compared without regard to case when deciding what a new bundle dropped: macOS
+volumes are usually case-insensitive, so a bundle that renames `A/Foo.milk` to
+`A/foo.milk` renames the preset there rather than removing it.
 
 Takedown requests come in as issues on visual-presets
 (<https://github.com/openflowfm/visual-presets/issues/new?title=Preset%20takedown>, the
 link in CREDITS.md and the Credits view): remove the preset there, with its row in
-`index.json` and its thumbnail, push, and pin the new commit. The removal applies from
-that commit on, so to new app builds and fresh downloads; a pack already downloaded keeps it.
+`index.json` and its thumbnail, push, and pin the new commit. New app builds and fresh
+downloads don't have it from that commit on. A pack downloaded before loses it at the first
+launch of an app build pinning the newer bundle (above): the preset is removed if it is
+still as it was downloaded, and kept if the user edited it (it's theirs to remove then).
+Until then, it keeps the preset; projectM's bare pack, the fallback, still
+has it and would add it back to a pack that's missing it.
