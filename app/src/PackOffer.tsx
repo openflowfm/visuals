@@ -72,7 +72,7 @@ export function PackOffer(): JSX.Element | null {
   };
 
   return (
-    <p className="pack-offer" role="status">
+    <div className="pack-offer" role="status">
       {action.state === 'downloading' ? (
         <span className="pack-progress" role="progressbar" aria-label={action.label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((action.progress ?? 0) * 100)}>
           <span className="pack-progress-fill" style={{ width: `${(action.progress ?? 0) * 100}%` }} />
@@ -92,6 +92,6 @@ export function PackOffer(): JSX.Element | null {
           </Button>
         </>
       )}
-    </p>
+    </div>
   );
 }

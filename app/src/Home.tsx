@@ -262,7 +262,7 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
         </div>
       )}
       <HomeBar
-        name={current?.name ?? null}
+        name={playingRow?.title ?? current?.name ?? null}
         from={current ? from : ''}
         onStep={step}
         stepIn={playing ? ' in the playlist' : ''}
