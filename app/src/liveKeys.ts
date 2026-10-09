@@ -16,7 +16,7 @@ export interface LiveKeyTargets {
   fx: (action: fx.FxAction) => void;
   /** 1–5: rate the current preset. */
   rate: (stars: Stars) => void;
-  /** F: favourite the current preset. */
+  /** L: favourite the current preset. */
   favourite: () => void;
   /** ?: show or hide the list of live controls. */
   help: () => void;
@@ -38,21 +38,6 @@ export const modalOpen = (): boolean => typeof document !== 'undefined' && docum
 
 /** What the handlers read of a key event. */
 export type KeyLike = Pick<KeyboardEvent, 'key' | 'metaKey' | 'shiftKey' | 'ctrlKey' | 'altKey' | 'repeat' | 'target' | 'preventDefault'> & Partial<Pick<KeyboardEvent, 'defaultPrevented'>>;
-
-/**
- * The keys that hold an effect in live mode: fx's, except that freeze is on Z,
- * since F favourites the preset.
- */
-export const LIVE_HOLD_KEYS: Readonly<Record<string, fx.Hit>> = { s: 'strobe', p: 'punch', z: 'freeze' };
-
-/** What an effect key does in live mode: {@link fx.effectKey}, with freeze moved from F to Z. */
-function effectKey(key: string, shift: boolean): fx.KeyPress | null {
-  const k = key.toLowerCase();
-  const hit = LIVE_HOLD_KEYS[k];
-  if (hit) return shift ? { action: fx.hitAction(hit, null) } : { hold: hit };
-  if (k === 'f') return null;
-  return fx.effectKey(key, shift);
-}
 
 /**
  * Live mode's keys, without the window: a press, a release, and the window
@@ -88,10 +73,11 @@ export function liveKeys(to: LiveKeyTargets) {
         if (!e.repeat) to.help();
       } else if (/^[1-5]$/.test(e.key)) {
         if (!e.repeat) to.rate(Number(e.key) as Stars);
-      } else if (e.key.toLowerCase() === 'f') {
+      } else if (e.key.toLowerCase() === 'l') {
         if (!e.repeat) to.favourite();
       } else {
-        const press = effectKey(e.key, e.shiftKey);
+        // The effect keys, as everywhere: F freezes while held and ⇧F latches it (decision 57).
+        const press = fx.effectKey(e.key, e.shiftKey);
         if (!press) return;
         e.preventDefault();
         if (e.repeat) return;
@@ -104,7 +90,7 @@ export function liveKeys(to: LiveKeyTargets) {
       e.preventDefault();
     },
     keyup(e: Pick<KeyboardEvent, 'key'>) {
-      const hit = LIVE_HOLD_KEYS[e.key.toLowerCase()];
+      const hit = fx.HOLD_KEYS[e.key.toLowerCase()];
       if (hit && down.delete(hit)) to.fx(fx.hitAction(hit, false));
     },
     blur() {

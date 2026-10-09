@@ -324,7 +324,7 @@ export function Live({
           <div className="live-now" title={current ?? titleOf('now')} role="status" aria-atomic="true">
             {current ? <b>{nameOf(current)}</b> : <b className="live-none">Nothing playing — press R for a random preset, or play a playlist.</b>}
             {star && (
-              <span className="live-star" title="A favourite (F takes the star off)" role="img" aria-label="favourite">
+              <span className="live-star" title="A favourite (L takes the star off)" role="img" aria-label="favourite">
                 ★
               </span>
             )}
