@@ -110,6 +110,21 @@
   font-size: var(--text-body);
   white-space: nowrap;
 }
+/* "Skipped 1 broken preset": quiet, and fading over SKIP_FADE (Status.tsx) once its time is up. */
+.live-status-skipped {
+  padding: 0 8px;
+  color: var(--detail);
+  font-size: var(--text-body);
+  white-space: nowrap;
+  opacity: 1;
+  transition: opacity 1s ease-out;
+}
+.live-status-skipped:empty {
+  padding: 0;
+}
+.live-status-skipped[data-fading] {
+  opacity: 0;
+}
 .live-status-end {
   display: flex;
   gap: 4px;

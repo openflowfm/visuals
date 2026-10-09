@@ -303,6 +303,8 @@ export const presetsFailed = () => invoke<string[]>('presets_failed');
 /** Sent with the whole list each time a preset fails. */
 export const PRESETS_FAILED_EVENT = 'presets-failed';
 export const onPresetsFailed = (f: (paths: string[]) => void): Promise<UnlistenFn> => listen<string[]>(PRESETS_FAILED_EVENT, (e) => f(e.payload));
+/** `resume::SKIPPED`: sent with its path each time next, previous, random or auto-advance skips a preset that won't load. */
+export const onPresetSkipped = (f: (path: string) => void): Promise<UnlistenFn> => listen<string>('preset-skipped', (e) => f(e.payload));
 
 /** `settings::Problem`: a settings file (`audio.json`, `playlists.json`…) that couldn't be read or kept, in plain words. */
 export interface SettingsProblem {

@@ -14,7 +14,8 @@
 //! the bench won't load, is kept in `failed.json` with its file's size and
 //! modification time, and sent to the page ([`FAILED`], [`presets_failed`]),
 //! which marks it in the library. Stepping (next, previous, random, and
-//! auto-advance) moves on past it without a word ([`open_failed`]); nothing is
+//! auto-advance) moves on past it ([`open_failed`]), and the main window's
+//! status strip says so in a short note that fades ([`SKIPPED`]); nothing is
 //! ever shown on the output. The mark goes when the file changes or the preset
 //! opens after all (a newer engine).
 
@@ -193,13 +194,21 @@ pub enum Failed {
     /// Say so. Not answered now that every failure steps on, but the deck still handles it.
     #[allow(dead_code)]
     Report,
-    /// Step on to the next one without a word.
+    /// Step on to the next one, with only a note in the main window's status strip.
     Skip,
 }
 
+/// The event each skip goes out on, with the skipped preset's path: the main
+/// window's status strip counts them into a short note that fades (decision 60).
+pub const SKIPPED: &str = "preset-skipped";
+
 /// Asked by the deck when the preset at `path` failed to open while stepping
-/// (next, previous, random, auto-advance): always skip it. [`open`] has already marked it.
-pub fn open_failed(_handle: &AppHandle, _path: &Path, _error: &str) -> Failed {
+/// (next, previous, random, auto-advance): always skip it, and tell the page
+/// ([`SKIPPED`]). [`open`] has already marked it.
+pub fn open_failed(handle: &AppHandle, path: &Path, _error: &str) -> Failed {
+    if WHEN_FAILED == Failed::Skip {
+        let _ = handle.emit(SKIPPED, path.to_string_lossy());
+    }
     WHEN_FAILED
 }
 
