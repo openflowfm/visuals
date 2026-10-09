@@ -96,21 +96,18 @@ export function PresetDrawer({ chosen, playlists, current, onSet, onLoad, onClos
       {one && <Groups p={one} />}
 
       <div className="lib-drawer-actions">
-        <div className="wdg wdg-button">
-          <ButtonFace lit={!star} aria-pressed={!star} title={star ? 'Star it' : 'Take the star off'} onClick={() => onSet(keys, { star })}>
-            ★ {star ? 'star' : 'starred'}
-          </ButtonFace>
-        </div>
-        <div className="wdg wdg-button">
-          <ButtonFace
-            lit={!hide}
-            aria-pressed={!hide}
-            title={hide ? `Never play it: random, shuffle and ${say('auto-advance')} skip it. A playlist you made still plays it.` : 'Play it again'}
-            onClick={() => onSet(keys, { hidden: hide })}
-          >
-            {hide ? 'never play' : 'never played'}
-          </ButtonFace>
-        </div>
+        <button type="button" className="lib-chip" aria-pressed={!star} title={star ? 'Star it' : 'Take the star off'} onClick={() => onSet(keys, { star })}>
+          ★ {star ? 'star' : 'starred'}
+        </button>
+        <button
+          type="button"
+          className="lib-chip"
+          aria-pressed={!hide}
+          title={hide ? `Never play it: random, shuffle and ${say('auto-advance')} skip it. A playlist you made still plays it.` : 'Play it again'}
+          onClick={() => onSet(keys, { hidden: hide })}
+        >
+          {hide ? 'never play' : 'never played'}
+        </button>
       </div>
 
       <div className="lib-tags" aria-label="tags">

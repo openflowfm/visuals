@@ -86,6 +86,11 @@
   border-color: var(--fg);
   color: var(--fg);
 }
+.lib-chip[aria-pressed='true'] {
+  border-color: var(--amber);
+  background: var(--sel);
+  color: var(--fg);
+}
 .lib-chip[data-on] {
   border-color: var(--amber);
   color: var(--fg);
@@ -148,13 +153,12 @@
   padding: 2px 2px 0;
 }
 .lib-value {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
   max-width: 100%;
+  border-radius: var(--radius);
 }
-.lib-value[data-sub] {
-  margin-left: 10px;
+.lib-break {
+  flex-basis: 100%;
+  height: 0;
 }
 .lib-value[data-sub] .lib-value-name::before {
   content: '› ';

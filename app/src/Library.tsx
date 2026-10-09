@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
-import { ButtonFace } from '@openflow/widgets/controls/ButtonFace.tsx';
 import * as api from './api.ts';
 import type { Entry, LibraryChange, LibraryData, LibraryGroup, LibraryQuery, LibraryRow } from './api.ts';
 import * as pl from './playlists.ts';
@@ -341,22 +340,22 @@ function Values({ group, values, selected, find, onFind, onPick }: ValuesProps) 
       )}
       {list.length === 0 && <p className="lib-note">{group === 'tags' && !values.length ? 'No tags yet. Select a preset to tag it.' : 'none'}</p>}
       <div className="lib-values-list">
-        {list.map(({ value, count: n }) => (
-          <div key={value} className="wdg wdg-button">
-            <ButtonFace
-              size="small"
-              lit={selected.includes(value)}
-              aria-pressed={selected.includes(value)}
-              className="lib-value"
-              data-sub={group === 'style' && value.includes('/') ? '' : undefined}
-              onClick={() => onPick(value)}
-            >
-              {group === 'colour' && <span className="lib-swatch" style={{ background: SWATCH[value as Colour] }} />}
-              <span className="lib-value-name">{group === 'style' && value.includes('/') ? value.slice(value.indexOf('/') + 1) : valueLabel(group, value)}</span>
-              <span className="lib-value-count">{count(n)}</span>
-            </ButtonFace>
-          </div>
-        ))}
+        {list.flatMap(({ value, count: n }, i) => [
+          // Each style starts a line, with its sub-styles after it.
+          group === 'style' && i > 0 && !value.includes('/') ? <span key={`break:${value}`} className="lib-break" /> : null,
+          <button
+            key={value}
+            type="button"
+            className="lib-chip lib-value"
+            aria-pressed={selected.includes(value)}
+            data-sub={group === 'style' && value.includes('/') ? '' : undefined}
+            onClick={() => onPick(value)}
+          >
+            {group === 'colour' && <span className="lib-swatch" style={{ background: SWATCH[value as Colour] }} />}
+            <span className="lib-value-name">{group === 'style' && value.includes('/') ? value.slice(value.indexOf('/') + 1) : valueLabel(group, value)}</span>
+            <span className="lib-value-count">{count(n)}</span>
+          </button>,
+        ])}
       </div>
       {all.length > list.length && <p className="lib-note">{count(all.length - list.length)} more: type to find one</p>}
     </div>
