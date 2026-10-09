@@ -147,7 +147,6 @@ fn guarded(f: impl FnOnce()) {
 
 /// `std::panic::catch_unwind`, and a panic it catches isn't reported: use it
 /// wherever a panic is caught and the app carries on.
-#[allow(dead_code, reason = "for pack.rs's download, whose lane switches to it")]
 pub fn catch<R>(f: impl FnOnce() -> R + std::panic::UnwindSafe) -> std::thread::Result<R> {
     let result = std::panic::catch_unwind(f);
     if result.is_err() {
