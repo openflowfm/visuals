@@ -223,6 +223,63 @@ body {
   border: 1px solid var(--bd3);
 }
 
+/* A narrow window (decision 63, down to 560px): the header gives way instead of
+   cutting off its end (the gear). The preset's name already shrinks; below 760
+   the source picker shrinks with it, to 72px, its notes to nothing (their
+   titles keep the words), and the frame rate's plain numbers go (its warning
+   stays, shrinking too). The picker's parts join the header's own row, so each
+   keeps its own smallest size; a negative margin keeps their 4px spacing.
+   Below 640 the wordmark goes: the title bar names the app. */
+@media (max-width: 759px) {
+  .vf-header > .audio-input {
+    display: contents;
+  }
+  .vf-header .audio-input > * {
+    flex: none;
+  }
+  .vf-header .audio-input > * + * {
+    margin-left: -4px;
+  }
+  .vf-header .audio-input > .vf-meters {
+    margin-left: -2px;
+  }
+  .vf-header .audio-input .wdg-select {
+    flex: 0 1 180px;
+    min-width: 72px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .vf-header .audio-input .wdg-select-body {
+    justify-self: stretch;
+    width: auto;
+    min-width: 0;
+  }
+  .vf-header .audio-input .audio-note {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  .vf-header .audio-input > .vf-warning {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .vf-header > .vf-stats:not([data-slow]) {
+    display: none;
+  }
+  .vf-header > .vf-stats {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+@media (max-width: 639px) {
+  .vf-header > .vf-mark {
+    display: none;
+  }
+}
+
 .library {
   display: flex;
   flex-direction: column;
@@ -281,6 +338,15 @@ main {
 }
 .app[data-view='library'] .bench {
   height: min(calc(100vh - 160px), calc((100vw - 300px) * 9 / 16));
+}
+/* A narrow window (decision 63): the library column gives the preview room. */
+@media (max-width: 699px) {
+  .app[data-view='library'] {
+    grid-template-columns: 180px minmax(0, 1fr);
+  }
+  .app[data-view='library'] .bench {
+    height: min(calc(100vh - 160px), calc((100vw - 260px) * 9 / 16));
+  }
 }
 
 /* Until the bench has drawn (`Bench`), its box and the bars around it are the
