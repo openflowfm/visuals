@@ -2,20 +2,35 @@ use super::FORMAT;
 
 pub(super) struct Target {
     texture: wgpu::Texture,
+    /// What shaders sample: every mip level.
     pub(super) view: wgpu::TextureView,
+    /// What is drawn into: level 0 alone (the same as `view` without mips).
+    pub(super) out: wgpu::TextureView,
+    /// Each mip level on its own, for making the levels ([`Renderer::mips`]); empty without mips.
+    pub(super) levels: Vec<wgpu::TextureView>,
     pub(super) size: (u32, u32),
 }
 
 impl Target {
     pub(super) fn new(device: &wgpu::Device, size: (u32, u32), label: &str) -> Self {
-        Self::of(device, size, label, FORMAT)
+        Self::make(device, size, label, FORMAT, 1)
     }
 
-    pub(super) fn of(device: &wgpu::Device, (w, h): (u32, u32), label: &str, format: wgpu::TextureFormat) -> Self {
+    pub(super) fn of(device: &wgpu::Device, size: (u32, u32), label: &str, format: wgpu::TextureFormat) -> Self {
+        Self::make(device, size, label, format, 1)
+    }
+
+    /// A target with a full chain of mip levels, down to 1×1, as WebGL's
+    /// `generateMipmap` makes for Butterchurn's targets.
+    pub(super) fn mipped(device: &wgpu::Device, (w, h): (u32, u32), label: &str) -> Self {
+        Self::make(device, (w, h), label, FORMAT, 32 - w.max(h).max(1).leading_zeros())
+    }
+
+    fn make(device: &wgpu::Device, (w, h): (u32, u32), label: &str, format: wgpu::TextureFormat, mip_level_count: u32) -> Self {
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some(label),
             size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
-            mip_level_count: 1,
+            mip_level_count,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format,
@@ -23,10 +38,12 @@ impl Target {
             view_formats: &[],
         });
         let view = texture.create_view(&Default::default());
-        Self { texture, view, size: (w, h) }
+        let level = |i: u32| texture.create_view(&wgpu::TextureViewDescriptor { base_mip_level: i, mip_level_count: Some(1), ..Default::default() });
+        let (out, levels) = if mip_level_count > 1 { (level(0), (0..mip_level_count).map(level).collect()) } else { (view.clone(), Vec::new()) };
+        Self { texture, view, out, levels, size: (w, h) }
     }
 
-    /// This whole picture into `to`, which is the same size.
+    /// This whole picture (level 0) into `to`, which is the same size.
     pub(super) fn copy_to(&self, encoder: &mut wgpu::CommandEncoder, to: &Target) {
         let (width, height) = self.size;
         encoder.copy_texture_to_texture(self.texture.as_image_copy(), to.texture.as_image_copy(), wgpu::Extent3d { width, height, depth_or_array_layers: 1 });
@@ -93,9 +110,22 @@ pub(super) fn grid(gx: usize, gy: usize) -> (Vec<[f32; 2]>, Vec<u32>) {
     (vertices, indices)
 }
 
-/// The four samplers MilkDrop's names pick from: filtered or point-sampled,
-/// wrapping or clamped.
+/// Filtered samplers, wrapping or clamped, that read a texture's level 0 only —
+/// for moving whole pictures about — and in [`Samplers::mip`] the four that
+/// MilkDrop's names pick from.
 pub(super) struct Samplers {
+    pub(super) linear_wrap: wgpu::Sampler,
+    pub(super) linear_clamp: wgpu::Sampler,
+    pub(super) mip: MipSamplers,
+}
+
+/// The samplers presets' shaders and the blur read through, filtered or
+/// point-sampled, wrapping or clamped, reading mip levels as Butterchurn's
+/// do: `LINEAR_MIPMAP_LINEAR` filtered, `NEAREST_MIPMAP_NEAREST` point-sampled.
+/// Where a shader moves its coordinates fast (a big zoom, `tan` of the picture)
+/// the GPU reads a smaller level, so those pixels come out averaged as
+/// Butterchurn's do rather than as single sharp texels.
+pub(super) struct MipSamplers {
     pub(super) linear_wrap: wgpu::Sampler,
     pub(super) linear_clamp: wgpu::Sampler,
     pub(super) point_wrap: wgpu::Sampler,
@@ -104,12 +134,26 @@ pub(super) struct Samplers {
 
 impl Samplers {
     pub(super) fn new(device: &wgpu::Device) -> Self {
-        let sampler = |linear: bool, wrap: bool| {
+        let sampler = |linear: bool, wrap: bool, mips: bool| {
             let filter = if linear { wgpu::FilterMode::Linear } else { wgpu::FilterMode::Nearest };
+            let mipmap_filter = if linear { wgpu::MipmapFilterMode::Linear } else { wgpu::MipmapFilterMode::Nearest };
             let address = if wrap { wgpu::AddressMode::Repeat } else { wgpu::AddressMode::ClampToEdge };
-            device.create_sampler(&wgpu::SamplerDescriptor { address_mode_u: address, address_mode_v: address, address_mode_w: address, mag_filter: filter, min_filter: filter, ..Default::default() })
+            device.create_sampler(&wgpu::SamplerDescriptor {
+                address_mode_u: address,
+                address_mode_v: address,
+                address_mode_w: address,
+                mag_filter: filter,
+                min_filter: filter,
+                mipmap_filter,
+                lod_max_clamp: if mips { 32.0 } else { 0.0 },
+                ..Default::default()
+            })
         };
-        Self { linear_wrap: sampler(true, true), linear_clamp: sampler(true, false), point_wrap: sampler(false, true), point_clamp: sampler(false, false) }
+        Self {
+            linear_wrap: sampler(true, true, false),
+            linear_clamp: sampler(true, false, false),
+            mip: MipSamplers { linear_wrap: sampler(true, true, true), linear_clamp: sampler(true, false, true), point_wrap: sampler(false, true, true), point_clamp: sampler(false, false, true) },
+        }
     }
 
     /// The filtered sampler, wrapping or clamped.

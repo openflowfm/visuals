@@ -202,12 +202,12 @@ impl Renderer {
 
     /// The sampler, by MilkDrop's naming: `fw_` filtered and wrapping, `fc_`
     /// filtered and clamped, `pw_`/`pc_` point-sampled; `sampler_main` follows the
-    /// preset's `wrap`.
+    /// preset's `wrap`. Each reads mip levels, as Butterchurn's do ([`super::gpu::MipSamplers`]).
     pub(super) fn sampler_for(&self, name: &str, wrap: bool) -> &wgpu::Sampler {
         let short = name.trim_start_matches("sampler_");
-        let s = &self.samplers;
+        let s = &self.samplers.mip;
         if short == "main" {
-            s.linear(wrap)
+            if wrap { &s.linear_wrap } else { &s.linear_clamp }
         } else if short.starts_with("fw_") {
             &s.linear_wrap
         } else if short.starts_with("fc_") || short.starts_with("blur") {
