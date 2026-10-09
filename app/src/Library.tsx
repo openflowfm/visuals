@@ -13,6 +13,9 @@ import {
   debounced,
   facet,
   facetSummary,
+  inOrder,
+  LOOK_GROUPS,
+  oneAtATime,
   prepare,
   queryName,
   rowsFromEntries,
@@ -23,8 +26,9 @@ import {
   type Found,
   type Prepared,
 } from './librarySearch.ts';
-import { LibraryGrid, pickInto, type Pick } from './LibraryGrid.tsx';
-import { PresetDrawer } from './PresetDrawer.tsx';
+import { LibraryGrid, pickInto, rangeAnchor, type Pick } from './LibraryGrid.tsx';
+import { say } from './words.ts';
+import { PresetDrawer, hiddenCount } from './PresetDrawer.tsx';
 import { Credits } from './Credits.tsx';
 import { PackBar, useCreditsMenu, useDropToAdd } from './Pack.tsx';
 import './library.css';
@@ -61,12 +65,14 @@ const VALUES_CAP = 150;
 function useIndex(): LibraryRow[] | null {
   const [index, setIndex] = useState<LibraryRow[] | null>(null);
   useEffect(() => {
-    const read = () => void api.libraryIndex().then(setIndex, () => {});
-    read();
-    const reread = debounced(read, REREAD.wait, REREAD.most);
+    // One read at a time: a change during a read reads once more after it, so an older answer never lands last.
+    const reader = oneAtATime(api.libraryIndex, setIndex);
+    reader.run();
+    const reread = debounced(reader.run, REREAD.wait, REREAD.most);
     const stop = rereadOn(onChanged, reread);
     return () => {
       reread.cancel();
+      reader.stop();
       stop();
     };
   }, []);
@@ -74,16 +80,29 @@ function useIndex(): LibraryRow[] | null {
 }
 
 /** The user's library data, followed through `library-changed`; null until read. */
-function useLibraryData(): [LibraryData | null, (d: LibraryData) => void] {
+function useLibraryData(): [LibraryData | null, (answer: Promise<LibraryData>) => Promise<void>] {
   const [data, setData] = useState<LibraryData | null>(null);
+  // Every answer and event takes a ticket; one older than the newest applied is dropped.
+  const order = useRef(inOrder()).current;
   useEffect(() => {
-    api.libraryData().then(setData, () => {});
-    return rereadOnData(setData);
-  }, []);
-  return [data, setData];
+    const t = order.ticket();
+    api.libraryData().then(
+      (d) => order.take(t) && setData(d),
+      () => {},
+    );
+    return rereadOnData((d) => order.take(order.ticket()) && setData(d));
+  }, [order]);
+  const apply = useCallback(
+    (answer: Promise<LibraryData>) => {
+      const t = order.ticket();
+      return answer.then((d) => void (order.take(t) && setData(d)));
+    },
+    [order],
+  );
+  return [data, apply];
 }
 
-function rereadOnData(set: (d: LibraryData) => void): () => void {
+function rereadOnData(set: (d: LibraryData) => unknown): () => void {
   let stopped = false;
   let unlisten: Promise<() => void>;
   try {
@@ -154,28 +173,35 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
     };
   }, [one]);
 
-  const handlers = useRef({ onLoad, onAdd, shown, selection, anchor, entryOf });
-  handlers.current = { onLoad, onAdd, shown, selection, anchor, entryOf };
+  const handlers = useRef({ onLoad, onAdd, shown, selection, anchor, active, entryOf });
+  handlers.current = { onLoad, onAdd, shown, selection, anchor, active, entryOf };
   const pick = useCallback((i: number, how: Pick) => {
     const h = handlers.current;
     const p = h.shown[i];
     if (!p) return;
-    setSelection(pickInto(h.selection, h.shown, i, how, h.anchor));
+    // The first ⇧ move or click runs from the highlighted tile.
+    const from = rangeAnchor(h.anchor, h.active, h.shown);
+    setSelection(pickInto(h.selection, h.shown, i, how, from));
     setActive(p.row.key);
     setError(null);
     if (how !== 'range') setAnchor(p.row.key);
+    else if (from !== h.anchor) setAnchor(from);
     if (how === 'load') h.onLoad(h.entryOf(p));
   }, []);
   const add = useCallback((i: number) => {
     const h = handlers.current;
     if (h.shown[i]) h.onAdd(h.entryOf(h.shown[i]));
   }, []);
-  const moveTo = useCallback((i: number) => setActive(handlers.current.shown[i]?.row.key ?? null), []);
+  // A plain move lets go of the anchor, so the next ⇧ move runs from where it lands.
+  const moveTo = useCallback((i: number) => {
+    setActive(handlers.current.shown[i]?.row.key ?? null);
+    setAnchor(null);
+  }, []);
   const clear = useCallback(() => setSelection([]), []);
 
   const set = (keys: string[], change: LibraryChange) => {
     setError(null);
-    api.librarySet(keys, change).then(setData, (e) => setError(`Couldn't save that: ${why(e)}`));
+    setData(api.librarySet(keys, change)).catch((e) => setError(`Couldn't save that: ${why(e)}`));
   };
 
   const pickValue = (g: LibraryGroup, v: string) => {
@@ -235,14 +261,17 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
         <div className="lib-chips" role="group" aria-label="groups">
           {GROUPS.map((g) => {
             const on = query.groups[g]?.length ?? 0;
+            // Until the index is read there is no look to count, so these wait rather than show nothing.
+            const waiting = !index && LOOK_GROUPS.includes(g);
             return (
               <button
                 key={g}
                 type="button"
                 className="lib-chip"
                 aria-expanded={open === g}
+                disabled={waiting}
                 data-on={on ? '' : undefined}
-                title={`Show only presets with these ${GROUP_LABEL[g]} values; pick several to see any of them`}
+                title={waiting ? `${GROUP_LABEL[g]} comes once the library has been read` : `Show only presets with these ${GROUP_LABEL[g]} values; pick several to see any of them`}
                 onClick={() => {
                   setOpen((o) => (o === g ? null : g));
                   setFind('');
@@ -255,7 +284,9 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
           })}
         </div>
       )}
-      {open && <Values group={open} values={valuesFor(open, faceted, query)} selected={query.groups[open] ?? []} find={find} onFind={setFind} onPick={(v) => pickValue(open, v)} />}
+      {open && !(!index && LOOK_GROUPS.includes(open)) && (
+        <Values group={open} values={valuesFor(open, faceted, query)} selected={query.groups[open] ?? []} find={find} onFind={setFind} onPick={(v) => pickValue(open, v)} />
+      )}
       {filtered && (
         <div className="lib-picked">
           {activeGroups(query).flatMap((g) =>
@@ -271,7 +302,7 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
           </button>
           {naming === null ? (
             <button type="button" className="lib-link" onClick={() => setNaming(queryName(query))} title="Keep this filter as a playlist that fills itself">
-              save as smart playlist
+              {say('save query')}
             </button>
           ) : (
             <input
@@ -305,7 +336,17 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
         <LibraryGrid rows={shown} active={at} selected={selectedSet} current={current} into={into} onMove={moveTo} onPick={pick} onAdd={add} onClear={clear} reveal={reveal} />
       )}
       {chosen.length > 0 && !empty && (
-        <PresetDrawer key={selection.join('\n')} chosen={chosen} playlists={lists} current={current} onSet={set} onLoad={(p) => onLoad(entryOf(p))} onClose={clear} error={error} />
+        <PresetDrawer
+          key={selection.join('\n')}
+          chosen={chosen}
+          hiddenByFilter={hiddenCount(chosen, shown)}
+          playlists={lists}
+          current={current}
+          onSet={set}
+          onLoad={(p) => onLoad(entryOf(p))}
+          onClose={clear}
+          error={error}
+        />
       )}
       {bar}
     </div>

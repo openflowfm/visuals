@@ -24,9 +24,23 @@ export const flipFor = (chosen: readonly Prepared[], has: (p: Prepared) => boole
 /** What the "in playlists" line says. */
 export const inPlaylistsSays = (names: readonly string[] | null): string => (names === null ? 'in playlists: …' : names.length ? `in playlists: ${names.join(', ')}` : 'in no playlists');
 
+/** How many of `chosen` the filter keeps out of `shown`. */
+export function hiddenCount(chosen: readonly Prepared[], shown: readonly Prepared[]): number {
+  const keys = new Set(shown.map((p) => p.row.key));
+  return chosen.filter((p) => !keys.has(p.row.key)).length;
+}
+
+/** The drawer's title for a selection: says how many the filter hides, so a bulk edit never touches presets out of sight unsaid. */
+export function selectedSays(selected: number, hidden: number): string {
+  const n = `${selected.toLocaleString('en-US')} selected`;
+  return hidden > 0 ? `${n}, ${hidden.toLocaleString('en-US')} hidden by the filter` : n;
+}
+
 export interface PresetDrawerProps {
   /** The selected presets, one or more. */
   chosen: Prepared[];
+  /** How many of `chosen` the filter hides. */
+  hiddenByFilter: number;
   /** Every playlist, or null until read. */
   playlists: Playlist[] | null;
   /** Path of the preset playing. */
@@ -44,7 +58,7 @@ export interface PresetDrawerProps {
  * playlists it's in; or, for several, their tags at once. Star and never-play
  * apply to every one chosen.
  */
-export function PresetDrawer({ chosen, playlists, current, onSet, onLoad, onClose, error }: PresetDrawerProps) {
+export function PresetDrawer({ chosen, hiddenByFilter, playlists, current, onSet, onLoad, onClose, error }: PresetDrawerProps) {
   const [typing, setTyping] = useState('');
   const keys = chosen.map((p) => p.row.key);
   const one = chosen.length === 1 ? chosen[0] : null;
@@ -74,7 +88,7 @@ export function PresetDrawer({ chosen, playlists, current, onSet, onLoad, onClos
     <section className="lib-drawer" aria-label={one ? `preset ${one.title}` : `${chosen.length} presets`}>
       <header className="lib-drawer-head">
         <span className="lib-drawer-title" title={one ? one.row.key : undefined}>
-          {one ? one.title : `${chosen.length.toLocaleString('en-US')} presets`}
+          {one && !hiddenByFilter ? one.title : selectedSays(chosen.length, hiddenByFilter)}
         </span>
         <div className="wdg wdg-button">
           <ButtonFace tone="quiet" aria-label="close" title="Let go of the selection (Esc)" onClick={onClose}>
@@ -106,7 +120,7 @@ export function PresetDrawer({ chosen, playlists, current, onSet, onLoad, onClos
           title={hide ? `Never play it: random, shuffle and ${say('auto-advance')} skip it. A playlist you made still plays it.` : 'Play it again'}
           onClick={() => onSet(keys, { hidden: hide })}
         >
-          {hide ? 'never play' : 'never played'}
+          {hide ? say('hidden') : 'never played'}
         </button>
       </div>
 

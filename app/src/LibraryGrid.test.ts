@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { LibraryRow } from './api.ts';
 import { prepareRow } from './librarySearch.ts';
-import { TILE, layout, pickInto, pickOf, scrollFor, windowOf } from './LibraryGrid.tsx';
+import { TILE, firstLaidOut, layout, pickInto, pickOf, rangeAnchor, scrollFor, windowOf } from './LibraryGrid.tsx';
 
 describe('layout', () => {
   it('fits as many tiles across as their narrowest allows', () => {
@@ -65,14 +65,44 @@ describe('pickInto', () => {
     expect(pickInto(['a', 'c'], shown, 2, 'toggle', 'a')).toEqual(['a']);
   });
 
-  it('selects a run from the anchor with ⇧, either way, keeping what was selected', () => {
+  it('selects a run from the anchor with ⇧, either way', () => {
     expect(pickInto(['b'], shown, 3, 'range', 'b')).toEqual(['b', 'c', 'd']);
-    expect(pickInto(['e', 'a'], shown, 1, 'range', 'd')).toEqual(['e', 'a', 'b', 'c', 'd']);
+    expect(pickInto(['e'], shown, 1, 'range', 'd')).toEqual(['b', 'c', 'd']);
+  });
+
+  it('shrinks the run when ⇧ moves back towards the anchor', () => {
+    const grown = pickInto(['b'], shown, 4, 'range', 'b');
+    expect(grown).toEqual(['b', 'c', 'd', 'e']);
+    expect(pickInto(grown, shown, 2, 'range', 'b')).toEqual(['b', 'c']);
   });
 
   it('selects just the tile when the anchor is gone', () => {
     expect(pickInto(['x'], shown, 1, 'range', 'x')).toEqual(['b']);
     expect(pickInto([], shown, 1, 'range', null)).toEqual(['b']);
+  });
+});
+
+describe('rangeAnchor', () => {
+  const row = (key: string): LibraryRow => ({ key, path: `/p/${key}`, hash: '', style: 'A', sub_style: null, authors: [], title: key, thumbnail: null, look: null, starter: false });
+  const shown = ['a', 'b', 'c'].map((k) => prepareRow(row(k), undefined));
+
+  it('runs the first ⇧ move from the highlighted tile', () => {
+    expect(rangeAnchor(null, 'b', shown)).toBe('b');
+    expect(pickInto([], shown, 2, 'range', rangeAnchor(null, 'b', shown))).toEqual(['b', 'c']);
+  });
+
+  it('keeps an anchor still shown, and drops one the filter hid', () => {
+    expect(rangeAnchor('a', 'c', shown)).toBe('a');
+    expect(rangeAnchor('gone', 'c', shown)).toBe('c');
+  });
+});
+
+describe('firstLaidOut', () => {
+  it('is true once, when the grid first has a size and rows', () => {
+    expect(firstLaidOut(false, 0, 10)).toBe(false);
+    expect(firstLaidOut(false, 220, 0)).toBe(false);
+    expect(firstLaidOut(false, 220, 10)).toBe(true);
+    expect(firstLaidOut(true, 220, 10)).toBe(false);
   });
 });
 

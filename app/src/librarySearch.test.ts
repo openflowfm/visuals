@@ -11,6 +11,8 @@ import {
   prepare,
   prepareRow,
   queryName,
+  inOrder,
+  oneAtATime,
   rowsFromEntries,
   searchLibrary,
   stepIn,
@@ -270,6 +272,55 @@ describe('rowsFromEntries', () => {
       thumbnail: null,
     });
     expect(rowsFromEntries([{ path: '/p/x.milk', name: 'x', group: '' }])[0]).toMatchObject({ key: 'x.milk', style: '', sub_style: null });
+  });
+
+  it('keys a preset as the index does: its file under the folder, `/`-joined', () => {
+    expect(rowsFromEntries([{ path: '/p/Pack/A/x.MILK', name: 'x', group: 'Pack/A' }])[0].key).toBe('Pack/A/x.MILK');
+    expect(rowsFromEntries([{ path: 'C:\\p\\Pack\\A\\y.milk', name: 'y', group: 'Pack\\A' }])[0]).toMatchObject({ key: 'Pack/A/y.milk', style: 'Pack', sub_style: 'A' });
+  });
+});
+
+describe('oneAtATime', () => {
+  const later = <T>() => {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((r) => (resolve = r));
+    return { promise, resolve };
+  };
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+
+  it('keeps one read in flight and reads once more for the changes during it', async () => {
+    const asks: ReturnType<typeof later<number>>[] = [];
+    const applied: number[] = [];
+    const r = oneAtATime(
+      () => {
+        const a = later<number>();
+        asks.push(a);
+        return a.promise;
+      },
+      (v) => applied.push(v),
+    );
+    r.run();
+    r.run();
+    r.run();
+    expect(asks.length).toBe(1);
+    asks[0].resolve(1);
+    await flush();
+    expect(applied).toEqual([1]);
+    expect(asks.length).toBe(2);
+    asks[1].resolve(2);
+    await flush();
+    expect(applied).toEqual([1, 2]);
+    expect(asks.length).toBe(2);
+  });
+});
+
+describe('inOrder', () => {
+  it('drops an answer older than the newest applied', () => {
+    const o = inOrder();
+    const first = o.ticket();
+    const second = o.ticket();
+    expect(o.take(second)).toBe(true);
+    expect(o.take(first)).toBe(false);
   });
 });
 

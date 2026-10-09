@@ -14,6 +14,15 @@ export const WORDS = {
   'process tap': 'your DAW',
   'Ableton Link': 'keep in time with Ableton',
   quantum: 'beats in a bar',
+  hidden: 'never play',
+  'save query': 'save as smart playlist',
+  'user tags': 'my tags',
+  'speed low': 'slow',
+  'speed mid': 'steady',
+  'speed high': 'fast',
+  'intensity low': 'calm',
+  'intensity mid': 'lively',
+  'intensity high': 'wild',
 } as const;
 
 export type Jargon = keyof typeof WORDS;

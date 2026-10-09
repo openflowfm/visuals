@@ -58,9 +58,18 @@ export function pickInto(selection: readonly string[], shown: readonly Prepared[
   const from = anchor === null ? -1 : shown.findIndex((p) => p.row.key === anchor);
   if (from < 0) return [key];
   const [a, b] = from < index ? [from, index] : [index, from];
-  const run = shown.slice(a, b + 1).map((p) => p.row.key);
-  return [...selection.filter((k) => !run.includes(k)), ...run];
+  // The run is rebuilt from the anchor each time, so moving back towards it shrinks it.
+  return shown.slice(a, b + 1).map((p) => p.row.key);
 }
+
+/** The anchor a ⇧ pick runs from: the one set, or (the first time) the highlighted tile. */
+export function rangeAnchor(anchor: string | null, active: string | null, shown: readonly Prepared[]): string | null {
+  if (anchor !== null && shown.some((p) => p.row.key === anchor)) return anchor;
+  return active;
+}
+
+/** True the first time the grid has both a measured size and rows, when the playing tile is revealed again. */
+export const firstLaidOut = (done: boolean, width: number, rows: number): boolean => !done && width > 0 && rows > 0;
 
 export interface LibraryGridProps {
   rows: Prepared[];
@@ -132,6 +141,14 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
     if (reveal && current !== null) show(rows.findIndex((p) => p.row.path === current));
   }, [reveal]); // only when asked, not on every filter change
 
+  // On first mount the grid has no size yet, so reveal again once it has one and rows.
+  const laidOut = useRef(false);
+  useEffect(() => {
+    if (!firstLaidOut(laidOut.current, size.width, rows.length)) return;
+    laidOut.current = true;
+    if (current !== null) show(rows.findIndex((p) => p.row.path === current));
+  }, [size.width, rows.length, show]); // not on `current`: the reveal effect above follows that
+
   // A new filter starts at the top.
   const firstKey = rows[0]?.row.key;
   useEffect(() => {
@@ -145,8 +162,11 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
     if (ev.target !== ev.currentTarget) return; // keys on the grid itself, not a tile's + button
     const to = tileFor(ev.key, active, rows.length, lay.columns, page);
     if (to !== null) {
-      if (to >= 0) onMove(to);
-      if (ev.shiftKey && to >= 0) onPick(to, 'range');
+      // ⇧ extends the run from the anchor (a pick also moves); a plain move lets the anchor go.
+      if (to >= 0) {
+        if (ev.shiftKey) onPick(to, 'range');
+        else onMove(to);
+      }
     } else if (ev.key === 'Enter' && active >= 0) {
       onPick(active, 'load');
     } else if (ev.key === ' ' && active >= 0) {

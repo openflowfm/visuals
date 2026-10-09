@@ -1,4 +1,5 @@
 import type { Entry, LibraryData, LibraryGroup, LibraryQuery, LibraryRow, Level, Mine } from './api.ts';
+import { say } from './words.ts';
 
 /*
  * The library's search and groups (facets): rows from `library_index` with the
@@ -37,8 +38,11 @@ export const GROUP_LABEL: Record<LibraryGroup, string> = {
   speed: 'speed',
   intensity: 'intensity',
   star: '★',
-  tags: 'my tags',
+  tags: say('user tags'),
 };
+
+/** The groups read from the index's look, which the rows made from entries don't have. */
+export const LOOK_GROUPS: readonly LibraryGroup[] = ['colour', 'speed', 'intensity'];
 
 /** The colour group's values, in hue order; `grey` is a drawn preset with no dominant hue. */
 export const COLOURS = ['red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple', 'pink', 'grey'] as const;
@@ -71,8 +75,9 @@ export const SWATCH: Record<Colour, string> = {
 };
 
 const LEVELS: readonly Level[] = ['low', 'mid', 'high'];
-const SPEED: Record<Level, string> = { low: 'slow', mid: 'steady', high: 'fast' };
-const INTENSITY: Record<Level, string> = { low: 'calm', mid: 'lively', high: 'wild' };
+// The stored values stay low / mid / high; these are what the chips and the drawer say.
+const SPEED: Record<Level, string> = { low: say('speed low'), mid: say('speed mid'), high: say('speed high') };
+const INTENSITY: Record<Level, string> = { low: say('intensity low'), mid: say('intensity mid'), high: say('intensity high') };
 
 /** A sub-style's value in the style group: `Style/Sub` (folder names hold no `/`). */
 export const subStyleValue = (style: string, sub: string) => `${style}/${sub}`;
@@ -169,9 +174,12 @@ export const prepare = (rows: readonly LibraryRow[], data: LibraryData | null): 
  */
 export function rowsFromEntries(entries: readonly Entry[]): LibraryRow[] {
   return entries.map((e) => {
-    const [style = '', sub] = e.group.split('/');
+    // The index keys a preset by its path under the presets folder, `/`-joined (`{pack}/{path}`).
+    const group = e.group.replace(/\\/g, '/');
+    const file = e.path.split(/[\\/]/).pop() || `${e.name}.milk`;
+    const [style = '', sub] = group.split('/');
     return {
-      key: e.group ? `${e.group}/${e.name}.milk` : `${e.name}.milk`,
+      key: group ? `${group}/${file}` : file,
       path: e.path,
       hash: '',
       style,
@@ -183,6 +191,49 @@ export function rowsFromEntries(entries: readonly Entry[]): LibraryRow[] {
       starter: false,
     };
   });
+}
+
+/**
+ * Answers applied in the order they were asked for: `ticket()` before asking,
+ * `take(t)` with the answer, which is false for one older than the newest applied.
+ */
+export function inOrder() {
+  let issued = 0;
+  let applied = 0;
+  return {
+    ticket: () => ++issued,
+    take: (t: number) => (t > applied ? ((applied = t), true) : false),
+  };
+}
+
+/**
+ * `read` with at most one call in flight: a `run()` while one is out marks it dirty,
+ * and it reads exactly once more when that one ends. Answers older than the last applied are dropped.
+ */
+export function oneAtATime<T>(read: () => Promise<T>, apply: (value: T) => void) {
+  let busy = false;
+  let dirty = false;
+  let stopped = false;
+  const order = inOrder();
+  const run = (): void => {
+    if (stopped) return;
+    if (busy) {
+      dirty = true;
+      return;
+    }
+    busy = true;
+    dirty = false;
+    const t = order.ticket();
+    const done = () => {
+      busy = false;
+      if (dirty) run();
+    };
+    read().then((v) => {
+      if (!stopped && order.take(t)) apply(v);
+      done();
+    }, done);
+  };
+  return { run, stop: () => void (stopped = true) };
 }
 
 export const emptyQuery = (text = ''): LibraryQuery => ({ groups: {}, text });

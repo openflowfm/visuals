@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { LibraryRow, Mine } from './api.ts';
 import type { Playlist } from './playlists.ts';
 import { prepareRow } from './librarySearch.ts';
-import { flipFor, inPlaylistsSays, playlistsWith, tagCounts } from './PresetDrawer.tsx';
+import { flipFor, hiddenCount, inPlaylistsSays, playlistsWith, selectedSays, tagCounts } from './PresetDrawer.tsx';
 
 const row = (key: string): LibraryRow => ({ key, path: `/p/${key}`, hash: '', style: 'A', sub_style: null, authors: [], title: key, thumbnail: null, look: null, starter: false });
 const p = (key: string, mine?: Mine) => prepareRow(row(key), mine);
@@ -15,6 +15,14 @@ describe('tagCounts', () => {
       { tag: 'warm', count: 1 },
     ]);
     expect(tagCounts([])).toEqual([]);
+  });
+});
+
+describe('selection hidden by the filter', () => {
+  it('counts the chosen the filter keeps out, and says so', () => {
+    expect(hiddenCount([p('a'), p('b'), p('c')], [p('b')])).toBe(2);
+    expect(selectedSays(3, 2)).toBe('3 selected, 2 hidden by the filter');
+    expect(selectedSays(3, 0)).toBe('3 selected');
   });
 });
 
