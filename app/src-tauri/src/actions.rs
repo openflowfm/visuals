@@ -300,6 +300,12 @@ impl Deck {
         Lists { playlists: self.store.lock().unwrap().views(), deck: self.live.lock().unwrap().view() }
     }
 
+    /// Tell the page the playlists changed outside a playlist command (presets that
+    /// moved, `crate::userlib`): the [`Lists`] a command would return, as [`LISTS`].
+    pub fn emit_lists(&self, handle: &AppHandle) -> Result<(), String> {
+        handle.emit(LISTS, serde_json::to_value(self.lists()).map_err(|e| e.to_string())?).map_err(|e| e.to_string())
+    }
+
     /// Change preset on Link's grid on `every` ([`Live::schedule`]), give Link the
     /// schedule, and tell the page. Link is told only after the deck's lock is let go,
     /// so no lock is held while taking Link's.
@@ -408,6 +414,9 @@ pub fn start_auto(handle: AppHandle) {
         }
     });
 }
+
+/// The event [`Deck::emit_lists`] sends the playlists out on.
+pub const LISTS: &str = "lists";
 
 /// Every playlist and the live state, which every playlist command returns.
 #[derive(Serialize)]

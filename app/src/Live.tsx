@@ -75,6 +75,7 @@ export function Live({
       else pl.act({ kind: 'random' }).catch(fail("Couldn't pick a preset to start on."));
     }, fail("Couldn't read the playlists."));
   }, [fail, setError, start]);
+  useTauriEvent(pl.onLists, setLists);
   useTauriEvent(pl.onLive, (now) => {
     setLists((l) => (l ? { ...l, deck: now.deck } : l));
     if (now.path) setCurrent(now.path);

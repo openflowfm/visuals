@@ -117,6 +117,7 @@ export function Browse({ view, start, onMode, onOpened, below, side }: BrowsePro
   }, [fail]);
   // Whatever changed the preset live (a playlist step, auto-advance, a controller),
   // the page follows it here.
+  useTauriEvent(pl.onLists, setLists);
   useTauriEvent(pl.onLive, (now) => {
     setLists((l) => (l ? { ...l, deck: now.deck } : l));
     if (!now.path) return;
