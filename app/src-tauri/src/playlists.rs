@@ -16,7 +16,7 @@
 //!       "settings": { "change": { "unit": "seconds", "every": 30 }, "order": "in_order",
 //!                     "transition": 2, "speed": 1, "trails": 0, "hue": 0 },
 //!       "presets": [ { "path": "cream-of-the-crop/Dancer/x.milk", "hash": "<SHA-256>", "size": 1234 } ] },
-//!     { "id": "18g…", "name": "Calm", "kind": "smart",
+//!     { "id": "18g…", "name": "Calm", "kind": "smart", "starter": "calm",
 //!       "query": { "groups": { "speed": ["low"] }, "text": "" }, "settings": { … } } ] }
 //! ```
 //!
@@ -24,7 +24,9 @@
 //! ([`LibraryQuery`]) and is worked out when it loads, never playing a hidden
 //! preset. Each item keeps its file's content hash, so it is found again when
 //! the folder is reorganised (`crate::userlib` looks for it). Version 1 (items
-//! as plain paths, no settings) is read and moved to version 2 on open, the
+//! as plain paths, no settings) is read and moved to version 2 on open, its
+//! playlists getting the default settings with auto-advance off
+//! (`"change": { "unit": "off", "every": 30 }`) so they play as they did in 0.2, the
 //! old file kept beside it as `playlists.json.v1` (numbered, `.v1.1`…, when that
 //! is taken; until the backup is written, version 2 isn't). A file that won't parse, or
 //! of a newer version, is moved aside (`.bad`, `.bad.1`, …) as
@@ -46,6 +48,9 @@ pub enum Change {
     Seconds { every: f64 },
     /// Every this many bars on Link's bar lines, 1 to 64.
     Bars { every: u32 },
+    /// Never by itself: auto-advance off, as a playlist from 0.2 (version 1) plays.
+    /// `every` is the seconds it goes back to when turned on (1 to 3600).
+    Off { every: f64 },
 }
 
 /// The order a playlist plays in.
@@ -81,12 +86,19 @@ impl Default for Settings {
 }
 
 impl Settings {
+    /// What a playlist moved from version 1 (0.2) gets: the defaults with
+    /// auto-advance off, so it plays as it did in 0.2.
+    pub fn from_v1() -> Self {
+        Settings { change: Change::Off { every: 30.0 }, ..Settings::default() }
+    }
+
     /// These settings within their limits, or why not (a value that is no number).
     pub fn checked(self) -> Result<Settings, String> {
         use crate::fx::clamped;
         let change = match self.change {
             Change::Seconds { every } => Change::Seconds { every: clamped(every, 1.0, 3600.0, "seconds")? },
             Change::Bars { every } => Change::Bars { every: every.clamp(1, 64) },
+            Change::Off { every } => Change::Off { every: clamped(every, 1.0, 3600.0, "seconds")? },
         };
         Ok(Settings {
             change,
@@ -138,7 +150,7 @@ impl From<&str> for Entry {
 impl Playlist {
     /// A manual playlist of `presets` with the default settings.
     pub fn manual(id: &str, name: &str, presets: Vec<Entry>) -> Playlist {
-        Playlist { id: id.into(), name: name.into(), kind: Kind::Manual, query: None, settings: Settings::default(), presets }
+        Playlist { id: id.into(), name: name.into(), kind: Kind::Manual, query: None, settings: Settings::default(), presets, starter: None }
     }
 }
 
@@ -173,6 +185,11 @@ pub struct Playlist {
     /// A manual playlist's items, in order. The same preset may appear more than once.
     #[serde(default)]
     pub presets: Vec<Entry>,
+    /// Which of the home's starter smart playlists this is (`calm`, `peak-time`,
+    /// `recently-played`), when the home made it; never shown, never exported.
+    /// Seeding repairs only playlists carrying one, never one the user named the same.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub starter: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -212,6 +229,8 @@ pub struct View {
     pub settings: Settings,
     /// A manual playlist's items; empty for a smart one (worked out when it loads).
     pub items: Vec<Item>,
+    /// The starter id ([`Playlist::starter`]), when the home made it.
+    pub starter: Option<String>,
 }
 
 /// A playlist as a file to share: its presets by path (library-relative) and
@@ -306,7 +325,8 @@ impl Store {
                 return store;
             }
             Ok(f) if f.version < VERSION => {
-                store.lists = checked(f.playlists);
+                // Version 1 had no settings: auto-advance stays off, as in 0.2.
+                store.lists = f.playlists.into_iter().map(|l| Playlist { settings: Settings::from_v1(), ..l }).collect();
                 if let Err(e) = store.migrate(bytes) {
                     eprintln!("playlists: {e}");
                 }
@@ -442,10 +462,12 @@ impl Store {
         Ok(id)
     }
 
-    /// A smart playlist named `name` picking the presets `query` matches.
-    pub fn create_smart(&mut self, name: &str, query: LibraryQuery) -> Result<String, String> {
+    /// A smart playlist named `name` picking the presets `query` matches; `starter`
+    /// marks one of the home's starters ([`Playlist::starter`]).
+    pub fn create_smart(&mut self, name: &str, query: LibraryQuery, starter: Option<String>) -> Result<String, String> {
         let id = new_id();
-        self.lists.push(Playlist { id: id.clone(), name: clean_name(name)?, kind: Kind::Smart, query: Some(query), settings: Settings::default(), presets: Vec::new() });
+        let starter = starter.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+        self.lists.push(Playlist { id: id.clone(), name: clean_name(name)?, kind: Kind::Smart, query: Some(query), settings: Settings::default(), presets: Vec::new(), starter });
         Ok(id)
     }
 
@@ -571,6 +593,7 @@ impl Store {
                         }
                     })
                     .collect(),
+                starter: l.starter.clone(),
             })
             .collect()
     }
@@ -634,7 +657,8 @@ impl Store {
             .collect();
         let query = if shared.kind == Kind::Smart { shared.query } else { None };
         let id = new_id();
-        self.lists.push(Playlist { id: id.clone(), name, kind: shared.kind, query, settings, presets });
+        // Never a starter: an imported playlist is the user's own.
+        self.lists.push(Playlist { id: id.clone(), name, kind: shared.kind, query, settings, presets, starter: None });
         Ok(id)
     }
 }
@@ -688,9 +712,12 @@ mod tests {
         std::fs::write(dir.join("lib/a/two.milk"), "[preset00]\n").unwrap();
         let v1 = r#"{"version":1,"playlists":[{"id":"1","name":"Set","presets":["a/one.milk","a/two.milk","gone.milk"]}]}"#;
         std::fs::write(dir.join("p.json"), v1).unwrap();
-        let s = Store::open(dir.join("p.json"), dir.join("lib"));
+        let mut s = Store::open(dir.join("p.json"), dir.join("lib"));
         let l = &s.lists[0];
-        assert_eq!((l.id.as_str(), l.name.as_str(), l.kind, l.settings), ("1", "Set", Kind::Manual, Settings::default()));
+        // Auto-advance off, as in 0.2; the rest the defaults.
+        assert_eq!((l.id.as_str(), l.name.as_str(), l.kind, l.settings), ("1", "Set", Kind::Manual, Settings::from_v1()));
+        assert_eq!(l.settings.change, Change::Off { every: 30.0 });
+        assert_eq!(Settings { change: Change::Seconds { every: 30.0 }, ..l.settings }, Settings::default());
         assert_eq!(l.presets, ["a/one.milk", "a/two.milk", "gone.milk"]);
         assert_eq!(l.presets[1].hash.as_deref(), Some(engine::index::hash(b"[preset00]\n").as_str()));
         assert_eq!(l.presets[1].size, Some(11));
@@ -700,6 +727,41 @@ mod tests {
         let again = Store::open(dir.join("p.json"), dir.join("lib"));
         assert!(std::fs::read_to_string(dir.join("p.json")).unwrap().contains("\"version\": 2"));
         assert_eq!(again.lists, s.lists);
+        assert!(std::fs::read_to_string(dir.join("p.json")).unwrap().contains("\"unit\": \"off\""));
+        // A playlist made now still changes every 30 s with a 2 s crossfade.
+        let new = s.create("New").unwrap();
+        let new = s.find(&new).unwrap().settings;
+        assert_eq!((new.change, new.transition), (Change::Seconds { every: 30.0 }, 2.0));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn off_is_kept_within_limits() {
+        let off = Settings { change: Change::Off { every: 0.0 }, ..Settings::default() }.checked().unwrap();
+        assert_eq!(off.change, Change::Off { every: 1.0 });
+        assert!(Settings { change: Change::Off { every: f64::NAN }, ..Settings::default() }.checked().is_err());
+    }
+
+    #[test]
+    fn a_starter_keeps_its_id_but_never_exports_it() {
+        let dir = temp();
+        let mut s = Store::open(dir.join("p.json"), dir.join("lib"));
+        let query = LibraryQuery { text: "calm".into(), ..Default::default() };
+        let ours = s.create_smart("Calm", query.clone(), Some("calm".into())).unwrap();
+        let theirs = s.create_smart("Calm", query.clone(), None).unwrap();
+        let blank = s.create_smart("Blank", query, Some("  ".into())).unwrap();
+        assert_eq!(s.find(&blank).unwrap().starter, None, "a blank starter id is none");
+        s.rename(&ours, "Quiet").unwrap();
+        s.save().unwrap();
+        let mut s = Store::open(dir.join("p.json"), dir.join("lib"));
+        assert_eq!(s.find(&ours).unwrap().starter.as_deref(), Some("calm"), "kept through a rename and a save");
+        assert_eq!(s.find(&theirs).unwrap().starter, None);
+        let views = s.views();
+        assert_eq!(views.iter().map(|v| v.starter.as_deref()).collect::<Vec<_>>(), [Some("calm"), None, None]);
+        let shared = s.export(&ours).unwrap();
+        assert!(!shared.text.contains("starter"), "{}", shared.text);
+        let copy = s.import(&shared.text).unwrap();
+        assert_eq!(s.find(&copy).unwrap().starter, None, "an imported copy is the user's own");
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -744,7 +806,7 @@ mod tests {
         assert_eq!(s.lists[0].settings, Settings { change: Change::Bars { every: 64 }, order: Order::Shuffle, transition: 10.0, speed: 0.25, trails: 0.5, hue: 1.0 });
         assert!(s.set_settings(&a, Settings { speed: f64::NAN, ..Settings::default() }).is_err());
         let query = LibraryQuery { text: "warm".into(), ..Default::default() };
-        let smart = s.create_smart("Calm", query.clone()).unwrap();
+        let smart = s.create_smart("Calm", query.clone(), None).unwrap();
         assert!(s.add(&smart, &dir.join("lib/a/one.milk"), None).is_err(), "a smart playlist picks its own");
         assert!(s.set_query(&a, query.clone()).is_err());
         s.set_query(&smart, LibraryQuery { text: "cool".into(), ..Default::default() }).unwrap();

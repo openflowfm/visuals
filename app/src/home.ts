@@ -11,6 +11,8 @@ import { facet, type Prepared } from './librarySearch.ts';
 
 /** A smart playlist the home makes once, on a fresh install. */
 export interface Starter {
+  /** Kept on the playlist (`Playlist.starter`): how seeding knows it made it, whatever it's called now. */
+  id: string;
   name: string;
   query: LibraryQuery;
   settings: PlaylistSettings;
@@ -25,16 +27,19 @@ export const RECENT = 50;
  */
 export const STARTERS: readonly Starter[] = [
   {
+    id: 'calm',
     name: 'Calm',
     query: { groups: { speed: ['low', 'mid'], intensity: ['low'] }, text: '' },
     settings: { ...pl.DEFAULT_SETTINGS, change: { unit: 'seconds', every: 45 }, order: 'shuffle', transition: 5 },
   },
   {
+    id: 'peak-time',
     name: 'Peak-time',
     query: { groups: { speed: ['mid', 'high'], intensity: ['high'] }, text: '' },
     settings: { ...pl.DEFAULT_SETTINGS, change: { unit: 'seconds', every: 15 }, order: 'shuffle', transition: 1 },
   },
   {
+    id: 'recently-played',
     name: 'Recently played',
     query: { groups: {}, text: '', recent: RECENT },
     settings: { ...pl.DEFAULT_SETTINGS },
@@ -53,16 +58,23 @@ export interface Mark {
 
 /** What seeding needs from the app. */
 export interface Seeding {
-  save(name: string, query: LibraryQuery): Promise<string>;
+  /** Save a smart playlist carrying the starter id `starter`. */
+  save(name: string, query: LibraryQuery, starter: string): Promise<string>;
   settings(id: string, settings: PlaylistSettings): Promise<unknown>;
 }
 
 /**
- * Make the starter smart playlists the first time the home opens: each one
- * whose name no smart playlist has yet, with its own settings. Marked as done
- * once they are made, so they are never made again, even after one is deleted.
- * Without storage to keep the mark, nothing is made (rather than again on every
- * start). Resolves to how many it made.
+ * Make the starter smart playlists the first time the home opens, each with its
+ * own settings and its starter id. Marked as done once they are made, so they
+ * are never made again, even after one is deleted. Without storage to keep the
+ * mark, nothing is made (rather than again on every start). Resolves to how many
+ * it made.
+ *
+ * A run that failed part way is finished on the next start: a playlist carrying
+ * a starter's id gets that starter's settings again. Nothing without the id is
+ * ever changed, so a user's own Calm keeps its settings; and a starter isn't made
+ * while a smart playlist of its name but no id is there (the user's own, or one
+ * seeded before starters carried an id), so there are never two of one name.
  */
 export function seedStarters(playlists: readonly Playlist[], mark: Mark | null, app: Seeding): Promise<number> {
   // One run at a time in this page (StrictMode mounts twice, effects re-run); the
@@ -77,16 +89,19 @@ async function seedOnce(playlists: readonly Playlist[], mark: Mark | null, app: 
   if (!mark || mark.get(SEEDED_KEY)) return 0;
   mark.set(SEEDED_KEY, '1');
   try {
-    // A starter already there from a run that failed part way gets its settings again.
-    const have = new Map(playlists.filter((p) => p.kind === 'smart').map((p) => [p.name, p.id]));
+    const smart = playlists.filter((p) => p.kind === 'smart');
+    const ours = new Map(smart.filter((p) => p.starter).map((p) => [p.starter, p.id]));
+    const named = new Set(smart.filter((p) => !p.starter).map((p) => p.name));
     let made = 0;
     for (const s of STARTERS) {
-      const old = have.get(s.name);
+      // One already made by a run that failed part way gets its settings again.
+      const old = ours.get(s.id);
       if (old !== undefined) {
         await app.settings(old, s.settings);
         continue;
       }
-      const id = await app.save(s.name, s.query);
+      if (named.has(s.name)) continue;
+      const id = await app.save(s.name, s.query, s.id);
       made++;
       await app.settings(id, s.settings);
     }
@@ -233,9 +248,15 @@ export function withSetting<K extends keyof PlaylistSettings>(s: PlaylistSetting
   return next;
 }
 
-/** Switch how a playlist moves on between seconds and bars, to that unit's usual amount. */
-export const changeUnit = (s: PlaylistSettings, unit: pl.Change['unit']): PlaylistSettings =>
-  s.change.unit === unit ? s : withSetting(s, 'change', unit === 'bars' ? { unit, every: 8 } : { unit, every: pl.DEFAULT_SETTINGS.change.every });
+/**
+ * Switch how a playlist moves on between seconds, bars and off: bars to their usual amount; seconds and off
+ * keep the seconds between them (off remembers what it goes back to), or take the usual amount coming from bars.
+ */
+export function changeUnit(s: PlaylistSettings, unit: pl.Change['unit']): PlaylistSettings {
+  if (s.change.unit === unit) return s;
+  const every = unit === 'bars' ? 8 : s.change.unit === 'bars' ? pl.DEFAULT_SETTINGS.change.every : s.change.every;
+  return withSetting(s, 'change', { unit, every });
+}
 
 const clamp = (v: number, lo: number, hi: number) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : lo);
 
