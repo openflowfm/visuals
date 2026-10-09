@@ -107,7 +107,8 @@ pub enum FxAction {
         value: f64,
     },
     /// Live mode's one Intensity slider, 0–1 (½ is the picture as drawn): sets
-    /// sensitivity, brightness and strobe level together on [`intensity`]'s curve.
+    /// sensitivity on [`intensity`]'s curve, and scales the brightness and strobe
+    /// level set in Settings without changing them ([`Fx::levels`]).
     Intensity {
         value: f64,
     },
@@ -205,9 +206,10 @@ pub struct Intensity {
     pub strobe: f64,
 }
 
-/// The brightest the Intensity slider goes: punch and the strobe on top still leave colour, not white.
+/// The brightest the Intensity slider raises the picture to (unless Settings set it brighter):
+/// punch and the strobe on top still leave colour, not white.
 pub const INTENSITY_BRIGHTNESS_MAX: f64 = 1.2;
-/// The strongest strobe flash the Intensity slider sets; a full-white flash only from the strobe's own level.
+/// The strongest the Intensity slider raises a strobe flash to; a full-white flash only from the strobe's own level.
 pub const INTENSITY_STROBE_MAX: f64 = 0.85;
 
 /// The Intensity slider's curve, `v` 0–1 with ½ the picture as drawn: sensitivity
@@ -217,6 +219,14 @@ pub const INTENSITY_STROBE_MAX: f64 = 0.85;
 pub fn intensity(v: f64) -> Intensity {
     let v = v.clamp(0.0, 1.0);
     Intensity { sensitivity: 0.5 * 4f64.powf(v), brightness: 0.8 + (INTENSITY_BRIGHTNESS_MAX - 0.8) * v, strobe: 0.35 + (INTENSITY_STROBE_MAX - 0.35) * v }
+}
+
+/// `set` (a level from Settings) scaled by `ratio` (the Intensity curve at the
+/// slider over the curve at its middle). Down, it is scaled as is; up, it goes
+/// no higher than `cap` or `set`, whichever is higher, so the slider's top
+/// never takes a level past its old ceiling, nor below what Settings set.
+fn scaled(set: f64, ratio: f64, cap: f64) -> f64 {
+    if ratio <= 1.0 { set * ratio } else { (set * ratio).min(set.max(cap)) }
 }
 
 /// With motion reduced ([`crate::access`]): the strongest a strobe flash (or a
@@ -257,6 +267,9 @@ pub struct Fx {
     pub bpm: f64,
     /// The tempo is a Link session's ([`Fx::follow`]), not the taps'.
     pub linked: bool,
+    /// Where live mode's Intensity slider is, 0–1 (½ in the middle): it scales the
+    /// brightness and strobe level as drawn ([`Fx::levels`]), not as set.
+    intensity: f64,
     timing: Timing,
 }
 
@@ -279,14 +292,40 @@ struct Timing {
     /// The last heard beat at least [`REDUCED_FLASH_EVERY`] after the one before:
     /// what an audio strobe flashes on with motion reduced.
     heard_slow: Option<Instant>,
-    /// When the last strobe flash shown started ([`paced`]).
-    flash_shown: Option<Instant>,
+    /// The last strobe flash taken on ([`Fx::strobe_lit`]).
+    flash: Option<Shown>,
     /// With motion reduced: the last beat punch-on-beat pulsed on ([`paced`]).
     punch_shown: Option<Instant>,
     /// Whether motion was reduced at the last [`Fx::master_with`]: what a
     /// blackout's fade is worked out with when it is pressed.
     reduced: bool,
 }
+
+/// A strobe flash taken on: the beat it is for, as it read when taken on, when
+/// it shows from (that beat, or a little later to keep the flashes apart), for
+/// how long, and whether motion was reduced then.
+#[derive(Clone, Copy, Debug)]
+struct Shown {
+    beat: Instant,
+    from: Instant,
+    len: f64,
+    reduced: bool,
+}
+
+/// A strobe flash due by the sync ([`Fx::flashing`]): when its beat fell, how
+/// long it lasts, and how far apart the sync's beats are at least.
+struct Due {
+    start: Instant,
+    len: f64,
+    apart: f64,
+}
+
+/// How much too early a strobe flash's beat may be, after the last flash, and
+/// still flash (late, at the soonest the ceiling allows) rather than be let go:
+/// a Link session re-anchors the beat on each frame, sometimes by tens of ms.
+/// A flash's length at most, so a late flash still reads as on its beat; a beat
+/// earlier than that comes faster than the ceiling allows and is let go.
+const LATE: f64 = FLASH;
 
 /// How far apart strobe flashes start at least: [`REDUCED_FLASH_EVERY`] with
 /// motion `reduced`, [`FLASH_EVERY`] always.
@@ -366,6 +405,7 @@ impl Fx {
             settings: Settings::default(),
             bpm: 120.0,
             linked: false,
+            intensity: 0.5,
             timing: Timing {
                 thawed: None,
                 fading: None,
@@ -376,7 +416,7 @@ impl Fx {
                 heard: None,
                 loud: false,
                 heard_slow: None,
-                flash_shown: None,
+                flash: None,
                 punch_shown: None,
                 reduced: false,
             },
@@ -441,8 +481,9 @@ impl Fx {
             FxAction::Trails { value } => s.trails = clamped(*value, 0.0, 1.0, "trails")?,
             FxAction::Sensitivity { value } => s.sensitivity = clamped(*value, 0.25, 4.0, "sensitivity")?,
             FxAction::Intensity { value } => {
-                let curve = intensity(clamped(*value, 0.0, 1.0, "intensity")?);
-                (s.sensitivity, s.brightness, s.strobe_intensity) = (curve.sensitivity, curve.brightness, curve.strobe);
+                let v = clamped(*value, 0.0, 1.0, "intensity")?;
+                s.sensitivity = intensity(v).sensitivity;
+                self.intensity = v;
             }
             FxAction::Tap => return Ok(self.tap(now)),
             FxAction::Bpm { bpm } => {
@@ -509,8 +550,15 @@ impl Fx {
         self.timing.anchor = now.checked_sub(Duration::from_secs_f64(back)).unwrap_or(now);
     }
 
-    /// Back to the tapped tempo when the Link session has no peers left.
+    /// Back to our own tempo when the Link session has no peers left: the
+    /// session's last tempo folded into [`TEMPO_MIN`]–[`TEMPO_MAX`] (as it is,
+    /// when it was in range), the one the effects were already keeping time at,
+    /// so the beat carries on unbroken and the tempo shown is one taps or typing
+    /// could set.
     pub fn unfollow(&mut self) {
+        if self.linked {
+            self.bpm = fold_tempo(self.bpm);
+        }
         self.linked = false;
     }
 
@@ -578,8 +626,8 @@ impl Fx {
     /// [`REDUCED_FLASH_EVERY`] with motion `reduced`): a fast tempo's skip beats
     /// (every 2nd, 4th…, so they stay on the beat), heard beats too close to the
     /// last one flashed are let go. (What moves the beat — taps, a new tempo,
-    /// Link — is paced in [`Fx::master_with`].)
-    fn flashing(&self, now: Instant, reduced: bool) -> Option<Instant> {
+    /// Link — is paced in [`Fx::strobe_lit`].)
+    fn flashing(&self, now: Instant, reduced: bool) -> Option<Due> {
         match self.settings.sync {
             Sync::Tempo => {
                 let mut every = self.beat_length() / self.settings.strobe_rate;
@@ -589,13 +637,55 @@ impl Fx {
                 }
                 let since = now.saturating_duration_since(self.timing.anchor).as_secs_f64();
                 let into = (since / every).floor() * every;
-                (since - into < FLASH.min(every * 0.5)).then(|| self.timing.anchor + Duration::from_secs_f64(into))
+                let len = FLASH.min(every * 0.5);
+                (since - into < len).then(|| Due { start: self.timing.anchor + Duration::from_secs_f64(into), len, apart: every })
             }
             Sync::Audio => {
-                let beat = if reduced { self.timing.heard_slow } else { self.timing.heard };
-                beat.filter(|&t| secs(t, now) < FLASH * 1.5)
+                let (beat, apart) = if reduced { (self.timing.heard_slow, REDUCED_FLASH_EVERY) } else { (self.timing.heard, BEAT_GAP) };
+                let len = FLASH * 1.5;
+                beat.filter(|&t| secs(t, now) < len).map(|start| Due { start, len, apart })
             }
         }
+    }
+
+    /// Whether the strobe is lit at `now`. A flash due by the sync is taken on
+    /// once: read again, or moved less than half a beat by a re-anchor (a tap,
+    /// Link), it is the same flash, so a jump never doubles it. Taken on, it
+    /// shows from its beat, or, when that comes under [`flash_every`] after the
+    /// last flash shown but no more than [`LATE`] under, from the soonest the
+    /// ceiling allows, so a jump never drops it either. Flashes always start
+    /// at least [`flash_every`] apart.
+    fn strobe_lit(&mut self, now: Instant, reduced: bool) -> bool {
+        let every = flash_every(reduced);
+        // How far `start` is after `beat` (before it, under 0).
+        let gap = |beat: Instant, start: Instant| secs(beat, start) - secs(start, beat);
+        let due = self.flashing(now, reduced);
+        if let Some(due) = &due {
+            let from = match self.timing.flash {
+                None => Some(due.start),
+                Some(last) => {
+                    let soonest = last.from + Duration::from_secs_f64(every);
+                    if gap(last.beat, due.start) < due.apart / 2.0 || secs(due.start, soonest) > LATE {
+                        // The same beat, one before it, or one far too soon.
+                        None
+                    } else {
+                        Some(due.start.max(soonest))
+                    }
+                }
+            };
+            if let Some(from) = from {
+                self.timing.flash = Some(Shown { beat: due.start, from, len: due.len, reduced });
+            }
+        }
+        // Lit for its length, unless the sync has another beat due, or no beat
+        // due and motion was reduced or let be since (its own beats then).
+        self.timing.flash.is_some_and(|f| {
+            let still = match &due {
+                Some(d) => gap(f.beat, d.start).abs() < d.apart / 2.0,
+                None => f.reduced == reduced,
+            };
+            still && now >= f.from && secs(f.from, now) < f.len
+        })
     }
 
     /// The punch at `now`: held or dying away, and punch-on-beat's pulse. With
@@ -660,21 +750,19 @@ impl Fx {
         let punch = self.punch_level(now, reduced);
         let mut black = self.black_level(now, reduced);
         let mut flash = 0.0;
-        let s = &self.settings;
-        if s.strobe {
-            let on = match self.flashing(now, reduced) {
-                Some(start) => paced(&mut self.timing.flash_shown, start, flash_every(reduced)),
-                None => false,
-            };
-            let level = if reduced { s.strobe_intensity.min(REDUCED_FLASH_MAX) } else { s.strobe_intensity };
-            match s.strobe_style {
+        let (brightness, strobe) = self.levels();
+        if self.settings.strobe {
+            let on = self.strobe_lit(now, reduced);
+            let level = if reduced { strobe.min(REDUCED_FLASH_MAX) } else { strobe };
+            match self.settings.strobe_style {
                 StrobeStyle::White if on => flash = level,
                 StrobeStyle::Black if !on => black = black.max(level),
                 _ => {}
             }
         }
+        let s = &self.settings;
         Master {
-            brightness: s.brightness as f32,
+            brightness: brightness as f32,
             hue: s.hue as f32,
             invert: if s.invert { 1.0 } else { 0.0 },
             mirror: s.mirror,
@@ -683,6 +771,16 @@ impl Fx {
             punch: punch as f32,
             fade: self.fade_level(now) as f32,
         }
+    }
+
+    /// The brightness and strobe level drawn: the ones set in Settings, scaled by
+    /// the Intensity slider relative to its middle ([`scaled`]): 0.8–1.2× the
+    /// brightness and about 0.58–1.42× the strobe level (the curve's ends over
+    /// its middle). At the middle they are exactly as set.
+    fn levels(&self) -> (f64, f64) {
+        let (at, mid) = (intensity(self.intensity), intensity(0.5));
+        let s = &self.settings;
+        (scaled(s.brightness, at.brightness / mid.brightness, INTENSITY_BRIGHTNESS_MAX), scaled(s.strobe_intensity, at.strobe / mid.strobe, INTENSITY_STROBE_MAX))
     }
 
     /// The trails echo for the engine: how much of the frame before stays, per frame.
@@ -923,20 +1021,26 @@ mod tests {
     }
 
     #[test]
-    fn intensity_moves_three_settings_on_a_capped_curve() {
+    fn intensity_moves_three_levels_on_a_capped_curve() {
         let mut fx = fx();
         // The middle is the picture as drawn.
         act(&mut fx, FxAction::Intensity { value: 0.5 }, 0.0);
         assert!((fx.settings.sensitivity - 1.0).abs() < 1e-9);
-        assert!((fx.settings.brightness - 1.0).abs() < 1e-9);
-        // Out of range is clamped; the top stays short of white.
+        assert_eq!(fx.levels(), (1.0, 1.0));
+        // Out of range is clamped; the top raises the brightness to its cap, and
+        // the strobe no further than its own full level.
         act(&mut fx, FxAction::Intensity { value: 7.0 }, 0.0);
-        assert_eq!((fx.settings.sensitivity, fx.settings.brightness, fx.settings.strobe_intensity), (2.0, INTENSITY_BRIGHTNESS_MAX, INTENSITY_STROBE_MAX));
+        assert_eq!(fx.settings.sensitivity, 2.0);
+        assert_eq!(fx.levels(), (INTENSITY_BRIGHTNESS_MAX, 1.0));
+        // From a softer strobe, the top stays short of white.
+        act(&mut fx, FxAction::StrobeIntensity { value: 0.7 }, 0.0);
         act(&mut fx, FxAction::Strobe { on: Some(true) }, 0.0);
         let m = fx.master(t(0.0));
-        assert!(m.flash < 1.0 && m.brightness < 1.25, "{m:?}");
+        assert!((m.flash as f64 - INTENSITY_STROBE_MAX).abs() < 1e-6 && m.brightness < 1.25, "{m:?}");
+        act(&mut fx, FxAction::StrobeIntensity { value: 1.0 }, 0.0);
         act(&mut fx, FxAction::Intensity { value: -1.0 }, 0.0);
-        assert!((fx.settings.sensitivity - 0.5).abs() < 1e-9 && (fx.settings.brightness - 0.8).abs() < 1e-9 && (fx.settings.strobe_intensity - 0.35).abs() < 1e-9);
+        let (brightness, strobe) = fx.levels();
+        assert!((fx.settings.sensitivity - 0.5).abs() < 1e-9 && (brightness - 0.8).abs() < 1e-9 && (strobe - 0.35 / 0.6).abs() < 1e-9);
         assert_eq!(fx.apply(&FxAction::Intensity { value: f64::NAN }, t(0.0)), Err("intensity must be a number".into()));
         // Every step up raises all three.
         let mut last = intensity(0.0);
@@ -947,6 +1051,38 @@ mod tests {
         }
         let read = serde_json::from_str::<FxAction>(r#"{"kind":"intensity","value":0.25}"#).unwrap();
         assert_eq!(read, FxAction::Intensity { value: 0.25 });
+    }
+
+    #[test]
+    fn intensity_scales_the_settings_levels_and_leaves_them_as_set() {
+        let mut fx = fx();
+        act(&mut fx, FxAction::Brightness { value: 0.6 }, 0.0);
+        act(&mut fx, FxAction::StrobeIntensity { value: 0.4 }, 0.0);
+        act(&mut fx, FxAction::Strobe { on: Some(true) }, 0.0);
+        let close = |a: f64, b: f64| (a - b).abs() < 1e-9;
+        for v in [0.0, 0.2, 0.9, 1.0, 0.3] {
+            act(&mut fx, FxAction::Intensity { value: v }, 0.0);
+            // Settings keep what was set, whatever the slider does.
+            assert_eq!((fx.settings.brightness, fx.settings.strobe_intensity), (0.6, 0.4), "at {v}");
+            let curve = intensity(v);
+            let (brightness, strobe) = fx.levels();
+            assert!(close(brightness, 0.6 * curve.brightness) && close(strobe, 0.4 * curve.strobe / 0.6), "at {v}: {brightness} {strobe}");
+        }
+        // Back in the middle, exactly as set, in the picture too.
+        act(&mut fx, FxAction::Intensity { value: 0.5 }, 0.0);
+        assert_eq!(fx.levels(), (0.6, 0.4));
+        let m = fx.master(t(0.0));
+        assert_eq!((m.brightness, m.flash), (0.6, 0.4));
+        // A level set in Settings while the slider is up is kept as set too.
+        act(&mut fx, FxAction::Intensity { value: 0.0 }, 0.0);
+        act(&mut fx, FxAction::Brightness { value: 1.5 }, 0.0);
+        assert_eq!(fx.settings.brightness, 1.5);
+        assert!(close(fx.levels().0, 1.5 * 0.8));
+        // Up, a level set higher than the slider's cap isn't raised past it.
+        act(&mut fx, FxAction::Intensity { value: 1.0 }, 0.0);
+        assert_eq!(fx.levels().0, 1.5);
+        act(&mut fx, FxAction::Intensity { value: 0.5 }, 0.0);
+        assert_eq!(fx.levels(), (1.5, 0.4));
     }
 
     #[test]
@@ -976,7 +1112,7 @@ mod tests {
         };
         assert_eq!(flashes(&mut fx, false), (16, 1.0), "unreduced: as set, up to eight a second");
         // From the top again, as if the strobe had just been turned on.
-        fx.timing.flash_shown = None;
+        fx.timing.flash = None;
         // Still on the beat: the anchor's beat flashes.
         assert!(fx.master_with(at(0.01), true).flash > 0.0);
         let (count, peak) = flashes(&mut fx, true);
@@ -1185,6 +1321,49 @@ mod tests {
         });
         assert!(flashes.len() >= 31, "eight a second: {} in 4 s {flashes:?}", flashes.len());
         assert!(flashes.len() <= 33, "{} in 4 s", flashes.len());
+    }
+
+    #[test]
+    fn big_link_re_anchors_neither_drop_nor_double_flashes() {
+        // 120 bpm, four flashes a beat: eight a second, right at the cap. Link's
+        // frames, ten a second, jump the beat by 25–35 ms back and forth.
+        for rate in [4.0, 2.0] {
+            let mut fx = fx();
+            act(&mut fx, FxAction::StrobeRate { rate }, 0.0);
+            act(&mut fx, FxAction::Strobe { on: Some(true) }, 0.0);
+            let (flashes, ..) = run(&mut fx, 4.0, false, |fx, s| {
+                let ms = (s * 1000.0).round() as u64;
+                if ms % 100 == 0 {
+                    let jump = [0.015, -0.015, 0.01, -0.02][(ms / 100 % 4) as usize];
+                    fx.follow(120.0, (s + jump) * 2.0, t(s));
+                }
+            });
+            let want = (4.0 * 2.0 * rate) as usize;
+            assert!(flashes.len() + 1 >= want && flashes.len() <= want + 1, "rate {rate}: {} in 4 s, want {want}: {flashes:?}", flashes.len());
+            assert!(closest(&flashes) >= FLASH_EVERY - SAMPLED, "rate {rate}: {flashes:?}");
+        }
+    }
+
+    #[test]
+    fn the_tempo_is_in_range_once_a_link_session_is_left() {
+        let mut fx = fx();
+        // In range, the session's last tempo stays.
+        fx.follow(128.0, 0.0, t(0.0));
+        fx.unfollow();
+        assert_eq!(fx.bpm, 128.0);
+        // Out of range, it is the tempo the effects kept time at, so the beat carries on.
+        for (bpm, want) in [(999.0, 124.875), (20.0, 40.0), (480.0, 240.0), (30.0, 60.0)] {
+            fx.follow(bpm, 0.25, t(0.0));
+            let (len, last) = (fx.beat_length(), fx.last_tempo_beat(t(1.0)));
+            fx.unfollow();
+            assert_eq!(fx.bpm, want, "{bpm}");
+            assert!((TEMPO_MIN..=TEMPO_MAX).contains(&fx.bpm));
+            assert_eq!((fx.beat_length(), fx.last_tempo_beat(t(1.0))), (len, last), "{bpm}");
+        }
+        // Taps take over from there.
+        act(&mut fx, FxAction::Tap, 2.0);
+        act(&mut fx, FxAction::Tap, 2.5);
+        assert!((fx.bpm - 120.0).abs() < 0.01, "{}", fx.bpm);
     }
 
     #[test]
