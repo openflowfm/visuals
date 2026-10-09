@@ -5,6 +5,7 @@
 //! - [`eel`] compiles and runs the equations.
 //! - [`live`] is what a live player shares: the input ring and the window surface.
 //! - [`index`] is the preset library's index: one row per preset, from [`analyse`].
+//! - [`quality`] is what a picture costs: render scale and mesh size, by level or by machine.
 
 pub mod analyse;
 pub mod audio;
@@ -16,6 +17,7 @@ pub mod live;
 pub mod noise;
 pub mod picture;
 pub mod preset;
+pub mod quality;
 pub mod render;
 pub mod runtime;
 pub mod shader;

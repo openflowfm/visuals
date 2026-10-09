@@ -1,8 +1,34 @@
-import { memo, useCallback, useEffect, useId, useRef, useState } from 'react';
-import type { FocusEvent, KeyboardEvent } from 'react';
-import { ButtonFace } from '@openflow/widgets/controls/ButtonFace.tsx';
-import type { Entry } from './api.ts';
-import { foundSummary, rowFor, type Found } from './librarySearch.ts';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { KeyboardEvent } from 'react';
+import * as api from './api.ts';
+import type { Entry, LibraryChange, LibraryData, LibraryGroup, LibraryQuery, LibraryRow } from './api.ts';
+import * as pl from './playlists.ts';
+import { onChanged } from './pack.ts';
+import { rereadOn } from './library.ts';
+import {
+  GROUPS,
+  GROUP_LABEL,
+  SWATCH,
+  activeGroups,
+  debounced,
+  facet,
+  facetSummary,
+  inOrder,
+  LOOK_GROUPS,
+  oneAtATime,
+  prepare,
+  queryName,
+  rowsFromEntries,
+  toggle,
+  valueLabel,
+  valuesFor,
+  type Colour,
+  type Found,
+  type Prepared,
+} from './librarySearch.ts';
+import { LibraryGrid, pickInto, rangeAnchor, type Pick } from './LibraryGrid.tsx';
+import { say } from './words.ts';
+import { PresetDrawer, hiddenCount } from './PresetDrawer.tsx';
 import { Credits } from './Credits.tsx';
 import { PackBar, useCreditsMenu, useDropToAdd } from './Pack.tsx';
 import './library.css';
@@ -14,7 +40,7 @@ export interface LibraryProps {
   loaded: boolean;
   search: string;
   onSearch(next: string): void;
-  /** searchLibrary(entries, search), computed by the App. */
+  /** searchLibrary(entries, search), computed by the App, which steps through it; the grid filters the index itself. */
   found: Found;
   /** Path of the preset playing. */
   current: string | null;
@@ -25,83 +51,180 @@ export interface LibraryProps {
 }
 
 const count = (n: number) => n.toLocaleString('en-US');
+const why = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+/** How long the folder has to be quiet before the index is read again, and the longest it waits while it isn't. */
+const REREAD = { wait: 500, most: 4000 };
+
+/** A group with more values than this gets a box to find one. */
+const FIND_FROM = 12;
+/** The most values an open group lists at once (authors run to thousands); the find box reaches the rest. */
+const VALUES_CAP = 150;
+
+/** The index rows, read again (debounced) as the presets folder changes; null until read, or when it can't be. */
+function useIndex(): LibraryRow[] | null {
+  const [index, setIndex] = useState<LibraryRow[] | null>(null);
+  useEffect(() => {
+    // One read at a time: a change during a read reads once more after it, so an older answer never lands last.
+    const reader = oneAtATime(api.libraryIndex, setIndex);
+    reader.run();
+    const reread = debounced(reader.run, REREAD.wait, REREAD.most);
+    const stop = rereadOn(onChanged, reread);
+    return () => {
+      reread.cancel();
+      reader.stop();
+      stop();
+    };
+  }, []);
+  return index;
+}
+
+/** The user's library data, followed through `library-changed`; null until read. */
+function useLibraryData(): [LibraryData | null, (answer: Promise<LibraryData>) => Promise<void>] {
+  const [data, setData] = useState<LibraryData | null>(null);
+  // Every answer and event takes a ticket; one older than the newest applied is dropped.
+  const order = useRef(inOrder()).current;
+  useEffect(() => {
+    const t = order.ticket();
+    api.libraryData().then(
+      (d) => order.take(t) && setData(d),
+      () => {},
+    );
+    return rereadOnData((d) => order.take(order.ticket()) && setData(d));
+  }, [order]);
+  const apply = useCallback(
+    (answer: Promise<LibraryData>) => {
+      const t = order.ticket();
+      return answer.then((d) => void (order.take(t) && setData(d)));
+    },
+    [order],
+  );
+  return [data, apply];
+}
+
+function rereadOnData(set: (d: LibraryData) => unknown): () => void {
+  let stopped = false;
+  let unlisten: Promise<() => void>;
+  try {
+    unlisten = api.onLibraryChanged((d) => !stopped && set(d));
+  } catch {
+    return () => {}; // not in the app
+  }
+  return () => {
+    stopped = true;
+    void unlisten.then(
+      (u) => u(),
+      () => {},
+    );
+  };
+}
 
 /**
- * The preset library: a search box over a listbox of presets.
- *
- * The list is one tab stop and moves a highlighted row with `aria-activedescendant`,
- * so the rows stay plain `<li>`s and only the two rows whose highlight changes re-render.
+ * The preset library: a search box and group chips over a grid of thumbnails, with
+ * a drawer for the selection. AND across groups, OR within one; each value counts
+ * the presets it would show.
  */
-export function Library({ entries, loaded, search, onSearch, found, current, into, onLoad, onAdd }: LibraryProps) {
-  const id = useId();
-  const rowId = (i: number) => `${id}-row-${i}`;
-  const list = useRef<HTMLUListElement>(null);
+export function Library({ entries, loaded, search, onSearch, current, into, onLoad, onAdd }: LibraryProps) {
+  const index = useIndex();
+  const [data, setData] = useLibraryData();
+  const [groups, setGroups] = useState<LibraryQuery['groups']>({});
+  const [open, setOpen] = useState<LibraryGroup | null>(null);
+  const [find, setFind] = useState('');
+  const [selection, setSelection] = useState<string[]>([]);
+  const [anchor, setAnchor] = useState<string | null>(null);
   const [active, setActive] = useState<string | null>(null);
+  const [lists, setLists] = useState<pl.Playlist[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [naming, setNaming] = useState<string | null>(null);
+  const [saveNote, setSaveNote] = useState<string | null>(null);
+  const [reveal, setReveal] = useState(0);
   const [credits, setCredits] = useState(false);
   const drop = useDropToAdd();
   useCreditsMenu(() => setCredits(true));
-  const shown = found.shown;
-  const at = active === null ? -1 : shown.findIndex((e) => e.path === active);
 
-  // Stable callbacks so the memoized rows don't all re-render when the App's change.
-  const handlers = useRef({ onLoad, onAdd });
-  handlers.current = { onLoad, onAdd };
-  const load = useCallback((e: Entry) => {
-    setActive(e.path);
-    handlers.current.onLoad(e);
-  }, []);
-  const add = useCallback((e: Entry) => handlers.current.onAdd(e), []);
+  const query: LibraryQuery = useMemo(() => ({ groups, text: search }), [groups, search]);
+  const rows = useMemo(() => index ?? rowsFromEntries(entries), [index, entries]);
+  const prepared = useMemo(() => prepare(rows, data), [rows, data]);
+  const faceted = useMemo(() => facet(prepared, query), [prepared, query]);
+  const shown = faceted.shown;
+  const at = active === null ? -1 : shown.findIndex((p) => p.row.key === active);
+  const byKey = useMemo(() => new Map(prepared.map((p) => [p.row.key, p])), [prepared]);
+  const selectedSet = useMemo(() => new Set(selection), [selection]);
+  const chosen = useMemo(() => selection.map((k) => byKey.get(k)).filter((p): p is Prepared => !!p), [selection, byKey]);
 
-  const reveal = useCallback(
-    (i: number) => {
-      if (i >= 0) document.getElementById(`${id}-row-${i}`)?.scrollIntoView({ block: 'nearest' });
-    },
-    [id],
-  );
+  // The App's entries, by path, so a load hands it the entry it knows.
+  const byPath = useMemo(() => new Map(entries.map((e) => [e.path, e])), [entries]);
+  const entryOf = useCallback((p: Prepared): Entry => byPath.get(p.row.path) ?? { path: p.row.path, name: p.title, group: p.subStyle ? `${p.style}/${p.subStyle}` : p.style }, [byPath]);
 
-  // Keep the highlighted row in view as it moves.
-  useEffect(() => reveal(at), [at, reveal]);
+  // Bring the playing tile into view when the preset changes.
+  useEffect(() => setReveal((r) => r + 1), [current]);
 
-  // Bring the playing row into view when it changes.
+  // The playlists the drawer's preset is in, read when it opens on a new one.
+  const one = chosen.length === 1 ? chosen[0].row.path : null;
   useEffect(() => {
-    if (current === null) return;
-    reveal(shown.findIndex((e) => e.path === current));
-  }, [current]); // only on a new preset, not on every search keystroke
+    if (one === null) return;
+    let live = true;
+    pl.lists().then(
+      (l) => live && setLists(l.playlists),
+      () => live && setLists([]),
+    );
+    return () => {
+      live = false;
+    };
+  }, [one]);
 
-  const move = (to: number) => setActive(to >= 0 ? shown[to].path : null);
+  const handlers = useRef({ onLoad, onAdd, shown, selection, anchor, active, entryOf });
+  handlers.current = { onLoad, onAdd, shown, selection, anchor, active, entryOf };
+  const pick = useCallback((i: number, how: Pick) => {
+    const h = handlers.current;
+    const p = h.shown[i];
+    if (!p) return;
+    // The first ⇧ move or click runs from the highlighted tile.
+    const from = rangeAnchor(h.anchor, h.active, h.shown);
+    setSelection(pickInto(h.selection, h.shown, i, how, from));
+    setActive(p.row.key);
+    setError(null);
+    if (how !== 'range') setAnchor(p.row.key);
+    else if (from !== h.anchor) setAnchor(from);
+    if (how === 'load') h.onLoad(h.entryOf(p));
+  }, []);
+  const add = useCallback((i: number) => {
+    const h = handlers.current;
+    if (h.shown[i]) h.onAdd(h.entryOf(h.shown[i]));
+  }, []);
+  // A plain move lets go of the anchor, so the next ⇧ move runs from where it lands.
+  const moveTo = useCallback((i: number) => {
+    setActive(handlers.current.shown[i]?.row.key ?? null);
+    setAnchor(null);
+  }, []);
+  const clear = useCallback(() => setSelection([]), []);
 
-  const onListKey = (ev: KeyboardEvent<HTMLUListElement>) => {
-    if (ev.target !== ev.currentTarget) return; // keys on the list itself, not a row's + button
-    const to = rowFor(ev.key, at, shown.length);
-    if (to !== null) {
-      move(to);
-    } else if ((ev.key === 'Enter' || ev.key === ' ') && at >= 0) {
-      load(shown[at]);
-    } else if ((ev.key === '+' || ev.key === 'a' || ev.key === 'A') && at >= 0 && into) {
-      onAdd(shown[at]);
-    } else {
-      return;
-    }
-    ev.preventDefault();
-    ev.stopPropagation();
+  const set = (keys: string[], change: LibraryChange) => {
+    setError(null);
+    setData(api.librarySet(keys, change)).catch((e) => setError(`Couldn't save that: ${why(e)}`));
   };
 
-  const onListFocus = (ev: FocusEvent<HTMLUListElement>) => {
-    if (ev.target !== ev.currentTarget || at >= 0 || !shown.length) return;
-    const playing = current === null ? -1 : shown.findIndex((e) => e.path === current);
-    move(playing >= 0 ? playing : 0);
+  const pickValue = (g: LibraryGroup, v: string) => {
+    setGroups((gs) => toggle({ groups: gs, text: '' }, g, v).groups);
+    setSaveNote(null);
+  };
+  const clearAll = () => {
+    setGroups({});
+    onSearch('');
+    setSaveNote(null);
   };
 
-  const onSearchKey = (ev: KeyboardEvent<HTMLInputElement>) => {
-    if (ev.key !== 'ArrowDown' || !shown.length) return;
-    ev.preventDefault();
-    ev.stopPropagation();
-    if (at < 0) move(0);
-    list.current?.focus();
+  const save = (name: string) => {
+    setNaming(null);
+    api.smartPlaylistSave(name.trim() || queryName(query), query).then(
+      () => setSaveNote(`Saved “${name.trim() || queryName(query)}”.`),
+      (e) => setSaveNote(why(e)),
+    );
   };
 
-  const summary = foundSummary(found, search);
-  const empty = loaded && entries.length === 0;
+  const empty = loaded && entries.length === 0 && !rows.length;
+  const filtered = activeGroups(query).length > 0 || search.trim() !== '';
+  const summary = facetSummary(faceted, query);
 
   const bar = <PackBar presets={entries.length} dropped={drop.note} credits={credits} onCredits={() => setCredits((c) => !c)} />;
   if (credits) {
@@ -113,92 +236,169 @@ export function Library({ entries, loaded, search, onSearch, found, current, int
     );
   }
 
+  const onSearchKey = (ev: KeyboardEvent<HTMLInputElement>) => {
+    if (ev.key !== 'ArrowDown' || !shown.length) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    if (at < 0) setActive(shown[0].row.key);
+    (ev.currentTarget.closest('.lib')?.querySelector('.lib-grid') as HTMLElement | null)?.focus();
+  };
+
   return (
     <div className="lib" data-drop={drop.over ? '' : undefined}>
       <input
         className="lib-search"
         type="search"
         aria-label="search presets"
-        placeholder={`search ${count(entries.length)} presets`}
-        title="Every word must match the preset's group or name. ↓ moves into the list."
+        placeholder={`search ${count(rows.length || entries.length)} presets`}
+        title="Every word must match the preset's style, author, name or tags. ↓ moves into the grid."
         value={search}
         onChange={(ev) => onSearch(ev.target.value)}
         onKeyDown={onSearchKey}
         disabled={empty}
       />
-      {summary && (
-        <div className="lib-summary" role="status">
-          {summary}
+      {!empty && (
+        <div className="lib-chips" role="group" aria-label="groups">
+          {GROUPS.map((g) => {
+            const on = query.groups[g]?.length ?? 0;
+            // Until the index is read there is no look to count, so these wait rather than show nothing.
+            const waiting = !index && LOOK_GROUPS.includes(g);
+            return (
+              <button
+                key={g}
+                type="button"
+                className="lib-chip"
+                aria-expanded={open === g}
+                disabled={waiting}
+                data-on={on ? '' : undefined}
+                title={waiting ? `${GROUP_LABEL[g]} comes once the library has been read` : `Show only presets with these ${GROUP_LABEL[g]} values; pick several to see any of them`}
+                onClick={() => {
+                  setOpen((o) => (o === g ? null : g));
+                  setFind('');
+                }}
+              >
+                {GROUP_LABEL[g]}
+                {on > 0 && <span className="lib-chip-count">{on}</span>}
+              </button>
+            );
+          })}
         </div>
       )}
-      {!loaded ? (
+      {open && !(!index && LOOK_GROUPS.includes(open)) && (
+        <Values group={open} values={valuesFor(open, faceted, query)} selected={query.groups[open] ?? []} find={find} onFind={setFind} onPick={(v) => pickValue(open, v)} />
+      )}
+      {filtered && (
+        <div className="lib-picked">
+          {activeGroups(query).flatMap((g) =>
+            query.groups[g]!.map((v) => (
+              <button key={`${g}:${v}`} type="button" className="lib-chip lib-chip-picked" title={`Stop filtering by ${valueLabel(g, v)}`} onClick={() => pickValue(g, v)}>
+                {g === 'colour' && <span className="lib-swatch" style={{ background: SWATCH[v as Colour] }} />}
+                {valueLabel(g, v)} ×
+              </button>
+            )),
+          )}
+          <button type="button" className="lib-link" onClick={clearAll} title="Show every preset">
+            clear
+          </button>
+          {naming === null ? (
+            <button type="button" className="lib-link" onClick={() => setNaming(queryName(query))} title="Keep this filter as a playlist that fills itself">
+              {say('save query')}
+            </button>
+          ) : (
+            <input
+              className="lib-name-input"
+              aria-label="smart playlist name"
+              autoFocus
+              value={naming}
+              onChange={(ev) => setNaming(ev.target.value)}
+              onKeyDown={(ev) => {
+                if (ev.key === 'Enter') save(naming);
+                else if (ev.key === 'Escape') setNaming(null);
+                else return;
+                ev.preventDefault();
+                ev.stopPropagation();
+              }}
+              onBlur={() => setNaming(null)}
+            />
+          )}
+        </div>
+      )}
+      {(summary || saveNote) && (
+        <div className="lib-summary" role="status">
+          {[summary, saveNote].filter(Boolean).join(' · ')}
+        </div>
+      )}
+      {!loaded && !index ? (
         <p className="lib-note">loading presets…</p>
       ) : empty ? (
         <p className="lib-note lib-first-run">No presets yet. Drop .milk files or a folder of them here, or use Add a folder… below.</p>
       ) : (
-        <ul
-          ref={list}
-          className="lib-list"
-          role="listbox"
-          aria-label="presets"
-          tabIndex={shown.length ? 0 : -1}
-          aria-activedescendant={at >= 0 ? rowId(at) : undefined}
-          data-hint={`↑ ↓ Home End PageUp PageDown move, Enter loads the preset${into ? `, + or A adds it to ${into.name}` : ''}`}
-          onKeyDown={onListKey}
-          onFocus={onListFocus}
-        >
-          {shown.map((e, i) => (
-            <Row key={e.path} id={rowId(i)} entry={e} active={i === at} playing={e.path === current} intoName={into?.name ?? null} onLoad={load} onAdd={add} />
-          ))}
-        </ul>
+        <LibraryGrid rows={shown} active={at} selected={selectedSet} current={current} into={into} onMove={moveTo} onPick={pick} onAdd={add} onClear={clear} reveal={reveal} />
+      )}
+      {chosen.length > 0 && !empty && (
+        <PresetDrawer
+          key={selection.join('\n')}
+          chosen={chosen}
+          hiddenByFilter={hiddenCount(chosen, shown)}
+          playlists={lists}
+          current={current}
+          onSet={set}
+          onLoad={(p) => onLoad(entryOf(p))}
+          onClose={clear}
+          error={error}
+        />
       )}
       {bar}
     </div>
   );
 }
 
-interface RowProps {
-  id: string;
-  entry: Entry;
-  active: boolean;
-  playing: boolean;
-  intoName: string | null;
-  onLoad(e: Entry): void;
-  onAdd(e: Entry): void;
+interface ValuesProps {
+  group: LibraryGroup;
+  values: { value: string; count: number }[];
+  selected: string[];
+  find: string;
+  onFind(next: string): void;
+  onPick(value: string): void;
 }
 
-const Row = memo(function Row({ id, entry, active, playing, intoName, onLoad, onAdd }: RowProps) {
-  const full = entry.group ? `${entry.group} / ${entry.name}` : entry.name;
+/** An open group's values, each with the count of presets it would show. */
+function Values({ group, values, selected, find, onFind, onPick }: ValuesProps) {
+  const f = find.trim().toLowerCase();
+  const all = f ? values.filter((v) => valueLabel(group, v.value).toLowerCase().includes(f)) : values;
+  const list = all.slice(0, VALUES_CAP);
   return (
-    <li
-      id={id}
-      className="lib-row"
-      role="option"
-      aria-selected={playing}
-      data-active={active ? '' : undefined}
-      data-playing={playing ? '' : undefined}
-      title={playing ? `${full} (playing)` : full}
-      onClick={() => onLoad(entry)}
-    >
-      <span className="lib-name">{entry.name}</span>
-      {entry.group && <span className="lib-group">{entry.group}</span>}
-      {intoName !== null && (
-        // Out of the tab order: the listbox is one tab stop, and + on the list adds the active row.
-        <div className="wdg wdg-button lib-add">
-          <ButtonFace
-            tone="quiet"
-            tabIndex={-1}
-            aria-label={`add “${entry.name}” to ${intoName} (+ key)`}
-            title={`add “${entry.name}” to ${intoName} (+ key)`}
-            onClick={(ev) => {
-              ev.stopPropagation();
-              onAdd(entry);
-            }}
-          >
-            +
-          </ButtonFace>
-        </div>
+    <div className="lib-values" role="group" aria-label={`${GROUP_LABEL[group]} values`}>
+      {values.length > FIND_FROM && (
+        <input
+          className="lib-values-find"
+          type="search"
+          aria-label={`find a ${GROUP_LABEL[group]}`}
+          placeholder={`find a ${GROUP_LABEL[group].replace(/^my /, '')}`}
+          value={find}
+          onChange={(ev) => onFind(ev.target.value)}
+        />
       )}
-    </li>
+      {list.length === 0 && <p className="lib-note">{group === 'tags' && !values.length ? 'No tags yet. Select a preset to tag it.' : 'none'}</p>}
+      <div className="lib-values-list">
+        {list.flatMap(({ value, count: n }, i) => [
+          // Each style starts a line, with its sub-styles after it.
+          group === 'style' && i > 0 && !value.includes('/') ? <span key={`break:${value}`} className="lib-break" /> : null,
+          <button
+            key={value}
+            type="button"
+            className="lib-chip lib-value"
+            aria-pressed={selected.includes(value)}
+            data-sub={group === 'style' && value.includes('/') ? '' : undefined}
+            onClick={() => onPick(value)}
+          >
+            {group === 'colour' && <span className="lib-swatch" style={{ background: SWATCH[value as Colour] }} />}
+            <span className="lib-value-name">{group === 'style' && value.includes('/') ? value.slice(value.indexOf('/') + 1) : valueLabel(group, value)}</span>
+            <span className="lib-value-count">{count(n)}</span>
+          </button>,
+        ])}
+      </div>
+      {all.length > list.length && <p className="lib-note">{count(all.length - list.length)} more: type to find one</p>}
+    </div>
   );
-});
+}

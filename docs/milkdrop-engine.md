@@ -1,32 +1,62 @@
 # The MilkDrop engine
 
-A plan and its status. It replaced the old visual[flow] — a Node server and a WebGL2
-renderer with its own colour-at-a-point engine, which drew MilkDrop through Butterchurn —
-and that app is deleted (see "Where it lives").
+The plan to 1.0 and where it stands, then the engine and the app as they are built. The
+engine replaced the old visual[flow] (a Node server and a WebGL2 renderer with its own
+colour-at-a-point engine, which drew MilkDrop through Butterchurn), and that app is
+deleted (see "Where it lives").
 
-## The north star
+## The plan: 0.3 to 1.0
 
-**The node library is MilkDrop complete.** Anything a `.milk` preset can say, a flow can
-say. Then the Cream of the Crop pack is imported as flows, and each one draws what the
-same preset draws in the BlackHole visualizer — on our engine, not Butterchurn's.
+**1.0 is a player, not an editor.** Open the app, let it hear your music, pick a
+playlist, play. The milestones and their issues are in the tracking issue,
+[#105](https://github.com/openflowfm/visuals/issues/105); what's merged is marked done,
+everything else is planned.
+
+| Milestone | What it brings | Status |
+| --- | --- | --- |
+| **0.3 No Terminal** | the player app without the editor; the editor behind the `lab` build; listening to a DAW through a Core Audio process tap; 250 starter presets in the app and the full pack as a download; the first-run welcome; the updater (stable and nightly) | done (#107, #111–#115); the exit check (#89, three people from the DMG to visuals reacting to their DAW in under five minutes, and fps on a base M1) is still to run |
+| **0.4 Library** | the preset index (groups, colour, brightness, speed, intensity, thumbnails); the user's library data (stars, tags, hidden, overrides of the groups); the library grid with groups and a preset drawer; the full pack hosted with its index and thumbnails | the index (#110, #117), the contract (#116) and the library data (#118) are done; the grid (#92) and the hosted pack (#94) are planned |
+| **0.5 Playlists and live** | playlists as home, each with its own settings, and smart playlists; a new live view (nine controls, a status strip, a crate, windowed on one display); a settings sheet and a drawer for the other effects | planned (#95–#98) |
+| **0.9 Release candidate** | settings that survive and a show that never stops; accessibility (VoiceOver labels, reduced motion); performance on a base M1 with 8 GB and a quality setting; opt-in crash reports; these docs; a four-hour soak and a beta with ten or more people | planned (#99–#104) |
+| **1.0** | the release | planned |
+
+The product decisions behind it (#105):
+
+- **The editor stays in the repo behind a build-time `lab` feature**, as a tool for
+  working on the engine. It isn't in the 1.0 app, and nothing on the way to 1.0 builds
+  towards it.
+- **DAW audio through a Core Audio process tap** (macOS 14.4 and later), a mic or
+  interface otherwise; BlackHole only as a fallback (see
+  [Connect your DAW](connect-your-daw.md)).
+- **About 250 presets are bundled; the full 9,795 is a download** the welcome encourages.
+  The pack has no licence: credits and a takedown address ([starter credits](../app/src-tauri/presets/starter/CREDITS.md) and the in-app
+  Credits; a hosted pack is planned, #94).
+- **Automatic groups:** style, sub-style, author, colour, brightness, speed, intensity.
+  Mood is the user's own tags only.
+- **Tags in JSON:** the generated `index.json` and the user's `library.json`; `.milk`
+  files are never touched.
+- **Playlists are home** and carry their own settings.
+- **Live:** nine controls plus a crate; everything else in a settings sheet or a drawer;
+  windowed on one display.
+- **After 1.0:** MIDI first in 1.1, a phone remote after.
+
+**The engine's bar stays where it was:** each preset draws what it draws in the
+BlackHole visualizer, on our engine, not Butterchurn's.
 
 - **Identical is Ryan's call**, by ear and eye: a preset played here beside the same
   preset in the BlackHole visualizer.
 - **The reference is Butterchurn 2.6.7**, because that is what the BlackHole visualizer
   is. Where Butterchurn is wrong — the shaders that fall back to its default — Ryan
-  decides which one is right.
-- **Export to `.milk` is out of scope.** Imports keep the original text so it stays
-  possible.
-- **The old engine and its flows are abandoned**, not migrated. Versions of them may be
-  rebuilt on the new nodes later.
-- **Audio is a node.** The MVP source is an audio interface or BlackHole. The Live bridge
-  stays, as a node that provides sound and set facts; identical output needs the same
-  samples, so a signal synthesised from meters can never be the reference.
+  decides which one is right. The compare bench scores it (see "Comparing with
+  Butterchurn").
+- **Export to `.milk` is out of scope**; presets are read and kept as written.
 
-## Where it is: the proof of concept
+## Where it stands
 
 `engine/` is a Rust crate that reads `.milk` files and draws them on wgpu — Metal on a
-Mac — with no Butterchurn and no browser in the path.
+Mac — with no Butterchurn and no browser in the path. `app/` is the Tauri app built on it:
+the player (library, playlists, live mode and its output, Link, the audio sources, the
+welcome, the updater) and, in a lab build, the editor.
 
 ```sh
 cd engine
@@ -38,20 +68,40 @@ cargo run --release --bin gpucheck                  # a 250-preset sample loads 
 cargo run --release --bin explain -- preset.milk comp   # why one shader does not compile
 ```
 
-`play` opens a window, listens to any input — BlackHole is one — and plays the library:
-→/space next, ← previous, R random, F fullscreen.
+`play` opens a window, listens to any input device and plays the library:
+→/space next, ← previous, R random, F fullscreen. `record`, `motion`, `stages` and
+`index` are the other bins (AGENTS.md says when to run each).
 
-### The editor app
+### The app
 
 ```sh
-npm run app          # cargo tauri dev in app/src-tauri; the page's vite on $PORT, or a free port
+npm run app          # the player: cargo tauri dev in app/src-tauri; the page's vite on $PORT, or a free port
+npm run app:lab      # the lab build: the same with the editor
 ```
 
-`app/` is the Tauri shell. The page (`app/src`, React and the widgets' `Graph`) is the
-editor: the library on the left, the preset as MilkDrop's stage graph, and the selected
-stage's EEL/HLSL and numbers on the right. Every edit reloads the preset on the bench
-within a quarter second, and problems come back per stage and line — a broken equation
-leaves the last good preset drawing, a broken shader draws MilkDrop's default.
+`app/` is the Tauri shell; its page is `app/src` (React and the widgets). The player's
+views are *library | live*. The sections below are the app's reference as built.
+
+**Audio in.** `listen.rs` offers what there is to listen to: running DAWs (by bundle
+identifier, `tap::DAWS`), everything on this Mac and any other app playing sound, all
+through a Core Audio process tap (`tap.rs`, macOS 14.4 and later; the permission is
+`NSAudioCaptureUsageDescription`), then the input devices through CPAL. The choice is kept
+in `audio.json`; when its app quits or its interface is unplugged it falls back (to the
+whole Mac, else the system input) and goes back once the source returns. `testsound.rs`
+is the welcome's test beat, written straight into the engine's ring. The user's guide is
+[Connect your DAW](connect-your-daw.md).
+
+**Presets.** The 250 starter presets are bundled (`app/src-tauri/presets/starter`, laid
+out as the pack is), and the full Cream of the Crop pack downloads into the presets folder
+(`pack.rs`), unpacking as it arrives. Credits: [starter credits](../app/src-tauri/presets/starter/CREDITS.md) and the in-app
+Credits; a hosted pack is planned (#94).
+
+**The lab's editor.** `npm run app:lab` adds a third view, *editor*: the library on the
+left, the preset as MilkDrop's stage graph, and the selected stage's EEL/HLSL and numbers
+on the right (`app/src/Lab.tsx`, `editor.rs`, the `lab` feature). Every edit reloads the
+preset on the bench within a quarter second, and problems come back per stage and line —
+a broken equation leaves the last good preset drawing, a broken shader draws MilkDrop's
+default. It is a tool for working on the engine, not a product phase.
 
 **Stage pictures.** Each node shows its stage's picture, rendered by the engine
 (`Renderer::set_previews(wanted, size)`, `read_previews`) and polled by the page about
@@ -100,9 +150,11 @@ paced by the display; the page leaves a transparent hole and reports its rectang
 (`place_bench`). The engine and the app share one Cargo workspace at the repository
 root, so the engine's tests also run from there as `cargo test -p visuals-engine`.
 
-**Live mode and the output.** The page's switch is *editor | live*. Live mode is the show: entering it
-opens the output, leaving it closes it — there is no output while editing. In live mode
-the editor isn't rendered (no graph, no inspector) and stage previews are off
+**Live mode and the output.** The page's switch is *library | live* (*library | editor |
+live* in a lab build). Live mode is the show: entering it opens the output, leaving it
+closes it — there is no output in the library or the editor. Arriving from the welcome,
+live mode plays in the window without opening the output. In live mode the editor isn't
+rendered (no graph, no inspector) and stage previews are off
 (`set_previews` with none); the page shows a small preview of the bench, what's playing and
 what's next in the playing playlist, previous / random / next (all through
 `actions::act`, as a controller would), the playlists panel with play/stop and
@@ -171,7 +223,7 @@ the frame every second and each change's beat.
 Not yet: one output only (no mirroring to several displays); the presets still draw at
 about `bench::DRAW`'s 1920×1080 pixels and are scaled to the display, so a 4K projector
 gets an upscaled picture, and a landscape display that isn't 16:9 (an ultrawide) gets
-bars; on a single display the output covers the editor window, and only the keys (Esc,
+bars; on a single display the output covers the app's window, and only the keys (Esc,
 ⌘⇧L) get back out. The mouse cursor is hidden while it is over the output (a check
 ten times a second on the main thread, as the output never becomes the key window; macOS
 only hides it while the app is the active one).
@@ -526,15 +578,14 @@ BlackHole visualizer already has — with the engine as a Rust crate drawing on 
 - **EEL compiled to a register-VM bytecode in Rust**, tested against Butterchurn's
   results for the same inputs; per-vertex and per-point equations that qualify are
   compiled to shader code instead (see below).
-- **Link and the Live bridge move to Rust later** — `abl_link` bindings and a WebSocket
-  client. The MVP needs neither: it listens to an audio input.
+- **Link is in Rust** (`link.rs`, the official SDK through `rusty_link`). The Live bridge
+  is not part of the plan to 1.0: the app listens to the DAW's sound itself.
 
 Why native rather than staying on WebGL 2: compute shaders for the blur and the wave
 points; explicit passes with no automatic mipmap regeneration of a 4K feedback buffer;
 frame pacing a browser does not give; and a shader path that is not broken.
 
-The risk is that this is a rewrite. That is why phase 1 is a measured spike, not the
-engine.
+The risk was that this is a rewrite, so it started as a measured spike before the engine.
 
 ### What moves to the GPU, node by node
 
@@ -585,9 +636,91 @@ translation module:
 What is left: `double` (to be rewritten as `float`) and a handful of presets with real
 syntax errors, which MilkDrop's compiler tolerated and these do not.
 
+## Quality
+
+A renderer draws at a **quality** (`engine::quality`, `Renderer::set_quality`): the
+**render scale**, the size presets draw at as a fraction of the size asked for (each
+side, rounded), scaled up when presented; and the **mesh size**, the warp mesh's cells
+across and down — MilkDrop's own "mesh size" option, whose per-vertex equations run once
+per vertex, `(w + 1) × (h + 1)` a step. Like MilkDrop's texture-size option, the scale
+changes what presets read as `texsize`. Changing quality on a running renderer takes
+effect at once, without a reload: the feedback, the finished picture and the outgoing
+snapshot are carried over at the new size, as on a resize; a new mesh's buffers replace
+the old, and the pending step's per-vertex equations run again on it, with megabuf,
+gmegabuf and the random source put back afterwards so the preset doesn't drift. The old textures
+and buffers are let go (`bench --churn 200` at 4K: 422 MB of footprint before, 445 MB
+after 200 switches to low and back, where keeping one 4K picture a switch would add
+6.6 GB).
+
+| level | render scale | pixels drawn | mesh |
+|---|---|---|---|
+| low | ½ | 25% | 32×24 |
+| medium | ¾ | 56% | 48×36 |
+| high | 1 | 100% | 48×36, MilkDrop's and Butterchurn's default |
+
+High is the engine as it drew before there was a setting, and the default.
+
+Lines and dots (waves, shape borders) keep their pixel width at lower scales, so once
+scaled up they look thicker, as in MilkDrop at a smaller texture size.
+
+**Auto** (`quality::auto(machine, output)`) picks the best level whose estimated GPU
+time a refresh, for the slowest preset of the bench's starter sample, is at most
+**10 ms** (7.5 ms under 16 GB, where the GPU shares less memory and bandwidth), else
+low. The estimate is `10.6 ms × megapixels drawn ÷ GPU score`, where the score is the
+GPU's cores (as `ioreg` reads them; else the fewest its tier ships with: 7 for an M1, 8
+for later base chips, 14 Pro, 24 Max, 48 Ultra) × a per-core factor for its generation
+over the M1 (M2 1.2, M3 1.35, M4 1.5, later 1.7), and 10.6 is the slowest preset's
+0.33 ms/MP on this M1 Max × its 32 cores. A machine that isn't Apple silicon, or whose
+chip can't be read, gets medium. So a base M1 with 8 GB is **high at 1080p and medium
+at 4K**, an 8-core M2 at 4K high with 16 GB and medium with 8, and any Pro or Max high
+at 4K.
+
+**Measured on this M1 Max** (32-core GPU, 32 GB; `cargo run --release -p
+visuals-engine --bin bench -- --sizes 1920x1080,3840x2160,5760x3240,7680x4320`): 24
+starter presets spread over `app/src-tauri/presets/starter`, each 120 refreshes of
+1/60 s after 10 to warm up, each presented at the size, at most two ahead of the GPU.
+fps is the mean over presets of each one's refreshes over the time they took:
+
+| output | level | fps | median preset | slowest preset | CPU ms a refresh |
+|---|---|---|---|---|---|
+| 1080p | low | 902 | 1194 | 249 | 0.95 |
+| 1080p | medium | 842 | 1131 | 238 | 1.08 |
+| 1080p | high | 854 | 1144 | 240 | 1.09 |
+| 4K | low | 946 | 1290 | 235 | 0.97 |
+| 4K | medium | 770 | 1006 | 239 | 1.13 |
+| 4K | high | 714 | 887 | 238 | 1.12 |
+
+At 1080p and 4K the M1 Max's GPU is not what limits it: the level hardly moves the
+numbers, and the slowest preset (Martin – Pixies Party, many shape instances) is
+bound by its equations at about 4 ms of CPU at every level. The GPU shows at larger
+outputs, which is where its cost was read: high at 6K draws 476 fps (slowest 134) and
+at 8K 254 (slowest 82), so a refresh costs the GPU about **0.13 ms per megapixel drawn
+on average and 0.33 for the slowest preset** (Pithlit – Psychotrip), from the change
+between the two.
+
+**A base M1 (7- or 8-core GPU, 8 GB) is an estimate until #89 measures it.** Its CPU
+cores are the M1 Max's, so the CPU side is taken as the same; its GPU has a quarter of
+the cores (4.6× fewer with 7) and a sixth of the memory bandwidth (68 GB/s against
+400), so the GPU's time is taken as this machine's × 4.6 to 5.9. A refresh costs about
+the larger of the two:
+
+| output | level | GPU ms, average preset | GPU ms, slowest | estimated fps, slowest preset |
+|---|---|---|---|---|
+| 1080p | low | 0.3–0.4 | 0.8–1.0 | ~240 (its CPU) |
+| 1080p | medium | 0.7–0.9 | 1.8–2.3 | ~240 (its CPU) |
+| 1080p | high | 1.2–1.6 | 3.1–4.0 | ~240 (its CPU) |
+| 4K | low | 1.2–1.6 | 3.1–4.0 | ~240 (its CPU) |
+| 4K | medium | 2.8–3.6 | 7.1–9.1 | 110–140 |
+| 4K | high | 5.0–6.4 | 12.6–16.1 | 62–79 |
+
+So 60 fps at 1080p on a base M1 should hold at every level with the starter set; at
+4K high the slowest presets come close to the frame, which is why auto picks medium
+there.
+
 ## The graph is MilkDrop's pipeline
 
-Nodes are MilkDrop's stages, not arithmetic. Equation and shader nodes hold code, kept
+This is the lab editor's graph; the player has none. Nodes are MilkDrop's stages, not
+arithmetic. Equation and shader nodes hold code, kept
 as written; their ports are the variables MilkDrop already names.
 
 - **Sources:** audio input, the Live bridge, time.
@@ -658,25 +791,21 @@ What can't match Butterchurn, and so is not an engine bug when a preset looks di
   between WebGL and wgpu into different pictures within seconds; its first seconds are
   the ones to judge.
 
-## Phases
+## How the engine got here
 
-0. **Baseline.** Profile where Butterchurn's frame goes at 4K on Ryan's machine — equations, mesh, each
-   pass, mipmaps. The numbers that decide what to optimise.
-1. **Spike.** A Tauri app whose Rust crate draws one shader preset — warp, comp, feedback,
-   blur — on Metal at 4K, from a CPAL input. Measured against phase 0. **Decision point:**
-   confirm `wgpu` over raw Metal, and the frame budget per pass.
-2. **Engine.** Every stage, the EEL VM, exact audio analysis, the import-time shader
-   translation.
-3. **Importer.** `.milk` → flow JSON over the whole pack.
-4. **Conformance.** Ryan judges presets beside the BlackHole visualizer; the engine closes
-   what he finds.
-5. **Editor**, then the Live bridge as a sound node and set facts as ports.
+Before the milestones, the engine was built in phases: a baseline (where Butterchurn's
+frame goes at 4K, "Measured so far"), a spike on Metal that settled `wgpu` over raw
+Metal, then the engine itself (every stage, the EEL VM, exact audio analysis, the shader
+translation). Conformance carries on alongside the milestones: Ryan judges presets beside
+the BlackHole visualizer, the compare bench scores them, and the engine closes what they
+find. The editor, once the last phase, is now the lab build; the old plan's flow importer
+(`.milk` → flow JSON) and the Live bridge as a sound node are dropped.
 
 ## Questions still open
 
-- **Which machine is the 4K/60 target?** Phase 0 measures on it.
-- **The Live bridge's sound.** It carries meters today, not audio. "A node that provides
-  sound" means the bridge device sending PCM, which is bridge work in another repo.
+- **Performance on the low end.** The 1.0 floor is a base M1 with 8 GB (#101, measured in
+  the 0.3 exit check, #89), with a quality setting; 4K at 60 on larger machines comes
+  after.
 
 ## Where it lives
 
