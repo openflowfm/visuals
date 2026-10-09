@@ -227,6 +227,9 @@ pub const REDUCED_FLASH_MAX: f64 = 0.25;
 pub const REDUCED_FLASH_EVERY: f64 = 0.5;
 /// With motion reduced: the strongest a punch gets (half its zoom and brightness).
 pub const REDUCED_PUNCH_MAX: f64 = 0.5;
+/// With motion reduced: the strongest punch-on-beat's pulse gets; it pulses at
+/// most every [`REDUCED_FLASH_EVERY`] too.
+pub const REDUCED_BEAT_PUNCH_MAX: f64 = 0.25;
 
 /// How long freeze takes to come back up to speed once released.
 const THAW: f64 = 0.4;
@@ -266,6 +269,34 @@ struct Timing {
     /// The last heard beat at least [`REDUCED_FLASH_EVERY`] after the one before:
     /// what an audio strobe flashes on with motion reduced.
     heard_slow: Option<Instant>,
+    /// With motion reduced: when the last strobe flash shown started ([`paced`]).
+    flash_shown: Option<Instant>,
+    /// With motion reduced: the last beat punch-on-beat pulsed on ([`paced`]).
+    punch_shown: Option<Instant>,
+}
+
+/// With motion reduced: whether a flash (or beat pulse) that started at `start`
+/// may show, given when the last one shown started (`shown`, updated when it
+/// may). It may when it is that same one, or starts at least
+/// [`REDUCED_FLASH_EVERY`] after it, whatever moved the beat there: a tap, a
+/// new tempo or a Link session. One that starts sooner, or earlier, is refused.
+fn paced(shown: &mut Option<Instant>, start: Instant) -> bool {
+    /// How far apart two readings of one start may be (rounding), and still be the same flash.
+    const SAME: f64 = 0.001;
+    let Some(last) = *shown else {
+        *shown = Some(start);
+        return true;
+    };
+    let after = secs(last, start);
+    let before = secs(start, last);
+    if after.max(before) < SAME {
+        return true;
+    }
+    if after >= REDUCED_FLASH_EVERY - SAME {
+        *shown = Some(start);
+        return true;
+    }
+    false
 }
 
 impl Timing {
@@ -295,7 +326,19 @@ impl Fx {
             settings: Settings::default(),
             bpm: 120.0,
             linked: false,
-            timing: Timing { thawed: None, fading: None, black_from: (0.0, now), kicked: None, anchor: now, taps: Vec::new(), heard: None, loud: false, heard_slow: None },
+            timing: Timing {
+                thawed: None,
+                fading: None,
+                black_from: (0.0, now),
+                kicked: None,
+                anchor: now,
+                taps: Vec::new(),
+                heard: None,
+                loud: false,
+                heard_slow: None,
+                flash_shown: None,
+                punch_shown: None,
+            },
         }
     }
 
@@ -470,11 +513,12 @@ impl Fx {
         if to > from { (from + moved).min(to) } else { (from - moved).max(to) }
     }
 
-    /// Whether the strobe is in a flash at `now`. With motion `reduced`, the
-    /// flashes come at most every [`REDUCED_FLASH_EVERY`]: a fast tempo's skip
-    /// beats (every 2nd, 4th…, so they stay on the beat), heard beats too close
-    /// to the last one flashed are let go.
-    fn flashing(&self, now: Instant, reduced: bool) -> bool {
+    /// When the strobe's flash under way at `now` started, if one is. With motion
+    /// `reduced`, the sync's flashes come at most every [`REDUCED_FLASH_EVERY`]:
+    /// a fast tempo's skip beats (every 2nd, 4th…, so they stay on the beat),
+    /// heard beats too close to the last one flashed are let go. (What moves the
+    /// beat — taps, a new tempo, Link — is paced in [`Fx::master_with`].)
+    fn flashing(&self, now: Instant, reduced: bool) -> Option<Instant> {
         match self.settings.sync {
             Sync::Tempo => {
                 let mut every = self.beat_length() / self.settings.strobe_rate;
@@ -482,22 +526,36 @@ impl Fx {
                     every *= 2f64.powf((REDUCED_FLASH_EVERY / every).log2().ceil());
                 }
                 let since = now.saturating_duration_since(self.timing.anchor).as_secs_f64();
-                let phase = since - (since / every).floor() * every;
-                phase < FLASH.min(every * 0.5)
+                let into = (since / every).floor() * every;
+                (since - into < FLASH.min(every * 0.5)).then(|| self.timing.anchor + Duration::from_secs_f64(into))
             }
             Sync::Audio => {
                 let beat = if reduced { self.timing.heard_slow } else { self.timing.heard };
-                beat.is_some_and(|t| secs(t, now) < FLASH * 1.5)
+                beat.filter(|&t| secs(t, now) < FLASH * 1.5)
             }
         }
     }
 
-    fn punch_level(&self, now: Instant) -> f64 {
+    /// The punch at `now`: held or dying away, and punch-on-beat's pulse. With
+    /// motion `reduced`, the first is capped at [`REDUCED_PUNCH_MAX`], and the
+    /// pulse at [`REDUCED_BEAT_PUNCH_MAX`] and to one every [`REDUCED_FLASH_EVERY`]
+    /// at most (a beat too soon after the last one pulsed is let go).
+    fn punch_level(&mut self, now: Instant, reduced: bool) -> f64 {
         let decay = |t: Instant| (-secs(t, now) / PUNCH_DECAY).exp();
         let mut level: f64 = if self.settings.punch { 1.0 } else { self.timing.kicked.map_or(0.0, decay) };
+        if reduced {
+            level = level.min(REDUCED_PUNCH_MAX);
+        }
         if self.settings.punch_on_beat {
             if let Some(beat) = self.last_beat(now) {
-                level = level.max(decay(beat));
+                let pulse = if !reduced {
+                    decay(beat)
+                } else if paced(&mut self.timing.punch_shown, beat) {
+                    decay(beat).min(REDUCED_BEAT_PUNCH_MAX)
+                } else {
+                    self.timing.punch_shown.map_or(0.0, decay).min(REDUCED_BEAT_PUNCH_MAX)
+                };
+                level = level.max(pulse);
             }
         }
         if level < 0.01 { 0.0 } else { level }
@@ -520,20 +578,26 @@ impl Fx {
     }
 
     /// The master pass at `now`, with motion reduced when the app's setting says so ([`crate::access::reduced`]).
-    pub fn master(&self, now: Instant) -> Master {
+    pub fn master(&mut self, now: Instant) -> Master {
         self.master_with(now, crate::access::reduced())
     }
 
-    /// The master pass at `now`. With motion `reduced`, the strobe's flashes and
-    /// gaps are capped at [`REDUCED_FLASH_MAX`] and come at most every
-    /// [`REDUCED_FLASH_EVERY`], and a punch at [`REDUCED_PUNCH_MAX`], whatever
-    /// the strobe's level, rate or Intensity are set to.
-    pub fn master_with(&self, now: Instant, reduced: bool) -> Master {
-        let s = &self.settings;
+    /// The master pass at `now`, asked every refresh with `now` going forward.
+    /// With motion `reduced`, the strobe's flashes and gaps are capped at
+    /// [`REDUCED_FLASH_MAX`] and start at least [`REDUCED_FLASH_EVERY`] apart
+    /// whatever the strobe's level, rate, Intensity, taps, tempo or Link session
+    /// do; a punch is capped at [`REDUCED_PUNCH_MAX`], and punch-on-beat as
+    /// [`Fx::punch_level`] says.
+    pub fn master_with(&mut self, now: Instant, reduced: bool) -> Master {
+        let punch = self.punch_level(now, reduced);
         let mut black = self.black_level(now);
         let mut flash = 0.0;
+        let s = &self.settings;
         if s.strobe {
-            let on = self.flashing(now, reduced);
+            let on = match self.flashing(now, reduced) {
+                Some(start) => !reduced || paced(&mut self.timing.flash_shown, start),
+                None => false,
+            };
             let level = if reduced { s.strobe_intensity.min(REDUCED_FLASH_MAX) } else { s.strobe_intensity };
             match s.strobe_style {
                 StrobeStyle::White if on => flash = level,
@@ -541,7 +605,6 @@ impl Fx {
                 _ => {}
             }
         }
-        let punch = self.punch_level(now);
         Master {
             brightness: s.brightness as f32,
             hue: s.hue as f32,
@@ -549,7 +612,7 @@ impl Fx {
             mirror: s.mirror,
             flash: flash as f32,
             black: black as f32,
-            punch: (if reduced { punch.min(REDUCED_PUNCH_MAX) } else { punch }) as f32,
+            punch: punch as f32,
             fade: self.fade_level(now) as f32,
         }
     }
@@ -647,7 +710,7 @@ mod tests {
 
     #[test]
     fn defaults_draw_the_picture_as_it_is() {
-        let fx = fx();
+        let mut fx = fx();
         assert_eq!(fx.master(t(0.0)), Master::default());
         assert_eq!(fx.speed_now(t(0.0)), 1.0);
         assert_eq!(fx.echo(), 0.0);
@@ -831,7 +894,7 @@ mod tests {
         let anchor = fx.timing.anchor;
         let at = |s: f64| anchor + Duration::from_secs_f64(s);
         // Sampled every 5 ms over two seconds: count the flashes and find the brightest.
-        let flashes = |fx: &Fx, reduced: bool| {
+        let flashes = |fx: &mut Fx, reduced: bool| {
             let (mut count, mut peak, mut was) = (0, 0f32, false);
             for i in 0..400 {
                 let f = fx.master_with(at(i as f64 * 0.005), reduced).flash;
@@ -843,12 +906,12 @@ mod tests {
             }
             (count, peak)
         };
-        assert_eq!(flashes(&fx, false), (32, 1.0), "unreduced: as set");
-        let (count, peak) = flashes(&fx, true);
-        assert!(count <= 4, "at most two a second: {count}");
-        assert!(count > 0 && (peak as f64 - REDUCED_FLASH_MAX).abs() < 1e-6, "{count} {peak}");
+        assert_eq!(flashes(&mut fx, false), (32, 1.0), "unreduced: as set");
         // Still on the beat: the anchor's beat flashes.
         assert!(fx.master_with(at(0.01), true).flash > 0.0);
+        let (count, peak) = flashes(&mut fx, true);
+        assert!(count <= 4, "at most two a second: {count}");
+        assert!(count > 0 && (peak as f64 - REDUCED_FLASH_MAX).abs() < 1e-6, "{count} {peak}");
         // Black gaps are capped the same way.
         act(&mut fx, FxAction::StrobeStyle { style: StrobeStyle::Black }, 0.0);
         let gap = fx.master_with(at(0.1), true).black;
@@ -862,6 +925,123 @@ mod tests {
         act(&mut fx, FxAction::Punch { on: Some(true) }, 0.0);
         assert_eq!(fx.master_with(at(0.3), false).punch, 1.0);
         assert_eq!(fx.master_with(at(0.3), true).punch as f64, REDUCED_PUNCH_MAX);
+    }
+
+    /// Runs `fx` from `t(0)` for `seconds`, a refresh every 5 ms, calling `meddle`
+    /// with each refresh's time first (to tap, set a tempo…): when each strobe
+    /// flash and each punch pulse began, and the strongest of each.
+    fn run(fx: &mut Fx, seconds: f64, reduced: bool, mut meddle: impl FnMut(&mut Fx, f64)) -> (Vec<f64>, f32, Vec<f64>, f32) {
+        let (mut flashes, mut flash_peak, mut lit) = (Vec::new(), 0f32, false);
+        let (mut pulses, mut punch_peak, mut last) = (Vec::new(), 0f32, 0f32);
+        for i in 0..(seconds / 0.005) as usize {
+            let s = i as f64 * 0.005;
+            meddle(fx, s);
+            let m = fx.master_with(t(s), reduced);
+            if m.flash > 0.0 && !lit {
+                flashes.push(s);
+            }
+            lit = m.flash > 0.0;
+            flash_peak = flash_peak.max(m.flash);
+            // A pulse begins where the punch jumps up.
+            if m.punch > last + 0.05 {
+                pulses.push(s);
+            }
+            last = m.punch;
+            punch_peak = punch_peak.max(m.punch);
+        }
+        (flashes, flash_peak, pulses, punch_peak)
+    }
+
+    /// How much sooner than [`REDUCED_FLASH_EVERY`] two starts [`run`] saw may
+    /// look: a flash starting between refreshes is seen at the next one (5 ms),
+    /// plus the rounding [`paced`] allows.
+    const SAMPLED: f64 = 0.006;
+
+    /// The shortest time between two of `starts`.
+    fn closest(starts: &[f64]) -> f64 {
+        starts.windows(2).map(|w| w[1] - w[0]).fold(f64::INFINITY, f64::min)
+    }
+
+    #[test]
+    fn reduced_motion_keeps_rapid_taps_to_two_flashes_a_second() {
+        let tapping = |fx: &mut Fx, s: f64| {
+            // Seven taps a second: each one puts the beat (and a flash) on itself.
+            if (s * 1000.0).round() as u64 % 140 == 0 {
+                act(fx, FxAction::Tap, s);
+            }
+        };
+        let mut fx = fx();
+        act(&mut fx, FxAction::Strobe { on: Some(true) }, 0.0);
+        let (flashes, ..) = run(&mut fx, 4.0, false, tapping);
+        assert!(flashes.len() >= 20, "unreduced, every tap flashes: {flashes:?}");
+        let mut fx = self::fx();
+        act(&mut fx, FxAction::Strobe { on: Some(true) }, 0.0);
+        let (flashes, peak, ..) = run(&mut fx, 4.0, true, tapping);
+        assert!(flashes.len() >= 4, "it still flashes: {flashes:?}");
+        assert!(closest(&flashes) >= REDUCED_FLASH_EVERY - SAMPLED, "{flashes:?}");
+        assert!(peak as f64 <= REDUCED_FLASH_MAX + 1e-6);
+    }
+
+    #[test]
+    fn reduced_motion_keeps_a_tempo_sweep_and_link_to_two_flashes_a_second() {
+        // The tempo stepped up every 30 ms from 40 to 240 bpm, four flashes a beat.
+        let sweep = |fx: &mut Fx, s: f64| {
+            if (s * 1000.0).round() as u64 % 30 == 0 {
+                act(fx, FxAction::Bpm { bpm: 40.0 + 200.0 * (s / 3.0).min(1.0) }, s);
+            }
+        };
+        // A Link session whose phase jumps about every 20 ms.
+        let link = |fx: &mut Fx, s: f64| {
+            if (s * 1000.0).round() as u64 % 20 == 0 {
+                fx.follow(180.0, (s * 7.3).fract(), t(s));
+            }
+        };
+        for (name, meddle) in [("sweep", &sweep as &dyn Fn(&mut Fx, f64)), ("link", &link)] {
+            let mut fx = fx();
+            act(&mut fx, FxAction::StrobeRate { rate: 4.0 }, 0.0);
+            act(&mut fx, FxAction::Strobe { on: Some(true) }, 0.0);
+            let (fast, ..) = run(&mut fx, 4.0, false, |fx, s| meddle(fx, s));
+            assert!(closest(&fast) < 0.3, "{name} unreduced flashes faster: {fast:?}");
+            let mut fx = self::fx();
+            act(&mut fx, FxAction::StrobeRate { rate: 4.0 }, 0.0);
+            act(&mut fx, FxAction::Strobe { on: Some(true) }, 0.0);
+            let (flashes, ..) = run(&mut fx, 4.0, true, |fx, s| meddle(fx, s));
+            assert!(flashes.len() >= 3, "{name} still flashes: {flashes:?}");
+            assert!(closest(&flashes) >= REDUCED_FLASH_EVERY - SAMPLED, "{name}: {flashes:?}");
+        }
+    }
+
+    #[test]
+    fn reduced_motion_paces_and_softens_punch_on_beat() {
+        let tapping = |fx: &mut Fx, s: f64| {
+            if s >= 2.0 && (s * 1000.0).round() as u64 % 150 == 0 {
+                act(fx, FxAction::Tap, s);
+            }
+        };
+        // 240 bpm (four beats a second), then taps over six a second.
+        let mut fx = fx();
+        act(&mut fx, FxAction::Bpm { bpm: 240.0 }, 0.0);
+        act(&mut fx, FxAction::PunchOnBeat { on: Some(true) }, 0.0);
+        let (_, _, pulses, peak) = run(&mut fx, 4.0, false, tapping);
+        assert!(closest(&pulses) < 0.3 && peak > 0.9, "unreduced: every beat, full: {pulses:?} {peak}");
+        let mut fx = self::fx();
+        act(&mut fx, FxAction::Bpm { bpm: 240.0 }, 0.0);
+        act(&mut fx, FxAction::PunchOnBeat { on: Some(true) }, 0.0);
+        let (_, _, pulses, peak) = run(&mut fx, 4.0, true, tapping);
+        assert!(pulses.len() >= 4, "it still pulses: {pulses:?}");
+        assert!(closest(&pulses) >= REDUCED_FLASH_EVERY - SAMPLED, "at most two a second: {pulses:?}");
+        assert!((peak as f64 - REDUCED_BEAT_PUNCH_MAX).abs() < 1e-6, "{peak}");
+    }
+
+    #[test]
+    fn a_flash_is_paced_by_when_the_last_one_started() {
+        let mut shown = None;
+        assert!(paced(&mut shown, t(1.0)), "the first");
+        assert!(paced(&mut shown, t(1.0)), "the same one, read again");
+        assert!(!paced(&mut shown, t(1.2)), "too soon");
+        assert!(!paced(&mut shown, t(0.8)), "earlier than the last");
+        assert!(paced(&mut shown, t(1.5)), "half a second on");
+        assert_eq!(shown, Some(t(1.5)));
     }
 
     #[test]
