@@ -5,11 +5,18 @@ import './access.css';
 /**
  * Accessibility (#100): the app's reduced-motion setting (`api.reducedMotion`),
  * which follows macOS's "Reduce motion" until a choice is made in Settings.
- * While it is on, the app caps the strobe and flashes (in `fx.rs`) and the page
+ * While it is on, the app caps the strobe and flashes and fades the blackout (in
+ * `fx.rs`; presets' own flashing is theirs) and the page
  * calms its own motion: the document is marked `data-reduced-motion`, which
  * `access.css` reads. `access.css` also gives every control a visible keyboard
  * focus ring.
  */
+
+/**
+ * What reduce flashing does, as the first run's switch and Settings both say it:
+ * it calms the app's own effects; presets draw their own flashes.
+ */
+export const REDUCE_WHAT = 'Calms the app’s strobe, flashes and blackout. Presets can still flash on their own.';
 
 /** The media query WebKit answers from macOS's Reduce motion. */
 export const SYSTEM_QUERY = '(prefers-reduced-motion: reduce)';

@@ -124,6 +124,11 @@ describe('MotionSwitch', () => {
     expect(html).not.toContain('Follow macOS&#x27;s Reduce motion"');
   });
 
+  it('says in its tooltip what it calms, and that presets can still flash', () => {
+    const html = draw({ reduced: false, system: true });
+    expect(html).toContain('title="Calms the app’s strobe, flashes and blackout. Presets can still flash on their own."');
+  });
+
   it('offers to follow macOS again once a choice was made', () => {
     const html = draw({ reduced: false, system: false });
     expect(switchTag(html)).toContain('aria-pressed="false"');

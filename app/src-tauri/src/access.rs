@@ -1,5 +1,5 @@
-//! Reduced motion (#100): caps the strobe, flashes and punch ([`crate::fx`]'s
-//! `master`), and follows macOS's Reduce motion until a choice is made in
+//! Reduced motion (#100): caps the strobe, flashes and punch and fades the
+//! blackout ([`crate::fx`]'s `master`; presets' own flashing is theirs), and follows macOS's Reduce motion until a choice is made in
 //! Settings. The choice (on, off, or none: follow macOS) is kept in
 //! `access.json`; macOS's setting is read again every couple of seconds, so
 //! turning it on in System Settings calms a show that is already playing.
