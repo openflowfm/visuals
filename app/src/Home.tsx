@@ -19,6 +19,7 @@ import { beginDrag, dropAction, isOver, itemTarget, listTarget, nudge, runDrop, 
 import { changeUnit, localMark, NameEdit, saveFile, sections, seedStarters, strip, tileFocus, withSetting, type StripTile } from './home.ts';
 import { FrameRate, Header, Hints, NoticeBanner, NowPlaying, openSheet, Preview, type View } from './views.tsx';
 import { say } from './words.ts';
+import { problemKey, useSettingsProblems } from './survive.ts';
 import './playlists.css';
 import './home.css';
 
@@ -168,6 +169,7 @@ export function Home({ start, onMode }: { start: string | null; onMode(view: Vie
         </div>
       </aside>
       <main className="home-main">
+        <SettingsNotes />
         {shown?.kind === 'library' ? (
           <Library
             entries={library}
@@ -205,6 +207,30 @@ export function Home({ start, onMode }: { start: string | null; onMode(view: Vie
       </main>
       <DragGhost />
       <Hints resting={HINT} />
+    </div>
+  );
+}
+
+/**
+ * Settings files that couldn't be read or kept (#99), each a quiet note over the
+ * main pane in the words the app wrote, until dismissed for this session. The
+ * live region is always there, so a problem that comes later is read out too.
+ */
+function SettingsNotes() {
+  const { problems, dismiss } = useSettingsProblems();
+  return (
+    <div className="home-problems" role="status" aria-label="settings problems">
+      {problems.map((p) => (
+        <p key={problemKey(p)} className="home-problem" data-file={p.file}>
+          <span className="home-problem-mark" aria-hidden="true">
+            !
+          </span>
+          <span className="home-problem-text">{p.message}</span>
+          <Button tone="quiet" onPress={() => dismiss(p)} label={`Dismiss the note about ${p.file}`} title="Dismiss: hide this note until the app starts again">
+            ✕
+          </Button>
+        </p>
+      ))}
     </div>
   );
 }
