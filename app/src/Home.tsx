@@ -8,7 +8,7 @@ import type { Entry, LibraryData, LibraryRow } from './api.ts';
 import { AudioInput } from './AudioInput.tsx';
 import { Library } from './Library.tsx';
 import { stepIn, prepare, queryName } from './librarySearch.ts';
-import { useLibrary, rereadOn } from './library.ts';
+import { useLibrary, rereadOn, stepDeck } from './library.ts';
 import { onChanged } from './pack.ts';
 import * as pl from './playlists.ts';
 import type { Lists, Playlist, PlaylistSettings } from './playlists.ts';
@@ -16,15 +16,11 @@ import { useNotice, useTauriEvent } from './hooks.ts';
 import { isTyping, nameOf, notice, openFailed } from './shell.ts';
 import { plural } from './controls.ts';
 import { beginDrag, dropAction, isOver, itemTarget, listTarget, nudge, runDrop, useDrag, type DragHandlers, type Payload } from './drag.ts';
-import { changeUnit, localMark, NameEdit, saveFile, sections, seedStarters, strip, tileFocus, withSetting, type StripTile } from './home.ts';
+import { changeUnit, localMark, NameEdit, playsFrom, saveFile, sections, seedStarters, strip, tileFocus, withSetting, type StripTile } from './home.ts';
 import { FrameRate, Header, Hints, NoticeBanner, NowPlaying, openSheet, Preview, type View } from './views.tsx';
 import { say } from './words.ts';
 import { problemKey, useSettingsProblems } from './survive.ts';
-import './playlists.css';
 import './home.css';
-
-/** Whether the home is ready to be the start view; kept in `homeReady.ts` so `views.tsx` can read it without a circular import. */
-export { HOME_READY } from './homeReady.ts';
 
 /** What the main pane shows: a playlist, by id, or the library. */
 type Pane = { kind: 'list'; id: string } | { kind: 'library' };
@@ -35,17 +31,20 @@ const HOME_TILE = 150;
 const HINT = '← → previous / next preset · R random · drag a preset from the library onto a playlist · point at anything to read what it does';
 
 /**
- * The playlists home (#96), the app's first screen: a sidebar of playlists,
- * smart playlists and the library, with the preview under them; the main pane
+ * The home (#96, and since decision 66 the one place to browse), the app's first
+ * screen: a sidebar of playlists, smart playlists and the library; the main pane
  * is the playlist picked, as a strip of thumbnails in the order it plays with its
- * settings and Play, or the library, full width. Presets are dragged from the
- * library onto a playlist in the sidebar, and about within a playlist's strip.
+ * settings and Play, or the library's grid; and the big preview of the preset
+ * playing beside it, or above it in a narrow window (`.home-stage`, home.css).
+ * Presets are dragged from the library onto a playlist in the sidebar, and about
+ * within a playlist's strip. `library` opens it on the library pane
+ * (`VISUALS_VIEW=library`).
  */
-export function Home({ start, onMode }: { start: string | null; onMode(view: View, path: string | null): void }) {
+export function Home({ start, onMode, library: startOnLibrary = false }: { start: string | null; onMode(view: View, path: string | null): void; library?: boolean }) {
   const [current, setCurrent] = useState<Entry | null>(null);
   const { notice: banner, set: setNotice, fail, dismiss } = useNotice();
   const [lists, setLists] = useState<Lists | null>(null);
-  const [pane, setPane] = useState<Pane | null>(null);
+  const [pane, setPane] = useState<Pane | null>(startOnLibrary ? { kind: 'library' } : null);
   const audioFailed = useMemo(() => fail("Couldn't read the audio input."), [fail]);
 
   const load = useCallback(
@@ -101,7 +100,8 @@ export function Home({ start, onMode }: { start: string | null; onMode(view: Vie
   const step = useCallback(
     (by: number) => {
       if (playing || deck.query) {
-        pl.act({ kind: by === 0 ? 'random' : by > 0 ? 'next' : 'previous' }).catch(fail("Couldn't step the playlist."));
+        // Counted as in flight until the deck has answered and said what it opened, so the grid's follow waits for it.
+        stepDeck({ kind: by === 0 ? 'random' : by > 0 ? 'next' : 'previous' }).catch(fail("Couldn't step the playlist."));
         return;
       }
       const next = stepIn(found.shown.length ? found.shown : library, current?.path ?? null, by);
@@ -144,10 +144,10 @@ export function Home({ start, onMode }: { start: string | null; onMode(view: Vie
     <div className="app home" data-view="home">
       <Header view="home" onChange={(next) => next !== 'home' && onMode(next, current?.path ?? null)}>
         <div className="wdg wdg-control-group vf-transport" role="group" aria-label="presets">
-          <Button onPress={() => step(-1)} label="previous preset" title="previous preset (←)">
+          <Button onPress={() => step(-1)} label="previous preset" title="previous preset (←)" hint={`previous preset${playing ? ' in the playlist' : ''} (←)`}>
             ◀
           </Button>
-          <Button onPress={() => step(1)} label="next preset" title="next preset (→)">
+          <Button onPress={() => step(1)} label="next preset" title="next preset (→)" hint={`next preset${playing ? ' in the playlist' : ''} (→)`}>
             ▶
           </Button>
           <Button onPress={() => step(0)} label="random preset" title="random preset (R)">
@@ -165,10 +165,21 @@ export function Home({ start, onMode }: { start: string | null; onMode(view: Vie
       </Header>
       <aside className="home-side">
         <Sidebar lists={lists} shown={shown} onPick={pick} onLists={setLists} onImport={imported} onError={(what) => fail(`Couldn't ${what}.`)} rowsReady={rows !== null} />
+      </aside>
+      <section className="home-stage" aria-label={say('bench')}>
         <div className="home-preview-cell">
           <Preview className="home-preview" />
         </div>
-      </aside>
+        <div className="home-stage-says">
+          {current && (
+            <p className="home-stage-name" title={current.group ? `${current.group} / ${current.name}` : current.name}>
+              {current.name}
+            </p>
+          )}
+          {current?.group && <p className="home-stage-group">{current.group}</p>}
+          <p className="home-stage-from">{playsFrom(deck, playlists)}</p>
+        </div>
+      </section>
       <main className="home-main">
         <SettingsNotes />
         {shown?.kind === 'library' ? (
@@ -239,8 +250,13 @@ function SettingsNotes() {
 /** The header's ⚙: the Settings sheet (#98), over the home. */
 export const openSettings = () => openSheet('settings');
 
-/** The pane to show when none has been picked: the playlist playing, else the first, else the library. */
+/**
+ * The pane to show when none has been picked: the playlist playing; else the
+ * library when the deck follows its filter (one the app picked up, #161, which
+ * the library then shows); else the first playlist, else the library.
+ */
 export function firstPane(lists: Lists): Pane {
+  if (!lists.deck.playlist && lists.deck.query) return { kind: 'library' };
   const id = lists.deck.playlist ?? lists.playlists[0]?.id;
   return id ? { kind: 'list', id } : { kind: 'library' };
 }

@@ -136,7 +136,7 @@ library data and the small files, not the presets or the playlists.
 |---|---|
 | `VISUALS_PRESET=<path>` | start on that preset: absolute, or a path in the pack |
 | `VISUALS_LIVE=1` | start in live mode: the output window full screen on a display |
-| `VISUALS_VIEW=<view>` | start in `home`, `library`, `live` or `live-windowed` (live in the main window, no output); wins over `VISUALS_LIVE` |
+| `VISUALS_VIEW=<view>` | start in `home`, `library` (the home on its library pane), `live` or `live-windowed` (live in the main window, no output); wins over `VISUALS_LIVE` |
 | `VISUALS_DISPLAY=<n>` | the display for the output window, from 0 (otherwise the one chosen last) |
 | `VISUALS_LINK=0` | start with Link off |
 | `VISUALS_LINK_EVERY=<bars>` | start with preset changes on the bar on, every that many bars |

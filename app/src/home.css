@@ -1,19 +1,68 @@
-/* The playlists home (Home.tsx): a sidebar of playlists, smart playlists and the
-   library over the preview, and a main pane with the playlist picked (its
-   settings and its strip of thumbnails) or the library. Rules hang off `.home`,
-   which outranks app.css's own `.app[data-view='home'] main`. */
+/* The home (Home.tsx): a sidebar of playlists, smart playlists and the library;
+   a main pane with the playlist picked (its settings and its strip of
+   thumbnails) or the library's grid; and the stage, the big preview of the
+   preset playing. In a wide window the stage is a column beside the main pane;
+   in a narrow one (under 1200px) it is a row above it. Either way it has its own
+   grid cell, so it never covers the chips or the strip, and it stays put while
+   they scroll. Rules hang off `.home`, which outranks app.css's own. */
 
 .app.home {
-  grid-template-columns: 260px minmax(0, 1fr);
+  --home-side: 260px;
+  --home-stage: clamp(360px, 34vw, 720px);
+  grid-template-columns: var(--home-side) minmax(0, 1fr) var(--home-stage);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+.home > .vf-footer {
+  grid-row: -2 / -1;
 }
 
-/* The sidebar: the lists scroll, the preview keeps its place under them. */
+/* The sidebar: the lists scroll. */
 .home .home-side {
+  grid-column: 1;
+  grid-row: 2;
   display: flex;
   flex-direction: column;
   min-height: 0;
   background: var(--panel);
   border-right: 1px solid var(--bd3);
+}
+
+/* The stage: the preview at the top of its column, and where the preset comes from under it. */
+.home .home-stage {
+  grid-column: 3;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--panel);
+  border-left: 1px solid var(--bd3);
+}
+/* Under the preview in a wide window: the preset's name, its folder, and where it comes from. */
+.home .home-stage-says {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px;
+  min-width: 0;
+}
+.home .home-stage-says p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.home .home-stage-name {
+  color: var(--fg);
+  font-size: var(--text-lead);
+  font-weight: var(--weight-medium);
+}
+.home .home-stage-group,
+.home .home-stage-from {
+  color: var(--caption);
+  font-size: var(--text-label);
+  letter-spacing: var(--track-label);
+}
+.home .home-stage-from:empty {
+  display: none;
 }
 .home .home-lists {
   flex: 1;
@@ -29,7 +78,7 @@
   display: flex;
   justify-content: center;
   overflow: hidden;
-  border-top: 1px solid var(--bd3);
+  border-bottom: 1px solid var(--bd3);
 }
 .home .home-preview {
   aspect-ratio: 16 / 9;
@@ -136,6 +185,7 @@
 /* The main pane. */
 .app.home main.home-main {
   grid-column: 2;
+  grid-row: 2;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -451,6 +501,35 @@
   white-space: nowrap;
 }
 
+/* Under 1200px the main pane needs the stage's width: the stage moves above it,
+   as wide as the main pane, the preview centred in letterbox black and no
+   taller than about a third of the window, so the chips and the strip keep
+   most of it. Where it comes from is said in the header's name and the strip. */
+@media (max-width: 1199px) {
+  .app.home {
+    grid-template-columns: var(--home-side) minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+  }
+  .home .home-side {
+    grid-row: 2 / 4;
+  }
+  .home .home-stage {
+    grid-column: 2;
+    grid-row: 2;
+    border-left: 0;
+  }
+  .home .home-preview {
+    width: auto;
+    height: min(32vh, calc((100vw - var(--home-side)) * 9 / 16));
+  }
+  .home .home-stage-says {
+    display: none;
+  }
+  .app.home main.home-main {
+    grid-row: 3;
+  }
+}
+
 /* A narrow window: the frame rate's plain numbers give way (its warning when frames drop stays). */
 @media (max-width: 900px) {
   .home .vf-header .vf-stats:not([data-slow]) {
@@ -461,6 +540,13 @@
 /* Narrower still (decision 63): the sidebar gives the playlist room. */
 @media (max-width: 699px) {
   .app.home {
-    grid-template-columns: 180px minmax(0, 1fr);
+    --home-side: 180px;
   }
+}
+
+/* While a preset is dragged (drag.ts), the pointer says so everywhere and nothing gets selected. */
+body[data-dragging],
+body[data-dragging] * {
+  cursor: grabbing !important;
+  user-select: none;
 }

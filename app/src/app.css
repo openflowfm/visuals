@@ -280,23 +280,13 @@ body {
   }
 }
 
+/* The editor's library column (Lab.tsx). */
 .library {
   display: flex;
   flex-direction: column;
   min-height: 0;
   background: var(--panel);
   border-right: 1px solid var(--bd3);
-}
-
-/* The library column's tabs. */
-.library-tabs {
-  padding: 8px 8px 0;
-}
-.library-tabs .wdg-segmented-body {
-  display: flex;
-}
-.library-tabs .wdg-segmented-body button {
-  flex: 1;
 }
 
 main {
@@ -324,32 +314,7 @@ main {
   box-shadow: 0 0 0 100vmax #000;
 }
 
-/* The library view (`Browse` with nothing below or beside the preview): the
-   library column and the preview, as big as the room left allows. */
-.app[data-view='library'] {
-  grid-template-columns: 220px minmax(0, 1fr);
-}
-.app[data-view='library'] main {
-  grid-template-rows: minmax(0, 1fr);
-}
-.app[data-view='library'] .bench-row {
-  align-items: center;
-  border-bottom: 0;
-}
-.app[data-view='library'] .bench {
-  height: min(calc(100vh - 160px), calc((100vw - 300px) * 9 / 16));
-}
-/* A narrow window (decision 63): the library column gives the preview room. */
-@media (max-width: 699px) {
-  .app[data-view='library'] {
-    grid-template-columns: 180px minmax(0, 1fr);
-  }
-  .app[data-view='library'] .bench {
-    height: min(calc(100vh - 160px), calc((100vw - 260px) * 9 / 16));
-  }
-}
-
-/* Until the bench has drawn (`Bench`), its box and the bars around it are the
+/* Until the bench has drawn (`Preview`), its box and the bars around it are the
    page's own surface, saying so, instead of a hole onto whatever is under the
    window. The editor's bench and live mode's preview alike. */
 .bench[data-loading],
@@ -395,8 +360,7 @@ main {
   color: var(--caption);
 }
 
-/* The 0.5 stubs (Home, Settings, More effects): just enough to look meant until
-   their lanes (#96, #98) draw them for real. A sheet is a panel over any view. */
+/* A sheet (Settings, More effects) is a panel over any view. */
 .vf-sheet {
   position: fixed;
   top: calc(var(--ctl-h) + 21px);
@@ -428,19 +392,4 @@ main {
 .vf-sheet p {
   color: var(--caption);
   font-size: var(--text-body);
-}
-/* Home has no library column or side panel: its main spans the grid, and paints
-   itself, as nothing here sits over the bench. */
-.app[data-view='home'] main {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg);
-}
-.home-placeholder {
-  margin: 0;
-  color: var(--caption);
-  font-size: var(--text-body);
-  text-align: center;
 }

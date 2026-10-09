@@ -90,7 +90,12 @@ describe('the view to start in', () => {
   it('follows VISUALS_VIEW and VISUALS_LIVE, as the app says them', () => {
     expect(startIn('live-windowed', 'home')).toEqual({ view: 'live', windowed: true });
     expect(startIn('live', 'home')).toEqual({ view: 'live' });
-    expect(startIn('library', 'home')).toEqual({ view: 'library' });
-    expect(startIn(null, 'library')).toEqual({ view: 'library' });
+    expect(startIn('home', 'editor')).toEqual({ view: 'home' });
+    expect(startIn(null, 'editor')).toEqual({ view: 'editor' });
+  });
+
+  it('opens the home on its library pane for VISUALS_VIEW=library, in any build', () => {
+    expect(startIn('library', 'home')).toEqual({ view: 'home', library: true });
+    expect(startIn('library', 'editor')).toEqual({ view: 'home', library: true });
   });
 });

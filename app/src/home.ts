@@ -258,6 +258,18 @@ export function changeUnit(s: PlaylistSettings, unit: pl.Change['unit']): Playli
   return withSetting(s, 'change', { unit, every });
 }
 
+/**
+ * What the preview's caption says the preset playing comes from: "From Chill, 3
+ * of 20", "From the library, in the grid's order" while the deck follows the
+ * library's filter, else nothing (a preset opened on its own).
+ */
+export function playsFrom(deck: pl.Deck, playlists: readonly Playlist[]): string {
+  const up = pl.upNext({ deck, playlists: [...playlists] });
+  if (up) return `From ${up.playlist.name}${up.index !== null && up.count ? `, ${up.index + 1} of ${up.count}` : ''}`;
+  if (deck.query) return "From the library, in the grid's order";
+  return '';
+}
+
 const clamp = (v: number, lo: number, hi: number) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : lo);
 
 /** A file to save in the page: a link to it, clicked. */

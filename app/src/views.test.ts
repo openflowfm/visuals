@@ -18,26 +18,19 @@ describe('Preview', () => {
 });
 
 describe('viewsFor', () => {
-  it('offers the library and live, and the editor only in a lab build', () => {
-    expect(viewsFor(false, false)).toEqual(['library', 'live']);
-    expect(viewsFor(true, false)).toEqual(['library', 'editor', 'live']);
+  it('offers the home and live, with no library view of its own', () => {
+    expect(viewsFor(false)).toEqual(['home', 'live']);
   });
 
-  it('puts the home first once it is ready', () => {
-    expect(viewsFor(false, true)).toEqual(['home', 'library', 'live']);
-    expect(viewsFor(true, true)).toEqual(['home', 'library', 'editor', 'live']);
+  it('offers the editor between them only in a lab build', () => {
+    expect(viewsFor(true)).toEqual(['home', 'editor', 'live']);
   });
 });
 
 describe('homeFor', () => {
-  it('starts a lab build in the editor, whether or not the home is ready', () => {
-    expect(homeFor(true, false)).toBe('editor');
-    expect(homeFor(true, true)).toBe('editor');
-  });
-
-  it('starts in the home once it is ready, else the library', () => {
-    expect(homeFor(false, true)).toBe('home');
-    expect(homeFor(false, false)).toBe('library');
+  it('starts a lab build in the editor, and the app in the home', () => {
+    expect(homeFor(true)).toBe('editor');
+    expect(homeFor(false)).toBe('home');
   });
 });
 
