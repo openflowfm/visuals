@@ -49,11 +49,11 @@
 .home .home-section {
   margin: 0 0 10px;
 }
-.home .home-section-title {
+/* A section's heading, with its tools (+, ⤓) beside it rather than in it. */
+.home .home-section-head {
   display: flex;
   align-items: center;
   gap: 2px;
-  margin: 0;
   padding: 0 6px 2px 12px;
   color: var(--caption);
   font-size: var(--text-label);
@@ -61,8 +61,10 @@
   letter-spacing: var(--track-label);
   text-transform: uppercase;
 }
-.home .home-section-title > span {
+.home .home-section-title {
   flex: 1;
+  margin: 0;
+  font: inherit;
 }
 .home .home-section-rows {
   list-style: none;
@@ -81,14 +83,15 @@
   min-height: 26px;
   padding: 0 10px 0 6px;
   cursor: pointer;
-  outline: none;
   user-select: none;
 }
 .home .home-row:hover {
   background: var(--bd);
 }
-.home .home-row:focus-visible {
-  box-shadow: inset 0 0 0 1px var(--focus);
+/* A row's ring (access.css) goes inside it: the lists scroll, and would clip one drawn outside. */
+.vf-root .home li.home-row:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: -2px;
 }
 .home .home-row[aria-current='true'] {
   background: var(--sel);
@@ -219,9 +222,8 @@
   font-size: var(--text-lead);
   color: var(--fg);
   background: var(--surface-control);
-  border: 1px solid var(--focus);
+  border: 1px solid var(--bd3);
   border-radius: var(--radius);
-  outline: none;
 }
 .home .home-pane-what {
   color: var(--caption);
@@ -239,7 +241,7 @@
 }
 .home .home-pane-head .wdg-button-body:focus-visible,
 .home .home-lists .wdg-button-body:focus-visible {
-  outline: 1px solid var(--fg);
+  outline: 2px solid var(--vf-focus-ring);
   outline-offset: 1px;
 }
 
@@ -295,9 +297,12 @@
   min-width: 0;
   color: var(--ui);
   cursor: pointer;
-  outline: none;
   user-select: none;
   border-radius: var(--radius);
+}
+/* A focused tile rings its picture (below), not itself as well: one ring. */
+.vf-root .home li.home-tile:focus-visible {
+  outline: none;
 }
 .home .home-thumb {
   position: relative;
@@ -363,10 +368,6 @@
 .home .home-tile:hover .home-thumb {
   outline-color: var(--ui);
 }
-.home .home-tile:focus-visible .home-thumb {
-  outline: 2px solid var(--focus);
-  outline-offset: -2px;
-}
 .home .home-tile[aria-current='true'] .home-thumb {
   outline: 2px solid var(--green);
   outline-offset: -2px;
@@ -377,6 +378,13 @@
 }
 .home .home-tile[data-next] .home-thumb {
   outline: 1px dashed var(--amber);
+}
+/* After the playing and next marks, and above them: focus shows on those tiles too (the playing one keeps its bold name). */
+.home .home-tile:focus-visible .home-thumb,
+.home .home-tile[aria-current='true']:focus-visible .home-thumb,
+.home .home-tile[data-next]:focus-visible .home-thumb {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: -2px;
 }
 .home .home-tile[data-missing] .home-thumb,
 .home .home-tile[data-missing] .home-tile-name {

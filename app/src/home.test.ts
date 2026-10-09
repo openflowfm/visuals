@@ -3,7 +3,9 @@ import type { LibraryQuery, LibraryRow, Level } from './api.ts';
 import { prepareRow, type Prepared } from './librarySearch.ts';
 import { DEFAULT_SETTINGS, EMPTY_DECK, type Lists, type Playlist } from './playlists.ts';
 import { changeUnit, matches, RECENT, sections, seedStarters, SEEDED_KEY, STARTERS, STRIP_CAP, strip, NameEdit, tileFocus, withSetting, type Mark } from './home.ts';
-import { firstPane, openSettings } from './Home.tsx';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { firstPane, openSettings, PlaylistPane, rowSays, SettingsBar, Sidebar, stripTileSays } from './Home.tsx';
 import { SHEET_EVENT, sheetOf } from './views.tsx';
 
 const row = (name: string, speed: Level = 'mid', intensity: Level = 'mid', over: Partial<LibraryRow> = {}): LibraryRow => ({
@@ -272,5 +274,58 @@ describe('openSettings', () => {
     page.addEventListener(SHEET_EVENT, (e) => asked.push(sheetOf(e)));
     openSettings();
     expect(asked).toEqual(['settings']);
+  });
+});
+
+describe('the home, read aloud', () => {
+  const none = () => {};
+  const fails = () => none;
+  const mine = manual('Mine', ['/presets/g/a.milk', '/presets/g/b.milk']);
+  const calm = smart('Calm', { groups: {}, text: '' });
+  const lists: Lists = { playlists: [mine, calm], deck: { ...EMPTY_DECK, playlist: 'Mine', index: 0, next_index: 1 } };
+
+  it('names each playlist row with its kind, its count and whether it plays', () => {
+    expect(rowSays(mine, true)).toBe('Mine, playlist, 2 presets, playing');
+    expect(rowSays(calm, false)).toBe('Calm, smart playlist, fills itself with all presets');
+    const html = renderToStaticMarkup(createElement(Sidebar, { lists, shown: null, onPick: none, onLists: none, onImport: none, onError: fails, rowsReady: true }));
+    expect(html).toContain('aria-label="Mine, playlist, 2 presets, playing"');
+    expect(html).toContain('aria-label="Calm, smart playlist, fills itself with all presets"');
+    // The count is in the label, so the number itself isn't read again.
+    expect(html).toContain('<i aria-hidden="true">2</i>');
+  });
+
+  it('keeps + and ⤓ beside the headings, not in them', () => {
+    const html = renderToStaticMarkup(createElement(Sidebar, { lists, shown: null, onPick: none, onLists: none, onImport: none, onError: fails, rowsReady: true }));
+    const headings = [...html.matchAll(/<h2[^>]*>(.*?)<\/h2>/g)].map((m) => m[1]);
+    expect(headings).toEqual(['Playlists', 'Smart playlists']);
+    expect(html).toContain('aria-label="new playlist"');
+    expect(html).toContain('aria-label="add from a file"');
+  });
+
+  it('names each tile in the strip with its place, and whether it plays now or next', () => {
+    expect(stripTileSays({ key: 'k', path: '/x.milk', name: 'x', thumbnail: null, missing: true, index: 2 }, 3, false, false)).toBe('3. x, not in the library any more');
+    const html = renderToStaticMarkup(
+      createElement(PlaylistPane, {
+        list: mine,
+        lists,
+        rows: [prep(row('a')), prep(row('b'))],
+        played: [],
+        dropping: { accepts: () => true, onDrop: none },
+        onLists: none,
+        onDeleted: none,
+        onError: fails,
+        onLibrary: none,
+      }),
+    );
+    expect(html).toContain('aria-label="1. a, playing"');
+    expect(html).toContain('aria-label="2. b, next"');
+  });
+
+  it('names every field of how a playlist plays, with no <label> round controls it can’t label', () => {
+    const html = renderToStaticMarkup(createElement(SettingsBar, { settings: DEFAULT_SETTINGS, differs: [], onChange: none }));
+    expect(html).not.toContain('<label');
+    expect(html).toContain('role="group" aria-label="move on by itself"');
+    const sliders = [...html.matchAll(/<div[^>]*role="slider"[^>]*>/g)].map((m) => /aria-label="([^"]*)"/.exec(m[0])?.[1]);
+    expect(sliders).toEqual(['move on by itself every, in seconds', 'crossfade', 'speed', 'trails', 'colour shift']);
   });
 });

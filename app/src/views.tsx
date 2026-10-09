@@ -4,6 +4,7 @@ import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { HintFooter } from '@openflow/widgets/chrome/HintFooter.tsx';
 import * as api from './api.ts';
 import { usePreview } from './preview.ts';
+import { say } from './words.ts';
 import { frameReadout, type Notice } from './shell.ts';
 import { HOME_READY } from './homeReady.ts';
 
@@ -48,7 +49,7 @@ export function Preview({ className }: { className: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const drawing = usePreview(ref);
   return (
-    <div className={className} ref={ref} data-loading={drawing ? undefined : ''}>
+    <div className={className} ref={ref} role="img" aria-label={`${say('bench')} of the playing preset`} data-loading={drawing ? undefined : ''}>
       {!drawing && (
         <span className="bench-loading" role="status">
           Loading the display…

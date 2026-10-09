@@ -282,6 +282,7 @@ export const Tile = memo(function Tile({ id, index, p, active, selected, playing
       className="lib-tile"
       role="option"
       aria-selected={selected}
+      aria-label={says}
       data-active={active ? '' : undefined}
       data-playing={playing ? '' : undefined}
       data-hidden={p.hidden ? '' : undefined}
@@ -306,7 +307,7 @@ export const Tile = memo(function Tile({ id, index, p, active, selected, playing
       <span className="lib-title">{p.title}</span>
       {intoName !== null && (
         // Out of the tab order: the grid is one tab stop, and + on the grid adds the active tile.
-        <div className="wdg wdg-button lib-add">
+        <div className="wdg wdg-button lib-add" aria-hidden="true">
           <ButtonFace
             tone="quiet"
             tabIndex={-1}

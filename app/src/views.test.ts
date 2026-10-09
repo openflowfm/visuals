@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { homeFor, openSheet, SHEET_EVENT, sheetOf, viewsFor, type Sheet } from './views.tsx';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { homeFor, openSheet, Preview, SHEET_EVENT, sheetOf, viewsFor, type Sheet } from './views.tsx';
+
+describe('Preview', () => {
+  it('is a picture with a name, for a screen reader', () => {
+    const html = renderToStaticMarkup(createElement(Preview, { className: 'home-preview' }));
+    expect(html).toMatch(/^<div class="home-preview" role="img" aria-label="preview of the playing preset"/);
+  });
+});
 
 describe('viewsFor', () => {
   it('offers the library and live, and the editor only in a lab build', () => {

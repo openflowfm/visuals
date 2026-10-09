@@ -292,8 +292,19 @@ interface SidebarProps {
   rowsReady: boolean;
 }
 
+/** What a playlist's row says to a screen reader: its name, what kind it is, how many presets (a manual one), and whether it plays. */
+export function rowSays(p: Playlist, playing: boolean): string {
+  const what = p.kind === 'smart' ? `smart playlist, fills itself with ${p.query ? queryName(p.query) : 'presets'}` : `playlist, ${plural(p.items.length, 'preset')}`;
+  return `${p.name}, ${what}${playing ? ', playing' : ''}`;
+}
+
+/** What a tile in the strip says to a screen reader: its place, its name, and whether it plays now, plays next or is gone from the library. */
+export function stripTileSays(t: StripTile, place: number, playing: boolean, next: boolean): string {
+  return [`${place}. ${t.name}`, playing && 'playing', next && 'next', t.missing && 'not in the library any more'].filter(Boolean).join(', ');
+}
+
 /** Playlists, smart playlists, the library: each a row to open in the main pane, and a playlist a place to drop a preset. */
-function Sidebar({ lists, shown, onPick, onLists, onImport, onError }: SidebarProps) {
+export function Sidebar({ lists, shown, onPick, onLists, onImport, onError }: SidebarProps) {
   const drag = useDrag();
   const file = useRef<HTMLInputElement>(null);
   const playlists = lists?.playlists ?? [];
@@ -318,6 +329,7 @@ function Sidebar({ lists, shown, onPick, onLists, onImport, onError }: SidebarPr
         key={p.id}
         className="home-row"
         tabIndex={0}
+        aria-label={rowSays(p, on)}
         aria-current={picked ? 'true' : undefined}
         data-active={on ? '' : undefined}
         data-drop={p.kind === 'manual' ? target : undefined}
@@ -334,7 +346,7 @@ function Sidebar({ lists, shown, onPick, onLists, onImport, onError }: SidebarPr
           </Button>
         </span>
         <span className="home-row-name">{p.name}</span>
-        {p.kind === 'manual' && <i>{p.items.length}</i>}
+        {p.kind === 'manual' && <i aria-hidden="true">{p.items.length}</i>}
       </li>
     );
   };
@@ -390,10 +402,11 @@ function Sidebar({ lists, shown, onPick, onLists, onImport, onError }: SidebarPr
 function Section({ title, tools, children }: { title: string; tools?: ReactNode; children: ReactNode }) {
   return (
     <section className="home-section">
-      <h2 className="home-section-title">
-        <span>{title}</span>
+      {/* The tools sit beside the heading, not in it: a heading's name is just its title. */}
+      <div className="home-section-head">
+        <h2 className="home-section-title">{title}</h2>
         {tools}
-      </h2>
+      </div>
       <ul className="home-section-rows">{children}</ul>
     </section>
   );
@@ -419,7 +432,7 @@ interface PaneProps {
 }
 
 /** A playlist: its name and Play, its settings, and its presets as a strip in the order they play. */
-function PlaylistPane({ list, lists, rows, played, dropping, onLists, onDeleted, onError, onLibrary }: PaneProps) {
+export function PlaylistPane({ list, lists, rows, played, dropping, onLists, onDeleted, onError, onLibrary }: PaneProps) {
   const drag = useDrag();
   const [naming, setNamingState] = useState<string | null>(null);
   const nameEdit = useRef(new NameEdit()).current;
@@ -570,6 +583,7 @@ function PlaylistPane({ list, lists, rows, played, dropping, onLists, onDeleted,
                 key={t.key}
                 className="home-tile"
                 tabIndex={0}
+                aria-label={stripTileSays(t, i + 1, currentAt(t), nextAt(t))}
                 aria-current={currentAt(t) ? 'true' : undefined}
                 data-next={nextAt(t) ? '' : undefined}
                 data-missing={t.missing ? '' : undefined}
@@ -613,14 +627,16 @@ function PlaylistPane({ list, lists, rows, played, dropping, onLists, onDeleted,
 }
 
 /** How a playlist plays: how often it moves on, in what order, the crossfade, and the look it sets. */
-function SettingsBar({ settings, differs, onChange }: { settings: PlaylistSettings; differs: readonly string[]; onChange(next: PlaylistSettings): void }) {
+export function SettingsBar({ settings, differs, onChange }: { settings: PlaylistSettings; differs: readonly string[]; onChange(next: PlaylistSettings): void }) {
   const tweaked = (name: string) => (differs.includes(name) ? 'changed live; this playlist’s own value comes back when it loads again' : undefined);
   const { change } = settings;
   return (
     <div className="home-settings" role="group" aria-label="how it plays">
-      <label className="home-setting" data-tweaked={tweaked('change') ? '' : undefined} title={tweaked('change')}>
-        <span>{say('auto-advance')} every</span>
+      {/* Each control names itself (a `<label>` can't label the widgets' sliders and radio groups); the words beside them are for the eye. */}
+      <div className="home-setting" role="group" aria-label={say('auto-advance')} data-tweaked={tweaked('change') ? '' : undefined} title={tweaked('change')}>
+        <span aria-hidden="true">{say('auto-advance')} every</span>
         <NumberField
+          label={`${say('auto-advance')} every, in ${change.unit === 'bars' ? 'bars' : 'seconds'}`}
           param={change.unit === 'bars' ? EVERY_BARS : EVERY_S}
           value={change.every}
           onChange={(v) => onChange(withSetting(settings, 'change', { unit: change.unit, every: v }))}
@@ -634,8 +650,8 @@ function SettingsBar({ settings, differs, onChange }: { settings: PlaylistSettin
           label="seconds or bars"
           hint="seconds, or bars of the beat when you keep in time with Ableton"
         />
-      </label>
-      <label className="home-setting" data-tweaked={tweaked('order') ? '' : undefined}>
+      </div>
+      <div className="home-setting" data-tweaked={tweaked('order') ? '' : undefined}>
         <Segmented
           items={['in order', 'shuffle']}
           index={settings.order === 'shuffle' ? 1 : 0}
@@ -643,9 +659,10 @@ function SettingsBar({ settings, differs, onChange }: { settings: PlaylistSettin
           label="order"
           hint="play in the order listed, or shuffled"
         />
-      </label>
+      </div>
       <Setting name="crossfade" tweak={tweaked('transition')}>
         <NumberField
+          label="crossfade"
           param={CROSSFADE}
           value={settings.transition}
           onChange={(v) => onChange(withSetting(settings, 'transition', v))}
@@ -654,10 +671,18 @@ function SettingsBar({ settings, differs, onChange }: { settings: PlaylistSettin
         />
       </Setting>
       <Setting name="speed" tweak={tweaked('speed')}>
-        <NumberField param={SPEED} value={settings.speed} onChange={(v) => onChange(withSetting(settings, 'speed', v))} display={`${settings.speed.toFixed(2)}×`} title="How fast the presets move" />
+        <NumberField
+          label="speed"
+          param={SPEED}
+          value={settings.speed}
+          onChange={(v) => onChange(withSetting(settings, 'speed', v))}
+          display={`${settings.speed.toFixed(2)}×`}
+          title="How fast the presets move"
+        />
       </Setting>
       <Setting name="trails" tweak={tweaked('trails')}>
         <NumberField
+          label="trails"
           param={TRAILS}
           value={settings.trails}
           onChange={(v) => onChange(withSetting(settings, 'trails', v))}
@@ -667,6 +692,7 @@ function SettingsBar({ settings, differs, onChange }: { settings: PlaylistSettin
       </Setting>
       <Setting name="colour shift" tweak={tweaked('hue')}>
         <NumberField
+          label="colour shift"
           param={HUE}
           value={settings.hue}
           onChange={(v) => onChange(withSetting(settings, 'hue', v))}
@@ -680,10 +706,10 @@ function SettingsBar({ settings, differs, onChange }: { settings: PlaylistSettin
 
 function Setting({ name, tweak, children }: { name: string; tweak?: string; children: ReactNode }) {
   return (
-    <label className="home-setting" data-tweaked={tweak ? '' : undefined} title={tweak}>
-      <span>{name}</span>
+    <div className="home-setting" data-tweaked={tweak ? '' : undefined} title={tweak}>
+      <span aria-hidden="true">{name}</span>
       {children}
-    </label>
+    </div>
   );
 }
 

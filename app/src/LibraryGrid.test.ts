@@ -135,6 +135,21 @@ describe('a preset that failed', () => {
   });
 });
 
+describe('a tile, read aloud', () => {
+  const row: LibraryRow = { key: 'k', path: '/p/aurora.milk', hash: '', style: 'A', sub_style: null, authors: ['geiss'], title: 'aurora', thumbnail: null, look: null, starter: false };
+  const p = prepareRow(row, undefined);
+  const html = renderToStaticMarkup(createElement(Tile, { id: 't', index: 0, p, active: true, selected: false, playing: true, failed: false, intoName: 'Mine', onPick: () => {}, onAdd: () => {} }));
+
+  it('is named by what it says, not by its picture and buttons', () => {
+    expect(html).toContain(`role="option" aria-selected="false" aria-label="${tileSays(p, true, false)}"`);
+    expect(tileSays(p, true, false)).toBe('aurora — A, by geiss · playing');
+  });
+
+  it('keeps its + out of what is read: the grid adds the active tile with the + key', () => {
+    expect(html).toContain('class="wdg wdg-button lib-add" aria-hidden="true"');
+  });
+});
+
 describe('pickOf', () => {
   it('reads the modifiers', () => {
     expect(pickOf({ metaKey: false, ctrlKey: false, shiftKey: false })).toBe('load');

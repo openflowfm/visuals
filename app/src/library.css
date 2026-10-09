@@ -187,11 +187,11 @@
   overflow-x: hidden;
   flex: 1;
   min-height: 0;
-  outline: none;
   overscroll-behavior: contain;
 }
-.lib-grid:focus-visible:not([aria-activedescendant]) {
-  box-shadow: inset 0 0 0 1px var(--focus);
+/* With no tile highlighted the grid rings itself (access.css), inside: it scrolls, and would clip a ring drawn outside. */
+.vf-root .lib-grid:focus-visible {
+  outline-offset: -2px;
 }
 .lib-grid-space {
   position: relative;
@@ -298,8 +298,9 @@
 .lib-tile[data-hidden] .lib-title {
   opacity: 0.4;
 }
+/* The highlighted tile's ring replaces its picture's edge (and a selection's amber), so it has one ring, not two. */
 .lib-grid:focus-visible .lib-tile[data-active] .lib-thumb {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--vf-focus-ring);
   outline-offset: -2px;
 }
 
