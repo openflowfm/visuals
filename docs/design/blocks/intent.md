@@ -141,6 +141,30 @@ The editor brings back the old build's 36 node kinds (LFOs, colourways, lenses, 
 fractals, light, grade, spread, halftone, blend, image, video, 3D models, the Ableton
 nodes), sorted into these primitives.
 
+### After the design, UX and musician reviews
+
+Recorded October 9, 2026; applied in the mock.
+
+- **The picture is always in view:** a preview pinned beside the graph; the graph scrolls
+  rather than shrinking text below 85%.
+- **Quiet at rest:** wires from sources rest as short stubs at the input and show whole
+  on hover; wires don't pulse. Values move in the knobs (a live bar) and source ports.
+- **Colour on a wire means what it carries;** where it comes from is a tinted label. Six
+  port shapes (circle, colour wheel, triangle, bar, diamond, square), five line styles
+  (thin, thick, ticks, wavy, beads, hollow pipe for pictures and drawings).
+- **Nodes:** an icon, the title and one badge in the header, the output port on the header,
+  a small moving picture on Move, Draw and Look nodes, untouched defaults folded into
+  "+N". Code that does nothing is hatched, with the reason.
+- **Trails is part of the loop** (Move the picture → Trails → Paint on top), always there,
+  off until turned up; the feedback connection is labelled "feedback · trails".
+- **Music:** hits (Kick, Snare, Hats) found in the sound are the default way to use it;
+  loudness levels stay for imports. With Link or a tempo set by hand, times are note
+  values. Wobble, Drift and LFO are one node, **Sway**. New: Pump, Phrase, Build/Drop,
+  Only when, Macros with MIDI learn and snapshots, swing, an output delay.
+- **Link carries only tempo, beat and start/stop.** Track levels, section, key and clip or
+  scene launches need a visual[flow] device in the Live set; sources say which they come
+  from. A section is a trigger (and a name), not a number.
+
 ## Measured on the pack (9,795 presets)
 
 | Where the code is | Presets |
