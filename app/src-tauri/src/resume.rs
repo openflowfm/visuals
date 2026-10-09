@@ -189,10 +189,16 @@ pub fn start(handle: &AppHandle) {
         while handle.state::<crate::App>().commands().is_err() && Instant::now() < until {
             std::thread::sleep(Duration::from_millis(50));
         }
-        let opened = restore(&handle, &r);
-        RESTORED.store(true, Ordering::SeqCst);
-        SETTLED.set(opened.then_some(r));
+        settle(&SETTLED, &RESTORED, || restore(&handle, &r).then_some(r));
     });
+}
+
+/// Runs `put_back` and settles on what it answers: nothing put back when it
+/// panics, so the page hears at once and [`note`] keeps the deck from then on.
+fn settle(settled: &Settled, restored: &AtomicBool, put_back: impl FnOnce() -> Option<Resume>) {
+    let answer = crate::crash::catch(std::panic::AssertUnwindSafe(put_back)).unwrap_or(None);
+    restored.store(true, Ordering::SeqCst);
+    settled.set(answer);
 }
 
 /// The preset from `path` drew a refresh (`crate::bench::Drawing::Drew`): it
@@ -724,6 +730,25 @@ mod tests {
         assert_eq!(to_resume(filter.clone(), false, None, gone), filter);
         let list = Some(r(Some("p"), Some(1), Some("/x.milk")));
         assert_eq!(to_resume(list.clone(), false, None, gone), list);
+    }
+
+    #[test]
+    fn a_panicking_restore_still_settles_on_nothing() {
+        let settled = std::sync::Arc::new(Settled::new());
+        let restored = AtomicBool::new(false);
+        let waiting = {
+            let s = settled.clone();
+            std::thread::spawn(move || s.wait(Duration::from_secs(10)))
+        };
+        let asked = Instant::now();
+        settle(&settled, &restored, || panic!("restore broke"));
+        assert!(restored.load(Ordering::SeqCst));
+        assert_eq!(waiting.join().unwrap(), None);
+        assert!(asked.elapsed() < Duration::from_secs(5));
+        // One that opened still answers what it put back.
+        let fine = Settled::new();
+        settle(&fine, &restored, || Some(r(None, None, Some("/x.milk"))));
+        assert_eq!(fine.wait(Duration::ZERO), Some(r(None, None, Some("/x.milk"))));
     }
 
     #[test]
