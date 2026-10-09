@@ -26,3 +26,8 @@ serde = { version = "1", features = ["derive"] }
 webp = { version = "0.3", default-features = false }
 serde_json = "1"
 sha2 = "0.10"
+
+[dev-dependencies]
+# wgpu's live resource counts (`Device::get_internal_counters`), for the leak
+# test only: a dev-dependency's features stay out of the bins and the app.
+wgpu = { version = "30.0.1", features = ["naga-ir", "counters"] }

@@ -9,7 +9,7 @@ The app people get is built without both.
 
 | Command | What it checks | When to run |
 | --- | --- | --- |
-| `cargo test -p visuals-engine --lib` | the engine: `.milk` parsing, shader translation, EEL, audio, a GPU render | any change under `engine/` |
+| `cargo test -p visuals-engine --lib` | the engine: `.milk` parsing, shader translation, EEL, audio, a GPU render, and that GPU objects aren't leaked over preset and quality switches | any change under `engine/` |
 | `cargo test -p visuals-engine --bins` | the engine's bins compile and their tests (`engine/src/bin/`) pass; `--lib` doesn't build them | any change under `engine/` |
 | `cargo build -p visuals-app` | the Tauri app compiles | any change under `app/src-tauri/` |
 | `cargo test -p visuals-app` | the app's Rust: live actions, playlists, the Link one and changes on the beat, the live output's display choice and fit, the live effects' timing, the first-run state (building needs `cmake`, for Ableton Link) | any change under `app/src-tauri/` |
