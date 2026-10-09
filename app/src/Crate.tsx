@@ -215,6 +215,14 @@ export function Crate({ lists, data, act, onLists, onError, current }: Props) {
   // A step only moves where "Up next" reads from in the same order, so a new playing preset isn't a reason to ask again;
   // the order is asked for again when what plays changes, its size does, or the deck's Next stops agreeing with it (a reshuffle).
   const stale = itemsAgree(items, playing, deck.next) ? null : `${playing}>${deck.next}`;
+  // Counted, so the order agreeing again (stale back to null) isn't a second reason to ask: one fetch per reshuffle.
+  const asked = useRef<string | null>(null);
+  const reshuffles = useRef(0);
+  if (stale && stale !== asked.current) {
+    asked.current = stale;
+    reshuffles.current += 1;
+  }
+  const reshuffle = reshuffles.current;
   useEffect(() => {
     if (!fetching) return setItems(null);
     let live = true;
@@ -225,7 +233,7 @@ export function Crate({ lists, data, act, onLists, onError, current }: Props) {
       live = false;
     };
     // `onError` is the page's; a new one each render isn't a reason to ask again.
-  }, [fetching, deck.playlist, query, deck.order, deck.count, stale]);
+  }, [fetching, deck.playlist, query, deck.order, deck.count, reshuffle]);
 
   const all = moods(data);
   const lit = litMoods(deck);
