@@ -220,13 +220,20 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
     if (deckPlaylist.current !== undefined && deckPlaylist.current !== deck.playlist) following.current = false;
     deckPlaylist.current = deck.playlist;
   };
-  // The app picked up playing a filter: the library shows it, and the deck, already
-  // following it, follows it on as it changes (until the user changes it, every
-  // library that opens shows it).
+  // The app picked up playing a filter: the first library that shows it (while the
+  // deck still plays it) takes it, and the deck, already following it, follows it
+  // on as it changes. Libraries opened later start unfiltered, as before, and a
+  // filter the user set first is never replaced.
+  const touched = useRef(false);
+  const filterChanged = () => {
+    touched.current = true;
+    forgetResumedQuery();
+  };
   useEffect(() => {
     let live = true;
     resumedQuery().then((q) => {
-      if (!live || !q) return;
+      if (!live || !q || touched.current) return;
+      forgetResumedQuery();
       setGroups(groupsOf(q));
       if (q.text) handlers.current.onSearch(q.text);
       following.current = true;
@@ -290,12 +297,12 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
   };
 
   const pickValue = (g: LibraryGroup, v: string) => {
-    forgetResumedQuery();
+    filterChanged();
     setGroups((gs) => toggle({ groups: gs, text: '' }, g, v).groups);
     setSaveNote(null);
   };
   const clearAll = () => {
-    forgetResumedQuery();
+    filterChanged();
     setGroups({});
     onSearch('');
     setSaveNote(null);
@@ -341,7 +348,7 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
         title="Every word must match the preset's style, author, name or tags. ↓ moves into the grid."
         value={search}
         onChange={(ev) => {
-          forgetResumedQuery();
+          filterChanged();
           onSearch(ev.target.value);
         }}
         onKeyDown={onSearchKey}

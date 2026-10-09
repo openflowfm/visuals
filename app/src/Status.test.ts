@@ -137,6 +137,15 @@ describe('the skipped note', () => {
     expect(addSkip(note, note.at + SKIP_SHOWN_FOR + SKIP_FADE)).toEqual({ count: 1, at: note.at + SKIP_SHOWN_FOR + SKIP_FADE });
   });
 
+  it('goes back to the skip count when a skip follows a stop while the note fades', () => {
+    const stop = addStop(addSkip(null, 1000), 2000, 8);
+    const fading = 2000 + SKIP_SHOWN_FOR + SKIP_FADE / 2;
+    expect(skipPhase(stop, fading)).toBe('fading');
+    const after = addSkip(stop, fading);
+    expect(after.stopped).toBeUndefined();
+    expect(noteText(after)).toBe('Skipped 2 broken presets');
+  });
+
   it('says when stepping stopped, without counting the stop as a skip', () => {
     expect(stopText(8)).toBe("Stopped skipping: 8 presets in a row wouldn't draw");
     let note = addSkip(addSkip(null, 1000), 1100);

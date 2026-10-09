@@ -60,7 +60,8 @@ export function Home({ start, onMode }: { start: string | null; onMode(view: Vie
     },
     [dismiss, setNotice],
   );
-  const { library, loaded, search, setSearch, found } = useLibrary(start, load, fail);
+  // Picking up where the app left off, the preset put back stays: named in the header (unless the deck said first), not opened again.
+  const { library, loaded, search, setSearch, found } = useLibrary(start, load, fail, (e) => setCurrent((c) => c ?? e));
   const rows = useLibraryRows();
   const played = usePlayed();
 

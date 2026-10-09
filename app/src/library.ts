@@ -130,8 +130,12 @@ export function rereadOn(subscribe: (f: () => void) => Promise<() => void>, rere
   };
 }
 
-/** What the app is picking up from (`resume::resume_state`); null when nothing, or outside the app. */
-const resumed = (): Promise<api.Resume | null> => {
+/**
+ * What the app put back at launch (`resume::resume_state`, which answers once that
+ * has settled); null when nothing was (nothing to pick up, or it couldn't be
+ * opened again), or outside the app. The page opens a preset of its own only then.
+ */
+export const resumed = (): Promise<api.Resume | null> => {
   try {
     return api.resumeState().then(
       (r) => r ?? null,
@@ -144,26 +148,86 @@ const resumed = (): Promise<api.Resume | null> => {
 
 /**
  * What the page opens once the library is read: `start` when it was given one;
- * otherwise nothing of its own while the app picks up where it left off (`resume`,
- * which puts its preset back itself), only showing the preset it puts back; else
- * {@link firstToOpen}'s pick.
+ * otherwise nothing of its own when the app put a preset back (`resume`), only
+ * showing what the deck plays (`playing`, or the preset put back); else
+ * {@link firstToOpen}'s pick, so something always plays.
  */
-export function startFrom(library: Entry[], start: string | null, resume: api.Resume | null, pick: number): { open: Entry | null; show: Entry | null } {
+export function startFrom(library: Entry[], start: string | null, resume: api.Resume | null, pick: number, playing: string | null = null): { open: Entry | null; show: Entry | null } {
   if (start || !resume) return { open: firstToOpen(library, start, pick), show: null };
-  const at = resume.current;
+  const at = playing ?? resume.current;
   return { open: null, show: at ? (library.find((e) => e.path === at) ?? { path: at, name: nameOf(at), group: '' }) : null };
 }
 
-/** The filter the app resumed playing, for the library to show; null once the user has changed the library's filter. */
-let resumedFilter: Promise<LibraryQuery | null> | null = null;
+/** The preset the deck plays now; null when none, or it can't be asked. */
+const deckPlaying = (): Promise<string | null> => {
+  try {
+    return pl
+      .lists()
+      .then((l) => l?.deck?.current ?? null)
+      .catch(() => null);
+  } catch {
+    return Promise.resolve(null);
+  }
+};
 
-/** The unsaved filter the app picked up playing (no playlist was), as the library's chips and search can show it; null when none. */
-export function resumedQuery(): Promise<LibraryQuery | null> {
-  resumedFilter ??= resumed().then((r) => (r && !r.playlist && r.query ? r.query : null));
-  return resumedFilter;
+/**
+ * Live mode starting with nothing playing on the deck: `start` when it was given
+ * one; otherwise, once the app has settled what it put back, nothing of its own
+ * when it put a preset back (`shown` is told which), and a random one when it
+ * didn't, so the picture is never left black.
+ */
+export async function startLive(
+  start: string | null,
+  does: { open(path: string): void; random(): void; shown(path: string): void },
+  resume: () => Promise<api.Resume | null> = resumed,
+): Promise<void> {
+  if (start) return does.open(start);
+  const r = await resume();
+  if (!r) return does.random();
+  const at = (await deckPlaying()) ?? r.current;
+  if (at) does.shown(at);
 }
 
-/** The user changed the library's filter: libraries opened from now on start unfiltered, as before. `again` reads it afresh (tests). */
+/** The filter the app resumed playing, until a library has shown it or the user changed the filter; then none. */
+let resumedFilter: Promise<LibraryQuery | null> | null = null;
+
+/** Two filters the same, whatever order their groups came in. */
+export function sameQuery(a: LibraryQuery | null | undefined, b: LibraryQuery | null | undefined): boolean {
+  if (!a || !b) return a === b;
+  const norm = (q: LibraryQuery) =>
+    JSON.stringify([
+      Object.entries(q.groups ?? {})
+        .filter(([, v]) => v?.length)
+        .map(([g, v]) => [g, [...v!].sort()])
+        .sort(([x], [y]) => String(x).localeCompare(String(y))),
+      q.text ?? '',
+      q.recent ?? null,
+    ]);
+  return norm(a) === norm(b);
+}
+
+/**
+ * The unsaved filter the app picked up playing (no playlist was), for a library
+ * to show; null when none, once the deck has moved on from it (a playlist loaded
+ * from the home, another filter), and once a library has shown it
+ * ({@link forgetResumedQuery}, called by the one that does).
+ */
+export function resumedQuery(): Promise<LibraryQuery | null> {
+  resumedFilter ??= resumed().then((r) => (r && !r.playlist && r.query ? r.query : null));
+  return resumedFilter.then(async (q) => {
+    if (!q) return null;
+    const deck = await (async () => {
+      try {
+        return (await pl.lists()).deck;
+      } catch {
+        return null;
+      }
+    })();
+    return deck && !deck.playlist && sameQuery(deck.query, q) ? q : null;
+  });
+}
+
+/** A library showed the resumed filter, or the user changed the filter: no library shows it after. `again` reads it afresh (tests). */
 export function forgetResumedQuery(again = false): void {
   resumedFilter = again ? null : Promise.resolve(null);
 }
@@ -182,11 +246,14 @@ export function useLibrary(start: string | null, load: (e: Entry) => void, fail:
   told.current = onResumed;
 
   useEffect(() => {
-    Promise.all([api.presets(), start ? null : resumed()]).then(
-      ([l, resume]) => {
+    api.presets().then(
+      async (l) => {
         setLibrary(l);
         setLoaded(true);
-        const { open, show } = startFrom(l, start, resume, Math.random());
+        // Asked after the library shows: the answer waits for the deck to be put back.
+        const resume = start ? null : await resumed();
+        const playing = resume ? await deckPlaying() : null;
+        const { open, show } = startFrom(l, start, resume, Math.random(), playing);
         if (open) load(open);
         if (show) told.current?.(show);
       },

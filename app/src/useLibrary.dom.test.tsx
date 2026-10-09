@@ -28,7 +28,7 @@ async function started(start: string | null = null) {
   const onResumed = vi.fn();
   const fail = () => () => {};
   renderHook(() => useLibrary(start, load, fail, onResumed));
-  await act(async () => {});
+  await act(() => new Promise((done) => setTimeout(done, 0)));
   return { load, onResumed };
 }
 
@@ -40,7 +40,19 @@ describe('the page starting while the app picks up where it left off', () => {
     expect(onResumed).toHaveBeenCalledWith(ENTRIES[1]);
   });
 
-  it('opens a preset of its own with nothing to pick up', async () => {
+  it('names what the deck plays now when it has moved on from the preset put back', async () => {
+    resume = { playlist: 'mine', index: 0, current: '/p/b.milk', source: null };
+    invoke.mockImplementation((cmd: string) =>
+      Promise.resolve(cmd === 'presets' ? ENTRIES : cmd === 'resume_state' ? resume : cmd === 'playlists' ? { playlists: [], deck: { current: '/p/a.milk' } } : null),
+    );
+    const { load, onResumed } = await started();
+    expect(load).not.toHaveBeenCalled();
+    expect(onResumed).toHaveBeenCalledWith(ENTRIES[0]);
+  });
+
+  // `resume_state` answers none both with nothing to pick up and when the restore
+  // opened nothing (the file gone, the playlist or filter failing): never black.
+  it('opens a preset of its own with nothing to pick up, or when the restore opened nothing', async () => {
     const { load, onResumed } = await started();
     expect(load).toHaveBeenCalledTimes(1);
     expect(onResumed).not.toHaveBeenCalled();

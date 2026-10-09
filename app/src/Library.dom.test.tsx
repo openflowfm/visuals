@@ -34,13 +34,15 @@ function answer(cmd: string): unknown {
   if (cmd === 'library_index') return ROWS;
   if (cmd === 'library_data') return { version: 1, presets: {} };
   if (cmd === 'presets_failed' || cmd === 'presets') return [];
-  if (cmd === 'playlists') return { playlists: [], deck: EMPTY_DECK };
+  if (cmd === 'playlists') return { playlists: [], deck };
   if (cmd === 'resume_state') return resume;
   return null;
 }
 
 /** What `resume_state` answers: where the app picked up. */
 let resume: Resume | null = null;
+/** What the deck plays, as `playlists` answers. */
+let deck: Deck = EMPTY_DECK;
 
 /** The `query` actions sent to the deck: the grid followed, from where. */
 const follows = () =>
@@ -76,6 +78,7 @@ async function filter(r: ReturnType<typeof render>, current: string | null, sear
 beforeEach(() => {
   vi.useFakeTimers();
   resume = null;
+  deck = EMPTY_DECK;
   forgetResumedQuery(true);
   invoke.mockReset();
   invoke.mockImplementation((cmd: string) => Promise.resolve(answer(cmd)));
@@ -86,7 +89,12 @@ afterEach(() => {
 });
 
 describe('the library showing a filter the app picked up', () => {
-  const picked = (over: Partial<Resume> = {}): Resume => ({ playlist: null, index: null, current: ROWS[1].path, source: null, query: { groups: { style: ['A'] }, text: 'b' }, ...over });
+  const QUERY = { groups: { style: ['A'] }, text: 'b' };
+  const picked = (over: Partial<Resume> = {}): Resume => ({ playlist: null, index: null, current: ROWS[1].path, source: null, query: QUERY, ...over });
+  // The app played the filter again: the deck follows it.
+  beforeEach(() => {
+    deck = { ...EMPTY_DECK, current: ROWS[1].path, query: QUERY };
+  });
   const mount = async (onSearch: (s: string) => void = () => {}) => {
     const r = render(view(ROWS[1].path, '', onSearch));
     await act(() => vi.advanceTimersByTimeAsync(0));
@@ -104,16 +112,35 @@ describe('the library showing a filter the app picked up', () => {
     expect(follows().at(-1)).toBe(ROWS[1].path);
   });
 
-  it('is shown by each library that opens until the user changes the filter', async () => {
+  it('is shown once a run: a library opened later starts unfiltered', async () => {
     resume = picked();
-    let r = await mount();
-    r.unmount();
-    r = await mount();
+    const r = await mount();
     expect(screen.getByRole('button', { name: 'stop filtering by A' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'clear the filter' }));
     r.unmount();
     await mount();
     expect(screen.queryByRole('button', { name: 'stop filtering by A' })).toBeNull();
+  });
+
+  it('is shown by no library once the user changed the filter before it came', async () => {
+    resume = picked();
+    const r = render(view(ROWS[1].path));
+    // Typed into the search before the app answered.
+    fireEvent.change(screen.getByRole('searchbox', { name: 'search presets' }), { target: { value: 'x' } });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(screen.queryByRole('button', { name: 'stop filtering by A' })).toBeNull();
+    r.unmount();
+    await mount();
+    expect(screen.queryByRole('button', { name: 'stop filtering by A' })).toBeNull();
+  });
+
+  it("isn't shown after a playlist was loaded from the home before the library opened, so it can't replace the playlist", async () => {
+    resume = picked();
+    // On the home, the user loads a playlist; then opens the library.
+    deck = { ...EMPTY_DECK, playlist: 'mine', index: 0, current: ROWS[2].path };
+    await mount();
+    expect(screen.queryByRole('button', { name: 'stop filtering by A' })).toBeNull();
+    await act(() => vi.advanceTimersByTimeAsync(400));
+    expect(follows()).toEqual([]);
   });
 
   it('shows nothing when a playlist was picked up, or nothing at all', async () => {
