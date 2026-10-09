@@ -236,11 +236,25 @@ fn update(handle: &AppHandle) {
         return;
     }
     // Shown as already in: the page keeps the pack bar away.
-    if !begin(Some(engine::preset::milk_files(&library).len())) {
+    if !begin(Some(quiet_count(engine::preset::milk_files(&library).len()))) {
         return;
     }
     eprintln!("pack: bringing the pack up to {}", bundle.url);
     let _ = download(handle, &[bundle], true);
+}
+
+/// The count of presets a quiet update reports while it runs: at least
+/// [`TOTAL`], which the page reads as the pack being in, so it shows no pack bar
+/// (even after presets were deleted, or when a build raises `TOTAL`).
+fn quiet_count(installed: usize) -> usize {
+    installed.max(TOTAL)
+}
+
+/// Whether the quiet update runs at start: not in headless runs (agents' captures
+/// against the owner's library) nor in debug builds, unless a debug build is
+/// given `VISUALS_PACK_UPDATE=1`.
+fn updates(headless: bool, debug: bool, asked: bool) -> bool {
+    if debug { asked } else { !headless }
 }
 
 /// The download itself, on its own thread: [`fetch`] from `sources` with
@@ -758,7 +772,9 @@ pub fn start(handle: &AppHandle) {
             }
         });
     }
-    {
+    let headless = std::env::var_os("VISUALS_HEADLESS").is_some();
+    let asked = std::env::var_os("VISUALS_PACK_UPDATE").is_some_and(|v| v == "1");
+    if updates(headless, cfg!(debug_assertions), asked) {
         let handle = handle.clone();
         std::thread::spawn(move || update(&handle));
     }
@@ -1311,6 +1327,22 @@ mod tests {
         assert!(begin(None), "nothing running: it starts");
         assert!(!begin(Some(9795)), "a first download runs: the update waits for the next launch");
         DOWNLOAD.lock().unwrap().state = State::Idle;
+    }
+
+    #[test]
+    fn a_quiet_update_reads_as_installed_so_no_pack_bar_shows() {
+        let d = Download { state: State::Downloading, received: 0, error: None, installed: quiet_count(120), size: 1 };
+        let s = status(&d, 0, d.installed);
+        assert!(s.installed >= s.total, "deleted presets: still shown as in");
+        assert_eq!(quiet_count(TOTAL + 5), TOTAL + 5);
+    }
+
+    #[test]
+    fn the_quiet_update_skips_headless_and_debug_runs() {
+        assert!(updates(false, false, false), "a release build updates");
+        assert!(!updates(true, false, false), "headless: no update");
+        assert!(!updates(false, true, false), "debug: no update");
+        assert!(updates(true, true, true), "debug with VISUALS_PACK_UPDATE=1: updates");
     }
 
     #[test]
