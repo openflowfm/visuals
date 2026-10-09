@@ -29,7 +29,8 @@ The product decisions behind it (#105):
   interface otherwise; BlackHole only as a fallback (see
   [Connect your DAW](connect-your-daw.md)).
 - **About 250 presets are bundled; the full 9,795 is a download** the welcome encourages.
-  The pack has no licence: credits and a takedown address ([the pack](pack.md)).
+  The pack has no licence: credits and a takedown address ([starter credits](../app/src-tauri/presets/starter/CREDITS.md) and the in-app
+  Credits; a hosted pack is planned, #94).
 - **Automatic groups:** style, sub-style, author, colour, brightness, speed, intensity.
   Mood is the user's own tags only.
 - **Tags in JSON:** the generated `index.json` and the user's `library.json`; `.milk`
@@ -92,7 +93,8 @@ is the welcome's test beat, written straight into the engine's ring. The user's 
 
 **Presets.** The 250 starter presets are bundled (`app/src-tauri/presets/starter`, laid
 out as the pack is), and the full Cream of the Crop pack downloads into the presets folder
-(`pack.rs`), unpacking as it arrives. Credits and takedowns: [the pack](pack.md).
+(`pack.rs`), unpacking as it arrives. Credits: [starter credits](../app/src-tauri/presets/starter/CREDITS.md) and the in-app
+Credits; a hosted pack is planned (#94).
 
 **The lab's editor.** `npm run app:lab` adds a third view, *editor*: the library on the
 left, the preset as MilkDrop's stage graph, and the selected stage's EEL/HLSL and numbers

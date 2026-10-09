@@ -43,7 +43,9 @@ The first time it opens, a short welcome walks through:
 5. **Pick a vibe:** a playlist, or something at random, and it plays.
 
 **visual[flow] › Welcome…** runs it again. **visual[flow] › Credits** lists who made the
-presets (see [`docs/pack.md`](docs/pack.md) for the pack, its credits and takedowns).
+presets (the bundled ones are credited in
+[`app/src-tauri/presets/starter/CREDITS.md`](app/src-tauri/presets/starter/CREDITS.md); a
+hosted pack is planned, #94).
 
 ### Listen to your DAW
 
@@ -162,7 +164,7 @@ secrets listed at the top of the file.
   performance, and what can't match Butterchurn.
 - [`docs/connect-your-daw.md`](docs/connect-your-daw.md): the user guide to hearing your
   DAW and keeping time with Link.
-- [`docs/pack.md`](docs/pack.md): the preset pack, its credits and takedowns.
+- [`app/src-tauri/presets/starter/CREDITS.md`](app/src-tauri/presets/starter/CREDITS.md): who made the bundled presets (also in the app's Credits); a hosted pack is planned (#94).
 - [`docs/design/flow-outlet/intent.md`](docs/design/flow-outlet/intent.md): the product
   intent recorded for the graph editor, now the lab's.
 - [`teaser/README.md`](teaser/README.md): the teaser, cut from the engine's own footage.

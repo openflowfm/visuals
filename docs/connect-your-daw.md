@@ -20,14 +20,14 @@ in live mode. There are three kinds of choice:
 | **everything on this Mac** | all the sound the Mac plays | the music comes from more than one app, or from a browser or player |
 | **a mic or interface** (listed by name, with its channel count) | an input, like any recording app | the music comes in from outside: a mixer, decks, a second computer |
 
-Your DAW is listed while it's open, whether it's playing or not, so open it before you
-choose. No driver, plug-in or loopback device is needed: visual[flow] listens to the DAW's
+Your DAW is listed while its audio engine is running, whether it's playing or not, so
+open it before you choose. No driver, plug-in or loopback device is needed: visual[flow] listens to the DAW's
 output directly, and your DAW's own audio settings don't change.
 
 - **Ableton Live:** choose **Ableton Live**. It hears Live's master output.
 - **Logic Pro:** choose **Logic Pro**. It hears Logic's output.
-- **Bitwig Studio:** choose **Bitwig Studio**. It hears Bitwig's output, including its
-  plug-in hosts.
+- **Bitwig Studio:** choose **Bitwig Studio**. It hears Bitwig's output; sound
+  from its separate plug-in host processes may not be heard.
 
 The level meters beside the picker show what the presets hear. Play something: they
 should move, and so should the picture.
@@ -49,7 +49,8 @@ If you said no, or the question never appeared, turn it on yourself:
 
 1. Open **System Settings › Privacy & Security › Screen & System Audio Recording**.
 2. Find **visual[flow]** in the list for system audio recording and turn it on.
-3. Quit and reopen visual[flow].
+
+If it still doesn't hear your DAW after you allow it, quit and reopen visual[flow].
 
 A mic or interface asks for a different permission, **Microphone**, under
 **System Settings › Privacy & Security › Microphone**.
@@ -63,12 +64,14 @@ follows: it never changes your tempo, your beat or your transport.
 
 Turn Link on in your DAW:
 
-- **Ableton Live:** Settings › Link, Tempo & MIDI, turn on **Show Link Toggle**, then
-  switch on **LINK** at the top left of Live's window.
+- **Ableton Live:** turn on the **Link** toggle in Live's Control Bar. If it isn't there:
+  Settings › Link, Tempo & MIDI (Live 11: Preferences) › **Show Link Toggle**.
 - **Logic Pro:** File › Project Settings › Synchronization, set **Sync Mode** to
-  **Ableton Link**.
-- **Bitwig Studio:** switch on **LINK** in the transport bar (Settings ›
-  Synchronization if it isn't shown).
+  **Ableton Link** (or Control-click the control bar's Sync button and choose Ableton
+  Link).
+- **Bitwig Studio:** Dashboard › Settings › Synchronization › Transport Sync (IN) ›
+  Sync Method: **Ableton Link**. The Link button then appears at the top of the window;
+  make sure it's on.
 
 If Link is on when you first open visual[flow], the welcome offers **Keep in time with
 Ableton** and how often to change the preset. Later, the **Link** panel in live mode has
@@ -105,8 +108,8 @@ visual[flow] tells you after a few seconds of silence, with the audio picker a p
 
 **It says it isn't allowed to hear other apps.**
 macOS refused the permission. Turn it on in **System Settings › Privacy & Security ›
-Screen & System Audio Recording**, then quit and reopen visual[flow]
-([step 2](#2-allow-visualflow-to-hear-other-apps)).
+Screen & System Audio Recording**. If it still doesn't hear your DAW after you allow it,
+quit and reopen visual[flow] ([step 2](#2-allow-visualflow-to-hear-other-apps)).
 
 **My DAW isn't in the list.**
 Open the DAW first; the list updates every few seconds. On macOS older than 14.4, apps
