@@ -24,6 +24,12 @@ export const flipFor = (chosen: readonly Prepared[], has: (p: Prepared) => boole
 /** What the "in playlists" line says. */
 export const inPlaylistsSays = (names: readonly string[] | null): string => (names === null ? 'in playlists: …' : names.length ? `in playlists: ${names.join(', ')}` : 'in no playlists');
 
+/** A toggle's state over `chosen`, for aria-pressed: on when every one has it, mixed when only some do. */
+export function pressedFor(chosen: readonly Prepared[], has: (p: Prepared) => boolean): boolean | 'mixed' {
+  const n = chosen.filter(has).length;
+  return n > 0 && n === chosen.length ? true : n > 0 ? 'mixed' : false;
+}
+
 /** How many of `chosen` the filter keeps out of `shown`. */
 export function hiddenCount(chosen: readonly Prepared[], shown: readonly Prepared[]): number {
   const keys = new Set(shown.map((p) => p.row.key));
@@ -91,14 +97,20 @@ export function PresetDrawer({ chosen, hiddenByFilter, playlists, current, onSet
           {one && !hiddenByFilter ? one.title : selectedSays(chosen.length, hiddenByFilter)}
         </span>
         <div className="wdg wdg-button">
-          <ButtonFace tone="quiet" aria-label="close" title="Let go of the selection (Esc)" onClick={onClose}>
+          <ButtonFace tone="quiet" aria-label="close, let go of the selection" title="Let go of the selection (Esc)" onClick={onClose}>
             ×
           </ButtonFace>
         </div>
       </header>
 
       {one ? (
-        <button type="button" className="lib-drawer-picture" title={one.row.path === current ? 'playing' : 'load it'} onClick={() => onLoad(one)}>
+        <button
+          type="button"
+          className="lib-drawer-picture"
+          aria-label={one.row.path === current ? `${one.title}, playing` : `play ${one.title}`}
+          title={one.row.path === current ? 'playing' : 'load it'}
+          onClick={() => onLoad(one)}
+        >
           {one.row.thumbnail ? <img src={one.row.thumbnail} alt="" /> : <span className="lib-thumb-none">{one.style}</span>}
         </button>
       ) : (
@@ -110,13 +122,21 @@ export function PresetDrawer({ chosen, hiddenByFilter, playlists, current, onSet
       {one && <Groups p={one} />}
 
       <div className="lib-drawer-actions">
-        <button type="button" className="lib-chip" aria-pressed={!star} title={star ? 'Star it' : 'Take the star off'} onClick={() => onSet(keys, { star })}>
-          ★ {star ? 'star' : 'starred'}
+        <button
+          type="button"
+          className="lib-chip"
+          aria-label="star"
+          aria-pressed={pressedFor(chosen, (p) => p.star)}
+          title={star ? 'Star it' : 'Take the star off'}
+          onClick={() => onSet(keys, { star })}
+        >
+          <span aria-hidden="true">★</span> {star ? 'star' : 'starred'}
         </button>
         <button
           type="button"
           className="lib-chip"
-          aria-pressed={!hide}
+          aria-label={say('hidden')}
+          aria-pressed={pressedFor(chosen, (p) => p.hidden)}
           title={hide ? `Never play it: random, shuffle and ${say('auto-advance')} skip it. A playlist you made still plays it.` : 'Play it again'}
           onClick={() => onSet(keys, { hidden: hide })}
         >
@@ -124,7 +144,7 @@ export function PresetDrawer({ chosen, hiddenByFilter, playlists, current, onSet
         </button>
       </div>
 
-      <div className="lib-tags" aria-label="tags">
+      <div className="lib-tags" role="group" aria-label="tags">
         {tags.map(({ tag, count }) => (
           <span key={tag} className="lib-tag" data-some={count < chosen.length ? '' : undefined} title={count < chosen.length ? `on ${count} of ${chosen.length}` : undefined}>
             {tag}
@@ -132,7 +152,7 @@ export function PresetDrawer({ chosen, hiddenByFilter, playlists, current, onSet
             <button
               type="button"
               className="lib-tag-x"
-              aria-label={`take the tag ${tag} off`}
+              aria-label={`take the tag ${tag} off${count < chosen.length ? ` (on ${count} of ${chosen.length})` : ''}`}
               title={`Take “${tag}” off${chosen.length > 1 ? ' all of them' : ''}`}
               onClick={() => onSet(keys, { remove_tags: [tag] })}
             >
@@ -181,7 +201,7 @@ function Groups({ p }: { p: Prepared }) {
         <Fact name="colour">
           {v.colour.map((c) => (
             <span key={c} className="lib-colour">
-              <span className="lib-swatch" style={{ background: SWATCH[c as Colour] }} />
+              <span className="lib-swatch" aria-hidden="true" style={{ background: SWATCH[c as Colour] }} />
               {c}
             </span>
           ))}

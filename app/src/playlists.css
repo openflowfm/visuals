@@ -42,7 +42,7 @@
 
 /* Keyboard focus on any button in the panel, as the widgets ring their other controls. */
 .playlists .wdg-button-body:focus-visible {
-  outline: 1px solid var(--fg);
+  outline: 2px solid var(--vf-focus-ring);
   outline-offset: 1px;
 }
 
@@ -77,13 +77,14 @@
   min-width: 0;
   padding: 3px 8px 3px 10px;
   cursor: pointer;
-  outline: none;
 }
 .playlists .playlists-row:hover {
   background: var(--sel);
 }
-.playlists .playlists-row:focus-visible {
-  box-shadow: var(--ring) var(--fg);
+/* A row draws its ring inside itself: the lists scroll, and would clip one drawn outside. */
+.vf-root .playlists .playlists-row:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: -2px;
 }
 .playlists .playlists-row i {
   color: var(--caption);
@@ -137,11 +138,6 @@
   background: var(--bd);
   color: var(--fg);
   box-shadow: var(--edge-left) var(--green);
-}
-.playlists .playlists-items .playlists-row[data-current]:focus-visible {
-  box-shadow:
-    var(--edge-left) var(--green),
-    var(--ring) var(--fg);
 }
 .playlists .playlists-items .playlists-row > b {
   flex: none;

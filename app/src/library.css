@@ -16,7 +16,6 @@
   background: var(--surface-control);
   border: 1px solid var(--bd3);
   border-radius: var(--radius);
-  outline: none;
   min-width: 0;
 }
 .lib-search {
@@ -37,8 +36,7 @@
 .lib-values-find:focus-visible,
 .lib-tag-input:focus-visible,
 .lib-name-input:focus-visible {
-  border-color: var(--focus);
-  box-shadow: 0 0 0 1px var(--focus);
+  border-color: var(--vf-focus-ring);
 }
 
 .lib-summary,
@@ -97,7 +95,7 @@
 }
 .lib-chip:focus-visible,
 .lib-link:focus-visible {
-  outline: 1px solid var(--focus);
+  outline: 2px solid var(--vf-focus-ring);
   outline-offset: 1px;
 }
 .lib-chip-count {
@@ -341,7 +339,8 @@
   object-fit: cover;
 }
 .lib-drawer-picture:focus-visible {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 1px;
 }
 .lib-drawer-strip {
   display: grid;
