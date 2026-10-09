@@ -5,7 +5,7 @@ import { Toggle } from '@openflow/widgets/controls/Toggle.tsx';
 import * as api from './api.ts';
 import { EffectSettings, useFx } from './Effects.tsx';
 import { setMotion, useMotion } from './access.ts';
-import { useFocusTrap } from './focusTrap.ts';
+import { isTopTrap, leavesKeys, useFocusTrap } from './focusTrap.ts';
 import { useNotice, useTauriEvent } from './hooks.ts';
 import { LinkSettings } from './LinkPanel.tsx';
 import * as output from './output.ts';
@@ -53,6 +53,9 @@ export function Sheet({
   useFocusTrap(ref);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
+      // A dialog over the sheet (the flashing lights warning), or a popover beside a drawer, takes Esc for itself.
+      const root = ref.current;
+      if (!root || leavesKeys(root, e.target instanceof Element ? e.target : null, isTopTrap(root))) return;
       if (!closesSheet(e)) return;
       e.preventDefault();
       e.stopPropagation();

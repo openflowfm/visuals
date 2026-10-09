@@ -5,7 +5,7 @@ import { Select } from '@openflow/widgets/controls/Select.tsx';
 import { Toggle } from '@openflow/widgets/controls/Toggle.tsx';
 import { setMotion, useMotion } from './access.ts';
 import * as api from './api.ts';
-import { useFocusTrap } from './focusTrap.ts';
+import { isTopTrap, useFocusTrap } from './focusTrap.ts';
 import { plural } from './controls.ts';
 import { useNotice, useTauriEvent } from './hooks.ts';
 import * as link from './link.ts';
@@ -520,7 +520,7 @@ export function FlashWarningDialog({ onClose }: { onClose(): void }) {
   useFocusTrap(ref);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
+      if (e.key !== 'Escape' || !isTopTrap(ref.current)) return;
       e.preventDefault();
       e.stopPropagation();
       onClose();

@@ -1,6 +1,6 @@
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { useEffect, useRef, type ReactElement } from 'react';
-import { useFocusTrap } from './focusTrap.ts';
+import { isTopTrap, useFocusTrap } from './focusTrap.ts';
 import { Say, say } from './words.ts';
 
 /** Every control live mode has, on screen or on a key. */
@@ -125,7 +125,7 @@ function HelpDialog({ onClose }: { onClose(): void }) {
   useFocusTrap(panel);
   useEffect(() => {
     const keydown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' && e.key !== '?') return;
+      if ((e.key !== 'Escape' && e.key !== '?') || !isTopTrap(panel.current)) return;
       e.preventDefault();
       e.stopPropagation();
       close.current();
