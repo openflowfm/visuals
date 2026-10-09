@@ -5,6 +5,9 @@ import type { Fx } from './fx.ts';
 import type { Frame } from './link.ts';
 import {
   addSkip,
+  addStop,
+  noteText,
+  stopText,
   audioLabel,
   beatLabel,
   beatLit,
@@ -132,6 +135,20 @@ describe('the skipped note', () => {
     expect(skipPhase(note, note.at)).toBe('shown');
     // Once gone, the next is a new note of one.
     expect(addSkip(note, note.at + SKIP_SHOWN_FOR + SKIP_FADE)).toEqual({ count: 1, at: note.at + SKIP_SHOWN_FOR + SKIP_FADE });
+  });
+
+  it('says when stepping stopped, without counting the stop as a skip', () => {
+    expect(stopText(8)).toBe("Stopped skipping: 8 presets in a row wouldn't draw");
+    let note = addSkip(addSkip(null, 1000), 1100);
+    note = addStop(note, 1200, 8);
+    expect(note).toEqual({ count: 2, at: 1200, stopped: 8 });
+    expect(noteText(note)).toBe("Stopped skipping: 8 presets in a row wouldn't draw");
+    // Skipping again after: back to counting, from where it was.
+    note = addSkip(note, 1300);
+    expect(note).toEqual({ count: 3, at: 1300 });
+    expect(noteText(note)).toBe('Skipped 3 broken presets');
+    // A stop alone counts no skips.
+    expect(addStop(null, 5000, 8)).toEqual({ count: 0, at: 5000, stopped: 8 });
   });
 
   it('stays a few seconds after the last skip, then fades and goes', () => {

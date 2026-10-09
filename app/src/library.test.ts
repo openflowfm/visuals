@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Entry, LibraryQuery } from './api.ts';
-import { firstToOpen, followAction, followGrid, gridKey, LIVE_WAIT, rereadOn, stepDeck, stepping } from './library.ts';
+import type { Entry, LibraryQuery, Resume } from './api.ts';
+import { firstToOpen, followAction, followGrid, forgetResumedQuery, gridKey, LIVE_WAIT, rereadOn, resumedQuery, startFrom, stepDeck, stepping } from './library.ts';
 
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn((..._args: unknown[]): Promise<unknown> => Promise.resolve(null)) }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => invoke(...args) }));
@@ -152,5 +152,43 @@ describe('firstToOpen', () => {
 
   it('opens nothing from an empty library', () => {
     expect(firstToOpen([], null, 0.3)).toBeNull();
+  });
+});
+
+describe('startFrom', () => {
+  const resume = (over: Partial<Resume>): Resume => ({ playlist: null, index: null, current: null, source: null, ...over });
+
+  it('opens nothing of its own while the app picks up where it left off, and shows the preset it puts back', () => {
+    expect(startFrom(library, null, resume({ current: '/p/b.milk' }), 0)).toEqual({ open: null, show: library[1] });
+    expect(startFrom(library, null, resume({ current: '/gone/x.milk' }), 0)).toEqual({ open: null, show: { path: '/gone/x.milk', name: 'x', group: '' } });
+    // A filter played again from its start: nothing to show until the deck says.
+    expect(startFrom(library, null, resume({ query: { groups: {}, text: 'x' } }), 0)).toEqual({ open: null, show: null });
+  });
+
+  it('keeps its own start with nothing to pick up, or when given one', () => {
+    expect(startFrom(library, null, null, 0.5)).toEqual({ open: library[1], show: null });
+    expect(startFrom(library, '/p/c.milk', resume({ current: '/p/b.milk' }), 0)).toEqual({ open: library[2], show: null });
+  });
+});
+
+describe('resumedQuery', () => {
+  const resumeIs = (r: Resume | null) => invoke.mockImplementation((cmd: unknown) => Promise.resolve(cmd === 'resume_state' ? r : null));
+
+  it('is the filter picked up with no playlist, until the user changes the filter', async () => {
+    const query: LibraryQuery = { groups: { style: ['Geiss'] }, text: 'x' };
+    resumeIs({ playlist: null, index: null, current: null, source: null, query });
+    forgetResumedQuery(true);
+    expect(await resumedQuery()).toEqual(query);
+    forgetResumedQuery();
+    expect(await resumedQuery()).toBeNull();
+  });
+
+  it('is none with a playlist picked up, or nothing', async () => {
+    resumeIs({ playlist: 'mine', index: 0, current: null, source: null, query: { groups: {}, text: 'x' } });
+    forgetResumedQuery(true);
+    expect(await resumedQuery()).toBeNull();
+    resumeIs(null);
+    forgetResumedQuery(true);
+    expect(await resumedQuery()).toBeNull();
   });
 });

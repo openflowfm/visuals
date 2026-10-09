@@ -179,10 +179,15 @@ export const SKIP_FADE = 1000;
 export interface Skips {
   count: number;
   at: number;
+  /** Stepping stopped (`resume::STOPPED`) after this many presets in a row wouldn't draw; the note says so until the next skip. */
+  stopped?: number;
 }
 
 /** A skip at `now`: counted into the note while it is still up (fading or not), a new note of one once it has gone. */
 export const addSkip = (was: Skips | null, now: number): Skips => ({ count: was && skipPhase(was, now) !== 'gone' ? was.count + 1 : 1, at: now });
+
+/** Stepping stopped at `now` after `inARow` presets wouldn't draw: the note says so, and the stop isn't counted as a skip. */
+export const addStop = (was: Skips | null, now: number, inARow: number): Skips => ({ count: was && skipPhase(was, now) !== 'gone' ? was.count : 0, at: now, stopped: inARow });
 
 /** Where the note is at `now`: up, fading, or gone. */
 export function skipPhase(note: Skips | null, now: number): 'shown' | 'fading' | 'gone' {
@@ -201,10 +206,17 @@ export function skipNextChange(note: Skips | null, now: number): number | null {
 /** The note's words: "Skipped 1 broken preset", "Skipped 3 broken presets". */
 export const skipText = (count: number): string => `Skipped ${plural(count, say('failed preset'))}`;
 
+/** The note's words once stepping stopped: "Stopped skipping: 8 presets in a row wouldn't draw". */
+export const stopText = (inARow: number): string => `${Say('skip budget spent')}: ${plural(inARow, 'preset')} ${say('skip budget why')}`;
+
+/** What the note says: that stepping stopped, or how many were skipped. */
+export const noteText = (note: Skips): string => (note.stopped !== undefined ? stopText(note.stopped) : skipText(note.count));
+
 /**
  * The note that next, previous, random or auto-advance skipped a preset that
  * won't load (decision 60): skips in quick succession counted into one line,
- * which fades a few seconds after the last. Its own leaf; the polite live region
+ * which fades a few seconds after the last; when stepping past presets that
+ * won't draw stops, it says that instead, and fades the same way. Its own leaf; the polite live region
  * is always there (empty while nothing is said), so VoiceOver reads each new count.
  * In a narrow window it takes only the room the strip has left, wrapping onto a
  * second line and then cutting short (`live.css`); its tooltip says it whole.
@@ -217,6 +229,11 @@ export function SkipNote() {
     setNote((was) => addSkip(was, t));
     setNow(t);
   });
+  useTauriEvent(api.onSkippingStopped, (inARow) => {
+    const t = Date.now();
+    setNote((was) => addStop(was, t, inARow));
+    setNow(t);
+  });
   useEffect(() => {
     const next = skipNextChange(note, now);
     if (next === null) return;
@@ -224,7 +241,7 @@ export function SkipNote() {
     return () => window.clearTimeout(t);
   }, [note, now]);
   const phase = skipPhase(note, now);
-  const text = note && phase !== 'gone' ? skipText(note.count) : '';
+  const text = note && phase !== 'gone' ? noteText(note) : '';
   return (
     <span className="live-status-skipped" role="status" aria-live="polite" title={text || undefined} data-fading={phase === 'fading' ? '' : undefined}>
       {text}

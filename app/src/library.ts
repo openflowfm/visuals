@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as api from './api.ts';
 import type { Entry, LibraryQuery } from './api.ts';
 import { searchLibrary } from './librarySearch.ts';
@@ -130,23 +130,65 @@ export function rereadOn(subscribe: (f: () => void) => Promise<() => void>, rere
   };
 }
 
+/** What the app is picking up from (`resume::resume_state`); null when nothing, or outside the app. */
+const resumed = (): Promise<api.Resume | null> => {
+  try {
+    return api.resumeState().then(
+      (r) => r ?? null,
+      () => null,
+    );
+  } catch {
+    return Promise.resolve(null);
+  }
+};
+
+/**
+ * What the page opens once the library is read: `start` when it was given one;
+ * otherwise nothing of its own while the app picks up where it left off (`resume`,
+ * which puts its preset back itself), only showing the preset it puts back; else
+ * {@link firstToOpen}'s pick.
+ */
+export function startFrom(library: Entry[], start: string | null, resume: api.Resume | null, pick: number): { open: Entry | null; show: Entry | null } {
+  if (start || !resume) return { open: firstToOpen(library, start, pick), show: null };
+  const at = resume.current;
+  return { open: null, show: at ? (library.find((e) => e.path === at) ?? { path: at, name: nameOf(at), group: '' }) : null };
+}
+
+/** The filter the app resumed playing, for the library to show; null once the user has changed the library's filter. */
+let resumedFilter: Promise<LibraryQuery | null> | null = null;
+
+/** The unsaved filter the app picked up playing (no playlist was), as the library's chips and search can show it; null when none. */
+export function resumedQuery(): Promise<LibraryQuery | null> {
+  resumedFilter ??= resumed().then((r) => (r && !r.playlist && r.query ? r.query : null));
+  return resumedFilter;
+}
+
+/** The user changed the library's filter: libraries opened from now on start unfiltered, as before. `again` reads it afresh (tests). */
+export function forgetResumedQuery(again = false): void {
+  resumedFilter = again ? null : Promise.resolve(null);
+}
+
 /**
  * The preset library and its search. Once the folders are read it opens `start`,
- * or a random preset when there's none.
+ * or a random preset when there's none, unless the app is picking up where it left
+ * off: then the preset it puts back stays, and `onResumed` is told which it is.
  */
-export function useLibrary(start: string | null, load: (e: Entry) => void, fail: (message: string) => (e: unknown) => void) {
+export function useLibrary(start: string | null, load: (e: Entry) => void, fail: (message: string) => (e: unknown) => void, onResumed?: (e: Entry) => void) {
   const [library, setLibrary] = useState<Entry[]>([]);
   const [search, setSearch] = useState('');
   const [loaded, setLoaded] = useState(false);
   const found = useMemo(() => searchLibrary(library, search), [library, search]);
+  const told = useRef(onResumed);
+  told.current = onResumed;
 
   useEffect(() => {
-    api.presets().then(
-      (l) => {
+    Promise.all([api.presets(), start ? null : resumed()]).then(
+      ([l, resume]) => {
         setLibrary(l);
         setLoaded(true);
-        const first = firstToOpen(l, start, Math.random());
-        if (first) load(first);
+        const { open, show } = startFrom(l, start, resume, Math.random());
+        if (open) load(open);
+        if (show) told.current?.(show);
       },
       (e) => {
         setLoaded(true);

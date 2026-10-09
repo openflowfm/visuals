@@ -22,7 +22,8 @@
 //! goes when the file changes or the preset opens after all (a newer engine);
 //! a preset that panicked drawing has to draw again, not only load ([`Panics`]),
 //! and isn't opened again by stepping this run. Panics that step the deck on
-//! have a budget ([`BUDGET`]), so presets that all panic never keep it stepping.
+//! have a budget ([`BUDGET`]), so presets that all panic never keep it stepping;
+//! the strip says when stepping stopped ([`STOPPED`]).
 
 use crate::actions::{Action, Deck, DeckView};
 use crate::bench::Drawing;
@@ -95,7 +96,9 @@ static RESTORED: AtomicBool = AtomicBool::new(false);
 /// What [`note`] kept last, so an unchanged deck isn't written again.
 static KEPT: Mutex<Option<Resume>> = Mutex::new(None);
 
-/// Where the app was last time, if it should pick up there; `None` when nothing was playing.
+/// Where the app is picking up from: `None` when nothing was playing, on the
+/// first run, or when started on a given preset. The page opens a preset of its
+/// own only when this is `None`, so it never replaces the one put back here.
 #[tauri::command]
 pub fn resume_state() -> Option<Resume> {
     FOUND.get().cloned().flatten()
@@ -109,6 +112,12 @@ fn worth(r: &Resume) -> bool {
 /// Whether to pick up at all: never on the first run, nor when started on a given preset.
 fn wanted(first_run: bool, preset: Option<&str>) -> bool {
     !first_run && preset.is_none_or(str::is_empty)
+}
+
+/// What to pick up of `kept` (`resume.json`): `None` when there's nothing worth
+/// it, or picking up isn't [`wanted`].
+fn to_resume(kept: Option<Resume>, first_run: bool, preset: Option<&str>) -> Option<Resume> {
+    kept.filter(worth).filter(|_| wanted(first_run, preset))
 }
 
 /// Called once at setup: problems with settings go to the page from now on, the
@@ -131,9 +140,9 @@ pub fn start(handle: &AppHandle) {
             std::thread::spawn(move || moved_on(&handle, path, &why));
         }
     });
-    let found = crate::settings::load::<Resume>(FILE).filter(worth).map(|r| Resume { source: kept_source(), ..r });
-    let _ = FOUND.set(found.clone());
-    let go = found.filter(|_| wanted(crate::settings::first_run(), std::env::var("VISUALS_PRESET").ok().as_deref()));
+    let kept = crate::settings::load::<Resume>(FILE).map(|r| Resume { source: kept_source(), ..r });
+    let go = to_resume(kept, crate::settings::first_run(), std::env::var("VISUALS_PRESET").ok().as_deref());
+    let _ = FOUND.set(go.clone());
     let Some(r) = go else {
         RESTORED.store(true, Ordering::SeqCst);
         return;
@@ -173,7 +182,9 @@ fn moved_on(handle: &AppHandle, path: Option<PathBuf>, why: &str) {
         OnPanic::Leave => {}
         OnPanic::Stop => {
             eprintln!("resume: {BUDGET} presets in a row panicked drawing; holding the picture rather than stepping on");
-            let _ = handle.emit(SKIPPED, path.to_string_lossy());
+            if let Some((event, count)) = said(on) {
+                let _ = handle.emit(event, count);
+            }
         }
         OnPanic::Step => {
             if open_failed(handle, &path, why) != Failed::Skip {
@@ -193,6 +204,17 @@ fn moved_on(handle: &AppHandle, path: Option<PathBuf>, why: &str) {
 /// past, while a deck of nothing but panicking presets stops within a few
 /// seconds, after at most this many loads.
 pub const BUDGET: usize = 8;
+
+/// The event the main window's status strip hears when stepping past panics
+/// stops ([`OnPanic::Stop`]), with how many presets in a row wouldn't draw
+/// ([`BUDGET`]); a stop isn't a skip, so it doesn't go out on [`SKIPPED`].
+pub const STOPPED: &str = "preset-skipping-stopped";
+
+/// What the page is told of `on`, besides the skip a step sends ([`open_failed`]):
+/// the event and its payload.
+fn said(on: OnPanic) -> Option<(&'static str, usize)> {
+    (on == OnPanic::Stop).then_some((STOPPED, BUDGET))
+}
 
 /// The presets that panicked drawing this run, and how many panics in a row
 /// stepped the deck on.
@@ -642,6 +664,27 @@ mod tests {
         assert!(wanted(false, Some("")));
         assert!(!wanted(true, None));
         assert!(!wanted(false, Some("cream-of-the-crop/x.milk")));
+    }
+
+    #[test]
+    fn reports_to_the_page_only_what_it_puts_back() {
+        let kept = Some(r(None, None, Some("/x.milk")));
+        assert_eq!(to_resume(kept.clone(), false, None), kept);
+        // The page opens its own start preset only when this says none: on the
+        // first run, on a given preset, or with nothing worth picking up.
+        assert_eq!(to_resume(kept.clone(), true, None), None);
+        assert_eq!(to_resume(kept, false, Some("cream-of-the-crop/x.milk")), None);
+        assert_eq!(to_resume(Some(Resume::default()), false, None), None);
+        assert_eq!(to_resume(None, false, None), None);
+    }
+
+    #[test]
+    fn a_stop_is_said_as_a_stop_not_as_one_more_skip() {
+        assert_eq!(said(OnPanic::Stop), Some((STOPPED, BUDGET)));
+        assert_ne!(STOPPED, SKIPPED);
+        // A step's skip goes out from `open_failed`; leaving the deck be says nothing.
+        assert_eq!(said(OnPanic::Step), None);
+        assert_eq!(said(OnPanic::Leave), None);
     }
 
     #[test]

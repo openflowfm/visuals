@@ -121,7 +121,8 @@ export function Browse({ view, start, onMode, onOpened, below, side }: BrowsePro
     },
     [dismiss, setNotice, onOpened],
   );
-  const { library, loaded, search, setSearch, found } = useLibrary(start, load, fail);
+  // Picking up where the app left off, the preset put back stays: shown (unless the deck said first), not opened again.
+  const { library, loaded, search, setSearch, found } = useLibrary(start, load, fail, (e) => setCurrent((c) => c ?? e));
   const shown = found.shown;
 
   // A playlist is playing: the live action layer steps through it.
