@@ -27,7 +27,9 @@
 //! child whose preset panicked is restarted, so no preset draws on a renderer a
 //! panic left half-way. A child that fails to start doesn't cost its preset
 //! anything: the preset goes back on the queue. After three such failures in a
-//! row a driver gives up; when every driver has, the index so far is saved and
+//! row a driver gives up, and the drivers still going draw what it put back
+//! (one that ran out of presets waits while others hold some, in case they
+//! come back); when every driver has given up, the index so far is saved and
 //! the run ends with exit status 1, naming why.
 //!
 //! `--sample N` takes N presets spread evenly over the sorted paths; the rows
@@ -45,7 +47,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 /// Pictures are drawn at this many times the thumbnail size and shrunk.
@@ -94,6 +96,87 @@ struct Job {
     hash: String,
     path: PathBuf,
     tries: u32,
+}
+
+/// The presets still to draw, shared by the drivers. A driver takes one at a
+/// time and then either finishes it ([`Queue::done`]) or puts it back
+/// ([`Queue::put_back`]). A driver that finds the queue empty waits while
+/// another still holds a preset, since it may come back (a timeout to try
+/// again, or a driver giving up), so a preset put back late is still drawn by
+/// the drivers left rather than by the next run.
+struct Queue {
+    state: Mutex<Pending>,
+    changed: Condvar,
+}
+
+struct Pending {
+    jobs: VecDeque<Job>,
+    /// Presets taken and not yet finished or put back.
+    out: usize,
+    /// Drivers waiting in [`Queue::take`].
+    waiting: usize,
+}
+
+impl Queue {
+    fn new(jobs: VecDeque<Job>) -> Queue {
+        Queue { state: Mutex::new(Pending { jobs, out: 0, waiting: 0 }), changed: Condvar::new() }
+    }
+
+    fn lock(&self) -> MutexGuard<'_, Pending> {
+        self.state.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// The next preset, waiting while the queue is empty but presets are out;
+    /// `None` once there's nothing left to draw or to come back.
+    fn take(&self) -> Option<Job> {
+        let mut s = self.lock();
+        loop {
+            if let Some(job) = s.jobs.pop_front() {
+                s.out += 1;
+                return Some(job);
+            }
+            if s.out == 0 {
+                return None;
+            }
+            s.waiting += 1;
+            self.changed.notify_all();
+            s = self.changed.wait(s).unwrap_or_else(|e| e.into_inner());
+            s.waiting -= 1;
+        }
+    }
+
+    /// Waits until a driver is waiting in [`Queue::take`].
+    #[cfg(test)]
+    fn until_waiting(&self) {
+        let mut s = self.lock();
+        while s.waiting == 0 {
+            s = self.changed.wait(s).unwrap_or_else(|e| e.into_inner());
+        }
+    }
+
+    /// A taken preset is finished.
+    fn done(&self) {
+        self.lock().out -= 1;
+        self.changed.notify_all();
+    }
+
+    /// A taken preset goes back: to the front (untried) or the back (to try again later).
+    fn put_back(&self, job: Job, front: bool) {
+        let mut s = self.lock();
+        s.out -= 1;
+        if front {
+            s.jobs.push_front(job);
+        } else {
+            s.jobs.push_back(job);
+        }
+        drop(s);
+        self.changed.notify_all();
+    }
+
+    /// The presets nobody drew.
+    fn left(&self) -> Vec<Job> {
+        self.lock().jobs.iter().cloned().collect()
+    }
 }
 
 /// What an old index already knows, by content hash.
@@ -254,7 +337,7 @@ fn run(folder: &Path, out: &Path, count: Option<usize>, jobs: usize, timeout: Du
     );
 
     let started = Instant::now();
-    let queue = Arc::new(Mutex::new(queue));
+    let queue = Arc::new(Queue::new(queue));
     let (tx, results) = mpsc::channel();
     let launch = match std::env::current_exe() {
         Ok(program) => Launch { program, args: vec!["--child".into(), frame.to_string()] },
@@ -299,7 +382,7 @@ fn run(folder: &Path, out: &Path, count: Option<usize>, jobs: usize, timeout: Du
     let gave_up: Vec<String> = workers.into_iter().filter_map(|w| w.join().unwrap_or_else(|_| Some("its driver panicked".into()))).collect();
     let secs = started.elapsed().as_secs_f64();
     save(&index, &file);
-    let left = queue.lock().unwrap_or_else(|e| e.into_inner()).len();
+    let left = queue.left().len();
     if left > 0 {
         eprintln!("index: {left} presets not drawn: children couldn't start ({}); the index so far is saved, run again to go on", gave_up.join("; "));
         std::process::exit(1);
@@ -398,17 +481,18 @@ fn ask(r: &mut Running, preset: &Path, thumb: &Path, timeout: Duration) -> Outco
     }
 }
 
-/// Draws presets from `queue` in a child until it's empty. The child is
-/// restarted after a timeout, a crash or a panic; a preset that times out goes
-/// to the back of the queue until it has had [`TRIES`]. A preset whose child
-/// fails to start goes back on the queue untried; after [`START_FAILURES`] in a
-/// row this driver gives up, returning why.
-fn drive(queue: &Mutex<VecDeque<Job>>, results: &mpsc::Sender<(String, PathBuf, Reply)>, thumbs: &Path, launch: &Launch, timeout: Duration) -> Option<String> {
+/// Draws presets from `queue` in a child until there are none left, nor any
+/// out with other drivers ([`Queue::take`]). The child is restarted after a
+/// timeout, a crash or a panic; a preset that times out goes to the back of the
+/// queue until it has had [`TRIES`]. A preset whose child fails to start goes
+/// back on the queue untried; after [`START_FAILURES`] in a row this driver
+/// gives up, returning why, and the other drivers draw what it put back.
+fn drive(queue: &Queue, results: &mpsc::Sender<(String, PathBuf, Reply)>, thumbs: &Path, launch: &Launch, timeout: Duration) -> Option<String> {
     let mut running: Option<Running> = None;
     let mut failures = 0;
     let mut gave_up = None;
     loop {
-        let Some(mut job) = queue.lock().unwrap_or_else(|e| e.into_inner()).pop_front() else { break };
+        let Some(mut job) = queue.take() else { break };
         let mut r = match running.take().map_or_else(|| spawn(launch), Ok) {
             Ok(r) => {
                 failures = 0;
@@ -417,7 +501,7 @@ fn drive(queue: &Mutex<VecDeque<Job>>, results: &mpsc::Sender<(String, PathBuf, 
             Err(e) => {
                 failures += 1;
                 eprintln!("index: can't start a child ({failures} in a row): {e}");
-                queue.lock().unwrap_or_else(|e| e.into_inner()).push_front(job);
+                queue.put_back(job, true);
                 if failures >= START_FAILURES {
                     gave_up = Some(format!("{failures} in a row, the last: {e}"));
                     break;
@@ -440,7 +524,7 @@ fn drive(queue: &Mutex<VecDeque<Job>>, results: &mpsc::Sender<(String, PathBuf, 
                 stop(r);
                 if job.tries < TRIES {
                     eprintln!("index: timed out, trying again later\t{}", job.path.display());
-                    queue.lock().unwrap_or_else(|e| e.into_inner()).push_back(job);
+                    queue.put_back(job, false);
                     continue;
                 }
                 Reply::Failed("timed out".into())
@@ -450,6 +534,7 @@ fn drive(queue: &Mutex<VecDeque<Job>>, results: &mpsc::Sender<(String, PathBuf, 
                 Reply::Failed("crashed".into())
             }
         };
+        queue.done();
         if results.send((job.hash, job.path, reply)).is_err() {
             break;
         }
@@ -559,19 +644,52 @@ mod tests {
 
     /// The same, with the presets left on the queue and why the driver gave up.
     fn run_driver_whole(launch: &Launch, presets: &[&str], timeout: Duration) -> (Vec<(PathBuf, String)>, Vec<PathBuf>, Option<String>) {
-        let queue = Mutex::new(presets.iter().map(|p| Job { hash: format!("{p}hash"), path: PathBuf::from(p), tries: 0 }).collect::<VecDeque<_>>());
+        let queue = jobs(presets);
         let (tx, rx) = mpsc::channel();
         let gave_up = drive(&queue, &tx, &std::env::temp_dir(), launch, timeout);
         drop(tx);
-        let replies = rx
-            .iter()
+        let left = queue.left().into_iter().map(|j| j.path).collect();
+        (answers(rx), left, gave_up)
+    }
+
+    fn jobs(presets: &[&str]) -> Queue {
+        Queue::new(presets.iter().map(|p| Job { hash: format!("{p}hash"), path: PathBuf::from(p), tries: 0 }).collect())
+    }
+
+    fn answers(rx: Receiver<(String, PathBuf, Reply)>) -> Vec<(PathBuf, String)> {
+        rx.iter()
             .map(|(_, path, reply)| match reply {
                 Reply::Failed(why) => (path, why),
                 Reply::Drew { .. } => (path, "drew".into()),
             })
-            .collect();
-        let left = queue.into_inner().unwrap().into_iter().map(|j| j.path).collect();
-        (replies, left, gave_up)
+            .collect()
+    }
+
+    #[test]
+    fn a_preset_put_back_after_the_queue_ran_dry_is_still_drawn() {
+        // Another driver holds `late` (here, the test): the driver finds the
+        // queue empty and waits, rather than ending, until it comes back.
+        let queue = Arc::new(jobs(&["late"]));
+        let held = queue.take().unwrap();
+        let (tx, rx) = mpsc::channel();
+        let driver = {
+            let queue = queue.clone();
+            let launch = sh(r#"echo ready; while read l; do echo '{"Failed":"answered"}'; done"#);
+            std::thread::spawn(move || drive(&queue, &tx, &std::env::temp_dir(), &launch, Duration::from_secs(5)))
+        };
+        // Once the driver waits, the holder gives up on it, as a driver whose
+        // children won't start does.
+        queue.until_waiting();
+        queue.put_back(held, true);
+        assert_eq!(driver.join().unwrap(), None);
+        assert_eq!(answers(rx), [(PathBuf::from("late"), "answered".into())]);
+        assert!(queue.left().is_empty());
+
+        // With nothing out, an empty queue ends a driver at once.
+        let (tx, rx) = mpsc::channel();
+        assert_eq!(drive(&jobs(&[]), &tx, &std::env::temp_dir(), &sh("exit 1"), Duration::from_secs(5)), None);
+        drop(tx);
+        assert!(answers(rx).is_empty());
     }
 
     fn scratch(name: &str) -> PathBuf {

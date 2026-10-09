@@ -77,8 +77,9 @@ const FOLDER: &str = "cream-of-the-crop";
 const INDEX: &str = "index.json";
 /// The folder of the index's thumbnails, beside it.
 const THUMBNAILS: &str = "thumbnails";
-/// The most an `index.json` in a download may be (the full pack's is a few MB).
-const INDEX_MAX: u64 = 64 << 20;
+/// The most a file in a download may be (the full pack's `index.json`, its
+/// largest, is a few MB).
+const FILE_MAX: u64 = 64 << 20;
 
 /// The folders presets are listed from: the presets folder, and the bundled
 /// starter set while the presets folder doesn't have all of it.
@@ -230,16 +231,23 @@ fn download(handle: &AppHandle) -> Result<(), String> {
     result.map(|_| ())
 }
 
-/// Counts the bytes read through it.
+/// Counts the bytes read through it, and notes when the download broke off
+/// (rather than the archive being bad): reading it failed or stalled, or it
+/// ended short of the `length` the server gave.
 struct Counted<'a, R> {
     inner: R,
+    length: Option<u64>,
     count: &'a Cell<u64>,
+    broke: &'a Cell<bool>,
 }
 
 impl<R: Read> Read for Counted<'_, R> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let n = self.inner.read(buf)?;
+        let n = self.inner.read(buf).inspect_err(|_| self.broke.set(true))?;
         self.count.set(self.count.get() + n as u64);
+        if n == 0 && !buf.is_empty() && self.length.is_some_and(|l| self.count.get() < l) {
+            self.broke.set(true);
+        }
         Ok(n)
     }
 }
@@ -248,8 +256,11 @@ impl<R: Read> Read for Counted<'_, R> {
 /// unpack it into `dest` as it arrives ([`extract`]). `sized` hears the
 /// download's size once a server has answered (its `Content-Length`, else the
 /// source's own figure); `progress` the bytes received and the presets placed
-/// so far. A download that breaks off isn't taken up from the next source: a
-/// retry carries on from the same one. Returns how many presets the pack has.
+/// so far. A source that answers with something that isn't a whole tar.gz of
+/// presets (it won't gunzip or untar, or has no presets) counts as one that
+/// can't be had, and the next is tried. A download that breaks off isn't taken
+/// up from the next source: a retry carries on from the same one. Returns how
+/// many presets the pack has.
 fn fetch(sources: &[Source], dest: &Path, mut sized: impl FnMut(u64), mut progress: impl FnMut(u64, usize)) -> Result<usize, String> {
     let client = client()?;
     let mut failed = Vec::new();
@@ -262,11 +273,22 @@ fn fetch(sources: &[Source], dest: &Path, mut sized: impl FnMut(u64), mut progre
                 continue;
             }
         };
-        sized(response.content_length().unwrap_or(source.size));
-        let received = Cell::new(0);
-        let files = extract(Counted { inner: response, count: &received }, dest, |files| progress(received.get(), files))?;
-        progress(received.get(), files);
-        return Ok(files);
+        let length = response.content_length();
+        sized(length.unwrap_or(source.size));
+        let (received, broke) = (Cell::new(0), Cell::new(false));
+        match extract(Counted { inner: response, length, count: &received, broke: &broke }, dest, |files| progress(received.get(), files)) {
+            Ok(files) => {
+                progress(received.get(), files);
+                return Ok(files);
+            }
+            Err(Failed::Archive(e)) if broke.get() => return Err(format!("the download broke off: {e}")),
+            Err(Failed::Archive(e)) => {
+                let e = format!("the pack's archive is damaged: {e}");
+                eprintln!("pack: {e} ({})", source.url);
+                failed.push(e);
+            }
+            Err(Failed::Local(e)) => return Err(e),
+        }
     }
     Err(if failed.is_empty() { "nowhere to download the pack from".into() } else { failed.join("; ") })
 }
@@ -319,75 +341,173 @@ fn kind(rel: &Path) -> Option<Kind> {
     if has_ext(rel, "milk") { Some(Kind::Preset) } else { has_ext(rel, "md").then_some(Kind::Other) }
 }
 
+/// Why [`extract`] stopped.
+#[derive(Debug)]
+enum Failed {
+    /// Reading the archive went wrong: it isn't a whole tar.gz of presets, or
+    /// the download under it broke off ([`fetch`] tells which).
+    Archive(String),
+    /// Writing into the presets folder went wrong.
+    Local(String),
+}
+
+/// What the `index.json` already in the pack's folder says was downloaded: each
+/// file's content hash by its path (`/`-separated, in the pack's folder), and
+/// the thumbnails' names. Empty when there's none, or it can't be read.
+#[derive(Default)]
+struct Downloaded {
+    hashes: std::collections::HashMap<String, String>,
+    thumbnails: HashSet<String>,
+}
+
+impl Downloaded {
+    /// Read from `index` loosely, whatever its version: only its rows' and
+    /// skips' paths, hashes and thumbnails, which every version has.
+    fn read(index: &Path) -> Downloaded {
+        #[derive(Deserialize, Default)]
+        struct Old {
+            #[serde(default)]
+            rows: Vec<Row>,
+            #[serde(default)]
+            skipped: Vec<Row>,
+        }
+        #[derive(Deserialize)]
+        struct Row {
+            path: String,
+            hash: String,
+            #[serde(default)]
+            thumbnail: Option<String>,
+        }
+        let old: Old = std::fs::read(index).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+        let thumbnails = old.rows.iter().filter_map(|r| r.thumbnail.clone()).collect();
+        Downloaded { hashes: old.rows.into_iter().chain(old.skipped).map(|r| (r.path, r.hash)).collect(), thumbnails }
+    }
+
+    /// Whether the file at `key` is still as it was downloaded: there, and its
+    /// content's hash the one the index has for it.
+    fn untouched(&self, key: &str, there: &[u8]) -> bool {
+        self.hashes.get(key).is_some_and(|h| *h == engine::index::hash(there))
+    }
+}
+
 /// Unpack a tar.gz of the pack into `dest`, leaving out its top folder: its
 /// `.milk` and `.md` files, its `index.json` and the `.webp` files in its
 /// `thumbnails/`, never anything outside `dest`. Each file is written to a
-/// `.part` beside its place and renamed into it; one already there is kept. The
-/// index is the exception: it is always replaced, and only once the whole
-/// archive has arrived, so the library groups the pack once its presets and
-/// thumbnails are all in. `placed` hears how many presets are in place so far.
-/// Returns how many presets the archive has.
-fn extract(reader: impl Read, dest: &Path, mut placed: impl FnMut(usize)) -> Result<usize, String> {
-    let broken = |e: std::io::Error| format!("the download broke off: {e}");
+/// `.part` beside its place and renamed into it. A file already there is kept,
+/// unless the pack's old `index.json` (the one in `dest`) has its hash, so it
+/// is still as downloaded: then a changed one replaces it. With no old index,
+/// nothing is replaced. The index itself is always replaced, and only once the
+/// whole archive has arrived, so the library groups the pack once its presets
+/// and thumbnails are all in. Then, when the archive has an index (our bundle,
+/// not projectM's bare pack), what the old index listed and the archive
+/// doesn't have is removed: presets still as downloaded (a takedown), never
+/// ones edited, and thumbnails. `placed` hears how many presets are in place
+/// so far. Returns how many presets the archive has.
+fn extract(reader: impl Read, dest: &Path, mut placed: impl FnMut(usize)) -> Result<usize, Failed> {
+    let bad = |e: std::io::Error| Failed::Archive(e.to_string());
+    let old = Downloaded::read(&dest.join(INDEX));
     let mut archive = tar::Archive::new(flate2::read::GzDecoder::new(reader));
     let mut files = 0;
     let mut index = None;
-    for entry in archive.entries().map_err(broken)? {
-        let mut entry = entry.map_err(broken)?;
+    let mut seen = HashSet::new();
+    for entry in archive.entries().map_err(bad)? {
+        let mut entry = entry.map_err(bad)?;
         if !entry.header().entry_type().is_file() {
             continue;
         }
-        let path = entry.path().map_err(broken)?.into_owned();
+        let path = entry.path().map_err(bad)?.into_owned();
         let Some(rel) = inside(&path) else { continue };
         let Some(kind) = kind(&rel) else { continue };
+        if entry.size() > FILE_MAX {
+            return Err(Failed::Archive(format!("its {} is too big ({} bytes)", rel.display(), entry.size())));
+        }
+        let mut bytes = Vec::with_capacity(entry.size() as usize);
+        entry.read_to_end(&mut bytes).map_err(bad)?;
         if kind == Kind::Index {
-            if entry.size() > INDEX_MAX {
-                return Err(format!("the pack's {INDEX} is too big ({} bytes)", entry.size()));
-            }
-            let mut bytes = Vec::new();
-            entry.read_to_end(&mut bytes).map_err(broken)?;
             index = Some(bytes);
             continue;
         }
-        let milk = kind == Kind::Preset;
+        let key = index_path(&rel);
         let target = dest.join(&rel);
-        // Never overwrite a file already there: the user may have edited it. A
-        // cut-off write never leaves one (it lands in the `.part` first).
-        if !target.exists() {
-            if let Some(dir) = target.parent() {
-                std::fs::create_dir_all(dir).map_err(|e| format!("couldn't make {}: {e}", dir.display()))?;
-            }
-            let mut part = target.clone().into_os_string();
-            part.push(".part");
-            let part = PathBuf::from(part);
-            let written = std::fs::File::create(&part).and_then(|mut f| std::io::copy(&mut entry, &mut f));
-            if let Err(e) = written {
-                let _ = std::fs::remove_file(&part);
-                return Err(broken(e));
-            }
-            std::fs::rename(&part, &target).map_err(|e| format!("couldn't write {}: {e}", target.display()))?;
+        // A file already there is replaced only while it's as downloaded: the
+        // user may have edited it. A cut-off write never leaves one (it lands
+        // in the `.part` first).
+        let write = match std::fs::read(&target) {
+            Ok(there) => there != bytes && old.untouched(&key, &there),
+            Err(e) => e.kind() == std::io::ErrorKind::NotFound,
+        };
+        if write {
+            place(&target, &bytes).map_err(Failed::Local)?;
         }
-        if milk {
+        seen.insert(key);
+        if kind == Kind::Preset {
             files += 1;
             placed(files);
         }
     }
     // Read the gzip stream to its end, so a cut-off download is an error.
     let mut rest = archive.into_inner();
-    std::io::copy(&mut rest, &mut std::io::sink()).map_err(broken)?;
-    std::io::copy(&mut rest.into_inner(), &mut std::io::sink()).map_err(broken)?;
+    std::io::copy(&mut rest, &mut std::io::sink()).map_err(bad)?;
+    std::io::copy(&mut rest.into_inner(), &mut std::io::sink()).map_err(bad)?;
     if files == 0 {
-        return Err("the download had no presets in it".into());
+        return Err(Failed::Archive("it has no presets in it".into()));
     }
     if let Some(bytes) = index {
-        let target = dest.join(INDEX);
-        let part = dest.join(format!("{INDEX}.part"));
-        std::fs::write(&part, bytes).and_then(|_| std::fs::rename(&part, &target)).map_err(|e| {
-            let _ = std::fs::remove_file(&part);
-            format!("couldn't write {}: {e}", target.display())
-        })?;
+        remove_dropped(dest, &old, &seen);
+        place(&dest.join(INDEX), &bytes).map_err(Failed::Local)?;
     }
     Ok(files)
+}
+
+/// Write `bytes` to a `.part` beside `target`, then rename it into place.
+fn place(target: &Path, bytes: &[u8]) -> Result<(), String> {
+    if let Some(dir) = target.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| format!("couldn't make {}: {e}", dir.display()))?;
+    }
+    let mut part = target.as_os_str().to_owned();
+    part.push(".part");
+    let part = PathBuf::from(part);
+    std::fs::write(&part, bytes).and_then(|_| std::fs::rename(&part, target)).map_err(|e| {
+        let _ = std::fs::remove_file(&part);
+        format!("couldn't write {}: {e}", target.display())
+    })
+}
+
+/// Remove from `dest` what `old` listed and the new archive doesn't have
+/// (`seen`): presets still as downloaded, and thumbnails. An edited preset is
+/// kept. A folder left empty goes too. A file that can't be removed is only
+/// logged: it stays listed nowhere, and the download still counts.
+fn remove_dropped(dest: &Path, old: &Downloaded, seen: &HashSet<String>) {
+    let thumbnails = old.thumbnails.iter().map(|t| format!("{THUMBNAILS}/{t}"));
+    let dropped = old.hashes.keys().cloned().chain(thumbnails).filter(|k| !seen.contains(k));
+    for key in dropped {
+        // Only plain names inside `dest`: the index is data, not a path to trust.
+        if !Path::new(&key).components().all(|c| matches!(c, Component::Normal(_))) {
+            continue;
+        }
+        let target = dest.join(&key);
+        let Ok(there) = std::fs::read(&target) else { continue };
+        if old.hashes.contains_key(&key) && !old.untouched(&key, &there) {
+            continue;
+        }
+        if let Err(e) = std::fs::remove_file(&target) {
+            eprintln!("pack: couldn't remove {}: {e}", target.display());
+            continue;
+        }
+        // Folders left empty, up to the pack's own (`remove_dir` fails on one that isn't).
+        let mut dir = target.parent();
+        while let Some(d) = dir.filter(|d| *d != dest && d.starts_with(dest)) {
+            if std::fs::remove_dir(d).is_err() {
+                break;
+            }
+            dir = d.parent();
+        }
+    }
+}
+
+/// `rel` as the index writes paths: `/`-separated.
+fn index_path(rel: &Path) -> String {
+    rel.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect::<Vec<_>>().join("/")
 }
 
 /// An archive path without its top folder, when every part is a plain name.
@@ -786,6 +906,112 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
+    /// An `index.json` (the engine's own format) listing `presets` by their
+    /// content, with a thumbnail each, and `skipped` without one.
+    fn index_of(presets: &[(&str, &[u8])], skipped: &[(&str, &[u8])]) -> Vec<u8> {
+        use engine::index::{hash, row, thumbnail_name, Index, Skipped};
+        let mut index = Index::new(90);
+        for (path, data) in presets {
+            let mut r = row(Path::new(path), hash(data));
+            r.thumbnail = Some(thumbnail_name(&r.hash));
+            index.rows.push(r);
+        }
+        for (path, data) in skipped {
+            index.rows.push(row(Path::new(path), hash(data)));
+            index.skipped.push(Skipped { path: path.to_string(), hash: hash(data), why: "timed out".into() });
+        }
+        serde_json::to_vec(&index).unwrap()
+    }
+
+    fn thumb(data: &[u8]) -> String {
+        format!("top/thumbnails/{}", engine::index::thumbnail_name(&engine::index::hash(data)))
+    }
+
+    #[test]
+    fn a_new_bundle_replaces_and_removes_only_presets_still_as_downloaded() {
+        let dir = temp();
+        let dest = dir.join("cream-of-the-crop");
+        let read = |p: &str| std::fs::read(dest.join(p)).ok();
+        // The first bundle: five presets, one of them skipped by the index.
+        let v1: [(&str, &[u8]); 5] = [("A/same.milk", b"same"), ("A/changed.milk", b"old"), ("A/edited.milk", b"old e"), ("B/dropped.milk", b"drop"), ("C/dropped-edited.milk", b"drop e")];
+        let index1 = index_of(&v1[..4], &v1[4..]);
+        let mut files1: Vec<(String, &[u8])> = v1.iter().map(|(p, d)| (format!("top/{p}"), *d)).collect();
+        files1.extend(v1[..4].iter().map(|(_, d)| (thumb(d), &b"RIFF"[..])));
+        files1.push(("top/index.json".into(), &index1[..]));
+        let gz1 = tar_gz(&files1.iter().map(|(p, d)| (p.as_str(), *d)).collect::<Vec<_>>());
+        assert_eq!(extract(&gz1[..], &dest, |_| {}).unwrap(), 5);
+        let dropped_thumb = thumb(b"drop").trim_start_matches("top/").to_string();
+        assert!(dest.join(&dropped_thumb).is_file());
+
+        // The user edits two; then a new bundle changes two and drops two.
+        std::fs::write(dest.join("A/edited.milk"), b"mine").unwrap();
+        std::fs::write(dest.join("C/dropped-edited.milk"), b"mine too").unwrap();
+        std::fs::write(dest.join("A/mine.milk"), b"not the pack's").unwrap();
+        let v2: [(&str, &[u8]); 3] = [("A/same.milk", b"same"), ("A/changed.milk", b"new"), ("A/edited.milk", b"new e")];
+        let index2 = index_of(&v2, &[]);
+        let mut files2: Vec<(String, &[u8])> = v2.iter().map(|(p, d)| (format!("top/{p}"), *d)).collect();
+        files2.push(("top/index.json".into(), &index2[..]));
+        let gz2 = tar_gz(&files2.iter().map(|(p, d)| (p.as_str(), *d)).collect::<Vec<_>>());
+        // Cut off, nothing is removed and the old index stays.
+        assert!(extract(&gz2[..gz2.len() - 10], &dest, |_| {}).is_err());
+        assert_eq!(read("B/dropped.milk").as_deref(), Some(&b"drop"[..]));
+        assert_eq!(read("index.json"), Some(index1.clone()));
+
+        assert_eq!(extract(&gz2[..], &dest, |_| {}).unwrap(), 3);
+        assert_eq!(read("A/same.milk").as_deref(), Some(&b"same"[..]));
+        assert_eq!(read("A/changed.milk").as_deref(), Some(&b"new"[..]), "overwritten: untouched");
+        assert_eq!(read("A/edited.milk").as_deref(), Some(&b"mine"[..]), "kept: edited");
+        assert_eq!(read("B/dropped.milk"), None, "removed: dropped and untouched");
+        assert!(!dest.join("B").exists(), "its folder left empty goes too");
+        assert_eq!(read("C/dropped-edited.milk").as_deref(), Some(&b"mine too"[..]), "kept: dropped but edited");
+        assert_eq!(read("A/mine.milk").as_deref(), Some(&b"not the pack's"[..]));
+        assert!(!dest.join(&dropped_thumb).exists(), "a thumbnail the new index doesn't have goes");
+        assert_eq!(read("index.json"), Some(index2));
+        assert!(parts(&dir).is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_pack_without_an_index_removes_nothing_and_replaces_only_untouched_presets() {
+        let dir = temp();
+        let dest = dir.join("cream-of-the-crop");
+        let index = index_of(&[("A/a.milk", b"a"), ("A/b.milk", b"b")], &[]);
+        let thumbnail = thumb(b"b");
+        let gz = tar_gz(&[("top/A/a.milk", b"a"), ("top/A/b.milk", b"b"), ("top/index.json", &index[..]), (&thumbnail, b"RIFF")]);
+        assert_eq!(extract(&gz[..], &dest, |_| {}).unwrap(), 2);
+        // projectM's bare pack: no index, `b` changed, `a` gone.
+        assert_eq!(extract(&tar_gz(&[("top/A/b.milk", b"b2")])[..], &dest, |_| {}).unwrap(), 1);
+        assert_eq!(std::fs::read(dest.join("A/a.milk")).unwrap(), b"a");
+        assert_eq!(std::fs::read(dest.join("A/b.milk")).unwrap(), b"b2");
+        assert!(dest.join(thumb(b"b").trim_start_matches("top/")).is_file());
+        assert_eq!(std::fs::read(dest.join("index.json")).unwrap(), index);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn fetch_falls_back_when_the_bundle_isnt_a_tar_gz_of_presets() {
+        let dir = temp();
+        let gz = tar_gz(&[("top/S/a.milk", b"a")]);
+        let not_tar = {
+            let mut e = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+            e.write_all(&noise(9, 4000)).unwrap();
+            e.finish().unwrap()
+        };
+        let empty = tar_gz(&[("top/README.md", b"no presets")]);
+        // Sent whole, with its own length, but the archive itself is cut short.
+        let short = tar_gz(&[("top/S/b.milk", &noise(4, 30_000))])[..10_000].to_vec();
+        for bad in [b"<html>not gzip</html>".to_vec(), not_tar, empty, short] {
+            let mut sizes = Vec::new();
+            assert_eq!(fetch(&[at(serve(ok(&bad)), 1), at(serve(ok(&gz)), 2)], &dir, |s| sizes.push(s), |_, _| {}).unwrap(), 1);
+            assert_eq!(sizes, [bad.len() as u64, gz.len() as u64]);
+            assert!(dir.join("S/a.milk").is_file());
+            std::fs::remove_file(dir.join("S/a.milk")).unwrap();
+        }
+        let err = fetch(&[at(serve(ok(b"garbage")), 1)], &dir, |_| {}, |_, _| {}).unwrap_err();
+        assert!(err.contains("damaged"), "{err}");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
     #[test]
     fn fetch_downloads_and_unpacks_counting_the_bytes() {
         let dir = temp();
@@ -898,7 +1124,10 @@ mod tests {
         let files: Vec<(String, Vec<u8>)> = (0..6).map(|i| (format!("top/S/{i}.milk"), noise(i, 30_000))).collect();
         let gz = tar_gz(&files.iter().map(|(p, d)| (p.as_str(), &d[..])).collect::<Vec<_>>());
         // Broken off part-way, it isn't taken up from the fallback (which can't be reached).
-        let err = fetch(&[at(serve(ok(&gz[..gz.len() / 2])), 1), nowhere()], &dir, |_| {}, |_, _| {}).unwrap_err();
+        // The connection drops half-way: fewer bytes than the length the server gave.
+        let mut cut = ok(&gz);
+        cut.truncate(cut.len() - gz.len() / 2);
+        let err = fetch(&[at(serve(cut), 1), nowhere()], &dir, |_| {}, |_, _| {}).unwrap_err();
         assert!(err.contains("broke off"), "{err}");
         assert!(parts(&dir).is_empty());
         assert!(!dir.join("S/5.milk").exists());
