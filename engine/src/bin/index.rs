@@ -14,13 +14,22 @@
 //! motion, as `motion` measures it) and intensity (frame difference).
 //!
 //! Incremental: a preset whose content hash is already in `index.json` with a
-//! thumbnail on disk isn't drawn again, nor one that timed out or failed before
-//! (unless `--retry`); its name, style and levels are always read afresh.
+//! thumbnail on disk, measured by the current analysis (`index::ANALYSIS`),
+//! isn't drawn again, nor one that was skipped before (unless `--retry`); its
+//! name, style and levels are always read afresh. A `--frame` other than the
+//! index's starts it afresh.
 //!
 //! Presets are drawn in `--jobs` child processes (this bin, run with
 //! `--child`), so one stuck past `--timeout` seconds — a Metal compile can't be
-//! interrupted — is killed, listed under `skipped` and the run goes on.
-//! `--sample N` takes N presets spread evenly over the sorted paths.
+//! interrupted — is killed and the run goes on. The clock starts once the child
+//! has its GPU. A preset that times out goes to the back of the queue for one
+//! more try in a fresh child; a second timeout lists it under `skipped`. A
+//! child whose preset panicked is restarted, so no preset draws on a renderer a
+//! panic left half-way.
+//!
+//! `--sample N` takes N presets spread evenly over the sorted paths; the rows
+//! of the folder's other presets already in `index.json` are kept as they are.
+//! Rows for presets no longer in the folder are dropped.
 
 use engine::analyse::{self, colour::Hues};
 use engine::audio::{Audio, FFT_SIZE};
@@ -28,7 +37,7 @@ use engine::index::{self, Cuts, Index, Look, Skipped, THUMBNAIL};
 use engine::render::{headless, Renderer};
 use engine::runtime::PRESET_RATE;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
@@ -40,12 +49,94 @@ use std::time::{Duration, Instant};
 const SUPERSAMPLE: u32 = 2;
 /// WebP quality, 0–100.
 const QUALITY: f32 = 75.0;
+/// What a child prints once it has its GPU and renderer, before any preset.
+const READY: &str = "ready";
+/// How long a child may take to get its GPU; not counted against `--timeout`.
+const SETUP: Duration = Duration::from_secs(120);
+/// How many times a preset is tried before a timeout skips it.
+const TRIES: u32 = 2;
 
 /// What a child sends back for one preset.
 #[derive(Debug, Serialize, Deserialize)]
 enum Reply {
     Drew { hues: Vec<u16>, brightness: f32, speed: Option<f32>, intensity: f32 },
     Failed(String),
+}
+
+impl Reply {
+    /// A panic leaves the child's renderer in whatever state it was in.
+    fn panicked(&self) -> bool {
+        matches!(self, Reply::Failed(why) if why.starts_with("panicked"))
+    }
+}
+
+/// How to start a child.
+#[derive(Debug, Clone)]
+struct Launch {
+    program: PathBuf,
+    args: Vec<String>,
+}
+
+/// A preset to draw, and how many times it's been tried.
+#[derive(Debug, Clone)]
+struct Job {
+    hash: String,
+    path: PathBuf,
+    tries: u32,
+}
+
+/// What an old index already knows, by content hash.
+#[derive(Debug, Default)]
+struct Known {
+    /// Drawn by the current analysis, with the thumbnail on disk.
+    drawn: HashMap<String, (Look, String)>,
+    /// Skipped before, and why.
+    failed: HashMap<String, String>,
+}
+
+impl Known {
+    fn from(old: Option<&Index>, has_thumbnail: impl Fn(&str) -> bool, retry: bool) -> Known {
+        let mut known = Known::default();
+        for r in old.iter().flat_map(|o| &o.rows) {
+            if let (Some(look), Some(t)) = (&r.look, &r.thumbnail) {
+                if look.analysis == index::ANALYSIS && has_thumbnail(t) {
+                    known.drawn.insert(r.hash.clone(), (look.clone(), t.clone()));
+                }
+            }
+        }
+        if !retry {
+            for s in old.iter().flat_map(|o| &o.skipped) {
+                known.failed.insert(s.hash.clone(), s.why.clone());
+            }
+        }
+        known
+    }
+}
+
+/// `rel` as an index path: `/`-separated.
+fn index_path(rel: &Path) -> String {
+    rel.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect::<Vec<_>>().join("/")
+}
+
+/// Adds `old`'s rows and skips for the presets in `folder` (index paths) that
+/// this run didn't take (`taken`), as they were: their names, styles and
+/// levels read afresh, their thumbnail kept only when it's on disk.
+fn carry(index: &mut Index, old: Option<&Index>, folder: &HashSet<String>, taken: &HashSet<String>, has_thumbnail: impl Fn(&str) -> bool) {
+    let Some(old) = old else { return };
+    let keep = |path: &String| folder.contains(path) && !taken.contains(path);
+    for r in old.rows.iter().filter(|r| keep(&r.path)) {
+        let mut row = index::row(Path::new(&r.path), r.hash.clone());
+        if let (Some(look), Some(t)) = (&r.look, &r.thumbnail) {
+            if has_thumbnail(t) {
+                let mut look = look.clone();
+                look.relevel();
+                row.look = Some(look);
+                row.thumbnail = Some(t.clone());
+            }
+        }
+        index.rows.push(row);
+    }
+    index.skipped.extend(old.skipped.iter().filter(|s| keep(&s.path)).cloned());
 }
 
 fn usage(msg: &str) -> ! {
@@ -96,6 +187,7 @@ fn run(folder: &Path, out: &Path, count: Option<usize>, jobs: usize, timeout: Du
         usage(&format!("no .milk presets in {}", folder.display()));
     }
     let pool = found.len();
+    let in_folder: HashSet<String> = found.iter().map(|p| index_path(p.strip_prefix(folder).unwrap_or(p))).collect();
     let files = match count {
         Some(n) => index::sample(found, n),
         None => found,
@@ -106,26 +198,13 @@ fn run(folder: &Path, out: &Path, count: Option<usize>, jobs: usize, timeout: Du
     }
     let file = out.join("index.json");
     let old = Index::load(&file).filter(|old| old.frame == frame && old.thumbnail == THUMBNAIL);
-
-    // What's known already, by content hash.
-    let mut drawn: HashMap<String, (Look, String)> = HashMap::new();
-    let mut failed: HashMap<String, String> = HashMap::new();
-    for r in old.iter().flat_map(|o| &o.rows) {
-        if let (Some(look), Some(t)) = (&r.look, &r.thumbnail) {
-            if thumbs.join(t).is_file() {
-                drawn.insert(r.hash.clone(), (look.clone(), t.clone()));
-            }
-        }
-    }
-    if !retry {
-        for s in old.iter().flat_map(|o| &o.skipped) {
-            failed.insert(s.hash.clone(), s.why.clone());
-        }
-    }
+    let has_thumbnail = |t: &str| thumbs.join(t).is_file();
+    let Known { drawn, failed } = Known::from(old.as_ref(), has_thumbnail, retry);
 
     let mut index = Index::new(frame);
     let mut queue = VecDeque::new();
     let mut waiting: HashMap<String, Vec<usize>> = HashMap::new();
+    let mut taken = HashSet::new();
     for path in &files {
         let bytes = match std::fs::read(path) {
             Ok(b) => b,
@@ -136,6 +215,7 @@ fn run(folder: &Path, out: &Path, count: Option<usize>, jobs: usize, timeout: Du
         };
         let rel = path.strip_prefix(folder).unwrap_or(path);
         let mut row = index::row(rel, index::hash(&bytes));
+        taken.insert(row.path.clone());
         if let Some((look, thumb)) = drawn.get(&row.hash) {
             let mut look = look.clone();
             look.relevel();
@@ -146,27 +226,33 @@ fn run(folder: &Path, out: &Path, count: Option<usize>, jobs: usize, timeout: Du
         } else {
             let at = waiting.entry(row.hash.clone()).or_default();
             if at.is_empty() {
-                queue.push_back((row.hash.clone(), path.clone()));
+                queue.push_back(Job { hash: row.hash.clone(), path: path.clone(), tries: 0 });
             }
             at.push(index.rows.len());
         }
         index.rows.push(row);
     }
+    let taking = index.rows.len();
+    carry(&mut index, old.as_ref(), &in_folder, &taken, has_thumbnail);
     let to_draw = queue.len();
     eprintln!(
-        "{} presets ({pool} in the folder): {} already indexed, {to_draw} to draw with {jobs} jobs, timeout {}s",
-        index.rows.len(),
-        index.rows.len() - waiting.values().map(Vec::len).sum::<usize>(),
+        "{taking} presets ({pool} in the folder, {} more kept from the index): {} already indexed, {to_draw} to draw with {jobs} jobs, timeout {}s",
+        index.rows.len() - taking,
+        taking - waiting.values().map(Vec::len).sum::<usize>(),
         timeout.as_secs_f64()
     );
 
     let started = Instant::now();
     let queue = Arc::new(Mutex::new(queue));
     let (tx, results) = mpsc::channel();
+    let launch = match std::env::current_exe() {
+        Ok(program) => Launch { program, args: vec!["--child".into(), frame.to_string()] },
+        Err(e) => usage(&format!("can't find this program to start children: {e}")),
+    };
     let workers: Vec<_> = (0..jobs.min(to_draw))
         .map(|_| {
-            let (queue, tx, thumbs) = (queue.clone(), tx.clone(), thumbs.clone());
-            std::thread::spawn(move || drive(&queue, &tx, &thumbs, frame, timeout))
+            let (queue, tx, thumbs, launch) = (queue.clone(), tx.clone(), thumbs.clone(), launch.clone());
+            std::thread::spawn(move || drive(&queue, &tx, &thumbs, &launch, timeout))
         })
         .collect();
     drop(tx);
@@ -249,8 +335,9 @@ struct Running {
     lines: Receiver<String>,
 }
 
-fn spawn(frame: u32) -> std::io::Result<Running> {
-    let mut child = Command::new(std::env::current_exe()?).args(["--child", &frame.to_string()]).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::inherit()).spawn()?;
+/// Starts a child and waits, up to [`SETUP`], for it to say it's [`READY`].
+fn spawn(launch: &Launch) -> std::io::Result<Running> {
+    let mut child = Command::new(&launch.program).args(&launch.args).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::inherit()).spawn()?;
     let stdin = child.stdin.take().expect("piped stdin");
     let stdout = child.stdout.take().expect("piped stdout");
     let (tx, lines) = mpsc::channel();
@@ -261,7 +348,15 @@ fn spawn(frame: u32) -> std::io::Result<Running> {
             }
         }
     });
-    Ok(Running { child, stdin, lines })
+    let r = Running { child, stdin, lines };
+    let why = match r.lines.recv_timeout(SETUP) {
+        Ok(line) if line == READY => return Ok(r),
+        Ok(line) => format!("it said {line:?} before it was ready"),
+        Err(RecvTimeoutError::Timeout) => format!("it wasn't ready within {}s", SETUP.as_secs()),
+        Err(RecvTimeoutError::Disconnected) => "it ended before it was ready".into(),
+    };
+    stop(r);
+    Err(std::io::Error::other(why))
 }
 
 fn stop(mut r: Running) {
@@ -269,41 +364,64 @@ fn stop(mut r: Running) {
     let _ = r.child.wait();
 }
 
-/// Draws presets from `queue` in a child until it's empty, restarting the
-/// child after a timeout or a crash.
-fn drive(queue: &Mutex<VecDeque<(String, PathBuf)>>, results: &mpsc::Sender<(String, PathBuf, Reply)>, thumbs: &Path, frame: u32, timeout: Duration) {
+/// What came of asking a child for one preset.
+enum Outcome {
+    Replied(Reply),
+    TimedOut,
+    Crashed,
+}
+
+fn ask(r: &mut Running, preset: &Path, thumb: &Path, timeout: Duration) -> Outcome {
+    if writeln!(r.stdin, "{}\t{}", preset.display(), thumb.display()).and_then(|_| r.stdin.flush()).is_err() {
+        return Outcome::Crashed;
+    }
+    match r.lines.recv_timeout(timeout) {
+        Ok(line) => Outcome::Replied(serde_json::from_str(&line).unwrap_or_else(|e| Reply::Failed(format!("failed: bad reply {line:?}: {e}")))),
+        Err(RecvTimeoutError::Timeout) => Outcome::TimedOut,
+        Err(RecvTimeoutError::Disconnected) => Outcome::Crashed,
+    }
+}
+
+/// Draws presets from `queue` in a child until it's empty. The child is
+/// restarted after a timeout, a crash or a panic; a preset that times out goes
+/// to the back of the queue until it has had [`TRIES`].
+fn drive(queue: &Mutex<VecDeque<Job>>, results: &mpsc::Sender<(String, PathBuf, Reply)>, thumbs: &Path, launch: &Launch, timeout: Duration) {
     let mut running: Option<Running> = None;
     loop {
-        let Some((hash, path)) = queue.lock().unwrap_or_else(|e| e.into_inner()).pop_front() else { break };
-        let r = match running.take().map_or_else(|| spawn(frame), Ok) {
+        let Some(mut job) = queue.lock().unwrap_or_else(|e| e.into_inner()).pop_front() else { break };
+        let mut r = match running.take().map_or_else(|| spawn(launch), Ok) {
             Ok(r) => r,
             Err(e) => {
-                let _ = results.send((hash, path, Reply::Failed(format!("failed: can't start a child: {e}"))));
+                let _ = results.send((job.hash, job.path, Reply::Failed(format!("failed: can't start a child: {e}"))));
                 continue;
             }
         };
-        let thumb = thumbs.join(index::thumbnail_name(&hash));
-        let mut r = r;
-        let reply = if writeln!(r.stdin, "{}\t{}", path.display(), thumb.display()).and_then(|_| r.stdin.flush()).is_err() {
-            stop(r);
-            Reply::Failed("crashed".into())
-        } else {
-            match r.lines.recv_timeout(timeout) {
-                Ok(line) => {
+        job.tries += 1;
+        let thumb = thumbs.join(index::thumbnail_name(&job.hash));
+        let reply = match ask(&mut r, &job.path, &thumb, timeout) {
+            Outcome::Replied(reply) => {
+                if reply.panicked() {
+                    stop(r);
+                } else {
                     running = Some(r);
-                    serde_json::from_str(&line).unwrap_or_else(|e| Reply::Failed(format!("failed: bad reply {line:?}: {e}")))
                 }
-                Err(RecvTimeoutError::Timeout) => {
-                    stop(r);
-                    Reply::Failed("timed out".into())
+                reply
+            }
+            Outcome::TimedOut => {
+                stop(r);
+                if job.tries < TRIES {
+                    eprintln!("index: timed out, trying again later\t{}", job.path.display());
+                    queue.lock().unwrap_or_else(|e| e.into_inner()).push_back(job);
+                    continue;
                 }
-                Err(RecvTimeoutError::Disconnected) => {
-                    stop(r);
-                    Reply::Failed("crashed".into())
-                }
+                Reply::Failed("timed out".into())
+            }
+            Outcome::Crashed => {
+                stop(r);
+                Reply::Failed("crashed".into())
             }
         };
-        if results.send((hash, path, reply)).is_err() {
+        if results.send((job.hash, job.path, reply)).is_err() {
             break;
         }
     }
@@ -315,14 +433,21 @@ fn drive(queue: &Mutex<VecDeque<(String, PathBuf)>>, results: &mpsc::Sender<(Str
     }
 }
 
-/// The child: draws each preset named on stdin (`<preset>\t<thumbnail>`),
-/// writes its thumbnail and answers one JSON [`Reply`] line.
+/// The child: says [`READY`] once it has its GPU, then draws each preset named
+/// on stdin (`<preset>\t<thumbnail>`), writes its thumbnail and answers one
+/// JSON [`Reply`] line.
 fn child(frame: u32) {
-    std::panic::set_hook(Box::new(|_| {}));
     let (w, h) = (THUMBNAIL.0 * SUPERSAMPLE, THUMBNAIL.1 * SUPERSAMPLE);
     let (device, queue) = headless().expect("a GPU");
     let mut renderer = Renderer::new(device, queue, w, h);
+    std::panic::set_hook(Box::new(|_| {}));
     let stdout = std::io::stdout();
+    {
+        let mut out = stdout.lock();
+        if writeln!(out, "{READY}").and_then(|_| out.flush()).is_err() {
+            return;
+        }
+    }
     for line in std::io::stdin().lock().lines().map_while(Result::ok) {
         let Some((preset, thumb)) = line.split_once('\t') else { continue };
         let reply = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| draw(&mut renderer, Path::new(preset), Path::new(thumb), frame))) {
@@ -330,8 +455,10 @@ fn child(frame: u32) {
             Ok(Err(e)) => Reply::Failed(format!("failed: {e}")),
             Err(p) => Reply::Failed(format!("panicked: {}", p.downcast_ref::<String>().map(String::as_str).or(p.downcast_ref::<&str>().copied()).unwrap_or("?"))),
         };
+        let panicked = reply.panicked();
         let mut out = stdout.lock();
-        if writeln!(out, "{}", serde_json::to_string(&reply).expect("a reply serialises")).and_then(|_| out.flush()).is_err() {
+        if writeln!(out, "{}", serde_json::to_string(&reply).expect("a reply serialises")).and_then(|_| out.flush()).is_err() || panicked {
+            // After a panic the parent starts a fresh child.
             break;
         }
     }
@@ -385,7 +512,125 @@ fn draw(r: &mut Renderer, preset: &Path, thumb: &Path, frame: u32) -> Result<Rep
 
 #[cfg(test)]
 mod tests {
-    use super::Reply;
+    use super::*;
+
+    /// A child that's `sh -c script`: tests drive the real driver against a
+    /// stand-in that speaks the same lines without a GPU.
+    fn sh(script: &str) -> Launch {
+        Launch { program: "/bin/sh".into(), args: vec!["-c".into(), script.into()] }
+    }
+
+    /// Runs `presets` through one driver with `launch`; the replies in order.
+    fn run_driver(launch: &Launch, presets: &[&str], timeout: Duration) -> Vec<(PathBuf, String)> {
+        let queue = Mutex::new(presets.iter().map(|p| Job { hash: format!("{p}hash"), path: PathBuf::from(p), tries: 0 }).collect::<VecDeque<_>>());
+        let (tx, rx) = mpsc::channel();
+        drive(&queue, &tx, &std::env::temp_dir(), launch, timeout);
+        drop(tx);
+        rx.iter()
+            .map(|(_, path, reply)| match reply {
+                Reply::Failed(why) => (path, why),
+                Reply::Drew { .. } => (path, "drew".into()),
+            })
+            .collect()
+    }
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("visuals-index-bin-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn the_clock_starts_after_the_child_is_ready() {
+        // Setup takes longer than the timeout; the answer itself is quick.
+        let launch = sh(r#"sleep 1; echo ready; while read l; do echo '{"Failed":"answered"}'; done"#);
+        let replies = run_driver(&launch, &["a"], Duration::from_millis(500));
+        assert_eq!(replies, vec![(PathBuf::from("a"), "answered".into())]);
+    }
+
+    #[test]
+    fn a_child_that_never_gets_ready_fails_its_preset() {
+        let launch = sh("echo hello");
+        let replies = run_driver(&launch, &["a"], Duration::from_secs(5));
+        assert!(replies[0].1.starts_with("failed: can't start a child"), "{replies:?}");
+    }
+
+    #[test]
+    fn a_panic_restarts_the_child() {
+        // Each reply counts the presets its process has been asked for.
+        let launch = sh(r#"echo ready; n=0; while read l; do n=$((n+1)); case "$l" in *panic*) echo '{"Failed":"panicked: boom"}';; *) echo "{\"Failed\":\"answer $n\"}";; esac; done"#);
+        let replies = run_driver(&launch, &["a", "panic", "b"], Duration::from_secs(5));
+        let why: Vec<&str> = replies.iter().map(|(_, w)| w.as_str()).collect();
+        assert_eq!(why, ["answer 1", "panicked: boom", "answer 1"]);
+    }
+
+    #[test]
+    fn a_timeout_is_tried_once_more_at_the_back_of_the_queue() {
+        let dir = scratch("retry");
+        let marker = dir.join("slow-once");
+        // `slow` hangs the first time only; `hang` always does. `exec` so the kill takes the sleep.
+        let launch = sh(&format!(
+            r#"echo ready; while read l; do case "$l" in *slow*) if [ ! -e '{m}' ]; then touch '{m}'; exec sleep 30; fi;; *hang*) exec sleep 30;; esac; echo '{{"Failed":"answered"}}'; done"#,
+            m = marker.display()
+        ));
+        let replies = run_driver(&launch, &["slow", "a", "hang"], Duration::from_millis(500));
+        let got: Vec<(&str, &str)> = replies.iter().map(|(p, w)| (p.to_str().unwrap(), w.as_str())).collect();
+        assert_eq!(got, [("a", "answered"), ("slow", "answered"), ("hang", "timed out")]);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    fn drawn_row(path: &str, hash: &str, analysis: u32) -> index::Row {
+        let mut r = index::row(Path::new(path), hash.into());
+        let mut look = Look::new(vec![10], 0.5, Some(3.0), 9.0);
+        look.analysis = analysis;
+        r.look = Some(look);
+        r.thumbnail = Some(index::thumbnail_name(hash));
+        r
+    }
+
+    #[test]
+    fn only_looks_from_the_current_analysis_are_reused() {
+        let mut old = Index::new(90);
+        old.rows.push(drawn_row("A/now.milk", "aaaa", index::ANALYSIS));
+        old.rows.push(drawn_row("A/before.milk", "bbbb", index::ANALYSIS - 1));
+        old.rows.push(drawn_row("A/lost.milk", "cccc", index::ANALYSIS));
+        old.skipped.push(Skipped { path: "A/x.milk".into(), hash: "dddd".into(), why: "crashed".into() });
+        let on_disk = |t: &str| t != index::thumbnail_name("cccc");
+        let known = Known::from(Some(&old), on_disk, false);
+        assert_eq!(known.drawn.keys().collect::<Vec<_>>(), ["aaaa"]);
+        assert_eq!(known.failed.get("dddd").map(String::as_str), Some("crashed"));
+        assert!(Known::from(Some(&old), on_disk, true).failed.is_empty());
+    }
+
+    #[test]
+    fn rows_the_run_did_not_take_are_kept_while_in_the_folder() {
+        let mut old = Index::new(90);
+        old.rows.push(drawn_row("A/taken.milk", "aaaa", index::ANALYSIS));
+        old.rows.push(drawn_row("A/kept.milk", "bbbb", index::ANALYSIS - 1));
+        old.rows.push(drawn_row("A/gone.milk", "cccc", index::ANALYSIS));
+        old.rows.push(index::row(Path::new("B/hung.milk"), "dddd".into()));
+        old.skipped.push(Skipped { path: "B/hung.milk".into(), hash: "dddd".into(), why: "timed out".into() });
+        old.skipped.push(Skipped { path: "B/gone.milk".into(), hash: "eeee".into(), why: "timed out".into() });
+        let folder: HashSet<String> = ["A/taken.milk", "A/kept.milk", "B/hung.milk"].map(String::from).into();
+        let taken: HashSet<String> = ["A/taken.milk".to_string()].into();
+        let mut index = Index::new(90);
+        carry(&mut index, Some(&old), &folder, &taken, |_| true);
+        let paths: Vec<&str> = index.rows.iter().map(|r| r.path.as_str()).collect();
+        assert_eq!(paths, ["A/kept.milk", "B/hung.milk"]);
+        assert_eq!(index.rows[0], old.rows[1], "kept as it was, its analysis too");
+        assert_eq!(index.skipped, vec![old.skipped[0].clone()]);
+
+        let mut index = Index::new(90);
+        carry(&mut index, Some(&old), &folder, &taken, |_| false);
+        assert_eq!((index.rows[0].look.as_ref(), index.rows[0].thumbnail.as_ref()), (None, None), "no thumbnail on disk, no look");
+    }
+
+    #[test]
+    fn index_paths_use_slashes() {
+        assert_eq!(index_path(&Path::new("A").join("B").join("c.milk")), "A/B/c.milk");
+        assert_eq!(index_path(Path::new("A/x.milk")), index::row(Path::new("A/x.milk"), String::new()).path);
+    }
 
     #[test]
     fn replies_round_trip_on_one_line() {
