@@ -129,6 +129,20 @@ impl Default for Live {
     }
 }
 
+/// Where the deck is ([`Live::place`]), to go back to when what it moved to fails to open.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Place {
+    current: Option<PathBuf>,
+    index: Option<usize>,
+}
+
+/// Whether a failed open of what `action` meant leaves the deck where it was
+/// ([`Live::back_to`]): a step or a go, which keep the playlist. A load or a
+/// filter has changed what plays, so the deck stays on it.
+fn keeps_place(action: &Action) -> bool {
+    matches!(action, Action::Next | Action::Previous | Action::Random | Action::Go { .. })
+}
+
 /// A playlist setting's name, as [`DeckView::differs`] lists it.
 pub type SettingName = &'static str;
 
@@ -338,6 +352,22 @@ impl Live {
             count: if self.active() { self.items.len() } else { 0 },
             query: self.query.clone(),
         }
+    }
+
+    /// Where the deck is: the preset on the bench and its place in the items.
+    pub fn place(&self) -> Place {
+        Place { current: self.current.clone(), index: self.index }
+    }
+
+    /// `failed` didn't open, so the bench still shows what it showed when the
+    /// deck was at `was`: the deck goes back there, so the two agree. Nothing
+    /// changes when the deck has moved on from `failed` since.
+    pub fn back_to(&mut self, failed: &Path, was: Place) {
+        if self.current.as_deref() != Some(failed) {
+            return;
+        }
+        self.current = was.current;
+        self.index = was.index.filter(|&i| i < self.items.len());
     }
 
     fn play(&mut self, path: PathBuf) -> Option<PathBuf> {
@@ -686,10 +716,18 @@ const SKIPS: usize = 8;
 /// Do `action`: move the live state, open what it means on the bench, tell the page.
 /// Callable from any thread — the page's `act`, the auto-advance timer, a MIDI input.
 pub fn dispatch(handle: &AppHandle, action: Action) -> Result<(), String> {
-    dispatch_skipping(handle, action, SKIPS)
+    dispatch_past(handle, action, Vec::new())
 }
 
-fn dispatch_skipping(handle: &AppHandle, action: Action, skips: usize) -> Result<(), String> {
+/// Step on (next) from `failed`, which the bench stopped drawing because it
+/// panicked (`crate::resume`): it is passed over as one that failed to open,
+/// without opening it again or saying so again.
+pub fn step_past(handle: &AppHandle, failed: &Path, why: &str) -> Result<(), String> {
+    dispatch_past(handle, Action::Next, vec![(failed.to_path_buf(), why.to_string())])
+}
+
+/// [`dispatch`], with `failed` already known to fail, and why.
+fn dispatch_past(handle: &AppHandle, action: Action, failed: Vec<(PathBuf, String)>) -> Result<(), String> {
     let deck = handle.state::<Deck>();
     if let Action::Fx(fx) = &action {
         let tempo = {
@@ -713,31 +751,108 @@ fn dispatch_skipping(handle: &AppHandle, action: Action, skips: usize) -> Result
         }
         return emit_deck(handle, &deck);
     }
-    let app = handle.state::<crate::App>();
-    let all = crate::userlib::playable(handle, crate::pack::milk_files(handle));
     let played = deck.played.lock().unwrap().clone();
-    let resolve = |q: &LibraryQuery| crate::query::resolve(q, &crate::catalog::cached_rows(handle), &crate::userlib::data(handle), &played);
-    let library = || all.clone();
-    let (path, took) = step(&deck.store, &deck.live, &action, &library, &resolve, roll())?;
-    if let Some(s) = took {
-        deck.took(handle, &s);
-        deck.emit_fx(handle)?;
+    let app = AppStepping { handle, deck: &deck, all: crate::userlib::playable(handle, crate::pack::milk_files(handle)), played };
+    dispatch_skipping(&app, &deck.store, &deck.live, action, SKIPS, failed)
+}
+
+/// What a step needs from the app around the deck: the library, the bench, and
+/// the page. [`dispatch_skipping`] works through it, so its skipping can be
+/// tried without an app.
+pub(crate) trait Stepping {
+    /// Every playable preset, for stepping through the library as a whole.
+    fn library(&self) -> Vec<PathBuf>;
+    /// The presets `query` picks.
+    fn resolve(&self, query: &LibraryQuery) -> Vec<PathBuf>;
+    /// A load gave the deck the settings `s`.
+    fn took(&self, s: &Settings) -> Result<(), String>;
+    /// Open `path` on the bench: what opened, or why it didn't.
+    fn open(&self, path: &Path) -> (Option<crate::library::Opened>, Option<String>);
+    /// `path` failed to open while stepping, for `error`: skip it, or not.
+    fn open_failed(&self, path: &Path, error: &str) -> crate::resume::Failed;
+    /// `path` opened: it has been played.
+    fn played(&self, path: &Path);
+    /// Tell the page what the action came to.
+    fn done(&self, opened: Option<crate::library::Opened>, path: Option<PathBuf>, error: Option<String>) -> Result<(), String>;
+}
+
+/// The app's [`Stepping`].
+struct AppStepping<'a> {
+    handle: &'a AppHandle,
+    deck: &'a Deck,
+    all: Vec<PathBuf>,
+    played: Vec<String>,
+}
+
+impl Stepping for AppStepping<'_> {
+    fn library(&self) -> Vec<PathBuf> {
+        self.all.clone()
     }
-    let (opened, error) = match &path {
-        Some(p) => crate::resume::open(handle, &app, p),
-        None => (None, None),
-    };
-    if let (Some(p), Some(e)) = (&path, &error) {
-        let stepping = matches!(action, Action::Next | Action::Previous | Action::Random);
-        if stepping && skips > 0 && crate::resume::open_failed(handle, p, e) == crate::resume::Failed::Skip {
-            return dispatch_skipping(handle, action, skips - 1);
+
+    fn resolve(&self, q: &LibraryQuery) -> Vec<PathBuf> {
+        crate::query::resolve(q, &crate::catalog::cached_rows(self.handle), &crate::userlib::data(self.handle), &self.played)
+    }
+
+    fn took(&self, s: &Settings) -> Result<(), String> {
+        self.deck.took(self.handle, s);
+        self.deck.emit_fx(self.handle)
+    }
+
+    fn open(&self, path: &Path) -> (Option<crate::library::Opened>, Option<String>) {
+        crate::resume::open(self.handle, &self.handle.state::<crate::App>(), path)
+    }
+
+    fn open_failed(&self, path: &Path, error: &str) -> crate::resume::Failed {
+        crate::resume::open_failed(self.handle, path, error)
+    }
+
+    fn played(&self, path: &Path) {
+        self.deck.record(path);
+    }
+
+    fn done(&self, opened: Option<crate::library::Opened>, path: Option<PathBuf>, error: Option<String>) -> Result<(), String> {
+        emit_now(self.handle, Now { deck: self.deck.view(), opened, path: path.map(|p| p.to_string_lossy().into_owned()), error })
+    }
+}
+
+/// Move the deck (`store`, `live`) for `action`, open what it means, and tell
+/// the page. A step (next, previous, random) skips at most `skips` presets that
+/// fail to open, when `env` says to skip them; `failed` are known to fail
+/// already, with why, and are passed over without opening them again or asking.
+/// Given up, the deck goes back to where it was before the first try, which the
+/// bench still shows.
+pub(crate) fn dispatch_skipping(env: &dyn Stepping, store: &Mutex<Store>, live: &Mutex<Live>, action: Action, mut skips: usize, mut failed: Vec<(PathBuf, String)>) -> Result<(), String> {
+    let was = live.lock().unwrap().place();
+    let stepping = matches!(action, Action::Next | Action::Previous | Action::Random);
+    loop {
+        let (path, took) = step(store, live, &action, &|| env.library(), &|q| env.resolve(q), roll())?;
+        if let Some(s) = took {
+            env.took(&s)?;
         }
+        let known = path.as_ref().and_then(|p| failed.iter().find(|(f, _)| f == p)).map(|(_, e)| e.clone());
+        let (opened, error) = match (&path, known.clone()) {
+            (Some(_), Some(e)) => (None, Some(e)),
+            (Some(p), None) => env.open(p),
+            (None, _) => (None, None),
+        };
+        if let (Some(p), Some(e)) = (&path, &error) {
+            if stepping && skips > 0 && (known.is_some() || env.open_failed(p, e) == crate::resume::Failed::Skip) {
+                if known.is_none() {
+                    failed.push((p.clone(), e.clone()));
+                }
+                skips -= 1;
+                continue;
+            }
+            // Given up: the bench kept what it showed, and the deck says so too.
+            if keeps_place(&action) {
+                live.lock().unwrap().back_to(p, was);
+            }
+        }
+        if let (Some(p), Some(_)) = (&path, &opened) {
+            env.played(p);
+        }
+        return env.done(opened, path, error);
     }
-    if let (Some(p), Some(_)) = (&path, &opened) {
-        deck.record(p);
-    }
-    let now = Now { deck: deck.view(), opened, path: path.map(|p| p.to_string_lossy().into_owned()), error };
-    emit_now(handle, now)
 }
 
 /// [`decide`] `action` on the deck's playlists and live state, holding their
@@ -1013,6 +1128,179 @@ mod tests {
         assert_eq!(d(&mut live, &Action::Load { playlist: 0, index: Some(2) }, &s).unwrap(), p("z"));
         assert!(d(&mut live, &Action::Load { playlist: 0, index: Some(3) }, &s).is_err());
         assert!(d(&mut live, &Action::Load { playlist: 2, index: None }, &s).is_err());
+    }
+
+    /// A [`Stepping`] with no app: the presets in `fails` don't open, and those
+    /// `panics` says panicked drawing are refused as `crate::resume::open` does.
+    #[derive(Default)]
+    struct Fake<'a> {
+        fails: Vec<PathBuf>,
+        panics: Option<&'a std::cell::RefCell<crate::resume::Panics>>,
+        /// Every open asked of the bench, and those that loaded.
+        tried: std::cell::RefCell<Vec<PathBuf>>,
+        loaded: std::cell::RefCell<Vec<PathBuf>>,
+        /// The presets the deck was told failed while stepping.
+        skipped: std::cell::RefCell<Vec<PathBuf>>,
+        /// What the page was told: the path and the error.
+        said: std::cell::RefCell<Vec<(Option<PathBuf>, Option<String>)>>,
+    }
+
+    impl Stepping for Fake<'_> {
+        fn library(&self) -> Vec<PathBuf> {
+            Vec::new()
+        }
+        fn resolve(&self, _: &LibraryQuery) -> Vec<PathBuf> {
+            Vec::new()
+        }
+        fn took(&self, _: &Settings) -> Result<(), String> {
+            Ok(())
+        }
+        fn open(&self, path: &Path) -> (Option<crate::library::Opened>, Option<String>) {
+            if let Some(why) = self.panics.and_then(|p| p.borrow().refused(path)) {
+                return (None, Some(why));
+            }
+            self.tried.borrow_mut().push(path.to_path_buf());
+            if self.fails.iter().any(|f| f == path) {
+                return (None, Some("it didn't load".into()));
+            }
+            self.loaded.borrow_mut().push(path.to_path_buf());
+            (Some(crate::library::Opened::blank()), None)
+        }
+        fn open_failed(&self, path: &Path, _: &str) -> crate::resume::Failed {
+            self.skipped.borrow_mut().push(path.to_path_buf());
+            crate::resume::Failed::Skip
+        }
+        fn played(&self, _: &Path) {}
+        fn done(&self, _: Option<crate::library::Opened>, path: Option<PathBuf>, error: Option<String>) -> Result<(), String> {
+            self.said.borrow_mut().push((path, error));
+            Ok(())
+        }
+    }
+
+    /// A store with one playlist of `names`, the deck loaded on its first.
+    fn deck_of(names: &[&str]) -> (Mutex<Store>, Mutex<Live>, PathBuf) {
+        let dir = std::env::temp_dir().join(format!("visuals-actions-{}-{}", std::process::id(), roll()));
+        let lib = dir.join("lib");
+        let mut s = Store::open(dir.join("p.json"), lib.clone());
+        let a = s.create("a").unwrap();
+        for n in names {
+            s.add(&a, &lib.join(format!("{n}.milk")), None).unwrap();
+        }
+        let mut live = Live::default();
+        d(&mut live, &Action::Load { playlist: 0, index: None }, &s).unwrap();
+        (Mutex::new(s), Mutex::new(live), lib)
+    }
+
+    fn on(live: &Mutex<Live>) -> (Option<PathBuf>, Option<usize>) {
+        let live = live.lock().unwrap();
+        (live.current.clone(), live.index)
+    }
+
+    #[test]
+    fn a_step_that_fails_to_open_leaves_the_deck_on_the_preset_still_showing() {
+        let (store, live, lib) = deck_of(&["x", "y", "z"]);
+        let p = |n: &str| lib.join(format!("{n}.milk"));
+        // On x; y and z don't open, and the one skip allowed is spent on y.
+        let env = Fake { fails: vec![p("y"), p("z")], ..Fake::default() };
+        dispatch_skipping(&env, &store, &live, Action::Next, 1, Vec::new()).unwrap();
+        assert_eq!(*env.tried.borrow(), [p("y"), p("z")]);
+        assert_eq!(*env.skipped.borrow(), [p("y")]);
+        assert_eq!(on(&live), (Some(p("x")), Some(0)), "back on x, which the bench still shows");
+        assert_eq!(*env.said.borrow(), [(Some(p("z")), Some("it didn't load".into()))]);
+        // With skips to spare, past y to z, which opens.
+        let env = Fake { fails: vec![p("y")], ..Fake::default() };
+        dispatch_skipping(&env, &store, &live, Action::Next, SKIPS, Vec::new()).unwrap();
+        assert_eq!((on(&live), env.loaded.borrow().clone()), ((Some(p("z")), Some(2)), vec![p("z")]));
+        // One known to fail already is passed over without opening it or saying so again.
+        let env = Fake::default();
+        dispatch_skipping(&env, &store, &live, Action::Next, SKIPS, vec![(p("x"), "it panicked drawing".into())]).unwrap();
+        assert_eq!((on(&live), env.tried.borrow().clone(), env.skipped.borrow().len()), ((Some(p("y")), Some(1)), vec![p("y")], 0));
+        // A go that fails keeps the deck where it was too; a load doesn't.
+        let env = Fake { fails: vec![p("x")], ..Fake::default() };
+        dispatch_skipping(&env, &store, &live, Action::Go { index: 0 }, SKIPS, Vec::new()).unwrap();
+        assert_eq!(on(&live), (Some(p("y")), Some(1)));
+        assert!(env.skipped.borrow().is_empty(), "only steps skip");
+        dispatch_skipping(&env, &store, &live, Action::Load { playlist: 0, index: None }, SKIPS, Vec::new()).unwrap();
+        assert_eq!(on(&live), (Some(p("x")), Some(0)));
+    }
+
+    /// Play the deck on from `first` panicking as the bench and `crate::resume`
+    /// would: each panic on what the deck shows steps on past it, and every preset
+    /// in `panicking` that loads panics in turn. Returns how many panics there were.
+    fn panics_out(env: &Fake, panics: &std::cell::RefCell<crate::resume::Panics>, store: &Mutex<Store>, live: &Mutex<Live>, panicking: &[PathBuf], first: PathBuf) -> usize {
+        let mut drawing = Some(first);
+        let mut rounds = 0;
+        while let Some(p) = drawing.take() {
+            rounds += 1;
+            assert!(rounds <= 100, "the deck never stops stepping");
+            let current = live.lock().unwrap().current.clone();
+            let on = panics.borrow_mut().panicked(&p, current.as_deref());
+            if on == crate::resume::OnPanic::Step {
+                let before = env.loaded.borrow().len();
+                dispatch_skipping(env, store, live, Action::Next, SKIPS, vec![(p.clone(), "it panicked drawing".into())]).unwrap();
+                drawing = env.loaded.borrow()[before..].last().filter(|o| panicking.contains(o)).cloned();
+            }
+        }
+        rounds
+    }
+
+    #[test]
+    fn a_one_item_playlist_whose_preset_panics_drawing_stops_without_reopening_it() {
+        let (store, live, lib) = deck_of(&["x"]);
+        let x = lib.join("x.milk");
+        let panics = std::cell::RefCell::new(crate::resume::Panics::default());
+        let env = Fake { panics: Some(&panics), ..Fake::default() };
+        assert_eq!(panics_out(&env, &panics, &store, &live, &[x.clone()], x.clone()), 1);
+        assert!(env.tried.borrow().is_empty(), "never opened again");
+        assert_eq!(on(&live), (Some(x), Some(0)), "the picture holds");
+    }
+
+    #[test]
+    fn two_presets_that_both_panic_drawing_stop_the_deck_instead_of_alternating() {
+        let (store, live, lib) = deck_of(&["a", "b"]);
+        let (a, b) = (lib.join("a.milk"), lib.join("b.milk"));
+        let panics = std::cell::RefCell::new(crate::resume::Panics::default());
+        let env = Fake { panics: Some(&panics), ..Fake::default() };
+        // a panics: on to b, which loads once and panics; a isn't opened again.
+        assert_eq!(panics_out(&env, &panics, &store, &live, &[a.clone(), b.clone()], a.clone()), 2);
+        assert_eq!(*env.loaded.borrow(), [b.clone()]);
+        assert_eq!(on(&live), (Some(b), Some(1)));
+    }
+
+    #[test]
+    fn panics_on_presets_never_opened_again_stop_within_the_budget() {
+        // Twenty presets that all panic drawing: each loads once, then the deck stops.
+        let names: Vec<String> = (0..20).map(|n| format!("p{n}")).collect();
+        let (store, live, lib) = deck_of(&names.iter().map(String::as_str).collect::<Vec<_>>());
+        let all: Vec<PathBuf> = names.iter().map(|n| lib.join(format!("{n}.milk"))).collect();
+        let panics = std::cell::RefCell::new(crate::resume::Panics::default());
+        let env = Fake { panics: Some(&panics), ..Fake::default() };
+        assert_eq!(panics_out(&env, &panics, &store, &live, &all, all[0].clone()), crate::resume::BUDGET + 1);
+        assert_eq!(env.loaded.borrow().len(), crate::resume::BUDGET);
+    }
+
+    #[test]
+    fn a_failed_place_is_kept_only_while_the_deck_is_still_there() {
+        let (s, lib) = store();
+        let p = |n: &str| Some(lib.join(format!("{n}.milk")));
+        let mut live = Live::default();
+        d(&mut live, &Action::Load { playlist: 0, index: None }, &s).unwrap();
+        let was = live.place();
+        let last = d(&mut live, &Action::Next, &s).unwrap().unwrap();
+        live.back_to(&last, was.clone());
+        assert_eq!((live.current.clone(), live.index), (p("x"), Some(0)), "back on what the bench shows");
+        assert_eq!(live.view(&crate::fx::Settings::default()).current, p("x").map(|p| p.to_string_lossy().into_owned()));
+        // Moved on since (something else opened): left alone.
+        d(&mut live, &Action::Go { index: 2 }, &s).unwrap();
+        live.back_to(&last, was);
+        assert_eq!((live.current.clone(), live.index), (p("z"), Some(2)));
+        // Only steps and goes keep their place; a load has changed what plays.
+        assert!(keeps_place(&Action::Next) && keeps_place(&Action::Random) && keeps_place(&Action::Go { index: 0 }));
+        assert!(!keeps_place(&Action::Load { playlist: 0, index: None }));
+        // A place past the items' end (edited since) is no place.
+        let mut short = Live { current: p("y"), items: vec![lib.join("y.milk")], ..Live::default() };
+        short.back_to(&lib.join("y.milk"), Place { current: p("x"), index: Some(4) });
+        assert_eq!((short.current, short.index), (p("x"), None));
     }
 
     #[test]
