@@ -585,6 +585,83 @@ translation module:
 What is left: `double` (to be rewritten as `float`) and a handful of presets with real
 syntax errors, which MilkDrop's compiler tolerated and these do not.
 
+## Quality
+
+A renderer draws at a **quality** (`engine::quality`, `Renderer::set_quality`): the
+**render scale**, the size presets draw at as a fraction of the size asked for (each
+side, rounded), scaled up when presented; and the **mesh size**, the warp mesh's cells
+across and down — MilkDrop's own "mesh size" option, whose per-vertex equations run once
+per vertex, `(w + 1) × (h + 1)` a step. Like MilkDrop's texture-size option, the scale
+changes what presets read as `texsize`. Changing quality on a running renderer takes
+effect at once, without a reload: the feedback, the finished picture and the outgoing
+snapshot are carried over at the new size, as on a resize; a new mesh's buffers replace
+the old, and the pending step's per-vertex equations run again on it. The old textures
+and buffers are let go (`bench --churn 200` at 4K: 422 MB of footprint before, 445 MB
+after 200 switches to low and back, where keeping one 4K picture a switch would add
+6.6 GB).
+
+| level | render scale | pixels drawn | mesh |
+|---|---|---|---|
+| low | ½ | 25% | 32×24 |
+| medium | ¾ | 56% | 48×36 |
+| high | 1 | 100% | 48×36, MilkDrop's and Butterchurn's default |
+
+High is the engine as it drew before there was a setting, and the default.
+
+**Auto** (`quality::auto(machine, output)`) picks the best level whose estimated GPU
+time a refresh, for the slowest preset of the bench's starter sample, is at most
+**10 ms** (7.5 ms under 16 GB, where the GPU shares less memory and bandwidth), else
+low. The estimate is `10.6 ms × megapixels drawn ÷ GPU score`, where the score is the
+GPU's cores (as `ioreg` reads them; else the fewest its tier ships with: 7 for an M1, 8
+for later base chips, 14 Pro, 24 Max, 48 Ultra) × a per-core factor for its generation
+over the M1 (M2 1.2, M3 1.35, M4 1.5, later 1.7), and 10.6 is the slowest preset's
+0.33 ms/MP on this M1 Max × its 32 cores. A machine that isn't Apple silicon, or whose
+chip can't be read, gets medium. So a base M1 with 8 GB is **high at 1080p and medium
+at 4K**, an 8-core M2 at 4K high with 16 GB and medium with 8, and any Pro or Max high
+at 4K.
+
+**Measured on this M1 Max** (32-core GPU, 32 GB; `cargo run --release -p
+visuals-engine --bin bench -- --sizes 1920x1080,3840x2160,5760x3240,7680x4320`): 24
+starter presets spread over `app/src-tauri/presets/starter`, each 120 refreshes of
+1/60 s after 10 to warm up, each presented at the size, at most two ahead of the GPU.
+fps is the mean over presets of each one's refreshes over the time they took:
+
+| output | level | fps | median preset | slowest preset | CPU ms a refresh |
+|---|---|---|---|---|---|
+| 1080p | low | 902 | 1194 | 249 | 0.95 |
+| 1080p | medium | 842 | 1131 | 238 | 1.08 |
+| 1080p | high | 854 | 1144 | 240 | 1.09 |
+| 4K | low | 946 | 1290 | 235 | 0.97 |
+| 4K | medium | 770 | 1006 | 239 | 1.13 |
+| 4K | high | 714 | 887 | 238 | 1.12 |
+
+At 1080p and 4K the M1 Max's GPU is not what limits it: the level hardly moves the
+numbers, and the slowest preset (Martin – Pixies Party, many shape instances) is
+bound by its equations at about 4 ms of CPU at every level. The GPU shows at larger
+outputs, which is where its cost was read: high at 6K draws 476 fps (slowest 134) and
+at 8K 254 (slowest 82), so a refresh costs the GPU about **0.13 ms per megapixel drawn
+on average and 0.33 for the slowest preset** (Pithlit – Psychotrip), from the change
+between the two.
+
+**A base M1 (7- or 8-core GPU, 8 GB) is an estimate until #89 measures it.** Its CPU
+cores are the M1 Max's, so the CPU side is taken as the same; its GPU has a quarter of
+the cores (4.6× fewer with 7) and a sixth of the memory bandwidth (68 GB/s against
+400), so the GPU's time is taken as this machine's × 4.6 to 5.9. A refresh costs about
+the larger of the two:
+
+| output | level | GPU ms, average preset | GPU ms, slowest | estimated fps, slowest preset |
+|---|---|---|---|---|
+| 1080p | low | 0.3–0.4 | 0.8–1.0 | ~240 (its CPU) |
+| 1080p | medium | 0.7–0.9 | 1.8–2.3 | ~240 (its CPU) |
+| 1080p | high | 1.2–1.6 | 3.1–4.0 | ~240 (its CPU) |
+| 4K | low | 1.2–1.6 | 3.1–4.0 | ~240 (its CPU) |
+| 4K | medium | 2.8–3.6 | 7.1–9.1 | 110–140 |
+| 4K | high | 5.0–6.4 | 12.6–16.1 | 62–79 |
+
+So 60 fps at 1080p on a base M1 should hold at every level with the starter set; at
+4K high the slowest presets come close to the frame, which is why auto picks medium
+there.
+
 ## The graph is MilkDrop's pipeline
 
 Nodes are MilkDrop's stages, not arithmetic. Equation and shader nodes hold code, kept
