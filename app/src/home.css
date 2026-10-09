@@ -457,3 +457,10 @@
     display: none;
   }
 }
+
+/* Narrower still (decision 63): the sidebar gives the playlist room. */
+@media (max-width: 699px) {
+  .app.home {
+    grid-template-columns: 180px minmax(0, 1fr);
+  }
+}
