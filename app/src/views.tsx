@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Segmented } from '@openflow/widgets/controls/Segmented.tsx';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { HintFooter } from '@openflow/widgets/chrome/HintFooter.tsx';
 import * as api from './api.ts';
 import { usePreview } from './preview.ts';
 import { frameReadout, type Notice } from './shell.ts';
+import { HOME_READY } from './homeReady.ts';
 
 /**
  * A lab build (`npm run app:lab`: `VITE_LAB=1` here, the `lab` feature in the
@@ -12,15 +13,26 @@ import { frameReadout, type Notice } from './shell.ts';
  */
 export const LAB = Boolean(import.meta.env.VITE_LAB);
 
-export type View = 'library' | 'editor' | 'live';
+export type View = 'home' | 'library' | 'editor' | 'live';
 
-/** The views the app offers: the editor only in a lab build. */
-export const VIEWS: View[] = LAB ? ['library', 'editor', 'live'] : ['library', 'live'];
+/** The views a build offers: the home first once it is ready, the editor only in a lab build. */
+export function viewsFor(lab: boolean, homeReady: boolean): View[] {
+  return [...(homeReady ? (['home'] as const) : []), 'library', ...(lab ? (['editor'] as const) : []), 'live'];
+}
+
+/** The view a build starts in, and live mode goes back to: the editor in a lab build, else the home once it is ready, else the library. */
+export function homeFor(lab: boolean, homeReady: boolean): View {
+  return lab ? 'editor' : homeReady ? 'home' : 'library';
+}
+
+/** The views the app offers. */
+export const VIEWS: View[] = viewsFor(LAB, HOME_READY);
 
 /** The view the app starts in, and live mode goes back to. */
-export const HOME: View = LAB ? 'editor' : 'library';
+export const HOME: View = homeFor(LAB, HOME_READY);
 
 const VIEW_HINTS: Record<View, string> = {
+  home: 'home: your playlists and what you played last, to pick up where you left off',
   library: 'library: browse presets and play them in the preview',
   editor: 'editor: browse presets and change them while they play',
   live: 'live: the output full screen on a display, with performing controls',
@@ -144,6 +156,33 @@ export function FrameRate({ always = false }: { always?: boolean }) {
       {shown.text}
     </span>
   );
+}
+
+/** The sheets that open over any view: ⚙ Settings (#98) and the More effects drawer (#98). */
+export type Sheet = 'settings' | 'effects';
+
+/** The page's event that opens a sheet; its `detail` is the `Sheet`. */
+export const SHEET_EVENT = 'vf-sheet';
+
+/** Open a sheet over whatever view is showing, from anywhere in the page (live mode's ⚙, say), without reaching into `App`. */
+export const openSheet = (sheet: Sheet) => window.dispatchEvent(new CustomEvent<Sheet>(SHEET_EVENT, { detail: sheet }));
+
+/** The sheet a `SHEET_EVENT` asks for; null for anything else. */
+export function sheetOf(e: Event): Sheet | null {
+  const detail = (e as CustomEvent<unknown>).detail;
+  return detail === 'settings' || detail === 'effects' ? detail : null;
+}
+
+/** The sheet showing, opened by `openSheet`, for `App` to mount; `close` puts it away. */
+export function useSheet(): { sheet: Sheet | null; close(): void } {
+  const [sheet, setSheet] = useState<Sheet | null>(null);
+  useEffect(() => {
+    const open = (e: Event) => setSheet((s) => sheetOf(e) ?? s);
+    window.addEventListener(SHEET_EVENT, open);
+    return () => window.removeEventListener(SHEET_EVENT, open);
+  }, []);
+  const close = useCallback(() => setSheet(null), []);
+  return { sheet, close };
 }
 
 /** The resting line of the hint strip: the keys every browsing view answers. */

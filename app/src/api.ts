@@ -236,10 +236,61 @@ export type LibraryGroup = 'style' | 'author' | 'colour' | 'speed' | 'intensity'
 export interface LibraryQuery {
   groups: Partial<Record<LibraryGroup, string[]>>;
   text: string;
+  /** Only presets among the last this many played, newest first. */
+  recent?: number;
 }
 
-/** Save `query` as a smart playlist named `name`. A stub until 0.5: it always fails. */
-export const smartPlaylistSave = (_name: string, _query: LibraryQuery): Promise<string> => Promise.reject(new Error('Smart playlists come in 0.5.'));
+/** Save `query` as a smart playlist named `name`; resolves to its id, and a `lists` event follows. */
+export const smartPlaylistSave = (name: string, query: LibraryQuery) => invoke<string>('smart_playlist_save', { name, query });
+
+/** How much the renderer draws: chosen by the user, or `auto` to follow the machine. */
+export type QualityLevel = 'auto' | 'low' | 'medium' | 'high';
+/** `quality::Quality`: the level chosen, and the one in effect (what `auto` came to). */
+export interface Quality {
+  chosen: QualityLevel;
+  effective: Exclude<QualityLevel, 'auto'>;
+}
+/** The render quality. A stub until its 0.9 lane (#101) lands: it never fails, and always says `{ chosen: 'auto', effective: 'high' }`. */
+export const qualityGet = () => invoke<Quality>('quality_get');
+/** Choose the render quality; resolves to it in effect. A stub until its 0.9 lane (#101) lands: it fails. */
+export const qualitySet = (level: QualityLevel) => invoke<Quality>('quality_set', { level });
+
+/** `access::Motion`: whether to calm the motion, and whether that came from macOS's own setting. */
+export interface Motion {
+  reduced: boolean;
+  /** No choice made in the app: macOS's "Reduce motion" decides. */
+  system: boolean;
+}
+export const reducedMotion = () => invoke<Motion>('reduced_motion');
+/** Reduce motion (true), don't (false), or follow macOS (null). */
+export const reducedMotionSet = (on: boolean | null) => invoke<Motion>('reduced_motion_set', { on });
+
+/** `crash::Report`: a crash kept on this Mac. */
+export interface CrashReport {
+  id: string;
+  /** Unix seconds. */
+  when: number;
+  summary: string;
+  /** Already opened as an issue. */
+  sent: boolean;
+}
+/** The crash reports kept on this Mac, unsent and sent. */
+export const crashReports = () => invoke<CrashReport[]>('crash_reports');
+/** Open a GitHub issue prefilled with the report, for the user to look over and submit; nothing goes to a server of ours. */
+export const crashReportOpen = (id: string) => invoke<void>('crash_report_open', { id });
+/** Whether crashes are kept to report. */
+export const crashReportsEnabled = () => invoke<boolean>('crash_reports_enabled');
+export const crashReportsEnable = (on: boolean) => invoke<void>('crash_reports_enable', { on });
+
+/** `resume::Resume`: where the last session left off, to pick it up again. */
+export interface Resume {
+  playlist: string | null;
+  index: number | null;
+  current: string | null;
+  source: SourceId | null;
+}
+/** Where the last session left off; null on a first run or when nothing was playing. */
+export const resumeState = () => invoke<Resume | null>('resume_state');
 
 /** Menu event: Check for Updates… was chosen. Listened to by #87. */
 export const UPDATE_CHECK_EVENT = 'update-check';

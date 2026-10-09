@@ -14,7 +14,8 @@ use engine::index::{Index, Look};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::path::{Component, Path, PathBuf};
-use std::sync::{Mutex, Once};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, Once};
 use tauri::{AppHandle, Listener, Manager};
 
 /// The URI scheme thumbnails are served on (`main.rs` registers it).
@@ -75,9 +76,51 @@ fn cached_roots(app: &AppHandle) -> Vec<Root> {
 /// Every preset the library lists, with what its index says of it.
 #[tauri::command]
 pub async fn library_index(handle: AppHandle) -> Vec<Row> {
-    let roots = roots(&handle);
+    rows(&handle)
+}
+
+/// The rows [`library_index`] gives, worked out now; refreshes the roots
+/// [`serve`] uses and the rows [`cached_rows`] gives.
+pub fn rows(app: &AppHandle) -> Vec<Row> {
+    listen(app);
+    let generation = GENERATION.load(Ordering::SeqCst);
+    let roots = roots(app);
     *CACHED.lock().unwrap() = Some(roots.clone());
-    rows_in(&roots, &dropped_starter(&handle, &roots))
+    let rows = rows_in(&roots, &dropped_starter(app, &roots));
+    let mut cached = ROWS.lock().unwrap();
+    // Kept only when nothing changed while they were being worked out.
+    if GENERATION.load(Ordering::SeqCst) == generation {
+        *cached = Some(Arc::new(rows.clone()));
+    }
+    rows
+}
+
+/// [`rows`] as last worked out, for smart playlists and mood chips resolved in
+/// Rust ([`crate::query`]): working them out walks the library and reads every
+/// `index.json`. Forgotten when the presets change ([`crate::pack::CHANGED`])
+/// or what the user keeps about them does ([`crate::userlib::CHANGED`]).
+pub fn cached_rows(app: &AppHandle) -> Arc<Vec<Row>> {
+    listen(app);
+    if let Some(rows) = ROWS.lock().unwrap().clone() {
+        return rows;
+    }
+    Arc::new(rows(app))
+}
+
+static ROWS: Mutex<Option<Arc<Vec<Row>>>> = Mutex::new(None);
+/// Counts the changes that forget [`ROWS`], so rows worked out across one are not kept.
+static GENERATION: AtomicU64 = AtomicU64::new(0);
+static LISTENING_ROWS: Once = Once::new();
+
+fn listen(app: &AppHandle) {
+    LISTENING_ROWS.call_once(|| {
+        for event in [crate::pack::CHANGED, crate::userlib::CHANGED] {
+            app.listen_any(event, |_| {
+                GENERATION.fetch_add(1, Ordering::SeqCst);
+                *ROWS.lock().unwrap() = None;
+            });
+        }
+    });
 }
 
 /// The starter set as a root when it isn't one of `roots`: still the source of

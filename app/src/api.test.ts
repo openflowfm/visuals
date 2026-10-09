@@ -19,7 +19,9 @@ describe('the library commands', () => {
     expect(invoke).toHaveBeenCalledWith('library_set', { keys: ['cream-of-the-crop/Dancer/x.milk'], change: { star: true, add_tags: ['warm up'] } });
   });
 
-  it('saving a smart playlist fails until 0.5', async () => {
-    await expect(api.smartPlaylistSave('Chill', { groups: { speed: ['low'] }, text: '' })).rejects.toThrow('0.5');
+  it('save a smart playlist by its name and filter', async () => {
+    invoke.mockClear();
+    await api.smartPlaylistSave('Chill', { groups: { speed: ['low'] }, text: '' });
+    expect(invoke).toHaveBeenCalledWith('smart_playlist_save', { name: 'Chill', query: { groups: { speed: ['low'] }, text: '' } });
   });
 });

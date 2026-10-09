@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LibraryRow, Mine } from './api.ts';
-import type { Playlist } from './playlists.ts';
+import { manual, type Playlist } from './playlists.ts';
 import { prepareRow } from './librarySearch.ts';
 import { flipFor, hiddenCount, inPlaylistsSays, playlistsWith, selectedSays, tagCounts } from './PresetDrawer.tsx';
 
@@ -35,7 +35,12 @@ describe('flipFor', () => {
 });
 
 describe('playlistsWith', () => {
-  const list = (id: string, paths: string[]): Playlist => ({ id, name: `list ${id}`, items: paths.map((path) => ({ path, name: '', group: '', missing: false })) });
+  const list = (id: string, paths: string[]): Playlist =>
+    manual(
+      id,
+      `list ${id}`,
+      paths.map((path) => ({ path, name: '', group: '', missing: false, hash: null })),
+    );
 
   it('names each playlist holding the preset once', () => {
     const lists = [list('1', ['/p/a', '/p/a']), list('2', ['/p/b']), list('3', ['/p/a'])];

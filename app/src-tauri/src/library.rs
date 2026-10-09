@@ -80,6 +80,26 @@ mod tests {
         let at = |d: &std::path::PathBuf, r: &str| d.join(r).to_string_lossy().into_owned();
         assert_eq!(listed, vec![(at(&presets, "Geiss/a.milk"), "Geiss".into()), (at(&starter, "Geiss/b.milk"), "Geiss".into())]);
     }
+
+    #[test]
+    fn only_regular_files_of_a_preset_s_size_are_read() {
+        let root = std::env::temp_dir().join(format!("visuals-read-preset-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("a.milk"), "[preset00]\n").unwrap();
+        std::fs::write(root.join("big.milk"), vec![b'x'; MAX_PRESET as usize + 1]).unwrap();
+        let fifo = root.join("fifo.milk");
+        let made = std::process::Command::new("mkfifo").arg(&fifo).status().is_ok_and(|s| s.success());
+        let read = |name: &str| read_preset(&root.join(name));
+        assert_eq!(read("a.milk").unwrap(), b"[preset00]\n");
+        assert!(read("big.milk").is_err());
+        assert!(read("").is_err(), "a folder");
+        assert!(read("gone.milk").is_err());
+        assert!(read_preset(Path::new("/dev/zero")).is_err());
+        if made {
+            assert!(read("fifo.milk").is_err(), "a FIFO is refused, not waited on");
+        }
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }
 
 /// Which stage's equations fail, compiled one at a time.
@@ -113,9 +133,39 @@ pub fn load(app: &App, preset: Preset) -> Result<Report, String> {
     }
 }
 
-/// Read `path` and put it on the bench with a new seed.
+/// The most a preset file may hold. A `.milk` is at most a few hundred KB; a
+/// path that names anything bigger is not one.
+pub const MAX_PRESET: u64 = 4 << 20;
+
+/// Read the preset file at `path`: only a regular file (never a device such as
+/// `/dev/zero`, a FIFO or a folder, which could block or never end) of at most
+/// [`MAX_PRESET`] bytes.
+pub fn read_preset(path: &Path) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    let not_preset = |why: &str| format!("{} {why}", path.display());
+    let meta = std::fs::metadata(path).map_err(|e| not_preset(&format!("can't be read ({e})")))?;
+    if !meta.is_file() {
+        return Err(not_preset("is not a file"));
+    }
+    if meta.len() > MAX_PRESET {
+        return Err(not_preset(&format!("is too big for a preset ({} bytes)", meta.len())));
+    }
+    let file = std::fs::File::open(path).map_err(|e| not_preset(&format!("can't be read ({e})")))?;
+    // Swapped for something else since the look above.
+    if !file.metadata().is_ok_and(|m| m.is_file()) {
+        return Err(not_preset("is not a file"));
+    }
+    let mut bytes = Vec::new();
+    file.take(MAX_PRESET + 1).read_to_end(&mut bytes).map_err(|e| not_preset(&format!("can't be read ({e})")))?;
+    if bytes.len() as u64 > MAX_PRESET {
+        return Err(not_preset("is too big for a preset"));
+    }
+    Ok(bytes)
+}
+
+/// Read `path` ([`read_preset`]) and put it on the bench with a new seed.
 pub fn open_path(app: &App, path: &str) -> Result<Opened, String> {
-    let text = engine::preset::decode(&std::fs::read(path).map_err(|e| e.to_string())?);
+    let text = engine::preset::decode(&read_preset(Path::new(path))?);
     let preset = engine::preset::parse(&text);
     app.seed.store(std::time::UNIX_EPOCH.elapsed().map(|d| d.as_nanos() as u64).unwrap_or(1), Ordering::Relaxed);
     let report = load(app, preset.clone())?;

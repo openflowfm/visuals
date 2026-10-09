@@ -2,9 +2,11 @@
 //! in live mode the output full screen on a display of its own. Built with the
 //! `lab` feature, the page is the editor too ([`editor`]).
 
+mod access;
 mod actions;
 mod bench;
 mod catalog;
+mod crash;
 #[cfg(target_os = "macos")]
 mod dev;
 #[cfg(feature = "lab")]
@@ -18,6 +20,9 @@ mod output;
 mod pack;
 mod playlists;
 mod preview;
+mod quality;
+mod query;
+mod resume;
 mod settings;
 mod tap;
 mod testsound;
@@ -51,6 +56,22 @@ macro_rules! commands {
             actions::playlist_remove,
             actions::playlist_move_item,
             actions::playlist_move,
+            actions::playlist_settings,
+            actions::playlist_set_query,
+            actions::smart_playlist_save,
+            actions::playlist_export,
+            actions::playlist_import,
+            actions::deck_items,
+            actions::recently_played,
+            resume::resume_state,
+            quality::quality_get,
+            quality::quality_set,
+            access::reduced_motion,
+            access::reduced_motion_set,
+            crash::crash_reports,
+            crash::crash_report_open,
+            crash::crash_reports_enabled,
+            crash::crash_reports_enable,
             output::start_preset,
             output::live_start,
             output::displays,
@@ -115,6 +136,8 @@ impl App {
 }
 
 fn main() {
+    // First, so a crash anywhere after is caught (#102).
+    crash::install();
     let library = engine::preset::pack_dir();
     let deck = actions::Deck::new(playlists::Store::open(playlists::default_file(), library.clone()));
     #[cfg(target_os = "macos")]
@@ -146,6 +169,11 @@ fn main() {
             actions::start_auto(app.handle().clone());
             link::start(app.handle().clone());
             updater::start(app.handle().clone());
+            // The 0.9 lanes' own start-up: the quality (#101), reduced motion (#100), and
+            // reopening where the show was (#99).
+            quality::start(app.handle());
+            access::start(app.handle());
+            resume::start(app.handle());
             #[cfg(not(target_os = "macos"))]
             app.get_webview_window("main").expect("main window").show()?;
             #[cfg(target_os = "macos")]
