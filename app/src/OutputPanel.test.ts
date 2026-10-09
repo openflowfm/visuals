@@ -1,6 +1,29 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
-import { leave } from './OutputPanel.tsx';
+import { fitLine, leave } from './OutputPanel.tsx';
+import type { Display } from './output.ts';
+
+const display = (width: number, height: number): Display => ({ id: 1, index: 0, name: 'Projector', width, height, main: false });
+
+describe('fitLine', () => {
+  it('says how it will fit while nothing is showing', () => {
+    expect(fitLine({ display: null, size: null })).toMatch(/^The whole picture, with black bars/);
+  });
+
+  it('fills a display turned on its side', () => {
+    expect(fitLine({ display: display(1080, 1920), size: [1080, 1920] })).toBe('Fills Projector, drawn tall to match it.');
+  });
+
+  it('fills a display the picture matches, or whose size is not known yet', () => {
+    expect(fitLine({ display: display(1920, 1080), size: [1920, 1080] })).toBe('Fills Projector.');
+    expect(fitLine({ display: display(1920, 1080), size: null })).toBe('Fills Projector.');
+  });
+
+  it('says where the black bars go', () => {
+    expect(fitLine({ display: display(1920, 1080), size: [1440, 1080] })).toBe('The whole picture, 1440×1080 on Projector, with black bars at the sides.');
+    expect(fitLine({ display: display(1920, 1200), size: [1920, 1080] })).toBe('The whole picture, 1920×1080 on Projector, with black bars above and below.');
+  });
+});
 
 describe('leave', () => {
   // The IPC mock lives on `window`, which the node test environment doesn't have.

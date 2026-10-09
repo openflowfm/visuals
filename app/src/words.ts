@@ -23,6 +23,14 @@ export const WORDS = {
   'intensity low': 'calm',
   'intensity mid': 'lively',
   'intensity high': 'wild',
+  'render quality': 'picture quality',
+  'reduced motion': 'reduce flashing',
+  telemetry: 'usage tracking',
+  'strobe style': 'strobe colour',
+  'strobe rate': 'flashes per beat',
+  'blackout fade': 'fade to black',
+  'fx reset': 'back to normal',
+  'output fit': 'how the picture fills the screen',
 } as const;
 
 export type Jargon = keyof typeof WORDS;

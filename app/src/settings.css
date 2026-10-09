@@ -1,0 +1,133 @@
+/* ⚙ Settings and the More effects drawer (Settings.tsx, MoreEffects.tsx): sheets
+   over any view, sized for a finger (44 px targets) and closed with Esc. */
+
+.vf-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 29;
+  background: rgb(0 0 0 / 0.35);
+}
+.vf-sheet:focus {
+  outline: none;
+}
+.vf-sheet.settings,
+.vf-sheet.more-fx {
+  --wdg-field-height: 44px;
+  --ctl-h: 44px;
+}
+.vf-sheet .vf-sheet-head .wdg-button {
+  min-width: 44px;
+}
+
+/* Settings: a panel down the right-hand side, the whole window tall, its head
+   kept in view while the sections scroll under it. */
+.vf-sheet.settings {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(440px, 100vw);
+  max-height: none;
+  padding: 0 18px 24px;
+  border-width: 0 0 0 1px;
+  border-radius: 0;
+}
+.vf-sheet.settings .vf-sheet-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 12px 0 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--bd3);
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--bd3);
+}
+.settings-section:last-child {
+  border-bottom: 0;
+}
+.settings-section h3 {
+  margin: 0;
+  color: var(--caption);
+  font-size: var(--text-label);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+}
+.vf-sheet .settings-line {
+  margin: 0;
+  color: var(--caption);
+  font-size: var(--text-body);
+  line-height: 1.4;
+}
+.vf-sheet .settings-problem {
+  color: var(--red);
+}
+.settings-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  color: var(--fg);
+  font-size: var(--text-body);
+}
+.settings-switch .wdg-toggle {
+  width: 96px;
+}
+.settings-quality {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Sound: the source picker with its meter, and Advanced (the channels) opening
+   in place rather than floating over the next section. */
+.settings .audio-input {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.settings .audio-advanced {
+  display: block;
+  width: 100%;
+  order: 3;
+}
+.settings .audio-advanced > summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+.settings .audio-advanced-body {
+  position: static;
+  padding: 0;
+  background: none;
+  border: 0;
+}
+.settings .audio-note {
+  order: 4;
+  max-width: none;
+  white-space: normal;
+}
+
+/* Output: the display picked, and how the picture fits it. */
+.output-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.vf-sheet .output-settings p {
+  margin: 0;
+  font-size: var(--text-body);
+  line-height: 1.4;
+}
+.output-settings .output-fit b {
+  color: var(--fg);
+  font-weight: var(--weight-medium);
+}
