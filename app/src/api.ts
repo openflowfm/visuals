@@ -249,6 +249,8 @@ export type QualityLevel = 'auto' | 'low' | 'medium' | 'high';
 export interface Quality {
   chosen: QualityLevel;
   effective: Exclude<QualityLevel, 'auto'>;
+  /** One line on why it is at `effective`: what auto measured, or that it was chosen. */
+  reason: string;
 }
 /** The render quality. A stub until its 0.9 lane (#101) lands: it never fails, and always says `{ chosen: 'auto', effective: 'high' }`. */
 export const qualityGet = () => invoke<Quality>('quality_get');

@@ -104,3 +104,25 @@
 .link-problem {
   gap: 6px;
 }
+
+/* Link in ⚙ Settings (LinkSettings): on or off, the session, and the bar start's
+   buttons, wide enough for a finger. */
+.link-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--fg);
+  font-size: var(--text-body);
+}
+.link-settings .link-one {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.link-settings .link-one-name {
+  flex: 1 0 100%;
+  color: var(--caption);
+}
+.link-settings .link-one .wdg-button {
+  min-width: 52px;
+}

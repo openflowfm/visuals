@@ -116,3 +116,64 @@
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 6px 14px;
 }
+
+/* The effects in ⚙ Settings (EffectSettings): a row per setting, its name over
+   its control; the fine ones with a step down and up either side. */
+.fx-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.fx-setting {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.fx-setting-name {
+  color: var(--caption);
+  font-size: var(--text-body);
+}
+.fx-setting-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.fx-setting-control > .wdg-segmented,
+.fx-setting-control > .wdg-slider-horizontal {
+  flex: 1;
+  min-width: 0;
+}
+.fx-setting-control > .wdg-button {
+  min-width: 44px;
+}
+
+/* The More effects drawer (MoreEffects.tsx): along the bottom, the show above it
+   left uncovered, every control big enough to hit blind. */
+.vf-sheet.more-fx {
+  top: auto;
+  right: 50%;
+  bottom: 12px;
+  width: min(560px, calc(100vw - 24px));
+  transform: translateX(50%);
+}
+.more-fx .more-fx-body {
+  padding: 0;
+  background: none;
+}
+.more-fx-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--fg);
+  font-size: var(--text-body);
+}
+.more-fx-row .wdg-segmented {
+  flex: 0 1 300px;
+}
+.more-fx-row .wdg-toggle {
+  width: 120px;
+}
+.more-fx .fx .fx-hit {
+  min-height: 64px;
+}

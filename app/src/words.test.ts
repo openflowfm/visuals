@@ -21,4 +21,15 @@ describe('the plain words', () => {
   it('start a sentence with a capital', () => {
     expect(Say('hold')).toBe('Stay on this one');
   });
+
+  it('say the settings in plain words', () => {
+    expect(Say('render quality')).toBe('Picture quality');
+    expect(Say('reduced motion')).toBe('Reduce flashing');
+    expect(say('telemetry')).toBe('usage tracking');
+    expect(say('strobe style')).toBe('strobe colour');
+    expect(say('strobe rate')).toBe('flashes per beat');
+    expect(say('blackout fade')).toBe('fade to black');
+    expect(say('fx reset')).toBe('back to normal');
+    expect(Say('output fit')).toBe('How the picture fills the screen');
+  });
 });
