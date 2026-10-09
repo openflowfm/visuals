@@ -17,7 +17,7 @@ import { isTyping, nameOf, notice, openFailed } from './shell.ts';
 import { plural } from './controls.ts';
 import { beginDrag, dropAction, isOver, itemTarget, listTarget, nudge, runDrop, useDrag, type DragHandlers, type Payload } from './drag.ts';
 import { changeUnit, localMark, saveFile, sections, seedStarters, strip, withSetting, type StripTile } from './home.ts';
-import { FrameRate, Header, Hints, NoticeBanner, NowPlaying, Preview, type View } from './views.tsx';
+import { FrameRate, Header, Hints, NoticeBanner, NowPlaying, openSheet, Preview, type View } from './views.tsx';
 import { say } from './words.ts';
 import './playlists.css';
 import './home.css';
@@ -157,6 +157,9 @@ export function Home({ start, onMode }: { start: string | null; onMode(view: Vie
         <span className="vf-fill" />
         <AudioInput onError={audioFailed} />
         <FrameRate />
+        <Button tone="quiet" onPress={openSettings} label="settings" title="Settings: sound, the output, quality and more">
+          ⚙
+        </Button>
       </Header>
       <aside className="home-side">
         <Sidebar lists={lists} shown={shown} onPick={pick} onLists={setLists} onImport={imported} onError={(what) => fail(`Couldn't ${what}.`)} rowsReady={rows !== null} />
@@ -205,6 +208,9 @@ export function Home({ start, onMode }: { start: string | null; onMode(view: Vie
     </div>
   );
 }
+
+/** The header's ⚙: the Settings sheet (#98), over the home. */
+export const openSettings = () => openSheet('settings');
 
 /** The pane to show when none has been picked: the playlist playing, else the first, else the library. */
 export function firstPane(lists: Lists): Pane {

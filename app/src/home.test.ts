@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LibraryQuery, LibraryRow, Level } from './api.ts';
 import { prepareRow, type Prepared } from './librarySearch.ts';
 import { DEFAULT_SETTINGS, EMPTY_DECK, type Lists, type Playlist } from './playlists.ts';
 import { changeUnit, matches, RECENT, sections, seedStarters, SEEDED_KEY, STARTERS, STRIP_CAP, strip, withSetting, type Mark } from './home.ts';
-import { firstPane } from './Home.tsx';
+import { firstPane, openSettings } from './Home.tsx';
+import { SHEET_EVENT, sheetOf } from './views.tsx';
 
 const row = (name: string, speed: Level = 'mid', intensity: Level = 'mid', over: Partial<LibraryRow> = {}): LibraryRow => ({
   key: `g/${name}.milk`,
@@ -193,5 +194,19 @@ describe('firstPane', () => {
     expect(firstPane(lists([manual('a', []), manual('b', [])], 'b'))).toEqual({ kind: 'list', id: 'b' });
     expect(firstPane(lists([manual('a', []), manual('b', [])]))).toEqual({ kind: 'list', id: 'a' });
     expect(firstPane(lists([]))).toEqual({ kind: 'library' });
+  });
+});
+
+describe('openSettings', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("asks for the Settings sheet, the ⚙ in the home's header", () => {
+    // The node test environment has no `window`; an event target stands in for it.
+    const page = new EventTarget();
+    vi.stubGlobal('window', page);
+    const asked: (string | null)[] = [];
+    page.addEventListener(SHEET_EVENT, (e) => asked.push(sheetOf(e)));
+    openSettings();
+    expect(asked).toEqual(['settings']);
   });
 });
