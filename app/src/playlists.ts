@@ -20,8 +20,11 @@ export type Action =
   /** Play the presets matching a filter, as an unsaved smart playlist; hidden ones never. */
   | { kind: 'query'; query: LibraryQuery; at?: string };
 
-/** `playlists::Change`: when a playlist moves on — every so many seconds, or on Link's bar lines every so many bars. */
-export type Change = { unit: 'seconds'; every: number } | { unit: 'bars'; every: number };
+/**
+ * `playlists::Change`: when a playlist moves on — every so many seconds, on Link's bar lines every so many bars,
+ * or never by itself (`off`: auto-advance off, as a playlist from 0.2 plays; `every` is the seconds it goes back to when turned on).
+ */
+export type Change = { unit: 'seconds'; every: number } | { unit: 'bars'; every: number } | { unit: 'off'; every: number };
 
 /** `playlists::Order`: the items as listed, or shuffled. */
 export type Order = 'in_order' | 'shuffle';
@@ -68,6 +71,8 @@ export interface Playlist {
   /** A smart playlist's filter; null for a manual one. */
   query: LibraryQuery | null;
   settings: PlaylistSettings;
+  /** Which of the home's starter smart playlists this is (`home.ts`'s `STARTERS`), when the home made it; never shown. */
+  starter?: string | null;
 }
 
 /** A manual playlist with the default settings, as a new one is: for fixtures and placeholders. */

@@ -22,6 +22,12 @@ describe('the library commands', () => {
   it('save a smart playlist by its name and filter', async () => {
     invoke.mockClear();
     await api.smartPlaylistSave('Chill', { groups: { speed: ['low'] }, text: '' });
-    expect(invoke).toHaveBeenCalledWith('smart_playlist_save', { name: 'Chill', query: { groups: { speed: ['low'] }, text: '' } });
+    expect(invoke).toHaveBeenCalledWith('smart_playlist_save', { name: 'Chill', query: { groups: { speed: ['low'] }, text: '' }, starter: null });
+  });
+
+  it('save a smart playlist that a starter came from', async () => {
+    invoke.mockClear();
+    await api.smartPlaylistSave('Chill', { groups: { speed: ['low'] }, text: '' }, 'starter-chill');
+    expect(invoke).toHaveBeenCalledWith('smart_playlist_save', { name: 'Chill', query: { groups: { speed: ['low'] }, text: '' }, starter: 'starter-chill' });
   });
 });

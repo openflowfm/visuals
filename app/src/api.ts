@@ -244,8 +244,8 @@ export interface LibraryQuery {
   recent?: number;
 }
 
-/** Save `query` as a smart playlist named `name`; resolves to its id, and a `lists` event follows. */
-export const smartPlaylistSave = (name: string, query: LibraryQuery) => invoke<string>('smart_playlist_save', { name, query });
+/** Save `query` as a smart playlist named `name`, `starter` marking one of the home's starters; resolves to its id, and a `lists` event follows. */
+export const smartPlaylistSave = (name: string, query: LibraryQuery, starter?: string) => invoke<string>('smart_playlist_save', { name, query, starter: starter ?? null });
 
 /** How much the renderer draws: chosen by the user, or `auto` to follow the machine. */
 export type QualityLevel = 'auto' | 'low' | 'medium' | 'high';

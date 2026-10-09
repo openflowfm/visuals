@@ -640,15 +640,15 @@ export function SettingsBar({ settings, differs, onChange }: { settings: Playlis
           param={change.unit === 'bars' ? EVERY_BARS : EVERY_S}
           value={change.every}
           onChange={(v) => onChange(withSetting(settings, 'change', { unit: change.unit, every: v }))}
-          display={change.unit === 'bars' ? plural(Math.round(change.every), 'bar') : `${Math.round(change.every)} s`}
-          title={change.unit === 'bars' ? "Bars of Ableton Link's beat on each preset" : 'Seconds on each preset'}
+          display={change.unit === 'off' ? say('auto-advance off') : change.unit === 'bars' ? plural(Math.round(change.every), 'bar') : `${Math.round(change.every)} s`}
+          title={change.unit === 'off' ? say('auto-advance off hint') : change.unit === 'bars' ? "Bars of Ableton Link's beat on each preset" : 'Seconds on each preset'}
         />
         <Segmented
-          items={['s', 'bars']}
-          index={change.unit === 'bars' ? 1 : 0}
-          onChange={(i) => onChange(changeUnit(settings, i === 1 ? 'bars' : 'seconds'))}
-          label="seconds or bars"
-          hint="seconds, or bars of the beat when you keep in time with Ableton"
+          items={['s', 'bars', say('auto-advance off')]}
+          index={change.unit === 'off' ? 2 : change.unit === 'bars' ? 1 : 0}
+          onChange={(i) => onChange(changeUnit(settings, i === 2 ? 'off' : i === 1 ? 'bars' : 'seconds'))}
+          label="seconds, bars or off"
+          hint={`seconds, bars of the beat when you keep in time with Ableton, or ${say('auto-advance off')}`}
         />
       </div>
       <div className="home-setting" data-tweaked={tweaked('order') ? '' : undefined}>

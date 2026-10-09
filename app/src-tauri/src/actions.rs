@@ -162,7 +162,7 @@ pub struct DeckView {
 /// The schedule on Link's grid a playlist's change timing means: none for seconds.
 pub fn every_of(change: Change) -> Every {
     match change {
-        Change::Seconds { .. } => Every::OFF,
+        Change::Seconds { .. } | Change::Off { .. } => Every::OFF,
         Change::Bars { every } => Every { every, unit: Unit::Bars },
     }
 }
@@ -238,13 +238,21 @@ impl Live {
         self.take_change(s.change);
     }
 
-    /// Change on `change`: Link's schedule, or auto-advance on every so many seconds from now.
+    /// Change on `change`: Link's schedule, auto-advance on every so many seconds
+    /// from now, or neither (auto-advance off, its seconds kept for when it's turned on).
     fn take_change(&mut self, change: Change) {
         self.schedule(every_of(change));
-        if let Change::Seconds { every } = change {
-            self.auto = true;
-            self.seconds = every;
-            self.since = Instant::now();
+        match change {
+            Change::Seconds { every } => {
+                self.auto = true;
+                self.seconds = every;
+                self.since = Instant::now();
+            }
+            Change::Off { every } => {
+                self.auto = false;
+                self.seconds = every;
+            }
+            Change::Bars { .. } => {}
         }
     }
 
@@ -296,6 +304,7 @@ impl Live {
         let change = match s.change {
             Change::Seconds { every } => self.auto && self.bars == 0 && same(self.seconds, every),
             Change::Bars { every } => self.bars == every,
+            Change::Off { .. } => !self.auto && self.bars == 0,
         };
         [
             ("change", change),
@@ -909,11 +918,12 @@ pub fn playlist_set_query(id: String, query: LibraryQuery, deck: State<Deck>) ->
     edited(&deck, |s| s.set_query(&id, query))
 }
 
-/// Save `query` as a smart playlist named `name`. Returns its id; the playlists
+/// Save `query` as a smart playlist named `name`; `starter` marks one the home
+/// makes ([`crate::playlists::Playlist::starter`]). Returns its id; the playlists
 /// follow as the `lists` event.
 #[tauri::command]
-pub fn smart_playlist_save(name: String, query: LibraryQuery, deck: State<Deck>, handle: AppHandle) -> Result<String, String> {
-    let id = edit(&deck, |s| s.create_smart(&name, query))?;
+pub fn smart_playlist_save(name: String, query: LibraryQuery, starter: Option<String>, deck: State<Deck>, handle: AppHandle) -> Result<String, String> {
+    let id = edit(&deck, |s| s.create_smart(&name, query, starter))?;
     deck.emit_lists(&handle)?;
     Ok(id)
 }
@@ -1169,6 +1179,25 @@ mod tests {
     }
 
     #[test]
+    fn a_playlist_with_auto_advance_off_turns_it_off_when_it_loads() {
+        let (mut s, _) = store();
+        let a = s.lists[0].id.clone();
+        s.set_settings(&a, Settings::from_v1()).unwrap();
+        let mut live = Live::default();
+        let mut fx = Fx::new(Instant::now());
+        live.auto = true;
+        live.bars = 8;
+        d(&mut live, &Action::Load { playlist: 0, index: None }, &s).unwrap();
+        apply_fx(&mut fx, &live.settings.unwrap(), Instant::now());
+        assert_eq!((live.auto, live.bars, live.seconds), (false, 0, 30.0), "off, its 30 s kept for when it's turned on");
+        assert!(live.view(&fx.settings).differs.is_empty());
+        // Turned on live: a tweak, at the playlist's seconds.
+        d(&mut live, &Action::Auto { on: Some(true) }, &s).unwrap();
+        assert_eq!((live.auto, live.seconds), (true, 30.0));
+        assert_eq!(live.view(&fx.settings).differs, ["change"]);
+    }
+
+    #[test]
     fn shuffle_plays_every_item_once_a_round_and_says_what_is_next() {
         let (mut s, lib) = store();
         let a = s.lists[0].id.clone();
@@ -1199,7 +1228,7 @@ mod tests {
     fn a_smart_playlist_and_a_filter_play_what_they_resolve_to_on_load() {
         let (mut s, lib) = store();
         let calm = LibraryQuery { text: "calm".into(), ..Default::default() };
-        s.create_smart("Calm", calm.clone()).unwrap();
+        s.create_smart("Calm", calm.clone(), None).unwrap();
         let asked = std::cell::RefCell::new(Vec::new());
         let resolve = |q: &LibraryQuery| {
             asked.borrow_mut().push(q.text.clone());
@@ -1226,7 +1255,7 @@ mod tests {
     #[test]
     fn a_smart_playlist_is_worked_out_with_neither_lock_held() {
         let (mut s, lib) = store();
-        s.create_smart("Calm", LibraryQuery { text: "calm".into(), ..Default::default() }).unwrap();
+        s.create_smart("Calm", LibraryQuery { text: "calm".into(), ..Default::default() }, None).unwrap();
         let (store, live) = (Mutex::new(s), Mutex::new(Live::default()));
         let asked = std::cell::Cell::new(0);
         let resolve = |_: &LibraryQuery| {

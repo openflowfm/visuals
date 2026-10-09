@@ -72,7 +72,8 @@ describe('seedStarters, run twice or failing', () => {
     await expect(seedStarters([], mark, failing)).rejects.toThrow('no');
     expect(mark.get(SEEDED_KEY)).toBeNull();
     expect(a.saved.map((s) => s.name)).toEqual(['Calm']);
-    const made = await seedStarters([smart('Calm', { groups: {}, text: '' }, { id: 'id-Calm' })], mark, a);
+    expect(a.saved[0].starter).toBe('calm');
+    const made = await seedStarters([smart('Calm', { groups: {}, text: '' }, { id: 'id-Calm', starter: 'calm' })], mark, a);
     expect(made).toBe(2);
     expect(a.saved.map((s) => s.name)).toEqual(['Calm', 'Peak-time', 'Recently played']);
     expect(a.set).toContainEqual({ id: 'id-Calm', every: 45 });
@@ -106,13 +107,13 @@ describe('NameEdit', () => {
 
 /** The app's side of seeding, writing down what it was asked. */
 const app = () => {
-  const saved: { name: string; query: LibraryQuery }[] = [];
+  const saved: { name: string; query: LibraryQuery; starter: string }[] = [];
   const set: { id: string; every: number }[] = [];
   return {
     saved,
     set,
-    save: async (name: string, query: LibraryQuery) => {
-      saved.push({ name, query });
+    save: async (name: string, query: LibraryQuery, starter: string) => {
+      saved.push({ name, query, starter });
       return `id-${name}`;
     },
     settings: async (id: string, s: typeof DEFAULT_SETTINGS) => void set.push({ id, every: s.change.every }),
@@ -125,6 +126,7 @@ describe('seedStarters', () => {
     const a = app();
     expect(await seedStarters([], mark, a)).toBe(3);
     expect(a.saved.map((s) => s.name)).toEqual(['Calm', 'Peak-time', 'Recently played']);
+    expect(a.saved.map((s) => s.starter)).toEqual(['calm', 'peak-time', 'recently-played']);
     expect(a.set.map((s) => s.id)).toEqual(['id-Calm', 'id-Peak-time', 'id-Recently played']);
     expect(mark.get(SEEDED_KEY)).not.toBeNull();
     // The next start makes none, even with the starters since deleted.
@@ -132,12 +134,25 @@ describe('seedStarters', () => {
     expect(a.saved).toHaveLength(3);
   });
 
-  it('skips a starter whose name a smart playlist already has, and marks itself done', async () => {
+  it('leaves a user’s own smart playlist of a starter’s name alone, makes no second one, and marks itself done', async () => {
     const mark = new MapMark();
     const a = app();
-    expect(await seedStarters([smart('Calm', { groups: {}, text: '' })], mark, a)).toBe(2);
+    const mine = smart('mine', { groups: {}, text: 'slow' }, { name: 'Calm', settings: { ...DEFAULT_SETTINGS, change: { unit: 'seconds', every: 99 } } });
+    expect(await seedStarters([mine], mark, a)).toBe(2);
     expect(a.saved.map((s) => s.name)).toEqual(['Peak-time', 'Recently played']);
+    expect(a.set.map((s) => s.id)).not.toContain('mine');
     expect(mark.get(SEEDED_KEY)).not.toBeNull();
+  });
+
+  it('repairs a playlist carrying a starter id, whatever it is called, and never one without', async () => {
+    const mark = new MapMark();
+    const a = app();
+    const ours = smart('ours', { groups: {}, text: '' }, { name: 'Quiet', starter: 'calm' });
+    const theirs = smart('theirs', { groups: {}, text: '' }, { name: 'Peak-time' });
+    expect(await seedStarters([ours, theirs], mark, a)).toBe(1);
+    expect(a.set).toContainEqual({ id: 'ours', every: 45 });
+    expect(a.set.map((s) => s.id)).not.toContain('theirs');
+    expect(a.saved.map((s) => s.name)).toEqual(['Recently played']);
   });
 
   it('makes nothing without storage to remember it by', async () => {
@@ -251,6 +266,20 @@ describe('settings', () => {
     expect(changeUnit(bars, 'seconds').change).toEqual(DEFAULT_SETTINGS.change);
     expect(changeUnit(bars, 'bars')).toBe(bars);
   });
+
+  it('auto-advance off remembers its seconds both ways', () => {
+    const every45 = withSetting(DEFAULT_SETTINGS, 'change', { unit: 'seconds', every: 45 });
+    const off = changeUnit(every45, 'off');
+    expect(off.change).toEqual({ unit: 'off', every: 45 });
+    expect(changeUnit(off, 'seconds').change).toEqual({ unit: 'seconds', every: 45 });
+    expect(changeUnit(off, 'bars').change).toEqual({ unit: 'bars', every: 8 });
+    expect(withSetting(off, 'change', { unit: 'off', every: 9999 }).change).toEqual({ unit: 'off', every: 3600 });
+  });
+
+  it('a new playlist changes every 30 s with a 2 s crossfade', () => {
+    expect(DEFAULT_SETTINGS.change).toEqual({ unit: 'seconds', every: 30 });
+    expect(DEFAULT_SETTINGS.transition).toBe(2);
+  });
 });
 
 describe('firstPane', () => {
@@ -327,5 +356,14 @@ describe('the home, read aloud', () => {
     expect(html).toContain('role="group" aria-label="move on by itself"');
     const sliders = [...html.matchAll(/<div[^>]*role="slider"[^>]*>/g)].map((m) => /aria-label="([^"]*)"/.exec(m[0])?.[1]);
     expect(sliders).toEqual(['move on by itself every, in seconds', 'crossfade', 'speed', 'trails', 'colour shift']);
+  });
+
+  it('shows a playlist with auto-advance off as off, and turning it back to seconds keeps its 30 s', () => {
+    const off = changeUnit(DEFAULT_SETTINGS, 'off');
+    const html = renderToStaticMarkup(createElement(SettingsBar, { settings: off, differs: [], onChange: none }));
+    expect(html).not.toContain('30 s');
+    expect(html).toContain('Stays on each preset until you move on');
+    expect(html).toMatch(/aria-checked="true"[^>]*>off</);
+    expect(changeUnit(off, 'seconds').change).toEqual({ unit: 'seconds', every: 30 });
   });
 });
