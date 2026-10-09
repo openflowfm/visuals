@@ -1,3 +1,3 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict><key>NSMicrophoneUsageDescription</key><string>visual[flow] listens to the audio input you choose to animate presets. Audio stays on your Mac.</string></dict></plist>
+<plist version="1.0"><dict><key>NSMicrophoneUsageDescription</key><string>visual[flow] listens to the audio input you choose to animate presets. Audio stays on your Mac.</string><key>NSAudioCaptureUsageDescription</key><string>visual[flow] listens to your DAW, or to everything this Mac plays, to animate presets. Audio stays on your Mac.</string></dict></plist>

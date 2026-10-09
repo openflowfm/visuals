@@ -18,6 +18,12 @@ use std::path::{Path, PathBuf};
 /// The schema version written to `index.json`; a file with another is rebuilt.
 pub const VERSION: u32 = 1;
 
+/// The version of what draws and measures a preset: the `index` bin's drawing
+/// and `engine/src/analyse`. Bump it when either changes what a [`Look`] or a
+/// thumbnail comes out as; the next run re-draws every row measured by
+/// another (see [`Look::analysis`]).
+pub const ANALYSIS: u32 = 1;
+
 /// The thumbnail size, in pixels.
 pub const THUMBNAIL: (u32, u32) = (192, 144);
 
@@ -72,6 +78,10 @@ pub const INTENSITY: Cuts = Cuts(6.97, 20.34);
 /// What a preset looks like, measured from the pictures it draws.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Look {
+    /// The [`ANALYSIS`] it was measured by; 0 in an index written before
+    /// there was one.
+    #[serde(default)]
+    pub analysis: u32,
     /// Dominant hues in degrees, the strongest first; empty when it's grey.
     pub hues: Vec<u16>,
     /// Mean luma, 0–1.
@@ -88,9 +98,9 @@ pub struct Look {
 }
 
 impl Look {
-    /// A look from its measures, levelled against the current cuts.
+    /// A look from its measures by the current [`ANALYSIS`], levelled against the current cuts.
     pub fn new(hues: Vec<u16>, brightness: f32, speed: Option<f32>, intensity: f32) -> Look {
-        let mut look = Look { hues, brightness, speed, intensity, brightness_level: Level::Low, speed_level: Level::Low, intensity_level: Level::Low };
+        let mut look = Look { analysis: ANALYSIS, hues, brightness, speed, intensity, brightness_level: Level::Low, speed_level: Level::Low, intensity_level: Level::Low };
         look.relevel();
         look
     }
@@ -272,6 +282,17 @@ mod tests {
         old.save(&file).unwrap();
         assert_eq!(Index::load(&file), None);
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn looks_carry_their_analysis_and_older_ones_read_as_none() {
+        let look = Look::new(vec![], 0.5, None, 1.0);
+        assert_eq!(look.analysis, ANALYSIS);
+        let mut json = serde_json::to_value(&look).unwrap();
+        json.as_object_mut().unwrap().remove("analysis");
+        let old: Look = serde_json::from_value(json).unwrap();
+        assert_eq!(old.analysis, 0);
+        assert_ne!(old.analysis, ANALYSIS);
     }
 
     #[test]
