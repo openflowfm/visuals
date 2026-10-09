@@ -445,10 +445,20 @@ the `index` bin writes: `index.json` (`engine/src/index.rs`) and a folder of thu
   (16 px blocks, ±8 px). A step whose blocks are textured but not found again counts as 8
   px (moving faster than the search); a preset with too little to follow on two thirds of
   its steps (flat colour, soft glows) has no speed, and its speed level is its intensity's.
-- **Robustness.** Presets are drawn in child processes; one that doesn't answer within the
-  timeout (20 s) is killed, listed under `skipped` with the reason, and its child restarted.
-  The run is incremental by content hash: a preset already drawn, or already skipped
+- **Robustness.** Presets are drawn in child processes. The timeout (20 s) starts once a
+  child has its GPU, so a new child's setup isn't counted against its first preset. A
+  preset that doesn't answer in time is killed with its child and goes to the back of the
+  queue for one more try in a fresh child (timeouts are mostly cold shader compiles queued
+  under load); a second timeout lists it under `skipped`. A child whose preset panicked is
+  restarted too, so the next preset doesn't draw on a renderer the panic left half-way.
+- **Incremental.** By content hash: a preset already drawn by the current analysis
+  (`ANALYSIS` in `engine/src/index.rs`, stored with each look), or already skipped
   (unless `--retry`), isn't drawn again; names, styles and levels are always recomputed.
+  Bump `ANALYSIS` when the drawing or `engine/src/analyse/` changes what a look or a
+  thumbnail comes out as, and the next run redraws everything measured before it (an index
+  from before there was a version reads as version 0). A `--sample` run into an existing
+  index keeps the rows of the presets it didn't take, as they were; a row whose preset has
+  left the folder is dropped.
 
 **Cut points** (terciles of the full pack, 9,789 presets drawn; in `engine/src/index.rs`):
 
