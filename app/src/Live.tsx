@@ -186,17 +186,23 @@ export function Live({
   // Live mode is the output: open it on the way in when another display can take it, close it (and reset the effects) on the way out.
   useEffect(() => {
     api.setPreviews([]).catch(() => {});
+    // Left before the displays came back: don't open an output nothing would close.
+    let gone = false;
     output.displays().then(
       (ds) => {
+        if (gone) return;
         setDisplays(ds);
         if (!playsWindowed(windowed, ds)) show(null);
       },
       () => {
-        if (!windowed) show(null);
+        if (!gone && !windowed) show(null);
       },
     );
     fx.state().then(setEffects, fail("Couldn't read the effects."));
-    return leave;
+    return () => {
+      gone = true;
+      leave();
+    };
   }, [show, fail, windowed]);
   useTauriEvent(output.onStatus, setStatus);
   useTauriEvent(fx.onFx, setEffects);

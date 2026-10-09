@@ -1,6 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, expect, it, vi } from 'vitest';
 import type { FxAction } from './fx.ts';
-import { liveKeys, type KeyLike } from './liveKeys.ts';
+import { liveKeys, modalOpen, type KeyLike } from './liveKeys.ts';
+import { MoreEffects } from './MoreEffects.tsx';
+import { Settings } from './Settings.tsx';
 import type { Action } from './playlists.ts';
 
 type Sent = Action | FxAction | 'editor' | 'favourite' | 'help' | { rate: number };
@@ -79,6 +83,44 @@ describe('liveKeys', () => {
     sheet.open = false;
     press('Escape');
     expect(sent).toEqual(['editor']);
+  });
+
+  it('by default, leaves every key to the real ⚙ or More effects sheet, even with focus outside it, but not to a status popover', () => {
+    const page = { html: '' };
+    // A document holding `page.html`, matching the few selectors modalOpen asks for.
+    const tags = () => [...page.html.matchAll(/<[a-z]+\s[^>]*>/g)].map((m) => m[0]);
+    const matches = (tag: string, sel: string) => {
+      if (sel === '.vf-sheet') return /class="(vf-sheet|vf-sheet\s[^"]*)"/.test(tag);
+      if (sel === '[aria-modal="true"]') return tag.includes('aria-modal="true"');
+      if (sel === '[role="dialog"]:not(.live-status-pop)') return tag.includes('role="dialog"') && !tag.includes('live-status-pop');
+      throw new Error(`unexpected selector ${sel}`);
+    };
+    vi.stubGlobal('document', { querySelector: (s: string) => (s.split(',').some((sel) => tags().some((t) => matches(t, sel.trim()))) ? {} : null) });
+    try {
+      const sent: Sent[] = [];
+      const keys = liveKeys({
+        sheetOpen: modalOpen,
+        editor: () => sent.push('editor'),
+        act: (a) => sent.push(a),
+        fx: (a) => sent.push(a),
+        rate: (stars) => sent.push({ rate: stars }),
+        favourite: () => sent.push('favourite'),
+        help: () => sent.push('help'),
+      });
+      const outside = { closest: () => null } as unknown as EventTarget;
+      const press = (key: string) => keys.keydown({ key, metaKey: false, shiftKey: false, ctrlKey: false, altKey: false, repeat: false, target: outside, preventDefault: () => {} });
+      const all = ['Escape', 'r', 'ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown', '1', '2', '3', '4', '5', 'f', 'z', 'h'];
+      for (const sheet of [createElement(Settings, { open: true, onClose: () => {} }), createElement(MoreEffects, { open: true, onClose: () => {} })]) {
+        page.html = renderToStaticMarkup(sheet);
+        for (const key of all) press(key);
+        expect(sent).toEqual([]);
+      }
+      page.html = '<div class="live-status-pop" data-pop="x" role="dialog" aria-label="x"></div>';
+      press('Escape');
+      expect(sent).toEqual(['editor']);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('leaves every key pressed inside a sheet or dialog to it', () => {

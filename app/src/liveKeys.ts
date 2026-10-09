@@ -30,8 +30,11 @@ function inDialog(target: EventTarget | null): boolean {
   return typeof el?.closest === 'function' && el.closest('[role="dialog"], [aria-modal="true"]') !== null;
 }
 
+/** An open sheet (⚙ Settings, More effects) or modal; the status bar's popovers are dialogs too, but not modal. */
+const MODAL = '[aria-modal="true"], .vf-sheet, [role="dialog"]:not(.live-status-pop)';
+
 /** Whether a modal (a sheet, the ? overlay) is open in the page. */
-export const modalOpen = (): boolean => typeof document !== 'undefined' && document.querySelector('[aria-modal="true"]') !== null;
+export const modalOpen = (): boolean => typeof document !== 'undefined' && document.querySelector(MODAL) !== null;
 
 /** What the handlers read of a key event. */
 export type KeyLike = Pick<KeyboardEvent, 'key' | 'metaKey' | 'shiftKey' | 'ctrlKey' | 'altKey' | 'repeat' | 'target' | 'preventDefault'> & Partial<Pick<KeyboardEvent, 'defaultPrevented'>>;
@@ -73,9 +76,11 @@ export function liveKeys(to: LiveKeyTargets) {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       // Keys pressed in a field, or in a sheet or dialog, are theirs.
       if (isTyping(e) || inDialog(e.target)) return;
+      // An open sheet or modal takes the keys, even with focus still outside it (on ⚙); only ? still toggles the help.
+      if (e.key !== '?' && to.sheetOpen?.()) return;
       if (e.key === 'Escape') {
         // A menu, sheet or dialog that took its own Esc keeps it (decision 17q: the ⚙ sheet takes Esc before live does).
-        if (e.defaultPrevented || to.sheetOpen?.()) return;
+        if (e.defaultPrevented) return;
         e.preventDefault();
         to.editor();
         return;

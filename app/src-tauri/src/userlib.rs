@@ -204,7 +204,13 @@ pub fn load(file: &Path) -> Result<LibraryData, String> {
         Err(e) => return Err(format!("couldn't read {}: {e}", file.display())),
     };
     let problem = match serde_json::from_slice::<LibraryData>(&bytes) {
-        Ok(data) if data.version <= VERSION => return Ok(LibraryData { version: VERSION, ..data }),
+        Ok(mut data) if data.version <= VERSION => {
+            // A hand-edited rating above 5 stars reads as 5.
+            for mine in data.presets.values_mut() {
+                mine.rating = mine.rating.map(|r| r.min(5));
+            }
+            return Ok(LibraryData { version: VERSION, ..data });
+        }
         Ok(data) => format!("is version {}, newer than {VERSION}", data.version),
         Err(e) => format!("does not parse ({e})"),
     };
@@ -728,6 +734,17 @@ mod tests {
         assert!(text.contains(r#""rating":5"#), "{text}");
         apply(&mut data, &keys, &Change { rating: Some(0), ..Default::default() });
         assert!(data.presets.is_empty());
+    }
+
+    #[test]
+    fn a_rating_above_five_loads_as_five() {
+        let dir = temp("rating");
+        let file = dir.join("library.json");
+        std::fs::write(&file, r#"{"version":1,"presets":{"a.milk":{"rating":9},"b.milk":{"rating":3}}}"#).unwrap();
+        let data = load(&file).unwrap();
+        assert_eq!(data.presets["a.milk"].rating, Some(5));
+        assert_eq!(data.presets["b.milk"].rating, Some(3));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     fn temp(name: &str) -> PathBuf {

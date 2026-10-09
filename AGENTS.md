@@ -66,6 +66,7 @@ window, for checking it without screen access, and `VISUALS_CAPTURE_OUTPUT=<file
 the live output window (both after `VISUALS_CAPTURE_AFTER` seconds, 8 by default).
 `VISUALS_FX='[{"kind":"mirror","mode":"quad"}]'` sends those live actions (effects,
 hold…) 5 s after start (`VISUALS_FX_AFTER`), to check effects in a capture.
+`VISUALS_WINDOW_SIZE=WxH` (e.g. `800x900`) opens the main window at that size, to check a layout.
 
 **Agents always run the app headless** (`VISUALS_HEADLESS=1`), from the first run on: the
 owner is using the screen. Headless, the app has no Dock icon or menu bar, never becomes
