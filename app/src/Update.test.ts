@@ -1,5 +1,10 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { afterCheck, day } from './Update.tsx';
+import { afterCheck, day, Notes } from './Update.tsx';
+import { blocks, inlines } from './notes.ts';
+
+const html = (notes: string) => renderToStaticMarkup(createElement(Notes, { notes }));
 
 const update = { version: '0.3.1', notes: 'Faster previews.', date: '2026-10-08 6:00:00.0 +00:00:00' };
 
@@ -30,5 +35,85 @@ describe('day', () => {
   it('is null without a date it can read', () => {
     expect(day(null)).toBeNull();
     expect(day('yesterday')).toBeNull();
+  });
+});
+
+describe('release notes', () => {
+  it('parts paragraphs on blank lines and joins the lines of one', () => {
+    expect(blocks('First line\nsame paragraph.\n\nSecond.')).toEqual([
+      { kind: 'paragraph', children: [{ kind: 'text', text: 'First line same paragraph.' }] },
+      { kind: 'paragraph', children: [{ kind: 'text', text: 'Second.' }] },
+    ]);
+  });
+
+  it('makes lists of - and * lines, a paragraph before them kept apart', () => {
+    expect(blocks('New:\n- one\n* two\n  carried on\n\nAfter.')).toEqual([
+      { kind: 'paragraph', children: [{ kind: 'text', text: 'New:' }] },
+      { kind: 'list', items: [[{ kind: 'text', text: 'one' }], [{ kind: 'text', text: 'two carried on' }]] },
+      { kind: 'paragraph', children: [{ kind: 'text', text: 'After.' }] },
+    ]);
+  });
+
+  it('reads headings, and Windows line ends', () => {
+    expect(blocks('## Fixes\r\n- a')).toEqual([
+      { kind: 'heading', children: [{ kind: 'text', text: 'Fixes' }] },
+      { kind: 'list', items: [[{ kind: 'text', text: 'a' }]] },
+    ]);
+  });
+
+  it('reads bold, code and links', () => {
+    expect(inlines('**Faster** `bench` [notes](https://example.com/a) and https://example.com/b.')).toEqual([
+      { kind: 'bold', children: [{ kind: 'text', text: 'Faster' }] },
+      { kind: 'text', text: ' ' },
+      { kind: 'code', text: 'bench' },
+      { kind: 'text', text: ' ' },
+      { kind: 'link', text: 'notes', href: 'https://example.com/a' },
+      { kind: 'text', text: ' and ' },
+      { kind: 'link', text: 'https://example.com/b', href: 'https://example.com/b' },
+      { kind: 'text', text: '.' },
+    ]);
+  });
+
+  it('strips a heading’s closing hashes', () => {
+    expect(blocks('## Fixes ##  ')).toEqual([{ kind: 'heading', children: [{ kind: 'text', text: 'Fixes' }] }]);
+  });
+
+  it('renders hostile notes quickly', () => {
+    const hostile = [
+      '# a' + ' '.repeat(2000) + 'b',
+      '# a' + ' '.repeat(20000) + '#'.repeat(20000) + ' x',
+      '[a]('.repeat(40000),
+      '['.repeat(100000),
+      '[a'.repeat(50000),
+      '`'.repeat(100000),
+      '**'.repeat(50000) + 'x',
+      'https://'.repeat(20000),
+      'https://' + 'a.'.repeat(50000),
+    ];
+    for (const notes of hostile) {
+      const start = performance.now();
+      blocks(notes);
+      expect(performance.now() - start).toBeLessThan(500);
+    }
+  });
+
+  it('keeps links that are not web links as text', () => {
+    expect(inlines('[click](javascript:alert)')).toEqual([{ kind: 'text', text: '[click](javascript:alert)' }]);
+    expect(inlines('[file](file:///etc/passwd)')).toEqual([{ kind: 'text', text: '[file](file:///etc/passwd)' }]);
+  });
+
+  it('draws them as HTML', () => {
+    expect(html('Hi **there**.\n\n- `a`\n- [b](https://example.com)')).toBe(
+      '<p>Hi <strong>there</strong>.</p><ul><li><code>a</code></li><li><a href="https://example.com" title="https://example.com">b</a></li></ul>',
+    );
+  });
+
+  it('escapes markup in the notes rather than drawing it', () => {
+    const out = html('<img src=x onerror=alert(1)> **<b>bold</b>** `<script>`\n\n[<i>x</i>](https://example.com/"onmouseover="alert(1))');
+    expect(out).not.toMatch(/<img|<b>|<script|<i>/);
+    expect(out).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(out).toContain('<strong>&lt;b&gt;bold&lt;/b&gt;</strong>');
+    expect(out).toContain('<code>&lt;script&gt;</code>');
+    expect(out).toContain('href="https://example.com/&quot;onmouseover=&quot;alert(1"');
   });
 });

@@ -5,6 +5,10 @@
 //! turning it on in System Settings calms a show that is already playing.
 //! A damaged `access.json` fails safe: motion is reduced, and the file is moved
 //! aside and said as [`crate::settings`] does for every settings file.
+//!
+//! `access.json` also keeps whether "I understand" was chosen on the flashing
+//! warning, so it is asked once. A file from before it was kept reads as not
+//! chosen, and so does a damaged one: the warning shows again.
 
 use crate::settings;
 use serde::{Deserialize, Serialize};
@@ -22,10 +26,13 @@ pub struct Motion {
     pub system: bool,
 }
 
-/// The choice kept in [`FILE`]: `null` follows macOS.
+/// What's kept in [`FILE`]: the choice (`null` follows macOS), and whether the
+/// flashing warning's "I understand" was chosen (missing in older files: not yet).
 #[derive(Serialize, Deserialize, Default, Debug, PartialEq)]
 struct Kept {
     reduce: Option<bool>,
+    #[serde(default)]
+    flash_warning_understood: bool,
 }
 
 const FILE: &str = "access.json";
@@ -36,11 +43,13 @@ struct State {
     choice: Mutex<Option<bool>>,
     /// What the render thread reads every refresh, through [`reduced`].
     reduced: AtomicBool,
+    /// "I understand" chosen on the flashing warning. Read from [`FILE`] at [`start`].
+    understood: AtomicBool,
 }
 
 impl State {
     const fn new() -> State {
-        State { choice: Mutex::new(None), reduced: AtomicBool::new(false) }
+        State { choice: Mutex::new(None), reduced: AtomicBool::new(false), understood: AtomicBool::new(false) }
     }
 
     /// Work out what's in effect from the choice (changed first by `change`, if
@@ -106,25 +115,57 @@ pub fn reduced_motion() -> Motion {
 /// couldn't be kept, the error says so (and the settings' problems too).
 #[tauri::command]
 pub fn reduced_motion_set(on: Option<bool>) -> Result<Motion, String> {
-    // One choice at a time, so the file ends with the one in force.
-    static SETTING: Mutex<()> = Mutex::new(());
     let _one = SETTING.lock().unwrap_or_else(|e| e.into_inner());
     let motion = update_with(Some(on));
-    if !settings::save_json(FILE, &Kept { reduce: on }) {
+    if !keep(on) {
         return Err(NOT_KEPT.into());
     }
     Ok(motion)
 }
 
+/// One change to [`FILE`] at a time, so the file ends with what's in force.
+static SETTING: Mutex<()> = Mutex::new(());
+
+/// Write [`FILE`]: the choice `reduce`, and the flashing warning's answer in force.
+/// Call it holding [`SETTING`].
+fn keep(reduce: Option<bool>) -> bool {
+    settings::save_json(FILE, &Kept { reduce, flash_warning_understood: STATE.understood.load(Ordering::Relaxed) })
+}
+
 /// What [`reduced_motion_set`] says when the choice couldn't be kept.
 const NOT_KEPT: &str = "Couldn't save the reduced motion setting; it is in force until visual[flow] quits.";
+
+/// Whether "I understand" was chosen on the flashing warning, at this launch or one before.
+#[tauri::command]
+pub fn flash_warning_understood() -> bool {
+    STATE.understood.load(Ordering::Relaxed)
+}
+
+/// "I understand" was chosen on the flashing warning: kept for every launch
+/// after. It holds until visual[flow] quits even if it couldn't be kept, which
+/// the error says.
+#[tauri::command]
+pub fn flash_warning_understand() -> Result<(), String> {
+    let _one = SETTING.lock().unwrap_or_else(|e| e.into_inner());
+    STATE.understood.store(true, Ordering::Relaxed);
+    let choice = *STATE.choice.lock().unwrap_or_else(|e| e.into_inner());
+    if !keep(choice) {
+        return Err(NOT_KEPT_WARNING.into());
+    }
+    Ok(())
+}
+
+/// What [`flash_warning_understand`] says when it couldn't be kept.
+const NOT_KEPT_WARNING: &str = "Couldn't save that you've read the flashing warning; it will be shown again at the next launch.";
 
 /// Called once at setup: reads the kept choice (a damaged file is moved aside
 /// and said, as every settings file is, and reduces motion) and macOS's
 /// setting, and keeps reading macOS's while the app runs.
 pub fn start(_handle: &AppHandle) {
     let found = settings::dir().join(FILE).exists();
-    update_with(Some(first_choice(settings::load::<Kept>(FILE), found)));
+    let kept = settings::load::<Kept>(FILE);
+    STATE.understood.store(kept.as_ref().is_some_and(|k| k.flash_warning_understood), Ordering::Relaxed);
+    update_with(Some(first_choice(kept, found)));
     let _ = std::thread::Builder::new().name("reduce-motion".into()).spawn(|| {
         loop {
             std::thread::sleep(POLL);
@@ -174,13 +215,23 @@ mod tests {
     #[test]
     fn the_kept_choice_reads_back_and_a_bad_file_fails_safe() {
         for on in [Some(true), Some(false), None] {
-            assert_eq!(first_choice(Some(Kept { reduce: on }), true), on);
+            assert_eq!(first_choice(Some(Kept { reduce: on, flash_warning_understood: false }), true), on);
         }
         assert_eq!(first_choice(None, false), None, "no file: follow macOS");
         assert_eq!(first_choice(None, true), Some(true), "a file that couldn't be read: reduce motion");
         // A versioned file reads as a choice; a damaged one doesn't (settings moves it aside).
-        assert_eq!(serde_json::from_str::<Kept>(r#"{"version":1,"reduce":false}"#).unwrap(), Kept { reduce: Some(false) });
+        assert_eq!(serde_json::from_str::<Kept>(r#"{"version":1,"reduce":false}"#).unwrap(), Kept { reduce: Some(false), flash_warning_understood: false });
         assert!(serde_json::from_str::<Kept>(r#"{"reduce":"yes"}"#).is_err());
+    }
+
+    #[test]
+    fn the_flashing_warnings_answer_is_kept_and_an_older_file_reads_as_not_yet() {
+        // A file from before the answer was kept: the choice reads, and the warning shows again.
+        assert_eq!(serde_json::from_str::<Kept>(r#"{"reduce":true}"#).unwrap(), Kept { reduce: Some(true), flash_warning_understood: false });
+        let kept = Kept { reduce: None, flash_warning_understood: true };
+        let json = serde_json::to_string(&kept).unwrap();
+        assert_eq!(json, r#"{"reduce":null,"flash_warning_understood":true}"#);
+        assert_eq!(serde_json::from_str::<Kept>(&json).unwrap(), kept);
     }
 
     #[test]

@@ -536,6 +536,12 @@ jobs:
   # rather than on the build. The feed never goes back: a tag older than the
   # one it holds (a patch to an older release, published after the next
   # one's candidate) leaves it be.
+  #
+  # Each run feeds the highest published candidate or final, not the tag that
+  # started it. GitHub keeps only one waiting run per concurrency group, so
+  # when several drafts are published in quick succession a run in the middle
+  # can be dropped; the run that does go reads every release published by
+  # then, so nothing is lost.
   beta:
     if: github.event_name == 'release'
     runs-on: ubuntu-24.04
@@ -547,15 +553,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          TAG: ${{ github.event.release.tag_name }}
-          RELEASE_URL: ${{ github.event.release.html_url }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
         run: |
           set -eux
-          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]]; then
-            echo "::notice::$TAG is neither a release nor a release candidate: the beta is left as it is."
+          release='^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$'
+          if [[ ! "$EVENT_TAG" =~ $release ]]; then
+            echo "::notice::$EVENT_TAG is neither a release nor a release candidate: the beta is left as it is."
             exit 0
           fi
-          version="${TAG#v}"
           # A version as numbers that sort: X Y Z, then the candidate, a final
           # coming after every candidate of its version.
           key() {
@@ -563,9 +568,25 @@ jobs:
             if [[ "$1" == *-rc.* ]]; then rc=${1##*-rc.}; fi
             printf '%s %s\n' "${core//./ }" "$rc"
           }
+          # The highest published candidate or final (drafts don't count), the
+          # one that started this run among them.
+          published=$(gh api "repos/$GH_REPO/releases" --paginate --jq '.[] | select(.draft | not) | .tag_name')
+          TAG=$(printf '%s\n' "$published" | while IFS= read -r tag; do
+            if [[ "$tag" =~ $release ]]; then printf '%s %s\n' "$(key "${tag#v}")" "$tag"; fi
+          done | sort -k1,1n -k2,2n -k3,3n -k4,4n | tail -n 1 | cut -d ' ' -f 5)
+          if [ -z "$TAG" ]; then
+            echo "::error::No published release or candidate found, though $EVENT_TAG was just published."
+            exit 1
+          fi
+          if [ "$TAG" != "$EVENT_TAG" ]; then
+            echo "::notice::$EVENT_TAG started this run; $TAG is the highest published, so the beta is fed that."
+          fi
+          version="${TAG#v}"
+          sha=$(gh api "repos/$GH_REPO/commits/$TAG" --jq .sha)
+          RELEASE_URL=$(gh release view "$TAG" --json url --jq .url)
           if ! gh release view beta > /dev/null 2>&1; then
             if ! gh api "repos/$GH_REPO/git/refs/tags/beta" > /dev/null 2>&1; then
-              gh api "repos/$GH_REPO/git/refs" -f ref=refs/tags/beta -f sha="$GITHUB_SHA"
+              gh api "repos/$GH_REPO/git/refs" -f ref=refs/tags/beta -f sha="$sha"
             fi
             gh release create beta --verify-tag --prerelease --latest=false \
               --title "Beta" --notes "Release candidates of visual[flow], and each release."
@@ -582,7 +603,7 @@ jobs:
           if [[ "$TAG" == *-rc.* ]]; then
             gh release download "$TAG" --pattern "visual-flow_${version}_aarch64.dmg" --output new/visual-flow-beta_aarch64.dmg
             gh release upload beta new/visual-flow-beta_aarch64.dmg --clobber
-            gh api -X PATCH "repos/$GH_REPO/git/refs/tags/beta" -f sha="$GITHUB_SHA" -F force=true
+            gh api -X PATCH "repos/$GH_REPO/git/refs/tags/beta" -f sha="$sha" -F force=true
           fi
           if gh release download "$TAG" --pattern latest.json --output new/latest.json; then
             gh release upload beta new/latest.json --clobber
