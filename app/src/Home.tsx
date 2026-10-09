@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import * as api from './api.ts';
 import type { Entry, LibraryChange, LibraryData, LibraryRow } from './api.ts';
@@ -54,8 +54,10 @@ function useNarrow(): boolean {
  * under its header; the Now Playing panel on the right with the big preview of
  * the preset playing, which can be closed; and the bottom bar with what plays,
  * ◀ ▶ R, what the app listens to, the panel's toggle and "go live". Under 900 px
- * the source list is a menu at the top of the main pane, the panel opens over
- * it, and the bar carries a small preview that opens it. Presets are dragged
+ * the source list is a menu at the top of the main pane, the panel, opened,
+ * takes the main pane's place, and the bar carries a small preview that opens
+ * it. Closing the panel puts focus on the bar's way back to it; opening it from
+ * the bar moves focus into it. Presets are dragged
  * from the library onto a playlist in the source list, and about within a
  * playlist's strip. `library` opens it on the library pane
  * (`VISUALS_VIEW=library`), as it opens anyway unless a playlist plays.
@@ -116,16 +118,27 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
     if (next.kind === 'list' && playlists.find((p) => p.id === next.id)?.kind === 'manual') setLastManual(next.id);
   };
 
-  // The Now Playing panel: open in a wide window as the viewer left it; over the main pane, and closed at first, in a narrow one.
+  // The Now Playing panel: open in a wide window as the viewer left it; in the main pane's place, and closed at first, in a narrow one.
   const narrow = useNarrow();
   const [panelWide, setPanelWide] = useState(() => remembered(PANEL_KEY, true));
-  const [panelNarrow, setPanelNarrow] = useState(false);
+  // `VITE_HOME_PANEL=1` (a dev run only) starts with it open in a narrow window too, for a headless capture of it.
+  const [panelNarrow, setPanelNarrow] = useState(() => import.meta.env.DEV && import.meta.env.VITE_HOME_PANEL === '1');
   const panel = narrow ? panelNarrow : panelWide;
-  const setPanel = (open: boolean) => {
+  // Where focus goes once the panel has opened or closed: into it, or to the bar's way back to it.
+  const focusAfter = useRef<'panel' | 'bar' | null>(null);
+  const setPanel = (open: boolean, focus: 'panel' | 'bar' | null = null) => {
+    focusAfter.current = focus;
     if (narrow) return setPanelNarrow(open);
     remember(PANEL_KEY, open);
     setPanelWide(open);
   };
+  useEffect(() => {
+    const to = focusAfter.current;
+    focusAfter.current = null;
+    if (to === 'panel') document.querySelector<HTMLElement>('.now-panel .now-close')?.focus();
+    // In a narrow window the bar's toggle is hidden: its small preview opens the panel instead.
+    else if (to === 'bar') document.querySelector<HTMLElement>(narrow ? '.home-bar-mini-button' : '.home-bar [aria-label="now playing panel"]')?.focus();
+  }, [panel, narrow]);
 
   const playing = deck.playlist;
   const step = useCallback(
@@ -256,7 +269,7 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
             playlists={lists?.playlists ?? null}
             onSet={setData}
             onAddTo={addTo}
-            onClose={() => setPanel(false)}
+            onClose={() => setPanel(false, 'bar')}
             error={panelError}
           />
         </div>
@@ -267,7 +280,8 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
         onStep={step}
         stepIn={playing ? ' in the playlist' : ''}
         panel={panel}
-        onPanel={() => setPanel(!panel)}
+        // The toggle keeps focus; the small preview, which goes as the panel opens, hands it to the panel.
+        onPanel={(from) => setPanel(!panel, from === 'mini' && !panel ? 'panel' : null)}
         mini={!panel}
         onLive={() => onMode('live', current?.path ?? null)}
         onAudioError={audioFailed}
@@ -354,6 +368,9 @@ export function stripTileSays(t: StripTile, place: number, playing: boolean, nex
   return [`${place}. ${t.name}`, playing && 'playing', next && 'next', t.missing && 'not in the library any more'].filter(Boolean).join(', ');
 }
 
+/** The strip's one-line tip: how to play from a preset, and, in a playlist you can reorder, how to move one and take it out. */
+export const stripTip = (reorderable: boolean): string => (reorderable ? 'Click a preset to play from there · drag it, or ⌥← ⌥→, to move it · ✕ takes it out' : 'Click a preset to play from there');
+
 interface PaneProps {
   list: Playlist;
   lists: Lists;
@@ -420,58 +437,60 @@ export function PlaylistPane({ list, lists, rows, played, dropping, onLists, onD
           )}
         </p>
       ) : (
-        <ol
-          className="home-strip"
-          aria-label={`${list.name}, in the order it plays`}
-          data-hint={reorderable ? 'click plays from there · drag, or ⌥← ⌥→, to move · ✕ takes it out' : 'click plays from there'}
-        >
-          {tiles.map((t, i) => {
-            const target = manual && t.index !== null ? itemTarget(list.id, t.index) : undefined;
-            const payload: Payload | null = reorderable && t.index !== null ? { kind: 'item', list: list.id, index: t.index, path: t.path, name: t.name, thumbnail: t.thumbnail } : null;
-            const open = () => (t.index !== null ? play(t.index) : api.open(t.path).catch(onError(`open ${t.name}`)));
-            return (
-              <li
-                key={t.key}
-                className="home-tile"
-                tabIndex={0}
-                aria-label={stripTileSays(t, i + 1, currentAt(t), nextAt(t))}
-                aria-current={currentAt(t) ? 'true' : undefined}
-                data-next={nextAt(t) ? '' : undefined}
-                data-missing={t.missing ? '' : undefined}
-                data-drop={reorderable ? target : undefined}
-                data-over={target && isOver(drag, target) ? (drag?.payload.kind === 'item' && drag.payload.list === list.id && drag.payload.index < (t.index ?? 0) ? 'after' : 'before') : undefined}
-                data-dragged={drag?.payload.kind === 'item' && drag.payload.list === list.id && drag.payload.index === t.index ? '' : undefined}
-                title={t.missing ? `Not in the library any more: ${t.path}` : `${t.name} — click to play from here`}
-                onClick={open}
-                onPointerDown={payload ? (e) => beginDrag(e, payload, dropping) : undefined}
-                onKeyDown={(e) => {
-                  const by = e.altKey && e.key === 'ArrowLeft' ? -1 : e.altKey && e.key === 'ArrowRight' ? 1 : 0;
-                  const to = by && reorderable && t.index !== null && e.target === e.currentTarget ? nudge(t.index, by, list.items.length) : null;
-                  if (to === null) return onActivate(open)(e);
-                  e.preventDefault();
-                  e.stopPropagation();
-                  const strip = e.currentTarget.parentElement;
-                  run(pl.moveItem(list.id, t.index!, to), `move ${t.name}`).then(() => requestAnimationFrame(() => (strip?.children[tileFocus(to, tiles.length)] as HTMLElement | undefined)?.focus()));
-                }}
-              >
-                <div className="home-thumb">
-                  {t.thumbnail ? <img src={t.thumbnail} alt="" loading="lazy" decoding="async" draggable={false} /> : <span className="home-thumb-none">{t.name}</span>}
-                  <b className="home-tile-n">{i + 1}</b>
-                  {nextAt(t) && <span className="home-tile-next">next</span>}
-                </div>
-                <span className="home-tile-name">{t.name}</span>
-                {manual && t.index !== null && (
-                  <span className="home-tile-tools" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
-                    <Button tone="quiet" onPress={() => run(pl.removeItem(list.id, t.index!), `take ${t.name} out`)} label={`Take ${t.name} out of ${list.name}`} title="Take it out of the playlist">
-                      ✕
-                    </Button>
-                  </span>
-                )}
-              </li>
-            );
-          })}
-          {total > tiles.length && <li className="home-more">and {plural(total - tiles.length, 'more')}</li>}
-        </ol>
+        <>
+          {/* What the hint footer used to say about the strip, kept where the strip is. */}
+          <p className="home-strip-tip">{stripTip(reorderable)}</p>
+          <ol className="home-strip" aria-label={`${list.name}, in the order it plays`} data-hint={stripTip(reorderable)}>
+            {tiles.map((t, i) => {
+              const target = manual && t.index !== null ? itemTarget(list.id, t.index) : undefined;
+              const payload: Payload | null = reorderable && t.index !== null ? { kind: 'item', list: list.id, index: t.index, path: t.path, name: t.name, thumbnail: t.thumbnail } : null;
+              const open = () => (t.index !== null ? play(t.index) : api.open(t.path).catch(onError(`open ${t.name}`)));
+              return (
+                <li
+                  key={t.key}
+                  className="home-tile"
+                  tabIndex={0}
+                  aria-label={stripTileSays(t, i + 1, currentAt(t), nextAt(t))}
+                  aria-current={currentAt(t) ? 'true' : undefined}
+                  data-next={nextAt(t) ? '' : undefined}
+                  data-missing={t.missing ? '' : undefined}
+                  data-drop={reorderable ? target : undefined}
+                  data-over={target && isOver(drag, target) ? (drag?.payload.kind === 'item' && drag.payload.list === list.id && drag.payload.index < (t.index ?? 0) ? 'after' : 'before') : undefined}
+                  data-dragged={drag?.payload.kind === 'item' && drag.payload.list === list.id && drag.payload.index === t.index ? '' : undefined}
+                  title={t.missing ? `Not in the library any more: ${t.path}` : `${t.name} — click to play from here`}
+                  onClick={open}
+                  onPointerDown={payload ? (e) => beginDrag(e, payload, dropping) : undefined}
+                  onKeyDown={(e) => {
+                    const by = e.altKey && e.key === 'ArrowLeft' ? -1 : e.altKey && e.key === 'ArrowRight' ? 1 : 0;
+                    const to = by && reorderable && t.index !== null && e.target === e.currentTarget ? nudge(t.index, by, list.items.length) : null;
+                    if (to === null) return onActivate(open)(e);
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const strip = e.currentTarget.parentElement;
+                    run(pl.moveItem(list.id, t.index!, to), `move ${t.name}`).then(() =>
+                      requestAnimationFrame(() => (strip?.children[tileFocus(to, tiles.length)] as HTMLElement | undefined)?.focus()),
+                    );
+                  }}
+                >
+                  <div className="home-thumb">
+                    {t.thumbnail ? <img src={t.thumbnail} alt="" loading="lazy" decoding="async" draggable={false} /> : <span className="home-thumb-none">{t.name}</span>}
+                    <b className="home-tile-n">{i + 1}</b>
+                    {nextAt(t) && <span className="home-tile-next">next</span>}
+                  </div>
+                  <span className="home-tile-name">{t.name}</span>
+                  {manual && t.index !== null && (
+                    <span className="home-tile-tools" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+                      <Button tone="quiet" onPress={() => run(pl.removeItem(list.id, t.index!), `take ${t.name} out`)} label={`Take ${t.name} out of ${list.name}`} title="Take it out of the playlist">
+                        ✕
+                      </Button>
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+            {total > tiles.length && <li className="home-more">and {plural(total - tiles.length, 'more')}</li>}
+          </ol>
+        </>
       )}
     </div>
   );

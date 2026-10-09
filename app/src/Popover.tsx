@@ -4,7 +4,8 @@ import './popover.css';
 /**
  * A button that opens a small panel under it (the home's "how it plays ▾",
  * "···", "+ playlist ▾" and the narrow window's source menu). Esc or a press
- * outside closes it, and Esc puts focus back on the button. `children` is the
+ * outside closes it; Esc, and a choice that closes it, put focus back on the
+ * button (something the choice opens, such as a rename box, may take it after). `children` is the
  * panel's contents, or a function of `close` for a menu whose items close it.
  * `role` is the panel's: `dialog` for controls, `menu` for a list of actions
  * (each item then a `menuitem`). `align` hangs the panel from the button's left
@@ -56,7 +57,11 @@ export function Popover({
       window.removeEventListener('pointerdown', press, { capture: true });
     };
   }, [open]);
-  const close = () => setOpen(false);
+  // A choice made in the panel (a menu item, a source picked) closes it and gives focus back to the button, as Esc does; a press elsewhere leaves focus where it went.
+  const close = () => {
+    setOpen(false);
+    button.current?.focus();
+  };
   return (
     <span className={className ? `vf-pop ${className}` : 'vf-pop'} ref={root}>
       <button

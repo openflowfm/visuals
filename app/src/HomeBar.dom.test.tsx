@@ -74,6 +74,7 @@ describe('HomeBar', () => {
     expect(toggle.getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(toggle);
     expect(p.onPanel).toHaveBeenCalledTimes(1);
+    expect(p.onPanel).toHaveBeenCalledWith('toggle');
     fireEvent.click(screen.getByRole('button', { name: 'go live' }));
     expect(p.onLive).toHaveBeenCalledTimes(1);
   });
@@ -87,6 +88,7 @@ describe('HomeBar', () => {
     expect(screen.getByRole('img')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'show the now playing panel' }));
     expect(p.onPanel).toHaveBeenCalledTimes(1);
+    expect(p.onPanel).toHaveBeenCalledWith('mini');
   });
 
   it.each([1440, 800])('paints nothing behind the small preview at %ipx', async (width) => {

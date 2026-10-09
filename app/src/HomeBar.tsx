@@ -15,8 +15,9 @@ export interface HomeBarProps {
   stepIn: string;
   /** The Now Playing panel is open. */
   panel: boolean;
-  onPanel(): void;
-  /** Show the small preview at the bar's left (the panel, which has the big one, is closed). Clicking it opens the panel (onPanel). */
+  /** Show or hide the panel; `from` says which control asked: the toggle, or the small preview (which only opens it, and hands focus to it). */
+  onPanel(from: 'toggle' | 'mini'): void;
+  /** Show the small preview at the bar's left (the panel, which has the big one, is closed). Clicking it opens the panel (onPanel('mini')). */
   mini: boolean;
   onLive(): void;
   onAudioError(e: unknown): void;
@@ -33,7 +34,7 @@ export function HomeBar({ name, from, onStep, stepIn, panel, onPanel, mini, onLi
   return (
     <div className="home-bar" role="region" aria-label="now playing" data-mini={mini ? '' : undefined}>
       {mini && (
-        <button type="button" className="home-bar-mini-button" aria-label="show the now playing panel" title="Show the now playing panel" onClick={onPanel}>
+        <button type="button" className="home-bar-mini-button" aria-label="show the now playing panel" title="Show the now playing panel" onClick={() => onPanel('mini')}>
           <Preview className="home-bar-mini" />
         </button>
       )}
@@ -69,7 +70,7 @@ export function HomeBar({ name, from, onStep, stepIn, panel, onPanel, mini, onLi
       <div className="home-bar-right">
         <SourcePicker onError={onAudioError} channels="none" width={180} />
         <FrameRate slowOnly />
-        <button type="button" className="home-bar-panel" aria-label="now playing panel" aria-pressed={panel} title="Show or hide the now playing panel" onClick={onPanel}>
+        <button type="button" className="home-bar-panel" aria-label="now playing panel" aria-pressed={panel} title="Show or hide the now playing panel" onClick={() => onPanel('toggle')}>
           ▣
         </button>
         <button type="button" className="home-bar-live" title="Live: the output full screen on a display, with performing controls" onClick={onLive}>

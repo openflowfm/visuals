@@ -3,7 +3,7 @@
    library's grid or a playlist's strip under its header (PlaylistHead.tsx); the
    Now Playing panel (NowPanel.tsx) on the right, which can be closed; and the
    bottom bar (HomeBar.tsx). Under 900px the source list is a menu at the top of
-   the main pane, and the panel opens over the main pane. The panel and the bar
+   the main pane, and the panel, opened, takes the main pane's place. The panel and the bar
    carry the preview, a hole onto the native view under the page: they paint
    themselves with its shadow, so nothing here may paint behind them. Rules hang
    off `.home`, which outranks app.css's own. */
@@ -135,6 +135,18 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
+}
+
+/* The strip's tip: how to play from it and reorder it, quietly over it. */
+.home .home-strip-tip {
+  flex: none;
+  margin: 0;
+  padding: 0 16px 8px;
+  color: var(--caption);
+  font-size: var(--text-control);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 /* The strip: the playlist's presets as thumbnails, in the order they play. */
@@ -324,8 +336,10 @@
 }
 
 /* Under 900px (down to the 560px minimum, decision 63): the source list is a
-   menu at the top of the main pane, and the panel, closed at first, opens over
-   the main pane from the right (the bar's small preview opens it). */
+   menu at the top of the main pane, and the panel, closed at first, takes the
+   main pane's place when opened (the bar's small preview opens it, ✕ puts the
+   main pane back). The main pane isn't drawn while it is open: nothing may
+   paint under the preview (#163). */
 @media (max-width: 899px) {
   .app.home,
   .app.home[data-panel] {
@@ -342,10 +356,9 @@
   }
   .home .home-now {
     grid-column: 1;
-    z-index: 20;
-    justify-self: end;
-    width: min(340px, 100%);
-    box-shadow: -8px 0 24px rgb(0 0 0 / 0.45);
+  }
+  .app.home[data-panel] main.home-main {
+    display: none;
   }
   .home .home-strip {
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
