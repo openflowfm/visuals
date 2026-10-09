@@ -9,7 +9,7 @@ report as a page.
 ```sh
 cd compare
 npm ci && npx playwright install chromium     # once
-npm run compare -- <presets or folders> [--sample N] [--frames 240] [--captures 8] \
+npm run compare -- <presets or folders> [--sample N] [--frames 240] [--captures 8 | --every N] \
                    [--size 640x360] [--refresh 60] [--seed 1] [--min-score N] [--timeout 30]
 npm run compare -- --serve                     # the last report as a page, with approve / reject / note
 npm run calibrate [-- --seed N --count N --rerender]
