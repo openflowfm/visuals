@@ -318,6 +318,11 @@ fn fold_tempo(bpm: f64) -> f64 {
 fn paced(shown: &mut Option<Instant>, start: Instant, every: f64) -> bool {
     /// How far apart two readings of one start may be (rounding), and still be the same flash.
     const SAME: f64 = 0.001;
+    /// How much sooner than `every` the next one may start and still show: Link re-anchors
+    /// the beat on each frame, so a flash due one interval on can land a few ms early.
+    /// A few ms, not a fraction of `every`: 10% lets a jumpy session or fast taps
+    /// through at 450 ms reduced, over the two-a-second cap.
+    const SLACK: f64 = 0.005;
     let Some(last) = *shown else {
         *shown = Some(start);
         return true;
@@ -327,7 +332,7 @@ fn paced(shown: &mut Option<Instant>, start: Instant, every: f64) -> bool {
     if after.max(before) < SAME {
         return true;
     }
-    if after >= every - SAME {
+    if after >= every - SLACK {
         *shown = Some(start);
         return true;
     }
@@ -482,8 +487,8 @@ impl Fx {
 
     /// How long a beat is for the strobe and punch-on-beat: of the tempo halved
     /// or doubled into [`TEMPO_MIN`]–[`TEMPO_MAX`] ([`fold_tempo`]), so a Link
-    /// session at 999 bpm keeps time at a quarter of it (249.75 → 124.9 bpm),
-    /// on every fourth of its beats.
+    /// session at 999 bpm keeps time at an eighth of it (halved three times, to
+    /// 124.875 bpm), on every eighth of its beats.
     fn beat_length(&self) -> f64 {
         60.0 / fold_tempo(self.bpm)
     }
@@ -498,7 +503,7 @@ impl Fx {
     pub fn follow(&mut self, bpm: f64, beat: f64, now: Instant) {
         self.linked = true;
         self.bpm = bpm.clamp(20.0, 999.0);
-        // Session beats to one of ours: 4 at 999 bpm, ½ at 20.
+        // Session beats to one of ours: 8 at 999 bpm, ½ at 20.
         let per = self.bpm / fold_tempo(self.bpm);
         let back = (beat / per).rem_euclid(1.0) * self.beat_length();
         self.timing.anchor = now.checked_sub(Duration::from_secs_f64(back)).unwrap_or(now);
@@ -1162,6 +1167,24 @@ mod tests {
                 assert!(flashes.len() as f64 <= 4.0 * 8.0 + 1.0, "{name} {sync:?}: {} in 4 s", flashes.len());
             }
         }
+    }
+
+    #[test]
+    fn link_jitter_does_not_drop_flashes_due_one_interval_on() {
+        // 120 bpm, four flashes a beat: eight a second, right at the cap. Link's
+        // frames, ten a second, re-anchor the beat a few ms off each time.
+        let mut fx = fx();
+        act(&mut fx, FxAction::StrobeRate { rate: 4.0 }, 0.0);
+        act(&mut fx, FxAction::Strobe { on: Some(true) }, 0.0);
+        let (flashes, ..) = run(&mut fx, 4.0, false, |fx, s| {
+            let ms = (s * 1000.0).round() as u64;
+            if ms % 100 == 0 {
+                let jitter = [0.002, -0.002, 0.001, -0.001][(ms / 100 % 4) as usize];
+                fx.follow(120.0, (s + jitter) * 2.0, t(s));
+            }
+        });
+        assert!(flashes.len() >= 31, "eight a second: {} in 4 s {flashes:?}", flashes.len());
+        assert!(flashes.len() <= 33, "{} in 4 s", flashes.len());
     }
 
     #[test]

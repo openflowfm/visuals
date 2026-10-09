@@ -558,6 +558,16 @@ export const warningOwed = (store: WarningStore = kept): boolean => store.getIte
 export const warningUnderstood = (store: WarningStore = kept): void => store.setItem(WARNING_KEY, 'seen');
 
 /**
+ * Whether a first run done before the warning existed owes it: the first run is
+ * done (`first` false) and the warning has no state yet. Marks it owed if so. A
+ * fresh install (`first` true) goes through the welcome's warning step instead.
+ */
+export function owedFromBefore(first: boolean, store: WarningStore = kept): boolean {
+  if (!first && store.getItem(WARNING_KEY) === null) store.setItem(WARNING_KEY, 'owed');
+  return !first && warningOwed(store);
+}
+
+/**
  * The welcome flow ended, finished or skipped; `understood` when its warning's
  * "I understand" was pressed. Unless it was, then or ever before, the warning is
  * owed: `FlashWarning` shows it before anything else can be done.
@@ -613,6 +623,15 @@ export function FlashWarningDialog({ onClose, onUnderstood, required = false }: 
  */
 export function FlashWarning({ store = kept }: { store?: WarningStore }) {
   const [open, setOpen] = useState<'owed' | 'asked' | null>(() => (warningOwed(store) ? 'owed' : null));
+  useEffect(() => {
+    // A first run finished before the warning existed is owed it once.
+    api.firstRun().then(
+      (first) => {
+        if (owedFromBefore(first, store)) setOpen('owed');
+      },
+      () => {},
+    );
+  }, [store]);
   useEffect(() => {
     const show = () => setOpen((o) => o ?? 'asked');
     window.addEventListener(FLASH_WARNING, show);

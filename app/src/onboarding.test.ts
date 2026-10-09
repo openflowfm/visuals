@@ -11,6 +11,7 @@ import {
   REDUCE_HINT,
   WARNING_KEY,
   WARNING_TEXT,
+  owedFromBefore,
   warningOwed,
   warningUnderstood,
   welcomeEnded,
@@ -205,6 +206,23 @@ describe('the flashing-lights warning, when the first run is skipped', () => {
     const store = memory();
     welcomeEnded(true, store);
     expect(warningOwed(store)).toBe(false);
+    expect(shown(store)).toBe('');
+  });
+
+  it('is owed once to a first run done before the warning existed', () => {
+    const store = memory();
+    // first_run.json says done, and nothing kept about the warning.
+    expect(owedFromBefore(false, store)).toBe(true);
+    expect(shown(store)).toContain('role="dialog"');
+    warningUnderstood(store);
+    expect(owedFromBefore(false, store)).toBe(false);
+    expect(shown(store)).toBe('');
+  });
+
+  it('is not owed on a fresh install: the welcome shows it', () => {
+    const store = memory();
+    expect(owedFromBefore(true, store)).toBe(false);
+    expect(store.getItem(WARNING_KEY)).toBe(null);
     expect(shown(store)).toBe('');
   });
 
