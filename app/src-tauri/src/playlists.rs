@@ -26,7 +26,8 @@
 //! the folder is reorganised (`crate::userlib` looks for it). Version 1 (items
 //! as plain paths, no settings) is read and moved to version 2 on open, its
 //! playlists getting the default settings with auto-advance off
-//! (`"change": { "unit": "off", "every": 30 }`) so they play as they did in 0.2, the
+//! (written `"change": { "unit": "seconds", "every": 30, "auto": false }`, which
+//! older builds read as seconds; `"unit": "off"` is read too) so they play as they did in 0.2, the
 //! old file kept beside it as `playlists.json.v1` (numbered, `.v1.1`…, when that
 //! is taken; until the backup is written, version 2 isn't). A file that won't parse, or
 //! of a newer version, is moved aside (`.bad`, `.bad.1`, …) as
@@ -40,9 +41,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 /// The file format's version.
 pub const VERSION: u32 = 2;
 
-/// When a playlist moves on to its next preset.
+/// When a playlist moves on to its next preset. The page sees `off` as its own
+/// unit; files (`playlists.json` and shared playlists) write it as
+/// `{ "unit": "seconds", "every": …, "auto": false }` ([`stored`]), which builds
+/// from before `off` read as seconds (they ignore `auto`) rather than failing on.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
-#[serde(tag = "unit", rename_all = "snake_case")]
+#[serde(tag = "unit", rename_all = "snake_case", from = "ChangeIn")]
 pub enum Change {
     /// Every this many seconds (auto-advance), 1 to 3600.
     Seconds { every: f64 },
@@ -51,6 +55,56 @@ pub enum Change {
     /// Never by itself: auto-advance off, as a playlist from 0.2 (version 1) plays.
     /// `every` is the seconds it goes back to when turned on (1 to 3600).
     Off { every: f64 },
+}
+
+/// [`Change`] as read: seconds with `"auto": false` is off.
+#[derive(Deserialize)]
+#[serde(tag = "unit", rename_all = "snake_case")]
+enum ChangeIn {
+    Seconds {
+        every: f64,
+        #[serde(default = "yes")]
+        auto: bool,
+    },
+    Bars {
+        every: u32,
+    },
+    Off {
+        every: f64,
+    },
+}
+
+fn yes() -> bool {
+    true
+}
+
+impl From<ChangeIn> for Change {
+    fn from(c: ChangeIn) -> Self {
+        match c {
+            ChangeIn::Seconds { every, auto: true } => Change::Seconds { every },
+            ChangeIn::Seconds { every, auto: false } | ChangeIn::Off { every } => Change::Off { every },
+            ChangeIn::Bars { every } => Change::Bars { every },
+        }
+    }
+}
+
+/// [`Settings`] as files write them: an off [`Change`] as seconds with
+/// `"auto": false`, so an older build reads the file (and at worst auto-advances).
+mod stored {
+    use super::{Change, Settings};
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<S: Serializer>(s: &Settings, ser: S) -> Result<S::Ok, S::Error> {
+        let mut v = serde_json::to_value(s).map_err(serde::ser::Error::custom)?;
+        if let Change::Off { every } = s.change {
+            v["change"] = serde_json::json!({ "unit": "seconds", "every": every, "auto": false });
+        }
+        v.serialize(ser)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Settings, D::Error> {
+        Settings::deserialize(d)
+    }
 }
 
 /// The order a playlist plays in.
@@ -180,7 +234,7 @@ pub struct Playlist {
     /// A smart playlist's filter.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub query: Option<LibraryQuery>,
-    #[serde(default)]
+    #[serde(default, with = "stored")]
     pub settings: Settings,
     /// A manual playlist's items, in order. The same preset may appear more than once.
     #[serde(default)]
@@ -245,7 +299,7 @@ pub struct Shared {
     pub kind: Kind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub query: Option<LibraryQuery>,
-    #[serde(default)]
+    #[serde(default, with = "stored")]
     pub settings: Settings,
     #[serde(default)]
     pub items: Vec<SharedItem>,
@@ -727,12 +781,47 @@ mod tests {
         let again = Store::open(dir.join("p.json"), dir.join("lib"));
         assert!(std::fs::read_to_string(dir.join("p.json")).unwrap().contains("\"version\": 2"));
         assert_eq!(again.lists, s.lists);
-        assert!(std::fs::read_to_string(dir.join("p.json")).unwrap().contains("\"unit\": \"off\""));
+        assert!(std::fs::read_to_string(dir.join("p.json")).unwrap().contains("\"auto\": false"));
         // A playlist made now still changes every 30 s with a 2 s crossfade.
         let new = s.create("New").unwrap();
         let new = s.find(&new).unwrap().settings;
         assert_eq!((new.change, new.transition), (Change::Seconds { every: 30.0 }, 2.0));
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn an_off_playlist_is_written_so_older_builds_read_it() {
+        // `Change` as main (the 0.5 nightly) has it: no `off`.
+        #[derive(Deserialize, Debug, PartialEq)]
+        #[serde(tag = "unit", rename_all = "snake_case")]
+        enum OldChange {
+            Seconds { every: f64 },
+            Bars { every: u32 },
+        }
+        #[derive(Deserialize)]
+        struct OldSettings {
+            change: OldChange,
+        }
+        #[derive(Deserialize)]
+        struct OldPlaylist {
+            settings: OldSettings,
+        }
+        #[derive(Deserialize)]
+        struct OldFile {
+            playlists: Vec<OldPlaylist>,
+        }
+        let mut l = Playlist::manual("1", "Set", Vec::new());
+        l.settings = Settings::from_v1();
+        let text = serde_json::to_string_pretty(&File { version: VERSION, playlists: vec![l.clone()] }).unwrap();
+        let old: OldFile = serde_json::from_str(&text).unwrap();
+        assert_eq!(old.playlists[0].settings.change, OldChange::Seconds { every: 30.0 });
+        // Read back here, it is still off; and a file with `"unit": "off"` still reads.
+        let back: File = serde_json::from_str(&text).unwrap();
+        assert_eq!(back.playlists[0].settings.change, Change::Off { every: 30.0 });
+        let written_off: Playlist = serde_json::from_str(r#"{"id":"1","name":"Set","settings":{"change":{"unit":"off","every":12}}}"#).unwrap();
+        assert_eq!(written_off.settings.change, Change::Off { every: 12.0 });
+        // The page still sees `off` as its own unit.
+        assert_eq!(serde_json::to_value(Change::Off { every: 30.0 }).unwrap(), serde_json::json!({ "unit": "off", "every": 30.0 }));
     }
 
     #[test]

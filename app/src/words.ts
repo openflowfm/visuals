@@ -10,6 +10,9 @@ export const WORDS = {
   'the one': 'bar start',
   pack: 'full library',
   'auto-advance': 'move on by itself',
+  /* A playlist with auto-advance off (as one from 0.2 plays): the choice's name, and what it means. */
+  'auto-advance off': 'off',
+  'auto-advance off hint': 'Stays on each preset until you move on; pick s or bars to move on by itself again',
   'audio input': 'listen to',
   'process tap': 'your DAW',
   'Ableton Link': 'keep in time with Ableton',

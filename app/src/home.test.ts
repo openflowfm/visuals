@@ -357,4 +357,13 @@ describe('the home, read aloud', () => {
     const sliders = [...html.matchAll(/<div[^>]*role="slider"[^>]*>/g)].map((m) => /aria-label="([^"]*)"/.exec(m[0])?.[1]);
     expect(sliders).toEqual(['move on by itself every, in seconds', 'crossfade', 'speed', 'trails', 'colour shift']);
   });
+
+  it('shows a playlist with auto-advance off as off, and turning it back to seconds keeps its 30 s', () => {
+    const off = changeUnit(DEFAULT_SETTINGS, 'off');
+    const html = renderToStaticMarkup(createElement(SettingsBar, { settings: off, differs: [], onChange: none }));
+    expect(html).not.toContain('30 s');
+    expect(html).toContain('Stays on each preset until you move on');
+    expect(html).toMatch(/aria-checked="true"[^>]*>off</);
+    expect(changeUnit(off, 'seconds').change).toEqual({ unit: 'seconds', every: 30 });
+  });
 });
