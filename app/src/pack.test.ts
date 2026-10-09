@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { authorsOf, credits, megabytes, packAction, type PackStatus } from './pack.ts';
+import { authorsOf, credits, megabytes, packAction, TAKEDOWN, type PackStatus } from './pack.ts';
+
+describe('takedown', () => {
+  it('goes to the presets repo, where the pack lives', () => {
+    expect(TAKEDOWN).toBe('https://github.com/openflowfm/visual-presets/issues/new?title=Preset%20takedown');
+  });
+});
 
 const status = (s: Partial<PackStatus> = {}): PackStatus => ({
   starter: 250,

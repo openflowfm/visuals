@@ -55,7 +55,7 @@ export const add = (items: Added[]) => invoke<number>('pack_add', { items });
 /** projectM's "Cream of the Crop", the pack the full library comes from. */
 export const PACK_PAGE = 'https://github.com/projectM-visualizer/presets-cream-of-the-crop';
 /** Where an author asks for their presets to be taken out. */
-export const TAKEDOWN = 'https://github.com/openflowfm/visuals/issues/new?title=Preset%20takedown';
+export const TAKEDOWN = 'https://github.com/openflowfm/visual-presets/issues/new?title=Preset%20takedown';
 
 const count = (n: number) => n.toLocaleString('en-US');
 
