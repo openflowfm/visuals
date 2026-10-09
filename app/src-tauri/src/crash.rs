@@ -687,6 +687,21 @@ fn ends_path(c: char) -> bool {
     c.is_whitespace() || "\"'`()<>,;{}".contains(c)
 }
 
+/// Where a preset's path at the start of `rest` ends: just after its `.milk`. Its folders
+/// end like any path's, but its file name may hold `'`, `,`, `;`, `&` and brackets, as
+/// MilkDrop names often do (`Rovastar's Fav.milk`, `Swirl (remix).milk`); not quotes,
+/// `<>{}`, a line break, `: ` or the start of another path.
+fn milk_path_end(rest: &str) -> Option<usize> {
+    let line = &rest[..rest.find('\n').unwrap_or(rest.len())];
+    let end = milk_end(line)?;
+    let path = &line[..end];
+    let slash = path.rfind('/')?;
+    let (dirs, name) = (&path[..slash], &path[slash + 1..]);
+    let dirs_ok = !dirs.contains(|c: char| ends_path(c) && c != ' ') && !dirs.contains("  ");
+    let name_ok = !name.contains(|c: char| "\"`<>{}\t\r".contains(c)) && !name.contains(": ") && !name.contains(" /") && !name.contains(" ~/");
+    (dirs_ok && name_ok && !path[1..].contains(" /") && !path[1..].contains(" ~/")).then_some(end)
+}
+
 /// `text` with every absolute path, spaces and all, cut to its file name
 /// (`/a/My Drive/d.rs:3:1` → `d.rs:3:1`), the home folder dropped and the names
 /// of the user and the machine replaced, whatever their case. A preset's path
@@ -703,6 +718,18 @@ fn scrub(text: &str, private: &Private, presets: &Presets) -> String {
     while let Some(c) = rest.chars().next() {
         let starts_path = (c == '/' || rest.starts_with("~/")) && !prev.is_some_and(|p| p.is_alphanumeric() || "._-/~".contains(p));
         if starts_path {
+            if let Some(end) = milk_path_end(rest) {
+                let path = &rest[..end];
+                let name = file_name(path);
+                if presets.ours(&unhome(path, private)) {
+                    out.push_str(name);
+                } else {
+                    out.push(OWN_MARK);
+                }
+                prev = path.chars().next_back();
+                rest = &rest[end..];
+                continue;
+            }
             let mut end = rest.find(ends_path).unwrap_or(rest.len());
             // Words after single spaces are part of the path up to the last one with a `/` in it,
             // before anything else ends it: `/Volumes/My Backup Drive/x` is one path. A file
@@ -1047,6 +1074,11 @@ mod tests {
         assert_eq!(scrub("bad /tmp/x/Mine Too.milk: x", &p, &presets), "bad a preset of your own: x");
         assert_eq!(scrub("bad ~/presets/z.MILK, then", &p, &presets), "bad a preset of your own, then");
         assert_eq!(scrub("\"/Volumes/USB Stick/sets/z.milk\"", &p, &presets), "\"a preset of your own\"");
+        // Names with apostrophes, brackets, commas and `&` are replaced whole.
+        assert_eq!(scrub("couldn't load /Users/jdoe/Music/Rovastar's Fav.milk", &p, &presets), "couldn't load a preset of your own");
+        assert_eq!(scrub("bad /tmp/Geiss - Swirl (remix).milk; then", &p, &presets), "bad a preset of your own; then");
+        assert_eq!(scrub("bad /tmp/Flexi, Martin & Geiss - Tide.milk: x", &p, &presets), "bad a preset of your own: x");
+        assert_eq!(scrub(&format!("bad {PACK}/A/Rovastar's Fav (2), A & B.milk!"), &p, &presets), "bad Rovastar's Fav (2), A & B.milk!");
         // Not a preset: only paths are cut to a file name, as before.
         assert_eq!(scrub("/tmp/x/notes.milkshake", &p, &presets), "notes.milkshake");
         // A name from no path stays: nothing says whose it is, unless it's the one on screen.
