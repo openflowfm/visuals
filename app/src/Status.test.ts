@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { Fx } from './fx.ts';
 import type { Frame } from './link.ts';
-import { beatLabel, beatLit, bpmText, fpsShown, outputLabel, outputText, peersText, Status } from './Status.tsx';
+import { audioLabel, beatLabel, beatLit, hearingAt, SILENT_AFTER, bpmText, fpsShown, outputLabel, outputText, peersText, Status } from './Status.tsx';
 
 const frame = (over: Partial<Frame> = {}): Frame => ({
   enabled: true,
@@ -76,7 +76,7 @@ describe('the status strip, to VoiceOver', () => {
   });
 
   it('names each light by what it shows, and says it opens a popover', () => {
-    expect(tagOf('data-light="audio"')).toContain('aria-label="Audio"');
+    expect(tagOf('data-light="audio"')).toContain('aria-label="Audio, silent"');
     expect(tagOf('data-light="beat"')).toContain('aria-label="Beat, 128 BPM"');
     expect(tagOf('data-light="output"')).toContain('aria-label="Output, in this window"');
     for (const light of ['audio', 'beat', 'output']) {
@@ -86,6 +86,15 @@ describe('the status strip, to VoiceOver', () => {
     expect(beatLabel(frame({ tempo: 123.6 }), effects)).toBe('Beat, 124 BPM, 2 in time');
     expect(beatLabel(null, null)).toBe('Beat');
     expect(outputLabel({ display: { id: 1, index: 1, name: 'Projector', width: 1, height: 1, main: false }, size: null })).toBe('Output, on Projector');
+    expect(audioLabel(true)).toBe('Audio, hearing');
+    expect(audioLabel(false)).toBe('Audio, silent');
+  });
+
+  it('calls the audio silent only after a second of nothing, not in a gap between notes', () => {
+    expect(hearingAt(null, 5000)).toBe(false);
+    expect(hearingAt(5000, 5000)).toBe(true);
+    expect(hearingAt(5000, 5000 + SILENT_AFTER - 1)).toBe(true);
+    expect(hearingAt(5000, 5000 + SILENT_AFTER)).toBe(false);
   });
 
   it('keeps the meter and the beat dot, which change every frame, away from VoiceOver', () => {

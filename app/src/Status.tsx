@@ -57,17 +57,39 @@ type Pop = 'audio' | 'beat' | 'output';
 
 type Titles = Partial<Record<'audio' | 'beat' | 'output' | 'help' | 'settings' | 'leave', string>>;
 
-/** The AUDIO light's dot and mini meter. A leaf of its own: it re-renders up to twenty times a second, and the strip doesn't have to. */
-function AudioLevel() {
+/** How long the meter stays at nothing before the AUDIO light is called silent (a gap between notes isn't silence). */
+export const SILENT_AFTER = 1000;
+
+/** What VoiceOver calls the AUDIO light: "Audio, hearing" or "Audio, silent". */
+export const audioLabel = (hearing: boolean): string => `Audio, ${hearing ? 'hearing' : 'silent'}`;
+
+/** Whether the AUDIO light is hearing at `now`, given when the meter last showed anything (`heard`, ms; null: never). */
+export const hearingAt = (heard: number | null, now: number): boolean => heard !== null && now - heard < SILENT_AFTER;
+
+/**
+ * The AUDIO light's dot and mini meter. A leaf of its own: it re-renders up to
+ * twenty times a second, and the strip doesn't have to; it tells the strip
+ * (`onHearing`) only when it turns from hearing to silent or back.
+ */
+function AudioLevel({ onHearing }: { onHearing(hearing: boolean): void }) {
   const [level, setLevel] = useState(0);
+  const said = useRef(onHearing);
+  said.current = onHearing;
   useEffect(() => {
     let live = true;
+    let heard: number | null = null;
+    let was = false;
     const tick = async () => {
       while (live) {
         const [l, r] = await api.levels().catch(() => [0, 0] as [number, number]);
         if (!live) return;
+        const now = Date.now();
+        const shown = meterLevel(Math.max(l, r));
+        if (shown > 0) heard = now;
+        const hearing = hearingAt(heard, now);
+        if (hearing !== was) said.current((was = hearing));
         // Silence stays silent without a render.
-        setLevel(meterLevel(Math.max(l, r)));
+        setLevel(shown);
         await new Promise((done) => setTimeout(done, 60));
       }
     };
@@ -213,6 +235,7 @@ export function Status({
 }) {
   const [open, setOpen] = useState<Pop | null>(null);
   const [frame, setFrame] = useState<link.Frame | null>(null);
+  const [hearing, setHearing] = useState(false);
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -260,14 +283,14 @@ export function Status({
       <Light
         name="audio"
         caption="AUDIO"
-        label="Audio"
+        label={audioLabel(hearing)}
         popName={`What it will ${say('audio input')}`}
         title={titles.audio ?? `${Say('audio input')}: what the presets hear, and its level`}
         open={open === 'audio'}
         toggle={toggle}
         pop={<AudioInput onError={onError} />}
       >
-        <AudioLevel />
+        <AudioLevel onHearing={setHearing} />
       </Light>
       <Light
         name="beat"
