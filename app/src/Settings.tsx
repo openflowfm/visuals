@@ -4,6 +4,8 @@ import { Segmented } from '@openflow/widgets/controls/Segmented.tsx';
 import { Toggle } from '@openflow/widgets/controls/Toggle.tsx';
 import * as api from './api.ts';
 import { EffectSettings, useFx } from './Effects.tsx';
+import { setMotion, useMotion } from './access.ts';
+import { isTopTrap, leavesKeys, useFocusTrap } from './focusTrap.ts';
 import { useNotice, useTauriEvent } from './hooks.ts';
 import { LinkSettings } from './LinkPanel.tsx';
 import * as output from './output.ts';
@@ -25,16 +27,35 @@ export function closesSheet(e: { key: string; target: EventTarget | null }): boo
 
 /**
  * A sheet over whatever view is showing, with its name and a close button. Esc
- * closes it, before live mode's own Esc (leave) can hear it; focus moves into
- * it on open and goes back where it was on close. `scrim` lays a see-through
- * layer behind it that closes it when tapped.
+ * closes it, before live mode's own Esc (leave) can hear it; keyboard focus
+ * moves into it on open, Tab goes round its controls (`useFocusTrap`), and
+ * focus goes back to the opener on close. `scrim` lays a see-through layer
+ * behind it that closes it when tapped; `modal` tells VoiceOver the page
+ * behind can't be used while it is open (not so for a drawer that leaves live
+ * usable behind it).
  */
-export function Sheet({ title, className, scrim = false, onClose, children }: { title: string; className: string; scrim?: boolean; onClose(): void; children: ReactNode }) {
+export function Sheet({
+  title,
+  className,
+  scrim = false,
+  modal = false,
+  onClose,
+  children,
+}: {
+  title: string;
+  className: string;
+  scrim?: boolean;
+  modal?: boolean;
+  onClose(): void;
+  children: ReactNode;
+}) {
   const ref = useRef<HTMLDivElement>(null);
+  useFocusTrap(ref);
   useEffect(() => {
-    const was = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    ref.current?.focus();
     const key = (e: KeyboardEvent) => {
+      // A dialog over the sheet (the flashing lights warning), or a popover beside a drawer, takes Esc for itself.
+      const root = ref.current;
+      if (!root || leavesKeys(root, e.target instanceof Element ? e.target : null, isTopTrap(root))) return;
       if (!closesSheet(e)) return;
       e.preventDefault();
       e.stopPropagation();
@@ -42,15 +63,12 @@ export function Sheet({ title, className, scrim = false, onClose, children }: { 
     };
     // Capturing, so the sheet hears Esc before anything else on the page does.
     window.addEventListener('keydown', key, true);
-    return () => {
-      window.removeEventListener('keydown', key, true);
-      was?.focus();
-    };
+    return () => window.removeEventListener('keydown', key, true);
   }, [onClose]);
   return (
     <>
       {scrim && <div className="vf-scrim" aria-hidden="true" onClick={onClose} />}
-      <div ref={ref} tabIndex={-1} className={`vf-sheet ${className}`} role="dialog" aria-label={title}>
+      <div ref={ref} tabIndex={-1} className={`vf-sheet ${className}`} role="dialog" aria-label={title} aria-modal={modal ? 'true' : undefined}>
         <div className="vf-sheet-head">
           <h2>{title}</h2>
           <Button tone="quiet" label={`Close ${title.toLowerCase()}`} title="Close (Esc)" onPress={onClose}>
@@ -104,7 +122,9 @@ function QualitySettings() {
             onChange={(i) => api.qualitySet(QUALITY_LEVELS[i]).then(setQuality, fail(`Couldn't change the ${say('render quality')}.`))}
             title="How much detail the picture is drawn with: Auto picks for this Mac; Low is lightest on it"
           />
-          <p className="settings-line">{qualityLine(quality)}</p>
+          <p className="settings-line" role="status">
+            {qualityLine(quality)}
+          </p>
         </>
       )}
       <NoticeBanner notice={notice} onDismiss={dismiss} />
@@ -157,20 +177,106 @@ function KeptToggle({ read, write, name, title }: { read(): Promise<boolean>; wr
       <Toggle on={on === true} onChange={change} disabled={on === null} layout="inside" name={name.toLowerCase()} label={name} title={title}>
         {on ? 'on' : 'off'}
       </Toggle>
-      {problem && <p className="settings-line settings-problem">{problem}</p>}
+      {problem && (
+        <p className="settings-line settings-problem" role="status">
+          {problem}
+        </p>
+      )}
     </div>
   );
 }
 
-const readMotion = () => api.reducedMotion().then((m) => m.reduced);
-const writeMotion = (on: boolean) => api.reducedMotionSet(on);
+/** The words a failed change resolves to: the app's own. */
+const why = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+/**
+ * The reduce-flashing switch as drawn: `motion` is the app's setting (null
+ * until it has said, and the switch waits), `shown` what the switch shows
+ * while a change is on its way. Under it, that macOS's Reduce motion decides,
+ * or, once a choice was made here, a button to hand it back to macOS.
+ */
+export function MotionSwitch({
+  motion,
+  shown = motion?.reduced ?? false,
+  problem,
+  onChange,
+  onFollow,
+}: {
+  motion: api.Motion | null;
+  shown?: boolean;
+  problem: string | null;
+  onChange(on: boolean): void;
+  onFollow(): void;
+}) {
+  const name = Say('reduced motion');
+  return (
+    <div className="settings-switch">
+      <span>{name}</span>
+      <Toggle
+        on={shown}
+        onChange={onChange}
+        disabled={motion === null}
+        layout="inside"
+        name={name.toLowerCase()}
+        label={name}
+        title="Calm the strobe and flashes, for anyone sensitive to flashing light"
+      >
+        {shown ? 'on' : 'off'}
+      </Toggle>
+      {motion &&
+        (motion.system ? (
+          <p className="settings-line settings-follow">Following macOS's Reduce motion.</p>
+        ) : (
+          <Button tone="quiet" className="settings-follow" label="Follow macOS's Reduce motion" title="Let macOS's Reduce motion decide again" onPress={onFollow}>
+            Follow macOS
+          </Button>
+        ))}
+      {problem && (
+        <p className="settings-line settings-problem" role="status">
+          {problem}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Accessibility: reduce flashing, following the one setting the whole page
+ * follows (`useMotion`). Flipped, it shows at once; if the app refuses, it
+ * goes back and says why.
+ */
+function MotionSettings() {
+  const motion = useMotion();
+  const [pending, setPending] = useState<boolean | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const ask = (on: boolean | null) => {
+    setPending(on);
+    setProblem(null);
+    setMotion(on).then(
+      () => setPending(null),
+      (e) => {
+        setPending(null);
+        setProblem(why(e));
+      },
+    );
+  };
+  return <MotionSwitch motion={motion} shown={pending ?? motion?.reduced ?? false} problem={problem} onChange={ask} onFollow={() => ask(null)} />;
+}
 
 /** The effects' section: only once they've been read. */
 function EffectsSection() {
   const { state, set, notice, dismiss } = useFx();
   return (
     <>
-      {state ? <EffectSettings state={state} set={set} /> : !notice && <p className="settings-line">Reading the effects…</p>}
+      {state ? (
+        <EffectSettings state={state} set={set} />
+      ) : (
+        !notice && (
+          <p className="settings-line" role="status">
+            Reading the effects…
+          </p>
+        )
+      )}
       <NoticeBanner notice={notice} onDismiss={dismiss} />
     </>
   );
@@ -203,7 +309,7 @@ export function Settings({ open, onClose }: { open: boolean; onClose(): void }) 
   if (!open) return null;
   const [sound, out, linked, effects, quality, access, privacy] = SECTIONS;
   return (
-    <Sheet title="Settings" className="settings" scrim onClose={onClose}>
+    <Sheet title="Settings" className="settings" scrim modal onClose={onClose}>
       <Section name={sound}>
         <SoundSection />
       </Section>
@@ -220,7 +326,7 @@ export function Settings({ open, onClose }: { open: boolean; onClose(): void }) 
         <QualitySettings />
       </Section>
       <Section name={access}>
-        <KeptToggle read={readMotion} write={writeMotion} name={Say('reduced motion')} title="Calm the strobe and flashes, for anyone sensitive to flashing light" />
+        <MotionSettings />
       </Section>
       <Section name={privacy}>
         <KeptToggle

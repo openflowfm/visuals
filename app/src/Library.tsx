@@ -57,6 +57,18 @@ export interface LibraryProps {
 const count = (n: number) => n.toLocaleString('en-US');
 const why = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
+/** A group's name read aloud: the star group's chip shows only ★. */
+export const groupSays = (g: LibraryGroup): string => (g === 'star' ? 'starred' : GROUP_LABEL[g]);
+
+/** A group chip's spoken name, with how many of its values are picked. */
+export const chipSays = (g: LibraryGroup, picked: number): string => (picked > 0 ? `${groupSays(g)}, ${picked} picked` : groupSays(g));
+
+/** A value chip's spoken name: the value and how many presets it would show. */
+export const valueSays = (name: string, n: number): string => `${unstarred(name)}, ${n === 1 ? '1 preset' : `${count(n)} presets`}`;
+
+/** A value's label without the ★ in front, which a screen reader would read as "black star". */
+const unstarred = (label: string) => label.replace(/^★\s*/, '');
+
 /** How long the folder has to be quiet before the index is read again, and the longest it waits while it isn't. */
 const REREAD = { wait: 500, most: 4000 };
 
@@ -278,6 +290,7 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
                 type="button"
                 className="lib-chip"
                 aria-expanded={open === g}
+                aria-label={chipSays(g, on)}
                 disabled={waiting}
                 data-on={on ? '' : undefined}
                 title={waiting ? `${GROUP_LABEL[g]} comes once the library has been read` : `Show only presets with these ${GROUP_LABEL[g]} values; pick several to see any of them`}
@@ -287,7 +300,11 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
                 }}
               >
                 {GROUP_LABEL[g]}
-                {on > 0 && <span className="lib-chip-count">{on}</span>}
+                {on > 0 && (
+                  <span className="lib-chip-count" aria-hidden="true">
+                    {on}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -300,13 +317,20 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
         <div className="lib-picked">
           {activeGroups(query).flatMap((g) =>
             query.groups[g]!.map((v) => (
-              <button key={`${g}:${v}`} type="button" className="lib-chip lib-chip-picked" title={`Stop filtering by ${valueLabel(g, v)}`} onClick={() => pickValue(g, v)}>
-                {g === 'colour' && <span className="lib-swatch" style={{ background: SWATCH[v as Colour] }} />}
-                {valueLabel(g, v)} ×
+              <button
+                key={`${g}:${v}`}
+                type="button"
+                className="lib-chip lib-chip-picked"
+                aria-label={`stop filtering by ${unstarred(valueLabel(g, v))}`}
+                title={`Stop filtering by ${valueLabel(g, v)}`}
+                onClick={() => pickValue(g, v)}
+              >
+                {g === 'colour' && <span className="lib-swatch" aria-hidden="true" style={{ background: SWATCH[v as Colour] }} />}
+                {valueLabel(g, v)} <span aria-hidden="true">×</span>
               </button>
             )),
           )}
-          <button type="button" className="lib-link" onClick={clearAll} title="Show every preset">
+          <button type="button" className="lib-link" aria-label="clear the filter" onClick={clearAll} title="Show every preset">
             clear
           </button>
           {naming === null ? (
@@ -338,7 +362,9 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
         </div>
       )}
       {!loaded && !index ? (
-        <p className="lib-note">loading presets…</p>
+        <p className="lib-note" role="status">
+          loading presets…
+        </p>
       ) : empty ? (
         <p className="lib-note lib-first-run">No presets yet. Drop .milk files or a folder of them here, or use Add a folder… below.</p>
       ) : (
@@ -385,17 +411,17 @@ interface ValuesProps {
 }
 
 /** An open group's values, each with the count of presets it would show. */
-function Values({ group, values, selected, find, onFind, onPick }: ValuesProps) {
+export function Values({ group, values, selected, find, onFind, onPick }: ValuesProps) {
   const f = find.trim().toLowerCase();
   const all = f ? values.filter((v) => valueLabel(group, v.value).toLowerCase().includes(f)) : values;
   const list = all.slice(0, VALUES_CAP);
   return (
-    <div className="lib-values" role="group" aria-label={`${GROUP_LABEL[group]} values`}>
+    <div className="lib-values" role="group" aria-label={`${groupSays(group)} values`}>
       {values.length > FIND_FROM && (
         <input
           className="lib-values-find"
           type="search"
-          aria-label={`find a ${GROUP_LABEL[group]}`}
+          aria-label={`find a ${groupSays(group).replace(/^my /, '')}`}
           placeholder={`find a ${GROUP_LABEL[group].replace(/^my /, '')}`}
           value={find}
           onChange={(ev) => onFind(ev.target.value)}
@@ -403,22 +429,27 @@ function Values({ group, values, selected, find, onFind, onPick }: ValuesProps) 
       )}
       {list.length === 0 && <p className="lib-note">{group === 'tags' && !values.length ? 'No tags yet. Select a preset to tag it.' : 'none'}</p>}
       <div className="lib-values-list">
-        {list.flatMap(({ value, count: n }, i) => [
-          // Each style starts a line, with its sub-styles after it.
-          group === 'style' && i > 0 && !value.includes('/') ? <span key={`break:${value}`} className="lib-break" /> : null,
-          <button
-            key={value}
-            type="button"
-            className="lib-chip lib-value"
-            aria-pressed={selected.includes(value)}
-            data-sub={group === 'style' && value.includes('/') ? '' : undefined}
-            onClick={() => onPick(value)}
-          >
-            {group === 'colour' && <span className="lib-swatch" style={{ background: SWATCH[value as Colour] }} />}
-            <span className="lib-value-name">{group === 'style' && value.includes('/') ? value.slice(value.indexOf('/') + 1) : valueLabel(group, value)}</span>
-            <span className="lib-value-count">{count(n)}</span>
-          </button>,
-        ])}
+        {list.flatMap(({ value, count: n }, i) => {
+          const sub = group === 'style' && value.includes('/');
+          return [
+            // Each style starts a line, with its sub-styles after it.
+            group === 'style' && i > 0 && !value.includes('/') ? <span key={`break:${value}`} className="lib-break" /> : null,
+            <button
+              key={value}
+              type="button"
+              className="lib-chip lib-value"
+              aria-pressed={selected.includes(value)}
+              // A sub-style shows only its own name; read aloud, it says which style it is under.
+              aria-label={valueSays(valueLabel(group, value), n)}
+              data-sub={sub ? '' : undefined}
+              onClick={() => onPick(value)}
+            >
+              {group === 'colour' && <span className="lib-swatch" aria-hidden="true" style={{ background: SWATCH[value as Colour] }} />}
+              <span className="lib-value-name">{sub ? value.slice(value.indexOf('/') + 1) : valueLabel(group, value)}</span>
+              <span className="lib-value-count">{count(n)}</span>
+            </button>,
+          ];
+        })}
       </div>
       {all.length > list.length && <p className="lib-note">{count(all.length - list.length)} more: type to find one</p>}
     </div>

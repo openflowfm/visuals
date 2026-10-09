@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { beatsToNext, CHOICES, choicesFor, runOn, statusText, type Frame } from './link.ts';
+import { LinkSettings } from './LinkPanel.tsx';
 
 const frame = (over: Partial<Frame> = {}): Frame => ({
   enabled: true,
@@ -69,5 +72,11 @@ describe('statusText', () => {
     expect(statusText(frame())).toBe('no one else in the session: our own clock');
     expect(statusText(frame({ peers: 1 }))).toBe('1 peer');
     expect(statusText(frame({ peers: 2, playing: true }))).toBe('2 peers · playing');
+  });
+});
+
+describe('LinkSettings', () => {
+  it('says it is starting as a status line VoiceOver reads out, until Link answers', () => {
+    expect(renderToStaticMarkup(createElement(LinkSettings))).toContain('role="status">Starting…<');
   });
 });

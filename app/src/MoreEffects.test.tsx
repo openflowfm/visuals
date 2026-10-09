@@ -39,6 +39,13 @@ describe('MoreFx', () => {
     for (const mode of ['off', 'X', 'Y', '4-way']) expect(html).toContain(`>${mode}<`);
   });
 
+  it('names its controls for VoiceOver', () => {
+    const html = renderToStaticMarkup(<MoreFx state={REST} set={none} send={none} />);
+    expect(html).toMatch(/role="radiogroup"[^>]*aria-label="mirror"/);
+    expect(html).toMatch(/<button[^>]*aria-label="invert"/);
+    expect(html).toMatch(/<button[^>]*>Reset: back to normal<\/button>/);
+  });
+
   it('shows invert as it is', () => {
     expect(renderToStaticMarkup(<MoreFx state={REST} set={none} send={none} />)).toContain('>off<');
     const inverted = renderToStaticMarkup(<MoreFx state={{ ...REST, invert: true }} set={none} send={none} />);

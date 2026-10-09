@@ -45,7 +45,7 @@ function Body() {
   const { state, set, send, notice, dismiss } = useFx();
   return (
     <>
-      {state ? <MoreFx state={state} set={set} send={send} /> : !notice && <p>Reading the effects…</p>}
+      {state ? <MoreFx state={state} set={set} send={send} /> : !notice && <p role="status">Reading the effects…</p>}
       <NoticeBanner notice={notice} onDismiss={dismiss} />
     </>
   );
@@ -54,7 +54,8 @@ function Body() {
 /**
  * The More effects drawer (#98), one tap from live: opened with
  * `openSheet('effects')` from `views.tsx`, mounted by `App`. It leaves the
- * show uncovered and the live controls usable behind it.
+ * show uncovered and the live controls usable behind it, so it is a dialog
+ * but not a modal one: Tab keeps to it, while a click behind it still works.
  */
 export function MoreEffects({ open, onClose }: { open: boolean; onClose(): void }) {
   if (!open) return null;

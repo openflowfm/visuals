@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
-import { fitLine, leave } from './OutputPanel.tsx';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { fitLine, leave, OutputSettings } from './OutputPanel.tsx';
 import type { Display } from './output.ts';
 
 const display = (width: number, height: number): Display => ({ id: 1, index: 0, name: 'Projector', width, height, main: false });
@@ -22,6 +24,12 @@ describe('fitLine', () => {
   it('says where the black bars go', () => {
     expect(fitLine({ display: display(1920, 1080), size: [1440, 1080] })).toBe('The whole picture, 1440×1080 on Projector, with black bars at the sides.');
     expect(fitLine({ display: display(1920, 1200), size: [1920, 1080] })).toBe('The whole picture, 1920×1080 on Projector, with black bars above and below.');
+  });
+});
+
+describe('OutputSettings', () => {
+  it('says where the output is as a status line, which changes when a display is picked', () => {
+    expect(renderToStaticMarkup(createElement(OutputSettings))).toMatch(/class="output-state" role="status">Not showing/);
   });
 });
 

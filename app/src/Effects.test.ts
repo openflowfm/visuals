@@ -1,5 +1,16 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { BRIGHTNESS_STEP, MIRROR_NAMES, MIRRORS, nearest, stepBrightness, stepSensitivity } from './Effects.tsx';
+import { BRIGHTNESS_STEP, Hit, hitLabel, MIRROR_NAMES, MIRRORS, nearest, stepBrightness, stepSensitivity } from './Effects.tsx';
+
+describe('the hits, to VoiceOver', () => {
+  it('names a hit as a word with its key, and says whether it is on', () => {
+    expect(hitLabel('BLACKOUT', 'B')).toBe('Blackout (B)');
+    const html = renderToStaticMarkup(createElement(Hit, { kind: 'strobe', on: true, hold: true, label: 'STROBE', keyName: 'S', send: () => {} }));
+    expect(html).toContain('aria-label="Strobe (S)"');
+    expect(html).toContain('aria-pressed="true"');
+  });
+});
 
 describe('stepBrightness', () => {
   it('moves by 0.02 a step', () => {

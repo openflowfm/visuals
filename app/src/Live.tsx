@@ -74,12 +74,25 @@ export const openEffects = () => openSheet('effects');
 
 const INTENSITY = range('intensity', 0, 1, 0.5);
 
-/** One of the eight big buttons; `id` names it from the help list. */
-function Pad({ id, onPress, on, children }: { id: ControlId; onPress(): void; on?: boolean; children: React.ReactNode }) {
+/** A pad's accessible name: the control's name from the help list, or `name` instead, then its keys: "Previous (← ↑)". */
+export function padLabel(id: ControlId, name?: string): string {
+  const c = control(id);
+  return `${name ?? c.name}${c.keys ? ` (${c.keys})` : ''}`;
+}
+
+/** The tempo pad's name: what sets the tempo, and what it is. "Tap tempo, 120 BPM (T)". */
+export const tempoLabel = (linked: boolean, bpm: number | null): string => padLabel('tempo', `${linked ? 'Link' : 'Tap'} tempo${bpm !== null && bpm > 0 ? `, ${Math.round(bpm)} BPM` : ''}`);
+
+/**
+ * One of the eight big buttons; `id` names it from the help list. `on` makes it
+ * a toggle (`aria-pressed`); `lit` only lights it, for a pad that doesn't
+ * switch what it shows (tempo, lit while Link keeps it).
+ */
+export function Pad({ id, onPress, on, lit, label, children }: { id: ControlId; onPress(): void; on?: boolean; lit?: boolean; label?: string; children?: React.ReactNode }) {
   return (
-    <ButtonFace className="live-pad" data-pad={id} aria-pressed={on} aria-label={`${control(id).name}${control(id).keys ? ` (${control(id).keys})` : ''}`} title={titleOf(id)} onClick={onPress}>
+    <ButtonFace className="live-pad" data-pad={id} aria-pressed={on} lit={lit} aria-label={label ?? padLabel(id)} title={titleOf(id)} onClick={onPress}>
       {children}
-      {control(id).keys && <small>{control(id).keys}</small>}
+      {control(id).keys && <small aria-hidden="true">{control(id).keys}</small>}
     </ButtonFace>
   );
 }
@@ -88,7 +101,7 @@ function Pad({ id, onPress, on, children }: { id: ControlId; onPress(): void; on
  * A held effect's pad: on while the pointer is down, off when it comes up or
  * leaves; Shift-click latches. From the keyboard (Enter or space) it toggles.
  */
-function HoldPad({ id, kind, on, send, children }: { id: ControlId; kind: fx.Hit; on: boolean; send(action: fx.FxAction): void; children: React.ReactNode }) {
+export function HoldPad({ id, kind, on, send, children }: { id: ControlId; kind: fx.Hit; on: boolean; send(action: fx.FxAction): void; children?: React.ReactNode }) {
   const pressed = useRef(false);
   const release = () => {
     if (!pressed.current) return;
@@ -100,7 +113,7 @@ function HoldPad({ id, kind, on, send, children }: { id: ControlId; kind: fx.Hit
       className="live-pad"
       data-pad={id}
       aria-pressed={on}
-      aria-label={`${control(id).name} (${control(id).keys})`}
+      aria-label={padLabel(id)}
       title={titleOf(id)}
       onPointerDown={(e) => {
         if (e.button !== 0) return;
@@ -123,7 +136,7 @@ function HoldPad({ id, kind, on, send, children }: { id: ControlId; kind: fx.Hit
       }}
     >
       {children}
-      <small>{control(id).keys}</small>
+      <small aria-hidden="true">{control(id).keys}</small>
     </ButtonFace>
   );
 }
@@ -295,16 +308,17 @@ export function Live({
       </div>
       <section className="live-stage">
         <div className="live-deck">
-          <div className="live-now" title={current ?? titleOf('now')}>
+          {/* A polite status: VoiceOver says the new preset (and its star, rating and HOLD) when it changes, not on every frame. */}
+          <div className="live-now" title={current ?? titleOf('now')} role="status" aria-atomic="true">
             <i>now</i>
             {current ? <b>{nameOf(current)}</b> : <b className="live-none">Nothing playing — press R for a random preset, or play a playlist.</b>}
             {star && (
-              <span className="live-star" title="A favourite (F takes the star off)" aria-label="favourite">
+              <span className="live-star" title="A favourite (F takes the star off)" role="img" aria-label="favourite">
                 ★
               </span>
             )}
             {rating !== null && (
-              <span className="live-rating" title={`Rated ${rating} of 5 (press ${rating} again to take it off)`} aria-label={`rated ${rating} of 5`}>
+              <span className="live-rating" title={`Rated ${rating} of 5 (press ${rating} again to take it off)`} role="img" aria-label={`rated ${rating} of 5`}>
                 {starsText(rating)}
               </span>
             )}
@@ -381,7 +395,7 @@ export function Live({
           <HoldPad id="freeze" kind="freeze" on={effects?.freeze === true} send={actFx}>
             Freeze
           </HoldPad>
-          <Pad id="tempo" on={linked} onPress={() => actFx({ kind: 'tap' })}>
+          <Pad id="tempo" lit={linked} label={tempoLabel(linked, effects?.bpm ?? null)} onPress={() => actFx({ kind: 'tap' })}>
             {linked ? 'Link' : 'Tap'} {effects ? Math.round(effects.bpm) : ''}
           </Pad>
         </div>

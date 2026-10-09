@@ -7,6 +7,7 @@ import * as pl from './playlists.ts';
 import type { Lists } from './playlists.ts';
 import { plural } from './controls.ts';
 import { notice, type Notice } from './shell.ts';
+import { say } from './words.ts';
 import { beginDrag, dropAction, isOver, itemTarget, listTarget, nudge, runDrop, useDrag, type DragHandlers } from './drag.ts';
 import './playlists.css';
 
@@ -28,6 +29,13 @@ interface Props {
 }
 
 const SECONDS: Param = { kind: 'int', min: 1, max: 600, defaultValue: 30, steps: 600, name: 'every', customUnit: 's', unit: 'custom' };
+
+/** A playlist row's spoken name: its name, how many presets, and whether it's playing. */
+export const listSays = (p: pl.Playlist, playing: boolean): string => `${p.name}, ${p.kind === 'smart' ? 'smart playlist' : plural(p.items.length, 'preset')}${playing ? ', playing' : ''}`;
+
+/** An item row's spoken name: its place, its name, its group or that it's missing, and whether it's playing. */
+export const itemSays = (i: number, item: pl.Playlist['items'][number], playing: boolean): string =>
+  `${i + 1}. ${item.name}, ${item.missing ? 'missing, file not found' : item.group}${playing ? ', playing' : ''}`;
 
 /** Enter or space on a row, as a click. */
 const onActivate = (f: () => void) => (e: KeyboardEvent) => {
@@ -156,6 +164,7 @@ export function Playlists({ lists, current, selected, onSelect, onLists, onError
               data-active={on ? '' : undefined}
               data-drop={listTarget(p.id)}
               data-over={isOver(drag, listTarget(p.id)) ? '' : undefined}
+              aria-label={naming?.id === p.id ? undefined : listSays(p, on)}
               onClick={() => onSelect(p.id)}
               onDoubleClick={() => play(n)}
               onKeyDown={onActivate(() => onSelect(p.id))}
@@ -189,7 +198,7 @@ export function Playlists({ lists, current, selected, onSelect, onLists, onError
                     )}
                   </span>
                   <span className="playlists-name">{p.name}</span>
-                  <i>{p.items.length}</i>
+                  <i aria-hidden="true">{p.items.length}</i>
                 </>
               )}
             </li>
@@ -240,6 +249,7 @@ export function Playlists({ lists, current, selected, onSelect, onLists, onError
                   data-drop={target}
                   data-over={isOver(drag, target) ? (drag?.payload.kind === 'item' && drag.payload.list === list.id && drag.payload.index < i ? 'after' : 'before') : undefined}
                   data-dragged={drag?.payload.kind === 'item' && drag.payload.list === list.id && drag.payload.index === i ? '' : undefined}
+                  aria-label={itemSays(i, item, active && deck.index === i)}
                   onClick={open}
                   onPointerDown={(e) => beginDrag(e, { kind: 'item', list: list.id, index: i, path: item.path, name: item.name, thumbnail: null }, dropping)}
                   onKeyDown={(e) => {
@@ -273,7 +283,7 @@ export function Playlists({ lists, current, selected, onSelect, onLists, onError
         </>
       )}
       <div className="playlists-auto">
-        <Toggle on={deck.auto} onChange={(on) => run(pl.act({ kind: 'auto', on }), 'turn auto-advance ' + (on ? 'on' : 'off'))} layout="inside" name="auto-advance" label="auto-advance">
+        <Toggle on={deck.auto} onChange={(on) => run(pl.act({ kind: 'auto', on }), 'turn auto-advance ' + (on ? 'on' : 'off'))} layout="inside" name={say('auto-advance')} label={say('auto-advance')}>
           {deck.auto ? 'on' : 'off'}
         </Toggle>
         <NumberField
@@ -285,6 +295,7 @@ export function Playlists({ lists, current, selected, onSelect, onLists, onError
             run(pl.act({ kind: 'seconds', seconds }), 'change the seconds');
           }}
           display={`${Math.round(deck.seconds)} s`}
+          label="seconds on each preset"
           title="Seconds on each preset before auto-advance moves on"
         />
       </div>

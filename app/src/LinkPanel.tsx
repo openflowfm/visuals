@@ -41,7 +41,16 @@ function useLink() {
  */
 export function LinkSettings() {
   const { frame, run, trouble } = useLink();
-  if (!frame) return <div className="link-settings">{trouble ?? <p className="link-quiet">Starting…</p>}</div>;
+  if (!frame)
+    return (
+      <div className="link-settings">
+        {trouble ?? (
+          <p className="link-quiet" role="status">
+            Starting…
+          </p>
+        )}
+      </div>
+    );
   const start = say('the one');
   return (
     <div className="wdg link-settings">

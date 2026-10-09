@@ -1,6 +1,8 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LibraryData, LibraryRow } from './api.ts';
-import { intensityOf, keyOf, openEffects, playsWindowed, ratingOf, starred, starsText, whenText } from './Live.tsx';
+import { HoldPad, intensityOf, keyOf, openEffects, Pad, padLabel, playsWindowed, ratingOf, starred, starsText, tempoLabel, whenText } from './Live.tsx';
 import { openSettings } from './Status.tsx';
 import { SHEET_EVENT, sheetOf } from './views.tsx';
 
@@ -72,5 +74,35 @@ describe('live mode', () => {
     expect(whenText(1)).toBe('in 1 beat');
     expect(whenText(7.4)).toBe('in 8 beats');
     expect(whenText(8)).toBe('in 8 beats');
+  });
+});
+
+describe("live mode's pads, to VoiceOver", () => {
+  const noop = () => {};
+
+  it('names the symbol pads in words, with their keys', () => {
+    const html = renderToStaticMarkup(createElement(Pad, { id: 'previous', onPress: noop }, '◀ Previous'));
+    expect(html).toContain('aria-label="Previous (← ↑)"');
+    expect(padLabel('step')).toBe('Next (→ ↓)');
+    // A plain step is a button, not a toggle.
+    expect(html).not.toContain('aria-pressed');
+  });
+
+  it('says whether a toggle pad is on, and whether a held effect is held', () => {
+    expect(renderToStaticMarkup(createElement(Pad, { id: 'hold', on: true, onPress: noop }, 'Hold'))).toContain('aria-pressed="true"');
+    expect(renderToStaticMarkup(createElement(Pad, { id: 'blackout', on: false, onPress: noop }, 'Blackout'))).toContain('aria-pressed="false"');
+    const strobe = renderToStaticMarkup(createElement(HoldPad, { id: 'strobe', kind: 'strobe', on: true, send: noop }, 'Strobe'));
+    expect(strobe).toContain('aria-pressed="true"');
+    expect(strobe).toContain('aria-label="Strobe (hold S, ⇧S latches)"');
+  });
+
+  it('names the tempo pad with its tempo, lit (not pressed) while Link keeps it', () => {
+    expect(tempoLabel(false, 120.4)).toBe('Tap tempo, 120 BPM (T)');
+    expect(tempoLabel(true, 128)).toBe('Link tempo, 128 BPM (T)');
+    expect(tempoLabel(false, null)).toBe('Tap tempo (T)');
+    const html = renderToStaticMarkup(createElement(Pad, { id: 'tempo', lit: true, label: tempoLabel(true, 128), onPress: noop }, 'Link 128'));
+    expect(html).toContain('aria-label="Link tempo, 128 BPM (T)"');
+    expect(html).toContain('data-on=""');
+    expect(html).not.toContain('aria-pressed');
   });
 });

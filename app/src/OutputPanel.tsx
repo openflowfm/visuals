@@ -63,7 +63,9 @@ export function OutputSettings() {
       ) : (
         <p>No displays found.</p>
       )}
-      <p className="output-state">{shown ? `Showing on ${shown.name}.` : 'Not showing: live mode opens it on the display picked last.'}</p>
+      <p className="output-state" role="status">
+        {shown ? `Showing on ${shown.name}.` : 'Not showing: live mode opens it on the display picked last.'}
+      </p>
       <p className="output-fit">
         <b>{Say('output fit')}:</b> {fitLine(status)}
       </p>

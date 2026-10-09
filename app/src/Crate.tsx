@@ -107,6 +107,9 @@ export function upNote(lists: pl.Lists): string {
   return 'A smart playlist plays its matches in library order.';
 }
 
+/** An up-next row's accessible name, saying when its file is missing (the strike-through doesn't). */
+export const rowLabel = (r: Pick<Upcoming, 'name' | 'missing'>): string => (r.missing ? `${r.name}, missing` : r.name);
+
 /** Where a row dragged to `y` lands, from the rows' tops and heights: before row `slot`, or after the last when `slot` is their count. */
 export function dropSlot(rows: readonly { top: number; height: number }[], y: number): number {
   return rows.filter((r) => r.top + r.height / 2 < y).length;
@@ -194,10 +197,20 @@ export function Crate({ lists, data, act, onLists, onError, current }: Props) {
     setDrag(null);
     move(drag.row, slotAt(e.clientY));
   };
+  // Where keyboard focus goes once a nudged row lands: the rows are drawn again in their new order, and the moved one keeps focus.
+  const refocus = useRef<number | null>(null);
+  useEffect(() => {
+    const at = refocus.current;
+    if (at === null) return;
+    refocus.current = null;
+    refs.current[at]?.focus();
+  }, [lists]);
   const nudge = (row: number) => (e: KeyboardEvent) => {
     if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
     e.preventDefault();
-    move(row, e.key === 'ArrowUp' ? row - 1 : row + 2);
+    const slot = e.key === 'ArrowUp' ? row - 1 : row + 2;
+    if (list && moveFor(rows, row, slot)) refocus.current = e.key === 'ArrowUp' ? row - 1 : row + 1;
+    move(row, slot);
   };
   const marker = (row: number) => {
     if (!drag || drag.slot === drag.row || drag.slot === drag.row + 1) return null;
@@ -270,7 +283,9 @@ export function Crate({ lists, data, act, onLists, onError, current }: Props) {
 
       <section className="live-crate-section" aria-labelledby="live-crate-next">
         <h2 id="live-crate-next">Up next</h2>
-        <p className="live-crate-note">{upNote(lists)}</p>
+        <p className="live-crate-note" id="live-crate-next-note">
+          {upNote(lists)}
+        </p>
         {rows.length > 0 && (
           <ol className="live-crate-list" aria-label="Up next, in play order">
             {rows.map((r, i) => (
@@ -284,6 +299,8 @@ export function Crate({ lists, data, act, onLists, onError, current }: Props) {
                 data-dragging={drag?.row === i || undefined}
                 tabIndex={list ? 0 : undefined}
                 aria-keyshortcuts={list ? 'Alt+ArrowUp Alt+ArrowDown' : undefined}
+                aria-label={rowLabel(r)}
+                aria-describedby={list ? 'live-crate-next-note' : undefined}
                 onKeyDown={list ? nudge(i) : undefined}
                 title={r.missing ? `${r.name}: the file is missing` : r.name}
               >

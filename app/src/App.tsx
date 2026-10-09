@@ -19,7 +19,7 @@ import { useLibrary } from './library.ts';
 import { isTyping, nameOf, notice, openFailed } from './shell.ts';
 import { Live } from './Live.tsx';
 import * as output from './output.ts';
-import { Onboarding, useWelcome } from './Onboarding.tsx';
+import { FlashWarning, Onboarding, useWelcome } from './Onboarding.tsx';
 
 // The editor, only in a lab build: without `VITE_LAB` this is `null` at build
 // time, and the editor's code (the graph, the inspector, the edits) never reaches
@@ -62,6 +62,7 @@ export function App() {
       <Settings open={sheet === 'settings'} onClose={close} />
       <MoreEffects open={sheet === 'effects'} onClose={close} />
       <CrashPrompt />
+      <FlashWarning />
     </>
   );
 }

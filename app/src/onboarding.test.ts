@@ -1,5 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { after, before, downloadText, haveAll, libraryLine, QUIET_MS, silenceWatch, sizeText, STEPS, stepsFor, testSoundGuard, vibes } from './Onboarding.tsx';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import {
+  after,
+  before,
+  downloadText,
+  FLASH_WARNING,
+  FlashWarningDialog,
+  haveAll,
+  ReduceFlashing,
+  libraryLine,
+  QUIET_MS,
+  silenceWatch,
+  sizeText,
+  STEPS,
+  stepsFor,
+  testSoundGuard,
+  vibes,
+} from './Onboarding.tsx';
 import type { PackStatus } from './pack.ts';
 import { EMPTY_DECK, manual, type Lists } from './playlists.ts';
 
@@ -143,5 +161,33 @@ describe('the silence watch', () => {
     w.hear(0.001, 0);
     expect(w.hear(0.02, QUIET_MS)).toBe(true);
     expect(w.hear(Number.NaN, QUIET_MS + 1)).toBe(false);
+  });
+});
+
+describe('the flashing-lights warning from the menu', () => {
+  it("answers the menu item's event", () => {
+    expect(FLASH_WARNING).toBe('flash-warning');
+  });
+
+  it('is a modal dialog, named by its heading and described by the warning', () => {
+    const html = renderToStaticMarkup(createElement(FlashWarningDialog, { onClose: () => {} }));
+    expect(html).toContain('role="dialog"');
+    expect(html).toContain('aria-modal="true"');
+    expect(html).toContain('tabindex="-1"');
+    const labelled = /aria-labelledby="([^"]+)"/.exec(html)?.[1];
+    const described = /aria-describedby="([^"]+)"/.exec(html)?.[1];
+    expect(html).toContain(`<h2 id="${labelled}">Flashing lights</h2>`);
+    expect(html).toContain(`id="${described}"`);
+    expect(html).toContain('photosensitive epilepsy');
+    expect(html).toContain('I understand');
+  });
+
+  it('offers the reduce-flashing switch, disabled until the app has said', () => {
+    const off = renderToStaticMarkup(createElement(ReduceFlashing, { motion: null, onChange: () => {} }));
+    expect(off).toContain('aria-label="Reduce flashing"');
+    expect(off).toMatch(/disabled/);
+    const on = renderToStaticMarkup(createElement(ReduceFlashing, { motion: { reduced: true, system: true }, onChange: () => {} }));
+    expect(on).toMatch(/aria-(checked|pressed)="true"/);
+    expect(on).not.toMatch(/disabled=""/);
   });
 });

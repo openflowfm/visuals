@@ -83,7 +83,7 @@
   gap: 4px;
 }
 .link-one .wdg-button-body:focus-visible {
-  outline: 1px solid var(--fg);
+  outline: 2px solid var(--vf-focus-ring);
   outline-offset: 1px;
 }
 

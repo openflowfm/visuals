@@ -30,6 +30,8 @@
   padding: 0 18px 24px;
   border-width: 0 0 0 1px;
   border-radius: 0;
+  /* A control Tab lands on scrolls into view below the sticky head, not under it. */
+  scroll-padding-top: 72px;
 }
 .vf-sheet.settings .vf-sheet-head {
   position: sticky;
@@ -79,6 +81,14 @@
 }
 .settings-switch .wdg-toggle {
   width: 96px;
+}
+/* Under the switch, on a line of its own: who decides, or why a change failed. */
+.settings-switch > .settings-follow,
+.settings-switch > .settings-problem {
+  flex: 1 0 100%;
+}
+.settings-switch > .wdg-button.settings-follow {
+  justify-items: start;
 }
 .settings-quality {
   display: flex;

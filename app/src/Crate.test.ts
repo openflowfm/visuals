@@ -1,7 +1,9 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { LibraryData } from './api.ts';
 import * as pl from './playlists.ts';
-import { chipAction, dropSlot, litMoods, moods, moveFor, needsDeckItems, orderable, upNote, upcoming } from './Crate.tsx';
+import { chipAction, Crate, dropSlot, litMoods, moods, moveFor, needsDeckItems, orderable, rowLabel, upNote, upcoming } from './Crate.tsx';
 
 const item = (name: string, missing = false): pl.Item => ({ path: `pack/${name}.milk`, name, group: 'pack', missing, hash: null });
 const ITEMS = ['a', 'b', 'c', 'd', 'e'].map((n) => item(n, n === 'd'));
@@ -146,5 +148,28 @@ describe('moveFor', () => {
         2,
       ),
     ).toBeNull();
+  });
+});
+
+describe('the crate, to VoiceOver', () => {
+  const noop = () => {};
+  const data: LibraryData = { version: 1, presets: { x: { tags: ['warm'] } } };
+  const html = renderToStaticMarkup(createElement(Crate, { lists: lists({ playlist: 'm', index: 2, next_index: 3 }), data, act: noop, onLists: noop, onError: noop, current: null }));
+
+  it('names each up-next row, says a missing one is missing, and points a row that moves at how to move it', () => {
+    expect(rowLabel({ name: 'd', missing: true })).toBe('d, missing');
+    expect(rowLabel({ name: 'e', missing: false })).toBe('e');
+    const rows = html.match(/<li[^>]*class="live-crate-row"[^>]*>/g) ?? [];
+    expect(rows).toHaveLength(4);
+    expect(rows[0]).toContain('aria-label="d, missing"');
+    for (const row of rows) {
+      expect(row).toContain('tabindex="0"');
+      expect(row).toContain('aria-describedby="live-crate-next-note"');
+    }
+    expect(html).toContain('id="live-crate-next-note"');
+  });
+
+  it('says whether a mood is playing', () => {
+    expect(html).toMatch(/<button[^>]*class="live-crate-chip"[^>]*aria-pressed="false"[^>]*>warm<\/button>/);
   });
 });

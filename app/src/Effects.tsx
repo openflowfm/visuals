@@ -42,6 +42,9 @@ export const stepSensitivity = (value: number, by: number) => {
   return Math.min(4, Math.max(0.25, 2 ** position));
 };
 
+/** A hit's accessible name: its caps label as a word VoiceOver reads (not spells), and its key. "Strobe (S)". */
+export const hitLabel = (label: string, keyName: string): string => `${label.charAt(0).toUpperCase()}${label.slice(1).toLowerCase()} (${keyName})`;
+
 /**
  * One of the big hits. A held one is on while the pointer is down and off when it
  * comes up or leaves; Shift-click latches it instead. Blackout toggles. From the
@@ -60,7 +63,7 @@ export function Hit({ kind, on, hold, label, keyName, send }: { kind: fx.Hit; on
       className="fx-hit"
       data-kind={kind}
       aria-pressed={on}
-      aria-label={`${label} (${keyName})`}
+      aria-label={hitLabel(label, keyName)}
       title={`${label}: ${how}`}
       onPointerDown={(e) => {
         if (e.button !== 0) return;
@@ -82,7 +85,7 @@ export function Hit({ kind, on, hold, label, keyName, send }: { kind: fx.Hit; on
       }}
     >
       {label}
-      <small>{keyName}</small>
+      <small aria-hidden="true">{keyName}</small>
     </ButtonFace>
   );
 }
@@ -129,7 +132,14 @@ export function Effects({ state, onState, send }: { state: fx.Fx; onState: React
             <ButtonFace className="fx-tempo" aria-label={`Tap tempo, now ${Math.round(state.bpm)} bpm (T)`} title="Tap the tempo (T)" onClick={() => send({ kind: 'tap' })}>
               TAP <b>{Math.round(state.bpm)}</b>
             </ButtonFace>
-            <NumberField param={BPM} value={Math.round(state.bpm)} onChange={(v) => set({ kind: 'bpm', bpm: Math.round(v) }, { bpm: Math.round(v) })} name="bpm" title="Type or drag a tempo" />
+            <NumberField
+              param={BPM}
+              value={Math.round(state.bpm)}
+              onChange={(v) => set({ kind: 'bpm', bpm: Math.round(v) }, { bpm: Math.round(v) })}
+              name="bpm"
+              label="Tempo in BPM"
+              title="Type or drag a tempo"
+            />
           </>
         )}
         <Segmented

@@ -208,7 +208,9 @@ export function SourcePicker({ onError }: { onError(error: unknown): void }) {
         width={180}
       />
       <details className="audio-advanced">
-        <summary title="which two of the source's channels are left and right">Advanced</summary>
+        <summary aria-label="Advanced: the left and right channels" title="which two of the source's channels are left and right">
+          Advanced
+        </summary>
         <span className="audio-advanced-body">
           {channel('left')}
           {channel('right')}
@@ -221,12 +223,12 @@ export function SourcePicker({ onError }: { onError(error: unknown): void }) {
         </span>
       )}
       {note && (
-        <span className="vf-warning audio-note" title={note}>
+        <span className="vf-warning audio-note" role="status" title={note}>
           {note}
         </span>
       )}
       {problem && (
-        <span className="vf-warning audio-note" title={problem}>
+        <span className="vf-warning audio-note" role="status" title={problem}>
           {problem}
         </span>
       )}
