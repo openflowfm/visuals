@@ -2,7 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LibraryData, LibraryRow } from './api.ts';
-import { HoldPad, intensityOf, keyOf, openEffects, Pad, padLabel, playsWindowed, ratingOf, starred, starsText, whenText, whereText } from './Live.tsx';
+import { HoldPad, intensityOf, keyOf, openEffects, Pad, padLabel, playsWindowed, ratingOf, starred, starsText, whenText, whereSr, whereText } from './Live.tsx';
 import * as pl from './playlists.ts';
 import { openSettings } from './Status.tsx';
 import { SHEET_EVENT, sheetOf } from './views.tsx';
@@ -86,6 +86,12 @@ describe('live mode', () => {
     // Following the library grid's filter is "the library", never a mood.
     expect(whereText(null, { ...pl.EMPTY_DECK, query: { groups: { style: ['fractal'] }, text: '' } })).toBe('From the library');
     expect(whereText(null, { ...pl.EMPTY_DECK, query: { groups: { tags: ['dark'] }, text: 'tunnel' } })).toBe('From the library');
+  });
+
+  it('reads where the next preset comes from to screen readers, after its name', () => {
+    const list = pl.manual('m', 'Chill', []);
+    expect(whereSr({ playlist: list, index: 2, next: null, nextIndex: null, count: 20 }, null)).toBe(', from Chill, 3 of 20');
+    expect(whereSr(null, null)).toMatch(/^, from the whole library/);
   });
 });
 

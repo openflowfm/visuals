@@ -139,6 +139,9 @@ export function upNote(lists: pl.Lists): string | null {
 }
 
 /** An up-next row's accessible name, saying when its file is missing (the strike-through doesn't). */
+/** Where focus goes when "Show fewer" hides the rows past UP_NEXT: a focused hidden row hands it to the last row still shown; otherwise it stays put (null). */
+export const collapseFocus = (focused: number): number | null => (focused >= UP_NEXT ? UP_NEXT - 1 : null);
+
 export const rowLabel = (r: Pick<Upcoming, 'name' | 'missing'>): string => (r.missing ? `${r.name}, missing` : r.name);
 
 /** Where a row dragged to `y` lands, from the rows' tops and heights: before row `slot`, or after the last when `slot` is their count. */
@@ -244,6 +247,14 @@ export function Crate({ lists, data, act, onLists, onError, current }: Props) {
     refocus.current = null;
     refs.current[at]?.focus();
   }, [lists]);
+  // "Show fewer" with focus on a row it hides: hand focus to the last row still shown rather than dropping it to the page.
+  const toggle = () => {
+    if (expanded) {
+      const at = collapseFocus(refs.current.findIndex((el) => el !== null && el === document.activeElement));
+      if (at !== null) refs.current[at]?.focus();
+    }
+    setExpanded(!expanded);
+  };
   const nudge = (row: number) => (e: KeyboardEvent) => {
     if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
     e.preventDefault();
@@ -366,7 +377,7 @@ export function Crate({ lists, data, act, onLists, onError, current }: Props) {
           </ol>
         )}
         {more && (
-          <button type="button" className="live-crate-more" aria-expanded={expanded} aria-controls="live-crate-next-rows" onClick={() => setExpanded((e) => !e)}>
+          <button type="button" className="live-crate-more" aria-expanded={expanded} aria-controls="live-crate-next-rows" onClick={toggle}>
             {expanded ? 'Show fewer' : 'Show all'}
           </button>
         )}

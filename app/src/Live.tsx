@@ -75,6 +75,9 @@ export function whereText(up: pl.Up | null, deck: pl.Deck | null): string {
   return 'From the whole library: play a playlist or a mood to set the order';
 }
 
+/** The same, read after the Next line's name for screen readers, which don't get its tooltip: ", from Chill, 1 of 20". */
+export const whereSr = (up: pl.Up | null, deck: pl.Deck | null): string => `, from${whereText(up, deck).slice('From'.length)}`;
+
 /** "More effects…": the More effects sheet, over live mode (it takes Esc while open). */
 export const openEffects = () => openSheet('effects');
 
@@ -350,6 +353,7 @@ export function Live({
             ) : (
               <span className="live-none">the next preset in the library</span>
             )}
+            {says.kind !== 'held' && <span className="live-sr">{whereSr(up, deck)}</span>}
             {says.kind !== 'held' && deck && <NextWhen auto={deck.auto} seconds={deck.seconds} />}
           </div>
         </div>

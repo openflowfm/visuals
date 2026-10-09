@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { LibraryData } from './api.ts';
 import * as pl from './playlists.ts';
-import { afterNext, chipAction, isMood, Crate, dropSlot, litMoods, moods, moveFor, needsDeckItems, nextPath, orderable, rowLabel, UP_NEXT, upNote, upcoming } from './Crate.tsx';
+import { afterNext, chipAction, collapseFocus, isMood, Crate, dropSlot, litMoods, moods, moveFor, needsDeckItems, nextPath, orderable, rowLabel, UP_NEXT, upNote, upcoming } from './Crate.tsx';
 
 const item = (name: string, missing = false): pl.Item => ({ path: `pack/${name}.milk`, name, group: 'pack', missing, hash: null });
 const ITEMS = ['a', 'b', 'c', 'd', 'e'].map((n) => item(n, n === 'd'));
@@ -232,5 +232,12 @@ describe('the crate, on screen', () => {
     expect(html).toMatch(/<button[^>]*class="live-crate-more"[^>]*aria-expanded="false"[^>]*>Show all<\/button>/);
     // Few enough to show them all: no disclosure.
     expect(render(lists({ playlist: 'm', index: 2, next_index: 3 }))).not.toContain('live-crate-more');
+  });
+
+  it('"Show fewer" moves focus off a row it hides to the last row shown', () => {
+    expect(collapseFocus(UP_NEXT + 3)).toBe(UP_NEXT - 1);
+    expect(collapseFocus(UP_NEXT)).toBe(UP_NEXT - 1);
+    expect(collapseFocus(UP_NEXT - 1)).toBeNull();
+    expect(collapseFocus(-1)).toBeNull();
   });
 });
