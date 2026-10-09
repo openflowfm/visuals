@@ -69,6 +69,8 @@ macro_rules! commands {
             quality::quality_set,
             access::reduced_motion,
             access::reduced_motion_set,
+            access::flash_warning_understood,
+            access::flash_warning_understand,
             crash::crash_reports,
             crash::crash_report_open,
             crash::crash_reports_enabled,

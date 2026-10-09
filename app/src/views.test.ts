@@ -6,7 +6,14 @@ import { homeFor, openSheet, Preview, SHEET_EVENT, sheetOf, viewsFor, type Sheet
 describe('Preview', () => {
   it('is a picture with a name, for a screen reader', () => {
     const html = renderToStaticMarkup(createElement(Preview, { className: 'home-preview' }));
-    expect(html).toMatch(/^<div class="home-preview" role="img" aria-label="preview of the playing preset"/);
+    expect(html).toMatch(/^<div class="home-preview" role="img" aria-label="preview of the playing preset/);
+  });
+
+  it('says it is loading in its name, since a picture hides what is inside it from a screen reader', () => {
+    const html = renderToStaticMarkup(createElement(Preview, { className: 'home-preview' }));
+    expect(html).toContain('aria-label="preview of the playing preset: Loading the display…"');
+    expect(html).toMatch(/<span class="bench-loading" aria-hidden="true">Loading the display…<\/span>/);
+    expect(html).not.toContain('role="status"');
   });
 });
 

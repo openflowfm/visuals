@@ -256,9 +256,9 @@ export interface Quality {
   /** One line on why it is at `effective`: what auto measured, or that it was chosen. */
   reason: string;
 }
-/** The render quality. A stub until its 0.9 lane (#101) lands: it never fails, and always says `{ chosen: 'auto', effective: 'high' }`. */
+/** The render quality now: the level chosen, the one in effect, and why. */
 export const qualityGet = () => invoke<Quality>('quality_get');
-/** Choose the render quality; resolves to it in effect. A stub until its 0.9 lane (#101) lands: it fails. */
+/** Choose the render quality, kept for next launch and drawn at from now on; resolves to it in effect. */
 export const qualitySet = (level: QualityLevel) => invoke<Quality>('quality_set', { level });
 
 /** `access::Motion`: whether to calm the motion, and whether that came from macOS's own setting. */
@@ -270,6 +270,10 @@ export interface Motion {
 export const reducedMotion = () => invoke<Motion>('reduced_motion');
 /** Reduce motion (true), don't (false), or follow macOS (null). */
 export const reducedMotionSet = (on: boolean | null) => invoke<Motion>('reduced_motion_set', { on });
+/** Whether "I understand" was chosen on the flashing warning, kept in `access.json` so it is asked once (and not in dev runs or headless captures after that). */
+export const flashWarningUnderstood = () => invoke<boolean>('flash_warning_understood');
+/** Keep that "I understand" was chosen on the flashing warning. */
+export const flashWarningUnderstand = () => invoke<void>('flash_warning_understand');
 
 /** `crash::Report`: a crash kept on this Mac. */
 export interface CrashReport {
