@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NONE_SEEN, newest, notes, readSeen, SEEN_KEY, shown, toOffer, writeSeen, type Report } from './CrashPrompt.tsx';
+import { markSeen, NONE_SEEN, notes, readSeen, SEEN_KEY, shown, toOffer, wasSeen, writeSeen, type Report } from './CrashPrompt.tsx';
 import { say } from './words.ts';
 
 const report = (id: string, when: number, sent = false, text = ''): Report => ({ id, when, summary: `summary ${id}`, sent, text });
@@ -7,20 +7,31 @@ const report = (id: string, when: number, sent = false, text = ''): Report => ({
 describe('the crash prompt', () => {
   it('offers unsent reports not yet seen, newest first', () => {
     const reports = [report('a', 10), report('b', 30), report('c', 20, true), report('d', 5)];
-    expect(toOffer(reports, { when: 8, ids: [] }).map((r) => r.id)).toEqual(['b', 'a']);
-    expect(toOffer(reports, { when: 30, ids: ['b'] })).toEqual([]);
+    expect(toOffer(reports, NONE_SEEN).map((r) => r.id)).toEqual(['b', 'a', 'd']);
+    expect(toOffer(reports, { when: 0, ids: ['b', 'a', 'd'] })).toEqual([]);
   });
 
-  it('still offers a report from the same second as the last one seen', () => {
-    const seen = newest([report('a', 30)], NONE_SEEN);
-    expect(seen).toEqual({ when: 30, ids: ['a'] });
-    expect(toOffer([report('a', 30), report('b', 30)], seen).map((r) => r.id)).toEqual(['b']);
-    expect(newest([report('b', 30)], seen)).toEqual({ when: 30, ids: ['a', 'b'] });
+  it('offers a report older than one already seen', () => {
+    const seen = markSeen([report('new', 30)], NONE_SEEN);
+    expect(seen).toEqual({ when: 0, ids: ['new'] });
+    expect(toOffer([report('new', 30), report('old', 10), report('same', 30)], seen).map((r) => r.id)).toEqual(['same', 'old']);
   });
 
-  it('remembers the newest report it has passed', () => {
-    expect(newest([report('a', 10), report('b', 30)], { when: 12, ids: [] })).toEqual({ when: 30, ids: ['b'] });
-    expect(newest([], { when: 12, ids: [] })).toEqual({ when: 12, ids: [] });
+  it('keeps the reports seen before ids were kept as seen', () => {
+    // The old high-water mark: everything before that second, and the ids of that second.
+    const legacy = { when: 30, ids: ['b'] };
+    expect(wasSeen(report('a', 10), legacy)).toBe(true);
+    expect(wasSeen(report('b', 30), legacy)).toBe(true);
+    expect(wasSeen(report('c', 30), legacy)).toBe(false);
+    expect(wasSeen(report('d', 40), legacy)).toBe(false);
+    // Marking more doesn't move the mark on.
+    expect(markSeen([report('d', 40)], legacy)).toEqual({ when: 30, ids: ['b', 'd'] });
+  });
+
+  it('forgets the ids of reports no longer kept', () => {
+    const seen = { when: 0, ids: ['gone', 'a'] };
+    expect(markSeen([report('b', 2)], seen, [report('a', 1), report('b', 2)])).toEqual({ when: 0, ids: ['a', 'b'] });
+    expect(markSeen([], seen)).toEqual(seen);
   });
 
   it('asks the user to read the text before submitting it, and counts earlier crashes', () => {

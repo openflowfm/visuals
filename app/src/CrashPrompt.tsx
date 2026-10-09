@@ -17,10 +17,14 @@ import './crash.css';
 
 export type Report = api.CrashReport;
 
-/** Where the newest crash already offered (or passed over while reports were off) is kept. */
+/** Where the crashes already offered (or passed over while reports were off) are kept. */
 export const SEEN_KEY = 'visuals.crashes.seen';
 
-/** The newest second already offered, and the reports of that second, so another one in the same second still shows. */
+/**
+ * The reports already offered, by id, so an older one not yet offered still
+ * shows. `when` is the high-water mark kept before ids were (every report
+ * before that second counts as seen); it's carried over, never moved on.
+ */
 export interface Seen {
   when: number;
   ids: string[];
@@ -28,17 +32,25 @@ export interface Seen {
 
 export const NONE_SEEN: Seen = { when: 0, ids: [] };
 
-/** The reports to offer: unsent and not seen, newest first. */
-export function toOffer(reports: Report[], seen: Seen): Report[] {
-  return reports.filter((r) => !r.sent && r.when >= seen.when && !(r.when === seen.when && seen.ids.includes(r.id))).sort((a, b) => b.when - a.when);
+/** Whether `report` was offered already. */
+export function wasSeen(report: Report, seen: Seen): boolean {
+  return report.when < seen.when || seen.ids.includes(report.id);
 }
 
-/** `seen` moved on past `reports`. */
-export function newest(reports: Report[], seen: Seen): Seen {
-  return reports.reduce<Seen>(
-    (most, r) => (r.when > most.when ? { when: r.when, ids: [r.id] } : r.when === most.when && !most.ids.includes(r.id) ? { when: r.when, ids: [...most.ids, r.id] } : most),
-    seen,
-  );
+/** The reports to offer: unsent and not seen, newest first. */
+export function toOffer(reports: Report[], seen: Seen): Report[] {
+  return reports.filter((r) => !r.sent && !wasSeen(r, seen)).sort((a, b) => b.when - a.when);
+}
+
+/**
+ * `seen` with `reports` added, keeping only the ids of reports still kept
+ * (`kept`, every report listed), so the list doesn't grow past the reports the
+ * app keeps; ids are kept as they were when `kept` is empty.
+ */
+export function markSeen(reports: Report[], seen: Seen, kept: Report[] = []): Seen {
+  const ids = [...new Set([...seen.ids, ...reports.map((r) => r.id)])];
+  const still = new Set(kept.map((r) => r.id));
+  return { when: seen.when, ids: kept.length > 0 ? ids.filter((id) => still.has(id)) : ids };
 }
 
 /** The text to show for `report`: the whole of it, or its summary when there's no more. */
@@ -86,6 +98,7 @@ export function writeSeen(seen: Seen, store?: Pick<Storage, 'setItem'>) {
 
 export function CrashPrompt() {
   const [offer, setOffer] = useState<Report[]>([]);
+  const [kept, setKept] = useState<Report[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -95,10 +108,12 @@ export function CrashPrompt() {
         const seen = readSeen();
         if (!on) {
           // Off: nothing is offered, and turning reports on later doesn't bring these back.
-          writeSeen(newest(reports, seen));
+          writeSeen(markSeen(reports, seen, reports));
           return;
         }
-        if (live) setOffer(toOffer(reports, seen));
+        if (!live) return;
+        setKept(reports);
+        setOffer(toOffer(reports, seen));
       })
       .catch(() => {});
     return () => {
@@ -107,10 +122,10 @@ export function CrashPrompt() {
   }, []);
 
   const close = useCallback(() => {
-    writeSeen(newest(offer, readSeen()));
+    writeSeen(markSeen(offer, readSeen(), kept));
     setOffer([]);
     setError(null);
-  }, [offer]);
+  }, [offer, kept]);
 
   const send = useCallback(() => {
     const report = offer[0];
