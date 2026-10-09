@@ -76,6 +76,62 @@ shaders, the same pixels from a fixed run).
   shader shows as one sealed block that still runs exactly and keeps its wires: honest
   about what it can't open yet, never wrong.
 
+## The graph: typed wires and one feedback connection
+
+Agreed October 9, 2026, from the mock at <https://claude.ai/artifact/EpPrAGEwFUmPsSup168qm9>
+(Kick Bloom, a preset made from blocks in six moves, and three pack presets).
+
+The preset is a left-to-right node graph, not a stack of stages. Movement blocks (Zoom,
+Spin, Ripple…) output movement into **Move the picture**; drawing blocks plug into
+**Paint on top**, whose numbered inlets are the paint order; Look blocks chain picture to
+picture into the screen. **Feedback** is the one connection that goes backwards: Paint's
+picture into Move's "last frame" inlet. Code that does nothing is a dashed block with no
+wire out.
+
+### Primitives
+
+Three kinds of value, each at one of four speeds:
+
+| | once | every frame | every point of a drawing | every spot of the screen |
+| --- | --- | --- | --- | --- |
+| **number** | Dice | Bass, Clock, an LFO | Sound | Distance from centre |
+| **colour** | a picked colour | Rainbow cycle | a line changing colour along it | = a **picture** |
+| **point** | a shape's position | a drifting shape | the points of a line | = **movement** |
+
+A picture is a colour at every spot, and movement is a point at every spot (where that
+spot reads the picture from), so the same nodes work at every speed. Three more things
+have wires of their own: **sound** (the wave or spectrum, read by drawings), **drawing**
+(painted on top, in order) and **trigger** (a kick, a beat, a bar). Feedback is not a
+type: it is a picture, one frame late. In the file the speeds are MilkDrop's sections
+(init, per-frame, per-point, per-pixel and the shaders).
+
+### Every knob is an inlet
+
+- A knob holds its own value until something is wired in; then it reads held value +
+  amount × wire, several wires add up, and unplugging brings the held value back. This is
+  the old build's rule (`node.values` and `node.depths` at `3bcc202`), kept.
+- Modes (circle, blob, explosive) are knobs too, so a wire can step through them.
+- Wires go to the same speed or faster, never slower; the only way back is Measure,
+  inside a Look.
+- Conversions are visible nodes: Place, Split, Colour from numbers, Measure.
+- Modulators (LFO, Wobble, Drift, Count up, Flicker, Rainbow cycle…) are sources whose own
+  knobs are inlets, so Treble can drive how far a Wobble swings.
+
+### Two tiers
+
+The editor brings back the old build's 36 node kinds (LFOs, colourways, lenses, patterns,
+fractals, light, grade, spread, halftone, blend, image, video, 3D models, the Ableton
+nodes), sorted into these primitives:
+
+- **Plays anywhere:** compiles to ordinary MilkDrop, so any MilkDrop player draws it the
+  same. Nearly everything: free-running LFOs, every modulator, colour, every lens mode,
+  patterns, fractals, light, grade, spread, halftone, blending the preset's own pictures,
+  images saved beside the preset as textures, wireframe models of a few hundred points.
+- **visual[flow]:** needs our engine. Link tempo and beat position, beat-synced LFOs,
+  Live track levels and song sections, video, full 3D models, blending with another
+  preset. The file still saves as a `.milk` with a stand-in other players use instead (a
+  detected beat for Link's beat, a still for a video), and the block carries a badge.
+
 ## Measured on the pack (9,795 presets)
 
 | Where the code is | Presets |
