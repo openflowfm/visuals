@@ -39,20 +39,26 @@ const VIEW_HINTS: Record<View, string> = {
   live: 'live: the output full screen on a display, with performing controls',
 };
 
+/** What the preview says until it has drawn. */
+const LOADING = 'Loading the display…';
+
 /**
  * Where the preview goes: the native view the engine draws in is placed under
  * this box, and shows through it. Until it has drawn, the box is a plain surface
  * saying the display is loading, so the page never shows a hole; once it draws,
- * the box paints nothing over the picture.
+ * the box paints nothing over the picture. A picture's (`role="img"`) contents
+ * are presentational, so VoiceOver never reads text inside it: the loading text
+ * goes in its name instead, and the text on screen is hidden from it.
  */
 export function Preview({ className }: { className: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const drawing = usePreview(ref);
+  const name = `${say('bench')} of the playing preset`;
   return (
-    <div className={className} ref={ref} role="img" aria-label={`${say('bench')} of the playing preset`} data-loading={drawing ? undefined : ''}>
+    <div className={className} ref={ref} role="img" aria-label={drawing ? name : `${name}: ${LOADING}`} data-loading={drawing ? undefined : ''}>
       {!drawing && (
-        <span className="bench-loading" role="status">
-          Loading the display…
+        <span className="bench-loading" aria-hidden="true">
+          {LOADING}
         </span>
       )}
     </div>

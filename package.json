@@ -25,18 +25,22 @@
     "app:lab": "VITE_LAB=1 app/run.sh --features lab"
   },
   "dependencies": {
-    "@openflow/widgets": "git+https://github.com/openflowfm/widgets.git#147983bb76764b2ae8036c7b0f5d5367eed86b83",
+    "@openflow/widgets": "git+https://github.com/openflowfm/widgets.git#ef99d1b2331c8ee11ecabdaa5c7328e5fed2ef97",
     "@tauri-apps/api": "^2.12.1",
     "@tauri-apps/plugin-opener": "^2.7.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
     "@types/node": "^26.6.4",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.2",
     "@vitest/coverage-v8": "^5.0.3",
+    "happy-dom": "^20.14.6",
     "prettier": "3.9.9",
     "typescript": "^7.0.2",
     "vite": "^8.3.3",
