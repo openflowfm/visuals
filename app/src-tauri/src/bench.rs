@@ -57,6 +57,8 @@ pub enum Cmd {
     /// Headless captures use it, since the window server never composes a
     /// Metal layer on a window that is on no display.
     Snapshot(bool, Sender<Option<Picture>>),
+    /// Draw at this render scale and mesh size from now on (`quality.rs`).
+    Quality(engine::quality::Quality),
 }
 
 /// A picture: its width and height in pixels, and its RGBA rows top to bottom.
@@ -198,7 +200,8 @@ pub fn start(instance: wgpu::Instance, surface: wgpu::Surface<'static>, size: (u
     let mut config = configuration(&adapter, &surface, size);
     config.present_mode = bench_present_mode(false);
     surface.configure(&device, &config);
-    let renderer = Renderer::new(device, queue, DRAW.0, DRAW.1);
+    let mut renderer = Renderer::new(device, queue, DRAW.0, DRAW.1);
+    renderer.set_quality(crate::quality::initial());
     let (commands, rx) = std::sync::mpsc::channel();
     let stats = Arc::new(Mutex::new(Stats::default()));
     let previews = Arc::new(Mutex::new(None));
@@ -350,6 +353,7 @@ impl Loop {
                 let _ = reply.send(size.filter(|_| self.loaded).and_then(|size| snapshot(&mut self.renderer, size)));
             }
             Cmd::SampleRate(rate) => self.audio.set_sample_rate(rate),
+            Cmd::Quality(quality) => self.renderer.set_quality(quality),
             Cmd::Set(owner, key, value, reply) => {
                 let _ = reply.send(self.renderer.set_value(owner, &key, value));
             }
