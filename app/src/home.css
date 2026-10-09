@@ -1,190 +1,58 @@
-/* The home (Home.tsx): a sidebar of playlists, smart playlists and the library;
-   a main pane with the playlist picked (its settings and its strip of
-   thumbnails) or the library's grid; and the stage, the big preview of the
-   preset playing. In a wide window the stage is a column beside the main pane;
-   in a narrow one (under 1200px) it is a row above it. Either way it has its own
-   grid cell, so it never covers the chips or the strip, and it stays put while
-   they scroll. Rules hang off `.home`, which outranks app.css's own. */
+/* The home (Home.tsx), laid out like a music app (decision 67): the header across
+   the top; the source list (Sources.tsx) down the left; the main pane, the
+   library's grid or a playlist's strip under its header (PlaylistHead.tsx); the
+   Now Playing panel (NowPanel.tsx) on the right, which can be closed; and the
+   bottom bar (HomeBar.tsx). Under 900px the source list is a menu at the top of
+   the main pane, and the panel, opened, takes the main pane's place. The panel and the bar
+   carry the preview, a hole onto the native view under the page: they paint
+   themselves with its shadow, so nothing here may paint behind them. Rules hang
+   off `.home`, which outranks app.css's own. */
 
 .app.home {
-  --home-side: 260px;
-  --home-stage: clamp(360px, 34vw, 720px);
-  grid-template-columns: var(--home-side) minmax(0, 1fr) var(--home-stage);
+  --home-side: 220px;
+  --home-now: 340px;
+  grid-template-columns: var(--home-side) minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
-.home > .vf-footer {
-  grid-row: -2 / -1;
+.app.home[data-panel] {
+  grid-template-columns: var(--home-side) minmax(0, 1fr) var(--home-now);
 }
 
-/* The sidebar: the lists scroll. */
+/* The source list: it scrolls. */
 .home .home-side {
   grid-column: 1;
   grid-row: 2;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: var(--panel);
   border-right: 1px solid var(--bd3);
 }
+/* Its narrow stand-in, the source menu, only in a narrow window. */
+.home .src-menu {
+  display: none;
+}
 
-/* The stage: the preview at the top of its column, and where the preset comes from under it.
-   The stage itself paints nothing: the preview is a hole onto the native view
-   under the page, so a background here would cover the picture. What is under
-   the preview paints itself instead. */
-.home .home-stage {
+/* The Now Playing panel's cell: transparent, the panel paints itself round the preview. */
+.home .home-now {
   grid-column: 3;
   grid-row: 2;
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  border-left: 1px solid var(--bd3);
 }
-/* Under the preview in a wide window: the preset's name, its folder, and where it comes from. */
-.home .home-stage-says {
-  flex: 1;
-  background: var(--panel);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px 14px;
-  min-width: 0;
-}
-.home .home-stage-says p {
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-.home .home-stage-name {
-  color: var(--fg);
-  font-size: var(--text-lead);
-  font-weight: var(--weight-medium);
-}
-.home .home-stage-group,
-.home .home-stage-from {
-  color: var(--caption);
-  font-size: var(--text-label);
-  letter-spacing: var(--track-label);
-}
-.home .home-stage-from:empty {
-  display: none;
-}
-.home .home-lists {
+.home .home-now > .now-panel {
   flex: 1;
   min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding: 8px 0;
-  color: var(--ui);
-  font-size: var(--text-body);
-}
-.home .home-preview-cell {
-  flex: none;
-  display: flex;
-  justify-content: center;
-  overflow: hidden;
-  border-bottom: 1px solid var(--bd3);
-}
-.home .home-preview {
-  aspect-ratio: 16 / 9;
-  width: 100%;
-  background: transparent;
-  /* Letterbox black, as the bench draws it: nothing behind the preview may paint. */
-  box-shadow: 0 0 0 100vmax #000;
-}
-.home .home-preview[data-loading] {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--panel);
-  /* The bars around it too: nothing else behind the preview paints. */
-  box-shadow: 0 0 0 100vmax var(--panel);
 }
 
-.home .home-section {
-  margin: 0 0 10px;
-}
-/* A section's heading, with its tools (+, ⤓) beside it rather than in it. */
-.home .home-section-head {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 0 6px 2px 12px;
-  color: var(--caption);
-  font-size: var(--text-label);
-  font-weight: var(--weight-medium);
-  letter-spacing: var(--track-label);
-  text-transform: uppercase;
-}
-.home .home-section-title {
-  flex: 1;
-  margin: 0;
-  font: inherit;
-}
-.home .home-section-rows {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.home .home-library-row {
-  border-top: 1px solid var(--bd3);
-  padding-top: 6px;
-}
-
-.home .home-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 26px;
-  padding: 0 10px 0 6px;
-  cursor: pointer;
-  user-select: none;
-}
-.home .home-row:hover {
-  background: var(--bd);
-}
-/* A row's ring (access.css) goes inside it: the lists scroll, and would clip one drawn outside. */
-.vf-root .home li.home-row:focus-visible {
-  outline: 2px solid var(--vf-focus-ring);
-  outline-offset: -2px;
-}
-.home .home-row[aria-current='true'] {
-  background: var(--sel);
-  color: var(--fg);
-}
-.home .home-row[data-active] .home-row-name {
-  color: var(--green);
-}
-.home .home-row-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.home .home-row > i {
-  color: var(--caption);
-  font-family: var(--mono);
-  font-variation-settings: var(--mono-axes);
-  font-size: var(--text-label);
-  font-style: normal;
-}
-.home .home-row-icon {
-  width: 22px;
-  text-align: center;
-  color: var(--detail);
-}
-.home .home-empty {
-  padding: 2px 12px;
-  color: var(--caption);
-  font-size: var(--text-label);
-}
-/* While a preset is dragged: the playlist it would land on lights up, and smart ones, which take none, fade. */
-.home .home-row[data-over] {
-  background: var(--sel);
-  box-shadow: inset 0 0 0 1px var(--caution);
-}
-.home .home-row[data-refuses] {
-  opacity: 0.45;
+/* The bottom bar, the whole width. */
+.home .home-bar {
+  grid-column: 1 / -1;
+  grid-row: 3;
 }
 
 /* The main pane. */
@@ -198,6 +66,17 @@
   min-width: 0;
   min-height: 0;
   background: var(--bg);
+}
+/* Something that went wrong (a preset that wouldn't open), over the main pane. */
+.home .home-notice {
+  flex: none;
+  gap: 4px;
+  margin: 8px 12px 0;
+  padding: 3px 4px 3px 8px;
+  font-size: var(--text-body);
+  background: var(--panel);
+  border-left: 2px solid var(--red);
+  border-radius: var(--radius);
 }
 .home .home-note {
   margin: 24px;
@@ -257,88 +136,29 @@
   flex: 1;
   min-height: 0;
 }
-.home .home-pane-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  padding: 12px 16px 6px;
-}
-.home .home-name {
-  margin: 0;
-  color: var(--fg);
-  font-size: var(--text-lead);
-  font-weight: var(--weight-medium);
-  cursor: text;
-}
-.home .home-name-input {
-  padding: 2px 6px;
-  font: inherit;
-  font-size: var(--text-lead);
-  color: var(--fg);
-  background: var(--surface-control);
-  border: 1px solid var(--bd3);
-  border-radius: var(--radius);
-}
-.home .home-pane-what {
-  color: var(--caption);
-  font-size: var(--text-label);
-  letter-spacing: var(--track-label);
-}
-.home .home-confirm {
-  display: inline-flex;
-  gap: 4px;
-}
-.home .home-play .wdg-button-body,
-.home .home-on .wdg-button-body {
-  border-color: var(--green);
-  color: var(--green);
-}
-.home .home-pane-head .wdg-button-body:focus-visible,
-.home .home-lists .wdg-button-body:focus-visible {
-  outline: 2px solid var(--vf-focus-ring);
-  outline-offset: 1px;
-}
 
-/* How it plays. A setting changed live, away from the playlist's own, is marked. */
-.home .home-settings {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 14px;
-  padding: 4px 16px 10px;
-  border-bottom: 1px solid var(--bd3);
-}
-.home .home-setting {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--detail);
-  font-size: var(--text-label);
-  letter-spacing: var(--track-label);
-}
-/* Each setting is named beside its field, so the field's own caption above it would say it twice. */
-.home .home-setting .wdg-caption {
-  display: none;
-}
-/* --caution, not --amber: the theme makes amber its (grey) primary, and a live change must be seen. */
-.home .home-setting[data-tweaked] > span {
-  color: var(--caution);
-}
-.home .home-setting[data-tweaked] > span::after {
-  content: ' •';
+/* The strip's tip: how to play from it and reorder it, quietly over it. */
+.home .home-strip-tip {
+  flex: none;
+  margin: 0;
+  padding: 0 16px 8px;
+  color: var(--caption);
+  font-size: var(--text-control);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 /* The strip: the playlist's presets as thumbnails, in the order they play. */
 .home .home-strip {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   align-content: start;
-  gap: 10px;
+  gap: 14px 12px;
   flex: 1;
   min-height: 0;
   margin: 0;
-  padding: 12px 16px 16px;
+  padding: 4px 16px 16px;
   overflow-x: hidden;
   overflow-y: auto;
   list-style: none;
@@ -348,7 +168,7 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
   min-width: 0;
   color: var(--ui);
   cursor: pointer;
@@ -387,28 +207,29 @@
 .home .home-tile-n,
 .home .home-tile-next {
   position: absolute;
-  bottom: 3px;
   padding: 0 4px;
-  color: #fff;
+  color: var(--fg);
   font-family: var(--mono);
   font-variation-settings: var(--mono-axes);
   font-size: var(--text-label);
   font-weight: normal;
-  background: rgb(0 0 0 / 0.55);
+  background: rgb(0 0 0 / 0.65);
   border-radius: var(--radius);
 }
 .home .home-tile-n {
-  left: 3px;
+  top: 4px;
+  left: 4px;
 }
 .home .home-tile-next {
-  right: 3px;
+  bottom: 4px;
+  right: 4px;
   color: var(--caution);
 }
 .home .home-tile-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--text-label);
+  font-size: var(--text-body);
 }
 .home .home-tile-tools {
   position: absolute;
@@ -424,8 +245,8 @@
   outline-color: var(--ui);
 }
 .home .home-tile[aria-current='true'] .home-thumb {
-  outline: 2px solid var(--green);
-  outline-offset: -2px;
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
 }
 .home .home-tile[aria-current='true'] .home-tile-name {
   color: var(--fg);
@@ -506,46 +327,48 @@
   white-space: nowrap;
 }
 
-/* Under 1200px the main pane needs the stage's width: the stage moves above it,
-   as wide as the main pane, the preview centred in letterbox black and no
-   taller than about a third of the window, so the chips and the strip keep
-   most of it. Where it comes from is said in the header's name and the strip. */
-@media (max-width: 1199px) {
+/* Under 1100px the panel narrows, so the grid keeps three tiles across. */
+@media (max-width: 1099px) {
   .app.home {
-    grid-template-columns: var(--home-side) minmax(0, 1fr);
-    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    --home-side: 200px;
+    --home-now: 300px;
+  }
+}
+
+/* Under 900px (down to the 560px minimum, decision 63): the source list is a
+   menu at the top of the main pane, and the panel, closed at first, takes the
+   main pane's place when opened (the bar's small preview opens it, ✕ puts the
+   main pane back). The main pane isn't drawn while it is open: nothing may
+   paint under the preview (#163). */
+@media (max-width: 899px) {
+  .app.home,
+  .app.home[data-panel] {
+    grid-template-columns: minmax(0, 1fr);
   }
   .home .home-side {
-    grid-row: 2 / 4;
-  }
-  .home .home-stage {
-    grid-column: 2;
-    grid-row: 2;
-    border-left: 0;
-  }
-  .home .home-preview {
-    width: auto;
-    height: min(32vh, calc((100vw - var(--home-side)) * 9 / 16));
-  }
-  .home .home-stage-says {
     display: none;
+  }
+  .home .src-menu {
+    display: inline-flex;
   }
   .app.home main.home-main {
-    grid-row: 3;
+    grid-column: 1;
   }
-}
-
-/* A narrow window: the frame rate's plain numbers give way (its warning when frames drop stays). */
-@media (max-width: 900px) {
-  .home .vf-header .vf-stats:not([data-slow]) {
+  .home .home-now {
+    grid-column: 1;
+  }
+  .app.home[data-panel] main.home-main {
     display: none;
   }
+  .home .home-strip {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    padding-inline: 12px;
+  }
 }
-
-/* Narrower still (decision 63): the sidebar gives the playlist room. */
-@media (max-width: 699px) {
-  .app.home {
-    --home-side: 180px;
+/* The home's header holds only the mark, home | live and ⚙ now, so the mark keeps its place down to 560px (app.css hides it under 640 for the other views). */
+@media (max-width: 639px) {
+  .home .vf-header > .vf-mark {
+    display: inline-flex;
   }
 }
 

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LibraryQuery, LibraryRow, Level } from './api.ts';
 import { prepareRow, type Prepared } from './librarySearch.ts';
 import { DEFAULT_SETTINGS, EMPTY_DECK, type Lists, type Playlist } from './playlists.ts';
-import { changeUnit, matches, playsFrom, RECENT, sections, seedStarters, SEEDED_KEY, STARTERS, STRIP_CAP, strip, NameEdit, tileFocus, withSetting, type Mark } from './home.ts';
+import { changeUnit, matches, playsFrom, playsLike, recentList, RECENT, sections, seedStarters, SEEDED_KEY, STARTERS, STRIP_CAP, strip, NameEdit, tileFocus, withSetting, type Mark } from './home.ts';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { firstPane, openSettings, PlaylistPane, rowSays, SettingsBar, Sidebar, stripTileSays } from './Home.tsx';
@@ -285,10 +285,12 @@ describe('settings', () => {
 describe('firstPane', () => {
   const lists = (playlists: Playlist[], playing: string | null = null): Lists => ({ playlists, deck: { ...EMPTY_DECK, playlist: playing } });
 
-  it('opens on the playlist playing, else the first, else the library', () => {
+  it('opens on the playlist playing, else the library (decision 67)', () => {
     expect(firstPane(lists([manual('a', []), manual('b', [])], 'b'))).toEqual({ kind: 'list', id: 'b' });
-    expect(firstPane(lists([manual('a', []), manual('b', [])]))).toEqual({ kind: 'list', id: 'a' });
+    expect(firstPane(lists([manual('a', []), manual('b', [])]))).toEqual({ kind: 'library' });
     expect(firstPane(lists([]))).toEqual({ kind: 'library' });
+    // A playlist that's gone isn't opened.
+    expect(firstPane(lists([manual('a', [])], 'gone'))).toEqual({ kind: 'library' });
   });
 
   it('opens on the library while the deck follows its filter (one the app picked up, say), so the library can show it', () => {
@@ -303,13 +305,33 @@ describe('playsFrom', () => {
   const warm = manual('w', ['/p/x.milk', '/p/y.milk', '/p/z.milk'], { name: 'Warm up' });
 
   it('names the playlist playing and where in it', () => {
-    expect(playsFrom({ ...EMPTY_DECK, playlist: 'w', index: 1 }, [warm])).toBe('From Warm up, 2 of 3');
-    expect(playsFrom({ ...EMPTY_DECK, playlist: 'w', index: null }, [warm])).toBe('From Warm up');
+    expect(playsFrom({ ...EMPTY_DECK, playlist: 'w', index: 1 }, [warm])).toBe('from Warm up · 2 of 3');
+    expect(playsFrom({ ...EMPTY_DECK, playlist: 'w', index: 1 }, [warm], false)).toBe('from Warm up');
+    expect(playsFrom({ ...EMPTY_DECK, playlist: 'w', index: null }, [warm])).toBe('from Warm up');
   });
 
-  it('says the library while the deck follows the grid, and nothing for a preset opened on its own', () => {
-    expect(playsFrom({ ...EMPTY_DECK, query: { groups: {}, text: 'x' } }, [warm])).toBe("From the library, in the grid's order");
-    expect(playsFrom(EMPTY_DECK, [warm])).toBe('');
+  it('says the library and its place while the deck follows the grid, and a preset opened on its own', () => {
+    expect(playsFrom({ ...EMPTY_DECK, query: { groups: {}, text: 'x' }, index: 6, count: 412 }, [warm])).toBe('from the library · 7 of 412');
+    expect(playsFrom({ ...EMPTY_DECK, query: { groups: {}, text: 'x' } }, [warm])).toBe('from the library');
+    expect(playsFrom(EMPTY_DECK, [warm])).toBe('opened on its own');
+  });
+});
+
+describe('playsLike', () => {
+  it('sums up how a playlist plays in one line', () => {
+    const warm = manual('w', ['/p/x.milk'], { name: 'Warm up' });
+    expect(playsLike(warm, 20)).toBe('20 presets · moves on every 30 s · in order · crossfade 2 s');
+    const odd = { ...warm, settings: { ...DEFAULT_SETTINGS, change: { unit: 'bars' as const, every: 8 }, order: 'shuffle' as const, transition: 0.5, speed: 1.5 } };
+    expect(playsLike(odd, 1)).toBe('1 preset · moves on every 8 bars · shuffled · crossfade 0.5 s · speed 1.50×');
+    expect(playsLike({ ...warm, settings: changeUnit(DEFAULT_SETTINGS, 'off') }, 3)).toContain('stays on each preset');
+  });
+});
+
+describe('recentList', () => {
+  it('finds the smart playlist of the presets played lately', () => {
+    const recent = smart('Recently played', { groups: {}, text: '', recent: 50 });
+    expect(recentList([manual('a', []), smart('Calm', { groups: {}, text: '' }), recent])).toBe(recent);
+    expect(recentList([manual('a', [])])).toBeNull();
   });
 });
 
@@ -333,11 +355,12 @@ describe('the home, read aloud', () => {
   const mine = manual('Mine', ['/presets/g/a.milk', '/presets/g/b.milk']);
   const calm = smart('Calm', { groups: {}, text: '' });
   const lists: Lists = { playlists: [mine, calm], deck: { ...EMPTY_DECK, playlist: 'Mine', index: 0, next_index: 1 } };
+  const counts = { library: 2, starred: 0, list: (p: Playlist) => (p.kind === 'manual' ? p.items.length : null) };
 
   it('names each playlist row with its kind, its count and whether it plays', () => {
     expect(rowSays(mine, true)).toBe('Mine, playlist, 2 presets, playing');
     expect(rowSays(calm, false)).toBe('Calm, smart playlist, fills itself with all presets');
-    const html = renderToStaticMarkup(createElement(Sidebar, { lists, shown: null, onPick: none, onLists: none, onImport: none, onError: fails, rowsReady: true }));
+    const html = renderToStaticMarkup(createElement(Sidebar, { lists, shown: null, counts, onPick: none, onLists: none, onImport: none, onError: fails }));
     expect(html).toContain('aria-label="Mine, playlist, 2 presets, playing"');
     expect(html).toContain('aria-label="Calm, smart playlist, fills itself with all presets"');
     // The count is in the label, so the number itself isn't read again.
@@ -345,7 +368,7 @@ describe('the home, read aloud', () => {
   });
 
   it('keeps + and ⤓ beside the headings, not in them', () => {
-    const html = renderToStaticMarkup(createElement(Sidebar, { lists, shown: null, onPick: none, onLists: none, onImport: none, onError: fails, rowsReady: true }));
+    const html = renderToStaticMarkup(createElement(Sidebar, { lists, shown: null, counts, onPick: none, onLists: none, onImport: none, onError: fails }));
     const headings = [...html.matchAll(/<h2[^>]*>(.*?)<\/h2>/g)].map((m) => m[1]);
     expect(headings).toEqual(['Playlists', 'Smart playlists']);
     expect(html).toContain('aria-label="new playlist"');

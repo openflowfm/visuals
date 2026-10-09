@@ -2,6 +2,7 @@ import type { LibraryQuery } from './api.ts';
 import * as pl from './playlists.ts';
 import type { Playlist, PlaylistSettings } from './playlists.ts';
 import { facet, type Prepared } from './librarySearch.ts';
+import { say } from './words.ts';
 
 /**
  * The home's logic, kept out of `Home.tsx` so it can be tested without a page:
@@ -259,15 +260,62 @@ export function changeUnit(s: PlaylistSettings, unit: pl.Change['unit']): Playli
 }
 
 /**
- * What the preview's caption says the preset playing comes from: "From Chill, 3
- * of 20", "From the library, in the grid's order" while the deck follows the
- * library's filter, else nothing (a preset opened on its own).
+ * Where the preset playing comes from, as the bottom bar's second line and the
+ * Now Playing panel say it: "from Chill · 3 of 20", "from the library · 7 of
+ * 412" while the deck follows the library's filter, else "opened on its own".
+ * `place` false leaves out "· n of m" (the panel's line).
  */
-export function playsFrom(deck: pl.Deck, playlists: readonly Playlist[]): string {
+export function playsFrom(deck: pl.Deck, playlists: readonly Playlist[], place = true): string {
+  const of = (index: number | null, count: number) => (place && index !== null && count > 0 ? ` · ${(index + 1).toLocaleString('en-US')} of ${count.toLocaleString('en-US')}` : '');
   const up = pl.upNext({ deck, playlists: [...playlists] });
-  if (up) return `From ${up.playlist.name}${up.index !== null && up.count ? `, ${up.index + 1} of ${up.count}` : ''}`;
-  if (deck.query) return "From the library, in the grid's order";
-  return '';
+  if (up) return `from ${up.playlist.name}${of(up.index, up.count)}`;
+  if (deck.query) return `from ${say('library query')}${of(deck.index, deck.count)}`;
+  return say('played alone');
+}
+
+/** What the main pane shows: a playlist, by id; the library; or the library's starred presets. */
+export type Pane = { kind: 'list'; id: string } | { kind: 'library' } | { kind: 'starred' };
+
+/** The smart playlist the sidebar shows as "Recently played", beside the library, rather than with the other smart playlists: the one filling itself with the presets played lately. */
+export const recentList = (playlists: readonly Playlist[]): Playlist | null => playlists.find((p) => p.kind === 'smart' && p.query?.recent !== undefined) ?? null;
+
+/** How often a playlist moves on, said plainly: "moves on every 30 s", "every 8 bars", "stays on each preset". */
+export function movesOn(change: pl.Change): string {
+  if (change.unit === 'off') return 'stays on each preset';
+  if (change.unit === 'bars') return `moves on every ${change.every === 1 ? 'bar' : `${change.every} bars`}`;
+  return `moves on every ${change.every} s`;
+}
+
+/**
+ * A playlist's one-line summary under its name: how many presets, how it moves
+ * on, its order and crossfade, then any look it sets ("20 presets · moves on
+ * every 30 s · in order · crossfade 2 s"). `total` is how many it holds (a
+ * smart one's matches).
+ */
+export function playsLike(list: Playlist, total: number): string {
+  const s = list.settings;
+  const n = `${total.toLocaleString('en-US')} preset${total === 1 ? '' : 's'}`;
+  const look = [s.speed !== 1 && `speed ${s.speed.toFixed(2)}×`, s.trails > 0 && `trails ${Math.round(s.trails * 100)}%`, s.hue > 0 && `colour shift ${Math.round(s.hue * 360)}°`];
+  return [n, movesOn(s.change), s.order === 'shuffle' ? 'shuffled' : 'in order', `crossfade ${Number(s.transition.toFixed(1))} s`, ...look].filter(Boolean).join(' · ');
+}
+
+/** The browser storage keys for what a viewer leaves open on the home: the library's filter chips, and the Now Playing panel in a wide window. */
+export const FILTERS_KEY = 'visuals.home.filters';
+export const PANEL_KEY = 'visuals.home.panel';
+
+/** A remembered open-or-closed, `fallback` when nothing was kept or storage can't be read. */
+export function remembered(key: string, fallback: boolean): boolean {
+  const v = localMark()?.get(key);
+  return v === '1' ? true : v === '0' ? false : fallback;
+}
+
+/** Keep an open-or-closed for next time; nothing when storage can't be used. */
+export function remember(key: string, open: boolean): void {
+  try {
+    localMark()?.set(key, open ? '1' : '0');
+  } catch {
+    // Storage full or refused: it opens as it would next time.
+  }
 }
 
 const clamp = (v: number, lo: number, hi: number) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : lo);

@@ -1,0 +1,147 @@
+/* The home's source list (Sources.tsx): the library, starred and recently played
+   up top, then the playlists and the smart playlists under caps headings. The
+   same list sits in the sidebar and, in a narrow window, in the source menu. */
+.src-list {
+  padding: 8px 0;
+  color: var(--ui);
+  font-size: var(--text-body);
+}
+.src-list .src-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.src-list .src-section {
+  margin: 12px 0 0;
+}
+/* A section's caps heading, with its tools (+, ⤓) at its right rather than in it. */
+.src-list .src-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 22px;
+  padding: 0 6px 2px 12px;
+  color: var(--caption);
+  font-size: var(--text-label);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+}
+.src-list .src-title {
+  flex: 1;
+  margin: 0;
+  font: inherit;
+}
+.src-list .src-head .wdg-button {
+  letter-spacing: 0;
+}
+.src-list .src-head .wdg-button-body:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 1px;
+}
+
+.src-list .src-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 0 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.src-list .src-row:hover {
+  background: var(--bd);
+}
+/* A row's ring goes inside it: the list scrolls, and would clip one drawn outside. */
+.vf-root .src-list li.src-row:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: -2px;
+}
+.src-list .src-row[aria-current='true'] {
+  background: var(--sel);
+  color: var(--fg);
+  box-shadow: inset 2px 0 0 var(--primary);
+}
+.src-list .src-row[data-active] .src-name {
+  color: var(--green);
+}
+.src-list .src-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The count, right-aligned. */
+.src-list .src-row > i {
+  margin-left: auto;
+  color: var(--caption);
+  font-size: var(--text-control);
+  font-style: normal;
+}
+
+/* The icon; on a playlist, a quiet play (or stop) button in its place on hover and focus. */
+.src-list .src-ico {
+  position: relative;
+  flex: none;
+  width: 12px;
+  text-align: center;
+  color: var(--detail);
+}
+.src-list .src-play {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--ui);
+  font: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.src-list .src-play:hover:not(:disabled),
+.src-list .src-play:focus-visible {
+  color: var(--fg);
+}
+.src-list .src-play:disabled {
+  color: var(--caption);
+  cursor: default;
+}
+.src-list .src-play:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 1px;
+}
+.src-list .src-row:hover .src-play,
+.src-list .src-row:focus-within .src-play {
+  display: flex;
+}
+.src-list .src-row:hover .src-ico:has(.src-play) .src-glyph,
+.src-list .src-row:focus-within .src-ico:has(.src-play) .src-glyph {
+  visibility: hidden;
+}
+
+.src-list .src-empty {
+  padding: 2px 12px;
+  color: var(--caption);
+  font-size: var(--text-label);
+}
+/* While a preset is dragged: the playlist it would land on lights up, and smart ones, which take none, fade. */
+.src-list .src-row[data-over] {
+  background: var(--sel);
+  box-shadow: inset 0 0 0 1px var(--caution);
+}
+.src-list .src-row[data-refuses] {
+  opacity: 0.45;
+}
+
+/* The narrow window's source menu: the same list in a panel under "<pane> ▾". */
+.src-menu .vf-pop-panel {
+  width: 240px;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 0;
+}
+.src-menu .src-list {
+  padding: 4px 0;
+}

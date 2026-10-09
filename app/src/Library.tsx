@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { KeyboardEvent, PointerEvent } from 'react';
+import type { KeyboardEvent, PointerEvent, ReactNode } from 'react';
+import { FILTERS_KEY, remember, remembered } from './home.ts';
+import { PackOffer } from './PackOffer.tsx';
 import * as api from './api.ts';
 import type { Entry, LibraryChange, LibraryData, LibraryGroup, LibraryQuery, LibraryRow } from './api.ts';
 import * as pl from './playlists.ts';
@@ -11,6 +13,7 @@ import {
   GROUP_LABEL,
   SWATCH,
   activeGroups,
+  STARRED,
   debounced,
   facet,
   facetSummary,
@@ -53,6 +56,27 @@ export interface LibraryProps {
   onPress?(e: Entry, thumbnail: string | null, ev: PointerEvent): void;
   /** The narrowest a tile gets, in px, for a library given more room than its column. */
   tileMin?: number;
+  /** The library as the home's main pane (decision 67); without it, the lab editor's column. */
+  home?: HomeLibrary;
+}
+
+/**
+ * The library as the home's main pane: a title and count, the search, and the
+ * group chips behind a "filter · n" button (open or closed as the viewer left
+ * it); the values picked as chips on a summary line with "save as smart
+ * playlist"; no drawer (the home's Now Playing panel takes the selection) and
+ * no pack bar (the full library is offered on a line while only the starter set
+ * is in, and in Settings).
+ */
+export interface HomeLibrary {
+  /** `starred` shows only the starred presets (the sidebar's Starred). */
+  scope: 'library' | 'starred';
+  /** The pane's title: "Library", "Starred". */
+  title: string;
+  /** The narrow window's source menu, shown in place of the title. */
+  menu?: ReactNode;
+  /** Several presets picked in the grid (⌘ or ⇧), or one; for the Now Playing panel. */
+  onChosen(chosen: Prepared[]): void;
 }
 
 const count = (n: number) => n.toLocaleString('en-US');
@@ -154,7 +178,7 @@ function rereadOnData(set: (d: LibraryData) => unknown): () => void {
  * a drawer for the selection. AND across groups, OR within one; each value counts
  * the presets it would show.
  */
-export function Library({ entries, loaded, search, onSearch, current, into, onLoad, onAdd, onPress, tileMin }: LibraryProps) {
+export function Library({ entries, loaded, search, onSearch, current, into, onLoad, onAdd, onPress, tileMin, home }: LibraryProps) {
   const index = useIndex();
   const [data, setData] = useLibraryData();
   const [groups, setGroups] = useState<LibraryQuery['groups']>({});
@@ -171,8 +195,17 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
   const [credits, setCredits] = useState(false);
   const drop = useDropToAdd();
   useCreditsMenu(() => setCredits(true));
+  // The home's chips start as the viewer left them: closed, the first time.
+  const [filters, setFilters] = useState(() => (home ? remembered(FILTERS_KEY, false) : true));
+  const flipFilters = () => {
+    remember(FILTERS_KEY, !filters);
+    setFilters(!filters);
+    if (filters) setOpen(null);
+  };
 
-  const query: LibraryQuery = useMemo(() => ({ groups, text: search }), [groups, search]);
+  // Starred is the library with the star group always picked; its chip isn't shown, as it can't be taken off.
+  const starred = home?.scope === 'starred';
+  const query: LibraryQuery = useMemo(() => ({ groups: starred ? { ...groups, star: [STARRED] } : groups, text: search }), [groups, search, starred]);
   const rows = useMemo(() => index ?? rowsFromEntries(entries), [index, entries]);
   const prepared = useMemo(() => prepare(rows, data), [rows, data]);
   const faceted = useMemo(() => facet(prepared, query), [prepared, query]);
@@ -181,6 +214,8 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
   const byKey = useMemo(() => new Map(prepared.map((p) => [p.row.key, p])), [prepared]);
   const selectedSet = useMemo(() => new Set(selection), [selection]);
   const chosen = useMemo(() => selection.map((k) => byKey.get(k)).filter((p): p is Prepared => !!p), [selection, byKey]);
+  const onChosen = home?.onChosen;
+  useEffect(() => onChosen?.(chosen), [chosen, onChosen]);
 
   // The App's entries, by path, so a load hands it the entry it knows.
   const byPath = useMemo(() => new Map(entries.map((e) => [e.path, e])), [entries]);
@@ -317,10 +352,14 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
   };
 
   const empty = loaded && entries.length === 0 && !rows.length;
-  const filtered = activeGroups(query).length > 0 || search.trim() !== '';
-  const summary = facetSummary(faceted, query);
+  // The values picked by hand: Starred's own star isn't one.
+  const picked = activeGroups({ groups, text: '' });
+  const filtered = picked.length > 0 || search.trim() !== '';
+  const summary = home ? (filtered ? (shown.length ? `${count(shown.length)} preset${shown.length === 1 ? '' : 's'}` : 'no presets match') : null) : facetSummary(faceted, query);
+  const pickedCount = picked.reduce((n, g) => n + (groups[g]?.length ?? 0), 0);
 
-  const bar = <PackBar presets={entries.length} dropped={drop.note} credits={credits} onCredits={() => setCredits((c) => !c)} />;
+  // The home has no pack bar: a drop's note goes on the summary line, and the full library is offered on a line of its own.
+  const bar = home ? null : <PackBar presets={entries.length} dropped={drop.note} credits={credits} onCredits={() => setCredits((c) => !c)} />;
   if (credits) {
     return (
       <div className="lib" data-drop={drop.over ? '' : undefined}>
@@ -338,25 +377,51 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
     (ev.currentTarget.closest('.lib')?.querySelector('.lib-grid') as HTMLElement | null)?.focus();
   };
 
-  return (
-    <div className="lib" data-drop={drop.over ? '' : undefined}>
-      <input
-        className="lib-search"
-        type="search"
-        aria-label="search presets"
-        placeholder={`search ${count(rows.length || entries.length)} presets`}
-        title="Every word must match the preset's style, author, name or tags. ↓ moves into the grid."
-        value={search}
-        onChange={(ev) => {
-          filterChanged();
-          onSearch(ev.target.value);
-        }}
-        onKeyDown={onSearchKey}
+  const searchBox = (
+    <input
+      className="lib-search"
+      type="search"
+      aria-label="search presets"
+      placeholder={`search ${count(rows.length || entries.length)} presets`}
+      title="Every word must match the preset's style, author, name or tags. ↓ moves into the grid."
+      value={search}
+      onChange={(ev) => {
+        filterChanged();
+        onSearch(ev.target.value);
+      }}
+      onKeyDown={onSearchKey}
+      disabled={empty}
+    />
+  );
+  // On the home the chips wait behind "filter · n"; the editor's column always shows them.
+  const chipsShown = !empty && filters;
+  const title = home && (
+    <div className="lib-head">
+      {home.menu}
+      <h1 className="lib-title-head">{home.title}</h1>
+      <span className="lib-count">{count(starred ? prepared.filter((p) => p.star).length : rows.length || entries.length)}</span>
+      <span className="lib-fill" />
+      {searchBox}
+      <button
+        type="button"
+        className="lib-filter"
+        aria-expanded={filters}
+        aria-label={pickedCount ? `${say('facets')}, ${pickedCount} picked` : say('facets')}
+        title={filters ? 'Hide the filter' : 'Filter by style, author, colour, speed, intensity, star or your tags'}
+        onClick={flipFilters}
         disabled={empty}
-      />
-      {!empty && (
+      >
+        {say('facets')} · {pickedCount}
+      </button>
+    </div>
+  );
+
+  return (
+    <div className={home ? 'lib lib-home' : 'lib'} data-drop={drop.over ? '' : undefined}>
+      {title || searchBox}
+      {chipsShown && (
         <div className="lib-chips" role="group" aria-label="groups">
-          {GROUPS.map((g) => {
+          {GROUPS.filter((g) => !(starred && g === 'star')).map((g) => {
             const on = query.groups[g]?.length ?? 0;
             // Until the index is read there is no look to count, so these wait rather than show nothing.
             const waiting = !index && LOOK_GROUPS.includes(g);
@@ -386,13 +451,13 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
           })}
         </div>
       )}
-      {open && !(!index && LOOK_GROUPS.includes(open)) && (
+      {chipsShown && open && !(!index && LOOK_GROUPS.includes(open)) && (
         <Values group={open} values={valuesFor(open, faceted, query)} selected={query.groups[open] ?? []} find={find} onFind={setFind} onPick={(v) => pickValue(open, v)} />
       )}
       {filtered && (
         <div className="lib-picked">
-          {activeGroups(query).flatMap((g) =>
-            query.groups[g]!.map((v) => (
+          {picked.flatMap((g) =>
+            groups[g]!.map((v) => (
               <button
                 key={`${g}:${v}`}
                 type="button"
@@ -405,6 +470,14 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
                 {valueLabel(g, v)} <span aria-hidden="true">×</span>
               </button>
             )),
+          )}
+          {home && (
+            <>
+              <span className="lib-picked-count" role="status">
+                {summary}
+              </span>
+              <span className="lib-fill" />
+            </>
           )}
           <button type="button" className="lib-link" aria-label="clear the filter" onClick={clearAll} title="Show every preset">
             clear
@@ -432,17 +505,30 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
           )}
         </div>
       )}
-      {(summary || saveNote) && (
-        <div className="lib-summary" role="status">
-          {[summary, saveNote].filter(Boolean).join(' · ')}
-        </div>
+      {home ? (
+        <>
+          {(saveNote || drop.note) && (
+            <div className="lib-summary" role="status" data-error={drop.note?.error ? '' : undefined}>
+              {[saveNote, drop.note?.text].filter(Boolean).join(' · ')}
+            </div>
+          )}
+          {!empty && !starred && <PackOffer />}
+        </>
+      ) : (
+        (summary || saveNote) && (
+          <div className="lib-summary" role="status">
+            {[summary, saveNote].filter(Boolean).join(' · ')}
+          </div>
+        )
       )}
       {!loaded && !index ? (
         <p className="lib-note" role="status">
           loading presets…
         </p>
       ) : empty ? (
-        <p className="lib-note lib-first-run">No presets yet. Drop .milk files or a folder of them here, or use Add a folder… below.</p>
+        <p className="lib-note lib-first-run">No presets yet. Drop .milk files or a folder of them here, or use Add a folder… {home ? 'in Settings (⚙)' : 'below'}.</p>
+      ) : starred && !shown.length && !filtered ? (
+        <p className="lib-note lib-first-run">Nothing starred yet. ★ in the {say('stage')} panel stars the preset playing.</p>
       ) : (
         <LibraryGrid
           rows={shown}
@@ -459,7 +545,7 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
           tileMin={tileMin}
         />
       )}
-      {chosen.length > 0 && !empty && (
+      {!home && chosen.length > 0 && !empty && (
         <PresetDrawer
           key={selection.join('\n')}
           chosen={chosen}

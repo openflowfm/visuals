@@ -451,3 +451,113 @@
 .lib-drawer-error {
   color: var(--red);
 }
+
+/* The library as the home's main pane (decision 67): a title row with the
+   count, the search and "filter · n"; the chips under it only when opened; the
+   values picked on a summary line with the count and "save as smart playlist". */
+.lib-home .lib-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px 8px;
+  min-width: 0;
+}
+.lib-home .lib-title-head {
+  margin: 0;
+  color: var(--fg);
+  font-family: var(--sans);
+  font-variation-settings: var(--sans-axes);
+  font-size: var(--text-title);
+  font-weight: var(--weight-strong);
+  white-space: nowrap;
+}
+.lib-home .lib-count,
+.lib-home .lib-picked-count {
+  color: var(--caption);
+  font-size: var(--text-body);
+  white-space: nowrap;
+}
+.lib-fill {
+  flex: 1;
+}
+.lib-home .lib-search {
+  flex: 0 1 240px;
+  min-width: 90px;
+  height: var(--ctl-h);
+  margin: 0;
+  padding: 0 8px;
+  font-family: var(--mono);
+  font-variation-settings: var(--mono-axes);
+  font-size: var(--text-control);
+  background: var(--panel);
+}
+.lib-home .lib-filter {
+  flex: none;
+  height: var(--ctl-h);
+  padding: 0 8px;
+  font-family: var(--mono);
+  font-variation-settings: var(--mono-axes);
+  font-size: var(--text-control);
+  color: var(--ui);
+  white-space: nowrap;
+}
+.lib-home .lib-filter[aria-expanded='true'] {
+  color: var(--fg);
+  border-color: var(--focus);
+}
+.lib-home .lib-filter:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 1px;
+}
+.lib-home .lib-chips,
+.lib-home .lib-picked {
+  gap: 6px;
+  padding: 0 16px 10px;
+}
+.lib-home .lib-values {
+  margin: 0 16px 10px;
+}
+.lib-home .lib-chip {
+  height: 20px;
+  padding: 0 8px;
+  font-size: var(--text-control);
+}
+.lib-home .lib-chip-picked {
+  color: var(--fg);
+  background: var(--sel);
+  border-color: var(--focus);
+}
+.lib-home .lib-link {
+  font-size: var(--text-control);
+  color: var(--detail);
+  text-decoration: none;
+}
+.lib-home .lib-link:hover {
+  color: var(--fg);
+}
+.lib-home .lib-summary {
+  padding: 0 16px 8px;
+}
+.lib-home .lib-summary[data-error] {
+  color: var(--red);
+}
+.lib-home .lib-first-run {
+  padding: 8px 16px;
+}
+/* A narrow window: the menu takes the title's place, and the search takes the room left. */
+@media (max-width: 899px) {
+  .lib-home .lib-head {
+    padding: 10px 12px 8px;
+  }
+  .lib-home .lib-title-head {
+    display: none;
+  }
+  .lib-home .lib-search {
+    flex: 1 1 auto;
+  }
+  .lib-home .lib-chips,
+  .lib-home .lib-picked,
+  .lib-home .lib-summary {
+    padding-inline: 12px;
+  }
+}

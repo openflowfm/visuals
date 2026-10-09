@@ -96,29 +96,26 @@
   gap: 8px;
 }
 
-/* Sound: the source picker with its meter, and Advanced (the channels) opening
-   in place rather than floating over the next section. */
+/* Sound: the source picker with its meter, and under them, on a line of their
+   own, the left and right channels. */
 .settings .audio-input {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
-.settings .audio-advanced {
-  display: block;
-  width: 100%;
+.vf-sheet.settings .audio-channels {
+  display: flex;
+  flex: 1 0 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
   order: 3;
 }
-.settings .audio-advanced > summary {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-}
-.settings .audio-advanced-body {
-  position: static;
-  padding: 0;
-  background: none;
-  border: 0;
+.vf-sheet.settings .audio-channels-name {
+  flex: 1 0 auto;
+  color: var(--fg);
+  font-size: var(--text-body);
 }
 .settings .audio-note {
   order: 4;
@@ -140,4 +137,49 @@
 .output-settings .output-fit b {
   color: var(--fg);
   font-weight: var(--weight-medium);
+}
+
+/* Presets: the pack bar (Pack.tsx, styled in credits.css for the library's
+   foot) as a section of its own, and the credits shown in its place. */
+.vf-sheet.settings .pack {
+  gap: 8px;
+  padding: 0;
+  border-top: 0;
+}
+.vf-sheet.settings .pack-count,
+.vf-sheet.settings .pack-note {
+  font-size: var(--text-body);
+}
+.vf-sheet.settings .pack-progress {
+  height: 44px;
+}
+.vf-sheet.settings .pack-progress-label {
+  line-height: 42px;
+}
+.vf-sheet.settings .credits-head {
+  padding: 0;
+}
+.vf-sheet.settings .credits-body {
+  overflow: visible;
+  padding: 0;
+}
+
+/* The library's pack offer (PackOffer.tsx), used on the home: one quiet line,
+   its button inline. */
+.pack-offer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 0;
+  padding: 0 16px 10px;
+  color: var(--caption);
+  font-size: var(--text-body);
+  line-height: 1.4;
+}
+.pack-offer .pack-offer-error {
+  color: var(--red);
+}
+.pack-offer .pack-progress {
+  flex: 1 1 240px;
 }
