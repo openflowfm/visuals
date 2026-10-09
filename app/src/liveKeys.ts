@@ -45,10 +45,6 @@ export type KeyLike = Pick<KeyboardEvent, 'key' | 'metaKey' | 'shiftKey' | 'ctrl
  */
 export const LIVE_HOLD_KEYS: Readonly<Record<string, fx.Hit>> = { s: 'strobe', p: 'punch', z: 'freeze' };
 
-/** Live mode's keys, briefly, for the footer when nothing is hovered. */
-export const KEYS =
-  '← → step · R random · H hold · hold S strobe, P punch, Z freeze (⇧ latches) · B blackout · T tap · I invert · M mirror · 0 reset effects · 1–5 rate · F favourite · ? help · Esc leave';
-
 /** What an effect key does in live mode: {@link fx.effectKey}, with freeze moved from F to Z. */
 function effectKey(key: string, shift: boolean): fx.KeyPress | null {
   const k = key.toLowerCase();

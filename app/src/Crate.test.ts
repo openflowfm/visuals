@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { LibraryData } from './api.ts';
 import * as pl from './playlists.ts';
-import { chipAction, Crate, dropSlot, litMoods, moods, moveFor, needsDeckItems, orderable, rowLabel, upNote, upcoming } from './Crate.tsx';
+import { afterNext, chipAction, collapseFocus, isMood, Crate, dropSlot, litMoods, moods, moveFor, needsDeckItems, nextPath, orderable, rowLabel, UP_NEXT, upNote, upcoming } from './Crate.tsx';
 
 const item = (name: string, missing = false): pl.Item => ({ path: `pack/${name}.milk`, name, group: 'pack', missing, hash: null });
 const ITEMS = ['a', 'b', 'c', 'd', 'e'].map((n) => item(n, n === 'd'));
@@ -37,6 +37,17 @@ describe('litMoods', () => {
     expect(litMoods(lists({ query: { groups: { style: ['x'] }, text: '' } }).deck)).toEqual([]);
     expect(litMoods(pl.EMPTY_DECK)).toEqual([]);
   });
+
+  it("never lights a mood for the library grid's filter, even one with tags in it", () => {
+    const grid = { groups: { tags: ['dark'], style: ['fractal'] }, text: '' };
+    expect(isMood(grid)).toBe(false);
+    expect(isMood({ groups: { tags: ['dark'] }, text: 'tunnel' })).toBe(false);
+    expect(isMood({ groups: { tags: ['dark'] }, text: '' })).toBe(true);
+    expect(isMood(null)).toBe(false);
+    expect(litMoods(lists({ query: grid }).deck)).toEqual([]);
+    expect(upNote(lists({ query: grid }))).toBe('From the library, in its order.');
+    expect(upNote(lists({ query: grid }))).not.toMatch(/mood/);
+  });
 });
 
 describe('chipAction', () => {
@@ -62,7 +73,7 @@ describe('upcoming', () => {
   });
 
   it('starts at the first before anything in the playlist has played', () => {
-    expect(upcoming(lists({ playlist: 'm' }), null).map((r) => r.at)).toEqual([0, 1, 2, 3, 4]);
+    expect(upcoming(lists({ playlist: 'm' }), null, 8).map((r) => r.at)).toEqual([0, 1, 2, 3, 4]);
   });
 
   it('reads the deck items from after the playing one for a shuffle, a smart list or a mood, and none can be dragged', () => {
@@ -98,7 +109,21 @@ describe('orderable and the notes', () => {
     expect(upNote(lists({ playlist: 'm', order: 'shuffle' }))).toBe('Shuffled: the order is picked as it plays.');
     expect(upNote(lists({ query: { groups: { tags: ['x'] }, text: '' } }))).toBe('A mood plays in library order.');
     expect(upNote(lists({ playlist: 's' }))).toMatch(/smart playlist/);
-    expect(upNote(lists({ playlist: 'm' }))).toMatch(/Drag/);
+    // A playlist in order shows no instruction: its rows show their ≡ on hover.
+    expect(upNote(lists({ playlist: 'm' }))).toBeNull();
+  });
+});
+
+describe('afterNext', () => {
+  it("leaves out the first row when the deck's Next line already names it", () => {
+    const deck = lists({ playlist: 'm', index: 2, next_index: 3 });
+    expect(nextPath(deck)).toBe('pack/d.milk');
+    const rows = upcoming(deck, null);
+    expect(afterNext(rows, nextPath(deck)).map((r) => r.name)).toEqual(['e', 'a', 'b']);
+    // A Next line naming something else, or nothing: every row stays.
+    expect(afterNext(rows, 'pack/e.milk').map((r) => r.name)).toEqual(['d', 'e', 'a', 'b']);
+    expect(afterNext(rows, null)).toHaveLength(4);
+    expect(nextPath(lists({}))).toBeNull();
   });
 });
 
@@ -159,17 +184,60 @@ describe('the crate, to VoiceOver', () => {
   it('names each up-next row, says a missing one is missing, and points a row that moves at how to move it', () => {
     expect(rowLabel({ name: 'd', missing: true })).toBe('d, missing');
     expect(rowLabel({ name: 'e', missing: false })).toBe('e');
+    // Playing c, next d (the Next line's): the rows are e a b.
     const rows = html.match(/<li[^>]*class="live-crate-row"[^>]*>/g) ?? [];
-    expect(rows).toHaveLength(4);
-    expect(rows[0]).toContain('aria-label="d, missing"');
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toContain('aria-label="e"');
     for (const row of rows) {
       expect(row).toContain('tabindex="0"');
       expect(row).toContain('aria-describedby="live-crate-next-note"');
     }
-    expect(html).toContain('id="live-crate-next-note"');
+    // The note is for VoiceOver only; on screen the ≡ shows on hover.
+    expect(html).toMatch(/<span class="live-sr" id="live-crate-next-note">Alt\+↑/);
+    expect(html).not.toContain('Drag ≡');
   });
 
   it('says whether a mood is playing', () => {
     expect(html).toMatch(/<button[^>]*class="live-crate-chip"[^>]*aria-pressed="false"[^>]*>warm<\/button>/);
+  });
+});
+
+describe('the crate, on screen', () => {
+  const noop = () => {};
+  const render = (l: pl.Lists, data: LibraryData | null = null) => renderToStaticMarkup(createElement(Crate, { lists: l, data, act: noop, onLists: noop, onError: noop, current: null }));
+
+  it("doesn't count a playlist's presets, and marks a smart one", () => {
+    const html = render(lists({}));
+    expect(html).not.toMatch(/\d+ presets?/);
+    expect(html).toContain('class="live-crate-smart"');
+  });
+
+  it('has no Moods section until there are moods', () => {
+    expect(render(lists({}), null)).not.toContain('Moods');
+    expect(render(lists({}), { version: 1, presets: { x: { star: true } } })).not.toContain('Moods');
+    expect(render(lists({}), { version: 1, presets: { x: { tags: ['warm'] } } })).toContain('Moods');
+  });
+
+  it('shows four rows, the rest behind "Show all"', () => {
+    const long = pl.manual(
+      'm',
+      'Set',
+      ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((n) => item(n)),
+    );
+    const html = render({ playlists: [long], deck: { ...pl.EMPTY_DECK, playlist: 'm', index: 0, next_index: 1 } });
+    // Next is b: the rows start at c.
+    const rows = html.match(/<li[^>]*class="live-crate-row"[^>]*>/g) ?? [];
+    expect(rows).toHaveLength(UP_NEXT);
+    expect(rows[0]).toContain('aria-label="c"');
+    expect(html).toMatch(/<button[^>]*class="live-crate-more"[^>]*aria-expanded="false"[^>]*>Show all<\/button>/);
+    // Few enough to show them all: no disclosure.
+    expect(render(lists({ playlist: 'm', index: 2, next_index: 3 }))).not.toContain('live-crate-more');
+  });
+
+  it('"Show fewer" moves focus off a row it hides to the last row shown', () => {
+    expect(collapseFocus(UP_NEXT + 3)).toBe(UP_NEXT - 1);
+    expect(collapseFocus(UP_NEXT)).toBe(UP_NEXT - 1);
+    expect(collapseFocus(UP_NEXT - 1)).toBeNull();
+    expect(collapseFocus(-1)).toBeNull();
   });
 });
