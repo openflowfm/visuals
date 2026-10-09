@@ -4,10 +4,13 @@
 //! The starter set mirrors the pack's layout (`cream-of-the-crop/<Style>/…`), so
 //! a starter preset and the same one downloaded have the same folder-relative
 //! path: playlists follow it into the pack, and nothing is listed twice. The
-//! download unpacks as it arrives, each file written beside its place and then
-//! renamed into it, so the library fills in as it goes and a retry only fetches
-//! what is missing. The presets folder is watched, and the page told when it
-//! changes ([`CHANGED`]).
+//! full pack is our own bundle ([`BUNDLE`], see `docs/pack.md`): the presets with
+//! their `index.json` and `thumbnails/`, so the library arrives grouped and with
+//! pictures. When it can't be reached, projectM's bare pack is fetched instead
+//! ([`PROJECTM`]). The download unpacks as it arrives, each file written beside
+//! its place and then renamed into it, so the library fills in as it goes and a
+//! retry only fetches what is missing. The presets folder is watched, and the
+//! page told when it changes ([`CHANGED`]).
 
 use crate::App;
 use serde::{Deserialize, Serialize};
@@ -25,15 +28,50 @@ pub const PROGRESS: &str = "pack-progress";
 /// The event that says the presets folder changed (no payload).
 pub const CHANGED: &str = "presets-changed";
 
-/// The full pack: projectM's cream-of-the-crop, pinned to a commit. #94 swaps it
-/// for our own hosted bundle.
-const SOURCE: &str = "https://github.com/projectM-visualizer/presets-cream-of-the-crop/archive/0180df21f5e0bd39b9060cc5de420ed2f1f9e509.tar.gz";
+/// Where the full pack can be downloaded from, and its size in bytes.
+#[derive(Debug, Clone, Copy)]
+struct Source {
+    url: &'static str,
+    size: u64,
+}
+
+/// The full pack: our bundle of projectM's cream-of-the-crop with its index and
+/// thumbnails, a release asset of this repo (`docs/pack.md` builds it). A new
+/// bundle goes under a new tag, with its size here.
+const BUNDLE: Source = Source { url: "https://github.com/openflowfm/visuals/releases/download/pack-v1/cream-of-the-crop.tar.gz", size: 58_726_841 };
+/// The fallback: projectM's bare pack, pinned to the commit the bundle is made
+/// from. Same presets, no index or thumbnails.
+const PROJECTM: Source = Source { url: "https://github.com/projectM-visualizer/presets-cream-of-the-crop/archive/0180df21f5e0bd39b9060cc5de420ed2f1f9e509.tar.gz", size: 10_847_153 };
+/// Tried in order; the next only when one can't be reached.
+const SOURCES: [Source; 2] = [BUNDLE, PROJECTM];
+
+/// Where the app downloads the pack from: [`SOURCES`]. In a debug build
+/// `VISUALS_PACK_URL=<url>` puts that bundle in [`BUNDLE`]'s place (one served
+/// locally, to try a new bundle in the app before uploading it; `docs/pack.md`).
+fn sources() -> Vec<Source> {
+    #[cfg(debug_assertions)]
+    return sources_with(std::env::var("VISUALS_PACK_URL").ok().filter(|u| !u.is_empty()));
+    #[cfg(not(debug_assertions))]
+    return sources_with(None);
+}
+
+/// [`SOURCES`], with `bundle` (when given) in [`BUNDLE`]'s place.
+fn sources_with(bundle: Option<String>) -> Vec<Source> {
+    match bundle {
+        Some(url) => vec![Source { url: url.leak(), size: 0 }, PROJECTM],
+        None => SOURCES.to_vec(),
+    }
+}
 /// How many presets the full pack has.
 const TOTAL: usize = 9795;
-/// The full pack's download, in bytes.
-const SIZE: u64 = 10_847_153;
 /// The pack's folder inside the presets folder (and inside the starter set).
 const FOLDER: &str = "cream-of-the-crop";
+/// The pack's index, at the top of its folder (`crate::catalog` reads it).
+const INDEX: &str = "index.json";
+/// The folder of the index's thumbnails, beside it.
+const THUMBNAILS: &str = "thumbnails";
+/// The most an `index.json` in a download may be (the full pack's is a few MB).
+const INDEX_MAX: u64 = 64 << 20;
 
 /// The folders presets are listed from: the presets folder, and the bundled
 /// starter set while the presets folder doesn't have all of it.
@@ -99,7 +137,8 @@ pub struct PackStatus {
     installed: usize,
     /// Presets in the full pack.
     total: usize,
-    /// The full pack's download, in bytes.
+    /// The full pack's download, in bytes: the server's own figure once it has
+    /// answered.
     size: u64,
     state: State,
     /// Bytes downloaded so far.
@@ -115,12 +154,14 @@ struct Download {
     error: Option<String>,
     /// `.milk` files in the presets folder so far, while downloading.
     installed: usize,
+    /// The download's size in bytes.
+    size: u64,
 }
 
-static DOWNLOAD: Mutex<Download> = Mutex::new(Download { state: State::Idle, received: 0, error: None, installed: 0 });
+static DOWNLOAD: Mutex<Download> = Mutex::new(Download { state: State::Idle, received: 0, error: None, installed: 0, size: BUNDLE.size });
 
 fn status(d: &Download, starter: usize, installed: usize) -> PackStatus {
-    PackStatus { starter, installed, total: TOTAL, size: SIZE, state: d.state, received: d.received, error: d.error.clone() }
+    PackStatus { starter, installed, total: TOTAL, size: d.size, state: d.state, received: d.received, error: d.error.clone() }
 }
 
 fn starter_count(handle: &AppHandle) -> usize {
@@ -144,7 +185,7 @@ pub async fn pack_download(handle: AppHandle) -> Result<(), String> {
         if d.state == State::Downloading {
             return Ok(());
         }
-        *d = Download { state: State::Downloading, received: 0, error: None, installed: d.installed };
+        *d = Download { state: State::Downloading, received: 0, error: None, installed: d.installed, size: d.size };
     }
     let thread = std::thread::spawn(move || download(&handle));
     tauri::async_runtime::spawn_blocking(move || thread.join()).await.map_err(|e| e.to_string())?.unwrap_or_else(|_| Err("the download stopped unexpectedly".into()))
@@ -158,8 +199,9 @@ fn download(handle: &AppHandle) -> Result<(), String> {
     let starter = starter_count(handle);
     let others = engine::preset::milk_files(&library).iter().filter(|p| !p.starts_with(&dest)).count();
     let mut last: Option<Instant> = None;
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        fetch(SOURCE, &dest, |received, files| {
+    let result = crate::crash::catch(std::panic::AssertUnwindSafe(|| {
+        let sized = |size| DOWNLOAD.lock().unwrap().size = size;
+        fetch(&sources(), &dest, sized, |received, files| {
             let mut d = DOWNLOAD.lock().unwrap();
             d.received = received;
             d.installed = others + files;
@@ -195,12 +237,36 @@ impl<R: Read> Read for Counted<'_, R> {
     }
 }
 
-/// Download the tar.gz at `url` and unpack it into `dest` as it arrives
-/// ([`extract`]), calling `progress` with the bytes received and the presets
-/// placed so far. Returns how many presets the pack has.
-fn fetch(url: &str, dest: &Path, mut progress: impl FnMut(u64, usize)) -> Result<usize, String> {
+/// Download the pack's tar.gz from the first of `sources` that answers, and
+/// unpack it into `dest` as it arrives ([`extract`]). `sized` hears the
+/// download's size once a server has answered (its `Content-Length`, else the
+/// source's own figure); `progress` the bytes received and the presets placed
+/// so far. A download that breaks off isn't taken up from the next source: a
+/// retry carries on from the same one. Returns how many presets the pack has.
+fn fetch(sources: &[Source], dest: &Path, mut sized: impl FnMut(u64), mut progress: impl FnMut(u64, usize)) -> Result<usize, String> {
+    let client = client()?;
+    let mut failed = Vec::new();
+    for source in sources {
+        let response = match open(&client, source.url) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("pack: {e} ({})", source.url);
+                failed.push(e);
+                continue;
+            }
+        };
+        sized(response.content_length().unwrap_or(source.size));
+        let received = Cell::new(0);
+        let files = extract(Counted { inner: response, count: &received }, dest, |files| progress(received.get(), files))?;
+        progress(received.get(), files);
+        return Ok(files);
+    }
+    Err(if failed.is_empty() { "nowhere to download the pack from".into() } else { failed.join("; ") })
+}
+
+fn client() -> Result<reqwest::blocking::Client, String> {
     let _ = rustls::crypto::ring::default_provider().install_default();
-    let client = reqwest::blocking::Client::builder()
+    reqwest::blocking::Client::builder()
         .user_agent(concat!("visual[flow]/", env!("CARGO_PKG_VERSION")))
         .connect_timeout(Duration::from_secs(15))
         // No limit on the whole download, so a slow connection can finish it;
@@ -208,25 +274,57 @@ fn fetch(url: &str, dest: &Path, mut progress: impl FnMut(u64, usize)) -> Result
         // the response, each `read` waits at most this long for bytes.)
         .timeout(Duration::from_secs(30))
         .build()
-        .map_err(|e| format!("couldn't start the download: {e}"))?;
+        .map_err(|e| format!("couldn't start the download: {e}"))
+}
+
+/// Ask for `url`: the response, once the server has said yes.
+fn open(client: &reqwest::blocking::Client, url: &str) -> Result<reqwest::blocking::Response, String> {
     let response = client.get(url).send().map_err(|e| format!("couldn't reach the pack: {e}"))?;
     if !response.status().is_success() {
         return Err(format!("the pack's server said {}", response.status()));
     }
-    let received = Cell::new(0);
-    let files = extract(Counted { inner: response, count: &received }, dest, |files| progress(received.get(), files))?;
-    progress(received.get(), files);
-    Ok(files)
+    Ok(response)
 }
 
-/// Unpack a tar.gz of the pack into `dest`, leaving out its top folder: only
-/// `.milk` and `.md` files, never outside `dest`. Each file is written to a
-/// `.part` beside its place and renamed into it; one already there is kept. `placed` hears how many presets are in place so far. Returns how
-/// many presets the archive has.
+/// What [`extract`] takes from the archive: a file to place, or the index.
+#[derive(Debug, PartialEq)]
+enum Kind {
+    Preset,
+    /// A `.md` beside the presets, or a thumbnail in `thumbnails/`.
+    Other,
+    Index,
+}
+
+/// What to do with the archive's file at `rel` (its top folder left out).
+fn kind(rel: &Path) -> Option<Kind> {
+    let name = rel.file_name()?.to_str()?;
+    // macOS's tar adds `._name` beside a file for its extended attributes.
+    if name.starts_with("._") {
+        return None;
+    }
+    let parts: Vec<_> = rel.components().collect();
+    if parts.len() == 1 && name == INDEX {
+        return Some(Kind::Index);
+    }
+    if parts.len() == 2 && parts[0].as_os_str() == THUMBNAILS {
+        return has_ext(rel, "webp").then_some(Kind::Other);
+    }
+    if has_ext(rel, "milk") { Some(Kind::Preset) } else { has_ext(rel, "md").then_some(Kind::Other) }
+}
+
+/// Unpack a tar.gz of the pack into `dest`, leaving out its top folder: its
+/// `.milk` and `.md` files, its `index.json` and the `.webp` files in its
+/// `thumbnails/`, never anything outside `dest`. Each file is written to a
+/// `.part` beside its place and renamed into it; one already there is kept. The
+/// index is the exception: it is always replaced, and only once the whole
+/// archive has arrived, so the library groups the pack once its presets and
+/// thumbnails are all in. `placed` hears how many presets are in place so far.
+/// Returns how many presets the archive has.
 fn extract(reader: impl Read, dest: &Path, mut placed: impl FnMut(usize)) -> Result<usize, String> {
     let broken = |e: std::io::Error| format!("the download broke off: {e}");
     let mut archive = tar::Archive::new(flate2::read::GzDecoder::new(reader));
     let mut files = 0;
+    let mut index = None;
     for entry in archive.entries().map_err(broken)? {
         let mut entry = entry.map_err(broken)?;
         if !entry.header().entry_type().is_file() {
@@ -234,10 +332,17 @@ fn extract(reader: impl Read, dest: &Path, mut placed: impl FnMut(usize)) -> Res
         }
         let path = entry.path().map_err(broken)?.into_owned();
         let Some(rel) = inside(&path) else { continue };
-        let milk = has_ext(&rel, "milk");
-        if !milk && !has_ext(&rel, "md") {
+        let Some(kind) = kind(&rel) else { continue };
+        if kind == Kind::Index {
+            if entry.size() > INDEX_MAX {
+                return Err(format!("the pack's {INDEX} is too big ({} bytes)", entry.size()));
+            }
+            let mut bytes = Vec::new();
+            entry.read_to_end(&mut bytes).map_err(broken)?;
+            index = Some(bytes);
             continue;
         }
+        let milk = kind == Kind::Preset;
         let target = dest.join(&rel);
         // Never overwrite a file already there: the user may have edited it. A
         // cut-off write never leaves one (it lands in the `.part` first).
@@ -266,6 +371,14 @@ fn extract(reader: impl Read, dest: &Path, mut placed: impl FnMut(usize)) -> Res
     std::io::copy(&mut rest.into_inner(), &mut std::io::sink()).map_err(broken)?;
     if files == 0 {
         return Err("the download had no presets in it".into());
+    }
+    if let Some(bytes) = index {
+        let target = dest.join(INDEX);
+        let part = dest.join(format!("{INDEX}.part"));
+        std::fs::write(&part, bytes).and_then(|_| std::fs::rename(&part, &target)).map_err(|e| {
+            let _ = std::fs::remove_file(&part);
+            format!("couldn't write {}: {e}", target.display())
+        })?;
     }
     Ok(files)
 }
@@ -408,6 +521,17 @@ pub fn start(handle: &AppHandle) {
     let library = handle.state::<App>().library.clone();
     if let Err(e) = std::fs::create_dir_all(&library) {
         eprintln!("presets: couldn't make {}: {e}", library.display());
+    }
+    // A debug build downloads the pack at start with `VISUALS_PACK_DOWNLOAD=1`,
+    // to try a bundle in a headless run (with `VISUALS_PACK_URL`; docs/pack.md).
+    #[cfg(debug_assertions)]
+    if std::env::var_os("VISUALS_PACK_DOWNLOAD").is_some_and(|v| v == "1") {
+        let handle = handle.clone();
+        tauri::async_runtime::spawn(async move {
+            if let Err(e) = pack_download(handle).await {
+                eprintln!("pack: {e}");
+            }
+        });
     }
     let handle = handle.clone();
     std::thread::spawn(move || watch(&handle, &library));
@@ -600,9 +724,59 @@ mod tests {
     }
 
     fn ok(body: &[u8]) -> Vec<u8> {
-        let mut r = b"HTTP/1.1 200 OK\r\nContent-Type: application/x-gzip\r\nConnection: close\r\n\r\n".to_vec();
+        let mut r = format!("HTTP/1.1 200 OK\r\nContent-Type: application/x-gzip\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len()).into_bytes();
         r.extend_from_slice(body);
         r
+    }
+
+    fn not_found() -> Vec<u8> {
+        b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec()
+    }
+
+    /// A source at `url` whose own size figure is `size`.
+    fn at(url: String, size: u64) -> Source {
+        Source { url: Box::leak(url.into_boxed_str()), size }
+    }
+
+    /// Nothing listens on port 1: a source that can't be reached.
+    fn nowhere() -> Source {
+        at("http://127.0.0.1:1/pack.tar.gz".into(), 7)
+    }
+
+    #[test]
+    fn extract_takes_the_index_and_its_thumbnails_and_places_the_index_last() {
+        let dir = temp();
+        let dest = dir.join("cream-of-the-crop");
+        let bundle = |index: &'static [u8]| {
+            tar_gz(&[
+                ("top/index.json", index),
+                ("top/thumbnails/ab.webp", b"RIFF"),
+                ("top/thumbnails/cd.png", b"no"),
+                ("top/thumbnails/deep/ef.webp", b"no"),
+                ("top/A/index.json", b"no"),
+                ("top/A/._one.milk", b"apple double"),
+                ("top/A/one.milk", b"one"),
+                ("top/._index.json", b"apple double"),
+            ])
+        };
+        let gz = bundle(br#"{"v":1}"#);
+        // Cut off: no index yet, however early in the archive it came.
+        assert!(extract(&gz[..gz.len() - 10], &dest, |_| {}).is_err());
+        assert!(!dest.join("index.json").exists());
+        assert_eq!(extract(&gz[..], &dest, |_| {}).unwrap(), 1);
+        assert_eq!(std::fs::read(dest.join("index.json")).unwrap(), br#"{"v":1}"#);
+        assert_eq!(std::fs::read(dest.join("thumbnails/ab.webp")).unwrap(), b"RIFF");
+        assert_eq!(std::fs::read(dest.join("A/one.milk")).unwrap(), b"one");
+        for no in ["thumbnails/cd.png", "thumbnails/deep/ef.webp", "A/index.json", "A/._one.milk", "._index.json"] {
+            assert!(!dest.join(no).exists(), "{no}");
+        }
+        // A newer bundle's index replaces the one there; presets edited are kept.
+        std::fs::write(dest.join("A/one.milk"), b"mine").unwrap();
+        assert_eq!(extract(&bundle(br#"{"v":2}"#)[..], &dest, |_| {}).unwrap(), 1);
+        assert_eq!(std::fs::read(dest.join("index.json")).unwrap(), br#"{"v":2}"#);
+        assert_eq!(std::fs::read(dest.join("A/one.milk")).unwrap(), b"mine");
+        assert!(parts(&dir).is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
@@ -611,9 +785,10 @@ mod tests {
         let a = noise(1, 20_000);
         let b = noise(2, 20_000);
         let gz = tar_gz(&[("top/LICENSE.md", b"license"), ("top/S/a.milk", &a), ("top/S/b.milk", &b)]);
-        let mut last = (0, 0);
-        assert_eq!(fetch(&serve(ok(&gz)), &dir, |r, n| last = (r, n)).unwrap(), 2);
+        let (mut last, mut size) = ((0, 0), 0);
+        assert_eq!(fetch(&[at(serve(ok(&gz)), 1)], &dir, |s| size = s, |r, n| last = (r, n)).unwrap(), 2);
         assert_eq!(last, (gz.len() as u64, 2));
+        assert_eq!(size, gz.len() as u64, "the server's own size");
         assert_eq!(std::fs::read(dir.join("S/a.milk")).unwrap(), a);
         assert_eq!(std::fs::read(dir.join("S/b.milk")).unwrap(), b);
         assert!(dir.join("LICENSE.md").is_file());
@@ -624,9 +799,31 @@ mod tests {
     fn fetch_fails_on_a_server_error() {
         let dir = temp();
         let url = serve(b"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec());
-        let err = fetch(&url, &dir, |_, _| {}).unwrap_err();
+        let err = fetch(&[at(url, 1)], &dir, |_| {}, |_, _| {}).unwrap_err();
         assert!(err.contains("500"), "{err}");
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn fetch_falls_back_when_the_bundle_cant_be_had() {
+        let dir = temp();
+        let gz = tar_gz(&[("top/S/a.milk", b"a")]);
+        let mut sizes = Vec::new();
+        assert_eq!(fetch(&[at(serve(not_found()), 1), nowhere(), at(serve(ok(&gz)), 2)], &dir, |s| sizes.push(s), |_, _| {}).unwrap(), 1);
+        assert_eq!(sizes, [gz.len() as u64], "only the source that answered is sized");
+        assert!(dir.join("S/a.milk").is_file());
+
+        let err = fetch(&[at(serve(not_found()), 1), nowhere()], &dir, |_| {}, |_, _| {}).unwrap_err();
+        assert!(err.contains("404") && err.contains("couldn't reach"), "both reasons: {err}");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_bundle_url_takes_the_bundles_place_and_keeps_the_fallback() {
+        let urls = |s: Vec<Source>| s.iter().map(|s| s.url).collect::<Vec<_>>();
+        assert_eq!(urls(sources_with(None)), [BUNDLE.url, PROJECTM.url]);
+        let local = "http://127.0.0.1:8765/cream-of-the-crop.tar.gz";
+        assert_eq!(urls(sources_with(Some(local.into()))), [local, PROJECTM.url]);
     }
 
     #[test]
@@ -634,10 +831,12 @@ mod tests {
         let dir = temp();
         let files: Vec<(String, Vec<u8>)> = (0..6).map(|i| (format!("top/S/{i}.milk"), noise(i, 30_000))).collect();
         let gz = tar_gz(&files.iter().map(|(p, d)| (p.as_str(), &d[..])).collect::<Vec<_>>());
-        assert!(fetch(&serve(ok(&gz[..gz.len() / 2])), &dir, |_, _| {}).is_err());
+        // Broken off part-way, it isn't taken up from the fallback (which can't be reached).
+        let err = fetch(&[at(serve(ok(&gz[..gz.len() / 2])), 1), nowhere()], &dir, |_| {}, |_, _| {}).unwrap_err();
+        assert!(err.contains("broke off"), "{err}");
         assert!(parts(&dir).is_empty());
         assert!(!dir.join("S/5.milk").exists());
-        assert_eq!(fetch(&serve(ok(&gz)), &dir, |_, _| {}).unwrap(), 6);
+        assert_eq!(fetch(&[at(serve(ok(&gz)), 1)], &dir, |_| {}, |_, _| {}).unwrap(), 6);
         for (i, (_, data)) in files.iter().enumerate() {
             assert_eq!(&std::fs::read(dir.join(format!("S/{i}.milk"))).unwrap(), data);
         }
@@ -645,22 +844,51 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
-    /// The real download from [`SOURCE`], over the network: `cargo test -p visuals-app
-    /// the_real_pack -- --ignored`. `VISUALS_PACK_INTO=<presets folder>` keeps it
-    /// there (in `cream-of-the-crop/`), to start the app on; otherwise it's removed.
+    /// The real download of [`BUNDLE`], over the network: `cargo test -p visuals-app
+    /// the_real_pack -- --ignored`. `VISUALS_PACK_URL=<url>` downloads a bundle from
+    /// elsewhere instead (a local server, to try one before it's uploaded; its size
+    /// isn't checked against [`BUNDLE`]'s). `VISUALS_PACK_INTO=<presets folder>`
+    /// keeps it there (in `cream-of-the-crop/`), to start the app on; otherwise
+    /// it's removed.
     #[test]
     #[ignore]
-    fn the_real_pack_downloads_whole() {
+    fn the_real_pack_downloads_whole_with_its_index_and_thumbnails() {
+        let url = std::env::var("VISUALS_PACK_URL").ok();
+        let source = url.clone().map_or(BUNDLE, |u| at(u, 0));
         let keep = std::env::var_os("VISUALS_PACK_INTO").map(PathBuf::from);
         let presets = keep.clone().unwrap_or_else(temp);
-        let mut received = 0;
-        assert_eq!(fetch(SOURCE, &presets.join(FOLDER), |r, _| received = r).unwrap(), TOTAL);
-        assert_eq!(received, SIZE);
+        let (mut received, mut size) = (0, 0);
+        assert_eq!(fetch(&[source], &presets.join(FOLDER), |s| size = s, |r, _| received = r).unwrap(), TOTAL);
+        assert_eq!(received, size);
+        if url.is_none() {
+            assert_eq!(size, BUNDLE.size, "BUNDLE.size is the asset's real size");
+        }
         assert_eq!(engine::preset::milk_files(&presets).len(), TOTAL);
         assert!(covers(&presets, &Path::new(env!("CARGO_MANIFEST_DIR")).join("presets/starter")));
+        let pack = presets.join(FOLDER);
+        let index = engine::index::Index::load(&pack.join(INDEX)).expect("an index.json of this version");
+        assert_eq!(index.rows.len(), TOTAL);
+        let thumbnails: Vec<&String> = index.rows.iter().filter_map(|r| r.thumbnail.as_ref()).collect();
+        assert!(thumbnails.len() > TOTAL * 99 / 100, "{} of {TOTAL} have thumbnails", thumbnails.len());
+        for t in thumbnails {
+            assert!(pack.join(THUMBNAILS).join(t).is_file(), "{t}");
+        }
         if keep.is_none() {
             std::fs::remove_dir_all(&presets).unwrap();
         }
+    }
+
+    /// The same for the fallback, [`PROJECTM`]: `cargo test -p visuals-app
+    /// the_fallback_pack -- --ignored`.
+    #[test]
+    #[ignore]
+    fn the_fallback_pack_downloads_whole() {
+        let presets = temp();
+        let (mut received, mut size) = (0, 0);
+        assert_eq!(fetch(&[PROJECTM], &presets.join(FOLDER), |s| size = s, |r, _| received = r).unwrap(), TOTAL);
+        assert_eq!((received, size), (PROJECTM.size, PROJECTM.size));
+        assert_eq!(engine::preset::milk_files(&presets).len(), TOTAL);
+        std::fs::remove_dir_all(&presets).unwrap();
     }
 
     #[test]
