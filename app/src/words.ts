@@ -31,6 +31,8 @@ export const WORDS = {
   'blackout fade': 'fade to black',
   'fx reset': 'back to normal',
   'output fit': 'how the picture fills the screen',
+  /* A deck following the library grid's filter (any query that isn't a mood). */
+  'library query': 'the library',
 } as const;
 
 export type Jargon = keyof typeof WORDS;

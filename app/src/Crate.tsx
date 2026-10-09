@@ -5,8 +5,11 @@ import { plural } from './controls.ts';
 import { nameOf } from './shell.ts';
 import { say } from './words.ts';
 
-/** How many presets "Up next" shows. */
-export const UP_NEXT = 8;
+/** How many presets "Up next" shows until "Show all" is open. */
+export const UP_NEXT = 4;
+
+/** The most "Show all" lists: a smart playlist or a mood can match thousands. */
+export const UP_NEXT_ALL = 100;
 
 /** One mood: a tag of the user's own, and how many presets carry it. */
 export interface Mood {
@@ -21,10 +24,21 @@ export function moods(data: LibraryData | null): Mood[] {
   return [...counts].map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
 }
 
-/** The moods playing: the tags of the deck's filter, when a filter (not a playlist) plays. */
+/**
+ * Whether `query` is a mood: what the chips play, the user's tags and nothing
+ * else. Any other filter (the library grid's, followed when a preset is played
+ * from it) is "the library", never a mood.
+ */
+export function isMood(query: pl.Deck['query']): boolean {
+  if (!query || query.text.trim() !== '') return false;
+  const groups = Object.entries(query.groups).filter(([, v]) => (v?.length ?? 0) > 0);
+  return groups.length === 1 && groups[0][0] === 'tags';
+}
+
+/** The moods playing: the tags of the deck's filter, when a mood (not a playlist, nor the library grid's filter) plays. */
 export function litMoods(deck: pl.Deck): string[] {
-  if (deck.playlist !== null || !deck.query) return [];
-  return deck.query.groups.tags ?? [];
+  if (deck.playlist !== null || !isMood(deck.query)) return [];
+  return deck.query?.groups.tags ?? [];
 }
 
 /** The filter that plays the presets tagged with any of `tags`. */
@@ -97,13 +111,30 @@ export function upcoming(lists: pl.Lists, items: readonly string[] | null, n = U
   return out;
 }
 
-/** The line under "Up next" saying how its order works, or how to change it. */
-export function upNote(lists: pl.Lists): string {
+/**
+ * The rows after the deck's Next line: `rows` without its first when that is
+ * the preset the Next line already names (`next`, by path).
+ */
+export function afterNext(rows: readonly Upcoming[], next: string | null): Upcoming[] {
+  return next !== null && rows[0]?.path === next ? rows.slice(1) : [...rows];
+}
+
+/** The path the deck's Next line names, or null when it names none. */
+export function nextPath(lists: pl.Lists): string | null {
+  const says = pl.nextSays(lists, false);
+  return says.kind === 'item' || says.kind === 'filter' ? says.item.path : null;
+}
+
+/** What VoiceOver hears on a row that can move: how to move it (the ≡ handle only shows on hover or focus). */
+export const MOVE_NOTE = 'Alt+↑ or Alt+↓ moves it earlier or later.';
+
+/** The line under "Up next" saying how its order works; null for a playlist in order, whose rows show their own ≡ handle. */
+export function upNote(lists: pl.Lists): string | null {
   const { deck } = lists;
   if (deck.playlist === null && deck.query === null) return 'Play a playlist or a mood to see what comes next.';
-  if (orderable(lists)) return 'Drag ≡ (or press Alt+↑ ↓) to change what plays when.';
+  if (orderable(lists)) return null;
   if (deck.order === 'shuffle') return 'Shuffled: the order is picked as it plays.';
-  if (deck.playlist === null) return 'A mood plays in library order.';
+  if (deck.playlist === null) return isMood(deck.query) ? 'A mood plays in library order.' : `From ${say('library query')}, in its order.`;
   return 'A smart playlist plays its matches in library order.';
 }
 
@@ -143,8 +174,10 @@ interface Props {
 
 /**
  * Live mode's crate: the playlists to play with one tap, the user's tags as
- * moods to play (and mix), and what plays next — which, for a playlist in
- * order, can be dragged (or Alt+↑ ↓) into a new order.
+ * moods to play (and mix) once there are any, and what plays after the deck's
+ * Next — four rows, the rest behind "Show all" — which, for a playlist in
+ * order, can be dragged by the ≡ that shows on hover or focus (or Alt+↑ ↓) into
+ * a new order.
  */
 export function Crate({ lists, data, act, onLists, onError, current }: Props) {
   const { playlists, deck } = lists;
@@ -167,12 +200,18 @@ export function Crate({ lists, data, act, onLists, onError, current }: Props) {
   const all = moods(data);
   const lit = litMoods(deck);
   const list = orderable(lists);
-  const rows = upcoming({ ...lists, deck: { ...deck, current: playing } }, items, UP_NEXT);
+  const [expanded, setExpanded] = useState(false);
+  // One more than "Show all" lists, as the first is usually the deck's Next line.
+  const every = afterNext(upcoming({ ...lists, deck: { ...deck, current: playing } }, items, UP_NEXT_ALL + 1), nextPath(lists)).slice(0, UP_NEXT_ALL);
+  const rows = expanded ? every : every.slice(0, UP_NEXT);
+  const more = every.length > UP_NEXT;
+  const note = upNote(lists);
 
   const refs = useRef<(HTMLLIElement | null)[]>([]);
   const [drag, setDrag] = useState<{ row: number; slot: number } | null>(null);
+  // Moves map through every row, shown or not, so Alt+↓ on the last row shown still moves it (and opens the rest).
   const move = (row: number, slot: number) => {
-    const m = list && moveFor(rows, row, slot);
+    const m = list && moveFor(every, row, slot);
     if (list && m) pl.moveItem(list.id, m.from, m.to).then(onLists, onError);
   };
   const slotAt = (y: number) =>
@@ -209,7 +248,10 @@ export function Crate({ lists, data, act, onLists, onError, current }: Props) {
     if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
     e.preventDefault();
     const slot = e.key === 'ArrowUp' ? row - 1 : row + 2;
-    if (list && moveFor(rows, row, slot)) refocus.current = e.key === 'ArrowUp' ? row - 1 : row + 1;
+    if (list && moveFor(every, row, slot)) {
+      refocus.current = e.key === 'ArrowUp' ? row - 1 : row + 1;
+      if (refocus.current >= rows.length) setExpanded(true);
+    }
     move(row, slot);
   };
   const marker = (row: number) => {
@@ -240,12 +282,10 @@ export function Crate({ lists, data, act, onLists, onError, current }: Props) {
                     onClick={() => act({ kind: 'load', playlist: i, index: null })}
                   >
                     <span className="live-crate-name">{p.name}</span>
-                    {p.kind === 'smart' ? (
+                    {p.kind === 'smart' && (
                       <span className="live-crate-smart" title="A smart playlist: whatever matches its filter">
                         smart
                       </span>
-                    ) : (
-                      <span className="live-crate-count">{plural(p.items.length, 'preset')}</span>
                     )}
                   </button>
                 </li>
@@ -255,11 +295,10 @@ export function Crate({ lists, data, act, onLists, onError, current }: Props) {
         )}
       </section>
 
-      <section className="live-crate-section" aria-labelledby="live-crate-moods">
-        <h2 id="live-crate-moods">Moods</h2>
-        {all.length === 0 ? (
-          <p className="live-crate-note">Tag presets in the library and {say('user tags')} show up here as moods to play.</p>
-        ) : (
+      {/* Moods only once there are some: the user's tags, made in the library. */}
+      {all.length > 0 && (
+        <section className="live-crate-section" aria-labelledby="live-crate-moods">
+          <h2 id="live-crate-moods">Moods</h2>
           <div className="live-crate-chips" role="group" aria-label="Moods">
             {all.map(({ tag, count }) => {
               const on = lit.includes(tag);
@@ -278,16 +317,19 @@ export function Crate({ lists, data, act, onLists, onError, current }: Props) {
               );
             })}
           </div>
-        )}
-      </section>
+        </section>
+      )}
 
       <section className="live-crate-section" aria-labelledby="live-crate-next">
         <h2 id="live-crate-next">Up next</h2>
-        <p className="live-crate-note" id="live-crate-next-note">
-          {upNote(lists)}
-        </p>
+        {note !== null && <p className="live-crate-note">{note}</p>}
+        {list && (
+          <span className="live-sr" id="live-crate-next-note">
+            {MOVE_NOTE}
+          </span>
+        )}
         {rows.length > 0 && (
-          <ol className="live-crate-list" aria-label="Up next, in play order">
+          <ol className="live-crate-list" id="live-crate-next-rows" aria-label="Up next, in play order">
             {rows.map((r, i) => (
               <li
                 key={`${r.at ?? 'x'}:${i}:${r.path}`}
@@ -305,11 +347,12 @@ export function Crate({ lists, data, act, onLists, onError, current }: Props) {
                 title={r.missing ? `${r.name}: the file is missing` : r.name}
               >
                 {marker(i)}
+                <span className="live-crate-name">{r.missing ? <s>{r.name}</s> : r.name}</span>
                 {list && (
                   <span
                     className="live-crate-handle"
                     aria-hidden="true"
-                    title="Drag to change when it plays"
+                    title="Drag to change when it plays (or Alt+↑ ↓)"
                     onPointerDown={grab(i)}
                     onPointerMove={drift}
                     onPointerUp={drop}
@@ -318,10 +361,14 @@ export function Crate({ lists, data, act, onLists, onError, current }: Props) {
                     ≡
                   </span>
                 )}
-                <span className="live-crate-name">{r.missing ? <s>{r.name}</s> : r.name}</span>
               </li>
             ))}
           </ol>
+        )}
+        {more && (
+          <button type="button" className="live-crate-more" aria-expanded={expanded} aria-controls="live-crate-next-rows" onClick={() => setExpanded((e) => !e)}>
+            {expanded ? 'Show fewer' : 'Show all'}
+          </button>
         )}
       </section>
     </div>

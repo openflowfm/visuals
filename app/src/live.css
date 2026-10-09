@@ -3,23 +3,35 @@
    paints itself, and the bars beside the 16:9 preview are its own shadow,
    clipped to its cell.
 
-   Along the top the status strip; then now and next over the preview, the
-   eight pads and the Intensity row; the crate beside them; the key hints along
-   the bottom. Everything a hand reaches for during a show is at least 44px. */
+   Along the top the status strip; then now and next over the preview, which
+   takes what's left; the pads in two rows and the Intensity row; the crate
+   beside them. The ? overlay lists the keys. Everything a hand reaches for
+   during a show is at least 44px. One look for "on": a pressed pad fills
+   white; amber (--caution) only means HOLD or a problem, red only Blackout or
+   an error. */
 
 .live {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr);
   grid-template-areas:
     'strip strip'
     'banner banner'
-    'stage side'
-    'hints hints';
+    'stage side';
   height: 100%;
 }
 
-/* The status strip: AUDIO, BEAT, OUTPUT, the frame rate, then ? ⚙ ✕. */
+/* Only for VoiceOver: words the picture doesn't need. */
+.live-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The status strip: the audio, beat and output lights (no captions), the frame rate, ? ⚙, and ✕ apart. */
 .live-status-strip {
   grid-area: strip;
   position: relative;
@@ -56,13 +68,6 @@
   border-color: var(--bd3);
   color: var(--fg);
 }
-.live-status-light i {
-  color: var(--caption);
-  font-style: normal;
-  font-size: var(--text-label);
-  font-weight: var(--weight-medium);
-  letter-spacing: var(--track-caps);
-}
 .live-status-dot {
   flex: none;
   width: 8px;
@@ -91,13 +96,13 @@
   background: var(--green);
 }
 .live-status-value {
-  color: var(--fg);
+  color: var(--detail);
   font-weight: var(--weight-medium);
   white-space: nowrap;
 }
-.live-status-peers {
-  color: var(--detail);
-  white-space: nowrap;
+/* Words beside the output's dot only while something is wrong. */
+.live-status-light[data-light='output'] .live-status-value {
+  color: var(--caution);
 }
 .live-status-fps {
   padding: 0 8px;
@@ -109,6 +114,13 @@
   display: flex;
   gap: 4px;
   margin-left: auto;
+}
+/* ✕, set apart from ? and ⚙ by a gap and a rule, so a click meant for them doesn't leave live. */
+.live-status-leave {
+  display: flex;
+  margin-left: 16px;
+  padding-left: 12px;
+  border-left: 1px solid var(--bd3);
 }
 .live-status-btn {
   display: flex;
@@ -146,6 +158,38 @@
   border-radius: var(--radius);
   background: var(--panel);
   box-shadow: var(--shadow-menu);
+}
+
+/* Tap tempo, at the top of the beat popover: tapped in time, lit while Link keeps the tempo. */
+.live-status-pop .live-tap {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  max-width: none;
+  min-height: 56px;
+  height: auto;
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--fg);
+  font-size: var(--text-heading);
+  font-weight: var(--weight-medium);
+}
+.live-tap b {
+  font-size: var(--text-title);
+  font-weight: var(--weight-strong);
+}
+.live-tap small {
+  color: var(--caption);
+  font-size: var(--text-label);
+  font-weight: var(--weight-normal);
+}
+.live-status-pop .live-tap[data-on] {
+  border-color: var(--fg);
 }
 
 /* The output panel, inside the OUTPUT popover. */
@@ -212,45 +256,41 @@
   overflow-y: auto;
 }
 
-/* Now and next. */
+/* Now and next: two lines, no captions. Now wraps to two lines rather than losing the end of its name; next is smaller and muted, its when folded in. */
 .live-deck {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 18px 22px 14px;
+  gap: 6px;
+  padding: 16px 22px 14px;
   background: var(--panel);
   border-bottom: 1px solid var(--bd3);
-}
-.live-deck i {
-  flex: none;
-  width: 56px;
-  color: var(--caption);
-  font-style: normal;
-  font-size: var(--text-label);
-  font-weight: var(--weight-medium);
-  letter-spacing: var(--track-caps);
-  text-transform: uppercase;
 }
 .live-now,
 .live-next {
   display: flex;
   align-items: baseline;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
 }
-.live-now b,
-.live-next span {
+.live-now b {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: anywhere;
+  color: var(--fg);
+  font-size: calc(var(--text-title) * 1.5);
+  font-weight: var(--weight-strong);
+  letter-spacing: var(--track-tight);
+  line-height: 1.2;
+}
+.live-next > span:not(.live-sr) {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.live-now b {
-  color: var(--fg);
-  font-size: calc(var(--text-title) * 2);
-  font-weight: var(--weight-strong);
-  letter-spacing: var(--track-tight);
-  line-height: 1.15;
 }
 .live-star {
   flex: none;
@@ -277,9 +317,9 @@
   letter-spacing: var(--track-label);
 }
 .live-next span {
-  color: var(--ui);
-  font-size: var(--text-title);
-  font-weight: var(--weight-medium);
+  color: var(--detail);
+  font-size: var(--text-heading);
+  font-weight: var(--weight-normal);
 }
 .live-next span[data-missing] {
   color: var(--detail);
@@ -294,9 +334,9 @@
 }
 .live-when {
   flex: none;
-  color: var(--detail);
+  color: var(--caption);
   font-style: normal;
-  font-size: var(--text-body);
+  font-size: var(--text-heading);
   white-space: nowrap;
 }
 .live-deck .live-none {
@@ -305,15 +345,6 @@
   font-weight: var(--weight-normal);
   letter-spacing: var(--track-none);
   white-space: normal;
-}
-.live-where {
-  margin: 0 0 0 68px;
-  color: var(--caption);
-  font-size: var(--text-body);
-}
-.live-where b {
-  color: var(--detail);
-  font-weight: var(--weight-medium);
 }
 
 /* An error (a `NoticeBanner`, laid out by .vf-notice): a band across the stage. */
@@ -337,11 +368,13 @@
   overflow: hidden;
   min-height: 140px;
   padding: 12px;
+  container-type: size;
 }
 .live-preview {
+  /* As big as its cell allows, at 16:9: the whole height the stage leaves it, or the whole width. */
   aspect-ratio: 16 / 9;
-  height: min(100%, 360px);
-  max-width: 100%;
+  width: min(100cqw, 100cqh * 16 / 9);
+  height: auto;
   background: transparent;
   box-shadow: 0 0 0 100vmax #000;
 }
@@ -383,14 +416,26 @@
   text-align: center;
 }
 
-/* The eight pads: four across, two down. */
+/* The pads, in two groups with a clear gap between: the presets (previous,
+   random, and next, the widest), then the effects (hold, strobe, blackout,
+   freeze). Each group is one row at any width. */
 .live-pads {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(64px, 1fr));
-  gap: 8px;
-  padding: 12px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 14px 22px 12px;
   background: var(--panel);
   border-top: 1px solid var(--bd3);
+}
+.live-pads-row {
+  display: grid;
+  gap: 8px;
+}
+.live-pads-row[data-row='presets'] {
+  grid-template-columns: minmax(64px, 1fr) minmax(64px, 1fr) minmax(64px, 2fr);
+}
+.live-pads-row[data-row='effects'] {
+  grid-template-columns: repeat(4, minmax(64px, 1fr));
 }
 .live-pads .live-pad {
   display: flex;
@@ -402,9 +447,9 @@
   width: 100%;
   max-width: none;
   min-width: 64px;
-  min-height: 64px;
+  min-height: 56px;
   height: auto;
-  padding: 8px;
+  padding: 6px 8px;
   border: 1px solid var(--bd3);
   border-radius: var(--radius);
   background: var(--panel);
@@ -420,49 +465,30 @@
   font-weight: var(--weight-normal);
   letter-spacing: var(--track-label);
 }
+/* One look for "on": a pressed pad fills white. */
 .live-pads .live-pad[aria-pressed='true'] {
   border-color: var(--fg);
   background: var(--fg);
   color: var(--bg);
+  font-weight: var(--weight-bold);
 }
 .live-pads .live-pad[aria-pressed='true'] small {
   color: inherit;
   opacity: 0.75;
 }
-/* --caution, not --amber: the theme makes amber its (grey) primary, and HOLD must be seen. */
+/* Except HOLD, the one amber: --caution, not --amber, as the theme makes amber its (grey) primary, and HOLD must be seen. */
 .live-pads .live-pad[data-pad='hold'][aria-pressed='true'] {
   border-color: var(--caution);
   background: var(--caution);
-  color: var(--bg);
-  font-weight: var(--weight-bold);
+}
+/* And Blackout, the one red: outlined at rest, filled when the picture is black. */
+.live-pads .live-pad[data-pad='blackout'] {
+  border-color: var(--red);
 }
 .live-pads .live-pad[data-pad='blackout'][aria-pressed='true'] {
   border-color: var(--red);
-  background: #000;
-  color: var(--red);
-  font-weight: var(--weight-bold);
-}
-.live-pads .live-pad[data-pad='strobe'][aria-pressed='true'] {
-  border-color: var(--fg);
-  background: var(--fg);
+  background: var(--red);
   color: var(--bg);
-  font-weight: var(--weight-bold);
-}
-.live-pads .live-pad[data-pad='freeze'][aria-pressed='true'] {
-  border-color: var(--blue);
-  background: var(--blue);
-  color: var(--bg);
-  font-weight: var(--weight-bold);
-}
-/* Tempo is lit (data-on), not pressed: Link keeps the tempo, a tap doesn't switch it. */
-.live-pads .live-pad[data-pad='tempo'][data-on] {
-  border-color: var(--green);
-  background: var(--panel);
-  color: var(--green);
-}
-.live-pads .live-pad[data-pad='tempo'][data-on] small {
-  color: inherit;
-  opacity: 0.75;
 }
 
 /* Intensity, and More effects beside it. */
@@ -567,14 +593,11 @@
   font-weight: var(--weight-medium);
   box-shadow: var(--edge-left) var(--green);
 }
-.live-crate-count,
 .live-crate-smart {
   flex: none;
   color: var(--caption);
   font-size: var(--text-label);
   font-weight: var(--weight-normal);
-}
-.live-crate-smart {
   padding: 1px 6px;
   border: 1px solid var(--bd3);
   border-radius: var(--radius-pill);
@@ -612,13 +635,10 @@
   align-items: center;
   gap: 4px;
   min-height: 44px;
-  padding: 0 8px 0 0;
+  padding: 0 10px;
   border-radius: var(--radius);
   color: var(--ui);
   font-size: var(--text-body);
-}
-.live-crate-row:not(:has(.live-crate-handle)) {
-  padding-left: 10px;
 }
 .live-crate-row[data-missing] {
   color: var(--detail);
@@ -627,21 +647,59 @@
 .live-crate-row[data-dragging] {
   opacity: 0.35;
 }
+/* The ≡ handle, over the row's right end, only while the row is hovered, focused or dragged. */
 .live-crate-handle {
-  flex: none;
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 44px;
-  height: 44px;
-  color: var(--caption);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--detail);
   font-size: var(--text-heading);
   cursor: grab;
   touch-action: none;
   user-select: none;
+  opacity: 0;
+}
+.live-crate-row:is(:hover, :focus-within, [data-dragging]) .live-crate-handle {
+  opacity: 1;
+}
+.live-crate-row:has(.live-crate-handle):is(:hover, :focus-visible) {
+  background: var(--sel);
+}
+.live-crate-row:has(.live-crate-handle):is(:hover, :focus-visible) .live-crate-handle {
+  background: var(--sel);
 }
 .live-crate-handle:active {
   cursor: grabbing;
+}
+/* "Show all": a small disclosure under the rows. */
+.live-crate-more {
+  align-self: flex-start;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--detail);
+  font: inherit;
+  font-size: var(--text-body);
+  cursor: pointer;
+  appearance: none;
+}
+.live-crate-more::after {
+  content: ' ▾';
+}
+.live-crate-more[aria-expanded='true']::after {
+  content: ' ▴';
+}
+.live-crate-more:hover {
+  color: var(--fg);
 }
 .live-crate-drop {
   position: absolute;
@@ -663,12 +721,6 @@
   color: var(--detail);
   font-size: var(--text-body);
   line-height: 1.45;
-}
-
-.live-hints {
-  grid-area: hints;
-  background: var(--panel);
-  border-top-color: var(--bd3);
 }
 
 /* Help: every control and its keys, over everything. */
@@ -751,7 +803,20 @@
 }
 
 /* Focus on every control here, in the ring every view uses (access.css). */
-.live :is(.live-status-light, .live-status-btn, .live-pad, .live-crate-playlist, .live-crate-chip, .live-crate-row, .wdg-button-body, [role='slider'], [role='radio']):focus-visible {
+.live
+  :is(
+    .live-status-light,
+    .live-status-btn,
+    .live-pad,
+    .live-tap,
+    .live-crate-playlist,
+    .live-crate-chip,
+    .live-crate-row,
+    .live-crate-more,
+    .wdg-button-body,
+    [role='slider'],
+    [role='radio']
+  ):focus-visible {
   outline: 2px solid var(--vf-focus-ring);
   outline-offset: 2px;
 }
@@ -776,8 +841,7 @@
       'strip'
       'banner'
       'stage'
-      'side'
-      'hints';
+      'side';
     overflow-y: auto;
   }
   .live-status-strip {
@@ -802,18 +866,13 @@
     padding-left: 16px;
     padding-right: 16px;
   }
+  /* The page scrolls here, so the cell sizes to the preview rather than the preview to the cell. */
   .live-preview-cell {
     flex: none;
+    container-type: normal;
   }
-  /* No more than about a third of the window tall, so the pads stay in reach. */
+  /* No more than about half the window tall, so the pads stay in reach. */
   .live-preview {
-    width: min(100%, calc(34vh * 16 / 9));
-    height: auto;
-  }
-  .live-pads {
-    grid-template-columns: repeat(2, minmax(64px, 1fr));
-  }
-  .live-where {
-    margin-left: 0;
+    width: min(100%, calc(48vh * 16 / 9));
   }
 }

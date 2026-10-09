@@ -1,16 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { HintFooter } from '@openflow/widgets/chrome/HintFooter.tsx';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { ButtonFace } from '@openflow/widgets/controls/ButtonFace.tsx';
 import { Slider } from '@openflow/widgets/controls/Slider.tsx';
 import * as api from './api.ts';
 import { range } from './controls.ts';
-import { Crate } from './Crate.tsx';
+import { Crate, isMood } from './Crate.tsx';
 import * as fx from './fx.ts';
-import { control, HelpOverlay, titleOf, type ControlId } from './HelpOverlay.tsx';
+import { control, HelpOverlay, padKey, titleOf, type ControlId } from './HelpOverlay.tsx';
 import * as link from './link.ts';
-import { KEYS, useLiveKeys, type Stars } from './liveKeys.ts';
+import { useLiveKeys, type Stars } from './liveKeys.ts';
 import * as output from './output.ts';
 import { leave } from './OutputPanel.tsx';
 import * as pl from './playlists.ts';
@@ -69,6 +68,13 @@ export function whenText(beats: number | null): string | null {
   return `in ${n} beat${n === 1 ? '' : 's'}`;
 }
 
+/** Where the next preset comes from, for the Next line's tooltip: "From Chill, 1 of 20", the mood, or the whole library. */
+export function whereText(up: pl.Up | null, deck: pl.Deck | null): string {
+  if (up) return `From ${up.playlist.name}${up.index !== null ? `, ${up.index + 1} of ${up.count}` : ''}`;
+  if (deck?.query) return isMood(deck.query) ? `From the mood ${(deck.query.groups.tags ?? []).join(' + ')}` : `From ${say('library query')}`;
+  return 'From the whole library: play a playlist or a mood to set the order';
+}
+
 /** "More effects…": the More effects sheet, over live mode (it takes Esc while open). */
 export const openEffects = () => openSheet('effects');
 
@@ -80,19 +86,21 @@ export function padLabel(id: ControlId, name?: string): string {
   return `${name ?? c.name}${c.keys ? ` (${c.keys})` : ''}`;
 }
 
-/** The tempo pad's name: what sets the tempo, and what it is. "Tap tempo, 120 BPM (T)". */
-export const tempoLabel = (linked: boolean, bpm: number | null): string => padLabel('tempo', `${linked ? 'Link' : 'Tap'} tempo${bpm !== null && bpm > 0 ? `, ${Math.round(bpm)} BPM` : ''}`);
+/** The key under a pad's name: one letter or arrow; the rest of its keys are in its tooltip and the ? overlay. */
+function PadKey({ id }: { id: ControlId }) {
+  const key = padKey(id);
+  return key ? <small aria-hidden="true">{key}</small> : null;
+}
 
 /**
- * One of the eight big buttons; `id` names it from the help list. `on` makes it
- * a toggle (`aria-pressed`); `lit` only lights it, for a pad that doesn't
- * switch what it shows (tempo, lit while Link keeps it).
+ * One of the big buttons; `id` names it from the help list. `on` makes it a
+ * toggle (`aria-pressed`).
  */
-export function Pad({ id, onPress, on, lit, label, children }: { id: ControlId; onPress(): void; on?: boolean; lit?: boolean; label?: string; children?: React.ReactNode }) {
+export function Pad({ id, onPress, on, label, children }: { id: ControlId; onPress(): void; on?: boolean; label?: string; children?: React.ReactNode }) {
   return (
-    <ButtonFace className="live-pad" data-pad={id} aria-pressed={on} lit={lit} aria-label={label ?? padLabel(id)} title={titleOf(id)} onClick={onPress}>
+    <ButtonFace className="live-pad" data-pad={id} aria-pressed={on} aria-label={label ?? padLabel(id)} title={titleOf(id)} onClick={onPress}>
       {children}
-      {control(id).keys && <small aria-hidden="true">{control(id).keys}</small>}
+      <PadKey id={id} />
     </ButtonFace>
   );
 }
@@ -136,7 +144,7 @@ export function HoldPad({ id, kind, on, send, children }: { id: ControlId; kind:
       }}
     >
       {children}
-      <small aria-hidden="true">{control(id).keys}</small>
+      <PadKey id={id} />
     </ButtonFace>
   );
 }
@@ -159,9 +167,10 @@ function NextWhen({ auto, seconds }: { auto: boolean; seconds: number }) {
 
 /**
  * Live mode: performing, not editing. Along the top the status strip (what it
- * hears, the beat, where the picture goes, help, settings, leave); then what's
- * playing and what's next over the preview; eight big pads — previous, random,
- * next, hold, strobe, blackout, freeze, tempo — and one Intensity slider; and
+ * hears, the beat and tap tempo, where the picture goes, help, settings, and
+ * leave apart); then what's playing and what's next, two lines over the
+ * preview, which takes the rest of the height; the pads in two rows — previous,
+ * random, next; hold, strobe, blackout, freeze — and one Intensity slider; and
  * beside them the crate: playlists, moods from the user's tags, and up next.
  * Everything else is a key (the ? overlay names them all) or in More effects.
  *
@@ -290,7 +299,6 @@ export function Live({
   const up = pl.upNext(lists);
   const deck = lists?.deck ?? null;
   const inWindow = status.display === null && displays !== null;
-  const linked = effects?.linked === true;
 
   return (
     <div className="live" data-windowed={inWindow ? '' : undefined}>
@@ -299,6 +307,7 @@ export function Live({
         show={show}
         effects={effects}
         onHelp={() => setHelp(true)}
+        onTap={() => actFx({ kind: 'tap' })}
         onLeave={leaveLive}
         onError={fail("Couldn't use that audio input.")}
         titles={{ audio: titleOf('audio'), beat: titleOf('beat'), output: titleOf('output'), help: titleOf('help'), settings: titleOf('settings'), leave: titleOf('leave') }}
@@ -310,7 +319,6 @@ export function Live({
         <div className="live-deck">
           {/* A polite status: VoiceOver says the new preset (and its star, rating and HOLD) when it changes, not on every frame. */}
           <div className="live-now" title={current ?? titleOf('now')} role="status" aria-atomic="true">
-            <i>now</i>
             {current ? <b>{nameOf(current)}</b> : <b className="live-none">Nothing playing — press R for a random preset, or play a playlist.</b>}
             {star && (
               <span className="live-star" title="A favourite (F takes the star off)" role="img" aria-label="favourite">
@@ -328,8 +336,8 @@ export function Live({
               </span>
             )}
           </div>
-          <div className="live-next" title={titleOf('next')}>
-            <i>next</i>
+          <div className="live-next" title={`${titleOf('next')}. ${whereText(up, deck)}`}>
+            <span className="live-sr">Next: </span>
             {says.kind === 'held' ? (
               <span className="live-none">held — nothing changes until you let go of HOLD (H)</span>
             ) : says.kind === 'item' || says.kind === 'filter' ? (
@@ -344,20 +352,6 @@ export function Live({
             )}
             {says.kind !== 'held' && deck && <NextWhen auto={deck.auto} seconds={deck.seconds} />}
           </div>
-          <p className="live-where">
-            {up ? (
-              <>
-                from <b>{up.playlist.name}</b>
-                {up.index !== null && ` · ${up.index + 1} of ${up.count}`}
-              </>
-            ) : deck?.query ? (
-              <>
-                from the mood <b>{(deck.query.groups.tags ?? []).join(' + ') || 'filter'}</b>
-              </>
-            ) : (
-              'from the whole library — play a playlist or a mood to set the order'
-            )}
-          </p>
         </div>
         <NoticeBanner className="live-problem" notice={error} onDismiss={dismiss} />
         <div className="live-preview-cell">
@@ -374,30 +368,31 @@ export function Live({
           )}
         </div>
         <div className="wdg live-pads" role="group" aria-label="Live controls">
-          <Pad id="previous" onPress={() => act({ kind: 'previous' })}>
-            ◀ Previous
-          </Pad>
-          <Pad id="random" onPress={() => act({ kind: 'random' })}>
-            Random
-          </Pad>
-          <Pad id="step" onPress={() => act({ kind: 'next' })}>
-            Next ▶
-          </Pad>
-          <Pad id="hold" on={held} onPress={() => actFx({ kind: 'hold', on: null })}>
-            Hold
-          </Pad>
-          <HoldPad id="strobe" kind="strobe" on={effects?.strobe === true} send={actFx}>
-            Strobe
-          </HoldPad>
-          <Pad id="blackout" on={effects?.blackout === true} onPress={() => actFx({ kind: 'blackout', on: null })}>
-            Blackout
-          </Pad>
-          <HoldPad id="freeze" kind="freeze" on={effects?.freeze === true} send={actFx}>
-            Freeze
-          </HoldPad>
-          <Pad id="tempo" lit={linked} label={tempoLabel(linked, effects?.bpm ?? null)} onPress={() => actFx({ kind: 'tap' })}>
-            {linked ? 'Link' : 'Tap'} {effects ? Math.round(effects.bpm) : ''}
-          </Pad>
+          <div className="live-pads-row" data-row="presets" role="group" aria-label="Presets">
+            <Pad id="previous" onPress={() => act({ kind: 'previous' })}>
+              ◀ Previous
+            </Pad>
+            <Pad id="random" onPress={() => act({ kind: 'random' })}>
+              Random
+            </Pad>
+            <Pad id="step" onPress={() => act({ kind: 'next' })}>
+              Next ▶
+            </Pad>
+          </div>
+          <div className="live-pads-row" data-row="effects" role="group" aria-label="Effects">
+            <Pad id="hold" on={held} onPress={() => actFx({ kind: 'hold', on: null })}>
+              Hold
+            </Pad>
+            <HoldPad id="strobe" kind="strobe" on={effects?.strobe === true} send={actFx}>
+              Strobe
+            </HoldPad>
+            <Pad id="blackout" on={effects?.blackout === true} onPress={() => actFx({ kind: 'blackout', on: null })}>
+              Blackout
+            </Pad>
+            <HoldPad id="freeze" kind="freeze" on={effects?.freeze === true} send={actFx}>
+              Freeze
+            </HoldPad>
+          </div>
         </div>
         <div className="wdg live-intensity">
           <Slider
@@ -421,7 +416,6 @@ export function Live({
         </div>
       </section>
       <aside className="live-side">{lists && <Crate lists={lists} data={data} act={act} onLists={setLists} onError={setError} current={current} />}</aside>
-      <HintFooter className="live-hints" resting={KEYS} />
       <HelpOverlay open={help} onClose={() => setHelp(false)} />
     </div>
   );
