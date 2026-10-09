@@ -155,5 +155,8 @@ commit also changes `PROJECTM` in `pack.rs` (its URL and size) and the curl abov
 `TOTAL` in `pack.rs` if the count changes. An app that already has the pack doesn't
 download it again.
 
-Takedown requests come in as issues on visual-presets: remove the preset there, with its
-row in `index.json` and its thumbnail, push, and pin the new commit.
+Takedown requests come in as issues on visual-presets
+(<https://github.com/openflowfm/visual-presets/issues/new?title=Preset%20takedown>, the
+link in CREDITS.md and the Credits view): remove the preset there, with its row in
+`index.json` and its thumbnail, push, and pin the new commit. The removal applies from
+that commit on, so to new app builds and fresh downloads; a pack already downloaded keeps it.

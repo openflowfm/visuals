@@ -50,7 +50,9 @@ presets are projectM's
 curated by ISOSCELES, each by its own author; thank you to projectM and to every preset
 author. The full pack downloads from
 [openflowfm/visual-presets](https://github.com/openflowfm/visual-presets), which keeps
-projectM's LICENSE beside the presets and takes takedown requests as issues.
+projectM's LICENSE beside the presets and takes takedown requests as
+[issues](https://github.com/openflowfm/visual-presets/issues/new?title=Preset%20takedown);
+a removal applies from the next pinned commit, so to new app builds and fresh downloads.
 
 ### Listen to your DAW
 

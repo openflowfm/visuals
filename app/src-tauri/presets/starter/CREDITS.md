@@ -15,5 +15,6 @@ view lists every author in the library with how many presets they made.
 
 **Terms.** MilkDrop presets were released freely, almost always without a license;
 each author keeps the rights to their own. Any author who wants a preset removed can
-ask at <https://github.com/openflowfm/visuals/issues/new?title=Preset%20takedown>,
-and it leaves the next release (projectM takes the same requests for the pack).
+ask at <https://github.com/openflowfm/visual-presets/issues/new?title=Preset%20takedown>.
+The removal applies from the next pinned commit of the pack: to new app builds and
+fresh downloads (projectM takes the same requests for its own pack).
