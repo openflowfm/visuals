@@ -522,3 +522,85 @@ fn stage_previews_and_live_values() {
     assert_eq!(r.runner.as_ref().unwrap().preset.values["fDecay"], 0.5);
     assert!(!r.set_value(crate::runtime::Owner::Waves(0), "enabled", 1.0), "turning a wave on needs a reload");
 }
+
+/// The size of every picture and mesh buffer a renderer holds: what changing
+/// quality makes again, and must not pile up.
+fn held(r: &Renderer) -> (Vec<(u32, u32)>, Vec<u64>) {
+    let mut sizes = vec![r.feedback[0].size, r.feedback[1].size, r.comp.size, r.display.size, r.bare.size, r.outgoing.size];
+    for (h, v) in r.blur.iter().chain(&r.display_blur) {
+        sizes.extend([h.size, v.size]);
+    }
+    sizes.extend(r.textured_source.as_ref().map(|t| t.size));
+    let buffers = [&r.warp_positions, &r.warp_uvs, &r.warp_colors, &r.warp_indices.0, &r.display_uvs, &r.display_shaded_uvs].map(|b| b.size()).to_vec();
+    (sizes, buffers)
+}
+
+#[test]
+fn a_mesh_change_does_not_run_the_vertex_equations_twice() {
+    use crate::quality::Level;
+    let text = SPIRAL.replace("per_pixel_1=", "per_pixel_2=megabuf(0)=megabuf(0)+1;\nper_pixel_1=");
+    let run = |change: bool| -> Option<f64> {
+        let mut r = renderer(W, H, &text)?;
+        let mut audio = Audio::default();
+        play(&mut r, &mut audio, 3, 0.5 / PRESET_RATE);
+        if change {
+            r.set_quality(Level::Low.quality());
+            r.set_quality(Level::High.quality());
+            r.resize(H, W);
+        }
+        Some(r.runner.as_ref().unwrap().megabuf(0))
+    };
+    let (Some(plain), Some(changed)) = (run(false), run(true)) else { return };
+    assert!(plain > 0.0);
+    assert_eq!(plain, changed);
+}
+
+#[test]
+fn quality_changes_while_running_without_a_reload() {
+    use crate::quality::Level;
+    let Some((mut r, mut audio)) = spiral(30) else { return };
+    let lit = |p: &[u8]| p.chunks(4).filter(|p| p[0] > 8 || p[1] > 8 || p[2] > 8).count();
+    assert_eq!(r.quality(), Level::High.quality());
+    // Half a step in, so the step's motion is pending when the mesh changes.
+    play(&mut r, &mut audio, 1, 0.5 / PRESET_RATE);
+    let steps = r.steps();
+
+    r.set_quality(Level::Low.quality());
+    let size = r.size();
+    assert_eq!((size.texsize_x, size.texsize_y, size.mesh_width, size.mesh_height), (32.0, 18.0, 32, 24));
+    assert_eq!(r.output_size(), (W, H));
+    // The picture so far is carried over at the new scale, and the preset runs on.
+    let carried = r.read_back();
+    assert_eq!(carried.len(), 32 * 18 * 4);
+    assert!(lit(&carried) > carried.len() / 4 / 4, "the picture is carried over");
+    play(&mut r, &mut audio, 5, 0.5 / PRESET_RATE);
+    assert!(r.steps() > steps, "the same preset steps on");
+    assert!(lit(&r.read_back()) > 0);
+    // Presented, it is scaled up to fill the size asked for.
+    let shown = presented(&mut r, Master::default());
+    assert!(lit(&shown) > shown.len() / 4 / 4);
+
+    // Back up, and round again: what it holds is what a renderer made at that
+    // quality holds, so nothing from the sizes before is kept.
+    r.set_quality(Level::High.quality());
+    play(&mut r, &mut audio, 3, 0.5 / PRESET_RATE);
+    assert_eq!(r.read_back().len(), (W * H * 4) as usize);
+    for _ in 0..20 {
+        for level in [Level::Medium, Level::Low, Level::High] {
+            r.set_quality(level.quality());
+            play(&mut r, &mut audio, 1, 0.5 / PRESET_RATE);
+        }
+    }
+    r.set_quality(Level::Medium.quality());
+    play(&mut r, &mut audio, 2, 0.5 / PRESET_RATE);
+    let mut fresh = renderer(W, H, SPIRAL).unwrap();
+    fresh.set_quality(Level::Medium.quality());
+    play(&mut fresh, &mut Audio::default(), 2, 0.5 / PRESET_RATE);
+    assert_eq!(held(&r), held(&fresh));
+    assert_eq!(r.size().texsize_x, 48.0);
+
+    // Resizing keeps the scale.
+    r.resize(H, W);
+    assert_eq!((r.size().texsize_x, r.size().texsize_y), (27.0, 48.0));
+    assert_eq!(r.output_size(), (H, W));
+}

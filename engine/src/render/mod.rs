@@ -33,6 +33,7 @@ mod textures;
 use crate::audio::Audio;
 use crate::draw::{Blend, DrawList, Topology};
 use crate::fx::Master;
+use crate::quality::Quality;
 use crate::runtime::{Clock, Mesh, Runner, Size, PRESET_RATE};
 use crate::shader::{self, Kind};
 use blur::{blur_size, BLUR, BLUR_RATIOS};
@@ -58,7 +59,12 @@ pub struct Loaded {
 pub struct Renderer {
     device: wgpu::Device,
     queue: wgpu::Queue,
+    /// What presets read: the size they draw at and the mesh.
     size: Size,
+    /// The size asked for ([`Renderer::resize`]), which the picture is
+    /// presented as; presets draw at it times the quality's scale.
+    output: (u32, u32),
+    quality: Quality,
     feedback: [Target; 2],
     current: usize,
     comp: Target,
@@ -190,7 +196,8 @@ struct Out { @builtin(position) pos: vec4f }
 
 impl Renderer {
     pub fn new(device: wgpu::Device, queue: wgpu::Queue, width: u32, height: u32) -> Self {
-        let size = Size { texsize_x: width as f64, texsize_y: height as f64, mesh_width: 48, mesh_height: 36 };
+        let quality = Quality::default();
+        let size = Size { texsize_x: width as f64, texsize_y: height as f64, mesh_width: quality.mesh.0, mesh_height: quality.mesh.1 };
         let (noise, rng) = noise_data();
         let mut textures = HashMap::new();
         for (name, data, side, depth) in noise {
@@ -210,13 +217,9 @@ impl Renderer {
         let blur_h = quad(&device, "horizontal", &blur_shader, "horizontal", FORMAT);
         let blur_v = quad(&device, "vertical", &blur_shader, "vertical", FORMAT);
 
-        let (warp_grid, warp_index) = grid(size.mesh_width, size.mesh_height);
         let (comp_grid, comp_index) = grid(COMP_GRID.0, COMP_GRID.1);
         let vertex = wgpu::BufferUsages::VERTEX;
-        let warp_positions = buffer(&device, bytemuck::cast_slice(&warp_grid), vertex);
-        let warp_uvs = buffer(&device, bytemuck::cast_slice(&vec![[0f32; 2]; warp_grid.len()]), vertex);
-        let warp_colors = buffer(&device, bytemuck::cast_slice(&vec![[1f32; 4]; warp_grid.len()]), vertex);
-        let warp_indices = (buffer(&device, bytemuck::cast_slice(&warp_index), wgpu::BufferUsages::INDEX), warp_index.len() as u32);
+        let WarpBuffers { positions: warp_positions, uvs: warp_uvs, colors: warp_colors, indices: warp_indices, display_uvs, display_shaded_uvs } = WarpBuffers::new(&device, quality.mesh);
         let comp_positions = buffer(&device, bytemuck::cast_slice(&comp_grid), vertex);
         let comp_colors = buffer(&device, bytemuck::cast_slice(&vec![[1f32; 4]; comp_grid.len()]), vertex);
         let comp_indices = (buffer(&device, bytemuck::cast_slice(&comp_index), wgpu::BufferUsages::INDEX), comp_index.len() as u32);
@@ -231,12 +234,10 @@ impl Renderer {
                 .collect()
         };
         let (blur, display_blur) = (blurs(), blurs());
-        let display_uvs = buffer(&device, bytemuck::cast_slice(&vec![[0f32; 2]; warp_grid.len()]), vertex);
         let mix_shader = wgsl(MIX);
         let mix = quad(&device, "mix", &mix_shader, "fs", FORMAT);
         let carry = quad(&device, "carry", &wgsl(CARRY), "fs", FORMAT);
         let mix_uniform = buffer(&device, &[0u8; 16], wgpu::BufferUsages::UNIFORM);
-        let display_shaded_uvs = buffer(&device, bytemuck::cast_slice(&vec![[0f32; 2]; warp_grid.len()]), vertex);
         let transport_fs = wgsl(TRANSPORT);
         let transport = pipeline(&device, Some("transport"), (&warp_vs, "main", &warp_layout()), wgpu::PrimitiveTopology::TriangleList, (&transport_fs, "fs"), FORMAT.into());
         let blur_uniforms = (0..3)
@@ -307,6 +308,8 @@ impl Renderer {
             rng,
             previews: Vec::new(),
             size,
+            output: full,
+            quality,
             device,
             queue,
         };
@@ -324,10 +327,83 @@ impl Renderer {
     /// outgoing snapshot) are carried over, scaled, so the preset goes on
     /// rather than starting again from black; presets read the new size and
     /// aspect from the next refresh.
+    ///
+    /// Presets draw at that size times the quality's scale
+    /// ([`Renderer::set_quality`]); [`Renderer::present`] scales it up to it.
     pub fn resize(&mut self, width: u32, height: u32) {
-        let full = (width.max(1), height.max(1));
-        if full == self.comp.size {
+        self.output = (width.max(1), height.max(1));
+        if self.retarget() {
+            self.remesh();
+        }
+    }
+
+    /// The size asked for ([`Renderer::new`], [`Renderer::resize`]): what the
+    /// picture is presented as. Presets draw at [`Renderer::size`].
+    pub fn output_size(&self) -> (u32, u32) {
+        self.output
+    }
+
+    pub fn quality(&self) -> Quality {
+        self.quality
+    }
+
+    /// Draw at `quality` from now on (clamped, [`Quality::clamped`]), without
+    /// a reload: the pictures kept so far are carried over at the new scale, as
+    /// by [`Renderer::resize`], and a new mesh takes over at once — the pending
+    /// step's per-vertex equations run again on it, with what they write besides
+    /// variables put back. The old size's textures and the old mesh's buffers
+    /// are let go.
+    pub fn set_quality(&mut self, quality: Quality) {
+        let quality = quality.clamped();
+        let new_mesh = quality.mesh != self.quality.mesh;
+        if new_mesh {
+            let buffers = WarpBuffers::new(&self.device, quality.mesh);
+            (self.warp_positions, self.warp_uvs, self.warp_colors, self.warp_indices) = (buffers.positions, buffers.uvs, buffers.colors, buffers.indices);
+            (self.display_uvs, self.display_shaded_uvs) = (buffers.display_uvs, buffers.display_shaded_uvs);
+            (self.size.mesh_width, self.size.mesh_height) = quality.mesh;
+        }
+        self.quality = quality;
+        if self.retarget() || new_mesh {
+            self.remesh();
+        }
+    }
+
+    /// The pending step's motion and size-dependent uniforms again, for the
+    /// mesh and size [`Renderer::size`] now says, so a refresh before the next
+    /// step draws with them.
+    fn remesh(&mut self) {
+        let size = self.size;
+        let time = self.clock.time;
+        let (Some(runner), true) = (self.runner.as_mut(), self.pending) else {
+            self.mesh = Mesh::default();
             return;
+        };
+        runner.rewarp_motion(time, &size, &mut self.mesh);
+        let mut uvs = std::mem::take(&mut self.uvs);
+        self.mesh.uvs(1.0, &mut uvs);
+        self.queue.write_buffer(&self.warp_uvs, 0, bytemuck::cast_slice(&uvs));
+        self.uvs = uvs;
+        let (ax, ay) = (size.aspect_x() as f32, size.aspect_y() as f32);
+        let (tx, ty) = (size.texsize_x as f32, size.texsize_y as f32);
+        for values in [&mut self.next_values, &mut self.shown_values] {
+            for (name, value) in values.iter_mut() {
+                match *name {
+                    "aspect" => *value = vec![ax, ay, 1.0 / ax, 1.0 / ay],
+                    "texsize" => *value = vec![tx, ty, 1.0 / tx, 1.0 / ty],
+                    _ => {}
+                }
+            }
+        }
+        self.write_uniforms(self.warp.as_ref().unwrap(), &self.next_values);
+    }
+
+    /// The pictures made again at the size presets draw at now — the output
+    /// size times the quality's scale — with the ones kept carried over, scaled.
+    /// Nothing changes when that size has not; true when it has.
+    fn retarget(&mut self) -> bool {
+        let full = self.quality.scaled(self.output);
+        if full == self.comp.size {
+            return false;
         }
         self.size.texsize_x = full.0 as f64;
         self.size.texsize_y = full.1 as f64;
@@ -353,6 +429,7 @@ impl Renderer {
         // Both are made again, at the new size, when next needed.
         self.textured_source = None;
         self.trails_pass = None;
+        true
     }
 
     pub fn device(&self) -> &wgpu::Device {
@@ -709,7 +786,9 @@ impl Renderer {
         );
         let mut encoder = self.device.create_command_encoder(&Default::default());
         {
-            let (x, y, w, h) = fit(size, self.comp.size);
+            // As the size asked for: at a scale below 1 the picture's own
+            // size is that, rounded, and would leave a sliver of a bar.
+            let (x, y, w, h) = fit(size, self.output);
             let mut pass = begin(&mut encoder, view, true);
             pass.set_viewport(x, y, w, h, 0.0, 1.0);
             pass.set_pipeline(pipeline);
@@ -720,10 +799,38 @@ impl Renderer {
     }
 
     /// The finished picture, read back as RGBA rows top to bottom — for tests and
-    /// the harness.
+    /// the harness. It is the size presets draw at ([`Renderer::size`]), which
+    /// is smaller than the size asked for at a render scale below 1.
     pub fn read_back(&self) -> Vec<u8> {
         // GL orientation: the last row is the top of the picture.
         read_targets(&self.device, &self.queue, &[&self.comp], true).expect("mapped")
+    }
+}
+
+/// The warp mesh's buffers for a mesh `cells` across and down: its positions,
+/// indices and colours, the step's texture coordinates, and those between steps.
+struct WarpBuffers {
+    positions: wgpu::Buffer,
+    uvs: wgpu::Buffer,
+    colors: wgpu::Buffer,
+    indices: (wgpu::Buffer, u32),
+    display_uvs: wgpu::Buffer,
+    display_shaded_uvs: wgpu::Buffer,
+}
+
+impl WarpBuffers {
+    fn new(device: &wgpu::Device, cells: (usize, usize)) -> Self {
+        let (grid, index) = grid(cells.0, cells.1);
+        let vertex = wgpu::BufferUsages::VERTEX;
+        let zeros = || buffer(device, bytemuck::cast_slice(&vec![[0f32; 2]; grid.len()]), vertex);
+        Self {
+            positions: buffer(device, bytemuck::cast_slice(&grid), vertex),
+            uvs: zeros(),
+            colors: buffer(device, bytemuck::cast_slice(&vec![[1f32; 4]; grid.len()]), vertex),
+            indices: (buffer(device, bytemuck::cast_slice(&index), wgpu::BufferUsages::INDEX), index.len() as u32),
+            display_uvs: zeros(),
+            display_shaded_uvs: zeros(),
+        }
     }
 }
 
