@@ -1,10 +1,21 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Entry, LibraryQuery } from './api.ts';
-import { firstToOpen, followAction, followGrid, gridKey, rereadOn, stepDeck, stepping } from './library.ts';
+import { firstToOpen, followAction, followGrid, gridKey, LIVE_WAIT, rereadOn, stepDeck, stepping } from './library.ts';
 
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn((..._args: unknown[]): Promise<unknown> => Promise.resolve(null)) }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => invoke(...args) }));
-vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }));
+const { heard } = vi.hoisted(() => ({ heard: new Map<string, (e: { payload: unknown }) => void>() }));
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: vi.fn((name: string, f: (e: { payload: unknown }) => void) => {
+    heard.set(name, f);
+    return Promise.resolve(() => {});
+  }),
+}));
+
+/** The deck's `live` event, as it reaches the page. */
+const live = () => heard.get('live')?.({ payload: { deck: null, opened: null, path: '/p/next.milk', error: null } });
+/** Let the step be sent: it waits for its `live` listener first. */
+const sendOut = () => new Promise((r) => setTimeout(r, 0));
 
 describe('following the grid', () => {
   const query: LibraryQuery = { groups: { style: ['Geiss'], author: ['Rovastar'] }, text: 'warm' };
@@ -31,10 +42,13 @@ describe('following the grid', () => {
 });
 
 describe('stepping the deck', () => {
-  it('counts a step as in flight until the deck answers, even when it fails', async () => {
+  it('counts a step as in flight until the deck answers, after its live event, and settles a refused one', async () => {
     let answer: (v: unknown) => void = () => {};
     invoke.mockImplementationOnce(() => new Promise((r) => (answer = r)));
     const sent = stepDeck({ kind: 'next' });
+    expect(stepping()).toBe(true);
+    await sendOut();
+    live();
     expect(stepping()).toBe(true);
     answer(null);
     await sent;
@@ -42,6 +56,44 @@ describe('stepping the deck', () => {
     invoke.mockImplementationOnce(() => Promise.reject(new Error('held')));
     await expect(stepDeck({ kind: 'next' })).rejects.toThrow('held');
     expect(stepping()).toBe(false);
+  });
+
+  it('stays in flight when the deck answers before its live event reaches the page', async () => {
+    // The answer first: the page still shows the old preset, so a re-follow must wait.
+    const sent = stepDeck({ kind: 'next' });
+    await sent;
+    expect(invoke).toHaveBeenLastCalledWith('act', { action: { kind: 'next' } });
+    expect(stepping()).toBe(true);
+    live();
+    expect(stepping()).toBe(false);
+  });
+
+  it('does not take a live event from before the step was sent as its own', async () => {
+    await sendOut();
+    let answer: (v: unknown) => void = () => {};
+    invoke.mockImplementationOnce(() => new Promise((r) => (answer = r)));
+    const sent = stepDeck({ kind: 'previous' });
+    live(); // an auto-advance, say, before the step went out
+    await sendOut();
+    answer(null);
+    await sent;
+    expect(stepping()).toBe(true);
+    live();
+    expect(stepping()).toBe(false);
+  });
+
+  it('settles an answered step whose live event never comes, after a while', async () => {
+    vi.useFakeTimers();
+    try {
+      const sent = stepDeck({ kind: 'random' });
+      await vi.advanceTimersByTimeAsync(0);
+      await sent;
+      expect(stepping()).toBe(true);
+      await vi.advanceTimersByTimeAsync(LIVE_WAIT);
+      expect(stepping()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

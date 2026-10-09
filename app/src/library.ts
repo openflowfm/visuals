@@ -13,25 +13,76 @@ import * as pl from './playlists.ts';
  */
 export const followAction = (query: LibraryQuery, at: string): pl.Action => ({ kind: 'query', query, at });
 
-/** Steps sent to the deck and not answered yet. */
-let pending = 0;
+/**
+ * A step sent to the deck. The deck sends the `live` event (what it opened) and then
+ * its answer, but the page can get them either way round: the step is in flight until
+ * it has both, so nothing reads the page's preset while it still shows the old one.
+ */
+interface Step {
+  sent: boolean;
+  answered: boolean;
+  live: boolean;
+}
 
-/** Step the deck (next, previous, random), counting it as in flight until it answers. */
-export function stepDeck(action: pl.Action): Promise<void> {
-  pending += 1;
-  let sent: Promise<void>;
-  try {
-    sent = pl.act(action);
-  } catch (e) {
-    sent = Promise.reject(e);
+/** Steps sent to the deck and not settled yet. */
+const steps = new Set<Step>();
+
+/** How long an answered step waits for its `live` event before it counts as settled anyway, in ms. */
+export const LIVE_WAIT = 2000;
+
+/** The `live` event came: every step already sent has had its event. */
+function sawLive() {
+  for (const s of steps) {
+    if (!s.sent) continue;
+    s.live = true;
+    if (s.answered) steps.delete(s);
   }
-  return sent.finally(() => {
-    pending -= 1;
+}
+
+/** Listening for `live`, started by the first step; false when it can't (outside the app). */
+let listening: Promise<boolean> | null = null;
+function listenLive(): Promise<boolean> {
+  if (!listening) {
+    try {
+      listening = pl.onLive(sawLive).then(
+        () => true,
+        () => false,
+      );
+    } catch {
+      listening = Promise.resolve(false);
+    }
+  }
+  return listening;
+}
+
+/**
+ * Step the deck (next, previous, random), counting it as in flight until it has
+ * both answered and sent its `live` event, whichever comes first; a refused step
+ * sends no event and settles with its answer.
+ */
+export function stepDeck(action: pl.Action): Promise<void> {
+  const s: Step = { sent: false, answered: false, live: false };
+  steps.add(s);
+  const sent = listenLive().then((heard) => {
+    s.live = !heard;
+    s.sent = true;
+    return pl.act(action);
   });
+  return sent.then(
+    () => {
+      s.answered = true;
+      if (s.live) steps.delete(s);
+      else setTimeout(() => steps.delete(s), LIVE_WAIT);
+    },
+    (e) => {
+      steps.delete(s);
+      throw e;
+    },
+  );
 }
 
 /** A step is in flight: what the page shows may not be what the deck plays yet. */
-export const stepping = () => pending > 0;
+export const stepping = () => steps.size > 0;
 
 /** The grid's contents as one value: it changes when what the grid shows does. */
 export const gridKey = (paths: string[]) => paths.join('\n');
