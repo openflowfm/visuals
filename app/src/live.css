@@ -454,10 +454,15 @@
   color: var(--bg);
   font-weight: var(--weight-bold);
 }
-.live-pads .live-pad[data-pad='tempo'][aria-pressed='true'] {
+/* Tempo is lit (data-on), not pressed: Link keeps the tempo, a tap doesn't switch it. */
+.live-pads .live-pad[data-pad='tempo'][data-on] {
   border-color: var(--green);
   background: var(--panel);
   color: var(--green);
+}
+.live-pads .live-pad[data-pad='tempo'][data-on] small {
+  color: inherit;
+  opacity: 0.75;
 }
 
 /* Intensity, and More effects beside it. */
@@ -745,10 +750,14 @@
   white-space: nowrap;
 }
 
-/* Focus on every control here. */
-.live :is(.live-status-light, .live-status-btn, .live-pad, .live-crate-playlist, .live-crate-chip, .live-crate-row, .wdg-button-body):focus-visible {
-  outline: 2px solid var(--focus);
+/* Focus on every control here, in the ring every view uses (access.css). */
+.live :is(.live-status-light, .live-status-btn, .live-pad, .live-crate-playlist, .live-crate-chip, .live-crate-row, .wdg-button-body, [role='slider'], [role='radio']):focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
   outline-offset: 2px;
+}
+/* The strip's controls fill its height at the top of the window: their ring goes inside, so the window's edge doesn't cut it. */
+.live :is(.live-status-light, .live-status-btn):focus-visible {
+  outline-offset: -2px;
 }
 
 @media (max-width: 600px) {

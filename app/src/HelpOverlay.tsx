@@ -1,5 +1,6 @@
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { useEffect, useRef, type ReactElement } from 'react';
+import { useFocusTrap } from './focusTrap.ts';
 import { Say, say } from './words.ts';
 
 /** Every control live mode has, on screen or on a key. */
@@ -107,16 +108,22 @@ export function titleOf(id: ControlId): string {
 }
 
 /**
- * The ? overlay: every live control, grouped by where it is. Esc or ? closes
- * it (before live mode's own keys see them), as do ✕ and a click outside.
+ * The ? overlay: every live control, grouped by where it is. A modal dialog:
+ * focus moves into it and stays there, and goes back to what opened it (the ?
+ * button) when it closes. Esc or ? closes it (before live mode's own keys see
+ * them), as do ✕ and a click outside.
  */
 export function HelpOverlay({ open, onClose }: { open: boolean; onClose(): void }): ReactElement | null {
+  return open ? <HelpDialog onClose={onClose} /> : null;
+}
+
+/** The overlay while it is open: mounted only then, so the focus trap takes focus on open and gives it back on close. */
+function HelpDialog({ onClose }: { onClose(): void }) {
   const panel = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
   close.current = onClose;
+  useFocusTrap(panel);
   useEffect(() => {
-    if (!open) return;
-    panel.current?.focus();
     const keydown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' && e.key !== '?') return;
       e.preventDefault();
@@ -125,21 +132,17 @@ export function HelpOverlay({ open, onClose }: { open: boolean; onClose(): void 
     };
     window.addEventListener('keydown', keydown, { capture: true });
     return () => window.removeEventListener('keydown', keydown, { capture: true });
-  }, [open]);
-  if (!open) return null;
+  }, []);
   return (
     <div
       className="live-help"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Live controls"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="live-help-panel" ref={panel} tabIndex={-1}>
+      <div className="live-help-panel" ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="live-help-title">
         <div className="live-help-head">
-          <h2>Live controls</h2>
+          <h2 id="live-help-title">Live controls</h2>
           <Button tone="quiet" label="Close live controls" title="Close (Esc or ?)" onPress={onClose}>
             ✕
           </Button>

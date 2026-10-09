@@ -78,8 +78,8 @@ function AudioLevel() {
   }, []);
   return (
     <>
-      <span className="live-status-dot" data-on={level > 0 ? '' : undefined} />
-      <span className="live-status-meter" aria-hidden>
+      <span className="live-status-dot" data-on={level > 0 ? '' : undefined} aria-hidden="true" />
+      <span className="live-status-meter" aria-hidden="true">
         <span style={{ width: `${(level * 100).toFixed(0)}%` }} />
       </span>
     </>
@@ -100,7 +100,7 @@ function BeatDot({ frame }: { frame: link.Frame | null }) {
     tick();
     return () => cancelAnimationFrame(id);
   }, []);
-  return <span className="live-status-dot" data-on={lit ? '' : undefined} />;
+  return <span className="live-status-dot" data-on={lit ? '' : undefined} aria-hidden="true" />;
 }
 
 /** The frame rate, read once a second and shown only while it is low. Its own leaf, so a reading re-renders nothing else. */
@@ -124,10 +124,21 @@ function Fps() {
   );
 }
 
-/** One light: a caption, what it shows, and the popover it opens under it. */
+/** What VoiceOver calls the BEAT light: "Beat, 120 BPM, 2 in time"; the tempo and who keeps it, without the dot. */
+export function beatLabel(frame: link.Frame | null, effects: fx.Fx | null): string {
+  const bpm = bpmText(frame, effects);
+  return ['Beat', bpm, linked(frame) ? `${frame.peers} in time` : null].filter(Boolean).join(', ');
+}
+
+/** What VoiceOver calls the OUTPUT light: "Output, on Projector". */
+export const outputLabel = (status: output.Status): string => `Output, ${outputText(status).text}`;
+
+/** One light: a caption, what it shows, and the popover it opens under it (a dialog, but not modal: Esc or a click elsewhere closes it). */
 function Light({
   name,
   caption,
+  label,
+  popName,
   title,
   on,
   open,
@@ -137,6 +148,10 @@ function Light({
 }: {
   name: Pop;
   caption: string;
+  /** Its accessible name: short, with what it shows; `title` is the longer tooltip. */
+  label: string;
+  /** The popover's name. */
+  popName: string;
   title: string;
   on?: boolean;
   open: boolean;
@@ -144,14 +159,26 @@ function Light({
   children: ReactNode;
   pop: ReactNode;
 }) {
+  const id = `live-status-pop-${name}`;
   return (
     <span className="live-status-item">
-      <button type="button" className="live-status-light" data-light={name} data-on={on ? '' : undefined} aria-expanded={open} aria-label={title} title={title} onClick={() => toggle(name)}>
-        <i>{caption}</i>
+      <button
+        type="button"
+        className="live-status-light"
+        data-light={name}
+        data-on={on ? '' : undefined}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        aria-controls={open ? id : undefined}
+        aria-label={label}
+        title={title}
+        onClick={() => toggle(name)}
+      >
+        <i aria-hidden="true">{caption}</i>
         {children}
       </button>
       {open && (
-        <div className="live-status-pop" data-pop={name} role="dialog" aria-label={title}>
+        <div className="live-status-pop" id={id} data-pop={name} role="dialog" aria-label={popName}>
           {pop}
         </div>
       )}
@@ -206,6 +233,9 @@ export function Status({
     const key = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       e.preventDefault();
+      // Focus inside the popover goes back to its light, rather than to the page when the popover goes.
+      const pop = root.current?.querySelector('.live-status-pop');
+      if (pop && document.activeElement && pop.contains(document.activeElement)) root.current?.querySelector<HTMLElement>(`[data-light="${open}"]`)?.focus();
       setOpen(null);
     };
     const press = (e: PointerEvent) => {
@@ -230,6 +260,8 @@ export function Status({
       <Light
         name="audio"
         caption="AUDIO"
+        label="Audio"
+        popName={`What it will ${say('audio input')}`}
         title={titles.audio ?? `${Say('audio input')}: what the presets hear, and its level`}
         open={open === 'audio'}
         toggle={toggle}
@@ -237,7 +269,16 @@ export function Status({
       >
         <AudioLevel />
       </Light>
-      <Light name="beat" caption="BEAT" title={(titles.beat ?? `the beat, and ${say('Ableton Link')}`) + peersTitle} open={open === 'beat'} toggle={toggle} pop={<LinkPanel />}>
+      <Light
+        name="beat"
+        caption="BEAT"
+        label={beatLabel(frame, effects)}
+        popName={Say('Ableton Link')}
+        title={(titles.beat ?? `the beat, and ${say('Ableton Link')}`) + peersTitle}
+        open={open === 'beat'}
+        toggle={toggle}
+        pop={<LinkPanel />}
+      >
         <BeatDot frame={frame} />
         {bpm && <span className="live-status-value">{bpm}</span>}
         {peers && <span className="live-status-peers">{peers}</span>}
@@ -245,13 +286,15 @@ export function Status({
       <Light
         name="output"
         caption="OUTPUT"
+        label={outputLabel(output)}
+        popName="Where the picture goes"
         title={titles.output ?? 'where the picture goes: a display, or only this window'}
         on={out.on}
         open={open === 'output'}
         toggle={toggle}
         pop={<OutputPanel status={output} show={show} />}
       >
-        <span className="live-status-dot" data-on={out.on ? '' : undefined} data-warn={out.on ? undefined : ''} />
+        <span className="live-status-dot" data-on={out.on ? '' : undefined} data-warn={out.on ? undefined : ''} aria-hidden="true" />
         <span className="live-status-value">{out.text}</span>
       </Light>
       <Fps />
@@ -259,17 +302,26 @@ export function Status({
         <button
           type="button"
           className="live-status-btn"
-          aria-label={titles.help ?? 'help: what every key does'}
+          aria-label="Help"
+          aria-haspopup="dialog"
+          aria-keyshortcuts="?"
           title={titles.help ?? 'help: what every key does'}
           onClick={() => (setOpen(null), onHelp())}
         >
-          ?
+          <span aria-hidden="true">?</span>
         </button>
-        <button type="button" className="live-status-btn" aria-label={titles.settings ?? 'settings'} title={titles.settings ?? 'settings'} onClick={() => (setOpen(null), openSettings())}>
-          ⚙
+        <button type="button" className="live-status-btn" aria-label="Settings" aria-haspopup="dialog" title={titles.settings ?? 'settings'} onClick={() => (setOpen(null), openSettings())}>
+          <span aria-hidden="true">⚙</span>
         </button>
-        <button type="button" className="live-status-btn" aria-label={titles.leave ?? 'leave live mode'} title={titles.leave ?? 'leave live mode'} onClick={() => (setOpen(null), onLeave())}>
-          ✕
+        <button
+          type="button"
+          className="live-status-btn"
+          aria-label="Leave live"
+          aria-keyshortcuts="Escape Meta+Shift+L"
+          title={titles.leave ?? 'leave live mode'}
+          onClick={() => (setOpen(null), onLeave())}
+        >
+          <span aria-hidden="true">✕</span>
         </button>
       </span>
     </div>

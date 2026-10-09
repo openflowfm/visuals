@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { FxAction } from './fx.ts';
+import { HelpOverlay } from './HelpOverlay.tsx';
 import { liveKeys, modalOpen, type KeyLike } from './liveKeys.ts';
 import { MoreEffects } from './MoreEffects.tsx';
 import { Settings } from './Settings.tsx';
@@ -110,7 +111,12 @@ describe('liveKeys', () => {
       const outside = { closest: () => null } as unknown as EventTarget;
       const press = (key: string) => keys.keydown({ key, metaKey: false, shiftKey: false, ctrlKey: false, altKey: false, repeat: false, target: outside, preventDefault: () => {} });
       const all = ['Escape', 'r', 'ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown', '1', '2', '3', '4', '5', 'f', 'z', 'h'];
-      for (const sheet of [createElement(Settings, { open: true, onClose: () => {} }), createElement(MoreEffects, { open: true, onClose: () => {} })]) {
+      for (const sheet of [
+        createElement(Settings, { open: true, onClose: () => {} }),
+        createElement(MoreEffects, { open: true, onClose: () => {} }),
+        // The ? overlay, a modal dialog too.
+        createElement(HelpOverlay, { open: true, onClose: () => {} }),
+      ]) {
         page.html = renderToStaticMarkup(sheet);
         for (const key of all) press(key);
         expect(sent).toEqual([]);

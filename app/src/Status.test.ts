@@ -1,7 +1,9 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { Fx } from './fx.ts';
 import type { Frame } from './link.ts';
-import { beatLit, bpmText, fpsShown, outputText, peersText } from './Status.tsx';
+import { beatLabel, beatLit, bpmText, fpsShown, outputLabel, outputText, peersText, Status } from './Status.tsx';
 
 const frame = (over: Partial<Frame> = {}): Frame => ({
   enabled: true,
@@ -59,5 +61,35 @@ describe('the status strip', () => {
     const display = { id: 1, index: 1, name: 'Projector', width: 1920, height: 1080, main: false };
     expect(outputText({ display, size: [1920, 1080] })).toEqual({ on: true, text: 'on Projector' });
     expect(outputText({ display: null, size: null })).toEqual({ on: false, text: 'in this window' });
+  });
+});
+
+describe('the status strip, to VoiceOver', () => {
+  const noop = () => {};
+  const html = renderToStaticMarkup(createElement(Status, { output: { display: null, size: null }, show: noop, effects, onHelp: noop, onLeave: noop, onError: noop }));
+  const tagOf = (attr: string) => [...html.matchAll(/<button[^>]*>/g)].map((m) => m[0]).find((t) => t.includes(attr)) ?? '';
+
+  it('names ?, ⚙ and ✕ in words', () => {
+    expect(tagOf('aria-label="Help"')).toContain('aria-keyshortcuts="?"');
+    expect(tagOf('aria-label="Settings"')).toContain('aria-haspopup="dialog"');
+    expect(tagOf('aria-label="Leave live"')).toContain('aria-keyshortcuts="Escape Meta+Shift+L"');
+  });
+
+  it('names each light by what it shows, and says it opens a popover', () => {
+    expect(tagOf('data-light="audio"')).toContain('aria-label="Audio"');
+    expect(tagOf('data-light="beat"')).toContain('aria-label="Beat, 128 BPM"');
+    expect(tagOf('data-light="output"')).toContain('aria-label="Output, in this window"');
+    for (const light of ['audio', 'beat', 'output']) {
+      expect(tagOf(`data-light="${light}"`)).toContain('aria-haspopup="dialog"');
+      expect(tagOf(`data-light="${light}"`)).toContain('aria-expanded="false"');
+    }
+    expect(beatLabel(frame({ tempo: 123.6 }), effects)).toBe('Beat, 124 BPM, 2 in time');
+    expect(beatLabel(null, null)).toBe('Beat');
+    expect(outputLabel({ display: { id: 1, index: 1, name: 'Projector', width: 1, height: 1, main: false }, size: null })).toBe('Output, on Projector');
+  });
+
+  it('keeps the meter and the beat dot, which change every frame, away from VoiceOver', () => {
+    expect(html).not.toContain('aria-live');
+    for (const dot of html.match(/<span class="live-status-(dot|meter)"[^>]*>/g) ?? []) expect(dot).toContain('aria-hidden="true"');
   });
 });

@@ -1,5 +1,7 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { CONTROLS, control, GROUPS, titleOf, type ControlId } from './HelpOverlay.tsx';
+import { CONTROLS, control, GROUPS, HelpOverlay, titleOf, type ControlId } from './HelpOverlay.tsx';
 import { liveKeys, type KeyLike } from './liveKeys.ts';
 
 const IDS: Record<ControlId, true> = {
@@ -109,5 +111,25 @@ describe('the live controls', () => {
     for (const key of ['arrowleft', 'arrowright', 'arrowup', 'arrowdown', 'r', 'h', 's', 'p', 'z', 'b', 't', 'i', 'm', '0', '1', '2', '3', '4', '5', 'f', '?', 'escape', 'l']) {
       expect(named.has(key), key).toBe(true);
     }
+  });
+});
+
+describe('the ? overlay, to VoiceOver', () => {
+  const html = renderToStaticMarkup(createElement(HelpOverlay, { open: true, onClose: () => {} }));
+
+  it('is a modal dialog named by its heading, which takes focus (the trap needs tabindex -1)', () => {
+    const dialog = /<[a-z]+[^>]*role="dialog"[^>]*>/.exec(html)?.[0] ?? '';
+    expect(dialog).toContain('aria-modal="true"');
+    expect(dialog).toContain('aria-labelledby="live-help-title"');
+    expect(dialog).toContain('tabindex="-1"');
+    expect(html).toContain('<h2 id="live-help-title">Live controls</h2>');
+  });
+
+  it('names its ✕ in words', () => {
+    expect(html).toContain('aria-label="Close live controls"');
+  });
+
+  it('draws nothing while closed', () => {
+    expect(renderToStaticMarkup(createElement(HelpOverlay, { open: false, onClose: () => {} }))).toBe('');
   });
 });
