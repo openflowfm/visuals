@@ -122,10 +122,17 @@ fn equation_problems(p: &Preset) -> Vec<Problem> {
 }
 
 /// Put `preset` on the bench with the open preset's seed, and say what failed.
+#[cfg_attr(not(feature = "lab"), allow(dead_code))]
 pub fn load(app: &App, preset: Preset) -> Result<Report, String> {
+    load_from(app, preset, None)
+}
+
+/// [`load`] the preset read from `path`, which the bench names when it draws or
+/// panics (`bench::on_drawing`).
+fn load_from(app: &App, preset: Preset, path: Option<&Path>) -> Result<Report, String> {
     let seed = app.seed.load(Ordering::Relaxed);
     let problems = equation_problems(&preset);
-    match app.ask(|tx| bench::Cmd::Load(Box::new(preset), seed, tx))? {
+    match app.ask(|tx| bench::Cmd::Load(Box::new(preset), seed, path.map(Path::to_path_buf), tx))? {
         Ok(loaded) => {
             Ok(Report { equations: Vec::new(), shaders: loaded.fell_back.into_iter().map(|(kind, message)| Problem { stage: format!("{kind:?}").to_lowercase(), line: None, message }).collect() })
         }
@@ -168,8 +175,16 @@ pub fn open_path(app: &App, path: &str) -> Result<Opened, String> {
     let text = engine::preset::decode(&read_preset(Path::new(path))?);
     let preset = engine::preset::parse(&text);
     app.seed.store(std::time::UNIX_EPOCH.elapsed().map(|d| d.as_nanos() as u64).unwrap_or(1), Ordering::Relaxed);
-    let report = load(app, preset.clone())?;
+    let report = load_from(app, preset.clone(), Some(Path::new(path)))?;
     Ok(Opened { preset, report })
+}
+
+impl Opened {
+    /// An empty preset that opened without a problem, for tests.
+    #[cfg(test)]
+    pub fn blank() -> Opened {
+        Opened { preset: engine::preset::parse(""), report: Report::default() }
+    }
 }
 
 /// The page opens `path` (the library's grid, the start preset, a drop, the lab):

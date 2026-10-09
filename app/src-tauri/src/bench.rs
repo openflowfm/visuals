@@ -10,6 +10,7 @@ use engine::audio::Audio;
 use engine::live::{configuration, show, Ring};
 use engine::preset::Preset;
 use engine::render::Renderer;
+use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
@@ -35,7 +36,9 @@ pub fn draw_size(output: (u32, u32)) -> (u32, u32) {
 }
 
 pub enum Cmd {
-    Load(Box<Preset>, u64, Sender<Result<engine::render::Loaded, String>>),
+    /// Load a preset with this seed; its file, when it has one (the editor's has none),
+    /// is what [`on_drawing`] names.
+    Load(Box<Preset>, u64, Option<PathBuf>, Sender<Result<engine::render::Loaded, String>>),
     /// One value, live. Replies false when it needs a reload instead.
     #[cfg_attr(not(feature = "lab"), allow(dead_code))]
     Set(engine::runtime::Owner, String, f64, Sender<bool>),
@@ -226,6 +229,8 @@ pub fn start(instance: wgpu::Instance, surface: wgpu::Surface<'static>, size: (u
         window: (now, 0, 0.0),
         loaded: false,
         pictures_read: 0,
+        source: None,
+        drawing: Drawn::Not,
     };
     std::thread::Builder::new().name("bench".into()).spawn(move || bench.run(rx)).expect("bench thread");
     Thread { commands, stats, previews }
@@ -268,17 +273,72 @@ struct Loop {
     loaded: bool,
     /// The preset step the stage pictures were last read at.
     pictures_read: u64,
+    /// The file of the preset on the bench, when it has one.
+    source: Option<PathBuf>,
+    /// How far the preset on the bench has got drawing since it loaded.
+    drawing: Drawn,
 }
 
-/// Told why, when the preset on the bench panicked while drawing ([`on_panic`]).
-type PanicHook = Box<dyn Fn(String) + Send + Sync>;
-static ON_PANIC: OnceLock<PanicHook> = OnceLock::new();
+/// How the preset on the bench is getting on, told to [`on_drawing`].
+#[derive(Clone, Debug, PartialEq)]
+pub enum Drawing {
+    /// The preset from this file drew its first refresh since it loaded.
+    Drew(PathBuf),
+    /// The preset on the bench has drawn for [`STEADY`] without panicking.
+    Steady,
+    /// The preset from this file (`None`: one without, the editor's) panicked
+    /// drawing, and why. The bench has stopped drawing it; the picture holds.
+    Panicked(Option<PathBuf>, String),
+}
 
-/// Call `f` with why, whenever the preset on the bench panics while drawing.
-/// The bench has stopped drawing it by then (the picture holds); `f` runs on
-/// the bench's thread, so it must not wait on the bench.
-pub fn on_panic(f: impl Fn(String) + Send + Sync + 'static) {
-    let _ = ON_PANIC.set(Box::new(f));
+/// How long a preset draws without panicking before it counts as drawing fine
+/// ([`Drawing::Steady`]): long enough to get past presets that panic a moment in
+/// (the first beat, a variable that grows), short enough that a show that recovered
+/// is soon trusted again. About 60 of the preset's steps at 1×.
+pub const STEADY: Duration = Duration::from_secs(2);
+
+/// How far the preset on the bench has got since it loaded.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Drawn {
+    /// No refresh drawn yet.
+    Not,
+    /// Drawing since then.
+    Since(Instant),
+    /// Drawn for [`STEADY`], and told.
+    Steady,
+}
+
+impl Drawn {
+    /// A refresh drew fine at `now`: what to tell about the preset from `source`.
+    fn drew(&mut self, now: Instant, source: Option<&PathBuf>) -> Option<Drawing> {
+        match *self {
+            Drawn::Not => {
+                *self = Drawn::Since(now);
+                source.cloned().map(Drawing::Drew)
+            }
+            Drawn::Since(at) if now.duration_since(at) >= STEADY => {
+                *self = Drawn::Steady;
+                Some(Drawing::Steady)
+            }
+            Drawn::Since(_) | Drawn::Steady => None,
+        }
+    }
+}
+
+type DrawingHook = Box<dyn Fn(Drawing) + Send + Sync>;
+static ON_DRAWING: OnceLock<DrawingHook> = OnceLock::new();
+
+/// Call `f` as the preset on the bench draws its first refresh, draws steadily, or
+/// panics drawing ([`Drawing`]). `f` runs on the bench's thread, so it must not
+/// wait on the bench, nor take long.
+pub fn on_drawing(f: impl Fn(Drawing) + Send + Sync + 'static) {
+    let _ = ON_DRAWING.set(Box::new(f));
+}
+
+fn tell(drawing: Drawing) {
+    if let Some(hook) = ON_DRAWING.get() {
+        hook(drawing);
+    }
 }
 
 /// Run `f`, catching a panic (`crate::crash::catch`, so it is no crash report):
@@ -292,7 +352,7 @@ impl Loop {
     /// Handle commands and draw, for good: a panic in either is caught, so the
     /// bench goes on. A preset that panics loading or drawing stops being drawn
     /// (the picture holds) until the next one loads, and is reported: as the
-    /// load's error, or to [`on_panic`].
+    /// load's error, or to [`on_drawing`].
     fn run(mut self, rx: Receiver<Cmd>) {
         loop {
             // Block while there is nothing to draw, so a closed window costs nothing.
@@ -304,11 +364,16 @@ impl Loop {
                 }
                 continue;
             }
-            if let Err(why) = survive(|| self.frame()) {
-                eprintln!("bench: the preset panicked drawing ({why}); stopped drawing it");
-                self.loaded = false;
-                if let Some(hook) = ON_PANIC.get() {
-                    hook(why);
+            match survive(|| self.frame()) {
+                Ok(()) => {
+                    if let Some(drawing) = self.drawing.drew(Instant::now(), self.source.as_ref()) {
+                        tell(drawing);
+                    }
+                }
+                Err(why) => {
+                    eprintln!("bench: the preset panicked drawing ({why}); stopped drawing it");
+                    self.loaded = false;
+                    tell(Drawing::Panicked(self.source.take(), why));
                 }
             }
         }
@@ -316,7 +381,7 @@ impl Loop {
 
     fn command(&mut self, cmd: Cmd) {
         match cmd {
-            Cmd::Load(preset, seed, reply) => {
+            Cmd::Load(preset, seed, source, reply) => {
                 // In the show (the output open), a new preset crossfades from the
                 // last one's picture; the editor's reloads on every edit never do.
                 let fading = self.loaded && self.output.is_some() && self.fx.lock().unwrap().settings.transition > 0.0;
@@ -328,9 +393,15 @@ impl Loop {
                     Err(why) => {
                         // Half loaded, maybe: nothing is drawn until a preset loads whole.
                         self.loaded = false;
+                        self.source = None;
                         Err(format!("it panicked loading ({why})"))
                     }
                 };
+                // A preset that didn't load leaves the last one drawing, as it was.
+                if result.is_ok() {
+                    self.source = source;
+                    self.drawing = Drawn::Not;
+                }
                 if fading && result.is_ok() {
                     self.fx.lock().unwrap().start_fade(Instant::now());
                 }
@@ -760,5 +831,20 @@ mod tests {
         // A new preset starts again at step 0 and is read at once.
         assert!(pictures_due(0, 40));
         assert!(!pictures_due(41, 40));
+    }
+
+    #[test]
+    fn tells_the_first_refresh_then_steady_drawing_once_each() {
+        let t = Instant::now();
+        let file = PathBuf::from("/p/x.milk");
+        let mut drawn = Drawn::Not;
+        assert_eq!(drawn.drew(t, Some(&file)), Some(Drawing::Drew(file.clone())));
+        assert_eq!(drawn.drew(t + Duration::from_millis(500), Some(&file)), None, "told once");
+        assert_eq!(drawn.drew(t + STEADY, Some(&file)), Some(Drawing::Steady));
+        assert_eq!(drawn.drew(t + STEADY * 3, Some(&file)), None, "told once");
+        // The editor's preset has no file: nothing to name, but it still draws steadily.
+        let mut editor = Drawn::Not;
+        assert_eq!(editor.drew(t, None), None);
+        assert_eq!(editor.drew(t + STEADY, None), Some(Drawing::Steady));
     }
 }
