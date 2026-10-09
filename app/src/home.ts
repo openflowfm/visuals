@@ -48,6 +48,7 @@ export const SEEDED_KEY = 'visuals.home.starters';
 export interface Mark {
   get(key: string): string | null;
   set(key: string, value: string): void;
+  remove(key: string): void;
 }
 
 /** What seeding needs from the app. */
@@ -63,25 +64,70 @@ export interface Seeding {
  * Without storage to keep the mark, nothing is made (rather than again on every
  * start). Resolves to how many it made.
  */
-export async function seedStarters(playlists: readonly Playlist[], mark: Mark | null, app: Seeding): Promise<number> {
+export function seedStarters(playlists: readonly Playlist[], mark: Mark | null, app: Seeding): Promise<number> {
+  // One run at a time in this page (StrictMode mounts twice, effects re-run); the
+  // mark, set before the first await, keeps a second window out too.
+  seeding ??= seedOnce(playlists, mark, app).finally(() => (seeding = null));
+  return seeding;
+}
+
+let seeding: Promise<number> | null = null;
+
+async function seedOnce(playlists: readonly Playlist[], mark: Mark | null, app: Seeding): Promise<number> {
   if (!mark || mark.get(SEEDED_KEY)) return 0;
-  const have = new Set(playlists.filter((p) => p.kind === 'smart').map((p) => p.name));
-  let made = 0;
-  for (const s of STARTERS) {
-    if (have.has(s.name)) continue;
-    const id = await app.save(s.name, s.query);
-    await app.settings(id, s.settings);
-    made++;
-  }
   mark.set(SEEDED_KEY, '1');
-  return made;
+  try {
+    // A starter already there from a run that failed part way gets its settings again.
+    const have = new Map(playlists.filter((p) => p.kind === 'smart').map((p) => [p.name, p.id]));
+    let made = 0;
+    for (const s of STARTERS) {
+      const old = have.get(s.name);
+      if (old !== undefined) {
+        await app.settings(old, s.settings);
+        continue;
+      }
+      const id = await app.save(s.name, s.query);
+      made++;
+      await app.settings(id, s.settings);
+    }
+    return made;
+  } catch (err) {
+    // Not done: the next start tries again.
+    mark.remove(SEEDED_KEY);
+    throw err;
+  }
+}
+
+/** Where focus goes after a strip tile moves to `to`: that tile, or the last one drawn when it moved past the cap. */
+export const tileFocus = (to: number, drawn: number): number => Math.max(0, Math.min(to, drawn - 1));
+
+/**
+ * The rename box's commit rule: Enter or leaving it commits once; Esc cancels,
+ * and the blur that follows the box closing commits nothing.
+ */
+export class NameEdit {
+  private done = false;
+  /** The name to save on Enter or blur, or null. */
+  commit(draft: string | null, current: string): string | null {
+    if (this.done) return null;
+    this.done = true;
+    const name = draft?.trim();
+    return name && name !== current ? name : null;
+  }
+  cancel() {
+    this.done = true;
+  }
+  /** A new edit begins. */
+  open() {
+    this.done = false;
+  }
 }
 
 /** The page's local storage, or null where it can't be used. */
 export function localMark(): Mark | null {
   try {
     const s = window.localStorage;
-    return { get: (k) => s.getItem(k), set: (k, v) => s.setItem(k, v) };
+    return { get: (k) => s.getItem(k), set: (k, v) => s.setItem(k, v), remove: (k) => s.removeItem(k) };
   } catch {
     return null;
   }

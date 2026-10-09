@@ -16,7 +16,7 @@ import { useNotice, useTauriEvent } from './hooks.ts';
 import { isTyping, nameOf, notice, openFailed } from './shell.ts';
 import { plural } from './controls.ts';
 import { beginDrag, dropAction, isOver, itemTarget, listTarget, nudge, runDrop, useDrag, type DragHandlers, type Payload } from './drag.ts';
-import { changeUnit, localMark, saveFile, sections, seedStarters, strip, withSetting, type StripTile } from './home.ts';
+import { changeUnit, localMark, NameEdit, saveFile, sections, seedStarters, strip, tileFocus, withSetting, type StripTile } from './home.ts';
 import { FrameRate, Header, Hints, NoticeBanner, NowPlaying, openSheet, Preview, type View } from './views.tsx';
 import { say } from './words.ts';
 import './playlists.css';
@@ -395,7 +395,13 @@ interface PaneProps {
 /** A playlist: its name and Play, its settings, and its presets as a strip in the order they play. */
 function PlaylistPane({ list, lists, rows, played, dropping, onLists, onDeleted, onError, onLibrary }: PaneProps) {
   const drag = useDrag();
-  const [naming, setNaming] = useState<string | null>(null);
+  const [naming, setNamingState] = useState<string | null>(null);
+  const nameEdit = useRef(new NameEdit()).current;
+  const startNaming = (name: string) => {
+    nameEdit.open();
+    setNamingState(name);
+  };
+  const setNaming = setNamingState;
   const [deleting, setDeleting] = useState(false);
   const { playlists, deck } = lists;
   const at = playlists.indexOf(list);
@@ -427,9 +433,9 @@ function PlaylistPane({ list, lists, rows, played, dropping, onLists, onDeleted,
   const play = (index: number | null) => run(pl.act(active && index !== null ? { kind: 'go', index } : { kind: 'load', playlist: at, index }), `play ${list.name}`);
   const stop = () => run(pl.act({ kind: 'unload' }), 'stop the playlist');
   const commitName = () => {
-    const name = naming?.trim();
+    const name = nameEdit.commit(naming, list.name);
     setNaming(null);
-    if (name && name !== list.name) run(pl.rename(list.id, name), 'rename the playlist');
+    if (name) run(pl.rename(list.id, name), 'rename the playlist');
   };
   const exportIt = () => pl.exportList(list.id).then((f) => saveFile(f.file_name, f.text), onError(`save ${list.name} to a file`));
 
@@ -452,11 +458,14 @@ function PlaylistPane({ list, lists, rows, played, dropping, onLists, onDeleted,
             onBlur={commitName}
             onKeyDown={(e) => {
               if (e.key === 'Enter') commitName();
-              else if (e.key === 'Escape') setNaming(null);
+              else if (e.key === 'Escape') {
+                nameEdit.cancel();
+                setNaming(null);
+              }
             }}
           />
         ) : (
-          <h1 className="home-name" title="Double-click to rename" onDoubleClick={() => setNaming(list.name)}>
+          <h1 className="home-name" title="Double-click to rename" onDoubleClick={() => startNaming(list.name)}>
             {list.name}
           </h1>
         )}
@@ -474,7 +483,7 @@ function PlaylistPane({ list, lists, rows, played, dropping, onLists, onDeleted,
             ▶ play
           </Button>
         )}
-        <Button onPress={() => setNaming(list.name)} title="Rename the playlist">
+        <Button onPress={() => startNaming(list.name)} title="Rename the playlist">
           rename
         </Button>
         <Button onPress={exportIt} title="Save to a file, to keep or to give someone: its presets by name and content">
@@ -551,7 +560,7 @@ function PlaylistPane({ list, lists, rows, played, dropping, onLists, onDeleted,
                   e.preventDefault();
                   e.stopPropagation();
                   const strip = e.currentTarget.parentElement;
-                  run(pl.moveItem(list.id, t.index!, to), `move ${t.name}`).then(() => requestAnimationFrame(() => (strip?.children[to] as HTMLElement | undefined)?.focus()));
+                  run(pl.moveItem(list.id, t.index!, to), `move ${t.name}`).then(() => requestAnimationFrame(() => (strip?.children[tileFocus(to, tiles.length)] as HTMLElement | undefined)?.focus()));
                 }}
               >
                 <div className="home-thumb">

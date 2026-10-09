@@ -241,7 +241,7 @@
 }
 .playlists .playlists-names .playlists-row[data-over] {
   background: var(--sel);
-  box-shadow: inset 0 0 0 1px var(--amber);
+  box-shadow: inset 0 0 0 1px var(--caution);
 }
 body[data-dragging],
 body[data-dragging] * {

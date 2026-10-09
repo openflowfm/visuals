@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LibraryQuery, LibraryRow, Level } from './api.ts';
 import { prepareRow, type Prepared } from './librarySearch.ts';
 import { DEFAULT_SETTINGS, EMPTY_DECK, type Lists, type Playlist } from './playlists.ts';
-import { changeUnit, matches, RECENT, sections, seedStarters, SEEDED_KEY, STARTERS, STRIP_CAP, strip, withSetting, type Mark } from './home.ts';
+import { changeUnit, matches, RECENT, sections, seedStarters, SEEDED_KEY, STARTERS, STRIP_CAP, strip, NameEdit, tileFocus, withSetting, type Mark } from './home.ts';
 import { firstPane, openSettings } from './Home.tsx';
 import { SHEET_EVENT, sheetOf } from './views.tsx';
 
@@ -36,7 +36,71 @@ class MapMark implements Mark {
   m = new Map<string, string>();
   get = (k: string) => this.m.get(k) ?? null;
   set = (k: string, v: string) => void this.m.set(k, v);
+  remove = (k: string) => void this.m.delete(k);
 }
+
+describe('seedStarters, run twice or failing', () => {
+  it('makes each starter once when two runs overlap, in one page or two sharing the mark', async () => {
+    const mark = new MapMark();
+    const a = app();
+    const [x, y] = await Promise.all([seedStarters([], mark, a), seedStarters([], mark, a)]);
+    expect(x).toBe(3);
+    expect(y).toBe(3); // the same run
+    expect(a.saved).toHaveLength(3);
+    // Another window: the mark is already set before the first await.
+    const b = app();
+    const one = seedStarters([], mark, b);
+    await one;
+    expect(b.saved).toHaveLength(0);
+  });
+
+  it('a second window starting while the first is mid-run makes none', async () => {
+    const mark = new MapMark();
+    const a = app();
+    const first = seedStarters([], mark, a);
+    expect(mark.get(SEEDED_KEY)).not.toBeNull();
+    await first;
+    expect(a.saved).toHaveLength(3);
+  });
+
+  it('after settings fail, the next start applies them to the starters already made', async () => {
+    const mark = new MapMark();
+    const a = app();
+    const failing = { ...a, settings: async () => Promise.reject(new Error('no')) };
+    await expect(seedStarters([], mark, failing)).rejects.toThrow('no');
+    expect(mark.get(SEEDED_KEY)).toBeNull();
+    expect(a.saved.map((s) => s.name)).toEqual(['Calm']);
+    const made = await seedStarters([smart('Calm', { groups: {}, text: '' }, { id: 'id-Calm' })], mark, a);
+    expect(made).toBe(2);
+    expect(a.saved.map((s) => s.name)).toEqual(['Calm', 'Peak-time', 'Recently played']);
+    expect(a.set).toContainEqual({ id: 'id-Calm', every: 45 });
+    expect(mark.get(SEEDED_KEY)).not.toBeNull();
+  });
+});
+
+describe('tileFocus', () => {
+  it('keeps focus on a drawn tile when the last one moves past the cap', () => {
+    expect(tileFocus(STRIP_CAP, STRIP_CAP)).toBe(STRIP_CAP - 1);
+    expect(tileFocus(5, STRIP_CAP)).toBe(5);
+  });
+});
+
+describe('NameEdit', () => {
+  it('Esc then the blur as the box closes commits nothing', () => {
+    const e = new NameEdit();
+    e.open();
+    e.cancel();
+    expect(e.commit('New name', 'Old')).toBeNull();
+  });
+  it('Enter commits once, not again on the blur after', () => {
+    const e = new NameEdit();
+    e.open();
+    expect(e.commit(' New ', 'Old')).toBe('New');
+    expect(e.commit('New', 'Old')).toBeNull();
+    e.open();
+    expect(e.commit('Again', 'Old')).toBe('Again');
+  });
+});
 
 /** The app's side of seeding, writing down what it was asked. */
 const app = () => {
