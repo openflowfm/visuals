@@ -15,7 +15,7 @@ import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { Library } from './Library.tsx';
 import { stepIn } from './librarySearch.ts';
 import { useNotice, useTauriEvent } from './hooks.ts';
-import { useLibrary } from './library.ts';
+import { stepDeck, useLibrary } from './library.ts';
 import { isTyping, nameOf, notice, openFailed } from './shell.ts';
 import { Live } from './Live.tsx';
 import * as output from './output.ts';
@@ -126,7 +126,7 @@ export function Browse({ view, start, onMode, onOpened, below, side }: BrowsePro
   const step = useCallback(
     (by: number) => {
       if (playing || lists?.deck.query) {
-        pl.act({ kind: by === 0 ? 'random' : by > 0 ? 'next' : 'previous' }).catch(fail("Couldn't step the playlist."));
+        stepDeck({ kind: by === 0 ? 'random' : by > 0 ? 'next' : 'previous' }).catch(fail("Couldn't step the playlist."));
         return;
       }
       const next = stepIn(shown.length ? shown : library, current?.path ?? null, by);

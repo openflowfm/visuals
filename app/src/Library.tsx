@@ -4,7 +4,8 @@ import * as api from './api.ts';
 import type { Entry, LibraryChange, LibraryData, LibraryGroup, LibraryQuery, LibraryRow } from './api.ts';
 import * as pl from './playlists.ts';
 import { onChanged } from './pack.ts';
-import { followGrid, rereadOn } from './library.ts';
+import { followGrid, gridKey, rereadOn, stepping } from './library.ts';
+import { useTauriEvent } from './hooks.ts';
 import {
   GROUPS,
   GROUP_LABEL,
@@ -203,15 +204,31 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
     following.current = true;
     followGrid(h.query, p.row.path);
   }, []);
-  // The filter changed since: follow the grid as it is now, from what is playing.
+  // A playlist loaded or let go: stop following until the grid opens a preset again.
+  const deckPlaylist = useRef<string | null | undefined>(undefined);
+  const deckMoved = (deck: pl.Deck) => {
+    if (deckPlaylist.current !== undefined && deckPlaylist.current !== deck.playlist) following.current = false;
+    deckPlaylist.current = deck.playlist;
+  };
+  useTauriEvent(pl.onLive, (now) => deckMoved(now.deck));
+  useTauriEvent(pl.onLists, (l) => deckMoved(l.deck));
+  // The filter or the library changed what the grid shows since: follow the grid as
+  // it is now, from what is playing; while a step is in flight, wait for it.
+  const grid = useMemo(() => gridKey(shown.map((p) => p.row.path)), [shown]);
   useEffect(() => {
     if (!following.current) return;
-    const t = setTimeout(() => {
+    let t: ReturnType<typeof setTimeout>;
+    const refollow = () => {
+      if (stepping()) {
+        t = setTimeout(refollow, REFOLLOW);
+        return;
+      }
       const h = handlers.current;
-      if (h.current !== null) followGrid(h.query, h.current);
-    }, REFOLLOW);
+      if (following.current && h.current !== null) followGrid(h.query, h.current);
+    };
+    t = setTimeout(refollow, REFOLLOW);
     return () => clearTimeout(t);
-  }, [query]);
+  }, [query, grid]);
 
   const pick = useCallback((i: number, how: Pick) => {
     const h = handlers.current;

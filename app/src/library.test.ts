@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Entry, LibraryQuery } from './api.ts';
-import { firstToOpen, followAction, followGrid, rereadOn } from './library.ts';
+import { firstToOpen, followAction, followGrid, gridKey, rereadOn, stepDeck, stepping } from './library.ts';
 
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn((..._args: unknown[]): Promise<unknown> => Promise.resolve(null)) }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => invoke(...args) }));
@@ -27,6 +27,28 @@ describe('following the grid', () => {
     });
     expect(() => followGrid(query, '/p/a.milk')).not.toThrow();
     await Promise.resolve();
+  });
+});
+
+describe('stepping the deck', () => {
+  it('counts a step as in flight until the deck answers, even when it fails', async () => {
+    let answer: (v: unknown) => void = () => {};
+    invoke.mockImplementationOnce(() => new Promise((r) => (answer = r)));
+    const sent = stepDeck({ kind: 'next' });
+    expect(stepping()).toBe(true);
+    answer(null);
+    await sent;
+    expect(stepping()).toBe(false);
+    invoke.mockImplementationOnce(() => Promise.reject(new Error('held')));
+    await expect(stepDeck({ kind: 'next' })).rejects.toThrow('held');
+    expect(stepping()).toBe(false);
+  });
+});
+
+describe('gridKey', () => {
+  it('changes when the grid’s contents do, under the same filter (a hidden preset)', () => {
+    expect(gridKey(['/a', '/b', '/c'])).not.toBe(gridKey(['/a', '/c']));
+    expect(gridKey(['/a', '/b'])).toBe(gridKey(['/a', '/b']));
   });
 });
 

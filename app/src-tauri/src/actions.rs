@@ -337,6 +337,19 @@ impl Live {
         Some(path)
     }
 
+    /// The page opened `path` itself (the grid, the start preset, a drop, the lab):
+    /// it plays now. Following the grid, the deck steps on from it when the grid
+    /// has it, and stops following otherwise, so it never steps from a stale place.
+    fn opened(&mut self, path: PathBuf) {
+        if self.playlist.is_none() && self.query.is_some() {
+            match self.items.iter().position(|p| *p == path) {
+                Some(at) => self.index = Some(at),
+                None => self.unload(),
+            }
+        }
+        self.play(path);
+    }
+
     /// No playlist or filter: the library steps as a whole.
     fn unload(&mut self) {
         self.playlist = None;
@@ -464,6 +477,8 @@ pub fn decide(live: &mut Live, action: &Action, store: &Store, library: &dyn Fn(
             live.order = Order::InOrder;
             live.arrange(roll);
             live.index = live.items.iter().position(|p| p == at);
+            // The page opened it: the deck's current is what the page shows.
+            live.current = Some(at.clone());
             Ok(None)
         }
         Action::Unload => {
@@ -554,7 +569,7 @@ impl Deck {
 
     /// The page opened `path` itself (a library click): it is what plays now.
     pub fn opened(&self, path: &Path) {
-        self.live.lock().unwrap().play(path.to_path_buf());
+        self.live.lock().unwrap().opened(path.to_path_buf());
         self.record(path);
     }
 
@@ -729,6 +744,10 @@ fn step(
     resolve: &dyn Fn(&LibraryQuery) -> Vec<PathBuf>,
     roll: u64,
 ) -> Result<(Option<PathBuf>, Option<Settings>), String> {
+    // Following the grid while a playlist is loaded changes nothing: work nothing out.
+    if matches!(action, Action::Query { at: Some(_), .. }) && live.lock().unwrap().playlist.is_some() {
+        return Ok((None, None));
+    }
     let query = match action {
         Action::Load { playlist, .. } => store.lock().unwrap().lists.get(*playlist).filter(|l| l.kind == Kind::Smart).map(|l| l.query.clone().unwrap_or_default()),
         Action::Query { query, .. } => Some(query.clone()),
@@ -1280,6 +1299,39 @@ mod tests {
         let follow = Action::Query { query: LibraryQuery::default(), at: Some(lib.join("b.milk")) };
         assert_eq!(step(&store, &live, &follow, &none, &resolve, 0).unwrap(), (None, None));
         assert_eq!(live.lock().unwrap().index, Some(1));
+    }
+
+    #[test]
+    fn following_the_grid_with_a_playlist_loaded_resolves_nothing() {
+        let (s, lib) = store();
+        let (store, live) = (Mutex::new(s), Mutex::new(Live::default()));
+        let asked = std::cell::Cell::new(0);
+        let resolve = |_: &LibraryQuery| {
+            asked.set(asked.get() + 1);
+            Vec::new()
+        };
+        step(&store, &live, &Action::Load { playlist: 0, index: None }, &none, &resolve, 0).unwrap();
+        let follow = Action::Query { query: LibraryQuery::default(), at: Some(lib.join("x.milk")) };
+        assert_eq!(step(&store, &live, &follow, &none, &resolve, 0).unwrap(), (None, None));
+        assert_eq!(asked.get(), 0);
+    }
+
+    #[test]
+    fn opening_from_elsewhere_while_following_never_steps_from_a_stale_place() {
+        let (s, lib) = store();
+        let grid: Vec<PathBuf> = ["a", "b", "c"].iter().map(|n| lib.join(format!("{n}.milk"))).collect();
+        let resolve = |_: &LibraryQuery| grid.clone();
+        let mut live = Live::default();
+        let follow = Action::Query { query: LibraryQuery::default(), at: Some(grid[0].clone()) };
+        decide(&mut live, &follow, &s, &none, &resolve, 0).unwrap();
+        assert_eq!(live.current, Some(grid[0].clone()), "the deck's current is what the page opened");
+        // Opened from elsewhere, but in the grid: the deck steps on from it.
+        live.opened(grid[1].clone());
+        assert_eq!(decide(&mut live, &Action::Next, &s, &none, &resolve, 0).unwrap(), Some(grid[2].clone()));
+        // Not in the grid (a dropped file): the deck stops following.
+        let dropped = lib.join("dropped.milk");
+        live.opened(dropped.clone());
+        assert_eq!((live.query.clone(), live.index, live.current.clone()), (None, None, Some(dropped)));
     }
 
     #[test]

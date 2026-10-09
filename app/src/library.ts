@@ -11,9 +11,30 @@ import * as pl from './playlists.ts';
  * filtered by `query`, so previous, next and random go through what the grid shows,
  * in its order and on across its groups (`actions::Action::Query` with `at`).
  */
-export const followAction = (query: LibraryQuery, at: string): pl.Action =>
-  // `at` isn't in `pl.Action` (playlists.ts, a contract file) yet.
-  ({ kind: 'query', query, at }) as pl.Action;
+export const followAction = (query: LibraryQuery, at: string): pl.Action => ({ kind: 'query', query, at });
+
+/** Steps sent to the deck and not answered yet. */
+let pending = 0;
+
+/** Step the deck (next, previous, random), counting it as in flight until it answers. */
+export function stepDeck(action: pl.Action): Promise<void> {
+  pending += 1;
+  let sent: Promise<void>;
+  try {
+    sent = pl.act(action);
+  } catch (e) {
+    sent = Promise.reject(e);
+  }
+  return sent.finally(() => {
+    pending -= 1;
+  });
+}
+
+/** A step is in flight: what the page shows may not be what the deck plays yet. */
+export const stepping = () => pending > 0;
+
+/** The grid's contents as one value: it changes when what the grid shows does. */
+export const gridKey = (paths: string[]) => paths.join('\n');
 
 /**
  * Tell the deck to follow the grid ({@link followAction}), in the library and in live.
