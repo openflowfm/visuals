@@ -3,6 +3,9 @@ import * as fx from './fx.ts';
 import type * as pl from './playlists.ts';
 import { isTyping } from './shell.ts';
 
+/** A rating, in stars. */
+export type Stars = 1 | 2 | 3 | 4 | 5;
+
 /** Where live mode's keys go. */
 export interface LiveKeyTargets {
   /** ⌘⇧L or Esc: back to the editor. */
@@ -11,10 +14,49 @@ export interface LiveKeyTargets {
   act: (action: pl.Action) => void;
   /** An effect. */
   fx: (action: fx.FxAction) => void;
+  /** 1–5: rate the current preset. */
+  rate: (stars: Stars) => void;
+  /** F: favourite the current preset. */
+  favourite: () => void;
+  /** ?: show or hide the list of live controls. */
+  help: () => void;
+  /** Whether a sheet (⚙ Settings, More effects) or another modal is open over live mode: it takes Esc, so live doesn't leave. */
+  sheetOpen?: () => boolean;
 }
+
+/** Whether `target` is inside a dialog, which answers its own Esc. */
+function inDialog(target: EventTarget | null): boolean {
+  const el = target as { closest?: (selector: string) => unknown } | null;
+  return typeof el?.closest === 'function' && el.closest('[role="dialog"], [aria-modal="true"]') !== null;
+}
+
+/** An open sheet (⚙ Settings, More effects) or modal; the status bar's popovers are dialogs too, but not modal. */
+const MODAL = '[aria-modal="true"], .vf-sheet, [role="dialog"]:not(.live-status-pop)';
+
+/** Whether a modal (a sheet, the ? overlay) is open in the page. */
+export const modalOpen = (): boolean => typeof document !== 'undefined' && document.querySelector(MODAL) !== null;
 
 /** What the handlers read of a key event. */
 export type KeyLike = Pick<KeyboardEvent, 'key' | 'metaKey' | 'shiftKey' | 'ctrlKey' | 'altKey' | 'repeat' | 'target' | 'preventDefault'> & Partial<Pick<KeyboardEvent, 'defaultPrevented'>>;
+
+/**
+ * The keys that hold an effect in live mode: fx's, except that freeze is on Z,
+ * since F favourites the preset.
+ */
+export const LIVE_HOLD_KEYS: Readonly<Record<string, fx.Hit>> = { s: 'strobe', p: 'punch', z: 'freeze' };
+
+/** Live mode's keys, briefly, for the footer when nothing is hovered. */
+export const KEYS =
+  '← → step · R random · H hold · hold S strobe, P punch, Z freeze (⇧ latches) · B blackout · T tap · I invert · M mirror · 0 reset effects · 1–5 rate · F favourite · ? help · Esc leave';
+
+/** What an effect key does in live mode: {@link fx.effectKey}, with freeze moved from F to Z. */
+function effectKey(key: string, shift: boolean): fx.KeyPress | null {
+  const k = key.toLowerCase();
+  const hit = LIVE_HOLD_KEYS[k];
+  if (hit) return shift ? { action: fx.hitAction(hit, null) } : { hold: hit };
+  if (k === 'f') return null;
+  return fx.effectKey(key, shift);
+}
 
 /**
  * Live mode's keys, without the window: a press, a release, and the window
@@ -32,9 +74,12 @@ export function liveKeys(to: LiveKeyTargets) {
         return;
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (isTyping(e)) return;
+      // Keys pressed in a field, or in a sheet or dialog, are theirs.
+      if (isTyping(e) || inDialog(e.target)) return;
+      // An open sheet or modal takes the keys, even with focus still outside it (on ⚙); only ? still toggles the help.
+      if (e.key !== '?' && to.sheetOpen?.()) return;
       if (e.key === 'Escape') {
-        // A menu or dialog that took its own Esc keeps it.
+        // A menu, sheet or dialog that took its own Esc keeps it (decision 17q: the ⚙ sheet takes Esc before live does).
         if (e.defaultPrevented) return;
         e.preventDefault();
         to.editor();
@@ -43,8 +88,14 @@ export function liveKeys(to: LiveKeyTargets) {
       if (e.key === 'ArrowRight' || e.key === 'ArrowDown') to.act({ kind: 'next' });
       else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') to.act({ kind: 'previous' });
       else if (e.key.toLowerCase() === 'r') to.act({ kind: 'random' });
-      else {
-        const press = fx.effectKey(e.key, e.shiftKey);
+      else if (e.key === '?') {
+        if (!e.repeat) to.help();
+      } else if (/^[1-5]$/.test(e.key)) {
+        if (!e.repeat) to.rate(Number(e.key) as Stars);
+      } else if (e.key.toLowerCase() === 'f') {
+        if (!e.repeat) to.favourite();
+      } else {
+        const press = effectKey(e.key, e.shiftKey);
         if (!press) return;
         e.preventDefault();
         if (e.repeat) return;
@@ -57,7 +108,7 @@ export function liveKeys(to: LiveKeyTargets) {
       e.preventDefault();
     },
     keyup(e: Pick<KeyboardEvent, 'key'>) {
-      const hit = fx.HOLD_KEYS[e.key.toLowerCase()];
+      const hit = LIVE_HOLD_KEYS[e.key.toLowerCase()];
       if (hit && down.delete(hit)) to.fx(fx.hitAction(hit, false));
     },
     blur() {
@@ -76,6 +127,10 @@ export function useLiveKeys(to: LiveKeyTargets) {
       editor: () => latest.current.editor(),
       act: (a) => latest.current.act(a),
       fx: (a) => latest.current.fx(a),
+      rate: (s) => latest.current.rate(s),
+      favourite: () => latest.current.favourite(),
+      help: () => latest.current.help(),
+      sheetOpen: () => (latest.current.sheetOpen ?? modalOpen)(),
     });
     const keydown = (e: KeyboardEvent) => keys.keydown(e);
     const keyup = (e: KeyboardEvent) => keys.keyup(e);
