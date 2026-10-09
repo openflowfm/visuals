@@ -40,10 +40,9 @@ Fluorescent Things: about 120 lines read back as 14 blocks).
 
 ## No code, nothing lost, the same picture
 
-Layout A, the loop, is chosen. Code is never shown, and nothing typed is code. The
-`.milk` file stays the single truth: the graph is a lossless view of it and compiles back
-to plain MilkDrop, so any MilkDrop player draws the same picture. Anything the graph can
-express, an LFO included, is written as ordinary equations.
+Code is never shown, and nothing typed is code. An imported `.milk` reads into the graph
+losslessly and plays exactly as MilkDrop draws it (superseded in part on October 9: our
+own format, not the `.milk`, is the truth; see "Our own format; MilkDrop is an import").
 
 | In the file | In the graph |
 | --- | --- |
@@ -102,7 +101,7 @@ A picture is a colour at every spot, and movement is a point at every spot (wher
 spot reads the picture from), so the same nodes work at every speed. Three more things
 have wires of their own: **sound** (the wave or spectrum, read by drawings), **drawing**
 (painted on top, in order) and **trigger** (a kick, a beat, a bar). Feedback is not a
-type: it is a picture, one frame late. In the file the speeds are MilkDrop's sections
+type: it is a picture, one frame late. In an imported `.milk` the speeds are MilkDrop's sections
 (init, per-frame, per-point, per-pixel and the shaders).
 
 ### Every knob is an inlet
@@ -117,20 +116,30 @@ type: it is a picture, one frame late. In the file the speeds are MilkDrop's sec
 - Modulators (LFO, Wobble, Drift, Count up, Flicker, Rainbow cycle…) are sources whose own
   knobs are inlets, so Treble can drive how far a Wobble swings.
 
-### Two tiers
+### Our own format; MilkDrop is an import
+
+Decided October 9, 2026 (Ryan): our format is a graph and it is the source of truth. A
+`.milk` imports into it and plays back exactly as MilkDrop draws it; from there it can go
+further than MilkDrop allows. An imported preset keeps its `.milk` untouched until the
+first change, which saves it in our format with the `.milk` it came from noted. A preset
+that only uses what MilkDrop has can also be exported back to a `.milk`; nodes beyond
+MilkDrop (Link, Live, video, 3D models, blending presets) carry a badge saying they can't
+be. The "same picture as a native player" guarantee is for imports, not a limit on our own
+presets.
+
+The four showcase cases in the mock: an imported preset (Geiss, Flower Blossom), the same
+preset expanded (palette, an LFO on Link, kaleidoscope, glow on the Drums track), MilkDrop
+from scratch (Kick Bloom, exportable), and expanded from scratch (Night Engine: a 3D model,
+a downbeat envelope, a step sequence, a palette that changes with the song section).
+
+**Colours are sources.** A Palette is a node whose colours are outlets, wired into
+anything with a colour knob (a line, what the trails fade toward, a glow, a model's light),
+not a filter over the finished picture. Fade has colour knobs of its own: what the picture
+fades toward and the tint it takes as it fades.
 
 The editor brings back the old build's 36 node kinds (LFOs, colourways, lenses, patterns,
 fractals, light, grade, spread, halftone, blend, image, video, 3D models, the Ableton
-nodes), sorted into these primitives:
-
-- **Plays anywhere:** compiles to ordinary MilkDrop, so any MilkDrop player draws it the
-  same. Nearly everything: free-running LFOs, every modulator, colour, every lens mode,
-  patterns, fractals, light, grade, spread, halftone, blending the preset's own pictures,
-  images saved beside the preset as textures, wireframe models of a few hundred points.
-- **visual[flow]:** needs our engine. Link tempo and beat position, beat-synced LFOs,
-  Live track levels and song sections, video, full 3D models, blending with another
-  preset. The file still saves as a `.milk` with a stand-in other players use instead (a
-  detected beat for Link's beat, a still for a video), and the block carries a badge.
+nodes), sorted into these primitives.
 
 ## Measured on the pack (9,795 presets)
 
