@@ -4,7 +4,7 @@
 // compared section by section against Butterchurn's own drift (`grid.ts`).
 // See compare/README.md.
 //
-//   npm run compare -- <presets or folders> [--sample N] [--frames N] [--captures N]
+//   npm run compare -- <presets or folders> [--sample N] [--frames N] [--captures N | --every N]
 //                      [--size WxH] [--refresh HZ] [--seed N] [--min-score N] [--timeout S]
 //   npm run compare -- --serve        # the last report as a page, with approve / reject / note
 //
@@ -65,7 +65,7 @@ interface Options extends Settings {
 function parseArgs(argv: string[]): Options {
   const flags = new Map<string, string>();
   const positional: string[] = [];
-  const known = ['sample', 'frames', 'captures', 'size', 'refresh', 'seed', 'min-score', 'timeout'];
+  const known = ['sample', 'frames', 'captures', 'every', 'size', 'refresh', 'seed', 'min-score', 'timeout'];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (!a.startsWith('--')) positional.push(a);
@@ -83,7 +83,9 @@ function parseArgs(argv: string[]): Options {
   const frames = int('frames', 240);
   const { width, height } = parseSize(flags.get('size') ?? '640x360');
   const refresh = int('refresh', 60);
-  const captures = captureFrames(frames, int('captures', 8));
+  // --every N: a capture every N frames instead of geometric spacing, even enough to watch as a video.
+  const every = flags.has('every') ? int('every', 1) : 0;
+  const captures = every ? Array.from({ length: Math.floor(frames / every) }, (_, i) => (i + 1) * every) : captureFrames(frames, int('captures', 8));
   if (!refreshLands(refresh, captures)) throw new UsageError(`--refresh ${refresh}: ours' refreshes must land on every capture frame (${captures.join(', ')}; Butterchurn draws 30 a second), so a multiple of 30`);
   const timeout = int('timeout', 30);
   const minScore = flags.has('min-score') ? Number(flags.get('min-score')) : null;
