@@ -122,12 +122,25 @@ export const keep = (write: (on: boolean) => Promise<unknown>, on: boolean): Pro
     (e) => (e instanceof Error ? e.message : String(e)),
   );
 
+/**
+ * Read a kept switch. Resolves to its state, or to why it couldn't be read
+ * (its own words), so the switch says so rather than showing a false "off".
+ */
+export const readKept = (read: () => Promise<boolean>): Promise<{ on: boolean | null; problem: string | null }> =>
+  read().then(
+    (on) => ({ on, problem: null }),
+    (e) => ({ on: null, problem: e instanceof Error ? e.message : String(e) }),
+  );
+
 /** A switch the app keeps: read once, shown at once when flipped, and put back, with why, if the app refuses it. */
 function KeptToggle({ read, write, name, title }: { read(): Promise<boolean>; write(on: boolean): Promise<unknown>; name: string; title: string }) {
   const [on, setOn] = useState<boolean | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   useEffect(() => {
-    read().then(setOn, () => setOn(false));
+    readKept(read).then((r) => {
+      setOn(r.on);
+      setProblem(r.problem);
+    });
   }, [read]);
   const change = (next: boolean) => {
     setOn(next);

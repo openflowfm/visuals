@@ -156,17 +156,15 @@ fn drawn_for(payload: &str) -> Option<(u32, u32)> {
 
 /// Hand the renderer the level in effect, when it isn't the one it has.
 fn apply(handle: &AppHandle) -> Quality {
-    let (now, send) = {
-        let mut s = state().lock().unwrap();
-        let level = s.chosen.setting().level(machine(), s.drawn);
-        let send = s.applied != Some(level);
+    // Send while the lock is held, so commands reach the renderer in the
+    // order they're recorded in `applied`.
+    let mut s = state().lock().unwrap();
+    let level = s.chosen.setting().level(machine(), s.drawn);
+    if s.applied != Some(level) {
         s.applied = Some(level);
-        (resolve(s.chosen, machine(), s.drawn), send.then(|| level.quality()))
-    };
-    if let Some(q) = send {
-        handle.state::<crate::App>().send(bench::Cmd::Quality(q));
+        handle.state::<crate::App>().send(bench::Cmd::Quality(level.quality()));
     }
-    now
+    resolve(s.chosen, machine(), s.drawn)
 }
 
 /// What the bench's renderer starts at: the kept choice, at [`bench::DRAW`].

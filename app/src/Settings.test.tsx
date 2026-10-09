@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { closesSheet, keep, qualityLine, SECTIONS, Settings } from './Settings.tsx';
+import { closesSheet, keep, qualityLine, readKept, SECTIONS, Settings } from './Settings.tsx';
 import { MoreEffects } from './MoreEffects.tsx';
 
 /** A key press from an element: inside an open menu or not. */
@@ -51,6 +51,16 @@ describe('keep', () => {
   it("resolves to the app's own words when it refuses", async () => {
     await expect(keep(() => Promise.reject(new Error('No crash folder.')), true)).resolves.toBe('No crash folder.');
     await expect(keep(() => Promise.reject('not allowed'), false)).resolves.toBe('not allowed');
+  });
+});
+
+describe('readKept', () => {
+  it('resolves to the state when the app reads it', async () => {
+    await expect(readKept(async () => true)).resolves.toEqual({ on: true, problem: null });
+  });
+
+  it('says why, rather than off, when the read fails', async () => {
+    await expect(readKept(() => Promise.reject(new Error('No settings folder.')))).resolves.toEqual({ on: null, problem: 'No settings folder.' });
   });
 });
 
