@@ -1,18 +1,26 @@
-# The signed, notarised macOS build of the Tauri app (`app/`).
+# The signed, notarised macOS build of the Tauri app (`app/`), for the three
+# update channels (`docs/releasing.md` says how a release goes out):
 #
-# - A `v*` tag builds it and opens a draft release with the disk image.
+# - latest: every push to `main` builds it and puts it on the `latest`
+#   prerelease in place of the one before, so its link never changes:
+#   https://github.com/openflowfm/visuals/releases/download/latest/visual-flow-latest_aarch64.dmg
+#   A newer push cancels a build still running, so the last push always gets
+#   one.
+# - beta: a `vX.Y.Z-rc.N` tag builds a beta app and opens a draft prerelease
+#   for the tag. Publishing the draft (by hand) puts its image and its
+#   `latest.json` on the fixed `beta` prerelease:
+#   https://github.com/openflowfm/visuals/releases/download/beta/visual-flow-beta_aarch64.dmg
+# - stable: a `vX.Y.Z` tag builds a stable app and opens a draft release.
+#   Publishing it makes it the latest release, which stable apps read, and
+#   puts its `latest.json` on the `beta` prerelease too, so beta testers roll
+#   onto the final.
 # - Running it by hand (Actions → release → Run workflow, on any branch) builds
 #   the same signed image and keeps it as a build artifact, with no release —
 #   for trying a build on another Mac before anything is tagged.
-# - Every day, if `main` has moved since the last one, it builds the nightly:
-#   the same signed image, put on the `nightly` prerelease in place of the one
-#   before, so its link never changes:
-#   https://github.com/openflowfm/visuals/releases/download/nightly/visual-flow-nightly_aarch64.dmg
-#   Running it by hand on `main` with "nightly" ticked builds one now, moved
-#   or not.
 #
-# Every build's CFBundleVersion is the run number, so About and crash reports
-# say which build it was; the run page names the commit.
+# Tag builds are never cancelled. Every build's CFBundleVersion is the run
+# number, so About and crash reports say which build it was; the run page
+# names the commit.
 #
 # It needs these repository secrets, the same names the other openflowfm apps
 # use:
@@ -25,9 +33,10 @@
 #
 # Updates (`app/src-tauri/src/updater.rs`): with these two set as well, every
 # build also makes the signed update bundle (`*.app.tar.gz`, its `.sig`) and
-# `latest.json`, the file the app reads to learn of a newer version. A tagged
-# release carries them for the stable channel (live once the draft is
-# published); the nightly carries them for the nightly channel.
+# `latest.json`, the file the app reads to learn of a newer version. A tag's
+# release carries them (live once the draft is published, which also copies
+# its `latest.json` to `beta`); the `latest` prerelease carries the latest
+# channel's.
 #   TAURI_SIGNING_PRIVATE_KEY           the updater's private key, from
 #                                       `cargo tauri signer generate`
 #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  its password
@@ -40,23 +49,18 @@ name: release
 
 on:
   push:
+    branches: [main]
+    # Docs-only pushes to main don't build a latest. GitHub applies path
+    # filters only to branch pushes, never to tags, so a tag always builds.
+    paths-ignore: ['docs/**', '**/*.md', 'teaser/**']
     tags: ['v*']
   workflow_dispatch:
-    inputs:
-      nightly:
-        description: Publish it as the nightly (main only)
-        type: boolean
-        default: false
-  # 06:00 UTC: after a European evening and an American one.
-  schedule:
-    - cron: '0 6 * * *'
+  # Publishing a tag's draft (by hand) feeds the `beta` prerelease.
+  release:
+    types: [published]
 
 permissions:
   contents: write
-
-concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: false
 
 # The runner image is pinned rather than `-latest`. `-latest` migrates to a new
 # OS over a month or two with nothing here changing, which is fine for `ci.yml`
@@ -75,10 +79,11 @@ jobs:
   # Its own job rather than a step, so it fails in fifteen seconds instead of
   # twenty minutes into a build.
   guard:
+    if: github.event_name != 'release'
     runs-on: ubuntu-24.04
     outputs:
-      build: ${{ steps.plan.outputs.build }}
-      nightly: ${{ steps.plan.outputs.nightly }}
+      kind: ${{ steps.plan.outputs.kind }}
+      channel: ${{ steps.plan.outputs.channel }}
       dmg: ${{ steps.plan.outputs.dmg }}
       version: ${{ steps.plan.outputs.version }}
       bundle: ${{ steps.plan.outputs.bundle }}
@@ -86,45 +91,51 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # What this run makes: a release, a nightly, or a build to download from
-      # the run page. A scheduled nightly with nothing new on main since the
-      # last one builds nothing — the same image twice is twenty minutes of a
-      # Mac for no one.
+      # What this run makes: a latest build (a push to main), a release
+      # candidate or a final (a tag), or a build to download from the run page
+      # (by hand, on any branch or tag).
       - name: What this run builds
         id: plan
-        env:
-          NIGHTLY_INPUT: ${{ inputs.nightly }}
         run: |
           set -eu
-          nightly=false
-          if [ "$GITHUB_EVENT_NAME" = schedule ] || [ "$NIGHTLY_INPUT" = true ]; then
-            nightly=true
+          kind=manual
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            case "$GITHUB_REF" in
+              refs/heads/main) kind=latest ;;
+              refs/tags/*)
+                if [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]]; then
+                  kind=rc
+                elif [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                  kind=final
+                else
+                  echo "::error::$GITHUB_REF_NAME is neither a release (vX.Y.Z) nor a release candidate (vX.Y.Z-rc.N)."
+                  exit 1
+                fi ;;
+              *)
+                echo "::error::release.yml doesn't build pushes to $GITHUB_REF."
+                exit 1 ;;
+            esac
           fi
-          if [ "$nightly" = true ] && [ "$GITHUB_REF" != refs/heads/main ]; then
-            echo "::error::the nightly is built from main, not $GITHUB_REF_NAME."
-            exit 1
-          fi
-          build=true
-          if [ "$GITHUB_EVENT_NAME" = schedule ]; then
-            last=$(git ls-remote origin refs/tags/nightly | cut -f1)
-            if [ "$last" = "$GITHUB_SHA" ]; then
-              echo "main is still ${GITHUB_SHA:0:7}, the last nightly; nothing to build."
-              build=false
-            fi
-          fi
+          case "$kind" in
+            latest) channel=latest ;;
+            rc) channel=beta ;;
+            *) channel=stable ;;
+          esac
           version=$(node -p "require('./app/src-tauri/tauri.conf.json').version")
-          # The nightly's update bundle carries its build number, so the one
-          # `latest.json` points at is never replaced under it mid-download.
-          if [ "$nightly" = true ]; then
-            dmg=visual-flow-nightly_aarch64.dmg
-            bundle="visual-flow-nightly-${GITHUB_RUN_NUMBER}_aarch64.app.tar.gz"
+          # A latest build's update bundle carries its build number, so the
+          # one `latest.json` points at is never replaced under it
+          # mid-download.
+          if [ "$kind" = latest ]; then
+            dmg=visual-flow-latest_aarch64.dmg
+            bundle="visual-flow-latest-${GITHUB_RUN_NUMBER}_aarch64.app.tar.gz"
           else
             dmg="visual-flow_${version}_aarch64.dmg"
             bundle="visual-flow_${version}_aarch64.app.tar.gz"
           fi
+          echo "this run builds: $kind, for the $channel channel"
           {
-            echo "build=$build"
-            echo "nightly=$nightly"
+            echo "kind=$kind"
+            echo "channel=$channel"
             echo "dmg=$dmg"
             echo "version=$version"
             echo "bundle=$bundle"
@@ -156,7 +167,7 @@ jobs:
           echo "updates=true" >> "$GITHUB_OUTPUT"
 
       - name: The tag is the version
-        if: startsWith(github.ref, 'refs/tags/')
+        if: steps.plan.outputs.kind == 'rc' || steps.plan.outputs.kind == 'final'
         run: |
           set -eu
           tag="${GITHUB_REF_NAME#v}"
@@ -189,8 +200,14 @@ jobs:
 
   app:
     needs: guard
-    if: needs.guard.outputs.build == 'true'
     runs-on: macos-26
+    # A push to main cancels the latest build still running from an earlier
+    # push (and one still waiting), so the last push always gets a build.
+    # Every other run, tags above all, has a group of its own and is never
+    # cancelled.
+    concurrency:
+      group: ${{ needs.guard.outputs.kind == 'latest' && 'release-latest-build' || format('release-build-{0}', github.run_id) }}
+      cancel-in-progress: ${{ needs.guard.outputs.kind == 'latest' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -258,8 +275,8 @@ jobs:
       #
       # With the updater's key it also makes the update bundle (the notarised
       # app, tarred and signed with that key). VISUALS_CHANNEL and VISUALS_BUILD
-      # are compiled in: which `latest.json` the app reads, and which nightly
-      # it is.
+      # are compiled in: which `latest.json` the app reads, and which build it
+      # is.
       - name: Build the app
         env:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY_ID }}
@@ -267,7 +284,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           UPDATES: ${{ needs.guard.outputs.updates }}
-          VISUALS_CHANNEL: ${{ needs.guard.outputs.nightly == 'true' && 'nightly' || 'stable' }}
+          VISUALS_CHANNEL: ${{ needs.guard.outputs.channel }}
         working-directory: app/src-tauri
         run: |
           set -eu
@@ -278,6 +295,14 @@ jobs:
           else
             unset TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
           fi
+          # Tauri's macOS bundler writes the whole version (`1.0.0-rc.1`) as
+          # CFBundleShortVersionString, which Apple defines as three integers;
+          # only its iOS path strips the suffix. Our Info.plist is merged over
+          # the bundler's, so it carries the numeric X.Y.Z. The app's own
+          # version, which the updater compares with `latest.json`, still
+          # comes from tauri.conf.json, suffix and all.
+          version=$(node -p "require('./tauri.conf.json').version")
+          plutil -replace CFBundleShortVersionString -string "${version%%-*}" Info.plist
           cargo tauri build --bundles app,dmg \
             --config "{\"bundle\":{\"createUpdaterArtifacts\":$updater,\"macOS\":{\"bundleVersion\":\"$GITHUB_RUN_NUMBER\"}}}"
 
@@ -326,14 +351,14 @@ jobs:
 
       # The update bundle Tauri made from the notarised app, renamed without
       # the brackets, and the `latest.json` that points at it where this run
-      # puts it: the tag's release, or the nightly. A version on the nightly
-      # says its build (`0.3.0-nightly.123`), which is how a nightly knows a
-      # later one (`updater.rs`). A run by hand on a branch makes them for a
-      # look at the run page, pointing where the tag of this version would.
+      # puts it: the tag's release, or the `latest` prerelease. A latest
+      # build's version says its build (`0.3.0-latest.123`), which is how one
+      # knows a later one (`updater.rs`). A run by hand makes them for a look
+      # at the run page, pointing where the tag of this version would.
       - name: The update bundle and latest.json
         if: needs.guard.outputs.updates == 'true'
         env:
-          NIGHTLY: ${{ needs.guard.outputs.nightly }}
+          KIND: ${{ needs.guard.outputs.kind }}
           VERSION: ${{ needs.guard.outputs.version }}
           BUNDLE: ${{ needs.guard.outputs.bundle }}
           REPO_URL: ${{ github.server_url }}/${{ github.repository }}
@@ -343,10 +368,10 @@ jobs:
           test "${#bundles[@]}" -eq 1
           cp "${bundles[0]}" "release/$BUNDLE"
           cp "${bundles[0]}.sig" "release/$BUNDLE.sig"
-          if [ "$NIGHTLY" = true ]; then
-            version="${VERSION%%-*}-nightly.${GITHUB_RUN_NUMBER}"
-            url="$REPO_URL/releases/download/nightly/$BUNDLE"
-            notes="Nightly build ${GITHUB_RUN_NUMBER}, from ${GITHUB_SHA:0:7} on main. Not a release, and not tested beyond building."
+          if [ "$KIND" = latest ]; then
+            version="${VERSION%%-*}-latest.${GITHUB_RUN_NUMBER}"
+            url="$REPO_URL/releases/download/latest/$BUNDLE"
+            notes="Latest build ${GITHUB_RUN_NUMBER}, from ${GITHUB_SHA:0:7} on main. Not a release, and not tested beyond building."
           else
             version="$VERSION"
             tag="v$VERSION"
@@ -374,9 +399,13 @@ jobs:
           path: release/*
           if-no-files-found: error
 
+  # A tag's release: a draft, always, a prerelease for a release candidate.
+  # Release notes get one last human read, and publishing it is what lets it
+  # out: a final becomes the latest release (the stable channel and every
+  # install instruction), and the `beta` job below feeds either to beta.
   publish:
-    needs: app
-    if: startsWith(github.ref, 'refs/tags/')
+    needs: [guard, app]
+    if: needs.guard.outputs.kind == 'rc' || needs.guard.outputs.kind == 'final'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -386,11 +415,10 @@ jobs:
           path: assets
           merge-multiple: true
 
-      # A draft, always. Release notes get one last human read, and a
-      # published release is what every install instruction points at.
-      - name: Publish
+      - name: Open the draft
         env:
           GH_TOKEN: ${{ github.token }}
+          KIND: ${{ needs.guard.outputs.kind }}
         run: |
           set -eux
           notes=".github/notes/${GITHUB_REF_NAME}.md"
@@ -403,26 +431,29 @@ jobs:
           while IFS= read -r file; do files+=("$file"); done < <(find assets -type f | sort)
           test "${#files[@]}" -gt 0
           prerelease=()
-          case "$GITHUB_REF_NAME" in *-*) prerelease=(--prerelease) ;; esac
+          if [ "$KIND" = rc ]; then prerelease=(--prerelease); fi
           gh release create "$GITHUB_REF_NAME" --draft --title "$GITHUB_REF_NAME" \
             "${prerelease[@]}" "${notes_args[@]}" "${files[@]}"
 
-  # One prerelease, `nightly`, whose image is replaced each time, so the link
-  # in the header never changes. It is never "latest": the latest release is
-  # what a tagged version is for. The tag moves only after the new image is
-  # up, so a failed upload leaves the old image and the old tag, and the next
-  # night tries again rather than thinking it is done.
-  nightly:
+  # One prerelease, `latest`, whose image is replaced each time, so its link
+  # never changes. It is never GitHub's "latest release": that is what a final
+  # is for. The tag moves only after the new image is up, so a failed upload
+  # leaves the old image and the old tag. Publishing waits for a publish
+  # still running rather than cancelling it halfway.
+  latest:
     needs: [guard, app]
-    if: needs.guard.outputs.nightly == 'true'
+    if: needs.guard.outputs.kind == 'latest'
     runs-on: ubuntu-24.04
+    concurrency:
+      group: release-latest-publish
+      cancel-in-progress: false
     steps:
       - uses: actions/download-artifact@v8
         with:
           path: assets
           merge-multiple: true
 
-      - name: Replace the nightly
+      - name: Replace the latest build
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -431,27 +462,34 @@ jobs:
         run: |
           set -eux
           test -f "assets/$DMG"
-          title="Nightly ${GITHUB_SHA:0:7}"
+          title="Latest ${GITHUB_SHA:0:7}"
           notes="Built from ${GITHUB_SHA} on $(date -u +%F) — build ${GITHUB_RUN_NUMBER}, ${RUN_URL}.
           Signed and notarised, straight from main: not a release, and not tested beyond building."
-          if ! gh release view nightly > /dev/null 2>&1; then
-            if ! gh api "repos/$GH_REPO/git/refs/tags/nightly" > /dev/null 2>&1; then
-              gh api "repos/$GH_REPO/git/refs" -f ref=refs/tags/nightly -f sha="$GITHUB_SHA"
+          if ! gh release view latest > /dev/null 2>&1; then
+            if ! gh api "repos/$GH_REPO/git/refs/tags/latest" > /dev/null 2>&1; then
+              gh api "repos/$GH_REPO/git/refs" -f ref=refs/tags/latest -f sha="$GITHUB_SHA"
             fi
-            gh release create nightly --verify-tag --prerelease --latest=false \
+            gh release create latest --verify-tag --prerelease --latest=false \
               --title "$title" --notes "$notes"
           fi
-          gh release upload nightly "assets/$DMG" --clobber
-          gh api -X PATCH "repos/$GH_REPO/git/refs/tags/nightly" -f sha="$GITHUB_SHA" -F force=true
-          gh release edit nightly --prerelease --latest=false --title "$title" --notes "$notes"
+          # A build that a later one has already replaced leaves it be.
+          live=$(gh release view latest --json name --jq .name | sed -n 's/^Latest build \([0-9][0-9]*\) .*/\1/p')
+          if [ -n "$live" ] && [ "$GITHUB_RUN_NUMBER" -lt "$live" ]; then
+            echo "::notice::The latest prerelease already has build $live, newer than this run ($GITHUB_RUN_NUMBER): leaving it."
+            exit 0
+          fi
+          title="Latest build ${GITHUB_RUN_NUMBER} (${GITHUB_SHA:0:7})"
+          gh release upload latest "assets/$DMG" --clobber
+          gh api -X PATCH "repos/$GH_REPO/git/refs/tags/latest" -f sha="$GITHUB_SHA" -F force=true
+          gh release edit latest --prerelease --latest=false --title "$title" --notes "$notes"
 
       # The update bundle goes up before the `latest.json` that names it, so
       # the app never reads of a bundle that isn't there yet. The bundle the
-      # new `latest.json` names and the two nightlies' before it stay, so a Mac
-      # that read an earlier `latest.json` can still download what it names;
-      # older ones go. A re-run of an older run (a lower run number than the
-      # live `latest.json`'s) publishes nothing, so the nightly never rolls back.
-      - name: Publish the nightly's update
+      # new `latest.json` names and the two before it stay, so a Mac that read
+      # an earlier `latest.json` can still download what it names; older ones
+      # go. A run older than the live `latest.json`'s build publishes nothing,
+      # so the channel never rolls back.
+      - name: Publish the latest build's update
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -460,31 +498,96 @@ jobs:
         run: |
           set -eux
           if [ "$UPDATES" != true ]; then
-            echo "No updater key: the nightly has no update bundle or latest.json this time."
+            echo "No updater key: the latest build has no update bundle or latest.json this time."
             exit 0
           fi
           live=0
-          if gh release download nightly --pattern latest.json --output live-latest.json --clobber; then
-            live=$(jq -r '.version' live-latest.json | sed -n 's/.*-nightly\.\([0-9][0-9]*\)$/\1/p')
+          if gh release download latest --pattern latest.json --output live-latest.json --clobber; then
+            live=$(jq -r '.version' live-latest.json | sed -n 's/.*-latest\.\([0-9][0-9]*\)$/\1/p')
             live=${live:-0}
           fi
           if [ "$GITHUB_RUN_NUMBER" -lt "$live" ]; then
-            echo "::notice::The live nightly latest.json is build $live, newer than this run ($GITHUB_RUN_NUMBER): not publishing this update."
+            echo "::notice::The live latest.json is build $live, newer than this run ($GITHUB_RUN_NUMBER): not publishing this update."
             exit 0
           fi
-          gh release upload nightly "assets/$BUNDLE" "assets/$BUNDLE.sig" --clobber
-          gh release upload nightly assets/latest.json --clobber
-          names=$(gh release view nightly --json assets --jq '.assets[].name')
-          # The run numbers of the three newest nightly bundles (this one among them).
-          keep=$(printf '%s\n' "$names" | sed -n 's/^visual-flow-nightly-\([0-9][0-9]*\)_aarch64\.app\.tar\.gz$/\1/p' | sort -rn | head -n 3)
+          gh release upload latest "assets/$BUNDLE" "assets/$BUNDLE.sig" --clobber
+          gh release upload latest assets/latest.json --clobber
+          names=$(gh release view latest --json assets --jq '.assets[].name')
+          # The run numbers of the three newest bundles (this one among them).
+          keep=$(printf '%s\n' "$names" | sed -n 's/^visual-flow-latest-\([0-9][0-9]*\)_aarch64\.app\.tar\.gz$/\1/p' | sort -rn | head -n 3)
           printf '%s\n' "$names" | while IFS= read -r name; do
             case "$name" in
               "$BUNDLE"|"$BUNDLE.sig") ;;
-              visual-flow-nightly-*_aarch64.app.tar.gz|visual-flow-nightly-*_aarch64.app.tar.gz.sig)
-                run=${name#visual-flow-nightly-}
+              visual-flow-latest-*_aarch64.app.tar.gz|visual-flow-latest-*_aarch64.app.tar.gz.sig)
+                run=${name#visual-flow-latest-}
                 run=${run%%_*}
                 if ! printf '%s\n' "$keep" | grep -qx "$run"; then
-                  gh release delete-asset nightly "$name" --yes
+                  gh release delete-asset latest "$name" --yes
                 fi ;;
             esac
           done
+
+  # The beta channel: one prerelease, `beta`, fed when a tag's draft is
+  # published by hand. A release candidate brings its image (renamed, so the
+  # link never changes) and its `latest.json`; a final brings only its
+  # `latest.json`, so testers roll onto it while the beta image stays a beta
+  # app. Its `latest.json` names the bundle on the tag's own release, which
+  # downloads only once that release is published, hence feeding on publish
+  # rather than on the build. The feed never goes back: a tag older than the
+  # one it holds (a patch to an older release, published after the next
+  # one's candidate) leaves it be.
+  beta:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: release-beta-publish
+      cancel-in-progress: false
+    steps:
+      - name: Feed the beta
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.event.release.tag_name }}
+          RELEASE_URL: ${{ github.event.release.html_url }}
+        run: |
+          set -eux
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]]; then
+            echo "::notice::$TAG is neither a release nor a release candidate: the beta is left as it is."
+            exit 0
+          fi
+          version="${TAG#v}"
+          # A version as numbers that sort: X Y Z, then the candidate, a final
+          # coming after every candidate of its version.
+          key() {
+            local core=${1%%-*} rc=999999
+            if [[ "$1" == *-rc.* ]]; then rc=${1##*-rc.}; fi
+            printf '%s %s\n' "${core//./ }" "$rc"
+          }
+          if ! gh release view beta > /dev/null 2>&1; then
+            if ! gh api "repos/$GH_REPO/git/refs/tags/beta" > /dev/null 2>&1; then
+              gh api "repos/$GH_REPO/git/refs" -f ref=refs/tags/beta -f sha="$GITHUB_SHA"
+            fi
+            gh release create beta --verify-tag --prerelease --latest=false \
+              --title "Beta" --notes "Release candidates of visual[flow], and each release."
+          fi
+          # The version the beta holds, from its title ("Beta 1.0.0-rc.2").
+          live=$(gh release view beta --json name --jq .name | sed -n 's/^Beta \([0-9][0-9.]*\(-rc\.[0-9][0-9]*\)\{0,1\}\)$/\1/p')
+          if [ -n "$live" ]; then
+            if [ "$live" = "$version" ] || [ "$(printf '%s\n%s\n' "$(key "$live")" "$(key "$version")" | sort -k1,1n -k2,2n -k3,3n -k4,4n | tail -n 1)" != "$(key "$version")" ]; then
+              echo "::notice::The beta already holds $live, not older than $version: leaving it."
+              exit 0
+            fi
+          fi
+          mkdir new
+          if [[ "$TAG" == *-rc.* ]]; then
+            gh release download "$TAG" --pattern "visual-flow_${version}_aarch64.dmg" --output new/visual-flow-beta_aarch64.dmg
+            gh release upload beta new/visual-flow-beta_aarch64.dmg --clobber
+            gh api -X PATCH "repos/$GH_REPO/git/refs/tags/beta" -f sha="$GITHUB_SHA" -F force=true
+          fi
+          if gh release download "$TAG" --pattern latest.json --output new/latest.json; then
+            gh release upload beta new/latest.json --clobber
+          else
+            echo "::notice::$TAG has no latest.json (built without the updater's key): beta apps won't hear of it."
+          fi
+          gh release edit beta --prerelease --latest=false --title "Beta $version" \
+            --notes "Release candidates of visual[flow], and each release. Now: $TAG, $RELEASE_URL."
