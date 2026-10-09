@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import {
@@ -13,6 +13,7 @@ import {
   warningOwed,
   warningStore,
   welcomeEnded,
+  resetWelcomeEnded,
   type WarningStore,
   haveAll,
   ReduceFlashing,
@@ -251,6 +252,7 @@ describe("the flashing-lights warning's answer, kept by the app", () => {
 
 describe('the flashing-lights warning, when it is owed', () => {
   const store = (understood: boolean): WarningStore => ({ understood: () => Promise.resolve(understood), understand: () => Promise.resolve() });
+  beforeEach(() => resetWelcomeEnded());
 
   it('is owed once the first run is done, until understood', async () => {
     expect(await warningOwed(store(false), () => Promise.resolve(false))).toBe(true);

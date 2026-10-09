@@ -595,6 +595,11 @@ export function welcomeEnded(): void {
   welcomeDone = true;
 }
 
+/** For tests: forget that the welcome ended this run. */
+export function resetWelcomeEnded(): void {
+  welcomeDone = false;
+}
+
 /** Whether the warning is owed: the first run is done (skipped, or done before the warning existed) and it hasn't been understood. */
 export async function warningOwed(store: WarningStore = kept, firstRun: () => Promise<boolean> = api.firstRun): Promise<boolean> {
   const first = welcomeDone ? false : await firstRun().catch(() => false);
