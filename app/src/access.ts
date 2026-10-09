@@ -34,8 +34,20 @@ export function publish(m: api.Motion) {
 /** Ask the app again (macOS's setting may have changed), and publish what it says. */
 export const refresh = (): Promise<api.Motion> => api.reducedMotion().then((m) => (publish(m), m));
 
-/** Reduce motion (true), don't (false), or follow macOS again (null); publishes what the app says is in effect. */
-export const setMotion = (on: boolean | null): Promise<api.Motion> => api.reducedMotionSet(on).then((m) => (publish(m), m));
+/**
+ * Reduce motion (true), don't (false), or follow macOS again (null); publishes
+ * what the app says is in effect. If the choice couldn't be kept, the app still
+ * put it in force for this run: that is read back and published, and the error
+ * is passed on to be shown.
+ */
+export const setMotion = (on: boolean | null): Promise<api.Motion> =>
+  api.reducedMotionSet(on).then(
+    (m) => (publish(m), m),
+    (e) => {
+      refresh().catch(() => {});
+      throw e;
+    },
+  );
 
 /** The reduced-motion setting, null until the app has said; it follows changes made anywhere in the page and in macOS. */
 export function useMotion(): api.Motion | null {

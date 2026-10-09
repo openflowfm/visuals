@@ -3,6 +3,8 @@
 //! Settings. The choice (on, off, or none: follow macOS) is kept in
 //! `access.json`; macOS's setting is read again every couple of seconds, so
 //! turning it on in System Settings calms a show that is already playing.
+//! A damaged `access.json` fails safe: motion is reduced, and the file is moved
+//! aside and said as [`crate::settings`] does for every settings file.
 
 use crate::settings;
 use serde::{Deserialize, Serialize};
@@ -28,16 +30,41 @@ struct Kept {
 
 const FILE: &str = "access.json";
 
-/// What the render thread reads every refresh, through [`reduced`].
-static REDUCED: AtomicBool = AtomicBool::new(false);
-/// The choice made in the app; `None` follows macOS. Read from [`FILE`] at [`start`].
-static CHOICE: Mutex<Option<bool>> = Mutex::new(None);
+/// The choice made in the app, and what's in force.
+struct State {
+    /// `None` follows macOS. Read from [`FILE`] at [`start`].
+    choice: Mutex<Option<bool>>,
+    /// What the render thread reads every refresh, through [`reduced`].
+    reduced: AtomicBool,
+}
+
+impl State {
+    const fn new() -> State {
+        State { choice: Mutex::new(None), reduced: AtomicBool::new(false) }
+    }
+
+    /// Work out what's in effect from the choice (changed first by `change`, if
+    /// given) and macOS now (`system`), and put it in force: all under the
+    /// choice's lock, so a poll that read the old choice can't put it back in
+    /// force after a new one.
+    fn update(&self, change: Option<Option<bool>>, system: impl FnOnce() -> bool) -> Motion {
+        let mut choice = self.choice.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(to) = change {
+            *choice = to;
+        }
+        let motion = resolve(*choice, system());
+        self.reduced.store(motion.reduced, Ordering::Relaxed);
+        motion
+    }
+}
+
+static STATE: State = State::new();
 /// How often macOS's setting is read again.
 const POLL: Duration = Duration::from_secs(2);
 
 /// Whether motion is reduced now. Cheap: the render thread asks every refresh.
 pub fn reduced() -> bool {
-    REDUCED.load(Ordering::Relaxed)
+    STATE.reduced.load(Ordering::Relaxed)
 }
 
 /// What's in effect, given the app's `choice` and whether macOS's Reduce motion is on.
@@ -48,17 +75,24 @@ pub fn resolve(choice: Option<bool>, system_on: bool) -> Motion {
     }
 }
 
-/// The choice as [`FILE`] reads; a missing or broken file follows macOS.
-fn read_choice(text: Option<&str>) -> Option<bool> {
-    text.and_then(|t| serde_json::from_str::<Kept>(t).ok()).and_then(|k| k.reduce)
+/// The choice to start with, from what [`FILE`] read as (`kept`) and whether it
+/// was there (`found`): a missing file follows macOS, but one that was there and
+/// couldn't be read (damaged, or not holding a choice) fails safe, reducing motion.
+fn first_choice(kept: Option<Kept>, found: bool) -> Option<bool> {
+    match kept {
+        Some(k) => k.reduce,
+        None if found => Some(true),
+        None => None,
+    }
 }
 
-/// Work out what's in effect from the choice and macOS now, and put it in force.
+/// [`State::update`] for the app, with macOS's setting read afresh.
+fn update_with(change: Option<Option<bool>>) -> Motion {
+    STATE.update(change, system_reduces_motion)
+}
+
 fn update() -> Motion {
-    let choice = *CHOICE.lock().unwrap_or_else(|e| e.into_inner());
-    let motion = resolve(choice, system_reduces_motion());
-    REDUCED.store(motion.reduced, Ordering::Relaxed);
-    motion
+    update_with(None)
 }
 
 /// Whether motion is reduced now (macOS's setting read afresh).
@@ -67,20 +101,30 @@ pub fn reduced_motion() -> Motion {
     update()
 }
 
-/// Reduce motion (`true`), don't (`false`), or (`None`) follow macOS again; kept for next launch.
+/// Reduce motion (`true`), don't (`false`), or (`None`) follow macOS again;
+/// kept for next launch. The choice is in force at once either way; if it
+/// couldn't be kept, the error says so (and the settings' problems too).
 #[tauri::command]
 pub fn reduced_motion_set(on: Option<bool>) -> Result<Motion, String> {
-    *CHOICE.lock().unwrap_or_else(|e| e.into_inner()) = on;
-    settings::save_json(FILE, &Kept { reduce: on });
-    Ok(update())
+    // One choice at a time, so the file ends with the one in force.
+    static SETTING: Mutex<()> = Mutex::new(());
+    let _one = SETTING.lock().unwrap_or_else(|e| e.into_inner());
+    let motion = update_with(Some(on));
+    if !settings::save_json(FILE, &Kept { reduce: on }) {
+        return Err(NOT_KEPT.into());
+    }
+    Ok(motion)
 }
 
-/// Called once at setup: reads the kept choice and macOS's setting, and keeps
-/// reading macOS's while the app runs.
+/// What [`reduced_motion_set`] says when the choice couldn't be kept.
+const NOT_KEPT: &str = "Couldn't save the reduced motion setting; it is in force until visual[flow] quits.";
+
+/// Called once at setup: reads the kept choice (a damaged file is moved aside
+/// and said, as every settings file is, and reduces motion) and macOS's
+/// setting, and keeps reading macOS's while the app runs.
 pub fn start(_handle: &AppHandle) {
-    let text = std::fs::read_to_string(settings::dir().join(FILE)).ok();
-    *CHOICE.lock().unwrap_or_else(|e| e.into_inner()) = read_choice(text.as_deref());
-    update();
+    let found = settings::dir().join(FILE).exists();
+    update_with(Some(first_choice(settings::load::<Kept>(FILE), found)));
     let _ = std::thread::Builder::new().name("reduce-motion".into()).spawn(|| {
         loop {
             std::thread::sleep(POLL);
@@ -128,14 +172,34 @@ mod tests {
     }
 
     #[test]
-    fn the_kept_choice_reads_back_and_a_bad_file_follows_macos() {
+    fn the_kept_choice_reads_back_and_a_bad_file_fails_safe() {
         for on in [Some(true), Some(false), None] {
-            let text = serde_json::to_string(&Kept { reduce: on }).unwrap();
-            assert_eq!(read_choice(Some(&text)), on);
+            assert_eq!(first_choice(Some(Kept { reduce: on }), true), on);
         }
-        assert_eq!(read_choice(None), None);
-        assert_eq!(read_choice(Some("{not json")), None);
-        assert_eq!(read_choice(Some(r#"{"reduce":"yes"}"#)), None);
+        assert_eq!(first_choice(None, false), None, "no file: follow macOS");
+        assert_eq!(first_choice(None, true), Some(true), "a file that couldn't be read: reduce motion");
+        // A versioned file reads as a choice; a damaged one doesn't (settings moves it aside).
+        assert_eq!(serde_json::from_str::<Kept>(r#"{"version":1,"reduce":false}"#).unwrap(), Kept { reduce: Some(false) });
+        assert!(serde_json::from_str::<Kept>(r#"{"reduce":"yes"}"#).is_err());
+    }
+
+    #[test]
+    fn a_choice_and_a_poll_at_once_leave_the_choice_in_force() {
+        // macOS says off; polls racing a choice of "on" never undo it, nor one of "off" after it.
+        static HERE: State = State::new();
+        let polls = std::thread::spawn(|| {
+            for _ in 0..2000 {
+                HERE.update(None, || false);
+            }
+        });
+        for _ in 0..200 {
+            HERE.update(Some(None), || false);
+            HERE.update(Some(Some(true)), || false);
+            assert!(HERE.reduced.load(Ordering::Relaxed));
+        }
+        polls.join().unwrap();
+        assert!(HERE.reduced.load(Ordering::Relaxed));
+        assert_eq!(HERE.update(None, || false), Motion { reduced: true, system: false });
     }
 
     #[test]
