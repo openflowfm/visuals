@@ -111,6 +111,23 @@ fn secs_from(value: Option<String>, default: f64) -> f64 {
     value.and_then(|s| s.parse().ok()).unwrap_or(default)
 }
 
+/// `VISUALS_WINDOW_SIZE=1440x900` sizes the main window (logical points), to
+/// capture the page at a given width, even one under the window's minimum.
+pub fn size(window: &tauri::WebviewWindow) {
+    let Some((w, h)) = size_from(std::env::var("VISUALS_WINDOW_SIZE").ok()) else { return };
+    let size = tauri::LogicalSize::new(w, h);
+    if let Err(e) = window.set_min_size(Some(size)).and_then(|()| window.set_size(size)) {
+        eprintln!("VISUALS_WINDOW_SIZE: {e}");
+    }
+}
+
+fn size_from(value: Option<String>) -> Option<(f64, f64)> {
+    let value = value?;
+    let (w, h) = value.split_once('x')?;
+    let (w, h) = (w.trim().parse::<f64>().ok()?, h.trim().parse::<f64>().ok()?);
+    (w >= 1.0 && h >= 1.0).then_some((w, h))
+}
+
 /// `VISUALS_FX='[{"kind": "mirror", "mode": "quad"}, …]'` sends those live actions
 /// once the page is up (after `VISUALS_FX_AFTER` seconds, 5 by default), for
 /// checking effects in a capture.
@@ -183,6 +200,15 @@ mod tests {
         assert_eq!(secs_from(Some("2.5".into()), 8.0), 2.5);
         assert_eq!(secs_from(Some("soon".into()), 8.0), 8.0);
         assert_eq!(secs_from(None, 5.0), 5.0);
+    }
+
+    #[test]
+    fn reads_a_window_size() {
+        assert_eq!(size_from(Some("1440x900".into())), Some((1440.0, 900.0)));
+        assert_eq!(size_from(Some("800 x 900".into())), Some((800.0, 900.0)));
+        assert_eq!(size_from(Some("big".into())), None);
+        assert_eq!(size_from(Some("0x900".into())), None);
+        assert_eq!(size_from(None), None);
     }
 
     #[test]
