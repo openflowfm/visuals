@@ -16,15 +16,20 @@
 //!   a force quit), noticed on the next launch: [`install`] leaves a marker
 //!   file per process, `running-<pid>`, that a clean exit removes (an `atexit`
 //!   handler). Only markers whose process is gone count, so a second copy of
-//!   the app running alongside isn't reported. SIGTERM, SIGINT (Ctrl-C) and
-//!   SIGHUP skip `atexit`, so a handler removes the marker for them (they're
-//!   asked for, not crashes); a SIGKILL (Activity Monitor's Force Quit) can't
-//!   be handled and counts as unclean.
+//!   the app running alongside isn't reported; the marker keeps when the
+//!   system says the process started, so a later process given the same pid
+//!   doesn't pass for it. SIGTERM, SIGINT (Ctrl-C) and SIGHUP skip `atexit`,
+//!   so a handler removes the marker for them (they're asked for, not crashes)
+//!   and with it any panic another thread survived, as a clean exit does; a
+//!   SIGKILL (Activity Monitor's Force Quit) can't be handled and counts as
+//!   unclean.
 //!
 //! A report holds the app's version, the macOS version, the chip, what went
 //! wrong with its backtrace, and the name of the preset on screen when it's from
-//! our own packs (the starter set or the full pack; any other is "a preset of
-//! your own", decision 54); never audio, file paths (only file names are kept),
+//! our own packs (listed in the `index.json` of the starter set or the full
+//! pack; any other is "a preset of your own", decision 54, and the names of the
+//! user's own presets the library knows are hidden wherever they turn up);
+//! never audio, file paths (only file names are kept), disk names,
 //! the user's name or the Mac's, which are collected before the panic hook is
 //! set so even the earliest crash has them scrubbed. Reports are always
 //! written; turning them on (off by default) only makes the page offer the new
@@ -32,6 +37,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::panic::AssertUnwindSafe;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
@@ -57,6 +63,10 @@ const PACK_FOLDER: &str = "cream-of-the-crop";
 const OWN_PRESET: &str = "a preset of your own";
 /// Stands for [`OWN_PRESET`] while a text is scrubbed, so nothing after matches inside it.
 const OWN_MARK: char = '\u{1}';
+/// Where macOS mounts disks; a path that is just one of them is replaced by [`DISK`].
+const VOLUMES: &str = "/Volumes/";
+/// What a report says instead of a disk's name.
+const DISK: &str = "<disk>";
 
 /// One crash, written locally.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -114,11 +124,13 @@ pub fn install() {
     if std::env::var_os("VISUALS_HEADLESS").is_none() {
         let now = now();
         STARTED.store(now, Ordering::Relaxed);
+        let pid_start = process_start(std::process::id());
+        let _ = PID_START.set(pid_start);
         for report in unclean_exits(&dir, machine, now, alive) {
             let _ = write(&dir, &report);
         }
         let marker = dir.join(format!("{MARKER}{}", std::process::id()));
-        if save_marker(&marker, &Marker { started: now, panics: Vec::new() }).is_ok() {
+        if save_marker(&marker, &Marker { started: Some(now), pid_start, panics: Vec::new() }).is_ok() {
             if let Ok(c) = std::ffi::CString::new(marker.as_os_str().as_encoded_bytes()) {
                 let _ = MARKER_C.set(c);
             }
@@ -170,8 +182,9 @@ fn wait_for(work: impl FnOnce() + Send + 'static, wait: Duration) -> bool {
     spawned.is_ok() && finished.recv_timeout(wait).is_ok()
 }
 
-/// Called from the app's setup: the app (to read the preset on screen) and the
-/// bundled starter set's folder, whose presets are ours to name.
+/// Called from the app's setup: the app (to read the preset on screen and the
+/// library) and the bundled starter set's folder, whose pack's indexed presets
+/// are ours to name.
 pub fn start(app: &AppHandle) {
     if let Some(starter) = crate::pack::starter(app) {
         let _ = OWN_STARTER.set(starter);
@@ -217,10 +230,12 @@ static OWN_STARTER: OnceLock<PathBuf> = OnceLock::new();
 static MAIN_THREAD: OnceLock<ThreadId> = OnceLock::new();
 /// When this run started, as its marker says.
 static STARTED: AtomicU64 = AtomicU64::new(0);
+/// When the system says this process started ([`process_start`]), as its marker says.
+static PID_START: OnceLock<Option<u64>> = OnceLock::new();
 /// Panics not (yet) caught, by thread: reported at exit, or from the marker on the next launch.
 static PENDING: Mutex<Vec<(ThreadId, CrashReport)>> = Mutex::new(Vec::new());
-/// Whether [`PENDING`] has any, for the signal handler, which can't lock.
-static ANY_PENDING: AtomicBool = AtomicBool::new(false);
+/// Whether [`PENDING`] has a panic of the main thread, for the signal handler, which can't lock.
+static MAIN_PENDING: AtomicBool = AtomicBool::new(false);
 /// Tells apart reports made in the same millisecond.
 static COUNT: AtomicU32 = AtomicU32::new(0);
 
@@ -243,12 +258,14 @@ unsafe extern "C" {
 }
 
 /// SIGTERM, SIGINT or SIGHUP: the app was asked to stop, which isn't a crash, so
-/// the marker goes (unless it holds a panic nothing caught), then the signal
-/// does what it would have done.
+/// the marker goes, then the signal does what it would have done. As at a clean
+/// exit ([`at_exit`]), panics other threads survived go with it; only a pending
+/// panic of the main thread, which was ending the process anyway, keeps the
+/// marker for the next launch to report ([`main_pending`]).
 extern "C" fn on_signal(sig: std::ffi::c_int) {
     // SAFETY: `unlink`, `signal` and `raise` are async-signal-safe; the path was made before the handler was set.
     unsafe {
-        if !ANY_PENDING.load(Ordering::Relaxed)
+        if !MAIN_PENDING.load(Ordering::Relaxed)
             && let Some(path) = MARKER_C.get()
         {
             unlink(path.as_ptr());
@@ -265,7 +282,14 @@ fn pending() -> std::sync::MutexGuard<'static, Vec<(ThreadId, CrashReport)>> {
 /// What this run's marker holds: when it started and the panics not caught so far.
 #[derive(Serialize, Deserialize, Default)]
 struct Marker {
-    started: u64,
+    /// Unix seconds; `None` when unknown.
+    #[serde(default)]
+    started: Option<u64>,
+    /// When the system says the process started ([`process_start`]), to tell it
+    /// from a later process given the same pid; `None` when unknown.
+    #[serde(default)]
+    pid_start: Option<u64>,
+    #[serde(default)]
     panics: Vec<CrashReport>,
 }
 
@@ -278,10 +302,17 @@ fn save_marker(path: &Path, marker: &Marker) -> std::io::Result<()> {
 
 /// Writes the pending panics into this run's marker, for the next launch should the process die.
 fn update_marker(pending: &[(ThreadId, CrashReport)]) {
-    ANY_PENDING.store(!pending.is_empty(), Ordering::Relaxed);
+    MAIN_PENDING.store(main_pending(pending, MAIN_THREAD.get().copied()), Ordering::Relaxed);
     if let Some(path) = MARKER_PATH.get() {
-        let _ = save_marker(path, &Marker { started: STARTED.load(Ordering::Relaxed), panics: pending.iter().map(|(_, r)| r.clone()).collect() });
+        let marker = Marker { started: Some(STARTED.load(Ordering::Relaxed)), pid_start: PID_START.get().copied().flatten(), panics: pending.iter().map(|(_, r)| r.clone()).collect() };
+        let _ = save_marker(path, &marker);
     }
+}
+
+/// Whether a pending panic is the main thread's: the one kind an asked-for stop
+/// (a signal) doesn't drop, as it was ending the process anyway.
+fn main_pending(pending: &[(ThreadId, CrashReport)], main: Option<ThreadId>) -> bool {
+    pending.iter().any(|(t, _)| Some(*t) == main)
 }
 
 /// Drops the newest pending panic of `thread`: it was caught.
@@ -316,13 +347,59 @@ extern "C" fn at_exit() {
     });
 }
 
-/// Whether process `pid` is still running.
-fn alive(pid: u32) -> bool {
-    let Ok(pid @ 1..) = std::ffi::c_int::try_from(pid) else { return false };
+/// Whether the process that left a marker is still running: `pid` exists and,
+/// when the marker says when it started (`started`, from [`process_start`]), it
+/// started then, so a later process given the same pid doesn't hide a crash.
+fn alive(pid: u32, started: Option<u64>) -> bool {
+    let Ok(id @ 1..) = std::ffi::c_int::try_from(pid) else { return false };
     // SAFETY: signal 0 only checks the process exists; nothing is sent.
-    let exists = unsafe { kill(pid, 0) } == 0;
+    let exists = unsafe { kill(id, 0) } == 0;
     // EPERM: it exists, run by someone else.
-    exists || std::io::Error::last_os_error().raw_os_error() == Some(1)
+    let exists = exists || std::io::Error::last_os_error().raw_os_error() == Some(1);
+    exists && same_start(started, process_start(pid))
+}
+
+/// Whether a marker's start time and a running process's are the same process's; unknown on either side counts as the same.
+fn same_start(marker: Option<u64>, running: Option<u64>) -> bool {
+    match (marker, running) {
+        (Some(m), Some(r)) => m == r,
+        _ => true,
+    }
+}
+
+/// When process `pid` started, in microseconds since 1970, from the kernel's
+/// process table (`sysctl` `KERN_PROC_PID`, `kp_proc.p_starttime`); `None` when
+/// there's no such process.
+#[cfg(target_os = "macos")]
+fn process_start(pid: u32) -> Option<u64> {
+    unsafe extern "C" {
+        fn sysctl(name: *const std::ffi::c_int, namelen: std::ffi::c_uint, oldp: *mut std::ffi::c_void, oldlenp: *mut usize, newp: *mut std::ffi::c_void, newlen: usize) -> std::ffi::c_int;
+    }
+    const CTL_KERN: std::ffi::c_int = 1;
+    const KERN_PROC: std::ffi::c_int = 14;
+    const KERN_PROC_PID: std::ffi::c_int = 1;
+    let mib = [CTL_KERN, KERN_PROC, KERN_PROC_PID, std::ffi::c_int::try_from(pid).ok()?];
+    // `struct kinfo_proc` (648 bytes on 64-bit macOS), 8-aligned. It starts with
+    // `kp_proc`, an `extern_proc`, whose first member's union holds
+    // `p_starttime`, a `struct timeval` (64-bit seconds, 32-bit microseconds).
+    let mut buf = [0u64; 128];
+    let mut len = std::mem::size_of_val(&buf);
+    // SAFETY: a four-part name, and a buffer with its length; nothing is set.
+    let ok = unsafe { sysctl(mib.as_ptr(), 4, buf.as_mut_ptr().cast(), &mut len, std::ptr::null_mut(), 0) } == 0;
+    // No such process: it succeeds with nothing written.
+    if !ok || len < 16 {
+        return None;
+    }
+    let secs = buf[0];
+    let micros = buf[1] & 0xffff_ffff;
+    (secs > 0).then(|| secs.saturating_mul(1_000_000).saturating_add(micros))
+}
+
+/// When process `pid` started, in clock ticks since boot (`/proc/<pid>/stat`, field 22).
+#[cfg(not(target_os = "macos"))]
+fn process_start(pid: u32) -> Option<u64> {
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    stat[stat.rfind(')')? + 1..].split_whitespace().nth(19)?.parse().ok()
 }
 
 /// `~/.openflow/visuals/crashes`.
@@ -451,40 +528,132 @@ fn preset_name(path: &Path) -> Option<String> {
     Some(path.file_stem()?.to_string_lossy().into_owned())
 }
 
-/// Which presets a report may name (decision 54): only ours, from the folders in
-/// `roots` (the starter set, the full pack). Any other preset is
-/// [`OWN_PRESET`], and the name of the one on screen, when it isn't ours, is
-/// hidden wherever it turns up.
+/// One of our own packs: its folder and the presets its `index.json` lists,
+/// relative to the folder and lowercased (macOS paths ignore case).
+struct Pack {
+    dir: PathBuf,
+    listed: std::sync::Arc<HashSet<String>>,
+}
+
+impl Pack {
+    /// The pack in `dir`, with what its `index.json` lists (read-only, cached in
+    /// [`INDEXES`] until the file changes). Missing or unreadable, it lists nothing.
+    fn load(dir: &Path) -> Pack {
+        let file = dir.join("index.json");
+        let stamp = std::fs::metadata(&file).ok().map(|m| (m.modified().ok(), m.len()));
+        let mut guard = INDEXES.lock().unwrap_or_else(|e| e.into_inner());
+        let cache = guard.get_or_insert_with(HashMap::new);
+        let listed = match (cache.get(dir), stamp) {
+            (Some((was, listed)), Some(now)) if *was == now => listed.clone(),
+            (_, None) => {
+                cache.remove(dir);
+                Default::default()
+            }
+            (_, Some(now)) => {
+                let listed: std::sync::Arc<HashSet<String>> =
+                    std::sync::Arc::new(engine::index::Index::load(&file).map(|i| i.rows.into_iter().map(|r| r.path.to_lowercase()).collect()).unwrap_or_default());
+                cache.insert(dir.to_owned(), (now, listed.clone()));
+                listed
+            }
+        };
+        Pack { dir: dir.to_owned(), listed }
+    }
+
+    #[cfg(test)]
+    fn listing(dir: &str, paths: &[&str]) -> Pack {
+        Pack { dir: dir.into(), listed: std::sync::Arc::new(paths.iter().map(|p| p.to_lowercase()).collect()) }
+    }
+
+    /// Whether this pack's index lists `path`.
+    fn lists(&self, path: &Path) -> bool {
+        let Ok(rel) = path.strip_prefix(&self.dir) else { return false };
+        let rel = rel.components().map(|c| c.as_os_str().to_string_lossy()).collect::<Vec<_>>().join("/");
+        self.listed.contains(&rel.to_lowercase())
+    }
+}
+
+/// What each of our packs' `index.json` lists, by folder, with the file's time and size when read.
+type Indexes = HashMap<PathBuf, ((Option<SystemTime>, u64), std::sync::Arc<HashSet<String>>)>;
+static INDEXES: Mutex<Option<Indexes>> = Mutex::new(None);
+
+/// Which presets a report may name (decision 54): only ours, those listed in the
+/// `index.json` of one of `packs` (the starter set, the full pack); a file the
+/// user put in one of their folders isn't. Any other preset is [`OWN_PRESET`],
+/// and the bare names of the user's own presets (`theirs`: the one on screen,
+/// and every other the library knows) are hidden wherever they turn up.
 struct Presets {
-    roots: Vec<PathBuf>,
-    /// The on-screen preset's file name and name, when it isn't ours; longest first.
+    packs: Vec<Pack>,
+    /// File names and names of presets of the user's own, 3 characters or more; longest first.
     hidden: Vec<String>,
 }
 
 impl Presets {
-    fn new(roots: Vec<PathBuf>, on_screen: Option<&Path>) -> Presets {
-        let mut presets = Presets { roots, hidden: Vec::new() };
-        if let Some(path) = on_screen.filter(|p| !presets.ours(p)) {
-            presets.hidden = [path.file_name(), path.file_stem()].into_iter().flatten().map(|n| n.to_string_lossy().trim().to_owned()).filter(|n| n.chars().count() >= 3).collect();
-            presets.hidden.sort_by_key(|n| std::cmp::Reverse(n.len()));
+    /// `theirs` are the paths of presets known to the user's library, the one on screen among them.
+    fn new(packs: Vec<Pack>, theirs: &[PathBuf]) -> Presets {
+        let mut presets = Presets { packs, hidden: Vec::new() };
+        // A name one of our presets also has isn't the user's to hide: it's public.
+        let mut public = HashSet::new();
+        let mut hidden = HashSet::new();
+        for path in theirs {
+            let names = [path.file_name(), path.file_stem()].into_iter().flatten().map(|n| n.to_string_lossy().trim().to_owned()).filter(|n| n.chars().count() >= 3);
+            if presets.ours(path) {
+                public.extend(names.map(|n| n.to_lowercase()));
+            } else {
+                hidden.extend(names);
+            }
         }
+        presets.hidden = hidden.into_iter().filter(|n| !public.contains(&n.to_lowercase())).collect();
+        presets.hidden.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
         presets
     }
 
-    /// Our folders as this run knows them, and the preset on screen.
+    /// Our packs as this run knows them, the preset on screen, and the presets the library knows.
     fn here(on_screen: Option<&Path>) -> Presets {
-        Presets::new([OWN_PACK.get(), OWN_STARTER.get()].into_iter().flatten().cloned().collect(), on_screen)
+        let packs = [OWN_PACK.get().cloned(), OWN_STARTER.get().map(|s| s.join(PACK_FOLDER))].into_iter().flatten().map(|d| Pack::load(&d)).collect();
+        let mut theirs = library_paths();
+        theirs.extend(on_screen.map(Path::to_owned));
+        Presets::new(packs, &theirs)
     }
 
-    /// Whether `path` is a preset from our own packs: inside one of their folders, with no `..` to climb out.
+    /// Whether `path` is a preset from our own packs: listed in one's index, with no `..` to climb out.
     fn ours(&self, path: &Path) -> bool {
-        path.is_absolute() && !path.components().any(|c| matches!(c, std::path::Component::ParentDir)) && self.roots.iter().any(|r| path.starts_with(r))
+        path.is_absolute() && !path.components().any(|c| matches!(c, std::path::Component::ParentDir)) && self.packs.iter().any(|p| p.lists(path))
     }
 
     /// How a report names the preset at `path`: by its name when it's ours, else [`OWN_MARK`] (for [`OWN_PRESET`]).
     fn name(&self, path: &Path) -> String {
         self.ours(path).then(|| preset_name(path)).flatten().unwrap_or_else(|| OWN_MARK.to_string())
     }
+}
+
+/// The longest a panic waits for the library's presets ([`library_paths`]).
+const LIBRARY_WAIT: Duration = Duration::from_millis(500);
+/// A lookup of the library's presets is under way: a panic during it (or while
+/// it's stuck) goes without them rather than starting another.
+static LOOKING_UP: AtomicBool = AtomicBool::new(false);
+
+/// The paths of every preset the library knows (the library index,
+/// `catalog::cached_rows`: every pack's `index.json` and any `.milk` in the
+/// presets folders), worked out off the panicking thread, which may hold the
+/// lock it needs, and waited for at most [`LIBRARY_WAIT`]. None before the app
+/// has started or past the wait.
+fn library_paths() -> Vec<PathBuf> {
+    let Some(app) = HANDLE.get().cloned() else { return Vec::new() };
+    if LOOKING_UP.swap(true, Ordering::SeqCst) {
+        return Vec::new();
+    }
+    let (send, got) = std::sync::mpsc::channel();
+    let spawned = std::thread::Builder::new().name("crash-library".into()).spawn(move || {
+        if let Ok(rows) = catch(AssertUnwindSafe(|| crate::catalog::cached_rows(&app))) {
+            let _ = send.send(rows.iter().map(|r| PathBuf::from(&r.path)).collect::<Vec<_>>());
+        }
+        LOOKING_UP.store(false, Ordering::SeqCst);
+    });
+    if spawned.is_err() {
+        LOOKING_UP.store(false, Ordering::SeqCst);
+        return Vec::new();
+    }
+    got.recv_timeout(LIBRARY_WAIT).unwrap_or_default()
 }
 
 /// Where `.milk` ends in `name` (any case), when it's there and not part of a longer word.
@@ -731,6 +900,13 @@ fn scrub(text: &str, private: &Private, presets: &Presets) -> String {
                 continue;
             }
             let mut end = rest.find(ends_path).unwrap_or(rest.len());
+            // A lone `/` (or `//`) is text, not a path: "a / b".
+            if rest[..end].chars().all(|c| c == '/') {
+                out.push_str(&rest[..end]);
+                prev = Some('/');
+                rest = &rest[end..];
+                continue;
+            }
             // Words after single spaces are part of the path up to the last one with a `/` in it,
             // before anything else ends it: `/Volumes/My Backup Drive/x` is one path. A file
             // name with spaces at the end (`/a/My Song.wav`) is kept as it is.
@@ -750,6 +926,24 @@ fn scrub(text: &str, private: &Private, presets: &Presets) -> String {
                     break;
                 }
             }
+            // A disk itself (`/Volumes/Backup Drive`) has no `/` after its name to say where the
+            // name ends: it runs on to the next `/`, `:`, quote, `)`, newline or the end of the text,
+            // and the whole of it is replaced, as a disk's name is the user's own (over-scrubbing beats leaking).
+            if let Some(disk) = rest[..end].strip_prefix(VOLUMES)
+                && !disk.trim_end_matches('/').is_empty()
+                && !disk.trim_end_matches('/').contains('/')
+            {
+                if let Some(colon) = disk.find(':') {
+                    end = VOLUMES.len() + colon;
+                } else if !disk.ends_with('/') {
+                    let tail = &rest[end..];
+                    end += tail.find(['/', ':', '"', '\'', ')', '\n']).unwrap_or(tail.len());
+                }
+                out.push_str(DISK);
+                prev = rest[..end].chars().next_back();
+                rest = &rest[end..];
+                continue;
+            }
             let path = &rest[..end];
             let name = file_name(path);
             match milk_end(name) {
@@ -767,7 +961,9 @@ fn scrub(text: &str, private: &Private, presets: &Presets) -> String {
             rest = &rest[c.len_utf8()..];
         }
     }
-    for name in &presets.hidden {
+    // The library may know thousands of names: only those in the text are replaced.
+    let lower = out.to_lowercase();
+    for name in presets.hidden.iter().filter(|n| lower.contains(&n.to_lowercase())) {
         out = replace_ignoring_case(&out, name, &OWN_MARK.to_string(), true);
     }
     for name in &private.names {
@@ -813,25 +1009,29 @@ fn panic_report(id: String, when: u64, panic: &Panic, machine: &Machine, preset:
 }
 
 /// Reports for the runs that ended without a clean exit: each marker whose
-/// process is gone (`alive` says), with the panics it kept or else a report of
-/// the unclean exit. Those markers are cleared; a running copy's is left alone.
-fn unclean_exits(dir: &Path, machine: &Machine, now: u64, alive: impl Fn(u32) -> bool) -> Vec<CrashReport> {
+/// process is gone (`alive` says, given the pid and the marker's start time),
+/// with the panics it kept or else a report of the unclean exit. Those markers
+/// are cleared; a running copy's is left alone. A marker that can't be read (cut
+/// short as the process died) still counts, with its start unknown.
+fn unclean_exits(dir: &Path, machine: &Machine, now: u64, alive: impl Fn(u32, Option<u64>) -> bool) -> Vec<CrashReport> {
     let mut reports = Vec::new();
-    let own = std::process::id();
     for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
         let Some(pid) = entry.file_name().to_str().and_then(|n| n.strip_prefix(MARKER)).and_then(|p| p.parse::<u32>().ok()) else { continue };
-        if pid == own || alive(pid) {
+        let marker: Marker = std::fs::read_to_string(entry.path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+        if alive(pid, marker.pid_start) {
             continue;
         }
-        let marker: Marker = std::fs::read_to_string(entry.path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
         let _ = std::fs::remove_file(entry.path());
         if !marker.panics.is_empty() {
             reports.extend(marker.panics);
             continue;
         }
-        let started = marker.started;
         let summary = "visual[flow] quit unexpectedly (a crash outside Rust, or a force quit)".to_owned();
-        let text = format!("{}\n{summary}. It started at {started} (Unix seconds) and was noticed at the next launch, {now}.\n", header(machine, None));
+        let started = match marker.started.filter(|&s| s > 0) {
+            Some(s) => format!("It started at {s} (Unix seconds)"),
+            None => "When it started isn't known".to_owned(),
+        };
+        let text = format!("{}\n{summary}. {started} and it was noticed at the next launch, {now}.\n", header(machine, None));
         reports.push(CrashReport { id: new_id(), when: now, summary, text, sent: false });
     }
     reports
@@ -911,17 +1111,25 @@ mod tests {
         Private::new(None, Vec::new())
     }
 
-    /// No folders of ours: every preset is the user's.
+    /// No packs of ours: every preset is the user's.
     fn none() -> Presets {
-        Presets::new(Vec::new(), None)
+        Presets::new(Vec::new(), &[])
     }
 
     /// Ours: the full pack in jdoe's presets folder, and a starter set.
     const PACK: &str = "/Users/jdoe/.openflow/visuals/presets/cream-of-the-crop";
     const STARTER: &str = "/Applications/My Apps/visual[flow].app/Contents/Resources/presets/starter";
 
+    /// Our two packs, with what their indexes list.
+    fn packs() -> Vec<Pack> {
+        vec![
+            Pack::listing(PACK, &["Geiss/Geiss - Swirl.milk", "Fractal/a - b.milk", "A/Geiss - Swirl.milk", "A/b.milk", "A/Rovastar's Fav (2), A & B.milk"]),
+            Pack::listing(&format!("{STARTER}/cream-of-the-crop"), &["Dancer/ORB - Xenon.milk"]),
+        ]
+    }
+
     fn ours(on_screen: Option<&str>) -> Presets {
-        Presets::new(vec![PACK.into(), STARTER.into()], on_screen.map(Path::new))
+        Presets::new(packs(), &on_screen.map(PathBuf::from).into_iter().collect::<Vec<_>>())
     }
 
     fn report(id: &str, when: u64) -> CrashReport {
@@ -992,6 +1200,34 @@ mod tests {
     }
 
     #[test]
+    fn a_lone_slash_is_text() {
+        let p = nobody();
+        assert_eq!(scrub("a / b and c // d", &p, &none()), "a / b and c // d");
+        assert_eq!(scrub("left/right, 3 / 4 / /tmp/x.rs", &p, &none()), "left/right, 3 / 4 / x.rs");
+        assert_eq!(scrub("/", &p, &none()), "/");
+    }
+
+    #[test]
+    fn a_disk_is_scrubbed_whole() {
+        let p = nobody();
+        assert_eq!(scrub("/Volumes/Backup Drive", &p, &none()), "<disk>");
+        assert_eq!(scrub("couldn't read /Volumes/Backup Drive: denied", &p, &none()), "couldn't read <disk>: denied");
+        assert_eq!(scrub("/Volumes/Backup Drive 2 is full", &p, &none()), "<disk>");
+        assert_eq!(scrub("/Volumes/Time Machine backups", &p, &none()), "<disk>");
+        assert_eq!(scrub("/Volumes/Macintosh HD - Data", &p, &none()), "<disk>");
+        assert_eq!(scrub("read \"/Volumes/backup drive\" failed", &p, &none()), "read \"<disk>\" failed");
+        assert_eq!(scrub("/Volumes/My Disk/sub/file.txt", &p, &none()), "file.txt");
+        assert_eq!(scrub("(/Volumes/My Backup Drive/)", &p, &none()), "(<disk>)");
+        assert_eq!(scrub("/Volumes/USB", &p, &none()), "<disk>");
+        // Below a disk, a path is cut to its file name as any other.
+        assert_eq!(scrub("/Volumes/Backup Drive/sets/a.wav", &p, &none()), "a.wav");
+        for never in ["Backup", "Drive", "USB"] {
+            let s = scrub("x /Volumes/Backup Drive and /Volumes/USB y", &p, &none());
+            assert!(!s.contains(never), "{never:?} leaked into {s:?}");
+        }
+    }
+
+    #[test]
     fn names_are_scrubbed_whatever_their_case() {
         let p = Private::new(
             Some("/Users/ryan".into()),
@@ -1055,7 +1291,8 @@ mod tests {
         let pack = format!("{PACK}/Fractal/a - b.milk");
         assert!(crash_on(&pack, "x").text.contains("Preset: a - b\n"));
 
-        for theirs in ["/Users/jdoe/presets/My Secret Set.milk", "/Users/jdoe/Desktop/cream-of-the-crop/My Secret Set.milk", &format!("{PACK}/../My Secret Set.milk")] {
+        let put_in_ours = format!("{PACK}/Fractal/My Secret Set.milk");
+        for theirs in ["/Users/jdoe/presets/My Secret Set.milk", "/Users/jdoe/Desktop/cream-of-the-crop/My Secret Set.milk", &format!("{PACK}/../My Secret Set.milk"), &put_in_ours] {
             let r = crash_on(theirs, &format!("couldn't draw {theirs}: lost; My Secret Set has no waves, my secret set.MILK"));
             assert!(r.text.contains("Preset: a preset of your own\n"), "{}", r.text);
             assert_eq!(r.summary, "Panic: couldn't draw a preset of your own: lost; a preset of your own has no waves, a preset of your own");
@@ -1085,6 +1322,56 @@ mod tests {
         assert_eq!(scrub("Geiss - Swirl", &p, &presets), "Geiss - Swirl");
         let on_screen = ours(Some("/tmp/preset.milk"));
         assert_eq!(scrub("/tmp/preset.milk failed: preset", &p, &on_screen), "a preset of your own failed: a preset of your own", "the placeholder's own words aren't touched");
+    }
+
+    #[test]
+    fn only_what_a_packs_index_lists_is_ours() {
+        let dir = temp("index");
+        let pack = dir.join(PACK_FOLDER);
+        std::fs::create_dir_all(&pack).unwrap();
+        let in_pack = |rel: &str| pack.join(rel);
+        // No index: nothing in the folder is ours.
+        assert!(!Presets::new(vec![Pack::load(&pack)], &[]).ours(&in_pack("A/x.milk")));
+        // An unreadable one neither.
+        std::fs::write(pack.join("index.json"), "{ not json").unwrap();
+        assert!(!Presets::new(vec![Pack::load(&pack)], &[]).ours(&in_pack("A/x.milk")));
+        let mut index = engine::index::Index::new(90);
+        index.rows.push(engine::index::row(Path::new("A/x.milk"), "h".into()));
+        index.save(&pack.join("index.json")).unwrap();
+        let presets = Presets::new(vec![Pack::load(&pack)], &[]);
+        assert!(presets.ours(&in_pack("A/x.milk")));
+        assert!(presets.ours(&in_pack("a/X.MILK")), "macOS paths ignore case");
+        assert!(!presets.ours(&in_pack("A/mine.milk")), "a file put in our folder by hand");
+        assert!(!presets.ours(&in_pack("A/../A/x.milk")));
+        // Read again once the index changes.
+        index.rows.push(engine::index::row(Path::new("A/mine.milk"), "h2".into()));
+        index.save(&pack.join("index.json")).unwrap();
+        assert!(Presets::new(vec![Pack::load(&pack)], &[]).ours(&in_pack("A/mine.milk")));
+        std::fs::remove_file(pack.join("index.json")).unwrap();
+        assert!(!Presets::new(vec![Pack::load(&pack)], &[]).ours(&in_pack("A/x.milk")));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn the_names_of_every_preset_of_the_users_own_are_hidden() {
+        let library: Vec<PathBuf> = [
+            "/Users/jdoe/presets/Mine/Night Drive.milk",
+            "/Users/jdoe/presets/Mine/Ok.milk",
+            "/Users/jdoe/presets/Mine/Geiss - Swirl.milk",
+            &format!("{PACK}/Geiss/Geiss - Swirl.milk"),
+            &format!("{PACK}/Mine/Secret Garden.milk"),
+        ]
+        .iter()
+        .map(PathBuf::from)
+        .collect();
+        let presets = Presets::new(packs(), &library);
+        let p = private();
+        // Not on screen, named bare in the text: hidden all the same.
+        assert_eq!(scrub("lost night drive, then Secret Garden.milk", &p, &presets), "lost a preset of your own, then a preset of your own");
+        // Names under 3 characters stay, as do names one of ours has too (they're public).
+        assert_eq!(scrub("Ok then; Geiss - Swirl", &p, &presets), "Ok then; Geiss - Swirl");
+        // Only at the start of a word.
+        assert_eq!(scrub("UnNight Drive", &p, &presets), "UnNight Drive");
     }
 
     #[test]
@@ -1150,21 +1437,71 @@ mod tests {
 
     fn marker(dir: &Path, pid: u32, panics: Vec<CrashReport>) -> PathBuf {
         let path = dir.join(format!("{MARKER}{pid}"));
-        save_marker(&path, &Marker { started: 50, panics }).unwrap();
+        save_marker(&path, &Marker { started: Some(50), pid_start: None, panics }).unwrap();
         path
+    }
+
+    #[test]
+    fn a_marker_cut_short_reports_an_unknown_start_not_zero() {
+        let dir = temp("corrupt");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(format!("{MARKER}4000010")), "{\"started\": 5").unwrap();
+        std::fs::write(dir.join(format!("{MARKER}4000011")), "").unwrap();
+        let reports = unclean_exits(&dir, &machine(), 100, |_, _| false);
+        assert_eq!(reports.len(), 2);
+        for r in &reports {
+            assert!(r.text.contains("When it started isn't known"), "{}", r.text);
+            assert!(!r.text.contains("started at 0"), "{}", r.text);
+        }
+        marker(&dir, 4_000_012, Vec::new());
+        assert!(unclean_exits(&dir, &machine(), 100, |_, _| false)[0].text.contains("It started at 50 (Unix seconds) and it was noticed at the next launch, 100."));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_reused_pid_doesnt_hide_a_stale_marker() {
+        let dir = temp("reused");
+        let own = std::process::id();
+        let start = process_start(own);
+        assert!(start.is_some(), "this system tells when a process started");
+        assert_eq!(process_start(own), start, "the same every time");
+        assert_eq!(process_start(4_000_004), None);
+        // This process now has the pid of a run that crashed earlier: it isn't that run.
+        let path = dir.join(format!("{MARKER}{own}"));
+        save_marker(&path, &Marker { started: Some(50), pid_start: start.map(|s| s - 1), panics: Vec::new() }).unwrap();
+        assert_eq!(unclean_exits(&dir, &machine(), 100, alive).len(), 1);
+        assert!(!path.exists());
+        // The marker of this very run (or one too old to say) is left alone.
+        save_marker(&path, &Marker { started: Some(50), pid_start: start, panics: Vec::new() }).unwrap();
+        assert_eq!(unclean_exits(&dir, &machine(), 100, alive), vec![]);
+        save_marker(&path, &Marker { started: Some(50), pid_start: None, panics: Vec::new() }).unwrap();
+        assert_eq!(unclean_exits(&dir, &machine(), 100, alive), vec![]);
+        assert!(path.exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn an_asked_for_stop_drops_the_panics_other_threads_survived() {
+        let main = std::thread::current().id();
+        let other = std::thread::spawn(|| std::thread::current().id()).join().unwrap();
+        // What the signal handler reads: false lets it remove the marker, as `at_exit` drops them.
+        assert!(!main_pending(&[(other, report("survived", 1))], Some(main)));
+        assert!(!main_pending(&[], Some(main)));
+        assert!(main_pending(&[(other, report("survived", 1)), (main, report("died", 2))], Some(main)));
+        assert!(!main_pending(&[(main, report("died", 2))], None));
     }
 
     #[test]
     fn an_unclean_exit_is_reported_once() {
         let dir = temp("marker");
-        assert_eq!(unclean_exits(&dir, &machine(), 100, |_| false), vec![], "no marker: a first launch or a clean exit");
+        assert_eq!(unclean_exits(&dir, &machine(), 100, |_, _| false), vec![], "no marker: a first launch or a clean exit");
         let gone = marker(&dir, 4_000_001, Vec::new());
-        let reports = unclean_exits(&dir, &machine(), 100, |_| false);
+        let reports = unclean_exits(&dir, &machine(), 100, |_, _| false);
         assert_eq!(reports.len(), 1);
         assert_eq!(reports[0].when, 100);
         assert!(reports[0].text.contains("Version: 0.9.0") && reports[0].text.contains("quit unexpectedly"));
         assert!(!gone.exists());
-        assert_eq!(unclean_exits(&dir, &machine(), 101, |_| false), vec![]);
+        assert_eq!(unclean_exits(&dir, &machine(), 101, |_, _| false), vec![]);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -1173,7 +1510,7 @@ mod tests {
         let dir = temp("copies");
         let running = marker(&dir, 4_000_002, Vec::new());
         let own = marker(&dir, std::process::id(), Vec::new());
-        assert_eq!(unclean_exits(&dir, &machine(), 100, |pid| pid == 4_000_002), vec![]);
+        assert_eq!(unclean_exits(&dir, &machine(), 100, |pid, start| pid == 4_000_002 || alive(pid, start)), vec![]);
         assert!(running.exists() && own.exists());
         std::fs::remove_dir_all(&dir).unwrap();
     }
@@ -1182,7 +1519,7 @@ mod tests {
     fn a_run_that_died_after_a_panic_reports_the_panic() {
         let dir = temp("died");
         marker(&dir, 4_000_003, vec![report("0000000000060-1-0", 60)]);
-        assert_eq!(unclean_exits(&dir, &machine(), 100, |_| false), vec![report("0000000000060-1-0", 60)]);
+        assert_eq!(unclean_exits(&dir, &machine(), 100, |_, _| false), vec![report("0000000000060-1-0", 60)]);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -1194,9 +1531,13 @@ mod tests {
 
     #[test]
     fn this_process_is_alive_and_a_made_up_one_isnt() {
-        assert!(alive(std::process::id()));
-        assert!(!alive(4_000_004));
-        assert!(!alive(u32::MAX));
+        let own = std::process::id();
+        assert!(alive(own, None));
+        assert!(alive(own, process_start(own)));
+        assert!(!alive(own, process_start(own).map(|s| s + 1)), "another process that had this pid");
+        assert!(!alive(4_000_004, None));
+        assert!(!alive(u32::MAX, None));
+        assert!(same_start(None, Some(3)) && same_start(Some(3), None) && same_start(Some(3), Some(3)) && !same_start(Some(3), Some(4)));
     }
 
     #[test]
