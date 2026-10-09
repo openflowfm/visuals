@@ -163,6 +163,7 @@ fn main() {
             std::thread::spawn(move || responder.respond(catalog::serve(&app, &request)));
         })
         .setup(move |app| {
+            crash::start(app.handle());
             menu::install(app)?;
             if let Some(starter) = pack::starter(app.handle()) {
                 app.state::<actions::Deck>().store.lock().unwrap().add_folder(starter);

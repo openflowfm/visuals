@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { NONE_SEEN, newest, readSeen, SEEN_KEY, shown, toOffer, writeSeen, type Report } from './CrashPrompt.tsx';
+import { NONE_SEEN, newest, notes, readSeen, SEEN_KEY, shown, toOffer, writeSeen, type Report } from './CrashPrompt.tsx';
+import { say } from './words.ts';
 
 const report = (id: string, when: number, sent = false, text = ''): Report => ({ id, when, summary: `summary ${id}`, sent, text });
 
@@ -20,6 +21,16 @@ describe('the crash prompt', () => {
   it('remembers the newest report it has passed', () => {
     expect(newest([report('a', 10), report('b', 30)], { when: 12, ids: [] })).toEqual({ when: 30, ids: ['b'] });
     expect(newest([], { when: 12, ids: [] })).toEqual({ when: 12, ids: [] });
+  });
+
+  it('asks the user to read the text before submitting it, and counts earlier crashes', () => {
+    const said = notes(0);
+    expect(said.check).toBe(say('crash report check'));
+    expect(said.check).toMatch(/^Read the text before you submit it/);
+    expect(said.check).toMatch(/device|display/);
+    expect(said.earlier).toBeNull();
+    expect(notes(1).earlier).toMatch(/^One earlier crash is kept/);
+    expect(notes(3).earlier).toMatch(/^3 earlier crashes are kept/);
   });
 
   it('shows the whole text, or the summary when there is none', () => {

@@ -33,6 +33,8 @@ export const WORDS = {
   'output fit': 'how the picture fills the screen',
   /* A deck following the library grid's filter (any query that isn't a mood). */
   'library query': 'the library',
+  /* The crash prompt's reminder (decision 54): the scrub can't catch every name. */
+  'crash report check': "Read the text before you submit it: a name the app can't recognise, such as a device's or a display's, may still be in it.",
 } as const;
 
 export type Jargon = keyof typeof WORDS;

@@ -1,5 +1,10 @@
 /* The crash prompt on launch (CrashPrompt.tsx): the report as it would be sent. */
 
+/* The reminder to read the report before submitting it. */
+.crash-check {
+  font-weight: 600;
+}
+
 .crash-text {
   margin: 0;
   max-height: 40vh;

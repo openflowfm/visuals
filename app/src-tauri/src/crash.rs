@@ -22,8 +22,11 @@
 //!   be handled and counts as unclean.
 //!
 //! A report holds the app's version, the macOS version, the chip, what went
-//! wrong with its backtrace, and the name of the preset on screen; never audio,
-//! file paths (only file names are kept), the user's name or the Mac's. Reports are always
+//! wrong with its backtrace, and the name of the preset on screen when it's from
+//! our own packs (the starter set or the full pack; any other is "a preset of
+//! your own", decision 54); never audio, file paths (only file names are kept),
+//! the user's name or the Mac's, which are collected before the panic hook is
+//! set so even the earliest crash has them scrubbed. Reports are always
 //! written; turning them on (off by default) only makes the page offer the new
 //! ones on the next launch. The last [`KEEP`] are kept.
 
@@ -34,7 +37,7 @@ use std::panic::AssertUnwindSafe;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::thread::ThreadId;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_opener::OpenerExt;
 
@@ -48,6 +51,12 @@ const MARKER: &str = "running-";
 const NEW_ISSUE: &str = "https://github.com/openflowfm/visuals/issues/new";
 /// The longest issue link made: GitHub and browsers take about 8 KB.
 const URL_MAX: usize = 8000;
+/// The full pack's folder in the presets folder (`pack.rs` unpacks it there).
+const PACK_FOLDER: &str = "cream-of-the-crop";
+/// What a report says instead of the name of a preset that isn't from our own packs.
+const OWN_PRESET: &str = "a preset of your own";
+/// Stands for [`OWN_PRESET`] while a text is scrubbed, so nothing after matches inside it.
+const OWN_MARK: char = '\u{1}';
 
 /// One crash, written locally.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -127,13 +136,47 @@ pub fn install() {
         }
     }
     rotate(&dir, KEEP);
-    // Who the user is and what the Mac is called, worked out once and off the main thread.
-    let _ = std::thread::Builder::new().name("crash-private".into()).spawn(|| PRIVATE.get_or_init(Private::here));
+    let _ = OWN_PACK.set(engine::preset::pack_dir().join(PACK_FOLDER));
+    // Who the user is and what the Mac is called, before the hook is set, so even a
+    // crash in the first moments has them scrubbed (decision 54).
+    if !collect_names(NAMES_WAIT) {
+        eprintln!("crash reports: the names to scrub took over {NAMES_WAIT:?}; they're added when ready");
+    }
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         guarded(|| keep_panic(info));
         previous(info);
     }));
+}
+
+/// The longest [`install`] waits for the names to scrub (usually a few ms: one
+/// `scutil` run and two system calls). Past it the app starts anyway and they
+/// fill in when ready; a panic before then scrubs the home folder and login.
+const NAMES_WAIT: Duration = Duration::from_secs(1);
+
+/// Works out [`PRIVATE`] off this thread, waiting at most `wait` for it. True when it's ready.
+fn collect_names(wait: Duration) -> bool {
+    wait_for(|| _ = PRIVATE.get_or_init(Private::here), wait)
+}
+
+/// Runs `work` on a thread of its own and waits at most `wait` for it to finish;
+/// past that it goes on in the background. True when it finished in time.
+fn wait_for(work: impl FnOnce() + Send + 'static, wait: Duration) -> bool {
+    let (done, finished) = std::sync::mpsc::channel();
+    let spawned = std::thread::Builder::new().name("crash-private".into()).spawn(move || {
+        work();
+        let _ = done.send(());
+    });
+    spawned.is_ok() && finished.recv_timeout(wait).is_ok()
+}
+
+/// Called from the app's setup: the app (to read the preset on screen) and the
+/// bundled starter set's folder, whose presets are ours to name.
+pub fn start(app: &AppHandle) {
+    if let Some(starter) = crate::pack::starter(app) {
+        let _ = OWN_STARTER.set(starter);
+    }
+    remember(app.clone());
 }
 
 /// Runs `f` unless this thread is already in it, and catches a panic from it:
@@ -166,6 +209,10 @@ static MARKER_PATH: OnceLock<PathBuf> = OnceLock::new();
 /// The marker's path for the signal handler, which mustn't allocate.
 static MARKER_C: OnceLock<std::ffi::CString> = OnceLock::new();
 static PRIVATE: OnceLock<Private> = OnceLock::new();
+/// The full pack's folder in the presets folder (openflowfm/visual-presets, or projectM's same presets as its fallback).
+static OWN_PACK: OnceLock<PathBuf> = OnceLock::new();
+/// The starter set bundled with the app, once [`start`] has run.
+static OWN_STARTER: OnceLock<PathBuf> = OnceLock::new();
 /// The thread [`install`] ran on: `main`'s, whose panic ends the process.
 static MAIN_THREAD: OnceLock<ThreadId> = OnceLock::new();
 /// When this run started, as its marker says.
@@ -392,16 +439,58 @@ fn chip() -> Option<String> {
     Some(std::env::consts::ARCH.into())
 }
 
-/// The name of the preset on screen, if the page has called in and the deck isn't locked mid-change.
-fn current_preset() -> Option<String> {
+/// The preset on screen, if the app has started and the deck isn't locked mid-change.
+fn current_preset() -> Option<PathBuf> {
     let deck = HANDLE.get()?.try_state::<crate::actions::Deck>()?;
     let live = deck.live.try_lock().ok()?;
-    preset_name(live.current.as_deref()?)
+    live.current.clone()
 }
 
 /// A preset's name: its file name without the folder or `.milk`.
 fn preset_name(path: &Path) -> Option<String> {
     Some(path.file_stem()?.to_string_lossy().into_owned())
+}
+
+/// Which presets a report may name (decision 54): only ours, from the folders in
+/// `roots` (the starter set, the full pack). Any other preset is
+/// [`OWN_PRESET`], and the name of the one on screen, when it isn't ours, is
+/// hidden wherever it turns up.
+struct Presets {
+    roots: Vec<PathBuf>,
+    /// The on-screen preset's file name and name, when it isn't ours; longest first.
+    hidden: Vec<String>,
+}
+
+impl Presets {
+    fn new(roots: Vec<PathBuf>, on_screen: Option<&Path>) -> Presets {
+        let mut presets = Presets { roots, hidden: Vec::new() };
+        if let Some(path) = on_screen.filter(|p| !presets.ours(p)) {
+            presets.hidden = [path.file_name(), path.file_stem()].into_iter().flatten().map(|n| n.to_string_lossy().trim().to_owned()).filter(|n| n.chars().count() >= 3).collect();
+            presets.hidden.sort_by_key(|n| std::cmp::Reverse(n.len()));
+        }
+        presets
+    }
+
+    /// Our folders as this run knows them, and the preset on screen.
+    fn here(on_screen: Option<&Path>) -> Presets {
+        Presets::new([OWN_PACK.get(), OWN_STARTER.get()].into_iter().flatten().cloned().collect(), on_screen)
+    }
+
+    /// Whether `path` is a preset from our own packs: inside one of their folders, with no `..` to climb out.
+    fn ours(&self, path: &Path) -> bool {
+        path.is_absolute() && !path.components().any(|c| matches!(c, std::path::Component::ParentDir)) && self.roots.iter().any(|r| path.starts_with(r))
+    }
+
+    /// How a report names the preset at `path`: by its name when it's ours, else [`OWN_MARK`] (for [`OWN_PRESET`]).
+    fn name(&self, path: &Path) -> String {
+        self.ours(path).then(|| preset_name(path)).flatten().unwrap_or_else(|| OWN_MARK.to_string())
+    }
+}
+
+/// Where `.milk` ends in `name` (any case), when it's there and not part of a longer word.
+fn milk_end(name: &str) -> Option<usize> {
+    let lower = name.to_ascii_lowercase();
+    lower.match_indices(".milk").map(|(at, m)| at + m.len()).find(|&end| !lower[end..].starts_with(char::is_alphanumeric))
 }
 
 /// What a panic said.
@@ -431,7 +520,9 @@ fn keep_panic(info: &std::panic::PanicHookInfo) {
             &minimal
         }
     };
-    let report = panic_report(new_id(), now(), &panic, machine, current_preset().as_deref(), private);
+    let on_screen = current_preset();
+    let presets = Presets::here(on_screen.as_deref());
+    let report = panic_report(new_id(), now(), &panic, machine, on_screen.as_deref(), private, &presets);
     let mut pending = pending();
     pending.push((std::thread::current().id(), report));
     update_marker(&pending);
@@ -591,15 +682,32 @@ fn replace_ignoring_case(text: &str, needle: &str, with: &str, word_start: bool)
     out
 }
 
-/// Where a path stops.
+/// Where a path stops. Not at square brackets: the app's own name has them (`visual[flow].app`).
 fn ends_path(c: char) -> bool {
-    c.is_whitespace() || "\"'`()<>,;[]{}".contains(c)
+    c.is_whitespace() || "\"'`()<>,;{}".contains(c)
+}
+
+/// Where a preset's path at the start of `rest` ends: just after its `.milk`. Its folders
+/// end like any path's, but its file name may hold `'`, `,`, `;`, `&` and brackets, as
+/// MilkDrop names often do (`Rovastar's Fav.milk`, `Swirl (remix).milk`); not quotes,
+/// `<>{}`, a line break, `: ` or the start of another path.
+fn milk_path_end(rest: &str) -> Option<usize> {
+    let line = &rest[..rest.find('\n').unwrap_or(rest.len())];
+    let end = milk_end(line)?;
+    let path = &line[..end];
+    let slash = path.rfind('/')?;
+    let (dirs, name) = (&path[..slash], &path[slash + 1..]);
+    let dirs_ok = !dirs.contains(|c: char| ends_path(c) && c != ' ') && !dirs.contains("  ");
+    let name_ok = !name.contains(|c: char| "\"`<>{}\t\r".contains(c)) && !name.contains(": ") && !name.contains(" /") && !name.contains(" ~/");
+    (dirs_ok && name_ok && !path[1..].contains(" /") && !path[1..].contains(" ~/")).then_some(end)
 }
 
 /// `text` with every absolute path, spaces and all, cut to its file name
 /// (`/a/My Drive/d.rs:3:1` → `d.rs:3:1`), the home folder dropped and the names
-/// of the user and the machine replaced, whatever their case.
-fn scrub(text: &str, private: &Private) -> String {
+/// of the user and the machine replaced, whatever their case. A preset's path
+/// (`….milk`) keeps its file name only when it's one of ours (`presets`); any
+/// other, and the hidden name of the one on screen, become [`OWN_PRESET`].
+fn scrub(text: &str, private: &Private, presets: &Presets) -> String {
     let mut text = text.to_owned();
     if let Some(home) = &private.home {
         text = replace_ignoring_case(&text, home, "~", false);
@@ -610,6 +718,18 @@ fn scrub(text: &str, private: &Private) -> String {
     while let Some(c) = rest.chars().next() {
         let starts_path = (c == '/' || rest.starts_with("~/")) && !prev.is_some_and(|p| p.is_alphanumeric() || "._-/~".contains(p));
         if starts_path {
+            if let Some(end) = milk_path_end(rest) {
+                let path = &rest[..end];
+                let name = file_name(path);
+                if presets.ours(&unhome(path, private)) {
+                    out.push_str(name);
+                } else {
+                    out.push(OWN_MARK);
+                }
+                prev = path.chars().next_back();
+                rest = &rest[end..];
+                continue;
+            }
             let mut end = rest.find(ends_path).unwrap_or(rest.len());
             // Words after single spaces are part of the path up to the last one with a `/` in it,
             // before anything else ends it: `/Volumes/My Backup Drive/x` is one path. A file
@@ -624,10 +744,22 @@ fn scrub(text: &str, private: &Private) -> String {
                 scan += 1 + word;
                 if next[..word].contains('/') {
                     end = scan;
+                } else if milk_end(&next[..word]).is_some() && milk_end(file_name(&rest[..end])).is_none() {
+                    // A preset's file name with spaces in it (`/a/Geiss - Swirl.milk`) is part of its path.
+                    end = scan;
+                    break;
                 }
             }
-            out.push_str(rest[..end].rsplit('/').next().unwrap_or(""));
-            prev = rest[..end].chars().next_back();
+            let path = &rest[..end];
+            let name = file_name(path);
+            match milk_end(name) {
+                Some(at) if !presets.ours(&unhome(&path[..path.len() - name.len() + at], private)) => {
+                    out.push(OWN_MARK);
+                    out.push_str(&name[at..]);
+                }
+                _ => out.push_str(name),
+            }
+            prev = path.chars().next_back();
             rest = &rest[end..];
         } else {
             out.push(c);
@@ -635,10 +767,26 @@ fn scrub(text: &str, private: &Private) -> String {
             rest = &rest[c.len_utf8()..];
         }
     }
+    for name in &presets.hidden {
+        out = replace_ignoring_case(&out, name, &OWN_MARK.to_string(), true);
+    }
     for name in &private.names {
         out = replace_ignoring_case(&out, name, "<user>", true);
     }
-    out
+    out.replace(OWN_MARK, OWN_PRESET)
+}
+
+/// The last part of a path.
+fn file_name(path: &str) -> &str {
+    path.rsplit('/').next().unwrap_or("")
+}
+
+/// `path` with a leading `~/` put back to the home folder it stands for.
+fn unhome(path: &str, private: &Private) -> PathBuf {
+    match (path.strip_prefix("~/"), &private.home) {
+        (Some(rest), Some(home)) => Path::new(home).join(rest),
+        _ => PathBuf::from(path),
+    }
 }
 
 fn header(machine: &Machine, preset: Option<&str>) -> String {
@@ -654,11 +802,13 @@ fn one_line(text: &str) -> String {
     }
 }
 
-fn panic_report(id: String, when: u64, panic: &Panic, machine: &Machine, preset: Option<&str>, private: &Private) -> CrashReport {
-    let message = scrub(&panic.message, private);
-    let location = panic.location.as_deref().map(|l| scrub(l, private)).unwrap_or_else(|| "an unknown place".into());
-    let preset = preset.map(|p| scrub(p, private));
-    let text = format!("{}Thread: {}\n\nPanicked at {location}:\n{message}\n\nBacktrace:\n{}", header(machine, preset.as_deref()), scrub(&panic.thread, private), scrub(&panic.backtrace, private));
+/// The report of `panic`, with `preset` (the one on screen) named only when it's one of ours.
+fn panic_report(id: String, when: u64, panic: &Panic, machine: &Machine, preset: Option<&Path>, private: &Private, presets: &Presets) -> CrashReport {
+    let scrub = |text: &str| scrub(text, private, presets);
+    let message = scrub(&panic.message);
+    let location = panic.location.as_deref().map(scrub).unwrap_or_else(|| "an unknown place".into());
+    let preset = preset.map(|p| scrub(&presets.name(p)));
+    let text = format!("{}Thread: {}\n\nPanicked at {location}:\n{message}\n\nBacktrace:\n{}", header(machine, preset.as_deref()), scrub(&panic.thread), scrub(&panic.backtrace));
     CrashReport { id, when, summary: one_line(&format!("Panic: {message}")), text, sent: false }
 }
 
@@ -761,6 +911,19 @@ mod tests {
         Private::new(None, Vec::new())
     }
 
+    /// No folders of ours: every preset is the user's.
+    fn none() -> Presets {
+        Presets::new(Vec::new(), None)
+    }
+
+    /// Ours: the full pack in jdoe's presets folder, and a starter set.
+    const PACK: &str = "/Users/jdoe/.openflow/visuals/presets/cream-of-the-crop";
+    const STARTER: &str = "/Applications/My Apps/visual[flow].app/Contents/Resources/presets/starter";
+
+    fn ours(on_screen: Option<&str>) -> Presets {
+        Presets::new(vec![PACK.into(), STARTER.into()], on_screen.map(Path::new))
+    }
+
     fn report(id: &str, when: u64) -> CrashReport {
         CrashReport { id: id.into(), when, summary: "s".into(), text: "t".into(), sent: false }
     }
@@ -779,7 +942,8 @@ mod tests {
             backtrace: "   0: std::panicking::begin_panic\n             at /rustc/abc123/library/std/src/panicking.rs:700:5\n   1: visuals::bench::draw\n             at ./app/src-tauri/src/bench.rs:40:9\n   2: main\n             at /private/var/folders/xy/T/build/main.rs:1:1"
                 .into(),
         };
-        let r = panic_report("1-2-3".into(), 42, &panic, &machine(), Some("Geiss - Swirl"), &private());
+        let swirl = format!("{PACK}/Geiss/Geiss - Swirl.milk");
+        let r = panic_report("1-2-3".into(), 42, &panic, &machine(), Some(Path::new(&swirl)), &private(), &ours(Some(&swirl)));
         assert_eq!(r.when, 42);
         assert!(!r.sent);
         for want in [
@@ -805,24 +969,24 @@ mod tests {
     #[test]
     fn scrubbing_keeps_relative_names_and_ordinary_slashes() {
         let p = nobody();
-        assert_eq!(scrub("at src/main.rs:3:1 and 1/2 and /tmp/x/y.milk", &p), "at src/main.rs:3:1 and 1/2 and y.milk");
-        assert_eq!(scrub("\"/a/b/c\"", &p), "\"c\"");
-        assert_eq!(scrub("~/presets/z.milk", &p), "z.milk");
+        assert_eq!(scrub("at src/main.rs:3:1 and 1/2 and /tmp/x/y.rs", &p, &none()), "at src/main.rs:3:1 and 1/2 and y.rs");
+        assert_eq!(scrub("\"/a/b/c\"", &p, &none()), "\"c\"");
+        assert_eq!(scrub("~/presets/z.txt", &p, &none()), "z.txt");
         // The character before a path is the text's, not the end of a path cut short.
-        assert_eq!(scrub("/a/b/c/d", &p), "d");
-        assert_eq!(scrub("x /a/b./c/d", &p), "x d");
+        assert_eq!(scrub("/a/b/c/d", &p, &none()), "d");
+        assert_eq!(scrub("x /a/b./c/d", &p, &none()), "x d");
     }
 
     #[test]
     fn scrubbing_takes_the_whole_path_spaces_and_all() {
         let p = nobody();
-        assert_eq!(scrub("couldn't read /Volumes/Backup Drive/sets/a.wav: denied", &p), "couldn't read a.wav: denied");
-        assert_eq!(scrub("open ~/Music/DJ Sets/Friday Night/b.milk failed", &p), "open b.milk failed");
-        assert_eq!(scrub("at /Volumes/My Backup Drive/x.rs:3:1", &p), "at x.rs:3:1");
-        assert_eq!(scrub("/presets/Geiss - Swirl.milk is bad", &p), "Geiss - Swirl.milk is bad");
-        assert_eq!(scrub("from /a/b to /c/d", &p), "from b to d");
+        assert_eq!(scrub("couldn't read /Volumes/Backup Drive/sets/a.wav: denied", &p, &none()), "couldn't read a.wav: denied");
+        assert_eq!(scrub("open ~/Music/DJ Sets/Friday Night/b.wav failed", &p, &none()), "open b.wav failed");
+        assert_eq!(scrub("at /Volumes/My Backup Drive/x.rs:3:1", &p, &none()), "at x.rs:3:1");
+        assert_eq!(scrub("/a/My Song.wav is bad", &p, &none()), "My Song.wav is bad");
+        assert_eq!(scrub("from /a/b to /c/d", &p, &none()), "from b to d");
         for never in ["Backup", "Drive", "DJ Sets", "Friday", "Volumes", "Music"] {
-            let s = scrub("x /Volumes/Backup Drive/a and ~/Music/DJ Sets/Friday Night/b y", &p);
+            let s = scrub("x /Volumes/Backup Drive/a and ~/Music/DJ Sets/Friday Night/b y", &p, &none());
             assert!(!s.contains(never), "{never:?} leaked into {s:?}");
         }
     }
@@ -833,19 +997,19 @@ mod tests {
             Some("/Users/ryan".into()),
             vec!["ryan".into(), "Ryan Gavin".into(), "Ryan".into(), "Gavin".into(), "Ryans-MacBook-Pro".into(), "Ryans-MacBook-Pro.local".into(), "Ryan's Studio".into(), "Al".into()],
         );
-        assert_eq!(scrub("connected Ryan's AirPods", &p), "connected <user>'s AirPods");
-        assert_eq!(scrub("host RYANS-MACBOOK-PRO.LOCAL and ryans-macbook-pro", &p), "host <user> and <user>");
-        assert_eq!(scrub("Ryan Gavin on Ryan's Studio, gavin", &p), "<user> on <user>, <user>");
-        assert_eq!(scrub("/USERS/RYAN/x.rs", &p), "x.rs");
+        assert_eq!(scrub("connected Ryan's AirPods", &p, &none()), "connected <user>'s AirPods");
+        assert_eq!(scrub("host RYANS-MACBOOK-PRO.LOCAL and ryans-macbook-pro", &p, &none()), "host <user> and <user>");
+        assert_eq!(scrub("Ryan Gavin on Ryan's Studio, gavin", &p, &none()), "<user> on <user>, <user>");
+        assert_eq!(scrub("/USERS/RYAN/x.rs", &p, &none()), "x.rs");
         // Only where a word starts, and never a name too short to be one.
-        assert_eq!(scrub("Bryan's Algo", &p), "Bryan's Algo");
+        assert_eq!(scrub("Bryan's Algo", &p, &none()), "Bryan's Algo");
     }
 
     #[test]
     fn names_outside_ascii_are_scrubbed_whatever_their_case() {
         let p = Private::new(None, vec!["Zoë".into(), "ZOË".into(), "Ørjan".into()]);
         assert_eq!(p.names.len(), 2, "one name in two cases is kept once");
-        assert_eq!(scrub("ZOË and zoë and Zoë's ØRJAN, not Mazoë", &p), "<user> and <user> and <user>'s <user>, not Mazoë");
+        assert_eq!(scrub("ZOË and zoë and Zoë's ØRJAN, not Mazoë", &p, &none()), "<user> and <user> and <user>'s <user>, not Mazoë");
     }
 
     #[test]
@@ -864,16 +1028,87 @@ mod tests {
         if let Ok(user) = std::env::var("USER")
             && user.chars().count() >= 3
         {
-            assert_eq!(scrub(&format!("hi {user}"), &p), "hi <user>");
+            assert_eq!(scrub(&format!("hi {user}"), &p, &none()), "hi <user>");
         }
         if let Ok(home) = std::env::var("HOME") {
-            assert_eq!(scrub(&format!("{home}/x.rs"), &p), "x.rs");
+            assert_eq!(scrub(&format!("{home}/x.rs"), &p, &none()), "x.rs");
         }
     }
 
     #[test]
     fn a_preset_name_is_its_file_name_without_the_folder() {
         assert_eq!(preset_name(Path::new("/Users/jdoe/presets/Geiss - Swirl.milk")).as_deref(), Some("Geiss - Swirl"));
+    }
+
+    fn crash_on(preset: &str, message: &str) -> CrashReport {
+        let panic = Panic { thread: "main".into(), location: None, message: message.into(), backtrace: String::new() };
+        panic_report("1-2-3".into(), 1, &panic, &machine(), Some(Path::new(preset)), &private(), &ours(Some(preset)))
+    }
+
+    #[test]
+    fn a_preset_from_our_packs_is_named_and_any_other_is_not() {
+        let starter = format!("{STARTER}/cream-of-the-crop/Dancer/ORB - Xenon.milk");
+        let r = crash_on(&starter, &format!("couldn't draw {starter}: lost"));
+        assert!(r.text.contains("Preset: ORB - Xenon\n"), "{}", r.text);
+        assert_eq!(r.summary, "Panic: couldn't draw ORB - Xenon.milk: lost");
+
+        let pack = format!("{PACK}/Fractal/a - b.milk");
+        assert!(crash_on(&pack, "x").text.contains("Preset: a - b\n"));
+
+        for theirs in ["/Users/jdoe/presets/My Secret Set.milk", "/Users/jdoe/Desktop/cream-of-the-crop/My Secret Set.milk", &format!("{PACK}/../My Secret Set.milk")] {
+            let r = crash_on(theirs, &format!("couldn't draw {theirs}: lost; My Secret Set has no waves, my secret set.MILK"));
+            assert!(r.text.contains("Preset: a preset of your own\n"), "{}", r.text);
+            assert_eq!(r.summary, "Panic: couldn't draw a preset of your own: lost; a preset of your own has no waves, a preset of your own");
+            assert!(!r.text.to_lowercase().contains("secret"), "{}", r.text);
+        }
+    }
+
+    #[test]
+    fn a_preset_path_in_a_message_is_named_only_when_its_ours() {
+        let p = private();
+        let presets = ours(None);
+        // Ours by its path, written out or from home.
+        assert_eq!(scrub(&format!("bad {PACK}/A/Geiss - Swirl.milk: x"), &p, &presets), "bad Geiss - Swirl.milk: x");
+        assert_eq!(scrub("bad ~/.openflow/visuals/presets/cream-of-the-crop/A/b.MILK:3", &p, &presets), "bad b.MILK:3");
+        // Anything else, whatever its case or what follows it.
+        assert_eq!(scrub("bad /tmp/x/Mine Too.milk: x", &p, &presets), "bad a preset of your own: x");
+        assert_eq!(scrub("bad ~/presets/z.MILK, then", &p, &presets), "bad a preset of your own, then");
+        assert_eq!(scrub("\"/Volumes/USB Stick/sets/z.milk\"", &p, &presets), "\"a preset of your own\"");
+        // Names with apostrophes, brackets, commas and `&` are replaced whole.
+        assert_eq!(scrub("couldn't load /Users/jdoe/Music/Rovastar's Fav.milk", &p, &presets), "couldn't load a preset of your own");
+        assert_eq!(scrub("bad /tmp/Geiss - Swirl (remix).milk; then", &p, &presets), "bad a preset of your own; then");
+        assert_eq!(scrub("bad /tmp/Flexi, Martin & Geiss - Tide.milk: x", &p, &presets), "bad a preset of your own: x");
+        assert_eq!(scrub(&format!("bad {PACK}/A/Rovastar's Fav (2), A & B.milk!"), &p, &presets), "bad Rovastar's Fav (2), A & B.milk!");
+        // Not a preset: only paths are cut to a file name, as before.
+        assert_eq!(scrub("/tmp/x/notes.milkshake", &p, &presets), "notes.milkshake");
+        // A name from no path stays: nothing says whose it is, unless it's the one on screen.
+        assert_eq!(scrub("Geiss - Swirl", &p, &presets), "Geiss - Swirl");
+        let on_screen = ours(Some("/tmp/preset.milk"));
+        assert_eq!(scrub("/tmp/preset.milk failed: preset", &p, &on_screen), "a preset of your own failed: a preset of your own", "the placeholder's own words aren't touched");
+    }
+
+    #[test]
+    fn the_names_are_ready_before_the_hook_so_an_early_report_is_scrubbed() {
+        // What `install` does before it sets the hook.
+        assert!(collect_names(NAMES_WAIT), "the names took longer than {NAMES_WAIT:?}");
+        let private = PRIVATE.get().expect("collected");
+        let mut names: Vec<String> = [computer_name(), host_name(), full_name()].into_iter().flatten().filter(|n| n.chars().count() >= 3).collect();
+        names.extend(std::env::var("USER").ok().filter(|u| u.chars().count() >= 3));
+        assert!(!names.is_empty());
+        for name in names {
+            let panic = Panic { thread: "main".into(), location: None, message: format!("lost {name}"), backtrace: String::new() };
+            let r = panic_report(new_id(), 1, &panic, &machine(), None, private, &none());
+            assert!(r.summary.starts_with("Panic: lost <user>"), "{name:?} in {}", r.summary);
+            assert!(!r.text.contains(&name), "{name:?} leaked into {}", r.text);
+        }
+    }
+
+    #[test]
+    fn a_slow_lookup_is_waited_for_only_so_long() {
+        let (release, wait) = std::sync::mpsc::channel::<()>();
+        assert!(!wait_for(move || _ = wait.recv(), Duration::from_millis(50)));
+        drop(release);
+        assert!(wait_for(|| (), Duration::from_secs(5)));
     }
 
     #[test]
