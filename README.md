@@ -73,6 +73,20 @@ with keys, playlists that move on by themselves, and **stay on this one** to hol
 preset. Esc or ⌘⇧L
 leaves it.
 
+### Privacy
+
+visual[flow] has no telemetry and no server: it never sends anything about you or how you
+use it. What it hears stays on your Mac; the only things it fetches are updates and the
+preset pack.
+
+When something crashes, a report is written on your Mac, in `~/.openflow/visuals/crashes/`
+(the last 20 are kept). It holds the app and macOS versions, the chip, the error with its
+backtrace and the name of the preset on screen; never audio, your files' paths or your
+name or your Mac's (a name shorter than 3 characters is only removed as part of your home
+folder's path). Crash reports are off by default. With **Send crash reports** turned on
+in Settings (⚙) › Privacy, the app shows you a new one on the next launch, and **Send
+report** opens it as a GitHub issue for you to read and submit yourself.
+
 ## For developers
 
 ### Running it
