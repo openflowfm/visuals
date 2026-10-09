@@ -59,7 +59,7 @@ describe('liveKeys', () => {
     press('Escape', field);
     press('3', field);
     press('f', field);
-    press('z', field);
+    press('l', field);
     press('?', { ...field, shiftKey: true });
     expect(sent).toEqual([]);
   });
@@ -110,7 +110,7 @@ describe('liveKeys', () => {
       });
       const outside = { closest: () => null } as unknown as EventTarget;
       const press = (key: string) => keys.keydown({ key, metaKey: false, shiftKey: false, ctrlKey: false, altKey: false, repeat: false, target: outside, preventDefault: () => {} });
-      const all = ['Escape', 'r', 'ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown', '1', '2', '3', '4', '5', 'f', 'z', 'h'];
+      const all = ['Escape', 'r', 'ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown', '1', '2', '3', '4', '5', 'f', 'l', 'h'];
       for (const sheet of [
         createElement(Settings, { open: true, onClose: () => {} }),
         createElement(MoreEffects, { open: true, onClose: () => {} }),
@@ -153,8 +153,8 @@ describe('liveKeys', () => {
 
   it('latches with Shift, and sends the other effect keys as one action', () => {
     const { sent, keys, press } = setup();
-    press('Z', { shiftKey: true });
-    keys.keyup({ key: 'z' });
+    press('F', { shiftKey: true });
+    keys.keyup({ key: 'f' });
     press('b');
     expect(sent).toEqual([
       { kind: 'freeze', on: null },
@@ -163,13 +163,13 @@ describe('liveKeys', () => {
     expect(keys.down.size).toBe(0);
   });
 
-  it('freezes while Z is down, and lets go on its release', () => {
+  it('freezes while F is down, and lets go on its release', () => {
     const { sent, keys, press, prevented } = setup();
-    press('z');
-    press('z', { repeat: true });
-    keys.keyup({ key: 'f' });
+    press('f');
+    press('f', { repeat: true });
+    keys.keyup({ key: 'l' });
     expect(keys.down.has('freeze')).toBe(true);
-    keys.keyup({ key: 'Z' });
+    keys.keyup({ key: 'F' });
     expect(sent).toEqual([
       { kind: 'freeze', on: true },
       { kind: 'freeze', on: false },
@@ -181,10 +181,10 @@ describe('liveKeys', () => {
     const { sent, keys, press } = setup();
     press('s');
     press('p');
-    press('z');
+    press('f');
     keys.blur();
     keys.keyup({ key: 's' });
-    keys.keyup({ key: 'z' });
+    keys.keyup({ key: 'f' });
     expect(sent).toEqual([
       { kind: 'strobe', on: true },
       { kind: 'punch', on: true },
@@ -210,14 +210,24 @@ describe('liveKeys', () => {
     expect(prevented()).toBe(0);
   });
 
-  it('favourites with F, which no longer freezes, with or without Shift', () => {
+  it('favourites with L, with or without Shift, which never freezes', () => {
     const { sent, keys, press } = setup();
-    press('f');
-    press('F', { shiftKey: true });
-    press('f', { repeat: true });
-    keys.keyup({ key: 'f' });
+    press('l');
+    press('L', { shiftKey: true });
+    press('l', { repeat: true });
+    keys.keyup({ key: 'l' });
     expect(sent).toEqual(['favourite', 'favourite']);
     expect(keys.down.size).toBe(0);
+  });
+
+  it('does nothing on Z, which froze before decision 57', () => {
+    const { sent, keys, press, prevented } = setup();
+    press('z');
+    press('Z', { shiftKey: true });
+    keys.keyup({ key: 'z' });
+    expect(sent).toEqual([]);
+    expect(keys.down.size).toBe(0);
+    expect(prevented()).toBe(0);
   });
 
   it('shows the help on ?', () => {

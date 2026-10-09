@@ -124,7 +124,7 @@ describe("live mode's pads, on screen", () => {
     expect(caption(strobe)).toBe('S');
     expect(strobe).toContain('title="Strobe: ');
     expect(strobe).toContain('hold S, ⇧S latches)"');
-    expect(caption(renderToStaticMarkup(createElement(HoldPad, { id: 'freeze', kind: 'freeze', on: false, send: noop }, 'Freeze')))).toBe('Z');
+    expect(caption(renderToStaticMarkup(createElement(HoldPad, { id: 'freeze', kind: 'freeze', on: false, send: noop }, 'Freeze')))).toBe('F');
     expect(caption(renderToStaticMarkup(createElement(Pad, { id: 'previous', onPress: noop }, '◀ Previous')))).toBe('←');
     expect(caption(renderToStaticMarkup(createElement(Pad, { id: 'step', onPress: noop }, 'Next ▶')))).toBe('→');
     expect(caption(renderToStaticMarkup(createElement(Pad, { id: 'blackout', onPress: noop }, 'Blackout')))).toBe('B');

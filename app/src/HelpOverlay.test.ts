@@ -82,7 +82,8 @@ describe('the live controls', () => {
   });
 
   it('finds a control by its id', () => {
-    expect(control('freeze').keys).toContain('Z');
+    expect(control('freeze').keys).toBe('hold F, ⇧F latches');
+    expect(control('favourite').keys).toBe('L');
     expect(() => control('nope' as ControlId)).toThrow();
   });
 
@@ -108,7 +109,7 @@ describe('the live controls', () => {
         .flatMap((c) => pressesOf(c.keys))
         .map((p) => p.key?.toLowerCase()),
     );
-    for (const key of ['arrowleft', 'arrowright', 'arrowup', 'arrowdown', 'r', 'h', 's', 'p', 'z', 'b', 't', 'i', 'm', '0', '1', '2', '3', '4', '5', 'f', '?', 'escape', 'l']) {
+    for (const key of ['arrowleft', 'arrowright', 'arrowup', 'arrowdown', 'r', 'h', 's', 'p', 'b', 't', 'i', 'm', '0', '1', '2', '3', '4', '5', 'f', '?', 'escape', 'l']) {
       expect(named.has(key), key).toBe(true);
     }
   });
