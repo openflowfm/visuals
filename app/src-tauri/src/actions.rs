@@ -129,6 +129,20 @@ impl Default for Live {
     }
 }
 
+/// Where the deck is ([`Live::place`]), to go back to when what it moved to fails to open.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Place {
+    current: Option<PathBuf>,
+    index: Option<usize>,
+}
+
+/// Whether a failed open of what `action` meant leaves the deck where it was
+/// ([`Live::back_to`]): a step or a go, which keep the playlist. A load or a
+/// filter has changed what plays, so the deck stays on it.
+fn keeps_place(action: &Action) -> bool {
+    matches!(action, Action::Next | Action::Previous | Action::Random | Action::Go { .. })
+}
+
 /// A playlist setting's name, as [`DeckView::differs`] lists it.
 pub type SettingName = &'static str;
 
@@ -338,6 +352,22 @@ impl Live {
             count: if self.active() { self.items.len() } else { 0 },
             query: self.query.clone(),
         }
+    }
+
+    /// Where the deck is: the preset on the bench and its place in the items.
+    pub fn place(&self) -> Place {
+        Place { current: self.current.clone(), index: self.index }
+    }
+
+    /// `failed` didn't open, so the bench still shows what it showed when the
+    /// deck was at `was`: the deck goes back there, so the two agree. Nothing
+    /// changes when the deck has moved on from `failed` since.
+    pub fn back_to(&mut self, failed: &Path, was: Place) {
+        if self.current.as_deref() != Some(failed) {
+            return;
+        }
+        self.current = was.current;
+        self.index = was.index.filter(|&i| i < self.items.len());
     }
 
     fn play(&mut self, path: PathBuf) -> Option<PathBuf> {
@@ -686,10 +716,13 @@ const SKIPS: usize = 8;
 /// Do `action`: move the live state, open what it means on the bench, tell the page.
 /// Callable from any thread — the page's `act`, the auto-advance timer, a MIDI input.
 pub fn dispatch(handle: &AppHandle, action: Action) -> Result<(), String> {
-    dispatch_skipping(handle, action, SKIPS)
+    let was = handle.state::<Deck>().live.lock().unwrap().place();
+    dispatch_skipping(handle, action, SKIPS, was)
 }
 
-fn dispatch_skipping(handle: &AppHandle, action: Action, skips: usize) -> Result<(), String> {
+/// [`dispatch`], skipping at most `skips` presets that fail to open; `was` is
+/// where the deck was before the first try, which the bench still shows.
+fn dispatch_skipping(handle: &AppHandle, action: Action, skips: usize, was: Place) -> Result<(), String> {
     let deck = handle.state::<Deck>();
     if let Action::Fx(fx) = &action {
         let tempo = {
@@ -730,7 +763,11 @@ fn dispatch_skipping(handle: &AppHandle, action: Action, skips: usize) -> Result
     if let (Some(p), Some(e)) = (&path, &error) {
         let stepping = matches!(action, Action::Next | Action::Previous | Action::Random);
         if stepping && skips > 0 && crate::resume::open_failed(handle, p, e) == crate::resume::Failed::Skip {
-            return dispatch_skipping(handle, action, skips - 1);
+            return dispatch_skipping(handle, action, skips - 1, was);
+        }
+        // Given up: the bench kept what it showed, and the deck says so too.
+        if keeps_place(&action) {
+            deck.live.lock().unwrap().back_to(p, was);
         }
     }
     if let (Some(p), Some(_)) = (&path, &opened) {
@@ -1013,6 +1050,33 @@ mod tests {
         assert_eq!(d(&mut live, &Action::Load { playlist: 0, index: Some(2) }, &s).unwrap(), p("z"));
         assert!(d(&mut live, &Action::Load { playlist: 0, index: Some(3) }, &s).is_err());
         assert!(d(&mut live, &Action::Load { playlist: 2, index: None }, &s).is_err());
+    }
+
+    #[test]
+    fn a_step_that_fails_to_open_leaves_the_deck_on_the_preset_still_showing() {
+        let (s, lib) = store();
+        let p = |n: &str| Some(lib.join(format!("{n}.milk")));
+        let mut live = Live::default();
+        d(&mut live, &Action::Load { playlist: 0, index: None }, &s).unwrap();
+        let was = live.place();
+        // Every skip fails: the deck stepped on twice, then gives up.
+        let failed = d(&mut live, &Action::Next, &s).unwrap().unwrap();
+        let last = d(&mut live, &Action::Next, &s).unwrap().unwrap();
+        assert_ne!(failed, last);
+        live.back_to(&last, was.clone());
+        assert_eq!((live.current.clone(), live.index), (p("x"), Some(0)), "back on what the bench shows");
+        assert_eq!(live.view(&crate::fx::Settings::default()).current, p("x").map(|p| p.to_string_lossy().into_owned()));
+        // Moved on since (something else opened): left alone.
+        d(&mut live, &Action::Go { index: 1 }, &s).unwrap();
+        live.back_to(&last, was);
+        assert_eq!((live.current.clone(), live.index), (p("y"), Some(1)));
+        // Only steps and goes keep their place; a load has changed what plays.
+        assert!(keeps_place(&Action::Next) && keeps_place(&Action::Random) && keeps_place(&Action::Go { index: 0 }));
+        assert!(!keeps_place(&Action::Load { playlist: 0, index: None }));
+        // A place past the items' end (edited since) is no place.
+        let mut short = Live { current: p("y"), items: vec![lib.join("y.milk")], ..Live::default() };
+        short.back_to(&lib.join("y.milk"), Place { current: p("x"), index: Some(4) });
+        assert_eq!((short.current, short.index), (p("x"), None));
     }
 
     #[test]

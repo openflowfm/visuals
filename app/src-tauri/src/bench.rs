@@ -11,7 +11,7 @@ use engine::live::{configuration, show, Ring};
 use engine::preset::Preset;
 use engine::render::Renderer;
 use std::sync::mpsc::{Receiver, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 /// The size presets draw at, whatever the size of the hole they are shown in,
@@ -270,16 +270,47 @@ struct Loop {
     pictures_read: u64,
 }
 
+/// Told why, when the preset on the bench panicked while drawing ([`on_panic`]).
+type PanicHook = Box<dyn Fn(String) + Send + Sync>;
+static ON_PANIC: OnceLock<PanicHook> = OnceLock::new();
+
+/// Call `f` with why, whenever the preset on the bench panics while drawing.
+/// The bench has stopped drawing it by then (the picture holds); `f` runs on
+/// the bench's thread, so it must not wait on the bench.
+pub fn on_panic(f: impl Fn(String) + Send + Sync + 'static) {
+    let _ = ON_PANIC.set(Box::new(f));
+}
+
+/// Run `f`, catching a panic (`crate::crash::catch`, so it is no crash report):
+/// what it returned, or what the panic said.
+fn survive<T>(f: impl FnOnce() -> T) -> Result<T, String> {
+    crate::crash::catch(std::panic::AssertUnwindSafe(f))
+        .map_err(|payload| payload.downcast_ref::<&str>().map(|s| s.to_string()).or_else(|| payload.downcast_ref::<String>().cloned()).unwrap_or_else(|| "a panic".into()))
+}
+
 impl Loop {
+    /// Handle commands and draw, for good: a panic in either is caught, so the
+    /// bench goes on. A preset that panics loading or drawing stops being drawn
+    /// (the picture holds) until the next one loads, and is reported: as the
+    /// load's error, or to [`on_panic`].
     fn run(mut self, rx: Receiver<Cmd>) {
         loop {
             // Block while there is nothing to draw, so a closed window costs nothing.
             let next = if self.loaded { rx.try_recv().ok() } else { rx.recv().ok() };
             if let Some(cmd) = next {
-                self.command(cmd);
+                // A command's reply is dropped with it, so whoever asked hears an error.
+                if let Err(why) = survive(|| self.command(cmd)) {
+                    eprintln!("bench: a command panicked ({why}); going on");
+                }
                 continue;
             }
-            self.frame();
+            if let Err(why) = survive(|| self.frame()) {
+                eprintln!("bench: the preset panicked drawing ({why}); stopped drawing it");
+                self.loaded = false;
+                if let Some(hook) = ON_PANIC.get() {
+                    hook(why);
+                }
+            }
         }
     }
 
@@ -292,7 +323,14 @@ impl Loop {
                 if fading {
                     self.renderer.keep_outgoing();
                 }
-                let result = self.renderer.load_preset(*preset, seed).map_err(|e| e.to_string());
+                let result = match survive(|| self.renderer.load_preset(*preset, seed)) {
+                    Ok(loaded) => loaded.map_err(|e| e.to_string()),
+                    Err(why) => {
+                        // Half loaded, maybe: nothing is drawn until a preset loads whole.
+                        self.loaded = false;
+                        Err(format!("it panicked loading ({why})"))
+                    }
+                };
                 if fading && result.is_ok() {
                     self.fx.lock().unwrap().start_fade(Instant::now());
                 }
@@ -669,6 +707,16 @@ mod tests {
                 due
             })
             .collect()
+    }
+
+    #[test]
+    fn a_panic_on_the_bench_is_survived_with_what_it_said() {
+        assert_eq!(survive(|| 7), Ok(7));
+        assert_eq!(survive(|| -> u8 { panic!("the mesh ran out") }), Err("the mesh ran out".to_string()));
+        let n = 3;
+        assert_eq!(survive(|| -> u8 { panic!("step {n} broke") }), Err("step 3 broke".to_string()));
+        // The thread goes on: a later call still runs.
+        assert_eq!(survive(|| "next frame"), Ok("next frame"));
     }
 
     #[test]

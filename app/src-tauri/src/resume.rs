@@ -1,26 +1,30 @@
 //! A show that never stops (#99).
 //!
 //! **Picking up where the app left off.** Every change to the deck ([`note`])
-//! keeps the playlist, the position in it and the preset playing in
-//! `resume.json` (`crate::settings`). On the next launch, after a crash or a
-//! quit, [`start`] loads that playlist again at that position (or, for a smart
-//! playlist worked out again, wherever that preset now is), or opens that
-//! preset when no playlist was playing. The source needs nothing here:
+//! keeps the playlist, the position in it, the preset playing, the unsaved
+//! filter playing, the live tweaks ([`Tweaks`]) and hold in `resume.json`
+//! (`crate::settings`). On the next launch, after a crash or a quit, [`start`]
+//! loads that playlist again at that position (or, for a smart playlist worked
+//! out again, wherever that preset now is), or plays that filter again from
+//! that preset, or opens that preset when neither was playing; then it puts
+//! the tweaks back and holds again. The source needs nothing here:
 //! `crate::listen` already comes back listening to the one chosen last
 //! (`audio.json`), which [`resume_state`] reports. Nothing is resumed on the
 //! first run, or when the app is started on a given preset (`VISUALS_PRESET`).
 //!
-//! **Skipping what fails.** A preset the deck opens that can't be read, or that
-//! the bench won't load, is kept in `failed.json` with its file's size and
-//! modification time, and sent to the page ([`FAILED`], [`presets_failed`]),
-//! which marks it in the library. Stepping (next, previous, random, and
-//! auto-advance) moves on past it ([`open_failed`]), and the main window's
-//! status strip says so in a short note that fades ([`SKIPPED`]); nothing is
-//! ever shown on the output. The mark goes when the file changes or the preset
-//! opens after all (a newer engine).
+//! **Skipping what fails.** A preset that can't be read, that the bench won't
+//! load, or that panics on the bench, whether the deck or the library opened
+//! it, is kept in `failed.json` with its file's size and modification time, and
+//! sent to the page ([`FAILED`], [`presets_failed`]), which marks it in the
+//! library. Stepping (next, previous, random, and auto-advance) moves on past
+//! it ([`open_failed`]), and the main window's status strip says so in a short
+//! note that fades ([`SKIPPED`]); nothing is ever shown on the output. The mark
+//! goes when the file changes or the preset opens after all (a newer engine).
 
 use crate::actions::{Action, Deck, DeckView};
+use crate::fx::FxAction;
 use crate::library::Opened;
+use crate::query::LibraryQuery;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -30,13 +34,35 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
 
-/// Where the app was: the playlist and the position in it, the preset on screen and what it listened to.
+/// Where the app was: the playlist and the position in it, the preset on screen,
+/// the filter playing, the deck's tweaks and hold, and what it listened to.
+/// Files from before the tweaks, hold and filter were kept read as none of them.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct Resume {
     pub playlist: Option<String>,
     pub index: Option<usize>,
     pub current: Option<String>,
     pub source: Option<crate::listen::SourceId>,
+    /// The unsaved filter playing (a mood, or the library's grid followed).
+    #[serde(default)]
+    pub query: Option<LibraryQuery>,
+    #[serde(default)]
+    pub tweaks: Option<Tweaks>,
+    #[serde(default)]
+    pub hold: bool,
+}
+
+/// The deck's live settings as they were, tweaked or not: how it changes
+/// preset and the effects a playlist sets.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
+pub struct Tweaks {
+    pub auto: bool,
+    pub seconds: f64,
+    pub bars: u32,
+    pub transition: f64,
+    pub speed: f64,
+    pub trails: f64,
+    pub hue: f64,
 }
 
 /// Where the deck is kept, in `crate::settings::dir`.
@@ -62,7 +88,7 @@ pub fn resume_state() -> Option<Resume> {
 
 /// Whether there's anything to pick up in `r`.
 fn worth(r: &Resume) -> bool {
-    r.playlist.is_some() || r.current.is_some()
+    r.playlist.is_some() || r.current.is_some() || r.query.is_some()
 }
 
 /// Whether to pick up at all: never on the first run, nor when started on a given preset.
@@ -71,11 +97,18 @@ fn wanted(first_run: bool, preset: Option<&str>) -> bool {
 }
 
 /// Called once at setup: problems with settings go to the page from now on, the
-/// failed presets are read, and the deck is put back where it was once the bench is there.
+/// failed presets are read, a preset that panics on the bench is marked and
+/// moved on from, and the deck is put back where it was once the bench is there.
 pub fn start(handle: &AppHandle) {
     crate::settings::install(handle);
     let failed = crate::settings::load::<FailedFile>(FAILED_FILE).map(|f| still_failing(f.presets)).unwrap_or_default();
     *FAILURES.lock().unwrap() = failed;
+    let panicked = handle.clone();
+    crate::bench::on_panic(move |why| {
+        // Off the bench's thread: moving on asks the bench.
+        let handle = panicked.clone();
+        std::thread::spawn(move || moved_on(&handle, &why));
+    });
     let found = crate::settings::load::<Resume>(FILE).filter(worth).map(|r| Resume { source: kept_source(), ..r });
     let _ = FOUND.set(found.clone());
     let go = found.filter(|_| wanted(crate::settings::first_run(), std::env::var("VISUALS_PRESET").ok().as_deref()));
@@ -95,6 +128,22 @@ pub fn start(handle: &AppHandle) {
     });
 }
 
+/// The preset on the bench panicked drawing (`crate::bench::on_panic`), and the
+/// bench stopped drawing it: mark the deck's preset failed, and step on past it
+/// as stepping does past any failed preset.
+fn moved_on(handle: &AppHandle, why: &str) {
+    let current = handle.state::<Deck>().live.lock().unwrap().current.clone();
+    if let Some(path) = current {
+        set_failed(handle, &path, true);
+        if open_failed(handle, &path, why) != Failed::Skip {
+            return;
+        }
+    }
+    if let Err(e) = crate::actions::dispatch(handle, Action::Next) {
+        eprintln!("resume: moving on from a preset that panicked: {e}");
+    }
+}
+
 /// The source `crate::listen` comes back to (`audio.json`).
 fn kept_source() -> Option<crate::listen::SourceId> {
     let audio = crate::settings::load::<Value>("audio.json")?;
@@ -109,7 +158,12 @@ enum Plan {
         playlist: usize,
         index: Option<usize>,
     },
-    /// No playlist (or it's gone): open this preset.
+    /// Play the filter `query` again, from `current` when there was one.
+    Query {
+        query: LibraryQuery,
+        current: Option<PathBuf>,
+    },
+    /// No playlist (or it's gone) nor filter: open this preset.
     Open(PathBuf),
     Nothing,
 }
@@ -119,8 +173,12 @@ fn plan(r: &Resume, ids: &[String]) -> Plan {
     if let Some(n) = r.playlist.as_ref().and_then(|id| ids.iter().position(|i| i == id)) {
         return Plan::Load { playlist: n, index: r.index };
     }
-    match &r.current {
-        Some(c) => Plan::Open(PathBuf::from(c)),
+    let current = r.current.as_ref().map(PathBuf::from);
+    if let Some(query) = r.query.clone().filter(|_| r.playlist.is_none()) {
+        return Plan::Query { query, current };
+    }
+    match current {
+        Some(c) => Plan::Open(c),
         None => Plan::Nothing,
     }
 }
@@ -129,14 +187,22 @@ fn restore(handle: &AppHandle, r: &Resume) {
     let deck = handle.state::<Deck>();
     let ids: Vec<String> = deck.store.lock().unwrap().lists.iter().map(|l| l.id.clone()).collect();
     let said = |what: &str, e: String| eprintln!("resume: {what}: {e}");
+    let act = |what: &str, action: Action| crate::actions::dispatch(handle, action).map_err(|e| said(what, e)).is_ok();
+    // Open `path` for the deck; whether it opened.
+    let open_here = |path: &Path| {
+        let (opened, error) = open(handle, &handle.state::<crate::App>(), path);
+        if opened.is_some() {
+            deck.opened(path);
+        } else if let Some(e) = error {
+            said("opening the preset", e);
+        }
+        opened.is_some()
+    };
     match plan(r, &ids) {
         Plan::Load { playlist, index } => {
             // The position may be gone (items removed since): the playlist's start, then.
-            if let Err(e) = crate::actions::dispatch(handle, Action::Load { playlist, index }) {
-                said("loading the playlist at its position", e);
-                if let Err(e) = crate::actions::dispatch(handle, Action::Load { playlist, index: None }) {
-                    return said("loading the playlist", e);
-                }
+            if !act("loading the playlist at its position", Action::Load { playlist, index }) && !act("loading the playlist", Action::Load { playlist, index: None }) {
+                return;
             }
             // A smart playlist is worked out again: go to where that preset is now.
             let elsewhere = r.current.as_ref().and_then(|c| {
@@ -145,34 +211,81 @@ fn restore(handle: &AppHandle, r: &Resume) {
                 if here { None } else { live.items.iter().position(|p| p.as_os_str() == c.as_str()) }
             });
             if let Some(index) = elsewhere {
-                if let Err(e) = crate::actions::dispatch(handle, Action::Go { index }) {
-                    said("going back to the preset", e);
-                }
+                act("going back to the preset", Action::Go { index });
             }
         }
+        Plan::Query { query, current } => {
+            // From the preset that was playing, as the grid follows from what it opened;
+            // otherwise from the filter's start.
+            match current.filter(|p| p.is_file()).filter(|p| open_here(p)) {
+                Some(at) => act("following the filter again", Action::Query { query, at: Some(at) }),
+                None => act("playing the filter again", Action::Query { query, at: None }),
+            };
+        }
         Plan::Open(path) if path.is_file() => {
-            let (opened, error) = open(handle, &handle.state::<crate::App>(), &path);
-            if opened.is_some() {
-                deck.opened(&path);
-            } else if let Some(e) = error {
-                said("opening the preset", e);
-            }
+            open_here(&path);
         }
         Plan::Open(_) | Plan::Nothing => {}
     }
+    let fx = deck.fx.lock().unwrap().settings.clone();
+    for action in again(r, &deck.view(), &fx) {
+        act("putting the deck's tweaks back", action);
+    }
 }
 
-/// Where `deck` is, to keep.
-fn kept_from(deck: &DeckView) -> Resume {
-    Resume { playlist: deck.playlist.clone(), index: deck.index, current: deck.current.clone(), source: None }
+/// The actions that put `r`'s tweaks and hold back on a deck now at `deck`, with
+/// the effects `fx`: only what differs, and hold last, as it refuses loads.
+fn again(r: &Resume, deck: &DeckView, fx: &crate::fx::Settings) -> Vec<Action> {
+    let mut actions = Vec::new();
+    if let Some(t) = r.tweaks {
+        let differ = |a: f64, b: f64| (a - b).abs() >= 1e-9;
+        for (differs, action) in [
+            (differ(t.transition, fx.transition), FxAction::Transition { seconds: t.transition }),
+            (differ(t.speed, fx.speed), FxAction::Speed { speed: t.speed }),
+            (differ(t.trails, fx.trails), FxAction::Trails { value: t.trails }),
+            (differ(t.hue, fx.hue), FxAction::Hue { value: t.hue }),
+        ] {
+            if differs {
+                actions.push(Action::Fx(action));
+            }
+        }
+        // Bars turn the timed auto-advance off, so auto goes after them.
+        if t.bars != deck.bars {
+            actions.push(Action::Bars { bars: t.bars });
+        }
+        if differ(t.seconds, deck.seconds) {
+            actions.push(Action::Seconds { seconds: t.seconds });
+        }
+        if t.auto != deck.auto || t.bars != deck.bars {
+            actions.push(Action::Auto { on: Some(t.auto) });
+        }
+    }
+    if r.hold && !deck.hold {
+        actions.push(Action::Hold { on: Some(true) });
+    }
+    actions
+}
+
+/// Where `deck` is, with the effects `fx`, to keep.
+fn kept_from(deck: &DeckView, fx: &crate::fx::Settings) -> Resume {
+    Resume {
+        playlist: deck.playlist.clone(),
+        index: deck.index,
+        current: deck.current.clone(),
+        source: None,
+        query: deck.query.clone(),
+        tweaks: Some(Tweaks { auto: deck.auto, seconds: deck.seconds, bars: deck.bars, transition: fx.transition, speed: fx.speed, trails: fx.trails, hue: fx.hue }),
+        hold: deck.hold,
+    }
 }
 
 /// Called after every change to the deck: keep where it is, when that changed.
-pub fn note(_handle: &AppHandle, deck: &DeckView) {
+pub fn note(handle: &AppHandle, deck: &DeckView) {
     if !RESTORED.load(Ordering::SeqCst) {
         return;
     }
-    keep(&KEPT, kept_from(deck), |now| crate::settings::save_json(FILE, now));
+    let fx = handle.state::<Deck>().fx.lock().unwrap().settings.clone();
+    keep(&KEPT, kept_from(deck, &fx), |now| crate::settings::save_json(FILE, now));
 }
 
 /// Save `now` unless it is what `kept` says was saved last. The check and the
@@ -288,32 +401,48 @@ fn load_problem(opened: &Value) -> Option<String> {
 /// didn't. A preset that can't be read or that the bench won't load is marked failed;
 /// one that didn't open because asking the bench failed (not up yet) is only reported.
 pub fn open(handle: &AppHandle, app: &crate::App, path: &Path) -> (Option<Opened>, Option<String>) {
+    for_the_deck(open_reported(handle, app, path))
+}
+
+/// Open the preset at `path` on the bench as the library does, marking it as
+/// [`open`] does: what the bench answered, with its report of what failed to
+/// build, or why it couldn't be asked.
+pub fn open_reported(handle: &AppHandle, app: &crate::App, path: &Path) -> Result<Opened, String> {
     let readable = crate::library::read_preset(path).map(|_| ());
     let (result, failed) = judge(readable, || crate::library::open_path(app, &path.to_string_lossy()));
     if let Some(failed) = failed {
         set_failed(handle, path, failed);
     }
+    result
+}
+
+/// What the deck makes of the bench's answer: a preset that didn't load is an
+/// error, as one that couldn't be read is.
+fn for_the_deck<T: Serialize>(result: Result<T, String>) -> (Option<T>, Option<String>) {
     match result {
-        Ok(o) => (Some(o), None),
+        Ok(o) => match serde_json::to_value(&o).ok().as_ref().and_then(load_problem) {
+            Some(e) => (None, Some(e)),
+            None => (Some(o), None),
+        },
         Err(e) => (None, Some(e)),
     }
 }
 
-/// What opening a preset came to, and whether to mark it failed (`Some(true)`),
-/// unmark it (`Some(false)`) or leave its mark alone (`None`). `readable` is whether
-/// its file reads as a preset; `open` asks the bench. Only the file failing to read
-/// or the bench answering that it won't load is a failure: an error from asking
-/// the bench at all says nothing about the preset.
+/// What opening a preset came to (the bench's answer as it gave it), and whether to
+/// mark it failed (`Some(true)`), unmark it (`Some(false)`) or leave its mark alone
+/// (`None`). `readable` is whether its file reads as a preset; `open` asks the bench.
+/// Only the file failing to read or the bench answering that it won't load is a
+/// failure: an error from asking the bench at all says nothing about the preset.
 fn judge<T: Serialize>(readable: Result<(), String>, open: impl FnOnce() -> Result<T, String>) -> (Result<T, String>, Option<bool>) {
     if let Err(e) = readable {
         return (Err(e), Some(true));
     }
     match open() {
         Err(e) => (Err(e), None),
-        Ok(o) => match serde_json::to_value(&o).ok().as_ref().and_then(load_problem) {
-            Some(e) => (Err(e), Some(true)),
-            None => (Ok(o), Some(false)),
-        },
+        Ok(o) => {
+            let failed = serde_json::to_value(&o).ok().as_ref().and_then(load_problem).is_some();
+            (Ok(o), Some(failed))
+        }
     }
 }
 
@@ -322,16 +451,29 @@ mod tests {
     use super::*;
 
     fn r(playlist: Option<&str>, index: Option<usize>, current: Option<&str>) -> Resume {
-        Resume { playlist: playlist.map(Into::into), index, current: current.map(Into::into), source: None }
+        Resume { playlist: playlist.map(Into::into), index, current: current.map(Into::into), ..Resume::default() }
+    }
+
+    fn tweaks() -> Tweaks {
+        let fx = crate::fx::Settings::default();
+        Tweaks { auto: false, seconds: 30.0, bars: 0, transition: fx.transition, speed: fx.speed, trails: fx.trails, hue: fx.hue }
     }
 
     #[test]
     fn resume_reads_and_writes_as_the_page_expects() {
-        assert_eq!(serde_json::to_string(&Resume::default()).unwrap(), r#"{"playlist":null,"index":null,"current":null,"source":null}"#);
+        assert_eq!(serde_json::to_string(&Resume::default()).unwrap(), r#"{"playlist":null,"index":null,"current":null,"source":null,"query":null,"tweaks":null,"hold":false}"#);
+        // A file from before the tweaks, hold and filter were kept still reads.
         let kept: Resume = serde_json::from_str(r#"{"version":1,"playlist":"a","index":3,"current":"/p/x.milk","source":{"kind":"system"}}"#).unwrap();
         assert_eq!(kept.source, Some(crate::listen::SourceId::System));
+        assert_eq!((kept.query.as_ref(), kept.tweaks, kept.hold), (None, None, false));
         assert!(worth(&kept));
         assert!(!worth(&Resume::default()));
+        // A filter alone is worth picking up.
+        assert!(worth(&Resume { query: Some(LibraryQuery::default()), ..Resume::default() }));
+        // And it all reads back as written.
+        let full = Resume { query: Some(LibraryQuery::default()), tweaks: Some(Tweaks { speed: 2.0, ..tweaks() }), hold: true, ..r(None, None, Some("/x.milk")) };
+        let back: Resume = serde_json::from_str(&serde_json::to_string(&full).unwrap()).unwrap();
+        assert_eq!(back, full);
     }
 
     #[test]
@@ -343,7 +485,7 @@ mod tests {
     }
 
     #[test]
-    fn plans_the_playlist_by_id_then_the_preset() {
+    fn plans_the_playlist_by_id_then_the_filter_then_the_preset() {
         let ids = vec!["a".to_string(), "b".to_string()];
         assert_eq!(plan(&r(Some("b"), Some(4), Some("/x.milk")), &ids), Plan::Load { playlist: 1, index: Some(4) });
         // The playlist moved in the file: still found by its id.
@@ -352,18 +494,49 @@ mod tests {
         assert_eq!(plan(&r(Some("gone"), Some(1), Some("/x.milk")), &ids), Plan::Open("/x.milk".into()));
         assert_eq!(plan(&r(None, None, Some("/y.milk")), &ids), Plan::Open("/y.milk".into()));
         assert_eq!(plan(&r(None, None, None), &ids), Plan::Nothing);
+        // An unsaved filter plays again, from the preset that was playing.
+        let q = LibraryQuery::default();
+        let filter = Resume { query: Some(q.clone()), ..r(None, Some(2), Some("/y.milk")) };
+        assert_eq!(plan(&filter, &ids), Plan::Query { query: q.clone(), current: Some("/y.milk".into()) });
+        assert_eq!(plan(&Resume { query: Some(q.clone()), ..Resume::default() }, &ids), Plan::Query { query: q, current: None });
     }
 
     #[test]
-    fn keeps_the_deck_s_playlist_position_and_preset() {
+    fn keeps_the_deck_s_playlist_position_preset_filter_tweaks_and_hold() {
+        let fx = crate::fx::Settings { speed: 2.0, hue: 0.25, ..crate::fx::Settings::default() };
         let deck: DeckView = {
             let mut live = crate::actions::Live::default();
             live.playlist = Some("p".into());
             live.index = Some(2);
             live.current = Some("/a/b.milk".into());
-            live.view(&crate::fx::Settings::default())
+            live.auto = true;
+            live.seconds = 12.0;
+            live.hold = true;
+            live.view(&fx)
         };
-        assert_eq!(kept_from(&deck), r(Some("p"), Some(2), Some("/a/b.milk")));
+        let kept = kept_from(&deck, &fx);
+        assert_eq!((kept.playlist, kept.index, kept.current), (Some("p".into()), Some(2), Some("/a/b.milk".into())));
+        assert_eq!(kept.tweaks, Some(Tweaks { auto: true, seconds: 12.0, speed: 2.0, hue: 0.25, ..tweaks() }));
+        assert!(kept.hold);
+        let filtering = crate::actions::Live { query: Some(LibraryQuery::default()), ..crate::actions::Live::default() };
+        assert_eq!(kept_from(&filtering.view(&fx), &fx).query, Some(LibraryQuery::default()));
+    }
+
+    #[test]
+    fn puts_back_only_the_tweaks_that_differ_and_holds_last() {
+        let fx = crate::fx::Settings::default();
+        let deck = crate::actions::Live::default().view(&fx);
+        // Nothing kept, or nothing different: nothing to do.
+        assert!(again(&Resume::default(), &deck, &fx).is_empty());
+        assert!(again(&Resume { tweaks: Some(tweaks()), ..Resume::default() }, &deck, &fx).is_empty());
+        let r = Resume { tweaks: Some(Tweaks { speed: 0.5, auto: true, seconds: 10.0, ..tweaks() }), hold: true, ..Resume::default() };
+        assert_eq!(again(&r, &deck, &fx), vec![Action::Fx(FxAction::Speed { speed: 0.5 }), Action::Seconds { seconds: 10.0 }, Action::Auto { on: Some(true) }, Action::Hold { on: Some(true) }]);
+        // Bars first, which turn auto off, then auto as it was.
+        let bars = Resume { tweaks: Some(Tweaks { bars: 8, ..tweaks() }), ..Resume::default() };
+        assert_eq!(again(&bars, &deck, &fx), vec![Action::Bars { bars: 8 }, Action::Auto { on: Some(false) }]);
+        // Already held: not toggled.
+        let held = crate::actions::Live { hold: true, ..crate::actions::Live::default() }.view(&fx);
+        assert!(again(&Resume { hold: true, ..Resume::default() }, &held, &fx).is_empty());
     }
 
     #[test]
@@ -400,12 +573,25 @@ mod tests {
         let (r, mark) = judge::<Value>(Ok(()), || Err("the bench isn't running".into()));
         assert!(r.is_err());
         assert_eq!(mark, None);
-        // The bench said its equations fail: marked.
+        // The bench said its equations fail (or it panicked loading): marked.
         assert_eq!(judge(Ok(()), || Ok(bad.clone())).1, Some(true));
         // The file isn't a preset: marked, without asking the bench.
         assert_eq!(judge::<Value>(Err("is not a file".into()), || panic!("not asked")).1, Some(true));
         // It opened: unmarked.
         assert_eq!(judge(Ok(()), || Ok(good.clone())).1, Some(false));
+    }
+
+    #[test]
+    fn the_library_gets_the_bench_s_report_and_the_deck_an_error() {
+        let bad = serde_json::json!({ "report": { "equations": [{ "message": "unexpected (" }] } });
+        // Marked either way; the library's open still has the report to show where it failed.
+        let (result, mark) = judge(Ok(()), || Ok(bad.clone()));
+        assert_eq!((result.as_ref().ok(), mark), (Some(&bad), Some(true)));
+        // The deck's open makes it an error.
+        assert_eq!(for_the_deck(result), (None, Some("it didn't load (unexpected ()".into())));
+        let good = serde_json::json!({ "report": { "equations": [] } });
+        assert_eq!(for_the_deck::<Value>(Ok(good.clone())), (Some(good), None));
+        assert_eq!(for_the_deck::<Value>(Err("gone".into())), (None, Some("gone".into())));
     }
 
     #[test]
@@ -434,6 +620,6 @@ mod tests {
         // Shaders that fell back to MilkDrop's default still draw: not a failure.
         let fell_back = serde_json::json!({ "preset": {}, "report": { "equations": [], "shaders": [{ "stage": "warp", "message": "x", "line": null }] } });
         assert_eq!(load_problem(&fell_back), None);
-        assert_eq!(WHEN_FAILED, Failed::Skip, "stepping moves on past it without a word");
+        assert_eq!(WHEN_FAILED, Failed::Skip, "stepping moves on past it, with a note in the status strip that fades (decision 60)");
     }
 }

@@ -172,8 +172,11 @@ pub fn open_path(app: &App, path: &str) -> Result<Opened, String> {
     Ok(Opened { preset, report })
 }
 
+/// The page opens `path` (the library's grid, the start preset, a drop, the lab):
+/// the bench's answer with its report, and the preset marked failed or not as
+/// the deck's opens are (`crate::resume::open_reported`).
 #[tauri::command]
-pub async fn open(path: String, app: State<'_, App>, deck: State<'_, crate::actions::Deck>) -> Result<Opened, String> {
+pub async fn open(path: String, handle: tauri::AppHandle, app: State<'_, App>, deck: State<'_, crate::actions::Deck>) -> Result<Opened, String> {
     deck.opened(Path::new(&path));
-    open_path(&app, &path)
+    crate::resume::open_reported(&handle, &app, Path::new(&path))
 }
