@@ -12,7 +12,7 @@
 //!   "presets": {
 //!     "cream-of-the-crop/Dancer/Whirl/ORB - Xenon.milk": {
 //!       "hash": "<SHA-256 of the file, hex>",
-//!       "star": true, "tags": ["warm up"], "hidden": false,
+//!       "star": true, "rating": 4, "tags": ["warm up"], "hidden": false,
 //!       "overrides": { "style": "Hypnotic", "speed": "low" } } } }
 //! ```
 //!
@@ -117,13 +117,16 @@ pub struct Mine {
     /// Never played by random or auto-advance, and shown only when asked for.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub hidden: bool,
+    /// The user's rating, 1–5 stars (live mode's 1–5 keys); none when unrated.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rating: Option<u8>,
     #[serde(skip_serializing_if = "Overrides::is_empty")]
     pub overrides: Overrides,
 }
 
 impl Mine {
     fn is_empty(&self) -> bool {
-        !self.star && !self.hidden && self.tags.is_empty() && self.overrides.is_empty()
+        !self.star && !self.hidden && self.rating.is_none() && self.tags.is_empty() && self.overrides.is_empty()
     }
 }
 
@@ -148,6 +151,8 @@ impl Default for LibraryData {
 pub struct Change {
     pub star: Option<bool>,
     pub hidden: Option<bool>,
+    /// A rating of 1–5 stars (more is 5); 0 takes the rating off.
+    pub rating: Option<u8>,
     /// Tags to add (once each) and to take off.
     pub add_tags: Vec<String>,
     pub remove_tags: Vec<String>,
@@ -166,6 +171,9 @@ pub fn apply(data: &mut LibraryData, keys: &[String], change: &Change) {
         }
         if let Some(hidden) = change.hidden {
             mine.hidden = hidden;
+        }
+        if let Some(rating) = change.rating {
+            mine.rating = (rating > 0).then_some(rating.min(5));
         }
         mine.tags.retain(|t| !change.remove_tags.contains(t));
         for t in &change.add_tags {
@@ -705,6 +713,20 @@ mod tests {
         apply(&mut data, &keys, &Change { star: Some(false), remove_tags: vec!["warm".into()], ..Default::default() });
         assert!(!data.presets.contains_key("b.milk"));
         apply(&mut data, &keys[..1], &Change { clear_overrides: true, ..Default::default() });
+        assert!(data.presets.is_empty());
+    }
+
+    #[test]
+    fn a_rating_is_one_to_five_and_zero_takes_it_off() {
+        let mut data = LibraryData::default();
+        let keys = ["a.milk".to_string()];
+        apply(&mut data, &keys, &Change { rating: Some(4), ..Default::default() });
+        assert_eq!(data.presets["a.milk"], Mine { rating: Some(4), ..Default::default() });
+        apply(&mut data, &keys, &Change { rating: Some(9), ..Default::default() });
+        assert_eq!(data.presets["a.milk"].rating, Some(5));
+        let text = serde_json::to_string(&data).unwrap();
+        assert!(text.contains(r#""rating":5"#), "{text}");
+        apply(&mut data, &keys, &Change { rating: Some(0), ..Default::default() });
         assert!(data.presets.is_empty());
     }
 

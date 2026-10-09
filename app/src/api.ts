@@ -200,6 +200,8 @@ export interface Mine {
   tags?: string[];
   /** Never played by random or auto-advance. */
   hidden?: boolean;
+  /** 1–5 stars; left out when unrated. */
+  rating?: number;
   overrides?: Overrides;
 }
 
@@ -213,6 +215,8 @@ export interface LibraryData {
 export interface LibraryChange {
   star?: boolean;
   hidden?: boolean;
+  /** 1–5 stars; 0 takes the rating off. */
+  rating?: number;
   add_tags?: string[];
   remove_tags?: string[];
   /** Drop the preset's overrides before `overrides` is applied. */
