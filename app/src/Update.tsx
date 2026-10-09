@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { Modal } from '@openflow/widgets/chrome/Modal.tsx';
 import * as api from './api.ts';
 import { useTauriEvent } from './hooks.ts';
+import { blocks, type Inline } from './notes.ts';
 
 /**
  * Updates: the app looks for a newer version once when it opens, quietly, and
@@ -42,6 +44,71 @@ const check = (): Promise<CheckResult> =>
     (update) => ({ update }),
     (e: unknown) => ({ error: String(e) }),
   );
+
+/** One run of the notes, drawn as React elements, so every bit of text is escaped. */
+function Run({ run }: { run: Inline }): ReactNode {
+  switch (run.kind) {
+    case 'text':
+      return run.text;
+    case 'code':
+      return <code>{run.text}</code>;
+    case 'bold':
+      return (
+        <strong>
+          <Runs runs={run.children} />
+        </strong>
+      );
+    case 'link':
+      // In the system browser, never inside the app's own window.
+      return (
+        <a
+          href={run.href}
+          title={run.href}
+          onClick={(e) => {
+            e.preventDefault();
+            void openUrl(run.href);
+          }}
+        >
+          {run.text}
+        </a>
+      );
+  }
+}
+
+const Runs = ({ runs }: { runs: Inline[] }) => runs.map((run, i) => <Run key={i} run={run} />);
+
+/** The release notes, with their paragraphs, lists, bold, code and links. */
+export function Notes({ notes }: { notes: string }) {
+  const parts = useMemo(() => blocks(notes), [notes]);
+  return parts.map((block, i) => {
+    switch (block.kind) {
+      case 'paragraph':
+        return (
+          <p key={i}>
+            <Runs runs={block.children} />
+          </p>
+        );
+      case 'heading':
+        return (
+          <p key={i}>
+            <strong>
+              <Runs runs={block.children} />
+            </strong>
+          </p>
+        );
+      case 'list':
+        return (
+          <ul key={i}>
+            {block.items.map((item, j) => (
+              <li key={j}>
+                <Runs runs={item} />
+              </li>
+            ))}
+          </ul>
+        );
+    }
+  });
+}
 
 export function Update() {
   const [state, setState] = useState<UpdateState>({ kind: 'idle' });
@@ -116,7 +183,7 @@ export function Update() {
         >
           {when && <p>Released {when}.</p>}
           <p>What's new:</p>
-          <p style={{ whiteSpace: 'pre-wrap', maxHeight: '40vh', overflowY: 'auto' }}>{notes.trim() || 'The release says nothing about it.'}</p>
+          <div style={{ maxHeight: '40vh', overflowY: 'auto' }}>{notes.trim() ? <Notes notes={notes} /> : <p>The release says nothing about it.</p>}</div>
         </Modal>
       );
     }
