@@ -47,8 +47,9 @@ nothing is recorded or sent anywhere.
 
 If you said no, or the question never appeared, turn it on yourself:
 
-1. Open **System Settings › Privacy & Security › Screen & System Audio Recording**
-   (on older macOS the name may differ slightly).
+1. On macOS 15 and later, open **System Settings › Privacy & Security › Screen &
+   System Audio Recording**. On macOS 14, look under **Privacy & Security** for the
+   entry that names visual[flow].
 2. Find **visual[flow]** and turn it on. It only needs audio, so it may be listed
    among the apps allowed to record audio only.
 
