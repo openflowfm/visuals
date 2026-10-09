@@ -257,6 +257,13 @@ body {
     flex: 0 1 auto;
     min-width: 0;
   }
+  .vf-header .audio-input > .vf-warning {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
   .vf-header > .vf-stats:not([data-slow]) {
     display: none;
   }
