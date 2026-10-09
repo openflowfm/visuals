@@ -3,7 +3,28 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { Fx } from './fx.ts';
 import type { Frame } from './link.ts';
-import { audioLabel, beatLabel, beatLit, hearingAt, SILENT_AFTER, bpmText, fpsShown, outputLabel, outputShown, outputText, peersText, Status, TapButton, tempoLabel } from './Status.tsx';
+import {
+  addSkip,
+  audioLabel,
+  beatLabel,
+  beatLit,
+  hearingAt,
+  SILENT_AFTER,
+  SKIP_FADE,
+  SKIP_SHOWN_FOR,
+  skipNextChange,
+  skipPhase,
+  skipText,
+  bpmText,
+  fpsShown,
+  outputLabel,
+  outputShown,
+  outputText,
+  peersText,
+  Status,
+  TapButton,
+  tempoLabel,
+} from './Status.tsx';
 
 const frame = (over: Partial<Frame> = {}): Frame => ({
   enabled: true,
@@ -93,6 +114,46 @@ describe('the status strip, on screen', () => {
   });
 });
 
+describe('the skipped note', () => {
+  it('says how many broken presets were skipped', () => {
+    expect(skipText(1)).toBe('Skipped 1 broken preset');
+    expect(skipText(3)).toBe('Skipped 3 broken presets');
+  });
+
+  it('counts skips in quick succession into one line, and starts again once it has gone', () => {
+    let note = addSkip(null, 1000);
+    expect(note).toEqual({ count: 1, at: 1000 });
+    note = addSkip(note, 1200);
+    note = addSkip(note, 3000);
+    expect(note).toEqual({ count: 3, at: 3000 });
+    // While it fades, a new skip still counts in and brings it back.
+    note = addSkip(note, 3000 + SKIP_SHOWN_FOR + SKIP_FADE / 2);
+    expect(note.count).toBe(4);
+    expect(skipPhase(note, note.at)).toBe('shown');
+    // Once gone, the next is a new note of one.
+    expect(addSkip(note, note.at + SKIP_SHOWN_FOR + SKIP_FADE)).toEqual({ count: 1, at: note.at + SKIP_SHOWN_FOR + SKIP_FADE });
+  });
+
+  it('stays a few seconds after the last skip, then fades and goes', () => {
+    const note = { count: 2, at: 1000 };
+    expect(skipPhase(null, 1000)).toBe('gone');
+    expect(skipPhase(note, 1000)).toBe('shown');
+    expect(skipPhase(note, 1000 + SKIP_SHOWN_FOR - 1)).toBe('shown');
+    expect(skipPhase(note, 1000 + SKIP_SHOWN_FOR)).toBe('fading');
+    expect(skipPhase(note, 1000 + SKIP_SHOWN_FOR + SKIP_FADE - 1)).toBe('fading');
+    expect(skipPhase(note, 1000 + SKIP_SHOWN_FOR + SKIP_FADE)).toBe('gone');
+    expect(SKIP_SHOWN_FOR).toBeGreaterThanOrEqual(2000);
+  });
+
+  it('wakes up when the note next changes, and not once it has gone', () => {
+    const note = { count: 1, at: 1000 };
+    expect(skipNextChange(note, 1000)).toBe(1000 + SKIP_SHOWN_FOR);
+    expect(skipNextChange(note, 1000 + SKIP_SHOWN_FOR)).toBe(1000 + SKIP_SHOWN_FOR + SKIP_FADE);
+    expect(skipNextChange(note, 1000 + SKIP_SHOWN_FOR + SKIP_FADE)).toBeNull();
+    expect(skipNextChange(null, 1000)).toBeNull();
+  });
+});
+
 describe('tap tempo, in the beat popover', () => {
   it('names the tap button with its tempo, lit (not pressed) while Link keeps it', () => {
     expect(tempoLabel(false, 120.4)).toBe('Tap tempo, 120 BPM (T)');
@@ -141,8 +202,15 @@ describe('the status strip, to VoiceOver', () => {
     expect(hearingAt(5000, 5000 + SILENT_AFTER)).toBe(false);
   });
 
+  it('reads the skipped note politely, from a live region that is there before anything is said', () => {
+    const lives = html.match(/<[^>]*aria-live[^>]*>[^<]*/g) ?? [];
+    expect(lives).toHaveLength(1);
+    expect(lives[0]).toContain('class="live-status-skipped"');
+    expect(lives[0]).toContain('aria-live="polite"');
+    expect(lives[0]).toMatch(/>$/);
+  });
+
   it('keeps the meter and the beat dot, which change every frame, away from VoiceOver', () => {
-    expect(html).not.toContain('aria-live');
     for (const dot of html.match(/<span class="live-status-(dot|meter)"[^>]*>/g) ?? []) expect(dot).toContain('aria-hidden="true"');
   });
 });

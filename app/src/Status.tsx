@@ -170,6 +170,65 @@ function Fps() {
   );
 }
 
+/** How long the skipped note stays after the last skip before it starts to fade (ms). */
+export const SKIP_SHOWN_FOR = 4000;
+/** How long the skipped note takes to fade (ms); `live.css` fades it over the same time. */
+export const SKIP_FADE = 1000;
+
+/** The skipped note: how many broken presets were skipped since it showed, and when the last one was (ms). */
+export interface Skips {
+  count: number;
+  at: number;
+}
+
+/** A skip at `now`: counted into the note while it is still up (fading or not), a new note of one once it has gone. */
+export const addSkip = (was: Skips | null, now: number): Skips => ({ count: was && skipPhase(was, now) !== 'gone' ? was.count + 1 : 1, at: now });
+
+/** Where the note is at `now`: up, fading, or gone. */
+export function skipPhase(note: Skips | null, now: number): 'shown' | 'fading' | 'gone' {
+  if (!note) return 'gone';
+  const since = now - note.at;
+  return since < SKIP_SHOWN_FOR ? 'shown' : since < SKIP_SHOWN_FOR + SKIP_FADE ? 'fading' : 'gone';
+}
+
+/** When the note next changes phase, from its last skip (ms); null once it has gone. */
+export function skipNextChange(note: Skips | null, now: number): number | null {
+  const phase = skipPhase(note, now);
+  if (!note || phase === 'gone') return null;
+  return note.at + SKIP_SHOWN_FOR + (phase === 'fading' ? SKIP_FADE : 0);
+}
+
+/** The note's words: "Skipped 1 broken preset", "Skipped 3 broken presets". */
+export const skipText = (count: number): string => `Skipped ${plural(count, say('failed preset'))}`;
+
+/**
+ * The note that next, previous, random or auto-advance skipped a preset that
+ * won't load (decision 60): skips in quick succession counted into one line,
+ * which fades a few seconds after the last. Its own leaf; the polite live region
+ * is always there (empty while nothing is said), so VoiceOver reads each new count.
+ */
+function SkipNote() {
+  const [note, setNote] = useState<Skips | null>(null);
+  const [now, setNow] = useState(0);
+  useTauriEvent(api.onPresetSkipped, () => {
+    const t = Date.now();
+    setNote((was) => addSkip(was, t));
+    setNow(t);
+  });
+  useEffect(() => {
+    const next = skipNextChange(note, now);
+    if (next === null) return;
+    const t = window.setTimeout(() => setNow(Date.now()), Math.max(0, next - now));
+    return () => window.clearTimeout(t);
+  }, [note, now]);
+  const phase = skipPhase(note, now);
+  return (
+    <span className="live-status-skipped" role="status" aria-live="polite" data-fading={phase === 'fading' ? '' : undefined}>
+      {note && phase !== 'gone' ? skipText(note.count) : ''}
+    </span>
+  );
+}
+
 /** What VoiceOver calls the BEAT light: "Beat, 120 BPM, 2 in time"; the tempo and who keeps it, without the dot. */
 export function beatLabel(frame: link.Frame | null, effects: fx.Fx | null): string {
   const bpm = bpmText(frame, effects);
@@ -347,6 +406,7 @@ export function Status({
         {shown && <span className="live-status-value">{shown}</span>}
       </Light>
       <Fps />
+      <SkipNote />
       <span className="live-status-end">
         <button
           type="button"
