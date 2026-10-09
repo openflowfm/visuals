@@ -3,7 +3,7 @@ import { Button } from '@openflow/widgets/controls/Button.tsx';
 /**
  * The More effects drawer (#98), a sheet over any view: opened with
  * `openSheet('effects')` from `views.tsx`, mounted by `App`. A placeholder until
- * 0.5.
+ * its 0.5 lane (#98) lands.
  */
 export function MoreEffects({ open, onClose }: { open: boolean; onClose(): void }) {
   if (!open) return null;
@@ -15,7 +15,7 @@ export function MoreEffects({ open, onClose }: { open: boolean; onClose(): void 
           ✕
         </Button>
       </div>
-      <p>More effects come in 0.5.</p>
+      <p>More effects are coming in a later 0.5 lane.</p>
     </div>
   );
 }

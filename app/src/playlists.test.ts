@@ -16,6 +16,7 @@ const deck = (over: Partial<Deck> = {}): Deck => ({
   settings: null,
   differs: [],
   next: null,
+  next_index: null,
   count: 0,
   query: null,
   ...over,
@@ -70,7 +71,7 @@ describe('upNext', () => {
   });
 
   it("takes the deck's next over stepping, as shuffle does", () => {
-    const up = upNext(lists([list('a', ['x', 'y', 'z'])], { playlist: 'a', index: 0, order: 'shuffle', next: 'g/z.milk' }));
+    const up = upNext(lists([list('a', ['x', 'y', 'z'])], { playlist: 'a', index: 0, order: 'shuffle', next: 'g/z.milk', next_index: 2 }));
     expect(up?.next?.name).toBe('z');
     expect(up?.nextIndex).toBe(2);
     expect(up?.count).toBe(3);
@@ -82,6 +83,12 @@ describe('upNext', () => {
     expect(up?.nextIndex).toBeNull();
     expect(up?.index).toBe(4);
     expect(up?.count).toBe(12);
+  });
+
+  it("finds the deck's next by its index when the playlist holds that preset twice", () => {
+    const up = upNext(lists([list('a', ['x', 'y', 'x'])], { playlist: 'a', index: 1, next: 'g/x.milk', next_index: 2 }));
+    expect(up?.nextIndex).toBe(2);
+    expect(up?.next?.name).toBe('x');
   });
 
   it('steps when the deck names no next', () => {

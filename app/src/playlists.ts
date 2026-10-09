@@ -93,6 +93,8 @@ export interface Deck {
   differs: SettingName[];
   /** The path `next` opens, knowing shuffle and smart lists; null when no playlist or filter plays. */
   next: string | null;
+  /** Where `next` is in what is playing: an index into the playlist's items, or the resolved smart list's or the filter's; null when nothing plays or nothing is next. The same preset can be in a playlist twice, so this, not the path, says which. */
+  next_index: number | null;
   /** How many presets are in what is playing: the playlist, the resolved smart list or the filter; 0 for the library. */
   count: number;
   /** Playing an unsaved filter (a mood chip, say); null otherwise. */
@@ -112,6 +114,7 @@ export const EMPTY_DECK: Deck = {
   settings: null,
   differs: [],
   next: null,
+  next_index: null,
   count: 0,
   query: null,
 };
@@ -137,7 +140,7 @@ export interface Up {
   index: number | null;
   /** What `next` opens: null only when the playlist is empty (or, for a smart one, when the deck didn't say). */
   next: Item | null;
-  /** Where `next` is in `playlist.items`; null when it isn't there (a smart playlist's items are empty). */
+  /** Where `next` is: in `playlist.items` for a manual playlist, in the resolved matches for a smart one (whose items are empty); null when the deck didn't say. */
   nextIndex: number | null;
   /** How many presets are playing: a smart playlist's resolved matches, otherwise its items. */
   count: number;
@@ -148,7 +151,8 @@ const itemAt = (path: string): Item => ({ path, name: nameOf(path), group: path.
 
 /**
  * The active playlist and its next item. The deck's own `next` comes first, as
- * it knows shuffle and smart lists; without it, stepping the way
+ * it knows shuffle and smart lists, found by the deck's `next_index` (never by
+ * path: a playlist can hold one preset twice); without it, stepping the way
  * `actions::decide` does: one on from the playing item, round to the first after
  * the last, and the first when nothing in it has played yet. Missing files are
  * not skipped (the engine doesn't skip them either). Null when no playlist is
@@ -163,8 +167,9 @@ export function upNext(lists: Lists | null): Up | null {
   const count = playlist.kind === 'smart' ? deck.count : items.length;
   const index = deck.index !== null && deck.index < count ? deck.index : null;
   if (deck.next) {
-    const at = items.findIndex((i) => i.path === deck.next);
-    return { playlist, index, next: at >= 0 ? items[at] : itemAt(deck.next), nextIndex: at >= 0 ? at : null, count };
+    const at = deck.next_index;
+    if (playlist.kind === 'manual' && at !== null && at >= 0 && at < items.length) return { playlist, index, next: items[at], nextIndex: at, count };
+    return { playlist, index, next: itemAt(deck.next), nextIndex: playlist.kind === 'smart' ? at : null, count };
   }
   if (items.length === 0) return { playlist, index: null, next: null, nextIndex: null, count };
   const nextIndex = index === null ? 0 : (index + 1) % items.length;

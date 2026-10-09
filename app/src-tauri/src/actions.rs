@@ -144,6 +144,9 @@ pub struct DeckView {
     pub differs: Vec<SettingName>,
     /// What `next` opens, when a playlist or filter plays.
     pub next: Option<String>,
+    /// Where `next` is in the playlist's or filter's items, so a preset listed
+    /// twice is told apart.
+    pub next_index: Option<usize>,
     /// How many presets the playlist or filter playing has.
     pub count: usize,
     /// The unsaved filter playing.
@@ -162,6 +165,21 @@ pub fn every_of(change: Change) -> Every {
 pub fn apply_fx(fx: &mut Fx, s: &Settings, now: Instant) {
     for action in [FxAction::Transition { seconds: s.transition }, FxAction::Speed { speed: s.speed }, FxAction::Trails { value: s.trails }, FxAction::Hue { value: s.hue }] {
         let _ = fx.apply(&action, now);
+    }
+}
+
+/// Set the effects among a playlist's settings that changed from `old` to `new`,
+/// leaving the rest (and live tweaks of them) alone.
+pub fn apply_fx_changed(fx: &mut Fx, old: &Settings, new: &Settings, now: Instant) {
+    let changed = |a: f64, b: f64| (a - b).abs() >= 1e-9;
+    let actions = [
+        (changed(old.transition, new.transition), FxAction::Transition { seconds: new.transition }),
+        (changed(old.speed, new.speed), FxAction::Speed { speed: new.speed }),
+        (changed(old.trails, new.trails), FxAction::Trails { value: new.trails }),
+        (changed(old.hue, new.hue), FxAction::Hue { value: new.hue }),
+    ];
+    for (_, action) in actions.iter().filter(|(c, _)| *c) {
+        let _ = fx.apply(action, now);
     }
 }
 
@@ -211,11 +229,32 @@ impl Live {
         self.settings = Some(*s);
         self.order = s.order;
         self.arrange(roll);
-        self.schedule(every_of(s.change));
-        if let Change::Seconds { every } = s.change {
+        self.take_change(s.change);
+    }
+
+    /// Change on `change`: Link's schedule, or auto-advance on every so many seconds from now.
+    fn take_change(&mut self, change: Change) {
+        self.schedule(every_of(change));
+        if let Change::Seconds { every } = change {
             self.auto = true;
             self.seconds = every;
             self.since = Instant::now();
+        }
+    }
+
+    /// The playing playlist's settings were edited from `old` to `new`: take
+    /// only what changed. A new order draws a new play order; new change timing
+    /// restarts the timer (and turns auto-advance on for seconds); anything
+    /// else, and live tweaks of what didn't change, stay as they are. The
+    /// effects are [`apply_fx_changed`]'s.
+    pub fn retake(&mut self, old: &Settings, new: &Settings, roll: u64) {
+        self.settings = Some(*new);
+        if old.order != new.order {
+            self.order = new.order;
+            self.arrange(roll);
+        }
+        if old.change != new.change {
+            self.take_change(new.change);
         }
     }
 
@@ -280,6 +319,7 @@ impl Live {
             settings: self.settings,
             differs: self.differs(fx),
             next: self.next_path().map(|p| p.to_string_lossy().into_owned()),
+            next_index: if self.active() { self.stepped(1).filter(|&i| i < self.items.len()) } else { None },
             count: if self.active() { self.items.len() } else { 0 },
             query: self.query.clone(),
         }
@@ -398,7 +438,7 @@ pub fn decide(live: &mut Live, action: &Action, store: &Store, library: &dyn Fn(
             live.unload();
             live.playlist = Some(list.id.clone());
             live.items = items;
-            live.take(&list.settings, roll);
+            live.take(&list.settings.checked().unwrap_or_default(), roll);
             start(live, *index)
         }
         Action::Query { query } => {
@@ -522,7 +562,16 @@ impl Deck {
     }
 
     fn lists(&self) -> Lists {
-        let playlists = self.store.lock().unwrap().views();
+        let playlists = {
+            let mut store = self.store.lock().unwrap();
+            // Items with no hash yet whose file has appeared since: hashed and kept.
+            if store.hash_missing() {
+                if let Err(e) = store.save() {
+                    eprintln!("playlists: {e}");
+                }
+            }
+            store.views()
+        };
         Lists { playlists, deck: self.view() }
     }
 
@@ -545,6 +594,15 @@ impl Deck {
     fn took(&self, handle: &AppHandle, s: &Settings) {
         apply_fx(&mut self.fx.lock().unwrap(), s, Instant::now());
         handle.state::<crate::link::Link>().set_every(every_of(s.change).clamped());
+    }
+
+    /// The effects and Link's schedule of what changed from `old` to `new` in the
+    /// playing playlist's settings ([`Live::retake`]).
+    fn retook(&self, handle: &AppHandle, old: &Settings, new: &Settings) {
+        apply_fx_changed(&mut self.fx.lock().unwrap(), old, new, Instant::now());
+        if old.change != new.change {
+            handle.state::<crate::link::Link>().set_every(every_of(new.change).clamped());
+        }
     }
 }
 
@@ -617,14 +675,9 @@ fn dispatch_skipping(handle: &AppHandle, action: Action, skips: usize) -> Result
     let app = handle.state::<crate::App>();
     let all = crate::userlib::playable(handle, crate::pack::milk_files(handle));
     let played = deck.played.lock().unwrap().clone();
-    let resolve = |q: &LibraryQuery| crate::query::resolve(q, &crate::catalog::rows(handle), &crate::userlib::data(handle), &played);
-    let (path, took) = {
-        let store = deck.store.lock().unwrap();
-        let mut live = deck.live.lock().unwrap();
-        let library = || all.clone();
-        let path = decide(&mut live, &action, &store, &library, &resolve, roll())?;
-        (path, if matches!(action, Action::Load { .. }) { live.settings } else { None })
-    };
+    let resolve = |q: &LibraryQuery| crate::query::resolve(q, &crate::catalog::cached_rows(handle), &crate::userlib::data(handle), &played);
+    let library = || all.clone();
+    let (path, took) = step(&deck.store, &deck.live, &action, &library, &resolve, roll())?;
     if let Some(s) = took {
         deck.took(handle, &s);
         deck.emit_fx(handle)?;
@@ -647,6 +700,41 @@ fn dispatch_skipping(handle: &AppHandle, action: Action, skips: usize) -> Result
     }
     let now = Now { deck: deck.view(), opened, path: path.map(|p| p.to_string_lossy().into_owned()), error };
     emit_now(handle, now)
+}
+
+/// [`decide`] `action` on the deck's playlists and live state, holding their
+/// locks only to read a smart playlist's filter and then to apply: what a
+/// smart playlist or filter picks (`resolve`, which goes through the whole
+/// library) is worked out with no lock held. Returns the preset to open and,
+/// for a load, the settings the deck took.
+fn step(
+    store: &Mutex<Store>,
+    live: &Mutex<Live>,
+    action: &Action,
+    library: &dyn Fn() -> Vec<PathBuf>,
+    resolve: &dyn Fn(&LibraryQuery) -> Vec<PathBuf>,
+    roll: u64,
+) -> Result<(Option<PathBuf>, Option<Settings>), String> {
+    let query = match action {
+        Action::Load { playlist, .. } => store.lock().unwrap().lists.get(*playlist).filter(|l| l.kind == Kind::Smart).map(|l| l.query.clone().unwrap_or_default()),
+        Action::Query { query } => Some(query.clone()),
+        _ => None,
+    };
+    // Held, the load is refused anyway: no need to work anything out.
+    let held = live.lock().unwrap().hold;
+    let resolved = query.filter(|_| !held).map(|q| {
+        let items = resolve(&q);
+        (q, items)
+    });
+    // The filter is the one worked out unless the playlists changed in between.
+    let picked = |q: &LibraryQuery| match &resolved {
+        Some((asked, items)) if asked == q => items.clone(),
+        _ => Vec::new(),
+    };
+    let store = store.lock().unwrap();
+    let mut live = live.lock().unwrap();
+    let path = decide(&mut live, action, &store, library, &picked, roll)?;
+    Ok((path, if matches!(action, Action::Load { .. }) { live.settings } else { None }))
 }
 
 /// Advance on the active playlist (or the library) every `seconds` while auto is on.
@@ -756,23 +844,27 @@ pub fn playlist_move(id: String, to: usize, deck: State<Deck>) -> Result<Lists, 
 }
 
 /// Change playlist `id`'s settings. When it is the one playing, the deck takes
-/// them at once (dropping live tweaks), as if it had loaded again in place.
+/// what changed at once ([`Live::retake`]): the rest, its play order and timer,
+/// and live tweaks of what didn't change stay as they are.
 #[tauri::command]
 pub fn playlist_settings(id: String, settings: Settings, deck: State<Deck>, handle: AppHandle) -> Result<Lists, String> {
-    let settings = edit(&deck, |s| {
+    let (old, new) = edit(&deck, |s| {
+        let old = s.find(&id).map(|l| l.settings);
         s.set_settings(&id, settings)?;
-        Ok(s.find(&id).map(|l| l.settings))
+        Ok((old, s.find(&id).map(|l| l.settings)))
     })?;
-    let playing = {
+    let changed = {
         let mut live = deck.live.lock().unwrap();
-        let playing = live.playlist.as_deref() == Some(id.as_str());
-        if let (true, Some(s)) = (playing, settings) {
-            live.take(&s, roll());
+        match (live.playlist.as_deref() == Some(id.as_str()), live.settings.or(old), new) {
+            (true, Some(old), Some(new)) => {
+                live.retake(&old, &new, roll());
+                Some((old, new))
+            }
+            _ => None,
         }
-        playing
     };
-    if let (true, Some(s)) = (playing, settings) {
-        deck.took(&handle, &s);
+    if let Some((old, new)) = changed {
+        deck.retook(&handle, &old, &new);
         emit_deck(&handle, &deck)?;
     }
     Ok(deck.lists())
@@ -1093,5 +1185,98 @@ mod tests {
         assert!(go(&mut live, Action::Go { index: 0 }).is_some());
         go(&mut live, Action::Unload);
         assert_eq!((live.query.clone(), live.view(&Default::default()).count), (None, 0));
+    }
+
+    #[test]
+    fn a_smart_playlist_is_worked_out_with_neither_lock_held() {
+        let (mut s, lib) = store();
+        s.create_smart("Calm", LibraryQuery { text: "calm".into(), ..Default::default() }).unwrap();
+        let (store, live) = (Mutex::new(s), Mutex::new(Live::default()));
+        let asked = std::cell::Cell::new(0);
+        let resolve = |_: &LibraryQuery| {
+            asked.set(asked.get() + 1);
+            assert!(store.try_lock().is_ok(), "the playlists are not locked while resolving");
+            assert!(live.try_lock().is_ok(), "the deck is not locked while resolving");
+            vec![lib.join("c.milk")]
+        };
+        let (path, took) = step(&store, &live, &Action::Load { playlist: 2, index: None }, &none, &resolve, 0).unwrap();
+        assert_eq!((path, took), (Some(lib.join("c.milk")), Some(Settings::default())));
+        let (path, took) = step(&store, &live, &Action::Query { query: LibraryQuery::default() }, &none, &resolve, 0).unwrap();
+        assert_eq!((path, took), (Some(lib.join("c.milk")), None));
+        assert_eq!(asked.get(), 2);
+        // A manual playlist and a step resolve nothing.
+        step(&store, &live, &Action::Load { playlist: 0, index: None }, &none, &resolve, 0).unwrap();
+        step(&store, &live, &Action::Next, &none, &resolve, 0).unwrap();
+        assert_eq!(asked.get(), 2);
+    }
+
+    #[test]
+    fn settings_out_of_their_limits_are_checked_when_a_playlist_loads() {
+        let (mut s, _) = store();
+        // As a hand edit leaves them: changing every 0 seconds, at speed 99.
+        s.lists[0].settings = Settings { change: Change::Seconds { every: 0.0 }, speed: 99.0, ..Settings::default() };
+        let (store, live) = (Mutex::new(s), Mutex::new(Live::default()));
+        let (_, took) = step(&store, &live, &Action::Load { playlist: 0, index: None }, &none, &nothing, 0).unwrap();
+        let took = took.unwrap();
+        assert_eq!((took.change, took.speed), (Change::Seconds { every: 1.0 }, 4.0));
+        let live = live.lock().unwrap();
+        assert_eq!((live.auto, live.seconds), (true, 1.0), "never every 100 ms");
+        let mut fx = Fx::new(Instant::now());
+        apply_fx(&mut fx, &took, Instant::now());
+        assert_eq!(fx.settings.speed, 4.0);
+    }
+
+    #[test]
+    fn editing_the_playing_playlist_takes_only_what_changed() {
+        let (mut s, lib) = store();
+        let a = s.lists[0].id.clone();
+        for n in ["u", "v", "w"] {
+            s.add(&a, &lib.join(format!("{n}.milk")), None).unwrap();
+        }
+        s.set_settings(&a, Settings { order: Order::Shuffle, ..Settings::default() }).unwrap();
+        let mut live = Live::default();
+        let mut fx = Fx::new(Instant::now());
+        rolled(&mut live, &Action::Load { playlist: 0, index: None }, &s, 12345).unwrap();
+        apply_fx(&mut fx, &live.settings.unwrap(), Instant::now());
+        d(&mut live, &Action::Next, &s).unwrap();
+        // Live: auto-advance turned off, speed tweaked.
+        d(&mut live, &Action::Auto { on: Some(false) }, &s).unwrap();
+        fx.apply(&FxAction::Speed { speed: 2.0 }, Instant::now()).unwrap();
+        let (next, sequence, since) = (live.next_path().cloned(), live.sequence.clone(), live.since);
+        let view = live.view(&fx.settings);
+        assert_eq!(view.next_index.map(|i| &live.items[i]), next.as_ref());
+
+        // Dragging trails, a step at a time.
+        let mut old = live.settings.unwrap();
+        for trails in [0.1, 0.2, 0.3] {
+            let new = Settings { trails, ..old };
+            live.retake(&old, &new, roll());
+            apply_fx_changed(&mut fx, &old, &new, Instant::now());
+            old = new;
+        }
+        assert_eq!(live.next_path().cloned(), next, "next stays next");
+        assert_eq!((&live.sequence, live.since, live.auto), (&sequence, since, false), "the order and timer are kept, auto stays off");
+        assert_eq!((fx.settings.trails, fx.settings.speed), (0.3, 2.0), "trails taken, the speed tweak kept");
+        assert_eq!(live.settings.unwrap().trails, 0.3);
+
+        // A new change timing restarts the timer and turns auto-advance on.
+        let new = Settings { change: Change::Seconds { every: 5.0 }, ..old };
+        live.retake(&old, &new, roll());
+        assert_eq!((live.auto, live.seconds, &live.sequence), (true, 5.0, &sequence));
+        // A new order draws a new play order.
+        let new2 = Settings { order: Order::InOrder, ..new };
+        live.retake(&new, &new2, roll());
+        assert_eq!(live.sequence, [0, 1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn next_index_tells_a_preset_listed_twice_apart() {
+        let (mut s, lib) = store();
+        let a = s.lists[0].id.clone();
+        s.add(&a, &lib.join("x.milk"), None).unwrap();
+        let mut live = Live::default();
+        d(&mut live, &Action::Load { playlist: 0, index: Some(2) }, &s).unwrap();
+        let view = live.view(&Default::default());
+        assert_eq!((view.next.as_deref(), view.next_index), (Some(lib.join("x.milk").to_string_lossy().as_ref()), Some(3)));
     }
 }

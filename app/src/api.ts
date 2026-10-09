@@ -250,9 +250,9 @@ export interface Quality {
   chosen: QualityLevel;
   effective: Exclude<QualityLevel, 'auto'>;
 }
-/** The render quality. A stub until 0.9: it fails. */
+/** The render quality. A stub until its 0.9 lane (#101) lands: it never fails, and always says `{ chosen: 'auto', effective: 'high' }`. */
 export const qualityGet = () => invoke<Quality>('quality_get');
-/** Choose the render quality; resolves to it in effect. A stub until 0.9: it fails. */
+/** Choose the render quality; resolves to it in effect. A stub until its 0.9 lane (#101) lands: it fails. */
 export const qualitySet = (level: QualityLevel) => invoke<Quality>('quality_set', { level });
 
 /** `access::Motion`: whether to calm the motion, and whether that came from macOS's own setting. */

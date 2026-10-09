@@ -328,3 +328,53 @@ main {
 .quiet {
   color: var(--caption);
 }
+
+/* The 0.5 stubs (Home, Settings, More effects): just enough to look meant until
+   their lanes (#96, #98) draw them for real. A sheet is a panel over any view. */
+.vf-sheet {
+  position: fixed;
+  top: calc(var(--ctl-h) + 21px);
+  right: 12px;
+  z-index: 30;
+  width: min(380px, calc(100vw - 24px));
+  max-height: calc(100vh - var(--ctl-h) - 42px);
+  overflow: auto;
+  padding: 12px 14px;
+  background: var(--panel);
+  color: var(--ui);
+  border: 1px solid var(--bd);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 32px rgb(0 0 0 / 0.45);
+}
+.vf-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.vf-sheet-head h2 {
+  margin: 0;
+  font-size: var(--text-heading);
+  font-weight: var(--weight-strong);
+  color: var(--fg);
+}
+.vf-sheet p {
+  color: var(--caption);
+  font-size: var(--text-body);
+}
+/* Home has no library column or side panel: its main spans the grid, and paints
+   itself, as nothing here sits over the bench. */
+.app[data-view='home'] main {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+.home-placeholder {
+  margin: 0;
+  color: var(--caption);
+  font-size: var(--text-body);
+  text-align: center;
+}

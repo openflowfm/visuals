@@ -25,7 +25,8 @@
 //! preset. Each item keeps its file's content hash, so it is found again when
 //! the folder is reorganised (`crate::userlib` looks for it). Version 1 (items
 //! as plain paths, no settings) is read and moved to version 2 on open, the
-//! old file kept beside it as `playlists.json.v1`. A file that won't parse, or
+//! old file kept beside it as `playlists.json.v1` (numbered, `.v1.1`…, when that
+//! is taken; until the backup is written, version 2 isn't). A file that won't parse, or
 //! of a newer version, is moved aside (`.bad`, `.bad.1`, …) as
 //! `crate::userlib` does; only a missing file reads as no playlists.
 
@@ -186,6 +187,9 @@ pub struct Store {
     /// The folders presets are relative to: the presets folder first, then the starter set.
     folders: Vec<PathBuf>,
     pub lists: Vec<Playlist>,
+    /// A version 1 file not yet kept as a backup: until it is, nothing is
+    /// written over it ([`Store::save`] tries the backup again first).
+    pending_backup: Option<Vec<u8>>,
 }
 
 /// One playlist item as the page shows it.
@@ -261,31 +265,51 @@ fn clean_name(name: &str) -> Result<String, String> {
     if name.is_empty() { Err("a playlist needs a name".into()) } else { Ok(name.to_string()) }
 }
 
-/// A file's content hash and size, when it can be read.
+/// A preset file's content hash and size, when it is one that can be read
+/// ([`crate::library::read_preset`]: a regular file of a preset's size).
 fn hash_file(path: &Path) -> (Option<String>, Option<u64>) {
-    match std::fs::read(path) {
+    match crate::library::read_preset(path) {
         Ok(bytes) => (Some(engine::index::hash(&bytes)), Some(bytes.len() as u64)),
         Err(_) => (None, None),
     }
 }
 
+/// A shared file's item path, when it is a plain path inside a library folder:
+/// relative, of ordinary names only (no `..`, no root, no drive).
+fn plain(path: &str) -> bool {
+    use std::path::Component;
+    !path.is_empty() && Path::new(path).components().all(|c| matches!(c, Component::Normal(_)))
+}
+
+/// `lists` with every playlist's settings within their limits ([`Settings::checked`]);
+/// settings that can't be (no number) are the defaults.
+fn checked(mut lists: Vec<Playlist>) -> Vec<Playlist> {
+    for l in &mut lists {
+        l.settings = l.settings.checked().unwrap_or_default();
+    }
+    lists
+}
+
 impl Store {
     /// Read the file (see the module's docs): version 1 is moved to version 2,
-    /// hashing the items whose files are there.
+    /// hashing the items whose files are there. Settings out of their limits
+    /// (a hand-edited file) are brought within them.
     pub fn open(file: PathBuf, library: PathBuf) -> Store {
-        let mut store = Store { file, folders: vec![library], lists: Vec::new() };
+        let mut store = Store { file, folders: vec![library], lists: Vec::new(), pending_backup: None };
         let bytes = match std::fs::read(&store.file) {
             Ok(bytes) => bytes,
             Err(_) => return store,
         };
         let problem = match serde_json::from_slice::<File>(&bytes) {
             Ok(f) if f.version == VERSION => {
-                store.lists = f.playlists;
+                store.lists = checked(f.playlists);
                 return store;
             }
             Ok(f) if f.version < VERSION => {
-                store.lists = f.playlists;
-                store.migrate(&bytes);
+                store.lists = checked(f.playlists);
+                if let Err(e) = store.migrate(bytes) {
+                    eprintln!("playlists: {e}");
+                }
                 return store;
             }
             Ok(f) => format!("is version {}, newer than {VERSION}", f.version),
@@ -297,31 +321,75 @@ impl Store {
         store
     }
 
-    /// From version 1: hash each item whose file is there, keep the old file as
-    /// `.v1`, and write version 2.
-    fn migrate(&mut self, old: &[u8]) {
-        for i in 0..self.lists.len() {
-            for j in 0..self.lists[i].presets.len() {
-                let path = self.resolve(&self.lists[i].presets[j].path);
-                let (hash, size) = hash_file(&path);
-                let entry = &mut self.lists[i].presets[j];
-                entry.hash = entry.hash.take().or(hash);
-                entry.size = entry.size.or(size);
-            }
-        }
-        let mut kept = self.file.file_name().unwrap_or_default().to_os_string();
-        kept.push(".v1");
-        let _ = std::fs::write(self.file.with_file_name(kept), old);
-        if let Err(e) = self.save() {
-            eprintln!("playlists: saving {} as version {VERSION} failed: {e}", self.file.display());
-        }
+    /// From version 1: hash each item whose file is there, keep the old file
+    /// beside it (`.v1`, or `.v1.1`, `.v1.2`… when that is taken: a backup is
+    /// never written over), and write version 2. When the backup can't be
+    /// written, the old file stays as it is and the migrated playlists play
+    /// from memory; every save tries the backup again first.
+    fn migrate(&mut self, old: Vec<u8>) -> Result<(), String> {
+        self.hash_missing();
+        self.pending_backup = Some(old);
+        self.save().map_err(|e| format!("{} stays at version 1 for now: {e}", self.file.display()))
     }
 
-    /// Write the whole file, through a temporary file so a crash never leaves half of one.
-    pub fn save(&self) -> Result<(), String> {
+    /// Keep the version 1 file not yet backed up, under the first free name.
+    fn back_up(&mut self) -> Result<(), String> {
+        let Some(old) = &self.pending_backup else { return Ok(()) };
+        let mut name = self.file.file_name().unwrap_or_default().to_os_string();
+        name.push(".v1");
+        for n in 0..1000 {
+            let mut numbered = name.clone();
+            if n > 0 {
+                numbered.push(format!(".{n}"));
+            }
+            let path = self.file.with_file_name(numbered);
+            match std::fs::OpenOptions::new().write(true).create_new(true).open(&path) {
+                Ok(mut f) => {
+                    use std::io::Write;
+                    if let Err(e) = f.write_all(old).and_then(|_| f.sync_all()) {
+                        let _ = std::fs::remove_file(&path);
+                        return Err(format!("keeping the version 1 file as {} failed: {e}", path.display()));
+                    }
+                    self.pending_backup = None;
+                    return Ok(());
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(e) => return Err(format!("keeping the version 1 file as {} failed: {e}", path.display())),
+            }
+        }
+        Err("keeping the version 1 file failed: every backup name is taken".into())
+    }
+
+    /// Hash the items that have no hash yet whose file is now there (an item
+    /// whose file was missing when version 1 was moved to version 2, say).
+    /// Returns whether any was.
+    pub fn hash_missing(&mut self) -> bool {
+        let mut any = false;
+        for i in 0..self.lists.len() {
+            for j in 0..self.lists[i].presets.len() {
+                if self.lists[i].presets[j].hash.is_some() {
+                    continue;
+                }
+                let path = self.resolve(&self.lists[i].presets[j].path);
+                if let (Some(hash), size) = hash_file(&path) {
+                    let entry = &mut self.lists[i].presets[j];
+                    entry.hash = Some(hash);
+                    entry.size = entry.size.or(size);
+                    any = true;
+                }
+            }
+        }
+        any
+    }
+
+    /// Write the whole file, through a temporary file so a crash never leaves
+    /// half of one. A version 1 file not yet backed up is kept first, or nothing
+    /// is written.
+    pub fn save(&mut self) -> Result<(), String> {
         if let Some(dir) = self.file.parent() {
             std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
         }
+        self.back_up()?;
         let text = serde_json::to_string_pretty(&File { version: VERSION, playlists: self.lists.clone() }).map_err(|e| e.to_string())?;
         let tmp = self.file.with_extension("json.tmp");
         std::fs::write(&tmp, text).map_err(|e| e.to_string())?;
@@ -517,7 +585,16 @@ impl Store {
             kind: l.kind,
             query: l.query.clone(),
             settings: l.settings,
-            items: l.presets.iter().map(|e| SharedItem { path: e.path.clone(), hash: e.hash.clone() }).collect(),
+            // Outside the library, only the file's name: never where it is on this Mac
+            // (the user's home). Its hash finds it again on import.
+            items: l
+                .presets
+                .iter()
+                .map(|e| {
+                    let path = if Path::new(&e.path).is_absolute() { Path::new(&e.path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default() } else { e.path.clone() };
+                    SharedItem { path, hash: e.hash.clone() }
+                })
+                .collect(),
         };
         let safe: String = l.name.chars().map(|c| if c.is_alphanumeric() || " -_".contains(c) { c } else { '_' }).collect();
         Ok(Exported { file_name: format!("{}.visualflow.json", safe.trim()), text: serde_json::to_string_pretty(&shared).map_err(|e| e.to_string())? })
@@ -525,6 +602,8 @@ impl Store {
 
     /// Add the playlist a shared file's `text` holds, as a new playlist; returns its id.
     /// Items whose file isn't where it says are kept, to be found again by their hash.
+    /// Item paths are only ever inside the library folders: a file naming an
+    /// absolute path or one through `..` is refused. A smart playlist keeps no items.
     pub fn import(&mut self, text: &str) -> Result<String, String> {
         let shared: Shared = serde_json::from_str(text).map_err(|e| format!("not a playlist file ({e})"))?;
         if shared.format != SHARED_FORMAT {
@@ -538,8 +617,11 @@ impl Store {
         }
         let name = clean_name(&shared.name)?;
         let settings = shared.settings.checked()?;
-        let presets = shared
-            .items
+        if let Some(bad) = shared.items.iter().find(|i| !plain(&i.path)) {
+            return Err(format!("the playlist file names a preset outside the library ({})", bad.path));
+        }
+        let items = if shared.kind == Kind::Smart { Vec::new() } else { shared.items };
+        let presets = items
             .into_iter()
             .map(|i| {
                 // The size is kept only when the file here is the one the hash names.
@@ -691,6 +773,104 @@ mod tests {
         assert_eq!((two.name.as_str(), two.settings.order, &two.presets), (one.name.as_str(), Order::Shuffle, &one.presets));
         assert!(s.import("{}").is_err());
         assert!(s.import(&out.text.replace(SHARED_FORMAT, "other")).is_err());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_v1_backup_is_never_written_over_and_v2_waits_for_it() {
+        let dir = temp();
+        let v1 = r#"{"version":1,"playlists":[{"id":"1","name":"Set","presets":["a/one.milk"]}]}"#;
+        // An older backup is there already: it stays, the new one is numbered.
+        std::fs::write(dir.join("p.json.v1"), "older").unwrap();
+        std::fs::write(dir.join("p.json"), v1).unwrap();
+        Store::open(dir.join("p.json"), dir.join("lib"));
+        assert_eq!(std::fs::read_to_string(dir.join("p.json.v1")).unwrap(), "older");
+        assert_eq!(std::fs::read_to_string(dir.join("p.json.v1.1")).unwrap(), v1);
+
+        // The backup can't be written (a read-only folder): version 1 is left as it is,
+        // the migrated playlists play from memory, and no save writes over it.
+        let ro = dir.join("ro");
+        std::fs::create_dir_all(&ro).unwrap();
+        std::fs::write(ro.join("p.json"), v1).unwrap();
+        let perms = |mode| {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&ro, std::fs::Permissions::from_mode(mode)).unwrap();
+        };
+        perms(0o555);
+        let mut s = Store::open(ro.join("p.json"), dir.join("lib"));
+        assert_eq!(s.lists[0].presets[0].hash.as_deref(), Some(engine::index::hash(b"").as_str()));
+        assert!(s.save().is_err(), "no backup, no version 2");
+        assert_eq!(std::fs::read_to_string(ro.join("p.json")).unwrap(), v1);
+        assert!(!ro.join("p.json.v1").exists());
+        // Once it can be, the next save keeps the backup, then writes version 2.
+        perms(0o755);
+        s.rename("1", "Renamed").unwrap();
+        s.save().unwrap();
+        assert_eq!(std::fs::read_to_string(ro.join("p.json.v1")).unwrap(), v1);
+        assert!(std::fs::read_to_string(ro.join("p.json")).unwrap().contains("Renamed"));
+        s.save().unwrap();
+        assert!(!ro.join("p.json.v1.1").exists(), "kept once");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn an_item_missing_at_migration_is_hashed_when_its_file_appears() {
+        let dir = temp();
+        std::fs::write(dir.join("p.json"), r#"{"version":1,"playlists":[{"id":"1","name":"Set","presets":["a/later.milk"]}]}"#).unwrap();
+        let mut s = Store::open(dir.join("p.json"), dir.join("lib"));
+        assert_eq!(s.lists[0].presets[0].hash, None);
+        assert!(!s.hash_missing());
+        std::fs::write(dir.join("lib/a/later.milk"), "[preset00]\n").unwrap();
+        assert!(s.hash_missing());
+        assert_eq!(s.lists[0].presets[0].hash.as_deref(), Some(engine::index::hash(b"[preset00]\n").as_str()));
+        assert_eq!(s.lists[0].presets[0].size, Some(11));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn hand_edited_settings_are_brought_within_limits_on_open() {
+        let dir = temp();
+        let file = r#"{"version":2,"playlists":[{"id":"1","name":"S","kind":"manual",
+            "settings":{"change":{"unit":"seconds","every":0},"speed":99,"transition":-1,"trails":2,"hue":-3},"presets":[]},
+            {"id":"2","name":"B","settings":{"change":{"unit":"bars","every":0}}}]}"#;
+        std::fs::write(dir.join("p.json"), file).unwrap();
+        let s = Store::open(dir.join("p.json"), dir.join("lib"));
+        let one = s.lists[0].settings;
+        assert_eq!((one.change, one.speed, one.transition, one.trails, one.hue), (Change::Seconds { every: 1.0 }, 4.0, 0.0, 1.0, 0.0));
+        assert_eq!(s.lists[1].settings.change, Change::Bars { every: 1 });
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn import_refuses_paths_outside_the_library_and_export_never_names_the_home() {
+        let dir = temp();
+        let mut s = Store::open(dir.join("p.json"), dir.join("lib"));
+        let file = |path: &str| format!(r#"{{"format":"{SHARED_FORMAT}","version":1,"name":"x","items":[{{"path":"a/one.milk"}},{{"path":{}}}]}}"#, serde_json::to_string(path).unwrap());
+        for bad in ["/dev/zero", "/etc/passwd", "../outside.milk", "a/../../outside.milk", "./a/one.milk", ""] {
+            assert!(s.import(&file(bad)).is_err(), "{bad}");
+        }
+        assert!(s.lists.is_empty());
+        s.import(&file("a/b/fine.milk")).unwrap();
+        assert_eq!(s.lists[0].presets, ["a/one.milk", "a/b/fine.milk"]);
+
+        // A preset outside the library goes out by its name and hash only.
+        let outside = dir.join("home/user/Secret/far.milk");
+        std::fs::create_dir_all(outside.parent().unwrap()).unwrap();
+        std::fs::write(&outside, "[preset00]\n").unwrap();
+        let a = s.create("a").unwrap();
+        s.add(&a, &outside, None).unwrap();
+        let text = s.export(&a).unwrap().text;
+        assert!(!text.contains("home/user"), "{text}");
+        let shared: Shared = serde_json::from_str(&text).unwrap();
+        assert_eq!(shared.items, [SharedItem { path: "far.milk".into(), hash: Some(engine::index::hash(b"[preset00]\n")) }]);
+        // And comes back in as that, to be found by its hash.
+        let b = s.import(&text).unwrap();
+        assert_eq!(s.find(&b).unwrap().presets[0].hash, shared.items[0].hash);
+
+        // A smart playlist's file keeps no items.
+        let smart = format!(r#"{{"format":"{SHARED_FORMAT}","version":1,"name":"s","kind":"smart","query":{{"text":"warm"}},"items":[{{"path":"a/one.milk"}}]}}"#);
+        let id = s.import(&smart).unwrap();
+        assert!(s.find(&id).unwrap().presets.is_empty());
         std::fs::remove_dir_all(dir).unwrap();
     }
 

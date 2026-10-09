@@ -2,7 +2,7 @@ import { Button } from '@openflow/widgets/controls/Button.tsx';
 
 /**
  * ⚙ Settings (#98), a sheet over any view: opened with `openSheet('settings')`
- * from `views.tsx`, mounted by `App`. A placeholder until 0.5.
+ * from `views.tsx`, mounted by `App`. A placeholder until its 0.5 lane (#98) lands.
  */
 export function Settings({ open, onClose }: { open: boolean; onClose(): void }) {
   if (!open) return null;
@@ -14,7 +14,7 @@ export function Settings({ open, onClose }: { open: boolean; onClose(): void }) 
           ✕
         </Button>
       </div>
-      <p>Settings come in 0.5.</p>
+      <p>Settings are coming in a later 0.5 lane.</p>
     </div>
   );
 }
