@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { Fx } from './fx.ts';
 import type { Frame } from './link.ts';
-import { audioLabel, beatLabel, beatLit, hearingAt, SILENT_AFTER, bpmText, fpsShown, outputLabel, outputText, peersText, Status } from './Status.tsx';
+import { audioLabel, beatLabel, beatLit, hearingAt, SILENT_AFTER, bpmText, fpsShown, outputLabel, outputShown, outputText, peersText, Status, TapButton, tempoLabel } from './Status.tsx';
 
 const frame = (over: Partial<Frame> = {}): Frame => ({
   enabled: true,
@@ -61,6 +61,50 @@ describe('the status strip', () => {
     const display = { id: 1, index: 1, name: 'Projector', width: 1920, height: 1080, main: false };
     expect(outputText({ display, size: [1920, 1080] })).toEqual({ on: true, text: 'on Projector' });
     expect(outputText({ display: null, size: null })).toEqual({ on: false, text: 'in this window' });
+  });
+
+  it("shows words by the output's light only while the picture isn't on a display", () => {
+    const display = { id: 1, index: 1, name: 'Projector', width: 1920, height: 1080, main: false };
+    expect(outputShown({ display, size: null })).toBeNull();
+    expect(outputShown({ display: null, size: null })).toBe('in this window');
+  });
+});
+
+describe('the status strip, on screen', () => {
+  const noop = () => {};
+  const display = { id: 1, index: 1, name: 'Projector', width: 1920, height: 1080, main: false };
+  const html = renderToStaticMarkup(createElement(Status, { output: { display, size: null }, show: noop, effects, onHelp: noop, onLeave: noop, onError: noop }));
+  const visible = html
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  it('has no captions: just the lights, the tempo, and ? ⚙ ✕', () => {
+    for (const word of ['AUDIO', 'BEAT', 'OUTPUT', 'Projector']) expect(visible).not.toContain(word);
+    expect(visible).toBe('128 BPM ? ⚙ ✕');
+  });
+
+  it('sets ✕ apart from ? and ⚙', () => {
+    const end = /<span class="live-status-end">(.*?)<\/span><span class="live-status-leave">(.*)<\/span><\/div>$/.exec(html);
+    expect(end?.[1]).toContain('aria-label="Help"');
+    expect(end?.[1]).toContain('aria-label="Settings"');
+    expect(end?.[1]).not.toContain('Leave live');
+    expect(end?.[2]).toContain('aria-label="Leave live"');
+  });
+});
+
+describe('tap tempo, in the beat popover', () => {
+  it('names the tap button with its tempo, lit (not pressed) while Link keeps it', () => {
+    expect(tempoLabel(false, 120.4)).toBe('Tap tempo, 120 BPM (T)');
+    expect(tempoLabel(true, 128)).toBe('Link tempo, 128 BPM (T)');
+    expect(tempoLabel(false, null)).toBe('Tap tempo (T)');
+    const linked = renderToStaticMarkup(createElement(TapButton, { effects: { bpm: 128, linked: true } as Fx, onTap: () => {} }));
+    expect(linked).toContain('aria-label="Link tempo, 128 BPM (T)"');
+    expect(linked).toContain('data-on=""');
+    expect(linked).not.toContain('aria-pressed');
+    const tap = renderToStaticMarkup(createElement(TapButton, { effects: { bpm: 120, linked: false } as Fx, onTap: () => {} }));
+    expect(tap).toContain('aria-label="Tap tempo, 120 BPM (T)"');
+    expect(tap).not.toContain('data-on');
   });
 });
 

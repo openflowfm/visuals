@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { ButtonFace } from '@openflow/widgets/controls/ButtonFace.tsx';
 import * as api from './api.ts';
+import { control } from './HelpOverlay.tsx';
 import * as link from './link.ts';
 import type * as fx from './fx.ts';
 import type * as output from './output.ts';
@@ -44,9 +46,31 @@ export function peersText(frame: link.Frame | null): string | null {
   return linked(frame) ? `· ${frame.peers} in time` : null;
 }
 
-/** What the OUTPUT light says: the display the picture is on, or that it is only in this window. */
+/** Where the picture goes, for the OUTPUT light's name: the display it is on, or that it is only in this window. */
 export function outputText(status: output.Status): { on: boolean; text: string } {
   return status.display ? { on: true, text: `on ${status.display.name}` } : { on: false, text: 'in this window' };
+}
+
+/** What the OUTPUT light shows beside its dot: nothing while the picture is on a display (its name is in the popover), "in this window" while it isn't. */
+export const outputShown = (status: output.Status): string | null => (status.display ? null : outputText(status).text);
+
+/** The tap button's name: what sets the tempo, and what it is. "Tap tempo, 120 BPM (T)". */
+export const tempoLabel = (linked: boolean, bpm: number | null): string => `${linked ? 'Link' : 'Tap'} tempo${bpm !== null && bpm > 0 ? `, ${Math.round(bpm)} BPM` : ''} (${control('tempo').keys})`;
+
+/**
+ * Tap tempo, at the top of the BEAT light's popover: tapped in time, or lit
+ * (not pressed) while Link keeps the tempo. T taps it from anywhere in live mode.
+ */
+export function TapButton({ effects, onTap }: { effects: fx.Fx | null; onTap(): void }) {
+  const linked = effects?.linked === true;
+  const bpm = effects?.bpm ?? null;
+  return (
+    <ButtonFace className="live-tap" lit={linked} aria-label={tempoLabel(linked, bpm)} title={`${control('tempo').does} (${control('tempo').keys})`} onClick={onTap}>
+      {linked ? 'Link' : 'Tap'}
+      {bpm !== null && bpm > 0 && <b>{Math.round(bpm)}</b>}
+      <small aria-hidden="true">{control('tempo').keys}</small>
+    </ButtonFace>
+  );
 }
 
 /** The strip's ⚙: the Settings sheet, over live mode (it takes Esc while open). */
@@ -155,10 +179,9 @@ export function beatLabel(frame: link.Frame | null, effects: fx.Fx | null): stri
 /** What VoiceOver calls the OUTPUT light: "Output, on Projector". */
 export const outputLabel = (status: output.Status): string => `Output, ${outputText(status).text}`;
 
-/** One light: a caption, what it shows, and the popover it opens under it (a dialog, but not modal: Esc or a click elsewhere closes it). */
+/** One light: what it shows, without a caption (its name is its accessible label), and the popover it opens under it (a dialog, but not modal: Esc or a click elsewhere closes it). */
 function Light({
   name,
-  caption,
   label,
   popName,
   title,
@@ -169,7 +192,6 @@ function Light({
   pop,
 }: {
   name: Pop;
-  caption: string;
   /** Its accessible name: short, with what it shows; `title` is the longer tooltip. */
   label: string;
   /** The popover's name. */
@@ -196,7 +218,6 @@ function Light({
         title={title}
         onClick={() => toggle(name)}
       >
-        <i aria-hidden="true">{caption}</i>
         {children}
       </button>
       {open && (
@@ -209,12 +230,13 @@ function Light({
 }
 
 /**
- * Live mode's top row: what it listens to (AUDIO, with a meter), the beat
- * (BEAT, flashing on each one, with the tempo and who keeps it), where the
- * picture goes (OUTPUT), the frame rate when it is low, and help, settings and
- * leave on the right. Each light opens its panel under it — the source picker,
- * Ableton Link, the output — one at a time; Esc or a click elsewhere puts it
- * away without leaving live mode.
+ * Live mode's top row, lights without captions (VoiceOver reads each one's
+ * name): what it listens to (a dot and a meter), the beat (a dot flashing on
+ * each one, and the tempo), where the picture goes (a dot, with words only while
+ * it is not on a display), the frame rate when it is low, help and settings on
+ * the right, and leave apart from them. Each light opens its panel under it —
+ * the source picker, tap tempo and Ableton Link, the output — one at a time;
+ * Esc or a click elsewhere puts it away without leaving live mode.
  */
 export function Status({
   output,
@@ -223,12 +245,15 @@ export function Status({
   onHelp,
   onLeave,
   onError,
+  onTap = () => {},
   titles = {},
 }: {
   output: output.Status;
   show(id: number | null): void;
   effects: fx.Fx | null;
   onHelp(): void;
+  /** Tap tempo, from the BEAT popover's Tap button. */
+  onTap?(): void;
   onLeave(): void;
   onError(e: unknown): void;
   titles?: Titles;
@@ -274,15 +299,14 @@ export function Status({
 
   const toggle = (name: Pop) => setOpen((was) => (was === name ? null : name));
   const bpm = bpmText(frame, effects);
-  const peers = peersText(frame);
   const out = outputText(output);
+  const shown = outputShown(output);
   const peersTitle = linked(frame) ? ` · ${plural(frame.peers, 'other')} in the session` : '';
 
   return (
     <div className="live-status-strip" ref={root}>
       <Light
         name="audio"
-        caption="AUDIO"
         label={audioLabel(hearing)}
         popName={`What it will ${say('audio input')}`}
         title={titles.audio ?? `${Say('audio input')}: what the presets hear, and its level`}
@@ -294,21 +318,23 @@ export function Status({
       </Light>
       <Light
         name="beat"
-        caption="BEAT"
         label={beatLabel(frame, effects)}
-        popName={Say('Ableton Link')}
-        title={(titles.beat ?? `the beat, and ${say('Ableton Link')}`) + peersTitle}
+        popName={`Tempo, and ${say('Ableton Link')}`}
+        title={(titles.beat ?? `the beat: tap the tempo, or ${say('Ableton Link')}`) + peersTitle}
         open={open === 'beat'}
         toggle={toggle}
-        pop={<LinkPanel />}
+        pop={
+          <>
+            <TapButton effects={effects} onTap={onTap} />
+            <LinkPanel />
+          </>
+        }
       >
         <BeatDot frame={frame} />
         {bpm && <span className="live-status-value">{bpm}</span>}
-        {peers && <span className="live-status-peers">{peers}</span>}
       </Light>
       <Light
         name="output"
-        caption="OUTPUT"
         label={outputLabel(output)}
         popName="Where the picture goes"
         title={titles.output ?? 'where the picture goes: a display, or only this window'}
@@ -318,7 +344,7 @@ export function Status({
         pop={<OutputPanel status={output} show={show} />}
       >
         <span className="live-status-dot" data-on={out.on ? '' : undefined} data-warn={out.on ? undefined : ''} aria-hidden="true" />
-        <span className="live-status-value">{out.text}</span>
+        {shown && <span className="live-status-value">{shown}</span>}
       </Light>
       <Fps />
       <span className="live-status-end">
@@ -336,6 +362,9 @@ export function Status({
         <button type="button" className="live-status-btn" aria-label="Settings" aria-haspopup="dialog" title={titles.settings ?? 'settings'} onClick={() => (setOpen(null), openSettings())}>
           <span aria-hidden="true">⚙</span>
         </button>
+      </span>
+      {/* ✕ stands apart from ? and ⚙, so a click meant for them doesn't leave live. */}
+      <span className="live-status-leave">
         <button
           type="button"
           className="live-status-btn"

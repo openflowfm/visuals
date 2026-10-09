@@ -2,7 +2,8 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LibraryData, LibraryRow } from './api.ts';
-import { HoldPad, intensityOf, keyOf, openEffects, Pad, padLabel, playsWindowed, ratingOf, starred, starsText, tempoLabel, whenText } from './Live.tsx';
+import { HoldPad, intensityOf, keyOf, openEffects, Pad, padLabel, playsWindowed, ratingOf, starred, starsText, whenText, whereSr, whereText } from './Live.tsx';
+import * as pl from './playlists.ts';
 import { openSettings } from './Status.tsx';
 import { SHEET_EVENT, sheetOf } from './views.tsx';
 
@@ -75,6 +76,23 @@ describe('live mode', () => {
     expect(whenText(7.4)).toBe('in 8 beats');
     expect(whenText(8)).toBe('in 8 beats');
   });
+
+  it("says where the next preset comes from in the Next line's tooltip, not on screen", () => {
+    const list = pl.manual('m', 'Chill', []);
+    expect(whereText({ playlist: list, index: 0, next: null, nextIndex: null, count: 20 }, null)).toBe('From Chill, 1 of 20');
+    expect(whereText({ playlist: list, index: null, next: null, nextIndex: null, count: 20 }, null)).toBe('From Chill');
+    expect(whereText(null, { ...pl.EMPTY_DECK, query: { groups: { tags: ['dark', 'warm'] }, text: '' } })).toBe('From the mood dark + warm');
+    expect(whereText(null, null)).toMatch(/^From the whole library/);
+    // Following the library grid's filter is "the library", never a mood.
+    expect(whereText(null, { ...pl.EMPTY_DECK, query: { groups: { style: ['fractal'] }, text: '' } })).toBe('From the library');
+    expect(whereText(null, { ...pl.EMPTY_DECK, query: { groups: { tags: ['dark'] }, text: 'tunnel' } })).toBe('From the library');
+  });
+
+  it('reads where the next preset comes from to screen readers, after its name', () => {
+    const list = pl.manual('m', 'Chill', []);
+    expect(whereSr({ playlist: list, index: 2, next: null, nextIndex: null, count: 20 }, null)).toBe(', from Chill, 3 of 20');
+    expect(whereSr(null, null)).toMatch(/^, from the whole library/);
+  });
 });
 
 describe("live mode's pads, to VoiceOver", () => {
@@ -95,14 +113,20 @@ describe("live mode's pads, to VoiceOver", () => {
     expect(strobe).toContain('aria-pressed="true"');
     expect(strobe).toContain('aria-label="Strobe (hold S, ⇧S latches)"');
   });
+});
 
-  it('names the tempo pad with its tempo, lit (not pressed) while Link keeps it', () => {
-    expect(tempoLabel(false, 120.4)).toBe('Tap tempo, 120 BPM (T)');
-    expect(tempoLabel(true, 128)).toBe('Link tempo, 128 BPM (T)');
-    expect(tempoLabel(false, null)).toBe('Tap tempo (T)');
-    const html = renderToStaticMarkup(createElement(Pad, { id: 'tempo', lit: true, label: tempoLabel(true, 128), onPress: noop }, 'Link 128'));
-    expect(html).toContain('aria-label="Link tempo, 128 BPM (T)"');
-    expect(html).toContain('data-on=""');
-    expect(html).not.toContain('aria-pressed');
+describe("live mode's pads, on screen", () => {
+  const noop = () => {};
+  const caption = (html: string) => /<small[^>]*>([^<]*)<\/small>/.exec(html)?.[1];
+
+  it('shows one letter or arrow under a pad, and keeps the longer hint for its tooltip', () => {
+    const strobe = renderToStaticMarkup(createElement(HoldPad, { id: 'strobe', kind: 'strobe', on: false, send: noop }, 'Strobe'));
+    expect(caption(strobe)).toBe('S');
+    expect(strobe).toContain('title="Strobe: ');
+    expect(strobe).toContain('hold S, ⇧S latches)"');
+    expect(caption(renderToStaticMarkup(createElement(HoldPad, { id: 'freeze', kind: 'freeze', on: false, send: noop }, 'Freeze')))).toBe('Z');
+    expect(caption(renderToStaticMarkup(createElement(Pad, { id: 'previous', onPress: noop }, '◀ Previous')))).toBe('←');
+    expect(caption(renderToStaticMarkup(createElement(Pad, { id: 'step', onPress: noop }, 'Next ▶')))).toBe('→');
+    expect(caption(renderToStaticMarkup(createElement(Pad, { id: 'blackout', onPress: noop }, 'Blackout')))).toBe('B');
   });
 });

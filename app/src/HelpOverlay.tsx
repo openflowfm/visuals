@@ -53,7 +53,7 @@ export interface Control {
  */
 export const CONTROLS: readonly Control[] = [
   { id: 'audio', where: 'status', name: 'Audio', keys: '', does: `What it's listening to, and how loud. Click to pick what to ${say('audio input')}` },
-  { id: 'beat', where: 'status', name: 'Beat', keys: '', does: `The tempo, and how many others are in time over Link. Click to ${say('Ableton Link')}` },
+  { id: 'beat', where: 'status', name: 'Beat', keys: '', does: `The tempo, flashing on each beat. Click to tap the tempo or ${say('Ableton Link')}` },
   { id: 'output', where: 'status', name: 'Output', keys: '', does: 'Where the picture shows. Click to pick a display' },
   { id: 'fps', where: 'status', name: 'Frames per second', keys: '', does: 'Only shown when the picture runs slow, under 50' },
   { id: 'help', where: 'status', name: 'Help', keys: '?', does: 'This list of every live control' },
@@ -69,12 +69,12 @@ export const CONTROLS: readonly Control[] = [
   { id: 'strobe', where: 'controls', name: 'Strobe', keys: 'hold S, ⇧S latches', does: 'Flashes on the beat while held; or press and hold the button' },
   { id: 'blackout', where: 'controls', name: 'Blackout', keys: 'B', does: 'Turns the picture to black, and back' },
   { id: 'freeze', where: 'controls', name: 'Freeze', keys: 'hold Z, ⇧Z latches', does: 'Stops the picture while held; or press and hold the button' },
-  { id: 'tempo', where: 'controls', name: 'Tap / Link tempo', keys: 'T', does: 'Tap the tempo in time. Follows Link when others are in time' },
+  { id: 'tempo', where: 'status', name: 'Tap tempo', keys: 'T', does: 'Tap the tempo in time, in the Beat panel or on T. Follows Link when others are in time' },
   { id: 'intensity', where: 'controls', name: 'Intensity', keys: '', does: `${Say('sensitivity')}: brightness and strobe level together, never to white` },
   { id: 'more', where: 'controls', name: 'More effects…', keys: '', does: 'The rest: speed, colour, mirror, trails…' },
   { id: 'playlists', where: 'crate', name: 'Playlists', keys: '', does: 'Tap one to play it' },
   { id: 'moods', where: 'crate', name: 'Moods', keys: '', does: `${Say('user tags')}: tap one to play it, a second to add it` },
-  { id: 'upnext', where: 'crate', name: 'Up next', keys: 'Alt+↑/↓', does: 'What plays next. Drag to reorder' },
+  { id: 'upnext', where: 'crate', name: 'Up next', keys: 'Alt+↑/↓', does: 'What plays after next. Drag a row by its ≡ (it shows on hover) to reorder' },
   { id: 'rate', where: 'keys', name: 'Rate', keys: '1–5', does: 'Rates the preset from 1 to 5' },
   { id: 'favourite', where: 'keys', name: 'Favourite', keys: 'F', does: 'Stars the preset as a favourite, or takes the star off' },
   { id: 'punch', where: 'keys', name: 'Punch', keys: 'hold P, ⇧P latches', does: 'A burst of brightness while held' },
@@ -105,6 +105,18 @@ export function control(id: ControlId): Control {
 export function titleOf(id: ControlId): string {
   const c = control(id);
   return c.keys ? `${c.name}: ${c.does} (${c.keys})` : `${c.name}: ${c.does}`;
+}
+
+/**
+ * The one key a pad shows under its name: a single letter or arrow, the first its
+ * keys name ("hold S, ⇧S latches" is S, "← ↑" is ←); empty when it has none. The
+ * rest of the keys are in the pad's tooltip and the ? overlay.
+ */
+export function padKey(id: ControlId): string {
+  const first = control(id)
+    .keys.replace(/^hold\s+/, '')
+    .split(/[\s,]+/)[0];
+  return first ?? '';
 }
 
 /**
