@@ -170,7 +170,15 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
         <div className="home-preview-cell">
           <Preview className="home-preview" />
         </div>
-        <p className="home-stage-from">{playsFrom(deck, playlists)}</p>
+        <div className="home-stage-says">
+          {current && (
+            <p className="home-stage-name" title={current.group ? `${current.group} / ${current.name}` : current.name}>
+              {current.name}
+            </p>
+          )}
+          {current?.group && <p className="home-stage-group">{current.group}</p>}
+          <p className="home-stage-from">{playsFrom(deck, playlists)}</p>
+        </div>
       </section>
       <main className="home-main">
         <SettingsNotes />

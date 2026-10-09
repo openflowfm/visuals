@@ -38,12 +38,28 @@
   background: var(--panel);
   border-left: 1px solid var(--bd3);
 }
+/* Under the preview in a wide window: the preset's name, its folder, and where it comes from. */
+.home .home-stage-says {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px;
+  min-width: 0;
+}
+.home .home-stage-says p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.home .home-stage-name {
+  color: var(--fg);
+  font-size: var(--text-lead);
+  font-weight: var(--weight-medium);
+}
+.home .home-stage-group,
 .home .home-stage-from {
-  margin: 8px 12px;
   color: var(--caption);
   font-size: var(--text-label);
   letter-spacing: var(--track-label);
-  overflow-wrap: anywhere;
 }
 .home .home-stage-from:empty {
   display: none;
@@ -506,7 +522,7 @@
     width: auto;
     height: min(32vh, calc((100vw - var(--home-side)) * 9 / 16));
   }
-  .home .home-stage-from {
+  .home .home-stage-says {
     display: none;
   }
   .app.home main.home-main {

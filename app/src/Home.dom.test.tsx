@@ -180,7 +180,8 @@ describe('picking up where the app left off', () => {
     deck = { ...EMPTY_DECK, current: ROWS[2].path };
     await mount();
     expect(sent('open')).toEqual([]);
-    expect(screen.getByTitle('A / c')).toBeTruthy();
+    // Named in the header and under the preview.
+    expect(screen.getAllByTitle('A / c')).toHaveLength(2);
   });
 
   it('shows the filter it picked up in the library, with the deck following it', async () => {
