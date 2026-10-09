@@ -27,7 +27,10 @@
   border-right: 1px solid var(--bd3);
 }
 
-/* The stage: the preview at the top of its column, and where the preset comes from under it. */
+/* The stage: the preview at the top of its column, and where the preset comes from under it.
+   The stage itself paints nothing: the preview is a hole onto the native view
+   under the page, so a background here would cover the picture. What is under
+   the preview paints itself instead. */
 .home .home-stage {
   grid-column: 3;
   grid-row: 2;
@@ -35,11 +38,12 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  background: var(--panel);
   border-left: 1px solid var(--bd3);
 }
 /* Under the preview in a wide window: the preset's name, its folder, and where it comes from. */
 .home .home-stage-says {
+  flex: 1;
+  background: var(--panel);
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -92,7 +96,8 @@
   align-items: center;
   justify-content: center;
   background: var(--panel);
-  box-shadow: none;
+  /* The bars around it too: nothing else behind the preview paints. */
+  box-shadow: 0 0 0 100vmax var(--panel);
 }
 
 .home .home-section {

@@ -14,6 +14,7 @@ import { Home } from './Home.tsx';
 import { forgetResumedQuery } from './library.ts';
 import { EMPTY_DECK, manual, type Deck, type Playlist } from './playlists.ts';
 import { SEEDED_KEY } from './home.ts';
+import { readFileSync } from 'node:fs';
 
 const { invoke, heard } = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -106,6 +107,33 @@ describe('the home, the one place to browse', () => {
     expect(stage).toBeTruthy();
     expect(screen.getByRole('main').contains(preview)).toBe(false);
     expect(stage!.contains(grid())).toBe(false);
+  });
+
+  // The preview is a hole: the native view the engine draws in sits under the
+  // page, so a background on anything behind the box covers the picture.
+  it.each([1440, 800])('paints nothing behind the preview at %ipx, once it draws', async (width) => {
+    (window as unknown as { happyDOM: { setViewport(v: { width: number; height: number }): void } }).happyDOM.setViewport({ width, height: 900 });
+    const style = document.createElement('style');
+    // Read from disk: vitest hands a test empty CSS for an import, even `?raw`.
+    // The theme's surfaces come from the widgets' stylesheet; any colour will do.
+    const theme = ':root { --bg: rgb(1, 1, 1); --panel: rgb(2, 2, 2); --rail: rgb(3, 3, 3); }';
+    style.textContent = [theme, ...['app.css', 'home.css'].map((f) => readFileSync(new URL(f, import.meta.url), 'utf8'))].join('\n');
+    document.head.append(style);
+    try {
+      await mount({ library: true });
+      const preview = screen.getByRole('img', { name: 'preview of the playing preset' });
+      const painted: string[] = [];
+      for (let el: Element | null = preview; el; el = el.parentElement) {
+        const bg = getComputedStyle(el).backgroundColor;
+        if (bg && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)') painted.push(`${el.tagName.toLowerCase()}.${el.className}: ${bg}`);
+      }
+      expect(painted).toEqual([]);
+      // The layout asked for: what is under the preview shows only in a wide window.
+      const says = document.querySelector('.home-stage-says')!;
+      expect(getComputedStyle(says).display).toBe(width >= 1200 ? 'flex' : 'none');
+    } finally {
+      style.remove();
+    }
   });
 
   it('opens on the library pane for VISUALS_VIEW=library, even with playlists', async () => {
