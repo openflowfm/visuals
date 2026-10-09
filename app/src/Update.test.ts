@@ -74,6 +74,29 @@ describe('release notes', () => {
     ]);
   });
 
+  it('strips a heading’s closing hashes', () => {
+    expect(blocks('## Fixes ##  ')).toEqual([{ kind: 'heading', children: [{ kind: 'text', text: 'Fixes' }] }]);
+  });
+
+  it('renders hostile notes quickly', () => {
+    const hostile = [
+      '# a' + ' '.repeat(2000) + 'b',
+      '# a' + ' '.repeat(20000) + '#'.repeat(20000) + ' x',
+      '[a]('.repeat(40000),
+      '['.repeat(100000),
+      '[a'.repeat(50000),
+      '`'.repeat(100000),
+      '**'.repeat(50000) + 'x',
+      'https://'.repeat(20000),
+      'https://' + 'a.'.repeat(50000),
+    ];
+    for (const notes of hostile) {
+      const start = performance.now();
+      blocks(notes);
+      expect(performance.now() - start).toBeLessThan(500);
+    }
+  });
+
   it('keeps links that are not web links as text', () => {
     expect(inlines('[click](javascript:alert)')).toEqual([{ kind: 'text', text: '[click](javascript:alert)' }]);
     expect(inlines('[file](file:///etc/passwd)')).toEqual([{ kind: 'text', text: '[file](file:///etc/passwd)' }]);

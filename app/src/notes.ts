@@ -13,13 +13,22 @@ export type Inline = { kind: 'text'; text: string } | { kind: 'bold'; children: 
 export type Block = { kind: 'paragraph'; children: Inline[] } | { kind: 'heading'; children: Inline[] } | { kind: 'list'; items: Inline[][] };
 
 const BULLET = /^\s*[-*]\s+(.*)$/;
-const HEADING = /^\s{0,3}#{1,6}\s+(.*?)\s*#*\s*$/;
+// The closing `#`s are stripped by hand: `(.*?)\s*#*\s*$` backtracks badly on long runs of spaces.
+const HEADING = /^\s{0,3}#{1,6}\s+(.*)$/;
+
+/** A heading's text without its trailing spaces and closing `#`s. */
+function headingText(text: string): string {
+  let end = text.trimEnd().length;
+  while (end > 0 && text[end - 1] === '#') end--;
+  return text.slice(0, end).trimEnd();
+}
 
 /** Only web links open; anything else (`javascript:`, `file:`) stays text. */
 const WEB = /^https?:\/\/[^\s]+$/i;
 
 // `code`, **bold**, [text](url), or a bare http(s) link (trailing punctuation left out).
-const INLINE = /`([^`]+)`|\*\*(.+?)\*\*|\[([^\]]+)\]\(([^)\s]+)\)|(https?:\/\/[^\s<>]*[^\s<>.,;:!?)\]'"])/gi;
+// Each run is capped at 500 characters so a hostile line can't make matching quadratic.
+const INLINE = /`([^`]{1,500})`|\*\*(.{1,500}?)\*\*|\[([^\]]{1,500})\]\(([^)\s]{1,500})\)|(https?:\/\/[^\s<>]{0,500}[^\s<>.,;:!?)\]'"])/gi;
 
 /** The runs of one line of text. */
 export function inlines(source: string): Inline[] {
@@ -71,7 +80,7 @@ export function blocks(notes: string): Block[] {
       (list ??= []).push(bullet[1].trim());
     } else if (heading) {
       flush();
-      out.push({ kind: 'heading', children: inlines(heading[1]) });
+      out.push({ kind: 'heading', children: inlines(headingText(heading[1])) });
     } else if (list) list[list.length - 1] += ` ${line}`;
     else para.push(line);
   }
