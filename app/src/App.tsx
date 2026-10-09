@@ -125,14 +125,14 @@ export function Browse({ view, start, onMode, onOpened, below, side }: BrowsePro
   const playing = lists?.deck.playlist ?? null;
   const step = useCallback(
     (by: number) => {
-      if (playing) {
+      if (playing || lists?.deck.query) {
         pl.act({ kind: by === 0 ? 'random' : by > 0 ? 'next' : 'previous' }).catch(fail("Couldn't step the playlist."));
         return;
       }
       const next = stepIn(shown.length ? shown : library, current?.path ?? null, by);
       if (next) load(next);
     },
-    [playing, shown, library, current, load, fail],
+    [playing, lists?.deck.query, shown, library, current, load, fail],
   );
 
   useEffect(() => {

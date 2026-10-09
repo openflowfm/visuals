@@ -1,9 +1,33 @@
 import { useEffect, useMemo, useState } from 'react';
 import * as api from './api.ts';
-import type { Entry } from './api.ts';
+import type { Entry, LibraryQuery } from './api.ts';
 import { searchLibrary } from './librarySearch.ts';
 import { nameOf } from './shell.ts';
 import { onChanged } from './pack.ts';
+import * as pl from './playlists.ts';
+
+/**
+ * The deck's action for following the grid: `at` was just opened from the grid
+ * filtered by `query`, so previous, next and random go through what the grid shows,
+ * in its order and on across its groups (`actions::Action::Query` with `at`).
+ */
+export const followAction = (query: LibraryQuery, at: string): pl.Action =>
+  // `at` isn't in `pl.Action` (playlists.ts, a contract file) yet.
+  ({ kind: 'query', query, at }) as pl.Action;
+
+/**
+ * Tell the deck to follow the grid ({@link followAction}), in the library and in live.
+ * The deck never plays a hidden preset and skips a failed one; while a playlist is
+ * loaded it changes nothing. Outside the app, or when it can't, nothing happens:
+ * stepping goes through the library as before.
+ */
+export function followGrid(query: LibraryQuery, at: string): void {
+  try {
+    pl.act(followAction(query, at)).catch(() => {});
+  } catch {
+    // not in the app
+  }
+}
 
 /**
  * The preset to open once the library is read: `start` (found in the library,

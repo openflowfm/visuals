@@ -1,6 +1,34 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Entry } from './api.ts';
-import { firstToOpen, rereadOn } from './library.ts';
+import type { Entry, LibraryQuery } from './api.ts';
+import { firstToOpen, followAction, followGrid, rereadOn } from './library.ts';
+
+const { invoke } = vi.hoisted(() => ({ invoke: vi.fn((..._args: unknown[]): Promise<unknown> => Promise.resolve(null)) }));
+vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => invoke(...args) }));
+vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }));
+
+describe('following the grid', () => {
+  const query: LibraryQuery = { groups: { style: ['Geiss'], author: ['Rovastar'] }, text: 'warm' };
+
+  it('asks the deck to play what the grid shows, from the preset opened, without opening it again', () => {
+    expect(followAction(query, '/p/b.milk')).toEqual({ kind: 'query', query, at: '/p/b.milk' });
+  });
+
+  it('sends the grid’s filter and the preset to the deck as one live action', () => {
+    invoke.mockClear();
+    followGrid(query, '/p/b.milk');
+    expect(invoke).toHaveBeenCalledWith('act', { action: { kind: 'query', query, at: '/p/b.milk' } });
+  });
+
+  it('says nothing when the deck refuses, or outside the app', async () => {
+    invoke.mockImplementationOnce(() => Promise.reject(new Error('held')));
+    expect(() => followGrid(query, '/p/a.milk')).not.toThrow();
+    invoke.mockImplementationOnce(() => {
+      throw new TypeError('no Tauri');
+    });
+    expect(() => followGrid(query, '/p/a.milk')).not.toThrow();
+    await Promise.resolve();
+  });
+});
 
 describe('rereadOn', () => {
   it('rereads on each change until stopped, then unsubscribes', async () => {
