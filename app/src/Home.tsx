@@ -645,6 +645,7 @@ export function SettingsBar({ settings, differs, onChange }: { settings: Playlis
         />
         <Segmented
           items={['s', 'bars', say('auto-advance off')]}
+          itemLabels={[say('auto-advance seconds')]}
           index={change.unit === 'off' ? 2 : change.unit === 'bars' ? 1 : 0}
           onChange={(i) => onChange(changeUnit(settings, i === 2 ? 'off' : i === 1 ? 'bars' : 'seconds'))}
           label="seconds, bars or off"
