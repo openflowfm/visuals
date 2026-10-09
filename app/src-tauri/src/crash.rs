@@ -5,11 +5,13 @@
 //!
 //! A report is written only when the app actually ends abnormally:
 //! - a Rust panic that isn't caught: the panic hook [`install`] sets keeps its
-//!   text in memory (and in this run's marker file); it's written as a report
-//!   at exit, or on the next launch if the process died without exiting. A
-//!   panic caught with [`catch`] is forgotten, so it's never reported and never
-//!   hides a later real crash. A panic that ends the main thread or a thread
-//!   nobody joins counts.
+//!   text in memory (and in this run's marker file). It becomes a report only
+//!   when the process actually died of it: on the main thread it's written at
+//!   exit, and otherwise on the next launch, from the marker of a process that
+//!   is gone. At a clean exit the other pending panics are dropped: they were
+//!   survived (tokio caught one in an async command, a rayon worker's or a
+//!   joined thread's was handed on). A panic caught with [`catch`] is
+//!   forgotten at once, so it never hides a later real crash.
 //! - an exit that didn't go through `exit()` (a crash in native code, an abort,
 //!   a force quit), noticed on the next launch: [`install`] leaves a marker
 //!   file per process, `running-<pid>`, that a clean exit removes (an `atexit`
@@ -97,6 +99,7 @@ pub fn crash_reports_enable(on: bool) -> Result<(), String> {
 /// started, and sets the panic hook.
 pub fn install() {
     let dir = dir();
+    let _ = MAIN_THREAD.set(std::thread::current().id());
     let machine = MACHINE.get_or_init(Machine::here);
     // Headless test runs are killed rather than quit: not a crash worth a report.
     if std::env::var_os("VISUALS_HEADLESS").is_none() {
@@ -164,6 +167,8 @@ static MARKER_PATH: OnceLock<PathBuf> = OnceLock::new();
 /// The marker's path for the signal handler, which mustn't allocate.
 static MARKER_C: OnceLock<std::ffi::CString> = OnceLock::new();
 static PRIVATE: OnceLock<Private> = OnceLock::new();
+/// The thread [`install`] ran on: `main`'s, whose panic ends the process.
+static MAIN_THREAD: OnceLock<ThreadId> = OnceLock::new();
 /// When this run started, as its marker says.
 static STARTED: AtomicU64 = AtomicU64::new(0);
 /// Panics not (yet) caught, by thread: reported at exit, or from the marker on the next launch.
@@ -242,10 +247,16 @@ fn forget_panic(thread: ThreadId) {
     }
 }
 
-/// At exit: the panics nothing caught become reports, and the marker goes.
+/// The pending panics that ended the process, from those still pending at exit:
+/// only the main thread's. The rest were survived, so they're dropped.
+fn died_of(pending: Vec<(ThreadId, CrashReport)>, main: Option<ThreadId>) -> Vec<CrashReport> {
+    pending.into_iter().filter(|(t, _)| Some(*t) == main).map(|(_, r)| r).collect()
+}
+
+/// At exit: a main-thread panic becomes a report, other pending panics are dropped, and the marker goes.
 extern "C" fn at_exit() {
     let _ = std::panic::catch_unwind(|| {
-        let reports: Vec<CrashReport> = pending().drain(..).map(|(_, r)| r).collect();
+        let reports = died_of(std::mem::take(&mut *pending()), MAIN_THREAD.get().copied());
         if !reports.is_empty() {
             let dir = dir();
             for report in &reports {
@@ -412,7 +423,16 @@ fn keep_panic(info: &std::panic::PanicHookInfo) {
         backtrace: std::backtrace::Backtrace::force_capture().to_string(),
     };
     let machine = MACHINE.get_or_init(Machine::here);
-    let report = panic_report(new_id(), now(), &panic, machine, current_preset().as_deref(), PRIVATE.get_or_init(Private::here));
+    // Never work the names out here (it starts `scutil`, and could wait on the thread doing it).
+    let minimal;
+    let private = match PRIVATE.get() {
+        Some(p) => p,
+        None => {
+            minimal = Private::minimal();
+            &minimal
+        }
+    };
+    let report = panic_report(new_id(), now(), &panic, machine, current_preset().as_deref(), private);
     let mut pending = pending();
     pending.push((std::thread::current().id(), report));
     update_marker(&pending);
@@ -426,9 +446,21 @@ struct Private {
 }
 
 impl Private {
-    fn here() -> Private {
+    /// The home folder and the user's login name.
+    fn home_and_user() -> (Option<String>, Option<String>) {
         let home = std::env::var("HOME").ok().filter(|h| h.len() > 1);
         let user = std::env::var("USER").ok().or_else(|| home.as_deref().and_then(|h| Path::new(h).file_name()).map(|n| n.to_string_lossy().into_owned()));
+        (home, user)
+    }
+
+    /// Only what's known without asking the system: for a panic before [`Private::here`] is ready.
+    fn minimal() -> Private {
+        let (home, user) = Private::home_and_user();
+        Private::new(home, user.into_iter().collect())
+    }
+
+    fn here() -> Private {
+        let (home, user) = Private::home_and_user();
         let mut names: Vec<String> = user.into_iter().collect();
         // The full name and each part of it ("Ryan Gavin", "Ryan", "Gavin").
         if let Some(full) = full_name() {
@@ -448,7 +480,7 @@ impl Private {
     fn new(home: Option<String>, names: Vec<String>) -> Private {
         let mut names: Vec<String> = names.into_iter().map(|n| n.trim().to_owned()).filter(|n| n.chars().count() >= 3).collect();
         names.sort_by_key(|n| std::cmp::Reverse(n.len()));
-        names.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
+        names.dedup_by(|a, b| a.to_lowercase() == b.to_lowercase());
         Private { home, names }
     }
 }
@@ -517,19 +549,37 @@ fn host_name() -> Option<String> {
     (!name.is_empty()).then_some(name)
 }
 
-/// `text` with every `needle` replaced by `with`, ignoring ASCII case; with
-/// `word_start`, only where a word starts ("Ryan's" and "ryans-mac", not "Bryan").
+/// How many bytes at the start of `rest` match `needle` (already lowercased), comparing lowercased forms.
+fn match_lowercase(rest: &str, needle: &[char]) -> Option<usize> {
+    let mut k = 0;
+    for (at, c) in rest.char_indices() {
+        if k == needle.len() {
+            return Some(at);
+        }
+        for l in c.to_lowercase() {
+            if needle.get(k) != Some(&l) {
+                return None;
+            }
+            k += 1;
+        }
+    }
+    (k == needle.len()).then_some(rest.len())
+}
+
+/// `text` with every `needle` replaced by `with`, ignoring case (any script's);
+/// with `word_start`, only where a word starts ("Ryan's" and "ryans-mac", not "Bryan").
 fn replace_ignoring_case(text: &str, needle: &str, with: &str, word_start: bool) -> String {
     if needle.is_empty() {
         return text.to_owned();
     }
+    let needle: Vec<char> = needle.to_lowercase().chars().collect();
     let mut out = String::with_capacity(text.len());
     let mut i = 0;
     let mut prev: Option<char> = None;
     while let Some(c) = text[i..].chars().next() {
-        let end = i + needle.len();
         let at_start = !word_start || !prev.is_some_and(char::is_alphanumeric);
-        if at_start && text.get(i..end).is_some_and(|s| s.eq_ignore_ascii_case(needle)) {
+        if let Some(len) = at_start.then(|| match_lowercase(&text[i..], &needle)).flatten() {
+            let end = i + len;
             out.push_str(with);
             prev = text[..end].chars().next_back();
             i = end;
@@ -790,6 +840,36 @@ mod tests {
         assert_eq!(scrub("/USERS/RYAN/x.rs", &p), "x.rs");
         // Only where a word starts, and never a name too short to be one.
         assert_eq!(scrub("Bryan's Algo", &p), "Bryan's Algo");
+    }
+
+    #[test]
+    fn names_outside_ascii_are_scrubbed_whatever_their_case() {
+        let p = Private::new(None, vec!["Zoë".into(), "ZOË".into(), "Ørjan".into()]);
+        assert_eq!(p.names.len(), 2, "one name in two cases is kept once");
+        assert_eq!(scrub("ZOË and zoë and Zoë's ØRJAN, not Mazoë", &p), "<user> and <user> and <user>'s <user>, not Mazoë");
+    }
+
+    #[test]
+    fn only_a_main_thread_panic_is_reported_at_a_clean_exit() {
+        let main = std::thread::current().id();
+        let other = std::thread::spawn(|| std::thread::current().id()).join().unwrap();
+        let pending = vec![(other, report("survived", 1)), (main, report("died", 2))];
+        assert_eq!(died_of(pending.clone(), Some(main)), vec![report("died", 2)]);
+        assert_eq!(died_of(pending[..1].to_vec(), Some(main)), vec![], "a panic another thread survived isn't a crash");
+        assert_eq!(died_of(pending, None), vec![]);
+    }
+
+    #[test]
+    fn the_minimal_scrub_takes_the_home_folder_and_the_user() {
+        let p = Private::minimal();
+        if let Ok(user) = std::env::var("USER")
+            && user.chars().count() >= 3
+        {
+            assert_eq!(scrub(&format!("hi {user}"), &p), "hi <user>");
+        }
+        if let Ok(home) = std::env::var("HOME") {
+            assert_eq!(scrub(&format!("{home}/x.rs"), &p), "x.rs");
+        }
     }
 
     #[test]
