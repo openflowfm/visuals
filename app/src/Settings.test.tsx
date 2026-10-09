@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { closesSheet, keep, MotionSwitch, qualityLine, readKept, SECTIONS, Settings } from './Settings.tsx';
+import { closesSheet, keep, latestOnly, MotionSwitch, qualityLine, readKept, SECTIONS, Settings } from './Settings.tsx';
 import { MoreEffects } from './MoreEffects.tsx';
 import type { Motion } from './api.ts';
 
@@ -24,6 +24,28 @@ describe('closesSheet', () => {
   it('closes on Esc from no element, or one that is not an element', () => {
     expect(closesSheet({ key: 'Escape', target: null })).toBe(true);
     expect(closesSheet({ key: 'Escape', target: {} as EventTarget })).toBe(true);
+  });
+});
+
+describe('latestOnly', () => {
+  it('shows only the reply to the latest request, whatever order they come back in', async () => {
+    const shown: string[] = [];
+    const show = latestOnly<string>((v) => shown.push(v));
+    let first!: (v: string) => void;
+    const older = show(new Promise<string>((resolve) => (first = resolve)));
+    await show(Promise.resolve('newer'));
+    first('older');
+    await older;
+    expect(shown).toEqual(['newer']);
+    await show(Promise.resolve('next'));
+    expect(shown).toEqual(['newer', 'next']);
+  });
+
+  it('passes a failure on, even from an older request', async () => {
+    const show = latestOnly<string>(() => {});
+    const older = show(Promise.reject(new Error('no')));
+    show(Promise.resolve('newer'));
+    await expect(older).rejects.toThrow('no');
   });
 });
 

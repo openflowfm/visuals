@@ -102,11 +102,27 @@ export function qualityLine(q: api.Quality): string {
   return q.chosen === 'auto' ? `Auto picked ${q.effective}.` : `Drawing at ${q.effective}.`;
 }
 
+/**
+ * Shows only the reply to the latest of the requests it is handed: one that
+ * comes back after a later one was asked for is dropped, so a slow read never
+ * puts back an older level and reason over a newer one. Failures always show.
+ */
+export function latestOnly<T>(show: (value: T) => void) {
+  let asked = 0;
+  return (request: Promise<T>): Promise<void> => {
+    const mine = ++asked;
+    return request.then((value) => {
+      if (mine === asked) show(value);
+    });
+  };
+}
+
 /** Auto, Low, Medium or High, kept for next launch; auto's pick is read again when the output moves, as it can change with it. */
-function QualitySettings() {
+export function QualitySettings() {
   const [quality, setQuality] = useState<api.Quality | null>(null);
   const { notice, fail, dismiss } = useNotice();
-  const read = useCallback(() => api.qualityGet().then(setQuality, fail(`Couldn't read the ${say('render quality')}.`)), [fail]);
+  const [show] = useState(() => latestOnly(setQuality));
+  const read = useCallback(() => show(api.qualityGet()).catch(fail(`Couldn't read the ${say('render quality')}.`)), [show, fail]);
   useEffect(() => {
     read();
   }, [read]);
@@ -119,7 +135,7 @@ function QualitySettings() {
             name={say('render quality')}
             items={QUALITY_NAMES}
             index={Math.max(0, QUALITY_LEVELS.indexOf(quality.chosen))}
-            onChange={(i) => api.qualitySet(QUALITY_LEVELS[i]).then(setQuality, fail(`Couldn't change the ${say('render quality')}.`))}
+            onChange={(i) => show(api.qualitySet(QUALITY_LEVELS[i])).catch(fail(`Couldn't change the ${say('render quality')}.`))}
             title="How much detail the picture is drawn with: Auto picks for this Mac; Low is lightest on it"
           />
           <p className="settings-line" role="status">
