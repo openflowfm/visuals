@@ -683,10 +683,7 @@ fn dispatch_skipping(handle: &AppHandle, action: Action, skips: usize) -> Result
         deck.emit_fx(handle)?;
     }
     let (opened, error) = match &path {
-        Some(p) => match crate::library::open_path(&app, &p.to_string_lossy()) {
-            Ok(o) => (Some(o), None),
-            Err(e) => (None, Some(e)),
-        },
+        Some(p) => crate::resume::open(handle, &app, p),
         None => (None, None),
     };
     if let (Some(p), Some(e)) = (&path, &error) {

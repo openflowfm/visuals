@@ -25,7 +25,10 @@
 //! has its GPU. A preset that times out goes to the back of the queue for one
 //! more try in a fresh child; a second timeout lists it under `skipped`. A
 //! child whose preset panicked is restarted, so no preset draws on a renderer a
-//! panic left half-way.
+//! panic left half-way. A child that fails to start doesn't cost its preset
+//! anything: the preset goes back on the queue. After three such failures in a
+//! row a driver gives up; when every driver has, the index so far is saved and
+//! the run ends with exit status 1, naming why.
 //!
 //! `--sample N` takes N presets spread evenly over the sorted paths; the rows
 //! of the folder's other presets already in `index.json` are kept as they are.
@@ -53,8 +56,16 @@ const QUALITY: f32 = 75.0;
 const READY: &str = "ready";
 /// How long a child may take to get its GPU; not counted against `--timeout`.
 const SETUP: Duration = Duration::from_secs(120);
+/// How often the index is saved while presets are drawn, so a run that is cut
+/// off (by `timeout`, or the Mac sleeping) loses at most this much work: the
+/// next run draws only what the saved index lacks.
+const SAVE_EVERY: Duration = Duration::from_secs(5);
 /// How many times a preset is tried before a timeout skips it.
 const TRIES: u32 = 2;
+/// How many children in a row may fail to start before a driver gives up: no
+/// GPU, or a broken build, fails every child, and a run must end rather than
+/// try the whole pack (or hang a CI job doing it).
+const START_FAILURES: u32 = 3;
 
 /// What a child sends back for one preset.
 #[derive(Debug, Serialize, Deserialize)]
@@ -257,6 +268,7 @@ fn run(folder: &Path, out: &Path, count: Option<usize>, jobs: usize, timeout: Du
         .collect();
     drop(tx);
     let mut done = 0;
+    let mut last_save = Instant::now();
     for (hash, path, reply) in results {
         done += 1;
         let rows = waiting.remove(&hash).unwrap_or_default();
@@ -279,15 +291,19 @@ fn run(folder: &Path, out: &Path, count: Option<usize>, jobs: usize, timeout: Du
             let secs = started.elapsed().as_secs_f64();
             eprintln!("{done}/{to_draw} in {secs:.0}s ({:.2} presets/s)", done as f64 / secs);
         }
-        if done % 500 == 0 {
+        if last_save.elapsed() >= SAVE_EVERY {
             save(&index, &file);
+            last_save = Instant::now();
         }
     }
-    for w in workers {
-        let _ = w.join();
-    }
+    let gave_up: Vec<String> = workers.into_iter().filter_map(|w| w.join().unwrap_or_else(|_| Some("its driver panicked".into()))).collect();
     let secs = started.elapsed().as_secs_f64();
     save(&index, &file);
+    let left = queue.lock().unwrap_or_else(|e| e.into_inner()).len();
+    if left > 0 {
+        eprintln!("index: {left} presets not drawn: children couldn't start ({}); the index so far is saved, run again to go on", gave_up.join("; "));
+        std::process::exit(1);
+    }
     report(&index, to_draw, secs, &file);
 }
 
@@ -384,15 +400,28 @@ fn ask(r: &mut Running, preset: &Path, thumb: &Path, timeout: Duration) -> Outco
 
 /// Draws presets from `queue` in a child until it's empty. The child is
 /// restarted after a timeout, a crash or a panic; a preset that times out goes
-/// to the back of the queue until it has had [`TRIES`].
-fn drive(queue: &Mutex<VecDeque<Job>>, results: &mpsc::Sender<(String, PathBuf, Reply)>, thumbs: &Path, launch: &Launch, timeout: Duration) {
+/// to the back of the queue until it has had [`TRIES`]. A preset whose child
+/// fails to start goes back on the queue untried; after [`START_FAILURES`] in a
+/// row this driver gives up, returning why.
+fn drive(queue: &Mutex<VecDeque<Job>>, results: &mpsc::Sender<(String, PathBuf, Reply)>, thumbs: &Path, launch: &Launch, timeout: Duration) -> Option<String> {
     let mut running: Option<Running> = None;
+    let mut failures = 0;
+    let mut gave_up = None;
     loop {
         let Some(mut job) = queue.lock().unwrap_or_else(|e| e.into_inner()).pop_front() else { break };
         let mut r = match running.take().map_or_else(|| spawn(launch), Ok) {
-            Ok(r) => r,
+            Ok(r) => {
+                failures = 0;
+                r
+            }
             Err(e) => {
-                let _ = results.send((job.hash, job.path, Reply::Failed(format!("failed: can't start a child: {e}"))));
+                failures += 1;
+                eprintln!("index: can't start a child ({failures} in a row): {e}");
+                queue.lock().unwrap_or_else(|e| e.into_inner()).push_front(job);
+                if failures >= START_FAILURES {
+                    gave_up = Some(format!("{failures} in a row, the last: {e}"));
+                    break;
+                }
                 continue;
             }
         };
@@ -431,6 +460,7 @@ fn drive(queue: &Mutex<VecDeque<Job>>, results: &mpsc::Sender<(String, PathBuf, 
         drop(stdin);
         let _ = child.wait();
     }
+    gave_up
 }
 
 /// The child: says [`READY`] once it has its GPU, then draws each preset named
@@ -522,16 +552,26 @@ mod tests {
 
     /// Runs `presets` through one driver with `launch`; the replies in order.
     fn run_driver(launch: &Launch, presets: &[&str], timeout: Duration) -> Vec<(PathBuf, String)> {
+        let (replies, left, gave_up) = run_driver_whole(launch, presets, timeout);
+        assert!(left.is_empty() && gave_up.is_none(), "{left:?} {gave_up:?}");
+        replies
+    }
+
+    /// The same, with the presets left on the queue and why the driver gave up.
+    fn run_driver_whole(launch: &Launch, presets: &[&str], timeout: Duration) -> (Vec<(PathBuf, String)>, Vec<PathBuf>, Option<String>) {
         let queue = Mutex::new(presets.iter().map(|p| Job { hash: format!("{p}hash"), path: PathBuf::from(p), tries: 0 }).collect::<VecDeque<_>>());
         let (tx, rx) = mpsc::channel();
-        drive(&queue, &tx, &std::env::temp_dir(), launch, timeout);
+        let gave_up = drive(&queue, &tx, &std::env::temp_dir(), launch, timeout);
         drop(tx);
-        rx.iter()
+        let replies = rx
+            .iter()
             .map(|(_, path, reply)| match reply {
                 Reply::Failed(why) => (path, why),
                 Reply::Drew { .. } => (path, "drew".into()),
             })
-            .collect()
+            .collect();
+        let left = queue.into_inner().unwrap().into_iter().map(|j| j.path).collect();
+        (replies, left, gave_up)
     }
 
     fn scratch(name: &str) -> PathBuf {
@@ -550,10 +590,31 @@ mod tests {
     }
 
     #[test]
-    fn a_child_that_never_gets_ready_fails_its_preset() {
-        let launch = sh("echo hello");
-        let replies = run_driver(&launch, &["a"], Duration::from_secs(5));
-        assert!(replies[0].1.starts_with("failed: can't start a child"), "{replies:?}");
+    fn children_that_never_start_end_the_driver_and_leave_every_preset_queued() {
+        for script in ["echo hello", "exit 1"] {
+            let started = Instant::now();
+            let (replies, left, gave_up) = run_driver_whole(&sh(script), &["a", "b", "c", "d", "e"], Duration::from_secs(5));
+            assert!(replies.is_empty(), "nothing skipped: {replies:?}");
+            assert_eq!(left, ["a", "b", "c", "d", "e"].map(PathBuf::from), "requeued in order");
+            assert!(gave_up.as_deref().is_some_and(|w| w.starts_with(&format!("{START_FAILURES} in a row"))), "{gave_up:?}");
+            assert!(started.elapsed() < Duration::from_secs(5));
+        }
+    }
+
+    #[test]
+    fn a_child_that_fails_to_start_costs_its_preset_nothing_and_only_failures_in_a_row_count() {
+        let dir = scratch("start-fails");
+        let count = dir.join("starts");
+        // Two of every three children end before they're ready: four failures in
+        // all, never three in a row. The panic makes the driver start another.
+        let launch = sh(&format!(
+            r#"c=$(cat '{f}' 2>/dev/null || echo 0); c=$((c+1)); echo $c > '{f}'; [ $((c % 3)) -ne 0 ] && exit 1; echo ready; while read l; do case "$l" in *panic*) echo '{{"Failed":"panicked: boom"}}'; exit;; esac; echo '{{"Failed":"answered"}}'; done"#,
+            f = count.display()
+        ));
+        let replies = run_driver(&launch, &["panic", "a"], Duration::from_secs(5));
+        assert_eq!(replies, [(PathBuf::from("panic"), "panicked: boom".into()), (PathBuf::from("a"), "answered".into())]);
+        assert_eq!(std::fs::read_to_string(&count).unwrap().trim(), "6");
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

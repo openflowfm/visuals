@@ -147,6 +147,42 @@
   font-size: var(--text-body);
   line-height: 1.5;
 }
+/* Settings that couldn't be read or kept: quiet notes over the main pane. --caution, not --amber (decision 28). */
+.home .home-problems {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 12px;
+}
+.home .home-problems:empty {
+  display: none;
+}
+.home .home-problems:not(:empty) {
+  padding-top: 8px;
+}
+.home .home-problem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 3px 4px 3px 8px;
+  color: var(--ui);
+  font-size: var(--text-body);
+  line-height: 1.4;
+  background: var(--panel);
+  border-left: 2px solid var(--caution);
+  border-radius: var(--radius);
+}
+.home .home-problem-mark {
+  flex: none;
+  color: var(--caution);
+  font-weight: 700;
+}
+.home .home-problem-text {
+  flex: 1;
+  min-width: 0;
+}
 .home .home-link {
   padding: 0;
   font: inherit;

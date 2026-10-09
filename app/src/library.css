@@ -253,6 +253,26 @@
   font-size: 12px;
   text-shadow: 0 0 2px #000;
 }
+/* A preset that failed to open or draw this run: live mode skips it. --caution, not --amber (decision 28). */
+.lib-failed {
+  position: absolute;
+  /* Bottom corner: the star has the top left, + the top right. */
+  bottom: 3px;
+  right: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--caution);
+  color: #000;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+  pointer-events: none;
+}
+.lib-tile[data-failed] .lib-thumb img {
+  opacity: 0.55;
+}
 .lib-tile:hover .lib-thumb,
 .lib-tile[data-active] .lib-thumb {
   outline-color: var(--ui);
