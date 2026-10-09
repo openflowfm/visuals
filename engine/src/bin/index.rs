@@ -179,6 +179,44 @@ impl Queue {
     }
 }
 
+/// A preset taken from a [`Queue`], until it is finished ([`Taken::done`]) or
+/// put back ([`Taken::put_back`]). Dropped without either, as when its driver
+/// panics, it counts as finished undrawn, so the other drivers don't wait for
+/// it forever; the next run draws it.
+struct Taken<'a> {
+    queue: &'a Queue,
+    job: Option<Job>,
+}
+
+impl<'a> Taken<'a> {
+    fn new(queue: &'a Queue, job: Job) -> Taken<'a> {
+        Taken { queue, job: Some(job) }
+    }
+
+    fn job(&mut self) -> &mut Job {
+        self.job.as_mut().expect("a taken job")
+    }
+
+    fn done(mut self) -> Job {
+        let job = self.job.take().expect("a taken job");
+        self.queue.done();
+        job
+    }
+
+    fn put_back(mut self, front: bool) {
+        self.queue.put_back(self.job.take().expect("a taken job"), front);
+    }
+}
+
+impl Drop for Taken<'_> {
+    fn drop(&mut self) {
+        if let Some(job) = self.job.take() {
+            eprintln!("index: its driver stopped while drawing it; the next run draws it\t{}", job.path.display());
+            self.queue.done();
+        }
+    }
+}
+
 /// What an old index already knows, by content hash.
 #[derive(Debug, Default)]
 struct Known {
@@ -492,7 +530,9 @@ fn drive(queue: &Queue, results: &mpsc::Sender<(String, PathBuf, Reply)>, thumbs
     let mut failures = 0;
     let mut gave_up = None;
     loop {
-        let Some(mut job) = queue.take() else { break };
+        let Some(job) = queue.take() else { break };
+        // From here a panic can't leave the preset out for good.
+        let mut taken = Taken::new(queue, job);
         let mut r = match running.take().map_or_else(|| spawn(launch), Ok) {
             Ok(r) => {
                 failures = 0;
@@ -501,7 +541,7 @@ fn drive(queue: &Queue, results: &mpsc::Sender<(String, PathBuf, Reply)>, thumbs
             Err(e) => {
                 failures += 1;
                 eprintln!("index: can't start a child ({failures} in a row): {e}");
-                queue.put_back(job, true);
+                taken.put_back(true);
                 if failures >= START_FAILURES {
                     gave_up = Some(format!("{failures} in a row, the last: {e}"));
                     break;
@@ -509,9 +549,11 @@ fn drive(queue: &Queue, results: &mpsc::Sender<(String, PathBuf, Reply)>, thumbs
                 continue;
             }
         };
+        let job = taken.job();
         job.tries += 1;
+        let (tries, path) = (job.tries, job.path.clone());
         let thumb = thumbs.join(index::thumbnail_name(&job.hash));
-        let reply = match ask(&mut r, &job.path, &thumb, timeout) {
+        let reply = match ask(&mut r, &path, &thumb, timeout) {
             Outcome::Replied(reply) => {
                 if reply.panicked() {
                     stop(r);
@@ -522,9 +564,9 @@ fn drive(queue: &Queue, results: &mpsc::Sender<(String, PathBuf, Reply)>, thumbs
             }
             Outcome::TimedOut => {
                 stop(r);
-                if job.tries < TRIES {
-                    eprintln!("index: timed out, trying again later\t{}", job.path.display());
-                    queue.put_back(job, false);
+                if tries < TRIES {
+                    eprintln!("index: timed out, trying again later\t{}", path.display());
+                    taken.put_back(false);
                     continue;
                 }
                 Reply::Failed("timed out".into())
@@ -534,7 +576,7 @@ fn drive(queue: &Queue, results: &mpsc::Sender<(String, PathBuf, Reply)>, thumbs
                 Reply::Failed("crashed".into())
             }
         };
-        queue.done();
+        let job = taken.done();
         if results.send((job.hash, job.path, reply)).is_err() {
             break;
         }
@@ -690,6 +732,30 @@ mod tests {
         assert_eq!(drive(&jobs(&[]), &tx, &std::env::temp_dir(), &sh("exit 1"), Duration::from_secs(5)), None);
         drop(tx);
         assert!(answers(rx).is_empty());
+    }
+
+    #[test]
+    fn a_driver_that_panics_holding_a_preset_doesnt_leave_the_others_waiting() {
+        // The test holds `lost` as a driver would; the driver waits for it.
+        let queue = Arc::new(jobs(&["lost"]));
+        let held = queue.take().unwrap();
+        let (tx, rx) = mpsc::channel();
+        let driver = {
+            let queue = queue.clone();
+            std::thread::spawn(move || drive(&queue, &tx, &std::env::temp_dir(), &sh("exit 1"), Duration::from_secs(5)))
+        };
+        let holder = {
+            let queue = queue.clone();
+            std::thread::spawn(move || {
+                let _taken = Taken::new(&queue, held);
+                queue.until_waiting();
+                panic!("a driver panics between take and done");
+            })
+        };
+        assert!(holder.join().is_err(), "it panicked");
+        assert_eq!(driver.join().unwrap(), None, "and the waiting driver ended");
+        assert!(answers(rx).is_empty());
+        assert!(queue.left().is_empty());
     }
 
     fn scratch(name: &str) -> PathBuf {

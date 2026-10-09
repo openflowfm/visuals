@@ -177,12 +177,32 @@ once the presets folder has `TOTAL` of them). When the pack is downloaded again 
 or presets missing), it is downloaded from the `BUNDLE` that app build pins, and changed
 presets replace the ones still as downloaded, as described above.
 
+### How existing users get a new bundle
+
+Once a whole archive is unpacked, the app notes its URL (which names the commit) in
+`.bundle` in the pack's folder. At each launch, in the background, it compares that with
+the `BUNDLE` its build pins. When they differ, or there is no `.bundle` (a pack downloaded
+before the record was kept, or one that came from projectM's fallback), it downloads the
+pinned bundle again over the pack, quietly: the same download as the button's, with its
+events and its rules (only untouched files are overwritten, only untouched dropped presets
+removed, nothing removed after a download that breaks off). The page's count stays at the
+pack's while it runs, so the pack bar doesn't come back. It only runs on a pack that is
+there whole (it has its `index.json`, or all `TOTAL` presets), never during another
+download, and never twice at once. It tries the bundle alone, not the fallback; when it
+fails, the pack stays as it is and `.bundle` keeps naming the old archive, so the next
+launch tries again. So a new pinned `BUNDLE` (a takedown, changed presets, a new index)
+reaches everyone who has the pack the first time they open the new app build.
+
+Paths are compared without regard to case when deciding what a new bundle dropped: macOS
+volumes are usually case-insensitive, so a bundle that renames `A/Foo.milk` to
+`A/foo.milk` renames the preset there rather than removing it.
+
 Takedown requests come in as issues on visual-presets
 (<https://github.com/openflowfm/visual-presets/issues/new?title=Preset%20takedown>, the
 link in CREDITS.md and the Credits view): remove the preset there, with its row in
 `index.json` and its thumbnail, push, and pin the new commit. New app builds and fresh
-downloads don't have it from that commit on. A pack downloaded before loses it the next
-time that app downloads the newer bundle: the preset is removed if it is still as it was
-downloaded, and kept if the user edited it (it's theirs to remove then). Until an app
-downloads the newer bundle, it keeps the preset; projectM's bare pack, the fallback, still
+downloads don't have it from that commit on. A pack downloaded before loses it at the first
+launch of an app build pinning the newer bundle (above): the preset is removed if it is
+still as it was downloaded, and kept if the user edited it (it's theirs to remove then).
+Until then, it keeps the preset; projectM's bare pack, the fallback, still
 has it and would add it back to a pack that's missing it.

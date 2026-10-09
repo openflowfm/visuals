@@ -77,6 +77,10 @@ const FOLDER: &str = "cream-of-the-crop";
 const INDEX: &str = "index.json";
 /// The folder of the index's thumbnails, beside it.
 const THUMBNAILS: &str = "thumbnails";
+/// The file in the pack's folder naming the archive last unpacked there whole
+/// (its URL, with the commit in it), so a new pinned [`BUNDLE`] is noticed
+/// ([`stale`]).
+const RECORD: &str = ".bundle";
 /// The most a file in a download may be (the full pack's `index.json`, its
 /// largest, is a few MB).
 const FILE_MAX: u64 = 64 << 20;
@@ -188,20 +192,62 @@ pub fn pack_status(handle: AppHandle, app: tauri::State<App>) -> PackStatus {
 /// on [`PROGRESS`]. Resolves when it ends; a call while one runs returns at once.
 #[tauri::command]
 pub async fn pack_download(handle: AppHandle) -> Result<(), String> {
-    {
-        let mut d = DOWNLOAD.lock().unwrap();
-        if d.state == State::Downloading {
-            return Ok(());
-        }
-        *d = Download { state: State::Downloading, received: 0, error: None, installed: d.installed, size: d.size };
+    if !begin(None) {
+        return Ok(());
     }
-    let thread = std::thread::spawn(move || download(&handle));
+    let thread = std::thread::spawn(move || download(&handle, &sources(), false));
     tauri::async_runtime::spawn_blocking(move || thread.join()).await.map_err(|e| e.to_string())?.unwrap_or_else(|_| Err("the download stopped unexpectedly".into()))
 }
 
-/// The download itself, on its own thread: [`fetch`] with progress going out on
-/// [`PROGRESS`] at most every 100 ms, and a last status when it ends.
-fn download(handle: &AppHandle) -> Result<(), String> {
+/// Mark a download as running, unless one already is (then false). The status
+/// says `installed` presets meanwhile when given, else the count so far.
+fn begin(installed: Option<usize>) -> bool {
+    let mut d = DOWNLOAD.lock().unwrap();
+    if d.state == State::Downloading {
+        return false;
+    }
+    *d = Download { state: State::Downloading, received: 0, error: None, installed: installed.unwrap_or(d.installed), size: d.size };
+    true
+}
+
+/// Whether the pack in `dest` should be brought up to `bundle` (its URL): it is
+/// a full pack, and [`RECORD`] names another archive or is missing (a pack
+/// downloaded before the record was kept). A pack that is there whole has its
+/// `index.json` (placed last, once the whole bundle is in) or every preset (the
+/// fallback's bare pack); a first download cut off part-way is neither, and is
+/// left to the button.
+fn stale(dest: &Path, bundle: &str) -> bool {
+    let record = std::fs::read_to_string(dest.join(RECORD)).ok();
+    if record.as_deref().map(str::trim) == Some(bundle) {
+        return false;
+    }
+    record.is_some() || dest.join(INDEX).is_file() || engine::preset::milk_files(dest).len() >= TOTAL
+}
+
+/// Bring an existing full pack up to the pinned bundle when it is [`stale`]:
+/// the download the button starts, from the bundle alone (not the fallback),
+/// quietly. It doesn't run while another download does. A failure leaves the
+/// pack as it is, and the next launch tries again.
+fn update(handle: &AppHandle) {
+    let library = handle.state::<App>().library.clone();
+    let dest = library.join(FOLDER);
+    let Some(&bundle) = sources().first() else { return };
+    if !stale(&dest, bundle.url) {
+        return;
+    }
+    // Shown as already in: the page keeps the pack bar away.
+    if !begin(Some(engine::preset::milk_files(&library).len())) {
+        return;
+    }
+    eprintln!("pack: bringing the pack up to {}", bundle.url);
+    let _ = download(handle, &[bundle], true);
+}
+
+/// The download itself, on its own thread: [`fetch`] from `sources` with
+/// progress going out on [`PROGRESS`] at most every 100 ms, and a last status
+/// when it ends. A `quiet` one ([`update`]) leaves the count of presets as it
+/// was until it ends, and a failure is only logged, not shown.
+fn download(handle: &AppHandle, sources: &[Source], quiet: bool) -> Result<(), String> {
     let library = handle.state::<App>().library.clone();
     let dest = library.join(FOLDER);
     let starter = starter_count(handle);
@@ -209,10 +255,12 @@ fn download(handle: &AppHandle) -> Result<(), String> {
     let mut last: Option<Instant> = None;
     let result = crate::crash::catch(std::panic::AssertUnwindSafe(|| {
         let sized = |size| DOWNLOAD.lock().unwrap().size = size;
-        fetch(&sources(), &dest, sized, |received, files| {
+        fetch(sources, &dest, sized, |received, files| {
             let mut d = DOWNLOAD.lock().unwrap();
             d.received = received;
-            d.installed = others + files;
+            if !quiet {
+                d.installed = others + files;
+            }
             if last.is_none_or(|t| t.elapsed() >= Duration::from_millis(100)) {
                 last = Some(Instant::now());
                 let _ = handle.emit(PROGRESS, status(&d, starter, d.installed));
@@ -225,6 +273,10 @@ fn download(handle: &AppHandle) -> Result<(), String> {
     d.installed = installed;
     match &result {
         Ok(_) => (d.state, d.error) = (State::Idle, None),
+        Err(e) if quiet => {
+            eprintln!("pack: couldn't bring the pack up to date, trying again next launch: {e}");
+            (d.state, d.error) = (State::Idle, None);
+        }
         Err(e) => (d.state, d.error) = (State::Failed, Some(e.clone())),
     }
     let _ = handle.emit(PROGRESS, status(&d, starter, installed));
@@ -259,8 +311,9 @@ impl<R: Read> Read for Counted<'_, R> {
 /// so far. A source that answers with something that isn't a whole tar.gz of
 /// presets (it won't gunzip or untar, or has no presets) counts as one that
 /// can't be had, and the next is tried. A download that breaks off isn't taken
-/// up from the next source: a retry carries on from the same one. Returns how
-/// many presets the pack has.
+/// up from the next source: a retry carries on from the same one. Once a whole
+/// archive is in, its URL (naming its commit) is noted in [`RECORD`]. Returns
+/// how many presets the pack has.
 fn fetch(sources: &[Source], dest: &Path, mut sized: impl FnMut(u64), mut progress: impl FnMut(u64, usize)) -> Result<usize, String> {
     let client = client()?;
     let mut failed = Vec::new();
@@ -279,6 +332,10 @@ fn fetch(sources: &[Source], dest: &Path, mut sized: impl FnMut(u64), mut progre
         match extract(Counted { inner: response, length, count: &received, broke: &broke }, dest, |files| progress(received.get(), files)) {
             Ok(files) => {
                 progress(received.get(), files);
+                if let Err(e) = std::fs::write(dest.join(RECORD), format!("{}\n", source.url)) {
+                    // Only costs a download: the next launch brings it up to date again.
+                    eprintln!("pack: couldn't note which bundle is in: {e}");
+                }
                 return Ok(files);
             }
             Err(Failed::Archive(e)) if broke.get() => return Err(format!("the download broke off: {e}")),
@@ -357,6 +414,8 @@ enum Failed {
 #[derive(Default)]
 struct Downloaded {
     hashes: std::collections::HashMap<String, String>,
+    /// The same, by the path in lower case.
+    folded: std::collections::HashMap<String, String>,
     thumbnails: HashSet<String>,
 }
 
@@ -380,13 +439,18 @@ impl Downloaded {
         }
         let old: Old = std::fs::read(index).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
         let thumbnails = old.rows.iter().filter_map(|r| r.thumbnail.clone()).collect();
-        Downloaded { hashes: old.rows.into_iter().chain(old.skipped).map(|r| (r.path, r.hash)).collect(), thumbnails }
+        let hashes: std::collections::HashMap<String, String> = old.rows.into_iter().chain(old.skipped).map(|r| (r.path, r.hash)).collect();
+        let folded = hashes.iter().map(|(k, h)| (k.to_lowercase(), h.clone())).collect();
+        Downloaded { hashes, folded, thumbnails }
     }
 
     /// Whether the file at `key` is still as it was downloaded: there, and its
-    /// content's hash the one the index has for it.
+    /// content's hash the one the index has for it. A path the index has only in
+    /// another case is the same file on a case-insensitive volume (macOS's
+    /// usually are), so a preset the new bundle renames only in case is
+    /// replaced like any other.
     fn untouched(&self, key: &str, there: &[u8]) -> bool {
-        self.hashes.get(key).is_some_and(|h| *h == engine::index::hash(there))
+        self.hashes.get(key).or_else(|| self.folded.get(&key.to_lowercase())).is_some_and(|h| *h == engine::index::hash(there))
     }
 }
 
@@ -477,7 +541,14 @@ fn place(target: &Path, bytes: &[u8]) -> Result<(), String> {
 /// (`seen`): presets still as downloaded, and thumbnails. An edited preset is
 /// kept. A folder left empty goes too. A file that can't be removed is only
 /// logged: it stays listed nowhere, and the download still counts.
+///
+/// A path the archive has only in another case (a rename like `A/Foo.milk` to
+/// `A/foo.milk`) is the same file on a case-insensitive volume, as macOS's
+/// usually are: it is renamed to the new case, never removed. On a
+/// case-sensitive volume the two are different files, and the old one goes
+/// like any dropped file.
 fn remove_dropped(dest: &Path, old: &Downloaded, seen: &HashSet<String>) {
+    let folded: std::collections::HashMap<String, &String> = seen.iter().map(|k| (k.to_lowercase(), k)).collect();
     let thumbnails = old.thumbnails.iter().map(|t| format!("{THUMBNAILS}/{t}"));
     let dropped = old.hashes.keys().cloned().chain(thumbnails).filter(|k| !seen.contains(k));
     for key in dropped {
@@ -486,6 +557,16 @@ fn remove_dropped(dest: &Path, old: &Downloaded, seen: &HashSet<String>) {
             continue;
         }
         let target = dest.join(&key);
+        if let Some(new) = folded.get(&key.to_lowercase()) {
+            let renamed = dest.join(new);
+            if same_file(&target, &renamed) {
+                // Only the case differs: the archive's file is this one.
+                if let Err(e) = std::fs::rename(&target, &renamed) {
+                    eprintln!("pack: couldn't rename {} to {}: {e}", target.display(), renamed.display());
+                }
+                continue;
+            }
+        }
         let Ok(there) = std::fs::read(&target) else { continue };
         if old.hashes.contains_key(&key) && !old.untouched(&key, &there) {
             continue;
@@ -503,6 +584,22 @@ fn remove_dropped(dest: &Path, old: &Downloaded, seen: &HashSet<String>) {
             dir = d.parent();
         }
     }
+}
+
+/// Whether `a` and `b` are the same file on disk (one path in two cases on a
+/// case-insensitive volume). False when either isn't there.
+#[cfg(unix)]
+fn same_file(a: &Path, b: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    match (std::fs::metadata(a), std::fs::metadata(b)) {
+        (Ok(a), Ok(b)) => (a.dev(), a.ino()) == (b.dev(), b.ino()),
+        _ => false,
+    }
+}
+
+#[cfg(not(unix))]
+fn same_file(_: &Path, _: &Path) -> bool {
+    false
 }
 
 /// `rel` as the index writes paths: `/`-separated.
@@ -635,8 +732,9 @@ fn put(presets: &Path, rel: &Path, bytes: &[u8]) -> Result<bool, String> {
     unreachable!()
 }
 
-/// Seed the starter playlists on a first run, then watch the presets folder and
-/// send [`CHANGED`] when it changes.
+/// Seed the starter playlists on a first run, bring a full pack up to the
+/// pinned bundle in the background ([`update`]), and watch the presets folder,
+/// sending [`CHANGED`] when it changes.
 pub fn start(handle: &AppHandle) {
     let fresh = !crate::playlists::default_file().exists();
     if let Some(starter) = starter(handle) {
@@ -659,6 +757,10 @@ pub fn start(handle: &AppHandle) {
                 eprintln!("pack: {e}");
             }
         });
+    }
+    {
+        let handle = handle.clone();
+        std::thread::spawn(move || update(&handle));
     }
     let handle = handle.clone();
     std::thread::spawn(move || watch(&handle, &library));
@@ -1136,6 +1238,94 @@ mod tests {
             assert_eq!(&std::fs::read(dir.join(format!("S/{i}.milk"))).unwrap(), data);
         }
         assert!(parts(&dir).is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A bundle's tar.gz: `presets` with an index of them.
+    fn bundle_of(presets: &[(&str, &[u8])]) -> Vec<u8> {
+        let index = index_of(presets, &[]);
+        let mut files: Vec<(String, &[u8])> = presets.iter().map(|(p, d)| (format!("top/{p}"), *d)).collect();
+        files.push(("top/index.json".into(), &index[..]));
+        tar_gz(&files.iter().map(|(p, d)| (p.as_str(), *d)).collect::<Vec<_>>())
+    }
+
+    #[test]
+    fn a_full_pack_is_brought_up_to_a_new_bundle_once() {
+        let dir = temp();
+        let dest = dir.join("cream-of-the-crop");
+        let read = |p: &str| std::fs::read(dest.join(p)).ok();
+        assert!(!stale(&dest, "any"), "no pack: nothing to bring up to date");
+        // A first download cut off part-way isn't a full pack: the button finishes it.
+        std::fs::create_dir_all(dest.join("A")).unwrap();
+        std::fs::write(dest.join("A/a.milk"), b"a1").unwrap();
+        assert!(!stale(&dest, "any"));
+
+        let v1 = at(serve(ok(&bundle_of(&[("A/a.milk", b"a1"), ("B/gone.milk", b"gone")]))), 1);
+        assert_eq!(fetch(&[v1], &dest, |_| {}, |_, _| {}).unwrap(), 2);
+        assert_eq!(read(RECORD), Some(format!("{}\n", v1.url).into_bytes()), "the bundle unpacked is noted");
+        assert!(!stale(&dest, v1.url), "the same commit: nothing to do");
+        assert!(stale(&dest, "https://example.com/other.tar.gz"), "another commit: update");
+        std::fs::remove_file(dest.join(RECORD)).unwrap();
+        assert!(stale(&dest, v1.url), "no record (downloaded before it was kept): update");
+
+        // The update: the download from the new bundle alone, as `update` does it.
+        let v2 = at(serve(ok(&bundle_of(&[("A/a.milk", b"a2")]))), 1);
+        assert!(stale(&dest, v2.url));
+        assert_eq!(fetch(&[v2], &dest, |_| {}, |_, _| {}).unwrap(), 1);
+        assert_eq!(read("A/a.milk").as_deref(), Some(&b"a2"[..]), "changed and untouched: replaced");
+        assert_eq!(read("B/gone.milk"), None, "taken down: removed");
+        assert!(!stale(&dest, v2.url), "done once");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_failed_update_leaves_the_pack_as_it_is_to_try_again() {
+        let dir = temp();
+        let dest = dir.join("cream-of-the-crop");
+        let v1 = at(serve(ok(&bundle_of(&[("A/a.milk", b"a1"), ("B/gone.milk", b"gone")]))), 1);
+        fetch(&[v1], &dest, |_| {}, |_, _| {}).unwrap();
+        let before = |p: &str| std::fs::read(dest.join(p)).unwrap();
+        let (a, gone, index, record) = (before("A/a.milk"), before("B/gone.milk"), before(INDEX), before(RECORD));
+
+        // The server says no.
+        let v2 = at(serve(not_found()), 1);
+        assert!(fetch(&[v2], &dest, |_| {}, |_, _| {}).is_err());
+        assert_eq!((before("A/a.milk"), before("B/gone.milk"), before(INDEX), before(RECORD)), (a, gone.clone(), index.clone(), record.clone()), "nothing changed");
+        // The download breaks off part-way through a bundle that drops a preset.
+        let gz = bundle_of(&[("A/a.milk", &noise(5, 30_000)[..]), ("C/new.milk", &noise(6, 30_000)[..])]);
+        let mut cut = ok(&gz);
+        cut.truncate(cut.len() - gz.len() / 2);
+        let v3 = at(serve(cut), 1);
+        assert!(fetch(&[v3], &dest, |_| {}, |_, _| {}).is_err());
+
+        assert_eq!(before("B/gone.milk"), gone, "nothing removed");
+        assert_eq!(before(INDEX), index);
+        assert_eq!(before(RECORD), record, "still the old bundle's, so the next launch tries again");
+        assert!(stale(&dest, v3.url));
+        assert!(parts(&dir).is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn an_update_doesnt_start_while_a_download_runs() {
+        assert!(begin(None), "nothing running: it starts");
+        assert!(!begin(Some(9795)), "a first download runs: the update waits for the next launch");
+        DOWNLOAD.lock().unwrap().state = State::Idle;
+    }
+
+    #[test]
+    fn a_rename_that_only_changes_case_keeps_the_preset() {
+        let dir = temp();
+        let dest = dir.join("cream-of-the-crop");
+        let milks = |d: &Path| std::fs::read_dir(d).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).filter(|n| n.ends_with(".milk")).collect::<Vec<_>>();
+        assert_eq!(extract(&bundle_of(&[("A/Foo.milk", b"foo"), ("A/Bar.milk", b"bar")])[..], &dest, |_| {}).unwrap(), 2);
+        // Renamed only in case, one as it was and one changed too.
+        assert_eq!(extract(&bundle_of(&[("A/foo.milk", b"foo"), ("A/bar.milk", b"bar 2")])[..], &dest, |_| {}).unwrap(), 2);
+        let mut names = milks(&dest.join("A"));
+        names.sort();
+        assert_eq!(names, ["bar.milk", "foo.milk"], "each kept once, under its new name");
+        assert_eq!(std::fs::read(dest.join("A/foo.milk")).unwrap(), b"foo");
+        assert_eq!(std::fs::read(dest.join("A/bar.milk")).unwrap(), b"bar 2");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
