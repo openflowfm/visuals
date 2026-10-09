@@ -604,3 +604,94 @@ fn quality_changes_while_running_without_a_reload() {
     assert_eq!((r.size().texsize_x, r.size().texsize_y), (27.0, 48.0));
     assert_eq!(r.output_size(), (H, W));
 }
+
+/// wgpu's live objects on `device`, by kind, once the GPU has finished and
+/// let go of everything dropped. Needs wgpu's `counters` feature (the engine's
+/// dev-dependency); without it every count reads 0.
+fn live_objects(device: &wgpu::Device) -> Vec<(&'static str, isize)> {
+    device.poll(wgpu::PollType::wait_indefinitely()).ok();
+    let c = device.get_internal_counters().hal;
+    vec![
+        ("buffers", c.buffers.read()),
+        ("textures", c.textures.read()),
+        ("texture views", c.texture_views.read()),
+        ("bind groups", c.bind_groups.read()),
+        ("bind group layouts", c.bind_group_layouts.read()),
+        ("render pipelines", c.render_pipelines.read()),
+        ("pipeline layouts", c.pipeline_layouts.read()),
+        ("shader modules", c.shader_modules.read()),
+        ("samplers", c.samplers.read()),
+        ("command encoders", c.command_encoders.read()),
+    ]
+}
+
+/// A show's switches, many times over: each loads the next preset with a
+/// crossfade from the last (the outgoing snapshot faded out through the master
+/// pass, drawn between steps), changes the quality, and now and then turns
+/// trails on or off and turns the output between landscape and portrait. The
+/// whole pattern repeats every 12 switches, so after any multiple of 12 the
+/// renderer is in the same state and should hold the same GPU objects:
+/// anything that grows from 24 switches to 48 is a leak.
+#[test]
+fn switching_presets_and_quality_frees_what_it_replaces() {
+    use crate::quality::{Level, Quality};
+    let Some((device, queue)) = headless() else {
+        eprintln!("skipped switching_presets_and_quality_frees_what_it_replaces: no GPU adapter");
+        return;
+    };
+    // The Spiral fixture; one with a textured shape, motion vectors, borders
+    // and every blur; and one on MilkDrop's default shaders.
+    let busy = SPIRAL
+        .replace("shapecode_0_textured=0", "shapecode_0_textured=1")
+        .replace("nMotionVectorsX=0.000000", "nMotionVectorsX=12.000000")
+        .replace("nMotionVectorsY=0.000000", "nMotionVectorsY=9.000000")
+        .replace("ob_size=0.000000", "ob_size=0.020000")
+        .replace("ret *= 0.97;", "ret = ret * 0.95 + GetBlur1(uv) * 0.04;")
+        .replace("ret = tex2D(sampler_main, uv).xyz * 1.2;", "ret = tex2D(sampler_main, uv).xyz + GetBlur2(uv) * 0.2 + GetBlur3(uv) * 0.2;");
+    assert_ne!(busy, SPIRAL);
+    let plain: String = SPIRAL.lines().filter(|l| !l.starts_with("warp_") && !l.starts_with("comp_")).map(|l| format!("{l}\n")).collect();
+    let presets = [SPIRAL, busy.as_str(), plain.as_str()];
+    let qualities = [Level::Low.quality(), Level::Medium.quality(), Level::High.quality(), Quality { scale: 0.6, mesh: (24, 18) }];
+    let (w, h) = (96, 54);
+    let mut r = Renderer::new(device, queue, w, h);
+    r.load(SPIRAL, 0).unwrap();
+    // Presented to two formats, as the app's window and a live output may be.
+    let outputs = [FORMAT, wgpu::TextureFormat::Bgra8Unorm].map(|format| (Target::of(r.device(), (w, h), "output", format), format));
+    let mut audio = Audio::default();
+    let tone = tone();
+
+    let mut switch = |r: &mut Renderer, i: usize| {
+        r.keep_outgoing();
+        let loaded = r.load(presets[i % presets.len()], i as u64).unwrap();
+        assert!(loaded.fell_back.is_empty(), "{:?}", loaded.fell_back);
+        r.set_quality(qualities[i % qualities.len()]);
+        r.set_trails(if i % 2 == 0 { 0.9 } else { 0.0 });
+        if i % 6 == 0 {
+            if i % 12 == 0 { r.resize(w, h) } else { r.resize(h, w) }
+        }
+        for f in 0..4 {
+            audio.update(&tone, &tone);
+            r.render(&mut audio, 0.4 / PRESET_RATE);
+            r.set_master(Master { fade: 1.0 - f as f32 / 4.0, ..Default::default() });
+            let (out, format) = &outputs[f % 2];
+            r.present(&out.view, *format, out.size);
+        }
+        r.set_master(Master::default());
+    };
+
+    let n = 24;
+    for i in 0..n {
+        switch(&mut r, i);
+    }
+    let after_n = live_objects(r.device());
+    for i in n..2 * n {
+        switch(&mut r, i);
+    }
+    let after_2n = live_objects(r.device());
+    eprintln!("live wgpu objects after {n} switches: {after_n:?}");
+    eprintln!("live wgpu objects after {} switches: {after_2n:?}", 2 * n);
+    assert!(after_n.iter().any(|&(_, count)| count > 0), "wgpu's counters are off: the engine's dev-dependency on wgpu needs the `counters` feature");
+    for ((kind, at_n), (_, at_2n)) in after_n.iter().zip(&after_2n) {
+        assert!(at_2n <= at_n, "{kind} grew from {at_n} after {n} switches to {at_2n} after {}", 2 * n);
+    }
+}
