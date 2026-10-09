@@ -271,6 +271,7 @@ export interface CrashReport {
   /** Unix seconds. */
   when: number;
   summary: string;
+  text: string;
   /** Already opened as an issue. */
   sent: boolean;
 }

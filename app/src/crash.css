@@ -1,0 +1,15 @@
+/* The crash prompt on launch (CrashPrompt.tsx): the report as it would be sent. */
+
+.crash-text {
+  margin: 0;
+  max-height: 40vh;
+  overflow: auto;
+  padding: 6px 8px;
+  border: 1px solid var(--bd);
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
