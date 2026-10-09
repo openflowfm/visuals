@@ -181,6 +181,7 @@ fn main() {
                 // The window starts hidden (`tauri.conf.json`): shown here, or
                 // headless, drawn where no display shows it.
                 let window = app.get_webview_window("main").expect("main window");
+                dev::size(&window);
                 if headless {
                     window.with_webview(|webview| {
                         let mtm = objc2::MainThreadMarker::new().expect("main thread");

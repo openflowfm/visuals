@@ -106,6 +106,11 @@ pub enum FxAction {
     Sensitivity {
         value: f64,
     },
+    /// Live mode's one Intensity slider, 0–1 (½ is the picture as drawn): sets
+    /// sensitivity, brightness and strobe level together on [`intensity`]'s curve.
+    Intensity {
+        value: f64,
+    },
     Tap,
     Bpm {
         bpm: f64,
@@ -190,6 +195,28 @@ impl Settings {
             ..Settings::default()
         };
     }
+}
+
+/// What the Intensity slider sets.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Intensity {
+    pub sensitivity: f64,
+    pub brightness: f64,
+    pub strobe: f64,
+}
+
+/// The brightest the Intensity slider goes: punch and the strobe on top still leave colour, not white.
+pub const INTENSITY_BRIGHTNESS_MAX: f64 = 1.2;
+/// The strongest strobe flash the Intensity slider sets; a full-white flash only from the strobe's own level.
+pub const INTENSITY_STROBE_MAX: f64 = 0.85;
+
+/// The Intensity slider's curve, `v` 0–1 with ½ the picture as drawn: sensitivity
+/// runs from ½× at the bottom to 2× at the top (a log taper, 1× in the middle),
+/// brightness 0.8–[`INTENSITY_BRIGHTNESS_MAX`] and the strobe level
+/// 0.35–[`INTENSITY_STROBE_MAX`], so the top of the slider never clips to white.
+pub fn intensity(v: f64) -> Intensity {
+    let v = v.clamp(0.0, 1.0);
+    Intensity { sensitivity: 0.5 * 4f64.powf(v), brightness: 0.8 + (INTENSITY_BRIGHTNESS_MAX - 0.8) * v, strobe: 0.35 + (INTENSITY_STROBE_MAX - 0.35) * v }
 }
 
 /// How long freeze takes to come back up to speed once released.
@@ -316,6 +343,10 @@ impl Fx {
             FxAction::Mirror { mode } => s.mirror = mode.unwrap_or_else(|| next(s.mirror)),
             FxAction::Trails { value } => s.trails = clamped(*value, 0.0, 1.0, "trails")?,
             FxAction::Sensitivity { value } => s.sensitivity = clamped(*value, 0.25, 4.0, "sensitivity")?,
+            FxAction::Intensity { value } => {
+                let curve = intensity(clamped(*value, 0.0, 1.0, "intensity")?);
+                (s.sensitivity, s.brightness, s.strobe_intensity) = (curve.sensitivity, curve.brightness, curve.strobe);
+            }
             FxAction::Tap => return Ok(self.tap(now)),
             FxAction::Bpm { bpm } => {
                 self.bpm = clamped(*bpm, 40.0, 240.0, "bpm")?;
@@ -724,6 +755,33 @@ mod tests {
         fx.unfollow();
         assert!(fx.apply(&FxAction::Tap, t(1.5)).unwrap());
         assert!((fx.bpm - 80.0).abs() < 0.01, "{}", fx.bpm);
+    }
+
+    #[test]
+    fn intensity_moves_three_settings_on_a_capped_curve() {
+        let mut fx = fx();
+        // The middle is the picture as drawn.
+        act(&mut fx, FxAction::Intensity { value: 0.5 }, 0.0);
+        assert!((fx.settings.sensitivity - 1.0).abs() < 1e-9);
+        assert!((fx.settings.brightness - 1.0).abs() < 1e-9);
+        // Out of range is clamped; the top stays short of white.
+        act(&mut fx, FxAction::Intensity { value: 7.0 }, 0.0);
+        assert_eq!((fx.settings.sensitivity, fx.settings.brightness, fx.settings.strobe_intensity), (2.0, INTENSITY_BRIGHTNESS_MAX, INTENSITY_STROBE_MAX));
+        act(&mut fx, FxAction::Strobe { on: Some(true) }, 0.0);
+        let m = fx.master(t(0.0));
+        assert!(m.flash < 1.0 && m.brightness < 1.25, "{m:?}");
+        act(&mut fx, FxAction::Intensity { value: -1.0 }, 0.0);
+        assert!((fx.settings.sensitivity - 0.5).abs() < 1e-9 && (fx.settings.brightness - 0.8).abs() < 1e-9 && (fx.settings.strobe_intensity - 0.35).abs() < 1e-9);
+        assert_eq!(fx.apply(&FxAction::Intensity { value: f64::NAN }, t(0.0)), Err("intensity must be a number".into()));
+        // Every step up raises all three.
+        let mut last = intensity(0.0);
+        for i in 1..=10 {
+            let now = intensity(i as f64 / 10.0);
+            assert!(now.sensitivity > last.sensitivity && now.brightness > last.brightness && now.strobe > last.strobe);
+            last = now;
+        }
+        let read = serde_json::from_str::<FxAction>(r#"{"kind":"intensity","value":0.25}"#).unwrap();
+        assert_eq!(read, FxAction::Intensity { value: 0.25 });
     }
 
     #[test]

@@ -16,7 +16,7 @@
         "title": "visual[flow]",
         "width": 1600,
         "height": 1000,
-        "minWidth": 1000,
+        "minWidth": 760,
         "minHeight": 640,
         "transparent": true,
         "visible": false
