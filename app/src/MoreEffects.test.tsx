@@ -42,6 +42,13 @@ describe('MoreFx', () => {
   it('names its controls for VoiceOver', () => {
     const html = renderToStaticMarkup(<MoreFx state={REST} set={none} send={none} />);
     expect(html).toMatch(/role="radiogroup"[^>]*aria-label="mirror"/);
+    for (const [label, shows] of [
+      ['mirror off', 'off'],
+      ['X: mirror across', 'X'],
+      ['Y: mirror down', 'Y'],
+      ['4-way: mirror four ways', '4-way'],
+    ])
+      expect(html).toMatch(new RegExp(`role="radio"[^>]*aria-label="${label}"[^>]*>${shows}<`));
     expect(html).toMatch(/<button[^>]*aria-label="invert"/);
     expect(html).toMatch(/<button[^>]*>Reset: back to normal<\/button>/);
   });
@@ -61,6 +68,8 @@ describe('EffectSettings', () => {
     expect(html).toContain('1.5 s');
     expect(html).toContain('aria-label="Brightness down a step"');
     expect(html).toContain('aria-label="Brightness up a step"');
+    expect(html).toMatch(/role="radio"[^>]*aria-label="a quarter flash per beat"[^>]*>¼</);
+    expect(html).toMatch(/role="radio"[^>]*aria-label="4 flashes per beat"[^>]*>4</);
     expect(html).toMatch(/aria-label="[^"]+ up a step"[^]*aria-label="[^"]+ up a step"/);
   });
 });

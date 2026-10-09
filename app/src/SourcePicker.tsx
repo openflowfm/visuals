@@ -37,6 +37,16 @@ export function goneNote(was: string | null, now: string | null, sources: api.So
   return `${was} is gone, so listening to ${now} until it's back`;
 }
 
+/**
+ * The source picker's tooltip: the full name of what it shows first (the
+ * 560–700 px header cuts the picker to 72 px, and a device's name with it),
+ * then what it can pick. `shown` is null while nothing is heard.
+ */
+export function sourceTitle(shown: string | null): string {
+  const choices = `${say('process tap')}, ${EVERYTHING}, or a microphone or interface`;
+  return shown ? `${Say('audio input')}: ${shown}. Or pick ${choices}` : `${Say('audio input')}: ${choices}`;
+}
+
 /** What to say when macOS refused the tap other apps' sound; null when it didn't. */
 export function deniedNote(heard: api.Heard): string | null {
   return heard.denied ? 'not allowed to hear other apps: allow it in System Settings › Privacy & Security › Screen & System Audio Recording' : null;
@@ -204,7 +214,7 @@ export function SourcePicker({ onError }: { onError(error: unknown): void }) {
           choose(next, l, r);
         }}
         label={say('audio input')}
-        title={`${Say('audio input')}: ${say('process tap')}, ${EVERYTHING}, or a microphone or interface`}
+        title={sourceTitle(missing ? (choice?.name ?? null) : items[at])}
         width={180}
       />
       <details className="audio-advanced">

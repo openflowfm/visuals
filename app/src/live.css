@@ -110,12 +110,23 @@
   font-size: var(--text-body);
   white-space: nowrap;
 }
-/* "Skipped 1 broken preset": quiet, and fading over SKIP_FADE (Status.tsx) once its time is up. */
+/*
+ * "Skipped 1 broken preset": quiet, and fading over SKIP_FADE (Status.tsx) once its time is up.
+ * It takes only the room the strip has left (a basis of 0, so it never wraps the strip or pushes ? ⚙ ✕ along):
+ * in a narrow window it wraps onto a second line inside the strip's height, then cuts short; its tooltip says it whole.
+ */
 .live-status-skipped {
+  flex: 1 1 0;
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
   padding: 0 8px;
   color: var(--detail);
   font-size: var(--text-body);
-  white-space: nowrap;
+  line-height: 1.2;
   opacity: 1;
   transition: opacity 1s ease-out;
 }

@@ -3,7 +3,26 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { LibraryData } from './api.ts';
 import * as pl from './playlists.ts';
-import { afterNext, chipAction, collapseFocus, isMood, Crate, dropSlot, litMoods, moods, moveFor, needsDeckItems, nextPath, orderable, rowLabel, UP_NEXT, upNote, upcoming } from './Crate.tsx';
+import {
+  afterNext,
+  chipAction,
+  collapseFocus,
+  findRow,
+  isMood,
+  itemsAgree,
+  Crate,
+  dropSlot,
+  litMoods,
+  moods,
+  moveFor,
+  needsDeckItems,
+  nextPath,
+  orderable,
+  rowLabel,
+  UP_NEXT,
+  upNote,
+  upcoming,
+} from './Crate.tsx';
 
 const item = (name: string, missing = false): pl.Item => ({ path: `pack/${name}.milk`, name, group: 'pack', missing, hash: null });
 const ITEMS = ['a', 'b', 'c', 'd', 'e'].map((n) => item(n, n === 'd'));
@@ -120,10 +139,57 @@ describe('afterNext', () => {
     expect(nextPath(deck)).toBe('pack/d.milk');
     const rows = upcoming(deck, null);
     expect(afterNext(rows, nextPath(deck)).map((r) => r.name)).toEqual(['e', 'a', 'b']);
-    // A Next line naming something else, or nothing: every row stays.
-    expect(afterNext(rows, 'pack/e.milk').map((r) => r.name)).toEqual(['d', 'e', 'a', 'b']);
+    // A Next line naming nothing, or a preset not among the rows: every row stays.
     expect(afterNext(rows, null)).toHaveLength(4);
+    expect(afterNext(rows, 'pack/z.milk')).toHaveLength(4);
     expect(nextPath(lists({}))).toBeNull();
+  });
+
+  it('leaves out the Next item wherever it is among the rows, so it never shows twice', () => {
+    const rows = upcoming(lists({ playlist: 'm', index: 2, next_index: 3 }), null);
+    expect(afterNext(rows, 'pack/e.milk').map((r) => r.name)).toEqual(['d', 'a', 'b']);
+    expect(afterNext(rows, 'pack/b.milk').map((r) => r.name)).toEqual(['d', 'e', 'a']);
+  });
+
+  it('leaves out only the first row of a preset that is in the list twice', () => {
+    const twice = [item('a'), item('b'), item('a'), item('c')].map((i, at) => ({ ...i, at }));
+    expect(afterNext(twice, 'pack/a.milk').map((r) => r.at)).toEqual([1, 2, 3]);
+  });
+});
+
+describe('itemsAgree', () => {
+  const order = ['pack/a.milk', 'pack/c.milk', 'pack/b.milk'];
+  it("agrees while the preset after the playing one is the deck's Next, round past the end", () => {
+    expect(itemsAgree(order, 'pack/a.milk', 'pack/c.milk')).toBe(true);
+    expect(itemsAgree(order, 'pack/c.milk', 'pack/b.milk')).toBe(true);
+    expect(itemsAgree(order, 'pack/b.milk', 'pack/a.milk')).toBe(true);
+    expect(itemsAgree(order, null, 'pack/a.milk')).toBe(true);
+  });
+
+  it('disagrees once the order was picked afresh (a playlist loaded again, shuffled)', () => {
+    expect(itemsAgree(order, 'pack/a.milk', 'pack/b.milk')).toBe(false);
+  });
+
+  it('agrees when there is nothing to check', () => {
+    expect(itemsAgree(null, 'pack/a.milk', 'pack/b.milk')).toBe(true);
+    expect(itemsAgree([], 'pack/a.milk', 'pack/b.milk')).toBe(true);
+    expect(itemsAgree(order, 'pack/a.milk', null)).toBe(true);
+  });
+});
+
+describe('findRow', () => {
+  it('finds a held row again by its playlist index and path, however the rows shifted', () => {
+    const before = upcoming(lists({ playlist: 'm', index: 0, next_index: 1 }), null);
+    const held = { path: before[2].path, at: before[2].at };
+    const after = upcoming(lists({ playlist: 'm', index: 1, next_index: 2 }), null);
+    expect(after[findRow(after, held)]).toMatchObject({ name: 'd', at: 3 });
+    // It has become the one playing: gone.
+    expect(findRow(upcoming(lists({ playlist: 'm', index: 3, next_index: 4 }), null), held)).toBe(-1);
+  });
+
+  it('falls back to the path when the playlist moved it', () => {
+    const rows = [item('a'), item('d')].map((i, at) => ({ ...i, at }));
+    expect(findRow(rows, { path: 'pack/d.milk', at: 3 })).toBe(1);
   });
 });
 

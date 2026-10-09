@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { BRIGHTNESS_STEP, Hit, hitLabel, MIRROR_NAMES, MIRRORS, nearest, stepBrightness, stepSensitivity } from './Effects.tsx';
+import { BRIGHTNESS_STEP, Hit, hitLabel, MIRROR_LABELS, MIRROR_NAMES, MIRRORS, nearest, RATE_LABELS, RATE_NAMES, stepBrightness, stepSensitivity } from './Effects.tsx';
 
 describe('the hits, to VoiceOver', () => {
   it('names a hit as a word with its key, and says whether it is on', () => {
@@ -54,6 +54,19 @@ describe('stepSensitivity', () => {
 describe('the mirror picker', () => {
   it('names every mode', () => {
     expect(MIRROR_NAMES).toHaveLength(MIRRORS.length);
+    expect(MIRROR_LABELS).toHaveLength(MIRRORS.length);
+  });
+
+  it('gives each mode a spoken name that starts with what it shows, so voice control finds it by what it says', () => {
+    expect(MIRROR_LABELS).toEqual(['mirror off', 'X: mirror across', 'Y: mirror down', '4-way: mirror four ways']);
+    MIRROR_LABELS.forEach((label, at) => expect(label.toLowerCase()).toContain(MIRROR_NAMES[at].toLowerCase()));
+  });
+});
+
+describe('the strobe rate picker', () => {
+  it('names each rate in words, the numbers among them; ¼ and ½ say theirs', () => {
+    expect(RATE_LABELS).toEqual(['a quarter flash per beat', 'half a flash per beat', '1 flash per beat', '2 flashes per beat', '4 flashes per beat']);
+    for (const at of [2, 3, 4]) expect(RATE_LABELS[at]).toContain(RATE_NAMES[at]);
   });
 
   it('finds the nearest of a list', () => {
