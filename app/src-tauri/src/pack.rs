@@ -5,8 +5,10 @@
 //! a starter preset and the same one downloaded have the same folder-relative
 //! path: playlists follow it into the pack, and nothing is listed twice. The
 //! full pack is our own bundle ([`BUNDLE`], see `docs/pack.md`): the presets with
-//! their `index.json` and `thumbnails/`, so the library arrives grouped and with
-//! pictures. When it can't be reached, projectM's bare pack is fetched instead
+//! their `index.json` and `thumbnails/`, kept in the openflowfm/visual-presets
+//! repo and downloaded as its archive at a pinned commit, so the library arrives
+//! grouped and with pictures. When it can't be reached, projectM's bare pack is
+//! fetched instead
 //! ([`PROJECTM`]). The download unpacks as it arrives, each file written beside
 //! its place and then renamed into it, so the library fills in as it goes and a
 //! retry only fetches what is missing. The presets folder is watched, and the
@@ -28,7 +30,10 @@ pub const PROGRESS: &str = "pack-progress";
 /// The event that says the presets folder changed (no payload).
 pub const CHANGED: &str = "presets-changed";
 
-/// Where the full pack can be downloaded from, and its size in bytes.
+/// Where the full pack can be downloaded from, and its size in bytes: the size
+/// shown until the server answers, and while it doesn't say (GitHub sends large
+/// archives without a `Content-Length`). Only for the progress bar, so it may be
+/// an estimate; nothing checks a download against it.
 #[derive(Debug, Clone, Copy)]
 struct Source {
     url: &'static str,
@@ -36,9 +41,11 @@ struct Source {
 }
 
 /// The full pack: our bundle of projectM's cream-of-the-crop with its index and
-/// thumbnails, a release asset of this repo (`docs/pack.md` builds it). A new
-/// bundle goes under a new tag, with its size here.
-const BUNDLE: Source = Source { url: "https://github.com/openflowfm/visuals/releases/download/pack-v1/cream-of-the-crop.tar.gz", size: 58_726_841 };
+/// thumbnails, the openflowfm/visual-presets repo's archive at a pinned commit
+/// (`docs/pack.md` builds it). The archive's top folder is
+/// `visual-presets-<commit>/`, left out like any top folder ([`extract`]). A
+/// new bundle is a new commit there, pinned here with its archive's size.
+const BUNDLE: Source = Source { url: "https://github.com/openflowfm/visual-presets/archive/fd71ac21887144e20cacbbe120cac681664847a8.tar.gz", size: 53_005_539 };
 /// The fallback: projectM's bare pack, pinned to the commit the bundle is made
 /// from. Same presets, no index or thumbnails.
 const PROJECTM: Source = Source { url: "https://github.com/projectM-visualizer/presets-cream-of-the-crop/archive/0180df21f5e0bd39b9060cc5de420ed2f1f9e509.tar.gz", size: 10_847_153 };
@@ -47,7 +54,7 @@ const SOURCES: [Source; 2] = [BUNDLE, PROJECTM];
 
 /// Where the app downloads the pack from: [`SOURCES`]. In a debug build
 /// `VISUALS_PACK_URL=<url>` puts that bundle in [`BUNDLE`]'s place (one served
-/// locally, to try a new bundle in the app before uploading it; `docs/pack.md`).
+/// locally, to try a new bundle in the app before pushing it; `docs/pack.md`).
 fn sources() -> Vec<Source> {
     #[cfg(debug_assertions)]
     return sources_with(std::env::var("VISUALS_PACK_URL").ok().filter(|u| !u.is_empty()));
@@ -795,6 +802,65 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
+    /// `body` sent chunked, with no `Content-Length`, as GitHub sends a large archive.
+    fn chunked(body: &[u8]) -> Vec<u8> {
+        let mut r = b"HTTP/1.1 200 OK\r\nContent-Type: application/x-gzip\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n".to_vec();
+        for chunk in body.chunks(4096) {
+            r.extend_from_slice(format!("{:x}\r\n", chunk.len()).as_bytes());
+            r.extend_from_slice(chunk);
+            r.extend_from_slice(b"\r\n");
+        }
+        r.extend_from_slice(b"0\r\n\r\n");
+        r
+    }
+
+    #[test]
+    fn fetch_unpacks_a_github_archive_sent_without_a_length() {
+        // As `git archive` makes it: a pax global header naming the commit, then
+        // the repo's files under `visual-presets-<commit>/`, folders included.
+        let top = "visual-presets-fd71ac21887144e20cacbbe120cac681664847a8";
+        let mut builder = tar::Builder::new(flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default()));
+        let comment = format!("52 comment={}\n", &top["visual-presets-".len()..]);
+        let mut header = tar::Header::new_ustar();
+        header.set_entry_type(tar::EntryType::XGlobalHeader);
+        header.set_path("pax_global_header").unwrap();
+        header.set_size(comment.len() as u64);
+        header.set_mode(0o666);
+        header.set_cksum();
+        builder.append(&header, comment.as_bytes()).unwrap();
+        for dir in ["", "! Transition/", "thumbnails/"] {
+            let mut header = tar::Header::new_ustar();
+            header.set_entry_type(tar::EntryType::Directory);
+            header.set_path(format!("{top}/{dir}")).unwrap();
+            header.set_size(0);
+            header.set_mode(0o775);
+            header.set_cksum();
+            builder.append(&header, &[][..]).unwrap();
+        }
+        let preset = noise(3, 30_000);
+        for (path, data) in [("README.md", &b"read me"[..]), ("LICENSE.md", b"licence"), ("! Transition/a.milk", &preset), ("index.json", br#"{"v":1}"#), ("thumbnails/ab.webp", b"RIFF")] {
+            let mut header = tar::Header::new_ustar();
+            header.set_path(format!("{top}/{path}")).unwrap();
+            header.set_size(data.len() as u64);
+            header.set_mode(0o664);
+            header.set_cksum();
+            builder.append(&header, data).unwrap();
+        }
+        let gz = builder.into_inner().unwrap().finish().unwrap();
+
+        let dir = temp();
+        let (mut last, mut size) = ((0, 0), 0);
+        assert_eq!(fetch(&[at(serve(chunked(&gz)), 12_345)], &dir, |s| size = s, |r, n| last = (r, n)).unwrap(), 1);
+        assert_eq!(size, 12_345, "no length from the server: the source's own figure");
+        assert_eq!(last, (gz.len() as u64, 1));
+        assert_eq!(std::fs::read(dir.join("! Transition/a.milk")).unwrap(), preset);
+        assert_eq!(std::fs::read(dir.join("index.json")).unwrap(), br#"{"v":1}"#);
+        assert_eq!(std::fs::read(dir.join("thumbnails/ab.webp")).unwrap(), b"RIFF");
+        assert!(dir.join("README.md").is_file() && dir.join("LICENSE.md").is_file());
+        assert!(!dir.join(top).exists() && !dir.join("pax_global_header").exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
     #[test]
     fn fetch_fails_on_a_server_error() {
         let dir = temp();
@@ -846,7 +912,7 @@ mod tests {
 
     /// The real download of [`BUNDLE`], over the network: `cargo test -p visuals-app
     /// the_real_pack -- --ignored`. `VISUALS_PACK_URL=<url>` downloads a bundle from
-    /// elsewhere instead (a local server, to try one before it's uploaded; its size
+    /// elsewhere instead (a local server, to try one before it's pushed; its size
     /// isn't checked against [`BUNDLE`]'s). `VISUALS_PACK_INTO=<presets folder>`
     /// keeps it there (in `cream-of-the-crop/`), to start the app on; otherwise
     /// it's removed.
@@ -859,9 +925,11 @@ mod tests {
         let presets = keep.clone().unwrap_or_else(temp);
         let (mut received, mut size) = (0, 0);
         assert_eq!(fetch(&[source], &presets.join(FOLDER), |s| size = s, |r, _| received = r).unwrap(), TOTAL);
-        assert_eq!(received, size);
+        eprintln!("received {received} bytes; size shown {size}");
         if url.is_none() {
-            assert_eq!(size, BUNDLE.size, "BUNDLE.size is the asset's real size");
+            // GitHub may not say the archive's length, so the bar runs on
+            // BUNDLE.size: it should be close enough to fill it.
+            assert!(received.abs_diff(BUNDLE.size) < BUNDLE.size / 20, "BUNDLE.size {} is within 5% of the archive's {received} bytes", BUNDLE.size);
         }
         assert_eq!(engine::preset::milk_files(&presets).len(), TOTAL);
         assert!(covers(&presets, &Path::new(env!("CARGO_MANIFEST_DIR")).join("presets/starter")));
