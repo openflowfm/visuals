@@ -4,7 +4,8 @@ import * as api from './api.ts';
 import type { Entry, LibraryChange, LibraryData, LibraryGroup, LibraryQuery, LibraryRow } from './api.ts';
 import * as pl from './playlists.ts';
 import { onChanged } from './pack.ts';
-import { rereadOn } from './library.ts';
+import { followGrid, gridKey, rereadOn, stepping } from './library.ts';
+import { useTauriEvent } from './hooks.ts';
 import {
   GROUPS,
   GROUP_LABEL,
@@ -71,6 +72,9 @@ const unstarred = (label: string) => label.replace(/^★\s*/, '');
 
 /** How long the folder has to be quiet before the index is read again, and the longest it waits while it isn't. */
 const REREAD = { wait: 500, most: 4000 };
+
+/** How long the filter has to be still before the deck follows the grid again, in ms (typing in the search box). */
+const REFOLLOW = 300;
 
 /** A group with more values than this gets a box to find one. */
 const FIND_FROM = 12;
@@ -189,8 +193,43 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
     };
   }, [one]);
 
-  const handlers = useRef({ onLoad, onAdd, onPress, shown, selection, anchor, active, entryOf });
-  handlers.current = { onLoad, onAdd, onPress, shown, selection, anchor, active, entryOf };
+  const handlers = useRef({ onLoad, onAdd, onPress, shown, selection, anchor, active, entryOf, query, current });
+  handlers.current = { onLoad, onAdd, onPress, shown, selection, anchor, active, entryOf, query, current };
+
+  // Playing from the grid: open it, and have ←, → and R follow the grid (the deck keeps a loaded playlist).
+  const following = useRef(false);
+  const play = useCallback((p: Prepared) => {
+    const h = handlers.current;
+    h.onLoad(h.entryOf(p));
+    following.current = true;
+    followGrid(h.query, p.row.path);
+  }, []);
+  // A playlist loaded or let go: stop following until the grid opens a preset again.
+  const deckPlaylist = useRef<string | null | undefined>(undefined);
+  const deckMoved = (deck: pl.Deck) => {
+    if (deckPlaylist.current !== undefined && deckPlaylist.current !== deck.playlist) following.current = false;
+    deckPlaylist.current = deck.playlist;
+  };
+  useTauriEvent(pl.onLive, (now) => deckMoved(now.deck));
+  useTauriEvent(pl.onLists, (l) => deckMoved(l.deck));
+  // The filter or the library changed what the grid shows since: follow the grid as
+  // it is now, from what is playing; while a step is in flight, wait for it.
+  const grid = useMemo(() => gridKey(shown.map((p) => p.row.path)), [shown]);
+  useEffect(() => {
+    if (!following.current) return;
+    let t: ReturnType<typeof setTimeout>;
+    const refollow = () => {
+      if (stepping()) {
+        t = setTimeout(refollow, REFOLLOW);
+        return;
+      }
+      const h = handlers.current;
+      if (following.current && h.current !== null) followGrid(h.query, h.current);
+    };
+    t = setTimeout(refollow, REFOLLOW);
+    return () => clearTimeout(t);
+  }, [query, grid]);
+
   const pick = useCallback((i: number, how: Pick) => {
     const h = handlers.current;
     const p = h.shown[i];
@@ -202,7 +241,7 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
     setError(null);
     if (how !== 'range') setAnchor(p.row.key);
     else if (from !== h.anchor) setAnchor(from);
-    if (how === 'load') h.onLoad(h.entryOf(p));
+    if (how === 'load') play(p);
   }, []);
   const add = useCallback((i: number) => {
     const h = handlers.current;
@@ -391,7 +430,7 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
           playlists={lists}
           current={current}
           onSet={set}
-          onLoad={(p) => onLoad(entryOf(p))}
+          onLoad={play}
           onClose={clear}
           error={error}
         />

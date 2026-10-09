@@ -18,7 +18,7 @@ export type Action =
   /** Change on Link's bar lines every this many bars. */
   | { kind: 'bars'; bars: number }
   /** Play the presets matching a filter, as an unsaved smart playlist; hidden ones never. */
-  | { kind: 'query'; query: LibraryQuery };
+  | { kind: 'query'; query: LibraryQuery; at?: string };
 
 /** `playlists::Change`: when a playlist moves on — every so many seconds, or on Link's bar lines every so many bars. */
 export type Change = { unit: 'seconds'; every: number } | { unit: 'bars'; every: number };

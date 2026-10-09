@@ -45,8 +45,14 @@ pub enum Action {
     },
     /// Play the presets `query` picks (never a hidden one) as an unsaved smart
     /// playlist, keeping the deck's settings: a mood chip in live.
+    ///
+    /// With `at`, the page has just opened `at` from the library's grid filtered by
+    /// `query`: the deck follows the grid instead, in its order from `at`, opening
+    /// nothing; while a playlist is loaded it changes nothing.
     Query {
         query: LibraryQuery,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        at: Option<PathBuf>,
     },
     /// No active playlist: the library steps as a whole again.
     Unload,
@@ -331,6 +337,19 @@ impl Live {
         Some(path)
     }
 
+    /// The page opened `path` itself (the grid, the start preset, a drop, the lab):
+    /// it plays now. Following the grid, the deck steps on from it when the grid
+    /// has it, and stops following otherwise, so it never steps from a stale place.
+    fn opened(&mut self, path: PathBuf) {
+        if self.playlist.is_none() && self.query.is_some() {
+            match self.items.iter().position(|p| *p == path) {
+                Some(at) => self.index = Some(at),
+                None => self.unload(),
+            }
+        }
+        self.play(path);
+    }
+
     /// No playlist or filter: the library steps as a whole.
     fn unload(&mut self) {
         self.playlist = None;
@@ -393,7 +412,8 @@ fn other(len: usize, at: Option<usize>, roll: u64) -> usize {
 /// `resolve` works out a smart playlist's or filter's presets (never hidden ones),
 /// asked for only when one loads.
 pub fn decide(live: &mut Live, action: &Action, store: &Store, library: &dyn Fn() -> Vec<PathBuf>, resolve: &dyn Fn(&LibraryQuery) -> Vec<PathBuf>, roll: u64) -> Result<Option<PathBuf>, String> {
-    let steps = matches!(action, Action::Next | Action::Previous | Action::Random | Action::Go { .. } | Action::Load { .. } | Action::Query { .. });
+    // Following the grid opens nothing, so hold doesn't refuse it.
+    let steps = matches!(action, Action::Next | Action::Previous | Action::Random | Action::Go { .. } | Action::Load { .. } | Action::Query { at: None, .. });
     if live.hold && steps {
         return Err("held: let go of HOLD to change the preset".into());
     }
@@ -441,13 +461,25 @@ pub fn decide(live: &mut Live, action: &Action, store: &Store, library: &dyn Fn(
             live.take(&list.settings.checked().unwrap_or_default(), roll);
             start(live, *index)
         }
-        Action::Query { query } => {
+        Action::Query { query, at } => {
+            if at.is_some() && live.playlist.is_some() {
+                return Ok(None);
+            }
             let items = resolve(query);
             live.unload();
             live.query = Some(query.clone());
             live.items = items;
+            let Some(at) = at else {
+                live.arrange(roll);
+                return start(live, None);
+            };
+            // The grid's order, whatever the last playlist's was.
+            live.order = Order::InOrder;
             live.arrange(roll);
-            start(live, None)
+            live.index = live.items.iter().position(|p| p == at);
+            // The page opened it: the deck's current is what the page shows.
+            live.current = Some(at.clone());
+            Ok(None)
         }
         Action::Unload => {
             live.unload();
@@ -537,7 +569,7 @@ impl Deck {
 
     /// The page opened `path` itself (a library click): it is what plays now.
     pub fn opened(&self, path: &Path) {
-        self.live.lock().unwrap().play(path.to_path_buf());
+        self.live.lock().unwrap().opened(path.to_path_buf());
         self.record(path);
     }
 
@@ -712,13 +744,17 @@ fn step(
     resolve: &dyn Fn(&LibraryQuery) -> Vec<PathBuf>,
     roll: u64,
 ) -> Result<(Option<PathBuf>, Option<Settings>), String> {
+    // Following the grid while a playlist is loaded changes nothing: work nothing out.
+    if matches!(action, Action::Query { at: Some(_), .. }) && live.lock().unwrap().playlist.is_some() {
+        return Ok((None, None));
+    }
     let query = match action {
         Action::Load { playlist, .. } => store.lock().unwrap().lists.get(*playlist).filter(|l| l.kind == Kind::Smart).map(|l| l.query.clone().unwrap_or_default()),
-        Action::Query { query } => Some(query.clone()),
+        Action::Query { query, .. } => Some(query.clone()),
         _ => None,
     };
-    // Held, the load is refused anyway: no need to work anything out.
-    let held = live.lock().unwrap().hold;
+    // Held, the load is refused anyway: no need to work anything out (following the grid isn't refused).
+    let held = live.lock().unwrap().hold && !matches!(action, Action::Query { at: Some(_), .. });
     let resolved = query.filter(|_| !held).map(|q| {
         let items = resolve(&q);
         (q, items)
@@ -1031,7 +1067,8 @@ mod tests {
         assert_eq!(read(r#"{"kind":"auto","on":null}"#), Action::Auto { on: None });
         assert_eq!(read(r#"{"kind":"hold","on":true}"#), Action::Hold { on: Some(true) });
         assert_eq!(read(r#"{"kind":"bars","bars":8}"#), Action::Bars { bars: 8 });
-        assert_eq!(read(r#"{"kind":"query","query":{"groups":{"tags":["chill"]},"text":""}}"#), Action::Query { query: serde_json::from_str(r#"{"groups":{"tags":["chill"]}}"#).unwrap() });
+        assert_eq!(read(r#"{"kind":"query","query":{"groups":{"tags":["chill"]},"text":""}}"#), Action::Query { query: serde_json::from_str(r#"{"groups":{"tags":["chill"]}}"#).unwrap(), at: None });
+        assert_eq!(read(r#"{"kind":"query","query":{"groups":{},"text":""},"at":"/p/a.milk"}"#), Action::Query { query: LibraryQuery::default(), at: Some(PathBuf::from("/p/a.milk")) });
         // The effects read as actions too, in the same flat shape.
         assert_eq!(read(r#"{"kind":"strobe","on":true}"#), Action::Fx(FxAction::Strobe { on: Some(true) }));
         assert_eq!(read(r#"{"kind":"tap"}"#), Action::Fx(FxAction::Tap));
@@ -1047,7 +1084,9 @@ mod tests {
         d(&mut live, &Action::Load { playlist: 0, index: None }, &s).unwrap();
         d(&mut live, &Action::Hold { on: None }, &s).unwrap();
         assert!(live.hold);
-        for action in [Action::Next, Action::Previous, Action::Random, Action::Go { index: 2 }, Action::Load { playlist: 0, index: Some(1) }, Action::Query { query: LibraryQuery::default() }] {
+        for action in
+            [Action::Next, Action::Previous, Action::Random, Action::Go { index: 2 }, Action::Load { playlist: 0, index: Some(1) }, Action::Query { query: LibraryQuery::default(), at: None }]
+        {
             assert!(d(&mut live, &action, &s).is_err(), "{action:?} while held");
         }
         assert_eq!(live.current, Some(lib.join("x.milk")));
@@ -1175,7 +1214,7 @@ mod tests {
         assert_eq!(*asked.borrow(), ["calm"], "worked out once, on load");
         // A mood: an unsaved filter, keeping the deck's settings.
         let mood = LibraryQuery { text: "mood".into(), ..Default::default() };
-        assert_eq!(go(&mut live, Action::Query { query: mood.clone() }), Some(lib.join("m.milk")));
+        assert_eq!(go(&mut live, Action::Query { query: mood.clone(), at: None }), Some(lib.join("m.milk")));
         let view = live.view(&Default::default());
         assert_eq!((view.playlist, view.query, view.count, view.settings), (None, Some(mood), 1, None));
         assert_eq!(go(&mut live, Action::Next), Some(lib.join("m.milk")));
@@ -1198,13 +1237,101 @@ mod tests {
         };
         let (path, took) = step(&store, &live, &Action::Load { playlist: 2, index: None }, &none, &resolve, 0).unwrap();
         assert_eq!((path, took), (Some(lib.join("c.milk")), Some(Settings::default())));
-        let (path, took) = step(&store, &live, &Action::Query { query: LibraryQuery::default() }, &none, &resolve, 0).unwrap();
+        let (path, took) = step(&store, &live, &Action::Query { query: LibraryQuery::default(), at: None }, &none, &resolve, 0).unwrap();
         assert_eq!((path, took), (Some(lib.join("c.milk")), None));
         assert_eq!(asked.get(), 2);
         // A manual playlist and a step resolve nothing.
         step(&store, &live, &Action::Load { playlist: 0, index: None }, &none, &resolve, 0).unwrap();
         step(&store, &live, &Action::Next, &none, &resolve, 0).unwrap();
         assert_eq!(asked.get(), 2);
+    }
+
+    #[test]
+    fn following_the_grid_steps_in_its_order_across_groups_and_leaves_a_playlist_alone() {
+        let (s, lib) = store();
+        // What the grid shows (resolve leaves hidden presets out), two styles one after the other.
+        let grid: Vec<PathBuf> = ["calm/1", "calm/2", "loud/1", "loud/2"].iter().map(|n| lib.join(format!("{n}.milk"))).collect();
+        let resolve = |_: &LibraryQuery| grid.clone();
+        let p = |n: &str| Some(lib.join(format!("{n}.milk")));
+        let follow = |at: &str| Action::Query { query: LibraryQuery { text: "grid".into(), ..Default::default() }, at: p(at) };
+        // A shuffled deck: the grid still plays in its own order.
+        let mut live = Live { order: Order::Shuffle, ..Live::default() };
+        let go = |live: &mut Live, a: Action| decide(live, &a, &s, &none, &resolve, 7).unwrap();
+        assert_eq!(go(&mut live, follow("calm/2")), None, "the page opened it: the deck opens nothing");
+        assert_eq!((live.index, live.order, live.query.as_ref().map(|q| q.text.as_str())), (Some(1), Order::InOrder, Some("grid")));
+        assert_eq!(go(&mut live, Action::Next), p("loud/1"), "on into the next group");
+        assert_eq!(go(&mut live, Action::Next), p("loud/2"));
+        assert_eq!(go(&mut live, Action::Next), p("calm/1"), "wraps to the first group");
+        assert_eq!(go(&mut live, Action::Previous), p("loud/2"), "back into the last group");
+        for roll in 0..8 {
+            let r = decide(&mut live, &Action::Random, &s, &none, &resolve, roll).unwrap();
+            assert!(r.as_ref().is_some_and(|r| grid.contains(r)), "random stays in the grid");
+        }
+        // Random never repeats the one playing while there is another.
+        go(&mut live, follow("loud/1"));
+        live.current = p("loud/1");
+        for roll in 0..8 {
+            let mut l = Live { query: live.query.clone(), items: live.items.clone(), sequence: live.sequence.clone(), index: live.index, ..Live::default() };
+            assert_ne!(decide(&mut l, &Action::Random, &s, &none, &resolve, roll).unwrap(), p("loud/1"));
+        }
+        // A preset the grid's playable set leaves out (a hidden one): stepping starts from the first.
+        go(&mut live, follow("hidden"));
+        assert_eq!(live.index, None);
+        assert_eq!(go(&mut live, Action::Next), p("calm/1"));
+        // Held, the grid is still followed (it opens nothing), but steps are refused.
+        live.hold = true;
+        go(&mut live, follow("loud/2"));
+        assert_eq!(live.index, Some(3));
+        assert!(decide(&mut live, &Action::Next, &s, &none, &resolve, 0).is_err());
+        live.hold = false;
+        // With a playlist loaded, nothing changes.
+        assert_eq!(go(&mut live, Action::Load { playlist: 0, index: None }), p("x"));
+        assert_eq!(go(&mut live, follow("calm/1")), None);
+        assert_eq!((live.playlist.as_deref(), live.query.clone(), live.index), (Some(s.lists[0].id.as_str()), None, Some(0)));
+        assert_eq!(go(&mut live, Action::Next), p("y"));
+    }
+
+    #[test]
+    fn following_the_grid_is_worked_out_even_while_held() {
+        let (s, lib) = store();
+        let (store, live) = (Mutex::new(s), Mutex::new(Live { hold: true, ..Live::default() }));
+        let resolve = |_: &LibraryQuery| vec![lib.join("a.milk"), lib.join("b.milk")];
+        let follow = Action::Query { query: LibraryQuery::default(), at: Some(lib.join("b.milk")) };
+        assert_eq!(step(&store, &live, &follow, &none, &resolve, 0).unwrap(), (None, None));
+        assert_eq!(live.lock().unwrap().index, Some(1));
+    }
+
+    #[test]
+    fn following_the_grid_with_a_playlist_loaded_resolves_nothing() {
+        let (s, lib) = store();
+        let (store, live) = (Mutex::new(s), Mutex::new(Live::default()));
+        let asked = std::cell::Cell::new(0);
+        let resolve = |_: &LibraryQuery| {
+            asked.set(asked.get() + 1);
+            Vec::new()
+        };
+        step(&store, &live, &Action::Load { playlist: 0, index: None }, &none, &resolve, 0).unwrap();
+        let follow = Action::Query { query: LibraryQuery::default(), at: Some(lib.join("x.milk")) };
+        assert_eq!(step(&store, &live, &follow, &none, &resolve, 0).unwrap(), (None, None));
+        assert_eq!(asked.get(), 0);
+    }
+
+    #[test]
+    fn opening_from_elsewhere_while_following_never_steps_from_a_stale_place() {
+        let (s, lib) = store();
+        let grid: Vec<PathBuf> = ["a", "b", "c"].iter().map(|n| lib.join(format!("{n}.milk"))).collect();
+        let resolve = |_: &LibraryQuery| grid.clone();
+        let mut live = Live::default();
+        let follow = Action::Query { query: LibraryQuery::default(), at: Some(grid[0].clone()) };
+        decide(&mut live, &follow, &s, &none, &resolve, 0).unwrap();
+        assert_eq!(live.current, Some(grid[0].clone()), "the deck's current is what the page opened");
+        // Opened from elsewhere, but in the grid: the deck steps on from it.
+        live.opened(grid[1].clone());
+        assert_eq!(decide(&mut live, &Action::Next, &s, &none, &resolve, 0).unwrap(), Some(grid[2].clone()));
+        // Not in the grid (a dropped file): the deck stops following.
+        let dropped = lib.join("dropped.milk");
+        live.opened(dropped.clone());
+        assert_eq!((live.query.clone(), live.index, live.current.clone()), (None, None, Some(dropped)));
     }
 
     #[test]
