@@ -37,15 +37,20 @@ The first time it opens, a short welcome walks through:
 2. **Keep in time with Ableton:** shown when a Link session is on the network; choose how
    often the preset changes on the bar.
 3. **The full library:** the app comes with 250 presets; the full Cream of the Crop pack
-   (9,795) is one download (about 59 MB, with its thumbnails) that carries on while you play. Later is fine:
+   (9,795) is one download (about 53 MB, with its thumbnails) that carries on while you play. Later is fine:
    the library offers it too.
 4. **Flashing lights:** a photosensitivity warning.
 5. **Pick a vibe:** a playlist, or something at random, and it plays.
 
 **visual[flow] › Welcome…** runs it again. **visual[flow] › Credits** lists who made the
 presets (the bundled ones are credited in
-[`app/src-tauri/presets/starter/CREDITS.md`](app/src-tauri/presets/starter/CREDITS.md); the
-downloaded pack keeps projectM's README and LICENSE beside its presets).
+[`app/src-tauri/presets/starter/CREDITS.md`](app/src-tauri/presets/starter/CREDITS.md)). The
+presets are projectM's
+[Cream of the Crop](https://github.com/projectM-visualizer/presets-cream-of-the-crop),
+curated by ISOSCELES, each by its own author; thank you to projectM and to every preset
+author. The full pack downloads from
+[openflowfm/visual-presets](https://github.com/openflowfm/visual-presets), which keeps
+projectM's LICENSE beside the presets and takes takedown requests as issues.
 
 ### Listen to your DAW
 
@@ -180,7 +185,8 @@ secrets listed at the top of the file.
   DAW and keeping time with Link.
 - [`app/src-tauri/presets/starter/CREDITS.md`](app/src-tauri/presets/starter/CREDITS.md): who made the bundled presets (also in the app's Credits).
 - [`docs/pack.md`](docs/pack.md): the full preset pack the app downloads (projectM's presets
-  with their index and thumbnails), and how to build and publish it.
+  with their index and thumbnails, kept in openflowfm/visual-presets), and how to build and
+  publish it.
 - [`docs/design/flow-outlet/intent.md`](docs/design/flow-outlet/intent.md): the product
   intent recorded for the graph editor, now the lab's.
 - [`teaser/README.md`](teaser/README.md): the teaser, cut from the engine's own footage.
