@@ -6,7 +6,15 @@ import {
   before,
   downloadText,
   FLASH_WARNING,
+  FlashWarning,
   FlashWarningDialog,
+  REDUCE_HINT,
+  WARNING_KEY,
+  WARNING_TEXT,
+  warningOwed,
+  warningUnderstood,
+  welcomeEnded,
+  type WarningStore,
   haveAll,
   ReduceFlashing,
   libraryLine,
@@ -18,6 +26,7 @@ import {
   testSoundGuard,
   vibes,
 } from './Onboarding.tsx';
+import { REDUCE_WHAT } from './access.ts';
 import type { PackStatus } from './pack.ts';
 import { EMPTY_DECK, manual, type Lists } from './playlists.ts';
 
@@ -164,6 +173,49 @@ describe('the silence watch', () => {
   });
 });
 
+describe('the flashing-lights warning, when the first run is skipped', () => {
+  const memory = (): WarningStore => {
+    const m = new Map<string, string>();
+    return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => void m.set(k, v) };
+  };
+  const shown = (store: WarningStore) => renderToStaticMarkup(createElement(FlashWarning, { store }));
+
+  it('is not shown before the first run has ended', () => {
+    expect(shown(memory())).toBe('');
+  });
+
+  it('shows at once after a skip from the welcome, and stays away once understood', () => {
+    const store = memory();
+    // Welcome's "Skip setup": the flow ends before its warning step.
+    welcomeEnded(false, store);
+    expect(warningOwed(store)).toBe(true);
+    const html = shown(store);
+    expect(html).toContain('role="dialog"');
+    expect(html).toContain('photosensitive epilepsy');
+    expect(html).toContain('I understand');
+    // "I understand" is remembered: not shown at the next launch, nor after another skip.
+    warningUnderstood(store);
+    expect(store.getItem(WARNING_KEY)).toBe('seen');
+    expect(shown(store)).toBe('');
+    welcomeEnded(false, store);
+    expect(warningOwed(store)).toBe(false);
+  });
+
+  it('is not owed when the flow went through its warning', () => {
+    const store = memory();
+    welcomeEnded(true, store);
+    expect(warningOwed(store)).toBe(false);
+    expect(shown(store)).toBe('');
+  });
+
+  it('stays owed until understood, launch after launch', () => {
+    const store = memory();
+    welcomeEnded(false, store);
+    expect(shown(store)).toContain('role="dialog"');
+    expect(shown(store)).toContain('role="dialog"');
+  });
+});
+
 describe('the flashing-lights warning from the menu', () => {
   it("answers the menu item's event", () => {
     expect(FLASH_WARNING).toBe('flash-warning');
@@ -180,6 +232,12 @@ describe('the flashing-lights warning from the menu', () => {
     expect(html).toContain(`id="${described}"`);
     expect(html).toContain('photosensitive epilepsy');
     expect(html).toContain('I understand');
+  });
+
+  it('says reduce flashing calms the app’s effects, and that presets can still flash', () => {
+    expect(REDUCE_WHAT).toBe('Calms the app’s strobe, flashes and blackout. Presets can still flash on their own.');
+    expect(REDUCE_HINT.startsWith(REDUCE_WHAT)).toBe(true);
+    expect(WARNING_TEXT).toContain('Many presets flash');
   });
 
   it('offers the reduce-flashing switch, disabled until the app has said', () => {

@@ -4,7 +4,7 @@ import { Segmented } from '@openflow/widgets/controls/Segmented.tsx';
 import { Toggle } from '@openflow/widgets/controls/Toggle.tsx';
 import * as api from './api.ts';
 import { EffectSettings, useFx } from './Effects.tsx';
-import { setMotion, useMotion } from './access.ts';
+import { REDUCE_WHAT, setMotion, useMotion } from './access.ts';
 import { isTopTrap, leavesKeys, useFocusTrap } from './focusTrap.ts';
 import { useNotice, useTauriEvent } from './hooks.ts';
 import { LinkSettings } from './LinkPanel.tsx';
@@ -212,15 +212,7 @@ export function MotionSwitch({
   return (
     <div className="settings-switch">
       <span>{name}</span>
-      <Toggle
-        on={shown}
-        onChange={onChange}
-        disabled={motion === null}
-        layout="inside"
-        name={name.toLowerCase()}
-        label={name}
-        title="Calm the strobe and flashes, for anyone sensitive to flashing light"
-      >
+      <Toggle on={shown} onChange={onChange} disabled={motion === null} layout="inside" name={name.toLowerCase()} label={name} title={REDUCE_WHAT}>
         {shown ? 'on' : 'off'}
       </Toggle>
       {motion &&

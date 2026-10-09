@@ -3,7 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { Select } from '@openflow/widgets/controls/Select.tsx';
 import { Toggle } from '@openflow/widgets/controls/Toggle.tsx';
-import { setMotion, useMotion } from './access.ts';
+import { REDUCE_WHAT, setMotion, useMotion } from './access.ts';
 import * as api from './api.ts';
 import { isTopTrap, useFocusTrap } from './focusTrap.ts';
 import { plural } from './controls.ts';
@@ -160,9 +160,17 @@ export type Ending = 'live' | 'skipped';
 export function Onboarding({ onDone: done, start = 'welcome' }: { onDone(ending: Ending): void; start?: Step }) {
   const [step, setStep] = useState<Step>(start);
   const [peers, setPeers] = useState(0);
+  // Whether the warning step's "I understand" was pressed: skipped before it, the warning is owed.
+  const understood = useRef(false);
   const onDone = (ending: Ending) => {
     api.firstRunDone().catch(() => {});
+    welcomeEnded(understood.current);
     done(ending);
+  };
+  const understand = () => {
+    understood.current = true;
+    warningUnderstood();
+    next();
   };
 
   // Ableton on the network decides whether its step shows; Link is on by default.
@@ -217,7 +225,7 @@ export function Onboarding({ onDone: done, start = 'welcome' }: { onDone(ending:
         {step === 'listen' && <Listen onNext={next} />}
         {step === 'link' && <KeepTime onNext={next} />}
         {step === 'library' && <FullLibrary onNext={next} />}
-        {step === 'warning' && <Warning onNext={next} />}
+        {step === 'warning' && <Warning onNext={understand} />}
         {step === 'vibe' && <PickVibe onPicked={() => onDone('live')} />}
       </main>
       {back && (
@@ -458,7 +466,7 @@ export const WARNING_TEXT =
   'Many presets flash, strobe and change colour fast. If you or anyone watching may be sensitive to flashing light (photosensitive epilepsy), take care — on a big screen most of all.';
 
 /** What the reduce-flashing switch says it does, beside the warning. */
-export const REDUCE_HINT = 'Calms the strobe and flashes, whatever the effects are set to. It follows macOS’s Reduce motion until you choose here; it’s in Settings too.';
+export const REDUCE_HINT = `${REDUCE_WHAT} It follows macOS’s Reduce motion until you choose here; it’s in Settings too.`;
 
 /** The reduce-flashing switch, shown with the warning: off and disabled until the app has said. */
 export function ReduceFlashing({ motion, onChange }: { motion: api.Motion | null; onChange(on: boolean): void }) {
@@ -509,11 +517,63 @@ export const FLASH_WARNING = 'flash-warning';
 export const showFlashWarning = () => window.dispatchEvent(new Event(FLASH_WARNING));
 
 /**
- * The first run's photosensitivity warning as a dialog over any view, with the
- * reduce-flashing switch: modal, focus kept inside and given back on close,
- * Esc or "I understand" closes it.
+ * Where the warning's state is kept: `'seen'` once its "I understand" has been
+ * pressed, `'owed'` when the first run ended (skipped) before it was.
  */
-export function FlashWarningDialog({ onClose }: { onClose(): void }) {
+export const WARNING_KEY = 'flash-warning';
+
+/** What the warning's state is kept in. */
+export type WarningStore = Pick<Storage, 'getItem' | 'setItem'>;
+
+const remembered = new Map<string, string>();
+
+/**
+ * The page's storage, with this run's writes kept in memory first: when storage
+ * is out of reach or refuses, an owed warning still shows this run.
+ */
+const kept: WarningStore = {
+  getItem(key) {
+    const here = remembered.get(key);
+    if (here !== undefined) return here;
+    try {
+      return globalThis.localStorage?.getItem(key) ?? null;
+    } catch {
+      return null;
+    }
+  },
+  setItem(key, value) {
+    remembered.set(key, value);
+    try {
+      globalThis.localStorage?.setItem(key, value);
+    } catch {
+      // Not kept past this run.
+    }
+  },
+};
+
+/** Whether the warning is owed: the first run was skipped before its "I understand", and it hasn't been pressed since. */
+export const warningOwed = (store: WarningStore = kept): boolean => store.getItem(WARNING_KEY) === 'owed';
+
+/** The warning's "I understand" was pressed: remembered, so it isn't owed again. */
+export const warningUnderstood = (store: WarningStore = kept): void => store.setItem(WARNING_KEY, 'seen');
+
+/**
+ * The welcome flow ended, finished or skipped; `understood` when its warning's
+ * "I understand" was pressed. Unless it was, then or ever before, the warning is
+ * owed: `FlashWarning` shows it before anything else can be done.
+ */
+export function welcomeEnded(understood: boolean, store: WarningStore = kept): void {
+  if (understood) warningUnderstood(store);
+  else if (store.getItem(WARNING_KEY) !== 'seen') store.setItem(WARNING_KEY, 'owed');
+}
+
+/**
+ * The first run's photosensitivity warning as a dialog over any view, with the
+ * reduce-flashing switch: modal, focus kept inside and given back on close.
+ * "I understand" closes it (`onUnderstood`, or else `onClose`); so do Esc and a
+ * click beside it, unless it is `required` (owed: it must be read and answered).
+ */
+export function FlashWarningDialog({ onClose, onUnderstood, required = false }: { onClose(): void; onUnderstood?(): void; required?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const title = useId();
   const text = useId();
@@ -523,15 +583,15 @@ export function FlashWarningDialog({ onClose }: { onClose(): void }) {
       if (e.key !== 'Escape' || !isTopTrap(ref.current)) return;
       e.preventDefault();
       e.stopPropagation();
-      onClose();
+      if (!required) onClose();
     };
     // Capturing, so live mode's own Esc (leave) doesn't hear it.
     window.addEventListener('keydown', key, true);
     return () => window.removeEventListener('keydown', key, true);
-  }, [onClose]);
+  }, [onClose, required]);
   return (
     <>
-      <div className="ob-dialog-scrim" aria-hidden="true" onClick={onClose} />
+      <div className="ob-dialog-scrim" aria-hidden="true" onClick={required ? undefined : onClose} />
       <div ref={ref} tabIndex={-1} className="ob-dialog ob-warning" role="dialog" aria-modal="true" aria-labelledby={title} aria-describedby={text}>
         <h2 id={title}>Flashing lights</h2>
         <p id={text} className="ob-lead">
@@ -539,18 +599,22 @@ export function FlashWarningDialog({ onClose }: { onClose(): void }) {
         </p>
         <ReduceFlashingSetting />
         <div className="ob-actions">
-          <Main onPress={onClose}>I understand</Main>
+          <Main onPress={onUnderstood ?? onClose}>I understand</Main>
         </div>
       </div>
     </>
   );
 }
 
-/** Mounted by `App`: the warning dialog, whenever the menu (or `showFlashWarning`) asks for it. */
-export function FlashWarning() {
-  const [open, setOpen] = useState(false);
+/**
+ * Mounted by `App` once the welcome flow is away: the warning dialog, at once
+ * when it is owed (the first run was skipped before it), and whenever the menu
+ * (or `showFlashWarning`) asks for it. Its "I understand" is remembered.
+ */
+export function FlashWarning({ store = kept }: { store?: WarningStore }) {
+  const [open, setOpen] = useState<'owed' | 'asked' | null>(() => (warningOwed(store) ? 'owed' : null));
   useEffect(() => {
-    const show = () => setOpen(true);
+    const show = () => setOpen((o) => o ?? 'asked');
     window.addEventListener(FLASH_WARNING, show);
     const off = listen(FLASH_WARNING, show).catch(() => () => {});
     return () => {
@@ -558,8 +622,12 @@ export function FlashWarning() {
       off.then((f) => f());
     };
   }, []);
-  const close = useCallback(() => setOpen(false), []);
-  return open ? <FlashWarningDialog onClose={close} /> : null;
+  const close = useCallback(() => setOpen(null), []);
+  const understood = useCallback(() => {
+    warningUnderstood(store);
+    setOpen(null);
+  }, [store]);
+  return open ? <FlashWarningDialog onClose={close} onUnderstood={understood} required={open === 'owed'} /> : null;
 }
 
 function PickVibe({ onPicked }: { onPicked(): void }) {
