@@ -19,7 +19,7 @@ import { stepDeck, useLibrary } from './library.ts';
 import { isTyping, nameOf, notice, openFailed } from './shell.ts';
 import { Live } from './Live.tsx';
 import * as output from './output.ts';
-import { FlashWarning, Onboarding, useWelcome } from './Onboarding.tsx';
+import { FlashWarning, Onboarding, useFlashWarning, useWelcome } from './Onboarding.tsx';
 
 // The editor, only in a lab build: without `VITE_LAB` this is `null` at build
 // time, and the editor's code (the graph, the inspector, the edits) never reaches
@@ -31,14 +31,17 @@ const Editor = import.meta.env.VITE_LAB ? lazy(() => import('./Lab.tsx')) : null
  * in the preview), live mode (performing controls, the output full screen on a
  * display), and in a lab build the editor; Settings and More effects open over
  * any of them (`openSheet`). `VISUALS_LIVE=1` starts in live mode,
- * `VISUALS_PRESET=<path>` on a preset.
+ * `VISUALS_VIEW=home|library|live|live-windowed` in that view (live in the
+ * window, without opening the output), `VISUALS_PRESET=<path>` on a preset.
+ * With the flashing warning owed, live waits for its "I understand".
  */
 export function App() {
   const [mode, setMode] = useState<{ view: View; preset: string | null; windowed?: boolean } | null>(null);
   const welcome = useWelcome();
+  const warning = useFlashWarning(welcome.shown === false);
   useEffect(() => {
     Promise.all([output.startPreset(), output.liveStart()]).then(
-      ([preset, live]) => setMode({ view: live ? 'live' : HOME, preset }),
+      ([preset, view]) => setMode({ ...output.startIn<View>(view, HOME), preset }),
       () => setMode({ view: HOME, preset: null }),
     );
   }, []);
@@ -56,14 +59,14 @@ export function App() {
         }}
       />
     );
+  // Nothing plays live behind an owed warning: live starts once it is understood.
   return (
-    <>
+    <FlashWarning warning={warning} live={mode.view === 'live'}>
       <Page mode={mode} onMode={onMode} />
       <Settings open={sheet === 'settings'} onClose={close} />
       <MoreEffects open={sheet === 'effects'} onClose={close} />
       <CrashPrompt />
-      <FlashWarning />
-    </>
+    </FlashWarning>
   );
 }
 

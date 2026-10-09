@@ -22,8 +22,19 @@ export interface Status {
   size: [number, number] | null;
 }
 
-/** `VISUALS_LIVE=1`: start in live mode. */
-export const liveStart = () => invoke<boolean>('live_start');
+/**
+ * The view to start in: `VISUALS_VIEW=home|library|live|live-windowed`, or
+ * `live` with `VISUALS_LIVE=1`; null for the page's own start. `live-windowed`
+ * plays live in the window, without opening the output on a display.
+ */
+export type StartView = 'home' | 'library' | 'live' | 'live-windowed';
+export const liveStart = () => invoke<StartView | null>('live_start');
+
+/** The page's view (and whether live plays in the window) for `liveStart`'s answer; `home` when it names none. */
+export function startIn<V extends string>(view: StartView | null, home: V): { view: V | 'live' | 'home' | 'library'; windowed?: boolean } {
+  if (view === 'live-windowed') return { view: 'live', windowed: true };
+  return { view: view ?? home };
+}
 /** `VISUALS_PRESET=<path>`: the preset to start on, as an absolute path. */
 export const startPreset = () => invoke<string | null>('start_preset');
 export const displays = () => invoke<Display[]>('displays');
