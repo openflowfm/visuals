@@ -70,7 +70,8 @@ hold…) 5 s after start (`VISUALS_FX_AFTER`), to check effects in a capture.
 In a debug build `VISUALS_PACK_URL=<url>` replaces the full pack's download URL (a bundle
 served locally; `docs/pack.md`), and `VISUALS_PACK_DOWNLOAD=1` starts the download at
 launch, for headless tests. Beside the user's settings and `library.json`, the app keeps
-`resume.json` (what to resume at the next launch) and `failed.json` (presets that wouldn't load).
+`resume.json` (what to resume at the next launch), `failed.json` (presets that wouldn't load)
+and `access.json` (the reduce-flashing choice; none means follow macOS).
 
 **Agents always run the app headless** (`VISUALS_HEADLESS=1`), from the first run on: the
 owner is using the screen. Headless, the app has no Dock icon or menu bar, never becomes
