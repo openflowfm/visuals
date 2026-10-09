@@ -1,0 +1,83 @@
+/* A button with a small panel under it (Popover.tsx). The button looks like the
+   home's other plain buttons; the panel floats over what is below it. */
+.vf-pop {
+  position: relative;
+  display: inline-flex;
+}
+.vf-pop-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: var(--ctl-h);
+  padding: 0 8px;
+  color: var(--ui);
+  font-family: var(--mono);
+  font-variation-settings: var(--mono-axes);
+  font-size: var(--text-control);
+  white-space: nowrap;
+  background: var(--surface-control);
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.vf-pop-button:hover,
+.vf-pop-button[aria-expanded='true'] {
+  border-color: var(--focus);
+  color: var(--fg);
+}
+.vf-pop-button[aria-pressed='true'] {
+  color: #000;
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.vf-pop-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 40;
+  min-width: 160px;
+  max-width: min(560px, calc(100vw - 24px));
+  max-height: 60vh;
+  overflow: auto;
+  padding: 6px;
+  color: var(--ui);
+  background: var(--panel);
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.45);
+}
+.vf-pop-panel[data-align='right'] {
+  left: auto;
+  right: 0;
+}
+/* A menu's items: whole-width rows. */
+.vf-pop-panel[role='menu'] {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.vf-pop-panel [role='menuitem'] {
+  display: block;
+  width: 100%;
+  padding: 5px 8px;
+  text-align: left;
+  color: var(--ui);
+  font-size: var(--text-body);
+  white-space: nowrap;
+  background: none;
+  border: 0;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.vf-pop-panel [role='menuitem']:hover,
+.vf-pop-panel [role='menuitem']:focus-visible {
+  color: var(--fg);
+  background: var(--sel);
+}
+.vf-pop-panel [role='menuitem'][data-danger] {
+  color: var(--red);
+}
+.vf-pop-panel [role='menuitem']:disabled {
+  color: var(--caption);
+  cursor: default;
+}

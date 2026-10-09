@@ -32,7 +32,7 @@ export const VIEWS: View[] = viewsFor(LAB);
 export const HOME: View = homeFor(LAB);
 
 const VIEW_HINTS: Record<View, string> = {
-  home: 'home: your playlists and the library, with the preview of the preset playing',
+  home: 'home: the library and your playlists, with the preset playing',
   editor: 'editor: browse presets and change them while they play',
   live: 'live: the output full screen on a display, with performing controls',
 };
@@ -128,9 +128,10 @@ export function NoticeBanner({ notice, onDismiss, className }: { notice: Notice 
  * The bench's frame rate. Its own leaf, polling once a second, so the reading
  * re-renders nothing else. A developer sees the numbers; a release says nothing
  * unless the picture has been slow for a few seconds. `always` shows the numbers
- * in every build, as live mode's header does.
+ * in every build, as live mode's header does; `slowOnly` says nothing until the
+ * picture is slow, in a developer's build too (the home's bottom bar, decision 67).
  */
-export function FrameRate({ always = false }: { always?: boolean }) {
+export function FrameRate({ always = false, slowOnly = false }: { always?: boolean; slowOnly?: boolean }) {
   const [history, setHistory] = useState<api.Stats[]>([]);
   useEffect(() => {
     const t = window.setInterval(() => {
@@ -150,8 +151,8 @@ export function FrameRate({ always = false }: { always?: boolean }) {
       </span>
     );
   }
-  const shown = frameReadout(history, import.meta.env.DEV);
-  if (!shown) return null;
+  const shown = frameReadout(history, import.meta.env.DEV && !slowOnly);
+  if (!shown || (slowOnly && !shown.slow)) return null;
   return (
     <span
       className="vf-stats"

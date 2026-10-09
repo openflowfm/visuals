@@ -1,0 +1,228 @@
+/* The home's now playing panel (NowPanel.tsx, decision 67). The preview is a hole
+   the engine's native view shows through, so neither it nor anything holding it
+   paints a background: the panel's colour is the preview's spread shadow, clipped
+   by the panel. Later flex items paint over earlier ones, so every part other than
+   the preview's cell is positioned, to paint above that flood. */
+.now-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  border-left: 1px solid var(--bd3);
+  color: var(--ui);
+  font-family: var(--mono);
+  font-variation-settings: var(--mono-axes);
+}
+.now-panel > :not(.now-cell) {
+  position: relative;
+}
+.now-panel .now-caps {
+  font-size: var(--text-label);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--caption);
+}
+.now-panel .now-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px 0;
+  flex: none;
+}
+.now-panel .now-close {
+  height: var(--ctl-h);
+  min-width: var(--ctl-h);
+  padding: 0 4px;
+  color: var(--detail);
+  font-size: var(--text-control);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.now-panel .now-close:hover {
+  color: var(--fg);
+}
+
+/* The preview's cell and the preview: transparent; the shadow is the panel. */
+.now-panel .now-cell {
+  flex: none;
+  padding: 12px;
+  background: transparent;
+}
+.now-panel .now-preview {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: transparent;
+  box-shadow: 0 0 0 100vmax var(--panel);
+}
+.now-panel .now-preview[data-loading] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel);
+}
+.now-panel .now-preview .bench-loading {
+  color: var(--caption);
+  font-size: var(--text-body);
+  user-select: none;
+}
+
+/* Everything under the preview scrolls; the preview stays. */
+.now-panel .now-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 12px 12px;
+}
+.now-panel .now-title {
+  min-width: 0;
+}
+.now-panel .now-title h2 {
+  margin: 0;
+  color: var(--fg);
+  font-family: var(--sans);
+  font-variation-settings: var(--sans-axes);
+  font-size: var(--text-heading);
+  font-weight: var(--weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.now-panel .now-from,
+.now-panel .now-nothing {
+  margin: 3px 0 0;
+  color: var(--caption);
+  font-size: var(--text-body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.now-panel .now-nothing {
+  margin: 0;
+}
+
+/* ★ star, never play, + playlist ▾: the home's plain buttons. */
+.now-panel .now-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.now-panel .now-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: var(--ctl-h);
+  padding: 0 8px;
+  color: var(--ui);
+  font-family: var(--mono);
+  font-variation-settings: var(--mono-axes);
+  font-size: var(--text-control);
+  white-space: nowrap;
+  background: var(--surface-control);
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.now-panel .now-btn:hover:not(:disabled) {
+  color: var(--fg);
+}
+.now-panel .now-btn[aria-pressed='true'],
+.now-panel .now-btn[aria-pressed='mixed'] {
+  color: #000;
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.now-panel .now-btn[aria-pressed='mixed'] {
+  opacity: 0.7;
+}
+.now-panel .now-btn:disabled {
+  color: var(--caption);
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* Author, style, speed, in. */
+.now-panel .now-facts {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  gap: 6px 8px;
+  margin: 0;
+  font-size: var(--text-body);
+}
+.now-panel .now-facts dt {
+  color: var(--caption);
+}
+.now-panel .now-facts dd {
+  margin: 0;
+  color: var(--ui);
+  overflow-wrap: anywhere;
+}
+
+/* My tags. */
+.now-panel .now-tags-block .now-caps {
+  margin-bottom: 6px;
+}
+.now-panel .now-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.now-panel .now-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 8px;
+  color: var(--ui);
+  font-family: var(--mono);
+  font-variation-settings: var(--mono-axes);
+  font-size: var(--text-control);
+  white-space: nowrap;
+  background: transparent;
+  border: 1px solid var(--bd3);
+  border-radius: 999px;
+}
+.now-panel .now-chip[data-some] {
+  border-style: dashed;
+}
+.now-panel .now-chip-count {
+  color: var(--caption);
+}
+.now-panel .now-chip-x {
+  padding: 0;
+  margin-right: -3px;
+  color: var(--detail);
+  font: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.now-panel .now-chip-x:hover {
+  color: var(--red);
+}
+.now-panel .now-chip-add {
+  color: var(--detail);
+  cursor: pointer;
+}
+.now-panel .now-chip-add:hover {
+  color: var(--fg);
+  border-color: var(--bd);
+}
+.now-panel .now-tag-input {
+  width: 14em;
+  max-width: 100%;
+  outline: none;
+  border-color: var(--primary);
+}
+.now-panel .now-error {
+  margin: 0;
+  color: var(--red);
+  font-size: var(--text-body);
+}

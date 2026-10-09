@@ -1,0 +1,171 @@
+/* The home's bottom bar (decision 67, option A): what plays, ◀ ▶ R, the audio
+   input, the panel's toggle and go live. */
+.home-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  height: 64px;
+  padding: 0 12px;
+  box-sizing: border-box;
+  min-width: 0;
+  background: var(--rail);
+  border-top: 1px solid var(--bd3);
+}
+
+/* With the small preview the bar is a hole the engine's view shows through:
+   nothing paints behind the preview, which floods the bar with its own spread
+   shadow instead. The cells after it sit above that shadow. */
+.home-bar[data-mini] {
+  grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr);
+  background: none;
+  overflow: hidden;
+}
+.home-bar-mini-button {
+  display: block;
+  flex: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  border-radius: 0;
+  cursor: pointer;
+}
+.home-bar .home-bar-mini {
+  display: grid;
+  place-items: center;
+  width: 96px;
+  aspect-ratio: 16 / 9;
+  background: transparent;
+  box-shadow: 0 0 0 100vmax var(--rail);
+}
+.home-bar .home-bar-mini[data-loading] {
+  background: var(--rail);
+}
+.home-bar .home-bar-mini .bench-loading {
+  display: none;
+}
+.home-bar-mini-button:focus-visible {
+  outline: 1px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.home-bar-who,
+.home-bar-transport,
+.home-bar-right {
+  position: relative;
+}
+
+.home-bar-who {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.home-bar-text {
+  min-width: 0;
+}
+.home-bar-name,
+.home-bar-from {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.home-bar-name {
+  color: var(--fg);
+  font-weight: 600;
+  font-size: var(--text-lead);
+}
+.home-bar-name[data-none] {
+  color: var(--caption);
+  font-weight: normal;
+}
+.home-bar-from {
+  margin-top: 3px;
+  color: var(--caption);
+  font-size: var(--text-body);
+}
+
+.home-bar-transport {
+  display: flex;
+  gap: 6px;
+}
+.home-bar-transport .wdg-button-body {
+  height: 28px;
+  min-width: 34px;
+  font-size: var(--text-body);
+}
+
+.home-bar-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+.home-bar .audio-input {
+  min-width: 0;
+}
+.home-bar .audio-input .wdg-select {
+  flex: 0 1 180px;
+  min-width: 0;
+}
+.home-bar .audio-input > .vf-warning {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 200px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.home-bar .vf-stats {
+  min-width: 0;
+}
+
+.home-bar-panel,
+.home-bar-live {
+  height: var(--ctl-h);
+  padding: 0 8px;
+  border-radius: var(--radius);
+  font-family: var(--mono);
+  font-variation-settings: var(--mono-axes);
+  font-size: var(--text-body);
+  white-space: nowrap;
+  flex: none;
+}
+.home-bar-panel {
+  min-width: 30px;
+  border: 0;
+  background: none;
+  color: var(--detail);
+}
+.home-bar-panel:hover,
+.home-bar-panel[aria-pressed='true'] {
+  color: var(--ui);
+}
+.home-bar-live {
+  border: 1px solid var(--green);
+  background: var(--surface-control);
+  color: var(--green);
+}
+
+/* Narrow (< 900): tighter, the source picker keeps only its meter, and the
+   panel's toggle goes (the small preview opens the panel). */
+@media (max-width: 899px) {
+  .home-bar {
+    gap: 8px;
+    padding: 0 8px;
+  }
+  .home-bar .home-bar-mini {
+    width: 88px;
+  }
+  .home-bar .audio-input .wdg-select {
+    display: none;
+  }
+  .home-bar-panel {
+    display: none;
+  }
+  .home-bar-transport .wdg-button-body {
+    min-width: 30px;
+  }
+}

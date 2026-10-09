@@ -95,12 +95,26 @@ function Levels() {
  * this Mac, another app playing sound, or a microphone or interface
  * (`api.audioSources`, `api.listenToSource`), with a meter so a quiet source is
  * obvious before a preset looks dead. Which two channels are left and right
- * sits under Advanced. The choice is the app's — saved, and back next launch —
+ * sits under Advanced, or in Settings (`channels`). The choice is the app's — saved, and back next launch —
  * so this only reads it and asks for changes. The sources are read again every
  * couple of seconds, which is also when the app notices a source gone and
  * falls back, or one back and returns to it.
  */
-export function SourcePicker({ onError }: { onError(error: unknown): void }) {
+export function SourcePicker({
+  onError,
+  channels: where = 'advanced',
+  width = 180,
+}: {
+  onError(error: unknown): void;
+  /**
+   * Where the left and right channels are picked: under Advanced (live's
+   * popover, the first run), shown under the picker (Settings, decision 67), or
+   * not here at all (the home's bottom bar, which leaves them to Settings).
+   */
+  channels?: 'advanced' | 'shown' | 'none';
+  /** The picker's width, in px. */
+  width?: number;
+}) {
   const [sources, setSources] = useState<api.Source[] | null>(null);
   const [heard, setHeard] = useState<api.Heard>({ choice: null, channels: 0 });
   const [problem, setProblem] = useState<string | null>(null);
@@ -215,18 +229,29 @@ export function SourcePicker({ onError }: { onError(error: unknown): void }) {
         }}
         label={say('audio input')}
         title={sourceTitle(missing ? (choice?.name ?? null) : items[at])}
-        width={180}
+        width={width}
       />
-      <details className="audio-advanced">
-        <summary aria-label="Advanced: the left and right channels" title="which two of the source's channels are left and right">
-          Advanced
-        </summary>
-        <span className="audio-advanced-body">
+      {where === 'advanced' && (
+        <details className="audio-advanced">
+          <summary aria-label="Advanced: the left and right channels" title="which two of the source's channels are left and right">
+            Advanced
+          </summary>
+          <span className="audio-advanced-body">
+            {channel('left')}
+            {channel('right')}
+          </span>
+        </details>
+      )}
+      <Levels />
+      {where === 'shown' && (
+        <span className="audio-channels" role="group" aria-label={say('audio channels')} title="which two of the source's channels are left and right">
+          <span className="audio-channels-name" aria-hidden="true">
+            {say('audio channels')}
+          </span>
           {channel('left')}
           {channel('right')}
         </span>
-      </details>
-      <Levels />
+      )}
       {denied && (
         <span className="vf-warning audio-note" title={denied}>
           {denied}

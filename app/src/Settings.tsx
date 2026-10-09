@@ -3,7 +3,10 @@ import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { Segmented } from '@openflow/widgets/controls/Segmented.tsx';
 import { Toggle } from '@openflow/widgets/controls/Toggle.tsx';
 import * as api from './api.ts';
+import { Credits } from './Credits.tsx';
 import { EffectSettings, useFx } from './Effects.tsx';
+import { PackBar } from './Pack.tsx';
+import * as pack from './pack.ts';
 import { REDUCE_WHAT, setMotion, useMotion } from './access.ts';
 import { isTopTrap, leavesKeys, useFocusTrap } from './focusTrap.ts';
 import { useNotice, useTauriEvent } from './hooks.ts';
@@ -296,30 +299,51 @@ function SoundSection() {
   const failed = useCallback((e: unknown) => fail(`Couldn't use that ${say('audio input')} source.`)(e), [fail]);
   return (
     <>
-      <SourcePicker onError={failed} />
+      <SourcePicker onError={failed} channels="shown" />
       <NoticeBanner notice={notice} onDismiss={dismiss} />
     </>
   );
 }
 
+/**
+ * The presets section: the pack bar that used to sit at the foot of the
+ * library (how many presets there are, getting the full library, adding a
+ * folder), and the credits shown in its place until "← Presets".
+ */
+function PresetsSection() {
+  const [entries, setEntries] = useState<api.Entry[]>([]);
+  const [credits, setCredits] = useState(false);
+  const read = useCallback(() => {
+    api.presets().then(setEntries, () => {});
+  }, []);
+  useEffect(read, [read]);
+  useTauriEvent<void>(pack.onChanged, read);
+  if (credits) return <Credits entries={entries} onBack={() => setCredits(false)} />;
+  return <PackBar presets={entries.length} dropped={null} credits={false} onCredits={() => setCredits(true)} />;
+}
+
 /** The sections, in the order the sheet shows them. */
-export const SECTIONS = ['Sound', 'Output', 'Link', 'Effects', Say('render quality'), 'Accessibility', 'Privacy'] as const;
+export const SECTIONS = ['Sound', 'Presets', 'Output', 'Link', 'Effects', Say('render quality'), 'Accessibility', 'Privacy'] as const;
 
 /**
  * ⚙ Settings (#98), a sheet over any view: opened with `openSheet('settings')`
- * from `views.tsx`, mounted by `App`. Sound (what the app listens to, its
- * channels under Advanced), Output (display and fit), Link (on or off and the
- * bar start), Effects (strobe, fade to black, fine brightness and
+ * from `views.tsx`, mounted by `App`. Sound (what the app listens to, and its
+ * left and right channels), Presets (how many, getting the full library,
+ * adding a folder, the credits), Output (display and fit), Link (on or off and
+ * the bar start), Effects (strobe, fade to black, fine brightness and
  * sensitivity), the picture quality, Accessibility (reduce flashing) and
  * Privacy (crash reports, off unless turned on; no usage tracking at all).
  */
 export function Settings({ open, onClose }: { open: boolean; onClose(): void }) {
   if (!open) return null;
-  const [sound, out, linked, effects, quality, access, privacy] = SECTIONS;
+  const [sound, presets, out, linked, effects, quality, access, privacy] = SECTIONS;
   return (
     <Sheet title="Settings" className="settings" scrim modal onClose={onClose}>
       <Section name={sound}>
         <SoundSection />
+      </Section>
+      <Section name={presets}>
+        <PresetsSection />
       </Section>
       <Section name={out}>
         <OutputSettings />

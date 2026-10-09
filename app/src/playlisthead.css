@@ -1,0 +1,163 @@
+/* The header over a playlist's strip on the home (PlaylistHead.tsx): a cover of
+   its first four thumbnails, then what it is, its name, how it plays and its actions. */
+.pl-head {
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+  padding: 14px 16px;
+  background: var(--panel);
+}
+.pl-cover {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  flex: none;
+  width: 120px;
+}
+.pl-cover > div {
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  background: var(--bd);
+}
+.pl-cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.pl-head-text {
+  min-width: 0;
+}
+.pl-caps {
+  color: var(--caption);
+  font-size: var(--text-label);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+}
+.pl-head .pl-name {
+  margin: 0 0 4px;
+  overflow: hidden;
+  color: var(--fg);
+  font-family: var(--sans);
+  font-variation-settings: var(--sans-axes);
+  font-size: 22px;
+  font-weight: var(--weight-strong);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.pl-head .pl-name-input {
+  display: block;
+  margin: 0 0 4px;
+  padding: 0 6px;
+  color: var(--fg);
+  font-family: var(--sans);
+  font-variation-settings: var(--sans-axes);
+  font-size: var(--text-heading);
+  background: var(--surface-control);
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius);
+}
+.pl-summary {
+  overflow: hidden;
+  color: var(--caption);
+  font-size: var(--text-body);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.pl-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.pl-confirm {
+  display: inline-flex;
+  gap: 6px;
+}
+
+/* The actions: plain buttons 22 px tall; play (and stop) filled, shuffle filled while on. */
+.pl-head .pl-btn,
+.pl-head .vf-pop-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  padding: 0 8px;
+  color: var(--ui);
+  font-family: var(--mono);
+  font-variation-settings: var(--mono-axes);
+  font-size: var(--text-control);
+  white-space: nowrap;
+  background: var(--surface-control);
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.pl-head .pl-btn:hover:not(:disabled) {
+  color: var(--fg);
+  border-color: var(--detail);
+}
+.pl-head .pl-btn[data-on],
+.pl-head .pl-btn[aria-pressed='true'] {
+  color: #000;
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.pl-head .pl-btn[data-danger] {
+  color: var(--red);
+  border-color: var(--red);
+}
+.pl-head .pl-btn:disabled {
+  color: var(--caption);
+  background: var(--surface-control);
+  border-color: var(--bd3);
+  cursor: default;
+}
+.pl-head .pl-more .vf-pop-button {
+  color: var(--detail);
+  background: transparent;
+  border-color: transparent;
+}
+.pl-head .pl-more .vf-pop-button:hover,
+.pl-head .pl-more .vf-pop-button[aria-expanded='true'] {
+  color: var(--fg);
+  border-color: var(--bd3);
+}
+
+/* How it plays, in its popover. A setting changed live, away from the playlist's own, is marked. */
+.pl-head .home-settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  max-width: 520px;
+  padding: 6px;
+}
+.pl-head .home-setting {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--detail);
+  font-size: var(--text-label);
+  letter-spacing: var(--track-label);
+}
+/* Each setting is named beside its field, so the field's own caption above it would say it twice. */
+.pl-head .home-setting .wdg-caption {
+  display: none;
+}
+/* --caution, not --amber: the theme makes amber its (grey) primary, and a live change must be seen. */
+.pl-head .home-setting[data-tweaked] > span {
+  color: var(--caution);
+}
+.pl-head .home-setting[data-tweaked] > span::after {
+  content: ' •';
+}
+
+@media (max-width: 899px) {
+  .pl-cover {
+    width: 84px;
+  }
+  .pl-head .pl-name {
+    font-size: var(--text-title);
+  }
+}

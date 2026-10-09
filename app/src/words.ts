@@ -54,6 +54,18 @@ export const WORDS = {
   'mirror mode x': 'X: mirror across',
   'mirror mode y': 'Y: mirror down',
   'mirror mode quad': '4-way: mirror four ways',
+  /* Home's layout (decision 67): the panel beside the grid with the preset playing (the code's stage), and the button that opens live mode. */
+  stage: 'now playing',
+  'live mode': 'go live',
+  /* The library's filter chips (facets), behind a button, and a playlist's settings, in a popover (decision 67). */
+  facets: 'filter',
+  'playlist settings': 'how it plays',
+  /* A preset opened on its own, not from a playlist or the library's filter. */
+  'played alone': 'opened on its own',
+  /* The bundled presets a fresh install has, before the full library (decision 67 offers it in the library then). */
+  'starter set': 'starter presets',
+  /* The source picker's left and right channels, in Settings (decision 67). */
+  'audio channels': 'left and right channels',
   /* The crash prompt's reminder (decision 54): the scrub can't catch every name. */
   'crash report check': "Read the text before you submit it: a name the app can't recognise, such as a device's or a display's, may still be in it.",
 } as const;

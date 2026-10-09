@@ -99,6 +99,7 @@ describe('the sheets', () => {
     expect(html).toContain('role="dialog" aria-label="Settings"');
     const headings = [...html.matchAll(/<h3[^>]*>([^<]*)<\/h3>/g)].map((m) => m[1]);
     expect(headings).toEqual([...SECTIONS]);
+    expect(headings.slice(0, 3)).toEqual(['Sound', 'Presets', 'Output']);
     expect(headings).toContain('Picture quality');
     expect(html).toContain('No usage tracking');
     expect(html).toContain('Send crash reports');
