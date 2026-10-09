@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { KeyboardEvent } from 'react';
+import type { KeyboardEvent, PointerEvent } from 'react';
 import * as api from './api.ts';
 import type { Entry, LibraryChange, LibraryData, LibraryGroup, LibraryQuery, LibraryRow } from './api.ts';
 import * as pl from './playlists.ts';
@@ -48,6 +48,10 @@ export interface LibraryProps {
   into: { id: string; name: string } | null;
   onLoad(e: Entry): void;
   onAdd(e: Entry): void;
+  /** A press on a tile that may become a drag, with the tile's thumbnail; none makes tiles plain. */
+  onPress?(e: Entry, thumbnail: string | null, ev: PointerEvent): void;
+  /** The narrowest a tile gets, in px, for a library given more room than its column. */
+  tileMin?: number;
 }
 
 const count = (n: number) => n.toLocaleString('en-US');
@@ -124,7 +128,7 @@ function rereadOnData(set: (d: LibraryData) => unknown): () => void {
  * a drawer for the selection. AND across groups, OR within one; each value counts
  * the presets it would show.
  */
-export function Library({ entries, loaded, search, onSearch, current, into, onLoad, onAdd }: LibraryProps) {
+export function Library({ entries, loaded, search, onSearch, current, into, onLoad, onAdd, onPress, tileMin }: LibraryProps) {
   const index = useIndex();
   const [data, setData] = useLibraryData();
   const [groups, setGroups] = useState<LibraryQuery['groups']>({});
@@ -173,8 +177,8 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
     };
   }, [one]);
 
-  const handlers = useRef({ onLoad, onAdd, shown, selection, anchor, active, entryOf });
-  handlers.current = { onLoad, onAdd, shown, selection, anchor, active, entryOf };
+  const handlers = useRef({ onLoad, onAdd, onPress, shown, selection, anchor, active, entryOf });
+  handlers.current = { onLoad, onAdd, onPress, shown, selection, anchor, active, entryOf };
   const pick = useCallback((i: number, how: Pick) => {
     const h = handlers.current;
     const p = h.shown[i];
@@ -198,6 +202,11 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
     setAnchor(null);
   }, []);
   const clear = useCallback(() => setSelection([]), []);
+  const press = useCallback((i: number, ev: PointerEvent) => {
+    const h = handlers.current;
+    const p = h.shown[i];
+    if (p && h.onPress) h.onPress(h.entryOf(p), p.row.thumbnail, ev);
+  }, []);
 
   const set = (keys: string[], change: LibraryChange) => {
     setError(null);
@@ -333,7 +342,20 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
       ) : empty ? (
         <p className="lib-note lib-first-run">No presets yet. Drop .milk files or a folder of them here, or use Add a folder… below.</p>
       ) : (
-        <LibraryGrid rows={shown} active={at} selected={selectedSet} current={current} into={into} onMove={moveTo} onPick={pick} onAdd={add} onClear={clear} reveal={reveal} />
+        <LibraryGrid
+          rows={shown}
+          active={at}
+          selected={selectedSet}
+          current={current}
+          into={into}
+          onMove={moveTo}
+          onPick={pick}
+          onAdd={add}
+          onClear={clear}
+          reveal={reveal}
+          onPress={onPress && press}
+          tileMin={tileMin}
+        />
       )}
       {chosen.length > 0 && !empty && (
         <PresetDrawer
