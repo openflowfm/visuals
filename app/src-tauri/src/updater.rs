@@ -1,13 +1,18 @@
 //! Updates: checking for a newer release and installing it, with the Tauri
-//! updater. Two channels, chosen when the app is built:
+//! updater. Three channels, chosen when the app is built (`VISUALS_CHANNEL`,
+//! which `release.yml` sets; see `docs/releasing.md`):
 //!
-//! - stable (the default) follows tagged releases: `latest.json` on the latest
-//!   published release, so a draft goes out only once it is published;
-//! - nightly (`VISUALS_CHANNEL=nightly` at build time, which `release.yml`
-//!   sets) follows the `nightly` prerelease. Every nightly has the same app
-//!   version, so its `latest.json` says `<version>-nightly.<build>` and a
-//!   nightly is newer when its build number is (`VISUALS_BUILD`, the run
-//!   number, also set by `release.yml`).
+//! - stable (the default, and any name it doesn't know) follows final
+//!   releases: `latest.json` on the latest published release, so a draft goes
+//!   out only once it is published. It never offers a prerelease;
+//! - beta follows the fixed `beta` prerelease, whose `latest.json` names each
+//!   release candidate and each final once published, compared as versions:
+//!   `1.0.0-rc.2` moves on to `1.0.0-rc.3`, then to `1.0.0`;
+//! - latest follows the fixed `latest` prerelease, rebuilt on every push to
+//!   `main`. Every latest build has the same app version, so its
+//!   `latest.json` says `<version>-latest.<build>` and a build is newer when
+//!   its build number is (`VISUALS_BUILD`, the run number, also set by
+//!   `release.yml`).
 //!
 //! The page asks on launch and when the menu's "Check for Updates…" fires
 //! (`app/src/Update.tsx`); nothing installs without the user saying so.
@@ -17,6 +22,7 @@
 //! and checks nothing.
 
 use serde::Serialize;
+use std::cmp::Ordering;
 use std::sync::Mutex;
 use tauri::Manager;
 use tauri_plugin_updater::UpdaterExt;
@@ -27,7 +33,8 @@ const PLACEHOLDER: &str = "REPLACE_WITH_CONTENTS_OF_visual-flow-updater.key.pub"
 
 /// Where each channel's `latest.json` lives.
 const STABLE: &str = "https://github.com/openflowfm/visuals/releases/latest/download/latest.json";
-const NIGHTLY: &str = "https://github.com/openflowfm/visuals/releases/download/nightly/latest.json";
+const BETA: &str = "https://github.com/openflowfm/visuals/releases/download/beta/latest.json";
+const LATEST: &str = "https://github.com/openflowfm/visuals/releases/download/latest/latest.json";
 
 /// What the page shows when updates can't be checked in this build.
 const NOT_SET_UP: &str = "Updates aren't set up in this build.";
@@ -46,14 +53,17 @@ pub struct Update {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Channel {
     Stable,
-    Nightly,
+    Beta,
+    Latest,
 }
 
 impl Channel {
-    /// The channel `VISUALS_CHANNEL` named at build time.
+    /// The channel `VISUALS_CHANNEL` named at build time; stable when it named
+    /// none or one this build doesn't know.
     fn of(name: Option<&str>) -> Channel {
         match name {
-            Some("nightly") => Channel::Nightly,
+            Some("beta") => Channel::Beta,
+            Some("latest") => Channel::Latest,
             _ => Channel::Stable,
         }
     }
@@ -61,7 +71,8 @@ impl Channel {
     fn endpoint(self) -> &'static str {
         match self {
             Channel::Stable => STABLE,
-            Channel::Nightly => NIGHTLY,
+            Channel::Beta => BETA,
+            Channel::Latest => LATEST,
         }
     }
 }
@@ -79,29 +90,69 @@ fn build() -> Option<u64> {
 /// A version as the comparison needs it: major, minor, patch and prerelease.
 type Version<'a> = (u64, u64, u64, &'a str);
 
-/// The build number in a nightly's prerelease, `nightly.<build>`.
-fn nightly_build(pre: &str) -> Option<u64> {
-    pre.strip_prefix("nightly.").and_then(|n| n.parse().ok())
+/// The build number in a latest build's prerelease, `latest.<build>`.
+fn latest_build(pre: &str) -> Option<u64> {
+    pre.strip_prefix("latest.").and_then(|n| n.parse().ok())
 }
 
-/// Whether `remote` is newer than the running `current` on `channel`. Stable
-/// compares versions (a prerelease moves on to its release); a nightly is newer
-/// when its version's numbers are, or when they are the same and its build is
-/// later than this one's.
-fn newer(channel: Channel, current: Version, build: Option<u64>, remote: Version) -> bool {
-    let (cur, rem) = ((current.0, current.1, current.2), (remote.0, remote.1, remote.2));
-    if rem != cur {
-        return rem > cur;
+/// How two prereleases order, as semver orders them: none (a release) comes
+/// after any; otherwise part by part, numbers as numbers and before words, and
+/// a shorter one first when the other goes on from it (`rc.2` < `rc.10`).
+fn prerelease_order(a: &str, b: &str) -> Ordering {
+    match (a.is_empty(), b.is_empty()) {
+        (true, true) => return Ordering::Equal,
+        (true, false) => return Ordering::Greater,
+        (false, true) => return Ordering::Less,
+        _ => {}
     }
+    let (mut a, mut b) = (a.split('.'), b.split('.'));
+    loop {
+        let part = match (a.next(), b.next()) {
+            (None, None) => return Ordering::Equal,
+            (None, Some(_)) => return Ordering::Less,
+            (Some(_), None) => return Ordering::Greater,
+            (Some(x), Some(y)) => match (x.parse::<u64>(), y.parse::<u64>()) {
+                (Ok(x), Ok(y)) => x.cmp(&y),
+                (Ok(_), Err(_)) => Ordering::Less,
+                (Err(_), Ok(_)) => Ordering::Greater,
+                (Err(_), Err(_)) => x.cmp(y),
+            },
+        };
+        if part != Ordering::Equal {
+            return part;
+        }
+    }
+}
+
+/// How two versions order: their numbers, then their prereleases.
+fn version_order(a: Version, b: Version) -> Ordering {
+    (a.0, a.1, a.2).cmp(&(b.0, b.1, b.2)).then_with(|| prerelease_order(a.3, b.3))
+}
+
+/// Whether `remote` is newer than the running `current` on `channel`.
+///
+/// - Stable offers only a release (never a prerelease) of a later version.
+/// - Beta offers any later version: the next release candidate, then the
+///   release it leads to.
+/// - Latest offers a build whose version's numbers are later, or the same
+///   with a later build than this one's.
+fn newer(channel: Channel, current: Version, build: Option<u64>, remote: Version) -> bool {
     match channel {
-        Channel::Stable => !current.3.is_empty() && remote.3.is_empty(),
-        Channel::Nightly => match (nightly_build(remote.3), build) {
-            (Some(r), Some(b)) => r > b,
-            // A nightly built anywhere but the release run has no number to
-            // compare with: the published one is the newer.
-            (Some(_), None) => true,
-            _ => false,
-        },
+        Channel::Stable => remote.3.is_empty() && version_order(current, remote) == Ordering::Less,
+        Channel::Beta => version_order(current, remote) == Ordering::Less,
+        Channel::Latest => {
+            let (cur, rem) = ((current.0, current.1, current.2), (remote.0, remote.1, remote.2));
+            if rem != cur {
+                return rem > cur;
+            }
+            match (latest_build(remote.3), build) {
+                (Some(r), Some(b)) => r > b,
+                // A latest build made anywhere but the release run has no
+                // number to compare with: the published one is the newer.
+                (Some(_), None) => true,
+                _ => false,
+            }
+        }
     }
 }
 
@@ -168,12 +219,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_channel_is_stable_unless_named_nightly() {
+    fn the_channel_is_stable_unless_named_beta_or_latest() {
         assert_eq!(Channel::of(None), Channel::Stable);
         assert_eq!(Channel::of(Some("stable")), Channel::Stable);
-        assert_eq!(Channel::of(Some("nightly")), Channel::Nightly);
+        assert_eq!(Channel::of(Some("beta")), Channel::Beta);
+        assert_eq!(Channel::of(Some("latest")), Channel::Latest);
+        // The old nightly, a typo or anything else: stable.
+        assert_eq!(Channel::of(Some("nightly")), Channel::Stable);
+        assert_eq!(Channel::of(Some("Beta")), Channel::Stable);
+        assert_eq!(Channel::of(Some("")), Channel::Stable);
         assert_eq!(Channel::Stable.endpoint(), STABLE);
-        assert_eq!(Channel::Nightly.endpoint(), NIGHTLY);
+        assert_eq!(Channel::Beta.endpoint(), BETA);
+        assert_eq!(Channel::Latest.endpoint(), LATEST);
     }
 
     #[test]
@@ -189,26 +246,64 @@ mod tests {
     }
 
     #[test]
-    fn nightly_offers_a_later_build() {
-        let n = Channel::Nightly;
-        assert!(newer(n, (0, 3, 0, ""), Some(120), (0, 3, 0, "nightly.121")));
-        assert!(!newer(n, (0, 3, 0, ""), Some(121), (0, 3, 0, "nightly.121")));
-        assert!(!newer(n, (0, 3, 0, ""), Some(122), (0, 3, 0, "nightly.121")));
+    fn stable_never_sees_a_prerelease() {
+        let s = Channel::Stable;
+        assert!(!newer(s, (1, 0, 0, ""), None, (1, 1, 0, "rc.1")));
+        assert!(!newer(s, (1, 0, 0, ""), None, (2, 0, 0, "rc.1")));
+        assert!(!newer(s, (1, 0, 0, ""), Some(5), (1, 0, 1, "latest.900")));
+    }
+
+    #[test]
+    fn beta_moves_through_the_candidates_to_the_release() {
+        let b = Channel::Beta;
+        assert!(newer(b, (1, 0, 0, "rc.2"), None, (1, 0, 0, "rc.3")));
+        assert!(newer(b, (1, 0, 0, "rc.3"), None, (1, 0, 0, "")));
+        assert!(newer(b, (1, 0, 0, "rc.2"), None, (1, 0, 0, "")));
+        assert!(!newer(b, (1, 0, 0, "rc.3"), None, (1, 0, 0, "rc.3")));
+        assert!(!newer(b, (1, 0, 0, "rc.3"), None, (1, 0, 0, "rc.2")));
+        assert!(!newer(b, (1, 0, 0, ""), None, (1, 0, 0, "rc.3")));
+        // Candidate numbers are compared as numbers, not text.
+        assert!(newer(b, (1, 0, 0, "rc.9"), None, (1, 0, 0, "rc.10")));
+        // After a release, the next one's candidates.
+        assert!(newer(b, (1, 0, 0, ""), None, (1, 0, 1, "rc.1")));
+        assert!(newer(b, (1, 0, 0, ""), None, (1, 1, 0, "rc.1")));
+        assert!(!newer(b, (1, 1, 0, "rc.1"), None, (1, 0, 1, "")));
+    }
+
+    #[test]
+    fn prereleases_order_as_semver_does() {
+        use Ordering::*;
+        assert_eq!(prerelease_order("", ""), Equal);
+        assert_eq!(prerelease_order("rc.1", ""), Less);
+        assert_eq!(prerelease_order("", "rc.1"), Greater);
+        assert_eq!(prerelease_order("rc.2", "rc.10"), Less);
+        assert_eq!(prerelease_order("rc", "rc.1"), Less);
+        assert_eq!(prerelease_order("1", "rc"), Less);
+        assert_eq!(prerelease_order("beta.2", "rc.1"), Less);
+        assert_eq!(version_order((1, 0, 0, "rc.5"), (0, 9, 9, "")), Greater);
+    }
+
+    #[test]
+    fn latest_offers_a_later_build() {
+        let l = Channel::Latest;
+        assert!(newer(l, (0, 3, 0, ""), Some(120), (0, 3, 0, "latest.121")));
+        assert!(!newer(l, (0, 3, 0, ""), Some(121), (0, 3, 0, "latest.121")));
+        assert!(!newer(l, (0, 3, 0, ""), Some(122), (0, 3, 0, "latest.121")));
         // Build numbers are compared as numbers, not text.
-        assert!(newer(n, (0, 3, 0, ""), Some(99), (0, 3, 0, "nightly.100")));
+        assert!(newer(l, (0, 3, 0, ""), Some(99), (0, 3, 0, "latest.100")));
     }
 
     #[test]
-    fn nightly_follows_the_version_when_it_moves() {
-        let n = Channel::Nightly;
-        assert!(newer(n, (0, 3, 0, ""), Some(200), (0, 4, 0, "nightly.150")));
-        assert!(!newer(n, (0, 4, 0, ""), Some(100), (0, 3, 0, "nightly.150")));
+    fn latest_follows_the_version_when_it_moves() {
+        let l = Channel::Latest;
+        assert!(newer(l, (0, 3, 0, ""), Some(200), (0, 4, 0, "latest.150")));
+        assert!(!newer(l, (0, 4, 0, ""), Some(100), (0, 3, 0, "latest.150")));
     }
 
     #[test]
-    fn a_nightly_without_a_build_number_takes_the_published_one() {
-        assert!(newer(Channel::Nightly, (0, 3, 0, ""), None, (0, 3, 0, "nightly.5")));
-        assert!(!newer(Channel::Nightly, (0, 3, 0, ""), Some(5), (0, 3, 0, "")));
+    fn a_latest_build_without_a_build_number_takes_the_published_one() {
+        assert!(newer(Channel::Latest, (0, 3, 0, ""), None, (0, 3, 0, "latest.5")));
+        assert!(!newer(Channel::Latest, (0, 3, 0, ""), Some(5), (0, 3, 0, "")));
     }
 
     #[test]
@@ -221,7 +316,7 @@ mod tests {
 
     /// The placeholder here and in `tauri.conf.json` must be the same text, or
     /// a build without the key would think it has one; the config's endpoint
-    /// is stable's, which nightly builds replace.
+    /// is stable's, which beta and latest builds replace.
     #[test]
     fn the_config_holds_the_placeholder_and_the_stable_endpoint() {
         let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
