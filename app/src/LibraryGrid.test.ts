@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import type { LibraryRow } from './api.ts';
 import { prepareRow } from './librarySearch.ts';
-import { TILE, firstLaidOut, layout, pickInto, pickOf, rangeAnchor, scrollFor, windowOf } from './LibraryGrid.tsx';
+import { TILE, Tile, firstLaidOut, layout, pickInto, pickOf, rangeAnchor, scrollFor, tileSays, windowOf } from './LibraryGrid.tsx';
 
 describe('layout', () => {
   it('fits as many tiles across as their narrowest allows', () => {
@@ -110,6 +112,26 @@ describe('firstLaidOut', () => {
     expect(firstLaidOut(false, 220, 0)).toBe(false);
     expect(firstLaidOut(false, 220, 10)).toBe(true);
     expect(firstLaidOut(true, 220, 10)).toBe(false);
+  });
+});
+
+describe('a preset that failed', () => {
+  const row: LibraryRow = { key: 'k', path: '/p/broken.milk', hash: '', style: 'A', sub_style: null, authors: [], title: 'broken', thumbnail: null, look: null, starter: false };
+  const p = prepareRow(row, undefined);
+  const tile = (failed: boolean) =>
+    renderToStaticMarkup(createElement(Tile, { id: 't', index: 0, p, active: false, selected: false, playing: false, failed, intoName: null, onPick: () => {}, onAdd: () => {} }));
+
+  it('says it was skipped in live', () => {
+    expect(tileSays(p, false, true)).toContain('didn’t open — skipped in live');
+    expect(tileSays(p, false, false)).not.toContain('skipped');
+  });
+
+  it('is marked on its tile', () => {
+    expect(tile(true)).toContain('data-failed=""');
+    expect(tile(true)).toContain('lib-failed');
+    expect(tile(true)).toContain('skipped in live');
+    expect(tile(false)).not.toContain('data-failed');
+    expect(tile(false)).not.toContain('lib-failed');
   });
 });
 

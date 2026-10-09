@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 
 import type { FocusEvent, KeyboardEvent, MouseEvent, PointerEvent } from 'react';
 import { ButtonFace } from '@openflow/widgets/controls/ButtonFace.tsx';
 import { tileFor, type Prepared } from './librarySearch.ts';
+import { FAILED_SAYS, useFailedPresets } from './survive.ts';
 
 /**
  * The narrowest a tile gets, the gap between tiles, the title line under a thumbnail
@@ -106,6 +107,7 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
   const [size, setSize] = useState({ width: 0, height: 0 });
   // The first row in view: state changes only when a scroll crosses a row.
   const [topRow, setTopRow] = useState(0);
+  const failed = useFailedPresets();
   const lay = layout(size.width, rows.length, tileMin);
   const { first, last } = windowOf(topRow * lay.rowHeight, size.height, lay.rowHeight, lay.rows);
 
@@ -207,6 +209,7 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
           active={i === active}
           selected={selected.has(p.row.key)}
           playing={p.row.path === current}
+          failed={failed.has(p.row.path)}
           intoName={into?.name ?? null}
           onPick={onPick}
           onAdd={onAdd}
@@ -249,23 +252,30 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
   );
 }
 
-interface TileProps {
+export interface TileProps {
   id: string;
   index: number;
   p: Prepared;
   active: boolean;
   selected: boolean;
   playing: boolean;
+  /** The preset failed to open or draw (and its file hasn't changed since), so live mode skips it. */
+  failed: boolean;
   intoName: string | null;
   onPick(index: number, how: Pick): void;
   onAdd(index: number): void;
   onPress?(index: number, ev: PointerEvent): void;
 }
 
-/** One preset: its thumbnail (or its style, when it has none) and its title. */
-const Tile = memo(function Tile({ id, index, p, active, selected, playing, intoName, onPick, onAdd, onPress }: TileProps) {
+/** What a tile says when pointed at, and to a screen reader: title, style and authors, then what's true of it now. */
+export function tileSays(p: Prepared, playing: boolean, failed: boolean): string {
   const full = `${p.title} — ${p.subStyle ? `${p.style} › ${p.subStyle}` : p.style}${p.authors.length ? `, by ${p.authors.join(' & ')}` : ''}`;
-  const says = [full, playing && 'playing', p.star && 'starred', p.hidden && 'never played'].filter(Boolean).join(' · ');
+  return [full, playing && 'playing', failed && FAILED_SAYS, p.star && 'starred', p.hidden && 'never played'].filter(Boolean).join(' · ');
+}
+
+/** One preset: its thumbnail (or its style, when it has none) and its title. */
+export const Tile = memo(function Tile({ id, index, p, active, selected, playing, failed, intoName, onPick, onAdd, onPress }: TileProps) {
+  const says = tileSays(p, playing, failed);
   return (
     <div
       id={id}
@@ -275,6 +285,7 @@ const Tile = memo(function Tile({ id, index, p, active, selected, playing, intoN
       data-active={active ? '' : undefined}
       data-playing={playing ? '' : undefined}
       data-hidden={p.hidden ? '' : undefined}
+      data-failed={failed ? '' : undefined}
       title={says}
       onClick={(ev: MouseEvent) => onPick(index, pickOf(ev))}
       onPointerDown={onPress && ((ev) => onPress(index, ev))}
@@ -284,6 +295,11 @@ const Tile = memo(function Tile({ id, index, p, active, selected, playing, intoN
         {p.star && (
           <span className="lib-star" aria-hidden="true">
             ★
+          </span>
+        )}
+        {failed && (
+          <span className="lib-failed" aria-hidden="true">
+            !
           </span>
         )}
       </div>
