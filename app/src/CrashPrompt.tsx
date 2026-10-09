@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { Modal } from '@openflow/widgets/chrome/Modal.tsx';
 import * as api from './api.ts';
+import { say } from './words.ts';
 import './crash.css';
 
 /**
@@ -43,6 +44,19 @@ export function newest(reports: Report[], seen: Seen): Seen {
 /** The text to show for `report`: the whole of it, or its summary when there's no more. */
 export function shown(report: Report): string {
   return report.text?.trim() || report.summary;
+}
+
+/**
+ * What the prompt says around the report: what Send report does, a reminder to
+ * read the text first (the scrub can't catch every name; decision 54), and how
+ * many `earlier` crashes are kept too.
+ */
+export function notes(earlier: number): { intro: string; check: string; earlier: string | null } {
+  return {
+    intro: 'Send report opens a GitHub issue with this text, for you to look over and submit. Nothing is sent otherwise, and the app collects nothing else.',
+    check: say('crash report check'),
+    earlier: earlier > 0 ? `${earlier === 1 ? 'One earlier crash is' : `${earlier} earlier crashes are`} kept on this Mac too, in ~/.openflow/visuals/crashes.` : null,
+  };
 }
 
 /** The stored `seen`; nothing seen when there's none or storage is out of reach. */
@@ -106,7 +120,7 @@ export function CrashPrompt() {
 
   const report = offer[0];
   if (!report) return null;
-  const earlier = offer.length - 1;
+  const said = notes(offer.length - 1);
   return (
     <Modal
       title="visual[flow] crashed last time"
@@ -120,9 +134,10 @@ export function CrashPrompt() {
         </>
       }
     >
-      <p>Send report opens a GitHub issue with this text, for you to look over and submit. Nothing is sent otherwise, and the app collects nothing else.</p>
+      <p>{said.intro}</p>
+      <p className="crash-check">{said.check}</p>
       <pre className="crash-text">{shown(report)}</pre>
-      {earlier > 0 && <p>{earlier === 1 ? 'One earlier crash is' : `${earlier} earlier crashes are`} kept on this Mac too, in ~/.openflow/visuals/crashes.</p>}
+      {said.earlier && <p>{said.earlier}</p>}
       {error && <p role="alert">{error}</p>}
     </Modal>
   );
