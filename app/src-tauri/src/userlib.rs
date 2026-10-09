@@ -29,7 +29,8 @@
 //! the folder) is found again by its hash among the presets no data is kept
 //! for, by the hashes the packs' `index.json` give (the file's own, for one no
 //! index lists): when exactly one preset has it, its data moves to that key,
-//! and so do playlist items naming the old one. This runs on its own thread the
+//! and so do playlist items naming the old one. A playlist item no data is kept
+//! for is found the same way by the hash it carries (`crate::playlists`). This runs on its own thread the
 //! first time the data is asked for and again after the presets change
 //! ([`crate::pack::CHANGED`]); a key looked for in vain isn't looked for again
 //! until the presets change (`library.searched.json`).
@@ -207,7 +208,7 @@ pub fn load(file: &Path) -> Result<LibraryData, String> {
 
 /// Where an unreadable `file` is moved: `library.json.bad`, or the first of
 /// `library.json.bad.1`, `.bad.2`, … not taken, so no earlier one is lost.
-fn aside(file: &Path) -> PathBuf {
+pub(crate) fn aside(file: &Path) -> PathBuf {
     let mut name = file.file_name().unwrap_or_default().to_os_string();
     name.push(".bad");
     let first = file.with_file_name(&name);
@@ -380,8 +381,24 @@ impl Matcher {
     /// [`GRACE`] moves to the one preset of the same hash that has no data of
     /// its own, when there is exactly one. Nothing is walked or hashed when no
     /// kept preset is missing.
+    #[cfg(test)]
     fn pass(&mut self, data: &LibraryData, folders: &[PathBuf], now: Instant) -> Pass {
-        let lost = lost_in(data, folders);
+        self.pass_with(data, &[], folders, now)
+    }
+
+    /// [`Matcher::pass`], looking for playlist `items` too ((as stored, hash,
+    /// size), from `crate::playlists::Store::hashed`): an item whose file is
+    /// gone and that has no library data of its own is found again the same
+    /// way, so its playlists follow it.
+    fn pass_with(&mut self, data: &LibraryData, items: &[(String, String, Option<u64>)], folders: &[PathBuf], now: Instant) -> Pass {
+        let mut wanted_by: BTreeMap<String, (String, Option<u64>)> =
+            lost_in(data, folders).into_iter().map(|k| (k.clone(), (data.presets[&k].hash.clone().unwrap_or_default(), data.presets[&k].size))).collect();
+        for (key, hash, size) in items {
+            if !data.presets.contains_key(key) && !folders.iter().any(|f| f.join(key).exists()) {
+                wanted_by.entry(key.clone()).or_insert((hash.clone(), *size));
+            }
+        }
+        let lost: Vec<String> = wanted_by.keys().cloned().collect();
         self.first_missing.retain(|k, _| lost.contains(k));
         let searched = self.searched.len();
         self.searched.retain(|k, _| lost.contains(k));
@@ -407,7 +424,7 @@ impl Matcher {
             self.keep_searched(searched);
             return Pass { moves: Vec::new(), again };
         }
-        let wanted: Vec<(&str, &str, Option<u64>)> = ready.iter().map(|k| (k.as_str(), data.presets[k].hash.as_deref().unwrap_or_default(), data.presets[k].size)).collect();
+        let wanted: Vec<(&str, &str, Option<u64>)> = ready.iter().map(|k| (k.as_str(), wanted_by[k].0.as_str(), wanted_by[k].1)).collect();
         let found = self.candidates(&wanted, data, &existing, &indexed);
         let mut per_hash: HashMap<&str, usize> = HashMap::new();
         for (_, hash, _) in &wanted {
@@ -509,8 +526,8 @@ fn follow(lists: &mut [Playlist], moves: &[(String, String)]) -> bool {
     let to: HashMap<&str, &str> = moves.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
     let mut changed = false;
     for item in lists.iter_mut().flat_map(|l| l.presets.iter_mut()) {
-        if let Some(new) = to.get(item.as_str()) {
-            *item = new.to_string();
+        if let Some(new) = to.get(item.path.as_str()) {
+            item.path = new.to_string();
             changed = true;
         }
     }
@@ -520,12 +537,13 @@ fn follow(lists: &mut [Playlist], moves: &[(String, String)]) -> bool {
 /// Keeps `moves` that still hold: playlists first, so a crash between the two
 /// saves leaves the library data at its old key, to be matched again, and
 /// never playlists naming a key the data has left. Moves whose old key has
-/// gone or whose new key has data since are dropped. Playlists that won't save
-/// are put back and nothing moves. Returns the moves made and whether
-/// playlists changed.
+/// gone (from the data and every playlist) or whose new key has data since are
+/// dropped. Playlists that won't save are put back and nothing moves. Returns
+/// the moves made and whether playlists changed.
 fn commit(store: &Store, lists: Option<&mut crate::playlists::Store>, moves: Vec<(String, String)>) -> Result<(Vec<(String, String)>, bool), String> {
     let mut data = store.data.lock().unwrap();
-    let moves: Vec<_> = moves.into_iter().filter(|(old, new)| data.presets.contains_key(old) && !data.presets.contains_key(new)).collect();
+    let named = |old: &str| lists.as_deref().is_some_and(|l| l.names(old));
+    let moves: Vec<_> = moves.into_iter().filter(|(old, new)| (data.presets.contains_key(old) || named(old)) && !data.presets.contains_key(new)).collect();
     if moves.is_empty() {
         return Ok((moves, false));
     }
@@ -571,7 +589,8 @@ fn rematch_once(handle: &AppHandle, store: &Store) {
         let folders = crate::pack::folders(&handle);
         loop {
             let data = store.data.lock().unwrap().clone();
-            let pass = store.matcher.lock().unwrap().pass(&data, &folders, Instant::now());
+            let items = handle.try_state::<crate::actions::Deck>().map(|d| d.store.lock().unwrap().hashed()).unwrap_or_default();
+            let pass = store.matcher.lock().unwrap().pass_with(&data, &items, &folders, Instant::now());
             if !pass.moves.is_empty() {
                 announce(&handle, &store, pass.moves);
             }
@@ -592,7 +611,7 @@ fn announce(handle: &AppHandle, store: &Store, moves: Vec<(String, String)>) {
             let mut lists = deck.store.lock().unwrap();
             let result = commit(store, Some(&mut lists), moves);
             if matches!(result, Ok((_, true))) {
-                deck.live.lock().unwrap().resync(&lists);
+                deck.live.lock().unwrap().resync(&lists, crate::actions::roll());
             }
             result
         }
@@ -612,6 +631,19 @@ fn announce(handle: &AppHandle, store: &Store, moves: Vec<(String, String)>) {
         }
         Err(e) => eprintln!("library: {e}"),
     }
+}
+
+/// What the user keeps about presets, for working out smart playlists.
+pub fn data(handle: &AppHandle) -> LibraryData {
+    handle.state::<Store>().data.lock().unwrap().clone()
+}
+
+/// Look for moved presets again even if the presets haven't changed: playlist
+/// items just came in (an imported playlist) whose files may be elsewhere.
+pub fn rematch(handle: &AppHandle) {
+    let store = handle.state::<Store>();
+    store.matched.store(false, Ordering::SeqCst);
+    rematch_once(handle, &store);
 }
 
 /// Everything the user keeps about presets.
@@ -787,7 +819,7 @@ mod tests {
         // Nothing more to move the second time.
         assert!(matcher.pass(&data, &folders, at(t0, 12)).moves.is_empty());
 
-        let mut lists = vec![Playlist { id: "1".into(), name: "set".into(), presets: vec!["pack/Dancer/a.milk".into(), "twin.milk".into(), "pack/Dancer/a.milk".into()] }];
+        let mut lists = vec![Playlist::manual("1", "set", vec!["pack/Dancer/a.milk".into(), "twin.milk".into(), "pack/Dancer/a.milk".into()])];
         assert!(follow(&mut lists, &pass.moves));
         assert_eq!(lists[0].presets, ["pack/Sparkle/a.milk", "twin.milk", "pack/Sparkle/a.milk"]);
         assert!(!follow(&mut lists, &pass.moves));
@@ -854,6 +886,38 @@ mod tests {
     }
 
     #[test]
+    fn playlist_items_with_no_library_data_are_found_again_by_their_hash() {
+        let root = temp("items");
+        let folders = vec![root.join("presets")];
+        let bytes = b"[preset00]\nzoom=1.3\n";
+        put(&root.join("presets/pack/Old/x.milk"), bytes);
+        // A playlist item the user never rated: it carries its own hash.
+        let mut lists = crate::playlists::Store::open(root.join("playlists.json"), root.join("presets"));
+        let id = lists.create("set").unwrap();
+        lists.add(&id, &root.join("presets/pack/Old/x.milk"), None).unwrap();
+        lists.save().unwrap();
+        assert_eq!(lists.hashed(), [("pack/Old/x.milk".to_string(), engine::index::hash(bytes), Some(bytes.len() as u64))]);
+        // The folder is reorganised.
+        std::fs::create_dir_all(root.join("presets/pack/New")).unwrap();
+        std::fs::rename(root.join("presets/pack/Old/x.milk"), root.join("presets/pack/New/x.milk")).unwrap();
+        let data = LibraryData::default();
+        let mut matcher = Matcher::default();
+        let t0 = Instant::now();
+        assert!(matcher.pass_with(&data, &lists.hashed(), &folders, t0).moves.is_empty(), "not before its grace");
+        let pass = matcher.pass_with(&data, &lists.hashed(), &folders, at(t0, 6));
+        assert_eq!(pass.moves, [("pack/Old/x.milk".to_string(), "pack/New/x.milk".to_string())]);
+        // Kept with no library data to move: the playlist follows, the data is untouched.
+        let store = Store::open(root.join("library.json"));
+        assert_eq!(commit(&store, Some(&mut lists), pass.moves.clone()).unwrap(), (pass.moves.clone(), true));
+        assert_eq!(lists.lists[0].presets, ["pack/New/x.milk"]);
+        assert!(store.data.lock().unwrap().presets.is_empty());
+        assert_eq!(crate::playlists::Store::open(root.join("playlists.json"), root.join("presets")).paths(&id), [root.join("presets/pack/New/x.milk")]);
+        // Found: nothing more to look for.
+        assert_eq!(matcher.pass_with(&data, &lists.hashed(), &folders, at(t0, 12)), Pass::default());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn playlists_are_saved_before_the_library_and_a_failed_save_moves_nothing() {
         let root = temp("commit");
         let store = Store::open(root.join("library.json"));
@@ -862,7 +926,7 @@ mod tests {
         // Playlists that can't be saved (their file is a folder): nothing moves.
         std::fs::create_dir_all(root.join("bad.json")).unwrap();
         let mut bad = crate::playlists::Store::open(root.join("bad.json"), root.clone());
-        bad.lists = vec![Playlist { id: "1".into(), name: "set".into(), presets: vec!["old.milk".into()] }];
+        bad.lists = vec![Playlist::manual("1", "set", vec!["old.milk".into()])];
         assert!(commit(&store, Some(&mut bad), moves.clone()).is_err());
         assert_eq!(bad.lists[0].presets, ["old.milk"]);
         assert!(store.data.lock().unwrap().presets.contains_key("old.milk"));

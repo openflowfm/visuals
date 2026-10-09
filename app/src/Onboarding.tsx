@@ -457,7 +457,7 @@ function PickVibe({ onPicked }: { onPicked(): void }) {
   const [busy, setBusy] = useState(false);
   const { notice: problem, set: setProblem, dismiss } = useNotice();
   useEffect(() => {
-    pl.lists().then(setLists, () => setLists({ playlists: [], deck: { playlist: null, index: null, auto: false, seconds: 30, current: null, hold: false, bars: 0 } }));
+    pl.lists().then(setLists, () => setLists({ playlists: [], deck: pl.EMPTY_DECK }));
   }, []);
 
   const pick = (action: pl.Action, what: string) => {

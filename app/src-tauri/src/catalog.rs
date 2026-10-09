@@ -75,9 +75,15 @@ fn cached_roots(app: &AppHandle) -> Vec<Root> {
 /// Every preset the library lists, with what its index says of it.
 #[tauri::command]
 pub async fn library_index(handle: AppHandle) -> Vec<Row> {
-    let roots = roots(&handle);
+    rows(&handle)
+}
+
+/// The rows [`library_index`] gives, worked out now (for smart playlists
+/// resolved in Rust, [`crate::query`]); refreshes the roots [`serve`] uses.
+pub fn rows(app: &AppHandle) -> Vec<Row> {
+    let roots = roots(app);
     *CACHED.lock().unwrap() = Some(roots.clone());
-    rows_in(&roots, &dropped_starter(&handle, &roots))
+    rows_in(&roots, &dropped_starter(app, &roots))
 }
 
 /// The starter set as a root when it isn't one of `roots`: still the source of

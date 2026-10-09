@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { after, before, downloadText, haveAll, libraryLine, QUIET_MS, silenceWatch, sizeText, STEPS, stepsFor, testSoundGuard, vibes } from './Onboarding.tsx';
 import type { PackStatus } from './pack.ts';
-import type { Lists } from './playlists.ts';
+import { EMPTY_DECK, manual, type Lists } from './playlists.ts';
 
 const status = (s: Partial<PackStatus> = {}): PackStatus => ({ starter: 40, installed: 0, total: 9795, size: 130_000_000, state: 'idle', received: 0, error: null, ...s });
 
@@ -108,17 +108,11 @@ describe('the full library step', () => {
 });
 
 describe('the vibes', () => {
-  const lists = (playlists: Lists['playlists']): Lists => ({ playlists, deck: { playlist: null, index: null, auto: false, seconds: 30, current: null, hold: false, bars: 0 } });
-  const item = (name: string, missing = false) => ({ path: `/p/${name}.milk`, name, group: '', missing });
+  const lists = (playlists: Lists['playlists']): Lists => ({ playlists, deck: EMPTY_DECK });
+  const item = (name: string, missing = false) => ({ path: `/p/${name}.milk`, name, group: '', missing, hash: null });
 
   it('offer the playlists with presets that are there, by their place in the list', () => {
-    const offered = vibes(
-      lists([
-        { id: 'a', name: 'empty', items: [] },
-        { id: 'b', name: 'chill', items: [item('one'), item('gone', true)] },
-        { id: 'c', name: 'gone', items: [item('x', true)] },
-      ]),
-    );
+    const offered = vibes(lists([manual('a', 'empty', []), manual('b', 'chill', [item('one'), item('gone', true)]), manual('c', 'gone', [item('x', true)])]));
     expect(offered).toEqual([{ index: 1, name: 'chill', size: 1 }]);
   });
 

@@ -5,7 +5,12 @@ import { AudioInput } from './AudioInput.tsx';
 import { Segmented } from '@openflow/widgets/controls/Segmented.tsx';
 import { Playlists } from './Playlists.tsx';
 import * as pl from './playlists.ts';
-import { FrameRate, Header, Hints, HOME, NoticeBanner, NowPlaying, Preview, type View } from './views.tsx';
+import { FrameRate, Header, Hints, HOME, NoticeBanner, NowPlaying, Preview, useSheet, type View } from './views.tsx';
+import { Home } from './Home.tsx';
+import { Settings } from './Settings.tsx';
+import { MoreEffects } from './MoreEffects.tsx';
+import { CrashPrompt } from './CrashPrompt.tsx';
+import { useAccessibility } from './access.ts';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { Library } from './Library.tsx';
 import { stepIn } from './librarySearch.ts';
@@ -22,9 +27,11 @@ import { Onboarding, useWelcome } from './Onboarding.tsx';
 const Editor = import.meta.env.VITE_LAB ? lazy(() => import('./Lab.tsx')) : null;
 
 /**
- * The library (browse presets, play them in the preview), live mode (performing
- * controls, the output full screen on a display), and in a lab build the editor.
- * `VISUALS_LIVE=1` starts in live mode, `VISUALS_PRESET=<path>` on a preset.
+ * The home (playlists, once it is ready), the library (browse presets, play them
+ * in the preview), live mode (performing controls, the output full screen on a
+ * display), and in a lab build the editor; Settings and More effects open over
+ * any of them (`openSheet`). `VISUALS_LIVE=1` starts in live mode,
+ * `VISUALS_PRESET=<path>` on a preset.
  */
 export function App() {
   const [mode, setMode] = useState<{ view: View; preset: string | null; windowed?: boolean } | null>(null);
@@ -36,6 +43,8 @@ export function App() {
     );
   }, []);
   const onMode = useCallback((view: View, preset: string | null) => setMode({ view, preset }), []);
+  const { sheet, close } = useSheet();
+  useAccessibility();
   if (!mode || welcome.shown === null) return null;
   if (welcome.shown)
     return (
@@ -47,7 +56,20 @@ export function App() {
         }}
       />
     );
+  return (
+    <>
+      <Page mode={mode} onMode={onMode} />
+      <Settings open={sheet === 'settings'} onClose={close} />
+      <MoreEffects open={sheet === 'effects'} onClose={close} />
+      <CrashPrompt />
+    </>
+  );
+}
+
+/** The view showing, under the sheets `App` lays over every view. */
+function Page({ mode, onMode }: { mode: { view: View; preset: string | null; windowed?: boolean }; onMode(view: View, preset: string | null): void }) {
   if (mode.view === 'live') return <Live start={mode.preset} onMode={onMode} windowed={mode.windowed} />;
+  if (mode.view === 'home') return <Home start={mode.preset} onMode={onMode} />;
   if (mode.view === 'editor' && Editor)
     return (
       <Suspense fallback={null}>

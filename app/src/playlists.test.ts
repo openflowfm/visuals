@@ -1,9 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { freshName, nextSays, upNext, type Deck, type Lists, type Playlist } from './playlists.ts';
+import { DEFAULT_SETTINGS, freshName, nextSays, upNext, type Deck, type Lists, type Playlist } from './playlists.ts';
 
-const item = (name: string, missing = false) => ({ path: `g/${name}.milk`, name, group: 'g', missing });
-const list = (id: string, names: string[]): Playlist => ({ id, name: id, items: names.map((n) => item(n)) });
-const deck = (over: Partial<Deck> = {}): Deck => ({ playlist: null, index: null, auto: false, seconds: 30, current: null, hold: false, bars: 0, ...over });
+const item = (name: string, missing = false) => ({ path: `g/${name}.milk`, name, group: 'g', missing, hash: null });
+const list = (id: string, names: string[]): Playlist => ({ id, name: id, items: names.map((n) => item(n)), kind: 'manual', query: null, settings: DEFAULT_SETTINGS });
+const smart = (id: string): Playlist => ({ id, name: id, items: [], kind: 'smart', query: { groups: { speed: ['low'] }, text: '' }, settings: DEFAULT_SETTINGS });
+const deck = (over: Partial<Deck> = {}): Deck => ({
+  playlist: null,
+  index: null,
+  auto: false,
+  seconds: 30,
+  current: null,
+  hold: false,
+  bars: 0,
+  order: 'in_order',
+  settings: null,
+  differs: [],
+  next: null,
+  count: 0,
+  query: null,
+  ...over,
+});
 const lists = (playlists: Playlist[], d: Partial<Deck> = {}): Lists => ({ playlists, deck: deck(d) });
 
 describe('upNext', () => {
@@ -49,8 +65,27 @@ describe('upNext', () => {
   });
 
   it('does not skip a missing item, as the engine does not', () => {
-    const a: Playlist = { id: 'a', name: 'a', items: [item('x'), item('gone', true), item('z')] };
+    const a: Playlist = { ...list('a', []), items: [item('x'), item('gone', true), item('z')] };
     expect(upNext(lists([a], { playlist: 'a', index: 0 }))?.next?.missing).toBe(true);
+  });
+
+  it("takes the deck's next over stepping, as shuffle does", () => {
+    const up = upNext(lists([list('a', ['x', 'y', 'z'])], { playlist: 'a', index: 0, order: 'shuffle', next: 'g/z.milk' }));
+    expect(up?.next?.name).toBe('z');
+    expect(up?.nextIndex).toBe(2);
+    expect(up?.count).toBe(3);
+  });
+
+  it("names a smart playlist's next by its path, and counts its resolved matches", () => {
+    const up = upNext(lists([smart('s')], { playlist: 's', index: 4, count: 12, next: '/p/Dancer/slow one.milk' }));
+    expect(up?.next).toMatchObject({ path: '/p/Dancer/slow one.milk', name: 'slow one', group: 'Dancer', missing: false });
+    expect(up?.nextIndex).toBeNull();
+    expect(up?.index).toBe(4);
+    expect(up?.count).toBe(12);
+  });
+
+  it('steps when the deck names no next', () => {
+    expect(upNext(lists([list('a', ['x', 'y'])], { playlist: 'a', index: 0, next: null }))?.next?.name).toBe('y');
   });
 });
 
@@ -72,6 +107,20 @@ describe('nextSays', () => {
 
   it('says so when the playing playlist is empty', () => {
     expect(nextSays(lists([list('a', [])], { playlist: 'a' }), false).kind).toBe('empty');
+  });
+
+  it('says a smart playlist with no matches is empty', () => {
+    expect(nextSays(lists([smart('s')], { playlist: 's', count: 0 }), false).kind).toBe('empty');
+  });
+
+  it("names the deck's next while playing a filter", () => {
+    const query = { groups: { speed: ['low'] }, text: '' };
+    const says = nextSays(lists([], { next: '/p/Dancer/calm.milk', query, count: 40 }), false);
+    expect(says).toMatchObject({ kind: 'filter', item: { name: 'calm' }, query });
+  });
+
+  it('names nothing while held, even playing a filter', () => {
+    expect(nextSays(lists([], { next: '/p/Dancer/calm.milk' }), true)).toEqual({ kind: 'held' });
   });
 });
 

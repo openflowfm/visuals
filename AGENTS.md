@@ -97,4 +97,20 @@ and `thumbnails/`, made with the `index` bin), and the types in `api.ts`. Its st
 event, `playable`, and the `library.json` format; #93 fills it in) and
 `smartPlaylistSave` in `api.ts` (0.5).
 
+The 0.5 (playlists and live) contract adds, as contract files:
+`app/src-tauri/src/playlists.rs` (`playlists.json` version 2: manual or smart playlists
+with their settings, items with content hashes, version 1 moved on open, export and
+import), `app/src-tauri/src/actions.rs` (the deck: a playlist's settings taken on load,
+live tweaks reported in `differs`, shuffle, smart playlists and filters resolved on load,
+recently played), `app/src-tauri/src/query.rs` (a `LibraryQuery` worked out in Rust,
+mirroring the page's filter), and `app/src/playlists.ts`. Its stubs, each in the lane's
+own file: `Home.tsx` and `homeReady.ts` (#96: the home view, shown once `HOME_READY`
+is on), `Settings.tsx` and `MoreEffects.tsx` (#98, opened with `openSheet` from
+`views.tsx`), `app/src-tauri/src/resume.rs` (#99: `resume_state`, and the deck's
+`note` and `open_failed` hooks), `access.rs` and `access.ts` (#100: `reduced_motion`),
+`quality.rs` (#101: `quality_get`, `quality_set`), and `crash.rs` and `CrashPrompt.tsx`
+(#102: `crash_reports`, `crash_report_open`, the opt-in; written locally, sent only as a
+GitHub issue the user submits). Each `.rs` stub's `start` (or `install`) is already
+called from `main.rs`.
+
 Every agent commit must end with a blank line and a GitHub-compatible co-author trailer naming the agent that actually made it, for example `Co-authored-by: Codex <noreply@openai.com>` or `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Never name an agent that didn't write the commit.
