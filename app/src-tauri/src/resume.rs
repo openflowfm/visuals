@@ -171,15 +171,20 @@ pub fn note(_handle: &AppHandle, deck: &DeckView) {
     if !RESTORED.load(Ordering::SeqCst) {
         return;
     }
-    let now = kept_from(deck);
-    {
-        let mut kept = KEPT.lock().unwrap();
-        if kept.as_ref() == Some(&now) {
-            return;
-        }
-        *kept = Some(now.clone());
+    keep(&KEPT, kept_from(deck), |now| crate::settings::save_json(FILE, now));
+}
+
+/// Save `now` unless it is what `kept` says was saved last. The check and the
+/// save happen under one lock, so an older deck can't land last; `kept` changes
+/// only when the save worked, so a failed one is tried again.
+fn keep(kept: &Mutex<Option<Resume>>, now: Resume, save: impl FnOnce(&Resume) -> bool) {
+    let mut kept = kept.lock().unwrap();
+    if kept.as_ref() == Some(&now) {
+        return;
     }
-    crate::settings::save_json(FILE, &now);
+    if save(&now) {
+        *kept = Some(now);
+    }
 }
 
 /// What the deck does about a preset that failed to open.
@@ -247,12 +252,13 @@ fn set_failed(handle: &AppHandle, path: &Path, failed: bool) {
         if !mark(&mut failures, path, failed) {
             return;
         }
+        // Saved under the lock, so an older list can't land last.
+        crate::settings::save_json(FAILED_FILE, &FailedFile { presets: failures.clone() });
         failures.clone()
     };
     if failed {
         eprintln!("resume: {} failed; marked, and skipped in live", path.display());
     }
-    crate::settings::save_json(FAILED_FILE, &FailedFile { presets: list.clone() });
     let _ = handle.emit(FAILED, list.into_keys().collect::<Vec<_>>());
 }
 
@@ -270,16 +276,35 @@ fn load_problem(opened: &Value) -> Option<String> {
 }
 
 /// Open the preset at `path` on the bench for the deck: what opened, or why it
-/// didn't. A preset that can't be read or that the bench won't load is marked failed.
+/// didn't. A preset that can't be read or that the bench won't load is marked failed;
+/// one that didn't open because asking the bench failed (not up yet) is only reported.
 pub fn open(handle: &AppHandle, app: &crate::App, path: &Path) -> (Option<Opened>, Option<String>) {
-    let result = crate::library::open_path(app, &path.to_string_lossy()).and_then(|o| match serde_json::to_value(&o).ok().as_ref().and_then(load_problem) {
-        Some(e) => Err(e),
-        None => Ok(o),
-    });
-    set_failed(handle, path, result.is_err());
+    let readable = crate::library::read_preset(path).map(|_| ());
+    let (result, failed) = judge(readable, || crate::library::open_path(app, &path.to_string_lossy()));
+    if let Some(failed) = failed {
+        set_failed(handle, path, failed);
+    }
     match result {
         Ok(o) => (Some(o), None),
         Err(e) => (None, Some(e)),
+    }
+}
+
+/// What opening a preset came to, and whether to mark it failed (`Some(true)`),
+/// unmark it (`Some(false)`) or leave its mark alone (`None`). `readable` is whether
+/// its file reads as a preset; `open` asks the bench. Only the file failing to read
+/// or the bench answering that it won't load is a failure: an error from asking
+/// the bench at all says nothing about the preset.
+fn judge<T: Serialize>(readable: Result<(), String>, open: impl FnOnce() -> Result<T, String>) -> (Result<T, String>, Option<bool>) {
+    if let Err(e) = readable {
+        return (Err(e), Some(true));
+    }
+    match open() {
+        Err(e) => (Err(e), None),
+        Ok(o) => match serde_json::to_value(&o).ok().as_ref().and_then(load_problem) {
+            Some(e) => (Err(e), Some(true)),
+            None => (Ok(o), Some(false)),
+        },
     }
 }
 
@@ -356,6 +381,41 @@ mod tests {
         // A missing file is never marked.
         assert!(!mark(&mut failures, &root.join("gone.milk"), true));
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn only_a_preset_s_own_failure_marks_it() {
+        let bad = serde_json::json!({ "report": { "equations": [{ "message": "unexpected (" }] } });
+        let good = serde_json::json!({ "report": { "equations": [] } });
+        // The bench wasn't there to ask: reported, not marked.
+        let (r, mark) = judge::<Value>(Ok(()), || Err("the bench isn't running".into()));
+        assert!(r.is_err());
+        assert_eq!(mark, None);
+        // The bench said its equations fail: marked.
+        assert_eq!(judge(Ok(()), || Ok(bad.clone())).1, Some(true));
+        // The file isn't a preset: marked, without asking the bench.
+        assert_eq!(judge::<Value>(Err("is not a file".into()), || panic!("not asked")).1, Some(true));
+        // It opened: unmarked.
+        assert_eq!(judge(Ok(()), || Ok(good.clone())).1, Some(false));
+    }
+
+    #[test]
+    fn a_deck_is_kept_once_saved_and_tried_again_when_a_save_fails() {
+        let kept = Mutex::new(None);
+        let deck = r(Some("p"), Some(1), None);
+        let mut tries = 0;
+        keep(&kept, deck.clone(), |_| {
+            tries += 1;
+            false
+        });
+        assert_eq!(*kept.lock().unwrap(), None, "a failed save isn't remembered");
+        keep(&kept, deck.clone(), |_| {
+            tries += 1;
+            true
+        });
+        assert_eq!(tries, 2, "tried again");
+        keep(&kept, deck.clone(), |_| panic!("unchanged: not saved again"));
+        assert_eq!(*kept.lock().unwrap(), Some(deck));
     }
 
     #[test]

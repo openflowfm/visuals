@@ -157,8 +157,17 @@ fn backup_problem(file: &Path) -> Option<Problem> {
 
 /// The JSON kept in `name`, if it is there and reads as a `T`. See the module's docs for what happens when it isn't.
 pub fn load<T: DeserializeOwned>(name: &str) -> Option<T> {
-    let (value, problems) = load_at(&dir().join(name));
-    report(name, Kind::Read, problems.read);
+    load_in(&dir(), name)
+}
+
+/// [`load`] from `dir`. A missing file leaves an earlier read problem in place
+/// (a file just moved aside is missing on the next load, and the page hasn't
+/// read why yet); only an existing file read well clears it.
+fn load_in<T: DeserializeOwned>(dir: &Path, name: &str) -> Option<T> {
+    let (value, problems) = load_at(&dir.join(name));
+    if !problems.missing {
+        report(name, Kind::Read, problems.read);
+    }
     if problems.write.is_some() {
         report(name, Kind::Write, problems.write);
     }
@@ -170,16 +179,21 @@ pub fn save(name: &str, contents: impl AsRef<[u8]>) {
     report(name, Kind::Write, save_at(&dir().join(name), contents.as_ref()).err());
 }
 
-/// Keep `value` in `name` as pretty JSON, versioned.
-pub fn save_json(name: &str, value: &impl Serialize) {
-    report(name, Kind::Write, save_json_at(&dir().join(name), value).err());
+/// Keep `value` in `name` as pretty JSON, versioned; whether it was kept.
+pub fn save_json(name: &str, value: &impl Serialize) -> bool {
+    let result = save_json_at(&dir().join(name), value);
+    let ok = result.is_ok();
+    report(name, Kind::Write, result.err());
+    ok
 }
 
-/// What went wrong reading a file: reading it, and writing it back moved up.
+/// What went wrong reading a file: reading it, and writing it back moved up;
+/// and whether it wasn't there at all.
 #[derive(Default, Debug)]
 struct Problems {
     read: Option<String>,
     write: Option<String>,
+    missing: bool,
 }
 
 fn spec_of(path: &Path) -> &'static Spec {
@@ -228,7 +242,10 @@ fn load_at<T: DeserializeOwned>(path: &Path) -> (Option<T>, Problems) {
     let mut problems = Problems::default();
     let (value, migrated) = match read_at(path) {
         Ok(Some(read)) => read,
-        Ok(None) => return (None, problems),
+        Ok(None) => {
+            problems.missing = true;
+            return (None, problems);
+        }
         Err(message) => {
             problems.read = Some(message);
             return (None, problems);
@@ -298,13 +315,15 @@ fn failed(spec: &Spec, why: &str) -> String {
 }
 
 /// Write `contents` to `path` through a temporary file renamed into place, so
-/// a crash never leaves half of one.
+/// a crash never leaves half of one. Each write has its own temporary file, so
+/// two saves of one file at once can't write into the same one.
 fn write_at(path: &Path, contents: &[u8]) -> Result<(), String> {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     }
     let mut name = path.file_name().unwrap_or_default().to_os_string();
-    name.push(".tmp");
+    name.push(format!(".{}.{}.tmp", std::process::id(), NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
     let temp = path.with_file_name(name);
     std::fs::write(&temp, contents).and_then(|_| std::fs::rename(&temp, path)).map_err(|e| {
         let _ = std::fs::remove_file(&temp);
@@ -361,7 +380,7 @@ mod tests {
         let (v, p) = load_at::<Value>(&path);
         assert_eq!(v.unwrap()["bpm"].as_f64(), Some(99.5));
         assert!(p.read.is_none() && p.write.is_none());
-        assert!(!root.join("deeper").join("tempo.json.tmp").exists());
+        assert!(std::fs::read_dir(root.join("deeper")).unwrap().all(|e| !e.unwrap().file_name().to_string_lossy().ends_with(".tmp")));
         // Missing reads as nothing, quietly.
         let (v, p) = load_at::<Value>(&root.join("missing.json"));
         assert!(v.is_none() && p.read.is_none());
@@ -480,6 +499,43 @@ mod tests {
         assert_eq!(mine(), vec!["reset"]);
         report(name, Kind::Read, None);
         assert!(mine().is_empty());
+    }
+
+    #[test]
+    fn a_reset_is_still_said_after_the_file_is_found_missing() {
+        let root = scratch("reset-kept");
+        for name in ["audio.json", FIRST_RUN] {
+            let said = || problems().into_iter().any(|p| p.file == name && p.message.contains("so it was reset"));
+            std::fs::write(root.join(name), "not json").unwrap();
+            assert!(load_in::<Value>(&root, name).is_none());
+            assert!(said(), "{name}: reset said");
+            // Loaded again, now missing: the reset is still there for the page.
+            assert!(load_in::<Value>(&root, name).is_none());
+            assert!(said(), "{name}: reset kept after a missing load");
+            // A good read clears it.
+            std::fs::write(root.join(name), r#"{"version": 1, "done": true}"#).unwrap();
+            assert!(load_in::<Value>(&root, name).is_some());
+            assert!(!said(), "{name}: cleared by a good read");
+        }
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn saves_of_one_file_at_once_never_collide() {
+        let root = scratch("concurrent");
+        let path = root.join("resume.json");
+        let threads: Vec<_> = (0..8)
+            .map(|n| {
+                let path = path.clone();
+                std::thread::spawn(move || (0..25).map(|i| save_json_at(&path, &serde_json::json!({ "index": n * 100 + i })).is_ok()).all(|ok| ok))
+            })
+            .collect();
+        for t in threads {
+            assert!(t.join().unwrap(), "every save succeeded");
+        }
+        assert!(read(&path)["index"].is_u64());
+        assert!(std::fs::read_dir(&root).unwrap().all(|e| !e.unwrap().file_name().to_string_lossy().ends_with(".tmp")));
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
