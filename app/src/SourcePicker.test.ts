@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Source } from './api.ts';
-import { current, deniedNote, goneNote, keepChannels, label } from './SourcePicker.tsx';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { current, deniedNote, goneNote, keepChannels, label, SourcePicker } from './SourcePicker.tsx';
 
 const daw: Source = { id: { kind: 'app', bundle: 'com.ableton.live' }, name: 'Ableton Live', channels: 2 };
 const mac: Source = { id: { kind: 'system' }, name: 'everything on this Mac', channels: 2 };
@@ -37,5 +39,15 @@ describe('the source picker', () => {
     expect(keepChannels({ name: 'Aggregate Device', left: 5, right: 6, size: 8 }, agg8)).toEqual([5, 6]);
     expect(keepChannels({ name: 'Aggregate Device', left: 5, right: 6, size: 8 }, daw)).toEqual([1, 2]);
     expect(keepChannels(null, { ...agg2, channels: 1 })).toEqual([1, 1]);
+  });
+
+  it('names every control for VoiceOver: the source, Advanced, both channels and both meters', () => {
+    const html = renderToStaticMarkup(createElement(SourcePicker, { onError: () => {} }));
+    expect(html).toMatch(/role="combobox"[^>]*aria-label="listen to"/);
+    expect(html).toMatch(/<summary[^>]*aria-label="Advanced: the left and right channels"/);
+    expect(html).toContain('aria-label="left channel"');
+    expect(html).toContain('aria-label="right channel"');
+    expect(html).toContain('aria-label="left level"');
+    expect(html).toContain('aria-label="right level"');
   });
 });

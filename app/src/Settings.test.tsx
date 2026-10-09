@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { closesSheet, keep, qualityLine, readKept, SECTIONS, Settings } from './Settings.tsx';
+import { closesSheet, keep, MotionSwitch, qualityLine, readKept, SECTIONS, Settings } from './Settings.tsx';
 import { MoreEffects } from './MoreEffects.tsx';
+import type { Motion } from './api.ts';
 
 /** A key press from an element: inside an open menu or not. */
 const press = (key: string, inOpenMenu = false) => ({ key, target: { closest: (selector: string) => (inOpenMenu && selector === '[aria-expanded="true"]' ? {} : null) } as unknown as EventTarget });
@@ -87,5 +88,53 @@ describe('the sheets', () => {
     expect(html).toContain('aria-label="More effects"');
     expect(html).toContain('vf-sheet more-fx');
     expect(html).not.toContain('vf-scrim');
+  });
+
+  it('make Settings a modal dialog, and leave the drawer a dialog live stays usable behind', () => {
+    const settings = renderToStaticMarkup(<Settings open onClose={() => {}} />);
+    expect(settings).toMatch(/<div[^>]*class="vf-sheet settings"[^>]*role="dialog"[^>]*aria-modal="true"/);
+    const drawer = renderToStaticMarkup(<MoreEffects open onClose={() => {}} />);
+    expect(drawer).toMatch(/<div[^>]*class="vf-sheet more-fx"[^>]*role="dialog"/);
+    expect(drawer).not.toContain('aria-modal');
+  });
+
+  it('name their close buttons in words, not by the ✕', () => {
+    expect(renderToStaticMarkup(<Settings open onClose={() => {}} />)).toMatch(/aria-label="Close settings"[^>]*>✕</);
+    expect(renderToStaticMarkup(<MoreEffects open onClose={() => {}} />)).toMatch(/aria-label="Close more effects"[^>]*>✕</);
+  });
+
+  it('wait for the app before the reduce-flashing switch can be used', () => {
+    const motion = switchTag(renderToStaticMarkup(<Settings open onClose={() => {}} />));
+    expect(motion).toContain('aria-pressed="false"');
+    expect(motion).toContain('disabled=""');
+  });
+});
+
+/** The reduce-flashing switch's own tag in `html`. */
+const switchTag = (html: string) => html.match(/<button[^>]*aria-label="Reduce flashing"[^>]*>/)?.[0] ?? '';
+
+describe('MotionSwitch', () => {
+  const draw = (motion: Motion | null, problem: string | null = null) => renderToStaticMarkup(<MotionSwitch motion={motion} problem={problem} onChange={() => {}} onFollow={() => {}} />);
+
+  it('says macOS decides while no choice has been made here', () => {
+    const html = draw({ reduced: true, system: true });
+    expect(switchTag(html)).toContain('aria-pressed="true"');
+    expect(switchTag(html)).not.toContain('disabled');
+    expect(html).toContain('Following macOS&#x27;s Reduce motion.');
+    expect(html).not.toContain('Follow macOS&#x27;s Reduce motion"');
+  });
+
+  it('offers to follow macOS again once a choice was made', () => {
+    const html = draw({ reduced: false, system: false });
+    expect(switchTag(html)).toContain('aria-pressed="false"');
+    expect(html).toMatch(/<button[^>]*aria-label="Follow macOS&#x27;s Reduce motion"[^>]*>Follow macOS</);
+    expect(html).not.toContain('Following macOS');
+  });
+
+  it('is disabled with no line under it until the app has said, and shows why a change failed', () => {
+    const html = draw(null, 'No settings folder.');
+    expect(switchTag(html)).toContain('disabled=""');
+    expect(html).not.toContain('macOS');
+    expect(html).toContain('role="status">No settings folder.<');
   });
 });
