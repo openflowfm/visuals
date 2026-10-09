@@ -2,7 +2,7 @@
 //
 // The crash prompt mounted as the app shows it on launch, with the commands it
 // calls replaced: which reports it offers, and what it keeps as seen.
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from './api.ts';
@@ -20,11 +20,6 @@ function reportsAre(on: boolean, reports: Report[]) {
   vi.mocked(api.crashReportsEnabled).mockResolvedValue(on);
   vi.mocked(api.crashReports).mockResolvedValue(reports);
   vi.mocked(api.crashReportOpen).mockResolvedValue(undefined);
-}
-
-/** Lets the launch's two commands answer and the page draw what they said. */
-async function settle() {
-  for (let i = 0; i < 5; i++) await Promise.resolve();
 }
 
 beforeEach(() => localStorage.clear());
@@ -64,7 +59,8 @@ describe('CrashPrompt in a DOM', () => {
     localStorage.setItem(SEEN_KEY, JSON.stringify({ when: 30, ids: ['b'] }));
     reportsAre(true, [report('b', 30), report('a', 10)]);
     render(<CrashPrompt />);
-    await settle();
+    await vi.waitFor(() => expect(api.crashReports).toHaveBeenCalled());
+    await act(async () => {});
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 

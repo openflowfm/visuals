@@ -927,27 +927,17 @@ fn scrub(text: &str, private: &Private, presets: &Presets) -> String {
                 }
             }
             // A disk itself (`/Volumes/Backup Drive`) has no `/` after its name to say where the
-            // name ends: it runs on over the words after single spaces that start with a capital
-            // or a digit, up to a `:`, and the whole of it is replaced, as a disk's name is the user's own.
+            // name ends: it runs on to the next `/`, `:`, quote, `)`, newline or the end of the text,
+            // and the whole of it is replaced, as a disk's name is the user's own (over-scrubbing beats leaking).
             if let Some(disk) = rest[..end].strip_prefix(VOLUMES)
                 && !disk.trim_end_matches('/').is_empty()
                 && !disk.trim_end_matches('/').contains('/')
             {
-                let stop = |c: char| ends_path(c) || c == ':';
                 if let Some(colon) = disk.find(':') {
                     end = VOLUMES.len() + colon;
                 } else if !disk.ends_with('/') {
-                    while rest[end..].starts_with(' ') {
-                        let next = &rest[end + 1..];
-                        let word = next.find(stop).unwrap_or(next.len());
-                        if word == 0 || next[..word].contains('/') || !next.starts_with(|c: char| c.is_uppercase() || c.is_ascii_digit()) {
-                            break;
-                        }
-                        end += 1 + word;
-                        if next[word..].starts_with(':') {
-                            break;
-                        }
-                    }
+                    let tail = &rest[end..];
+                    end += tail.find(['/', ':', '"', '\'', ')', '\n']).unwrap_or(tail.len());
                 }
                 out.push_str(DISK);
                 prev = rest[..end].chars().next_back();
@@ -1222,7 +1212,11 @@ mod tests {
         let p = nobody();
         assert_eq!(scrub("/Volumes/Backup Drive", &p, &none()), "<disk>");
         assert_eq!(scrub("couldn't read /Volumes/Backup Drive: denied", &p, &none()), "couldn't read <disk>: denied");
-        assert_eq!(scrub("/Volumes/Backup Drive 2 is full", &p, &none()), "<disk> is full");
+        assert_eq!(scrub("/Volumes/Backup Drive 2 is full", &p, &none()), "<disk>");
+        assert_eq!(scrub("/Volumes/Time Machine backups", &p, &none()), "<disk>");
+        assert_eq!(scrub("/Volumes/Macintosh HD - Data", &p, &none()), "<disk>");
+        assert_eq!(scrub("read \"/Volumes/backup drive\" failed", &p, &none()), "read \"<disk>\" failed");
+        assert_eq!(scrub("/Volumes/My Disk/sub/file.txt", &p, &none()), "file.txt");
         assert_eq!(scrub("(/Volumes/My Backup Drive/)", &p, &none()), "(<disk>)");
         assert_eq!(scrub("/Volumes/USB", &p, &none()), "<disk>");
         // Below a disk, a path is cut to its file name as any other.
