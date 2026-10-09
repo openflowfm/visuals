@@ -287,9 +287,22 @@ mismatches D3D9 truncated silently, user functions called with the wrong vector 
 functions missing a `return`, one naga bug in a helper — and 6 have equations too garbled
 to parse (an undefined `_aboeq()`, `0 = …`, stray prose).
 
+**Mipmaps, as Butterchurn has them.** The feedback and blur textures carry mip levels, and
+presets' shaders and the blur read them trilinear (`LINEAR_MIPMAP_LINEAR`, point names
+`NEAREST_MIPMAP_NEAREST`), so a shader that shrinks the picture where it reads it (`tan`
+of the picture, a big zoom out) gets averaged pixels, as in Butterchurn, not single sharp
+texels. The levels are made when Butterchurn makes them: the last step's picture as a
+step starts, never the target after its warp. So the blur, which reads its source at half
+size and hence from its first level, blurs the picture **two steps back**, and comp
+reading the feedback at a smaller level reads that older picture too. That is a
+Butterchurn quirk, not MilkDrop's, and it is what BlackHole shows: presets that change
+their picture from step to step (suksma's `frame%3` colour flips) look quite different
+without it (`render::tests::the_blur_reads_the_picture_two_steps_back`). On the compare
+bench's fixed 30-preset sample it took the mean score from 69 to 85.
+
 Not yet: MilkDrop's own blend patterns from one preset to the next (live mode crossfades,
-see "Live effects"), mipmaps on the feedback and blur textures
-(Butterchurn samples them mipmapped), the song-title text, and per-pass GPU timings.
+see "Live effects"), mipmaps on the noise textures and anisotropic filtering of the blur
+textures (Butterchurn has both), the song-title text, and per-pass GPU timings.
 
 ## The preset clock
 
@@ -396,7 +409,9 @@ are exact):
   presets whose warp shader moves the picture by noise more even (block matching) and
   their frame difference a little less (below).
 - **Comp's blur** between steps is of the picture between; the warp shader still reads the
-  last step's blur, as the next step's warp will.
+  last step's blur, as the next step's warp will. The picture between's mip levels, which
+  that blur reads, are the step's (two steps back) mixed by `f` with the next step's (one
+  step back), so the blur's lag moves on evenly too.
 - **Speed above 1× on a slow display** makes several steps in one refresh, each fed back;
   only the last is shown.
 

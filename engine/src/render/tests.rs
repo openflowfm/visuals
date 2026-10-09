@@ -696,3 +696,75 @@ fn switching_presets_and_quality_frees_what_it_replaces() {
         assert!(at_2n <= at_n, "{kind} grew from {at_n} after {n} switches to {at_2n} after {}", 2 * n);
     }
 }
+
+/// A preset whose warp draws white on every third step and black between, and
+/// whose comp shows `comp` of it; no waves.
+fn every_third_step(comp: &str) -> String {
+    format!(
+        "[preset00]
+MILKDROP_PRESET_VERSION=201
+PSVERSION=2
+fWaveAlpha=0.0
+warp_1=`shader_body {{
+warp_2=`ret = (fmod(frame, 3.0) < 0.5) ? 1 : 0;
+warp_3=`}}
+comp_1=`shader_body {{
+comp_2=`ret = {comp};
+comp_3=`}}
+"
+    )
+}
+
+/// The red channel at the centre of the picture, 0..1.
+fn centre(pixels: &[u8], w: u32, h: u32) -> f64 {
+    pixels[((h / 2 * w + w / 2) * 4) as usize] as f64 / 255.0
+}
+
+#[test]
+fn the_blur_reads_the_picture_two_steps_back() {
+    // Butterchurn's blur reads the warp's target through its first mip level,
+    // and that target's levels are made only when it is the picture before —
+    // so they hold the picture two steps back. Presets that flip their picture
+    // from step to step (suksma's `frame%3` ones) blur the older picture there.
+    let (w, h) = (64, 36);
+    let Some(mut warp) = renderer(w, h, &every_third_step("GetPixel(uv)")) else { return };
+    let Some(mut blur) = renderer(w, h, &every_third_step("GetBlur1(uv)")) else { return };
+    let (mut audio, mut heard) = (Audio::default(), Audio::default());
+    let (mut drawn, mut blurred) = (Vec::new(), Vec::new());
+    for _ in 0..9 {
+        play(&mut warp, &mut audio, 1, 1.0 / PRESET_RATE);
+        play(&mut blur, &mut heard, 1, 1.0 / PRESET_RATE);
+        drawn.push(centre(&warp.read_back(), w, h));
+        blurred.push(centre(&blur.read_back(), w, h));
+    }
+    assert!(drawn.iter().any(|&v| v > 0.9) && drawn.iter().any(|&v| v < 0.1), "the warp flips: {drawn:?}");
+    assert!(blurred[..2].iter().all(|&v| v < 0.1), "nothing two steps before the first: {blurred:?}");
+    for k in 2..drawn.len() {
+        assert!((blurred[k] - drawn[k - 2]).abs() < 0.1, "step {k}: blur {blurred:?} is not the picture two steps back {drawn:?}");
+    }
+}
+
+#[test]
+fn shaders_read_a_shrunk_picture_through_its_mip_levels() {
+    // Comp reading a one-pixel checkerboard at about 1/16 of its size (not
+    // exactly, or every read lands between two texels): Butterchurn's
+    // samplers average it to grey through the mip levels, where reading level 0
+    // alone gives black and white texels.
+    let text = "[preset00]
+MILKDROP_PRESET_VERSION=201
+PSVERSION=2
+fWaveAlpha=0.0
+bTexWrap=1
+warp_1=`shader_body {
+warp_2=`ret = fmod(floor(uv_orig.x*texsize.x) + floor(uv_orig.y*texsize.y), 2.0);
+warp_3=`}
+comp_1=`shader_body {
+comp_2=`ret = tex2D(sampler_main, uv*15.7).xyz;
+comp_3=`}
+";
+    let Some(mut r) = renderer(128, 64, text) else { return };
+    play(&mut r, &mut Audio::default(), 4, 1.0 / PRESET_RATE);
+    let reds: Vec<f64> = r.read_back().chunks(4).map(|p| p[0] as f64 / 255.0).collect();
+    let spread = reds.iter().map(|v| (v - 0.5).abs()).fold(0.0, f64::max);
+    assert!(spread < 0.15, "every pixel near grey, the furthest {spread} from it");
+}

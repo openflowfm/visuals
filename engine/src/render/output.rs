@@ -49,6 +49,14 @@ impl Renderer {
         quad_pass(encoder, target, &self.carry, &group);
     }
 
+    /// `target`'s mip levels made again from its picture, each a 2×2 average of
+    /// the one above, as WebGL's `generateMipmap`. Nothing without mips.
+    pub(super) fn mips(&self, encoder: &mut wgpu::CommandEncoder, target: &Target) {
+        for pair in target.levels.windows(2) {
+            self.carry(encoder, &pair[0], &pair[1]);
+        }
+    }
+
     /// The trails echo: the brighter of comp and the picture before faded by
     /// [`Renderer::set_trails`]'s amount — `k` per 1/60 s of preset time, so the
     /// same at any refresh rate — per channel, kept in half floats and copied

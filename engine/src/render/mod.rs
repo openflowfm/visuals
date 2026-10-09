@@ -229,7 +229,7 @@ impl Renderer {
             (0..3)
                 .map(|i| {
                     let ratios = BLUR_RATIOS[i];
-                    (Target::new(&device, blur_size(&size, ratios[0]), "blur h"), Target::new(&device, blur_size(&size, ratios[1]), "blur v"))
+                    (Target::mipped(&device, blur_size(&size, ratios[0]), "blur h"), Target::mipped(&device, blur_size(&size, ratios[1]), "blur v"))
                 })
                 .collect()
         };
@@ -247,10 +247,10 @@ impl Renderer {
             })
             .collect();
         let mut renderer = Self {
-            feedback: [Target::new(&device, full, "feedback a"), Target::new(&device, full, "feedback b")],
+            feedback: [Target::mipped(&device, full, "feedback a"), Target::mipped(&device, full, "feedback b")],
             current: 0,
             comp: Target::new(&device, full, "comp"),
-            display: Target::new(&device, full, "between steps"),
+            display: Target::mipped(&device, full, "between steps"),
             display_blur,
             display_uvs,
             display_shaded_uvs,
@@ -410,21 +410,22 @@ impl Renderer {
         let size = self.size;
         let device = &self.device;
         let blurs =
-            || -> Vec<(Target, Target)> { BLUR_RATIOS.iter().map(|r| (Target::new(device, blur_size(&size, r[0]), "blur h"), Target::new(device, blur_size(&size, r[1]), "blur v"))).collect() };
+            || -> Vec<(Target, Target)> { BLUR_RATIOS.iter().map(|r| (Target::mipped(device, blur_size(&size, r[0]), "blur h"), Target::mipped(device, blur_size(&size, r[1]), "blur v"))).collect() };
         let (blur, display_blur) = (blurs(), blurs());
-        let feedback = [Target::new(device, full, "feedback a"), Target::new(device, full, "feedback b")];
+        let feedback = [Target::mipped(device, full, "feedback a"), Target::mipped(device, full, "feedback b")];
         let comp = Target::new(device, full, "comp");
         let outgoing = Target::new(device, full, "outgoing");
         let mut encoder = device.create_command_encoder(&Default::default());
         for to in &feedback {
-            self.carry(&mut encoder, &self.feedback[self.current].view, &to.view);
+            self.carry(&mut encoder, &self.feedback[self.current].levels[0], &to.out);
+            self.mips(&mut encoder, to);
         }
         self.carry(&mut encoder, &self.comp.view, &comp.view);
         self.carry(&mut encoder, &self.outgoing.view, &outgoing.view);
         self.queue.submit([encoder.finish()]);
         (self.blur, self.display_blur) = (blur, display_blur);
         (self.feedback, self.comp, self.outgoing) = (feedback, comp, outgoing);
-        self.display = Target::new(&self.device, full, "between steps");
+        self.display = Target::mipped(&self.device, full, "between steps");
         self.bare = Target::new(&self.device, full, "warp before drawing");
         // Both are made again, at the new size, when next needed.
         self.textured_source = None;
@@ -594,11 +595,16 @@ impl Renderer {
         self.shown_values = self.next_values.clone();
         self.current ^= 1;
         let mut encoder = self.device.create_command_encoder(&Default::default());
+        // As Butterchurn: the last step's picture gets its mip levels as this
+        // step starts, and this step's target keeps the ones it got a step ago —
+        // made from the picture two steps back — until it is the last step's in
+        // turn. The blur reads them, and comp where it reads at a smaller level.
+        self.mips(&mut encoder, &self.feedback[self.current ^ 1]);
         {
             let (target, previous) = (&self.feedback[self.current], &self.feedback[self.current ^ 1]);
             let warp = self.warp.as_ref().unwrap();
             let group = self.bind_group(warp, &warp.pipeline, &previous.view, wrap, false);
-            let mut pass = begin(&mut encoder, &target.view, true);
+            let mut pass = begin(&mut encoder, &target.out, true);
             pass.set_pipeline(&warp.pipeline);
             pass.set_bind_group(0, &group, &[]);
             self.mesh_draw(&mut pass, &self.warp_uvs);
@@ -612,7 +618,7 @@ impl Renderer {
             // Kept for the refreshes before the next step (`show`).
             self.feedback[self.current].copy_to(&mut encoder, &self.bare);
         }
-        let (target, previous) = (&self.feedback[self.current].view, &self.feedback[self.current ^ 1].view);
+        let (target, previous) = (&self.feedback[self.current].out, &self.feedback[self.current ^ 1].view);
         self.draw(&mut encoder, &self.draw_list, self.draw_buffer.as_ref(), target, previous, wrap, true);
         self.preview(&mut encoder, 1, &self.feedback[self.current].view);
         self.queue.submit([encoder.finish()]);
@@ -652,6 +658,15 @@ impl Renderer {
                 self.draw_pipeline(cmd.topology, cmd.blend);
             }
             self.between_list = list;
+            // The picture between's mip levels: the step's (the picture two
+            // steps back) mixed by the fraction with the next step's (one step
+            // back), so its blur, which reads them, moves on evenly too.
+            self.queue.write_buffer(&self.mix_uniform, 0, bytemuck::cast_slice(&[fraction, 0.0, 0.0, 0.0]));
+            for (i, into) in self.display.levels.iter().enumerate().skip(1) {
+                let view = wgpu::BindingResource::TextureView;
+                let group = bind(&self.device, &self.mix, &[view(&self.feedback[self.current].levels[i]), view(&self.feedback[self.current ^ 1].levels[i]), self.mix_uniform.as_entire_binding()]);
+                quad_pass(&mut encoder, into, &self.mix, &group);
+            }
             let fed = &self.feedback[self.current].view;
             // Both ends are linear in the fraction: at 0 the last step's warp
             // with the drawing between (then the last step's own) over it, which
@@ -664,7 +679,7 @@ impl Renderer {
                 let mixed = warp.mixed.as_ref().unwrap();
                 let moved = bind(&self.device, &self.transport, &[wgpu::BindingResource::TextureView(bare), wgpu::BindingResource::Sampler(self.samplers.linear(wrap))]);
                 let shaded = self.bind_group(warp, mixed, fed, wrap, false);
-                let mut pass = begin(&mut encoder, &self.display.view, true);
+                let mut pass = begin(&mut encoder, &self.display.out, true);
                 pass.set_pipeline(&self.transport);
                 pass.set_bind_group(0, &moved, &[]);
                 self.mesh_draw(&mut pass, &self.display_uvs);
@@ -684,7 +699,7 @@ impl Renderer {
                 quad_pass(&mut encoder, &target.view, &self.mix, &group);
             }
             let sampled = if textured { &self.textured_source.as_ref().unwrap().view } else { &self.feedback[self.current].view };
-            self.draw(&mut encoder, &self.between_list, self.between_buffer.as_ref(), &self.display.view, sampled, wrap, false);
+            self.draw(&mut encoder, &self.between_list, self.between_buffer.as_ref(), &self.display.out, sampled, wrap, false);
         }
         let source = if between { &self.display.view } else { &self.feedback[self.current].view };
         let comp = self.comp_stage.as_ref().unwrap();

@@ -74,7 +74,8 @@ impl Renderer {
 
     /// Butterchurn's blur pyramid: per level, a horizontal pass into a narrower
     /// texture and a vertical pass into a shorter one — of `picture`, into the
-    /// step's blur or, `between` steps, the picture between's own.
+    /// step's blur or, `between` steps, the picture between's own. Each blur
+    /// texture's mip levels are made as it is drawn.
     pub(super) fn blur(&self, encoder: &mut wgpu::CommandEncoder, picture: &wgpu::TextureView, between: bool) {
         if self.blur_passes == 0 {
             return;
@@ -118,9 +119,13 @@ impl Renderer {
             v.extend(wds);
             v.extend([1.0 - ed, ed, 5.0, wdiv_v]);
             self.queue.write_buffer(v_uniform, 0, bytemuck::cast_slice(&v));
-            for (pipeline, uniform, input, output) in [(&self.blur_h, h_uniform, source, &h_target.view), (&self.blur_v, v_uniform, &h_target.view, &v_target.view)] {
-                let group = bind(&self.device, pipeline, &[uniform.as_entire_binding(), wgpu::BindingResource::TextureView(input), wgpu::BindingResource::Sampler(&self.samplers.linear_clamp)]);
-                quad_pass(encoder, output, pipeline, &group);
+            // Each pass draws into a target half its source's size, so it reads
+            // the source's first mip level, as Butterchurn's does — for level 0
+            // that is the feedback's levels, made from the picture two steps ago.
+            for (pipeline, uniform, input, output) in [(&self.blur_h, h_uniform, source, h_target), (&self.blur_v, v_uniform, &h_target.view, v_target)] {
+                let group = bind(&self.device, pipeline, &[uniform.as_entire_binding(), wgpu::BindingResource::TextureView(input), wgpu::BindingResource::Sampler(&self.samplers.mip.linear_clamp)]);
+                quad_pass(encoder, &output.out, pipeline, &group);
+                self.mips(encoder, output);
             }
         }
     }
