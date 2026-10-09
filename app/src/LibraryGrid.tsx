@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { FocusEvent, KeyboardEvent, MouseEvent } from 'react';
+import type { FocusEvent, KeyboardEvent, MouseEvent, PointerEvent } from 'react';
 import { ButtonFace } from '@openflow/widgets/controls/ButtonFace.tsx';
 import { tileFor, type Prepared } from './librarySearch.ts';
 
@@ -19,10 +19,10 @@ export interface Layout {
   rows: number;
 }
 
-/** How `count` tiles lay out across `width` px (the grid's inner width, padding taken off). */
-export function layout(width: number, count: number): Layout {
-  const inner = Math.max(TILE.min, width - 2 * TILE.pad);
-  const columns = Math.max(1, Math.floor((inner + TILE.gap) / (TILE.min + TILE.gap)));
+/** How `count` tiles at least `min` px wide lay out across `width` px (the grid's inner width, padding taken off). */
+export function layout(width: number, count: number, min: number = TILE.min): Layout {
+  const inner = Math.max(min, width - 2 * TILE.pad);
+  const columns = Math.max(1, Math.floor((inner + TILE.gap) / (min + TILE.gap)));
   const tile = (inner - (columns - 1) * TILE.gap) / columns;
   const rowHeight = Math.round((tile * 3) / 4 + TILE.label + TILE.gap);
   return { columns, tile, rowHeight, rows: Math.ceil(count / columns) };
@@ -88,6 +88,10 @@ export interface LibraryGridProps {
   onClear(): void;
   /** Bumped to bring the playing preset into view. */
   reveal: number;
+  /** A press on a tile that may become a drag (onto a playlist, on the home); none makes tiles plain. */
+  onPress?(index: number, ev: PointerEvent): void;
+  /** The narrowest a tile gets, in px; `TILE.min` (two across the library column) by default. */
+  tileMin?: number;
 }
 
 /**
@@ -97,12 +101,12 @@ export interface LibraryGridProps {
  * The grid is one tab stop and moves a highlighted tile with `aria-activedescendant`;
  * arrows move by a tile or a row, Enter loads, Space adds the tile to the selection.
  */
-export function LibraryGrid({ rows, active, selected, current, into, onMove, onPick, onAdd, onClear, reveal }: LibraryGridProps) {
+export function LibraryGrid({ rows, active, selected, current, into, onMove, onPick, onAdd, onClear, reveal, onPress, tileMin }: LibraryGridProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   // The first row in view: state changes only when a scroll crosses a row.
   const [topRow, setTopRow] = useState(0);
-  const lay = layout(size.width, rows.length);
+  const lay = layout(size.width, rows.length, tileMin);
   const { first, last } = windowOf(topRow * lay.rowHeight, size.height, lay.rowHeight, lay.rows);
 
   useLayoutEffect(() => {
@@ -206,6 +210,7 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
           intoName={into?.name ?? null}
           onPick={onPick}
           onAdd={onAdd}
+          onPress={onPress}
         />,
       );
     }
@@ -254,10 +259,11 @@ interface TileProps {
   intoName: string | null;
   onPick(index: number, how: Pick): void;
   onAdd(index: number): void;
+  onPress?(index: number, ev: PointerEvent): void;
 }
 
 /** One preset: its thumbnail (or its style, when it has none) and its title. */
-const Tile = memo(function Tile({ id, index, p, active, selected, playing, intoName, onPick, onAdd }: TileProps) {
+const Tile = memo(function Tile({ id, index, p, active, selected, playing, intoName, onPick, onAdd, onPress }: TileProps) {
   const full = `${p.title} — ${p.subStyle ? `${p.style} › ${p.subStyle}` : p.style}${p.authors.length ? `, by ${p.authors.join(' & ')}` : ''}`;
   const says = [full, playing && 'playing', p.star && 'starred', p.hidden && 'never played'].filter(Boolean).join(' · ');
   return (
@@ -271,6 +277,7 @@ const Tile = memo(function Tile({ id, index, p, active, selected, playing, intoN
       data-hidden={p.hidden ? '' : undefined}
       title={says}
       onClick={(ev: MouseEvent) => onPick(index, pickOf(ev))}
+      onPointerDown={onPress && ((ev) => onPress(index, ev))}
     >
       <div className="lib-thumb">
         {p.row.thumbnail ? <img src={p.row.thumbnail} alt="" loading="lazy" decoding="async" draggable={false} /> : <span className="lib-thumb-none">{p.style}</span>}

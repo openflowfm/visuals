@@ -15,6 +15,13 @@ describe('layout', () => {
     expect(layout(1000, 10).columns).toBe(11);
   });
 
+  it('takes wider tiles where there is room, as the home does', () => {
+    const l = layout(1000, 10, 150);
+    expect(l.columns).toBe(6);
+    expect(l.tile).toBeGreaterThanOrEqual(150);
+    expect(l.rows).toBe(2);
+  });
+
   it('keeps one column when there is no room, and no rows for no tiles', () => {
     expect(layout(0, 5)).toMatchObject({ columns: 1, rows: 5 });
     expect(layout(220, 0).rows).toBe(0);

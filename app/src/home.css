@@ -1,0 +1,415 @@
+/* The playlists home (Home.tsx): a sidebar of playlists, smart playlists and the
+   library over the preview, and a main pane with the playlist picked (its
+   settings and its strip of thumbnails) or the library. Rules hang off `.home`,
+   which outranks app.css's own `.app[data-view='home'] main`. */
+
+.app.home {
+  grid-template-columns: 260px minmax(0, 1fr);
+}
+
+/* The sidebar: the lists scroll, the preview keeps its place under them. */
+.home .home-side {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--panel);
+  border-right: 1px solid var(--bd3);
+}
+.home .home-lists {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 8px 0;
+  color: var(--ui);
+  font-size: var(--text-body);
+}
+.home .home-preview-cell {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+  border-top: 1px solid var(--bd3);
+}
+.home .home-preview {
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  background: transparent;
+  /* Letterbox black, as the bench draws it: nothing behind the preview may paint. */
+  box-shadow: 0 0 0 100vmax #000;
+}
+.home .home-preview[data-loading] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel);
+  box-shadow: none;
+}
+
+.home .home-section {
+  margin: 0 0 10px;
+}
+.home .home-section-title {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0;
+  padding: 0 6px 2px 12px;
+  color: var(--caption);
+  font-size: var(--text-label);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+}
+.home .home-section-title > span {
+  flex: 1;
+}
+.home .home-section-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.home .home-library-row {
+  border-top: 1px solid var(--bd3);
+  padding-top: 6px;
+}
+
+.home .home-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 26px;
+  padding: 0 10px 0 6px;
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+}
+.home .home-row:hover {
+  background: var(--bd);
+}
+.home .home-row:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--focus);
+}
+.home .home-row[aria-current='true'] {
+  background: var(--sel);
+  color: var(--fg);
+}
+.home .home-row[data-active] .home-row-name {
+  color: var(--green);
+}
+.home .home-row-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home .home-row > i {
+  color: var(--caption);
+  font-family: var(--mono);
+  font-variation-settings: var(--mono-axes);
+  font-size: var(--text-label);
+  font-style: normal;
+}
+.home .home-row-icon {
+  width: 22px;
+  text-align: center;
+  color: var(--detail);
+}
+.home .home-empty {
+  padding: 2px 12px;
+  color: var(--caption);
+  font-size: var(--text-label);
+}
+/* While a preset is dragged: the playlist it would land on lights up, and smart ones, which take none, fade. */
+.home .home-row[data-over] {
+  background: var(--sel);
+  box-shadow: inset 0 0 0 1px var(--caution);
+}
+.home .home-row[data-refuses] {
+  opacity: 0.45;
+}
+
+/* The main pane. */
+.app.home main.home-main {
+  grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg);
+}
+.home .home-note {
+  margin: 24px;
+  color: var(--caption);
+  font-size: var(--text-body);
+  line-height: 1.5;
+}
+.home .home-link {
+  padding: 0;
+  font: inherit;
+  color: var(--fg);
+  background: none;
+  border: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.home .home-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.home .home-pane-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 16px 6px;
+}
+.home .home-name {
+  margin: 0;
+  color: var(--fg);
+  font-size: var(--text-lead);
+  font-weight: var(--weight-medium);
+  cursor: text;
+}
+.home .home-name-input {
+  padding: 2px 6px;
+  font: inherit;
+  font-size: var(--text-lead);
+  color: var(--fg);
+  background: var(--surface-control);
+  border: 1px solid var(--focus);
+  border-radius: var(--radius);
+  outline: none;
+}
+.home .home-pane-what {
+  color: var(--caption);
+  font-size: var(--text-label);
+  letter-spacing: var(--track-label);
+}
+.home .home-confirm {
+  display: inline-flex;
+  gap: 4px;
+}
+.home .home-play .wdg-button-body,
+.home .home-on .wdg-button-body {
+  border-color: var(--green);
+  color: var(--green);
+}
+.home .home-pane-head .wdg-button-body:focus-visible,
+.home .home-lists .wdg-button-body:focus-visible {
+  outline: 1px solid var(--fg);
+  outline-offset: 1px;
+}
+
+/* How it plays. A setting changed live, away from the playlist's own, is marked. */
+.home .home-settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  padding: 4px 16px 10px;
+  border-bottom: 1px solid var(--bd3);
+}
+.home .home-setting {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--detail);
+  font-size: var(--text-label);
+  letter-spacing: var(--track-label);
+}
+/* Each setting is named beside its field, so the field's own caption above it would say it twice. */
+.home .home-setting .wdg-caption {
+  display: none;
+}
+/* --caution, not --amber: the theme makes amber its (grey) primary, and a live change must be seen. */
+.home .home-setting[data-tweaked] > span {
+  color: var(--caution);
+}
+.home .home-setting[data-tweaked] > span::after {
+  content: ' •';
+}
+
+/* The strip: the playlist's presets as thumbnails, in the order they play. */
+.home .home-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  align-content: start;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 12px 16px 16px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  list-style: none;
+  overscroll-behavior: contain;
+}
+.home .home-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  color: var(--ui);
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+  border-radius: var(--radius);
+}
+.home .home-thumb {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--bd);
+  outline: 1px solid var(--bd3);
+}
+.home .home-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.home .home-thumb-none {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 6px;
+  color: var(--caption);
+  font-size: var(--text-label);
+  text-align: center;
+  overflow: hidden;
+}
+.home .home-tile-n,
+.home .home-tile-next {
+  position: absolute;
+  bottom: 3px;
+  padding: 0 4px;
+  color: #fff;
+  font-family: var(--mono);
+  font-variation-settings: var(--mono-axes);
+  font-size: var(--text-label);
+  font-weight: normal;
+  background: rgb(0 0 0 / 0.55);
+  border-radius: var(--radius);
+}
+.home .home-tile-n {
+  left: 3px;
+}
+.home .home-tile-next {
+  right: 3px;
+  color: var(--caution);
+}
+.home .home-tile-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-label);
+}
+.home .home-tile-tools {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: none;
+}
+.home .home-tile:hover .home-tile-tools,
+.home .home-tile:focus-within .home-tile-tools {
+  display: block;
+}
+.home .home-tile:hover .home-thumb {
+  outline-color: var(--ui);
+}
+.home .home-tile:focus-visible .home-thumb {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.home .home-tile[aria-current='true'] .home-thumb {
+  outline: 2px solid var(--green);
+  outline-offset: -2px;
+}
+.home .home-tile[aria-current='true'] .home-tile-name {
+  color: var(--fg);
+  font-weight: var(--weight-medium);
+}
+.home .home-tile[data-next] .home-thumb {
+  outline: 1px dashed var(--amber);
+}
+.home .home-tile[data-missing] .home-thumb,
+.home .home-tile[data-missing] .home-tile-name {
+  opacity: 0.4;
+}
+.home .home-tile[data-dragged] {
+  opacity: 0.35;
+}
+/* Where a dragged preset would land: a bar before or after the tile it is over. */
+.home .home-tile[data-over]::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 18px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--amber);
+}
+.home .home-tile[data-over='before']::before {
+  left: -7px;
+}
+.home .home-tile[data-over='after']::before {
+  right: -7px;
+}
+.home .home-more {
+  align-self: center;
+  color: var(--caption);
+  font-size: var(--text-label);
+}
+
+/* The preset being dragged, following the pointer. */
+.home-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: 3px 8px 3px 3px;
+  color: var(--fg);
+  font-size: var(--text-label);
+  background: var(--panel);
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.4);
+  pointer-events: none;
+  opacity: 0.75;
+}
+.home-ghost[data-ok] {
+  border-color: var(--caution);
+  opacity: 1;
+}
+.home-ghost img {
+  width: 48px;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--radius);
+}
+.home-ghost span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A narrow window: the frame rate's plain numbers give way (its warning when frames drop stays). */
+@media (max-width: 900px) {
+  .home .vf-header .vf-stats:not([data-slow]) {
+    display: none;
+  }
+}

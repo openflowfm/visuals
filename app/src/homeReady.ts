@@ -4,4 +4,4 @@
  * list without a circular import through `Home.tsx` (which uses the views'
  * header). The home lane turns it on when the home is done.
  */
-export const HOME_READY: boolean = false;
+export const HOME_READY: boolean = true;
