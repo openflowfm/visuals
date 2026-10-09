@@ -22,7 +22,8 @@
 //! goes when the file changes or the preset opens after all (a newer engine);
 //! a preset that panicked drawing has to draw again, not only load ([`Panics`]),
 //! and isn't opened again by stepping this run. Panics that step the deck on
-//! have a budget ([`BUDGET`]), so presets that all panic never keep it stepping.
+//! have a budget ([`BUDGET`]), so presets that all panic never keep it stepping;
+//! the strip says when stepping stopped ([`STOPPED`]).
 
 use crate::actions::{Action, Deck, DeckView};
 use crate::bench::Drawing;
@@ -34,7 +35,7 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -87,18 +88,52 @@ const FAILED_FILE: &str = "failed.json";
 /// The event the whole list of failed presets goes out on when it changes.
 pub const FAILED: &str = "presets-failed";
 
-/// What the launch found to pick up, for [`resume_state`].
-static FOUND: OnceLock<Option<Resume>> = OnceLock::new();
+/// What was put back at launch, once that has settled, for [`resume_state`].
+static SETTLED: Settled = Settled::new();
 /// Set once the deck is back where it was (or there was nothing to do): until then
 /// [`note`] keeps nothing, so a page acting early can't overwrite where the show was.
 static RESTORED: AtomicBool = AtomicBool::new(false);
 /// What [`note`] kept last, so an unchanged deck isn't written again.
 static KEPT: Mutex<Option<Resume>> = Mutex::new(None);
 
-/// Where the app was last time, if it should pick up there; `None` when nothing was playing.
+/// Where the app picked up from, answered once putting the deck back has
+/// settled: `None` when nothing was put back (nothing was playing, the first
+/// run, a given preset, or the playlist, filter or preset couldn't be opened
+/// again). The page opens a preset of its own only when this is `None`, so it
+/// never replaces the one put back here, and never leaves the picture black.
 #[tauri::command]
-pub fn resume_state() -> Option<Resume> {
-    FOUND.get().cloned().flatten()
+pub async fn resume_state() -> Option<Resume> {
+    tauri::async_runtime::spawn_blocking(|| SETTLED.wait(SETTLE_WAIT)).await.ok().flatten()
+}
+
+/// The longest [`resume_state`] waits for the deck to be put back: longer than
+/// [`start`] waits for the bench, so an answer of `None` from waiting it out
+/// means the page's own start can't race a restore still going.
+const SETTLE_WAIT: Duration = Duration::from_secs(20);
+
+/// What was put back, once known: `None` until then, `Some(None)` when nothing was.
+pub(crate) struct Settled {
+    answer: Mutex<Option<Option<Resume>>>,
+    known: std::sync::Condvar,
+}
+
+impl Settled {
+    pub(crate) const fn new() -> Self {
+        Settled { answer: Mutex::new(None), known: std::sync::Condvar::new() }
+    }
+
+    /// Putting back settled: `put_back` is what was, or `None`.
+    pub(crate) fn set(&self, put_back: Option<Resume>) {
+        *self.answer.lock().unwrap() = Some(put_back);
+        self.known.notify_all();
+    }
+
+    /// What was put back, waiting up to `most` for it to settle; `None` when nothing was, or it didn't settle in time.
+    pub(crate) fn wait(&self, most: Duration) -> Option<Resume> {
+        let answer = self.answer.lock().unwrap();
+        let (answer, _) = self.known.wait_timeout_while(answer, most, |a| a.is_none()).unwrap();
+        answer.clone().flatten()
+    }
 }
 
 /// Whether there's anything to pick up in `r`.
@@ -109,6 +144,15 @@ fn worth(r: &Resume) -> bool {
 /// Whether to pick up at all: never on the first run, nor when started on a given preset.
 fn wanted(first_run: bool, preset: Option<&str>) -> bool {
     !first_run && preset.is_none_or(str::is_empty)
+}
+
+/// What to pick up of `kept` (`resume.json`): `None` when there's nothing worth
+/// it, or picking up isn't [`wanted`]. A preset that was playing alone (no
+/// playlist or filter) whose file is gone (deleted, or a pack update) is nothing
+/// to pick up; `exists` says whether a file is there.
+fn to_resume(kept: Option<Resume>, first_run: bool, preset: Option<&str>, exists: impl Fn(&Path) -> bool) -> Option<Resume> {
+    let reachable = |r: &Resume| r.playlist.is_some() || r.query.is_some() || r.current.as_deref().is_some_and(|c| exists(Path::new(c)));
+    kept.filter(worth).filter(reachable).filter(|_| wanted(first_run, preset))
 }
 
 /// Called once at setup: problems with settings go to the page from now on, the
@@ -131,10 +175,10 @@ pub fn start(handle: &AppHandle) {
             std::thread::spawn(move || moved_on(&handle, path, &why));
         }
     });
-    let found = crate::settings::load::<Resume>(FILE).filter(worth).map(|r| Resume { source: kept_source(), ..r });
-    let _ = FOUND.set(found.clone());
-    let go = found.filter(|_| wanted(crate::settings::first_run(), std::env::var("VISUALS_PRESET").ok().as_deref()));
+    let kept = crate::settings::load::<Resume>(FILE).map(|r| Resume { source: kept_source(), ..r });
+    let go = to_resume(kept, crate::settings::first_run(), std::env::var("VISUALS_PRESET").ok().as_deref(), Path::is_file);
     let Some(r) = go else {
+        SETTLED.set(None);
         RESTORED.store(true, Ordering::SeqCst);
         return;
     };
@@ -145,9 +189,16 @@ pub fn start(handle: &AppHandle) {
         while handle.state::<crate::App>().commands().is_err() && Instant::now() < until {
             std::thread::sleep(Duration::from_millis(50));
         }
-        restore(&handle, &r);
-        RESTORED.store(true, Ordering::SeqCst);
+        settle(&SETTLED, &RESTORED, || restore(&handle, &r).then_some(r));
     });
+}
+
+/// Runs `put_back` and settles on what it answers: nothing put back when it
+/// panics, so the page hears at once and [`note`] keeps the deck from then on.
+fn settle(settled: &Settled, restored: &AtomicBool, put_back: impl FnOnce() -> Option<Resume>) {
+    let answer = crate::crash::catch(std::panic::AssertUnwindSafe(put_back)).unwrap_or(None);
+    restored.store(true, Ordering::SeqCst);
+    settled.set(answer);
 }
 
 /// The preset from `path` drew a refresh (`crate::bench::Drawing::Drew`): it
@@ -173,7 +224,9 @@ fn moved_on(handle: &AppHandle, path: Option<PathBuf>, why: &str) {
         OnPanic::Leave => {}
         OnPanic::Stop => {
             eprintln!("resume: {BUDGET} presets in a row panicked drawing; holding the picture rather than stepping on");
-            let _ = handle.emit(SKIPPED, path.to_string_lossy());
+            if let Some((event, count)) = said(on) {
+                let _ = handle.emit(event, count);
+            }
         }
         OnPanic::Step => {
             if open_failed(handle, &path, why) != Failed::Skip {
@@ -193,6 +246,17 @@ fn moved_on(handle: &AppHandle, path: Option<PathBuf>, why: &str) {
 /// past, while a deck of nothing but panicking presets stops within a few
 /// seconds, after at most this many loads.
 pub const BUDGET: usize = 8;
+
+/// The event the main window's status strip hears when stepping past panics
+/// stops ([`OnPanic::Stop`]), with how many presets in a row wouldn't draw
+/// ([`BUDGET`]); a stop isn't a skip, so it doesn't go out on [`SKIPPED`].
+pub const STOPPED: &str = "preset-skipping-stopped";
+
+/// What the page is told of `on`, besides the skip a step sends ([`open_failed`]):
+/// the event and its payload.
+fn said(on: OnPanic) -> Option<(&'static str, usize)> {
+    (on == OnPanic::Stop).then_some((STOPPED, BUDGET))
+}
 
 /// The presets that panicked drawing this run, and how many panics in a row
 /// stepped the deck on.
@@ -282,8 +346,10 @@ fn plan(r: &Resume, ids: &[String]) -> Plan {
     }
 }
 
-fn restore(handle: &AppHandle, r: &Resume) {
+/// Put the deck back as `r` has it; whether the deck has a preset open after.
+fn restore(handle: &AppHandle, r: &Resume) -> bool {
     let deck = handle.state::<Deck>();
+    let playing = || deck.live.lock().unwrap().current.is_some();
     let ids: Vec<String> = deck.store.lock().unwrap().lists.iter().map(|l| l.id.clone()).collect();
     let said = |what: &str, e: String| eprintln!("resume: {what}: {e}");
     let act = |what: &str, action: Action| crate::actions::dispatch(handle, action).map_err(|e| said(what, e)).is_ok();
@@ -301,7 +367,7 @@ fn restore(handle: &AppHandle, r: &Resume) {
         Plan::Load { playlist, index } => {
             // The position may be gone (items removed since): the playlist's start, then.
             if !act("loading the playlist at its position", Action::Load { playlist, index }) && !act("loading the playlist", Action::Load { playlist, index: None }) {
-                return;
+                return playing();
             }
             // A smart playlist is worked out again: go to where that preset is now.
             let elsewhere = r.current.as_ref().and_then(|c| {
@@ -330,6 +396,7 @@ fn restore(handle: &AppHandle, r: &Resume) {
     for action in again(r, &deck.view(), &fx) {
         act("putting the deck's tweaks back", action);
     }
+    playing()
 }
 
 /// The actions that put `r`'s tweaks and hold back on a deck now at `deck`, with
@@ -642,6 +709,79 @@ mod tests {
         assert!(wanted(false, Some("")));
         assert!(!wanted(true, None));
         assert!(!wanted(false, Some("cream-of-the-crop/x.milk")));
+    }
+
+    #[test]
+    fn reports_to_the_page_only_what_it_puts_back() {
+        let there = |_: &Path| true;
+        let kept = Some(r(None, None, Some("/x.milk")));
+        assert_eq!(to_resume(kept.clone(), false, None, there), kept);
+        // The page opens its own start preset only when this says none: on the
+        // first run, on a given preset, or with nothing worth picking up.
+        assert_eq!(to_resume(kept.clone(), true, None, there), None);
+        assert_eq!(to_resume(kept.clone(), false, Some("cream-of-the-crop/x.milk"), there), None);
+        assert_eq!(to_resume(Some(Resume::default()), false, None, there), None);
+        assert_eq!(to_resume(None, false, None, there), None);
+        // The preset's file is gone (deleted, a pack update): nothing to pick up.
+        let gone = |_: &Path| false;
+        assert_eq!(to_resume(kept, false, None, gone), None);
+        // A playlist or a filter is still tried: the restore says whether it opened.
+        let filter = Some(Resume { query: Some(LibraryQuery::default()), ..r(None, None, Some("/x.milk")) });
+        assert_eq!(to_resume(filter.clone(), false, None, gone), filter);
+        let list = Some(r(Some("p"), Some(1), Some("/x.milk")));
+        assert_eq!(to_resume(list.clone(), false, None, gone), list);
+    }
+
+    #[test]
+    fn a_panicking_restore_still_settles_on_nothing() {
+        let settled = std::sync::Arc::new(Settled::new());
+        let restored = AtomicBool::new(false);
+        let waiting = {
+            let s = settled.clone();
+            std::thread::spawn(move || s.wait(Duration::from_secs(10)))
+        };
+        let asked = Instant::now();
+        settle(&settled, &restored, || panic!("restore broke"));
+        assert!(restored.load(Ordering::SeqCst));
+        assert_eq!(waiting.join().unwrap(), None);
+        assert!(asked.elapsed() < Duration::from_secs(5));
+        // One that opened still answers what it put back.
+        let fine = Settled::new();
+        settle(&fine, &restored, || Some(r(None, None, Some("/x.milk"))));
+        assert_eq!(fine.wait(Duration::ZERO), Some(r(None, None, Some("/x.milk"))));
+    }
+
+    #[test]
+    fn the_page_hears_what_was_put_back_once_it_has_settled() {
+        // A restore that opened nothing answers none, so the page opens its own start.
+        let failed = std::sync::Arc::new(Settled::new());
+        let waiting = {
+            let s = failed.clone();
+            std::thread::spawn(move || s.wait(Duration::from_secs(10)))
+        };
+        failed.set(None);
+        assert_eq!(waiting.join().unwrap(), None);
+        // One that opened answers what it put back, to a page asking before or after.
+        let opened = std::sync::Arc::new(Settled::new());
+        let early = {
+            let s = opened.clone();
+            std::thread::spawn(move || s.wait(Duration::from_secs(10)))
+        };
+        let back = r(None, None, Some("/x.milk"));
+        opened.set(Some(back.clone()));
+        assert_eq!(early.join().unwrap(), Some(back.clone()));
+        assert_eq!(opened.wait(Duration::ZERO), Some(back));
+        // Never settled: none once the wait is out.
+        assert_eq!(Settled::new().wait(Duration::from_millis(10)), None);
+    }
+
+    #[test]
+    fn a_stop_is_said_as_a_stop_not_as_one_more_skip() {
+        assert_eq!(said(OnPanic::Stop), Some((STOPPED, BUDGET)));
+        assert_ne!(STOPPED, SKIPPED);
+        // A step's skip goes out from `open_failed`; leaving the deck be says nothing.
+        assert_eq!(said(OnPanic::Step), None);
+        assert_eq!(said(OnPanic::Leave), None);
     }
 
     #[test]

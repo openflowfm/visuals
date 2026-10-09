@@ -4,7 +4,7 @@ import * as api from './api.ts';
 import type { Entry, LibraryChange, LibraryData, LibraryGroup, LibraryQuery, LibraryRow } from './api.ts';
 import * as pl from './playlists.ts';
 import { onChanged } from './pack.ts';
-import { followGrid, gridKey, rereadOn, stepping } from './library.ts';
+import { followGrid, forgetResumedQuery, gridKey, rereadOn, resumedQuery, stepping } from './library.ts';
 import { useTauriEvent } from './hooks.ts';
 import {
   GROUPS,
@@ -57,6 +57,16 @@ export interface LibraryProps {
 
 const count = (n: number) => n.toLocaleString('en-US');
 const why = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+/** `q`'s groups the chips know, each with the values picked; any other group (one from a newer app) is left out. */
+export function groupsOf(q: LibraryQuery): LibraryQuery['groups'] {
+  const groups: LibraryQuery['groups'] = {};
+  for (const g of GROUPS) {
+    const values = q.groups?.[g];
+    if (values?.length) groups[g] = [...values];
+  }
+  return groups;
+}
 
 /** A group's name read aloud: the star group's chip shows only ★. */
 export const groupSays = (g: LibraryGroup): string => (g === 'star' ? 'starred' : GROUP_LABEL[g]);
@@ -193,8 +203,8 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
     };
   }, [one]);
 
-  const handlers = useRef({ onLoad, onAdd, onPress, shown, selection, anchor, active, entryOf, query, current });
-  handlers.current = { onLoad, onAdd, onPress, shown, selection, anchor, active, entryOf, query, current };
+  const handlers = useRef({ onLoad, onAdd, onPress, onSearch, shown, selection, anchor, active, entryOf, query, current });
+  handlers.current = { onLoad, onAdd, onPress, onSearch, shown, selection, anchor, active, entryOf, query, current };
 
   // Playing from the grid: open it, and have ←, → and R follow the grid (the deck keeps a loaded playlist).
   const following = useRef(false);
@@ -210,6 +220,28 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
     if (deckPlaylist.current !== undefined && deckPlaylist.current !== deck.playlist) following.current = false;
     deckPlaylist.current = deck.playlist;
   };
+  // The app picked up playing a filter: the first library that shows it (while the
+  // deck still plays it) takes it, and the deck, already following it, follows it
+  // on as it changes. Libraries opened later start unfiltered, as before, and a
+  // filter the user set first is never replaced.
+  const touched = useRef(false);
+  const filterChanged = () => {
+    touched.current = true;
+    forgetResumedQuery();
+  };
+  useEffect(() => {
+    let live = true;
+    resumedQuery().then((q) => {
+      if (!live || !q || touched.current) return;
+      forgetResumedQuery();
+      setGroups(groupsOf(q));
+      if (q.text) handlers.current.onSearch(q.text);
+      following.current = true;
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
   useTauriEvent(pl.onLive, (now) => deckMoved(now.deck));
   useTauriEvent(pl.onLists, (l) => deckMoved(l.deck));
   // The filter or the library changed what the grid shows since: follow the grid as
@@ -265,10 +297,12 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
   };
 
   const pickValue = (g: LibraryGroup, v: string) => {
+    filterChanged();
     setGroups((gs) => toggle({ groups: gs, text: '' }, g, v).groups);
     setSaveNote(null);
   };
   const clearAll = () => {
+    filterChanged();
     setGroups({});
     onSearch('');
     setSaveNote(null);
@@ -313,7 +347,10 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
         placeholder={`search ${count(rows.length || entries.length)} presets`}
         title="Every word must match the preset's style, author, name or tags. ↓ moves into the grid."
         value={search}
-        onChange={(ev) => onSearch(ev.target.value)}
+        onChange={(ev) => {
+          filterChanged();
+          onSearch(ev.target.value);
+        }}
         onKeyDown={onSearchKey}
         disabled={empty}
       />

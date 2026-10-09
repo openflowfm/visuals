@@ -299,8 +299,24 @@ export interface Resume {
   index: number | null;
   current: string | null;
   source: SourceId | null;
+  /** The unsaved filter playing (a mood, or the library's grid followed); played again when no playlist was. */
+  query?: LibraryQuery | null;
+  /** The deck's live tweaks put back; null when none differed. */
+  tweaks?: Tweaks | null;
+  /** HOLD was on. */
+  hold?: boolean;
 }
-/** Where the last session left off; null on a first run or when nothing was playing. */
+/** `resume::Tweaks`: the deck's live tweaks kept; one left out wasn't tweaked away from the playlist's. */
+export interface Tweaks {
+  auto?: boolean;
+  seconds?: number;
+  bars?: number;
+  transition?: number;
+  speed?: number;
+  trails?: number;
+  hue?: number;
+}
+/** Where the last session left off, being picked up; null on a first run, when started on a given preset, or when nothing was playing. The page opens a preset of its own only when it is null. */
 export const resumeState = () => invoke<Resume | null>('resume_state');
 /** `resume::presets_failed`: the presets (by `path`) that failed to open or draw; live skips them, the library marks them. */
 export const presetsFailed = () => invoke<string[]>('presets_failed');
@@ -309,6 +325,8 @@ export const PRESETS_FAILED_EVENT = 'presets-failed';
 export const onPresetsFailed = (f: (paths: string[]) => void): Promise<UnlistenFn> => listen<string[]>(PRESETS_FAILED_EVENT, (e) => f(e.payload));
 /** `resume::SKIPPED`: sent with its path each time next, previous, random or auto-advance skips a preset that won't load. */
 export const onPresetSkipped = (f: (path: string) => void): Promise<UnlistenFn> => listen<string>('preset-skipped', (e) => f(e.payload));
+/** `resume::STOPPED`: stepping past presets that panic drawing stopped, with how many in a row wouldn't draw (`resume::BUDGET`); the picture holds. Not a skip. */
+export const onSkippingStopped = (f: (inARow: number) => void): Promise<UnlistenFn> => listen<number>('preset-skipping-stopped', (e) => f(e.payload));
 
 /** `settings::Problem`: a settings file (`audio.json`, `playlists.json`…) that couldn't be read or kept, in plain words. */
 export interface SettingsProblem {

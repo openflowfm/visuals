@@ -13,6 +13,7 @@ import { useLiveKeys, type Stars } from './liveKeys.ts';
 import * as output from './output.ts';
 import { leave } from './OutputPanel.tsx';
 import * as pl from './playlists.ts';
+import { startLive } from './library.ts';
 import { useNotice, useTauriEvent } from './hooks.ts';
 import { nameOf, notice, openFailed } from './shell.ts';
 import { SilenceBanner } from './Onboarding.tsx';
@@ -243,10 +244,14 @@ export function Live({
     pl.lists().then((l) => {
       setLists(l);
       setCurrent((c) => c ?? l.deck.current ?? start);
-      // Started in live mode, nothing is playing yet: the preset asked for, or any.
+      // Started in live mode, nothing is playing yet: the preset asked for; else
+      // what the app puts back once it has; else any, so the picture is never black.
       if (l.deck.current) return;
-      if (start) api.open(start).catch((e) => setError(openFailed(start, String(e))));
-      else pl.act({ kind: 'random' }).catch(fail("Couldn't pick a preset to start on."));
+      void startLive(start, {
+        open: (path) => void api.open(path).catch((e) => setError(openFailed(path, String(e)))),
+        random: () => void pl.act({ kind: 'random' }).catch(fail("Couldn't pick a preset to start on.")),
+        shown: (path) => setCurrent((c) => c ?? path),
+      });
     }, fail("Couldn't read the playlists."));
   }, [fail, setError, start]);
   useTauriEvent(pl.onLists, setLists);

@@ -40,6 +40,9 @@ export const WORDS = {
   'library query': 'the library',
   /* A preset that can't be read or won't load (decision 38); live skips it with a note (decision 60). */
   'failed preset': 'broken preset',
+  /* Stepping past presets that panic drawing stopped at its budget (resume::BUDGET): the note's start, then how many in a row. */
+  'skip budget spent': 'stopped skipping',
+  'skip budget why': "in a row wouldn't draw",
   /* The strobe rate picker's items (¼ ½ 1 2 4) as VoiceOver names them; the glyphs say nothing read aloud. */
   'strobe rate 1/4': 'a quarter flash per beat',
   'strobe rate 1/2': 'half a flash per beat',
