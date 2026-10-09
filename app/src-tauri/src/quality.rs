@@ -137,34 +137,49 @@ fn resolve(chosen: Level, machine: &Machine, drawn: (u32, u32)) -> Quality {
     Quality { chosen, effective, reason }
 }
 
-/// The size the renderer draws at for the `output` event's payload: the
+/// The size the renderer draws at while the output is as `status` says: the
 /// output's display decides it while open (`bench::draw_size`), otherwise
-/// `bench::DRAW`. `None` for a payload that doesn't read.
-fn drawn_for(payload: &str) -> Option<(u32, u32)> {
-    #[derive(Deserialize)]
-    struct Shown {
-        display: Option<Size>,
-    }
-    #[derive(Deserialize)]
-    struct Size {
-        width: u32,
-        height: u32,
-    }
-    let shown: Shown = serde_json::from_str(payload).ok()?;
-    Some(shown.display.map_or(bench::DRAW, |d| bench::draw_size((d.width, d.height))))
+/// `bench::DRAW`.
+fn drawn_for(status: &crate::output::Status) -> (u32, u32) {
+    status.display.as_ref().map_or(bench::DRAW, |d| bench::draw_size((d.width, d.height)))
 }
 
-/// Hand the renderer the level in effect, when it isn't the one it has.
+/// The size drawn at now, read from the output itself; `None` when it can't be read.
+///
+/// Read rather than kept from the `output` event: the page re-reads the quality
+/// on that same event, and its read could reach `quality_get` before this
+/// module's own listener had taken the new size, showing the last size's
+/// reason for one event.
+fn drawn_now(handle: &AppHandle) -> Option<(u32, u32)> {
+    crate::output::output_status(handle.clone()).ok().map(|s| drawn_for(&s))
+}
+
+/// Bring `s` up to drawing `drawn` (when known), and work out, together, the
+/// level to hand the renderer (when it isn't the one it has) and the quality to
+/// report, so the reason always speaks of the level drawn at.
+fn settle(s: &mut State, machine: &Machine, drawn: Option<(u32, u32)>) -> (Option<eq::Level>, Quality) {
+    if let Some(drawn) = drawn {
+        s.drawn = drawn;
+    }
+    let level = s.chosen.setting().level(machine, s.drawn);
+    let send = (s.applied != Some(level)).then_some(level);
+    s.applied = Some(level);
+    (send, resolve(s.chosen, machine, s.drawn))
+}
+
+/// Take the size drawn at now, hand the renderer the level in effect when it
+/// isn't the one it has, and say the quality.
 fn apply(handle: &AppHandle) -> Quality {
+    // Read before locking: reading the output may wait on the main thread.
+    let drawn = drawn_now(handle);
     // Send while the lock is held, so commands reach the renderer in the
     // order they're recorded in `applied`.
     let mut s = state().lock().unwrap();
-    let level = s.chosen.setting().level(machine(), s.drawn);
-    if s.applied != Some(level) {
-        s.applied = Some(level);
+    let (send, quality) = settle(&mut s, machine(), drawn);
+    if let Some(level) = send {
         handle.state::<crate::App>().send(bench::Cmd::Quality(level.quality()));
     }
-    resolve(s.chosen, machine(), s.drawn)
+    quality
 }
 
 /// What the bench's renderer starts at: the kept choice, at [`bench::DRAW`].
@@ -175,11 +190,11 @@ pub fn initial() -> eq::Quality {
     level.quality()
 }
 
-/// The quality now.
+/// The quality now, for the size drawn at now (which it also hands the
+/// renderer, should the `output` event not have reached this module yet).
 #[tauri::command]
-pub fn quality_get() -> Quality {
-    let s = state().lock().unwrap();
-    resolve(s.chosen, machine(), s.drawn)
+pub fn quality_get(handle: AppHandle) -> Quality {
+    apply(&handle)
 }
 
 /// Chooses the quality, keeps it for next launch, and draws at it from now on.
@@ -197,11 +212,8 @@ pub fn start(handle: &AppHandle) {
         machine();
     });
     let h = handle.clone();
-    handle.listen("output", move |event| {
-        if let Some(drawn) = drawn_for(event.payload()) {
-            state().lock().unwrap().drawn = drawn;
-            apply(&h);
-        }
+    handle.listen("output", move |_| {
+        apply(&h);
     });
 }
 
@@ -252,14 +264,36 @@ mod tests {
         assert_eq!(resolve(Level::Auto, &slow, (1280, 720)).effective, Level::High);
     }
 
+    fn on(width: u32, height: u32) -> crate::output::Status {
+        let display = crate::output::Display { id: 1, index: 0, name: "P".into(), width, height, main: false };
+        crate::output::Status { display: Some(display), size: Some((width, height)) }
+    }
+
     #[test]
-    fn the_output_event_sets_the_size_drawn() {
-        assert_eq!(drawn_for(r#"{"display":null,"size":null}"#), Some(bench::DRAW));
-        let landscape = r#"{"display":{"id":1,"index":0,"name":"P","width":3840,"height":2160,"main":false},"size":[3840,2160]}"#;
-        assert_eq!(drawn_for(landscape), Some(bench::DRAW));
-        let portrait = r#"{"display":{"id":1,"index":0,"name":"P","width":1080,"height":1920,"main":false},"size":[1080,1920]}"#;
-        assert_eq!(drawn_for(portrait), Some((1080, 1920)));
-        assert_eq!(drawn_for("nope"), None);
+    fn the_output_sets_the_size_drawn() {
+        assert_eq!(drawn_for(&crate::output::Status::default()), bench::DRAW);
+        assert_eq!(drawn_for(&on(3840, 2160)), bench::DRAW);
+        assert_eq!(drawn_for(&on(1080, 1920)), (1080, 1920));
+    }
+
+    #[test]
+    fn the_reason_reported_is_for_the_size_and_level_drawn_at_once_the_output_moves() {
+        // A GPU fast enough for High at 1080p's pixels only.
+        let slow = mac("Apple M1", 2, 8);
+        let mut s = State { chosen: Level::Auto, drawn: bench::DRAW, applied: Some(eq::Level::Medium) };
+        // The output opens on a portrait display: the quality read straight
+        // after, before any event is heard, already speaks of the new size.
+        let (send, q) = settle(&mut s, &slow, Some(drawn_for(&on(720, 1280))));
+        assert_eq!((send, q.effective), (Some(eq::Level::High), Level::High));
+        assert!(q.reason.starts_with("Auto picked high") && q.reason.contains("at 720×1280"), "{}", q.reason);
+        // Read again, or heard from the event after: nothing new to send, the same quality.
+        assert_eq!(settle(&mut s, &slow, Some((720, 1280))), (None, q.clone()));
+        // When the output can't be read, the size last drawn at stands.
+        assert_eq!(settle(&mut s, &slow, None), (None, q));
+        // Closed again: back to the window's size, and to Medium.
+        let (send, q) = settle(&mut s, &slow, Some(drawn_for(&crate::output::Status::default())));
+        assert_eq!((send, q.effective), (Some(eq::Level::Medium), Level::Medium));
+        assert!(q.reason.starts_with("Auto picked medium") && q.reason.contains("at 1920×1080"), "{}", q.reason);
     }
 
     #[test]

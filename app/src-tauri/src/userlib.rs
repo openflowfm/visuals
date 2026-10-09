@@ -17,6 +17,10 @@
 //! ```
 //!
 //! Every field of a preset but the key may be left out (false, empty, none).
+//! Fields this build doesn't know, at the top, on a preset or in its
+//! overrides, are kept and written back, so a newer build's data survives a
+//! save by an older one. Only builds from this one on keep them; earlier builds
+//! drop them on save.
 //! `hash` (and `size`, the file's bytes) lets a preset that moved be found
 //! again by its content. The file is written through a temporary file and
 //! renamed into place; one that won't parse is moved aside (`library.json.bad`,
@@ -75,7 +79,14 @@ pub struct Overrides {
     pub speed: Option<Level>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub intensity: Option<Level>,
+    /// Overrides this build doesn't know, kept as read and written back.
+    #[serde(flatten)]
+    pub unknown: Unknown,
 }
+
+/// Fields a newer build wrote that this one doesn't know: kept as read and
+/// written back on save, so an older build never drops another's data.
+pub type Unknown = BTreeMap<String, serde_json::Value>;
 
 impl Overrides {
     fn is_empty(&self) -> bool {
@@ -122,11 +133,16 @@ pub struct Mine {
     pub rating: Option<u8>,
     #[serde(skip_serializing_if = "Overrides::is_empty")]
     pub overrides: Overrides,
+    /// Fields of the preset this build doesn't know.
+    #[serde(flatten)]
+    pub unknown: Unknown,
 }
 
 impl Mine {
+    /// Nothing kept: a preset with fields this build doesn't know is never
+    /// empty, so clearing what it knows doesn't drop them.
     fn is_empty(&self) -> bool {
-        !self.star && !self.hidden && self.rating.is_none() && self.tags.is_empty() && self.overrides.is_empty()
+        !self.star && !self.hidden && self.rating.is_none() && self.tags.is_empty() && self.overrides.is_empty() && self.unknown.is_empty()
     }
 }
 
@@ -136,11 +152,14 @@ pub struct LibraryData {
     pub version: u32,
     /// By key; only presets the user has touched.
     pub presets: BTreeMap<String, Mine>,
+    /// Top-level fields this build doesn't know.
+    #[serde(flatten)]
+    pub unknown: Unknown,
 }
 
 impl Default for LibraryData {
     fn default() -> Self {
-        LibraryData { version: VERSION, presets: BTreeMap::new() }
+        LibraryData { version: VERSION, presets: BTreeMap::new(), unknown: Unknown::new() }
     }
 }
 
@@ -1022,5 +1041,31 @@ mod tests {
         assert_eq!((mine.star, mine.hidden, mine.overrides.speed), (true, false, Some(Level::Low)));
         let back = serde_json::to_value(&data).unwrap();
         assert_eq!(back, serde_json::from_str::<serde_json::Value>(text).unwrap());
+    }
+
+    #[test]
+    fn fields_a_newer_build_wrote_survive_a_load_and_save() {
+        let dir = temp("unknown");
+        let file = dir.join("library.json");
+        let text = r#"{ "version": 1, "synced": { "at": 12, "by": "phone" },
+            "presets": {
+              "a.milk": { "star": true, "plays": 7, "overrides": { "style": "Hypnotic", "mood": "calm" } },
+              "b.milk": { "notes": ["only a field this build doesn't know"] } } }"#;
+        put(&file, text.as_bytes());
+        let mut data = load(&file).unwrap();
+        assert_eq!(data.presets["a.milk"].unknown["plays"], serde_json::json!(7));
+        // Taking off all this build knows of a preset keeps it for the rest.
+        apply(&mut data, &["a.milk".into()], &Change { star: Some(false), ..Default::default() });
+        apply(&mut data, &["b.milk".into()], &Change { star: Some(true), ..Default::default() });
+        apply(&mut data, &["b.milk".into()], &Change { star: Some(false), ..Default::default() });
+        save(&file, &data).unwrap();
+        let back: serde_json::Value = serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
+        let expected = serde_json::json!({ "version": 1, "synced": { "at": 12, "by": "phone" },
+            "presets": {
+              "a.milk": { "plays": 7, "overrides": { "style": "Hypnotic", "mood": "calm" } },
+              "b.milk": { "notes": ["only a field this build doesn't know"] } } });
+        assert_eq!(back, expected);
+        assert_eq!(load(&file).unwrap(), data);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
