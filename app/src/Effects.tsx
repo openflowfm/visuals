@@ -26,10 +26,14 @@ const FADE = range('blackout fade', 0, 10, 0);
 const BPM: Param = { kind: 'int', min: 40, max: 240, defaultValue: 120, steps: 201, name: 'bpm' };
 
 const RATES = [0.25, 0.5, 1, 2, 4];
-const RATE_NAMES = ['¼', '½', '1', '2', '4'];
+export const RATE_NAMES = ['¼', '½', '1', '2', '4'];
+/** The strobe rates' accessible names, by position: the glyphs read aloud as nothing useful. */
+export const RATE_LABELS = [say('strobe rate 1/4'), say('strobe rate 1/2'), say('strobe rate 1'), say('strobe rate 2'), say('strobe rate 4')];
 /** The mirror modes in the order the pickers list them, and what they say. */
 export const MIRRORS: fx.Mirror[] = ['off', 'x', 'y', 'quad'];
 export const MIRROR_NAMES = ['off', 'X', 'Y', '4-way'];
+/** The mirror modes' accessible names, by position, each starting with what the item shows. */
+export const MIRROR_LABELS = [say('mirror mode off'), say('mirror mode x'), say('mirror mode y'), say('mirror mode quad')];
 /** Where in `list` the value nearest `value` is. */
 export const nearest = (list: number[], value: number) => list.reduce((best, v, at) => (Math.abs(v - value) < Math.abs(list[best] - value) ? at : best), 0);
 
@@ -155,6 +159,7 @@ export function Effects({ state, onState, send }: { state: fx.Fx; onState: React
         <Segmented
           name="strobe per beat"
           items={RATE_NAMES}
+          itemLabels={RATE_LABELS}
           index={nearest(RATES, state.strobe_rate)}
           onChange={(i) => set({ kind: 'strobe_rate', rate: RATES[i] }, { strobe_rate: RATES[i] })}
           title="Strobe flashes per beat"
@@ -172,6 +177,7 @@ export function Effects({ state, onState, send }: { state: fx.Fx; onState: React
         <Segmented
           name="mirror"
           items={MIRROR_NAMES}
+          itemLabels={MIRROR_LABELS}
           index={Math.max(0, MIRRORS.indexOf(state.mirror))}
           onChange={(i) => set({ kind: 'mirror', mode: MIRRORS[i] }, { mirror: MIRRORS[i] })}
           title="Mirror the picture (M steps through)"
@@ -285,6 +291,7 @@ export function EffectSettings({ state, set }: Pick<FxControl, 'set'> & { state:
         <Segmented
           name={say('strobe rate')}
           items={RATE_NAMES}
+          itemLabels={RATE_LABELS}
           index={nearest(RATES, state.strobe_rate)}
           onChange={(i) => set({ kind: 'strobe_rate', rate: RATES[i] }, { strobe_rate: RATES[i] })}
           title="How many times the strobe flashes each beat"

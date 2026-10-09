@@ -86,6 +86,16 @@ describe('liveKeys', () => {
     expect(sent).toEqual(['editor']);
   });
 
+  it('ignores ? while a sheet is open, and opens the help once it is closed', () => {
+    const sheet = { open: true };
+    const { sent, press } = setup(sheet);
+    press('?', { shiftKey: true });
+    expect(sent).toEqual([]);
+    sheet.open = false;
+    press('?', { shiftKey: true });
+    expect(sent).toEqual(['help']);
+  });
+
   it('by default, leaves every key to the real ⚙ or More effects sheet, even with focus outside it, but not to a status popover', () => {
     const page = { html: '' };
     // A document holding `page.html`, matching the few selectors modalOpen asks for.

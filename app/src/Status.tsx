@@ -206,8 +206,10 @@ export const skipText = (count: number): string => `Skipped ${plural(count, say(
  * won't load (decision 60): skips in quick succession counted into one line,
  * which fades a few seconds after the last. Its own leaf; the polite live region
  * is always there (empty while nothing is said), so VoiceOver reads each new count.
+ * In a narrow window it takes only the room the strip has left, wrapping onto a
+ * second line and then cutting short (`live.css`); its tooltip says it whole.
  */
-function SkipNote() {
+export function SkipNote() {
   const [note, setNote] = useState<Skips | null>(null);
   const [now, setNow] = useState(0);
   useTauriEvent(api.onPresetSkipped, () => {
@@ -222,9 +224,10 @@ function SkipNote() {
     return () => window.clearTimeout(t);
   }, [note, now]);
   const phase = skipPhase(note, now);
+  const text = note && phase !== 'gone' ? skipText(note.count) : '';
   return (
-    <span className="live-status-skipped" role="status" aria-live="polite" data-fading={phase === 'fading' ? '' : undefined}>
-      {note && phase !== 'gone' ? skipText(note.count) : ''}
+    <span className="live-status-skipped" role="status" aria-live="polite" title={text || undefined} data-fading={phase === 'fading' ? '' : undefined}>
+      {text}
     </span>
   );
 }

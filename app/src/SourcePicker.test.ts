@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Source } from './api.ts';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { current, deniedNote, goneNote, keepChannels, label, SourcePicker } from './SourcePicker.tsx';
+import { current, deniedNote, goneNote, keepChannels, label, SourcePicker, sourceTitle } from './SourcePicker.tsx';
 
 const daw: Source = { id: { kind: 'app', bundle: 'com.ableton.live' }, name: 'Ableton Live', channels: 2 };
 const mac: Source = { id: { kind: 'system' }, name: 'everything on this Mac', channels: 2 };
@@ -33,6 +33,11 @@ describe('the source picker', () => {
     expect(deniedNote({ choice: null, channels: 2, denied: true })).toContain('System Settings › Privacy & Security › Screen & System Audio Recording');
     expect(deniedNote({ choice: null, channels: 2, denied: false })).toBeNull();
     expect(deniedNote({ choice: null, channels: 2 })).toBeNull();
+  });
+
+  it("puts the full name of what is heard in the picker's tooltip, and only the choices while nothing is", () => {
+    expect(sourceTitle('Aggregate Device (8 ch)')).toBe('Listen to: Aggregate Device (8 ch). Or pick your DAW, everything on this Mac, or a microphone or interface');
+    expect(sourceTitle(null)).toBe('Listen to: your DAW, everything on this Mac, or a microphone or interface');
   });
 
   it('keeps the channels when the next source has them', () => {

@@ -57,8 +57,9 @@ export function liveKeys(to: LiveKeyTargets) {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       // Keys pressed in a field, or in a sheet or dialog, are theirs.
       if (isTyping(e) || inDialog(e.target)) return;
-      // An open sheet or modal takes the keys, even with focus still outside it (on ⚙); only ? still toggles the help.
-      if (e.key !== '?' && to.sheetOpen?.()) return;
+      // An open sheet or modal takes every key, even with focus still outside it (on ⚙), ? too: the help would open over the
+      // sheet (or close the sheet under someone mid-choice), so ? waits until it is closed. The open help closes itself on ?.
+      if (to.sheetOpen?.()) return;
       if (e.key === 'Escape') {
         // A menu, sheet or dialog that took its own Esc keeps it (decision 17q: the ⚙ sheet takes Esc before live does).
         if (e.defaultPrevented) return;

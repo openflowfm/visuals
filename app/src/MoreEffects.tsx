@@ -1,7 +1,7 @@
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { Segmented } from '@openflow/widgets/controls/Segmented.tsx';
 import { Toggle } from '@openflow/widgets/controls/Toggle.tsx';
-import { Hit, MIRROR_NAMES, MIRRORS, useFx, type FxControl } from './Effects.tsx';
+import { Hit, MIRROR_LABELS, MIRROR_NAMES, MIRRORS, useFx, type FxControl } from './Effects.tsx';
 import type * as fx from './fx.ts';
 import { Sheet } from './Settings.tsx';
 import { NoticeBanner } from './views.tsx';
@@ -19,6 +19,7 @@ export function MoreFx({ state, set, send }: Pick<FxControl, 'set' | 'send'> & {
         <Segmented
           name="mirror"
           items={MIRROR_NAMES}
+          itemLabels={MIRROR_LABELS}
           index={Math.max(0, MIRRORS.indexOf(state.mirror))}
           onChange={(i) => set({ kind: 'mirror', mode: MIRRORS[i] }, { mirror: MIRRORS[i] })}
           title="Mirror the picture side to side, top to bottom, or both (M steps through)"

@@ -112,11 +112,35 @@ export function upcoming(lists: pl.Lists, items: readonly string[] | null, n = U
 }
 
 /**
- * The rows after the deck's Next line: `rows` without its first when that is
- * the preset the Next line already names (`next`, by path).
+ * The rows after the deck's Next line: `rows` without the preset the Next line
+ * already names (`next`, by path), wherever it is among them — usually first,
+ * but not when the play order put it later. Only its first row goes: a preset
+ * in a playlist twice still shows its later turn.
  */
 export function afterNext(rows: readonly Upcoming[], next: string | null): Upcoming[] {
-  return next !== null && rows[0]?.path === next ? rows.slice(1) : [...rows];
+  const at = next === null ? -1 : rows.findIndex((r) => r.path === next);
+  return at < 0 ? [...rows] : [...rows.slice(0, at), ...rows.slice(at + 1)];
+}
+
+/**
+ * Whether `items` (what `deckItems` gave) still agrees with the deck: the preset
+ * after `playing` in them is the deck's `next`. Stepping keeps it true, so a new
+ * playing preset needs no fetch; a playlist loaded again (shuffled afresh) makes
+ * it false. Nothing to check against counts as agreeing.
+ */
+export function itemsAgree(items: readonly string[] | null, playing: string | null, next: string | null): boolean {
+  if (!items?.length || next === null) return true;
+  const pos = playing ? items.indexOf(playing) : -1;
+  return items[(pos + 1) % items.length] === next;
+}
+
+/** Which row a drag holds: its playlist index and path, so it is found again however the rows shifted under it. */
+export type Held = Pick<Upcoming, 'path' | 'at'>;
+
+/** Where `held` is among `rows` now: the row at the same playlist index with the same path, else the first with its path; -1 when it has gone (it became the Next line, or plays). */
+export function findRow(rows: readonly Upcoming[], held: Held): number {
+  const same = rows.findIndex((r) => r.at === held.at && r.path === held.path);
+  return same >= 0 ? same : rows.findIndex((r) => r.path === held.path);
 }
 
 /** The path the deck's Next line names, or null when it names none. */
@@ -188,6 +212,17 @@ export function Crate({ lists, data, act, onLists, onError, current }: Props) {
   const [items, setItems] = useState<string[] | null>(null);
   const query = JSON.stringify(deck.query);
   const playing = deck.current ?? current;
+  // A step only moves where "Up next" reads from in the same order, so a new playing preset isn't a reason to ask again;
+  // the order is asked for again when what plays changes, its size does, or the deck's Next stops agreeing with it (a reshuffle).
+  const stale = itemsAgree(items, playing, deck.next) ? null : `${playing}>${deck.next}`;
+  // Counted, so the order agreeing again (stale back to null) isn't a second reason to ask: one fetch per reshuffle.
+  const asked = useRef<string | null>(null);
+  const reshuffles = useRef(0);
+  if (stale && stale !== asked.current) {
+    asked.current = stale;
+    reshuffles.current += 1;
+  }
+  const reshuffle = reshuffles.current;
   useEffect(() => {
     if (!fetching) return setItems(null);
     let live = true;
@@ -198,7 +233,7 @@ export function Crate({ lists, data, act, onLists, onError, current }: Props) {
       live = false;
     };
     // `onError` is the page's; a new one each render isn't a reason to ask again.
-  }, [fetching, deck.playlist, query, deck.order, playing]);
+  }, [fetching, deck.playlist, query, deck.order, deck.count, reshuffle]);
 
   const all = moods(data);
   const lit = litMoods(deck);
@@ -211,7 +246,9 @@ export function Crate({ lists, data, act, onLists, onError, current }: Props) {
   const note = upNote(lists);
 
   const refs = useRef<(HTMLLIElement | null)[]>([]);
-  const [drag, setDrag] = useState<{ row: number; slot: number } | null>(null);
+  // The row held by its identity, not its index: auto-advance can move the deck mid-drag, and the rows shift under the pointer.
+  const [drag, setDrag] = useState<{ held: Held; slot: number } | null>(null);
+  const dragRow = drag ? findRow(every, drag.held) : -1;
   // Moves map through every row, shown or not, so Alt+↓ on the last row shown still moves it (and opens the rest).
   const move = (row: number, slot: number) => {
     const m = list && moveFor(every, row, slot);
@@ -229,15 +266,16 @@ export function Crate({ lists, data, act, onLists, onError, current }: Props) {
     if (e.button !== 0) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
-    setDrag({ row, slot: row });
+    setDrag({ held: { path: every[row].path, at: every[row].at }, slot: row });
   };
   const drift = (e: PointerEvent) => {
     if (drag) setDrag({ ...drag, slot: slotAt(e.clientY) });
   };
+  // The row and the slot are both worked out from the rows as they are at the drop, so the move lands where it was dropped.
   const drop = (e: PointerEvent) => {
     if (!drag) return;
     setDrag(null);
-    move(drag.row, slotAt(e.clientY));
+    if (dragRow >= 0) move(dragRow, slotAt(e.clientY));
   };
   // Where keyboard focus goes once a nudged row lands: the rows are drawn again in their new order, and the moved one keeps focus.
   const refocus = useRef<number | null>(null);
@@ -266,7 +304,7 @@ export function Crate({ lists, data, act, onLists, onError, current }: Props) {
     move(row, slot);
   };
   const marker = (row: number) => {
-    if (!drag || drag.slot === drag.row || drag.slot === drag.row + 1) return null;
+    if (!drag || dragRow < 0 || drag.slot === dragRow || drag.slot === dragRow + 1) return null;
     if (drag.slot === row) return <span className="live-crate-drop" data-at="before" aria-hidden="true" />;
     if (drag.slot === rows.length && row === rows.length - 1) return <span className="live-crate-drop" data-at="after" aria-hidden="true" />;
     return null;
@@ -343,13 +381,14 @@ export function Crate({ lists, data, act, onLists, onError, current }: Props) {
           <ol className="live-crate-list" id="live-crate-next-rows" aria-label="Up next, in play order">
             {rows.map((r, i) => (
               <li
-                key={`${r.at ?? 'x'}:${i}:${r.path}`}
+                // A row that can be dragged is keyed by its playlist index, so it stays the same element (and keeps the pointer) when the rows shift mid-drag.
+                key={r.at !== null ? `${r.at}:${r.path}` : `x:${i}:${r.path}`}
                 ref={(el) => {
                   refs.current[i] = el;
                 }}
                 className="live-crate-row"
                 data-missing={r.missing || undefined}
-                data-dragging={drag?.row === i || undefined}
+                data-dragging={(drag !== null && dragRow === i) || undefined}
                 tabIndex={list ? 0 : undefined}
                 aria-keyshortcuts={list ? 'Alt+ArrowUp Alt+ArrowDown' : undefined}
                 aria-label={rowLabel(r)}

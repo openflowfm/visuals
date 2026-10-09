@@ -40,6 +40,17 @@ export const WORDS = {
   'library query': 'the library',
   /* A preset that can't be read or won't load (decision 38); live skips it with a note (decision 60). */
   'failed preset': 'broken preset',
+  /* The strobe rate picker's items (¼ ½ 1 2 4) as VoiceOver names them; the glyphs say nothing read aloud. */
+  'strobe rate 1/4': 'a quarter flash per beat',
+  'strobe rate 1/2': 'half a flash per beat',
+  'strobe rate 1': '1 flash per beat',
+  'strobe rate 2': '2 flashes per beat',
+  'strobe rate 4': '4 flashes per beat',
+  /* The mirror picker's items (off X Y 4-way) as VoiceOver names them, each starting with what the item shows, so voice control finds it by what it says (WCAG 2.5.3). */
+  'mirror mode off': 'mirror off',
+  'mirror mode x': 'X: mirror across',
+  'mirror mode y': 'Y: mirror down',
+  'mirror mode quad': '4-way: mirror four ways',
   /* The crash prompt's reminder (decision 54): the scrub can't catch every name. */
   'crash report check': "Read the text before you submit it: a name the app can't recognise, such as a device's or a display's, may still be in it.",
 } as const;
