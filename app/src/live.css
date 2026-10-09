@@ -3,196 +3,157 @@
    paints itself, and the bars beside the 16:9 preview are its own shadow,
    clipped to its cell.
 
-   What a show needs most is the biggest: now, then next, then the transport and
-   HOLD, then the effects. The preview, the output, Link and the playlists are
-   around them. */
+   Along the top the status strip; then now and next over the preview, the
+   eight pads and the Intensity row; the crate beside them; the key hints along
+   the bottom. Everything a hand reaches for during a show is at least 44px. */
 
 .live {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
-  grid-template-rows: 36px minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'strip strip'
+    'banner banner'
+    'stage side'
+    'hints hints';
   height: 100%;
 }
 
-.live-stage {
+/* The status strip: AUDIO, BEAT, OUTPUT, the frame rate, then ? ⚙ ✕. */
+.live-status-strip {
+  grid-area: strip;
+  position: relative;
+  z-index: 20;
   display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  overflow-y: auto;
-}
-
-/* Now and next. */
-.live-deck {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 18px 22px 14px;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 0 6px 0 10px;
   background: var(--panel);
+  border-bottom: 1px solid var(--bd3);
 }
-.live-deck i {
-  flex: none;
-  width: 56px;
+.live-status-item {
+  position: relative;
+  display: flex;
+}
+.live-status-light {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--ui);
+  font: inherit;
+  font-size: var(--text-body);
+  cursor: pointer;
+  appearance: none;
+}
+.live-status-light:hover,
+.live-status-light[aria-expanded='true'] {
+  border-color: var(--bd3);
+  color: var(--fg);
+}
+.live-status-light i {
   color: var(--caption);
   font-style: normal;
   font-size: var(--text-label);
   font-weight: var(--weight-medium);
   letter-spacing: var(--track-caps);
-  text-transform: uppercase;
 }
-.live-now,
-.live-next {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  min-width: 0;
+.live-status-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bd3);
 }
-.live-now b,
-.live-next span {
-  min-width: 0;
+.live-status-dot[data-on] {
+  background: var(--green);
+}
+.live-status-dot[data-warn] {
+  background: var(--caution);
+}
+.live-status-meter {
+  position: relative;
+  flex: none;
+  width: 48px;
+  height: 6px;
   overflow: hidden;
-  text-overflow: ellipsis;
+  border-radius: var(--radius-sm);
+  background: var(--bd3);
+}
+.live-status-meter > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--green);
+}
+.live-status-value {
+  color: var(--fg);
+  font-weight: var(--weight-medium);
   white-space: nowrap;
 }
-.live-now b {
-  color: var(--fg);
-  font-size: calc(var(--text-title) * 2);
-  font-weight: var(--weight-strong);
-  letter-spacing: var(--track-tight);
-  line-height: 1.15;
-}
-.live-held {
-  flex: none;
-  align-self: center;
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-  background: var(--caution);
-  color: var(--bg);
-  font-size: var(--text-lead);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--track-label);
-}
-.live-next span {
-  color: var(--ui);
-  font-size: var(--text-title);
-  font-weight: var(--weight-medium);
-}
-.live-next span[data-missing] {
+.live-status-peers {
   color: var(--detail);
-  text-decoration: line-through;
+  white-space: nowrap;
 }
-.live-next em {
+.live-status-fps {
+  padding: 0 8px;
   color: var(--caution);
-  font-style: normal;
   font-size: var(--text-body);
-  text-decoration: none;
-  display: inline-block;
+  white-space: nowrap;
 }
-.live-deck .live-none {
-  color: var(--detail);
-  font-size: var(--text-heading);
-  font-weight: var(--weight-normal);
-  letter-spacing: var(--track-none);
-  white-space: normal;
-}
-.live-where {
-  margin: 0 0 0 68px;
-  color: var(--caption);
-  font-size: var(--text-body);
-}
-.live-where b {
-  color: var(--detail);
-  font-weight: var(--weight-medium);
-}
-
-/* Previous, random, next and HOLD: big enough to hit without looking twice. */
-.live-transport {
+.live-status-end {
   display: flex;
-  gap: 8px;
-  padding: 0 22px 16px;
-  background: var(--panel);
-  border-bottom: 1px solid var(--bd3);
+  gap: 4px;
+  margin-left: auto;
 }
-.live-transport .wdg-button {
-  flex: 1;
-  display: flex;
-}
-.live-transport .wdg-button-body,
-.live-transport .live-hold {
-  width: 100%;
-  height: auto;
-  padding: 10px 12px;
-  color: var(--fg);
-  font-size: var(--text-heading);
-  font-weight: var(--weight-medium);
-}
-.live-transport .live-hold {
-  flex: 0.6;
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--track-label);
-}
-/* --caution, not --amber: the theme makes amber its (grey) primary, and HOLD must be seen. */
-.live-transport .live-hold[data-on] {
-  color: var(--bg);
-  background: var(--caution);
-  border-color: var(--caution);
-}
-.live .wdg-button-body:focus-visible,
-.live .live-hold:focus-visible,
-.live .fx-hit:focus-visible,
-.live .fx-tempo:focus-visible {
-  outline: 1px solid var(--fg);
-  outline-offset: 1px;
-}
-
-/* An error (a `NoticeBanner`, laid out by .vf-notice): a band across the stage. */
-.live-problem {
-  gap: 8px;
-  padding: 8px 12px 8px 22px;
-  background: var(--panel);
-  border-bottom: 1px solid var(--bd3);
-  box-shadow: var(--edge-left) var(--red);
-  font-size: var(--text-body);
-}
-
-.live-stage > .fx {
-  border-bottom: 1px solid var(--bd3);
-}
-
-/* The preview: a hole, ringed by its own shadow, once the bench draws; until
-   then a loading surface (`.live-preview[data-loading]` in app.css). */
-.live-preview-cell {
-  flex: 1;
+.live-status-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
-  min-height: 140px;
-  padding: 12px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--ui);
+  font: inherit;
+  font-size: var(--text-heading);
+  cursor: pointer;
+  appearance: none;
 }
-.live-preview {
-  aspect-ratio: 16 / 9;
-  height: min(100%, 360px);
-  max-width: 100%;
-  background: transparent;
-  box-shadow: 0 0 0 100vmax #000;
+.live-status-btn:hover {
+  border-color: var(--bd3);
+  color: var(--fg);
+}
+/* A light's panel, under it and over everything else. */
+.live-status-pop {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  width: max-content;
+  min-width: 280px;
+  max-width: min(420px, calc(100vw - 24px));
+  max-height: min(70vh, 560px);
+  overflow-y: auto;
+  padding: 12px;
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow-menu);
 }
 
-/* The side: where the output goes, Link, then the playlists. */
-.live-side {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  background: var(--panel);
-  border-left: 1px solid var(--bd3);
-}
+/* The output panel, inside the OUTPUT popover. */
 .live-output {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 8px;
-  padding: 12px;
-  border-bottom: 1px solid var(--bd3);
 }
 .live-output h2 {
   margin: 0;
@@ -234,15 +195,616 @@
   line-height: 1.45;
 }
 
-.live-lists {
+.live-banner {
+  grid-area: banner;
+  min-width: 0;
+}
+.live-banner:empty {
+  display: none;
+}
+
+.live-stage {
+  grid-area: stage;
   display: flex;
   flex-direction: column;
-  flex: 1;
+  min-width: 0;
   min-height: 0;
+  overflow-y: auto;
+}
+
+/* Now and next. */
+.live-deck {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px 22px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--bd3);
+}
+.live-deck i {
+  flex: none;
+  width: 56px;
+  color: var(--caption);
+  font-style: normal;
+  font-size: var(--text-label);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+}
+.live-now,
+.live-next {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+.live-now b,
+.live-next span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.live-now b {
+  color: var(--fg);
+  font-size: calc(var(--text-title) * 2);
+  font-weight: var(--weight-strong);
+  letter-spacing: var(--track-tight);
+  line-height: 1.15;
+}
+.live-star {
+  flex: none;
+  align-self: center;
+  color: var(--caution);
+  font-size: var(--text-title);
+}
+.live-rating {
+  flex: none;
+  align-self: center;
+  color: var(--caution);
+  font-size: var(--text-heading);
+  letter-spacing: var(--track-label);
+}
+.live-held {
+  flex: none;
+  align-self: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--caution);
+  color: var(--bg);
+  font-size: var(--text-lead);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--track-label);
+}
+.live-next span {
+  color: var(--ui);
+  font-size: var(--text-title);
+  font-weight: var(--weight-medium);
+}
+.live-next span[data-missing] {
+  color: var(--detail);
+  text-decoration: line-through;
+}
+.live-next span em {
+  color: var(--caution);
+  font-style: normal;
+  font-size: var(--text-body);
+  text-decoration: none;
+  display: inline-block;
+}
+.live-when {
+  flex: none;
+  color: var(--detail);
+  font-style: normal;
+  font-size: var(--text-body);
+  white-space: nowrap;
+}
+.live-deck .live-none {
+  color: var(--detail);
+  font-size: var(--text-heading);
+  font-weight: var(--weight-normal);
+  letter-spacing: var(--track-none);
+  white-space: normal;
+}
+.live-where {
+  margin: 0 0 0 68px;
+  color: var(--caption);
+  font-size: var(--text-body);
+}
+.live-where b {
+  color: var(--detail);
+  font-weight: var(--weight-medium);
+}
+
+/* An error (a `NoticeBanner`, laid out by .vf-notice): a band across the stage. */
+.live-problem {
+  gap: 8px;
+  padding: 8px 12px 8px 22px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--bd3);
+  box-shadow: var(--edge-left) var(--red);
+  font-size: var(--text-body);
+}
+
+/* The preview: a hole, ringed by its own shadow, once the bench draws; until
+   then a loading surface (`.live-preview[data-loading]` in app.css). */
+.live-preview-cell {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  min-height: 140px;
+  padding: 12px;
+}
+.live-preview {
+  aspect-ratio: 16 / 9;
+  height: min(100%, 360px);
+  max-width: 100%;
+  background: transparent;
+  box-shadow: 0 0 0 100vmax #000;
+}
+/* Playing in the window: a big way out to a display, over the preview. Only the buttons paint. */
+.live-fullscreen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px;
+  pointer-events: none;
+}
+.live-fullscreen > * {
+  pointer-events: auto;
+}
+.live-fullscreen-go .wdg-button-body {
+  min-height: 64px;
+  height: auto;
+  padding: 12px 28px;
+  border-color: var(--fg);
+  background: var(--panel);
+  color: var(--fg);
+  font-size: var(--text-title);
+  font-weight: var(--weight-bold);
+  white-space: normal;
+  box-shadow: var(--shadow-lift);
+}
+.live-fullscreen-note {
+  max-width: 420px;
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--detail);
+  font-size: var(--text-body);
+  text-align: center;
+}
+
+/* The eight pads: four across, two down. */
+.live-pads {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(64px, 1fr));
+  gap: 8px;
+  padding: 12px 22px;
+  background: var(--panel);
+  border-top: 1px solid var(--bd3);
+}
+.live-pads .live-pad {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  /* The toggles (aria-pressed) are wdg-toggle-body, which sizes to its text: every pad fills its cell. */
+  width: 100%;
+  max-width: none;
+  min-width: 64px;
+  min-height: 64px;
+  height: auto;
+  padding: 8px;
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--fg);
+  font-size: var(--text-heading);
+  font-weight: var(--weight-medium);
+  white-space: normal;
+  text-align: center;
+}
+.live-pad small {
+  color: var(--caption);
+  font-size: var(--text-label);
+  font-weight: var(--weight-normal);
+  letter-spacing: var(--track-label);
+}
+.live-pads .live-pad[aria-pressed='true'] {
+  border-color: var(--fg);
+  background: var(--fg);
+  color: var(--bg);
+}
+.live-pads .live-pad[aria-pressed='true'] small {
+  color: inherit;
+  opacity: 0.75;
+}
+/* --caution, not --amber: the theme makes amber its (grey) primary, and HOLD must be seen. */
+.live-pads .live-pad[data-pad='hold'][aria-pressed='true'] {
+  border-color: var(--caution);
+  background: var(--caution);
+  color: var(--bg);
+  font-weight: var(--weight-bold);
+}
+.live-pads .live-pad[data-pad='blackout'][aria-pressed='true'] {
+  border-color: var(--red);
+  background: #000;
+  color: var(--red);
+  font-weight: var(--weight-bold);
+}
+.live-pads .live-pad[data-pad='strobe'][aria-pressed='true'] {
+  border-color: var(--fg);
+  background: var(--fg);
+  color: var(--bg);
+  font-weight: var(--weight-bold);
+}
+.live-pads .live-pad[data-pad='freeze'][aria-pressed='true'] {
+  border-color: var(--blue);
+  background: var(--blue);
+  color: var(--bg);
+  font-weight: var(--weight-bold);
+}
+.live-pads .live-pad[data-pad='tempo'][aria-pressed='true'] {
+  border-color: var(--green);
+  background: var(--panel);
+  color: var(--green);
+}
+
+/* Intensity, and More effects beside it. */
+.live-intensity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 22px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--bd3);
+  --wdg-inside-height: 44px;
+}
+.live-intensity > .wdg-slider {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+}
+.live-intensity .wdg-slider-body {
+  min-height: 44px;
+}
+.live-intensity .wdg-slider-thumb {
+  --wdg-mark-width: 4px;
+}
+.live-more {
+  flex: none;
+  display: flex;
+}
+.live-more .wdg-button-body {
+  min-width: 44px;
+  min-height: 44px;
+  height: auto;
+  padding: 0 14px;
+  font-size: var(--text-body);
+}
+
+/* The crate: playlists, moods, up next. It scrolls on its own. */
+.live-side {
+  grid-area: side;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--panel);
+  border-left: 1px solid var(--bd3);
+}
+.live-crate {
+  display: flex;
+  flex-direction: column;
+}
+.live-crate-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--bd3);
+}
+.live-crate-section h2 {
+  margin: 0;
+  color: var(--caption);
+  font-size: var(--text-label);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+}
+.live-crate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.live-crate-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.live-crate-playlist {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--ui);
+  font: inherit;
+  font-size: var(--text-heading);
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+}
+.live-crate-playlist:hover {
+  border-color: var(--bd3);
+  color: var(--fg);
+}
+.live-crate-playlist[data-on] {
+  border-color: var(--fg);
+  color: var(--fg);
+  font-weight: var(--weight-medium);
+  box-shadow: var(--edge-left) var(--green);
+}
+.live-crate-count,
+.live-crate-smart {
+  flex: none;
+  color: var(--caption);
+  font-size: var(--text-label);
+  font-weight: var(--weight-normal);
+}
+.live-crate-smart {
+  padding: 1px 6px;
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-pill);
+  letter-spacing: var(--track-label);
+}
+.live-crate-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.live-crate-chip {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--ui);
+  font: inherit;
+  font-size: var(--text-body);
+  cursor: pointer;
+  appearance: none;
+}
+.live-crate-chip:hover {
+  color: var(--fg);
+}
+.live-crate-chip[data-on] {
+  border-color: var(--fg);
+  background: var(--fg);
+  color: var(--bg);
+  font-weight: var(--weight-medium);
+}
+.live-crate-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 0 8px 0 0;
+  border-radius: var(--radius);
+  color: var(--ui);
+  font-size: var(--text-body);
+}
+.live-crate-row:not(:has(.live-crate-handle)) {
+  padding-left: 10px;
+}
+.live-crate-row[data-missing] {
+  color: var(--detail);
+  opacity: 0.6;
+}
+.live-crate-row[data-dragging] {
+  opacity: 0.35;
+}
+.live-crate-handle {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  color: var(--caption);
+  font-size: var(--text-heading);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.live-crate-handle:active {
+  cursor: grabbing;
+}
+.live-crate-drop {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--fg);
+  pointer-events: none;
+}
+.live-crate-drop[data-at='before'] {
+  top: -2px;
+}
+.live-crate-drop[data-at='after'] {
+  bottom: -2px;
+}
+.live-crate-note {
+  margin: 0;
+  color: var(--detail);
+  font-size: var(--text-body);
+  line-height: 1.45;
 }
 
 .live-hints {
-  grid-column: 1 / -1;
+  grid-area: hints;
   background: var(--panel);
   border-top-color: var(--bd3);
+}
+
+/* Help: every control and its keys, over everything. */
+.live-help {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--wdg-modal-scrim);
+}
+.live-help-panel {
+  width: min(760px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 16px 20px 20px;
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow-modal);
+  outline: none;
+}
+.live-help-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.live-help-head h2 {
+  margin: 0;
+  color: var(--fg);
+  font-size: var(--text-title);
+  font-weight: var(--weight-strong);
+}
+.live-help-head .wdg-button-body {
+  min-width: 44px;
+  min-height: 44px;
+  font-size: var(--text-heading);
+}
+.live-help-group h3 {
+  margin: 16px 0 6px;
+  color: var(--caption);
+  font-size: var(--text-label);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+}
+.live-help-group dl {
+  margin: 0;
+}
+.live-help-row {
+  display: grid;
+  grid-template-columns: 9rem 8rem minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+  padding: 6px 0;
+  border-top: 1px solid var(--bd3);
+  font-size: var(--text-body);
+}
+.live-help-row dt {
+  color: var(--fg);
+  font-weight: var(--weight-medium);
+}
+.live-help-row dd {
+  margin: 0;
+  color: var(--ui);
+}
+.live-help-keys kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: var(--text-label);
+  white-space: nowrap;
+}
+
+/* Focus on every control here. */
+.live :is(.live-status-light, .live-status-btn, .live-pad, .live-crate-playlist, .live-crate-chip, .live-crate-row, .wdg-button-body):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+@media (max-width: 600px) {
+  .live-help-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+}
+
+/* Narrow: one column, the crate under the stage, and the whole page scrolls. */
+@media (max-width: 899px) {
+  .live {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+    grid-template-areas:
+      'strip'
+      'banner'
+      'stage'
+      'side'
+      'hints';
+    overflow-y: auto;
+  }
+  .live-status-strip {
+    flex-wrap: wrap;
+  }
+  /* Each row as tall as what's in it: with min-height 0 the rows shrink to fit the window and overlap. */
+  .live-stage,
+  .live-side {
+    overflow: visible;
+    min-height: auto;
+  }
+  .live-stage > * {
+    flex-shrink: 0;
+  }
+  .live-side {
+    border-left: 0;
+    border-top: 1px solid var(--bd3);
+  }
+  .live-deck,
+  .live-pads,
+  .live-intensity {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .live-preview-cell {
+    flex: none;
+  }
+  /* No more than about a third of the window tall, so the pads stay in reach. */
+  .live-preview {
+    width: min(100%, calc(34vh * 16 / 9));
+    height: auto;
+  }
+  .live-pads {
+    grid-template-columns: repeat(2, minmax(64px, 1fr));
+  }
+  .live-where {
+    margin-left: 0;
+  }
 }
