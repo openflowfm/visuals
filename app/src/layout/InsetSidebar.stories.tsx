@@ -3,8 +3,10 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, waitFor } from 'storybook/test';
 import type { Pane } from '../home.ts';
 import type { Lists, Playlist } from '../playlists.ts';
-import { BRIGHT_FAST, CLOSING, LISTS, WARM_UP } from '../stories/fixtures.ts';
-import { SIDEBAR } from './fixtures.ts';
+import { drags } from '../drag.ts';
+import { BRIGHT_FAST, CLOSING, LISTS, ROWS, WARM_UP } from '../stories/fixtures.ts';
+import { SIDEBAR, STARRED } from './fixtures.ts';
+import type { SidebarActions } from './home-model.ts';
 import { InsetSidebar, sidebarSections, type InsetSidebarProps } from './InsetSidebar.tsx';
 // The shell's panel and its `--lay-*` sizes, as HomeLayout.tsx brings them (the decorator draws its panel).
 import './layout.css';
@@ -54,6 +56,34 @@ const MANY: Lists = (() => {
   return { playlists: [WARM_UP, ...manual, ...LISTS.playlists.filter((p) => p !== WARM_UP), ...smart], deck: LISTS.deck };
 })();
 
+/** What a smart playlist's row counts: its matches, fixed here (the app works them out). */
+const SMART_COUNT = 42;
+
+/** The sidebar's actions as spies: a manual playlist counts its items, a smart one `SMART_COUNT`. */
+const ACTIONS: SidebarActions = {
+  onPlay: fn(),
+  onStop: fn(),
+  onCreate: fn(),
+  onImport: fn(),
+  onRename: fn(),
+  onExport: fn(),
+  onDelete: fn(),
+  count: fn((p: Playlist) => (p.kind === 'manual' ? p.items.length : SMART_COUNT)),
+  onError: fn((what: string) => (e: unknown) => console.error(`Couldn't ${what}:`, e)),
+};
+
+/** No playlists at all, nothing playing. */
+const EMPTY: Lists = { playlists: [], deck: { ...LISTS.deck, playlist: null } };
+
+/** A row's button by the start of its name. */
+const rowNamed = (canvas: { getByRole(role: string, o: { name: RegExp }): HTMLElement }, name: string) => canvas.getByRole('button', { name: new RegExp(`^${escape(name)},`) });
+
+/** A right-click on a row, a third of the way along it, so the menu opens where a pointer would put it. */
+const rightClick = (el: HTMLElement) => {
+  const box = el.getBoundingClientRect();
+  return userEvent.pointer({ keys: '[MouseRight]', target: el, coords: { clientX: box.left + box.width / 3, clientY: box.top + box.height / 2 } });
+};
+
 /**
  * The macOS layout's inset sidebar (Apple's kit's "Library Preview"), in the
  * app's own look: today's source list (Home/Sources) as collapsible sections,
@@ -72,6 +102,7 @@ const meta = {
     collapsed: [],
     onSelect: fn(),
     onToggle: fn(),
+    actions: ACTIONS,
   },
   parameters: { scope: 'bare', layout: 'fullscreen' },
   decorators: [
@@ -100,7 +131,11 @@ export const Default: Story = {
     const warmUp = canvas.getByRole('button', { name: /^Warm-up, playlist, 10 presets, playing$/ });
     await expect(warmUp).toHaveAttribute('aria-current', 'true');
     await expect(warmUp).toHaveAttribute('data-playing');
-    // One tab stop: the row picked.
+    // The playlists' heading's + and ⤓ are tab stops of their own (before it in the page); then one stop for the rows and headings: the row picked.
+    await userEvent.tab();
+    await expect(canvas.getByRole('button', { name: 'new playlist' })).toHaveFocus();
+    await userEvent.tab();
+    await expect(canvas.getByRole('button', { name: 'add from a file' })).toHaveFocus();
     await userEvent.tab();
     await expect(warmUp).toHaveFocus();
     // Down to the next row, up past the heading's rows to the heading, End and Home.
@@ -160,5 +195,120 @@ export const LongNamesManyPlaylists: Story = {
     canvas.getByRole('button', { name: 'Library', expanded: true }).focus();
     await userEvent.keyboard('{End}');
     await waitFor(() => expect(body.scrollTop).toBeGreaterThan(0));
+  },
+};
+
+/** A playlist's menu: a right-click opens it on Play/Stop, the arrows walk it, Esc closes it back to the row, ⇧F10 opens it from the keyboard, and Save to a file exports. */
+export const RowMenu: Story = {
+  name: 'Row menu',
+  play: async ({ canvas, args }) => {
+    const warmUp = rowNamed(canvas, WARM_UP.name);
+    // The counts: a manual playlist's items, a smart one's matches.
+    await expect(warmUp).toHaveTextContent(String(WARM_UP.items.length));
+    await expect(rowNamed(canvas, BRIGHT_FAST.name)).toHaveTextContent(String(SMART_COUNT));
+    await rightClick(warmUp);
+    const menu = await canvas.findByRole('menu', { name: WARM_UP.name });
+    // Warm-up is playing: the menu opens on Stop.
+    await waitFor(() => expect(canvas.getByRole('menuitem', { name: 'Stop' })).toHaveFocus());
+    await userEvent.keyboard('{ArrowDown}');
+    await expect(canvas.getByRole('menuitem', { name: 'Rename' })).toHaveFocus();
+    await userEvent.keyboard('{End}');
+    await expect(canvas.getByRole('menuitem', { name: 'Delete…' })).toHaveFocus();
+    await userEvent.keyboard('{ArrowDown}');
+    await expect(canvas.getByRole('menuitem', { name: 'Stop' })).toHaveFocus();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(menu).not.toBeInTheDocument());
+    await expect(warmUp).toHaveFocus();
+    // From the keyboard: ⇧F10 on the row focused.
+    await userEvent.keyboard('{Shift>}{F10}{/Shift}');
+    await waitFor(() => expect(canvas.getByRole('menuitem', { name: 'Stop' })).toHaveFocus());
+    await userEvent.click(canvas.getByRole('menuitem', { name: 'Save to a file' }));
+    await expect(args.actions!.onExport).toHaveBeenCalledWith(WARM_UP.id);
+    await waitFor(() => expect(canvas.queryByRole('menu')).toBeNull());
+    await expect(args.actions!.onDelete).not.toHaveBeenCalled();
+  },
+};
+
+/** The menu left open on Closing set, for a look: its glass, where it sits, the row keeping its hover tint and its "…". */
+export const RowMenuOpen: Story = {
+  name: 'Row menu open',
+  play: async ({ canvas }) => {
+    const closing = rowNamed(canvas, CLOSING.name);
+    await rightClick(closing);
+    const menu = await canvas.findByRole('menu', { name: CLOSING.name });
+    // At the pointer, in the row: not flipped above it.
+    await waitFor(() => expect(menu.getBoundingClientRect().top).toBeGreaterThanOrEqual(closing.getBoundingClientRect().top));
+    await expect(canvas.getByRole('button', { name: `More for ${CLOSING.name}` })).toHaveAttribute('aria-expanded', 'true');
+  },
+};
+
+/** Rename from the menu: the name becomes a box in its row, a new name and Enter rename it, and focus goes back to the row. */
+export const Rename: Story = {
+  play: async ({ canvas, args }) => {
+    await rightClick(rowNamed(canvas, CLOSING.name));
+    await userEvent.click(await canvas.findByRole('menuitem', { name: 'Rename' }));
+    const box = await canvas.findByRole('textbox', { name: `New name for ${CLOSING.name}` });
+    await waitFor(() => expect(box).toHaveFocus());
+    await expect(box).toHaveValue(CLOSING.name);
+    await userEvent.clear(box);
+    await userEvent.type(box, 'Encore{Enter}');
+    await expect(args.actions!.onRename).toHaveBeenCalledWith(CLOSING.id, 'Encore');
+    await waitFor(() => expect(canvas.queryByRole('textbox')).toBeNull());
+    await waitFor(() => expect(rowNamed(canvas, CLOSING.name)).toHaveFocus());
+  },
+};
+
+/** Delete asks first, in the menu: "Delete Closing set, Saturday?" or Keep; Keep keeps it, the question deletes it. */
+export const DeleteAsksFirst: Story = {
+  name: 'Delete asks first',
+  play: async ({ canvas, args }) => {
+    const closing = rowNamed(canvas, CLOSING.name);
+    await rightClick(closing);
+    await userEvent.click(await canvas.findByRole('menuitem', { name: 'Delete…' }));
+    const ask = await canvas.findByRole('menuitem', { name: `Delete ${CLOSING.name}?` });
+    await waitFor(() => expect(ask).toHaveFocus());
+    await userEvent.click(canvas.getByRole('menuitem', { name: 'Keep' }));
+    await waitFor(() => expect(canvas.queryByRole('menu')).toBeNull());
+    await expect(args.actions!.onDelete).not.toHaveBeenCalled();
+    await expect(closing).toHaveFocus();
+    // Again, and this time delete.
+    await rightClick(closing);
+    await userEvent.click(await canvas.findByRole('menuitem', { name: 'Delete…' }));
+    await userEvent.click(await canvas.findByRole('menuitem', { name: `Delete ${CLOSING.name}?` }));
+    await expect(args.actions!.onDelete).toHaveBeenCalledWith(CLOSING.id);
+    await waitFor(() => expect(canvas.queryByRole('menu')).toBeNull());
+  },
+};
+
+/** No playlists yet: both sections say how to make one, and the heading's + makes one. */
+export const Empty: Story = {
+  args: { sections: sidebarSections(EMPTY, { library: ROWS.length, starred: STARRED.length }), lists: EMPTY, selected: { kind: 'library' } },
+  play: async ({ canvas, args }) => {
+    await expect(canvas.getByText('None yet: + makes one.')).toBeVisible();
+    await expect(canvas.getByText(/^Filter the library, then /)).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'new playlist' }));
+    await expect(args.actions!.onCreate).toHaveBeenCalled();
+  },
+};
+
+/** A preset dragged over Closing set: that row lights as the drop target, the smart playlists fade; the drag is the page's own (`drags`), held over the row. */
+export const DraggingAPreset: Story = {
+  name: 'Dragging a preset',
+  beforeEach: () => () => drags.cancel(),
+  play: async ({ canvasElement, canvas }) => {
+    const target = canvasElement.querySelector<HTMLElement>(`li[data-drop="list:${CLOSING.id}"]`)!;
+    await expect(target).not.toBeNull();
+    const box = target.getBoundingClientRect();
+    const x = box.left + box.width / 2;
+    const y = box.top + box.height / 2;
+    const row = ROWS[0];
+    drags.press(x - 40, y, { kind: 'preset', path: row.path, name: row.title, thumbnail: null }, { accepts: () => true, onDrop: fn() });
+    drags.move(x, y);
+    await waitFor(() => expect(target).toHaveAttribute('data-over'));
+    const bright = rowNamed(canvas, BRIGHT_FAST.name).closest('li')!;
+    await expect(bright).toHaveAttribute('data-refuses');
+    await expect(bright).not.toHaveAttribute('data-drop');
+    // Warm-up takes drops too, but the pointer isn't over it.
+    await expect(rowNamed(canvas, WARM_UP.name).closest('li')).not.toHaveAttribute('data-over');
   },
 };

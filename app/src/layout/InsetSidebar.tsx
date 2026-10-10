@@ -1,21 +1,33 @@
-import { useId, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import type { Pane } from '../home.ts';
-import type { Lists } from '../playlists.ts';
+import type { Lists, Playlist } from '../playlists.ts';
 import { plural } from '../controls.ts';
+import { useDrag } from '../drag.ts';
+import { queryName } from '../librarySearch.ts';
 import { say } from '../words.ts';
 import { rowSays, type SidebarActions } from './home-model.ts';
 import { Icon } from './icons.tsx';
-import { paneKey, samePane, type SidebarRow, type SidebarSection } from './sidebar-model.ts';
+import { canToggle, dropState, menuAt, menuStep, paneKey, renamed, rowMenu, samePane, toggleTitle, type MenuAction, type MenuItem, type SidebarRow, type SidebarSection } from './sidebar-model.ts';
+// The menu's glass and items are the popovers' (`.vf-pop-panel`).
+import '../popover.css';
 import './inset-sidebar.css';
 
 export { paneKey, samePane, sidebarSections, type SidebarRow, type SidebarSection } from './sidebar-model.ts';
 
 /**
- * The inset sidebar's content (HomeLayout's `sidebar` slot, inside its `nav`):
+ * The home's sidebar (HomeLayout's `sidebar` slot, inside its `nav`):
  * collapsible sections ("Library", "Playlists", "Smart playlists"), each a
  * quiet heading with a chevron over its rows; a row an icon, a name, a count
- * and, for the playlist playing, the green dot after its name, as today's
- * source list (Sources.tsx) has it. The row picked is a soft pill in --fg.
+ * and, for the playlist playing, the green dot after its name. The row picked
+ * is a soft pill in --fg.
+ *
+ * A playlist's row also plays: its icon turns into a play (or stop) button on
+ * hover, a double-click plays or stops it, and it is a place to drop a preset
+ * (a smart one refuses, faded, while one is dragged). Its menu, drawn by the
+ * page (decision D11), opens on a right-click, ⇧F10 (or the menu key) and the
+ * "…" that shows on hover: play or stop, rename (in place), save to a file,
+ * delete (asking first). The playlists' heading has + (a new playlist) and ⤓
+ * (add one from a file).
  *
  * One tab stop: the arrow keys walk the headings and the rows shown, Home and
  * End jump to the first and the last, Enter or Space picks a row or folds a
@@ -32,9 +44,9 @@ export interface InsetSidebarProps {
   collapsed: readonly string[];
   /** Fold or unfold a section. */
   onToggle(id: string): void;
-  /** The app's playlists, when there are: a playlist's row then says what today's source list says of it (`rowSays`), such as what a smart one fills itself with. */
+  /** The app's playlists: a playlist's row then says what it is (`rowSays`), and plays, takes drops and has its menu. */
   lists?: Lists | null;
-  /** What the rows and their menus can do to the playlists (play, stop, make, import, rename, save, delete); not used yet. */
+  /** What the rows, their menus and the playlists' heading do; without it the sidebar only picks and folds. */
   actions?: SidebarActions;
 }
 
@@ -42,25 +54,58 @@ export interface InsetSidebarProps {
 const headKey = (id: string) => `head:${id}`;
 const rowKey = (r: SidebarRow) => `row:${paneKey(r.pane)}`;
 
-/** What a row says to a screen reader: a playlist's as today's source list says it, the library's and starred's their name. */
-function rowLabel(r: SidebarRow, lists: Lists | null | undefined): string | undefined {
+/** The playlist a row opens, when it opens one. */
+const listOf = (r: SidebarRow, lists: Lists | null | undefined): Playlist | undefined =>
+  r.pane.kind === 'list' ? lists?.playlists.find((p) => r.pane.kind === 'list' && p.id === r.pane.id) : undefined;
+
+/** What a row says to a screen reader: a playlist's as `rowSays` has it, the library's and starred's their name. */
+function rowLabel(r: SidebarRow, p: Playlist | undefined): string | undefined {
   if (r.pane.kind !== 'list') return undefined;
-  const id = r.pane.id;
-  const p = lists?.playlists.find((x) => x.id === id);
   if (p) return rowSays(p, !!r.playing);
   // Without the playlists: what the row itself knows.
   const what = r.icon === 'smart-playlist' ? 'smart playlist' : r.count === null || r.count === undefined ? 'playlist' : `playlist, ${plural(r.count, 'preset')}`;
   return `${r.name}, ${what}${r.playing ? ', playing' : ''}`;
 }
 
-/** What an empty section says, as today's source list does. */
-const emptySays = (id: string) => (id === 'smart' ? `Filter the library, then ${say('save query')}.` : 'None yet.');
+/** What a row says on hover. */
+function rowTitle(r: SidebarRow, p: Playlist | undefined): string {
+  if (r.pane.kind === 'library') return 'Every preset: search, filter, and drag them onto a playlist';
+  if (r.pane.kind === 'starred') return 'The presets you starred';
+  if (!p) return r.name;
+  return p.kind === 'smart' ? `${p.name}: fills itself with ${p.query ? queryName(p.query) : 'presets'}` : `${p.name}: drop presets here to add them`;
+}
+
+/** What an empty section says. */
+const emptySays = (id: string) => (id === 'smart' ? `Filter the library, then ${say('save query')}.` : id === 'playlists' ? 'None yet: + makes one.' : 'None yet.');
+
+/** A row's menu open: whose, where, and what opened it (focus goes back there when it closes). */
+interface OpenMenu {
+  key: string;
+  list: Playlist;
+  playing: boolean;
+  x: number;
+  y: number;
+  opener: HTMLElement | null;
+}
 
 /** The sections and their rows. */
-export function InsetSidebar({ sections, selected, onSelect, collapsed, onToggle, lists }: InsetSidebarProps) {
+export function InsetSidebar({ sections, selected, onSelect, collapsed, onToggle, lists, actions }: InsetSidebarProps) {
   const uid = useId();
   const items = useRef(new Map<string, HTMLButtonElement>());
   const [active, setActive] = useState<string | null>(null);
+  const [menu, setMenu] = useState<OpenMenu | null>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  // A row to focus once it is drawn again (after a rename).
+  const refocus = useRef<string | null>(null);
+  const file = useRef<HTMLInputElement>(null);
+  const drag = useDrag();
+
+  useEffect(() => {
+    if (refocus.current && items.current.has(refocus.current)) {
+      items.current.get(refocus.current)?.focus();
+      refocus.current = null;
+    }
+  });
 
   // What the keyboard walks, in order: each heading, then its rows while it is open.
   const order: { key: string; section: SidebarSection; row?: SidebarRow }[] = [];
@@ -110,52 +155,190 @@ export function InsetSidebar({ sections, selected, onSelect, collapsed, onToggle
     focus(to);
   };
 
+  const toggle = (p: Playlist, playing: boolean) => {
+    if (!actions || !canToggle(p, playing)) return;
+    if (playing) actions.onStop();
+    else actions.onPlay(p.id);
+  };
+
+  const openMenu = (r: SidebarRow, p: Playlist, x: number, y: number, opener: HTMLElement | null) => {
+    if (!actions) return;
+    setMenu({ key: rowKey(r), list: p, playing: !!r.playing, x, y, opener });
+  };
+
+  const closeMenu = (refocusOpener: boolean) => {
+    const was = menu;
+    setMenu(null);
+    if (refocusOpener && was?.opener?.isConnected) was.opener.focus();
+  };
+
+  const choose = (action: MenuAction) => {
+    if (!menu || !actions) return;
+    const p = menu.list;
+    if (action === 'rename') {
+      setMenu(null);
+      setRenaming(p.id);
+      return;
+    }
+    closeMenu(true);
+    if (action === 'play' || action === 'stop') toggle(p, menu.playing);
+    else if (action === 'export') actions.onExport(p.id);
+    else if (action === 'delete') actions.onDelete(p.id);
+  };
+
+  const finishRename = (r: SidebarRow, p: Playlist, typed: string | null) => {
+    setRenaming(null);
+    refocus.current = rowKey(r);
+    const name = typed === null ? null : renamed(p.name, typed);
+    if (name && actions) actions.onRename(p.id, name);
+  };
+
   return (
-    <div className="isb" onKeyDown={onKeyDown}>
+    // The webview's own menu (Reload, Inspect…) never opens over the sidebar: a row's is the page's.
+    <div className="isb" onKeyDown={onKeyDown} onContextMenu={(e) => e.preventDefault()}>
       {sections.map((s) => {
         const open = !collapsed.includes(s.id);
         const body = `${uid}-isb-${s.id}`;
         return (
           <div key={s.id} className="isb-section">
-            <h2 className="isb-head">
-              <button
-                type="button"
-                className="isb-toggle"
-                aria-expanded={open}
-                aria-controls={body}
-                title={open ? `Hide ${s.title.toLowerCase()}` : `Show ${s.title.toLowerCase()}`}
-                onClick={() => onToggle(s.id)}
-                {...bind(headKey(s.id))}
-              >
-                <span className="isb-title">{s.title}</span>
-                <Icon className="isb-chevron" name={open ? 'chevron-down' : 'chevron-right'} size={12} />
-              </button>
-            </h2>
+            <div className="isb-headrow">
+              <h2 className="isb-head">
+                <button
+                  type="button"
+                  className="isb-toggle"
+                  aria-expanded={open}
+                  aria-controls={body}
+                  title={open ? `Hide ${s.title.toLowerCase()}` : `Show ${s.title.toLowerCase()}`}
+                  onClick={() => onToggle(s.id)}
+                  {...bind(headKey(s.id))}
+                >
+                  <span className="isb-title">{s.title}</span>
+                  <Icon className="isb-chevron" name={open ? 'chevron-down' : 'chevron-right'} size={12} />
+                </button>
+              </h2>
+              {/* Beside the heading, not in it: a heading's name is just its title. */}
+              {s.id === 'playlists' && actions && (
+                <span className="isb-tools">
+                  <button type="button" className="isb-tool" aria-label="new playlist" title="Make a new, empty playlist" onClick={() => actions.onCreate()}>
+                    <Icon name="plus" size={14} />
+                  </button>
+                  <button type="button" className="isb-tool" aria-label="add from a file" title="Add from a file: a playlist someone saved" onClick={() => file.current?.click()}>
+                    <span className="isb-tool-glyph" aria-hidden="true">
+                      ⤓
+                    </span>
+                  </button>
+                  <input
+                    ref={file}
+                    type="file"
+                    accept=".json,application/json"
+                    hidden
+                    data-testid="isb-import"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = '';
+                      if (f) f.text().then((text) => actions.onImport(text), actions.onError('read that file'));
+                    }}
+                  />
+                </span>
+              )}
+            </div>
             <ul id={body} className="isb-rows" hidden={!open}>
               {s.rows.map((r) => {
                 const picked = samePane(r.pane, selected);
+                const p = listOf(r, lists);
+                const playing = !!r.playing;
+                const live = !!(p && actions);
+                const drop = dropState(live ? p : null, drag);
+                const count = p && actions ? actions.count(p) : r.count;
+                const key = rowKey(r);
+                const menuOpen = menu?.key === key;
+                const onContextMenu = (e: ReactMouseEvent) => {
+                  e.preventDefault();
+                  if (p) openMenu(r, p, e.clientX, e.clientY, items.current.get(key) ?? null);
+                };
                 return (
-                  <li key={paneKey(r.pane)}>
-                    <button
-                      type="button"
-                      className="isb-row"
-                      aria-label={rowLabel(r, lists)}
-                      aria-current={picked ? 'true' : undefined}
-                      data-playing={r.playing ? '' : undefined}
-                      title={r.name}
-                      onClick={() => onSelect(r.pane)}
-                      {...bind(rowKey(r))}
-                    >
-                      <Icon className="isb-icon" name={r.icon} />
-                      <span className="isb-name">{r.name}</span>
-                      {/* The playlist playing: a small green dot after its name. */}
-                      {r.playing && <span className="isb-dot" aria-hidden="true" />}
-                      {r.count !== null && r.count !== undefined && (
-                        <i className="isb-count" aria-hidden="true">
-                          {r.count.toLocaleString('en-US')}
-                        </i>
-                      )}
-                    </button>
+                  <li
+                    key={paneKey(r.pane)}
+                    className="isb-item"
+                    data-live={live ? '' : undefined}
+                    data-menu={menuOpen ? '' : undefined}
+                    // Set here, on the row's whole box, so whatever part of it the pointer is over (the play button, the "…") finds the target.
+                    data-drop={drop.drop}
+                    data-over={drop.over ? '' : undefined}
+                    data-refuses={drop.refuses ? '' : undefined}
+                    onContextMenu={onContextMenu}
+                  >
+                    {live && p && renaming === p.id ? (
+                      <div className="isb-row" data-renaming="">
+                        <Icon className="isb-icon" name={r.icon} />
+                        <RenameBox name={p.name} onDone={(typed) => finishRename(r, p, typed)} />
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="isb-row"
+                        aria-label={rowLabel(r, p)}
+                        aria-current={picked ? 'true' : undefined}
+                        aria-haspopup={live ? 'menu' : undefined}
+                        data-playing={playing ? '' : undefined}
+                        title={rowTitle(r, p)}
+                        onClick={() => onSelect(r.pane)}
+                        onDoubleClick={() => p && toggle(p, playing)}
+                        onKeyDown={(e) => {
+                          if (!p || !live) return;
+                          if ((e.key === 'F10' && e.shiftKey) || e.key === 'ContextMenu') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const box = e.currentTarget.getBoundingClientRect();
+                            openMenu(r, p, box.left + 24, box.bottom, e.currentTarget);
+                          }
+                        }}
+                        {...bind(key)}
+                      >
+                        <Icon className="isb-icon" name={r.icon} />
+                        <span className="isb-name">{r.name}</span>
+                        {/* The playlist playing: a small green dot after its name. */}
+                        {playing && <span className="isb-dot" aria-hidden="true" />}
+                        {count !== null && count !== undefined && (
+                          <i className="isb-count" aria-hidden="true">
+                            {count.toLocaleString('en-US')}
+                          </i>
+                        )}
+                      </button>
+                    )}
+                    {live && p && renaming !== p.id && (
+                      <>
+                        {/* Over the icon on hover: play or stop. The keyboard plays from the menu (⇧F10), so this is no tab stop. */}
+                        <button
+                          type="button"
+                          className="isb-play"
+                          tabIndex={-1}
+                          aria-label={playing ? `Stop ${p.name}` : `Play ${p.name}`}
+                          title={toggleTitle(p, playing)}
+                          disabled={!canToggle(p, playing)}
+                          onClick={() => toggle(p, playing)}
+                        >
+                          <Icon name={playing ? 'stop' : 'play'} size={12} />
+                        </button>
+                        {/* The row's menu, from the pointer; over the count on hover. */}
+                        <button
+                          type="button"
+                          className="isb-more"
+                          tabIndex={-1}
+                          aria-label={`More for ${p.name}`}
+                          aria-haspopup="menu"
+                          aria-expanded={menuOpen}
+                          title="Play, rename, save to a file or delete"
+                          onClick={(e) => {
+                            if (menuOpen) return closeMenu(false);
+                            const box = e.currentTarget.getBoundingClientRect();
+                            openMenu(r, p, box.left, box.bottom + 4, items.current.get(key) ?? e.currentTarget);
+                          }}
+                        >
+                          <Icon name="more" size={14} />
+                        </button>
+                      </>
+                    )}
                   </li>
                 );
               })}
@@ -164,6 +347,122 @@ export function InsetSidebar({ sections, selected, onSelect, collapsed, onToggle
           </div>
         );
       })}
+      {menu && <RowMenu name={menu.list.name} items={rowMenu(menu.list, menu.playing, lists)} at={menu} onChoose={choose} onClose={closeMenu} />}
+    </div>
+  );
+}
+
+/** A playlist's name being edited in its row: Enter or leaving keeps what was typed, Esc puts the old name back. */
+function RenameBox({ name, onDone }: { name: string; onDone(typed: string | null): void }) {
+  const done = useRef(false);
+  const finish = (typed: string | null) => {
+    if (done.current) return;
+    done.current = true;
+    onDone(typed);
+  };
+  return (
+    <input
+      className="isb-rename"
+      aria-label={`New name for ${name}`}
+      defaultValue={name}
+      autoFocus
+      spellCheck={false}
+      onFocus={(e) => e.currentTarget.select()}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          finish(e.currentTarget.value);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          finish(null);
+        }
+      }}
+      onBlur={(e) => finish(e.currentTarget.value)}
+    />
+  );
+}
+
+/**
+ * A row's menu, drawn by the page in popover.css's glass, at a point (kept in
+ * the window). Arrow keys, Home and End walk its items; Enter or Space
+ * chooses; Esc or Tab closes it, putting focus back where it came from, and a
+ * press outside closes it. Delete asks first, in the menu itself.
+ */
+function RowMenu({ name, items, at, onChoose, onClose }: { name: string; items: MenuItem[]; at: { x: number; y: number }; onChoose(a: MenuAction): void; onClose(refocus: boolean): void }) {
+  const panel = useRef<HTMLDivElement>(null);
+  const [asking, setAsking] = useState(false);
+  const [place, setPlace] = useState(at);
+  const shown: MenuItem[] = asking
+    ? [
+        { action: 'delete', label: `Delete ${name}?`, title: `Delete ${name} for good`, danger: true },
+        // Keep: closes the menu (its action is not used).
+        { action: 'stop', label: 'Keep', title: 'Keep the playlist' },
+      ]
+    : items;
+
+  useLayoutEffect(() => {
+    const el = panel.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setPlace(menuAt(at, { w: r.width, h: r.height }, { w: window.innerWidth, h: window.innerHeight }));
+  }, [at, asking]);
+
+  // Focus the first item that can be chosen, on opening and on asking.
+  useEffect(() => {
+    panel.current?.querySelector<HTMLButtonElement>('[role=menuitem]:not(:disabled)')?.focus();
+  }, [asking]);
+
+  // A press anywhere else closes it; but for the "…" that opened it, whose click closes it.
+  useEffect(() => {
+    const press = (e: PointerEvent) => {
+      const t = e.target as Element | null;
+      if (panel.current?.contains(t) || t?.closest?.('.isb-item[data-menu] .isb-more')) return;
+      onClose(false);
+    };
+    window.addEventListener('pointerdown', press, { capture: true });
+    return () => window.removeEventListener('pointerdown', press, { capture: true });
+  }, [onClose]);
+
+  const onKeyDown = (e: KeyboardEvent) => {
+    e.stopPropagation();
+    if (e.key === 'Escape' || e.key === 'Tab') {
+      e.preventDefault();
+      onClose(true);
+      return;
+    }
+    const buttons = [...(panel.current?.querySelectorAll<HTMLButtonElement>('[role=menuitem]') ?? [])];
+    const to = menuStep(
+      buttons.map((b) => b.disabled),
+      buttons.indexOf(document.activeElement as HTMLButtonElement),
+      e.key,
+    );
+    if (to === null) return;
+    e.preventDefault();
+    buttons[to]?.focus();
+  };
+
+  return (
+    <div ref={panel} className="vf-pop-panel isb-menu" role="menu" aria-label={name} style={{ left: place.x, top: place.y }} onKeyDown={onKeyDown} onContextMenu={(e) => e.preventDefault()}>
+      {shown.map((it) => (
+        <button
+          key={`${asking}-${it.action}`}
+          type="button"
+          role="menuitem"
+          title={it.title}
+          disabled={it.disabled}
+          data-danger={it.danger ? '' : undefined}
+          onClick={() => {
+            if (asking) {
+              if (it.action === 'delete') onChoose('delete');
+              else onClose(true);
+            } else if (it.action === 'delete') setAsking(true);
+            else onChoose(it.action);
+          }}
+        >
+          {it.label}
+        </button>
+      ))}
     </div>
   );
 }
