@@ -138,3 +138,139 @@
   color: var(--caption);
   font-size: 11px;
 }
+
+/* The playlists' heading: + and ⤓ after it, faint until the heading's line is hovered. */
+.lay .isb-headrow {
+  display: flex;
+  align-items: center;
+}
+.lay .isb-headrow .isb-head {
+  flex: 1;
+  min-width: 0;
+}
+.lay .isb-tools {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  padding-right: 4px;
+  opacity: 0.6;
+  transition: opacity 0.12s ease;
+}
+.lay .isb-headrow:hover .isb-tools,
+.lay .isb-tools:focus-within {
+  opacity: 1;
+}
+.lay .isb-tool {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--caption);
+  font: inherit;
+  cursor: pointer;
+}
+.lay .isb-tool:hover {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+}
+.lay .isb-tool-glyph {
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* A playlist's row: the play button over its icon and the "…" over its count, on hover. */
+.lay .isb-item {
+  position: relative;
+}
+.lay .isb-play,
+.lay .isb-more {
+  position: absolute;
+  top: 50%;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ui);
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+/* Centred where the row's 16 px icon sits (the row's 10 px padding). */
+.lay .isb-play {
+  left: 7px;
+}
+.lay .isb-more {
+  right: 6px;
+}
+.lay .isb-play:hover:not(:disabled),
+.lay .isb-more:hover,
+.lay .isb-more[aria-expanded='true'] {
+  color: var(--fg);
+}
+.lay .isb-play:disabled {
+  color: var(--caption);
+  cursor: default;
+}
+.lay .isb-item[data-live]:hover :is(.isb-play, .isb-more),
+.lay .isb-item[data-menu] .isb-more {
+  display: flex;
+}
+.lay .isb-item[data-live]:hover .isb-row:not([data-renaming]) .isb-icon,
+.lay .isb-item[data-live]:is(:hover, [data-menu]) .isb-count {
+  visibility: hidden;
+}
+/* The row whose menu is open keeps its hover tint. */
+.lay .isb-item[data-menu] .isb-row {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
+}
+
+/* While a preset is dragged: the playlist it would land on lights up with a tint, and smart ones, which take none, fade. */
+.lay .isb-item[data-over] .isb-row {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--caution) 18%, transparent);
+}
+.lay .isb-item[data-refuses] {
+  opacity: 0.45;
+}
+
+/* A name being edited in its row: type on the faint field tone, no box. */
+.lay .isb-row[data-renaming] {
+  cursor: text;
+}
+/* Under .vf-root, to outrank access.css's focus ring for inputs. */
+.vf-root .lay .isb-rename,
+.lay .isb-rename {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  margin: 0 -6px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--surface-3);
+  color: var(--fg);
+  font: inherit;
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: -2px;
+}
+
+/* A row's menu: popover.css's glass panel, at the point it opened (InsetSidebar sets left and top). */
+.lay .vf-pop-panel.isb-menu {
+  position: fixed;
+  min-width: 180px;
+  z-index: 60;
+}
+.lay .isb-menu [role='menuitem'][data-danger]:hover,
+.lay .isb-menu [role='menuitem'][data-danger]:focus-visible {
+  color: var(--red);
+}
