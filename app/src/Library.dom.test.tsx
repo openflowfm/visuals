@@ -270,6 +270,26 @@ describe("the home's library pane (decision 68)", () => {
 });
 
 describe('the library following the grid', () => {
+  it('plays a tile with nothing followed until the index has answered, then follows as usual', async () => {
+    let index!: (rows: LibraryRow[]) => void;
+    invoke.mockImplementation((cmd: string) => (cmd === 'library_index' ? new Promise((r) => (index = r)) : Promise.resolve(answer(cmd))));
+    const r = render(view(null));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    const grid = screen.getByRole('listbox', { name: 'presets' });
+    fireEvent.focus(grid);
+    fireEvent.keyDown(grid, { key: 'Enter' });
+    expect(follows()).toEqual([]);
+    // Nor once the filter changes: the deck isn't following the fallback grid.
+    await filter(r, null, 'b');
+    expect(follows()).toEqual([]);
+    r.rerender(view(null));
+    await act(async () => index(ROWS));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    fireEvent.focus(grid);
+    fireEvent.keyDown(grid, { key: 'Enter' });
+    expect(follows()).toEqual([ROWS[0].path]);
+  });
+
   it('follows the grid again after the filter changes', async () => {
     const r = await mountAndPlay();
     await filter(r, ROWS[0].path, 'b');

@@ -272,14 +272,16 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
     };
   }, [one]);
 
-  const handlers = useRef({ onLoad, onAdd, onPress, onSearch, shown, selection, anchor, active, entryOf, query, current });
-  handlers.current = { onLoad, onAdd, onPress, onSearch, shown, selection, anchor, active, entryOf, query, current };
+  const handlers = useRef({ onLoad, onAdd, onPress, onSearch, shown, selection, anchor, active, entryOf, query, current, indexed: !!index });
+  handlers.current = { onLoad, onAdd, onPress, onSearch, shown, selection, anchor, active, entryOf, query, current, indexed: !!index };
 
   // Playing from the grid: open it, and have ←, → and R follow the grid (the deck keeps a loaded playlist).
   const following = useRef(false);
   const play = useCallback((p: Prepared) => {
     const h = handlers.current;
     h.onLoad(h.entryOf(p));
+    // Until the index has loaded, the grid's rows are a guess Rust's resolve may not agree with: play with nothing followed.
+    if (!h.indexed) return;
     following.current = true;
     followGrid(h.query, p.row.path);
   }, []);
