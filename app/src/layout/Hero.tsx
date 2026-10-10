@@ -1,4 +1,5 @@
 import type { LibraryRow } from '../api.ts';
+import { Numbers } from '../HomeBar.tsx';
 import { tileBy, tileName } from '../PresetTile.tsx';
 import { Icon } from './icons.tsx';
 import './hero.css';
@@ -6,8 +7,12 @@ import './hero.css';
 /**
  * The Now Playing card at the top of the main column (HomeLayout's `hero`
  * slot, inside its "now playing" region): the preview large, the preset's name
- * and author, where it plays from, and its actions. Stub: the hero lane draws
- * it (corners of `--lay-hero-radius`), keeping these props.
+ * and author, where it plays from, and its actions, as type (decision 68).
+ *
+ * The picture is one box (`.hero-pic`) with nothing laid over it: in the app it
+ * would be the native preview's hole (as NowPanel's `Preview` is), so the words
+ * and actions sit beside it in a wide card and under it in a narrow one, and
+ * its corners are `--lay-hero-radius`.
  */
 export interface HeroProps {
   /** The preset playing, from the index; null before anything plays. */
@@ -23,34 +28,63 @@ export interface HeroProps {
   onPlayPause(): void;
   onNext(): void;
   onStar(): void;
-  /** Add it to a playlist (the hero lane opens the picker). */
+  /** Add it to a playlist (the caller opens its picker). */
   onAdd(): void;
 }
 
 /** The card. */
 export function Hero({ preset, picture, playing, from, starred, onPlayPause, onNext, onStar, onAdd }: HeroProps) {
-  const name = preset ? tileName(preset.title, preset.path) : 'Nothing playing';
+  const name = preset ? tileName(preset.title, preset.path) : null;
   const by = preset ? tileBy(preset.authors, preset.style) : '';
   return (
-    <div className="hero">
-      <div className="hero-pic">{picture && <img src={picture} alt="" draggable={false} />}</div>
-      <div className="hero-info">
-        <h2 className="hero-name">{name}</h2>
-        {by && <p className="hero-by">{by}</p>}
-        {from && <p className="hero-from">{from}</p>}
-        <div className="hero-actions">
-          <button type="button" aria-label={playing ? 'Pause' : 'Play'} onClick={onPlayPause}>
-            <Icon name={playing ? 'pause' : 'play'} />
-          </button>
-          <button type="button" aria-label="Next" onClick={onNext}>
-            <Icon name="next" />
-          </button>
-          <button type="button" aria-label={starred ? 'Unstar' : 'Star'} aria-pressed={starred} onClick={onStar}>
-            <Icon name="star" />
-          </button>
-          <button type="button" aria-label="Add to a playlist" onClick={onAdd}>
-            <Icon name="plus" />
-          </button>
+    <div className="hero" data-none={preset ? undefined : ''}>
+      <div className="hero-row">
+        <div className="hero-pic" data-empty={picture ? undefined : ''}>
+          {picture ? <img src={picture} alt={name ? `preview of ${name}` : 'preview'} draggable={false} /> : <span className="hero-pic-none">{preset ? 'Drawing…' : 'Nothing playing yet'}</span>}
+        </div>
+        <div className="hero-info">
+          <p className="hero-label">Now playing</p>
+          {name ? (
+            <h2 className="hero-name" title={name}>
+              {name}
+            </h2>
+          ) : (
+            <h2 className="hero-name" data-none="">
+              Nothing playing
+            </h2>
+          )}
+          {by && <p className="hero-by">{by}</p>}
+          {from && (
+            <p className="hero-from">
+              <Numbers text={from} />
+            </p>
+          )}
+          <div className="hero-actions">
+            <button type="button" className="hero-act hero-play" aria-label={playing ? 'pause' : 'play'} title={playing ? 'Hold on this preset' : 'Move on by itself again'} onClick={onPlayPause}>
+              <Icon name={playing ? 'pause' : 'play'} />
+              <span aria-hidden="true">{playing ? 'Pause' : 'Play'}</span>
+            </button>
+            <button type="button" className="hero-act" aria-label="next preset" title="Next preset (→)" onClick={onNext}>
+              <Icon name="next" />
+              <span aria-hidden="true">Next</span>
+            </button>
+            <button
+              type="button"
+              className="hero-act"
+              aria-label="star"
+              aria-pressed={preset ? starred : undefined}
+              disabled={!preset}
+              title={starred ? 'Take the star off' : 'Star it'}
+              onClick={onStar}
+            >
+              <Icon name="star" />
+              <span aria-hidden="true">{starred ? 'Starred' : 'Star'}</span>
+            </button>
+            <button type="button" className="hero-act" aria-label="add to a playlist" title="Add it to a playlist" disabled={!preset} onClick={onAdd}>
+              <Icon name="plus" />
+              <span aria-hidden="true">Playlist</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
