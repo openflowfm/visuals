@@ -135,3 +135,24 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+
+  # The kit renderer's TypeScript: its geometry, fonts and scene building.
+  # kit/ is its own package; drawing needs Apple's kit, which is never in the
+  # repo, so CI runs only the tests that don't.
+  kit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: kit
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: kit/package-lock.json
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
