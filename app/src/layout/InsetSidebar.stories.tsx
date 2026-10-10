@@ -6,6 +6,8 @@ import type { Lists, Playlist } from '../playlists.ts';
 import { BRIGHT_FAST, CLOSING, LISTS, WARM_UP } from '../stories/fixtures.ts';
 import { SIDEBAR } from './fixtures.ts';
 import { InsetSidebar, sidebarSections, type InsetSidebarProps } from './InsetSidebar.tsx';
+// The shell's panel and its `--lay-*` sizes, as HomeLayout.tsx brings them (the decorator draws its panel).
+import './layout.css';
 
 /** The sidebar holding its own selection and folding, as Home would, telling the story's spies too. */
 function Live(props: InsetSidebarProps) {
