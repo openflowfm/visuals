@@ -15,8 +15,11 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
+    "test": "vitest run --project unit",
+    "test:coverage": "vitest run --project unit --coverage",
+    "test:stories": "vitest run --project stories",
+    "storybook": "storybook dev -p \"${PORT:-6006}\"",
+    "build-storybook": "storybook build --quiet -o storybook-static",
     "format:check": "prettier --check app/src",
     "app:ui": "vite --config vite.app.config.ts",
     "app:build-ui": "vite build --config vite.app.config.ts",
@@ -35,6 +38,10 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@storybook/addon-docs": "^10.6.0",
+    "@storybook/addon-themes": "^10.6.0",
+    "@storybook/addon-vitest": "^10.6.0",
+    "@storybook/react-vite": "^10.6.0",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.7",
@@ -42,12 +49,25 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.2",
+    "@vitest/browser": "^5.0.3",
+    "@vitest/browser-playwright": "^5.0.3",
     "@vitest/coverage-v8": "^5.0.3",
     "happy-dom": "^20.14.6",
+    "playwright": "^1.63.0",
     "prettier": "3.9.9",
+    "storybook": "^10.6.0",
+    "storybook-addon-pseudo-states": "^10.6.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.3",
     "vitest": "^5.0.1"
+  },
+  "overrides": {
+    "@storybook/addon-vitest": {
+      "@vitest/browser": "^5.0.1",
+      "@vitest/browser-playwright": "^5.0.1",
+      "@vitest/runner": "^5.0.1",
+      "vitest": "^5.0.1"
+    }
   },
   "allowScripts": {
     "fsevents@2.3.3": true
