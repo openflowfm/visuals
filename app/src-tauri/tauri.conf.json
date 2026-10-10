@@ -22,7 +22,7 @@
         "theme": "Dark",
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
-        "trafficLightPosition": { "x": 18, "y": 28 },
+        "trafficLightPosition": { "x": 24, "y": 28 },
         "windowEffects": {
           "effects": ["hudWindow"],
           "state": "active"

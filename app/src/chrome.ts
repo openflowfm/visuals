@@ -4,7 +4,9 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
  * The main window's own chrome. Its title bar is Tauri's overlay one
  * (`tauri.conf.json`: `titleBarStyle: Overlay`, the title hidden): the page runs
  * up to the window's top edge, under macOS's window buttons, which sit centred
- * in the page's top bar (`trafficLightPosition`). This marks the page's root so
+ * in the page's top bar, or in the home's docked sidebar's top band
+ * (`trafficLightPosition`, one place for every view: Tauri sets it only when it
+ * builds the window). This marks the page's root so
  * chrome.css leaves room for the buttons and gives the top bars their height:
  * `data-chrome="overlay"` in the main window on macOS, and `data-fullscreen`
  * while the window is full screen, where macOS hides the buttons with the title

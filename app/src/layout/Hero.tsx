@@ -11,14 +11,15 @@ import './hero.css';
  * and author, where it plays from, and its actions, as type (decision 68).
  *
  * The picture is one box (`.hero-pic`) with nothing laid over it: in the app it
- * would be the native preview's hole (as NowPanel's `Preview` is), so the words
- * and actions sit beside it in a wide card and under it in a narrow one, and
- * its corners are `--lay-hero-radius`.
+ * is the native preview's hole (`Preview`), so the words and actions sit beside
+ * it in a wide card and under it in a narrow one, and its corners are
+ * `--lay-hero-radius`. Its spread shadow paints the main column around it
+ * (hero.css), and HomeLayout pins the card, so it never scrolls.
  */
 export interface HeroProps {
   /** The preset playing, from the index; null before anything plays. */
   preset: LibraryRow | null;
-  /** The preview's picture: in a story a still or the preset's thumbnail (a URL); in the app a node (the native preview's `Preview`), rendered in its place. Null: nothing drawn yet. */
+  /** The preview's picture: in a story a still or the preset's thumbnail (a URL); in the app a node, `<Preview className="hero-pic" />`, rendered as the picture's box itself (so it must carry `hero-pic`). Null: nothing drawn yet. */
   picture: ReactNode | string | null;
   /** Whether the deck is moving on by itself (pause shows) or holding (play shows). */
   playing: boolean;
@@ -40,15 +41,18 @@ export function Hero({ preset, picture, playing, from, starred, onPlayPause, onN
   return (
     <div className="hero" data-none={preset ? undefined : ''}>
       <div className="hero-row">
-        <div className="hero-pic" data-empty={picture ? undefined : ''}>
-          {typeof picture === 'string' && picture ? (
-            <img src={picture} alt={name ? `preview of ${name}` : 'preview'} draggable={false} />
-          ) : picture ? (
-            picture
-          ) : (
-            <span className="hero-pic-none">{preset ? 'Drawing…' : 'Nothing playing yet'}</span>
-          )}
-        </div>
+        {picture && typeof picture !== 'string' ? (
+          // The app's `<Preview className="hero-pic" />`: the box itself, the native preview's hole, so nothing wraps it.
+          picture
+        ) : (
+          <div className="hero-pic" data-empty={picture ? undefined : ''}>
+            {typeof picture === 'string' && picture ? (
+              <img src={picture} alt={name ? `preview of ${name}` : 'preview'} draggable={false} />
+            ) : (
+              <span className="hero-pic-none">{preset ? 'Drawing…' : 'Nothing playing yet'}</span>
+            )}
+          </div>
+        )}
         <div className="hero-info">
           <p className="hero-label">Now playing</p>
           {name ? (
