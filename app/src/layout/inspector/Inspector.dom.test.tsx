@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LibraryRow, Look } from '../../api.ts';
 import { prepareRow } from '../../librarySearch.ts';
+import { manual } from '../../playlists.ts';
 import { Inspector, type InspectorProps } from './Inspector.tsx';
 
 afterEach(cleanup);
@@ -123,11 +124,135 @@ describe('the inspector in a DOM', () => {
     expect(p.onPick).not.toHaveBeenCalled();
   });
 
+  it('with nothing picked and a source passed, shows the source in place of the field', () => {
+    mount({ subject: null, source: <section aria-label="the playlist">Warm-up</section> });
+    expect(screen.getByRole('region', { name: 'the playlist' })).toBeTruthy();
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(screen.queryByText(/nothing playing/i)).toBeNull();
+  });
+
+  it('a preset shown wins over the source', () => {
+    mount({ source: <section aria-label="the playlist">Warm-up</section> });
+    expect(screen.getByRole('heading', { name: 'Bloom' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'the playlist' })).toBeNull();
+  });
+
+  it('says what failed in an alert line, in every view', () => {
+    mount({ error: 'Couldn’t star it: the disk is full' });
+    expect(screen.getByRole('alert').textContent).toBe('Couldn’t star it: the disk is full');
+    cleanup();
+    mount({ subject: null, playing: null, error: 'Couldn’t read the library' });
+    expect(screen.getByRole('alert').textContent).toBe('Couldn’t read the library');
+    cleanup();
+    mount({ error: null });
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('with onClose, ✕ and Escape close it; without, neither does', async () => {
+    const user = userEvent.setup();
+    const p = mount({ onClose: vi.fn() });
+    await user.click(screen.getByRole('button', { name: 'close info' }));
+    expect(p.onClose).toHaveBeenCalledTimes(1);
+    await user.keyboard('{Escape}');
+    expect(p.onClose).toHaveBeenCalledTimes(2);
+    cleanup();
+    mount();
+    expect(screen.queryByRole('button', { name: 'close info' })).toBeNull();
+  });
+
+  it('Escape in the tag box or an open menu closes that, not the inspector', async () => {
+    const user = userEvent.setup();
+    const p = mount({ onClose: vi.fn() });
+    await user.click(screen.getByRole('button', { name: '+ Tag' }));
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('textbox', { name: 'add tags' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'add to a playlist' }));
+    expect(screen.getByRole('menu', { name: 'add to a playlist' })).toBeTruthy();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(p.onClose).not.toHaveBeenCalled();
+  });
+
+  it('with no onClose, Escape does nothing', async () => {
+    const user = userEvent.setup();
+    mount();
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('heading', { name: 'Bloom' })).toBeTruthy();
+  });
+
   it('with nothing playing, says so and offers no action, the field still drawn', () => {
     mount({ subject: null, playing: null });
     expect(screen.getByText(/nothing playing/i)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'star' })).toBeNull();
     expect(screen.getByRole('listbox', { name: 'The library by speed and brightness' })).toBeTruthy();
     expect(screen.getByText(/The library: 3 presets by speed and brightness/)).toBeTruthy();
+  });
+});
+
+describe('the inspector over several picked', () => {
+  // Amber starred and tagged "warm", Bloom tagged "warm" and "intro", Cinder neither.
+  const several = () => [prepareRow(AMBER, { star: true, tags: ['warm'] }), prepareRow(BLOOM, { star: false, hidden: true, tags: ['warm', 'intro'] }), prepareRow(CINDER, { star: false, tags: [] })];
+  const keys = [AMBER.key, BLOOM.key, CINDER.key];
+  const LISTS = [manual('w', 'Warm-up', []), { ...manual('s', 'Fast', []), kind: 'smart' as const }];
+
+  it('says how many and their styles, with no field and no single preset', () => {
+    mount({ chosen: several() });
+    expect(screen.getByRole('heading', { name: '3 selected' })).toBeTruthy();
+    expect(screen.getByText('Hypnotic')).toBeTruthy();
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Bloom' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'play it' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'open in the editor' })).toBeNull();
+  });
+
+  it('one in chosen is no selection: the subject shows', () => {
+    mount({ chosen: [prepareRow(CINDER, undefined)] });
+    expect(screen.getByRole('heading', { name: 'Bloom' })).toBeTruthy();
+  });
+
+  it('star and never play are mixed over some, and turn on for all of them', async () => {
+    const p = mount({ chosen: several() });
+    const star = screen.getByRole('button', { name: 'star' });
+    expect(star.getAttribute('aria-pressed')).toBe('mixed');
+    await userEvent.click(star);
+    expect(p.onSet).toHaveBeenLastCalledWith(keys, { star: true });
+    const never = screen.getByRole('button', { name: 'never play' });
+    expect(never.getAttribute('aria-pressed')).toBe('mixed');
+    await userEvent.click(never);
+    expect(p.onSet).toHaveBeenLastCalledWith(keys, { hidden: true });
+  });
+
+  it('star takes the star off all of them when every one has it', async () => {
+    const all = several().map((x) => ({ ...x, star: true }));
+    const p = mount({ chosen: all });
+    expect(screen.getByRole('button', { name: 'star' }).getAttribute('aria-pressed')).toBe('true');
+    await userEvent.click(screen.getByRole('button', { name: 'star' }));
+    expect(p.onSet).toHaveBeenLastCalledWith(keys, { star: false });
+  });
+
+  it('adds all of them to a manual playlist', async () => {
+    const p = mount({ chosen: several(), playlists: LISTS });
+    await userEvent.click(screen.getByRole('button', { name: 'add to a playlist' }));
+    expect(screen.queryByRole('menuitem', { name: 'Fast' })).toBeNull();
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Warm-up' }));
+    expect(p.onAddTo).toHaveBeenCalledWith('w', [AMBER.path, BLOOM.path, CINDER.path]);
+  });
+
+  it('edits the tags on all of them, a tag on some showing its count', async () => {
+    const p = mount({ chosen: several() });
+    const tags = screen.getByRole('group', { name: 'my tags' });
+    expect(tags.textContent).toContain('warm2');
+    await userEvent.click(screen.getByRole('button', { name: '+ Tag' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'add tags' }), 'peak{Enter}');
+    expect(p.onSet).toHaveBeenLastCalledWith(keys, { add_tags: ['peak'] });
+    await userEvent.click(screen.getByRole('button', { name: 'take the tag intro off (on 1 of 3)' }));
+    expect(p.onSet).toHaveBeenLastCalledWith(keys, { remove_tags: ['intro'] });
+  });
+
+  it('keeps the close and the error line', async () => {
+    const p = mount({ chosen: several(), onClose: vi.fn(), error: 'Couldn’t tag them' });
+    expect(screen.getByRole('alert').textContent).toBe('Couldn’t tag them');
+    await userEvent.click(screen.getByRole('button', { name: 'close info' }));
+    expect(p.onClose).toHaveBeenCalled();
   });
 });
