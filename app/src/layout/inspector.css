@@ -1,0 +1,79 @@
+/* The inspector's slot (HomeLayout's `inspector`, InspectorPanel): an inset
+   panel down the window's right, mirroring the inset sidebar (layout.css), as
+   macOS 26's inspector does: a raised rounded panel --lay-inset in from the
+   window's edges, the full height, --lay-side-radius corners and the same hint
+   of glass along its top edge. The main column narrows beside it. It paints
+   --surface-2, so it takes the raised caption (home.css). Kept apart from
+   layout.css so the shell's own sizes stay there; this adds one: the panel's
+   width, between the sidebar's 240 and the hero's words beside a picture.
+
+   The options' own content is in inspector/*.css; nothing here styles it but
+   the parts all three share (the back glyph). */
+
+.app.home.lay {
+  --lay-insp: 288px;
+}
+.app.home.lay[data-inspector] {
+  grid-template-columns: calc(var(--lay-side) + 2 * var(--lay-inset)) minmax(0, 1fr) calc(var(--lay-insp) + var(--lay-inset));
+}
+/* An option on its own in a story: the panel alone, at its width. */
+.app.home.lay[data-inspector-alone] {
+  grid-template-columns: minmax(0, 1fr);
+  width: calc(var(--lay-insp) + 2 * var(--lay-inset));
+}
+
+.app.home.lay .lay-insp {
+  --caption: var(--caption-raised);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  margin: var(--lay-inset);
+  border-radius: var(--lay-side-radius);
+  background: var(--surface-2);
+  box-shadow: var(--glass-edge);
+  overflow: hidden;
+  color: var(--ui);
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
+}
+/* Beside the main column the panel's left margin would double the gap the column's own padding leaves. */
+.app.home.lay[data-inspector] > .lay-insp {
+  margin-left: 0;
+}
+.app.home.lay .lay-insp-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* The header's button that opens and closes it (stories): the sidebar's glyph turned to face right, the panel's side; brighter while open. */
+.lay .insp-toggle {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ui);
+  cursor: pointer;
+}
+.lay .insp-toggle .lay-icon {
+  transform: scaleX(-1);
+}
+.lay .insp-toggle:hover,
+.lay .insp-toggle[aria-pressed='true'] {
+  color: var(--fg);
+}
+.lay .insp-toggle:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 0;
+}
+
+/* The back glyph: the chevron, turned to point back. */
+.lay .insp-back-glyph {
+  transform: rotate(180deg);
+}

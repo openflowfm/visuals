@@ -1,0 +1,429 @@
+/* Option A, Marks (Marks.tsx): the inspector as marks, not a table. The
+   picture at the top (16:9, 12px corners, --surface-thumb behind it), then the
+   name set large with its style above it as a small eyebrow and its authors
+   and where it plays from under it. The character follows as marks: the
+   colours a strip of the hues themselves, in equal segments, with their names
+   in small type beneath; brightness, speed and intensity each a row of its
+   word (dark, slow, calm: the word says which measure it is) and a hairline
+   from least to most with one dot where the preset sits, the stretch up to it
+   a shade brighter. No label: value rows, no boxes; the parts are told apart
+   by space. The actions are type with glyphs, as the hero's are (hero.css),
+   the pressed one --fg with its glyph filled; my tags are quiet pills; the
+   playlists holding it one caption line at the foot. A tile picked puts
+   "back to now playing" at the very top and Play under its name. The panel
+   paints --surface-2, so captions here are already the raised ones. */
+
+.lay .insp-a {
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px 22px;
+  color: var(--ui);
+}
+
+/* A tile picked: the way back, first and plain. */
+.lay .insp-a-top {
+  margin: -4px 0 10px -6px;
+}
+.lay .insp-a-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 8px 0 4px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.lay .insp-a-back:hover {
+  background: var(--surface-3);
+}
+.lay .insp-a-back:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 0;
+}
+
+/* The picture. */
+.lay .insp-a-pic {
+  --caption: var(--caption-raised);
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--surface-thumb);
+}
+.lay .insp-a-pic img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.lay .insp-a-pic-none {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--caption);
+  font-size: 12px;
+  user-select: none;
+}
+
+/* The name, large, and what goes with it. */
+.lay .insp-a-head {
+  padding-top: 18px;
+}
+.lay .insp-a-kind {
+  margin: 0 0 6px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--detail);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.lay .insp-a-name {
+  margin: 0;
+  color: var(--fg);
+  font-family: var(--font-display);
+  font-variation-settings: var(--font-display-axes);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.18;
+  letter-spacing: -0.01em;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  text-wrap: balance;
+}
+.lay .insp-a-by {
+  margin: 6px 0 0;
+  color: var(--ui);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.lay .insp-a-from {
+  margin: 3px 0 0;
+  color: var(--caption);
+  font-size: 12px;
+  word-spacing: var(--sep-space);
+}
+.lay .insp-a-play {
+  margin: 10px 0 0 -6px;
+  color: var(--fg);
+  font-size: 14px;
+}
+
+/* The marks. */
+.lay .insp-a-marks {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding-top: 26px;
+}
+.lay .insp-a-strip {
+  display: flex;
+  gap: 3px;
+  height: 6px;
+}
+.lay .insp-a-strip > span {
+  flex: 1;
+  border-radius: 3px;
+}
+.lay .insp-a-strip[data-grey] {
+  border-radius: 3px;
+  background: linear-gradient(90deg, #3a3a3e, #8a8a90);
+}
+.lay .insp-a-hue-words {
+  margin: 8px 0 0;
+  color: var(--caption);
+  font-size: 12px;
+  word-spacing: var(--sep-space);
+}
+
+.lay .insp-a-scales {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lay .insp-a-scale {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 12px;
+}
+.lay .insp-a-word {
+  color: var(--fg);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 20px;
+}
+.lay .insp-a-track {
+  position: relative;
+  height: 9px;
+}
+/* The hairline, and the stretch up to the dot a shade brighter. */
+.lay .insp-a-track::before,
+.lay .insp-a-track::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 0;
+  height: 1px;
+  border-radius: 1px;
+}
+.lay .insp-a-track::before {
+  right: 0;
+  background: rgba(255, 255, 255, 0.13);
+}
+.lay .insp-a-track::after {
+  width: var(--at);
+  background: rgba(255, 255, 255, 0.42);
+}
+.lay .insp-a-dot {
+  position: absolute;
+  top: 0;
+  left: var(--at);
+  z-index: 1;
+  width: 9px;
+  height: 9px;
+  margin-left: -4.5px;
+  border-radius: 50%;
+  background: var(--fg);
+  box-shadow: 0 0 0 3px rgba(20, 20, 24, 0.5);
+}
+.lay .insp-a-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.lay .insp-a-unmeasured {
+  margin: 22px 0 0;
+  color: var(--caption);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* The actions: type with a glyph, no boxes; pressed is brighter and its glyph filled. */
+.lay .insp-a-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  margin: 26px 0 0 -6px;
+}
+.lay .insp-a-act,
+.lay .insp-a-add .vf-pop-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ui);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.lay .insp-a-add {
+  padding: 0;
+  height: auto;
+}
+.lay .insp-a-act:hover,
+.lay .insp-a-add .vf-pop-button:hover,
+.lay .insp-a-add .vf-pop-button[aria-expanded='true'],
+.lay .insp-a-act[aria-pressed='true'] {
+  color: var(--fg);
+  text-decoration: none;
+}
+.lay .insp-a-act[aria-pressed='true'] .lay-icon {
+  fill: currentColor;
+}
+.lay .insp-a-act:focus-visible,
+.lay .insp-a-add .vf-pop-button:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 0;
+}
+/* Never play's glyph: a ring struck through, drawn to the icons' 16-unit line. */
+.lay .insp-a-never-glyph {
+  position: relative;
+  width: 12px;
+  height: 12px;
+  margin: 0 2px;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+.lay .insp-a-never-glyph::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -1px;
+  right: -1px;
+  height: 1.5px;
+  margin-top: -0.75px;
+  background: currentColor;
+  transform: rotate(-45deg);
+}
+.lay .insp-a-act[aria-pressed='true'] .insp-a-never-glyph {
+  background: currentColor;
+}
+.lay .insp-a-act[aria-pressed='true'] .insp-a-never-glyph::after {
+  background: var(--surface-corner);
+}
+
+/* My tags: quiet pills, and "+ Tag" as type. */
+.lay .insp-a-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+}
+.lay .insp-a-tags-tag {
+  --caption: var(--caption-raised);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 24px;
+  padding: 0 4px 0 10px;
+  border-radius: 12px;
+  background: var(--surface-3);
+  color: var(--fg);
+  font-size: 12px;
+}
+.lay .insp-a-tags-x {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--caption);
+  cursor: pointer;
+}
+.lay .insp-a-tags-x:hover {
+  color: var(--fg);
+}
+.lay .insp-a-tags-add {
+  height: 24px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--caption);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+/* Alone, "+ Tag" lines its type up with the panel's left edge, as the actions do. */
+.lay .insp-a-tags-add:first-child {
+  margin-left: -6px;
+}
+.lay .insp-a-tags-add:hover {
+  color: var(--fg);
+}
+.lay .insp-a-tags-x:focus-visible,
+.lay .insp-a-tags-add:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 0;
+}
+.lay .insp-a-tags-input {
+  --caption: var(--caption-raised);
+  flex: 1;
+  min-width: 120px;
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 13px;
+  background: var(--surface-3);
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+.lay .insp-a-tags-input:focus-visible {
+  box-shadow: 0 0 0 2px var(--vf-focus-ring);
+}
+
+/* The playlists holding it: one line at the foot. */
+.lay .insp-a-in {
+  margin: 16px 0 0;
+  color: var(--caption);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.lay .insp-a-in-names {
+  color: var(--ui);
+}
+
+/* Nothing playing: said calmly, in the middle of the panel. */
+.lay .insp-a[data-none] {
+  height: 100%;
+  justify-content: center;
+}
+.lay .insp-a-none {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 18px 40px;
+  text-align: center;
+}
+.lay .insp-a-none-mark {
+  position: relative;
+  width: 96px;
+  height: 9px;
+  margin-bottom: 20px;
+}
+.lay .insp-a-none-mark::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.13);
+}
+.lay .insp-a-none-mark::after {
+  content: '';
+  position: absolute;
+  top: 1.5px;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  margin-left: -3px;
+  border-radius: 50%;
+  background: var(--caption);
+}
+.lay .insp-a-none-title {
+  margin: 0;
+  color: var(--ui);
+  font-size: 15px;
+  font-weight: 600;
+}
+.lay .insp-a-none-line {
+  margin: 6px 0 0;
+  color: var(--caption);
+  font-size: 12px;
+  line-height: 1.45;
+}

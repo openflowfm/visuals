@@ -1,0 +1,374 @@
+/* Option C, Scope (Scope.tsx): the preset placed among the library, read like
+   an instrument's XY display. At the top a field, every measured preset a
+   faint dot by speed (across, slow to fast) and brightness (up, dark to
+   bright), tinted by its strongest hue; the subject lit in its own hue, with a
+   fine cursor through it and a ring as wide as it is intense. The field has no
+   frame and no grid: its edges carry a scale's markings (five hairline ticks,
+   the middle one longer, a small cross at the centre) and four words set in
+   tiny type, as an oscilloscope's graticule would be engraved.
+
+   Under it the words, near borderless (decision 68): the name large, the
+   authors, the measures read out as one line ("slow · dark · calm"), the
+   colours as dots, then the actions as a row of keys (a glyph over a short
+   word, the pressed one filled and brighter), my tags and the playlists
+   holding it as quiet lines. Areas are told apart by space alone. The panel
+   paints --surface-2, so --caption here is the raised one (inspector.css). */
+
+.lay .insp-c {
+  --insp-c-pad: 20px;
+  --insp-c-hair: rgba(255, 255, 255, 0.22);
+  display: flex;
+  flex-direction: column;
+  padding: 14px var(--insp-c-pad) 24px;
+  color: var(--ui);
+  font-size: 13px;
+}
+
+/* Back to now playing: a quiet line above the field. */
+.lay .insp-c .insp-c-top {
+  margin: -4px 0 6px -6px;
+}
+.lay .insp-c .insp-c-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 6px 0 2px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--caption);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.lay .insp-c .insp-c-back:hover {
+  color: var(--fg);
+}
+
+/* The field: the drawing with its four words engraved at its edges. */
+.lay .insp-c .insp-c-field {
+  position: relative;
+  margin: 6px 0 0;
+  padding: 16px 0 18px;
+}
+.lay .insp-c .insp-c-scope {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.lay .insp-c .insp-c-axis {
+  position: absolute;
+  left: 0;
+  color: var(--caption);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  text-transform: uppercase;
+  pointer-events: none;
+  user-select: none;
+}
+.lay .insp-c .insp-c-axis-top {
+  top: 2px;
+}
+.lay .insp-c .insp-c-axis-low {
+  bottom: 30px;
+  left: 10px;
+  opacity: 0.8;
+}
+.lay .insp-c .insp-c-axis-x {
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: space-between;
+}
+.lay .insp-c .insp-c-ticks path {
+  stroke: var(--insp-c-hair);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.lay .insp-c .insp-c-ticks .insp-c-centre {
+  stroke: rgba(255, 255, 255, 0.14);
+}
+.lay .insp-c .insp-c-dots circle {
+  opacity: 0.55;
+}
+/* With a preset lit the rest step back, so it reads first. */
+.lay .insp-c .insp-c-dots[data-dim] circle {
+  opacity: 0.32;
+}
+.lay .insp-c .insp-c-lit {
+  fill: none;
+  stroke: currentColor;
+}
+.lay .insp-c .insp-c-cursor {
+  stroke-width: 1;
+  stroke-dasharray: 1 3;
+  opacity: 0.5;
+  vector-effect: non-scaling-stroke;
+}
+.lay .insp-c .insp-c-cursor-tick {
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.lay .insp-c .insp-c-ring {
+  stroke-width: 1;
+  opacity: 0.85;
+  vector-effect: non-scaling-stroke;
+}
+.lay .insp-c .insp-c-glow {
+  fill: currentColor;
+  stroke: none;
+  opacity: 0.25;
+}
+.lay .insp-c .insp-c-point {
+  fill: var(--fg);
+  stroke: currentColor;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Nothing playing: the field draws the library alone, and the words say so. */
+.lay .insp-c .insp-c-none {
+  margin-top: 18px;
+}
+.lay .insp-c .insp-c-none-title {
+  margin: 0 0 6px;
+  color: var(--fg);
+  font-size: 17px;
+  font-weight: 600;
+}
+.lay .insp-c .insp-c-quiet {
+  margin: 0;
+  color: var(--caption);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* The name and who made it. */
+.lay .insp-c .insp-c-head {
+  margin-top: 20px;
+}
+.lay .insp-c .insp-c-kicker {
+  display: flex;
+  align-items: center;
+  margin: 0 0 6px;
+  color: var(--caption);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lay .insp-c .insp-c-sep {
+  display: inline-block;
+  width: 3px;
+  height: 3px;
+  margin: 0 8px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.6;
+  vertical-align: middle;
+}
+.lay .insp-c .insp-c-name {
+  margin: 0;
+  color: var(--fg);
+  font-family: var(--font-display);
+  font-variation-settings: var(--font-display-axes);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  text-wrap: balance;
+}
+.lay .insp-c .insp-c-by,
+.lay .insp-c .insp-c-from {
+  margin: 4px 0 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 13px;
+}
+.lay .insp-c .insp-c-from {
+  color: var(--caption);
+  font-size: 12px;
+}
+
+/* The readout: the measures as words, the colours as dots. */
+.lay .insp-c .insp-c-read {
+  margin-top: 16px;
+}
+.lay .insp-c .insp-c-words {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 0;
+  color: var(--fg);
+  font-size: 15px;
+  font-weight: 500;
+}
+.lay .insp-c .insp-c-words > span {
+  display: inline-flex;
+  align-items: center;
+}
+.lay .insp-c .insp-c-words .insp-c-sep {
+  margin: 0 9px;
+}
+.lay .insp-c .insp-c-hues {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 0;
+  color: var(--caption);
+  font-size: 12px;
+}
+.lay .insp-c .insp-c-swatches {
+  display: inline-flex;
+  gap: 5px;
+}
+.lay .insp-c .insp-c-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+.lay .insp-c .insp-c-swatch[data-grey] {
+  background: var(--caption);
+  opacity: 0.6;
+}
+
+/* The keys: a glyph over a short word, no boxes; pressed is filled and brighter. */
+.lay .insp-c .insp-c-keys {
+  display: flex;
+  justify-content: space-between;
+  margin: 22px -6px 0;
+}
+.lay .insp-c .insp-c-key,
+.lay .insp-c .insp-c-key .vf-pop-button {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  min-width: 44px;
+  height: auto;
+  padding: 6px 4px 4px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ui);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.lay .insp-c .vf-pop.insp-c-key {
+  padding: 0;
+  min-width: 0;
+}
+.lay .insp-c .insp-c-key:hover,
+.lay .insp-c .insp-c-key[aria-pressed='true'],
+.lay .insp-c .insp-c-key .vf-pop-button:hover,
+.lay .insp-c .insp-c-key .vf-pop-button[aria-expanded='true'] {
+  color: var(--fg);
+  text-decoration: none;
+}
+.lay .insp-c .insp-c-key[aria-pressed='true'] .lay-icon {
+  fill: currentColor;
+}
+/* Never play's glyph stays a line when pressed: it reads as on by its colour. */
+.lay .insp-c .insp-c-key[aria-pressed='true'] .lay-icon circle {
+  fill: none;
+}
+.lay .insp-c .insp-c-key:focus-visible,
+.lay .insp-c .insp-c-key .vf-pop-button:focus-visible,
+.lay .insp-c .insp-c-back:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 0;
+}
+
+/* My tags, and where it's kept. */
+.lay .insp-c .insp-c-mine {
+  margin-top: 20px;
+}
+.lay .insp-c .insp-c-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+.lay .insp-c .insp-c-tags-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 500;
+}
+.lay .insp-c .insp-c-tags-tag::before {
+  content: '#';
+  margin-right: 1px;
+  color: var(--caption);
+}
+.lay .insp-c .insp-c-tags-x {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--caption);
+  cursor: pointer;
+  opacity: 0;
+}
+.lay .insp-c .insp-c-tags-tag:hover .insp-c-tags-x,
+.lay .insp-c .insp-c-tags-x:focus-visible {
+  opacity: 1;
+}
+.lay .insp-c .insp-c-tags-x:hover {
+  color: var(--fg);
+}
+.lay .insp-c .insp-c-tags-add {
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--caption);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.lay .insp-c .insp-c-tags-add:hover {
+  color: var(--fg);
+}
+.lay .insp-c .insp-c-tags-input {
+  flex: 1;
+  min-width: 120px;
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--surface-3);
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+.lay .insp-c .insp-c-tags-x:focus-visible,
+.lay .insp-c .insp-c-tags-add:focus-visible,
+.lay .insp-c .insp-c-tags-input:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 0;
+}
+.lay .insp-c .insp-c-in {
+  margin-top: 8px;
+}

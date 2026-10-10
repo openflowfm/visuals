@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { say } from '../words.ts';
 import './layout.css';
+import './inspector.css';
 
 /**
  * Home in the macOS 26/27 app layout (a reference, in Storybook only; Home.tsx
@@ -27,12 +28,28 @@ export interface HomeLayoutProps {
   bar?: ReactNode;
   /** Draw a stand-in for the native window buttons in the sidebar's top band (stories: the real ones are macOS's). */
   lights?: boolean;
+  /** The inspector's content, in an inset panel down the right mirroring the sidebar (macOS 26's inspector), a named `aside`; the main column narrows beside it. None: closed. */
+  inspector?: ReactNode;
+  /** What the inspector is called to a screen reader. */
+  inspectorLabel?: string;
 }
 
-/** The window: the inset sidebar and the main column. */
-export function HomeLayout({ sidebar, sidebarLabel = 'sources', header, hero, children, bar, lights = false }: HomeLayoutProps) {
+/** What the inspector is called by default. */
+export const INSPECTOR_LABEL = 'about the preset';
+
+/** The inspector's inset panel (inspector.css): HomeLayout's right slot, and an option's frame on its own in a story. */
+export function InspectorPanel({ label = INSPECTOR_LABEL, children }: { label?: string; children: ReactNode }) {
   return (
-    <div className="app home lay" data-view="home">
+    <aside className="lay-insp" aria-label={label}>
+      <div className="lay-insp-body">{children}</div>
+    </aside>
+  );
+}
+
+/** The window: the inset sidebar and the main column, and the inspector when open. */
+export function HomeLayout({ sidebar, sidebarLabel = 'sources', header, hero, children, bar, lights = false, inspector, inspectorLabel }: HomeLayoutProps) {
+  return (
+    <div className="app home lay" data-view="home" data-inspector={inspector ? '' : undefined}>
       <nav className="lay-side" aria-label={sidebarLabel}>
         {lights && (
           <span className="lay-lights" aria-hidden="true">
@@ -55,6 +72,7 @@ export function HomeLayout({ sidebar, sidebarLabel = 'sources', header, hero, ch
         </main>
         {bar && <div className="lay-bar">{bar}</div>}
       </div>
+      {inspector && <InspectorPanel label={inspectorLabel}>{inspector}</InspectorPanel>}
     </div>
   );
 }
