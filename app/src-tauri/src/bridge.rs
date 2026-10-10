@@ -4,14 +4,17 @@
 //! A small HTTP server on 127.0.0.1 (`VISUALS_BRIDGE=127.0.0.1:<port>`; vite
 //! proxies `/__bridge` to it, so the page sees it on its own origin). Every
 //! request carries `VISUALS_BRIDGE_TOKEN` (the `x-bridge-token` header, or
-//! `token=` where the browser can't set a header). It answers:
+//! `token=` where the browser can't set a header), and every answer carries
+//! `x-bridge: 1`, so the page can tell the bridge's answers from the proxy's. It
+//! answers:
 //!
-//! - `POST /__bridge/invoke` `{cmd, args}`: the command, dispatched through
-//!   Tauri's own IPC entry ([`tauri::WebviewWindow::on_message`]) as if the
-//!   main window's page had sent it, so it reaches exactly the handlers
+//! - `POST /__bridge/invoke` `{cmd, args, session, seq}`: the command, dispatched
+//!   through Tauri's own IPC entry ([`tauri::WebviewWindow::on_message`]) as if
+//!   the main window's page had sent it, so it reaches exactly the handlers
 //!   `main.rs` lists, with their state and ACL, and no list here can drift.
-//!   200 with the answer (JSON, or bytes for a raw one), or with the error as
-//!   [`ERROR_TYPE`] (the command rejected).
+//!   Handed on in the order the page numbered them ([`Order`]). 200 with the
+//!   answer (JSON, or bytes for a raw one), or with the error as [`ERROR_TYPE`]
+//!   (the command rejected).
 //! - `POST /__bridge/listen` `{event}`: relay that event from now on.
 //! - `GET /__bridge/events`: the relayed events, as server-sent events
 //!   (`{"event": name, "payload": …}`).
@@ -22,12 +25,12 @@
 //! page drives the app.
 
 use crate::{bench, catalog, App};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::mpsc::{self, Sender};
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::sync::{Arc, Condvar, Mutex};
+use std::time::{Duration, Instant};
 use tauri::ipc::{CallbackFn, InvokeBody, InvokeResponse, InvokeResponseBody};
 use tauri::webview::InvokeRequest;
 use tauri::{AppHandle, Listener, Manager};
@@ -40,6 +43,13 @@ const COMMAND_TIMEOUT: Duration = Duration::from_secs(120);
 const FRAME_QUALITY: f32 = 70.0;
 /// The content type of a command's error (`app/src/dev/bridge.ts` reads it).
 const ERROR_TYPE: &str = "application/x-bridge-error+json";
+/// The most a request may send, its line, headers and body together.
+const MAX_REQUEST: u64 = 8 << 20;
+/// How long a request may take to arrive.
+const READ_TIMEOUT: Duration = Duration::from_secs(10);
+/// How long a command waits for the one the page sent before it (lost, or sent to
+/// an app since restarted) before it goes anyway.
+const ORDER_GAP: Duration = Duration::from_secs(1);
 
 /// Start the bridge when `VISUALS_BRIDGE` names a loopback address; otherwise the app runs as usual.
 pub fn start(app: &AppHandle) -> Result<(), String> {
@@ -55,7 +65,7 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
         let _ = window.navigate("about:blank".parse().expect("a URL"));
     }
     eprintln!("visual[flow] dev bridge on http://{addr} (token {token})");
-    let bridge = Arc::new(Bridge { app: app.clone(), token, clients: Mutex::new(Vec::new()), relayed: Mutex::new(HashSet::new()) });
+    let bridge = Arc::new(Bridge { app: app.clone(), token, clients: Mutex::new(Vec::new()), relayed: Mutex::new(HashSet::new()), order: Order::default() });
     std::thread::spawn(move || {
         for stream in listener.incoming().flatten() {
             let bridge = bridge.clone();
@@ -72,6 +82,11 @@ fn fresh_token() -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
+/// Equal, in a time that doesn't depend on where they differ.
+fn same(a: &str, b: &str) -> bool {
+    a.len() == b.len() && a.bytes().zip(b.bytes()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}
+
 struct Bridge {
     app: AppHandle,
     token: String,
@@ -79,6 +94,43 @@ struct Bridge {
     clients: Mutex<Vec<Sender<String>>>,
     /// The events relayed so far.
     relayed: Mutex<HashSet<String>>,
+    /// Commands handed to the app in the order the page sent them.
+    order: Order,
+}
+
+/// Each page's commands, handed on in the order it numbered them (`seq` within
+/// its `session`, a page load), as Tauri's own IPC keeps them. Each request
+/// comes on a connection of its own, so two sent back to back can arrive the
+/// other way round: one that arrives early waits for the one before it, up to
+/// `gap`. Only the handing on is ordered; the commands then answer whenever
+/// they're done, as in the app.
+#[derive(Default)]
+struct Order {
+    /// The number each session's page is due to send next.
+    due: Mutex<HashMap<String, u64>>,
+    turned: Condvar,
+}
+
+impl Order {
+    /// Run `hand_on` (which should only queue the command) in its turn, then move the turn on.
+    fn in_turn<T>(&self, session: &str, seq: u64, gap: Duration, hand_on: impl FnOnce() -> T) -> T {
+        let deadline = Instant::now() + gap;
+        let mut due = self.due.lock().unwrap();
+        loop {
+            // A page the bridge hasn't heard from (or an app restarted under it) starts where it is.
+            let next = *due.entry(session.to_string()).or_insert(seq);
+            let left = deadline.saturating_duration_since(Instant::now());
+            if seq <= next || left.is_zero() {
+                break;
+            }
+            due = self.turned.wait_timeout(due, left).unwrap().0;
+        }
+        let out = hand_on();
+        let next = due.get_mut(session).expect("the session's turn");
+        *next = (*next).max(seq + 1);
+        self.turned.notify_all();
+        out
+    }
 }
 
 /// A request as the bridge reads it.
@@ -104,8 +156,10 @@ impl Request {
     }
 }
 
-/// Read one HTTP/1.1 request: its line, headers and a `Content-Length` body.
-fn read_request(reader: &mut impl BufRead) -> Option<Request> {
+/// Read one HTTP/1.1 request: its line, headers and a `Content-Length` body, none
+/// of it past `limit` bytes in all.
+fn read_request(reader: impl Read, limit: u64) -> Option<Request> {
+    let mut reader = BufReader::new(reader.take(limit));
     let mut line = String::new();
     reader.read_line(&mut line).ok()?;
     let mut parts = line.split_whitespace();
@@ -127,8 +181,11 @@ fn read_request(reader: &mut impl BufRead) -> Option<Request> {
         headers.push((k.trim().to_string(), v.trim().to_string()));
     }
     let mut request = Request { method, path: path.to_string(), query, headers, body: Vec::new() };
-    let length: usize = request.header("content-length").and_then(|l| l.parse().ok()).unwrap_or(0);
-    request.body = vec![0; length];
+    let length: u64 = request.header("content-length").and_then(|l| l.parse().ok()).unwrap_or(0);
+    if length > limit {
+        return None;
+    }
+    request.body = vec![0; length as usize];
     reader.read_exact(&mut request.body).ok()?;
     Some(request)
 }
@@ -159,15 +216,31 @@ fn decode(s: &str) -> String {
 }
 
 fn respond(stream: &mut TcpStream, status: &str, kind: &str, body: &[u8]) {
-    let head = format!("HTTP/1.1 {status}\r\nContent-Type: {kind}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n", body.len());
+    let head = format!("HTTP/1.1 {status}\r\nContent-Type: {kind}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nX-Bridge: 1\r\nConnection: close\r\n\r\n", body.len());
     let _ = stream.write_all(head.as_bytes()).and_then(|_| stream.write_all(body));
+}
+
+/// A command as the page sends it.
+#[derive(serde::Deserialize)]
+struct Call {
+    cmd: String,
+    #[serde(default)]
+    args: serde_json::Value,
+    /// The page load that sent it, and its number there; without them it isn't ordered.
+    #[serde(default)]
+    session: Option<String>,
+    #[serde(default)]
+    seq: Option<u64>,
 }
 
 impl Bridge {
     fn serve(self: Arc<Self>, mut stream: TcpStream) {
+        let _ = stream.set_read_timeout(Some(READ_TIMEOUT));
         let Ok(read) = stream.try_clone() else { return };
-        let Some(request) = read_request(&mut BufReader::new(read)) else { return };
-        if request.token() != Some(self.token.as_str()) {
+        let Some(request) = read_request(read, MAX_REQUEST) else {
+            return respond(&mut stream, "400 Bad Request", "text/plain", b"not a request the dev bridge reads");
+        };
+        if !request.token().is_some_and(|t| same(t, &self.token)) {
             return respond(&mut stream, "403 Forbidden", "text/plain", b"the dev bridge wants its token");
         }
         match (request.method.as_str(), request.path.as_str()) {
@@ -181,17 +254,11 @@ impl Bridge {
     }
 
     fn invoke(&self, stream: &mut TcpStream, body: &[u8]) {
-        #[derive(serde::Deserialize)]
-        struct Call {
-            cmd: String,
-            #[serde(default)]
-            args: serde_json::Value,
-        }
         let call: Call = match serde_json::from_slice(body) {
             Ok(c) => c,
             Err(e) => return respond(stream, "400 Bad Request", "text/plain", e.to_string().as_bytes()),
         };
-        match self.dispatch(call.cmd, call.args) {
+        match self.dispatch(call) {
             Ok(InvokeResponse::Ok(InvokeResponseBody::Json(json))) => respond(stream, "200 OK", "application/json", json.as_bytes()),
             Ok(InvokeResponse::Ok(InvokeResponseBody::Raw(bytes))) => respond(stream, "200 OK", "application/octet-stream", &bytes),
             // 200 too, told apart by its type: the browser logs any other status as a failed load.
@@ -200,13 +267,13 @@ impl Bridge {
         }
     }
 
-    /// Hand `cmd` to the main window's IPC entry, on the main thread as the
-    /// webview's own messages arrive, and wait for its answer.
-    fn dispatch(&self, cmd: String, args: serde_json::Value) -> Result<InvokeResponse, String> {
+    /// Hand the command to the main window's IPC entry, in its turn and on the
+    /// main thread as the webview's own messages arrive, and wait for its answer.
+    fn dispatch(&self, call: Call) -> Result<InvokeResponse, String> {
         let window = self.app.get_webview_window("main").ok_or("the main window is gone")?;
-        let args = if args.is_null() { serde_json::Value::Object(Default::default()) } else { args };
+        let args = if call.args.is_null() { serde_json::Value::Object(Default::default()) } else { call.args };
         let request = InvokeRequest {
-            cmd,
+            cmd: call.cmd,
             callback: CallbackFn(0),
             error: CallbackFn(1),
             url: ORIGIN.parse().expect("a URL"),
@@ -215,8 +282,9 @@ impl Bridge {
             invoke_key: self.app.invoke_key().to_string(),
         };
         let (tx, rx) = mpsc::channel();
-        self.app
-            .run_on_main_thread(move || {
+        let hand_on = || {
+            // The main thread's queue keeps the order they're put on it in.
+            self.app.run_on_main_thread(move || {
                 window.on_message(
                     request,
                     Box::new(move |_, _, response, _, _| {
@@ -224,7 +292,12 @@ impl Bridge {
                     }),
                 )
             })
-            .map_err(|e| e.to_string())?;
+        };
+        match (call.session, call.seq) {
+            (Some(session), Some(seq)) => self.order.in_turn(&session, seq, ORDER_GAP, hand_on),
+            _ => hand_on(),
+        }
+        .map_err(|e| e.to_string())?;
         rx.recv_timeout(COMMAND_TIMEOUT).map_err(|_| "the command didn't answer".to_string())
     }
 
@@ -254,7 +327,7 @@ impl Bridge {
     fn events(&self, mut stream: TcpStream) {
         let (tx, rx) = mpsc::channel::<String>();
         self.clients.lock().unwrap().push(tx);
-        let head = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-store\r\nConnection: keep-alive\r\n\r\n: relaying\n\n";
+        let head = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-store\r\nX-Bridge: 1\r\nConnection: keep-alive\r\n\r\n: relaying\n\n";
         if stream.write_all(head.as_bytes()).is_err() {
             return;
         }
@@ -305,7 +378,7 @@ mod tests {
     #[test]
     fn reads_a_request_with_its_body_and_token() {
         let raw = b"POST /__bridge/invoke?token=abc%20d HTTP/1.1\r\nHost: x\r\nX-Bridge-Token: t0k\r\nContent-Length: 13\r\n\r\n{\"cmd\":\"x\"}  extra";
-        let r = read_request(&mut BufReader::new(&raw[..])).unwrap();
+        let r = read_request(&raw[..], MAX_REQUEST).unwrap();
         assert_eq!(r.method, "POST");
         assert_eq!(r.path, "/__bridge/invoke");
         assert_eq!(r.param("token"), Some("abc d"));
@@ -315,9 +388,55 @@ mod tests {
 
     #[test]
     fn takes_the_token_from_the_query_without_a_header() {
-        let r = read_request(&mut BufReader::new(&b"GET /__bridge/frame?token=s3cret HTTP/1.1\r\n\r\n"[..])).unwrap();
+        let r = read_request(&b"GET /__bridge/frame?token=s3cret HTTP/1.1\r\n\r\n"[..], MAX_REQUEST).unwrap();
         assert_eq!(r.token(), Some("s3cret"));
-        assert!(read_request(&mut BufReader::new(&b"GET /x HTTP/1.1\r\nHost: x\r\n"[..])).is_none(), "a request cut short is dropped");
+        assert!(read_request(&b"GET /x HTTP/1.1\r\nHost: x\r\n"[..], MAX_REQUEST).is_none(), "a request cut short is dropped");
+    }
+
+    #[test]
+    fn refuses_a_request_over_the_limit() {
+        let raw = b"POST /__bridge/invoke HTTP/1.1\r\nContent-Length: 9999999999\r\n\r\n{}";
+        assert!(read_request(&raw[..], 1024).is_none(), "a body said to be too big isn't allocated");
+        let long = [b"GET /", &[b'a'; 2000][..], b" HTTP/1.1\r\n\r\n"].concat();
+        assert!(read_request(&long[..], 1024).is_none(), "nor is a line past the limit read");
+        assert!(read_request(&b"POST /x HTTP/1.1\r\nContent-Length: 2\r\n\r\n{}"[..], 1024).is_some());
+    }
+
+    #[test]
+    fn compares_tokens_whole() {
+        assert!(same("abcd", "abcd"));
+        assert!(!same("abcd", "abce"));
+        assert!(!same("abcd", "abc"));
+        assert!(!same("", "a"));
+    }
+
+    #[test]
+    fn hands_commands_on_in_the_order_the_page_sent_them() {
+        let order = Arc::new(Order::default());
+        let log = Arc::new(Mutex::new(Vec::new()));
+        order.in_turn("page", 0, ORDER_GAP, || log.lock().unwrap().push(0));
+        // 2 arrives before 1: it waits for 1, which comes a little later.
+        let late = {
+            let (order, log) = (order.clone(), log.clone());
+            std::thread::spawn(move || order.in_turn("page", 2, Duration::from_secs(5), || log.lock().unwrap().push(2)))
+        };
+        std::thread::sleep(Duration::from_millis(50));
+        order.in_turn("page", 1, ORDER_GAP, || log.lock().unwrap().push(1));
+        late.join().unwrap();
+        assert_eq!(*log.lock().unwrap(), [0, 1, 2]);
+    }
+
+    #[test]
+    fn goes_on_without_one_that_never_comes() {
+        let order = Order::default();
+        let log = Mutex::new(Vec::new());
+        order.in_turn("page", 0, ORDER_GAP, || log.lock().unwrap().push(0));
+        let started = Instant::now();
+        order.in_turn("page", 2, Duration::from_millis(30), || log.lock().unwrap().push(2));
+        assert!(started.elapsed() >= Duration::from_millis(30));
+        // A page the bridge hasn't heard from starts wherever it is, without waiting.
+        order.in_turn("other", 40, Duration::from_secs(5), || log.lock().unwrap().push(40));
+        assert_eq!(*log.lock().unwrap(), [0, 2, 40]);
     }
 
     #[test]

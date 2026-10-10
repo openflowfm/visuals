@@ -28,9 +28,30 @@ describe('the dev bridge shim', () => {
 
   it('sends a command with its token and resolves to its answer', async () => {
     const { fetch, sent } = fakeFetch(() => json([{ thumbnail: 'thumb://localhost/a.webp' }]));
-    const b = createBridge({ token: 'tok', fetch });
+    const b = createBridge({ token: 'tok', fetch, session: 's' });
     await expect(b.internals.invoke('library_index', {})).resolves.toEqual([{ thumbnail: '/__bridge/thumb/a.webp?token=tok' }]);
-    expect(sent).toEqual([{ path: '/__bridge/invoke', body: { cmd: 'library_index', args: {} }, token: 'tok' }]);
+    expect(sent).toEqual([{ path: '/__bridge/invoke', body: { cmd: 'library_index', args: {}, session: 's', seq: 0 }, token: 'tok' }]);
+  });
+
+  it('numbers commands in the order the page sends them, however their answers come back', async () => {
+    const answers: ((r: Response) => void)[] = [];
+    const sent: unknown[] = [];
+    const fetch = vi.fn((_url: string, init?: RequestInit) => {
+      sent.push(JSON.parse(String(init?.body)));
+      return new Promise<Response>((resolve) => answers.push(resolve));
+    }) as unknown as typeof globalThis.fetch;
+    const b = createBridge({ token: 'tok', fetch, session: 's' });
+    // As `Library.tsx`'s `play()` does: load, then follow the grid, in one tick.
+    const load = b.internals.invoke('act', { action: { kind: 'load' } });
+    const follow = b.internals.invoke('act', { action: { kind: 'query' } });
+    await Promise.resolve();
+    expect(sent).toEqual([
+      { cmd: 'act', args: { action: { kind: 'load' } }, session: 's', seq: 0 },
+      { cmd: 'act', args: { action: { kind: 'query' } }, session: 's', seq: 1 },
+    ]);
+    answers[1](json('second'));
+    answers[0](json('first'));
+    await expect(Promise.all([load, follow])).resolves.toEqual(['first', 'second']);
   });
 
   it("rejects with the command's own error", async () => {
@@ -56,10 +77,10 @@ describe('the dev bridge shim', () => {
   it('tells the painter where the bench goes, and still tells the app', async () => {
     const { fetch, sent } = fakeFetch(() => json(null));
     const place = vi.fn();
-    const b = createBridge({ token: 'tok', fetch, place });
+    const b = createBridge({ token: 'tok', fetch, place, session: 's' });
     await b.internals.invoke('place_bench', { x: 1, y: 2, width: 30, height: 40 });
     expect(place).toHaveBeenCalledWith({ x: 1, y: 2, width: 30, height: 40 });
-    expect(sent[0].body).toEqual({ cmd: 'place_bench', args: { x: 1, y: 2, width: 30, height: 40 } });
+    expect(sent[0].body).toEqual({ cmd: 'place_bench', args: { x: 1, y: 2, width: 30, height: 40 }, session: 's', seq: 0 });
   });
 
   it('relays an event once, delivers it to each listener, and stops after unlisten', async () => {
@@ -87,12 +108,29 @@ describe('the dev bridge shim', () => {
 
   it("waits while the app behind the bridge isn't up, then gives up", async () => {
     let up = false;
-    const { fetch, sent } = fakeFetch(() => (up ? json(7) : new Response('proxy error', { status: 502 })));
+    const refused = () => new Response('not up yet', { status: 503, headers: { 'x-bridge-unreachable': '1' } });
+    const { fetch, sent } = fakeFetch(() => (up ? json(7) : refused()));
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const b = createBridge({ token: 'tok', fetch, retry: 1, tries: 3 });
     await expect(b.internals.invoke('stats')).rejects.toThrow(/isn't answering/);
     expect(sent).toHaveLength(3);
     up = true;
     await expect(b.internals.invoke('stats')).resolves.toBe(7);
+  });
+
+  it('never sends a command again once it may have reached the app', async () => {
+    const { fetch, sent } = fakeFetch(() => new Response('', { status: 502 }));
+    const b = createBridge({ token: 'tok', fetch, retry: 1, tries: 3 });
+    await expect(b.internals.invoke('act', { action: { kind: 'next' } })).rejects.toThrow(/said 502/);
+    expect(sent).toHaveLength(1);
+    const thrown = createBridge({ token: 'tok', fetch: (() => Promise.reject(new TypeError('network'))) as unknown as typeof globalThis.fetch, retry: 1 });
+    await expect(thrown.internals.invoke('stats')).rejects.toThrow('network');
+  });
+
+  it('says when the bridge refuses the token for an event too', async () => {
+    const { fetch } = fakeFetch(() => new Response('the dev bridge wants its token', { status: 403 }));
+    const b = createBridge({ token: 'bad', fetch });
+    const handler = b.internals.transformCallback(() => {});
+    await expect(b.internals.invoke('plugin:event|listen', { event: 'live', handler })).rejects.toThrow(/refused the token/);
   });
 });

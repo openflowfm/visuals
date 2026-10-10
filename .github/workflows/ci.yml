@@ -58,6 +58,8 @@ jobs:
             echo "the editor's code is in the app's page (dist-app/)"
             exit 1
           fi
+      # Nor any of `npm run dev`'s bridge (`app/src/dev/`).
+      - run: npm run check:no-dev-code
 
   # The engine and the Tauri app. macOS because the app is macOS-only (its
   # output window is an NSScreen), and because the runner has Metal, so the
@@ -95,10 +97,15 @@ jobs:
       - run: cargo test -p visuals-engine --bins
 
       # rusty_link builds Ableton Link with cmake, which the macOS image has.
-      - run: cargo test -p visuals-app
+      # With `dev-bridge`, so `npm run dev`'s bridge is tested too; the rest is the same.
+      - run: cargo test -p visuals-app --features dev-bridge
 
-      # The lab build (the editor's commands) compiles too; its tests are the same.
-      - run: cargo build -p visuals-app --features lab
+      # The app as it ships, without the bridge: none of it may be in the binary.
+      - run: cargo build -p visuals-app
+      - run: node app/no-dev-code.mjs --bin target/debug/visuals
+
+      # The lab build (the editor's commands) compiles too, as `npm run dev:lab` builds it; its tests are the same.
+      - run: cargo build -p visuals-app --features lab,dev-bridge
 
       # The compare bench's engine half; its GPU tests draw here (Metal) and skip without a GPU.
       - run: cargo test -p visuals-compare

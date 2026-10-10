@@ -21,7 +21,19 @@ export default mergeConfig(
   defineConfig({
     plugins: [devEntry()],
     server: {
-      proxy: { '/__bridge': { target: `http://${bridge}` } },
+      proxy: {
+        '/__bridge': {
+          target: `http://${bridge}`,
+          // Refused means the app isn't listening yet (still building, or restarting): nothing
+          // reached it, so the page may send again (`x-bridge-unreachable`). Any other failure
+          // may have reached it, and is left to vite's own 502.
+          configure: (proxy) =>
+            proxy.on('error', (err, _req, res) => {
+              if ((err as NodeJS.ErrnoException).code !== 'ECONNREFUSED' || !('writeHead' in res) || res.headersSent) return;
+              res.writeHead(503, { 'content-type': 'text/plain', 'x-bridge-unreachable': '1' }).end('the app behind the dev bridge is not up yet');
+            }),
+        },
+      },
     },
   }),
 );

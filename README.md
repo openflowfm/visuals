@@ -109,6 +109,7 @@ cd visuals
 npm ci
 npm run app      # the player: app/run.sh runs cargo tauri dev, with the page's vite on $PORT or a free port
 npm run app:lab  # the lab build: the same with the preset editor
+npm run dev      # the player's page in your browser with hot reload, driving the real app headless (dev:lab for the editor)
 ```
 
 The lab build adds the editor: the preset as MilkDrop's stage graph, each stage's picture,

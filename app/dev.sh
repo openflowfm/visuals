@@ -6,9 +6,11 @@
 # bridge's token) and opens it when run from a terminal (`VISUALS_DEV_OPEN=0`
 # doesn't). `npm run dev:lab` passes `--features lab` and `VITE_LAB=1`.
 #
-# As `app/run.sh`: both run in a process group of their own, and the whole group
-# is stopped when this script ends, is stopped (Ctrl-C, SIGTERM, hangup) or its
-# parent goes away.
+# As `app/run.sh`: the app (with the cargo that builds it) and vite each run in
+# a process group of their own, and both groups are stopped when this script
+# ends, is stopped (Ctrl-C, SIGTERM, hangup) or its parent goes away. When
+# either of them ends by itself (the app fails to build, or quits), this script
+# says so, stops the other and exits 1.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 
@@ -31,23 +33,27 @@ if [ ! -f dist-app/index.html ]; then
 	npm run app:build-ui || exit 1
 fi
 
+# Job control: each background job gets a process group of its own, whose id is
+# its pid. Their input is /dev/null, so nothing in them waits on the terminal.
 set -m
-(
-	node_modules/.bin/vite --config vite.dev.config.ts --port "$PORT" --strictPort &
-	cargo run -p visuals-app --features "$features" &
-	wait
-) </dev/null &
-group=$!
+node_modules/.bin/vite --config vite.dev.config.ts --port "$PORT" --strictPort </dev/null &
+vite=$!
+cargo run -p visuals-app --features "$features" </dev/null &
+app=$!
 
-stop() {
-	trap - EXIT INT TERM HUP
-	kill -TERM -- "-$group" 2>/dev/null || return 0
+stop_group() {
+	kill -TERM -- "-$1" 2>/dev/null || return 0
 	for _ in 1 2 3 4 5 6 7 8 9 10; do
-		kill -0 -- "-$group" 2>/dev/null || return 0
+		kill -0 -- "-$1" 2>/dev/null || return 0
 		sleep 0.5
 	done
-	kill -KILL -- "-$group" 2>/dev/null
+	kill -KILL -- "-$1" 2>/dev/null
 	return 0
+}
+stop() {
+	trap - EXIT INT TERM HUP
+	stop_group "$app"
+	stop_group "$vite"
 }
 trap stop EXIT
 trap 'stop; exit 130' INT
@@ -59,12 +65,29 @@ ancestry() {
 }
 up() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
 
-# Wait for the bridge (the first run builds the app, which takes a while), each
-# second checking that the group and whoever started this script are still there.
+# Exit 1, saying why, when the app or vite has ended, or whoever started this
+# script has gone away; the EXIT trap stops the rest.
 started=$(ancestry)
+check() {
+	if ! kill -0 "$app" 2>/dev/null; then
+		wait "$app"
+		echo "app/dev.sh: the app ended (cargo run exited with $?: a failed build, or the app quit; see above), stopping" >&2
+		exit 1
+	fi
+	if ! kill -0 "$vite" 2>/dev/null; then
+		wait "$vite"
+		echo "app/dev.sh: vite ended (exit $?; see above), stopping" >&2
+		exit 1
+	fi
+	if [ "$(ancestry)" != "$started" ]; then
+		echo "app/dev.sh: what started it went away, stopping" >&2
+		exit 1
+	fi
+}
+
+# Wait for the bridge (the first run builds the app, which takes a while).
 until up "$BRIDGE_PORT"; do
-	kill -0 "$group" 2>/dev/null || { wait "$group"; exit 1; }
-	[ "$(ancestry)" = "$started" ] || { echo "app/dev.sh: what started it went away, stopping" >&2; exit 1; }
+	check
 	sleep 1
 done
 
@@ -76,11 +99,7 @@ if [ -t 1 ] && [ "${VISUALS_DEV_OPEN:-1}" != 0 ]; then
 	open "$url"
 fi
 
-while kill -0 "$group" 2>/dev/null; do
-	if [ "$(ancestry)" != "$started" ]; then
-		echo "app/dev.sh: what started it went away, stopping" >&2
-		exit 1
-	fi
+while true; do
+	check
 	sleep 1
 done
-wait "$group"

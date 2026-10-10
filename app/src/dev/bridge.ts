@@ -45,8 +45,6 @@ export function bridged<T>(value: T, token: string): T {
   return value;
 }
 
-/** Statuses the bridge itself answers with; anything else came from the proxy (the app isn't up). */
-const ANSWERED = new Set([200, 400, 403, 404]);
 /** The type of a command's error: still a 200, which the browser doesn't log as a failed load. */
 export const ERROR_TYPE = 'application/x-bridge-error+json';
 
@@ -59,44 +57,54 @@ export interface Options {
   retry?: number;
   /** How many tries before a command fails. */
   tries?: number;
+  /** This page load, which the bridge orders its commands within. */
+  session?: string;
 }
 
 /** The stand-in for Tauri's internals, talking to the bridge. */
 export function createBridge(o: Options) {
   const retry = o.retry ?? 1000;
   const tries = o.tries ?? 120;
+  const session = o.session ?? Math.random().toString(36).slice(2);
   const callbacks = new Map<number, Callback>();
   /** Listeners by event: their ids and their callbacks' ids. */
   const listeners = new Map<string, Map<number, number>>();
   let nextId = 1;
+  /** The next command's number: the bridge hands them to the app in this order, as Tauri's IPC would. */
+  let seq = 0;
   let warned = false;
   const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
   const headers = { 'content-type': 'application/json', 'x-bridge-token': o.token };
 
-  /** POST to the bridge, waiting (and trying again) while the app isn't up. */
+  /**
+   * POST to the bridge and check what came back. It is sent again only while the
+   * proxy says the app refused the connection (`x-bridge-unreachable`: it is still
+   * building or restarting), as nothing reached it then; never once it may have
+   * been handled.
+   */
   async function post(path: string, body: unknown): Promise<Response> {
     for (let attempt = 1; ; attempt++) {
-      let response: Response | null = null;
-      try {
-        response = await o.fetch(`${BRIDGE}/${path}`, { method: 'POST', headers, body: JSON.stringify(body) });
-      } catch {
-        response = null;
+      const response = await o.fetch(`${BRIDGE}/${path}`, { method: 'POST', headers, body: JSON.stringify(body) });
+      if (response.headers.get('x-bridge-unreachable')) {
+        if (attempt >= tries) throw new Error(`the dev bridge isn't answering (is \`npm run dev\`'s app running?)`);
+        if (!warned) {
+          warned = true;
+          console.warn('visual[flow] dev: waiting for the app behind the bridge…');
+        }
+        await wait(retry);
+        continue;
       }
-      if (response && ANSWERED.has(response.status)) return response;
-      if (attempt >= tries) throw new Error(`the dev bridge isn't answering (is \`npm run dev\`'s app running?)`);
-      if (!warned) {
-        warned = true;
-        console.warn('visual[flow] dev: waiting for the app behind the bridge…');
-      }
-      await wait(retry);
+      if (response.status === 403) throw new Error('the dev bridge refused the token: open the URL `npm run dev` printed');
+      if (response.status !== 200) throw new Error(`the dev bridge said ${response.status}: ${await response.text()}`);
+      return response;
     }
   }
 
   async function call(cmd: string, args: Args): Promise<unknown> {
     if (cmd === 'place_bench' && args && !Array.isArray(args) && !(args instanceof ArrayBuffer) && !(args instanceof Uint8Array)) o.place?.(args as unknown as Rect);
-    const response = await post('invoke', { cmd, args: args instanceof ArrayBuffer || args instanceof Uint8Array ? Array.from(new Uint8Array(args)) : (args ?? {}) });
-    if (response.status === 403) throw new Error('the dev bridge refused the token: open the URL `npm run dev` printed');
-    if (response.status !== 200) throw new Error(`the dev bridge said ${response.status}: ${await response.text()}`);
+    const body = args instanceof ArrayBuffer || args instanceof Uint8Array ? Array.from(new Uint8Array(args)) : (args ?? {});
+    // Numbered as sent, before any await, so the order is the page's own.
+    const response = await post('invoke', { cmd, args: body, session, seq: seq++ });
     const type = response.headers.get('content-type') ?? '';
     if (type.startsWith(ERROR_TYPE)) throw await response.json();
     if (type.startsWith('application/octet-stream')) return response.arrayBuffer();
@@ -128,7 +136,11 @@ export function createBridge(o: Options) {
         const id = nextId++;
         if (!listeners.has(event)) {
           listeners.set(event, new Map());
-          await relay(event);
+          await relay(event).catch((e: unknown) => {
+            // Not relayed: the next listen asks again.
+            listeners.delete(event);
+            throw e;
+          });
         }
         listeners.get(event)!.set(id, handler);
         return id;
