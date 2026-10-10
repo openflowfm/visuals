@@ -84,6 +84,8 @@ export function InsetSidebar({ sections, selected, onSelect, collapsed, onToggle
   });
 
   const onKeyDown = (e: KeyboardEvent) => {
+    // Arrows, Home and End with a modifier belong to the system (text moves, window switches): pass them through.
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
     const at = order.findIndex((o) => items.current.get(o.key) === e.target);
     if (at < 0) return;
     const here = order[at];

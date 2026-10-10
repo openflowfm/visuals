@@ -9,6 +9,9 @@ import { InsetSidebar, sidebarSections, type InsetSidebarProps } from './InsetSi
 // The shell's panel and its `--lay-*` sizes, as HomeLayout.tsx brings them (the decorator draws its panel).
 import './layout.css';
 
+/** A name as a literal for a RegExp. */
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 /** The sidebar holding its own selection and folding, as Home would, telling the story's spies too. */
 function Live(props: InsetSidebarProps) {
   const [selected, setSelected] = useState<Pane | null>(props.selected);
@@ -102,12 +105,12 @@ export const Default: Story = {
     await expect(warmUp).toHaveFocus();
     // Down to the next row, up past the heading's rows to the heading, End and Home.
     await userEvent.keyboard('{ArrowDown}');
-    await expect(canvas.getByRole('button', { name: new RegExp(`^${CLOSING.name},`) })).toHaveFocus();
+    await expect(canvas.getByRole('button', { name: new RegExp(`^${escape(CLOSING.name)},`) })).toHaveFocus();
     await userEvent.keyboard('{ArrowUp}{ArrowUp}');
     await expect(canvas.getByRole('button', { name: 'Playlists' })).toHaveFocus();
     await userEvent.keyboard('{End}');
     const last = SIDEBAR[SIDEBAR.length - 1].rows.at(-1)!;
-    await expect(canvas.getByRole('button', { name: new RegExp(`^${last.name},`) })).toHaveFocus();
+    await expect(canvas.getByRole('button', { name: new RegExp(`^${escape(last.name)},`) })).toHaveFocus();
     await userEvent.keyboard('{Home}');
     // (The heading, not the row of the same name: the heading folds.)
     await expect(canvas.getByRole('button', { name: 'Library', expanded: true })).toHaveFocus();
@@ -117,7 +120,7 @@ export const Default: Story = {
     await expect(canvas.getByRole('button', { name: 'Starred' })).toHaveAttribute('aria-current', 'true');
     await expect(warmUp).not.toHaveAttribute('aria-current');
     // A click picks too.
-    await userEvent.click(canvas.getByRole('button', { name: new RegExp(`^${BRIGHT_FAST.name}, smart playlist`) }));
+    await userEvent.click(canvas.getByRole('button', { name: new RegExp(`^${escape(BRIGHT_FAST.name)}, smart playlist`) }));
     await expect(args.onSelect).toHaveBeenLastCalledWith({ kind: 'list', id: BRIGHT_FAST.id });
   },
 };
