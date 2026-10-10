@@ -2,10 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "app",
+      "name": "dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "app"],
-      "port": 1430,
+      "runtimeArgs": ["run", "dev"],
+      "port": 1431,
       "autoPort": true
     }
   ]

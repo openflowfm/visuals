@@ -4,7 +4,10 @@
 # `app/src-tauri/src/bridge.rs`) and vite with `vite.dev.config.ts`, which
 # proxies `/__bridge` to it, then prints the URL to open (it carries the
 # bridge's token) and opens it when run from a terminal (`VISUALS_DEV_OPEN=0`
-# doesn't). `npm run dev:lab` passes `--features lab` and `VITE_LAB=1`.
+# doesn't). It also starts Storybook on `STORYBOOK_PORT` (6006 by default, or
+# a free port when that one is taken); Storybook ending by itself is reported
+# but doesn't stop the rest. The page's port is `PORT` (a free one otherwise).
+# `npm run dev:lab` passes `--features lab` and `VITE_LAB=1`.
 #
 # As `app/run.sh`: the app (with the cargo that builds it) and vite each run in
 # a process group of their own, and both groups are stopped when this script
@@ -22,6 +25,11 @@ fi
 free_port() { node -e "const s=require('net').createServer().listen(0,'127.0.0.1',()=>{console.log(s.address().port);s.close()})"; }
 PORT=${PORT:-$(free_port)}
 BRIDGE_PORT=$(free_port)
+port_taken() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
+STORYBOOK_PORT=${STORYBOOK_PORT:-6006}
+if port_taken "$STORYBOOK_PORT"; then
+	STORYBOOK_PORT=$(free_port)
+fi
 VISUALS_BRIDGE="127.0.0.1:$BRIDGE_PORT"
 VISUALS_BRIDGE_TOKEN=$(node -e "console.log(require('crypto').randomBytes(16).toString('hex'))")
 # The app's own window is never shown: the browser is the window.
@@ -40,6 +48,8 @@ node_modules/.bin/vite --config vite.dev.config.ts --port "$PORT" --strictPort <
 vite=$!
 cargo run -p visuals-app --features "$features" </dev/null &
 app=$!
+node_modules/.bin/storybook dev --ci --no-open -p "$STORYBOOK_PORT" </dev/null &
+storybook=$!
 
 stop_group() {
 	kill -TERM -- "-$1" 2>/dev/null || return 0
@@ -54,6 +64,8 @@ stop() {
 	trap - EXIT INT TERM HUP
 	stop_group "$app"
 	stop_group "$vite"
+	[ -n "$storybook" ] && stop_group "$storybook"
+	return 0
 }
 trap stop EXIT
 trap 'stop; exit 130' INT
@@ -79,6 +91,11 @@ check() {
 		echo "app/dev.sh: vite ended (exit $?; see above), stopping" >&2
 		exit 1
 	fi
+	if [ -n "$storybook" ] && ! kill -0 "$storybook" 2>/dev/null; then
+		wait "$storybook"
+		echo "app/dev.sh: Storybook ended (exit $?; see above); the app and the page keep running" >&2
+		storybook=
+	fi
 	if [ "$(ancestry)" != "$started" ]; then
 		echo "app/dev.sh: what started it went away, stopping" >&2
 		exit 1
@@ -94,6 +111,7 @@ done
 url="http://127.0.0.1:$PORT/?token=$VISUALS_BRIDGE_TOKEN"
 echo
 echo "  visual[flow] dev: $url"
+echo "  Storybook:        http://127.0.0.1:$STORYBOOK_PORT/"
 echo
 if [ -t 1 ] && [ "${VISUALS_DEV_OPEN:-1}" != 0 ]; then
 	open "$url"
