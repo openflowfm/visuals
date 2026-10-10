@@ -75,7 +75,7 @@ export const WORDS = {
   'starred empty': 'Nothing starred yet',
   'starred empty why': 'Star in the now playing panel stars the preset playing.',
   /* The library's search box ("Search 9,795 presets") and an open group's own ("find an author"). */
-  search: 'search',
+  'search box': 'search',
   'find value': 'find',
   /* The crash prompt's reminder (decision 54): the scrub can't catch every name. */
   'crash report check': "Read the text before you submit it: a name the app can't recognise, such as a device's or a display's, may still be in it.",

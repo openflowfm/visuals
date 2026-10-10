@@ -264,7 +264,8 @@ describe('the home, the one place to browse', () => {
   it('shows only the starred presets under Starred', async () => {
     invoke.mockImplementation((cmd: string) => Promise.resolve(cmd === 'library_data' ? { version: 1, presets: { b: { star: true, hidden: false, tags: [] } } } : answer(cmd)));
     await mount({ library: true });
-    fireEvent.click(screen.getByText('Starred'));
+    // The sidebar's Starred row, not the group switch's "★ Starred".
+    fireEvent.click(screen.getByTitle('The presets you starred'));
     await act(() => vi.advanceTimersByTimeAsync(0));
     expect(screen.getByRole('heading', { name: 'Starred' })).toBeTruthy();
     expect(

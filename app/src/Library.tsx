@@ -431,7 +431,7 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
       className="lib-search"
       type="search"
       aria-label="search presets"
-      placeholder={home ? `${Say('search')} ${count(paneTotal)} preset${paneTotal === 1 ? '' : 's'}` : `${say('search')} ${count(rows.length || entries.length)} presets`}
+      placeholder={home ? `${Say('search box')} ${count(paneTotal)} preset${paneTotal === 1 ? '' : 's'}` : `${say('search box')} ${count(rows.length || entries.length)} presets`}
       title="Every word must match the preset's style, author, name or tags. ↓ moves into the grid."
       value={search}
       onChange={(ev) => {
