@@ -1,0 +1,57 @@
+/* The Now Playing card (Hero.tsx), at the top of the main column. Stub: the
+   picture large at 16:9 with the name, author and actions under it; the hero
+   lane draws it. The picture's backing is --surface-thumb, so the card takes
+   the raised caption (home.css). */
+
+.lay .hero {
+  --caption: var(--caption-raised);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.lay .hero-pic {
+  aspect-ratio: 16 / 9;
+  max-height: 46vh;
+  overflow: hidden;
+  border-radius: var(--lay-hero-radius);
+  background: var(--surface-thumb);
+}
+.lay .hero-pic img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.lay .hero-name {
+  margin: 0;
+  color: var(--fg);
+  font-family: var(--font-display);
+  font-variation-settings: var(--font-display-axes);
+  font-size: 22px;
+  font-weight: 600;
+}
+.lay .hero-by,
+.lay .hero-from {
+  margin: 2px 0 0;
+  color: var(--caption);
+  font-size: 12px;
+}
+.lay .hero-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+.lay .hero-actions button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--ui);
+  cursor: pointer;
+}
+.lay .hero-actions button[aria-pressed='true'] {
+  color: var(--fg);
+}
