@@ -89,10 +89,33 @@ export const NothingPlaying: Story = {
   play: async ({ canvas }) => {
     await expect(canvas.queryByRole('progressbar')).toBeNull();
     await expect(canvas.getByRole('button', { name: 'next preset' })).toBeVisible();
-    // The bar sits on the layout root's surface and paints none of its own.
+    // The bar sits on the main column's surface (the hero's spread shadow paints it) and paints none of its own.
     const bar = canvas.getByRole('button', { name: 'next preset' }).closest('.lay-transport');
     await expect(bar).not.toBeNull();
     await expect(getComputedStyle(bar!).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+  },
+};
+
+/** At full speed the bar says nothing of the frame rate, in a developer's build too. */
+export const FullSpeed: Story = {
+  name: 'At full speed',
+  play: async ({ canvasElement }) => {
+    // The readout polls once a second; give it a few readings.
+    await new Promise((r) => setTimeout(r, 3500));
+    await expect(canvasElement.querySelector('.vf-stats')).toBeNull();
+  },
+};
+
+/** The picture drawing slowly for a few seconds: the amber warning, before the audio input. */
+export const Slow: Story = {
+  name: 'Drawing slowly',
+  parameters: { tauri: { stats: { fps: 24, cpu_ms: 31 } } },
+  play: async ({ canvas, canvasElement }) => {
+    const warning = await canvas.findByText('running slowly: 24 fps', {}, { timeout: 6000 });
+    await expect(warning).toHaveAttribute('data-slow');
+    await expect(warning.closest('.lay-transport-right')).not.toBeNull();
+    const bar = canvasElement.querySelector('.lay-transport') as HTMLElement;
+    await expect(bar.scrollWidth).toBeLessThanOrEqual(bar.clientWidth);
   },
 };
 

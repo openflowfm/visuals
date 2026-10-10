@@ -1,8 +1,9 @@
 /* The transport along the bottom of the macOS layout's main column
-   (TransportBar.tsx): ◀ play/pause ▶ R, the time on the preset, the audio
-   input. It paints no background: the layout's root (.app.home.lay)
-   already paints the translucent --surface-0, and painting it again would make
-   a darker strip. No rule over it (decision 68); the
+   (TransportBar.tsx): ◀ play/pause ▶ R, the time on the preset, the slow
+   warning, the audio input. It paints no background: the main column is
+   already painted the translucent --surface-0 (by the hero's spread shadow,
+   layout.css), and painting it again would make a darker strip, or cover the
+   preview were it under. No rule over it (decision 68); the
    keys are glyphs and type with no boxes, the track a faint raised line with
    the time in the numbers' face. The audio input is quiet as in HomeBar. */
 
@@ -96,8 +97,19 @@
 /* The audio input: quiet text and its meter, no box at rest (as in HomeBar). */
 .lay-transport-right {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 16px;
   min-width: 0;
+}
+/* The picture drawing slowly: the amber warning in the bar's small type, never wider than it needs. */
+.lay-transport .vf-stats {
+  flex: none;
+  min-width: 0;
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
+  font-size: 12px;
+  white-space: nowrap;
 }
 .lay-transport .audio-input {
   gap: 8px;

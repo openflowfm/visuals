@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import type { Decorator, Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, waitFor } from 'storybook/test';
 import { LONG } from '../stories/fixtures.ts';
+import { Preview } from '../views.tsx';
 import { HomeLayout } from './HomeLayout.tsx';
 import { Hero, type HeroProps } from './Hero.tsx';
 import { NOW, STARRED } from './fixtures.ts';
@@ -64,14 +65,14 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** The picture's box keeps 16:9 and stays within its cap (200 to 440 px tall), and within the card. */
+/** The picture's box keeps 16:9 and stays within its cap (160 to 440 px tall), and within the card. */
 async function pictureKept(root: HTMLElement) {
   const pic = root.querySelector('.hero-pic') as HTMLElement;
   const card = root.querySelector('.hero') as HTMLElement;
   const box = pic.getBoundingClientRect();
   await expect(Math.abs(box.width / box.height - 16 / 9)).toBeLessThan(0.02);
   await expect(box.height).toBeLessThanOrEqual(440.5);
-  await expect(box.height).toBeGreaterThanOrEqual(199.5);
+  await expect(box.height).toBeGreaterThanOrEqual(159.5);
   await expect(box.width).toBeLessThanOrEqual(card.getBoundingClientRect().width + 0.5);
   return { box, card: card.getBoundingClientRect() };
 }
@@ -104,6 +105,27 @@ export const Paused: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'play' }));
     await expect(args.onPlayPause).toHaveBeenCalledOnce();
     await waitFor(() => expect(canvas.getByRole('button', { name: 'pause' })).toBeVisible());
+  },
+};
+
+/**
+ * In the app: the picture is the native preview's hole, `<Preview className="hero-pic" />`,
+ * the box itself with nothing around it. Once it draws it paints nothing (the
+ * engine's view shows through; here the desktop's stand-in), its spread shadow
+ * paints the column around it, and its corners are painted opaque.
+ */
+export const ThePreview: Story = {
+  name: 'The preview (in the app)',
+  args: { picture: <Preview className="hero-pic" /> },
+  play: async ({ canvas, canvasElement }) => {
+    const pic = canvas.getByRole('img', { name: /^preview of the playing preset/ });
+    await expect(pic).toHaveClass('hero-pic');
+    await expect(pic.parentElement!.closest('.hero-pic')).toBeNull();
+    await waitFor(() => expect(pic).not.toHaveAttribute('data-loading'));
+    await expect(getComputedStyle(pic).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    await expect(getComputedStyle(pic).boxShadow).toMatch(/0px 0px 0px \d+(\.\d+)?px/);
+    await expect(getComputedStyle(pic, '::before').content).not.toBe('none');
+    await pictureKept(canvasElement);
   },
 };
 

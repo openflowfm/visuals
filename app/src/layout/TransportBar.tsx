@@ -1,4 +1,5 @@
 import { SourcePicker } from '../SourcePicker.tsx';
+import { FrameRate } from '../views.tsx';
 import { Icon } from './icons.tsx';
 import './transport-bar.css';
 
@@ -7,8 +8,10 @@ import './transport-bar.css';
  * `bar` slot): today's HomeBar reduced to the transport, since the hero above
  * carries the preview, the name and where it plays from. ◀ play/pause ▶ R on
  * the left, the time on the preset and how long until the next one in the
- * middle, the audio input on the right. No preview, so no hole: the bar paints
- * the window's own surface.
+ * middle, the audio input on the right, and before it a warning only while the
+ * picture draws slowly (`FrameRate slowOnly`, as HomeBar has it). No preview,
+ * so no hole: the bar paints nothing, sitting over the hero's spread shadow,
+ * which paints the main column.
  */
 export interface TransportBarProps {
   /** Whether the deck is moving on by itself (pause shows) or holding (play shows). */
@@ -77,6 +80,7 @@ export function TransportBar({ playing, onPlayPause, onStep, stepIn, position, o
         )}
       </div>
       <div className="lay-transport-right">
+        <FrameRate slowOnly />
         <SourcePicker onError={onAudioError} channels="none" width={180} />
       </div>
     </div>
