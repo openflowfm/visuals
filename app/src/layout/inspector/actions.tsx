@@ -1,46 +1,62 @@
 import type { ReactNode } from 'react';
 import type { Prepared } from '../../librarySearch.ts';
-import { playlistsWith } from '../../PresetDrawer.tsx';
+import { flipFor, playlistsWith, pressedFor } from '../../PresetDrawer.tsx';
 import { Popover } from '../../Popover.tsx';
 import { say, Say } from '../../words.ts';
 import { Icon } from '../icons.tsx';
 import type { InspectorProps } from './model.ts';
 
 /**
- * The inspector's actions on one preset: each a button with a name a screen
- * reader and voice control find it by, its state in aria-pressed, and a glyph
- * from the layout's icons. The inspector lays them out and styles them by
- * `className`; what they do and say stays here.
+ * The inspector's actions on the presets it is about (one, or several picked
+ * together): each a button with a name a screen reader and voice control find
+ * it by, its state in aria-pressed (mixed when only some of them have it), and
+ * a glyph from the layout's icons. A toggle turns it on for all of them unless
+ * every one already has it, as NowPanel and the library's drawer do. The
+ * inspector lays them out and styles them by `className`; what they do and say
+ * stays here.
  */
 
 /** What every action takes. */
 interface ActionProps {
-  p: Prepared;
+  /** The presets it acts on: one, or several picked together. */
+  chosen: readonly Prepared[];
   className?: string;
   /** What shows beside the glyph ('' for the glyph alone). */
   children?: ReactNode;
 }
 
+const keysOf = (chosen: readonly Prepared[]) => chosen.map((p) => p.row.key);
+const them = (chosen: readonly Prepared[]) => (chosen.length > 1 ? 'them' : 'it');
+
 /** Star: toggles, aria-pressed. */
-export function StarAction({ p, className, children, onSet }: ActionProps & Pick<InspectorProps, 'onSet'>) {
+export function StarAction({ chosen, className, children, onSet }: ActionProps & Pick<InspectorProps, 'onSet'>) {
+  const star = flipFor(chosen, (p) => p.star);
   return (
-    <button type="button" className={className} aria-label="star" aria-pressed={p.star} title={p.star ? 'Take the star off' : 'Star it'} onClick={() => onSet([p.row.key], { star: !p.star })}>
+    <button
+      type="button"
+      className={className}
+      aria-label="star"
+      aria-pressed={pressedFor(chosen, (p) => p.star)}
+      title={star ? `Star ${them(chosen)}` : 'Take the star off'}
+      onClick={() => onSet(keysOf(chosen), { star })}
+    >
       <Icon name="star" />
-      {children ?? <span aria-hidden="true">{p.star ? 'Starred' : 'Star'}</span>}
+      {children ?? <span aria-hidden="true">{star ? 'Star' : 'Starred'}</span>}
     </button>
   );
 }
 
 /** Never play: toggles, aria-pressed; random, shuffle and moving on by itself skip it. */
-export function NeverAction({ p, className, children, onSet }: ActionProps & Pick<InspectorProps, 'onSet'>) {
+export function NeverAction({ chosen, className, children, onSet }: ActionProps & Pick<InspectorProps, 'onSet'>) {
+  const hide = flipFor(chosen, (p) => p.hidden);
   return (
     <button
       type="button"
       className={className}
       aria-label={say('hidden')}
-      aria-pressed={p.hidden}
-      title={p.hidden ? 'Play it again' : `Never play it: random, shuffle and ${say('auto-advance')} skip it. A playlist you made still plays it.`}
-      onClick={() => onSet([p.row.key], { hidden: !p.hidden })}
+      aria-pressed={pressedFor(chosen, (p) => p.hidden)}
+      title={hide ? `Never play ${them(chosen)}: random, shuffle and ${say('auto-advance')} skip ${them(chosen)}. A playlist you made still plays ${them(chosen)}.` : `Play ${them(chosen)} again`}
+      onClick={() => onSet(keysOf(chosen), { hidden: hide })}
     >
       <Icon name="never" />
       {children ?? <span aria-hidden="true">{Say('hidden')}</span>}
@@ -49,7 +65,7 @@ export function NeverAction({ p, className, children, onSet }: ActionProps & Pic
 }
 
 /** Add to a playlist: a menu of the manual playlists. */
-export function AddAction({ p, className, children, playlists, onAddTo }: ActionProps & Pick<InspectorProps, 'playlists' | 'onAddTo'>) {
+export function AddAction({ chosen, className, children, playlists, onAddTo }: ActionProps & Pick<InspectorProps, 'playlists' | 'onAddTo'>) {
   const manuals = (playlists ?? []).filter((l) => l.kind === 'manual');
   return (
     <Popover
@@ -60,7 +76,7 @@ export function AddAction({ p, className, children, playlists, onAddTo }: Action
         </>
       }
       name="add to a playlist"
-      title="Add it to a playlist"
+      title={`Add ${them(chosen)} to a playlist`}
       role="menu"
       align="right"
       className={className}
@@ -73,7 +89,10 @@ export function AddAction({ p, className, children, playlists, onAddTo }: Action
               type="button"
               role="menuitem"
               onClick={() => {
-                onAddTo(l.id, [p.row.path]);
+                onAddTo(
+                  l.id,
+                  chosen.map((p) => p.row.path),
+                );
                 close();
               }}
             >
@@ -91,7 +110,7 @@ export function AddAction({ p, className, children, playlists, onAddTo }: Action
 }
 
 /** Open it in the preset editor (lab builds: shown only with `onEdit`). */
-export function EditAction({ className, children, onEdit }: Omit<ActionProps, 'p'> & Pick<InspectorProps, 'onEdit'>) {
+export function EditAction({ className, children, onEdit }: Omit<ActionProps, 'chosen'> & Pick<InspectorProps, 'onEdit'>) {
   if (!onEdit) return null;
   return (
     <button type="button" className={className} aria-label="open in the editor" title="Open it in the preset editor" onClick={onEdit}>
@@ -102,7 +121,7 @@ export function EditAction({ className, children, onEdit }: Omit<ActionProps, 'p
 }
 
 /** Back to the preset playing, from one picked. */
-export function BackAction({ className, children, onBack }: Omit<ActionProps, 'p'> & Pick<InspectorProps, 'onBack'>) {
+export function BackAction({ className, children, onBack }: Omit<ActionProps, 'chosen'> & Pick<InspectorProps, 'onBack'>) {
   return (
     <button type="button" className={className} aria-label={`back to ${say('stage')}`} title={`Back to the preset playing`} onClick={onBack}>
       <Icon name="chevron-right" className="insp-back-glyph" />
@@ -112,12 +131,22 @@ export function BackAction({ className, children, onBack }: Omit<ActionProps, 'p
 }
 
 /** Play the one picked (shown only with `onPlay`). */
-export function PlayAction({ className, children, onPlay }: Omit<ActionProps, 'p'> & Pick<InspectorProps, 'onPlay'>) {
+export function PlayAction({ className, children, onPlay }: Omit<ActionProps, 'chosen'> & Pick<InspectorProps, 'onPlay'>) {
   if (!onPlay) return null;
   return (
     <button type="button" className={className} aria-label="play it" title="Play it now" onClick={onPlay}>
       <Icon name="play" />
       {children ?? <span aria-hidden="true">Play</span>}
+    </button>
+  );
+}
+
+/** Close the inspector (shown only with `onClose`). */
+export function CloseAction({ className, onClose }: { className?: string } & Pick<InspectorProps, 'onClose'>) {
+  if (!onClose) return null;
+  return (
+    <button type="button" className={className} aria-label={`close ${say('inspector')}`} title={`Close ${say('inspector')} (Esc)`} onClick={onClose}>
+      <Icon name="close" size={12} />
     </button>
   );
 }

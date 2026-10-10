@@ -35,13 +35,13 @@ export interface InspectorProps {
   onPlay?(): void;
   /** Open it in the preset editor: lab builds only; without it no such action shows. */
   onEdit?(): void;
-  /** Several presets picked in the grid (two or more): the inspector is about them together; not used yet. */
+  /** Several presets picked together: with two or more the inspector is about them ("n selected": star, add, never play and tags over all), whatever `subject` is; one or none is ignored. */
   chosen?: Prepared[];
-  /** The source playing (a playlist's head, the library's), shown when the source is picked; not used yet. */
+  /** The source (a playlist's head, `PlaylistHead variant='inspector'`), shown in place of the field when `subject` is null and fewer than two are chosen. */
   source?: ReactNode;
-  /** Something that failed, said in the inspector; not used yet. */
+  /** Something that failed: one alert line under whatever shows. */
   error?: string | null;
-  /** Close the inspector (its ✕, or Escape when laid over); without it no close shows; not used yet. */
+  /** Close the inspector: with it a ✕ shows, and Escape anywhere in the window (not typed in a text box, nor taken by a popover or the tag box) calls it; pass it only when laid over. */
   onClose?(): void;
 }
 

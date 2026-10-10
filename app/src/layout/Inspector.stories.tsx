@@ -3,11 +3,12 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fireEvent, userEvent, waitFor, within } from 'storybook/test';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import type { LibraryChange, LibraryData, LibraryRow, Look } from '../api.ts';
-import type { Pane } from '../home.ts';
-import { prepareRow } from '../librarySearch.ts';
+import { strip, type Pane } from '../home.ts';
+import { prepare, prepareRow } from '../librarySearch.ts';
 import type { Playlist } from '../playlists.ts';
+import { PlaylistHead } from '../PlaylistHead.tsx';
 import { Header } from '../views.tsx';
-import { DATA, PLAYLISTS, ROWS, row, WARM_UP } from '../stories/fixtures.ts';
+import { DATA, LISTS, PLAYLISTS, RECENT, ROWS, row, WARM_UP } from '../stories/fixtures.ts';
 import { tileName } from '../PresetTile.tsx';
 import index from '../../src-tauri/presets/starter/cream-of-the-crop/index.json';
 import { HomeLayout, InspectorPanel, INSPECTOR_LABEL } from './HomeLayout.tsx';
@@ -20,11 +21,23 @@ import { NOW, SECTIONS, SIDEBAR } from './fixtures.ts';
 import { Inspector, type InspectorProps } from './inspector/Inspector.tsx';
 import { dotsOf, H, nearest, W } from './inspector/field.ts';
 
-/** What the inspector starts on: the preset playing, one picked, or nothing playing. */
-type Start = 'playing' | 'picked' | 'nothing';
+/** What the inspector starts on: the preset playing, one picked, several picked together, the source playing (its playlist), or nothing playing. */
+type Start = 'playing' | 'picked' | 'several' | 'source' | 'nothing';
 
 /** The one picked in the stories: starred and tagged, unlike the preset playing. */
 const PICKED: LibraryRow = row(21);
+/** Several picked together: the one picked (starred, tagged "peak") and eight around it. */
+const SEVERAL: LibraryRow[] = [18, 19, 20, 21, 22, 23, 24, 25, 26].map(row);
+
+const storyRows = prepare(ROWS, DATA);
+
+/** The playlist playing as the inspector shows a source: its head as a card, its lists kept as they change. */
+function SourceHead() {
+  const [lists, setLists] = useState(LISTS);
+  const list = lists.playlists.find((p) => p.id === WARM_UP.id)!;
+  const { tiles, total } = strip(list, { rows: storyRows, played: RECENT, playing: null });
+  return <PlaylistHead variant="inspector" list={list} lists={lists} tiles={tiles} total={total} onLists={setLists} onDeleted={() => {}} onError={() => () => {}} />;
+}
 /** The names the panel's heading shows. */
 const PLAYING_NAME = tileName(NOW.preset!.title, NOW.preset!.path);
 const PICKED_NAME = tileName(PICKED.title, PICKED.path);
@@ -89,9 +102,12 @@ function useInspector(start: Start, library: readonly LibraryRow[]) {
   const [playlists, setPlaylists] = useState<Playlist[]>(PLAYLISTS);
   const [picked, setPicked] = useState<LibraryRow | null>(start === 'picked' ? PICKED : null);
   const playing = start === 'nothing' ? null : NOW.preset;
-  const shown = picked ?? playing;
+  // A source shows while no preset is: the Home passes no subject then.
+  const shown = start === 'source' ? picked : (picked ?? playing);
   const props: InspectorProps = {
     subject: shown ? prepareRow(shown, data.presets[shown.key]) : null,
+    chosen: start === 'several' ? SEVERAL.map((r) => prepareRow(r, data.presets[r.key])) : undefined,
+    source: start === 'source' ? <SourceHead /> : undefined,
     playing: playing?.key ?? null,
     from: playing ? NOW.from : '',
     playlists,
@@ -108,13 +124,20 @@ function useInspector(start: Start, library: readonly LibraryRow[]) {
   return { props, pick: setPicked, playing, data };
 }
 
-/** The inspector on its own, in its panel at its width. */
-function Alone({ start, library }: { start: Start; library: readonly LibraryRow[] }) {
+/** The inspector on its own, in its panel at its width; laid over (`overlay`), it has a ✕ and Esc, and closed it leaves a button to open it again. */
+function Alone({ start, library, error, overlay }: { start: Start; library: readonly LibraryRow[]; error?: string; overlay?: boolean }) {
   const { props } = useInspector(start, library);
+  const [open, setOpen] = useState(true);
+  if (!open)
+    return (
+      <button type="button" onClick={() => setOpen(true)}>
+        Show the inspector
+      </button>
+    );
   return (
     <div className="app home lay" data-inspector-alone="" style={{ height: 860 }}>
       <InspectorPanel>
-        <Inspector {...props} />
+        <Inspector {...props} error={error ?? null} onClose={overlay ? () => setOpen(false) : undefined} />
       </InspectorPanel>
     </div>
   );
@@ -176,15 +199,17 @@ function InWindow({ start, library }: { start: Start; library: readonly LibraryR
   );
 }
 
-/** Which story: alone or in the window, what it starts on, and how big the library is. */
+/** Which story: alone or in the window, what it starts on, how big the library is, and (alone) something failed or laid over with a close. */
 interface Args {
   start: Start;
   window: boolean;
   pack: boolean;
+  error?: string;
+  overlay?: boolean;
 }
-function Story({ start, window, pack }: Args) {
+function Story({ start, window, pack, error, overlay }: Args) {
   const library = pack ? FULL_PACK : STARTER;
-  return window ? <InWindow start={start} library={library} /> : <Alone start={start} library={library} />;
+  return window ? <InWindow start={start} library={library} /> : <Alone start={start} library={library} error={error} overlay={overlay} />;
 }
 
 /**
@@ -199,7 +224,7 @@ const meta = {
   title: 'Layout/Inspector',
   component: Story,
   args: { start: 'playing', window: false, pack: false },
-  argTypes: { start: { control: 'inline-radio', options: ['playing', 'picked', 'nothing'] } },
+  argTypes: { start: { control: 'inline-radio', options: ['playing', 'picked', 'several', 'source', 'nothing'] } },
   parameters: { scope: 'bare', layout: 'fullscreen' },
 } satisfies Meta<typeof Story>;
 export default meta;
@@ -295,6 +320,72 @@ export const NothingPlaying: S = {
     await expect(panel.getByText(/nothing playing/i)).toBeVisible();
     await expect(panel.queryByRole('button', { name: 'star' })).toBeNull();
     await expect(fieldOf(panelEl)).toBeVisible();
+  },
+};
+
+/** Several picked in a section together: their first pictures, "9 selected", and star, add, never play and tags over all of them. */
+export const Several: S = {
+  name: 'Several picked',
+  args: { start: 'several' },
+  play: async ({ canvasElement }) => {
+    const panelEl = panelOf(within(canvasElement));
+    const panel = within(panelEl);
+    await expect(panel.getByRole('heading', { name: `${SEVERAL.length} selected` })).toBeVisible();
+    await expect(panel.queryByRole('listbox')).toBeNull();
+    await expect(panel.queryByRole('button', { name: 'play it' })).toBeNull();
+    const star = panel.getByRole('button', { name: 'star' });
+    await userEvent.click(star);
+    await waitFor(() => expect(star).toHaveAttribute('aria-pressed', 'true'));
+    await userEvent.click(star);
+    await waitFor(() => expect(star).toHaveAttribute('aria-pressed', 'false'));
+    await userEvent.click(panel.getByRole('button', { name: '+ Tag' }));
+    await userEvent.type(panel.getByRole('textbox', { name: 'add tags' }), 'set{Enter}');
+    // On all of them: no count beside it.
+    await waitFor(() => expect(panel.getByRole('button', { name: 'take the tag set off' })).toBeInTheDocument());
+    await expect(panel.getByRole('button', { name: 'add to a playlist' })).toBeVisible();
+  },
+};
+
+/** No preset picked, the playlist playing as the source: its head as a card, with play or stop, shuffle, how it plays and more. */
+export const Source: S = {
+  name: 'The source',
+  args: { start: 'source' },
+  play: async ({ canvasElement }) => {
+    const panelEl = panelOf(within(canvasElement));
+    const panel = within(panelEl);
+    await expect(panel.getByRole('heading', { level: 2, name: WARM_UP.name })).toBeVisible();
+    await expect(panel.getByRole('button', { name: /Stop/ })).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Shuffle' })).toBeVisible();
+    await expect(panel.queryByRole('listbox')).toBeNull();
+    await userEvent.click(panel.getByRole('button', { name: 'more' }));
+    await expect(panel.getByRole('menu', { name: 'more' })).toBeVisible();
+  },
+};
+
+/** Something failed (a change that didn't stick): one line under the rest. */
+export const Failed: S = {
+  name: 'Something failed',
+  args: { error: 'Couldn’t keep the star: the library file is read-only' },
+  play: async ({ canvasElement }) => {
+    const panel = within(panelOf(within(canvasElement)));
+    await expect(panel.getByRole('alert')).toHaveTextContent('read-only');
+  },
+};
+
+/** Laid over the window (a narrow one): a ✕ closes it, and so does Esc. */
+export const LaidOver: S = {
+  name: 'Laid over',
+  args: { overlay: true, start: 'picked' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(within(panelOf(canvas)).getByRole('button', { name: 'close info' }));
+    await waitFor(() => expect(canvas.queryByRole('complementary', { name: INSPECTOR_LABEL })).toBeNull());
+    await userEvent.click(canvas.getByRole('button', { name: 'Show the inspector' }));
+    await waitFor(() => expect(panelOf(canvas)).toBeVisible());
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(canvas.queryByRole('complementary', { name: INSPECTOR_LABEL })).toBeNull());
+    await userEvent.click(canvas.getByRole('button', { name: 'Show the inspector' }));
+    await waitFor(() => expect(panelOf(canvas)).toBeVisible());
   },
 };
 
