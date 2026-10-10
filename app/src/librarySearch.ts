@@ -170,14 +170,20 @@ export const prepare = (rows: readonly LibraryRow[], data: LibraryData | null): 
 
 /**
  * Library rows for entries no index has read (outside the app, or when the index
- * fails): style from the first folder, sub-style from the second, no look or thumbnail.
+ * fails), by the index's rules: style from the folder under the pack's, sub-style from the next,
+ * curated when from the starter set, no look or thumbnail.
  */
 export function rowsFromEntries(entries: readonly Entry[]): LibraryRow[] {
   return entries.map((e) => {
     // The index keys a preset by its path under the presets folder, `/`-joined (`{pack}/{path}`).
     const group = e.group.replace(/\\/g, '/');
     const file = e.path.split(/[\\/]/).pop() || `${e.name}.milk`;
-    const [style = '', sub] = group.split('/');
+    // As the index does: within a pack (`{pack}/{style}/{sub}/…`) the style is the folder under the pack's;
+    // a preset straight in its pack's folder takes the pack as its style.
+    const folders = group ? group.split('/') : [];
+    const [style = '', sub] = folders.length > 1 ? folders.slice(1) : folders;
+    // Curated as Rust marks it: from the bundled starter set (its folder is `…/presets/starter`).
+    const starter = /[\\/]presets[\\/]starter[\\/]/.test(e.path);
     return {
       key: group ? `${group}/${file}` : file,
       path: e.path,
@@ -188,8 +194,8 @@ export function rowsFromEntries(entries: readonly Entry[]): LibraryRow[] {
       title: e.name,
       thumbnail: null,
       look: null,
-      starter: false,
-      curated: false,
+      starter,
+      curated: starter,
     };
   });
 }

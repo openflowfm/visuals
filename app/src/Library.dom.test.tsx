@@ -270,6 +270,38 @@ describe("the home's library pane (decision 68)", () => {
 });
 
 describe('the library following the grid', () => {
+  /** Mount with `library_index` answering through `read`, and open the first tile from the grid. */
+  const playFirst = async (read: () => Promise<unknown>) => {
+    invoke.mockImplementation((cmd: string) => (cmd === 'library_index' ? read() : Promise.resolve(answer(cmd))));
+    const r = render(view(ROWS[0].path));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    const grid = screen.getByRole('listbox', { name: 'presets' });
+    fireEvent.focus(grid);
+    fireEvent.keyDown(grid, { key: 'Enter' });
+    return r;
+  };
+  const acts = () => invoke.mock.calls.filter(([cmd]) => cmd === 'act').map(([, args]) => (args as { action: { kind: string } }).action.kind);
+
+  it('plays a tile opened before the index answered with nothing followed, then follows it once the index comes', async () => {
+    let index!: (rows: LibraryRow[]) => void;
+    await playFirst(() => new Promise((r) => (index = r)));
+    expect(follows()).toEqual([]);
+    await act(async () => index(ROWS));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(follows()).toEqual([ROWS[0].path]);
+    // → steps the deck that now follows the real grid.
+    await act(() => stepDeck({ kind: 'next' }));
+    expect(acts()).toEqual(['query', 'next']);
+    // The step's `live` event, so no step is left in flight for the next test.
+    live({}, ROWS[1].path);
+  });
+
+  it('follows the fallback rows when the index failed', async () => {
+    await playFirst(() => Promise.reject(new Error('no index')));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(follows()).toEqual([ROWS[0].path]);
+  });
+
   it('follows the grid again after the filter changes', async () => {
     const r = await mountAndPlay();
     await filter(r, ROWS[0].path, 'b');

@@ -331,20 +331,37 @@ describe('parseTags', () => {
 });
 
 describe('rowsFromEntries', () => {
-  it('reads style and sub-style from the folders', () => {
-    expect(rowsFromEntries([{ path: '/p/Dancer/Whirl/x.milk', name: 'x', group: 'Dancer/Whirl' }])[0]).toMatchObject({
-      key: 'Dancer/Whirl/x.milk',
+  it('reads style and sub-style from the folders under the pack, as the index does', () => {
+    expect(rowsFromEntries([{ path: '/p/pack/Dancer/Whirl/x.milk', name: 'x', group: 'pack/Dancer/Whirl' }])[0]).toMatchObject({
+      key: 'pack/Dancer/Whirl/x.milk',
       style: 'Dancer',
       sub_style: 'Whirl',
       title: 'x',
       thumbnail: null,
     });
     expect(rowsFromEntries([{ path: '/p/x.milk', name: 'x', group: '' }])[0]).toMatchObject({ key: 'x.milk', style: '', sub_style: null });
+    // Straight in its pack's folder: the pack is its style.
+    expect(rowsFromEntries([{ path: '/p/pack/x.milk', name: 'x', group: 'pack' }])[0]).toMatchObject({ style: 'pack', sub_style: null });
+  });
+
+  it('leaves `!` styles out of browsing and puts starter presets first, as the index does', () => {
+    const rows = rowsFromEntries([
+      { path: '/p/presets/cream-of-the-crop/Dancer/a.milk', name: 'a', group: 'cream-of-the-crop/Dancer' },
+      { path: '/p/presets/cream-of-the-crop/! Transition/t.milk', name: 't', group: 'cream-of-the-crop/! Transition' },
+      { path: '/app/presets/starter/cream-of-the-crop/Dancer/s.milk', name: 's', group: 'cream-of-the-crop/Dancer' },
+    ]);
+    expect(rows.map((r) => [r.style, r.curated])).toEqual([
+      ['Dancer', false],
+      ['! Transition', false],
+      ['Dancer', true],
+    ]);
+    const shown = facet(browseOrder(prepare(rows, null)), { groups: {}, text: '', browse: true }).shown;
+    expect(shown.map((p) => p.title)).toEqual(['s', 'a']);
   });
 
   it('keys a preset as the index does: its file under the folder, `/`-joined', () => {
     expect(rowsFromEntries([{ path: '/p/Pack/A/x.MILK', name: 'x', group: 'Pack/A' }])[0].key).toBe('Pack/A/x.MILK');
-    expect(rowsFromEntries([{ path: 'C:\\p\\Pack\\A\\y.milk', name: 'y', group: 'Pack\\A' }])[0]).toMatchObject({ key: 'Pack/A/y.milk', style: 'Pack', sub_style: 'A' });
+    expect(rowsFromEntries([{ path: 'C:\\p\\Pack\\A\\y.milk', name: 'y', group: 'Pack\\A' }])[0]).toMatchObject({ key: 'Pack/A/y.milk', style: 'A', sub_style: null });
   });
 });
 
