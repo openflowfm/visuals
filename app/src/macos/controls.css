@@ -1,0 +1,386 @@
+/* macOS's toggles and disclosure button (controls.tsx), on the macOS 27 kit's
+   tokens. Sizes are the kit's, in points (one CSS pixel each); colours are the
+   kit's "Content Area" layer styles. Light or dark comes from the nearest
+   [data-appearance] or the system, as tokens.css decides; an ancestor with
+   .mac-inactive draws them as in a window that isn't key. */
+@import '../../../kit/tokens.css';
+
+/* What tokens.css leaves to one appearance only: the kit marks a checked box
+   in an inactive window at 70% black (light) or white (dark), and blends two
+   of its fills, each in one appearance. Same selectors as tokens.css, so they
+   follow the same appearance. */
+:root,
+[data-appearance='light'] {
+  --mac-ctl-inactive-mark: rgb(0 0 0 / 0.7);
+  --mac-ctl-off-clicked-blend: var(--mac-content-area-controls-active-off-clicked-blend, normal);
+  --mac-ctl-off-disabled-blend: normal;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-appearance='light']) {
+    --mac-ctl-inactive-mark: rgb(255 255 255 / 0.7);
+    --mac-ctl-off-clicked-blend: normal;
+    --mac-ctl-off-disabled-blend: var(--mac-content-area-controls-active-off-disabled-blend, normal);
+  }
+}
+[data-appearance='dark'] {
+  --mac-ctl-inactive-mark: rgb(255 255 255 / 0.7);
+  --mac-ctl-off-clicked-blend: normal;
+  --mac-ctl-off-disabled-blend: var(--mac-content-area-controls-active-off-disabled-blend, normal);
+}
+
+/* ---- Checkbox and radio button ---- */
+
+/* Per size: the box, its corners, the gap to the label (the kit's label x less
+   the box), the control's height, and the label's type. */
+.mac-toggle {
+  --box: 16px;
+  --radius: 5.5px;
+  --gap: 5px;
+  --height: 24px;
+  --font-size: 13px;
+  --line: 16px;
+}
+.mac-toggle[data-size='mini'] {
+  --box: 12px;
+  --radius: 3.5px;
+  --gap: 3px;
+  --height: 14px;
+  --font-size: 10px;
+  --line: 13px;
+}
+.mac-toggle[data-size='small'] {
+  --box: 14px;
+  --radius: 4.5px;
+  --gap: 4px;
+  --height: 18px;
+  --font-size: 11px;
+  --line: 14px;
+}
+.mac-toggle[data-size='large'] {
+  --box: 18px;
+  --radius: 6.5px;
+  --gap: 5px;
+  --height: 28px;
+}
+.mac-toggle[data-size='xlarge'] {
+  --box: 18px;
+  --radius: 6.5px;
+  --gap: 7px;
+  --height: 36px;
+}
+.mac-radio {
+  --radius: 50%;
+  --gap: 3px;
+  --dot: 4.8px;
+}
+.mac-radio[data-size='mini'] {
+  --dot: 4px;
+}
+.mac-radio[data-size='large'] {
+  --gap: 5px;
+  --dot: 5px;
+}
+.mac-radio[data-size='xlarge'] {
+  --gap: 7px;
+  --dot: 5px;
+}
+
+/* The box's fill, off and on, and the mark's colour, by where the control is:
+   the box below picks off or on from the input. */
+.mac-toggle {
+  --bg-off: var(--mac-content-area-controls-active-off-idle-bg);
+  --bg-on: var(--mac-content-area-controls-active-on-idle-bg);
+  --blend-off: normal;
+  --mark: rgb(255 255 255);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gap);
+  min-height: var(--height);
+  vertical-align: middle;
+  cursor: default;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.mac-toggle:active:not([data-disabled]) {
+  --bg-off: var(--mac-content-area-controls-active-off-clicked-bg);
+  --bg-on: var(--mac-content-area-controls-active-on-clicked-bg);
+  --blend-off: var(--mac-ctl-off-clicked-blend);
+}
+.mac-toggle[data-disabled] {
+  --bg-off: var(--mac-content-area-controls-active-off-disabled-bg);
+  --bg-on: var(--mac-content-area-controls-active-on-disabled-bg);
+  --blend-off: var(--mac-ctl-off-disabled-blend);
+}
+.mac-inactive .mac-toggle {
+  --bg-off: var(--mac-content-area-controls-inactive-off-idle-bg);
+  --bg-on: var(--mac-content-area-controls-inactive-on-idle-bg);
+  --blend-off: normal;
+  --mark: var(--mac-ctl-inactive-mark);
+}
+.mac-inactive .mac-toggle[data-disabled] {
+  --bg-off: var(--mac-content-area-controls-inactive-off-disabled-bg);
+  --bg-on: var(--mac-content-area-controls-inactive-on-disabled-bg);
+}
+
+.mac-toggle-box {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--box);
+  height: var(--box);
+  border-radius: var(--radius);
+  background: var(--bg-off);
+  mix-blend-mode: var(--blend-off);
+  color: var(--mark);
+}
+.mac-checkbox .mac-toggle-box:has(> .mac-toggle-input:is(:checked, :indeterminate)),
+.mac-radio .mac-toggle-box:has(> .mac-toggle-input:checked),
+.mac-radio[data-mixed] .mac-toggle-box {
+  background: var(--bg-on);
+  mix-blend-mode: normal;
+}
+/* A disabled mark fades with its box. */
+.mac-toggle[data-disabled] .mac-toggle-box > :not(input) {
+  opacity: 0.6;
+}
+
+/* The real input, over the box and unseen: it takes the clicks and the focus. */
+.mac-toggle-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+.mac-toggle-box:has(> .mac-toggle-input:focus-visible) {
+  box-shadow: var(--mac-global-focus-ring-ring);
+}
+
+/* The marks, each in the box's grid cell, shown by the input's state. */
+.mac-toggle-mark,
+.mac-radio-dot {
+  grid-area: 1 / 1;
+  display: none;
+  pointer-events: none;
+}
+.mac-toggle-mark {
+  width: 100%;
+  height: 100%;
+}
+.mac-checkbox .mac-toggle-input:checked:not(:indeterminate) ~ .mac-toggle-check,
+.mac-checkbox .mac-toggle-input:indeterminate ~ .mac-toggle-dash,
+.mac-radio[data-mixed] .mac-toggle-input:not(:checked) ~ .mac-toggle-dash {
+  display: block;
+}
+.mac-radio .mac-toggle-input:checked ~ .mac-radio-dot {
+  display: block;
+  width: var(--dot);
+  height: var(--dot);
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.mac-toggle-label {
+  font: 510 var(--font-size) / var(--line) var(--mac-font-family);
+  color: var(--mac-vibrant-label);
+  mix-blend-mode: var(--mac-vibrant-blend);
+}
+.mac-toggle[data-disabled] .mac-toggle-label {
+  color: var(--mac-vibrant-tertiary-label);
+}
+
+/* ---- Switch ---- */
+
+/* Per size: the track, the knob, and the knob's inset from the track's ends. */
+.mac-switch {
+  --track-w: 54px;
+  --track-h: 24px;
+  --knob-w: 32px;
+  --knob-h: 20px;
+  --inset: 2px;
+}
+.mac-switch[data-size='mini'] {
+  --track-w: 36px;
+  --track-h: 16px;
+  --knob-w: 21px;
+  --knob-h: 13px;
+  --inset: 1.5px;
+}
+.mac-switch[data-size='small'] {
+  --track-w: 44px;
+  --track-h: 20px;
+  --knob-w: 26px;
+  --knob-h: 16px;
+}
+.mac-switch[data-size='large'] {
+  --track-w: 64px;
+  --track-h: 28px;
+  --knob-w: 38px;
+  --knob-h: 24px;
+}
+.mac-switch[data-size='xlarge'] {
+  --track-w: 80px;
+  --track-h: 36px;
+  --knob-w: 47px;
+  --knob-h: 30px;
+  --inset: 3px;
+}
+
+.mac-switch {
+  --track: var(--mac-content-area-controls-active-off-idle-bg);
+  position: relative;
+  flex: none;
+  box-sizing: border-box;
+  display: inline-block;
+  vertical-align: middle;
+  width: var(--track-w);
+  height: var(--track-h);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  outline: none;
+  background: var(--track);
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: default;
+  transition: background-color 0.2s ease;
+}
+.mac-switch[aria-checked='true'] {
+  --track: var(--mac-content-area-controls-active-on-idle-bg);
+}
+.mac-switch:active:not(:disabled) {
+  --track: var(--mac-content-area-controls-active-off-clicked-bg);
+}
+.mac-switch[aria-checked='true']:active:not(:disabled) {
+  --track: var(--mac-content-area-controls-active-on-clicked-bg);
+}
+.mac-switch:disabled {
+  --track: var(--mac-content-area-controls-active-off-disabled-bg);
+}
+.mac-switch[aria-checked='true']:disabled {
+  --track: var(--mac-content-area-controls-active-on-disabled-bg);
+}
+.mac-inactive .mac-switch {
+  --track: var(--mac-content-area-controls-inactive-off-idle-bg);
+}
+.mac-inactive .mac-switch[aria-checked='true'] {
+  --track: var(--mac-content-area-controls-inactive-on-idle-bg);
+}
+.mac-inactive .mac-switch:disabled {
+  --track: var(--mac-content-area-controls-inactive-off-disabled-bg);
+}
+.mac-inactive .mac-switch[aria-checked='true']:disabled {
+  --track: var(--mac-content-area-controls-inactive-on-disabled-bg);
+}
+.mac-switch:focus-visible {
+  box-shadow: var(--mac-global-focus-ring-ring);
+}
+
+.mac-switch-knob {
+  --w: var(--knob-w);
+  --h: var(--knob-h);
+  position: absolute;
+  top: calc((var(--track-h) - var(--h)) / 2);
+  left: var(--inset);
+  width: var(--w);
+  height: var(--h);
+  border-radius: 999px;
+  background: var(--mac-content-area-knobs-toggle-idle-bg);
+  box-shadow: var(--mac-content-area-knobs-toggle-idle-shadow);
+  -webkit-backdrop-filter: var(--mac-content-area-knobs-toggle-idle-backdrop, none);
+  backdrop-filter: var(--mac-content-area-knobs-toggle-idle-backdrop, none);
+  transition:
+    left 0.2s ease,
+    top 0.2s ease,
+    width 0.2s ease,
+    height 0.2s ease,
+    background-color 0.2s ease;
+}
+.mac-switch[aria-checked='true'] .mac-switch-knob {
+  left: calc(var(--track-w) - var(--inset) - var(--w));
+}
+/* Pressed, the kit's knob turns to Liquid Glass and swells past the track:
+   approximated as a bigger, see-through knob over a blur, still held to its end. */
+.mac-switch:active:not(:disabled) .mac-switch-knob {
+  --w: calc(var(--knob-w) * 1.3);
+  --h: calc(var(--knob-h) * 1.35);
+  background: rgb(255 255 255 / 0.3);
+  box-shadow: var(--mac-content-area-knobs-toggle-clicked-shadow);
+  -webkit-backdrop-filter: blur(2px) saturate(1.6);
+  backdrop-filter: blur(2px) saturate(1.6);
+}
+.mac-switch:disabled .mac-switch-knob {
+  background: var(--mac-content-area-knobs-toggle-disabled-bg);
+  box-shadow: var(--mac-content-area-knobs-toggle-disabled-shadow);
+  -webkit-backdrop-filter: var(--mac-content-area-knobs-toggle-disabled-backdrop, none);
+  backdrop-filter: var(--mac-content-area-knobs-toggle-disabled-backdrop, none);
+}
+
+/* ---- Disclosure button ---- */
+
+.mac-disclosure {
+  --side: 24px;
+  --radius: 6px;
+  --glyph: 13px;
+}
+.mac-disclosure[data-size='mini'] {
+  --side: 16px;
+  --radius: 4px;
+  --glyph: 8.5px;
+}
+.mac-disclosure[data-size='small'] {
+  --side: 20px;
+  --radius: 5px;
+  --glyph: 10px;
+}
+.mac-disclosure[data-size='large'] {
+  --side: 28px;
+  --radius: 50%;
+}
+.mac-disclosure[data-size='xlarge'] {
+  --side: 36px;
+  --radius: 50%;
+}
+
+.mac-disclosure {
+  flex: none;
+  box-sizing: border-box;
+  display: inline-grid;
+  place-items: center;
+  vertical-align: middle;
+  width: var(--side);
+  height: var(--side);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  outline: none;
+  background: var(--mac-content-area-bordered-idle-bg);
+  color: var(--mac-vibrant-label);
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: default;
+}
+.mac-disclosure:active:not(:disabled) {
+  background: var(--mac-content-area-bordered-clicked-bg);
+}
+.mac-disclosure:disabled {
+  background: var(--mac-content-area-bordered-disabled-bg);
+  color: var(--mac-vibrant-tertiary-label);
+}
+.mac-disclosure:focus-visible {
+  box-shadow: var(--mac-global-focus-ring-ring);
+}
+.mac-disclosure-chevron {
+  width: var(--glyph);
+  height: var(--glyph);
+  mix-blend-mode: var(--mac-vibrant-blend);
+  transition: transform 0.2s ease;
+}
+.mac-disclosure[aria-expanded='true'] .mac-disclosure-chevron {
+  transform: rotate(180deg);
+}

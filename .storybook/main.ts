@@ -1,5 +1,12 @@
 import type { StorybookConfig } from '@storybook/react-vite';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import app from '../vite.app.config.ts';
+
+// The macOS kit's exported pictures (`kit/out/`, ignored by git: see
+// `kit/README.md`), served at `kit/` so the macOS stories show each beside
+// ours. Only when they have been exported here; the stories do without.
+const kitOut = fileURLToPath(new URL('../kit/out', import.meta.url));
 
 // The app's page components in the app's own look, with no app behind them.
 // Stories sit beside the component they show (`app/src/*.stories.tsx`); what
@@ -14,6 +21,7 @@ const config: StorybookConfig = {
   // Pseudo-states shows a hover or a focus ring without a pointer there (`parameters.pseudo`).
   addons: ['@storybook/addon-docs', '@storybook/addon-themes', '@storybook/addon-vitest', 'storybook-addon-pseudo-states'],
   core: { disableTelemetry: true },
+  staticDirs: existsSync(kitOut) ? [{ from: '../kit/out', to: '/kit' }] : [],
   viteFinal: (config) => ({
     ...config,
     // The app's own: the lab's switch, off (the editor isn't storied), and its build target.
