@@ -334,7 +334,7 @@
   --mac-over-glass-controls-inactive-on-clicked-bg: rgb(204.1 204.1 204.1);
   --mac-over-glass-controls-inactive-on-disabled-bg: rgb(0 0 0 / 0.05);
   --mac-over-glass-controls-inactive-on-disabled-blend: plus-darker;
-  --mac-content-area-input-fields-focus-ring-ring: inset 0 0 0 1px rgb(0 136 255), 0 0 0 3.5px rgb(0 136 255);
+  --mac-content-area-input-fields-focus-ring-ring: inset 0 0 0 1px rgb(0 136 255 / 0.5), 0 0 0 3.5px rgb(0 136 255 / 0.5);
   --mac-liquid-glass-menus-bg: rgb(230 230 230 / 0.55);
   --mac-liquid-glass-menus-shadow: 0px 4px 24px 0px rgb(0 0 0 / 0.3), 0px 0px 0px 0.5px rgb(0 0 0 / 0.2), 0px -4px 8px -4px rgb(12.8 12.8 12.8), 0px 4px 8px -4px rgb(13 13 13), 0px -0.5px 0px 0px rgb(38 38 38), 0px 0.5px 0px 0px rgb(38.3 38.3 38.3), 0px 0px 0px 1px rgb(102 102 102 / 0.15); /* glass lighting, as the kit layers it; a starting point only */
   --mac-liquid-glass-menus-backdrop: blur(10px) saturate(0.8); /* Liquid Glass, approximated as a blur: compare with the PNG */
@@ -445,9 +445,9 @@
     --mac-content-area-fills-selected-seximal-bg: rgb(255 255 255 / 0.025);
     --mac-content-area-input-fields-idle-bg: rgb(30 30 30);
     --mac-content-area-input-fields-idle-ring: 0 0 0 1px rgb(255 255 255 / 0.04);
-    --mac-content-area-input-fields-focus-ring-ring: inset 0 0 0 1px rgb(0 145 255), 0 0 0 3.5px rgb(0 145 255);
+    --mac-content-area-input-fields-focus-ring-ring: inset 0 0 0 1px rgb(0 145 255 / 0.5), 0 0 0 3.5px rgb(0 145 255 / 0.5);
     --mac-content-area-input-fields-disabled-bg: rgb(30 30 30 / 0.25);
-    --mac-content-area-input-fields-disabled-ring: 0 0 0 1px rgb(0 0 0 / 0.04);
+    --mac-content-area-input-fields-disabled-ring: 0 0 0 1px rgb(0 0 0 / 0.02);
     --mac-content-area-knobs-toggle-idle-bg: rgb(255 255 255 / 0.875);
     --mac-content-area-knobs-toggle-idle-shadow: 0px 0px 44px 0px rgb(0 0 0 / 0.1), 0px 0px 4px -0.5px rgb(0 0 0 / 0.05), 0px 0px 1px -0.25px rgb(0 0 0 / 0.05), 1.75px 2.5px 1px -1.5px rgb(255 255 255), -1.75px -2.5px 2px -1.5px rgb(255 255 255), 0px 0px 1px 0px rgb(255 255 255 / 0.1);
     --mac-content-area-knobs-toggle-idle-backdrop: blur(3.75px) saturate(1.15);
@@ -717,9 +717,9 @@
   --mac-content-area-fills-selected-seximal-bg: rgb(255 255 255 / 0.025);
   --mac-content-area-input-fields-idle-bg: rgb(30 30 30);
   --mac-content-area-input-fields-idle-ring: 0 0 0 1px rgb(255 255 255 / 0.04);
-  --mac-content-area-input-fields-focus-ring-ring: inset 0 0 0 1px rgb(0 145 255), 0 0 0 3.5px rgb(0 145 255);
+  --mac-content-area-input-fields-focus-ring-ring: inset 0 0 0 1px rgb(0 145 255 / 0.5), 0 0 0 3.5px rgb(0 145 255 / 0.5);
   --mac-content-area-input-fields-disabled-bg: rgb(30 30 30 / 0.25);
-  --mac-content-area-input-fields-disabled-ring: 0 0 0 1px rgb(0 0 0 / 0.04);
+  --mac-content-area-input-fields-disabled-ring: 0 0 0 1px rgb(0 0 0 / 0.02);
   --mac-content-area-knobs-toggle-idle-bg: rgb(255 255 255 / 0.875);
   --mac-content-area-knobs-toggle-idle-shadow: 0px 0px 44px 0px rgb(0 0 0 / 0.1), 0px 0px 4px -0.5px rgb(0 0 0 / 0.05), 0px 0px 1px -0.25px rgb(0 0 0 / 0.05), 1.75px 2.5px 1px -1.5px rgb(255 255 255), -1.75px -2.5px 2px -1.5px rgb(255 255 255), 0px 0px 1px 0px rgb(255 255 255 / 0.1);
   --mac-content-area-knobs-toggle-idle-backdrop: blur(3.75px) saturate(1.15);

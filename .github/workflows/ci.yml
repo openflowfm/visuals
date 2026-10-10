@@ -136,9 +136,9 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
-  # The kit renderer's TypeScript: its geometry, fonts and scene building.
-  # kit/ is its own package; drawing needs Apple's kit, which is never in the
-  # repo, so CI runs only the tests that don't.
+  # The kit tools' TypeScript: the symbol exporter's listing and sheet, and the
+  # token generator. kit/ is its own package; exporting needs Sketch and
+  # Apple's kit, which is never in the repo, so CI runs only the tests.
   kit:
     runs-on: ubuntu-latest
     defaults:

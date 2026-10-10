@@ -13,7 +13,7 @@
 // nothing matched, 2 on a usage error.
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { exportedFile, readSymbols, select, sheetHtml, type Format } from './symbols.ts';
 
@@ -53,11 +53,14 @@ if (symbols.length === 0) {
   process.exit(1);
 }
 
-// sketchtool reads a `.sketch`: zip an unpacked kit once, again when it changes.
+// sketchtool reads a `.sketch`: zip an unpacked kit once, again when the
+// document or any page is newer than the zip.
 let doc = resolve(kit);
 if (statSync(doc).isDirectory()) {
   const packed = join(out, 'kit.sketch');
-  if (!existsSync(packed) || statSync(packed).mtimeMs < statSync(join(doc, 'document.json')).mtimeMs) {
+  const pages = join(doc, 'pages');
+  const newest = Math.max(statSync(join(doc, 'document.json')).mtimeMs, ...readdirSync(pages).map((f) => statSync(join(pages, f)).mtimeMs));
+  if (!existsSync(packed) || statSync(packed).mtimeMs < newest) {
     console.log(`zip -r -X ${packed} . (in ${doc})`);
     execFileSync('zip', ['-r', '-X', '-q', packed, '.', '-x', '.DS_Store', '*/.DS_Store'], { cwd: doc, stdio: 'inherit' });
   }

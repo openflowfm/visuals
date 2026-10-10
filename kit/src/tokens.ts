@@ -204,9 +204,9 @@ export function over(b: Px, s: Px, mode: number): Px {
 
 const px = (v: number) => `${round(v, 2)}px`;
 
-function gradient(f: SFill): string {
+function gradient(f: SFill, opacity: number): string {
   const g = f.gradient!;
-  const stops = g.stops.map((s) => `${cssColor(premul(s.color, f.contextSettings?.opacity ?? 1))} ${round(s.position * 100, 1)}%`).join(', ');
+  const stops = g.stops.map((s) => `${cssColor(premul(s.color, (f.contextSettings?.opacity ?? 1) * opacity))} ${round(s.position * 100, 1)}%`).join(', ');
   const p = (s: string) =>
     s
       .replace(/[{}\s]/g, '')
@@ -224,7 +224,8 @@ function gradient(f: SFill): string {
 /**
  * The fills as one CSS background: solid fills (whatever their blend modes)
  * composited into a single colour, the style's opacity included; a gradient
- * makes it a layered background instead.
+ * makes it a layered background instead, where the fills' blend modes are
+ * lost (CSS can't blend background layers with plus darker or lighter).
  */
 export function background(style: SStyle): string | null {
   const fills = (style.fills ?? []).filter((f) => f.isEnabled && (f.fillType === 0 || f.fillType === 1));
@@ -239,15 +240,16 @@ export function background(style: SStyle): string | null {
   return fills
     .slice()
     .reverse()
-    .map((f) => (f.fillType === 1 ? gradient(f) : `linear-gradient(${cssColor(premul(f.color, (f.contextSettings?.opacity ?? 1) * opacity))} 0 0)`))
+    .map((f) => (f.fillType === 1 ? gradient(f, opacity) : `linear-gradient(${cssColor(premul(f.color, (f.contextSettings?.opacity ?? 1) * opacity))} 0 0)`))
     .join(', ');
 }
 
-/** Borders as box-shadow rings: inside → inset, outside → outset, centre → half each. */
+/** Borders as box-shadow rings: inside → inset, outside → outset, centre → half each; the style's opacity included. */
 export function ring(style: SStyle): string | null {
   const parts: string[] = [];
+  const opacity = style.contextSettings?.opacity ?? 1;
   for (const b of (style.borders ?? []).filter((x) => x.isEnabled && x.fillType === 0).reverse()) {
-    const c = cssColor(premul(b.color, b.contextSettings?.opacity ?? 1));
+    const c = cssColor(premul(b.color, (b.contextSettings?.opacity ?? 1) * opacity));
     if (b.position === 1) parts.push(`inset 0 0 0 ${px(b.thickness)} ${c}`);
     else if (b.position === 2) parts.push(`0 0 0 ${px(b.thickness)} ${c}`);
     else parts.push(`inset 0 0 0 ${px(b.thickness / 2)} ${c}`, `0 0 0 ${px(b.thickness / 2)} ${c}`);

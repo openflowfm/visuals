@@ -60,6 +60,8 @@ describe('layer styles', () => {
   it('draws borders as rings: inside inset, outside outset, top border first', () => {
     const border = (position: number, thickness: number) => ({ ...fill(c(0, 0.5333, 1)), thickness, position });
     expect(ring({ borders: [border(2, 3.5), border(1, 1)] })).toBe('inset 0 0 0 1px rgb(0 136 255), 0 0 0 3.5px rgb(0 136 255)');
+    // The style's opacity reaches its borders too (the input fields' focus ring is at 50%).
+    expect(ring({ borders: [border(1, 1)], contextSettings: { opacity: 0.5 } })).toBe('inset 0 0 0 1px rgb(0 136 255 / 0.5)');
   });
 
   it('writes shadows as box-shadow, inner shadows inset', () => {
