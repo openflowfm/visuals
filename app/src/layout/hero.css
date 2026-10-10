@@ -7,7 +7,7 @@
    are --lay-hero-radius (as --hole-radius, for home.css's opaque painted
    corners, `.home [data-hole]:not([data-loading])::before`). Its height is
    capped at --hero-cap, so its width is too and it keeps its shape. In a card
-   of 900px and up the words and actions sit beside it, along its foot;
+   of 680px and up the words and actions sit beside it, along its foot;
    narrower, under it. Near borderless (decision 68): the card is space, not a
    panel; the actions are type with a glyph, the pressed one brighter. A still
    or thumbnail (stories) has --surface-thumb behind it, so the card takes the
@@ -158,11 +158,11 @@
   font-size: 14px;
 }
 
-/* A wide card: the picture on the left at its cap, the words beside it, along its foot. */
-@container hero (min-width: 900px) {
+/* A wide card: the picture on the left up to its cap, the words beside it, along its foot. From 680px, so the pinned hero stays short beside a docked inspector too. */
+@container hero (min-width: 680px) {
   .lay .hero-row {
     display: grid;
-    grid-template-columns: minmax(0, calc(var(--hero-cap) * 16 / 9)) minmax(260px, 1fr);
+    grid-template-columns: minmax(0, calc(var(--hero-cap) * 16 / 9)) minmax(240px, 1fr);
     align-items: end;
     column-gap: 32px;
   }
