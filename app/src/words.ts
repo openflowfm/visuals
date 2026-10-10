@@ -66,6 +66,17 @@ export const WORDS = {
   'starter set': 'starter presets',
   /* The source picker's left and right channels, in Settings (decision 67). */
   'audio channels': 'left and right channels',
+  /* Home's empty states (decision 68): a search or filter that finds nothing, and an empty Starred. */
+  'no matches': 'Nothing matches',
+  'no matches search why': 'Every word has to match a name, style, author or tag.',
+  'no matches filter why': 'No preset has every value picked.',
+  'clear search': 'Clear the search',
+  'clear filter': 'Clear the filter',
+  'starred empty': 'Nothing starred yet',
+  'starred empty why': 'Star in the now playing panel stars the preset playing.',
+  /* The library's search box ("Search 9,795 presets") and an open group's own ("find an author"). */
+  search: 'search',
+  'find value': 'find',
   /* The crash prompt's reminder (decision 54): the scrub can't catch every name. */
   'crash report check': "Read the text before you submit it: a name the app can't recognise, such as a device's or a display's, may still be in it.",
 } as const;

@@ -194,7 +194,7 @@ describe('the home, the one place to browse', () => {
     // Read from disk: vitest hands a test empty CSS for an import, even `?raw`.
     // The theme's surfaces come from the widgets' stylesheet; any colour will do.
     const theme = ':root { --bg: rgb(1, 1, 1); --panel: rgb(2, 2, 2); --rail: rgb(3, 3, 3); --sel: rgb(4, 4, 4); --surface-control: rgb(5, 5, 5); }';
-    const sheets = ['app.css', 'home.css', 'nowpanel.css', 'homebar.css', 'library.css', 'sources.css', 'playlisthead.css', 'popover.css'];
+    const sheets = ['app.css', 'home.css', 'tile.css', 'nowpanel.css', 'homebar.css', 'library.css', 'sources.css', 'playlisthead.css', 'popover.css'];
     style.textContent = [theme, ...sheets.map(css)].join('\n');
     document.head.append(style);
     try {

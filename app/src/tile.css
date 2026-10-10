@@ -1,0 +1,163 @@
+/* Moved from home.css as it stood before decision 68, for the tile lane to restyle:
+   the playlist's strip and its tiles. */
+
+/* The strip's tip: how to play from it and reorder it, quietly over it. */
+.home .home-strip-tip {
+  flex: none;
+  margin: 0;
+  padding: 0 16px 8px;
+  color: var(--caption);
+  font-size: var(--text-control);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* The strip: the playlist's presets as thumbnails, in the order they play. */
+.home .home-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  align-content: start;
+  gap: 14px 12px;
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 4px 16px 16px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  list-style: none;
+  overscroll-behavior: contain;
+}
+.home .home-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  color: var(--ui);
+  cursor: pointer;
+  user-select: none;
+  border-radius: var(--radius);
+}
+/* A focused tile rings its picture (below), not itself as well: one ring. */
+.vf-root .home li.home-tile:focus-visible {
+  outline: none;
+}
+.home .home-thumb {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--bd);
+  outline: 1px solid var(--bd3);
+}
+.home .home-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.home .home-thumb-none {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 6px;
+  color: var(--caption);
+  font-size: var(--text-label);
+  text-align: center;
+  overflow: hidden;
+}
+.home .home-tile-n,
+.home .home-tile-next {
+  position: absolute;
+  padding: 0 4px;
+  color: var(--fg);
+  font-family: var(--mono);
+  font-variation-settings: var(--mono-axes);
+  font-size: var(--text-label);
+  font-weight: normal;
+  background: rgb(0 0 0 / 0.65);
+  border-radius: var(--radius);
+}
+.home .home-tile-n {
+  top: 4px;
+  left: 4px;
+}
+.home .home-tile-next {
+  bottom: 4px;
+  right: 4px;
+  color: var(--caution);
+}
+.home .home-tile-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-body);
+}
+.home .home-tile-tools {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: none;
+}
+.home .home-tile:hover .home-tile-tools,
+.home .home-tile:focus-within .home-tile-tools {
+  display: block;
+}
+.home .home-tile:hover .home-thumb {
+  outline-color: var(--ui);
+}
+.home .home-tile[aria-current='true'] .home-thumb {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+.home .home-tile[aria-current='true'] .home-tile-name {
+  color: var(--fg);
+  font-weight: var(--weight-medium);
+}
+.home .home-tile[data-next] .home-thumb {
+  outline: 1px dashed var(--amber);
+}
+/* After the playing and next marks, and above them: focus shows on those tiles too (the playing one keeps its bold name). */
+.home .home-tile:focus-visible .home-thumb,
+.home .home-tile[aria-current='true']:focus-visible .home-thumb,
+.home .home-tile[data-next]:focus-visible .home-thumb {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: -2px;
+}
+.home .home-tile[data-missing] .home-thumb,
+.home .home-tile[data-missing] .home-tile-name {
+  opacity: 0.4;
+}
+.home .home-tile[data-dragged] {
+  opacity: 0.35;
+}
+/* Where a dragged preset would land: a bar before or after the tile it is over. */
+.home .home-tile[data-over]::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 18px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--amber);
+}
+.home .home-tile[data-over='before']::before {
+  left: -7px;
+}
+.home .home-tile[data-over='after']::before {
+  right: -7px;
+}
+.home .home-more {
+  align-self: center;
+  color: var(--caption);
+  font-size: var(--text-label);
+}
+
+@media (max-width: 899px) {
+  .home .home-strip {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    padding-inline: 12px;
+  }
+}

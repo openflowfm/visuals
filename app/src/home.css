@@ -6,13 +6,109 @@
    the main pane, and the panel, opened, takes the main pane's place. The panel and the bar
    carry the preview, a hole onto the native view under the page: they paint
    themselves with its shadow, so nothing here may paint behind them. Rules hang
-   off `.home`, which outranks app.css's own. */
+   off `.home`, which outranks app.css's own.
+
+   Since decision 68 Home looks like an instrument, near borderless: areas are
+   told apart by space and tone, not lines; controls are type, the active one
+   underlined. The only lines left are the selection ring, the focus ring and
+   the playing mark. Live keeps its own crisper look, so nothing here reaches it. */
 
 .app.home {
+  /* Surfaces, darkest first. Each area paints itself with one of these (the
+     window's root paints nothing, for the preview's sake), so a later change can
+     make them translucent over a frosted window. */
+  --surface-0: var(--bg); /* the window: header, sidebar, main pane, bar */
+  --surface-1: #0e0e10; /* the now playing panel: one faint step up */
+  --surface-2: #161619; /* raised: popovers, menus, a tile's empty picture */
+  --surface-3: #1e1e22; /* a field being typed in, a pressed key */
+  /* Type. Chrome and labels, titles, numbers: each from its token, so the
+     font can change in one place. Recursive picks its cut by an axis. */
+  --font-ui: var(--sans);
+  --font-ui-axes: var(--sans-axes);
+  --font-display: var(--sans);
+  --font-display-axes: var(--sans-axes);
+  --font-num: var(--mono);
+  --font-num-axes: var(--mono-axes);
+  --font-mark: var(--mono);
+  --font-mark-axes: var(--mono-axes);
+  /* Small grey text at 4.5:1 or better on --surface-0 (the palette's is 3:1). */
+  --caption: #7a7a82;
+  /* The active control's underline, and the playing mark. */
+  --line-active: var(--primary);
+  --playing: var(--green);
+  /* The shadow a hovered tile lifts on. */
+  --lift: 0 10px 24px rgb(0 0 0 / 0.55);
+  /* One padding for the main pane: its head, chips and grid share a left edge. */
+  --pad: 22px;
   --home-side: 220px;
   --home-now: 340px;
   grid-template-columns: var(--home-side) minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
+}
+/* The widgets inside take the same type. */
+.app.home .wdg {
+  --wdg-sans: var(--font-ui);
+  --wdg-sans-axes: var(--font-ui-axes);
+  --wdg-mono-axes: var(--font-num-axes);
+}
+
+/* The header: on the window's own surface, no rule under it; the mark, home | live
+   as two words with the one shown underlined, and ⚙ as a 30px target. */
+.home .vf-header {
+  height: 52px;
+  padding: 0 14px 0 18px;
+  gap: 18px;
+  background: var(--surface-0);
+  border-bottom: 0;
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
+}
+.home .vf-header > .vf-mark {
+  font-family: var(--font-mark);
+  font-variation-settings: var(--font-mark-axes);
+  font-size: 13px;
+}
+.home .vf-header .wdg-segmented-body {
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  overflow: visible;
+}
+.home .vf-header .wdg-segmented-body button {
+  height: 28px;
+  padding: 0 6px;
+  border: 0;
+  color: var(--detail);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+.home .vf-header .wdg-segmented-body button:hover:not([aria-checked='true']) {
+  color: var(--ui);
+}
+.home .vf-header .wdg-segmented-body button[aria-checked='true'] {
+  color: var(--fg);
+  background: transparent;
+  text-decoration: underline 2px var(--line-active);
+  text-underline-offset: 7px;
+}
+.home .vf-header .wdg-segmented-body button:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 0;
+  border-radius: 4px;
+}
+.home .vf-header .wdg-button-body {
+  width: 30px;
+  height: 30px;
+  font-size: 15px;
+  color: var(--detail);
+  border-radius: 6px;
+}
+.home .vf-header .wdg-button-body:hover {
+  color: var(--fg);
 }
 .app.home[data-panel] {
   grid-template-columns: var(--home-side) minmax(0, 1fr) var(--home-now);
@@ -27,8 +123,7 @@
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  background: var(--panel);
-  border-right: 1px solid var(--bd3);
+  background: var(--surface-0);
 }
 /* Its narrow stand-in, the source menu, only in a narrow window. */
 .home .src-menu {
@@ -65,21 +160,20 @@
   justify-content: flex-start;
   min-width: 0;
   min-height: 0;
-  background: var(--bg);
+  background: var(--surface-0);
 }
-/* Something that went wrong (a preset that wouldn't open), over the main pane. */
+/* Something that went wrong (a preset that wouldn't open), over the main pane: a tinted note, no rule. */
 .home .home-notice {
   flex: none;
   gap: 4px;
-  margin: 8px 12px 0;
-  padding: 3px 4px 3px 8px;
-  font-size: var(--text-body);
-  background: var(--panel);
-  border-left: 2px solid var(--red);
-  border-radius: var(--radius);
+  margin: 10px var(--pad) 0;
+  padding: 4px 4px 4px 12px;
+  font-size: 12px;
+  background: color-mix(in srgb, var(--red) 12%, var(--surface-0));
+  border-radius: 8px;
 }
 .home .home-note {
-  margin: 24px;
+  margin: 24px var(--pad);
   color: var(--caption);
   font-size: var(--text-body);
   line-height: 1.5;
@@ -90,7 +184,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 0 12px;
+  padding: 0 var(--pad);
 }
 .home .home-problems:empty {
   display: none;
@@ -103,13 +197,12 @@
   align-items: center;
   gap: 8px;
   margin: 0;
-  padding: 3px 4px 3px 8px;
+  padding: 4px 4px 4px 12px;
   color: var(--ui);
-  font-size: var(--text-body);
+  font-size: 12px;
   line-height: 1.4;
-  background: var(--panel);
-  border-left: 2px solid var(--caution);
-  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--caution) 10%, var(--surface-0));
+  border-radius: 8px;
 }
 .home .home-problem-mark {
   flex: none;
@@ -137,161 +230,9 @@
   min-height: 0;
 }
 
-/* The strip's tip: how to play from it and reorder it, quietly over it. */
-.home .home-strip-tip {
-  flex: none;
-  margin: 0;
-  padding: 0 16px 8px;
-  color: var(--caption);
-  font-size: var(--text-control);
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
+/* The playlist's strip and its tiles: tile.css, one tile with the library's grid. */
 
-/* The strip: the playlist's presets as thumbnails, in the order they play. */
-.home .home-strip {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  align-content: start;
-  gap: 14px 12px;
-  flex: 1;
-  min-height: 0;
-  margin: 0;
-  padding: 4px 16px 16px;
-  overflow-x: hidden;
-  overflow-y: auto;
-  list-style: none;
-  overscroll-behavior: contain;
-}
-.home .home-tile {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-  color: var(--ui);
-  cursor: pointer;
-  user-select: none;
-  border-radius: var(--radius);
-}
-/* A focused tile rings its picture (below), not itself as well: one ring. */
-.vf-root .home li.home-tile:focus-visible {
-  outline: none;
-}
-.home .home-thumb {
-  position: relative;
-  aspect-ratio: 4 / 3;
-  overflow: hidden;
-  border-radius: var(--radius);
-  background: var(--bd);
-  outline: 1px solid var(--bd3);
-}
-.home .home-thumb img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.home .home-thumb-none {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  padding: 6px;
-  color: var(--caption);
-  font-size: var(--text-label);
-  text-align: center;
-  overflow: hidden;
-}
-.home .home-tile-n,
-.home .home-tile-next {
-  position: absolute;
-  padding: 0 4px;
-  color: var(--fg);
-  font-family: var(--mono);
-  font-variation-settings: var(--mono-axes);
-  font-size: var(--text-label);
-  font-weight: normal;
-  background: rgb(0 0 0 / 0.65);
-  border-radius: var(--radius);
-}
-.home .home-tile-n {
-  top: 4px;
-  left: 4px;
-}
-.home .home-tile-next {
-  bottom: 4px;
-  right: 4px;
-  color: var(--caution);
-}
-.home .home-tile-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--text-body);
-}
-.home .home-tile-tools {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  display: none;
-}
-.home .home-tile:hover .home-tile-tools,
-.home .home-tile:focus-within .home-tile-tools {
-  display: block;
-}
-.home .home-tile:hover .home-thumb {
-  outline-color: var(--ui);
-}
-.home .home-tile[aria-current='true'] .home-thumb {
-  outline: 2px solid var(--primary);
-  outline-offset: 1px;
-}
-.home .home-tile[aria-current='true'] .home-tile-name {
-  color: var(--fg);
-  font-weight: var(--weight-medium);
-}
-.home .home-tile[data-next] .home-thumb {
-  outline: 1px dashed var(--amber);
-}
-/* After the playing and next marks, and above them: focus shows on those tiles too (the playing one keeps its bold name). */
-.home .home-tile:focus-visible .home-thumb,
-.home .home-tile[aria-current='true']:focus-visible .home-thumb,
-.home .home-tile[data-next]:focus-visible .home-thumb {
-  outline: 2px solid var(--vf-focus-ring);
-  outline-offset: -2px;
-}
-.home .home-tile[data-missing] .home-thumb,
-.home .home-tile[data-missing] .home-tile-name {
-  opacity: 0.4;
-}
-.home .home-tile[data-dragged] {
-  opacity: 0.35;
-}
-/* Where a dragged preset would land: a bar before or after the tile it is over. */
-.home .home-tile[data-over]::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 18px;
-  width: 3px;
-  border-radius: 2px;
-  background: var(--amber);
-}
-.home .home-tile[data-over='before']::before {
-  left: -7px;
-}
-.home .home-tile[data-over='after']::before {
-  right: -7px;
-}
-.home .home-more {
-  align-self: center;
-  color: var(--caption);
-  font-size: var(--text-label);
-}
-
-/* The preset being dragged, following the pointer. */
+/* The preset being dragged, following the pointer: a lifted card, no outline; brighter over a place it can land. */
 .home-ghost {
   position: fixed;
   top: 0;
@@ -299,27 +240,25 @@
   z-index: 100;
   display: flex;
   align-items: center;
-  gap: 6px;
-  max-width: 220px;
-  padding: 3px 8px 3px 3px;
+  gap: 8px;
+  max-width: 240px;
+  padding: 4px 10px 4px 4px;
   color: var(--fg);
-  font-size: var(--text-label);
-  background: var(--panel);
-  border: 1px solid var(--bd3);
-  border-radius: var(--radius);
-  box-shadow: 0 4px 14px rgb(0 0 0 / 0.4);
+  font-size: 12px;
+  background: var(--surface-2);
+  border-radius: 8px;
+  box-shadow: var(--lift);
   pointer-events: none;
-  opacity: 0.75;
+  opacity: 0.7;
 }
 .home-ghost[data-ok] {
-  border-color: var(--caution);
   opacity: 1;
 }
 .home-ghost img {
-  width: 48px;
-  aspect-ratio: 4 / 3;
+  width: 56px;
+  aspect-ratio: 16 / 9;
   object-fit: cover;
-  border-radius: var(--radius);
+  border-radius: 4px;
 }
 .home-ghost span {
   overflow: hidden;
@@ -327,11 +266,12 @@
   white-space: nowrap;
 }
 
-/* Under 1100px the panel narrows, so the grid keeps three tiles across. */
+/* Under 1100px the sidebar and the panel narrow and the pane's padding tightens, so the grid keeps three tiles across down to 900px. */
 @media (max-width: 1099px) {
   .app.home {
-    --home-side: 200px;
-    --home-now: 300px;
+    --home-side: 184px;
+    --home-now: 280px;
+    --pad: 16px;
   }
 }
 
@@ -359,10 +299,6 @@
   }
   .app.home[data-panel] main.home-main {
     display: none;
-  }
-  .home .home-strip {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    padding-inline: 12px;
   }
 }
 /* The home's header holds only the mark, home | live and ⚙ now, so the mark keeps its place down to 560px (app.css hides it under 640 for the other views). */
