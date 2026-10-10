@@ -30,6 +30,11 @@ describe('tileBy', () => {
     expect(tileBy(['geiss'], 'Geometric')).toBe('geiss');
     expect(tileBy([], 'Geometric')).toBe('Geometric');
   });
+
+  it('leaves out the index\'s "unknown" author', () => {
+    expect(tileBy(['unknown'], 'Hypnotic')).toBe('Hypnotic');
+    expect(tileBy(['Unknown', 'isosceles'], 'Dancer')).toBe('isosceles');
+  });
 });
 
 describe('PresetTile', () => {

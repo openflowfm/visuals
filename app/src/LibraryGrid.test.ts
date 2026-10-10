@@ -59,10 +59,25 @@ describe('the home’s look (decision 68)', () => {
 });
 
 describe('centreFor', () => {
-  it('puts the row in the middle of the view', () => {
-    // Row 10 starts at 8 + 1000; its tiles are 94 tall, so its middle is at 1055.
-    expect(centreFor(10, 100, 300)).toBe(1055 - 150);
-    expect(centreFor(4, 150, 500, homeLook(22))).toBe(8 + 600 + (150 - 16) / 2 - 250);
+  it('puts the row in the middle of the view, starting the view on a whole row', () => {
+    // Row 10 starts at 8 + 1000; its tiles are 94 tall, so its middle is at 1055: 905 would centre it, row 9 starts nearest.
+    expect(centreFor(10, 100, 300)).toBe(900);
+    // Row 4's middle is at 8 + 600 + 67 = 675; 425 would centre it, row 3 (450) starts nearest.
+    expect(centreFor(4, 150, 500, homeLook(22))).toBe(450);
+  });
+
+  it('never cuts a row off at the top, and lands within half a row of the middle', () => {
+    const look = homeLook();
+    for (const [row, height] of [
+      [6, 500],
+      [40, 731],
+      [3, 288],
+    ]) {
+      const top = centreFor(row, 151, height, look);
+      expect(top % 151).toBe(0);
+      const middle = look.padTop + row * 151 + (151 - look.rowGap) / 2;
+      expect(Math.abs(middle - top - height / 2)).toBeLessThanOrEqual(151 / 2);
+    }
   });
 
   it('goes no higher than the top', () => {
@@ -76,7 +91,20 @@ describe('centreFor', () => {
     const centred = centreFor(6, 150, 500, look);
     const middle = look.padTop + 6 * 150 + (150 - look.rowGap) / 2;
     expect(middle - least).toBeGreaterThan(400);
-    expect(middle - centred).toBe(250);
+    expect(Math.abs(middle - centred - 250)).toBeLessThanOrEqual(75);
+  });
+});
+
+describe("the home's grid beside a scrollbar", () => {
+  it('keeps 3 columns at 900px when a classic scrollbar takes 15px, giving it the right padding', () => {
+    // The main pane at 900px: 900 - 184 - 280 = 436, on a 16px padding.
+    expect(layout(436 - 15, 9795, 124, homeLook(16)).columns).toBe(2);
+    const look = homeLook(16, 15);
+    expect(look.padRight).toBe(1);
+    expect(layout(436 - 15, 9795, 124, look).columns).toBe(3);
+    // An overlay scrollbar takes nothing, and the padding stays even.
+    expect(homeLook(16, 0).padRight).toBe(16);
+    expect(homeLook(16, 40).padRight).toBe(0);
   });
 });
 

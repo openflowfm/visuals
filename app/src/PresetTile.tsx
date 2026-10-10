@@ -14,8 +14,11 @@ export function tileName(title: string, path: string): string {
   return file || t;
 }
 
-/** The line under a tile's name: its authors joined with " & ", else its style. */
-export const tileBy = (authors: readonly string[], style: string): string => (authors.length ? authors.join(' & ') : style);
+/** The line under a tile's name: its authors joined with " & ", else its style. The index's "unknown" isn't an author: it says nothing a style wouldn't say better. */
+export function tileBy(authors: readonly string[], style: string): string {
+  const known = authors.filter((a) => a.trim() && a.trim().toLowerCase() !== 'unknown');
+  return known.length ? known.join(' & ') : style;
+}
 
 export interface PresetTileProps extends HTMLAttributes<HTMLElement> {
   /** The element: a grid's option (`div`) or a strip's place (`li`). */

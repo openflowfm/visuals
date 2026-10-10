@@ -79,6 +79,20 @@ export interface HomeLibrary {
   onChosen(chosen: Prepared[]): void;
 }
 
+/**
+ * How a dev run starts the home's library, for headless captures of its states
+ * (never in a release): `VITE_HOME_FILTER=<group>:<value>` opens the filter on
+ * that group with that value picked, `VITE_HOME_SEARCH=<text>` types the text.
+ */
+function devStart(): { group: LibraryGroup | null; value: string; search: string } | null {
+  if (!import.meta.env.DEV) return null;
+  const filter = String(import.meta.env.VITE_HOME_FILTER ?? '');
+  const search = String(import.meta.env.VITE_HOME_SEARCH ?? '');
+  const at = filter.indexOf(':');
+  const group = at > 0 && (GROUPS as readonly string[]).includes(filter.slice(0, at)) ? (filter.slice(0, at) as LibraryGroup) : null;
+  return group || search ? { group, value: filter.slice(at + 1), search } : null;
+}
+
 const count = (n: number) => n.toLocaleString('en-US');
 const why = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -193,8 +207,10 @@ function rereadOnData(set: (d: LibraryData) => unknown): () => void {
 export function Library({ entries, loaded, search, onSearch, current, into, onLoad, onAdd, onPress, tileMin, home }: LibraryProps) {
   const index = useIndex();
   const [data, setData] = useLibraryData();
-  const [groups, setGroups] = useState<LibraryQuery['groups']>({});
-  const [open, setOpen] = useState<LibraryGroup | null>(null);
+  // A dev run on the home may start filtered, for a headless capture of the filter (`VITE_HOME_FILTER=style:Hypnotic`).
+  const dev = home ? devStart() : null;
+  const [groups, setGroups] = useState<LibraryQuery['groups']>(() => (dev?.group ? { [dev.group]: [dev.value] } : {}));
+  const [open, setOpen] = useState<LibraryGroup | null>(dev?.group ?? null);
   const [find, setFind] = useState('');
   const [selection, setSelection] = useState<string[]>([]);
   const [anchor, setAnchor] = useState<string | null>(null);
@@ -208,7 +224,7 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
   const drop = useDropToAdd();
   useCreditsMenu(() => setCredits(true));
   // The home's chips start as the viewer left them: closed, the first time.
-  const [filters, setFilters] = useState(() => (home ? remembered(FILTERS_KEY, false) : true));
+  const [filters, setFilters] = useState(() => (home ? !!dev?.group || remembered(FILTERS_KEY, false) : true));
   const flipFilters = () => {
     remember(FILTERS_KEY, !filters);
     setFilters(!filters);
@@ -276,6 +292,11 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
     touched.current = true;
     forgetResumedQuery();
   };
+  useEffect(() => {
+    if (!dev) return;
+    filterChanged();
+    if (dev.search) handlers.current.onSearch(dev.search);
+  }, []);
   useEffect(() => {
     let live = true;
     resumedQuery().then((q) => {
@@ -536,7 +557,8 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
       {chipsShown && open && !(!index && LOOK_GROUPS.includes(open)) && (
         <Values group={open} values={valuesFor(open, faceted, query)} selected={query.groups[open] ?? []} find={find} onFind={setFind} onPick={(v) => pickValue(open, v)} home={!!home} />
       )}
-      {filtered && (
+      {/* On the home, a search alone that finds nothing has only the centred state: its line would say "0 presets" and offer to save nothing. */}
+      {filtered && !(home && !picked.length && !shown.length) && (
         <div className="lib-picked">
           {picked.flatMap((g) =>
             groups[g]!.map((v) => (

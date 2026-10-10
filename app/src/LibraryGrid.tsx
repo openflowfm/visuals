@@ -18,6 +18,8 @@ export interface Look {
   rowGap: number;
   label: number;
   padX: number;
+  /** The right padding, when not `padX`: the home's gives up to a scrollbar's width, so the bar sits in the gutter. */
+  padRight?: number;
   padTop: number;
   padBottom: number;
   aspect: number;
@@ -33,8 +35,19 @@ export const HOME_PAD = 22;
  * The home's look (decision 68): 16:9 pictures under a 12 px name and an 11 px
  * author (tile.css: 7 + 16 + 1 + 15 px), 12 px between columns and 16 between
  * rows, on the main pane's padding `pad`, with room above for a ring and a lift.
+ * A scrollbar that takes room (`scrollbar` px: a classic one, not an overlay) comes
+ * out of the right padding, so the columns don't change with it (3 at 900 px).
  */
-export const homeLook = (pad: number = HOME_PAD): Look => ({ gap: 12, rowGap: 16, label: 39, padX: pad, padTop: 8, padBottom: 22, aspect: 9 / 16 });
+export const homeLook = (pad: number = HOME_PAD, scrollbar = 0): Look => ({
+  gap: 12,
+  rowGap: 16,
+  label: 39,
+  padX: pad,
+  padRight: Math.max(0, pad - scrollbar),
+  padTop: 8,
+  padBottom: 22,
+  aspect: 9 / 16,
+});
 
 export interface Layout {
   columns: number;
@@ -47,7 +60,7 @@ export interface Layout {
 
 /** How `count` tiles at least `min` px wide lay out across `width` px (the grid's inner width, padding taken off). */
 export function layout(width: number, count: number, min: number = TILE.min, look: Look = LAB_LOOK): Layout {
-  const inner = Math.max(min, width - 2 * look.padX);
+  const inner = Math.max(min, width - look.padX - (look.padRight ?? look.padX));
   const columns = Math.max(1, Math.floor((inner + look.gap) / (min + look.gap)));
   const tile = (inner - (columns - 1) * look.gap) / columns;
   const rowHeight = Math.round(tile * look.aspect + look.label + look.rowGap);
@@ -71,10 +84,16 @@ export function scrollFor(row: number, rowHeight: number, top: number, height: n
   return null;
 }
 
-/** Where to scroll so that `row` sits in the middle of a view `height` px tall (as near as the top allows): how the playing tile is revealed. */
+/**
+ * Where to scroll so that `row` sits in the middle of a view `height` px tall (as
+ * near as the top allows): how the playing tile is revealed. The view starts on a
+ * whole row, so no row is cut off at the top; `row` lands as near the middle as that allows.
+ */
 export function centreFor(row: number, rowHeight: number, height: number, look: Look = LAB_LOOK): number {
+  if (rowHeight <= 0) return 0;
   const middle = look.padTop + row * rowHeight + (rowHeight - look.rowGap) / 2;
-  return Math.max(0, Math.round(middle - height / 2));
+  const first = Math.max(0, Math.round((middle - height / 2) / rowHeight));
+  return Math.min(first, row) * rowHeight;
 }
 
 /** How a tile was picked: a plain click, ⌘-click (add or take it out of the selection), or ⇧-click (select up to it). */
@@ -136,11 +155,11 @@ export interface LibraryGridProps {
 export function LibraryGrid({ rows, active, selected, current, into, onMove, onPick, onAdd, onClear, reveal, onPress, tileMin }: LibraryGridProps) {
   const ref = useRef<HTMLDivElement>(null);
   // Its size, and whether it is on the home (decision 68's look, on the main pane's `--pad`) or in the lab editor's column.
-  const [size, setSize] = useState({ width: 0, height: 0, home: false, pad: HOME_PAD });
+  const [size, setSize] = useState({ width: 0, height: 0, home: false, pad: HOME_PAD, bar: 0 });
   // The first row in view: state changes only when a scroll crosses a row.
   const [topRow, setTopRow] = useState(0);
   const failed = useFailedPresets();
-  const look = useMemo(() => (size.home ? homeLook(size.pad) : LAB_LOOK), [size.home, size.pad]);
+  const look = useMemo(() => (size.home ? homeLook(size.pad, size.bar) : LAB_LOOK), [size.home, size.pad, size.bar]);
   const lay = layout(size.width, rows.length, tileMin, look);
   const { first, last } = windowOf(topRow * lay.rowHeight, size.height, lay.rowHeight, lay.rows);
 
@@ -152,7 +171,13 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
       // The grid inherits `--pad`; read where it is set too, for a DOM that doesn't inherit custom properties (happy-dom).
       const read = home ? parseFloat(getComputedStyle(el).getPropertyValue('--pad') || getComputedStyle(home).getPropertyValue('--pad')) : NaN;
       const pad = Number.isFinite(read) ? read : HOME_PAD;
-      setSize((s) => (s.width === el.clientWidth && s.height === el.clientHeight && s.home === !!home && s.pad === pad ? s : { width: el.clientWidth, height: el.clientHeight, home: !!home, pad }));
+      // A scrollbar that takes room (none when it overlays): the home's grid gives it from its right padding.
+      const bar = Math.max(0, el.offsetWidth - el.clientWidth);
+      setSize((s) =>
+        s.width === el.clientWidth && s.height === el.clientHeight && s.home === !!home && s.pad === pad && s.bar === bar
+          ? s
+          : { width: el.clientWidth, height: el.clientHeight, home: !!home, pad, bar },
+      );
     };
     measure();
     if (typeof ResizeObserver === 'undefined') return;
@@ -208,13 +233,16 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
     revealPlaying();
   }, [size.width, rows.length, lay.rowHeight]); // not on `current`: the reveal effect above follows that
 
-  // A new filter starts at the top.
+  // New rows (a new filter, or the index read in place of the plain list) start at the
+  // top, unless the viewer hasn't moved since the playing tile was revealed and it is
+  // still among them: then it stays in the middle (the index arriving after the first
+  // reveal used to throw the view back to the top, the playing row out of sight).
   const firstKey = rows[0]?.row.key;
   useEffect(() => {
-    if (active < 0 && ref.current) {
-      ref.current.scrollTop = 0;
-      touched.current = true;
-    }
+    if (active >= 0 || !ref.current || !laidOut.current || !rows.length) return;
+    if (!touched.current && current !== null && rows.some((p) => p.row.path === current)) return revealPlaying();
+    ref.current.scrollTop = 0;
+    touched.current = true;
   }, [rows.length, firstKey]);
 
   const id = (i: number) => `lib-tile-${i}`;
@@ -303,7 +331,7 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
             gridTemplateColumns: `repeat(${lay.columns}, minmax(0, 1fr))`,
             gridAutoRows: `${lay.rowHeight - look.rowGap}px`,
             gap: look.rowGap === look.gap ? `${look.gap}px` : `${look.rowGap}px ${look.gap}px`,
-            padding: look === LAB_LOOK ? `${TILE.pad}px` : `${look.padTop}px ${look.padX}px ${look.padBottom}px`,
+            padding: look === LAB_LOOK ? `${TILE.pad}px` : `${look.padTop}px ${look.padRight ?? look.padX}px ${look.padBottom}px ${look.padX}px`,
           }}
         >
           {tiles}

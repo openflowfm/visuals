@@ -104,6 +104,12 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
     }, fail("Couldn't read the playlists."));
   }, [fail]);
   useTauriEvent(pl.onLists, setLists);
+  // `VITE_HOME_PLAYLIST=<name>` (a dev run only) opens that playlist's pane once the playlists are read, for a headless capture of it.
+  const devList = import.meta.env.DEV ? String(import.meta.env.VITE_HOME_PLAYLIST ?? '') : '';
+  const devListId = devList ? lists?.playlists.find((p) => p.name === devList)?.id : undefined;
+  useEffect(() => {
+    if (devListId) setPane({ kind: 'list', id: devListId });
+  }, [devListId]);
   useTauriEvent(pl.onLive, (now) => {
     setLists((l) => (l ? { ...l, deck: now.deck } : l));
     played.reread();
@@ -129,7 +135,8 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
   // The Now Playing panel: open in a wide window as the viewer left it; in the main pane's place, and closed at first, in a narrow one.
   const narrow = useNarrow();
   const tileMin = useNarrowerThan(HOME_TILE.under) ? HOME_TILE.small : HOME_TILE.wide;
-  const [panelWide, setPanelWide] = useState(() => remembered(PANEL_KEY, true));
+  // `VITE_HOME_PANEL=0` (a dev run only) starts with it closed in a wide window, for a headless capture of the bar with its small preview.
+  const [panelWide, setPanelWide] = useState(() => !(import.meta.env.DEV && import.meta.env.VITE_HOME_PANEL === '0') && remembered(PANEL_KEY, true));
   // `VITE_HOME_PANEL=1` (a dev run only) starts with it open in a narrow window too, for a headless capture of it.
   const [panelNarrow, setPanelNarrow] = useState(() => import.meta.env.DEV && import.meta.env.VITE_HOME_PANEL === '1');
   const panel = narrow ? panelNarrow : panelWide;
