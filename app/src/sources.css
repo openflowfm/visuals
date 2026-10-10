@@ -1,10 +1,15 @@
 /* The home's source list (Sources.tsx): the library, starred and recently played
-   up top, then the playlists and the smart playlists under caps headings. The
-   same list sits in the sidebar and, in a narrow window, in the source menu. */
+   up top, then the playlists and the smart playlists under quiet sentence-case
+   headings. The same list sits in the sidebar, on the window's surface, and, in
+   a narrow window, in the source menu, on the popover's. Since decision 68 it
+   draws no lines and no fills: the row picked is in --fg and heavier, the
+   playlist playing has a green dot after its name. */
 .src-list {
-  padding: 8px 0;
+  padding: 6px 10px 12px;
   color: var(--ui);
-  font-size: var(--text-body);
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
+  font-size: 13px;
 }
 .src-list .src-rows {
   list-style: none;
@@ -12,44 +17,55 @@
   padding: 0;
 }
 .src-list .src-section {
-  margin: 12px 0 0;
+  margin: 18px 0 0;
 }
-/* A section's caps heading, with its tools (+, ⤓) at its right rather than in it. */
+/* A section's heading, with its tools (+, ⤓) quiet at its right rather than in it. */
 .src-list .src-head {
   display: flex;
   align-items: center;
   gap: 2px;
   min-height: 22px;
-  padding: 0 6px 2px 12px;
+  margin-bottom: 4px;
+  padding: 0 4px 0 10px;
   color: var(--caption);
-  font-size: var(--text-label);
-  letter-spacing: var(--track-caps);
-  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 500;
 }
 .src-list .src-title {
   flex: 1;
   margin: 0;
   font: inherit;
 }
-.src-list .src-head .wdg-button {
-  letter-spacing: 0;
+.src-list .src-head .wdg-button-body {
+  height: 22px;
+  min-width: 22px;
+  padding: 0 4px;
+  color: var(--caption);
+  font-size: 14px;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+}
+.src-list .src-head .wdg-button-body:hover:not(:disabled) {
+  color: var(--fg);
 }
 .src-list .src-head .wdg-button-body:focus-visible {
   outline: 2px solid var(--vf-focus-ring);
-  outline-offset: 1px;
+  outline-offset: 0;
 }
 
 .src-list .src-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 26px;
-  padding: 0 12px;
+  gap: 10px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
   cursor: pointer;
   user-select: none;
 }
 .src-list .src-row:hover {
-  background: var(--bd);
+  color: var(--fg);
 }
 /* A row's ring goes inside it: the list scrolls, and would clip one drawn outside. */
 .vf-root .src-list li.src-row:focus-visible {
@@ -57,35 +73,50 @@
   outline-offset: -2px;
 }
 .src-list .src-row[aria-current='true'] {
-  background: var(--sel);
   color: var(--fg);
-  box-shadow: inset 2px 0 0 var(--primary);
+  font-weight: 600;
 }
-.src-list .src-row[data-active] .src-name {
-  color: var(--green);
+.src-list .src-row[aria-current='true'] .src-ico {
+  color: var(--fg);
 }
 .src-list .src-name {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* The count, right-aligned. */
+/* The playlist playing: a small green dot after its name. */
+.src-list .src-dot {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  margin-left: -3px;
+  border-radius: 50%;
+  background: var(--playing);
+}
+/* The count, right-aligned: a number, so in the numbers' face. */
 .src-list .src-row > i {
+  flex: none;
   margin-left: auto;
+  padding-left: 6px;
   color: var(--caption);
-  font-size: var(--text-control);
+  font-family: var(--font-num);
+  font-variation-settings: var(--font-num-axes);
+  font-size: 11px;
   font-style: normal;
+  font-weight: normal;
 }
 
-/* The icon; on a playlist, a quiet play (or stop) button in its place on hover and focus. */
+/* The icon, quiet; on a playlist, a quiet play (or stop) button in its place on hover and focus. */
 .src-list .src-ico {
   position: relative;
   flex: none;
-  width: 12px;
+  width: 14px;
   text-align: center;
   color: var(--detail);
+  font-size: 12px;
+  font-weight: normal;
 }
 .src-list .src-play {
   position: absolute;
@@ -111,6 +142,7 @@
 .src-list .src-play:focus-visible {
   outline: 2px solid var(--vf-focus-ring);
   outline-offset: 1px;
+  border-radius: 3px;
 }
 .src-list .src-row:hover .src-play,
 .src-list .src-row:focus-within .src-play {
@@ -122,20 +154,20 @@
 }
 
 .src-list .src-empty {
-  padding: 2px 12px;
+  padding: 2px 10px;
   color: var(--caption);
-  font-size: var(--text-label);
+  font-size: 11px;
 }
-/* While a preset is dragged: the playlist it would land on lights up, and smart ones, which take none, fade. */
+/* While a preset is dragged: the playlist it would land on lights up with a tint, and smart ones, which take none, fade. */
 .src-list .src-row[data-over] {
-  background: var(--sel);
-  box-shadow: inset 0 0 0 1px var(--caution);
+  color: var(--fg);
+  background: color-mix(in srgb, var(--caution) 18%, transparent);
 }
 .src-list .src-row[data-refuses] {
   opacity: 0.45;
 }
 
-/* The narrow window's source menu: the same list in a panel under "<pane> ▾". */
+/* The narrow window's source menu: the same list in a popover under "<pane> ▾". */
 .src-menu .vf-pop-panel {
   width: 240px;
   max-height: 70vh;
@@ -143,5 +175,8 @@
   padding: 0;
 }
 .src-menu .src-list {
-  padding: 4px 0;
+  padding: 4px 6px 8px;
+}
+.src-menu .src-list .src-section {
+  margin-top: 12px;
 }

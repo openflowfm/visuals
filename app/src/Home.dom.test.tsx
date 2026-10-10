@@ -312,6 +312,52 @@ describe('the home, the one place to browse', () => {
   });
 });
 
+describe('the tiles on the home (decision 68)', () => {
+  /** The home's own stylesheets, so the grid can read `--pad` from them. */
+  function withCss(more = '') {
+    const style = document.createElement('style');
+    style.textContent = [':root { --bg: rgb(1, 1, 1); }', css('home.css'), css('tile.css'), more].join('\n');
+    document.head.append(style);
+    return () => style.remove();
+  }
+
+  it.each([
+    [1440, '8px 22px 22px', ''],
+    [1000, '8px 16px 22px', ''],
+    [1440, '8px 30px 22px', '.app.home { --pad: 30px; }'],
+  ] as const)('lay the grid out at %ipx on the main pane’s padding (%s), 12 px across and 16 px down', async (width, padding, more) => {
+    (window as unknown as { happyDOM: { setViewport(v: { width: number; height: number }): void } }).happyDOM.setViewport({ width, height: 900 });
+    const done = withCss(more);
+    try {
+      await mount({ library: true });
+      const win = document.querySelector<HTMLElement>('.lib-grid-window')!;
+      expect(win.style.padding).toBe(padding);
+      expect(win.style.gap).toBe('16px 12px');
+      // The shared tile, not the lab editor's.
+      expect(grid()!.querySelector('.tile .tile-pic')).toBeTruthy();
+      expect(grid()!.querySelector('.lib-tile')).toBeNull();
+    } finally {
+      done();
+    }
+  });
+
+  it('show the same tile in a playlist’s strip, with the name, the author line and the playing mark', async () => {
+    const rows = [{ ...ROWS[0], authors: ['geiss', 'flexi'] }, ROWS[1], ROWS[2]];
+    invoke.mockImplementation((cmd: string) => Promise.resolve(cmd === 'library_index' ? rows : answer(cmd)));
+    playlists = [manual('1', 'Warm up', [item(ROWS[0]), item(ROWS[2])])];
+    deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path };
+    await mount();
+    const [first, second] = [...document.querySelectorAll('.home-strip > li.tile')];
+    expect(first.querySelector('.tile-name')!.textContent).toBe('a');
+    expect(first.querySelector('.tile-by')!.textContent).toBe('geiss & flexi');
+    expect(first.hasAttribute('data-playing')).toBe(true);
+    expect(first.querySelector('.tile-live')).toBeTruthy();
+    expect(first.querySelector('.home-tile-n')!.textContent).toBe('1');
+    expect(second.querySelector('.tile-by')!.textContent).toBe('A');
+    expect(second.hasAttribute('data-playing')).toBe(false);
+  });
+});
+
 describe('← → and R on the home', () => {
   it('step the deck while it follows the grid', async () => {
     deck = { ...EMPTY_DECK, current: ROWS[0].path, query: { groups: {}, text: '' } };

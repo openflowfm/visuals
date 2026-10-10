@@ -1,21 +1,23 @@
-/* The home's bottom bar (decision 67, option A): what plays, ◀ ▶ R, the audio
-   input, the panel's toggle and go live. */
+/* The home's bottom bar (decisions 67 and 68): what plays, ◀ ▶ R, the audio
+   input, the panel's toggle and go live. On the window's own surface with no
+   rule over it; its controls are type, with no boxes. */
 .home-bar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  gap: 12px;
-  height: 64px;
-  padding: 0 12px;
+  gap: 14px;
+  height: 72px;
+  padding: 0 16px 0 18px;
   box-sizing: border-box;
   min-width: 0;
-  background: var(--rail);
-  border-top: 1px solid var(--bd3);
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
+  background: var(--surface-0);
 }
 
 /* With the small preview the bar is a hole the engine's view shows through:
    nothing paints behind the preview, which floods the bar with its own spread
-   shadow instead. The cells after it sit above that shadow. */
+   shadow instead (and so paints its rounded corners). The cells after it sit above that shadow. */
 .home-bar[data-mini] {
   grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr);
   background: none;
@@ -27,26 +29,27 @@
   background: none;
   border: 0;
   padding: 0;
-  border-radius: 0;
+  border-radius: 6px;
   cursor: pointer;
 }
 .home-bar .home-bar-mini {
   display: grid;
   place-items: center;
-  width: 96px;
+  width: 92px;
   aspect-ratio: 16 / 9;
+  border-radius: 6px;
   background: transparent;
-  box-shadow: 0 0 0 100vmax var(--rail);
+  box-shadow: 0 0 0 100vmax var(--surface-0);
 }
 .home-bar .home-bar-mini[data-loading] {
-  background: var(--rail);
+  background: var(--surface-0);
 }
 .home-bar .home-bar-mini .bench-loading {
   display: none;
 }
 .home-bar-mini-button:focus-visible {
-  outline: 1px solid var(--focus);
-  outline-offset: 1px;
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 2px;
 }
 
 .home-bar-who,
@@ -58,7 +61,7 @@
 .home-bar-who {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
 }
 .home-bar-text {
@@ -74,41 +77,96 @@
 .home-bar-name {
   color: var(--fg);
   font-weight: 600;
-  font-size: var(--text-lead);
+  font-size: 13px;
 }
 .home-bar-name[data-none] {
   color: var(--caption);
   font-weight: normal;
 }
 .home-bar-from {
-  margin-top: 3px;
+  margin-top: 2px;
   color: var(--caption);
-  font-size: var(--text-body);
+  font-size: 12px;
+}
+.home-bar-num {
+  font-family: var(--font-num);
+  font-variation-settings: var(--font-num-axes);
+  font-variant-numeric: tabular-nums;
 }
 
+/* ◀ ▶ R: type keys, no boxes. */
 .home-bar-transport {
   display: flex;
-  gap: 6px;
+  gap: 18px;
 }
-.home-bar-transport .wdg-button-body {
-  height: 28px;
-  min-width: 34px;
-  font-size: var(--text-body);
+.home-bar .home-bar-transport .wdg-button-body {
+  height: 32px;
+  min-width: 32px;
+  padding: 0 6px;
+  color: var(--ui);
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
+  font-size: 14px;
+  font-weight: 600;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+}
+.home-bar .home-bar-transport .wdg-button-body:hover:not(:disabled) {
+  color: var(--fg);
+}
+.home-bar .home-bar-transport .wdg-button-body:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 0;
 }
 
 .home-bar-right {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 14px;
   min-width: 0;
 }
+/* The audio input: quiet text and its meter. The select keeps working; at rest it shows no box. */
 .home-bar .audio-input {
+  gap: 8px;
   min-width: 0;
 }
 .home-bar .audio-input .wdg-select {
   flex: 0 1 180px;
   min-width: 0;
+}
+.home-bar .audio-input .wdg-select-body {
+  justify-content: flex-end;
+  padding: 0 4px;
+  color: var(--detail);
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
+  font-size: 12px;
+  background: none;
+  border-color: transparent;
+  border-radius: 6px;
+}
+.home-bar .audio-input .wdg-select-label {
+  flex: 0 1 auto;
+}
+.home-bar .audio-input .wdg-select-caret {
+  margin-left: 0;
+  border-top-color: var(--caption);
+}
+.home-bar .audio-input .wdg-select-body:hover:not(:disabled),
+.home-bar .audio-input .wdg-select-body[aria-expanded='true'] {
+  color: var(--fg);
+  border-color: transparent;
+}
+.home-bar .audio-input .wdg-select-body:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 0;
+}
+.home-bar .vf-meters .wdg-meter-body {
+  border: 0;
+  border-radius: 2px;
+  background: var(--surface-3);
 }
 .home-bar .audio-input > .vf-warning {
   flex: 0 1 auto;
@@ -122,31 +180,53 @@
   min-width: 0;
 }
 
+/* The panel's toggle (◫) and go live: type, no boxes. */
 .home-bar-panel,
 .home-bar-live {
-  height: var(--ctl-h);
-  padding: 0 8px;
-  border-radius: var(--radius);
-  font-family: var(--mono);
-  font-variation-settings: var(--mono-axes);
-  font-size: var(--text-body);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 6px;
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
+  font-size: 13px;
+  font-weight: 500;
   white-space: nowrap;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
   flex: none;
 }
 .home-bar-panel {
+  justify-content: center;
   min-width: 30px;
-  border: 0;
-  background: none;
+  font-size: 15px;
   color: var(--detail);
 }
 .home-bar-panel:hover,
 .home-bar-panel[aria-pressed='true'] {
-  color: var(--ui);
+  color: var(--fg);
 }
 .home-bar-live {
-  border: 1px solid var(--green);
-  background: var(--surface-control);
-  color: var(--green);
+  color: var(--playing);
+}
+.home-bar-live:hover {
+  color: color-mix(in srgb, var(--playing) 70%, var(--fg));
+}
+/* Go live's small glowing dot. */
+.home-bar-led {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--playing);
+  box-shadow: 0 0 6px var(--playing);
+}
+.home-bar-panel:focus-visible,
+.home-bar-live:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 0;
 }
 
 /* Narrow (< 900): tighter, the source picker keeps only its meter, and the
@@ -154,7 +234,7 @@
 @media (max-width: 899px) {
   .home-bar {
     gap: 8px;
-    padding: 0 8px;
+    padding: 0 10px;
   }
   .home-bar .home-bar-mini {
     width: 88px;
@@ -165,7 +245,10 @@
   .home-bar-panel {
     display: none;
   }
-  .home-bar-transport .wdg-button-body {
+  .home-bar-transport {
+    gap: 6px;
+  }
+  .home-bar .home-bar-transport .wdg-button-body {
     min-width: 30px;
   }
 }

@@ -6,7 +6,7 @@ import { parseTags, valueLabel, type Prepared } from './librarySearch.ts';
 import { flipFor, playlistsWith, pressedFor, tagCounts } from './PresetDrawer.tsx';
 import { Popover } from './Popover.tsx';
 import { Preview } from './views.tsx';
-import { say } from './words.ts';
+import { say, Say } from './words.ts';
 import './nowpanel.css';
 
 export interface NowPanelProps {
@@ -27,7 +27,7 @@ export interface NowPanelProps {
   error: string | null;
 }
 
-const PLAYLIST_LABEL = '+ playlist ▾';
+const PLAYLIST_LABEL = '+ Playlist';
 
 /**
  * The home's right-hand panel (decision 67): the big preview of the preset
@@ -54,7 +54,7 @@ export function NowPanel({ chosen, current, from, playlists, onSet, onAddTo, onC
   return (
     <section className="now-panel" aria-label={say('stage')}>
       <header className="now-head">
-        <span className="now-caps">{say('stage')}</span>
+        <span className="now-label">{Say('stage')}</span>
         <button type="button" className="now-close" aria-label={`close ${say('stage')}`} title={`Close ${say('stage')}`} onClick={onClose}>
           ✕
         </button>
@@ -67,7 +67,7 @@ export function NowPanel({ chosen, current, from, playlists, onSet, onAddTo, onC
       <div className="now-body">
         <div className="now-title">
           {name === null ? (
-            <p className="now-nothing">nothing playing yet</p>
+            <p className="now-nothing">Nothing playing yet</p>
           ) : (
             <>
               <h2 title={one ? one.row.key : undefined}>{name}</h2>
@@ -86,7 +86,7 @@ export function NowPanel({ chosen, current, from, playlists, onSet, onAddTo, onC
             title={star ? 'Star it' : 'Take the star off'}
             onClick={() => onSet(keys, { star })}
           >
-            <span aria-hidden="true">★</span> {star ? 'star' : 'starred'}
+            <span aria-hidden="true">{star ? '☆' : '★'}</span> {star ? 'Star' : 'Starred'}
           </button>
           <button
             type="button"
@@ -97,7 +97,7 @@ export function NowPanel({ chosen, current, from, playlists, onSet, onAddTo, onC
             title={hide ? `Never play it: random, shuffle and ${say('auto-advance')} skip it. A playlist you made still plays it.` : 'Play it again'}
             onClick={() => onSet(keys, { hidden: hide })}
           >
-            {say('hidden')}
+            {Say('hidden')}
           </button>
           {none ? (
             <button type="button" className="now-btn" aria-label="add to a playlist" disabled>
@@ -122,7 +122,7 @@ export function NowPanel({ chosen, current, from, playlists, onSet, onAddTo, onC
                   ))
                 ) : (
                   <button type="button" role="menuitem" disabled>
-                    no playlists yet: + in the sidebar makes one
+                    No playlists yet: + in the sidebar makes one
                   </button>
                 )
               }
@@ -156,10 +156,10 @@ function Details({ p, playlists }: { p: Prepared; playlists: Playlist[] | null }
   const holding = playlists && playlistsWith(p.row.path, playlists);
   return (
     <dl className="now-facts">
-      {p.authors.length > 0 && <Fact name="author">{p.authors.join(' & ')}</Fact>}
-      <Fact name="style">{p.subStyle ? `${p.style} › ${p.subStyle}` : p.style}</Fact>
-      {p.values.speed.length > 0 && <Fact name="speed">{valueLabel('speed', p.values.speed[0])}</Fact>}
-      <Fact name="in">{holding === null ? '…' : holding.length ? holding.join(', ') : 'no playlists'}</Fact>
+      {p.authors.length > 0 && <Fact name="Author">{p.authors.join(' & ')}</Fact>}
+      <Fact name="Style">{p.subStyle ? `${p.style} › ${p.subStyle}` : p.style}</Fact>
+      {p.values.speed.length > 0 && <Fact name="Speed">{valueLabel('speed', p.values.speed[0])}</Fact>}
+      <Fact name="In">{holding === null ? '…' : holding.length ? holding.join(', ') : 'no playlists'}</Fact>
     </dl>
   );
 }
@@ -197,7 +197,7 @@ function Tags({ chosen, keys, onSet }: { chosen: Prepared[]; keys: string[]; onS
 
   return (
     <div className="now-tags-block">
-      <div className="now-caps">{say('user tags')}</div>
+      <div className="now-label">{Say('user tags')}</div>
       <div className="now-tags" role="group" aria-label={say('user tags')}>
         {tags.map(({ tag, count }) => (
           <span key={tag} className="now-chip" data-some={count < n ? '' : undefined} title={count < n ? `on ${count} of ${n}` : undefined}>
@@ -237,7 +237,7 @@ function Tags({ chosen, keys, onSet }: { chosen: Prepared[]; keys: string[]; onS
               setAdding(true);
             }}
           >
-            + tag
+            + Tag
           </button>
         )}
       </div>

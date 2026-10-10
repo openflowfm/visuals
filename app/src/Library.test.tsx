@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { LibraryRow, Mine } from './api.ts';
 import { prepareRow } from './librarySearch.ts';
-import { chipSays, groupSays, valueSays, Values } from './Library.tsx';
+import { chipSays, findSays, groupSays, groupTitle, valueSays, Values } from './Library.tsx';
 import { PresetDrawer, pressedFor } from './PresetDrawer.tsx';
 
 const row = (key: string): LibraryRow => ({ key, path: `/p/${key}`, hash: '', style: 'A', sub_style: null, authors: [], title: key, thumbnail: null, look: null, starter: false });
@@ -45,6 +45,37 @@ describe('the library chips, read aloud', () => {
   it('names the star group in words on its values', () => {
     const html = renderToStaticMarkup(<Values group="star" values={[{ value: 'yes', count: 2 }]} selected={[]} find="" onFind={none} onPick={none} />);
     expect(attrs(html, 'aria-label')).toEqual(['starred values', 'starred, 2 presets']);
+  });
+});
+
+describe("the home's filter panel", () => {
+  it('finds an author, a style, a tag', () => {
+    expect(findSays('author')).toBe('find an author');
+    expect(findSays('style')).toBe('find a style');
+    expect(findSays('tags')).toBe('find a tag');
+    expect(findSays('intensity')).toBe('find an intensity');
+    const authors = Array.from({ length: 13 }, (_, i) => ({ value: `a${i}`, count: 1 }));
+    const html = renderToStaticMarkup(<Values group="author" values={authors} selected={[]} find="" onFind={none} onPick={none} home />);
+    expect(html).toContain('placeholder="find an author"');
+    expect(html).toContain('aria-label="find an author"');
+  });
+
+  it('names the groups in sentence case', () => {
+    expect(groupTitle('style')).toBe('Style');
+    expect(groupTitle('star')).toBe('★ Starred');
+    expect(groupTitle('tags')).toBe('My tags');
+  });
+
+  it("puts a picked style's sub-styles on their own line, under the style", () => {
+    const values = [
+      { value: 'A', count: 3 },
+      { value: 'A/warm', count: 1 },
+      { value: 'B', count: 2 },
+      { value: 'B/cold', count: 2 },
+    ];
+    const html = renderToStaticMarkup(<Values group="style" values={values} selected={['A']} find="" onFind={none} onPick={none} home />);
+    expect(attrs(html, 'aria-label')).toEqual(['style values', 'A, 3 presets', 'B, 2 presets', 'in A', 'A › warm, 1 preset']);
+    expect(html).toContain('<span class="lib-values-in">In A</span>');
   });
 });
 

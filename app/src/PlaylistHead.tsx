@@ -8,7 +8,7 @@ import { queryName } from './librarySearch.ts';
 import * as pl from './playlists.ts';
 import type { Lists, Playlist, PlaylistSettings } from './playlists.ts';
 import { Popover } from './Popover.tsx';
-import { say } from './words.ts';
+import { say, Say } from './words.ts';
 import './playlisthead.css';
 
 export interface PlaylistHeadProps {
@@ -104,11 +104,11 @@ export function PlaylistHead({ list, lists, tiles, total, onLists, onDeleted, on
         <div className="pl-acts">
           {active ? (
             <button type="button" className="pl-btn" data-on="" onClick={stop} title="Stop: ← → step through the library again">
-              ■ stop
+              ■ Stop
             </button>
           ) : (
             <button type="button" className="pl-btn" data-on="" onClick={play} disabled={empty} title={empty ? 'Add presets to play it' : `Play ${list.name}`}>
-              ▶ play
+              ▶ Play
             </button>
           )}
           <button
@@ -118,9 +118,9 @@ export function PlaylistHead({ list, lists, tiles, total, onLists, onDeleted, on
             onClick={() => set(withSetting(list.settings, 'order', shuffled ? 'in_order' : 'shuffle'))}
             title="Play this playlist shuffled (it keeps this)"
           >
-            shuffle
+            Shuffle
           </button>
-          <Popover className="pl-pop" name={say('playlist settings')} label={`${say('playlist settings')} ▾`} title="How often it moves on, in what order, the crossfade and the look it sets">
+          <Popover className="pl-pop" name={say('playlist settings')} label={`${Say('playlist settings')} ▾`} title="How often it moves on, in what order, the crossfade and the look it sets">
             <SettingsBar settings={list.settings} differs={active ? deck.differs : []} onChange={set} />
           </Popover>
           {deleting ? (
@@ -137,10 +137,10 @@ export function PlaylistHead({ list, lists, tiles, total, onLists, onDeleted, on
                 }}
                 title={`Delete ${list.name} for good`}
               >
-                delete {list.name}?
+                Delete {list.name}?
               </button>
               <button type="button" className="pl-btn" onClick={() => setDeleting(false)} title="Keep the playlist">
-                keep
+                Keep
               </button>
             </span>
           ) : (
@@ -155,7 +155,7 @@ export function PlaylistHead({ list, lists, tiles, total, onLists, onDeleted, on
                       startNaming();
                     }}
                   >
-                    rename
+                    Rename
                   </button>
                   <button
                     type="button"
@@ -166,7 +166,7 @@ export function PlaylistHead({ list, lists, tiles, total, onLists, onDeleted, on
                       exportIt();
                     }}
                   >
-                    save to a file
+                    Save to a file
                   </button>
                   <button
                     type="button"
@@ -178,7 +178,7 @@ export function PlaylistHead({ list, lists, tiles, total, onLists, onDeleted, on
                       setDeleting(true);
                     }}
                   >
-                    delete…
+                    Delete…
                   </button>
                 </>
               )}

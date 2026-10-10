@@ -31,7 +31,7 @@ import {
   type Prepared,
 } from './librarySearch.ts';
 import { LibraryGrid, pickInto, rangeAnchor, type Pick } from './LibraryGrid.tsx';
-import { say } from './words.ts';
+import { Say, say } from './words.ts';
 import { PresetDrawer, hiddenCount } from './PresetDrawer.tsx';
 import { Credits } from './Credits.tsx';
 import { PackBar, useCreditsMenu, useDropToAdd } from './Pack.tsx';
@@ -100,6 +100,18 @@ export const chipSays = (g: LibraryGroup, picked: number): string => (picked > 0
 
 /** A value chip's spoken name: the value and how many presets it would show. */
 export const valueSays = (name: string, n: number): string => `${unstarred(name)}, ${n === 1 ? '1 preset' : `${count(n)} presets`}`;
+
+/** A group's name on the home's switch, in sentence case: "Style", "★ Starred", "My tags". */
+export const groupTitle = (g: LibraryGroup): string => {
+  const w = g === 'star' ? '★ Starred' : GROUP_LABEL[g];
+  return w.charAt(0).toUpperCase() + w.slice(1);
+};
+
+/** An open group's find box: "find an author", "find a style", "find a tag". */
+export const findSays = (g: LibraryGroup): string => {
+  const word = groupSays(g).replace(/^my /, '').replace(/tags$/, 'tag');
+  return `${say('find value')} ${/^[aeiou]/i.test(word) ? 'an' : 'a'} ${word}`;
+};
 
 /** A value's label without the ★ in front, which a screen reader would read as "black star". */
 const unstarred = (label: string) => label.replace(/^★\s*/, '');
@@ -355,8 +367,17 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
   // The values picked by hand: Starred's own star isn't one.
   const picked = activeGroups({ groups, text: '' });
   const filtered = picked.length > 0 || search.trim() !== '';
-  const summary = home ? (filtered ? (shown.length ? `${count(shown.length)} preset${shown.length === 1 ? '' : 's'}` : 'no presets match') : null) : facetSummary(faceted, query);
+  const summary = home ? (filtered ? `${count(shown.length)} preset${shown.length === 1 ? '' : 's'}` : null) : facetSummary(faceted, query);
   const pickedCount = picked.reduce((n, g) => n + (groups[g]?.length ?? 0), 0);
+  // The pane's own presets: Starred's are the starred ones. While filtering, the title counts what is shown.
+  const paneTotal = starred ? prepared.filter((p) => p.star).length : rows.length || entries.length;
+  const searchInput = useRef<HTMLInputElement>(null);
+  const clearSearch = () => {
+    filterChanged();
+    onSearch('');
+    setSaveNote(null);
+    searchInput.current?.focus();
+  };
 
   // The home has no pack bar: a drop's note goes on the summary line, and the full library is offered on a line of its own.
   const bar = home ? null : <PackBar presets={entries.length} dropped={drop.note} credits={credits} onCredits={() => setCredits((c) => !c)} />;
@@ -377,12 +398,13 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
     (ev.currentTarget.closest('.lib')?.querySelector('.lib-grid') as HTMLElement | null)?.focus();
   };
 
-  const searchBox = (
+  const searchInputBox = (
     <input
+      ref={searchInput}
       className="lib-search"
       type="search"
       aria-label="search presets"
-      placeholder={`search ${count(rows.length || entries.length)} presets`}
+      placeholder={home ? `${Say('search')} ${count(paneTotal)} presets` : `${say('search')} ${count(rows.length || entries.length)} presets`}
       title="Every word must match the preset's style, author, name or tags. ↓ moves into the grid."
       value={search}
       onChange={(ev) => {
@@ -393,13 +415,31 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
       disabled={empty}
     />
   );
-  // On the home the chips wait behind "filter · n"; the editor's column always shows them.
+  // On the home the search is type on the pane: a ⌕, the text, and a ✕ to clear it.
+  const searchBox = home ? (
+    <div className="lib-search-field">
+      <span className="lib-search-glyph" aria-hidden="true">
+        ⌕
+      </span>
+      {searchInputBox}
+      {search && (
+        <button type="button" className="lib-search-clear" aria-label={say('clear search')} title={Say('clear search')} onClick={clearSearch}>
+          <span aria-hidden="true">✕</span>
+        </button>
+      )}
+    </div>
+  ) : (
+    searchInputBox
+  );
+  // On the home the chips wait behind "Filter"; the editor's column always shows them.
   const chipsShown = !empty && filters;
   const title = home && (
     <div className="lib-head">
       {home.menu}
       <h1 className="lib-title-head">{home.title}</h1>
-      <span className="lib-count">{count(starred ? prepared.filter((p) => p.star).length : rows.length || entries.length)}</span>
+      <span className="lib-count" title={filtered ? `${count(shown.length)} of ${count(paneTotal)} presets shown` : undefined}>
+        {count(filtered ? shown.length : paneTotal)}
+      </span>
       <span className="lib-fill" />
       {searchBox}
       <button
@@ -411,8 +451,50 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
         onClick={flipFilters}
         disabled={empty}
       >
-        {say('facets')} · {pickedCount}
+        {Say('facets')}
+        {pickedCount > 0 && (
+          <span className="lib-filter-badge" aria-hidden="true">
+            {pickedCount}
+          </span>
+        )}
       </button>
+    </div>
+  );
+  // Nothing to show: what didn't match, why, and the way back (decision 68).
+  const noneTitle = search.trim() ? `“${search.trim()}”` : `“${picked.flatMap((g) => groups[g]!.map((v) => unstarred(valueLabel(g, v)))).join(', ')}”`;
+  const emptyState = !home ? null : filtered ? (
+    <div className="lib-empty">
+      <span className="lib-empty-glyph" aria-hidden="true">
+        ⌕
+      </span>
+      <h2 className="lib-empty-title">
+        {say('no matches')} {noneTitle}
+      </h2>
+      <p className="lib-empty-why">{search.trim() ? say('no matches search why') : say('no matches filter why')}</p>
+      {search.trim() ? (
+        <button type="button" className="lib-empty-clear" onClick={clearSearch}>
+          {Say('clear search')}
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="lib-empty-clear"
+          onClick={() => {
+            clearAll();
+            searchInput.current?.focus();
+          }}
+        >
+          {Say('clear filter')}
+        </button>
+      )}
+    </div>
+  ) : (
+    <div className="lib-empty">
+      <span className="lib-empty-glyph" aria-hidden="true">
+        ☆
+      </span>
+      <h2 className="lib-empty-title">{say('starred empty')}</h2>
+      <p className="lib-empty-why">{say('starred empty why')}</p>
     </div>
   );
 
@@ -440,7 +522,7 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
                   setFind('');
                 }}
               >
-                {GROUP_LABEL[g]}
+                {home ? groupTitle(g) : GROUP_LABEL[g]}
                 {on > 0 && (
                   <span className="lib-chip-count" aria-hidden="true">
                     {on}
@@ -452,7 +534,7 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
         </div>
       )}
       {chipsShown && open && !(!index && LOOK_GROUPS.includes(open)) && (
-        <Values group={open} values={valuesFor(open, faceted, query)} selected={query.groups[open] ?? []} find={find} onFind={setFind} onPick={(v) => pickValue(open, v)} />
+        <Values group={open} values={valuesFor(open, faceted, query)} selected={query.groups[open] ?? []} find={find} onFind={setFind} onPick={(v) => pickValue(open, v)} home={!!home} />
       )}
       {filtered && (
         <div className="lib-picked">
@@ -467,7 +549,10 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
                 onClick={() => pickValue(g, v)}
               >
                 {g === 'colour' && <span className="lib-swatch" aria-hidden="true" style={{ background: SWATCH[v as Colour] }} />}
-                {valueLabel(g, v)} <span aria-hidden="true">×</span>
+                {valueLabel(g, v)}{' '}
+                <span className="lib-x" aria-hidden="true">
+                  {home ? '✕' : '×'}
+                </span>
               </button>
             )),
           )}
@@ -480,11 +565,11 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
             </>
           )}
           <button type="button" className="lib-link" aria-label="clear the filter" onClick={clearAll} title="Show every preset">
-            clear
+            {home ? 'Clear' : 'clear'}
           </button>
           {naming === null ? (
             <button type="button" className="lib-link" onClick={() => setNaming(queryName(query))} title="Keep this filter as a playlist that fills itself">
-              {say('save query')}
+              {home ? Say('save query') : say('save query')}
             </button>
           ) : (
             <input
@@ -523,12 +608,12 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
       )}
       {!loaded && !index ? (
         <p className="lib-note" role="status">
-          loading presets…
+          {home ? 'Loading presets…' : 'loading presets…'}
         </p>
       ) : empty ? (
         <p className="lib-note lib-first-run">No presets yet. Drop .milk files or a folder of them here, or use Add a folder… {home ? 'in Settings (⚙)' : 'below'}.</p>
-      ) : starred && !shown.length && !filtered ? (
-        <p className="lib-note lib-first-run">Nothing starred yet. ★ in the {say('stage')} panel stars the preset playing.</p>
+      ) : home && !shown.length && (filtered || starred) ? (
+        emptyState
       ) : (
         <LibraryGrid
           rows={shown}
@@ -570,49 +655,73 @@ interface ValuesProps {
   find: string;
   onFind(next: string): void;
   onPick(value: string): void;
+  /** On the home: values as type, and a picked style's sub-styles on a line of their own under "In <style>". */
+  home?: boolean;
 }
 
+type Count = { value: string; count: number };
+
 /** An open group's values, each with the count of presets it would show. */
-export function Values({ group, values, selected, find, onFind, onPick }: ValuesProps) {
+export function Values({ group, values, selected, find, onFind, onPick, home }: ValuesProps) {
   const f = find.trim().toLowerCase();
   const all = f ? values.filter((v) => valueLabel(group, v.value).toLowerCase().includes(f)) : values;
   const list = all.slice(0, VALUES_CAP);
+  const button = ({ value, count: n }: Count) => {
+    const sub = group === 'style' && value.includes('/');
+    return (
+      <button
+        key={value}
+        type="button"
+        className="lib-chip lib-value"
+        aria-pressed={selected.includes(value)}
+        // A sub-style shows only its own name; read aloud, it says which style it is under.
+        aria-label={valueSays(valueLabel(group, value), n)}
+        data-sub={sub ? '' : undefined}
+        onClick={() => onPick(value)}
+      >
+        {group === 'colour' && <span className="lib-swatch" aria-hidden="true" style={{ background: SWATCH[value as Colour] }} />}
+        <span className="lib-value-name">{sub ? value.slice(value.indexOf('/') + 1) : valueLabel(group, value)}</span>
+        <span className="lib-value-count">{count(n)}</span>
+      </button>
+    );
+  };
+  // The home's styles: the styles first, then each picked style's sub-styles (while finding, any that match) under "In <style>".
+  const levels = home && group === 'style';
+  const subsOf = new Map<string, Count[]>();
+  if (levels) {
+    for (const v of list) {
+      const at = v.value.indexOf('/');
+      if (at < 0) continue;
+      const parent = v.value.slice(0, at);
+      if (!f && !selected.some((s) => s === parent || s.startsWith(`${parent}/`))) continue;
+      subsOf.set(parent, [...(subsOf.get(parent) ?? []), v]);
+    }
+  }
   return (
     <div className="lib-values" role="group" aria-label={`${groupSays(group)} values`}>
       {values.length > FIND_FROM && (
-        <input
-          className="lib-values-find"
-          type="search"
-          aria-label={`find a ${groupSays(group).replace(/^my /, '')}`}
-          placeholder={`find a ${GROUP_LABEL[group].replace(/^my /, '')}`}
-          value={find}
-          onChange={(ev) => onFind(ev.target.value)}
-        />
+        <input className="lib-values-find" type="search" aria-label={findSays(group)} placeholder={findSays(group)} value={find} onChange={(ev) => onFind(ev.target.value)} />
       )}
       {list.length === 0 && <p className="lib-note">{group === 'tags' && !values.length ? 'No tags yet. Select a preset to tag it.' : 'none'}</p>}
-      <div className="lib-values-list">
-        {list.flatMap(({ value, count: n }, i) => {
-          const sub = group === 'style' && value.includes('/');
-          return [
+      {levels ? (
+        <>
+          <div className="lib-values-list">{list.filter((v) => !v.value.includes('/')).map(button)}</div>
+          {[...subsOf].map(([parent, subs]) => (
+            <div key={parent} className="lib-values-subs" role="group" aria-label={`in ${parent}`}>
+              <span className="lib-values-in">{`In ${parent}`}</span>
+              {subs.map(button)}
+            </div>
+          ))}
+        </>
+      ) : (
+        <div className="lib-values-list">
+          {list.flatMap((v, i) => [
             // Each style starts a line, with its sub-styles after it.
-            group === 'style' && i > 0 && !value.includes('/') ? <span key={`break:${value}`} className="lib-break" /> : null,
-            <button
-              key={value}
-              type="button"
-              className="lib-chip lib-value"
-              aria-pressed={selected.includes(value)}
-              // A sub-style shows only its own name; read aloud, it says which style it is under.
-              aria-label={valueSays(valueLabel(group, value), n)}
-              data-sub={sub ? '' : undefined}
-              onClick={() => onPick(value)}
-            >
-              {group === 'colour' && <span className="lib-swatch" aria-hidden="true" style={{ background: SWATCH[value as Colour] }} />}
-              <span className="lib-value-name">{sub ? value.slice(value.indexOf('/') + 1) : valueLabel(group, value)}</span>
-              <span className="lib-value-count">{count(n)}</span>
-            </button>,
-          ];
-        })}
-      </div>
+            group === 'style' && i > 0 && !v.value.includes('/') ? <span key={`break:${v.value}`} className="lib-break" /> : null,
+            button(v),
+          ])}
+        </div>
+      )}
       {all.length > list.length && <p className="lib-note">{count(all.length - list.length)} more: type to find one</p>}
     </div>
   );

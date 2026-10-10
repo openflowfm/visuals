@@ -5,6 +5,9 @@
 // popover, and rename and delete from the "···" menu.
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { useState } from 'react';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PlaylistHead } from './PlaylistHead.tsx';
 import { EMPTY_DECK, manual, type Deck, type Lists, type Playlist } from './playlists.ts';
@@ -50,30 +53,52 @@ describe('the playlist head', () => {
     expect(screen.getByText('3 presets · moves on every 30 s · in order · crossfade 2 s')).toBeTruthy();
   });
 
+  it('is the pane’s title over its actions as type, with no fill and no boxes (decision 68)', async () => {
+    const style = document.createElement('style');
+    // Read from disk: vitest hands a test empty CSS for an import, even `?raw`.
+    style.textContent = ['playlisthead.css', 'popover.css'].map((f) => readFileSync(join(dirname(fileURLToPath(import.meta.url)), f), 'utf8')).join('\n');
+    document.head.append(style);
+    try {
+      await mount();
+      const head = screen.getByRole('banner');
+      expect(['', 'none', 'transparent', 'rgba(0, 0, 0, 0)']).toContain(getComputedStyle(head).backgroundColor);
+      expect(getComputedStyle(screen.getByRole('heading', { level: 1, name: 'Chill' })).fontSize).toBe('20px');
+      expect(screen.getByRole('button', { name: say('playlist settings') }).textContent).toBe('How it plays ▾');
+      for (const name of ['▶ Play', 'Shuffle', say('playlist settings')]) {
+        const b = getComputedStyle(screen.getByRole('button', { name }));
+        // happy-dom reads `border: 0` back as "initial".
+        expect(['', 'none', 'initial']).toContain(b.borderTopStyle);
+        expect(['', 'none', 'transparent', 'rgba(0, 0, 0, 0)']).toContain(b.backgroundColor);
+      }
+    } finally {
+      style.remove();
+    }
+  });
+
   it('plays the playlist, and stops it while it plays', async () => {
     await mount();
-    fireEvent.click(screen.getByRole('button', { name: '▶ play' }));
+    fireEvent.click(screen.getByRole('button', { name: '▶ Play' }));
     await flush();
     expect(sent('act')).toEqual([{ action: { kind: 'load', playlist: 1, index: null } }]);
     cleanup();
     invoke.mockClear();
     await mount({ ...EMPTY_DECK, playlist: chill.id, index: 0, count: 3 });
     expect(screen.getByText(/· playing 1 of 3$/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '■ stop' }));
+    fireEvent.click(screen.getByRole('button', { name: '■ Stop' }));
     await flush();
     expect(sent('act')).toEqual([{ action: { kind: 'unload' } }]);
   });
 
   it('shuffles the playlist and keeps it', async () => {
     await mount();
-    const shuffle = screen.getByRole('button', { name: 'shuffle' });
+    const shuffle = screen.getByRole('button', { name: 'Shuffle' });
     expect(shuffle.getAttribute('aria-pressed')).toBe('false');
     fireEvent.click(shuffle);
     await flush();
     const [args] = sent('playlist_settings');
     expect(args.id).toBe(chill.id);
     expect((args.settings as { order: string }).order).toBe('shuffle');
-    expect(screen.getByRole('button', { name: 'shuffle' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Shuffle' }).getAttribute('aria-pressed')).toBe('true');
   });
 
   it('opens how it plays in a popover, and Esc closes it', async () => {
@@ -88,7 +113,7 @@ describe('the playlist head', () => {
   it('renames from the more menu', async () => {
     await mount();
     fireEvent.click(screen.getByRole('button', { name: 'more' }));
-    fireEvent.click(within(screen.getByRole('menu', { name: 'more' })).getByRole('menuitem', { name: 'rename' }));
+    fireEvent.click(within(screen.getByRole('menu', { name: 'more' })).getByRole('menuitem', { name: 'Rename' }));
     const box = screen.getByRole('textbox', { name: 'playlist name' });
     fireEvent.change(box, { target: { value: 'Calm' } });
     fireEvent.keyDown(box, { key: 'Enter' });
@@ -99,9 +124,9 @@ describe('the playlist head', () => {
   it('deletes from the more menu, after asking', async () => {
     await mount();
     fireEvent.click(screen.getByRole('button', { name: 'more' }));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'delete…' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete…' }));
     expect(sent('playlist_delete')).toEqual([]);
-    fireEvent.click(screen.getByRole('button', { name: 'delete Chill?' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Chill?' }));
     await flush();
     expect(onDeleted).toHaveBeenCalledOnce();
     expect(sent('playlist_delete')).toEqual([{ id: chill.id }]);

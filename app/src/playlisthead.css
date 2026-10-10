@@ -1,23 +1,29 @@
-/* The header over a playlist's strip on the home (PlaylistHead.tsx): a cover of
-   its first four thumbnails, then what it is, its name, how it plays and its actions. */
+/* The header over a playlist's strip on the home (PlaylistHead.tsx): a small
+   cover of its first four thumbnails, then what it is, its name as the pane's
+   title, how it plays, and its actions. Since decision 68 it is on the window's
+   surface with no fill, on the pane's padding so it lines up with the strip,
+   and its actions are type with no boxes: the one on (shuffle) in --fg and underlined. */
 .pl-head {
   display: flex;
   gap: 16px;
-  align-items: flex-end;
-  padding: 14px 16px;
-  background: var(--panel);
+  align-items: center;
+  padding: 18px var(--pad) 12px;
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
 }
 .pl-cover {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 2px;
   flex: none;
-  width: 120px;
+  width: 96px;
+  border-radius: 6px;
+  overflow: hidden;
 }
 .pl-cover > div {
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 16 / 9;
   overflow: hidden;
-  background: var(--bd);
+  background: var(--surface-2);
 }
 .pl-cover img {
   display: block;
@@ -30,116 +36,126 @@
 }
 .pl-caps {
   color: var(--caption);
-  font-size: var(--text-label);
-  letter-spacing: var(--track-caps);
-  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 500;
 }
 .pl-head .pl-name {
-  margin: 0 0 4px;
+  margin: 2px 0 2px;
   overflow: hidden;
   color: var(--fg);
-  font-family: var(--sans);
-  font-variation-settings: var(--sans-axes);
-  font-size: 22px;
-  font-weight: var(--weight-strong);
+  font-family: var(--font-display);
+  font-variation-settings: var(--font-display-axes);
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 .pl-head .pl-name-input {
   display: block;
-  margin: 0 0 4px;
-  padding: 0 6px;
+  margin: 2px 0 2px;
+  padding: 0 8px;
   color: var(--fg);
-  font-family: var(--sans);
-  font-variation-settings: var(--sans-axes);
-  font-size: var(--text-heading);
-  background: var(--surface-control);
-  border: 1px solid var(--bd3);
-  border-radius: var(--radius);
+  font-family: var(--font-display);
+  font-variation-settings: var(--font-display-axes);
+  font-size: 20px;
+  font-weight: 650;
+  background: var(--surface-3);
+  border: 0;
+  border-radius: 6px;
+}
+.pl-head .pl-name-input:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 0;
 }
 .pl-summary {
   overflow: hidden;
   color: var(--caption);
-  font-size: var(--text-body);
+  font-size: 12px;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 .pl-acts {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
+  align-items: center;
+  gap: 4px 14px;
+  margin: 8px 0 0 -4px;
 }
 .pl-confirm {
   display: inline-flex;
-  gap: 6px;
+  gap: 14px;
 }
 
-/* The actions: plain buttons 22 px tall; play (and stop) filled, shuffle filled while on. */
+/* The actions: type, no boxes. Play (and stop) in --fg; shuffle, while on, in --fg and underlined. */
 .pl-head .pl-btn,
 .pl-head .vf-pop-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 22px;
-  padding: 0 8px;
+  gap: 5px;
+  height: 28px;
+  padding: 0 4px;
   color: var(--ui);
-  font-family: var(--mono);
-  font-variation-settings: var(--mono-axes);
-  font-size: var(--text-control);
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
+  font-size: 13px;
+  font-weight: 500;
   white-space: nowrap;
-  background: var(--surface-control);
-  border: 1px solid var(--bd3);
-  border-radius: var(--radius);
+  background: none;
+  border: 0;
+  border-radius: 4px;
   cursor: pointer;
 }
 .pl-head .pl-btn:hover:not(:disabled) {
   color: var(--fg);
-  border-color: var(--detail);
 }
-.pl-head .pl-btn[data-on],
+.pl-head .pl-btn[data-on] {
+  color: var(--fg);
+  font-weight: 600;
+}
 .pl-head .pl-btn[aria-pressed='true'] {
-  color: #000;
-  background: var(--primary);
-  border-color: var(--primary);
+  color: var(--fg);
+  text-decoration: underline 2px var(--line-active);
+  text-underline-offset: 6px;
 }
 .pl-head .pl-btn[data-danger] {
   color: var(--red);
-  border-color: var(--red);
 }
 .pl-head .pl-btn:disabled {
   color: var(--caption);
-  background: var(--surface-control);
-  border-color: var(--bd3);
+  font-weight: 500;
   cursor: default;
+}
+.pl-head .pl-btn:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 0;
 }
 .pl-head .pl-more .vf-pop-button {
   color: var(--detail);
-  background: transparent;
-  border-color: transparent;
 }
 .pl-head .pl-more .vf-pop-button:hover,
 .pl-head .pl-more .vf-pop-button[aria-expanded='true'] {
   color: var(--fg);
-  border-color: var(--bd3);
 }
 
-/* How it plays, in its popover. A setting changed live, away from the playlist's own, is marked. */
+/* How it plays, in its popover. Its controls keep their widget looks (they are form controls). A setting changed live, away from the playlist's own, is marked. */
+.pl-head .pl-pop .vf-pop-panel[role='dialog'] {
+  padding: 12px;
+}
 .pl-head .home-settings {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 14px;
+  gap: 10px 16px;
   max-width: 520px;
-  padding: 6px;
 }
 .pl-head .home-setting {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--detail);
-  font-size: var(--text-label);
-  letter-spacing: var(--track-label);
+  color: var(--caption);
+  font-size: 12px;
 }
 /* Each setting is named beside its field, so the field's own caption above it would say it twice. */
 .pl-head .home-setting .wdg-caption {
@@ -155,9 +171,9 @@
 
 @media (max-width: 899px) {
   .pl-cover {
-    width: 84px;
+    width: 72px;
   }
   .pl-head .pl-name {
-    font-size: var(--text-title);
+    font-size: 18px;
   }
 }

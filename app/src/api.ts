@@ -178,7 +178,11 @@ export interface LibraryRow {
   starter: boolean;
 }
 
-/** Every preset in the library (the starter set and the presets folder, once each), sorted by key. */
+/**
+ * Every preset in the library (the starter set and the presets folder, once each): curated picks first (the
+ * starter set's presets, also once found again in the presets folder by key or content hash), then by key.
+ * The grid keeps this order, and Rust resolves the deck's and smart playlists' lists in it.
+ */
 export const libraryIndex = () => invoke<LibraryRow[]>('library_index');
 
 /** `userlib::Overrides`: the user's own values for a preset's automatic groups; one left out keeps the index's. */

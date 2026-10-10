@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Entry, LibraryData, LibraryRow, Level, Look } from './api.ts';
+import type { Entry, LibraryData, LibraryQuery, LibraryRow, Level, Look } from './api.ts';
 import {
   colourOf,
   debounced,
@@ -186,6 +186,48 @@ describe('facet', () => {
     expect(f.shown.length).toBeGreaterThan(0);
     expect(first).toBeLessThan(100);
     expect(again).toBeLessThan(100);
+  });
+});
+
+describe('utility presets', () => {
+  // The same rows as `with_utility` in `app/src-tauri/src/query.rs`, whose tests expect the same keys.
+  const rows = [
+    row('p/Dancer/Whirl/a.milk', { style: 'Dancer', sub_style: 'Whirl', authors: ['orb'] }),
+    row('p/Dancer/b.milk', { style: 'Dancer', sub_style: null, authors: ['geiss'] }),
+    row('p/Fractal/c.milk', { style: 'Fractal', sub_style: null, authors: ['orb', 'geiss'] }),
+    row('p/! Transition/fade.milk', { style: '! Transition', sub_style: null, authors: ['orb'] }),
+  ];
+  const prepared = prepare(rows, null);
+  const keys = (groups: LibraryQuery['groups'], text = '', recent?: number) => facet(prepared, { groups, text, recent }).shown.map((p) => p.row.key);
+  const fade = ['p/! Transition/fade.milk'];
+
+  it('are left out unless the style group or the text asks for them, as in Rust', () => {
+    expect(keys({})).toEqual(['p/Dancer/Whirl/a.milk', 'p/Dancer/b.milk', 'p/Fractal/c.milk']);
+    expect(keys({ author: ['orb'] })).toEqual(['p/Dancer/Whirl/a.milk', 'p/Fractal/c.milk']);
+    expect(keys({ style: ['! Transition'] })).toEqual(fade);
+    expect(keys({ style: ['! Transition', 'Fractal'] })).toEqual(['p/Fractal/c.milk', 'p/! Transition/fade.milk']);
+    expect(keys({}, 'fade')).toEqual(fade);
+    expect(keys({}, 'orb')).toEqual(['p/Dancer/Whirl/a.milk', 'p/Fractal/c.milk', 'p/! Transition/fade.milk']);
+    expect(keys({ style: [] }, '  ')).toHaveLength(3);
+    expect(keys({}, '', 50)).toHaveLength(4);
+  });
+
+  it('still offer their style in the style group, counted as picking it would show', () => {
+    const q = emptyQuery();
+    const f = facet(prepared, q);
+    expect(f.counts.style.get('! Transition')).toBe(1);
+    expect(valuesFor('style', f, q).map((c) => c.value)).toContain('! Transition');
+    // Not in the other groups' counts, as they don't show them.
+    expect(f.counts.author.get('orb')).toBe(2);
+    const byOrb = { groups: { author: ['orb'] }, text: '' };
+    expect(facet(prepared, byOrb).counts.style.get('! Transition')).toBe(1);
+  });
+
+  it("go by the user's style", () => {
+    const data: LibraryData = { version: 1, presets: { 'p/Dancer/b.milk': { overrides: { style: '! Mine' } }, 'p/! Transition/fade.milk': { overrides: { style: 'Calm' } } } };
+    const mine = prepare(rows, data);
+    expect(facet(mine, emptyQuery()).shown.map((p) => p.row.key)).toEqual(['p/Dancer/Whirl/a.milk', 'p/Fractal/c.milk', 'p/! Transition/fade.milk']);
+    expect(facet(mine, { groups: { style: ['! Mine'] }, text: '' }).shown.map((p) => p.row.key)).toEqual(['p/Dancer/b.milk']);
   });
 });
 

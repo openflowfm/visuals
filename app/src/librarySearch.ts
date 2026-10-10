@@ -272,11 +272,27 @@ export interface Faceted {
   counts: Record<LibraryGroup, Map<string, number>>;
 }
 
-/** The rows matching `query`, and the live counts for every group's values. */
+/** A utility preset: its style (the user's, else the index's) starts with "!", like `! Transition`. */
+export const isUtility = (style: string) => style.startsWith('!');
+
+/**
+ * Whether `query` asks for utility presets, which are otherwise left out: it picks
+ * values in the style group (a utility preset still shows only if one is its
+ * style), it has search text (which it must still match), or it lists the
+ * presets played lately (`recent`). Rust's `query::matches` keeps the same rule.
+ */
+export const reachesUtility = (query: LibraryQuery) => (query.groups.style?.length ?? 0) > 0 || wordsOf(query.text).length > 0 || query.recent !== undefined;
+
+/**
+ * The rows matching `query`, and the live counts for every group's values. A
+ * utility preset the query doesn't ask for ({@link reachesUtility}) is left out as
+ * though it failed the style group, so the style group still counts (and offers) its style.
+ */
 export function facet(rows: readonly Prepared[], query: LibraryQuery): Faceted {
   const words = wordsOf(query.text);
   const active = activeGroups(query);
   const wanted = active.map((g) => new Set(query.groups[g]));
+  const utility = reachesUtility(query);
   const counts = Object.fromEntries(GROUPS.map((g) => [g, new Map<string, number>()])) as Record<LibraryGroup, Map<string, number>>;
   const shown: Prepared[] = [];
   const bump = (g: LibraryGroup, values: string[]) => {
@@ -286,21 +302,26 @@ export function facet(rows: readonly Prepared[], query: LibraryQuery): Faceted {
 
   for (const p of rows) {
     if (words.length && !words.every((w) => p.text.includes(w))) continue;
-    // The one active group this row fails, if only one: it still counts there.
-    let failed = -1;
+    // The one group this row fails, if only one: it still counts there.
+    let failed: LibraryGroup | null = null;
     let fails = 0;
+    if (!utility && isUtility(p.style)) {
+      // The style group isn't active here (picking a style reaches utility presets).
+      failed = 'style';
+      fails++;
+    }
     for (let i = 0; i < active.length && fails < 2; i++) {
       const want = wanted[i];
       if (!p.values[active[i]].some((v) => want.has(v))) {
-        failed = i;
+        failed = active[i];
         fails++;
       }
     }
     if (fails === 0) {
       shown.push(p);
       for (const g of GROUPS) bump(g, p.values[g]);
-    } else if (fails === 1) {
-      bump(active[failed], p.values[active[failed]]);
+    } else if (fails === 1 && failed) {
+      bump(failed, p.values[failed]);
     }
   }
   return { shown, total: rows.length, counts };

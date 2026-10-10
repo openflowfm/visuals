@@ -1,6 +1,7 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { FocusEvent, KeyboardEvent, MouseEvent, PointerEvent } from 'react';
 import { ButtonFace } from '@openflow/widgets/controls/ButtonFace.tsx';
+import { PresetTile, tileBy, tileName } from './PresetTile.tsx';
 import { tileFor, type Prepared } from './librarySearch.ts';
 import { FAILED_SAYS, useFailedPresets } from './survive.ts';
 
@@ -11,9 +12,33 @@ import { FAILED_SAYS, useFailedPresets } from './survive.ts';
  */
 export const TILE = { min: 84, gap: 6, label: 18, pad: 8 };
 
+/** How a grid's tiles are spaced: the gaps between columns and rows, the labels under a picture, the padding, and the picture's height over its width. */
+export interface Look {
+  gap: number;
+  rowGap: number;
+  label: number;
+  padX: number;
+  padTop: number;
+  padBottom: number;
+  aspect: number;
+}
+
+/** The lab editor's column: `TILE`, 4:3 pictures with a title line. */
+export const LAB_LOOK: Look = { gap: TILE.gap, rowGap: TILE.gap, label: TILE.label, padX: TILE.pad, padTop: TILE.pad, padBottom: TILE.pad, aspect: 3 / 4 };
+
+/** The home's padding (`--pad` in home.css) when it can't be read. */
+export const HOME_PAD = 22;
+
+/**
+ * The home's look (decision 68): 16:9 pictures under a 12 px name and an 11 px
+ * author (tile.css: 7 + 16 + 1 + 15 px), 12 px between columns and 16 between
+ * rows, on the main pane's padding `pad`, with room above for a ring and a lift.
+ */
+export const homeLook = (pad: number = HOME_PAD): Look => ({ gap: 12, rowGap: 16, label: 39, padX: pad, padTop: 8, padBottom: 22, aspect: 9 / 16 });
+
 export interface Layout {
   columns: number;
-  /** A tile's width; its thumbnail is 4:3. */
+  /** A tile's width; its thumbnail is 4:3 (16:9 on the home). */
   tile: number;
   /** A row of tiles, with the gap under it. */
   rowHeight: number;
@@ -21,11 +46,11 @@ export interface Layout {
 }
 
 /** How `count` tiles at least `min` px wide lay out across `width` px (the grid's inner width, padding taken off). */
-export function layout(width: number, count: number, min: number = TILE.min): Layout {
-  const inner = Math.max(min, width - 2 * TILE.pad);
-  const columns = Math.max(1, Math.floor((inner + TILE.gap) / (min + TILE.gap)));
-  const tile = (inner - (columns - 1) * TILE.gap) / columns;
-  const rowHeight = Math.round((tile * 3) / 4 + TILE.label + TILE.gap);
+export function layout(width: number, count: number, min: number = TILE.min, look: Look = LAB_LOOK): Layout {
+  const inner = Math.max(min, width - 2 * look.padX);
+  const columns = Math.max(1, Math.floor((inner + look.gap) / (min + look.gap)));
+  const tile = (inner - (columns - 1) * look.gap) / columns;
+  const rowHeight = Math.round(tile * look.aspect + look.label + look.rowGap);
   return { columns, tile, rowHeight, rows: Math.ceil(count / columns) };
 }
 
@@ -38,12 +63,18 @@ export function windowOf(top: number, height: number, rowHeight: number, rows: n
 }
 
 /** Where to scroll so that `row` is fully in a view `height` px tall now at `top`; null when it already is. */
-export function scrollFor(row: number, rowHeight: number, top: number, height: number): number | null {
-  const y = TILE.pad + row * rowHeight;
-  if (y < top) return Math.max(0, y - TILE.pad);
-  const bottom = y + rowHeight - TILE.gap + TILE.pad;
+export function scrollFor(row: number, rowHeight: number, top: number, height: number, look: Look = LAB_LOOK): number | null {
+  const y = look.padTop + row * rowHeight;
+  if (y < top) return Math.max(0, y - look.padTop);
+  const bottom = y + rowHeight - look.rowGap + look.padTop;
   if (bottom > top + height) return bottom - height;
   return null;
+}
+
+/** Where to scroll so that `row` sits in the middle of a view `height` px tall (as near as the top allows): how the playing tile is revealed. */
+export function centreFor(row: number, rowHeight: number, height: number, look: Look = LAB_LOOK): number {
+  const middle = look.padTop + row * rowHeight + (rowHeight - look.rowGap) / 2;
+  return Math.max(0, Math.round(middle - height / 2));
 }
 
 /** How a tile was picked: a plain click, ⌘-click (add or take it out of the selection), or ⇧-click (select up to it). */
@@ -104,17 +135,25 @@ export interface LibraryGridProps {
  */
 export function LibraryGrid({ rows, active, selected, current, into, onMove, onPick, onAdd, onClear, reveal, onPress, tileMin }: LibraryGridProps) {
   const ref = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ width: 0, height: 0 });
+  // Its size, and whether it is on the home (decision 68's look, on the main pane's `--pad`) or in the lab editor's column.
+  const [size, setSize] = useState({ width: 0, height: 0, home: false, pad: HOME_PAD });
   // The first row in view: state changes only when a scroll crosses a row.
   const [topRow, setTopRow] = useState(0);
   const failed = useFailedPresets();
-  const lay = layout(size.width, rows.length, tileMin);
+  const look = useMemo(() => (size.home ? homeLook(size.pad) : LAB_LOOK), [size.home, size.pad]);
+  const lay = layout(size.width, rows.length, tileMin, look);
   const { first, last } = windowOf(topRow * lay.rowHeight, size.height, lay.rowHeight, lay.rows);
 
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const measure = () => setSize((s) => (s.width === el.clientWidth && s.height === el.clientHeight ? s : { width: el.clientWidth, height: el.clientHeight }));
+    const measure = () => {
+      const home = el.closest<HTMLElement>('.app.home');
+      // The grid inherits `--pad`; read where it is set too, for a DOM that doesn't inherit custom properties (happy-dom).
+      const read = home ? parseFloat(getComputedStyle(el).getPropertyValue('--pad') || getComputedStyle(home).getPropertyValue('--pad')) : NaN;
+      const pad = Number.isFinite(read) ? read : HOME_PAD;
+      setSize((s) => (s.width === el.clientWidth && s.height === el.clientHeight && s.home === !!home && s.pad === pad ? s : { width: el.clientWidth, height: el.clientHeight, home: !!home, pad }));
+    };
     measure();
     if (typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver(measure);
@@ -133,39 +172,58 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
     (index: number) => {
       const el = ref.current;
       if (!el || index < 0) return;
-      const to = scrollFor(Math.floor(index / lay.columns), lay.rowHeight, el.scrollTop, el.clientHeight);
+      const to = scrollFor(Math.floor(index / lay.columns), lay.rowHeight, el.scrollTop, el.clientHeight, look);
       if (to !== null) el.scrollTop = to;
     },
-    [lay.columns, lay.rowHeight],
+    [lay.columns, lay.rowHeight, look],
   );
 
-  // Keep the highlighted tile in view as it moves, or as the grid reflows.
+  // Since the playing tile was last revealed, has the viewer scrolled or moved by key? Then a reflow leaves the view where they put it.
+  const touched = useRef(false);
+  const revealPlaying = useCallback(() => {
+    const el = ref.current;
+    const index = current === null ? -1 : rows.findIndex((p) => p.row.path === current);
+    if (!el || index < 0) return;
+    el.scrollTop = centreFor(Math.floor(index / lay.columns), lay.rowHeight, el.clientHeight, look);
+    touched.current = false;
+  }, [current, rows, lay.columns, lay.rowHeight, look]);
+
+  // Keep the highlighted tile in view as it moves, or as the grid reflows: the least scroll that shows it.
   useEffect(() => show(active), [active, show]);
 
-  // Bring the playing tile into view when asked.
+  // Bring the playing tile into the middle of the view when asked.
   useEffect(() => {
-    if (reveal && current !== null) show(rows.findIndex((p) => p.row.path === current));
+    if (reveal) revealPlaying();
   }, [reveal]); // only when asked, not on every filter change
 
-  // On first mount the grid has no size yet, so reveal again once it has one and rows.
+  // On first mount the grid has no size yet, so reveal again once it has one and rows,
+  // and again as the rows change height (the window resized, the home's look measured),
+  // which would otherwise leave the playing row cut off at the top.
   const laidOut = useRef(false);
+  const revealedAt = useRef(0);
   useEffect(() => {
-    if (!firstLaidOut(laidOut.current, size.width, rows.length)) return;
-    laidOut.current = true;
-    if (current !== null) show(rows.findIndex((p) => p.row.path === current));
-  }, [size.width, rows.length, show]); // not on `current`: the reveal effect above follows that
+    if (firstLaidOut(laidOut.current, size.width, rows.length)) laidOut.current = true;
+    else if (!laidOut.current || revealedAt.current === lay.rowHeight || touched.current) return;
+    revealedAt.current = lay.rowHeight;
+    revealPlaying();
+  }, [size.width, rows.length, lay.rowHeight]); // not on `current`: the reveal effect above follows that
 
   // A new filter starts at the top.
   const firstKey = rows[0]?.row.key;
   useEffect(() => {
-    if (active < 0 && ref.current) ref.current.scrollTop = 0;
+    if (active < 0 && ref.current) {
+      ref.current.scrollTop = 0;
+      touched.current = true;
+    }
   }, [rows.length, firstKey]);
 
   const id = (i: number) => `lib-tile-${i}`;
   const page = Math.max(1, Math.floor(size.height / Math.max(1, lay.rowHeight)));
+  const touch = () => void (touched.current = true);
 
   const onKey = (ev: KeyboardEvent<HTMLDivElement>) => {
     if (ev.target !== ev.currentTarget) return; // keys on the grid itself, not a tile's + button
+    touch();
     const to = tileFor(ev.key, active, rows.length, lay.columns, page);
     if (to !== null) {
       // ⇧ extends the run from the anchor (a pick also moves); a plain move lets the anchor go.
@@ -214,6 +272,7 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
           onPick={onPick}
           onAdd={onAdd}
           onPress={onPress}
+          home={size.home}
         />,
       );
     }
@@ -232,17 +291,19 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
       onKeyDown={onKey}
       onFocus={onFocus}
       onScroll={onScroll}
+      onWheel={touch}
+      onPointerDown={touch}
     >
-      <div className="lib-grid-space" role="presentation" style={{ height: lay.rows * lay.rowHeight + TILE.pad * 2 - TILE.gap }}>
+      <div className="lib-grid-space" role="presentation" style={{ height: lay.rows * lay.rowHeight + look.padTop + look.padBottom - look.rowGap }}>
         <div
           className="lib-grid-window"
           role="presentation"
           style={{
             transform: `translateY(${first * lay.rowHeight}px)`,
             gridTemplateColumns: `repeat(${lay.columns}, minmax(0, 1fr))`,
-            gridAutoRows: `${lay.rowHeight - TILE.gap}px`,
-            gap: `${TILE.gap}px`,
-            padding: `${TILE.pad}px`,
+            gridAutoRows: `${lay.rowHeight - look.rowGap}px`,
+            gap: look.rowGap === look.gap ? `${look.gap}px` : `${look.rowGap}px ${look.gap}px`,
+            padding: look === LAB_LOOK ? `${TILE.pad}px` : `${look.padTop}px ${look.padX}px ${look.padBottom}px`,
           }}
         >
           {tiles}
@@ -265,6 +326,8 @@ export interface TileProps {
   onPick(index: number, how: Pick): void;
   onAdd(index: number): void;
   onPress?(index: number, ev: PointerEvent): void;
+  /** On the home: the shared tile (PresetTile.tsx, decision 68); otherwise the lab editor's own. */
+  home?: boolean;
 }
 
 /** What a tile says when pointed at, and to a screen reader: title, style and authors, then what's true of it now. */
@@ -274,8 +337,57 @@ export function tileSays(p: Prepared, playing: boolean, failed: boolean): string
 }
 
 /** One preset: its thumbnail (or its style, when it has none) and its title. */
-export const Tile = memo(function Tile({ id, index, p, active, selected, playing, failed, intoName, onPick, onAdd, onPress }: TileProps) {
+export const Tile = memo(function Tile({ id, index, p, active, selected, playing, failed, intoName, onPick, onAdd, onPress, home = false }: TileProps) {
   const says = tileSays(p, playing, failed);
+  if (home) {
+    const add = `add “${p.title}” to ${intoName} (+ key)`;
+    return (
+      <PresetTile
+        id={id}
+        role="option"
+        aria-selected={selected}
+        aria-label={says}
+        data-active={active ? '' : undefined}
+        data-hidden={p.hidden ? '' : undefined}
+        data-failed={failed ? '' : undefined}
+        title={says}
+        onClick={(ev: MouseEvent) => onPick(index, pickOf(ev))}
+        onPointerDown={onPress && ((ev: PointerEvent) => onPress(index, ev))}
+        thumbnail={p.row.thumbnail}
+        empty={p.style}
+        name={tileName(p.title, p.row.path)}
+        by={tileBy(p.authors, p.style)}
+        playing={playing}
+        star={p.star}
+        marks={
+          <>
+            {failed && (
+              <span className="tile-failed" aria-hidden="true">
+                !
+              </span>
+            )}
+            {intoName !== null && (
+              // Out of the tab order and what is read: the grid is one tab stop, and + on the grid adds the active tile.
+              <button
+                type="button"
+                className="tile-add"
+                tabIndex={-1}
+                aria-hidden="true"
+                aria-label={add}
+                title={add}
+                onClick={(ev) => {
+                  ev.stopPropagation();
+                  onAdd(index);
+                }}
+              >
+                +
+              </button>
+            )}
+          </>
+        }
+      />
+    );
+  }
   return (
     <div
       id={id}

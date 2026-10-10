@@ -3,7 +3,7 @@
 // The library mounted in a DOM, with the app's commands and events faked: what
 // it tells the deck when the grid opens a preset, and when it follows the grid
 // again after the filter changes (decision 49).
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Entry, LibraryRow, Resume } from './api.ts';
 import { Library } from './Library.tsx';
@@ -153,6 +153,88 @@ describe('the library showing a filter the app picked up', () => {
     r = await mount();
     expect(screen.queryByRole('button', { name: 'stop filtering by A' })).toBeNull();
     expect(follows()).toEqual([]);
+  });
+});
+
+describe("the home's library pane (decision 68)", () => {
+  /** The library as the home's main pane, with the App's `search`. */
+  const home = (search = '', onSearch: (s: string) => void = () => {}, scope: 'library' | 'starred' = 'library') => (
+    <Library
+      entries={ENTRIES}
+      loaded
+      search={search}
+      onSearch={onSearch}
+      found={searchLibrary(ENTRIES, search)}
+      current={null}
+      into={null}
+      onLoad={() => {}}
+      onAdd={() => {}}
+      home={{ scope, title: scope === 'starred' ? 'Starred' : 'Library', onChosen: () => {} }}
+    />
+  );
+  const mount = async (search = '', onSearch: (s: string) => void = () => {}, scope: 'library' | 'starred' = 'library') => {
+    const r = render(home(search, onSearch, scope));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    return r;
+  };
+  const count = () => document.querySelector('.lib-head .lib-count')!.textContent;
+  const searchbox = () => screen.getByRole('searchbox', { name: 'search presets' });
+  beforeEach(() => localStorage.clear());
+
+  it("counts the results while filtering, and the pane's total otherwise", async () => {
+    const r = await mount();
+    expect(count()).toBe('3');
+    expect(searchbox().getAttribute('placeholder')).toBe('Search 3 presets');
+    r.rerender(home('b'));
+    expect(count()).toBe('1');
+    // The placeholder keeps the pane's own count.
+    expect(searchbox().getAttribute('placeholder')).toBe('Search 3 presets');
+  });
+
+  it('shows a count on "Filter" only when values are picked', async () => {
+    await mount();
+    const button = screen.getByRole('button', { name: 'filter' });
+    expect(button.textContent).toBe('Filter');
+    expect(button.querySelector('.lib-filter-badge')).toBeNull();
+    fireEvent.click(button);
+    fireEvent.click(screen.getByRole('button', { name: 'style' }));
+    fireEvent.click(screen.getByRole('button', { name: 'A, 3 presets' }));
+    const picked = screen.getByRole('button', { name: 'filter, 1 picked' });
+    expect(picked.querySelector('.lib-filter-badge')!.textContent).toBe('1');
+    expect(count()).toBe('3');
+    expect(document.querySelector('.lib-picked-count')!.textContent).toBe('3 presets');
+  });
+
+  it('says a search found nothing, and its clear empties the search and goes back to the box', async () => {
+    const onSearch = vi.fn();
+    await mount('zebra kazoo', onSearch);
+    expect(screen.queryByRole('listbox', { name: 'presets' })).toBeNull();
+    expect(count()).toBe('0');
+    const state = screen.getByRole('heading', { name: 'Nothing matches “zebra kazoo”' }).closest('.lib-empty') as HTMLElement;
+    expect(state.textContent).toContain('Every word has to match a name, style, author or tag.');
+    fireEvent.click(within(state).getByRole('button', { name: 'Clear the search' }));
+    expect(onSearch).toHaveBeenLastCalledWith('');
+    expect(document.activeElement).toBe(searchbox());
+  });
+
+  it('says a filter found nothing, naming its values, and its clear lets them go', async () => {
+    resume = { playlist: null, index: null, current: null, source: null, query: { groups: { style: ['Z'] }, text: '' } };
+    deck = { ...EMPTY_DECK, query: { groups: { style: ['Z'] }, text: '' } };
+    await mount();
+    const state = screen.getByRole('heading', { name: 'Nothing matches “Z”' }).closest('.lib-empty') as HTMLElement;
+    expect(state.textContent).toContain('No preset has every value picked.');
+    fireEvent.click(within(state).getByRole('button', { name: 'Clear the filter' }));
+    expect(screen.queryByRole('button', { name: 'stop filtering by Z' })).toBeNull();
+    expect(screen.getByRole('listbox', { name: 'presets' })).toBeTruthy();
+    expect(document.activeElement).toBe(searchbox());
+    expect(count()).toBe('3');
+  });
+
+  it('says so, centred, when nothing is starred', async () => {
+    await mount('', () => {}, 'starred');
+    expect(screen.getByRole('heading', { name: 'Nothing starred yet' }).closest('.lib-empty')).toBeTruthy();
+    expect(count()).toBe('0');
+    expect(searchbox().getAttribute('placeholder')).toBe('Search 0 presets');
   });
 });
 

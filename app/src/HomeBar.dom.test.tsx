@@ -51,12 +51,17 @@ describe('HomeBar', () => {
   it('shows what plays and where from', async () => {
     await mount();
     expect(screen.getByText('RadioActive Lightsticks 1')).toBeTruthy();
-    expect(screen.getByText('from the library · 7 of 412')).toBeTruthy();
+    expect(screen.getByTitle('from the library · 7 of 412').textContent).toBe('from the library · 7 of 412');
+  });
+
+  it('sets the place, a number, in the numbers face', async () => {
+    await mount({ from: 'from Chill · 7 of 9,795' });
+    expect([...document.querySelectorAll('.home-bar-num')].map((n) => n.textContent)).toEqual(['7 of 9,795']);
   });
 
   it('says nothing is playing before anything plays', async () => {
     await mount({ name: null });
-    expect(screen.getByText('nothing playing')).toBeTruthy();
+    expect(screen.getByText('Nothing playing')).toBeTruthy();
   });
 
   it('steps back, on and at random', async () => {
@@ -75,7 +80,9 @@ describe('HomeBar', () => {
     fireEvent.click(toggle);
     expect(p.onPanel).toHaveBeenCalledTimes(1);
     expect(p.onPanel).toHaveBeenCalledWith('toggle');
-    fireEvent.click(screen.getByRole('button', { name: 'go live' }));
+    const live = screen.getByRole('button', { name: 'Go live' });
+    expect(live.querySelector('.home-bar-led')).toBeTruthy();
+    fireEvent.click(live);
     expect(p.onLive).toHaveBeenCalledTimes(1);
   });
 
@@ -95,7 +102,7 @@ describe('HomeBar', () => {
     (window as unknown as { happyDOM: { setViewport(v: { width: number; height: number }): void } }).happyDOM.setViewport({ width, height: 900 });
     const style = document.createElement('style');
     // Read from disk: vitest hands a test empty CSS for an import, even `?raw`.
-    const theme = ':root { --bg: rgb(1, 1, 1); --panel: rgb(2, 2, 2); --rail: rgb(3, 3, 3); --surface-control: rgb(4, 4, 4); }';
+    const theme = ':root { --bg: rgb(1, 1, 1); --panel: rgb(2, 2, 2); --rail: rgb(3, 3, 3); --surface-control: rgb(4, 4, 4); --surface-0: rgb(5, 5, 5); }';
     style.textContent = [theme, ...['app.css', 'homebar.css'].map((f) => readFileSync(new URL(f, import.meta.url), 'utf8'))].join('\n');
     document.head.append(style);
     try {
@@ -111,6 +118,9 @@ describe('HomeBar', () => {
       // The preview is the bar's first thing, so the cells after it paint over its shadow.
       const bar = screen.getByRole('region', { name: 'now playing' });
       expect(bar.firstElementChild?.contains(preview)).toBe(true);
+      // The bar is on the window's surface, with no rule over it (decision 68).
+      expect(getComputedStyle(preview).boxShadow).toContain('rgb(5, 5, 5)');
+      expect(['', 'none']).toContain(getComputedStyle(bar).borderTopStyle);
     } finally {
       style.remove();
     }

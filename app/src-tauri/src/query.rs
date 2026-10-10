@@ -6,7 +6,9 @@
 //! It mirrors the page's filter: the user's overrides win over the index's
 //! values; a row matches when, for every group the query gives values for, it
 //! has at least one of them (AND across groups, OR within), and every word of
-//! the text is in its key, style, sub-style, authors, title or tags.
+//! the text is in its key, style, sub-style, authors, title or tags. Utility
+//! presets (a style starting with "!") are left out unless the query asks for
+//! them ([`reaches_utility`]).
 
 use crate::catalog::Row;
 use crate::userlib::{LibraryData, Mine};
@@ -99,11 +101,29 @@ fn haystack(row: &Row, mine: Option<&Mine>) -> String {
     format!("{} {style} {sub} {authors} {title} {tags}", row.key).to_lowercase()
 }
 
+/// A utility preset: its style (the user's, else the index's) starts with "!",
+/// like `! Transition`.
+pub fn is_utility(row: &Row, mine: Option<&Mine>) -> bool {
+    mine.and_then(|m| m.overrides.style.as_deref()).unwrap_or(&row.style).starts_with('!')
+}
+
+/// Whether `query` asks for utility presets, which are otherwise left out: it
+/// picks values in the style group (a utility preset still matches only if one is
+/// its style), it has search text (which it must still match), or it lists the
+/// presets played lately (`recent`). The page's `reachesUtility` keeps the same rule.
+pub fn reaches_utility(query: &LibraryQuery) -> bool {
+    query.groups.get("style").is_some_and(|v| !v.is_empty()) || !query.text.trim().is_empty() || query.recent.is_some()
+}
+
 /// Whether `row` (with what the user keeps about it, `mine`) is one `query` picks.
 /// A group the query names that there's no such thing as (not one of `style`,
 /// `author`, `colour`, `speed`, `intensity`, `star`, `tags`) matches nothing when
-/// it has values. `recent` and hidden presets are [`resolve`]'s business, not this.
+/// it has values. A utility preset ([`is_utility`]) matches only a query that
+/// [`reaches_utility`]. `recent` and hidden presets are [`resolve`]'s business, not this.
 pub fn matches(query: &LibraryQuery, row: &Row, mine: Option<&Mine>) -> bool {
+    if is_utility(row, mine) && !reaches_utility(query) {
+        return false;
+    }
     for (group, wanted) in &query.groups {
         if wanted.is_empty() {
             continue;
@@ -121,7 +141,7 @@ pub fn matches(query: &LibraryQuery, row: &Row, mine: Option<&Mine>) -> bool {
     words.iter().all(|w| text.contains(w.as_str()))
 }
 
-/// The presets `query` picks from `rows` (catalog order, by key), never a hidden one; with `recent`, only those among
+/// The presets `query` picks from `rows` (catalog order: curated picks, then by key), never a hidden one; with `recent`, only those among
 /// the first `recent` of `played` (preset paths, newest first), in that order.
 pub fn resolve(query: &LibraryQuery, rows: &[Row], data: &LibraryData, played: &[String]) -> Vec<PathBuf> {
     let picked = rows.iter().filter(|r| {
@@ -260,6 +280,46 @@ mod tests {
         assert_eq!(recent(4, &[]), [PathBuf::from("/presets/p/Fractal/c.milk")]);
         assert_eq!(recent(10, &[("style", &["Dancer"])]), [PathBuf::from("/presets/p/Dancer/Whirl/a.milk")]);
         assert!(recent(0, &[]).is_empty());
+    }
+
+    /// The rows of `librarySearch.test.ts`'s "utility presets" fixture, which expects the same keys.
+    fn with_utility() -> Vec<Row> {
+        let mut rows = rows();
+        rows.push(row("p/! Transition/fade.milk", "! Transition", None, &["orb"], None));
+        rows
+    }
+
+    #[test]
+    fn utility_presets_are_left_out_unless_the_style_group_or_the_text_asks_for_them() {
+        let (rows, data) = (with_utility(), LibraryData::default());
+        let fade = ["p/! Transition/fade.milk"];
+        assert_eq!(keys(&q(&[], ""), &rows, &data), ["p/Dancer/Whirl/a.milk", "p/Dancer/b.milk", "p/Fractal/c.milk"]);
+        assert_eq!(keys(&q(&[("author", &["orb"])], ""), &rows, &data), ["p/Dancer/Whirl/a.milk", "p/Fractal/c.milk"]);
+        assert_eq!(keys(&q(&[("style", &["! Transition"])], ""), &rows, &data), fade);
+        assert_eq!(keys(&q(&[("style", &["! Transition", "Fractal"])], ""), &rows, &data), ["p/Fractal/c.milk", "p/! Transition/fade.milk"]);
+        assert_eq!(keys(&q(&[], "fade"), &rows, &data), fade);
+        assert_eq!(keys(&q(&[], "orb"), &rows, &data), ["p/Dancer/Whirl/a.milk", "p/Fractal/c.milk", "p/! Transition/fade.milk"]);
+        assert_eq!(keys(&q(&[("style", &[])], "  "), &rows, &data).len(), 3);
+    }
+
+    #[test]
+    fn a_style_the_user_gives_decides_what_is_a_utility_preset() {
+        let rows = with_utility();
+        let mut data = LibraryData::default();
+        data.presets.insert("p/Dancer/b.milk".into(), Mine { overrides: Overrides { style: Some("! Mine".into()), ..Default::default() }, ..Default::default() });
+        data.presets.insert("p/! Transition/fade.milk".into(), Mine { overrides: Overrides { style: Some("Calm".into()), ..Default::default() }, ..Default::default() });
+        assert_eq!(keys(&q(&[], ""), &rows, &data), ["p/Dancer/Whirl/a.milk", "p/Fractal/c.milk", "p/! Transition/fade.milk"]);
+        assert_eq!(keys(&q(&[("style", &["! Mine"])], ""), &rows, &data), ["p/Dancer/b.milk"]);
+    }
+
+    #[test]
+    fn resolve_leaves_utility_presets_out_of_the_grid_but_not_out_of_recently_played() {
+        let (rows, data) = (with_utility(), LibraryData::default());
+        let all = resolve(&LibraryQuery::default(), &rows, &data, &[]);
+        assert!(!all.contains(&PathBuf::from("/presets/p/! Transition/fade.milk")));
+        assert_eq!(all.len(), 3);
+        let played = ["/presets/p/! Transition/fade.milk".to_string()];
+        assert_eq!(resolve(&LibraryQuery { recent: Some(5), ..Default::default() }, &rows, &data, &played), [PathBuf::from(&played[0])]);
     }
 
     #[test]
