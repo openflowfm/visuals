@@ -625,13 +625,15 @@ pub mod view {
         static VIEW: RefCell<Option<Retained<NSView>>> = const { RefCell::new(None) };
     }
 
-    /// The tag window-vibrancy 0.8.1 gives the effect view it adds for the
-    /// window's `windowEffects` (its `NS_VIEW_TAG_BLUR_VIEW`). Tauri applies the
+    /// The tags window-vibrancy 0.8.1 gives the effect view it adds for the
+    /// window's `windowEffects`: an `NSVisualEffectView`'s material
+    /// (`NS_VIEW_TAG_BLUR_VIEW`), or macOS 26's `NSGlassEffectView`
+    /// (`NS_VIEW_TAG_GLASS_VIEW`, `VISUALS_FROST=glass`). Tauri applies the
     /// effects on the main thread after the window is made, so before or after
-    /// the bench attaches. Window-vibrancy isn't a dependency of ours to import
-    /// it from: if an update changes it, [`restack`] finds no frost and never
-    /// says it stacked over one.
-    const FROST_TAG: isize = 91376254;
+    /// the bench attaches, and again for `VISUALS_FROST` (`dev::frost`).
+    /// Window-vibrancy isn't a dependency of ours to import them from: if an
+    /// update changes them, [`restack`] finds no frost and never says it stacked over one.
+    const FROST_TAGS: [isize; 2] = [91376254, 96945937];
 
     /// Put a view in `ns_window`'s content view, just above the frost if it is
     /// there yet and under everything else, and make a surface on it.
@@ -658,7 +660,7 @@ pub mod view {
             .map(|v| {
                 let layer = if std::ptr::eq(&*v, bench) {
                     Layer::Bench
-                } else if v.tag() == FROST_TAG {
+                } else if FROST_TAGS.contains(&v.tag()) {
                     Layer::Frost
                 } else {
                     Layer::Other
