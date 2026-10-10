@@ -65,6 +65,10 @@ export const Group: Story = {
     await expect(stretch).toBeChecked();
     await expect(stretch).toHaveFocus();
     await expect(fit).not.toBeChecked();
+    // Back to Fill, as it started.
+    await userEvent.click(fill);
+    await expect(fill).toBeChecked();
+    await expect(stretch).not.toBeChecked();
     // The dark window's group is apart.
     await expect(within(canvasElement).getByRole('region', { name: 'Dark' }).querySelector('input:checked')).toHaveAccessibleName('Fill');
   },
@@ -83,6 +87,14 @@ export const Checked: Story = {
     await expect(Math.round((dot.left + dot.width / 2 - regular.getBoundingClientRect().left) * 10) / 10).toBe(8);
     const disabled = cell(canvasElement, 'regular', 'Disabled');
     await expect(disabled).toBeDisabled();
+    await expect(disabled).toBeChecked();
+    // Checked, the input says so, and picking it again keeps it checked.
+    const idle = cell(canvasElement, 'regular', 'Idle');
+    await expect(idle).toBeChecked();
+    await expect(idle.matches(':checked')).toBe(true);
+    await expect(getComputedStyle(regular.querySelector('.mac-radio-dot')!).display).not.toBe('none');
+    await userEvent.click(idle);
+    await expect(idle).toBeChecked();
   },
 };
 
@@ -93,6 +105,9 @@ export const Unchecked: Story = {
     const idle = cell(canvasElement, 'large', 'Idle', 'Dark');
     await userEvent.click(idle.closest('label')!.querySelector('.mac-toggle-label')!);
     await expect(idle).toBeChecked();
+    // No click unchecks a radio: clear it, as it started.
+    (idle as HTMLInputElement).checked = false;
+    await expect(idle).not.toBeChecked();
     const disabled = cell(canvasElement, 'large', 'Disabled', 'Dark');
     await userEvent.click(disabled.closest('label')!);
     await expect(disabled).not.toBeChecked();
@@ -110,5 +125,10 @@ export const Mixed: Story = {
     await userEvent.click(idle);
     await expect(idle).toBeChecked();
     await expect(getComputedStyle(dash).display).toBe('none');
+    // No click brings mixed back: clear it and draw the dash again, as it started.
+    (idle as HTMLInputElement).checked = false;
+    idle.closest('label')!.setAttribute('data-mixed', '');
+    await expect(idle).not.toBeChecked();
+    await expect(getComputedStyle(dash).display).toBe('block');
   },
 };

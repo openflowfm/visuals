@@ -85,6 +85,9 @@ export const Checked: Story = {
     await userEvent.click(idle);
     await expect(idle).not.toBeChecked();
     await expect(getComputedStyle(idle.parentElement!.querySelector('.mac-toggle-check')!).display).toBe('none');
+    // Checked again, so the sheet shows what it is named for.
+    await userEvent.click(idle);
+    await expect(idle).toBeChecked();
   },
 };
 
@@ -98,6 +101,8 @@ export const Unchecked: Story = {
     await userEvent.click(idle.closest('label')!.querySelector('.mac-toggle-label')!);
     await expect(idle).toBeChecked();
     await expect(getComputedStyle(idle.parentElement!.querySelector('.mac-toggle-check')!).display).toBe('block');
+    await userEvent.click(idle);
+    await expect(idle).not.toBeChecked();
   },
 };
 
@@ -113,6 +118,11 @@ export const Mixed: Story = {
     await userEvent.click(idle);
     await expect(idle).not.toBePartiallyChecked();
     await expect(idle).toBeChecked();
+    // No click brings mixed back (only the app can): uncheck it and set it mixed again, as it started.
+    await userEvent.click(idle);
+    await expect(idle).not.toBeChecked();
+    (idle as HTMLInputElement).indeterminate = true;
+    await expect(idle).toBePartiallyChecked();
     // A disabled one stays mixed.
     const disabled = cell(canvasElement, 'small', 'Disabled');
     await userEvent.click(disabled.closest('label')!);

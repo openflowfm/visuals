@@ -51,6 +51,9 @@ export const Playground: Story = {
     await expect(light).toHaveAttribute('aria-checked', 'false');
     await userEvent.keyboard('{Enter}');
     await expect(light).toHaveAttribute('aria-checked', 'true');
+    // Back off, as it started.
+    await userEvent.keyboard(' ');
+    await expect(light).toHaveAttribute('aria-checked', 'false');
   },
 };
 
@@ -77,6 +80,10 @@ export const On: Story = {
     await userEvent.click(regular);
     await expect(regular).toHaveAttribute('aria-checked', 'false');
     await waitFor(() => expect(knobGaps(regular).leading).toBe(2));
+    // Back on, so the sheet shows what it is named for.
+    await userEvent.click(regular);
+    await expect(regular).toHaveAttribute('aria-checked', 'true');
+    await waitFor(() => expect(knobGaps(regular).trailing).toBe(2));
   },
 };
 
@@ -95,5 +102,7 @@ export const Off: Story = {
     await userEvent.click(idle);
     await expect(idle).toHaveAttribute('aria-checked', 'true');
     await waitFor(() => expect(knobGaps(idle).trailing).toBe(3));
+    await userEvent.click(idle);
+    await expect(idle).toHaveAttribute('aria-checked', 'false');
   },
 };

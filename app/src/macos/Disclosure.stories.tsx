@@ -96,5 +96,7 @@ export const Open: Story = {
     await expect(idle).toHaveAttribute('aria-expanded', 'true');
     await userEvent.click(idle);
     await expect(idle).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(idle);
+    await expect(idle).toHaveAttribute('aria-expanded', 'true');
   },
 };
