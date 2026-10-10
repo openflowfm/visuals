@@ -14,7 +14,9 @@
 }
 
 :root[data-chrome='overlay']:not([data-fullscreen]) :is(.vf-header, .live-status-strip, .ob-head) {
-  height: var(--chrome-bar);
+  /* At least the bar's height, not exactly: live.css wraps the strip on narrow
+     windows, and it grows then rather than overflowing. */
+  height: auto;
   min-height: var(--chrome-bar);
   padding-left: var(--chrome-lights);
 }
