@@ -89,6 +89,10 @@ export const NothingPlaying: Story = {
   play: async ({ canvas }) => {
     await expect(canvas.queryByRole('progressbar')).toBeNull();
     await expect(canvas.getByRole('button', { name: 'next preset' })).toBeVisible();
+    // The bar sits on the layout root's surface and paints none of its own.
+    const bar = canvas.getByRole('button', { name: 'next preset' }).closest('.lay-transport');
+    await expect(bar).not.toBeNull();
+    await expect(getComputedStyle(bar!).backgroundColor).toBe('rgba(0, 0, 0, 0)');
   },
 };
 

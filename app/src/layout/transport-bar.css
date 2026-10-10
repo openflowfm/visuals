@@ -1,6 +1,8 @@
 /* The transport along the bottom of the macOS layout's main column
    (TransportBar.tsx): ◀ play/pause ▶ R, the time on the preset, the audio
-   input. On the window's own surface with no rule over it (decision 68); the
+   input. It paints no background: the layout's root (.app.home.lay)
+   already paints the translucent --surface-0, and painting it again would make
+   a darker strip. No rule over it (decision 68); the
    keys are glyphs and type with no boxes, the track a faint raised line with
    the time in the numbers' face. The audio input is quiet as in HomeBar. */
 
@@ -16,7 +18,6 @@
   color: var(--ui);
   font-family: var(--font-ui);
   font-variation-settings: var(--font-ui-axes);
-  background: var(--surface-0);
 }
 
 .lay-transport-keys {
