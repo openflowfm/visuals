@@ -28,7 +28,7 @@ export interface HomeLayoutProps {
   bar?: ReactNode;
   /** Draw a stand-in for the native window buttons in the sidebar's top band (stories: the real ones are macOS's). */
   lights?: boolean;
-  /** The inspector's content, in an inset panel down the right mirroring the sidebar (macOS 26's inspector), a named `aside`; the main column narrows beside it. None: closed. */
+  /** The inspector (`Inspector`, inspector/Inspector.tsx), in an inset panel down the right mirroring the sidebar (macOS 26's inspector), a named `aside`; the main column narrows beside it. None: closed. */
   inspector?: ReactNode;
   /** What the inspector is called to a screen reader. */
   inspectorLabel?: string;
@@ -37,7 +37,7 @@ export interface HomeLayoutProps {
 /** What the inspector is called by default. */
 export const INSPECTOR_LABEL = 'about the preset';
 
-/** The inspector's inset panel (inspector.css): HomeLayout's right slot, and an option's frame on its own in a story. */
+/** The inspector's inset panel (inspector.css): HomeLayout's right slot, and the inspector's frame on its own in a story. */
 export function InspectorPanel({ label = INSPECTOR_LABEL, children }: { label?: string; children: ReactNode }) {
   return (
     <aside className="lay-insp" aria-label={label}>

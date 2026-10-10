@@ -34,6 +34,8 @@ export const ICON_NAMES = [
   'previous',
   'stop',
   'close',
+  'never',
+  'edit',
 ] as const;
 export type IconName = (typeof ICON_NAMES)[number];
 
@@ -123,6 +125,15 @@ const GLYPHS: Record<IconName, ReactNode> = {
   ),
   plus: <path d="M8 3.25V12.75M3.25 8H12.75" />,
   close: <path d="M4.25 4.25 11.75 11.75M11.75 4.25 4.25 11.75" />,
+  // Never play: a ring with a bar through it, corner to corner where it meets the ring.
+  never: (
+    <>
+      <circle cx="8" cy="8" r="5.75" />
+      <path d="M3.94 12.06 12.06 3.94" />
+    </>
+  ),
+  // Edit: a pencil, its point at the lower left, the ferrule ruled across it.
+  edit: <path d="M10.25 3.25 12.75 5.75 6 12.5 3 13 3.5 10ZM8.75 4.75 11.25 7.25" />,
 };
 
 /** The stroke, in the 16-unit box's units, for an icon `size` px across: 1.5 px at 16, 1/32 px more or less per px. */

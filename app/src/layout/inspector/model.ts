@@ -1,35 +1,34 @@
 /**
- * What the inspector options (app/src/layout/inspector/) read about a preset:
- * its character, from the preset index's analysis (`LibraryRow.look`) with the
- * user's overrides laid over it (`Prepared`), as words, marks and a sentence.
- * Every option shows the same facts; only how differs.
+ * What the inspector (Inspector.tsx) takes and reads about a preset: its
+ * character, from the preset index's analysis (`LibraryRow.look`) with the
+ * user's overrides laid over it (`Prepared`), as words and marks.
  */
 import type { LibraryChange, LibraryRow, Level } from '../../api.ts';
-import { colourOf, SWATCH, valueLabel, type Colour, type Prepared } from '../../librarySearch.ts';
+import { colourOf, valueLabel, type Colour, type Prepared } from '../../librarySearch.ts';
 import type { Playlist } from '../../playlists.ts';
 import { tileBy, tileName } from '../../PresetTile.tsx';
 
-/** What every option takes: the preset it is about, and what it can do to it. */
+/** What the inspector takes: the preset it is about, the library around it, and what it can do to them. */
 export interface InspectorProps {
-  /** The preset shown: the one playing, or a tile picked in a section; null when nothing plays and nothing is picked. */
+  /** The preset shown, with the user's star, never play and tags on it: the one playing, or one picked (in the field or a section); null when nothing plays and nothing is picked. */
   subject: Prepared | null;
-  /** The subject is a tile picked in a section, not the preset playing: a way back to now playing shows. */
-  picked: boolean;
-  /** Its picture: the preview's for the preset playing, the thumbnail for a tile picked. */
-  picture: string | null;
-  /** Where the preset playing plays from ("from Warm-up · 3 of 10"); '' for a tile picked or when nothing plays. */
+  /** The index key of the preset playing, or null when nothing plays (or it isn't in the index). A subject that isn't it is "picked": the way back to now playing and Play show, and its dot stays marked in the field. */
+  playing: string | null;
+  /** Where the preset playing plays from ("from Warm-up · 3 of 10"); shown only while the subject is the one playing. */
   from: string;
   /** Every playlist (for "add to a playlist" and "in"); null until read. */
   playlists: Playlist[] | null;
-  /** The library, for an option that places the preset among the rest. */
-  library?: readonly LibraryRow[];
+  /** The library's rows, for the field: every one the index has measured is a dot. */
+  library: readonly LibraryRow[];
   /** Change star / never play / tags on these preset keys. */
   onSet(keys: string[], change: LibraryChange): void;
   /** Add these preset paths to a manual playlist, by id. */
   onAddTo(playlist: string, paths: string[]): void;
-  /** Back to the preset playing (shown while `picked`). */
+  /** A dot in the field picked (click, or Enter on the keyboard's cursor): show this preset. A pick of the dot playing calls `onBack` instead. */
+  onPick(row: LibraryRow): void;
+  /** Back to the preset playing, from one picked. */
   onBack(): void;
-  /** Play the picked preset (shown while `picked`). */
+  /** Play the one picked; without it no Play shows. */
   onPlay?(): void;
   /** Open it in the preset editor: lab builds only; without it no such action shows. */
   onEdit?(): void;
@@ -116,12 +115,6 @@ export function characterOf(p: Prepared): Character {
   };
 }
 
-/** The swatch for a colour name, as the library's chips draw it. */
-export const swatchOf = (c: Colour) => SWATCH[c];
-
-/** "a" or "an" before `word`. */
-const article = (word: string) => (/^[aeiou]/i.test(word) ? 'an' : 'a');
-
 /** "x", "x and y", "x, y and z". */
 export function listed(words: readonly string[]): string {
   if (words.length <= 1) return words[0] ?? '';
@@ -131,18 +124,13 @@ export function listed(words: readonly string[]): string {
 /** Its colours' names, each once, the strongest first. */
 export const colourNames = (c: Character): string[] => [...new Set(c.hues.map((h) => h.colour))];
 
-/**
- * A short line about the preset, built from its analysis in plain words:
- * "A slow, dark, calm hypnotic piece by geiss & rovastar. Mostly purple and red."
- * Only what was measured is said; an undrawn preset is its style and authors.
- */
-export function describe(c: Character): string {
-  const adjectives = [c.speed.word, c.brightness.word, c.intensity.word].filter((w): w is string => !!w);
-  const kind = `${c.style.toLowerCase()} piece`;
-  const lead = adjectives.length ? `${adjectives.join(', ')} ${kind}` : kind;
-  const first = `${article(lead)} ${lead}${c.by ? ` by ${c.by}` : ''}.`;
-  const colours = colourNames(c);
-  const second = colours.length ? `Mostly ${listed(colours)}.` : c.grey ? 'Grey, without a colour of its own.' : '';
-  const line = `${first} ${second}`.trim();
-  return line.charAt(0).toUpperCase() + line.slice(1);
+/** What the field says about the subject: "Slow and dark, among 250 presets". */
+export function fieldSays(c: Character | null, count: number): string {
+  const n = count.toLocaleString('en-US');
+  const among = `among ${n} presets`;
+  if (!c) return `The library: ${n} presets by speed and brightness`;
+  const words = [c.speed.word, c.brightness.word].filter((w): w is string => !!w);
+  if (c.unmeasured || !words.length) return `Not drawn yet, ${among}`;
+  const said = listed(words);
+  return `${said.charAt(0).toUpperCase()}${said.slice(1)}, ${among}`;
 }

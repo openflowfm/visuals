@@ -7,8 +7,8 @@
    layout.css so the shell's own sizes stay there; this adds one: the panel's
    width, between the sidebar's 240 and the hero's words beside a picture.
 
-   The options' own content is in inspector/*.css; nothing here styles it but
-   the parts all three share (the back glyph). */
+   The inspector's own content is in inspector/*.css; nothing here styles it
+   but the back glyph. */
 
 .app.home.lay {
   --lay-insp: 288px;
@@ -16,7 +16,7 @@
 .app.home.lay[data-inspector] {
   grid-template-columns: calc(var(--lay-side) + 2 * var(--lay-inset)) minmax(0, 1fr) calc(var(--lay-insp) + var(--lay-inset));
 }
-/* An option on its own in a story: the panel alone, at its width. */
+/* The inspector on its own in a story: the panel alone, at its width. */
 .app.home.lay[data-inspector-alone] {
   grid-template-columns: minmax(0, 1fr);
   width: calc(var(--lay-insp) + 2 * var(--lay-inset));

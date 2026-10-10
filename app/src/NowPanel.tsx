@@ -1,10 +1,10 @@
-import { useRef, useState } from 'react';
-import type { KeyboardEvent, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import type { LibraryChange } from './api.ts';
 import type { Playlist } from './playlists.ts';
-import { parseTags, valueLabel, type Prepared } from './librarySearch.ts';
-import { flipFor, playlistsWith, pressedFor, tagCounts } from './PresetDrawer.tsx';
+import { valueLabel, type Prepared } from './librarySearch.ts';
+import { flipFor, playlistsWith, pressedFor } from './PresetDrawer.tsx';
 import { Popover } from './Popover.tsx';
+import { TagEditor } from './TagEditor.tsx';
 import { Preview } from './views.tsx';
 import { say, Say } from './words.ts';
 import './nowpanel.css';
@@ -132,7 +132,7 @@ export function NowPanel({ chosen, current, from, playlists, onSet, onAddTo, onC
 
         {one && <Details p={one} playlists={playlists} />}
 
-        {!none && <Tags chosen={chosen} keys={keys} onSet={onSet} />}
+        {!none && <Tags chosen={chosen} onSet={onSet} />}
 
         {error && (
           <p className="now-error" role="alert">
@@ -164,83 +164,12 @@ function Details({ p, playlists }: { p: Prepared; playlists: Playlist[] | null }
   );
 }
 
-/** My tags on `chosen`, each removable, and "+ tag", which becomes a text box. */
-function Tags({ chosen, keys, onSet }: { chosen: Prepared[]; keys: string[]; onSet: NowPanelProps['onSet'] }) {
-  const [adding, setAdding] = useState(false);
-  const [typing, setTyping] = useState('');
-  const tags = tagCounts(chosen);
-  const n = chosen.length;
-
-  // Esc closes the box; the blur that follows must not add what was typed.
-  const cancelled = useRef(false);
-  const commit = () => {
-    if (cancelled.current) return;
-    const add = parseTags(typing);
-    if (add.length) onSet(keys, { add_tags: add });
-    setTyping('');
-    setAdding(false);
-  };
-  const onKey = (ev: KeyboardEvent<HTMLInputElement>) => {
-    if (ev.key === 'Enter') {
-      ev.preventDefault();
-      commit();
-    } else if (ev.key === 'Escape') {
-      ev.preventDefault();
-      cancelled.current = true;
-      setTyping('');
-      setAdding(false);
-    } else {
-      return;
-    }
-    ev.stopPropagation();
-  };
-
+/** My tags on `chosen` under their label: the tag editor (TagEditor.tsx), shared with the inspector. */
+function Tags({ chosen, onSet }: { chosen: Prepared[]; onSet: NowPanelProps['onSet'] }) {
   return (
     <div className="now-tags-block">
       <div className="now-label">{Say('user tags')}</div>
-      <div className="now-tags" role="group" aria-label={say('user tags')}>
-        {tags.map(({ tag, count }) => (
-          <span key={tag} className="now-chip" data-some={count < n ? '' : undefined} title={count < n ? `on ${count} of ${n}` : undefined}>
-            {tag}
-            {count < n && <span className="now-chip-count">{count}</span>}
-            <button
-              type="button"
-              className="now-chip-x"
-              aria-label={`take the tag ${tag} off${count < n ? ` (on ${count} of ${n})` : ''}`}
-              title={`Take “${tag}” off${n > 1 ? ' all of them' : ''}`}
-              onClick={() => onSet(keys, { remove_tags: [tag] })}
-            >
-              ×
-            </button>
-          </span>
-        ))}
-        {adding ? (
-          <input
-            className="now-chip now-tag-input"
-            type="text"
-            aria-label="add tags"
-            placeholder="tags, split by commas"
-            title={`Enter adds${n > 1 ? ' to all of them' : ''}, Esc cancels`}
-            autoFocus
-            value={typing}
-            onChange={(ev) => setTyping(ev.target.value)}
-            onKeyDown={onKey}
-            onBlur={commit}
-          />
-        ) : (
-          <button
-            type="button"
-            className="now-chip now-chip-add"
-            title={`Add a tag${n > 1 ? ' to all of them' : ''}`}
-            onClick={() => {
-              cancelled.current = false;
-              setAdding(true);
-            }}
-          >
-            + Tag
-          </button>
-        )}
-      </div>
+      <TagEditor chosen={chosen} onSet={onSet} />
     </div>
   );
 }

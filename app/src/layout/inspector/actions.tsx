@@ -1,5 +1,5 @@
-import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { parseTags, type Prepared } from '../../librarySearch.ts';
+import type { ReactNode } from 'react';
+import type { Prepared } from '../../librarySearch.ts';
 import { playlistsWith } from '../../PresetDrawer.tsx';
 import { Popover } from '../../Popover.tsx';
 import { say, Say } from '../../words.ts';
@@ -7,17 +7,17 @@ import { Icon } from '../icons.tsx';
 import type { InspectorProps } from './model.ts';
 
 /**
- * The inspector's actions on one preset, the same in every option: each a
- * button with a name a screen reader and voice control find by, and its state
- * in aria-pressed. An option lays them out and styles them by `className`; what
- * they do and say stays here.
+ * The inspector's actions on one preset: each a button with a name a screen
+ * reader and voice control find it by, its state in aria-pressed, and a glyph
+ * from the layout's icons. The inspector lays them out and styles them by
+ * `className`; what they do and say stays here.
  */
 
 /** What every action takes. */
 interface ActionProps {
   p: Prepared;
   className?: string;
-  /** What shows beside the glyph; the option's choice ('' for the glyph alone). */
+  /** What shows beside the glyph ('' for the glyph alone). */
   children?: ReactNode;
 }
 
@@ -42,6 +42,7 @@ export function NeverAction({ p, className, children, onSet }: ActionProps & Pic
       title={p.hidden ? 'Play it again' : `Never play it: random, shuffle and ${say('auto-advance')} skip it. A playlist you made still plays it.`}
       onClick={() => onSet([p.row.key], { hidden: !p.hidden })}
     >
+      <Icon name="never" />
       {children ?? <span aria-hidden="true">{Say('hidden')}</span>}
     </button>
   );
@@ -94,12 +95,13 @@ export function EditAction({ className, children, onEdit }: Omit<ActionProps, 'p
   if (!onEdit) return null;
   return (
     <button type="button" className={className} aria-label="open in the editor" title="Open it in the preset editor" onClick={onEdit}>
+      <Icon name="edit" />
       {children ?? <span aria-hidden="true">Edit</span>}
     </button>
   );
 }
 
-/** Back to the preset playing, from a tile picked. */
+/** Back to the preset playing, from one picked. */
 export function BackAction({ className, children, onBack }: Omit<ActionProps, 'p'> & Pick<InspectorProps, 'onBack'>) {
   return (
     <button type="button" className={className} aria-label={`back to ${say('stage')}`} title={`Back to the preset playing`} onClick={onBack}>
@@ -109,7 +111,7 @@ export function BackAction({ className, children, onBack }: Omit<ActionProps, 'p
   );
 }
 
-/** Play the tile picked. */
+/** Play the one picked (shown only with `onPlay`). */
 export function PlayAction({ className, children, onPlay }: Omit<ActionProps, 'p'> & Pick<InspectorProps, 'onPlay'>) {
   if (!onPlay) return null;
   return (
@@ -122,76 +124,3 @@ export function PlayAction({ className, children, onPlay }: Omit<ActionProps, 'p
 
 /** The playlists holding the preset, or null until they are read. */
 export const holding = (p: Prepared, playlists: InspectorProps['playlists']): string[] | null => (playlists ? playlistsWith(p.row.path, playlists) : null);
-
-/**
- * My tags on the preset, each removable, and "+ Tag", which becomes a text box
- * (Enter adds, commas split, Esc cancels). `className` prefixes the parts'
- * classes: `<c>`, `<c>-tag`, `<c>-x`, `<c>-add`, `<c>-input`.
- */
-export function TagsAction({ p, className = 'insp-tags', onSet }: Omit<ActionProps, 'children'> & Pick<InspectorProps, 'onSet'>) {
-  const [adding, setAdding] = useState(false);
-  const [typing, setTyping] = useState('');
-  const keys = [p.row.key];
-  // Esc closes the box; the blur that follows must not add what was typed.
-  const cancelled = useRef(false);
-  const commit = () => {
-    if (cancelled.current) return;
-    const add = parseTags(typing);
-    if (add.length) onSet(keys, { add_tags: add });
-    setTyping('');
-    setAdding(false);
-  };
-  const onKey = (ev: KeyboardEvent<HTMLInputElement>) => {
-    if (ev.key === 'Enter') {
-      ev.preventDefault();
-      commit();
-    } else if (ev.key === 'Escape') {
-      ev.preventDefault();
-      cancelled.current = true;
-      setTyping('');
-      setAdding(false);
-    } else {
-      return;
-    }
-    ev.stopPropagation();
-  };
-  return (
-    <div className={className} role="group" aria-label={say('user tags')}>
-      {p.tags.map((tag) => (
-        <span key={tag} className={`${className}-tag`}>
-          {tag}
-          <button type="button" className={`${className}-x`} aria-label={`take the tag ${tag} off`} title={`Take “${tag}” off`} onClick={() => onSet(keys, { remove_tags: [tag] })}>
-            <Icon name="close" size={10} />
-          </button>
-        </span>
-      ))}
-      {adding ? (
-        <input
-          className={`${className}-input`}
-          type="text"
-          aria-label="add tags"
-          placeholder="tags, split by commas"
-          title="Enter adds, Esc cancels"
-          autoFocus
-          value={typing}
-          onChange={(ev) => setTyping(ev.target.value)}
-          onKeyDown={onKey}
-          onBlur={commit}
-        />
-      ) : (
-        <button
-          type="button"
-          className={`${className}-add`}
-          aria-label="add a tag"
-          title="Add a tag"
-          onClick={() => {
-            cancelled.current = false;
-            setAdding(true);
-          }}
-        >
-          + Tag
-        </button>
-      )}
-    </div>
-  );
-}
