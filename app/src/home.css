@@ -16,19 +16,26 @@
 .app.home {
   /* Surfaces, darkest first. Each area paints itself with one of these (the
      window's root paints nothing, for the preview's sake). Since decision 69 the
-     main window is frosted (macOS's under-window material, dark, under the
-     preview's native view), and these are translucent over it: tints, not
-     colours. In the dark appearance the material comes out about #1e1e1e to
-     #2a2a2a, lightest over a light desktop, and solid in that range with
+     main window is frosted glass (macOS's HUD material, dark, under the
+     preview's native view), and these are faint tints over it, so the material
+     carries the look: the desktop blurred through, its colour coming with it.
+     In the dark appearance the HUD material comes out about #1e1e1e over a dark
+     desktop to about #363636 over a light one, and solid in that range with
      "Reduce transparency" on; contrast.test.ts checks the captions over
-     #2a2a2a. Two stay opaque: popovers and menus float over the grid's bright
-     pictures, and a tile's picture keeps a dark backing of its own. */
-  --surface-0: rgba(0, 0, 0, 0.2); /* the window: header, sidebar, main pane, bar */
-  --surface-1: rgba(0, 0, 0, 0.12); /* the now playing panel: one faint step up */
-  --surface-2: rgba(255, 255, 255, 0.05); /* raised: a chip, a progress track */
-  --surface-3: rgba(255, 255, 255, 0.08); /* a field being typed in, a pressed key */
-  --surface-float: #161619; /* opaque: popovers, menus, a dragged tile */
+     #3c3c3c, and the other materials VISUALS_FROST offers over their own
+     lightest. Popovers, menus and a dragged tile are glass of their own (a
+     darker fill over a blur of what is under them, popover.css), and a tile's
+     picture keeps a dark backing. */
+  --surface-0: rgba(0, 0, 0, 0.1); /* the window: header, sidebar, main pane, bar */
+  --surface-1: rgba(0, 0, 0, 0.04); /* the now playing panel: one faint step up */
+  --surface-2: rgba(255, 255, 255, 0.035); /* raised: a chip, a progress track */
+  --surface-3: rgba(255, 255, 255, 0.05); /* a field being typed in, a pressed key */
+  --surface-float: rgba(20, 20, 24, 0.86); /* glass: popovers, menus, a dragged tile, over --glass */
   --surface-thumb: rgba(0, 0, 0, 0.4); /* behind a tile's or a cover's picture */
+  /* What a glass surface does to what is under it, and its top edge catching
+     the light: a hint of glass, not a line (decision 68). */
+  --glass: blur(28px) saturate(1.6);
+  --glass-edge: inset 0 1px 0 rgba(255, 255, 255, 0.07);
   /* (rgba() with commas: the DOM tests' happy-dom reads it, so their checks
      that nothing paints under the preview still see these.) */
   /* The preview's corners: the native view under its hole is square, and the
@@ -50,8 +57,8 @@
      material (the palette's is 3:1), and its lighter step for text on the raised
      surfaces, which the areas below take as their --caption (contrast.test.ts
      checks both). */
-  --caption: #94949e;
-  --caption-raised: #a8a8b0;
+  --caption: #a4a4ac;
+  --caption-raised: #b0b0b8;
   /* The active control's underline, and the playing mark. */
   --line-active: var(--primary);
   --playing: var(--green);
@@ -79,6 +86,32 @@
 .app.home .pl-head .pl-name-input,
 .app.home .home-bar .vf-meters .wdg-meter-body {
   --caption: var(--caption-raised);
+}
+/* The frost a dev run picked instead (VISUALS_FROST, which sets data-frost on
+   the root): the lighter materials take brighter captions, so small grey text
+   keeps 4.5:1 over each one's lightest (contrast.test.ts). glass-clear lets the
+   desktop through almost as it is, so no caption is safe on it: it takes
+   glass's, for comparing only. */
+:root[data-frost='sidebar'] .app.home,
+:root[data-frost='fullscreen-ui'] .app.home,
+:root[data-frost='popover'] .app.home,
+:root[data-frost='menu'] .app.home {
+  --caption: #b6b6be;
+  --caption-raised: #c4c4cc;
+}
+:root[data-frost='glass'] .app.home,
+:root[data-frost='glass-clear'] .app.home {
+  --caption: #c6c6ce;
+  --caption-raised: #d4d4dc;
+}
+/* VISUALS_FROST_TINT (a dev run): the window's tints above, each scaled by
+   --frost-tint, 0 (the material alone) to 1 (as shipped). The same alphas as
+   above (contrast.test.ts checks they match). */
+:root[data-frost-tint] .app.home {
+  --surface-0: rgba(0, 0, 0, calc(0.1 * var(--frost-tint)));
+  --surface-1: rgba(0, 0, 0, calc(0.04 * var(--frost-tint)));
+  --surface-2: rgba(255, 255, 255, calc(0.035 * var(--frost-tint)));
+  --surface-3: rgba(255, 255, 255, calc(0.05 * var(--frost-tint)));
 }
 /* The widgets inside take the same type. */
 .app.home .wdg {
@@ -279,8 +312,10 @@
   color: var(--fg);
   font-size: 12px;
   background: var(--surface-float);
+  -webkit-backdrop-filter: var(--glass);
+  backdrop-filter: var(--glass);
   border-radius: 8px;
-  box-shadow: var(--lift);
+  box-shadow: var(--lift), var(--glass-edge);
   pointer-events: none;
   opacity: 0.7;
 }

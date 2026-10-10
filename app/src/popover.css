@@ -1,7 +1,7 @@
 /* A button with a small panel under it (Popover.tsx), used on the home only.
    Since decision 68 the button is type with no box, shown open (or pressed) in
-   --fg and underlined; the panel floats over what is below it on the raised
-   surface, with soft corners and a lift, and no border. */
+   --fg and underlined; the panel floats over what is below it as glass, with
+   soft corners and a lift, and no border. */
 .vf-pop {
   position: relative;
   display: inline-flex;
@@ -52,9 +52,13 @@
   font-size: 13px;
   font-weight: normal;
   background: var(--surface-float);
+  /* Glass (decision 69): a dark fill over a blur of the tiles under it, so it
+     reads over bright pictures, and its top edge catching the light. */
+  -webkit-backdrop-filter: var(--glass);
+  backdrop-filter: var(--glass);
   border: 0;
   border-radius: 10px;
-  box-shadow: var(--lift);
+  box-shadow: var(--lift), var(--glass-edge);
 }
 .vf-pop-panel[data-align='right'] {
   left: auto;

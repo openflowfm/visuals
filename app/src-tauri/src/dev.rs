@@ -1,6 +1,7 @@
 //! Development hooks, for checking the app without a screen or a hand on it:
 //! `VISUALS_FX` sends live actions and `VISUALS_CAPTURE` / `VISUALS_CAPTURE_OUTPUT`
-//! save pictures of the window and the live output, each after a pause.
+//! save pictures of the window and the live output, each after a pause;
+//! `VISUALS_FROST` and `VISUALS_FROST_TINT` (debug builds) try other frosts.
 //!
 //! `VISUALS_HEADLESS=1` keeps the app off the screen while it runs, so a check
 //! doesn't get in anyone's way: no Dock icon or menu bar, it never becomes the
@@ -10,11 +11,13 @@
 
 use crate::{actions, bench, output};
 use objc2::MainThreadMarker;
+use objc2::rc::{Allocated, Retained};
 use objc2::runtime::{AnyClass, AnyObject, Sel};
-use objc2_app_kit::{NSScreen, NSWindow};
-use objc2_foundation::{NSPoint, NSRect};
+use objc2_app_kit::{NSColor, NSScreen, NSWindow};
+use objc2_foundation::{NSPoint, NSRect, NSString};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+use tauri::window::{Effect, EffectState, EffectsBuilder};
 use tauri::{AppHandle, Manager};
 
 /// Whether `VISUALS_HEADLESS` asks for the app to stay off the screen.
@@ -191,9 +194,152 @@ pub fn capture(handle: &AppHandle) {
     });
 }
 
+/// The materials `VISUALS_FROST` can give the main window, by the names it takes
+/// (tauri's `Effect`s, which window-vibrancy 0.8.1 draws as an
+/// `NSVisualEffectView`'s material, or on macOS 26 as an `NSGlassEffectView`),
+/// and `off`: a solid window. `tauri.conf.json`'s `windowEffects` is the default.
+const FROSTS: [(&str, Option<Effect>); 12] = [
+    ("under-window", Some(Effect::UnderWindowBackground)),
+    ("sidebar", Some(Effect::Sidebar)),
+    ("hud", Some(Effect::HudWindow)),
+    ("fullscreen-ui", Some(Effect::FullScreenUI)),
+    ("popover", Some(Effect::Popover)),
+    ("menu", Some(Effect::Menu)),
+    ("header", Some(Effect::HeaderView)),
+    ("content", Some(Effect::ContentBackground)),
+    ("window", Some(Effect::WindowBackground)),
+    ("glass", Some(Effect::LiquidGlassRegular)),
+    ("glass-clear", Some(Effect::LiquidGlassClear)),
+    ("off", None),
+];
+
+/// `VISUALS_FROST`'s value as a name from [`FROSTS`] and its material (`None`
+/// for `off`); `Err` names what it takes.
+fn frost_from(value: &str) -> Result<(&'static str, Option<Effect>), String> {
+    let value = value.trim().to_ascii_lowercase();
+    FROSTS.iter().find(|(name, _)| *name == value).copied().ok_or_else(|| {
+        let names: Vec<&str> = FROSTS.iter().map(|(n, _)| *n).collect();
+        format!("no material {value:?}; one of {}", names.join(", "))
+    })
+}
+
+/// `VISUALS_FROST_TINT`'s value: how much of the page's tint goes over the
+/// frost, 0 (none) to 1 (all of it, as shipped), clamped.
+fn tint_from(value: &str) -> Result<f64, String> {
+    let tint: f64 = value.trim().parse().map_err(|_| format!("{value:?} isn't a number from 0 to 1"))?;
+    if tint.is_finite() { Ok(tint.clamp(0.0, 1.0)) } else { Err(format!("{value:?} isn't a number from 0 to 1")) }
+}
+
+/// The script that tells the page which frost it is over: `data-frost` on the
+/// root (home.css gives the lighter materials brighter captions) and
+/// `--frost-tint` with `data-frost-tint` (home.css scales its surfaces' tints by it).
+fn frost_script(name: Option<&str>, tint: Option<f64>) -> String {
+    let mut js = String::from("(function(){var r=document.documentElement;");
+    if let Some(name) = name {
+        js += &format!("r.dataset.frost='{name}';");
+    }
+    if let Some(tint) = tint {
+        js += &format!("r.style.setProperty('--frost-tint','{tint}');r.dataset.frostTint='';");
+    }
+    js + "})();"
+}
+
+/// In a debug build, `VISUALS_FROST=<material>` gives the main window that
+/// material instead of `tauri.conf.json`'s (`off`: a solid window), and
+/// `VISUALS_FROST_TINT=<0..1>` scales the page's tints over it, so materials
+/// can be compared in a real run without rebuilding (decision 69). The bench
+/// restacks itself above whichever frost is there (`bench::view`).
+pub fn frost(window: &tauri::WebviewWindow) {
+    if !cfg!(debug_assertions) {
+        return;
+    }
+    let material = match std::env::var("VISUALS_FROST").ok().filter(|v| !v.is_empty()).map(|v| frost_from(&v)).transpose() {
+        Ok(m) => m,
+        Err(e) => return eprintln!("VISUALS_FROST: {e}"),
+    };
+    let tint = match std::env::var("VISUALS_FROST_TINT").ok().filter(|v| !v.is_empty()).map(|v| tint_from(&v)).transpose() {
+        Ok(t) => t,
+        Err(e) => return eprintln!("VISUALS_FROST_TINT: {e}"),
+    };
+    if material.is_none() && tint.is_none() {
+        return;
+    }
+    if let Some((name, effect)) = material {
+        let applied = match effect {
+            Some(effect) => window.set_effects(EffectsBuilder::new().effect(effect).state(EffectState::Active).build()),
+            None => window.set_effects(None).and_then(|()| window.ns_window()).map(|ns_window| {
+                // SAFETY: tauri hands over the live NSWindow, and setup runs on the main thread.
+                let ns_window: &NSWindow = unsafe { &*(ns_window as *const NSWindow) };
+                // The material's darkest, opaque: the window is transparent, so
+                // without a colour the desktop would show through unblurred.
+                ns_window.setBackgroundColor(Some(&NSColor::colorWithSRGBRed_green_blue_alpha(0.118, 0.118, 0.122, 1.0)));
+            }),
+        };
+        match applied {
+            Ok(()) => eprintln!("VISUALS_FROST: the main window is {name}"),
+            Err(e) => eprintln!("VISUALS_FROST: {e}"),
+        }
+    }
+    let js = frost_script(material.map(|(name, _)| name), tint);
+    // A user script, so the page has it on every load (vite reloads it in a dev run).
+    let script = js.clone();
+    let added = window.with_webview(move |webview| {
+        // SAFETY: tauri hands over the live WKWebView on the main thread; these
+        // are WebKit's public `WKUserContentController` and `WKUserScript` calls.
+        unsafe {
+            let webview: &AnyObject = &*(webview.inner() as *const AnyObject);
+            let Some(class) = AnyClass::get(c"WKUserScript") else { return };
+            let config: Retained<AnyObject> = objc2::msg_send![webview, configuration];
+            let content: Retained<AnyObject> = objc2::msg_send![&*config, userContentController];
+            let source = NSString::from_str(&script);
+            let alloc: Allocated<AnyObject> = objc2::msg_send![class, alloc];
+            // WKUserScriptInjectionTimeAtDocumentEnd is 1.
+            let user: Retained<AnyObject> = objc2::msg_send![alloc, initWithSource: &*source, injectionTime: 1isize, forMainFrameOnly: true];
+            let _: () = objc2::msg_send![&*content, addUserScript: &*user];
+        }
+    });
+    if let Err(e) = added {
+        eprintln!("VISUALS_FROST: {e}");
+    }
+    // And now, in case the page is already up.
+    let _ = window.eval(&js);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_a_frost_material() {
+        assert_eq!(frost_from("hud"), Ok(("hud", Some(Effect::HudWindow))));
+        assert_eq!(frost_from(" Sidebar "), Ok(("sidebar", Some(Effect::Sidebar))));
+        assert_eq!(frost_from("under-window"), Ok(("under-window", Some(Effect::UnderWindowBackground))));
+        assert_eq!(frost_from("glass"), Ok(("glass", Some(Effect::LiquidGlassRegular))));
+        assert_eq!(frost_from("off"), Ok(("off", None)));
+        let e = frost_from("mica").unwrap_err();
+        assert!(e.contains("mica") && e.contains("fullscreen-ui"), "{e}");
+        // Every name is distinct, so each reads back as itself.
+        for (name, effect) in FROSTS {
+            assert_eq!(frost_from(name), Ok((name, effect)));
+        }
+    }
+
+    #[test]
+    fn reads_a_frost_tint() {
+        assert_eq!(tint_from("0.4"), Ok(0.4));
+        assert_eq!(tint_from("0"), Ok(0.0));
+        assert_eq!(tint_from("3"), Ok(1.0));
+        assert_eq!(tint_from("-1"), Ok(0.0));
+        assert!(tint_from("half").is_err());
+        assert!(tint_from("NaN").is_err());
+    }
+
+    #[test]
+    fn tells_the_page_its_frost() {
+        assert_eq!(frost_script(Some("hud"), Some(0.5)), "(function(){var r=document.documentElement;r.dataset.frost='hud';r.style.setProperty('--frost-tint','0.5');r.dataset.frostTint='';})();");
+        assert!(!frost_script(Some("off"), None).contains("frost-tint"));
+        assert!(!frost_script(None, Some(0.0)).contains("dataset.frost="));
+    }
 
     #[test]
     fn reads_seconds_or_falls_back() {
