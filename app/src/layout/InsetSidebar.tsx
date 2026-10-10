@@ -145,13 +145,13 @@ export function InsetSidebar({ sections, selected, onSelect, collapsed, onToggle
     else if (e.key === 'ArrowLeft') {
       if (here.row) to = headKey(here.section.id);
       else if (open) onToggle(here.section.id);
-      else return;
     } else if (e.key === 'ArrowRight') {
       if (!here.row && !open) onToggle(here.section.id);
       else if (!here.row && here.section.rows[0]) to = rowKey(here.section.rows[0]);
-      else return;
     } else return;
+    // The walk's keys are the sidebar's: the home's window keys (← → step presets) never see them.
     e.preventDefault();
+    e.stopPropagation();
     focus(to);
   };
 
@@ -172,6 +172,9 @@ export function InsetSidebar({ sections, selected, onSelect, collapsed, onToggle
     if (refocusOpener && was?.opener?.isConnected) was.opener.focus();
   };
 
+  // Whether a menu's playlist is playing now (the deck may have moved on since the menu opened).
+  const playingNow = (m: OpenMenu) => (lists ? lists.deck.playlist === m.list.id : m.playing);
+
   const choose = (action: MenuAction) => {
     if (!menu || !actions) return;
     const p = menu.list;
@@ -180,22 +183,43 @@ export function InsetSidebar({ sections, selected, onSelect, collapsed, onToggle
       setRenaming(p.id);
       return;
     }
+    if (action === 'delete') {
+      // Focus goes to the next row in the section, else the one before, else its heading.
+      const at = order.findIndex((o) => o.key === menu.key);
+      const here = order[at];
+      const near = [order[at + 1], order[at - 1]].find((o) => o?.row && o.section === here?.section);
+      setMenu(null);
+      const to = near?.key ?? (here ? headKey(here.section.id) : undefined);
+      if (to) {
+        refocus.current = to;
+        setActive(to);
+        items.current.get(to)?.focus();
+      }
+      actions.onDelete(p.id);
+      return;
+    }
     closeMenu(true);
-    if (action === 'play' || action === 'stop') toggle(p, menu.playing);
+    if (action === 'play' || action === 'stop') toggle(p, playingNow(menu));
     else if (action === 'export') actions.onExport(p.id);
-    else if (action === 'delete') actions.onDelete(p.id);
   };
 
-  const finishRename = (r: SidebarRow, p: Playlist, typed: string | null) => {
+  const finishRename = (r: SidebarRow, p: Playlist, typed: string | null, back: boolean) => {
     setRenaming(null);
-    refocus.current = rowKey(r);
+    if (back) refocus.current = rowKey(r);
     const name = typed === null ? null : renamed(p.name, typed);
     if (name && actions) actions.onRename(p.id, name);
   };
 
   return (
     // The webview's own menu (Reload, Inspect…) never opens over the sidebar: a row's is the page's.
-    <div className="isb" onKeyDown={onKeyDown} onContextMenu={(e) => e.preventDefault()}>
+    <div
+      className="isb"
+      onKeyDown={onKeyDown}
+      onContextMenu={(e) => {
+        // But for the rename box, which keeps its own (cut, copy, paste).
+        if (!(e.target instanceof HTMLInputElement)) e.preventDefault();
+      }}
+    >
       {sections.map((s) => {
         const open = !collapsed.includes(s.id);
         const body = `${uid}-isb-${s.id}`;
@@ -253,6 +277,7 @@ export function InsetSidebar({ sections, selected, onSelect, collapsed, onToggle
                 const key = rowKey(r);
                 const menuOpen = menu?.key === key;
                 const onContextMenu = (e: ReactMouseEvent) => {
+                  if (e.target instanceof HTMLInputElement) return;
                   e.preventDefault();
                   if (p) openMenu(r, p, e.clientX, e.clientY, items.current.get(key) ?? null);
                 };
@@ -271,7 +296,7 @@ export function InsetSidebar({ sections, selected, onSelect, collapsed, onToggle
                     {live && p && renaming === p.id ? (
                       <div className="isb-row" data-renaming="">
                         <Icon className="isb-icon" name={r.icon} />
-                        <RenameBox name={p.name} onDone={(typed) => finishRename(r, p, typed)} />
+                        <RenameBox name={p.name} onDone={(typed, back) => finishRename(r, p, typed, back)} />
                       </div>
                     ) : (
                       <button
@@ -347,18 +372,21 @@ export function InsetSidebar({ sections, selected, onSelect, collapsed, onToggle
           </div>
         );
       })}
-      {menu && <RowMenu name={menu.list.name} items={rowMenu(menu.list, menu.playing, lists)} at={menu} onChoose={choose} onClose={closeMenu} />}
+      {menu && <RowMenu name={menu.list.name} items={rowMenu(menu.list, playingNow(menu), lists)} at={menu} onChoose={choose} onClose={closeMenu} />}
     </div>
   );
 }
 
-/** A playlist's name being edited in its row: Enter or leaving keeps what was typed, Esc puts the old name back. */
-function RenameBox({ name, onDone }: { name: string; onDone(typed: string | null): void }) {
+/**
+ * A playlist's name being edited in its row: Enter or leaving keeps what was typed, Esc puts the old name back.
+ * `back` is whether focus returns to the row: on Enter and Esc, not when focus left for somewhere else.
+ */
+function RenameBox({ name, onDone }: { name: string; onDone(typed: string | null, back: boolean): void }) {
   const done = useRef(false);
-  const finish = (typed: string | null) => {
+  const finish = (typed: string | null, back: boolean) => {
     if (done.current) return;
     done.current = true;
-    onDone(typed);
+    onDone(typed, back);
   };
   return (
     <input
@@ -372,13 +400,13 @@ function RenameBox({ name, onDone }: { name: string; onDone(typed: string | null
         e.stopPropagation();
         if (e.key === 'Enter') {
           e.preventDefault();
-          finish(e.currentTarget.value);
+          finish(e.currentTarget.value, true);
         } else if (e.key === 'Escape') {
           e.preventDefault();
-          finish(null);
+          finish(null, true);
         }
       }}
-      onBlur={(e) => finish(e.currentTarget.value)}
+      onBlur={(e) => finish(e.currentTarget.value, false)}
     />
   );
 }

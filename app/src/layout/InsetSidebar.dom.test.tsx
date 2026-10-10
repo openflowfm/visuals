@@ -321,6 +321,78 @@ describe("a row's menu", () => {
     ).toEqual(['Play', 'Save to a file']);
   });
 
+  it("keeps the walk's keys from the window's listeners", () => {
+    render(<Harness actions={fakeActions()} />);
+    const seen: string[] = [];
+    const listen = (e: KeyboardEvent) => seen.push(e.key);
+    window.addEventListener('keydown', listen);
+    try {
+      for (const key of ['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Home', 'End']) {
+        const row = rowButton('Chill');
+        row.focus();
+        fireEvent.keyDown(row, { key });
+      }
+      const head = screen.getByRole('button', { name: /^Playlists/ });
+      head.focus();
+      fireEvent.keyDown(head, { key: 'ArrowRight' });
+    } finally {
+      window.removeEventListener('keydown', listen);
+    }
+    expect(seen).toEqual([]);
+  });
+
+  it('renames on leaving the box, leaving focus where it went', () => {
+    const actions = fakeActions();
+    render(<Harness actions={actions} />);
+    fireEvent.contextMenu(rowButton('Chill'));
+    fireEvent.click(within(menu()).getByRole('menuitem', { name: 'Rename' }));
+    const box = screen.getByRole('textbox', { name: 'New name for Chill' });
+    fireEvent.change(box, { target: { value: 'Chilled' } });
+    const library = rowButton('Library');
+    library.focus();
+    fireEvent.blur(box);
+    expect(actions.onRename).toHaveBeenCalledWith('chill', 'Chilled');
+    expect(document.activeElement).toBe(library);
+  });
+
+  it('plays or stops by what is playing when chosen, not when it opened', () => {
+    const actions = fakeActions();
+    const { rerender } = render(<Harness actions={actions} />);
+    fireEvent.contextMenu(rowButton('Chill'));
+    rerender(<Harness actions={actions} theLists={{ ...lists, deck: { ...EMPTY_DECK, playlist: 'chill' } }} />);
+    fireEvent.click(within(menu()).getByRole('menuitem', { name: 'Stop' }));
+    expect(actions.onStop).toHaveBeenCalled();
+    expect(actions.onPlay).not.toHaveBeenCalled();
+  });
+
+  it('after a delete, focuses the next row in the section, else the previous, else its heading', () => {
+    function Live() {
+      const [l, setL] = useState<Lists>({ playlists: [chill, warm], deck: EMPTY_DECK });
+      const actions = { ...fakeActions(), onDelete: (id: string) => setL((x) => ({ ...x, playlists: x.playlists.filter((p) => p.id !== id) })) };
+      return <Harness actions={actions} theLists={l} />;
+    }
+    render(<Live />);
+    const del = (name: string) => {
+      fireEvent.contextMenu(rowButton(name));
+      fireEvent.click(within(screen.getByRole('menu', { name })).getByRole('menuitem', { name: 'Delete…' }));
+      fireEvent.click(within(screen.getByRole('menu', { name })).getByRole('menuitem', { name: `Delete ${name}?` }));
+    };
+    const [first, second] = [...rowFor('Chill').parentElement!.querySelectorAll('.isb-name')].map((n) => n.textContent!);
+    del(first);
+    expect(document.activeElement).toBe(rowButton(second));
+    del(second);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: /^Playlists/ }));
+  });
+
+  it('leaves the rename box its own context menu', () => {
+    render(<Harness actions={fakeActions()} />);
+    fireEvent.contextMenu(rowButton('Chill'));
+    fireEvent.click(within(menu()).getByRole('menuitem', { name: 'Rename' }));
+    const box = screen.getByRole('textbox', { name: 'New name for Chill' });
+    expect(fireEvent.contextMenu(box)).toBe(true);
+    expect(fireEvent.contextMenu(rowButton('Library'))).toBe(false);
+  });
+
   it('is not there for the library or starred', () => {
     render(<Harness actions={fakeActions()} />);
     fireEvent.contextMenu(rowButton('Library'));
