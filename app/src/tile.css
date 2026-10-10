@@ -74,7 +74,8 @@
 /* Selected: a ring in --fg, a gap off the picture. An outline, so the gap is
    clear: the pane behind it is a translucent tint over the frost (decision 69),
    and a gap painted in it would show as a darker band. */
-.home .tile[aria-selected='true'] .tile-pic {
+.home .tile[aria-selected='true'] .tile-pic,
+.home .tile[data-picked] .tile-pic {
   outline: 2px solid var(--fg);
   outline-offset: 2px;
 }
@@ -192,26 +193,16 @@
   display: grid;
 }
 
-/* The strip's tip: how to play from it and reorder it, quietly over it. */
-.home .home-strip-tip {
-  flex: none;
-  margin: 0;
-  padding: 0 var(--pad) 8px;
-  color: var(--caption);
-  font-size: 12px;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-/* An empty playlist's note, on the same edge. */
-.home .home-strip-empty {
+/* An empty playlist's note, on the grid's edge. (How to use the grid is its
+   tooltip since decision 70, not a line over it.) */
+.home .home-grid-empty {
   margin-inline: var(--pad);
   color: var(--caption);
   font-size: 12px;
 }
 
-/* The strip: the playlist's presets as tiles, in the order they play, on the grid's spacing. */
-.home .home-strip {
+/* A playlist's grid: its presets as tiles, in the order they play, wrapping, on the library grid's spacing. */
+.home .home-grid {
   --tile-min: 150px;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(var(--tile-min), 1fr));
@@ -317,9 +308,9 @@
   font-size: 12px;
 }
 
-/* Under 1100px the main pane narrows: smaller tiles, three across at 900px with the panel open (HOME_TILE in Home.tsx). */
+/* Under 1100px the main column narrows: smaller tiles (HOME_TILE in Home.tsx). */
 @media (max-width: 1099px) {
-  .home .home-strip {
+  .home .home-grid {
     --tile-min: 124px;
   }
 }

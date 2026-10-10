@@ -477,10 +477,9 @@ describe('the home, read aloud', () => {
       }),
     );
     expect(html).toContain('aria-label="1. a, playing"');
-    expect(html).toContain('aria-label="2. b, next"');
-    // The one picked is marked selected, and the grid says it can hold several.
-    expect(html).toMatch(/aria-label="2\. b, next"[^>]*aria-selected="true"|aria-selected="true"[^>]*aria-label="2\. b, next"/);
-    expect(html).toContain('aria-multiselectable="true"');
+    // The one picked says so, and is marked for its ring.
+    expect(html).toContain('aria-label="2. b, next, picked"');
+    expect(html).toContain('data-picked=""');
   });
 
   it('names every field of how a playlist plays, with no <label> round controls it can’t label', () => {

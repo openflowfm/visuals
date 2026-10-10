@@ -417,7 +417,16 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
 
   const sourceName = paneName(shown, lists);
   const sourceCard = !shown ? null : list && lists ? (
-    <PlaylistHead variant="inspector" list={list} lists={lists} tiles={tiles} total={total} onLists={setLists} onDeleted={() => pick({ kind: 'library' })} onError={(what) => fail(`Couldn't ${what}.`)} />
+    <PlaylistHead
+      variant="inspector"
+      list={list}
+      lists={lists}
+      tiles={tiles}
+      total={total}
+      onLists={setLists}
+      onDeleted={() => pick({ kind: 'library' })}
+      onError={(what) => fail(`Couldn't ${what}.`)}
+    />
   ) : (
     <SourceCard name={sourceName} count={shown.kind === 'starred' ? counts.starred : counts.library} offer={shown.kind === 'library'} />
   );
@@ -496,7 +505,16 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
           }}
         />
       }
-      bar={<TransportBar playing={!deck.hold} onPlayPause={() => run(pl.act({ kind: 'hold', on: null }), 'hold the preset')} onStep={step} stepIn={stepWords} position={position} onAudioError={audioFailed} />}
+      bar={
+        <TransportBar
+          playing={!deck.hold}
+          onPlayPause={() => run(pl.act({ kind: 'hold', on: null }), 'hold the preset')}
+          onStep={step}
+          stepIn={stepWords}
+          position={position}
+          onAudioError={audioFailed}
+        />
+      }
       inspector={
         modes.inspector ? (
           <Inspector
@@ -678,15 +696,13 @@ function useStrip(list: Playlist | null, lists: Lists | null, rows: Prepared[] |
 }
 
 /** What a tile in a playlist's grid says to a screen reader: its place, its name, and whether it plays now, plays next or is gone from the library. */
-export function stripTileSays(t: StripTile, place: number, playing: boolean, next: boolean): string {
-  return [`${place}. ${t.name}`, playing && 'playing', next && 'next', t.missing && 'not in the library any more'].filter(Boolean).join(', ');
+export function stripTileSays(t: StripTile, place: number, playing: boolean, next: boolean, picked = false): string {
+  return [`${place}. ${t.name}`, playing && 'playing', next && 'next', t.missing && 'not in the library any more', picked && 'picked'].filter(Boolean).join(', ');
 }
 
 /** How a playlist's grid is used (its tooltip, and a hint for VoiceOver): how to pick and play, and, in a playlist you can reorder, how to move a preset and take it out. */
 export const stripTip = (reorderable: boolean): string =>
-  reorderable
-    ? 'Click a preset to see it, double-click to play from there · drag it, or ⌥← ⌥→, to move it · ✕ takes it out'
-    : 'Click a preset to see it, double-click to play from there';
+  reorderable ? 'Click a preset to see it, double-click to play from there · drag it, or ⌥← ⌥→, to move it · ✕ takes it out' : 'Click a preset to see it, double-click to play from there';
 
 /** How a click picks a tile: ⇧ a run, ⌘ (or Ctrl) one more, else just it. */
 const tilePickOf = (e: MouseEvent): TilePick => (e.shiftKey ? 'range' : e.metaKey || e.ctrlKey ? 'toggle' : 'select');
@@ -752,7 +768,7 @@ export function PlaylistPane({ list, lists, tiles, total, rows, dropping, picked
     );
 
   return (
-    <ol className="home-grid" aria-label={`${list.name}, in the order it plays`} aria-multiselectable title={tip} data-hint={tip}>
+    <ol className="home-grid" aria-label={`${list.name}, in the order it plays`} title={tip} data-hint={tip}>
       {tiles.map((t, i) => {
         const target = manual && t.index !== null ? itemTarget(list.id, t.index) : undefined;
         const payload: Payload | null = reorderable && t.index !== null ? { kind: 'item', list: list.id, index: t.index, path: t.path, name: t.name, thumbnail: t.thumbnail } : null;
@@ -789,9 +805,8 @@ export function PlaylistPane({ list, lists, tiles, total, rows, dropping, picked
               )
             }
             tabIndex={0}
-            aria-label={stripTileSays(t, i + 1, currentAt(t), nextAt(t))}
+            aria-label={stripTileSays(t, i + 1, currentAt(t), nextAt(t), chosen)}
             aria-current={currentAt(t) ? 'true' : undefined}
-            aria-selected={chosen}
             data-picked={chosen ? '' : undefined}
             data-next={nextAt(t) ? '' : undefined}
             data-missing={t.missing ? '' : undefined}
@@ -810,9 +825,7 @@ export function PlaylistPane({ list, lists, tiles, total, rows, dropping, picked
                 e.preventDefault();
                 e.stopPropagation();
                 const grid = e.currentTarget.parentElement;
-                run(pl.moveItem(list.id, t.index!, to), `move ${t.name}`).then(() =>
-                  requestAnimationFrame(() => (grid?.children[tileFocus(to, tiles.length)] as HTMLElement | undefined)?.focus()),
-                );
+                run(pl.moveItem(list.id, t.index!, to), `move ${t.name}`).then(() => requestAnimationFrame(() => (grid?.children[tileFocus(to, tiles.length)] as HTMLElement | undefined)?.focus()));
               } else if (e.key === 'Enter') {
                 e.preventDefault();
                 onPlay(t);

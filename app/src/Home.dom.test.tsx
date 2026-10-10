@@ -1,19 +1,21 @@
 // @vitest-environment happy-dom
 //
-// The home mounted in a DOM, with the app's commands and events faked: since the
-// library view merged into it (decision 66), it is the one place to browse, so
-// what that view did is checked here. The header offers Home and Live; the big
-// preview sits in its own cell, outside the main pane; choosing a preset in the
-// grid or the strip opens it; ←, → and R step the deck while it follows the grid
-// or a playlist (#137); the preset the app put back stays (#161); and
-// `VISUALS_VIEW=library` opens it on the library pane.
+// The home mounted in a DOM, with the app's commands and events faked. Since
+// decision 70 it is an inspector view: the sidebar picks a source, the main
+// column is the Now Playing hero over a plain grid of the source's presets, the
+// inspector is about the presets picked (else the source), and the transport
+// bar runs along the bottom. A click picks a tile, a double-click or Enter plays
+// it, Esc goes back to the source; ←, → and R step the deck (#137) but leave the
+// grid's own arrows alone; the preset the app put back stays (#161); and
+// `VISUALS_VIEW=library` opens it on the library.
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Entry, LibraryRow, Resume } from './api.ts';
 import { Home, stripTip } from './Home.tsx';
 import { forgetResumedQuery } from './library.ts';
 import { EMPTY_DECK, manual, type Deck, type Playlist } from './playlists.ts';
-import { PANEL_KEY, SEEDED_KEY } from './home.ts';
+import { SEEDED_KEY } from './home.ts';
+import { INSPECTOR_KEY, SIDEBAR_KEY } from './layout/home-model.ts';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -68,6 +70,8 @@ const sent = (name: string) => invoke.mock.calls.filter(([cmd]) => cmd === name)
 /** The deck's actions sent, by kind. */
 const actions = () => sent('act').map((a) => (a.action as { kind: string }).kind);
 
+const viewport = (width: number) => (window as unknown as { happyDOM: { setViewport(v: { width: number; height: number }): void } }).happyDOM.setViewport({ width, height: 900 });
+
 async function mount(props: { start?: string | null; library?: boolean } = {}) {
   const r = render(<Home start={props.start ?? null} onMode={() => {}} library={props.library} />);
   await act(() => vi.advanceTimersByTimeAsync(0));
@@ -76,10 +80,13 @@ async function mount(props: { start?: string | null; library?: boolean } = {}) {
 }
 
 const grid = () => screen.queryByRole('listbox', { name: 'presets' });
+const tile = (name: string) => within(grid()!).getByRole('option', { name: new RegExp(`^${name} — `) });
+const header = () => document.querySelector<HTMLElement>('.vf-header')!;
+const inspector = () => document.querySelector('.insp');
 
 beforeEach(() => {
-  // A wide window, with the Now Playing panel beside the grid, unless a test says otherwise.
-  (window as unknown as { happyDOM: { setViewport(v: { width: number; height: number }): void } }).happyDOM.setViewport({ width: 1440, height: 900 });
+  // A wide window: the sidebar and the inspector docked, unless a test says otherwise.
+  viewport(1440);
   vi.useFakeTimers();
   resume = null;
   deck = EMPTY_DECK;
@@ -96,7 +103,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('the home, the one place to browse', () => {
+describe('the home, an inspector view (decision 70)', () => {
   it('offers Home and Live in the header, and no library view', async () => {
     await mount();
     const views = screen.getByRole('radiogroup', { name: 'view' });
@@ -107,167 +114,136 @@ describe('the home, the one place to browse', () => {
     ).toEqual(['home', 'live']);
   });
 
-  it('has only the mark, home | live and ⚙ in the header, and no key-hint footer', async () => {
+  it('has the sidebar’s toggle, the search and Filter, the inspector’s toggle and ⚙ in the header, and no key-hint footer', async () => {
     await mount({ library: true });
-    const header = document.querySelector('.vf-header')!;
-    expect(
-      within(header as HTMLElement)
-        .getAllByRole('button')
-        .map((b) => b.getAttribute('aria-label') ?? b.textContent),
-    ).toEqual(['settings']);
-    expect(header.querySelector('.audio-input')).toBeNull();
+    const h = header();
+    const buttons = within(h)
+      .getAllByRole('button')
+      .map((b) => b.getAttribute('aria-label') ?? b.textContent);
+    expect(buttons[0]).toBe('sidebar');
+    expect(buttons.slice(-2)).toEqual(['info', 'settings']);
+    expect(buttons).toContain('filter');
+    expect(within(h).getByRole('searchbox', { name: 'search presets' })).toBeTruthy();
     expect(document.querySelector('.vf-footer')).toBeNull();
   });
 
-  it('shows the big preview in the Now Playing panel, outside the main pane, and the bar takes a small one when the panel closes', async () => {
-    await mount({ library: true });
-    let preview = screen.getByRole('img', { name: 'preview of the playing preset' });
-    expect(preview.closest('.now-panel')).toBeTruthy();
-    expect(screen.getByRole('main').contains(preview)).toBe(false);
-    const toggle = screen.getByRole('button', { name: 'now playing panel' });
-    expect(toggle.getAttribute('aria-pressed')).toBe('true');
-    fireEvent.click(toggle);
-    expect(document.querySelector('.now-panel')).toBeNull();
-    // Still one preview, in the bar; clicking it opens the panel again.
-    preview = screen.getByRole('img', { name: 'preview of the playing preset' });
-    expect(preview.closest('.home-bar')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'show the now playing panel' }));
-    expect(screen.getAllByRole('img', { name: 'preview of the playing preset' })).toHaveLength(1);
-    expect(document.querySelector('.now-panel')).toBeTruthy();
-    // Closed stays closed next time.
-    fireEvent.click(screen.getByRole('button', { name: 'now playing panel' }));
-    cleanup();
-    await mount({ library: true });
-    expect(document.querySelector('.now-panel')).toBeNull();
-  });
-
-  // happy-dom lays nothing out, so where things land is worked out from the
-  // home's grid: each of `.app.home`'s cells by its computed grid-row and
-  // grid-column (3 columns, 3 rows at most), and anything not displayed left out.
-  const paints = (el: Element) => {
-    const bg = getComputedStyle(el).backgroundColor;
-    return !!bg && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'none';
-  };
-  const shown = (el: Element | null): boolean => !el || (getComputedStyle(el).display !== 'none' && shown(el.parentElement));
-  const span = (v: string): [number, number] => {
-    const [a, b] = v.split('/').map((s) => s.trim());
-    const start = Number(a) || 1;
-    const end = b === undefined || b === '' || b === 'auto' ? start + 1 : Number(b) < 0 ? 4 + Number(b) + 1 : Number(b);
-    return [start, end];
-  };
-  const area = (el: Element) => {
-    const s = getComputedStyle(el);
-    return { rows: span(s.gridRow || s.gridRowStart), cols: span(s.gridColumn || s.gridColumnStart) };
-  };
-  const meet = (a: [number, number], b: [number, number]) => a[0] < b[1] && b[0] < a[1];
-  const label = (el: Element) => `${el.tagName.toLowerCase()}.${el.className}`;
-
-  /** Whatever paints a background under the preview box: its ancestors, and anything in a grid cell that shares its place. */
-  function paintedUnder(preview: Element): string[] {
-    const painted: string[] = [];
-    for (let el: Element | null = preview; el; el = el.parentElement) if (paints(el)) painted.push(`${label(el)} (holds it)`);
-    const cells = [...document.querySelector('.app.home')!.children];
-    const own = cells.find((c) => c.contains(preview))!;
-    const at = area(own);
-    for (const cell of cells) {
-      if (cell === own || !shown(cell)) continue;
-      const there = area(cell);
-      if (!meet(there.rows, at.rows) || !meet(there.cols, at.cols)) continue;
-      for (const el of [cell, ...cell.querySelectorAll('*')]) if (shown(el) && paints(el)) painted.push(`${label(el)} (shares its cell)`);
-    }
-    return painted;
-  }
-
-  // The preview is a hole: the native view the engine draws in sits under the
-  // page, so a background on anything under the box covers the picture. Wide,
-  // it is in the Now Playing panel, or in the bar with the panel closed; narrow,
-  // in the bar, or in the panel, which then takes the main pane's place.
-  it.each([
-    [1440, true, '.now-panel'],
-    [1440, false, '.home-bar'],
-    [800, false, '.home-bar'],
-    [800, true, '.now-panel'],
-  ] as const)('paints nothing under the preview at %ipx, panel open: %s', async (width, open, where) => {
-    (window as unknown as { happyDOM: { setViewport(v: { width: number; height: number }): void } }).happyDOM.setViewport({ width, height: 900 });
-    if (!open) localStorage.setItem(PANEL_KEY, '0');
+  it('shows the preview in the Now Playing hero, over the grid, and paints nothing under it', async () => {
     const style = document.createElement('style');
     // Read from disk: vitest hands a test empty CSS for an import, even `?raw`.
-    // The theme's surfaces come from the widgets' stylesheet; any colour will do.
     const theme = ':root { --bg: rgb(1, 1, 1); --panel: rgb(2, 2, 2); --rail: rgb(3, 3, 3); --sel: rgb(4, 4, 4); --surface-control: rgb(5, 5, 5); }';
-    const sheets = ['app.css', 'home.css', 'tile.css', 'nowpanel.css', 'homebar.css', 'library.css', 'sources.css', 'playlisthead.css', 'popover.css'];
+    const sheets = ['app.css', 'home.css', 'tile.css', 'library.css', 'popover.css', 'layout/layout.css', 'layout/hero.css', 'layout/transport-bar.css'];
     style.textContent = [theme, ...sheets.map(css)].join('\n');
     document.head.append(style);
     try {
       await mount({ library: true });
-      if (width < 900 && open) fireEvent.click(screen.getByRole('button', { name: 'show the now playing panel' }));
       const previews = screen.getAllByRole('img', { name: 'preview of the playing preset' });
       expect(previews).toHaveLength(1);
-      expect(previews[0].closest(where)).toBeTruthy();
-      expect(paintedUnder(previews[0])).toEqual([]);
+      expect(previews[0].closest('.hero')).toBeTruthy();
+      expect(grid()!.contains(previews[0])).toBe(false);
+      const paints = (el: Element) => {
+        const bg = getComputedStyle(el).backgroundColor;
+        return !!bg && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'none';
+      };
+      const painted: string[] = [];
+      for (let el: Element | null = previews[0]; el; el = el.parentElement) if (paints(el)) painted.push(`${el.tagName.toLowerCase()}.${el.className}`);
+      expect(painted).toEqual([]);
     } finally {
       style.remove();
     }
   });
 
-  it('would catch the main pane drawn under a narrow panel (the check itself)', async () => {
-    (window as unknown as { happyDOM: { setViewport(v: { width: number; height: number }): void } }).happyDOM.setViewport({ width: 800, height: 900 });
-    const style = document.createElement('style');
-    // home.css without the rule that keeps the main pane out from under the panel.
-    const home = css('home.css').replace(/\.app\.home\[data-panel\] main\.home-main \{\s*display: none;\s*\}/, '');
-    expect(home).not.toBe(css('home.css'));
-    style.textContent = [':root { --bg: rgb(1, 1, 1); }', css('app.css'), home].join('\n');
-    document.head.append(style);
-    try {
-      await mount({ library: true });
-      fireEvent.click(screen.getByRole('button', { name: 'show the now playing panel' }));
-      expect(paintedUnder(screen.getByRole('img', { name: 'preview of the playing preset' }))).toContain('main.home-main (shares its cell)');
-    } finally {
-      style.remove();
-    }
-  });
-
-  it('puts focus back on the bar when the panel closes, and into the panel when the small preview opens it', async () => {
+  it('docks the inspector in a wide window, and keeps it closed once closed there', async () => {
     await mount({ library: true });
-    fireEvent.click(screen.getByRole('button', { name: 'close now playing' }));
-    expect(document.querySelector('.now-panel')).toBeNull();
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'now playing panel' }));
-    fireEvent.click(screen.getByRole('button', { name: 'show the now playing panel' }));
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'close now playing' }));
-  });
-
-  it('in a narrow window, closing the panel puts focus on the small preview that opens it again', async () => {
-    (window as unknown as { happyDOM: { setViewport(v: { width: number; height: number }): void } }).happyDOM.setViewport({ width: 800, height: 900 });
-    await mount({ library: true });
-    fireEvent.click(screen.getByRole('button', { name: 'show the now playing panel' }));
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'close now playing' }));
-    fireEvent.click(screen.getByRole('button', { name: 'close now playing' }));
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'show the now playing panel' }));
-  });
-
-  it('says how to play from and reorder a playlist over its strip', async () => {
-    playlists = [manual('1', 'Warm up', [item(ROWS[0]), item(ROWS[2])])];
-    deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path };
-    await mount();
-    expect(document.querySelector('.home-strip-tip')!.textContent).toBe(stripTip(true));
-  });
-
-  it('keeps the filter chips behind "filter · n", open or closed as left', async () => {
-    await mount({ library: true });
-    expect(screen.queryByRole('group', { name: 'groups' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'filter' }));
-    expect(screen.getByRole('group', { name: 'groups' })).toBeTruthy();
+    expect(inspector()).toBeTruthy();
+    const toggle = within(header()).getByRole('button', { name: 'info' });
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(toggle);
+    expect(inspector()).toBeNull();
+    expect(localStorage.getItem(INSPECTOR_KEY)).toBe('0');
     cleanup();
     await mount({ library: true });
+    expect(inspector()).toBeNull();
+    // ⌘I opens it again.
+    fireEvent.keyDown(window, { key: 'i', metaKey: true });
+    expect(inspector()).toBeTruthy();
+  });
+
+  it('starts with the inspector closed under 1200 px, and opening it there is not kept', async () => {
+    viewport(1000);
+    localStorage.setItem(INSPECTOR_KEY, '1');
+    await mount({ library: true });
+    expect(inspector()).toBeNull();
+    fireEvent.click(within(header()).getByRole('button', { name: 'info' }));
+    expect(inspector()).toBeTruthy();
+    expect(localStorage.getItem(INSPECTOR_KEY)).toBe('1');
+  });
+
+  it('shows or hides the sidebar with its toggle and ⌃⌘S, kept where it docks', async () => {
+    await mount({ library: true });
+    const toggle = within(header()).getByRole('button', { name: 'sidebar' });
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.keyDown(window, { key: 's', metaKey: true, ctrlKey: true });
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    expect(localStorage.getItem(SIDEBAR_KEY)).toBe('0');
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('picks a preset with a click and shows it in the inspector; Esc goes back to the source', async () => {
+    await mount({ library: true, start: ROWS[0].path });
+    invoke.mockClear();
+    fireEvent.click(tile('b'));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(sent('open')).toEqual([]);
+    expect(tile('b').getAttribute('aria-selected')).toBe('true');
+    expect(within(inspector() as HTMLElement).getByRole('heading', { name: 'b' })).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(tile('b').getAttribute('aria-selected')).toBe('false');
+    expect(within(inspector() as HTMLElement).queryByRole('heading', { name: 'b' })).toBeNull();
+  });
+
+  it('plays a preset on a double-click, and the deck follows the grid from it', async () => {
+    await mount({ library: true, start: ROWS[0].path });
+    fireEvent.doubleClick(tile('b'));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(sent('open').map((a) => a.path)).toContain(ROWS[1].path);
+    expect(sent('act').some((a) => (a.action as { kind: string }).kind === 'query')).toBe(true);
+  });
+
+  it('plays the preset highlighted in the grid on Enter', async () => {
+    await mount({ library: true, start: ROWS[0].path });
+    const g = grid()!;
+    fireEvent.focus(g);
+    fireEvent.keyDown(g, { key: 'ArrowRight' });
+    fireEvent.keyDown(g, { key: 'Enter' });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(sent('open').map((a) => a.path)).toContain(ROWS[1].path);
+  });
+
+  it('keeps the filter behind "Filter ▾" in the header', async () => {
+    await mount({ library: true });
+    expect(screen.queryByRole('group', { name: 'groups' })).toBeNull();
+    fireEvent.click(within(header()).getByRole('button', { name: 'filter' }));
     expect(screen.getByRole('group', { name: 'groups' })).toBeTruthy();
+  });
+
+  it('puts focus in the search on ⌘F, opening the library from a playlist', async () => {
+    playlists = [manual('1', 'Warm up', [item(ROWS[0])])];
+    deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path };
+    await mount();
+    expect(grid()).toBeNull();
+    fireEvent.keyDown(window, { key: 'f', metaKey: true });
+    await act(() => vi.advanceTimersByTimeAsync(50));
+    expect(grid()).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole('searchbox', { name: 'search presets' }));
   });
 
   it('shows only the starred presets under Starred', async () => {
     invoke.mockImplementation((cmd: string) => Promise.resolve(cmd === 'library_data' ? { version: 1, presets: { b: { star: true, hidden: false, tags: [] } } } : answer(cmd)));
     await mount({ library: true });
-    // The sidebar's Starred row, not the group switch's "★ Starred".
-    fireEvent.click(screen.getByTitle('The presets you starred'));
+    fireEvent.click(within(document.querySelector('.lay-side') as HTMLElement).getByRole('button', { name: /^Starred/ }));
     await act(() => vi.advanceTimersByTimeAsync(0));
-    expect(screen.getByRole('heading', { name: 'Starred' })).toBeTruthy();
     expect(
       within(grid()!)
         .getAllByRole('option')
@@ -275,8 +251,9 @@ describe('the home, the one place to browse', () => {
     ).toEqual(['b']);
   });
 
-  it('opens on the library pane for VISUALS_VIEW=library, even with playlists', async () => {
+  it('opens on the library for VISUALS_VIEW=library, even with playlists', async () => {
     playlists = [manual('1', 'Warm up', [item(ROWS[0])])];
+    deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path };
     await mount({ library: true });
     expect(grid()).toBeTruthy();
   });
@@ -289,73 +266,78 @@ describe('the home, the one place to browse', () => {
     deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path };
     r = await mount();
     expect(grid()).toBeNull();
-    expect(screen.getByRole('heading', { name: 'Warm up' })).toBeTruthy();
-  });
-
-  it('plays a preset chosen in the grid, and the deck follows the grid from it', async () => {
-    await mount({ library: true, start: ROWS[0].path });
-    const g = grid()!;
-    fireEvent.focus(g);
-    fireEvent.keyDown(g, { key: 'ArrowRight' });
-    fireEvent.keyDown(g, { key: 'Enter' });
-    await act(() => vi.advanceTimersByTimeAsync(0));
-    expect(sent('open').map((a) => a.path)).toContain(ROWS[1].path);
-    expect(sent('act').some((a) => (a.action as { kind: string; at?: string }).kind === 'query')).toBe(true);
-  });
-
-  it('plays a preset chosen in a playlist strip from there', async () => {
-    playlists = [manual('1', 'Warm up', [item(ROWS[0]), item(ROWS[2])])];
-    await mount();
-    fireEvent.click(screen.getByRole('listitem', { name: 'Warm up, playlist, 2 presets' }));
-    fireEvent.click(screen.getByRole('listitem', { name: '2. c' }));
-    await act(() => vi.advanceTimersByTimeAsync(0));
-    expect(sent('act').at(-1)).toEqual({ action: { kind: 'load', playlist: 0, index: 1 } });
+    expect(screen.getByRole('list', { name: 'Warm up, in the order it plays' })).toBeTruthy();
   });
 });
 
-describe('the tiles on the home (decision 68)', () => {
-  /** The home's own stylesheets, so the grid can read `--pad` from them. */
-  function withCss(more = '') {
-    const style = document.createElement('style');
-    style.textContent = [':root { --bg: rgb(1, 1, 1); }', css('home.css'), css('tile.css'), more].join('\n');
-    document.head.append(style);
-    return () => style.remove();
-  }
+describe('a playlist’s grid', () => {
+  beforeEach(() => {
+    playlists = [manual('1', 'Warm up', [item(ROWS[0]), item(ROWS[2])])];
+  });
 
+  it('says how to pick, play and reorder it in its tooltip, not a line over it', async () => {
+    deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path };
+    await mount();
+    const list = screen.getByRole('list', { name: 'Warm up, in the order it plays' });
+    expect(list.getAttribute('title')).toBe(stripTip(true));
+    expect(list.getAttribute('data-hint')).toBe(stripTip(true));
+    expect(document.querySelector('.home-strip-tip')).toBeNull();
+  });
+
+  it('picks a tile with a click, and plays from it on a double-click', async () => {
+    deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path };
+    await mount();
+    invoke.mockClear();
+    const second = screen.getByRole('listitem', { name: '2. c' });
+    fireEvent.click(second);
+    expect(screen.getByRole('listitem', { name: '2. c, picked' })).toBe(second);
+    expect(sent('act')).toEqual([]);
+    expect(within(inspector() as HTMLElement).getByRole('heading', { name: 'c' })).toBeTruthy();
+    fireEvent.doubleClick(second);
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(sent('act').at(-1)).toEqual({ action: { kind: 'go', index: 1 } });
+  });
+
+  it('loads the playlist from the tile when it isn’t the one playing', async () => {
+    await mount();
+    fireEvent.click(within(document.querySelector('.lay-side') as HTMLElement).getByRole('button', { name: /^Warm up/ }));
+    fireEvent.keyDown(screen.getByRole('listitem', { name: '2. c' }), { key: 'Enter' });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(sent('act').at(-1)).toEqual({ action: { kind: 'load', playlist: 0, index: 1 } });
+  });
+
+  it('shows the shared tile, with the name, the author line, its place and the playing mark', async () => {
+    const rows = [{ ...ROWS[0], authors: ['geiss', 'flexi'] }, ROWS[1], ROWS[2]];
+    invoke.mockImplementation((cmd: string) => Promise.resolve(cmd === 'library_index' ? rows : answer(cmd)));
+    deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path };
+    await mount();
+    const [first, second] = [...document.querySelectorAll('.home-grid > li.tile')];
+    expect(first.querySelector('.tile-name')!.textContent).toBe('a');
+    expect(first.querySelector('.tile-by')!.textContent).toBe('geiss & flexi');
+    expect(first.hasAttribute('data-playing')).toBe(true);
+    expect(first.querySelector('.home-tile-n')!.textContent).toBe('1');
+    expect(second.hasAttribute('data-playing')).toBe(false);
+  });
+});
+
+describe('the library grid on the home (decision 68)', () => {
   it.each([
-    [1440, '8px 22px 22px', ''],
-    [1000, '8px 16px 22px', ''],
-    [1440, '8px 30px 22px', '.app.home { --pad: 30px; }'],
-  ] as const)('lay the grid out at %ipx on the main pane’s padding (%s), 12 px across and 16 px down', async (width, padding, more) => {
-    (window as unknown as { happyDOM: { setViewport(v: { width: number; height: number }): void } }).happyDOM.setViewport({ width, height: 900 });
-    const done = withCss(more);
+    [1440, '8px 22px 22px'],
+    [1000, '8px 16px 22px'],
+  ] as const)('lays out at %ipx on the main column’s padding (%s), 12 px across and 16 px down', async (width, padding) => {
+    viewport(width);
+    const style = document.createElement('style');
+    style.textContent = [':root { --bg: rgb(1, 1, 1); }', css('home.css'), css('tile.css')].join('\n');
+    document.head.append(style);
     try {
       await mount({ library: true });
       const win = document.querySelector<HTMLElement>('.lib-grid-window')!;
       expect(win.style.padding).toBe(padding);
       expect(win.style.gap).toBe('16px 12px');
-      // The shared tile, not the lab editor's.
       expect(grid()!.querySelector('.tile .tile-pic')).toBeTruthy();
-      expect(grid()!.querySelector('.lib-tile')).toBeNull();
     } finally {
-      done();
+      style.remove();
     }
-  });
-
-  it('show the same tile in a playlist’s strip, with the name, the author line and the playing mark', async () => {
-    const rows = [{ ...ROWS[0], authors: ['geiss', 'flexi'] }, ROWS[1], ROWS[2]];
-    invoke.mockImplementation((cmd: string) => Promise.resolve(cmd === 'library_index' ? rows : answer(cmd)));
-    playlists = [manual('1', 'Warm up', [item(ROWS[0]), item(ROWS[2])])];
-    deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path };
-    await mount();
-    const [first, second] = [...document.querySelectorAll('.home-strip > li.tile')];
-    expect(first.querySelector('.tile-name')!.textContent).toBe('a');
-    expect(first.querySelector('.tile-by')!.textContent).toBe('geiss & flexi');
-    expect(first.hasAttribute('data-playing')).toBe(true);
-    expect(first.querySelector('.tile-live')).toBeTruthy();
-    expect(first.querySelector('.home-tile-n')!.textContent).toBe('1');
-    expect(second.querySelector('.tile-by')!.textContent).toBe('A');
-    expect(second.hasAttribute('data-playing')).toBe(false);
   });
 });
 
@@ -378,25 +360,40 @@ describe('← → and R on the home', () => {
     expect(sent('open').map((a) => a.path)).toEqual([ROWS[1].path]);
   });
 
-  it('leave the page alone while typing in the search', async () => {
+  it('leave the grid’s own arrows, and the search, alone', async () => {
     deck = { ...EMPTY_DECK, current: ROWS[0].path, query: { groups: {}, text: '' } };
     await mount({ library: true });
     invoke.mockClear();
     fireEvent.keyDown(screen.getByRole('searchbox', { name: 'search presets' }), { key: 'r' });
+    const g = grid()!;
+    fireEvent.focus(g);
+    fireEvent.keyDown(g, { key: 'ArrowRight' });
+    fireEvent.keyDown(document.querySelector('.lay-side button')!, { key: 'ArrowLeft' });
     await act(() => vi.advanceTimersByTimeAsync(0));
     expect(actions()).toEqual([]);
   });
 });
 
+describe('the transport bar', () => {
+  it('runs the time line while the deck moves on by itself, and blanks it while held', async () => {
+    deck = { ...EMPTY_DECK, auto: true, seconds: 30, current: ROWS[0].path };
+    await mount({ library: true, start: ROWS[0].path });
+    await act(() => vi.advanceTimersByTimeAsync(3000));
+    const bar = screen.getByRole('progressbar', { name: 'time on this preset' });
+    expect(bar.getAttribute('aria-valuemax')).toBe('30');
+    expect(Number(bar.getAttribute('aria-valuenow'))).toBeGreaterThanOrEqual(2);
+    act(() => heard.get('live')?.forEach((f) => f({ payload: { deck: { ...deck, hold: true }, opened: null, path: ROWS[0].path, error: null } })));
+    expect(screen.queryByRole('progressbar', { name: 'time on this preset' })).toBeNull();
+  });
+});
+
 describe('picking up where the app left off', () => {
-  it('names the preset put back without opening another', async () => {
+  it('names the preset put back in the hero without opening another', async () => {
     resume = { playlist: null, index: null, current: ROWS[2].path, source: null, query: null };
     deck = { ...EMPTY_DECK, current: ROWS[2].path };
     await mount();
     expect(sent('open')).toEqual([]);
-    // Named in the bottom bar and the Now Playing panel.
-    expect(document.querySelector('.home-bar')!.textContent).toContain('c');
-    expect(within(document.querySelector('.now-panel') as HTMLElement).getByRole('heading', { name: 'c' })).toBeTruthy();
+    expect(within(document.querySelector('.hero') as HTMLElement).getByRole('heading', { name: 'c' })).toBeTruthy();
   });
 
   it('shows the filter it picked up in the library, with the deck following it', async () => {
@@ -404,8 +401,9 @@ describe('picking up where the app left off', () => {
     resume = { playlist: null, index: null, current: ROWS[1].path, source: null, query };
     deck = { ...EMPTY_DECK, current: ROWS[1].path, query };
     await mount();
-    expect(screen.getByRole('button', { name: 'stop filtering by A' })).toBeTruthy();
     expect(screen.getByRole('searchbox', { name: 'search presets' })).toHaveProperty('value', 'b');
+    fireEvent.click(within(header()).getByRole('button', { name: 'filter' }));
+    expect(screen.getByRole('button', { name: 'stop filtering by A' })).toBeTruthy();
   });
 });
 
