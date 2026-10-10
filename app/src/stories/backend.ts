@@ -50,6 +50,8 @@ export interface World {
   hang: string[];
   /** Commands that fail, with what they say. */
   fail: Record<string, string>;
+  /** Seeds what the app would make up (a random pick, the meter's wobble), so a story draws the same every run. */
+  seed: number;
 }
 
 export const world = (over: Partial<World> = {}): World => ({
@@ -81,8 +83,21 @@ export const world = (over: Partial<World> = {}): World => ({
   start: null,
   hang: [],
   fail: {},
+  seed: 1,
   ...over,
 });
+
+/** Mulberry32: a small seeded generator, 0 ≤ n < 1. */
+export function seeded(seed: number): () => number {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 type Args = Record<string, unknown>;
 const never = new Promise<never>(() => {});
@@ -107,6 +122,7 @@ function play(lists: pl.Lists, list: pl.Playlist | null, index: number | null, p
 
 /** The command handler over `w`, which it changes as the app would. */
 export function handler(w: World) {
+  const random = seeded(w.seed);
   const lists = (next: pl.Lists): pl.Lists => {
     w.lists = next;
     void emit('lists', next);
@@ -154,8 +170,8 @@ export function handler(w: World) {
         return;
       case 'random':
         if (deck.hold) return;
-        if (items.length) at(Math.floor(Math.random() * items.length));
-        else live({ ...deck, current: w.rows[Math.floor(Math.random() * w.rows.length)].path });
+        if (items.length) at(Math.floor(random() * items.length));
+        else live({ ...deck, current: w.rows[Math.floor(random() * w.rows.length)].path });
         return;
       case 'go':
         at(action.index as number);
@@ -345,6 +361,8 @@ export function handler(w: World) {
       // Live.
       case 'fx_state':
         return w.fx;
+      // Link's frame is the fixture's, fixed: stamped as sampled just now, so the
+      // page reads its beat and bar as given rather than running them on.
       case 'link_state':
         return { ...w.link, at: Date.now() };
       case 'link_enable':
@@ -378,7 +396,7 @@ export function handler(w: World) {
       case 'stats':
         return w.stats;
       case 'levels':
-        return w.levels.map((l) => Math.max(0, Math.min(1, l * (0.75 + Math.random() * 0.5)))) as [number, number];
+        return w.levels.map((l) => Math.max(0, Math.min(1, l * (0.75 + random() * 0.5)))) as [number, number];
       case 'place_bench':
       case 'set_previews':
       case 'test_sound':
