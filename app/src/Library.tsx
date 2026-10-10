@@ -142,12 +142,21 @@ const FIND_FROM = 12;
 /** The most values an open group lists at once (authors run to thousands); the find box reaches the rest. */
 const VALUES_CAP = 150;
 
-/** The index rows, read again (debounced) as the presets folder changes; null until read, or when it can't be. */
-function useIndex(): LibraryRow[] | null {
+/**
+ * The index rows, read again (debounced) as the presets folder changes; null until read, or when it can't be.
+ * `settled` is whether the first read has answered or failed: until then the fallback rows are a guess the deck shouldn't follow.
+ */
+function useIndex(): { index: LibraryRow[] | null; settled: boolean } {
   const [index, setIndex] = useState<LibraryRow[] | null>(null);
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
     // One read at a time: a change during a read reads once more after it, so an older answer never lands last.
-    const reader = oneAtATime(api.libraryIndex, setIndex);
+    const read = () =>
+      api.libraryIndex().catch((e: unknown) => {
+        setFailed(true);
+        throw e;
+      });
+    const reader = oneAtATime(read, setIndex);
     reader.run();
     const reread = debounced(reader.run, REREAD.wait, REREAD.most);
     const stop = rereadOn(onChanged, reread);
@@ -157,7 +166,7 @@ function useIndex(): LibraryRow[] | null {
       stop();
     };
   }, []);
-  return index;
+  return { index, settled: index !== null || failed };
 }
 
 /** The user's library data, followed through `library-changed`; null until read. */
@@ -206,7 +215,7 @@ function rereadOnData(set: (d: LibraryData) => unknown): () => void {
  * the presets it would show.
  */
 export function Library({ entries, loaded, search, onSearch, current, into, onLoad, onAdd, onPress, tileMin, home }: LibraryProps) {
-  const index = useIndex();
+  const { index, settled } = useIndex();
   const [data, setData] = useLibraryData();
   // A dev run on the home may start filtered, for a headless capture of the filter (`VITE_HOME_FILTER=style:Hypnotic`).
   const dev = home ? devStart() : null;
@@ -272,19 +281,33 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
     };
   }, [one]);
 
-  const handlers = useRef({ onLoad, onAdd, onPress, onSearch, shown, selection, anchor, active, entryOf, query, current, indexed: !!index });
-  handlers.current = { onLoad, onAdd, onPress, onSearch, shown, selection, anchor, active, entryOf, query, current, indexed: !!index };
+  const handlers = useRef({ onLoad, onAdd, onPress, onSearch, shown, selection, anchor, active, entryOf, query, current, settled });
+  handlers.current = { onLoad, onAdd, onPress, onSearch, shown, selection, anchor, active, entryOf, query, current, settled };
 
   // Playing from the grid: open it, and have ←, → and R follow the grid (the deck keeps a loaded playlist).
   const following = useRef(false);
   const play = useCallback((p: Prepared) => {
     const h = handlers.current;
     h.onLoad(h.entryOf(p));
-    // Until the index has loaded, the grid's rows are a guess Rust's resolve may not agree with: play with nothing followed.
-    if (!h.indexed) return;
+    // Until the index has answered (or failed), the grid's rows are a guess Rust's resolve may not agree with:
+    // play with nothing followed, and follow from what plays once it has.
+    if (!h.settled) {
+      owed.current = p.row.path;
+      return;
+    }
+    owed.current = null;
     following.current = true;
     followGrid(h.query, p.row.path);
   }, []);
+  const owed = useRef<string | null>(null);
+  useEffect(() => {
+    if (!settled || owed.current === null) return;
+    const h = handlers.current;
+    const at = h.current ?? owed.current;
+    owed.current = null;
+    following.current = true;
+    followGrid(h.query, at);
+  }, [settled]);
   // A playlist loaded or let go: stop following until the grid opens a preset again.
   const deckPlaylist = useRef<string | null | undefined>(undefined);
   const deckMoved = (deck: pl.Deck) => {
