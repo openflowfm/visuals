@@ -80,7 +80,8 @@ function useInspector(start: Start) {
     playlists,
     library: FIELD,
     onSet: (keys, change) => setData((d) => applied(d, keys, change)),
-    onAddTo: (id, paths) => setPlaylists((ls) => ls.map((l) => (l.id === id ? { ...l, items: [...l.items, ...paths.map((path) => ({ path, name: path, group: '', missing: false, hash: null }))] } : l))),
+    onAddTo: (id, paths) =>
+      setPlaylists((ls) => ls.map((l) => (l.id === id ? { ...l, items: [...l.items, ...paths.map((path) => ({ path, name: path, group: '', missing: false, hash: null }))] } : l))),
     onBack: () => setPicked(null),
     onPlay: () => setPicked(null),
     onEdit: () => {},
@@ -113,39 +114,46 @@ function InWindow({ option, start }: { option: Letter; start: Start }) {
   // A window of 1440×900 whatever the runner's viewport, so the column and the panel lay out as they would there.
   return (
     <div style={{ width: 1440, height: 900 }}>
-    <HomeLayout
-      lights
-      sidebar={<InsetSidebar sections={SIDEBAR} selected={selected} onSelect={setSelected} collapsed={[]} onToggle={() => {}} />}
-      header={
-        <Header view="home" onChange={() => {}}>
-          <span className="vf-fill" />
-          <button type="button" className="insp-toggle" aria-label="show the preset's details" aria-pressed={open} title={open ? 'Hide the details' : 'Show the details'} onClick={() => setOpen((o) => !o)}>
-            <Icon name="sidebar" />
-          </button>
-          <Button tone="quiet" onPress={() => {}} label="settings" title="Settings: sound, presets, the output, quality and more">
-            ⚙
-          </Button>
-        </Header>
-      }
-      hero={
-        <Hero
-          preset={playing}
-          picture={playing ? NOW.picture : null}
-          playing={NOW.playing}
-          from={playing ? NOW.from : ''}
-          starred={!!playing && starred.includes(playing.key)}
-          onPlayPause={() => {}}
-          onNext={() => {}}
-          onStar={() => {}}
-          onAdd={() => {}}
-        />
-      }
-      inspector={open ? <Option {...props} /> : undefined}
-    >
-      {SECTIONS.map((s) => (
-        <Section key={s.title} title={s.title} rows={s.rows} playing={playing?.path ?? null} starred={starred} onPlay={pick} />
-      ))}
-    </HomeLayout>
+      <HomeLayout
+        lights
+        sidebar={<InsetSidebar sections={SIDEBAR} selected={selected} onSelect={setSelected} collapsed={[]} onToggle={() => {}} />}
+        header={
+          <Header view="home" onChange={() => {}}>
+            <span className="vf-fill" />
+            <button
+              type="button"
+              className="insp-toggle"
+              aria-label="show the preset's details"
+              aria-pressed={open}
+              title={open ? 'Hide the details' : 'Show the details'}
+              onClick={() => setOpen((o) => !o)}
+            >
+              <Icon name="sidebar" />
+            </button>
+            <Button tone="quiet" onPress={() => {}} label="settings" title="Settings: sound, presets, the output, quality and more">
+              ⚙
+            </Button>
+          </Header>
+        }
+        hero={
+          <Hero
+            preset={playing}
+            picture={playing ? NOW.picture : null}
+            playing={NOW.playing}
+            from={playing ? NOW.from : ''}
+            starred={!!playing && starred.includes(playing.key)}
+            onPlayPause={() => {}}
+            onNext={() => {}}
+            onStar={() => {}}
+            onAdd={() => {}}
+          />
+        }
+        inspector={open ? <Option {...props} /> : undefined}
+      >
+        {SECTIONS.map((s) => (
+          <Section key={s.title} title={s.title} rows={s.rows} playing={playing?.path ?? null} starred={starred} onPlay={pick} />
+        ))}
+      </HomeLayout>
     </div>
   );
 }
