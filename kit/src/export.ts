@@ -3,7 +3,8 @@
 // Exports the kit's symbols whose names start with any of the prefixes (Sketch
 // names are paths: `Toggles - Switches/Light/Content Area/3 Rg/…`) as PNGs,
 // drawn by Sketch itself with sketchtool, under DIR in one folder per name
-// segment, and writes DIR/sheet.html laying them out. An unpacked kit is
+// segment, and writes DIR/sheet.html laying out every symbol exported there
+// so far (so a big kit can go in several runs). An unpacked kit is
 // zipped into DIR/kit.sketch first, since sketchtool reads only `.sketch`
 // files. Prints each sketchtool command it runs. Exit 0 when every symbol was
 // exported, 1 when sketchtool failed or nothing matched, 2 on a usage error.
@@ -40,7 +41,8 @@ if (!existsSync(kit)) usage(`no kit at ${kit}`);
 const out = resolve(opts.out);
 mkdirSync(out, { recursive: true });
 
-const symbols = select(readSymbols(kit), prefixes);
+const all = readSymbols(kit);
+const symbols = select(all, prefixes);
 if (symbols.length === 0) {
   console.error(`export: no symbol starts with ${prefixes.map((p) => `"${p}"`).join(' or ')}`);
   process.exit(1);
@@ -72,6 +74,8 @@ for (let i = 0; i < symbols.length; i += 200) {
 
 const missing = symbols.filter((s) => !existsSync(join(out, exportedFile(s.name, opts.scale))));
 for (const s of missing) console.error(`export: not written: ${exportedFile(s.name, opts.scale)}`);
-writeFileSync(join(out, 'sheet.html'), sheetHtml(symbols, opts.scale));
+// The sheet shows everything exported into DIR so far, from this run or earlier ones.
+const exported = all.filter((s) => existsSync(join(out, exportedFile(s.name, opts.scale))));
+writeFileSync(join(out, 'sheet.html'), sheetHtml(exported, opts.scale));
 console.log(`${symbols.length - missing.length} of ${symbols.length} symbols exported into ${out}/ at ${opts.scale}×; sheet: ${join(out, 'sheet.html')}`);
 process.exit(failed || missing.length ? 1 : 0);
