@@ -1,14 +1,24 @@
-/* The inset sidebar's content (InsetSidebar.tsx), inside layout.css's panel.
-   Stub: plain rows of --lay-row, the picked one a pill of --lay-row-radius; the
-   sidebar lane draws it. */
+/* The inset sidebar's content (InsetSidebar.tsx), inside layout.css's panel
+   (which paints --surface-2 and takes the raised caption). Today's source list
+   (sources.css) in the macOS layout: quiet sentence-case headings that fold
+   with a chevron, rows of --lay-row, the row picked a soft pill of
+   --lay-row-radius in --fg, heavier, the playlist playing its green dot. No
+   lines: areas told apart by space and tone (decision 68). The panel's top band
+   (--lay-titlebar) is the window buttons'; nothing here reaches into it. */
 
 .lay .isb {
   padding: 0 10px 12px;
+  color: var(--ui);
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
   font-size: 13px;
 }
 .lay .isb-section + .isb-section {
   margin-top: 14px;
 }
+
+/* A section's heading: its title in the caption's grey, the chevron after it,
+   faint until the heading is hovered or focused. The whole heading folds it. */
 .lay .isb-head {
   margin: 0;
   font: inherit;
@@ -21,13 +31,30 @@
   height: 28px;
   padding: 0 10px;
   border: 0;
+  border-radius: var(--lay-row-radius);
   background: none;
   color: var(--caption);
   font: inherit;
   font-size: 11px;
   font-weight: 600;
+  text-align: left;
   cursor: pointer;
+  user-select: none;
 }
+.lay .isb-toggle:hover {
+  color: var(--fg);
+  background: none;
+}
+.lay .isb-chevron {
+  flex: none;
+  opacity: 0.55;
+  transition: opacity 0.12s ease;
+}
+.lay .isb-toggle:hover .isb-chevron,
+.lay .isb-toggle:focus-visible .isb-chevron {
+  opacity: 1;
+}
+
 .lay .isb-rows {
   list-style: none;
   margin: 0;
@@ -45,22 +72,69 @@
   background: none;
   color: var(--ui);
   font: inherit;
+  font-weight: normal;
   text-align: left;
   cursor: pointer;
+  user-select: none;
 }
-.lay .isb-row[aria-current='true'] {
-  background: var(--surface-3);
+.lay .isb-icon {
+  flex: none;
+  color: var(--detail);
+}
+/* Hover: the name and icon lift to --fg over the faintest tint. */
+.lay .isb-row:hover {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
+}
+.lay .isb-row:hover .isb-icon {
   color: var(--fg);
 }
+/* The row picked: a soft pill, its name in --fg and heavier, as today's list marks it. */
+.lay .isb-row[aria-current='true'] {
+  color: var(--fg);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--fg) 9%, transparent);
+}
+.lay .isb-row[aria-current='true'] .isb-icon {
+  color: var(--fg);
+}
+/* The focus ring goes inside: the panel scrolls, and would clip one drawn outside. */
+.vf-root .lay :is(.isb-row, .isb-toggle):focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: -2px;
+}
+
 .lay .isb-name {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+/* The playlist playing: a small green dot after its name. */
+.lay .isb-dot {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  margin-left: -4px;
+  border-radius: 50%;
+  background: var(--playing);
+}
+/* The count, right-aligned: a number, so in the numbers' face. */
 .lay .isb-count {
+  flex: none;
+  margin-left: auto;
+  padding-left: 6px;
   color: var(--caption);
+  font-family: var(--font-num);
+  font-variation-settings: var(--font-num-axes);
+  font-variant-numeric: tabular-nums;
   font-size: 11px;
   font-style: normal;
+  font-weight: normal;
+}
+.lay .isb-empty {
+  padding: 4px 10px;
+  color: var(--caption);
+  font-size: 11px;
 }
