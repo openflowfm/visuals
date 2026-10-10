@@ -184,12 +184,12 @@ export interface StripContext {
 const fileName = (path: string) => (path.split('/').pop() ?? path).replace(/\.milk$/i, '');
 
 /**
- * The presets a smart playlist's query picks, in the order they play unshuffled: the library's (curated
- * picks, then by key), or newest first with `recent`. Never a hidden one, and a utility preset only when
- * the query asks for it (`reachesUtility`; `recent` does). As Rust's `query::resolve` works it out.
+ * The presets a smart playlist's query picks, in the order they play unshuffled: the library's (by key), or
+ * newest first with `recent`. Never a hidden one. A saved query never browses (decision 68), so utility
+ * presets count and curated picks don't go first, as Rust's `query::resolve` works it out.
  */
 export function matches(query: LibraryQuery, rows: readonly Prepared[], played: readonly string[]): Prepared[] {
-  const shown = facet(rows, query).shown.filter((p) => !p.hidden);
+  const shown = facet(rows, { groups: query.groups, text: query.text }).shown.filter((p) => !p.hidden);
   if (query.recent === undefined) return shown;
   const byPath = new Map(shown.map((p) => [p.row.path, p]));
   const out: Prepared[] = [];

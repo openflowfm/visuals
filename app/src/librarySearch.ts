@@ -189,6 +189,7 @@ export function rowsFromEntries(entries: readonly Entry[]): LibraryRow[] {
       thumbnail: null,
       look: null,
       starter: false,
+      curated: false,
     };
   });
 }
@@ -276,12 +277,20 @@ export interface Faceted {
 export const isUtility = (style: string) => style.startsWith('!');
 
 /**
- * Whether `query` asks for utility presets, which are otherwise left out: it picks
+ * Whether `query` reaches utility presets: any query that isn't browsing does (a
+ * saved smart playlist, as before decision 68); a browsing one when it picks
  * values in the style group (a utility preset still shows only if one is its
- * style), it has search text (which it must still match), or it lists the
- * presets played lately (`recent`). Rust's `query::matches` keeps the same rule.
+ * style) or has search text (which it must still match). Rust's `query::reaches_utility` keeps the same rule.
  */
-export const reachesUtility = (query: LibraryQuery) => (query.groups.style?.length ?? 0) > 0 || wordsOf(query.text).length > 0 || query.recent !== undefined;
+export const reachesUtility = (query: LibraryQuery) => !query.browse || (query.groups.style?.length ?? 0) > 0 || wordsOf(query.text).length > 0;
+
+/** `rows` in the order the library's grid browses them (decision 68): the curated picks first, then the rest, each part in the order given (by key). As Rust's `query::resolve` does for a browsing query. */
+export function browseOrder<T extends { row: Pick<LibraryRow, 'curated'> }>(rows: readonly T[]): T[] {
+  return [...rows.filter((p) => p.row.curated), ...rows.filter((p) => !p.row.curated)];
+}
+
+/** What the library's grid can show of `rows` with nothing filtered: all but the utility presets, which only a filter reaches. */
+export const browsable = <T extends { style: string }>(rows: readonly T[]): T[] => rows.filter((p) => !isUtility(p.style));
 
 /**
  * The rows matching `query`, and the live counts for every group's values. A

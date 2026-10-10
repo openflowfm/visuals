@@ -192,10 +192,12 @@ describe('matches', () => {
     expect(matches({ groups: {}, text: '', recent: 2 }, rows, played).map((p) => p.title)).toEqual(['c', 'a']);
   });
 
-  it('leaves utility presets out unless the query asks for them, and recent does, as Rust resolves it', () => {
-    const fade = prep(row('fade', 'low', 'low', { style: '! Transition' }));
+  it('counts a saved query as before decision 68: utility presets in, curated picks not first, as Rust resolves it', () => {
+    const fade = prep(row('fade', 'low', 'low', { style: '! Transition', curated: true }));
     const all = [...rows, fade];
-    expect(matches(STARTERS[0].query, all, []).map((p) => p.title)).toEqual(['a', 'c']);
+    expect(matches(STARTERS[0].query, all, []).map((p) => p.title)).toEqual(['a', 'c', 'fade']);
+    // Even a query that browsed (one saved before the page stripped it) is counted as saved.
+    expect(matches({ ...STARTERS[0].query, browse: true }, all, []).map((p) => p.title)).toEqual(['a', 'c', 'fade']);
     expect(matches({ groups: { style: ['! Transition'] }, text: '' }, all, []).map((p) => p.title)).toEqual(['fade']);
     expect(matches({ groups: {}, text: '', recent: 50 }, all, ['/presets/g/fade.milk']).map((p) => p.title)).toEqual(['fade']);
   });

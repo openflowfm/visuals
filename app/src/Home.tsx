@@ -4,7 +4,7 @@ import * as api from './api.ts';
 import type { Entry, LibraryChange, LibraryData, LibraryRow } from './api.ts';
 import { HomeBar } from './HomeBar.tsx';
 import { Library } from './Library.tsx';
-import { stepIn, prepare, type Prepared } from './librarySearch.ts';
+import { browsable, browseOrder, facet, stepIn, prepare, type Prepared } from './librarySearch.ts';
 import { useLibrary, rereadOn, stepDeck } from './library.ts';
 import { NowPanel } from './NowPanel.tsx';
 import { onChanged } from './pack.ts';
@@ -157,6 +157,16 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
   }, [panel, narrow]);
 
   const playing = deck.playlist;
+  // What ←, → and R step through while the deck follows nothing: the library's grid as it browses (decision
+  // 68: curated picks first, utility presets only when the search reaches them), with the search typed; the
+  // plain list until the index is read.
+  const browsing = useMemo(() => {
+    if (!rows) return null;
+    const byPath = new Map(library.map((e) => [e.path, e]));
+    return facet(browseOrder(rows), { groups: {}, text: search, browse: true }).shown.map(
+      (p): Entry => byPath.get(p.row.path) ?? { path: p.row.path, name: p.title, group: p.subStyle ? `${p.style}/${p.subStyle}` : p.style },
+    );
+  }, [rows, library, search]);
   const step = useCallback(
     (by: number) => {
       if (playing || deck.query) {
@@ -164,10 +174,10 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
         stepDeck({ kind: by === 0 ? 'random' : by > 0 ? 'next' : 'previous' }).catch(fail("Couldn't step the playlist."));
         return;
       }
-      const next = stepIn(found.shown.length ? found.shown : library, current?.path ?? null, by);
+      const next = stepIn(browsing?.length ? browsing : found.shown.length ? found.shown : library, current?.path ?? null, by);
       if (next) load(next);
     },
-    [playing, deck.query, found.shown, library, current, load, fail],
+    [playing, deck.query, browsing, found.shown, library, current, load, fail],
   );
   useEffect(() => {
     const key = (e: globalThis.KeyboardEvent) => {
@@ -205,8 +215,9 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
     const smart = new Map<string, number>();
     if (rows) for (const p of playlists) if (p.kind === 'smart' && p.query) smart.set(p.id, matches(p.query, rows, played.paths).length);
     return {
-      library: rows ? rows.length : null,
-      starred: rows ? rows.filter((p) => p.star).length : null,
+      // What the library's grid shows with nothing filtered: utility presets wait for a filter (decision 68).
+      library: rows ? browsable(rows).length : null,
+      starred: rows ? browsable(rows).filter((p) => p.star).length : null,
       list: (p: Playlist) => (p.kind === 'manual' ? p.items.length : (smart.get(p.id) ?? null)),
     };
   }, [rows, playlists, played.paths]);

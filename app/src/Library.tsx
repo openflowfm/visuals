@@ -13,6 +13,7 @@ import {
   GROUP_LABEL,
   SWATCH,
   activeGroups,
+  browseOrder,
   STARRED,
   debounced,
   facet,
@@ -233,11 +234,16 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
 
   // Starred is the library with the star group always picked; its chip isn't shown, as it can't be taken off.
   const starred = home?.scope === 'starred';
-  const query: LibraryQuery = useMemo(() => ({ groups: starred ? { ...groups, star: [STARRED] } : groups, text: search }), [groups, search, starred]);
+  // The home's grid browses (decision 68): curated picks first, utility presets only when asked for; the
+  // deck following it is sent the same query. The lab editor's column lists the library as before.
+  const browse = !!home;
+  const query: LibraryQuery = useMemo(() => ({ groups: starred ? { ...groups, star: [STARRED] } : groups, text: search, ...(browse ? { browse } : {}) }), [groups, search, starred, browse]);
   const rows = useMemo(() => index ?? rowsFromEntries(entries), [index, entries]);
-  const prepared = useMemo(() => prepare(rows, data), [rows, data]);
+  const prepared = useMemo(() => (browse ? browseOrder(prepare(rows, data)) : prepare(rows, data)), [rows, data, browse]);
   const faceted = useMemo(() => facet(prepared, query), [prepared, query]);
   const shown = faceted.shown;
+  // What the pane holds with no filter of the viewer's: what the grid can show then (Starred's star stays picked), by the grid's own rule.
+  const paneTotal = useMemo(() => facet(prepared, { groups: starred ? { star: [STARRED] } : {}, text: '', ...(browse ? { browse } : {}) }).shown.length, [prepared, starred, browse]);
   const at = active === null ? -1 : shown.findIndex((p) => p.row.key === active);
   const byKey = useMemo(() => new Map(prepared.map((p) => [p.row.key, p])), [prepared]);
   const selectedSet = useMemo(() => new Set(selection), [selection]);
@@ -378,7 +384,8 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
 
   const save = (name: string) => {
     setNaming(null);
-    api.smartPlaylistSave(name.trim() || queryName(query), query).then(
+    // Saved without `browse`: a smart playlist resolves every match, by key, as it always has (decision 68 changes only browsing).
+    api.smartPlaylistSave(name.trim() || queryName(query), { groups: query.groups, text: query.text }).then(
       () => setSaveNote(`Saved “${name.trim() || queryName(query)}”.`),
       (e) => setSaveNote(why(e)),
     );
@@ -390,8 +397,7 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
   const filtered = picked.length > 0 || search.trim() !== '';
   const summary = home ? (filtered ? `${count(shown.length)} preset${shown.length === 1 ? '' : 's'}` : null) : facetSummary(faceted, query);
   const pickedCount = picked.reduce((n, g) => n + (groups[g]?.length ?? 0), 0);
-  // The pane's own presets: Starred's are the starred ones. While filtering, the title counts what is shown.
-  const paneTotal = starred ? prepared.filter((p) => p.star).length : rows.length || entries.length;
+  // The title counts `paneTotal` (above), or what is shown while filtering.
   const searchInput = useRef<HTMLInputElement>(null);
   const clearSearch = () => {
     filterChanged();
@@ -425,7 +431,7 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
       className="lib-search"
       type="search"
       aria-label="search presets"
-      placeholder={home ? `${Say('search')} ${count(paneTotal)} presets` : `${say('search')} ${count(rows.length || entries.length)} presets`}
+      placeholder={home ? `${Say('search')} ${count(paneTotal)} preset${paneTotal === 1 ? '' : 's'}` : `${say('search')} ${count(rows.length || entries.length)} presets`}
       title="Every word must match the preset's style, author, name or tags. ↓ moves into the grid."
       value={search}
       onChange={(ev) => {
@@ -708,26 +714,35 @@ export function Values({ group, values, selected, find, onFind, onPick, home }: 
     );
   };
   // The home's styles: the styles first, then each picked style's sub-styles (while finding, any that match) under "In <style>".
+  // The cap counts the styles alone: it never cuts off a picked style's sub-styles, which sort after every style.
   const levels = home && group === 'style';
+  const allTops = levels ? all.filter((v) => !v.value.includes('/')) : [];
+  // A picked style past the cap stays too, so what is picked can always be seen and let go.
+  const tops = allTops.filter((v, i) => i < VALUES_CAP || selected.includes(v.value));
   const subsOf = new Map<string, Count[]>();
   if (levels) {
-    for (const v of list) {
+    let found = 0;
+    for (const v of all) {
       const at = v.value.indexOf('/');
       if (at < 0) continue;
       const parent = v.value.slice(0, at);
-      if (!f && !selected.some((s) => s === parent || s.startsWith(`${parent}/`))) continue;
+      const picked = selected.some((s) => s === parent || s.startsWith(`${parent}/`));
+      if (!picked && !f) continue;
+      // Found by typing alone (its style not picked): those keep the cap, as the list did.
+      if (!picked && found++ >= VALUES_CAP) continue;
       subsOf.set(parent, [...(subsOf.get(parent) ?? []), v]);
     }
   }
+  const more = levels ? allTops.length - tops.length : all.length - list.length;
   return (
     <div className="lib-values" role="group" aria-label={`${groupSays(group)} values`}>
       {values.length > FIND_FROM && (
         <input className="lib-values-find" type="search" aria-label={findSays(group)} placeholder={findSays(group)} value={find} onChange={(ev) => onFind(ev.target.value)} />
       )}
-      {list.length === 0 && <p className="lib-note">{group === 'tags' && !values.length ? 'No tags yet. Select a preset to tag it.' : 'none'}</p>}
+      {all.length === 0 && <p className="lib-note">{group === 'tags' && !values.length ? 'No tags yet. Select a preset to tag it.' : 'none'}</p>}
       {levels ? (
         <>
-          <div className="lib-values-list">{list.filter((v) => !v.value.includes('/')).map(button)}</div>
+          <div className="lib-values-list">{tops.map(button)}</div>
           {[...subsOf].map(([parent, subs]) => (
             <div key={parent} className="lib-values-subs" role="group" aria-label={`in ${parent}`}>
               <span className="lib-values-in">{`In ${parent}`}</span>
@@ -744,7 +759,7 @@ export function Values({ group, values, selected, find, onFind, onPick, home }: 
           ])}
         </div>
       )}
-      {all.length > list.length && <p className="lib-note">{count(all.length - list.length)} more: type to find one</p>}
+      {more > 0 && <p className="lib-note">{count(more)} more: type to find one</p>}
     </div>
   );
 }

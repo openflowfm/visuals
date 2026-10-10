@@ -230,6 +230,37 @@ describe("the home's library pane (decision 68)", () => {
     expect(count()).toBe('3');
   });
 
+  it('browses curated picks first, counts only what the grid can show, and saves a smart playlist that does not browse', async () => {
+    const fade: LibraryRow = { ...row('fade'), style: '! Transition' };
+    const picks = [row('a'), { ...row('b'), curated: true }, row('c'), fade];
+    const starred = { version: 1, presets: { c: { star: true }, fade: { star: true } } };
+    invoke.mockImplementation((cmd: string) => Promise.resolve(cmd === 'library_index' ? picks : cmd === 'library_data' ? starred : answer(cmd)));
+    const tiles = () => screen.getAllByRole('option').map((o) => o.getAttribute('aria-label')!.split(' — ')[0]);
+    const r = await mount();
+    expect(tiles()).toEqual(['b', 'a', 'c']);
+    // The transition waits for a filter, so neither the title nor the placeholder counts it.
+    expect(count()).toBe('3');
+    expect(searchbox().getAttribute('placeholder')).toBe('Search 3 presets');
+    // A search reaches it, and the deck following the grid is told the grid browses.
+    r.rerender(home('fade'));
+    expect(tiles()).toEqual(['fade']);
+    fireEvent.focus(screen.getByRole('listbox', { name: 'presets' }));
+    fireEvent.keyDown(screen.getByRole('listbox', { name: 'presets' }), { key: 'Enter' });
+    const query = invoke.mock.calls.filter(([cmd]) => cmd === 'act').map(([, a]) => (a as { action: { query: { browse?: boolean } } }).action.query);
+    expect(query.at(-1)).toMatchObject({ text: 'fade', browse: true });
+    // Saved, the filter is a plain query: a smart playlist resolves every match, by key.
+    fireEvent.click(screen.getByRole('button', { name: 'Save as smart playlist' }));
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'smart playlist name' }), { key: 'Enter' });
+    const saved = invoke.mock.calls.find(([cmd]) => cmd === 'smart_playlist_save')![1] as { query: object };
+    expect(saved.query).toEqual({ groups: {}, text: 'fade' });
+    cleanup();
+    // Starred counts by the grid's rule too: the starred transition isn't shown, so it isn't counted.
+    await mount('', () => {}, 'starred');
+    expect(tiles()).toEqual(['c']);
+    expect(count()).toBe('1');
+    expect(searchbox().getAttribute('placeholder')).toBe('Search 1 preset');
+  });
+
   it('says so, centred, when nothing is starred', async () => {
     await mount('', () => {}, 'starred');
     expect(screen.getByRole('heading', { name: 'Nothing starred yet' }).closest('.lib-empty')).toBeTruthy();

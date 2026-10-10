@@ -45,6 +45,12 @@ pub struct Row {
     pub look: Option<Look>,
     /// From the bundled starter set rather than the presets folder.
     pub starter: bool,
+    /// One of the starter set's presets (a curated pick), from it or found again
+    /// in the presets folder at a key or with a content hash the starter set's
+    /// index has, so it stays one once the full pack is downloaded and the
+    /// starter set drops out of the list. Browsing the library lists these
+    /// first (decision 68, [`crate::query::resolve`] with `browse`).
+    pub curated: bool,
 }
 
 /// A folder of packs, and the name its thumbnails are served under.
@@ -138,12 +144,8 @@ struct Known {
 
 /// The rows for `roots`, in order: a preset at a key an earlier root already
 /// has is left out, but a copy no index lists takes what any root's index says
-/// of its key (its look, and that root's thumbnail). Sorted curated picks
-/// first, then by key (so by pack, then style): a curated pick is one of the
-/// starter set's presets, from it or found again in the presets folder at a key
-/// or with a content hash the starter set's index has, so it stays first once
-/// the full pack is downloaded and the starter set drops out of the list.
-/// `also` are folders only looked up for index data (the starter set once it
+/// of its key (its look, and that root's thumbnail). Sorted by key, each marked
+/// [`Row::curated`] or not. `also` are folders only looked up for index data (the starter set once it
 /// drops out of the list), never listed.
 fn rows_in(roots: &[Root], also: &[Root]) -> Vec<Row> {
     let mut known: HashMap<String, Known> = HashMap::new();
@@ -188,6 +190,7 @@ fn rows_in(roots: &[Root], also: &[Root]) -> Vec<Row> {
                     thumbnail,
                     look: r.look,
                     starter,
+                    curated: false,
                 });
             }
         }
@@ -211,6 +214,7 @@ fn rows_in(roots: &[Root], also: &[Root]) -> Vec<Row> {
                     thumbnail: thumbnail(from, &k.pack, r.thumbnail.as_deref()),
                     look: r.look,
                     starter,
+                    curated: false,
                 });
                 continue;
             }
@@ -234,11 +238,14 @@ fn rows_in(roots: &[Root], also: &[Root]) -> Vec<Row> {
                 thumbnail: None,
                 look: None,
                 starter,
+                curated: false,
             });
         }
     }
-    let curated = |r: &Row| r.starter || starter_keys.contains(&r.key) || (!r.hash.is_empty() && starter_hashes.contains(&r.hash));
-    rows.sort_by_cached_key(|r| (!curated(r), r.key.clone()));
+    for r in &mut rows {
+        r.curated = r.starter || starter_keys.contains(&r.key) || (!r.hash.is_empty() && starter_hashes.contains(&r.hash));
+    }
+    rows.sort_by(|a, b| a.key.cmp(&b.key));
     rows
 }
 
@@ -366,17 +373,19 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
 
         let keys: Vec<_> = rows.iter().map(|r| (r.key.as_str(), r.starter)).collect();
-        // The starter set's two come first (Xenon from the presets folder), then the rest by key.
-        assert_eq!(keys, [("pack/Dancer/Whirl/ORB - Xenon.milk", false), ("pack/Fractal/a - b.milk", true), ("loose.milk", false), ("pack/Sparkle/Geiss - Hand Added.milk", false)]);
-        let xenon = &rows[0];
+        // By key, as before decision 68: the order saved smart playlists play in.
+        assert_eq!(keys, [("loose.milk", false), ("pack/Dancer/Whirl/ORB - Xenon.milk", false), ("pack/Fractal/a - b.milk", true), ("pack/Sparkle/Geiss - Hand Added.milk", false)]);
+        // The starter set's two are curated (Xenon from the presets folder).
+        assert_eq!(rows.iter().map(|r| r.curated).collect::<Vec<_>>(), [false, true, true, false]);
+        let xenon = &rows[1];
         assert_eq!(xenon.path, presets.join("pack/Dancer/Whirl/ORB - Xenon.milk").to_string_lossy());
         assert_eq!((xenon.style.as_str(), xenon.sub_style.as_deref()), ("Dancer", Some("Whirl")));
         assert_eq!(xenon.thumbnail.as_deref(), Some(url("presets", "pack", "29.webp").as_str()));
-        assert_eq!(rows[1].thumbnail.as_deref(), Some(url("starter", "pack", "18.webp").as_str()));
+        assert_eq!(rows[2].thumbnail.as_deref(), Some(url("starter", "pack", "18.webp").as_str()));
         let added = &rows[3];
         assert_eq!((added.style.as_str(), added.hash.as_str(), added.thumbnail.is_none()), ("Sparkle", "", true));
         assert_eq!(added.authors, ["geiss"]);
-        assert_eq!(rows[2].style, "");
+        assert_eq!(rows[0].style, "");
     }
 
     /// A pack at `dir/pack` with each `(rel, hash)` written and indexed, no thumbnails.
@@ -390,7 +399,7 @@ mod tests {
     }
 
     #[test]
-    fn curated_picks_come_first_then_the_rest_by_key_even_once_the_starter_set_drops_out() {
+    fn curated_picks_are_marked_in_key_order_even_once_the_starter_set_drops_out() {
         let root = temp("curated");
         let (presets, starter) = (root.join("presets"), root.join("starter"));
         let (h1, h2) = ("1".repeat(64), "2".repeat(64));
@@ -404,9 +413,21 @@ mod tests {
         let dropped = rows_in(std::slice::from_ref(&p), &[s]);
         let _ = std::fs::remove_dir_all(&root);
 
-        let keys = |rows: &[Row]| rows.iter().map(|r| r.key.clone()).collect::<Vec<_>>();
-        assert_eq!(keys(&listed), ["pack/Fractal/s.milk", "pack/Moved/elsewhere.milk", "pack/Waveform/k.milk", "pack/Zoom/only.milk", "pack/Aaa/x.milk", "pack/Zed/y.milk"]);
-        assert_eq!(keys(&dropped), ["pack/Moved/elsewhere.milk", "pack/Waveform/k.milk", "pack/Aaa/x.milk", "pack/Zed/y.milk"]);
+        // Key order, as before; curated marked (the order browsing lists them in is query::resolve's).
+        let keys = |rows: &[Row]| rows.iter().map(|r| (r.key.clone(), r.curated)).collect::<Vec<_>>();
+        let k = |key: &str, curated: bool| (key.to_string(), curated);
+        assert_eq!(
+            keys(&listed),
+            [
+                k("pack/Aaa/x.milk", false),
+                k("pack/Fractal/s.milk", true),
+                k("pack/Moved/elsewhere.milk", true),
+                k("pack/Waveform/k.milk", true),
+                k("pack/Zed/y.milk", false),
+                k("pack/Zoom/only.milk", true)
+            ]
+        );
+        assert_eq!(keys(&dropped), [k("pack/Aaa/x.milk", false), k("pack/Moved/elsewhere.milk", true), k("pack/Waveform/k.milk", true), k("pack/Zed/y.milk", false)]);
         assert!(dropped.iter().all(|r| !r.starter));
     }
 

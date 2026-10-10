@@ -176,13 +176,11 @@ export interface LibraryRow {
   look: Look | null;
   /** From the bundled starter set rather than the presets folder. */
   starter: boolean;
+  /** A curated pick: one of the starter set's presets, also once found again in the presets folder by key or content hash. Browsing the library lists these first (decision 68). Rust always says; a row the page makes itself may leave it out. */
+  curated?: boolean;
 }
 
-/**
- * Every preset in the library (the starter set and the presets folder, once each): curated picks first (the
- * starter set's presets, also once found again in the presets folder by key or content hash), then by key.
- * The grid keeps this order, and Rust resolves the deck's and smart playlists' lists in it.
- */
+/** Every preset in the library (the starter set and the presets folder, once each), sorted by key. */
 export const libraryIndex = () => invoke<LibraryRow[]>('library_index');
 
 /** `userlib::Overrides`: the user's own values for a preset's automatic groups; one left out keeps the index's. */
@@ -246,6 +244,12 @@ export interface LibraryQuery {
   text: string;
   /** Only presets among the last this many played, newest first. */
   recent?: number;
+  /**
+   * The library pane's grid as it browses (decision 68): curated picks first, and utility presets (a style
+   * starting with "!") left out unless the style group or the search asks for them. Only the library's grid
+   * and the deck following it set this; a saved smart playlist never has it, so it resolves by key, with every match.
+   */
+  browse?: boolean;
 }
 
 /** Save `query` as a smart playlist named `name`, `starter` marking one of the home's starters; resolves to its id, and a `lists` event follows. */

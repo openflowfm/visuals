@@ -14,8 +14,9 @@ describe('tileName', () => {
     expect(tileName('3.14', '/pack/martin - pi.milk')).toBe('martin - pi');
   });
 
-  it('shows the file name for a title under four characters', () => {
-    expect(tileName('a1', '/pack/Rovastar - a1 (remix).MILK')).toBe('Rovastar - a1 (remix)');
+  it('keeps a short name that is a word, and shows the file name for an empty title', () => {
+    expect(tileName('Orb', '/pack/Geiss - Orb.milk')).toBe('Orb');
+    expect(tileName('a1', '/pack/Rovastar - a1 (remix).MILK')).toBe('a1');
     expect(tileName('  ', 'C:\\pack\\shifter - wave.milk')).toBe('shifter - wave');
   });
 

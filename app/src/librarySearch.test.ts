@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Entry, LibraryData, LibraryQuery, LibraryRow, Level, Look } from './api.ts';
 import {
+  browsable,
+  browseOrder,
   colourOf,
   debounced,
   emptyQuery,
@@ -198,10 +200,10 @@ describe('utility presets', () => {
     row('p/! Transition/fade.milk', { style: '! Transition', sub_style: null, authors: ['orb'] }),
   ];
   const prepared = prepare(rows, null);
-  const keys = (groups: LibraryQuery['groups'], text = '', recent?: number) => facet(prepared, { groups, text, recent }).shown.map((p) => p.row.key);
+  const keys = (groups: LibraryQuery['groups'], text = '') => facet(prepared, { groups, text, browse: true }).shown.map((p) => p.row.key);
   const fade = ['p/! Transition/fade.milk'];
 
-  it('are left out unless the style group or the text asks for them, as in Rust', () => {
+  it('are left out of the browsing grid unless the style group or the text asks for them, as in Rust', () => {
     expect(keys({})).toEqual(['p/Dancer/Whirl/a.milk', 'p/Dancer/b.milk', 'p/Fractal/c.milk']);
     expect(keys({ author: ['orb'] })).toEqual(['p/Dancer/Whirl/a.milk', 'p/Fractal/c.milk']);
     expect(keys({ style: ['! Transition'] })).toEqual(fade);
@@ -209,25 +211,42 @@ describe('utility presets', () => {
     expect(keys({}, 'fade')).toEqual(fade);
     expect(keys({}, 'orb')).toEqual(['p/Dancer/Whirl/a.milk', 'p/Fractal/c.milk', 'p/! Transition/fade.milk']);
     expect(keys({ style: [] }, '  ')).toHaveLength(3);
-    expect(keys({}, '', 50)).toHaveLength(4);
+  });
+
+  it('stay in a query that does not browse: a saved smart playlist resolves as before', () => {
+    expect(facet(prepared, emptyQuery()).shown).toHaveLength(4);
+    expect(facet(prepared, { groups: { author: ['orb'] }, text: '' }).shown.map((p) => p.row.key)).toEqual(['p/Dancer/Whirl/a.milk', 'p/Fractal/c.milk', 'p/! Transition/fade.milk']);
+    expect(facet(prepared, { groups: {}, text: '', recent: 50 }).shown).toHaveLength(4);
   });
 
   it('still offer their style in the style group, counted as picking it would show', () => {
-    const q = emptyQuery();
+    const q: LibraryQuery = { ...emptyQuery(), browse: true };
     const f = facet(prepared, q);
     expect(f.counts.style.get('! Transition')).toBe(1);
     expect(valuesFor('style', f, q).map((c) => c.value)).toContain('! Transition');
     // Not in the other groups' counts, as they don't show them.
     expect(f.counts.author.get('orb')).toBe(2);
-    const byOrb = { groups: { author: ['orb'] }, text: '' };
+    const byOrb = { groups: { author: ['orb'] }, text: '', browse: true };
     expect(facet(prepared, byOrb).counts.style.get('! Transition')).toBe(1);
   });
 
   it("go by the user's style", () => {
     const data: LibraryData = { version: 1, presets: { 'p/Dancer/b.milk': { overrides: { style: '! Mine' } }, 'p/! Transition/fade.milk': { overrides: { style: 'Calm' } } } };
     const mine = prepare(rows, data);
-    expect(facet(mine, emptyQuery()).shown.map((p) => p.row.key)).toEqual(['p/Dancer/Whirl/a.milk', 'p/Fractal/c.milk', 'p/! Transition/fade.milk']);
-    expect(facet(mine, { groups: { style: ['! Mine'] }, text: '' }).shown.map((p) => p.row.key)).toEqual(['p/Dancer/b.milk']);
+    expect(facet(mine, { ...emptyQuery(), browse: true }).shown.map((p) => p.row.key)).toEqual(['p/Dancer/Whirl/a.milk', 'p/Fractal/c.milk', 'p/! Transition/fade.milk']);
+    expect(facet(mine, { groups: { style: ['! Mine'] }, text: '', browse: true }).shown.map((p) => p.row.key)).toEqual(['p/Dancer/b.milk']);
+    expect(browsable(mine).map((p) => p.row.key)).toEqual(['p/Dancer/Whirl/a.milk', 'p/Fractal/c.milk', 'p/! Transition/fade.milk']);
+  });
+});
+
+describe('browseOrder', () => {
+  it('lists the curated picks first, then the rest, each in the order given, as Rust browses', () => {
+    const rows = prepare(
+      ['p/A/a.milk', 'p/B/b.milk', 'p/C/c.milk', 'p/D/d.milk'].map((k, i) => row(k, { curated: i === 1 || i === 3 })),
+      null,
+    );
+    expect(browseOrder(rows).map((p) => p.row.key)).toEqual(['p/B/b.milk', 'p/D/d.milk', 'p/A/a.milk', 'p/C/c.milk']);
+    expect(rows.map((p) => p.row.key)).toEqual(['p/A/a.milk', 'p/B/b.milk', 'p/C/c.milk', 'p/D/d.milk']);
   });
 });
 

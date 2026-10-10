@@ -31,8 +31,11 @@
   --font-num-axes: var(--mono-axes);
   --font-mark: var(--mono);
   --font-mark-axes: var(--mono-axes);
-  /* Small grey text at 4.5:1 or better on --surface-0 (the palette's is 3:1). */
+  /* Small grey text at 4.5:1 or better on --surface-0 and -1 (the palette's is 3:1),
+     and its lighter step for text on --surface-2 and -3, which the raised areas
+     below take as their --caption (contrast.test.ts checks both). */
   --caption: #7a7a82;
+  --caption-raised: #8b8b93;
   /* The active control's underline, and the playing mark. */
   --line-active: var(--primary);
   --playing: var(--green);
@@ -46,6 +49,20 @@
   grid-template-rows: auto minmax(0, 1fr) auto;
   font-family: var(--font-ui);
   font-variation-settings: var(--font-ui-axes);
+}
+/* Areas painted --surface-2 or -3 take the lighter caption, so small grey text on
+   them stays at 4.5:1. Every rule in Home's stylesheets that paints one of those
+   surfaces must be under one of these (contrast.test.ts checks). */
+.app.home .home-ghost,
+.app.home .tile-pic,
+.app.home .now-panel .now-chip,
+.app.home .lib-home .lib-name-input,
+.app.home .lib-home .pack-offer .pack-progress,
+.app.home .vf-pop-panel,
+.app.home .pl-cover > div,
+.app.home .pl-head .pl-name-input,
+.app.home .home-bar .vf-meters .wdg-meter-body {
+  --caption: var(--caption-raised);
 }
 /* The widgets inside take the same type. */
 .app.home .wdg {

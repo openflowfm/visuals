@@ -3,12 +3,12 @@ import './tile.css';
 
 /**
  * The name a tile shows: the preset's title, or its file name (the path's base
- * name without `.milk`) when the title says nothing — only a number, or under
- * four characters (decision 68).
+ * name without `.milk`) when the title says nothing, being only a number or
+ * empty (decision 68). A short real name ("Orb") stays.
  */
 export function tileName(title: string, path: string): string {
   const t = title.trim();
-  if (t.length >= 4 && !/^[\d\s.,#_-]+$/.test(t)) return t;
+  if (t && !/^[\d\s.,#_-]+$/.test(t)) return t;
   const base = path.split(/[\\/]/).pop() ?? '';
   const file = base.replace(/\.milk$/i, '').trim();
   return file || t;
