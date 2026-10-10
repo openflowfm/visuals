@@ -22,16 +22,30 @@ if [ "${1:-}" = "--features" ] && [ -n "${2:-}" ]; then
 	features="$2,dev-bridge"
 fi
 
-free_port() { node -e "const s=require('net').createServer().listen(0,'127.0.0.1',()=>{console.log(s.address().port);s.close()})"; }
+# Written with process.stdout.write and colour off, so FORCE_COLOR (the desktop
+# launcher sets it) can never wrap the value in colour codes.
+plain_node() { NO_COLOR=1 FORCE_COLOR=0 node -e "$1"; }
+free_port() { plain_node "const s=require('net').createServer().listen(0,'127.0.0.1',()=>{process.stdout.write(String(s.address().port));s.close()})"; }
+need() {
+	if ! [[ "$2" =~ $3 ]]; then
+		echo "app/dev.sh: $1 is not valid: '$2'" >&2
+		exit 1
+	fi
+}
 PORT=${PORT:-$(free_port)}
 BRIDGE_PORT=$(free_port)
 port_taken() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
 STORYBOOK_PORT=${STORYBOOK_PORT:-6006}
-if port_taken "$STORYBOOK_PORT"; then
+need STORYBOOK_PORT "$STORYBOOK_PORT" '^[0-9]+$'
+if port_taken "$STORYBOOK_PORT" || [ "$STORYBOOK_PORT" = "$PORT" ]; then
 	STORYBOOK_PORT=$(free_port)
 fi
+need PORT "$PORT" '^[0-9]+$'
+need "the bridge's port" "$BRIDGE_PORT" '^[0-9]+$'
+need "Storybook's port" "$STORYBOOK_PORT" '^[0-9]+$'
 VISUALS_BRIDGE="127.0.0.1:$BRIDGE_PORT"
-VISUALS_BRIDGE_TOKEN=$(node -e "console.log(require('crypto').randomBytes(16).toString('hex'))")
+VISUALS_BRIDGE_TOKEN=$(plain_node "process.stdout.write(require('crypto').randomBytes(16).toString('hex'))")
+need "the bridge's token" "$VISUALS_BRIDGE_TOKEN" '^[0-9a-f]{32}$'
 # The app's own window is never shown: the browser is the window.
 VISUALS_HEADLESS=1
 export PORT VISUALS_BRIDGE VISUALS_BRIDGE_TOKEN VISUALS_HEADLESS
