@@ -11,6 +11,7 @@ describe('fitCount', () => {
     expect(fitCount(600, 200, 16)).toBe(2);
     expect(fitCount(632, 200, 16)).toBe(3);
     expect(fitCount(631, 200, 16)).toBe(2);
+    expect(fitCount(631.6, 200, 16)).toBe(2);
   });
   it('always shows one, and every tile while unmeasured', () => {
     expect(fitCount(120, 200, 16)).toBe(1);

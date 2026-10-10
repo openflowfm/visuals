@@ -31,21 +31,26 @@ export interface SectionProps {
   empty?: string;
 }
 
+/** At most this many tiles before the row is measured (what fits a wide window), so a section of thousands never mounts them all. */
+const UNMEASURED_CAP = 12;
+
 /** How many tiles the row at `el` fits, from its width and the `--lay-*` sizes it is laid out by; kept up as it resizes. */
 function useFit(el: { current: HTMLElement | null }, watching: boolean): number {
-  const [fit, setFit] = useState(Infinity);
+  const [fit, setFit] = useState(UNMEASURED_CAP);
   useLayoutEffect(() => {
     const node = el.current;
     if (!node || !watching) return;
-    const measure = () => {
+    // Fractional widths, as CSS lays out by: clientWidth rounds, and 631.6 px would fit 3 where auto-fill fits 2.
+    const measure = (width: number) => {
       const css = getComputedStyle(node);
       const tile = parseFloat(css.getPropertyValue('--lay-tile'));
       const gap = parseFloat(css.columnGap);
-      setFit(fitCount(node.clientWidth, tile, Number.isFinite(gap) ? gap : 0));
+      const n = fitCount(width, tile, Number.isFinite(gap) ? gap : 0);
+      setFit(Number.isFinite(n) ? n : UNMEASURED_CAP);
     };
-    measure();
+    measure(node.getBoundingClientRect().width);
     if (typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(measure);
+    const ro = new ResizeObserver((entries) => measure(entries[0]?.contentRect.width ?? node.getBoundingClientRect().width));
     ro.observe(node);
     return () => ro.disconnect();
   }, [el, watching]);
