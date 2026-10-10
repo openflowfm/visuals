@@ -48,10 +48,6 @@
   outline: 2px solid var(--vf-focus-ring);
   outline-offset: 0;
 }
-/* Previous is next turned round. */
-.lay-transport-prev .lay-icon {
-  transform: scaleX(-1);
-}
 /* Play and pause lead: brighter, and the glyph a step larger. */
 .lay-transport-play {
   min-width: 36px;
