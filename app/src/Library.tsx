@@ -270,8 +270,10 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
   const byKey = useMemo(() => new Map(prepared.map((p) => [p.row.key, p])), [prepared]);
   const selectedSet = useMemo(() => new Set(selection), [selection]);
   const chosen = useMemo(() => selection.map((k) => byKey.get(k)).filter((p): p is Prepared => !!p), [selection, byKey]);
-  const onChosen = home?.onChosen;
-  useEffect(() => onChosen?.(chosen), [chosen, onChosen]);
+  // Reported when the selection changes, not when the caller hands a new function (a caller's inline one would loop).
+  const onChosen = useRef(home?.onChosen);
+  onChosen.current = home?.onChosen;
+  useEffect(() => onChosen.current?.(chosen), [chosen]);
   const bare = !!home?.bare;
 
   // The App's entries, by path, so a load hands it the entry it knows.

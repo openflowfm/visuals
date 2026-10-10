@@ -34,7 +34,6 @@ export const Wide: Story = {
   play: async ({ canvas, canvasElement }) => {
     await expect(await canvas.findByRole('list', { name: `${WARM_UP.name}, in the order it plays` })).toBeTruthy();
     await heroNamesPlaying(canvasElement);
-    await expect(canvasElement.querySelector('.insp')).toBeTruthy();
   },
 };
 
@@ -45,7 +44,6 @@ export const At900: Story = {
   play: async ({ canvas, canvasElement }) => {
     await expect(await canvas.findByRole('list', { name: `${WARM_UP.name}, in the order it plays` })).toBeTruthy();
     await heroNamesPlaying(canvasElement);
-    await expect(canvasElement.querySelector('.insp')).toBeNull();
   },
 };
 

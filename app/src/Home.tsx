@@ -518,7 +518,8 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
       inspector={
         modes.inspector ? (
           <Inspector
-            subject={picked.length === 1 ? picked[0] : (playingRow ?? null)}
+            // Nothing picked: the source's card (D8), not a preset.
+            subject={sel.kind === 'source' ? null : (picked[0] ?? null)}
             playing={playingRow?.row.key ?? null}
             from={playsFrom(deck, playlists, false)}
             playlists={lists?.playlists ?? null}
@@ -535,7 +536,8 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
             chosen={picked.length > 1 ? picked : undefined}
             source={sel.kind === 'source' ? sourceCard : undefined}
             error={panelError}
-            onClose={() => choose('inspector', false)}
+            // Its ✕ (and Esc anywhere) only while it is laid over the grid; docked, the header's toggle closes it.
+            onClose={modes.inspector === 'overlay' ? () => choose('inspector', false) : undefined}
           />
         ) : undefined
       }
