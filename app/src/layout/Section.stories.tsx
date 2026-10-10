@@ -94,16 +94,18 @@ export const Playing: Story = {
     </Window>
   ),
   play: async ({ canvas }) => {
-    const now = canvas.getByRole('button', { current: true });
+    const list = within(canvas.getByRole('region', { name: SECTIONS[1].title }));
+    const now = list.getByRole('button', { current: true });
     await expect(now).toHaveAccessibleName(/ · playing/);
     await expect(now.querySelector('.tile-live')).not.toBeNull();
-    await expect(canvas.getAllByRole('button', { current: false }).length).toBeGreaterThan(1);
+    await expect(list.getAllByRole('button', { current: false }).length).toBeGreaterThan(1);
   },
 };
 
 /** Empty, a long title and a long preset name, and a section with nothing to play: only pictures. */
 export const EmptyAndLong: Story = {
   name: 'Empty and long',
+  args: { width: 900 },
   render: (args) => (
     <Window width={args.width}>
       <Section title="Starred" rows={[]} empty="Star a preset to keep it here" />

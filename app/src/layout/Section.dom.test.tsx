@@ -22,7 +22,8 @@ describe('Section in a DOM', () => {
 
     await user.click(tiles[0]);
     expect(onPlay).toHaveBeenLastCalledWith(ROWS[0]);
-    await user.tab();
+    // The click left the keyboard on the first tile; Tab moves on to the next.
+    expect(document.activeElement).toBe(tiles[0]);
     await user.tab();
     expect(document.activeElement).toBe(tiles[1]);
     await user.keyboard('{Enter}');

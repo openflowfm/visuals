@@ -6,8 +6,12 @@
    No lines: the sections are told apart by the space between them
    (layout.css's --lay-section-gap) and the title's weight. */
 
+/* Its width is the column's, never its content's: a long title or a full row
+   mustn't widen the column (app.css makes every `main` a grid, whose implicit
+   column grows to its content's widest). */
 .lay .sec {
   min-width: 0;
+  contain: inline-size;
 }
 .lay .sec-head {
   display: flex;
