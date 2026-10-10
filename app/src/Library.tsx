@@ -78,6 +78,10 @@ export interface HomeLibrary {
   menu?: ReactNode;
   /** Several presets picked in the grid (⌘ or ⇧), or one; for the Now Playing panel. */
   onChosen(chosen: Prepared[]): void;
+  /** Just the grid and its search, without the title and count over it (the inspector view titles the pane); not used yet. */
+  bare?: boolean;
+  /** Where the search and the filter button go instead (a portal into the header's toolbar); null until it mounts; not used yet. */
+  toolbar?: HTMLElement | null;
 }
 
 /**

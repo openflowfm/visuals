@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { say } from '../words.ts';
+import type { InspectorMode, SidebarMode } from './home-model.ts';
 import './layout.css';
 import './inspector.css';
 
@@ -32,6 +33,14 @@ export interface HomeLayoutProps {
   inspector?: ReactNode;
   /** What the inspector is called to a screen reader. */
   inspectorLabel?: string;
+  /** How the sidebar shows (home-model.ts's `modesFor`); not used yet: it docks. */
+  sidebarMode?: SidebarMode;
+  /** How the inspector shows; not used yet: it docks when given. */
+  inspectorMode?: InspectorMode;
+  /** Put away what is laid over the main column (the overlay sidebar or inspector): a click outside it, or Escape; not used yet. */
+  onDismiss?(): void;
+  /** A pane in the main column in place of the hero and the sections (a playlist's, the library's); not used yet. */
+  pane?: ReactNode;
 }
 
 /** What the inspector is called by default. */

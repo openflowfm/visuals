@@ -3,6 +3,7 @@
  * character, from the preset index's analysis (`LibraryRow.look`) with the
  * user's overrides laid over it (`Prepared`), as words and marks.
  */
+import type { ReactNode } from 'react';
 import type { LibraryChange, LibraryRow, Level, Look, Mine, Overrides } from '../../api.ts';
 import { colourOf, valueLabel, type Colour, type Prepared } from '../../librarySearch.ts';
 import type { Playlist } from '../../playlists.ts';
@@ -34,6 +35,14 @@ export interface InspectorProps {
   onPlay?(): void;
   /** Open it in the preset editor: lab builds only; without it no such action shows. */
   onEdit?(): void;
+  /** Several presets picked in the grid (two or more): the inspector is about them together; not used yet. */
+  chosen?: Prepared[];
+  /** The source playing (a playlist's head, the library's), shown when the source is picked; not used yet. */
+  source?: ReactNode;
+  /** Something that failed, said in the inspector; not used yet. */
+  error?: string | null;
+  /** Close the inspector (its ✕, or Escape when laid over); without it no close shows; not used yet. */
+  onClose?(): void;
 }
 
 /** One of a preset's dominant hues. */

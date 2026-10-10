@@ -3,9 +3,9 @@ import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { queryName } from './librarySearch.ts';
 import * as pl from './playlists.ts';
 import type { Lists, Playlist } from './playlists.ts';
-import { plural } from './controls.ts';
 import { isOver, listTarget, useDrag } from './drag.ts';
 import { recentList, sections, type Pane } from './home.ts';
+import { paneName, rowSays } from './layout/home-model.ts';
 import { Popover } from './Popover.tsx';
 import { say } from './words.ts';
 import './sources.css';
@@ -39,18 +39,7 @@ const onActivate = (f: () => void) => (e: KeyboardEvent) => {
   }
 };
 
-/** What a playlist's row says to a screen reader: its name, what kind it is, how many presets (a manual one), and whether it plays. */
-export function rowSays(p: Playlist, playing: boolean): string {
-  const what = p.kind === 'smart' ? `smart playlist, fills itself with ${p.query ? queryName(p.query) : 'presets'}` : `playlist, ${plural(p.items.length, 'preset')}`;
-  return `${p.name}, ${what}${playing ? ', playing' : ''}`;
-}
-
-/** The name a pane goes by: "Library", "Starred", or the playlist's name ("Recently played" for that one). */
-export function paneName(pane: Pane | null, lists: Lists | null): string {
-  if (!pane || pane.kind === 'library') return 'Library';
-  if (pane.kind === 'starred') return 'Starred';
-  return lists?.playlists.find((p) => p.id === pane.id)?.name ?? 'Library';
-}
+export { paneName, rowSays } from './layout/home-model.ts';
 
 /** A count as a row shows it, or nothing while unknown. */
 const Count = ({ n }: { n: number | null | undefined }) => (n === null || n === undefined ? null : <i aria-hidden="true">{n.toLocaleString('en-US')}</i>);

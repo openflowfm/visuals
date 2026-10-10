@@ -25,6 +25,8 @@ export interface PlaylistHeadProps {
   onError(what: string): (e: unknown) => void;
   /** Shown above the caps label in a narrow window: the source menu, or nothing. */
   menu?: ReactNode;
+  /** Where it shows: over the playlist's pane (`pane`, the default, as today), or in the inspector; not used yet. */
+  variant?: 'pane' | 'inspector';
 }
 
 /**

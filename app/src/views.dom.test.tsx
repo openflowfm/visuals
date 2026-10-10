@@ -26,7 +26,8 @@ describe('Preview, as a screen reader finds it', () => {
     render(<Preview className="home-preview" />);
     expect(screen.getByRole('img', { name: 'preview of the playing preset: Loading the display…' })).toBeTruthy();
     act(() => drawn.set(true));
-    expect(screen.getByRole('img', { name: 'preview of the playing preset' })).toBeTruthy();
+    // Marked as a hole, so home.css paints its corners once it draws.
+    expect(screen.getByRole('img', { name: 'preview of the playing preset' }).hasAttribute('data-hole')).toBe(true);
     expect(screen.queryByText('Loading the display…')).toBeNull();
   });
 });

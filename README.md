@@ -161,6 +161,11 @@ library data and the small files, not the presets or the playlists.
 | `OPENFLOW_VISUALS_LIBRARY=<file>` | the library data file (stars, tags, hidden presets) |
 | `PORT` | the page's dev port; otherwise a free one |
 
+In a dev run, for captures of the home once it is the inspector view: `VITE_HOME_PANEL=1` or `0` starts with the
+inspector (the pane about the preset) open or closed, `VITE_HOME_SIDEBAR=1` or `0` with
+the sidebar shown or hidden, and `VITE_HOME_PICK=<path in the pack>` with that preset
+picked and shown in the inspector. `AGENTS.md` lists the rest.
+
 At build time, `VISUALS_CHANNEL=beta` or `latest` picks the update channel (otherwise
 stable), and `VISUALS_BUILD=<n>` is a latest build's number; `release.yml` sets both.
 

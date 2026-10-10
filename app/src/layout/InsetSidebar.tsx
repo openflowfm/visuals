@@ -2,8 +2,8 @@ import { useId, useRef, useState, type KeyboardEvent } from 'react';
 import type { Pane } from '../home.ts';
 import type { Lists } from '../playlists.ts';
 import { plural } from '../controls.ts';
-import { rowSays } from '../Sources.tsx';
 import { say } from '../words.ts';
+import { rowSays, type SidebarActions } from './home-model.ts';
 import { Icon } from './icons.tsx';
 import { paneKey, samePane, type SidebarRow, type SidebarSection } from './sidebar-model.ts';
 import './inset-sidebar.css';
@@ -34,6 +34,8 @@ export interface InsetSidebarProps {
   onToggle(id: string): void;
   /** The app's playlists, when there are: a playlist's row then says what today's source list says of it (`rowSays`), such as what a smart one fills itself with. */
   lists?: Lists | null;
+  /** What the rows and their menus can do to the playlists (play, stop, make, import, rename, save, delete); not used yet. */
+  actions?: SidebarActions;
 }
 
 /** A heading's key and a row's, for the keyboard's walk. */

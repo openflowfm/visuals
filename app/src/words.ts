@@ -57,6 +57,9 @@ export const WORDS = {
   /* Home's layout (decision 67): the panel beside the grid with the preset playing (the code's stage), and the button that opens live mode. */
   stage: 'now playing',
   'live mode': 'go live',
+  /* Home's panes either side of the main column: the one about the preset playing or picked (the code's inspector), and the one with the library and the playlists (Sources.tsx's source list, the code's sidebar). */
+  inspector: 'info',
+  'source list': 'sidebar',
   /* The library's filter chips (facets), behind a button, and a playlist's settings, in a popover (decision 67). */
   facets: 'filter',
   'playlist settings': 'how it plays',

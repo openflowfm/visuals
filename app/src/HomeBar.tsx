@@ -1,4 +1,5 @@
 import { Button } from '@openflow/widgets/controls/Button.tsx';
+import { Numbers } from './Numbers.tsx';
 import { SourcePicker } from './SourcePicker.tsx';
 import { FrameRate, Preview } from './views.tsx';
 import { Say } from './words.ts';
@@ -82,20 +83,4 @@ export function HomeBar({ name, from, onStep, stepIn, panel, onPanel, mini, onLi
   );
 }
 
-/** `text` with its numbers ("7 of 9,795") in the numbers' face. */
-export function Numbers({ text }: { text: string }) {
-  const parts = text.split(/(\d[\d,.]*(?: of \d[\d,.]*)?)/);
-  return (
-    <>
-      {parts.map((part, i) =>
-        i % 2 ? (
-          <span key={i} className="home-bar-num">
-            {part}
-          </span>
-        ) : (
-          part
-        ),
-      )}
-    </>
-  );
-}
+export { Numbers };

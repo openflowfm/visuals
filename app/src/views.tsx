@@ -46,14 +46,15 @@ const LOADING = 'Loading the display…';
  * saying the display is loading, so the page never shows a hole; once it draws,
  * the box paints nothing over the picture. A picture's (`role="img"`) contents
  * are presentational, so VoiceOver never reads text inside it: the loading text
- * goes in its name instead, and the text on screen is hidden from it.
+ * goes in its name instead, and the text on screen is hidden from it. Its
+ * `data-hole` is what home.css paints the rounded corners on.
  */
 export function Preview({ className }: { className: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const drawing = usePreview(ref);
   const name = `${say('bench')} of the playing preset`;
   return (
-    <div className={className} ref={ref} role="img" aria-label={drawing ? name : `${name}: ${LOADING}`} data-loading={drawing ? undefined : ''}>
+    <div className={className} ref={ref} role="img" aria-label={drawing ? name : `${name}: ${LOADING}`} data-hole="" data-loading={drawing ? undefined : ''}>
       {!drawing && (
         <span className="bench-loading" aria-hidden="true">
           {LOADING}
@@ -80,11 +81,12 @@ export function Mark() {
 /**
  * Every view's header: the mark, the view switch, then whatever the view puts in
  * it. In the main window it is the title bar too (chrome.ts): its empty space
- * drags the window.
+ * drags the window. `lead` goes before the mark (the home's sidebar toggle).
  */
-export function Header({ view, onChange, children }: { view: View; onChange(next: View): void; children?: ReactNode }) {
+export function Header({ view, onChange, lead, children }: { view: View; onChange(next: View): void; lead?: ReactNode; children?: ReactNode }) {
   return (
     <header className="vf-header" data-tauri-drag-region>
+      {lead}
       <Mark />
       <ViewSwitch view={view} onChange={onChange} />
       {children}
