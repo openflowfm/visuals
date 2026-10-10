@@ -74,7 +74,10 @@ the live output window (both after `VISUALS_CAPTURE_AFTER` seconds, 8 by default
 hold…) 5 s after start (`VISUALS_FX_AFTER`), to check effects in a capture.
 `VISUALS_WINDOW_SIZE=WxH` (e.g. `800x900`) opens the main window at that size, to check a layout.
 In a dev run `VITE_HOME_PANEL=1` opens the home's Now Playing panel at start in a window under
-900 px too (where it starts closed), to capture it.
+900 px too (where it starts closed), to capture it, and `VITE_HOME_PANEL=0` starts it closed in a wide
+window (the bar with its small preview). `VITE_HOME_FILTER=<group>:<value>` (e.g. `style:Hypnotic`) starts the
+library with its filter open on that group and that value picked, `VITE_HOME_SEARCH=<text>` with that search
+typed, and `VITE_HOME_PLAYLIST=<name>` opens that playlist's pane, all for captures of Home's states.
 In a debug build `VISUALS_PACK_URL=<url>` replaces the full pack's download URL (a bundle
 served locally; `docs/pack.md`), and `VISUALS_PACK_DOWNLOAD=1` starts the download at
 launch, for headless tests. In a debug build, or in any headless run, the app doesn't bring

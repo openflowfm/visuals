@@ -1,5 +1,7 @@
-/* A button with a small panel under it (Popover.tsx). The button looks like the
-   home's other plain buttons; the panel floats over what is below it. */
+/* A button with a small panel under it (Popover.tsx), used on the home only.
+   Since decision 68 the button is type with no box, shown open (or pressed) in
+   --fg and underlined; the panel floats over what is below it on the raised
+   surface, with soft corners and a lift, and no border. */
 .vf-pop {
   position: relative;
   display: inline-flex;
@@ -8,31 +10,35 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  height: var(--ctl-h);
-  padding: 0 8px;
+  height: 28px;
+  padding: 0 4px;
   color: var(--ui);
-  font-family: var(--mono);
-  font-variation-settings: var(--mono-axes);
-  font-size: var(--text-control);
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
+  font-size: 13px;
+  font-weight: 500;
   white-space: nowrap;
-  background: var(--surface-control);
-  border: 1px solid var(--bd3);
-  border-radius: var(--radius);
+  background: none;
+  border: 0;
+  border-radius: 4px;
   cursor: pointer;
 }
-.vf-pop-button:hover,
-.vf-pop-button[aria-expanded='true'] {
-  border-color: var(--focus);
+.vf-pop-button:hover {
   color: var(--fg);
 }
+.vf-pop-button[aria-expanded='true'],
 .vf-pop-button[aria-pressed='true'] {
-  color: #000;
-  background: var(--primary);
-  border-color: var(--primary);
+  color: var(--fg);
+  text-decoration: underline 2px var(--line-active);
+  text-underline-offset: 6px;
+}
+.vf-pop-button:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 0;
 }
 .vf-pop-panel {
   position: absolute;
-  top: calc(100% + 4px);
+  top: calc(100% + 6px);
   left: 0;
   z-index: 40;
   min-width: 160px;
@@ -41,16 +47,20 @@
   overflow: auto;
   padding: 6px;
   color: var(--ui);
-  background: var(--panel);
-  border: 1px solid var(--bd3);
-  border-radius: var(--radius);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 0.45);
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
+  font-size: 13px;
+  font-weight: normal;
+  background: var(--surface-2);
+  border: 0;
+  border-radius: 10px;
+  box-shadow: var(--lift);
 }
 .vf-pop-panel[data-align='right'] {
   left: auto;
   right: 0;
 }
-/* A menu's items: whole-width rows. */
+/* A menu's items: whole-width rows, type until hovered. */
 .vf-pop-panel[role='menu'] {
   display: flex;
   flex-direction: column;
@@ -59,20 +69,25 @@
 .vf-pop-panel [role='menuitem'] {
   display: block;
   width: 100%;
-  padding: 5px 8px;
+  height: 30px;
+  padding: 0 10px;
   text-align: left;
   color: var(--ui);
-  font-size: var(--text-body);
+  font: inherit;
   white-space: nowrap;
   background: none;
   border: 0;
-  border-radius: var(--radius);
+  border-radius: 6px;
   cursor: pointer;
 }
-.vf-pop-panel [role='menuitem']:hover,
+.vf-pop-panel [role='menuitem']:hover:not(:disabled),
 .vf-pop-panel [role='menuitem']:focus-visible {
   color: var(--fg);
-  background: var(--sel);
+  background: var(--surface-3);
+}
+.vf-pop-panel [role='menuitem']:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: -2px;
 }
 .vf-pop-panel [role='menuitem'][data-danger] {
   color: var(--red);

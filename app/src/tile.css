@@ -1,0 +1,329 @@
+/* One tile (PresetTile.tsx) for the home's library grid and a playlist's strip
+   (decision 68): a 16:9 picture, cover-cropped, with 6px corners and no edge;
+   a 12px name and an 11px author under it. States differ by kind, not by more
+   lines: hover lifts the picture, the selection is a ring with a gap, playing is
+   green (a level badge and ▶ before the name), and the keyboard's tile shows the
+   focus ring. The label lines add up to 39px, which LibraryGrid's `homeLook`
+   counts on. Everything hangs off `.home`: the lab editor keeps library.css. */
+
+.home .tile {
+  /* The labels' height under the picture: 7 + 16 + 1 + 15. */
+  --tile-label: 39px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  color: var(--ui);
+  cursor: pointer;
+  user-select: none;
+}
+.home .tile-pic {
+  position: relative;
+  flex: none;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--surface-2);
+  transition:
+    transform 140ms ease,
+    box-shadow 140ms ease;
+}
+.home .tile-pic img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.home .tile-none {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 6px;
+  box-sizing: border-box;
+  color: var(--caption);
+  font-size: 11px;
+  text-align: center;
+  overflow: hidden;
+}
+.home .tile-name,
+.home .tile-by {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.home .tile-name {
+  margin-top: 7px;
+  color: var(--ui);
+  font-size: 12px;
+  line-height: 16px;
+}
+.home .tile-by {
+  margin-top: 1px;
+  color: var(--caption);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+/* Hover: the picture lifts, no line. */
+.home .tile:hover .tile-pic {
+  transform: translateY(-2px);
+  box-shadow: var(--lift);
+}
+/* Selected: a ring in --fg, a gap off the picture. */
+.home .tile[aria-selected='true'] .tile-pic {
+  box-shadow:
+    0 0 0 2px var(--surface-0),
+    0 0 0 4px var(--fg);
+}
+.home .tile[aria-selected='true']:hover .tile-pic {
+  box-shadow:
+    0 0 0 2px var(--surface-0),
+    0 0 0 4px var(--fg),
+    var(--lift);
+}
+/* The keyboard's tile, while the grid has focus (the grid rings it, not itself): the focus ring, over a selection's. */
+.home .lib-grid:focus-visible .tile[data-active] .tile-pic {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 2px;
+}
+
+/* Playing: green. A level badge on the picture, ▶ before the name. */
+.home .tile[data-playing] .tile-name {
+  color: var(--fg);
+  font-weight: 600;
+}
+.home .tile[data-playing] .tile-name::before {
+  content: '▶';
+  margin-right: 5px;
+  color: var(--playing);
+  font-size: 9px;
+  vertical-align: 1px;
+}
+.home .tile-live {
+  position: absolute;
+  left: 7px;
+  bottom: 7px;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  box-sizing: content-box;
+  height: 12px;
+  padding: 3px 5px;
+  border-radius: 5px;
+  background: rgb(0 0 0 / 0.55);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+.home .tile-live i {
+  width: 2px;
+  height: 6px;
+  border-radius: 1px;
+  background: var(--playing);
+}
+.home .tile-live i:nth-child(2) {
+  height: 10px;
+}
+.home .tile-live i:nth-child(3) {
+  height: 4px;
+}
+.home .tile-live i:nth-child(4) {
+  height: 8px;
+}
+
+/* Starred: a white star, top left. */
+.home .tile-star {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  color: #fff;
+  font-size: 11px;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 0.8);
+  pointer-events: none;
+}
+/* A preset that failed to open or draw: live mode skips it. --caution, not --amber (decision 28). */
+.home .tile-failed {
+  position: absolute;
+  bottom: 7px;
+  right: 7px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--caution);
+  color: #000;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+  pointer-events: none;
+}
+.home .tile[data-failed] .tile-pic img {
+  opacity: 0.55;
+}
+/* Never played: quieter. */
+.home .tile[data-hidden] .tile-pic img,
+.home .tile[data-hidden] .tile-name {
+  opacity: 0.4;
+}
+
+/* +: a small round dark button, top right, on hover (or on the keyboard's tile). */
+.home .tile-add {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  display: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  color: var(--fg);
+  background: rgb(0 0 0 / 0.55);
+  backdrop-filter: blur(6px);
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.home .tile-add:hover {
+  background: rgb(0 0 0 / 0.75);
+}
+.home .tile:hover .tile-add,
+.home .lib-grid:focus-visible .tile[data-active] .tile-add {
+  display: grid;
+}
+
+/* The strip's tip: how to play from it and reorder it, quietly over it. */
+.home .home-strip-tip {
+  flex: none;
+  margin: 0;
+  padding: 0 var(--pad) 8px;
+  color: var(--caption);
+  font-size: 12px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* An empty playlist's note, on the same edge. */
+.home .home-strip-empty {
+  margin-inline: var(--pad);
+  color: var(--caption);
+  font-size: 12px;
+}
+
+/* The strip: the playlist's presets as tiles, in the order they play, on the grid's spacing. */
+.home .home-strip {
+  --tile-min: 150px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--tile-min), 1fr));
+  align-content: start;
+  gap: 16px 12px;
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 8px var(--pad) 22px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  list-style: none;
+  overscroll-behavior: contain;
+}
+/* A focused tile rings its picture (below), not itself as well: one ring. */
+.vf-root .home li.home-tile:focus-visible {
+  outline: none;
+}
+.home .home-tile:focus-visible .tile-pic {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 2px;
+}
+/* Its place in the playlist, top left; "next" a quiet chip, bottom right. */
+.home .home-tile-n,
+.home .home-tile-next {
+  position: absolute;
+  color: var(--fg);
+  font-weight: normal;
+  background: rgb(0 0 0 / 0.55);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+.home .home-tile-n {
+  top: 6px;
+  left: 6px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  font-family: var(--font-num);
+  font-variation-settings: var(--font-num-axes);
+  font-size: 10px;
+}
+.home .home-tile-next {
+  bottom: 7px;
+  right: 7px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+}
+/* ✕ takes it out: a small round dark button, top right, on hover or focus. */
+.home .home-tile-tools {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  display: none;
+}
+.home .home-tile:hover .home-tile-tools,
+.home .home-tile:focus-within .home-tile-tools {
+  display: block;
+}
+.home .home-tile-tools .wdg-button-body {
+  width: 24px;
+  min-width: 0;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  color: var(--fg);
+  background: rgb(0 0 0 / 0.55);
+  backdrop-filter: blur(6px);
+  font-size: 11px;
+}
+.home .home-tile-tools .wdg-button-body:hover {
+  background: rgb(0 0 0 / 0.75);
+}
+.home .home-tile[data-missing] .tile-pic,
+.home .home-tile[data-missing] .tile-name,
+.home .home-tile[data-missing] .tile-by {
+  opacity: 0.4;
+}
+.home .home-tile[data-dragged] {
+  opacity: 0.35;
+}
+/* Where a dragged preset would land: a bar before or after the tile it is over, in the gap, the picture's height. */
+.home .home-tile[data-over]::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: var(--tile-label);
+  width: 3px;
+  border-radius: 2px;
+  background: var(--amber);
+}
+.home .home-tile[data-over='before']::before {
+  left: -7.5px;
+}
+.home .home-tile[data-over='after']::before {
+  right: -7.5px;
+}
+.home .home-more {
+  align-self: center;
+  color: var(--caption);
+  font-size: 12px;
+}
+
+/* Under 1100px the main pane narrows: smaller tiles, three across at 900px with the panel open (HOME_TILE in Home.tsx). */
+@media (max-width: 1099px) {
+  .home .home-strip {
+    --tile-min: 124px;
+  }
+}

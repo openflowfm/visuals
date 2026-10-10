@@ -4,11 +4,12 @@ import * as api from './api.ts';
 import type { Entry, LibraryChange, LibraryData, LibraryRow } from './api.ts';
 import { HomeBar } from './HomeBar.tsx';
 import { Library } from './Library.tsx';
-import { stepIn, prepare, type Prepared } from './librarySearch.ts';
+import { browsable, browseOrder, facet, stepIn, prepare, type Prepared } from './librarySearch.ts';
 import { useLibrary, rereadOn, stepDeck } from './library.ts';
 import { NowPanel } from './NowPanel.tsx';
 import { onChanged } from './pack.ts';
 import { PlaylistHead } from './PlaylistHead.tsx';
+import { PresetTile, tileBy, tileName } from './PresetTile.tsx';
 import * as pl from './playlists.ts';
 import type { Lists, Playlist } from './playlists.ts';
 import { useNotice, useTauriEvent } from './hooks.ts';
@@ -25,15 +26,22 @@ export { Sidebar, rowSays } from './Sources.tsx';
 export { SettingsBar } from './PlaylistHead.tsx';
 export type { Pane } from './home.ts';
 
-/** The narrowest a library tile gets on the home, where the library has the main pane's width. */
-const HOME_TILE = 150;
+/**
+ * The narrowest a library tile gets on the home, where the library has the main
+ * pane's width: `small` under `under` px, where the sidebar and the panel narrow
+ * (home.css), so the grid keeps three across at 900 px with the panel open (decision 68).
+ */
+export const HOME_TILE = { wide: 150, small: 124, under: 1100 };
 
 /** Under this width (px) the sidebar is a menu and the Now Playing panel an overlay, closed at first (decision 67). */
 export const NARROW = 900;
 
 /** True while the window is narrower than `NARROW`. */
-function useNarrow(): boolean {
-  const query = `(max-width: ${NARROW - 1}px)`;
+const useNarrow = (): boolean => useNarrowerThan(NARROW);
+
+/** True while the window is narrower than `width` px. */
+function useNarrowerThan(width: number): boolean {
+  const query = `(max-width: ${width - 1}px)`;
   const [narrow, setNarrow] = useState(() => typeof window.matchMedia === 'function' && window.matchMedia(query).matches);
   useEffect(() => {
     if (typeof window.matchMedia !== 'function') return;
@@ -96,6 +104,12 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
     }, fail("Couldn't read the playlists."));
   }, [fail]);
   useTauriEvent(pl.onLists, setLists);
+  // `VITE_HOME_PLAYLIST=<name>` (a dev run only) opens that playlist's pane once the playlists are read, for a headless capture of it.
+  const devList = import.meta.env.DEV ? String(import.meta.env.VITE_HOME_PLAYLIST ?? '') : '';
+  const devListId = devList ? lists?.playlists.find((p) => p.name === devList)?.id : undefined;
+  useEffect(() => {
+    if (devListId) setPane({ kind: 'list', id: devListId });
+  }, [devListId]);
   useTauriEvent(pl.onLive, (now) => {
     setLists((l) => (l ? { ...l, deck: now.deck } : l));
     played.reread();
@@ -120,7 +134,9 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
 
   // The Now Playing panel: open in a wide window as the viewer left it; in the main pane's place, and closed at first, in a narrow one.
   const narrow = useNarrow();
-  const [panelWide, setPanelWide] = useState(() => remembered(PANEL_KEY, true));
+  const tileMin = useNarrowerThan(HOME_TILE.under) ? HOME_TILE.small : HOME_TILE.wide;
+  // `VITE_HOME_PANEL=0` (a dev run only) starts with it closed in a wide window, for a headless capture of the bar with its small preview.
+  const [panelWide, setPanelWide] = useState(() => !(import.meta.env.DEV && import.meta.env.VITE_HOME_PANEL === '0') && remembered(PANEL_KEY, true));
   // `VITE_HOME_PANEL=1` (a dev run only) starts with it open in a narrow window too, for a headless capture of it.
   const [panelNarrow, setPanelNarrow] = useState(() => import.meta.env.DEV && import.meta.env.VITE_HOME_PANEL === '1');
   const panel = narrow ? panelNarrow : panelWide;
@@ -141,6 +157,16 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
   }, [panel, narrow]);
 
   const playing = deck.playlist;
+  // What ←, → and R step through while the deck follows nothing: the library's grid as it browses (decision
+  // 68: curated picks first, utility presets only when the search reaches them), with the search typed; the
+  // plain list until the index is read.
+  const browsing = useMemo(() => {
+    if (!rows) return null;
+    const byPath = new Map(library.map((e) => [e.path, e]));
+    return facet(browseOrder(rows), { groups: {}, text: search, browse: true }).shown.map(
+      (p): Entry => byPath.get(p.row.path) ?? { path: p.row.path, name: p.title, group: p.subStyle ? `${p.style}/${p.subStyle}` : p.style },
+    );
+  }, [rows, library, search]);
   const step = useCallback(
     (by: number) => {
       if (playing || deck.query) {
@@ -148,10 +174,10 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
         stepDeck({ kind: by === 0 ? 'random' : by > 0 ? 'next' : 'previous' }).catch(fail("Couldn't step the playlist."));
         return;
       }
-      const next = stepIn(found.shown.length ? found.shown : library, current?.path ?? null, by);
+      const next = stepIn(browsing?.length ? browsing : found.shown.length ? found.shown : library, current?.path ?? null, by);
       if (next) load(next);
     },
-    [playing, deck.query, found.shown, library, current, load, fail],
+    [playing, deck.query, browsing, found.shown, library, current, load, fail],
   );
   useEffect(() => {
     const key = (e: globalThis.KeyboardEvent) => {
@@ -189,8 +215,9 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
     const smart = new Map<string, number>();
     if (rows) for (const p of playlists) if (p.kind === 'smart' && p.query) smart.set(p.id, matches(p.query, rows, played.paths).length);
     return {
-      library: rows ? rows.length : null,
-      starred: rows ? rows.filter((p) => p.star).length : null,
+      // What the library's grid shows with nothing filtered: utility presets wait for a filter (decision 68).
+      library: rows ? browsable(rows).length : null,
+      starred: rows ? browsable(rows).filter((p) => p.star).length : null,
       list: (p: Playlist) => (p.kind === 'manual' ? p.items.length : (smart.get(p.id) ?? null)),
     };
   }, [rows, playlists, played.paths]);
@@ -241,7 +268,7 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
             onLoad={load}
             onAdd={(e) => into && run(pl.add(into.id, e.path), `add ${e.name} to ${into.name}`)}
             onPress={(e, thumbnail, ev) => beginDrag(ev, { kind: 'preset', path: e.path, name: e.name, thumbnail }, dropping)}
-            tileMin={HOME_TILE}
+            tileMin={tileMin}
             home={{ scope: shown.kind, title: paneName(shown, lists), menu, onChosen: setChosen }}
           />
         ) : list && lists ? (
@@ -408,6 +435,8 @@ export function PlaylistPane({ list, lists, rows, played, dropping, onLists, onD
     };
   }, [orderKey]);
   const { tiles, total } = useMemo(() => strip(list, { rows: rows ?? [], played, playing: active ? order : null }), [list, rows, played, active, order]);
+  // Each tile's library row, for its name and author line.
+  const byPath = useMemo(() => new Map((rows ?? []).map((p) => [p.row.path, p])), [rows]);
 
   const play = (index: number | null) => run(pl.act(active && index !== null ? { kind: 'go', index } : { kind: 'load', playlist: at, index }), `play ${list.name}`);
 
@@ -421,7 +450,7 @@ export function PlaylistPane({ list, lists, rows, played, dropping, onLists, onD
     <div className="home-pane">
       <PlaylistHead list={list} lists={lists} tiles={tiles} total={total} onLists={onLists} onDeleted={onDeleted} onError={onError} menu={menu} />
       {tiles.length === 0 ? (
-        <p className="home-note">
+        <p className="home-note home-strip-empty">
           {manual ? (
             <>
               {list.name} is empty. Open the{' '}
@@ -445,10 +474,37 @@ export function PlaylistPane({ list, lists, rows, played, dropping, onLists, onD
               const target = manual && t.index !== null ? itemTarget(list.id, t.index) : undefined;
               const payload: Payload | null = reorderable && t.index !== null ? { kind: 'item', list: list.id, index: t.index, path: t.path, name: t.name, thumbnail: t.thumbnail } : null;
               const open = () => (t.index !== null ? play(t.index) : api.open(t.path).catch(onError(`open ${t.name}`)));
+              const known = byPath.get(t.path);
               return (
-                <li
+                <PresetTile
+                  as="li"
                   key={t.key}
                   className="home-tile"
+                  thumbnail={t.thumbnail}
+                  name={tileName(known?.title ?? t.name, t.path)}
+                  by={known ? tileBy(known.authors, known.style) : ''}
+                  playing={currentAt(t)}
+                  marks={
+                    <>
+                      <b className="home-tile-n">{i + 1}</b>
+                      {nextAt(t) && <span className="home-tile-next">next</span>}
+                    </>
+                  }
+                  tools={
+                    manual &&
+                    t.index !== null && (
+                      <span className="home-tile-tools" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+                        <Button
+                          tone="quiet"
+                          onPress={() => run(pl.removeItem(list.id, t.index!), `take ${t.name} out`)}
+                          label={`Take ${t.name} out of ${list.name}`}
+                          title="Take it out of the playlist"
+                        >
+                          ✕
+                        </Button>
+                      </span>
+                    )
+                  }
                   tabIndex={0}
                   aria-label={stripTileSays(t, i + 1, currentAt(t), nextAt(t))}
                   aria-current={currentAt(t) ? 'true' : undefined}
@@ -471,21 +527,7 @@ export function PlaylistPane({ list, lists, rows, played, dropping, onLists, onD
                       requestAnimationFrame(() => (strip?.children[tileFocus(to, tiles.length)] as HTMLElement | undefined)?.focus()),
                     );
                   }}
-                >
-                  <div className="home-thumb">
-                    {t.thumbnail ? <img src={t.thumbnail} alt="" loading="lazy" decoding="async" draggable={false} /> : <span className="home-thumb-none">{t.name}</span>}
-                    <b className="home-tile-n">{i + 1}</b>
-                    {nextAt(t) && <span className="home-tile-next">next</span>}
-                  </div>
-                  <span className="home-tile-name">{t.name}</span>
-                  {manual && t.index !== null && (
-                    <span className="home-tile-tools" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
-                      <Button tone="quiet" onPress={() => run(pl.removeItem(list.id, t.index!), `take ${t.name} out`)} label={`Take ${t.name} out of ${list.name}`} title="Take it out of the playlist">
-                        ✕
-                      </Button>
-                    </span>
-                  )}
-                </li>
+                />
               );
             })}
             {total > tiles.length && <li className="home-more">and {plural(total - tiles.length, 'more')}</li>}

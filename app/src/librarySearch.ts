@@ -189,6 +189,7 @@ export function rowsFromEntries(entries: readonly Entry[]): LibraryRow[] {
       thumbnail: null,
       look: null,
       starter: false,
+      curated: false,
     };
   });
 }
@@ -272,11 +273,35 @@ export interface Faceted {
   counts: Record<LibraryGroup, Map<string, number>>;
 }
 
-/** The rows matching `query`, and the live counts for every group's values. */
+/** A utility preset: its style (the user's, else the index's) starts with "!", like `! Transition`. */
+export const isUtility = (style: string) => style.startsWith('!');
+
+/**
+ * Whether `query` reaches utility presets: any query that isn't browsing does (a
+ * saved smart playlist, as before decision 68); a browsing one when it picks
+ * values in the style group (a utility preset still shows only if one is its
+ * style) or has search text (which it must still match). Rust's `query::reaches_utility` keeps the same rule.
+ */
+export const reachesUtility = (query: LibraryQuery) => !query.browse || (query.groups.style?.length ?? 0) > 0 || wordsOf(query.text).length > 0;
+
+/** `rows` in the order the library's grid browses them (decision 68): the curated picks first, then the rest, each part in the order given (by key). As Rust's `query::resolve` does for a browsing query. */
+export function browseOrder<T extends { row: Pick<LibraryRow, 'curated'> }>(rows: readonly T[]): T[] {
+  return [...rows.filter((p) => p.row.curated), ...rows.filter((p) => !p.row.curated)];
+}
+
+/** What the library's grid can show of `rows` with nothing filtered: all but the utility presets, which only a filter reaches. */
+export const browsable = <T extends { style: string }>(rows: readonly T[]): T[] => rows.filter((p) => !isUtility(p.style));
+
+/**
+ * The rows matching `query`, and the live counts for every group's values. A
+ * utility preset the query doesn't ask for ({@link reachesUtility}) is left out as
+ * though it failed the style group, so the style group still counts (and offers) its style.
+ */
 export function facet(rows: readonly Prepared[], query: LibraryQuery): Faceted {
   const words = wordsOf(query.text);
   const active = activeGroups(query);
   const wanted = active.map((g) => new Set(query.groups[g]));
+  const utility = reachesUtility(query);
   const counts = Object.fromEntries(GROUPS.map((g) => [g, new Map<string, number>()])) as Record<LibraryGroup, Map<string, number>>;
   const shown: Prepared[] = [];
   const bump = (g: LibraryGroup, values: string[]) => {
@@ -286,21 +311,26 @@ export function facet(rows: readonly Prepared[], query: LibraryQuery): Faceted {
 
   for (const p of rows) {
     if (words.length && !words.every((w) => p.text.includes(w))) continue;
-    // The one active group this row fails, if only one: it still counts there.
-    let failed = -1;
+    // The one group this row fails, if only one: it still counts there.
+    let failed: LibraryGroup | null = null;
     let fails = 0;
+    if (!utility && isUtility(p.style)) {
+      // The style group isn't active here (picking a style reaches utility presets).
+      failed = 'style';
+      fails++;
+    }
     for (let i = 0; i < active.length && fails < 2; i++) {
       const want = wanted[i];
       if (!p.values[active[i]].some((v) => want.has(v))) {
-        failed = i;
+        failed = active[i];
         fails++;
       }
     }
     if (fails === 0) {
       shown.push(p);
       for (const g of GROUPS) bump(g, p.values[g]);
-    } else if (fails === 1) {
-      bump(active[failed], p.values[active[failed]]);
+    } else if (fails === 1 && failed) {
+      bump(failed, p.values[failed]);
     }
   }
   return { shown, total: rows.length, counts };

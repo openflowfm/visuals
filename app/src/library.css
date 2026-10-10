@@ -452,112 +452,410 @@
   color: var(--red);
 }
 
-/* The library as the home's main pane (decision 67): a title row with the
-   count, the search and "filter · n"; the chips under it only when opened; the
-   values picked on a summary line with the count and "save as smart playlist". */
+.lib-fill {
+  flex: 1;
+}
+
+/* The library as the home's main pane (decisions 67 and 68), near borderless:
+   a head with the title, its count, the search as type and "Filter"; the groups
+   as a switch made of type, the open one underlined, and its values as text
+   with counts; the values picked on a quiet line with the count, "Clear" and
+   "Save as smart playlist"; centred empty states. No boxes and no rules: the
+   only lines are the active underline and the focus ring. Everything sits on
+   the pane's one padding (--pad, home.css), so its left edge is the grid's. */
+.lib-home {
+  --lib-pad: var(--pad, 16px);
+}
 .lib-home .lib-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 16px 8px;
+  gap: 12px;
+  padding: 18px var(--lib-pad) 12px;
   min-width: 0;
 }
 .lib-home .lib-title-head {
   margin: 0;
   color: var(--fg);
-  font-family: var(--sans);
-  font-variation-settings: var(--sans-axes);
-  font-size: var(--text-title);
-  font-weight: var(--weight-strong);
+  font-family: var(--font-display);
+  font-variation-settings: var(--font-display-axes);
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
   white-space: nowrap;
 }
 .lib-home .lib-count,
-.lib-home .lib-picked-count {
+.lib-home .lib-picked-count,
+.lib-home .lib-value-count,
+.lib-home .lib-chip-count {
   color: var(--caption);
-  font-size: var(--text-body);
+  font-family: var(--font-num);
+  font-variation-settings: var(--font-num-axes);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.lib-fill {
-  flex: 1;
+.lib-home .lib-count {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+/* The search: a ⌕ and the text on the pane, no box; the field rings when focused. */
+.lib-home .lib-search-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 260px;
+  min-width: 120px;
+  height: 32px;
+}
+.lib-home .lib-search-glyph {
+  flex: none;
+  color: var(--detail);
+  font-size: 13px;
 }
 .lib-home .lib-search {
-  flex: 0 1 240px;
-  min-width: 90px;
-  height: var(--ctl-h);
+  flex: 1;
+  min-width: 0;
+  height: 26px;
   margin: 0;
-  padding: 0 8px;
-  font-family: var(--mono);
-  font-variation-settings: var(--mono-axes);
-  font-size: var(--text-control);
-  background: var(--panel);
+  padding: 0 4px;
+  color: var(--fg);
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
+  font-size: 12px;
+  -webkit-appearance: none;
+  appearance: none;
 }
-.lib-home .lib-filter {
+.lib-home .lib-search::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+.lib-home .lib-search-clear {
   flex: none;
-  height: var(--ctl-h);
-  padding: 0 8px;
-  font-family: var(--mono);
-  font-variation-settings: var(--mono-axes);
-  font-size: var(--text-control);
+  padding: 2px 4px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--detail);
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.lib-home .lib-search-clear:hover {
+  color: var(--fg);
+}
+
+/* "Filter": type, underlined while the panel is open; a round count only when values are picked. */
+.lib-home .lib-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+  height: 32px;
+  padding: 0 2px;
   color: var(--ui);
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
+  font-size: 12px;
+  font-weight: 500;
   white-space: nowrap;
+  cursor: pointer;
+}
+.lib-home .lib-filter:hover:not(:disabled) {
+  color: var(--fg);
 }
 .lib-home .lib-filter[aria-expanded='true'] {
   color: var(--fg);
-  border-color: var(--focus);
+  text-decoration: underline;
+  text-decoration-color: var(--line-active);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 6px;
 }
-.lib-home .lib-filter:focus-visible {
-  outline: 2px solid var(--vf-focus-ring);
-  outline-offset: 1px;
+.lib-home .lib-filter:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
-.lib-home .lib-chips,
-.lib-home .lib-picked {
-  gap: 6px;
-  padding: 0 16px 10px;
+.lib-home .lib-filter-badge {
+  display: grid;
+  place-items: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--surface-0);
+  font-family: var(--font-num);
+  font-variation-settings: var(--font-num-axes);
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
 }
-.lib-home .lib-values {
-  margin: 0 16px 10px;
+
+/* The groups: a switch made of type, the open one underlined. */
+.lib-home .lib-chips {
+  gap: 4px 22px;
+  padding: 2px var(--lib-pad) 12px;
 }
 .lib-home .lib-chip {
-  height: 20px;
-  padding: 0 8px;
-  font-size: var(--text-control);
+  gap: 6px;
+  height: auto;
+  padding: 3px 0;
+  color: var(--detail);
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
+  font-size: 12px;
+  font-weight: 500;
+}
+.lib-home .lib-chip:hover:not(:disabled) {
+  color: var(--fg);
+  background: none;
+}
+.lib-home .lib-chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.lib-home .lib-chip[data-on] {
+  color: var(--ui);
+}
+.lib-home .lib-chip[aria-expanded='true'] {
+  color: var(--fg);
+  text-decoration: underline;
+  text-decoration-color: var(--line-active);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 6px;
+}
+.lib-home .lib-chip-count {
+  min-width: 0;
+  padding: 0;
+  background: none;
+  font-size: 11px;
+}
+
+/* The open group's values: text with a count, no box round them; picked is --fg and underlined. */
+.lib-home .lib-values {
+  gap: 10px;
+  margin: 0 var(--lib-pad) 14px;
+  padding: 0 0 4px;
+  overflow: auto;
+  background: none;
+  border: 0;
+  border-radius: 0;
+}
+.lib-home .lib-values-list {
+  gap: 6px 14px;
+  overflow: visible;
+}
+.lib-home .lib-value {
+  align-items: baseline;
+  height: auto;
+  padding: 2px 0;
+  color: var(--ui);
+  font-weight: 500;
+}
+.lib-home .lib-value[aria-pressed='true'] {
+  color: var(--fg);
+  background: none;
+  text-decoration: underline;
+  text-decoration-color: var(--line-active);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+.lib-home .lib-value-count {
+  font-size: 11px;
+}
+.lib-home .lib-values-subs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+}
+.lib-home .lib-values-in {
+  flex-basis: 100%;
+  color: var(--caption);
+  font-size: 11px;
+}
+.lib-home .lib-values-subs .lib-value {
+  color: var(--detail);
+  font-weight: 400;
+}
+.lib-home .lib-values-subs .lib-value[aria-pressed='true'] {
+  color: var(--fg);
+}
+.lib-home .lib-value[data-sub] .lib-value-name::before {
+  content: none;
+}
+.lib-home .lib-values-find {
+  align-self: flex-start;
+  width: 220px;
+  max-width: 100%;
+  padding: 3px 0;
+  color: var(--fg);
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
+  font-size: 12px;
+}
+.lib-home .lib-values .lib-note {
+  padding: 0;
+}
+
+/* The values picked: type with a ✕, the count, then "Clear" and "Save as smart playlist" at the right. */
+.lib-home .lib-picked {
+  gap: 6px 14px;
+  padding: 0 var(--lib-pad) 12px;
+  font-size: 12px;
 }
 .lib-home .lib-chip-picked {
   color: var(--fg);
-  background: var(--sel);
-  border-color: var(--focus);
+}
+.lib-home .lib-chip-picked .lib-x {
+  color: var(--detail);
+  font-size: 11px;
+}
+.lib-home .lib-chip-picked:hover .lib-x {
+  color: var(--fg);
+}
+.lib-home .lib-picked-count {
+  font-size: 12px;
 }
 .lib-home .lib-link {
-  font-size: var(--text-control);
+  padding: 2px 0;
+  border-radius: 4px;
   color: var(--detail);
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
+  font-size: 12px;
   text-decoration: none;
 }
 .lib-home .lib-link:hover {
   color: var(--fg);
 }
-.lib-home .lib-summary {
-  padding: 0 16px 8px;
+.lib-home .lib-name-input {
+  flex: 0 1 260px;
+  padding: 4px 8px;
+  color: var(--fg);
+  background: var(--surface-3);
+  border: 0;
+  border-radius: 4px;
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
+  font-size: 12px;
+}
+
+/* The notes: the save note, the loading note, the first run's. */
+.lib-home .lib-summary,
+.lib-home .lib-note {
+  padding: 0 var(--lib-pad) 12px;
+  font-size: 12px;
+  letter-spacing: normal;
 }
 .lib-home .lib-summary[data-error] {
   color: var(--red);
 }
 .lib-home .lib-first-run {
-  padding: 8px 16px;
+  padding: 8px var(--lib-pad);
+  font-size: 13px;
 }
+
+/* The starter pack's offer (PackOffer.tsx): one quiet line, its action a text link. */
+.lib-home .pack-offer {
+  padding: 0 var(--lib-pad) 12px;
+  font-size: 12px;
+}
+.lib-home .pack-offer .wdg-button-body {
+  height: auto;
+  padding: 2px 0;
+  color: var(--fg);
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
+  font-size: 12px;
+  font-weight: 500;
+}
+.lib-home .pack-offer .wdg-button-body:hover:not(:disabled) {
+  color: var(--fg);
+  text-decoration: underline;
+  text-decoration-color: var(--line-active);
+  text-underline-offset: 4px;
+}
+.lib-home .pack-offer .pack-progress {
+  background: var(--surface-2);
+  border: 0;
+  border-radius: 4px;
+}
+
+/* Nothing to show: centred in the pane, what didn't match, why, and the way back. */
+.lib-home .lib-empty {
+  flex: 1;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  padding: 0 var(--lib-pad) 80px;
+  text-align: center;
+}
+.lib-home .lib-empty-glyph {
+  color: var(--detail);
+  font-size: 28px;
+  line-height: 1;
+}
+.lib-home .lib-empty-title {
+  margin: 6px 0 0;
+  color: var(--fg);
+  font-family: var(--font-display);
+  font-variation-settings: var(--font-display-axes);
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.lib-home .lib-empty-why {
+  margin: 0;
+  color: var(--caption);
+  font-size: 12px;
+}
+.lib-home .lib-empty-clear {
+  margin-top: 6px;
+  padding: 4px 2px;
+  color: var(--ui);
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.lib-home .lib-empty-clear:hover {
+  color: var(--fg);
+}
+
+/* Keep focus visible on everything focusable here: no fill or edge to fall back on. */
+.lib-home :is(.lib-search, .lib-search-clear, .lib-filter, .lib-chip, .lib-link, .lib-values-find, .lib-empty-clear, .lib-name-input, .pack-offer .wdg-button-body):focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 2px;
+}
+
 /* A narrow window: the menu takes the title's place, and the search takes the room left. */
 @media (max-width: 899px) {
-  .lib-home .lib-head {
-    padding: 10px 12px 8px;
-  }
   .lib-home .lib-title-head {
     display: none;
   }
-  .lib-home .lib-search {
+  .lib-home .lib-search-field {
     flex: 1 1 auto;
-  }
-  .lib-home .lib-chips,
-  .lib-home .lib-picked,
-  .lib-home .lib-summary {
-    padding-inline: 12px;
   }
 }

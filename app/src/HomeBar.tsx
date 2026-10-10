@@ -1,7 +1,7 @@
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { SourcePicker } from './SourcePicker.tsx';
 import { FrameRate, Preview } from './views.tsx';
-import { say } from './words.ts';
+import { Say } from './words.ts';
 import './homebar.css';
 
 export interface HomeBarProps {
@@ -46,12 +46,12 @@ export function HomeBar({ name, from, onStep, stepIn, panel, onPanel, mini, onLi
             </b>
           ) : (
             <span className="home-bar-name" data-none="">
-              nothing playing
+              Nothing playing
             </span>
           )}
           {from && (
             <span className="home-bar-from" title={from}>
-              {from}
+              <Numbers text={from} />
             </span>
           )}
         </div>
@@ -71,12 +71,31 @@ export function HomeBar({ name, from, onStep, stepIn, panel, onPanel, mini, onLi
         <SourcePicker onError={onAudioError} channels="none" width={180} />
         <FrameRate slowOnly />
         <button type="button" className="home-bar-panel" aria-label="now playing panel" aria-pressed={panel} title="Show or hide the now playing panel" onClick={() => onPanel('toggle')}>
-          ▣
+          ◫
         </button>
         <button type="button" className="home-bar-live" title="Live: the output full screen on a display, with performing controls" onClick={onLive}>
-          {say('live mode')}
+          <span className="home-bar-led" aria-hidden="true" />
+          {Say('live mode')}
         </button>
       </div>
     </div>
+  );
+}
+
+/** `text` with its numbers ("7 of 9,795") in the numbers' face. */
+export function Numbers({ text }: { text: string }) {
+  const parts = text.split(/(\d[\d,.]*(?: of \d[\d,.]*)?)/);
+  return (
+    <>
+      {parts.map((part, i) =>
+        i % 2 ? (
+          <span key={i} className="home-bar-num">
+            {part}
+          </span>
+        ) : (
+          part
+        ),
+      )}
+    </>
   );
 }

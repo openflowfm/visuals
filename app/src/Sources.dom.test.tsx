@@ -5,6 +5,9 @@
 // smart playlists), its counts, picking and playing rows, making a playlist, and
 // the narrow window's source menu.
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS, EMPTY_DECK, manual, type Lists, type Playlist } from './playlists.ts';
 import { paneName, Sidebar, SourceMenu, type SidebarProps } from './Sources.tsx';
@@ -84,6 +87,38 @@ describe('the source list', () => {
     fireEvent.doubleClick(screen.getByRole('listitem', { name: 'Chill, playlist, 2 presets' }));
     expect(sent('act')).toEqual([{ action: { kind: 'load', playlist: 0, index: null } }]);
     expect(screen.getByRole('button', { name: 'Play Warm up' })).toHaveProperty('disabled', true);
+  });
+
+  it('marks the playlist playing with a green dot after its name, not by turning it green', () => {
+    render(<Sidebar {...props({ lists: { ...lists, deck: { ...EMPTY_DECK, playlist: 'chill' } } })} />);
+    const playing = screen.getByRole('listitem', { name: 'Chill, playlist, 2 presets, playing' });
+    expect(playing.querySelector('.src-name')?.nextElementSibling?.className).toBe('src-dot');
+    expect(document.querySelectorAll('.src-dot')).toHaveLength(1);
+  });
+
+  it('gives playlists ♪ and smart playlists ✦', () => {
+    render(<Sidebar {...props()} />);
+    const glyph = (name: string) => screen.getByRole('listitem', { name: new RegExp(`^${name},`) }).querySelector('.src-glyph')?.textContent;
+    expect(glyph('Chill')).toBe('♪');
+    expect(glyph('Calm')).toBe('✦');
+  });
+
+  it('names its sections in sentence case, with no caps, and draws no line or fill on the row picked', () => {
+    const style = document.createElement('style');
+    // Read from disk: vitest hands a test empty CSS for an import, even `?raw`.
+    style.textContent = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'sources.css'), 'utf8');
+    document.head.append(style);
+    try {
+      render(<Sidebar {...props({ shown: { kind: 'list', id: 'chill' } })} />);
+      for (const h of screen.getAllByRole('heading')) expect(getComputedStyle(h).textTransform).not.toBe('uppercase');
+      const picked = screen.getByRole('listitem', { name: 'Chill, playlist, 2 presets' });
+      const look = getComputedStyle(picked);
+      expect(look.fontWeight).toBe('600');
+      expect(['', 'none']).toContain(look.boxShadow);
+      expect(['', 'none', 'transparent', 'rgba(0, 0, 0, 0)']).toContain(look.backgroundColor);
+    } finally {
+      style.remove();
+    }
   });
 
   it('makes a new playlist with + and picks it', async () => {

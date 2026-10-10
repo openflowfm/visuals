@@ -1,8 +1,10 @@
-/* The home's now playing panel (NowPanel.tsx, decision 67). The preview is a hole
+/* The home's now playing panel (NowPanel.tsx, decisions 67 and 68). The preview is a hole
    the engine's native view shows through, so neither it nor anything holding it
-   paints a background: the panel's colour is the preview's spread shadow, clipped
-   by the panel. Later flex items paint over earlier ones, so every part other than
-   the preview's cell is positioned, to paint above that flood. */
+   paints a background: the panel's colour (--surface-1, one faint step up from the
+   window) is the preview's spread shadow, clipped by the panel. The shadow also
+   paints the preview's rounded corners. Later flex items paint over earlier ones, so every part other than
+   the preview's cell is positioned, to paint above that flood. No border: the
+   step in tone tells the panel from the main pane. */
 .now-panel {
   display: flex;
   flex-direction: column;
@@ -10,64 +12,69 @@
   min-height: 0;
   height: 100%;
   overflow: hidden;
-  border-left: 1px solid var(--bd3);
   color: var(--ui);
-  font-family: var(--mono);
-  font-variation-settings: var(--mono-axes);
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
+  font-size: 12px;
 }
 .now-panel > :not(.now-cell) {
   position: relative;
 }
-.now-panel .now-caps {
-  font-size: var(--text-label);
-  letter-spacing: var(--track-caps);
-  text-transform: uppercase;
-  color: var(--caption);
+.now-panel .now-label {
+  color: var(--detail);
+  font-size: 11px;
+  font-weight: 500;
 }
 .now-panel .now-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 10px 12px 0;
+  padding: 12px 10px 0 16px;
   flex: none;
 }
 .now-panel .now-close {
-  height: var(--ctl-h);
-  min-width: var(--ctl-h);
-  padding: 0 4px;
-  color: var(--detail);
-  font-size: var(--text-control);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius);
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  color: var(--caption);
+  font: inherit;
+  font-size: 13px;
+  background: none;
+  border: 0;
+  border-radius: 6px;
   cursor: pointer;
 }
 .now-panel .now-close:hover {
   color: var(--fg);
 }
+.now-panel .now-close:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 0;
+}
 
 /* The preview's cell and the preview: transparent; the shadow is the panel. */
 .now-panel .now-cell {
   flex: none;
-  padding: 12px;
+  padding: 10px 16px 14px;
   background: transparent;
 }
 .now-panel .now-preview {
   width: 100%;
   aspect-ratio: 16 / 9;
+  border-radius: 8px;
   background: transparent;
-  box-shadow: 0 0 0 100vmax var(--panel);
+  box-shadow: 0 0 0 100vmax var(--surface-1);
 }
 .now-panel .now-preview[data-loading] {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--panel);
+  background: var(--surface-1);
 }
 .now-panel .now-preview .bench-loading {
   color: var(--caption);
-  font-size: var(--text-body);
+  font-size: 12px;
   user-select: none;
 }
 
@@ -78,8 +85,8 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 0 12px 12px;
+  gap: 16px;
+  padding: 0 16px 16px;
 }
 .now-panel .now-title {
   min-width: 0;
@@ -87,10 +94,11 @@
 .now-panel .now-title h2 {
   margin: 0;
   color: var(--fg);
-  font-family: var(--sans);
-  font-variation-settings: var(--sans-axes);
-  font-size: var(--text-heading);
-  font-weight: var(--weight-medium);
+  font-family: var(--font-display);
+  font-variation-settings: var(--font-display-axes);
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -99,7 +107,7 @@
 .now-panel .now-nothing {
   margin: 3px 0 0;
   color: var(--caption);
-  font-size: var(--text-body);
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -108,26 +116,29 @@
   margin: 0;
 }
 
-/* ★ star, never play, + playlist ▾: the home's plain buttons. */
+/* ☆ Star, Never play, + Playlist: type, no box; pressed in --fg and underlined. */
 .now-panel .now-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px 14px;
+  margin-left: -4px;
 }
-.now-panel .now-btn {
+.now-panel .now-btn,
+.now-panel .now-pop .vf-pop-button {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  height: var(--ctl-h);
-  padding: 0 8px;
+  gap: 5px;
+  height: 28px;
+  padding: 0 4px;
   color: var(--ui);
-  font-family: var(--mono);
-  font-variation-settings: var(--mono-axes);
-  font-size: var(--text-control);
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
+  font-size: 13px;
+  font-weight: 500;
   white-space: nowrap;
-  background: var(--surface-control);
-  border: 1px solid var(--bd3);
-  border-radius: var(--radius);
+  background: none;
+  border: 0;
+  border-radius: 4px;
   cursor: pointer;
 }
 .now-panel .now-btn:hover:not(:disabled) {
@@ -135,26 +146,30 @@
 }
 .now-panel .now-btn[aria-pressed='true'],
 .now-panel .now-btn[aria-pressed='mixed'] {
-  color: #000;
-  background: var(--primary);
-  border-color: var(--primary);
+  color: var(--fg);
+  text-decoration: underline 2px var(--line-active);
+  text-underline-offset: 6px;
 }
 .now-panel .now-btn[aria-pressed='mixed'] {
-  opacity: 0.7;
+  text-decoration-style: dotted;
 }
 .now-panel .now-btn:disabled {
   color: var(--caption);
   cursor: default;
   opacity: 0.6;
 }
+.now-panel .now-btn:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 0;
+}
 
 /* Author, style, speed, in. */
 .now-panel .now-facts {
   display: grid;
-  grid-template-columns: 80px minmax(0, 1fr);
-  gap: 6px 8px;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 8px 10px;
   margin: 0;
-  font-size: var(--text-body);
+  font-size: 12px;
 }
 .now-panel .now-facts dt {
   color: var(--caption);
@@ -165,35 +180,41 @@
   overflow-wrap: anywhere;
 }
 
-/* My tags. */
-.now-panel .now-tags-block .now-caps {
+/* My tags: soft pills, no outline. */
+.now-panel .now-tags-block .now-label {
   margin-bottom: 6px;
+  color: var(--caption);
 }
 .now-panel .now-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 6px;
 }
 .now-panel .now-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  height: 20px;
-  padding: 0 8px;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
   color: var(--ui);
-  font-family: var(--mono);
-  font-variation-settings: var(--mono-axes);
-  font-size: var(--text-control);
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
+  font-size: 12px;
   white-space: nowrap;
-  background: transparent;
-  border: 1px solid var(--bd3);
+  background: var(--surface-3);
+  border: 0;
   border-radius: 999px;
 }
+/* On only some of several picked: fainter. */
 .now-panel .now-chip[data-some] {
-  border-style: dashed;
+  color: var(--detail);
+  background: var(--surface-2);
 }
 .now-panel .now-chip-count {
   color: var(--caption);
+  font-family: var(--font-num);
+  font-variation-settings: var(--font-num-axes);
+  font-size: 11px;
 }
 .now-panel .now-chip-x {
   padding: 0;
@@ -202,10 +223,16 @@
   font: inherit;
   background: none;
   border: 0;
+  border-radius: 3px;
   cursor: pointer;
 }
 .now-panel .now-chip-x:hover {
   color: var(--red);
+}
+.now-panel .now-chip-x:focus-visible,
+.now-panel .now-chip-add:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 1px;
 }
 .now-panel .now-chip-add {
   color: var(--detail);
@@ -213,16 +240,19 @@
 }
 .now-panel .now-chip-add:hover {
   color: var(--fg);
-  border-color: var(--bd);
 }
 .now-panel .now-tag-input {
   width: 14em;
   max-width: 100%;
+  color: var(--fg);
   outline: none;
-  border-color: var(--primary);
+}
+.now-panel .now-tag-input:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 0;
 }
 .now-panel .now-error {
   margin: 0;
   color: var(--red);
-  font-size: var(--text-body);
+  font-size: 12px;
 }

@@ -3,6 +3,9 @@
 // The home's small popovers: Esc and a choice made in one close it and give
 // focus back to its button; a press outside closes it too.
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Popover } from './Popover.tsx';
 
@@ -56,6 +59,27 @@ describe('Popover', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.queryByRole('menu')).toBeNull();
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'more' }));
+  });
+
+  it('is type with no box, underlined while open, over a raised panel with no border (decision 68)', () => {
+    const style = document.createElement('style');
+    // Read from disk: vitest hands a test empty CSS for an import, even `?raw`.
+    style.textContent = ':root { --surface-2: rgb(2, 2, 2); }\n' + readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'popover.css'), 'utf8');
+    document.head.append(style);
+    try {
+      menu();
+      const button = screen.getByRole('button', { name: 'more' });
+      // happy-dom reads `border: 0` back as "initial".
+      expect(['', 'none', 'initial']).toContain(getComputedStyle(button).borderTopStyle);
+      expect(['', 'none', 'transparent', 'rgba(0, 0, 0, 0)']).toContain(getComputedStyle(button).backgroundColor);
+      fireEvent.click(button);
+      expect(getComputedStyle(button).textDecoration).toContain('underline');
+      const panel = screen.getByRole('menu');
+      expect(getComputedStyle(panel).backgroundColor).toBe('rgb(2, 2, 2)');
+      expect(['', 'none', 'initial']).toContain(getComputedStyle(panel).borderTopStyle);
+    } finally {
+      style.remove();
+    }
   });
 
   it('closes on a press outside, leaving focus where it went', () => {

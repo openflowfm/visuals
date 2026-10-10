@@ -58,8 +58,18 @@ describe('NowPanel', () => {
     mount();
     expect(screen.getByRole('heading', { name: A.title })).toBeTruthy();
     expect(screen.getByText('Geiss · from the library')).toBeTruthy();
-    expect(screen.getByText('in').nextElementSibling?.textContent).toBe('Chill');
-    expect(screen.getByText('author').nextElementSibling?.textContent).toBe('geiss');
+    expect(screen.getByText('In').nextElementSibling?.textContent).toBe('Chill');
+    expect(screen.getByText('Author').nextElementSibling?.textContent).toBe('geiss');
+  });
+
+  it('says its labels and actions in sentence case', () => {
+    mount();
+    expect(screen.getByText('Now playing')).toBeTruthy();
+    expect(screen.getByText('My tags')).toBeTruthy();
+    expect(screen.getAllByRole('term').map((t) => t.textContent)).toEqual(['Author', 'Style', 'In']);
+    expect(screen.getByRole('button', { name: 'star' }).textContent).toBe('☆ Star');
+    expect(screen.getByRole('button', { name: 'never play' }).textContent).toBe('Never play');
+    expect(screen.getByRole('button', { name: 'add to a playlist' }).textContent).toBe('+ Playlist');
   });
 
   it('stars and never plays the preset', () => {
@@ -86,7 +96,7 @@ describe('NowPanel', () => {
 
   it('adds tags with + tag and Enter, and takes one off', () => {
     const p = mount();
-    fireEvent.click(screen.getByRole('button', { name: '+ tag' }));
+    fireEvent.click(screen.getByRole('button', { name: '+ Tag' }));
     const box = screen.getByRole('textbox', { name: 'add tags' });
     fireEvent.change(box, { target: { value: 'Intro, dark' } });
     fireEvent.keyDown(box, { key: 'Enter' });
@@ -97,7 +107,7 @@ describe('NowPanel', () => {
 
   it('cancels a tag with Esc', () => {
     const p = mount();
-    fireEvent.click(screen.getByRole('button', { name: '+ tag' }));
+    fireEvent.click(screen.getByRole('button', { name: '+ Tag' }));
     const box = screen.getByRole('textbox', { name: 'add tags' });
     fireEvent.change(box, { target: { value: 'intro' } });
     fireEvent.keyDown(box, { key: 'Escape' });
@@ -108,7 +118,7 @@ describe('NowPanel', () => {
   it('works on several at once', () => {
     const p = mount({ chosen: [prepareRow(A, { tags: ['warm'] }), prepareRow(B, undefined)] });
     expect(screen.getByRole('heading', { name: '2 selected' })).toBeTruthy();
-    expect(screen.queryByText('author')).toBeNull();
+    expect(screen.queryByText('Author')).toBeNull();
     expect(screen.getByTitle('on 1 of 2')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'star' }));
     expect(p.onSet).toHaveBeenLastCalledWith([A.key, B.key], { star: true });
@@ -116,7 +126,7 @@ describe('NowPanel', () => {
 
   it('says nothing plays yet, with its buttons off', () => {
     mount({ chosen: [], current: null });
-    expect(screen.getByText('nothing playing yet')).toBeTruthy();
+    expect(screen.getByText('Nothing playing yet')).toBeTruthy();
     expect((screen.getByRole('button', { name: 'star' }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole('button', { name: 'add to a playlist' }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByRole('img', { name: 'preview of the playing preset' })).toBeTruthy();
@@ -131,7 +141,8 @@ describe('NowPanel', () => {
   it('paints nothing behind the preview', () => {
     const style = document.createElement('style');
     // Read from disk: vitest hands a test empty CSS for an import, even `?raw`.
-    const theme = ':root { --bg: rgb(1, 1, 1); --panel: rgb(2, 2, 2); --rail: rgb(3, 3, 3); }';
+    // Home's surfaces live on `.app.home` (home.css); here on the root.
+    const theme = ':root { --bg: rgb(1, 1, 1); --panel: rgb(2, 2, 2); --rail: rgb(3, 3, 3); --surface-1: rgb(4, 4, 4); --surface-2: rgb(5, 5, 5); --surface-3: rgb(6, 6, 6); }';
     style.textContent = [theme, ...['app.css', 'nowpanel.css'].map((f) => readFileSync(new URL(f, import.meta.url), 'utf8'))].join('\n');
     document.head.append(style);
     try {
@@ -145,7 +156,11 @@ describe('NowPanel', () => {
       expect(painted).toEqual([]);
       // The panel's colour is the preview's own shadow, clipped by the panel.
       expect(getComputedStyle(preview).boxShadow).toContain('100vmax');
-      expect(getComputedStyle(screen.getByRole('region', { name: 'now playing' })).overflow).toBe('hidden');
+      expect(getComputedStyle(preview).boxShadow).toContain('rgb(4, 4, 4)');
+      const panel = screen.getByRole('region', { name: 'now playing' });
+      expect(getComputedStyle(panel).overflow).toBe('hidden');
+      // No line beside it: the step in tone tells it from the main pane (decision 68).
+      expect(['', 'none']).toContain(getComputedStyle(panel).borderLeftStyle);
     } finally {
       style.remove();
     }

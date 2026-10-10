@@ -127,6 +127,8 @@ export function Sidebar({ lists, shown, counts, onPick, onLists, onImport, onErr
           </button>
         </span>
         <span className="src-name">{p.name}</span>
+        {/* The playlist playing: a small green dot after its name. */}
+        {on && <span className="src-dot" aria-hidden="true" />}
         <Count n={countOf(p)} />
       </li>
     );
@@ -163,9 +165,9 @@ export function Sidebar({ lists, shown, counts, onPick, onLists, onImport, onErr
           </>
         }
       >
-        {manual.length ? manual.map((p) => row(p, '≡')) : <li className="src-empty">None yet: + makes one.</li>}
+        {manual.length ? manual.map((p) => row(p, '♪')) : <li className="src-empty">None yet: + makes one.</li>}
       </Section>
-      <Section title="Smart playlists">{smart.length ? smart.map((p) => row(p, '⚙')) : <li className="src-empty">Filter the library, then {say('save query')}.</li>}</Section>
+      <Section title="Smart playlists">{smart.length ? smart.map((p) => row(p, '✦')) : <li className="src-empty">Filter the library, then {say('save query')}.</li>}</Section>
     </nav>
   );
 }

@@ -194,7 +194,7 @@ describe('the home, the one place to browse', () => {
     // Read from disk: vitest hands a test empty CSS for an import, even `?raw`.
     // The theme's surfaces come from the widgets' stylesheet; any colour will do.
     const theme = ':root { --bg: rgb(1, 1, 1); --panel: rgb(2, 2, 2); --rail: rgb(3, 3, 3); --sel: rgb(4, 4, 4); --surface-control: rgb(5, 5, 5); }';
-    const sheets = ['app.css', 'home.css', 'nowpanel.css', 'homebar.css', 'library.css', 'sources.css', 'playlisthead.css', 'popover.css'];
+    const sheets = ['app.css', 'home.css', 'tile.css', 'nowpanel.css', 'homebar.css', 'library.css', 'sources.css', 'playlisthead.css', 'popover.css'];
     style.textContent = [theme, ...sheets.map(css)].join('\n');
     document.head.append(style);
     try {
@@ -264,7 +264,8 @@ describe('the home, the one place to browse', () => {
   it('shows only the starred presets under Starred', async () => {
     invoke.mockImplementation((cmd: string) => Promise.resolve(cmd === 'library_data' ? { version: 1, presets: { b: { star: true, hidden: false, tags: [] } } } : answer(cmd)));
     await mount({ library: true });
-    fireEvent.click(screen.getByText('Starred'));
+    // The sidebar's Starred row, not the group switch's "★ Starred".
+    fireEvent.click(screen.getByTitle('The presets you starred'));
     await act(() => vi.advanceTimersByTimeAsync(0));
     expect(screen.getByRole('heading', { name: 'Starred' })).toBeTruthy();
     expect(
@@ -309,6 +310,52 @@ describe('the home, the one place to browse', () => {
     fireEvent.click(screen.getByRole('listitem', { name: '2. c' }));
     await act(() => vi.advanceTimersByTimeAsync(0));
     expect(sent('act').at(-1)).toEqual({ action: { kind: 'load', playlist: 0, index: 1 } });
+  });
+});
+
+describe('the tiles on the home (decision 68)', () => {
+  /** The home's own stylesheets, so the grid can read `--pad` from them. */
+  function withCss(more = '') {
+    const style = document.createElement('style');
+    style.textContent = [':root { --bg: rgb(1, 1, 1); }', css('home.css'), css('tile.css'), more].join('\n');
+    document.head.append(style);
+    return () => style.remove();
+  }
+
+  it.each([
+    [1440, '8px 22px 22px', ''],
+    [1000, '8px 16px 22px', ''],
+    [1440, '8px 30px 22px', '.app.home { --pad: 30px; }'],
+  ] as const)('lay the grid out at %ipx on the main pane’s padding (%s), 12 px across and 16 px down', async (width, padding, more) => {
+    (window as unknown as { happyDOM: { setViewport(v: { width: number; height: number }): void } }).happyDOM.setViewport({ width, height: 900 });
+    const done = withCss(more);
+    try {
+      await mount({ library: true });
+      const win = document.querySelector<HTMLElement>('.lib-grid-window')!;
+      expect(win.style.padding).toBe(padding);
+      expect(win.style.gap).toBe('16px 12px');
+      // The shared tile, not the lab editor's.
+      expect(grid()!.querySelector('.tile .tile-pic')).toBeTruthy();
+      expect(grid()!.querySelector('.lib-tile')).toBeNull();
+    } finally {
+      done();
+    }
+  });
+
+  it('show the same tile in a playlist’s strip, with the name, the author line and the playing mark', async () => {
+    const rows = [{ ...ROWS[0], authors: ['geiss', 'flexi'] }, ROWS[1], ROWS[2]];
+    invoke.mockImplementation((cmd: string) => Promise.resolve(cmd === 'library_index' ? rows : answer(cmd)));
+    playlists = [manual('1', 'Warm up', [item(ROWS[0]), item(ROWS[2])])];
+    deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path };
+    await mount();
+    const [first, second] = [...document.querySelectorAll('.home-strip > li.tile')];
+    expect(first.querySelector('.tile-name')!.textContent).toBe('a');
+    expect(first.querySelector('.tile-by')!.textContent).toBe('geiss & flexi');
+    expect(first.hasAttribute('data-playing')).toBe(true);
+    expect(first.querySelector('.tile-live')).toBeTruthy();
+    expect(first.querySelector('.home-tile-n')!.textContent).toBe('1');
+    expect(second.querySelector('.tile-by')!.textContent).toBe('A');
+    expect(second.hasAttribute('data-playing')).toBe(false);
   });
 });
 

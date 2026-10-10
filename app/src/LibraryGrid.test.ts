@@ -3,7 +3,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { LibraryRow } from './api.ts';
 import { prepareRow } from './librarySearch.ts';
-import { TILE, Tile, firstLaidOut, layout, pickInto, pickOf, rangeAnchor, scrollFor, tileSays, windowOf } from './LibraryGrid.tsx';
+import { LAB_LOOK, TILE, Tile, centreFor, firstLaidOut, homeLook, layout, pickInto, pickOf, rangeAnchor, scrollFor, tileSays, windowOf } from './LibraryGrid.tsx';
 
 describe('layout', () => {
   it('fits as many tiles across as their narrowest allows', () => {
@@ -27,6 +27,84 @@ describe('layout', () => {
   it('keeps one column when there is no room, and no rows for no tiles', () => {
     expect(layout(0, 5)).toMatchObject({ columns: 1, rows: 5 });
     expect(layout(220, 0).rows).toBe(0);
+  });
+
+  it('keeps the lab editor’s look: 4:3 pictures, a title line, 6 px gaps on 8 px padding', () => {
+    expect(LAB_LOOK).toEqual({ gap: 6, rowGap: 6, label: 18, padX: 8, padTop: 8, padBottom: 8, aspect: 3 / 4 });
+    // (204 − 16 − 6) / 2 = 91 wide; 91 × 3/4 + 18 + 6 = 92.25.
+    expect(layout(204, 9795)).toEqual({ columns: 2, tile: 91, rowHeight: 92, rows: 4898 });
+    expect(layout(204, 9795, TILE.min, LAB_LOOK)).toEqual(layout(204, 9795));
+  });
+});
+
+describe('the home’s look (decision 68)', () => {
+  it('spaces tiles 12 px across and 16 px down, on the main pane’s padding', () => {
+    expect(homeLook()).toMatchObject({ gap: 12, rowGap: 16, padX: 22 });
+    expect(homeLook(16).padX).toBe(16);
+  });
+
+  it('counts a 16:9 picture and the name and author lines in a row', () => {
+    // The main pane at 1440 px with the panel open: 1440 − 220 − 340.
+    const l = layout(880, 100, 150, homeLook(22));
+    expect(l.columns).toBe(5);
+    expect(l.tile).toBeCloseTo((880 - 44 - 4 * 12) / 5);
+    expect(l.rowHeight).toBe(Math.round((l.tile * 9) / 16 + 39 + 16));
+  });
+
+  it('has three across at 900 px with the panel open', () => {
+    // 900 − 184 (the sidebar) − 280 (the panel), on 16 px padding and 124 px tiles.
+    expect(layout(436, 100, 124, homeLook(16)).columns).toBe(3);
+    expect(layout(436, 100, 150, homeLook(16)).columns).toBe(2);
+  });
+});
+
+describe('centreFor', () => {
+  it('puts the row in the middle of the view, starting the view on a whole row', () => {
+    // Row 10 starts at 8 + 1000; its tiles are 94 tall, so its middle is at 1055: 905 would centre it, row 9 starts nearest.
+    expect(centreFor(10, 100, 300)).toBe(900);
+    // Row 4's middle is at 8 + 600 + 67 = 675; 425 would centre it, row 3 (450) starts nearest.
+    expect(centreFor(4, 150, 500, homeLook(22))).toBe(450);
+  });
+
+  it('never cuts a row off at the top, and lands within half a row of the middle', () => {
+    const look = homeLook();
+    for (const [row, height] of [
+      [6, 500],
+      [40, 731],
+      [3, 288],
+    ]) {
+      const top = centreFor(row, 151, height, look);
+      expect(top % 151).toBe(0);
+      const middle = look.padTop + row * 151 + (151 - look.rowGap) / 2;
+      expect(Math.abs(middle - top - height / 2)).toBeLessThanOrEqual(151 / 2);
+    }
+  });
+
+  it('goes no higher than the top', () => {
+    expect(centreFor(0, 100, 600)).toBe(0);
+    expect(centreFor(1, 100, 600, homeLook())).toBe(0);
+  });
+
+  it('centres a row the least scroll would leave at the edge of the view', () => {
+    const look = homeLook();
+    const least = scrollFor(6, 150, 0, 500, look)!;
+    const centred = centreFor(6, 150, 500, look);
+    const middle = look.padTop + 6 * 150 + (150 - look.rowGap) / 2;
+    expect(middle - least).toBeGreaterThan(400);
+    expect(Math.abs(middle - centred - 250)).toBeLessThanOrEqual(75);
+  });
+});
+
+describe("the home's grid beside a scrollbar", () => {
+  it('keeps 3 columns at 900px when a classic scrollbar takes 15px, giving it the right padding', () => {
+    // The main pane at 900px: 900 - 184 - 280 = 436, on a 16px padding.
+    expect(layout(436 - 15, 9795, 124, homeLook(16)).columns).toBe(2);
+    const look = homeLook(16, 15);
+    expect(look.padRight).toBe(1);
+    expect(layout(436 - 15, 9795, 124, look).columns).toBe(3);
+    // An overlay scrollbar takes nothing, and the padding stays even.
+    expect(homeLook(16, 0).padRight).toBe(16);
+    expect(homeLook(16, 40).padRight).toBe(0);
   });
 });
 
@@ -147,6 +225,48 @@ describe('a tile, read aloud', () => {
 
   it('keeps its + out of what is read: the grid adds the active tile with the + key', () => {
     expect(html).toContain('class="wdg wdg-button lib-add" aria-hidden="true"');
+  });
+
+  it('keeps the lab editor’s tile: its picture and title, no author line', () => {
+    expect(html).toContain('class="lib-tile"');
+    expect(html).toContain('<span class="lib-title">aurora</span>');
+    expect(html).not.toContain('tile-by');
+  });
+});
+
+describe('a tile on the home', () => {
+  const row: LibraryRow = {
+    key: 'k',
+    path: '/p/Geiss - 3d tunnel.milk',
+    hash: '',
+    style: 'A',
+    sub_style: null,
+    authors: ['geiss', 'flexi'],
+    title: '42',
+    thumbnail: 'thumb:k',
+    look: null,
+    starter: false,
+  };
+  const p = prepareRow(row, undefined);
+  const tile = (playing: boolean, failed = false) =>
+    renderToStaticMarkup(createElement(Tile, { id: 't', index: 0, p, active: false, selected: true, playing, failed, intoName: 'Mine', onPick: () => {}, onAdd: () => {}, home: true }));
+
+  it('is the shared tile, named by its file when its title is a number, with its authors under it', () => {
+    const html = tile(false);
+    expect(html).toContain('class="tile"');
+    expect(html).not.toContain('lib-tile');
+    expect(html).toContain('<span class="tile-name">Geiss - 3d tunnel</span><span class="tile-by">geiss &amp; flexi</span>');
+  });
+
+  it('says the same to a screen reader as the lab’s', () => {
+    expect(tile(true)).toContain(`role="option" aria-selected="true" aria-label="${tileSays(p, true, false).replace(/&/g, '&amp;')}"`);
+  });
+
+  it('marks playing with the level badge, a failure with its mark, and keeps + out of what is read', () => {
+    expect(tile(true)).toContain('class="tile-live"');
+    expect(tile(false)).not.toContain('tile-live');
+    expect(tile(false, true)).toContain('tile-failed');
+    expect(tile(false)).toMatch(/<button type="button" class="tile-add" tabindex="-1" aria-hidden="true"/);
   });
 });
 

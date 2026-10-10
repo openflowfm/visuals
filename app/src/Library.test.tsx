@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { LibraryRow, Mine } from './api.ts';
 import { prepareRow } from './librarySearch.ts';
-import { chipSays, groupSays, valueSays, Values } from './Library.tsx';
+import { chipSays, findSays, groupSays, groupTitle, valueSays, Values } from './Library.tsx';
 import { PresetDrawer, pressedFor } from './PresetDrawer.tsx';
 
 const row = (key: string): LibraryRow => ({ key, path: `/p/${key}`, hash: '', style: 'A', sub_style: null, authors: [], title: key, thumbnail: null, look: null, starter: false });
@@ -45,6 +45,50 @@ describe('the library chips, read aloud', () => {
   it('names the star group in words on its values', () => {
     const html = renderToStaticMarkup(<Values group="star" values={[{ value: 'yes', count: 2 }]} selected={[]} find="" onFind={none} onPick={none} />);
     expect(attrs(html, 'aria-label')).toEqual(['starred values', 'starred, 2 presets']);
+  });
+});
+
+describe("the home's filter panel", () => {
+  it('finds an author, a style, a tag', () => {
+    expect(findSays('author')).toBe('find an author');
+    expect(findSays('style')).toBe('find a style');
+    expect(findSays('tags')).toBe('find a tag');
+    expect(findSays('intensity')).toBe('find an intensity');
+    const authors = Array.from({ length: 13 }, (_, i) => ({ value: `a${i}`, count: 1 }));
+    const html = renderToStaticMarkup(<Values group="author" values={authors} selected={[]} find="" onFind={none} onPick={none} home />);
+    expect(html).toContain('placeholder="find an author"');
+    expect(html).toContain('aria-label="find an author"');
+  });
+
+  it('names the groups in sentence case', () => {
+    expect(groupTitle('style')).toBe('Style');
+    expect(groupTitle('star')).toBe('★ Starred');
+    expect(groupTitle('tags')).toBe('My tags');
+  });
+
+  it("puts a picked style's sub-styles on their own line, under the style", () => {
+    const values = [
+      { value: 'A', count: 3 },
+      { value: 'A/warm', count: 1 },
+      { value: 'B', count: 2 },
+      { value: 'B/cold', count: 2 },
+    ];
+    const html = renderToStaticMarkup(<Values group="style" values={values} selected={['A']} find="" onFind={none} onPick={none} home />);
+    expect(attrs(html, 'aria-label')).toEqual(['style values', 'A, 3 presets', 'B, 2 presets', 'in A', 'A › warm, 1 preset']);
+    expect(html).toContain('<span class="lib-values-in">In A</span>');
+  });
+
+  it("never cuts off a picked style's sub-styles, however many values come before them", () => {
+    // 160 styles, more than the 150 an open group lists, then Z's 3 sub-styles, which sort last.
+    const styles = Array.from({ length: 160 }, (_, i) => ({ value: `S${String(i).padStart(3, '0')}`, count: 1 }));
+    const values = [...styles, { value: 'Z', count: 3 }, ...['a', 'b', 'c'].map((s) => ({ value: `Z/${s}`, count: 1 }))];
+    const html = renderToStaticMarkup(<Values group="style" values={values} selected={['Z']} find="" onFind={none} onPick={none} home />);
+    const labels = attrs(html, 'aria-label');
+    expect(labels.slice(-4)).toEqual(['in Z', 'Z › a, 1 preset', 'Z › b, 1 preset', 'Z › c, 1 preset']);
+    // The cap still holds for the other styles, the picked one past it stays, and the note counts only those left out.
+    expect(labels.filter((l) => /^S\d+,/.test(l))).toHaveLength(150);
+    expect(labels).toContain('Z, 3 presets');
+    expect(html).toContain('10 more: type to find one');
   });
 });
 
