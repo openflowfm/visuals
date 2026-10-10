@@ -123,7 +123,18 @@ export function handler(w: World) {
   };
   const itemFor = (path: string): pl.Item => {
     const r = w.rows.find((x) => x.path === path);
-    return r ? F.itemOf(r) : { path, name: path.split('/').pop()!.replace(/\.milk$/i, ''), group: '', missing: false, hash: null };
+    return r
+      ? F.itemOf(r)
+      : {
+          path,
+          name: path
+            .split('/')
+            .pop()!
+            .replace(/\.milk$/i, ''),
+          group: '',
+          missing: false,
+          hash: null,
+        };
   };
 
   function act(action: Args) {
@@ -282,7 +293,15 @@ export function handler(w: World) {
       }
       case 'smart_playlist_save': {
         const id = `s-${w.lists.playlists.length + 1}`;
-        const p: pl.Playlist = { id, name: args.name as string, items: [], kind: 'smart', query: args.query as api.LibraryQuery, settings: F.WARM_UP.settings, starter: (args.starter as string | null) ?? null };
+        const p: pl.Playlist = {
+          id,
+          name: args.name as string,
+          items: [],
+          kind: 'smart',
+          query: args.query as api.LibraryQuery,
+          settings: F.WARM_UP.settings,
+          starter: (args.starter as string | null) ?? null,
+        };
         lists({ ...w.lists, playlists: [...w.lists.playlists, p] });
         return id;
       }
@@ -329,7 +348,7 @@ export function handler(w: World) {
       case 'link_state':
         return { ...w.link, at: Date.now() };
       case 'link_enable':
-        w.link = args.on ?{ ...F.LINK, at: Date.now() } : { ...F.LINK_OFF, at: Date.now() };
+        w.link = args.on ? { ...F.LINK, at: Date.now() } : { ...F.LINK_OFF, at: Date.now() };
         return w.link;
       case 'link_set_one':
       case 'link_reset_one':
@@ -384,7 +403,12 @@ export function handler(w: World) {
       case 'quality_get':
         return w.quality;
       case 'quality_set':
-        w.quality = { ...w.quality, chosen: args.level as api.QualityLevel, effective: args.level === 'auto' ? 'high' : (args.level as Exclude<api.QualityLevel, 'auto'>), reason: args.level === 'auto' ? F.QUALITY.reason : 'Chosen in Settings' };
+        w.quality = {
+          ...w.quality,
+          chosen: args.level as api.QualityLevel,
+          effective: args.level === 'auto' ? 'high' : (args.level as Exclude<api.QualityLevel, 'auto'>),
+          reason: args.level === 'auto' ? F.QUALITY.reason : 'Chosen in Settings',
+        };
         return w.quality;
       case 'reduced_motion':
         return w.motion;

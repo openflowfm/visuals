@@ -42,9 +42,9 @@ body {
 
 /* The native preview's stand-in: where the engine's view would show through the
    page's hole, a still from the starter set (preview.tsx sets --sb-still). */
-.now-preview:not([data-loading]),
-.home-bar-mini:not([data-loading]),
-.live-preview:not([data-loading]),
-.bench:not([data-loading]) {
+html[data-sb-desk] .now-preview:not([data-loading]),
+html[data-sb-desk] .home-bar-mini:not([data-loading]),
+html[data-sb-desk] .live-preview:not([data-loading]),
+html[data-sb-desk] .bench:not([data-loading]) {
   background: var(--sb-still) center / cover no-repeat #000;
 }

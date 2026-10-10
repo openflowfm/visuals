@@ -43,6 +43,11 @@ jobs:
           name: coverage-${{ github.sha }}
           path: coverage/
           if-no-files-found: error
+
+      # Every Storybook story renders in headless Chromium and its play checks
+      # pass (about 6 s, after Chromium's install).
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:stories
           retention-days: 14
 
       # The "must build from a clean tree" rule, enforced rather than

@@ -67,7 +67,14 @@ export const ROWS: api.LibraryRow[] = all
 /** `presets`: the files, as the app lists them. */
 export const ENTRIES: api.Entry[] = ROWS.map((r) => {
   const rel = r.path.slice(STARTER.length + 1);
-  return { path: r.path, name: rel.split('/').pop()!.replace(/\.milk$/i, ''), group: rel.split('/').slice(0, -1).join('/') };
+  return {
+    path: r.path,
+    name: rel
+      .split('/')
+      .pop()!
+      .replace(/\.milk$/i, ''),
+    group: rel.split('/').slice(0, -1).join('/'),
+  };
 });
 
 /** The row at `n`, wrapping. */
@@ -80,7 +87,16 @@ export const LONG = ROWS.reduce((a, b) => (b.title.length > a.title.length ? b :
 /** A playlist item for a row. */
 export const itemOf = (r: api.LibraryRow): pl.Item => {
   const rel = r.path.slice(STARTER.length + 1);
-  return { path: r.path, name: rel.split('/').pop()!.replace(/\.milk$/i, ''), group: rel.split('/').slice(-2, -1)[0] ?? '', missing: false, hash: r.hash };
+  return {
+    path: r.path,
+    name: rel
+      .split('/')
+      .pop()!
+      .replace(/\.milk$/i, ''),
+    group: rel.split('/').slice(-2, -1)[0] ?? '',
+    missing: false,
+    hash: r.hash,
+  };
 };
 
 /** `library.json`: some starred, rated and tagged (the tags are live mode's moods), one never played. */
@@ -115,10 +131,7 @@ export const CLOSING: pl.Playlist = {
   name: 'Closing set, Saturday',
   kind: 'manual',
   query: null,
-  items: [
-    ...[45, 5, 16, 28].map((n) => itemOf(row(n))),
-    { path: `${STARTER}/${PACK}/Hypnotic/Gone/missing preset.milk`, name: 'missing preset', group: 'Gone', missing: true, hash: null },
-  ],
+  items: [...[45, 5, 16, 28].map((n) => itemOf(row(n))), { path: `${STARTER}/${PACK}/Hypnotic/Gone/missing preset.milk`, name: 'missing preset', group: 'Gone', missing: true, hash: null }],
   settings: { ...pl.DEFAULT_SETTINGS, change: { unit: 'bars', every: 8 }, order: 'shuffle', transition: 4, trails: 0.3 },
 };
 
@@ -282,7 +295,8 @@ export const CRASHES: api.CrashReport[] = [
 export const UPDATE: api.Update = {
   version: '0.6.0',
   date: '2026-10-08T12:00:00Z',
-  notes: '## What’s new\n\n- Home is near borderless, an instrument rather than a form.\n- Instrument Sans everywhere, with tabular figures for numbers.\n- The main window is frosted glass.\n\n## Fixed\n\n- The playing row is no longer cut off at the top.',
+  notes:
+    '## What’s new\n\n- Home is near borderless, an instrument rather than a form.\n- Instrument Sans everywhere, with tabular figures for numbers.\n- The main window is frosted glass.\n\n## Fixed\n\n- The playing row is no longer cut off at the top.',
 };
 
 export const SOURCES: api.AudioSources = {

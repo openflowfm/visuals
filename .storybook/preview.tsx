@@ -6,6 +6,8 @@ import { DEFAULT_THEME } from '@openflow/widgets/theme/theme.ts';
 import '@openflow/widgets/palette.css';
 import '@openflow/widgets/tokens.css';
 import '../app/src/app.css';
+// Home's tokens (--surface-*, --playing…) and its narrow rules, which only Home.tsx imports.
+import '../app/src/home.css';
 import './preview.css';
 import { install, type World } from '../app/src/stories/backend.ts';
 import { STILL } from '../app/src/stories/fixtures.ts';
