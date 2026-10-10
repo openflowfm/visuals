@@ -1,16 +1,20 @@
 /* The transport along the bottom of the macOS layout's main column
-   (TransportBar.tsx): ◀ play/pause ▶ R, the time on the preset, the audio
-   input. It paints no background: the layout's root (.app.home.lay)
-   already paints the translucent --surface-0, and painting it again would make
-   a darker strip. No rule over it (decision 68); the
+   (TransportBar.tsx): ◀ play/pause ▶ R, the time on the preset, the slow
+   warning, the audio input. It paints no background: the main column is
+   already painted the translucent --surface-0 (by the hero's spread shadow,
+   layout.css), and painting it again would make a darker strip, or cover the
+   preview were it under. No rule over it (decision 68); the
    keys are glyphs and type with no boxes, the track a faint raised line with
    the time in the numbers' face. The audio input is quiet as in HomeBar. */
 
 .lay-transport {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) minmax(0, auto);
+  /* The right column never shrinks under what it holds (its input shrinks
+     itself first), so in a narrow bar the time gives way rather than running
+     under the audio input. */
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 28px;
+  gap: clamp(12px, 3%, 28px);
   height: 64px;
   padding: 0 var(--lay-pad, 22px);
   box-sizing: border-box;
@@ -63,6 +67,12 @@
   max-width: 560px;
   width: 100%;
   justify-self: center;
+  /* Never over its neighbours, however narrow the bar. */
+  overflow: hidden;
+}
+/* Staying until moved on: no end, so a quiet track with nothing to fill. */
+.lay-transport-time[data-open] .lay-transport-track {
+  opacity: 0.5;
 }
 .lay-transport-num {
   flex: none;
@@ -96,8 +106,19 @@
 /* The audio input: quiet text and its meter, no box at rest (as in HomeBar). */
 .lay-transport-right {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 16px;
   min-width: 0;
+}
+/* The picture drawing slowly: the amber warning in the bar's small type, never wider than it needs. */
+.lay-transport .vf-stats {
+  flex: none;
+  min-width: 0;
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
+  font-size: 12px;
+  white-space: nowrap;
 }
 .lay-transport .audio-input {
   gap: 8px;
