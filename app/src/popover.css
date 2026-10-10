@@ -41,8 +41,12 @@
   top: calc(100% + 6px);
   left: 0;
   z-index: 40;
+  /* Sized to its contents, not the button (a short button made "move on by
+     itself every" wrap a word a line); Popover.tsx flips it to hang from the
+     right when it would run past the window. */
+  width: max-content;
   min-width: 160px;
-  max-width: min(560px, calc(100vw - 24px));
+  max-width: min(420px, calc(100vw - 24px));
   max-height: 60vh;
   overflow: auto;
   padding: 6px;

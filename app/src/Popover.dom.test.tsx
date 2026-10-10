@@ -77,6 +77,8 @@ describe('Popover', () => {
       const panel = screen.getByRole('menu');
       expect(getComputedStyle(panel).backgroundColor).toBe('rgb(2, 2, 2)');
       expect(['', 'none', 'initial']).toContain(getComputedStyle(panel).borderTopStyle);
+      // Sized to its contents, not the button, so its lines don't wrap a word at a time.
+      expect(getComputedStyle(panel).width).toBe('max-content');
     } finally {
       style.remove();
     }

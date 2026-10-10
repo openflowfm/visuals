@@ -1,4 +1,15 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+
+/** Three dots for a "more" button: the "···" glyph reads as a dash in Instrument Sans. */
+export function MoreDots() {
+  return (
+    <svg className="vf-more-dots" width="16" height="4" viewBox="0 0 16 4" aria-hidden="true" focusable="false">
+      <circle cx="2" cy="2" r="1.6" fill="currentColor" />
+      <circle cx="8" cy="2" r="1.6" fill="currentColor" />
+      <circle cx="14" cy="2" r="1.6" fill="currentColor" />
+    </svg>
+  );
+}
 import './popover.css';
 
 /**
@@ -38,6 +49,17 @@ export function Popover({
   const root = useRef<HTMLSpanElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   const id = useId();
+  const panel = useRef<HTMLDivElement>(null);
+  const [side, setSide] = useState(align);
+  // Keep the panel inside the window: hung from the left, it flips to the right when it would run past the window's right edge.
+  useLayoutEffect(() => {
+    if (!open) {
+      setSide(align);
+      return;
+    }
+    const r = panel.current?.getBoundingClientRect();
+    if (align === 'left' && r && r.right > window.innerWidth - 12) setSide('right');
+  }, [open, align]);
   useEffect(() => {
     if (!open) return;
     const key = (e: KeyboardEvent) => {
@@ -79,7 +101,7 @@ export function Popover({
         {label}
       </button>
       {open && (
-        <div className="vf-pop-panel" id={id} role={role} aria-label={name} data-align={align}>
+        <div ref={panel} className="vf-pop-panel" id={id} role={role} aria-label={name} data-align={side}>
           {typeof children === 'function' ? children(close) : children}
         </div>
       )}
