@@ -26,6 +26,7 @@
   "include": [
     "app/src",
     "vite.app.config.ts",
+    "vite.dev.config.ts",
     "vitest.config.ts"
   ]
 }

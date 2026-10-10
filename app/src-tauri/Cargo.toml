@@ -14,6 +14,9 @@ path = "src/main.rs"
 # The editor: its commands (`src/editor.rs`) and the page's editing. The player
 # is built without it.
 lab = []
+# `npm run dev`: the page in a normal browser, driving this app headless over a
+# local HTTP bridge (`src/bridge.rs`). Development only; never in a release.
+dev-bridge = ["dep:webp"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -39,6 +42,8 @@ flate2 = "1"
 tar = "0.4"
 notify = "8"
 tauri-plugin-opener = "2"
+# The dev bridge's frames of the bench (`dev-bridge` only).
+webp = { version = "0.3", default-features = false, optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"

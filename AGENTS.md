@@ -12,14 +12,16 @@ The app people get is built without both.
 | `cargo test -p visuals-engine --lib` | the engine: `.milk` parsing, shader translation, EEL, audio, a GPU render, and that GPU objects aren't leaked over preset and quality switches | any change under `engine/` |
 | `cargo test -p visuals-engine --bins` | the engine's bins compile and their tests (`engine/src/bin/`) pass; `--lib` doesn't build them | any change under `engine/` |
 | `cargo build -p visuals-app` | the Tauri app compiles | any change under `app/src-tauri/` |
-| `cargo test -p visuals-app` | the app's Rust: live actions, playlists, the Link one and changes on the beat, the live output's display choice and fit, the live effects' timing, the first-run state (building needs `cmake`, for Ableton Link) | any change under `app/src-tauri/` |
-| `cargo build -p visuals-app --features lab` | the lab app (with the editor's commands) compiles | any change under `app/src-tauri/` |
+| `cargo test -p visuals-app --features dev-bridge` | the app's Rust: live actions, playlists, the Link one and changes on the beat, the live output's display choice and fit, the live effects' timing, the first-run state, and `npm run dev`'s bridge (`bridge.rs`: its requests, token and command order) (building needs `cmake`, for Ableton Link) | any change under `app/src-tauri/` |
+| `cargo build -p visuals-app --features lab,dev-bridge` | the lab app (with the editor's commands), as `npm run dev:lab` builds it, compiles | any change under `app/src-tauri/` |
 | `cargo fmt --all --check` | the Rust is formatted (`rustfmt.toml`: width 200; `cargo fmt --all` fixes it) | any `.rs` change |
 | `npm run format:check` | the editor page (`app/src`) is formatted with Prettier (`.prettierrc.json`: single quotes, width 200; `npx prettier --write app/src` fixes it) | any change under `app/src` |
 | `npm run typecheck` | the editor page's TypeScript (`app/src`) and the vite and vitest configs compile | any `.ts`/`.tsx` change |
 | `npx vitest run <files>` | targeted unit tests; they run in node, and a file that mounts components in a DOM opts into happy-dom with `// @vitest-environment happy-dom` on its first line (Testing Library and user-event; `HelpOverlay.dom.test.tsx` is the pattern) | the tests next to what you changed; CI runs them all (`npm test`) |
 | `npm run app:build-ui` | the app's page builds into `dist-app/`, which the app crate needs to compile; it must have no `Lab-*` chunk and no editor command (CI checks) | changes to `app/src`, `app/index.html` or `vite.app.config.ts` |
 | `npm run app:build-ui:lab` | the lab page (with the editor, as its own `Lab-*` chunk) builds into `dist-app/` | changes to `app/src`, `app/index.html` or `vite.app.config.ts`; run it before `app:build-ui`, which leaves the app's page in `dist-app/` |
+| `npm run check:no-dev-code` (add `-- --bin target/debug/visuals` after a plain `cargo build -p visuals-app`) | none of `npm run dev`'s bridge is in what ships: not in the app's page in `dist-app/` (no `app/src/dev/`), nor in a binary built without `dev-bridge` (no `bridge.rs`); exit 1 naming what it found, 2 without `dist-app/` (CI runs both) | after `npm run app:build-ui`, and after a change to `app/src/dev/`, `bridge.rs` or `vite.dev.config.ts` |
+| `npm run dev` (`npm run dev:lab` for the editor) | the app's page in a normal browser with HMR, driving the real app headless over its dev bridge: real commands, events, deck, library, audio and Link, and the bench's frames streamed into the preview. Prints the URL to open, with the bridge's token; opens it when run from a terminal (`VISUALS_DEV_OPEN=0` doesn't). Exits 1, stopping everything, when the app fails to build or quits | designing the page; agents load the URL with Playwright (`compare/`'s), then stop the run and check `ps` that no vite or `target/debug/visuals` is left |
 | `VISUALS_HEADLESS=1 VISUALS_CAPTURE=<file.png> npm run app` (add `VISUALS_LIVE=1 VISUALS_CAPTURE_OUTPUT=<out.png>` for live mode, `VISUALS_FX=…` for effects) | the app runs and draws: pictures of the main window and the live output, with nothing shown on screen. It quits once the pictures are written, so the command ends by itself (exit 0) | after a change to the app or the page you want to see working: look at the pictures, then check with `ps` that no vite, `cargo-tauri` or `target/debug/visuals` is left |
 | `cargo run --release -p visuals-engine --bin record -- <audio> <out.mp4> --cut <s> <preset> …` | presets drawn from an audio file into a video, frame by frame — the teaser's footage (see `teaser/README.md`) | after a change to `record.rs`: record a few seconds and look at them |
 | `npm run typecheck` in `teaser/` | the teaser's Remotion edit compiles (the root typecheck doesn't reach it) | any change under `teaser/src/` |
@@ -102,6 +104,19 @@ and pasted in). With a capture it quits once the pictures are written. `npm run 
 whole group (vite, `cargo-tauri`, the app) when it is stopped (SIGINT, SIGTERM, hangup)
 or whatever started it goes away; still, never leave a run going, and check with `ps`
 afterwards.
+
+**`npm run dev` is development only.** `app/dev.sh` runs the app headless (`cargo run
+--features dev-bridge`, always `VISUALS_HEADLESS=1`) and vite with `vite.dev.config.ts`, each
+in a process group of its own, stopped together as `app/run.sh` stops its group. The app's
+dev bridge (`app/src-tauri/src/bridge.rs`, the `dev-bridge` Cargo feature, off by default)
+listens on `VISUALS_BRIDGE=127.0.0.1:<port>` only (nothing happens without it) and wants
+`VISUALS_BRIDGE_TOKEN` on every request; `dev.sh` picks both and passes the token to the page
+in the URL it prints. It hands each command to Tauri's own IPC entry, so every command the
+app has works with no list to keep, in the order the page sent them; it relays events,
+serves thumbnails and the bench's frames, and puts the hidden window's own page away. The
+page's half is `app/src/dev/` (it stands in for Tauri's internals), loaded only by
+`vite.dev.config.ts`, which proxies `/__bridge` to the bridge. Neither half may reach a
+release: `npm run check:no-dev-code` checks the page and the binary.
 
 **Contract files.** These are the shared surface every feature's parts would otherwise
 all touch. A change to them lands as its own small PR (a milestone's contract) before the
