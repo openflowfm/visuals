@@ -15,12 +15,26 @@
 
 .app.home {
   /* Surfaces, darkest first. Each area paints itself with one of these (the
-     window's root paints nothing, for the preview's sake), so a later change can
-     make them translucent over a frosted window. */
-  --surface-0: var(--bg); /* the window: header, sidebar, main pane, bar */
-  --surface-1: #0e0e10; /* the now playing panel: one faint step up */
-  --surface-2: #161619; /* raised: popovers, menus, a tile's empty picture */
-  --surface-3: #1e1e22; /* a field being typed in, a pressed key */
+     window's root paints nothing, for the preview's sake). Since decision 69 the
+     main window is frosted (macOS's under-window material, dark, under the
+     preview's native view), and these are translucent over it: tints, not
+     colours. In the dark appearance the material comes out about #1e1e1e to
+     #2a2a2a, lightest over a light desktop, and solid in that range with
+     "Reduce transparency" on; contrast.test.ts checks the captions over
+     #2a2a2a. Two stay opaque: popovers and menus float over the grid's bright
+     pictures, and a tile's picture keeps a dark backing of its own. */
+  --surface-0: rgba(0, 0, 0, 0.2); /* the window: header, sidebar, main pane, bar */
+  --surface-1: rgba(0, 0, 0, 0.12); /* the now playing panel: one faint step up */
+  --surface-2: rgba(255, 255, 255, 0.05); /* raised: a chip, a progress track */
+  --surface-3: rgba(255, 255, 255, 0.08); /* a field being typed in, a pressed key */
+  --surface-float: #161619; /* opaque: popovers, menus, a dragged tile */
+  --surface-thumb: rgba(0, 0, 0, 0.4); /* behind a tile's or a cover's picture */
+  /* (rgba() with commas: the DOM tests' happy-dom reads it, so their checks
+     that nothing paints under the preview still see these.) */
+  /* The preview's corners: the native view under its hole is square, and the
+     page rounds it by painting the corners over it, so they must be opaque. A
+     dark tone near the material's under the panel's tint. */
+  --surface-corner: #18181a;
   /* Type. Chrome and labels, titles, numbers: each from its token, so the
      font can change in one place. All Instrument Sans (decision 69, app.css);
      a rule in --font-num also sets `font-variant-numeric: tabular-nums`. */
@@ -32,11 +46,12 @@
   --font-num-axes: var(--sans-axes);
   --font-mark: var(--sans);
   --font-mark-axes: var(--sans-axes);
-  /* Small grey text at 4.5:1 or better on --surface-0 and -1 (the palette's is 3:1),
-     and its lighter step for text on --surface-2 and -3, which the raised areas
-     below take as their --caption (contrast.test.ts checks both). */
-  --caption: #7a7a82;
-  --caption-raised: #8b8b93;
+  /* Small grey text at 4.5:1 or better on --surface-0 and -1 over the lightest
+     material (the palette's is 3:1), and its lighter step for text on the raised
+     surfaces, which the areas below take as their --caption (contrast.test.ts
+     checks both). */
+  --caption: #94949e;
+  --caption-raised: #a8a8b0;
   /* The active control's underline, and the playing mark. */
   --line-active: var(--primary);
   --playing: var(--green);
@@ -51,9 +66,9 @@
   font-family: var(--font-ui);
   font-variation-settings: var(--font-ui-axes);
 }
-/* Areas painted --surface-2 or -3 take the lighter caption, so small grey text on
-   them stays at 4.5:1. Every rule in Home's stylesheets that paints one of those
-   surfaces must be under one of these (contrast.test.ts checks). */
+/* Areas painted --surface-2, -3, -float or -thumb take the lighter caption, so
+   small grey text on them stays at 4.5:1. Every rule in Home's stylesheets that
+   paints one of those surfaces must be under one of these (contrast.test.ts checks). */
 .app.home .home-ghost,
 .app.home .tile-pic,
 .app.home .now-panel .now-chip,
@@ -263,7 +278,7 @@
   padding: 4px 10px 4px 4px;
   color: var(--fg);
   font-size: 12px;
-  background: var(--surface-2);
+  background: var(--surface-float);
   border-radius: 8px;
   box-shadow: var(--lift);
   pointer-events: none;
@@ -324,6 +339,26 @@
   .home .vf-header > .vf-mark {
     display: inline-flex;
   }
+}
+
+/* The preview's rounded corners (decision 69). The native view under the hole
+   is square; the page rounds it by painting the four corners with the hole's
+   spread shadow. That shadow is a translucent tint now, so the picture would
+   show through it and the corners would look square: these paint them over it
+   in an opaque tone. Each hole sets its --hole-radius, and its border-radius from it. */
+.home .now-preview:not([data-loading])::before,
+.home .home-bar-mini:not([data-loading])::before {
+  content: '';
+  display: block;
+  width: 100%;
+  height: 100%;
+  --r: var(--hole-radius);
+  --corner: transparent var(--r), var(--surface-corner) calc(var(--r) + 0.5px);
+  background:
+    radial-gradient(circle at 100% 100%, var(--corner)) top left / var(--r) var(--r) no-repeat,
+    radial-gradient(circle at 0 100%, var(--corner)) top right / var(--r) var(--r) no-repeat,
+    radial-gradient(circle at 100% 0, var(--corner)) bottom left / var(--r) var(--r) no-repeat,
+    radial-gradient(circle at 0 0, var(--corner)) bottom right / var(--r) var(--r) no-repeat;
 }
 
 /* While a preset is dragged (drag.ts), the pointer says so everywhere and nothing gets selected. */

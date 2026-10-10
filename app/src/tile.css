@@ -23,7 +23,7 @@
   aspect-ratio: 16 / 9;
   overflow: hidden;
   border-radius: 6px;
-  background: var(--surface-2);
+  background: var(--surface-thumb);
   transition:
     transform 140ms ease,
     box-shadow 140ms ease;
@@ -71,17 +71,12 @@
   transform: translateY(-2px);
   box-shadow: var(--lift);
 }
-/* Selected: a ring in --fg, a gap off the picture. */
+/* Selected: a ring in --fg, a gap off the picture. An outline, so the gap is
+   clear: the pane behind it is a translucent tint over the frost (decision 69),
+   and a gap painted in it would show as a darker band. */
 .home .tile[aria-selected='true'] .tile-pic {
-  box-shadow:
-    0 0 0 2px var(--surface-0),
-    0 0 0 4px var(--fg);
-}
-.home .tile[aria-selected='true']:hover .tile-pic {
-  box-shadow:
-    0 0 0 2px var(--surface-0),
-    0 0 0 4px var(--fg),
-    var(--lift);
+  outline: 2px solid var(--fg);
+  outline-offset: 2px;
 }
 /* The keyboard's tile, while the grid has focus (the grid rings it, not itself): the focus ring, over a selection's. */
 .home .lib-grid:focus-visible .tile[data-active] .tile-pic {

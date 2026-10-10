@@ -589,7 +589,7 @@
   padding: 0 5px;
   border-radius: 999px;
   background: var(--primary);
-  color: var(--surface-0);
+  color: var(--bg);
   font-family: var(--font-num);
   font-variation-settings: var(--font-num-axes);
   font-size: 10px;

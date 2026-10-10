@@ -64,7 +64,7 @@ describe('Popover', () => {
   it('is type with no box, underlined while open, over a raised panel with no border (decision 68)', () => {
     const style = document.createElement('style');
     // Read from disk: vitest hands a test empty CSS for an import, even `?raw`.
-    style.textContent = ':root { --surface-2: rgb(2, 2, 2); }\n' + readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'popover.css'), 'utf8');
+    style.textContent = ':root { --surface-float: rgb(2, 2, 2); }\n' + readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'popover.css'), 'utf8');
     document.head.append(style);
     try {
       menu();
