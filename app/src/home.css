@@ -50,8 +50,8 @@
      material (the palette's is 3:1), and its lighter step for text on the raised
      surfaces, which the areas below take as their --caption (contrast.test.ts
      checks both). */
-  --caption: #8e8e98;
-  --caption-raised: #a0a0a8;
+  --caption: #94949e;
+  --caption-raised: #a8a8b0;
   /* The active control's underline, and the playing mark. */
   --line-active: var(--primary);
   --playing: var(--green);

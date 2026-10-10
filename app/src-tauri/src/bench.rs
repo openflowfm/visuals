@@ -692,7 +692,11 @@ pub mod view {
             eprintln!("bench: stacked {before:?}; moved to {:?}", order(&content));
         }
         let after = order(&content);
-        debug_assert!(super::stacked(&after), "bench: stacked {after:?}");
+        if !super::stacked(&after) {
+            // Insert only places the bench above the frost, so another view
+            // below the frost can leave it unstacked; logged, not fatal.
+            eprintln!("bench: still stacked {after:?} after moving it");
+        }
         static SAID: std::sync::Once = std::sync::Once::new();
         if after.contains(&Layer::Frost) {
             SAID.call_once(|| eprintln!("bench: stacked {after:?}, bottom to top"));

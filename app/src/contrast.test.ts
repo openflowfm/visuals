@@ -9,7 +9,8 @@
 // assumed here: a light desktop behind the frost, which the under-window material
 // in the dark appearance darkens to about #2a2a2a (its darkest, over a dark
 // desktop, is about #1e1e1e; with "Reduce transparency" on it is drawn solid in
-// that range). Each surface is laid over that material, as the page stacks them,
+// that range). #2a2a2a is an estimate, so the lightest case checked is #333333,
+// for margin. Each surface is laid over that material, as the page stacks them,
 // before the ratio is taken.
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -22,7 +23,7 @@ const home = read('home.css');
 const palette = readFileSync(join(here, '../../node_modules/@openflow/widgets/src/palette.css'), 'utf8');
 
 /** The frost, darkest and lightest, in the dark appearance. */
-const MATERIAL = ['#1e1e1e', '#2a2a2a'];
+const MATERIAL = ['#1e1e1e', '#333333'];
 
 /** A token's value as declared (home.css first, then the widgets' palette), with `var()`s followed. */
 function token(name: string): string {
@@ -90,7 +91,7 @@ describe('caption contrast on every surface, over the frost', () => {
   });
 
   it('would catch the plain caption on a raised surface over the light frost (the check itself)', () => {
-    expect(ratio('--caption', ['--surface-1', '--surface-3'], '#2a2a2a')).toBeLessThan(4.5);
+    expect(ratio('--caption', ['--surface-1', '--surface-3'], MATERIAL[1])).toBeLessThan(4.5);
   });
 
   it('lets the frost through the window’s surfaces, and keeps popovers and the preview’s corners opaque', () => {
