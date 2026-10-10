@@ -1,0 +1,52 @@
+/* The macOS stories' sheet (Showcase.tsx): light and dark windows side by
+   side, sizes down and states across. */
+.mac-sheet {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px;
+}
+.mac-window {
+  padding: 16px 20px;
+  border-radius: 12px;
+  background: var(--mac-window-background);
+  color: var(--mac-label);
+  font: var(--mac-font-body);
+  color-scheme: light;
+}
+.mac-window[data-appearance='dark'] {
+  color-scheme: dark;
+}
+.mac-pair {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 200px;
+}
+.mac-sheet-table {
+  border-collapse: collapse;
+}
+.mac-sheet-table th {
+  padding: 4px 12px 8px 0;
+  font: var(--mac-font-caption1);
+  color: var(--mac-secondary-label);
+  text-align: left;
+  white-space: nowrap;
+}
+.mac-sheet-table td {
+  padding: 4px 16px 4px 0;
+  vertical-align: middle;
+}
+/* Ours, then the kit's picture of the same variant when it is there. */
+.mac-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.mac-kit-picture {
+  display: block;
+  flex: none;
+  height: auto;
+  outline: 1px dashed var(--mac-separator);
+  outline-offset: 1px;
+}
