@@ -110,7 +110,17 @@ npm ci
 npm run app      # the player: app/run.sh runs cargo tauri dev, with the page's vite on $PORT or a free port
 npm run app:lab  # the lab build: the same with the preset editor
 npm run dev      # the player's page in your browser with hot reload, driving the real app headless (dev:lab for the editor)
+npm run storybook  # the page's components on their own, with hot reload, on port 6006 (or $PORT); no app needed
 ```
+
+Storybook shows the page's components (the home, the library, the Now Playing panel, live
+mode, the sheets and prompts) in the app's own look, each in its important states. Behind
+them is a fake app answering the Tauri commands from fixtures made of the starter set's real
+presets and thumbnails (`app/src/stories/`), so no story needs Rust. The stories sit beside
+their components (`app/src/*.stories.tsx`); the toolbar's theme picker swaps the stand-in
+for the frosted window between a dark desktop, a light one and Reduce transparency, and the
+viewport picker has 560, 900 and 1440 px. `npm run build-storybook` builds it into
+`storybook-static/`. None of it reaches the app's build.
 
 The lab build adds the editor: the preset as MilkDrop's stage graph, each stage's picture,
 its EEL or HLSL and numbers, and every edit reloading the preset as it plays. It's the
@@ -164,7 +174,8 @@ The engine runs without the app: `cargo run --release -p visuals-engine --bin pl
 ### Tests and checks
 
 [`AGENTS.md`](AGENTS.md) lists every command and when to run it. In short:
-`npm run typecheck`, `npm test` (the page's unit tests), `npm run format:check`,
+`npm run typecheck`, `npm test` (the page's unit tests), `npm run test:stories` (every
+story rendered in headless Chromium), `npm run format:check`,
 `npm run app:build-ui` (and `app:build-ui:lab`), `cargo test -p visuals-engine --lib`,
 `cargo test -p visuals-app`, `cargo build -p visuals-app --features lab` and
 `cargo fmt --all --check`.

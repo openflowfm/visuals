@@ -1,0 +1,50 @@
+/* Storybook's own frame around the app's page; the app's CSS is loaded as
+   main.tsx loads it (preview.tsx), and nothing here changes a component. */
+
+/* The frost's stand-in: the desktop as the main window's HUD material shows it,
+   already blurred (decision 69). The page paints nothing of its own here, as in
+   the app: its --surface-* tints go over this. */
+html[data-sb-desk] {
+  min-height: 100%;
+  background: var(--sb-desk);
+}
+html[data-sb-desk='dark'] {
+  --sb-desk: radial-gradient(70% 60% at 18% 8%, rgba(64, 86, 140, 0.32), transparent 70%), radial-gradient(60% 70% at 88% 92%, rgba(118, 62, 108, 0.26), transparent 70%), radial-gradient(50% 40% at 70% 30%, rgba(40, 110, 100, 0.14), transparent 70%), #1e1e1e;
+}
+html[data-sb-desk='light'] {
+  --sb-desk: radial-gradient(70% 60% at 18% 8%, rgba(110, 130, 170, 0.28), transparent 70%), radial-gradient(60% 70% at 88% 92%, rgba(150, 110, 140, 0.22), transparent 70%), #363636;
+}
+html[data-sb-desk='solid'] {
+  --sb-desk: #1e1e1e;
+}
+
+/* app.css holds the window still (overflow hidden, no scrolling page); a story
+   longer than the canvas scrolls. A whole view fills the canvas. */
+html,
+body {
+  overflow: auto;
+}
+#storybook-root {
+  height: 100%;
+}
+.sb-show-main.sb-main-fullscreen,
+.sb-show-main.sb-main-fullscreen #storybook-root {
+  height: 100%;
+}
+
+/* A component on its own, inside `.app.home` for Home's tokens and type, but
+   not laid out on Home's grid. */
+.app.home.sb-scope {
+  display: block;
+  height: auto;
+  min-height: 0;
+}
+
+/* The native preview's stand-in: where the engine's view would show through the
+   page's hole, a still from the starter set (preview.tsx sets --sb-still). */
+html[data-sb-desk] .now-preview:not([data-loading]),
+html[data-sb-desk] .home-bar-mini:not([data-loading]),
+html[data-sb-desk] .live-preview:not([data-loading]),
+html[data-sb-desk] .bench:not([data-loading]) {
+  background: var(--sb-still) center / cover no-repeat #000;
+}

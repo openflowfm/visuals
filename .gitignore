@@ -6,6 +6,7 @@ teaser/public/
 /target/
 engine/target/
 dist-app/
+storybook-static/
 app/src-tauri/gen/
 .DS_Store
 .tmp/

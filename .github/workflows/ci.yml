@@ -45,6 +45,11 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      # Every Storybook story renders in headless Chromium and its play checks
+      # pass (about 6 s, after Chromium's install).
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:stories
+
       # The "must build from a clean tree" rule, enforced rather than
       # remembered. A clean checkout is the only place it's honestly tested —
       # a file that's untracked but imported passes locally and fails here.
