@@ -91,6 +91,10 @@ In a dev run `VITE_HOME_PANEL=1` opens the home's Now Playing panel at start in 
 window (the bar with its small preview). `VITE_HOME_FILTER=<group>:<value>` (e.g. `style:Hypnotic`) starts the
 library with its filter open on that group and that value picked, `VITE_HOME_SEARCH=<text>` with that search
 typed, and `VITE_HOME_PLAYLIST=<name>` opens that playlist's pane, all for captures of Home's states.
+Once Home becomes the inspector view (the panes either side of the main column, `app/src/layout/home-model.ts`),
+`VITE_HOME_PANEL=1` opens the inspector at start and `VITE_HOME_PANEL=0` starts it closed, at any width;
+`VITE_HOME_SIDEBAR=1` shows the sidebar at start and `VITE_HOME_SIDEBAR=0` hides it; and `VITE_HOME_PICK=<path in the pack>`
+starts with that preset picked, shown in the inspector. `VISUALS_VIEW=library` stays the home on its library pane.
 In a debug build `VISUALS_PACK_URL=<url>` replaces the full pack's download URL (a bundle
 served locally; `docs/pack.md`), and `VISUALS_PACK_DOWNLOAD=1` starts the download at
 launch, for headless tests. In a debug build, or in any headless run, the app doesn't bring
@@ -131,7 +135,9 @@ lanes that need it; a lane that needs one asks for it rather than making it:
 start…), `app/src-tauri/src/main.rs` (modules and the command list),
 `app/src-tauri/src/settings.rs`, `app/src-tauri/Cargo.toml`, `Cargo.lock`,
 `app/src-tauri/tauri.conf.json` (each lane owns its own section, such as `plugins.updater`),
-`package.json`, `vite.app.config.ts`, `.github/workflows/ci.yml`, `AGENTS.md`, `README.md`.
+`package.json`, `vite.app.config.ts`, `.github/workflows/ci.yml`, `AGENTS.md`, `README.md`,
+`app/src/layout/home-model.ts` (the inspector view's panes, what is picked and the sidebar's
+actions) and `app/src/Numbers.tsx`.
 Stubs for a lane's commands live in the lane's own file (`pack.rs`, `updater.rs`,
 `testsound.rs`, `tap.rs`, `pack.ts`, `SourcePicker.tsx`) so the lane fills them in
 without touching these.

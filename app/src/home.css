@@ -380,9 +380,8 @@
    is square; the page rounds it by painting the four corners with the hole's
    spread shadow. That shadow is a translucent tint now, so the picture would
    show through it and the corners would look square: these paint them over it
-   in an opaque tone. Each hole sets its --hole-radius, and its border-radius from it. */
-.home .now-preview:not([data-loading])::before,
-.home .home-bar-mini:not([data-loading])::before {
+   in an opaque tone. Each hole (a `Preview`, marked `data-hole`) sets its --hole-radius, and its border-radius from it. */
+.home [data-hole]:not([data-loading])::before {
   content: '';
   display: block;
   width: 100%;

@@ -198,7 +198,7 @@ describe('the preview’s corners over the frost (decision 69)', () => {
     const css = uncomment(home);
     const rule = css.match(/([^{}]+)\{([^{}]*var\(--surface-corner\)[^{}]*)\}/);
     expect(rule).not.toBeNull();
-    expect(rule![1].split(',').map((s) => s.trim())).toEqual(['.home .now-preview:not([data-loading])::before', '.home .home-bar-mini:not([data-loading])::before']);
+    expect(rule![1].split(',').map((s) => s.trim())).toEqual(['.home [data-hole]:not([data-loading])::before']);
     expect(rule![2]).toContain('--r: var(--hole-radius)');
     for (const [file, hole] of [
       ['nowpanel.css', '.now-panel .now-preview'],

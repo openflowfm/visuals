@@ -1,5 +1,6 @@
+import type { ReactNode } from 'react';
 import type { LibraryRow } from '../api.ts';
-import { Numbers } from '../HomeBar.tsx';
+import { Numbers } from '../Numbers.tsx';
 import { tileBy, tileName } from '../PresetTile.tsx';
 import { Icon } from './icons.tsx';
 import './hero.css';
@@ -17,8 +18,8 @@ import './hero.css';
 export interface HeroProps {
   /** The preset playing, from the index; null before anything plays. */
   preset: LibraryRow | null;
-  /** The preview's picture: in a story a still or the preset's thumbnail (the app's would be the native preview showing through). Null: nothing drawn yet. */
-  picture: string | null;
+  /** The preview's picture: in a story a still or the preset's thumbnail (a URL); in the app a node (the native preview's `Preview`), rendered in its place. Null: nothing drawn yet. */
+  picture: ReactNode | string | null;
   /** Whether the deck is moving on by itself (pause shows) or holding (play shows). */
   playing: boolean;
   /** Where it plays from, as `playsFrom` says it: "from Warm-up, 3 of 10". */
@@ -40,7 +41,13 @@ export function Hero({ preset, picture, playing, from, starred, onPlayPause, onN
     <div className="hero" data-none={preset ? undefined : ''}>
       <div className="hero-row">
         <div className="hero-pic" data-empty={picture ? undefined : ''}>
-          {picture ? <img src={picture} alt={name ? `preview of ${name}` : 'preview'} draggable={false} /> : <span className="hero-pic-none">{preset ? 'Drawing…' : 'Nothing playing yet'}</span>}
+          {typeof picture === 'string' && picture ? (
+            <img src={picture} alt={name ? `preview of ${name}` : 'preview'} draggable={false} />
+          ) : picture ? (
+            picture
+          ) : (
+            <span className="hero-pic-none">{preset ? 'Drawing…' : 'Nothing playing yet'}</span>
+          )}
         </div>
         <div className="hero-info">
           <p className="hero-label">Now playing</p>
