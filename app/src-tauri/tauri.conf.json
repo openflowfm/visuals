@@ -19,6 +19,11 @@
         "minWidth": 560,
         "minHeight": 640,
         "transparent": true,
+        "theme": "Dark",
+        "windowEffects": {
+          "effects": ["underWindowBackground"],
+          "state": "active"
+        },
         "visible": false
       }
     ],

@@ -23,7 +23,7 @@
 .pl-cover > div {
   aspect-ratio: 16 / 9;
   overflow: hidden;
-  background: var(--surface-2);
+  background: var(--surface-thumb);
 }
 .pl-cover img {
   display: block;

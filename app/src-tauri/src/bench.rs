@@ -574,10 +574,45 @@ impl Loop {
     }
 }
 
+/// What sits in the main window's content view, as far as the bench cares
+/// (decision 69): the frost (the window's `NSVisualEffectView`), the bench, and
+/// everything else (the webview). Bottom to top they must go frost, bench,
+/// webview: the frost over the bench would hide the picture, and anything else
+/// under it would be hidden by it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Layer {
+    Frost,
+    Bench,
+    Other,
+}
+
+/// Whether the bench is stacked right in `order` (bottom to top): above every
+/// frost view and below everything else.
+pub fn stacked(order: &[Layer]) -> bool {
+    let Some(bench) = order.iter().position(|l| *l == Layer::Bench) else {
+        return false;
+    };
+    order.iter().enumerate().all(|(i, l)| match l {
+        Layer::Frost => i < bench,
+        Layer::Other => i > bench,
+        Layer::Bench => i == bench,
+    })
+}
+
+/// Where the bench goes among `order` (the content view's subviews without it,
+/// bottom to top): just above the topmost frost view (`Some` of its index), or,
+/// with no frost yet, at the very bottom (`None`). A frost added later goes to
+/// the very bottom too (window-vibrancy puts it there), so it ends up under the
+/// bench either way.
+pub fn slot(order: &[Layer]) -> Option<usize> {
+    order.iter().rposition(|l| *l == Layer::Frost)
+}
+
 #[cfg(target_os = "macos")]
 pub mod view {
     //! The native view, kept on the main thread.
 
+    use super::Layer;
     use objc2::rc::Retained;
     use objc2::MainThreadMarker;
     use objc2_app_kit::{NSView, NSWindow, NSWindowOrderingMode};
@@ -590,8 +625,16 @@ pub mod view {
         static VIEW: RefCell<Option<Retained<NSView>>> = const { RefCell::new(None) };
     }
 
-    /// Put a view under everything in `ns_window`'s content view, and make a
-    /// surface on it.
+    /// The tag window-vibrancy 0.8.1 gives the effect view it adds for the
+    /// window's `windowEffects` (its `NS_VIEW_TAG_BLUR_VIEW`). Tauri applies the
+    /// effects on the main thread after the window is made, so before or after
+    /// the bench attaches. Window-vibrancy isn't a dependency of ours to import
+    /// it from: if an update changes it, [`restack`] finds no frost and never
+    /// says it stacked over one.
+    const FROST_TAG: isize = 91376254;
+
+    /// Put a view in `ns_window`'s content view, just above the frost if it is
+    /// there yet and under everything else, and make a surface on it.
     ///
     /// # Safety
     /// `ns_window` must be a live `NSWindow`, and this must run on the main thread.
@@ -601,10 +644,59 @@ pub mod view {
         let content = window.contentView().expect("content view");
         let rect = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(1.0, 1.0));
         let view = metal_view(mtm, rect, window.backingScaleFactor());
-        content.addSubview_positioned_relativeTo(&view, NSWindowOrderingMode::Below, None);
+        insert(&content, &view);
         let surface = surface_on(&view, instance);
         VIEW.with(|v| *v.borrow_mut() = Some(view));
         surface
+    }
+
+    /// `content`'s subviews, bottom to top, and what each is.
+    fn layers(content: &NSView, bench: &NSView) -> Vec<(Layer, Retained<NSView>)> {
+        content
+            .subviews()
+            .iter()
+            .map(|v| {
+                let layer = if std::ptr::eq(&*v, bench) {
+                    Layer::Bench
+                } else if v.tag() == FROST_TAG {
+                    Layer::Frost
+                } else {
+                    Layer::Other
+                };
+                (layer, v)
+            })
+            .collect()
+    }
+
+    /// Add (or move) `bench` into `content` at its [`super::slot`].
+    fn insert(content: &NSView, bench: &NSView) {
+        let others: Vec<(Layer, Retained<NSView>)> = layers(content, bench).into_iter().filter(|(l, _)| *l != Layer::Bench).collect();
+        let order: Vec<Layer> = others.iter().map(|(l, _)| *l).collect();
+        match super::slot(&order) {
+            Some(i) => content.addSubview_positioned_relativeTo(bench, NSWindowOrderingMode::Above, Some(&others[i].1)),
+            None => content.addSubview_positioned_relativeTo(bench, NSWindowOrderingMode::Below, None),
+        }
+    }
+
+    /// Check the bench sits above the frost and under the webview, and put it
+    /// back if anything moved it. Cheap when it is right (a walk over a few
+    /// subviews), so [`place`] runs it on every layout the page reports: at
+    /// start, after a resize, after live mode and back. Says on stderr when it
+    /// had to move it, and once when it first finds itself over the frost.
+    fn restack(bench: &NSView) {
+        let Some(content) = (unsafe { bench.superview() }) else { return };
+        let order = |content: &NSView| layers(content, bench).into_iter().map(|(l, _)| l).collect::<Vec<_>>();
+        let before = order(&content);
+        if !super::stacked(&before) {
+            insert(&content, bench);
+            eprintln!("bench: stacked {before:?}; moved to {:?}", order(&content));
+        }
+        let after = order(&content);
+        debug_assert!(super::stacked(&after), "bench: stacked {after:?}");
+        static SAID: std::sync::Once = std::sync::Once::new();
+        if after.contains(&Layer::Frost) {
+            SAID.call_once(|| eprintln!("bench: stacked {after:?}, bottom to top"));
+        }
     }
 
     /// A layer-hosting view whose layer is a Metal layer, so the view's frame is
@@ -722,6 +814,7 @@ pub mod view {
         VIEW.with(|v| {
             let view = v.borrow();
             let view = view.as_ref()?;
+            restack(view);
             let hidden = width < 1.0 || height < 1.0;
             view.setHidden(hidden);
             if hidden {
@@ -846,5 +939,64 @@ mod tests {
         let mut editor = Drawn::Not;
         assert_eq!(editor.drew(t, None), None);
         assert_eq!(editor.drew(t + STEADY, None), Some(Drawing::Steady));
+    }
+
+    /// The content view as AppKit keeps it, bottom to top: the bench put in at
+    /// its [`slot`] (`view::insert`), the frost as tauri and window-vibrancy put
+    /// it in (the old one taken out, the new one at the very bottom).
+    #[derive(Default)]
+    struct Content(Vec<Layer>);
+
+    impl Content {
+        fn bench(&mut self) {
+            self.0.retain(|l| *l != Layer::Bench);
+            let at = slot(&self.0).map_or(0, |i| i + 1);
+            self.0.insert(at, Layer::Bench);
+        }
+        fn frost(&mut self) {
+            self.0.retain(|l| *l != Layer::Frost);
+            self.0.insert(0, Layer::Frost);
+        }
+        fn webview(&mut self) {
+            self.0.push(Layer::Other);
+        }
+    }
+
+    #[test]
+    fn the_bench_goes_above_the_frost_and_under_the_webview_in_any_order() {
+        use Layer::*;
+        // The frost applied before the bench attaches, or after it, or again
+        // after (`set_effects`): the same stack.
+        for steps in ["wfb", "wbf", "fwb", "wfbf", "wbff"] {
+            let mut c = Content::default();
+            for s in steps.chars() {
+                match s {
+                    'w' => c.webview(),
+                    'f' => c.frost(),
+                    _ => c.bench(),
+                }
+            }
+            assert_eq!(c.0, [Frost, Bench, Other], "{steps}");
+            assert!(stacked(&c.0), "{steps}");
+        }
+        // No frost (another tauri, or `windowEffects` gone): the bench at the bottom.
+        let mut c = Content::default();
+        c.webview();
+        c.bench();
+        assert_eq!(c.0, [Bench, Other]);
+        assert!(stacked(&c.0));
+    }
+
+    #[test]
+    fn a_bench_under_the_frost_or_over_the_webview_is_not_stacked() {
+        use Layer::*;
+        // What putting the bench at the very bottom did once the frost was there.
+        assert!(!stacked(&[Bench, Frost, Other]));
+        assert!(!stacked(&[Frost, Other, Bench]));
+        assert!(!stacked(&[Frost, Other]));
+        // Moving it puts it back.
+        let mut c = Content(vec![Bench, Frost, Other]);
+        c.bench();
+        assert_eq!(c.0, [Frost, Bench, Other]);
     }
 }

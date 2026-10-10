@@ -62,7 +62,8 @@
 .now-panel .now-preview {
   width: 100%;
   aspect-ratio: 16 / 9;
-  border-radius: 8px;
+  --hole-radius: 8px; /* its corners are painted over the native view (home.css) */
+  border-radius: var(--hole-radius);
   background: transparent;
   box-shadow: 0 0 0 100vmax var(--surface-1);
 }
