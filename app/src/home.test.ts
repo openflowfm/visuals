@@ -258,6 +258,20 @@ describe('strip', () => {
     expect(second.tiles.map((t) => t.index)).toEqual([1, 0, 2]);
   });
 
+  it('keys each tile by its preset, not its place, so a pick follows it as the playlist is reordered or a tile taken out', () => {
+    const before = strip(manual('m', ['/presets/g/a.milk', '/presets/g/b.milk', '/presets/g/a.milk', '/presets/g/c.milk']), ctx).tiles;
+    expect(new Set(before.map((t) => t.key)).size).toBe(4);
+    const b = before[1].key;
+    // b moved to the end: its key goes with it.
+    const moved = strip(manual('m', ['/presets/g/a.milk', '/presets/g/a.milk', '/presets/g/c.milk', '/presets/g/b.milk']), ctx).tiles;
+    expect(moved.find((t) => t.key === b)).toMatchObject({ name: 'b', index: 3 });
+    // c taken out: its key is gone, the others keep theirs.
+    const c = before[3].key;
+    const out = strip(manual('m', ['/presets/g/a.milk', '/presets/g/b.milk', '/presets/g/a.milk']), ctx).tiles;
+    expect(out.some((t) => t.key === c)).toBe(false);
+    expect(out.find((t) => t.key === b)).toMatchObject({ name: 'b', index: 1 });
+  });
+
   it('keeps the listed order for a shuffled playlist that is not playing', () => {
     const list = manual('m', ['/presets/g/a.milk', '/presets/g/b.milk'], { settings: { ...DEFAULT_SETTINGS, order: 'shuffle' } });
     expect(strip(list, ctx).tiles.map((t) => t.name)).toEqual(['a', 'b']);

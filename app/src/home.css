@@ -226,36 +226,9 @@
   display: none;
 }
 
-/* The preview, in the hero: a hole onto the native view under the page. It
-   paints the main column round itself with its spread shadow, and nothing
-   paints behind it: not the hero's picture box, nor the window (layout.css's
-   tint on the shell is lifted here). */
-.app.home.lay[data-view='home'] {
-  background: none;
-}
-.home .hero-pic:has(> [data-hole]) {
-  overflow: visible;
-  background: none;
-}
-.home .hero-pic[data-hole] {
-  --hole-radius: 18px; /* layout.css's --lay-hero-radius */
-  width: 100%;
-  height: 100%;
-  border-radius: var(--hole-radius);
-  background: transparent;
-  box-shadow: 0 0 0 100vmax var(--surface-0);
-}
-.home .hero-pic[data-hole][data-loading] {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--surface-0);
-}
-.home .hero-pic[data-hole] .bench-loading {
-  color: var(--caption);
-  font-size: 12px;
-  user-select: none;
-}
+/* The preview in the hero (`<Preview className="hero-pic">`, the picture's box
+   itself) and who paints round it: layout.css and hero.css. Only its rounded
+   corners are painted here (below). */
 
 /* Under the hero: the notes, then the grid filling the rest of the column; the grid scrolls, the hero stays. */
 .home .home-grid-pane {

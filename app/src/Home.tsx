@@ -35,7 +35,8 @@ import {
   type StripTile,
   type TilePick,
 } from './home.ts';
-import { HomeLayout } from './layout/HomeLayout.tsx';
+import { HomeLayout, INSPECTOR_ID, SIDEBAR_ID } from './layout/HomeLayout.tsx';
+import { modalOpen } from './liveKeys.ts';
 import { Hero } from './layout/Hero.tsx';
 import { TransportBar } from './layout/TransportBar.tsx';
 import { InsetSidebar, sidebarSections } from './layout/InsetSidebar.tsx';
@@ -263,6 +264,8 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
     const key = (e: globalThis.KeyboardEvent) => {
       const k = keys.current;
       const letter = e.key.toLowerCase();
+      // A sheet or dialog open over the home (⚙ Settings, a popover) has the keys: no pane or search moves under it.
+      if (modalOpen()) return;
       if (e.metaKey && e.ctrlKey && !e.altKey && letter === 's') {
         e.preventDefault();
         return k.toggleSidebar();
@@ -380,6 +383,32 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
   const byPath = useMemo(() => new Map((rows ?? []).map((p) => [p.row.path, p])), [rows]);
   const playingRow = current ? byPath.get(current.path) : undefined;
   const picked = useMemo(() => keysOf(sel).flatMap((k) => byKey.get(k) ?? []), [sel, byKey]);
+  // Presets picked that aren't in the index any more show the source's card, never a blank inspector.
+  const onSource = sel.kind === 'source' || picked.length === 0;
+
+  // Tiles picked in a playlist's grid (by tile key, which follows the preset): the presets they are.
+  const pickInList = (keys: string[]) => {
+    setTilesPicked(keys);
+    const paths = new Set(tiles.filter((t) => keys.includes(t.key)).map((t) => t.path));
+    const found = [...paths].flatMap((p) => byPath.get(p)?.row.key ?? []);
+    setSel(found.length ? { kind: 'presets', keys: found } : SOURCE);
+  };
+  // Picks that went (the index read again, the library or a playlist changed, a tile taken out) are let go; none left, back to the source.
+  const tileKeys = tiles.map((t) => t.key).join('\n');
+  useEffect(() => {
+    if (tilesPicked.length === 0) return;
+    if (!list) return toSource();
+    const there = new Set(tileKeys.split('\n'));
+    const live = tilesPicked.filter((k) => there.has(k));
+    if (live.length !== tilesPicked.length) pickInList(live);
+  }, [tileKeys, list?.id]); // only when the tiles change
+  useEffect(() => {
+    if (!rows || sel.kind !== 'presets') return;
+    const live = sel.keys.filter((k) => byKey.has(k));
+    if (live.length === sel.keys.length) return;
+    if (live.length === 0) toSource();
+    else setSel({ kind: 'presets', keys: live });
+  }, [rows, byKey, sel, toSource]);
   const libraryRows = useMemo(() => (rows ?? []).map((p) => p.row), [rows]);
   const [panelError, setPanelError] = useState<string | null>(null);
   const setData = (keys: string[], change: LibraryChange) => {
@@ -416,7 +445,10 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
   };
 
   const sourceName = paneName(shown, lists);
-  const sourceCard = !shown ? null : list && lists ? (
+  // Before the playlists are read nothing is shown yet: the card names the library, as it will most likely be.
+  const sourceCard = !shown ? (
+    <SourceCard name={sourceName} count={counts.library} offer={false} />
+  ) : list && lists ? (
     <PlaylistHead
       variant="inspector"
       list={list}
@@ -432,7 +464,7 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
   );
 
   const length = presetLength(deck);
-  const position = useElapsed(since, current !== null && length !== null, length);
+  const position = useElapsed(since, current !== null, length);
   const from = playsFrom(deck, playlists);
   const stepWords = playing ? ' in the playlist' : '';
 
@@ -461,6 +493,7 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
               type="button"
               className="home-tool home-tool-sidebar"
               aria-label={say('source list')}
+              aria-controls={SIDEBAR_ID}
               aria-pressed={modes.sidebar !== 'hidden'}
               title={`${modes.sidebar === 'hidden' ? 'Show' : 'Hide'} the ${say('source list')} (⌃⌘S)`}
               onClick={toggleSidebar}
@@ -475,6 +508,7 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
             type="button"
             className="home-tool home-tool-inspector"
             aria-label={say('inspector')}
+            aria-controls={INSPECTOR_ID}
             aria-pressed={modes.inspector !== null}
             title={`${modes.inspector === null ? 'Show' : 'Hide'} the ${say('inspector')} (⌘I)`}
             onClick={toggleInspector}
@@ -488,7 +522,7 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
       }
       hero={
         <Hero
-          preset={playingRow?.row ?? null}
+          preset={playingRow?.row ?? (current ? unindexed(current) : null)}
           picture={<Preview className="hero-pic" />}
           playing={!deck.hold}
           from={current ? from : ''}
@@ -519,7 +553,7 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
         modes.inspector ? (
           <Inspector
             // Nothing picked: the source's card (D8), not a preset.
-            subject={sel.kind === 'source' ? null : (picked[0] ?? null)}
+            subject={onSource ? null : picked[0]}
             playing={playingRow?.row.key ?? null}
             from={playsFrom(deck, playlists, false)}
             playlists={lists?.playlists ?? null}
@@ -534,58 +568,55 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
             onBack={toSource}
             onPlay={picked.length === 1 ? playPicked : undefined}
             chosen={picked.length > 1 ? picked : undefined}
-            source={sel.kind === 'source' ? sourceCard : undefined}
+            source={onSource ? sourceCard : undefined}
             error={panelError}
             // Its ✕ (and Esc anywhere) only while it is laid over the grid; docked, the header's toggle closes it.
             onClose={modes.inspector === 'overlay' ? () => choose('inspector', false) : undefined}
           />
         ) : undefined
       }
-    >
-      <div className="home-grid-pane">
-        <NoticeBanner className="home-notice" notice={banner} onDismiss={dismiss} />
-        <SettingsNotes />
-        {shown && shown.kind !== 'list' ? (
-          <Library
-            key={shown.kind}
-            entries={library}
-            loaded={loaded}
-            search={search}
-            onSearch={setSearch}
-            found={found}
-            current={current?.path ?? null}
-            into={into}
-            onLoad={load}
-            onAdd={(e) => into && run(pl.add(into.id, e.path), `add ${e.name} to ${into.name}`)}
-            onPress={(e, thumbnail, ev) => beginDrag(ev, { kind: 'preset', path: e.path, name: e.name, thumbnail }, dropping)}
-            tileMin={width < HOME_TILE.under ? HOME_TILE.small : HOME_TILE.wide}
-            home={{ scope: shown.kind, title: sourceName, onChosen, bare: true, toolbar, selected: keysOf(sel) }}
-          />
-        ) : list && lists ? (
-          <PlaylistPane
-            key={list.id}
-            list={list}
-            lists={lists}
-            tiles={tiles}
-            total={total}
-            rows={rows}
-            dropping={dropping}
-            picked={tilesPicked}
-            onPick={(keys) => {
-              setTilesPicked(keys);
-              const paths = new Set(tiles.filter((t) => keys.includes(t.key)).map((t) => t.path));
-              const found = [...paths].flatMap((p) => byPath.get(p)?.row.key ?? []);
-              setSel(found.length ? { kind: 'presets', keys: found } : SOURCE);
-            }}
-            onPlay={(t) => playAt(t.index, t.path, t.name)}
-            onLists={setLists}
-            onError={(what) => fail(`Couldn't ${what}.`)}
-            onLibrary={() => pick({ kind: 'library' })}
-          />
-        ) : null}
-        <DragGhost />
-      </div>
-    </HomeLayout>
+      // The grid scrolls itself under the pinned hero, on the column's padding (`--pad`, the hero's `--lay-pad`).
+      pane={
+        <div className="home-grid-pane">
+          <NoticeBanner className="home-notice" notice={banner} onDismiss={dismiss} />
+          <SettingsNotes />
+          {shown && shown.kind !== 'list' ? (
+            <Library
+              key={shown.kind}
+              entries={library}
+              loaded={loaded}
+              search={search}
+              onSearch={setSearch}
+              found={found}
+              current={current?.path ?? null}
+              into={into}
+              onLoad={load}
+              onAdd={(e) => into && run(pl.add(into.id, e.path), `add ${e.name} to ${into.name}`)}
+              onPress={(e, thumbnail, ev) => beginDrag(ev, { kind: 'preset', path: e.path, name: e.name, thumbnail }, dropping)}
+              tileMin={width < HOME_TILE.under ? HOME_TILE.small : HOME_TILE.wide}
+              home={{ scope: shown.kind, title: sourceName, onChosen, bare: true, toolbar, selected: keysOf(sel), controls: INSPECTOR_ID }}
+            />
+          ) : list && lists ? (
+            <PlaylistPane
+              key={list.id}
+              list={list}
+              lists={lists}
+              tiles={tiles}
+              total={total}
+              rows={rows}
+              dropping={dropping}
+              picked={tilesPicked}
+              onPick={pickInList}
+              onPlay={(t) => playAt(t.index, t.path, t.name)}
+              onLists={setLists}
+              onError={(what) => fail(`Couldn't ${what}.`)}
+              onLibrary={() => pick({ kind: 'library' })}
+            />
+          ) : null}
+          <DragGhost />
+        </div>
+      }
+    />
   );
 }
 
@@ -602,8 +633,14 @@ export function SourceCard({ name, count, offer }: { name: string; count: number
   );
 }
 
-/** Seconds on the preset playing, ticking each second while `on`; null (the bar's time line blank) otherwise. */
-function useElapsed(since: number, on: boolean, length: number | null): { elapsed: number; length: number } | null {
+/** The hero's row for a preset playing that the index doesn't list (a file opened from elsewhere, the index not read yet): its name, as the app gave it. */
+export function unindexed(e: Entry): LibraryRow {
+  const [style = '', sub = null] = e.group ? e.group.split('/') : [];
+  return { key: e.path, path: e.path, hash: '', style, sub_style: sub, authors: [], title: e.name, thumbnail: null, look: null, starter: false };
+}
+
+/** Seconds on the preset playing, ticking each second while `on`, with its length before the deck moves on, or a null length when it stays until moved on; null (the bar's time line blank) while nothing plays. */
+function useElapsed(since: number, on: boolean, length: number | null): { elapsed: number; length: number | null } | null {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!on) return;
@@ -611,7 +648,7 @@ function useElapsed(since: number, on: boolean, length: number | null): { elapse
     const t = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(t);
   }, [on, since]);
-  return on && length !== null ? { elapsed: Math.max(0, (now - since) / 1000), length } : null;
+  return on ? { elapsed: Math.max(0, (now - since) / 1000), length } : null;
 }
 
 /**
@@ -770,7 +807,8 @@ export function PlaylistPane({ list, lists, tiles, total, rows, dropping, picked
     );
 
   return (
-    <ol className="home-grid" aria-label={`${list.name}, in the order it plays`} title={tip} data-hint={tip}>
+    // What is picked here is what the inspector shows: a press in the grid doesn't put away the inspector laid over it.
+    <ol className="home-grid" aria-label={`${list.name}, in the order it plays`} aria-controls={INSPECTOR_ID} title={tip} data-hint={tip}>
       {tiles.map((t, i) => {
         const target = manual && t.index !== null ? itemTarget(list.id, t.index) : undefined;
         const payload: Payload | null = reorderable && t.index !== null ? { kind: 'item', list: list.id, index: t.index, path: t.path, name: t.name, thumbnail: t.thumbnail } : null;

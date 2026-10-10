@@ -151,6 +151,8 @@ export interface LibraryGridProps {
   tileMin?: number;
   /** The home's inspector grid (decision 70): a plain click selects the tile (`select`), a double-click loads it; without it a click loads, as in the lab editor's column. */
   clickSelects?: boolean;
+  /** The id of the panel its picks show (the home's inspector), as the grid's `aria-controls`. */
+  controls?: string;
 }
 
 /** The grid's spoken hint: how its keys and clicks pick. */
@@ -165,7 +167,7 @@ export const gridHint = (clickSelects: boolean, into: string | null): string =>
  * arrows move by a tile or a row, Enter loads, Space adds the tile to the selection.
  * Every key it handles is `preventDefault`ed and stopped; Escape with nothing selected is let through.
  */
-export function LibraryGrid({ rows, active, selected, current, into, onMove, onPick, onAdd, onClear, reveal, onPress, tileMin, clickSelects = false }: LibraryGridProps) {
+export function LibraryGrid({ rows, active, selected, current, into, onMove, onPick, onAdd, onClear, reveal, onPress, tileMin, clickSelects = false, controls }: LibraryGridProps) {
   const ref = useRef<HTMLDivElement>(null);
   // Its size, and whether it is on the home (decision 68's look, on the main pane's `--pad`) or in the lab editor's column.
   const [size, setSize] = useState({ width: 0, height: 0, home: false, pad: HOME_PAD, bar: 0 });
@@ -327,6 +329,7 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
       role="listbox"
       aria-label="presets"
       aria-multiselectable
+      aria-controls={controls}
       tabIndex={rows.length ? 0 : -1}
       aria-activedescendant={active >= 0 && active < rows.length ? id(active) : undefined}
       data-hint={gridHint(clickSelects, into?.name ?? null)}

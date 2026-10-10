@@ -16,6 +16,7 @@ import { forgetResumedQuery } from './library.ts';
 import { EMPTY_DECK, manual, type Deck, type Playlist } from './playlists.ts';
 import { SEEDED_KEY } from './home.ts';
 import { INSPECTOR_KEY, SIDEBAR_KEY } from './layout/home-model.ts';
+import { INSPECTOR_ID, SIDEBAR_ID } from './layout/HomeLayout.tsx';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -251,6 +252,76 @@ describe('the home, an inspector view (decision 70)', () => {
     ).toEqual(['b']);
   });
 
+  it('goes back to the source when the presets picked leave the index', async () => {
+    let rows = ROWS;
+    invoke.mockImplementation((cmd: string) => Promise.resolve(cmd === 'library_index' ? rows : answer(cmd)));
+    await mount({ library: true });
+    fireEvent.click(tile('b'));
+    expect(within(inspector() as HTMLElement).getByRole('heading', { name: 'b' })).toBeTruthy();
+    rows = [ROWS[0], ROWS[2]];
+    act(() => heard.get('presets-changed')?.forEach((f) => f({ payload: null })));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(within(inspector() as HTMLElement).queryByRole('heading', { name: 'b' })).toBeNull();
+    expect(within(inspector() as HTMLElement).getByRole('heading', { name: 'Library' })).toBeTruthy();
+  });
+
+  it('names its panels on their toggles, and a toggle closes its panel laid over the grid', async () => {
+    viewport(1000);
+    await mount({ library: true });
+    const toggle = within(header()).getByRole('button', { name: 'info' });
+    expect(toggle.getAttribute('aria-controls')).toBe(INSPECTOR_ID);
+    expect(within(header()).getByRole('button', { name: 'sidebar' }).getAttribute('aria-controls')).toBe(SIDEBAR_ID);
+    fireEvent.click(toggle);
+    expect(document.querySelector('.lay-insp-cell')?.getAttribute('data-mode')).toBe('overlay');
+    fireEvent.pointerDown(toggle);
+    fireEvent.click(toggle);
+    expect(inspector()).toBeNull();
+  });
+
+  it('picks a tile pressed while the inspector is laid over the grid, and keeps the inspector open', async () => {
+    viewport(1000);
+    await mount({ library: true });
+    fireEvent.click(within(header()).getByRole('button', { name: 'info' }));
+    fireEvent.pointerDown(tile('b'));
+    fireEvent.click(tile('b'));
+    expect(within(inspector() as HTMLElement).getByRole('heading', { name: 'b' })).toBeTruthy();
+    // A press elsewhere still puts it away.
+    fireEvent.pointerDown(header());
+    expect(inspector()).toBeNull();
+  });
+
+  it('puts the sidebar laid over the grid away once a source is picked, focus back on its toggle', async () => {
+    viewport(800);
+    await mount({ library: true });
+    const toggle = within(header()).getByRole('button', { name: 'sidebar' });
+    toggle.focus();
+    fireEvent.click(toggle);
+    const side = document.querySelector<HTMLElement>('.lay-side')!;
+    expect(side.contains(document.activeElement)).toBe(true);
+    fireEvent.click(within(side).getByRole('button', { name: /^Starred/ }));
+    expect(document.querySelector('.lay-side')).toBeNull();
+    expect(document.activeElement).toBe(toggle);
+  });
+
+  it('leaves ⌘I, ⌘F and ⌃⌘S to a sheet or dialog open over it', async () => {
+    await mount({ library: true });
+    const sheet = document.createElement('div');
+    sheet.setAttribute('role', 'dialog');
+    document.body.append(sheet);
+    try {
+      fireEvent.keyDown(window, { key: 'i', metaKey: true });
+      fireEvent.keyDown(window, { key: 's', metaKey: true, ctrlKey: true });
+      fireEvent.keyDown(window, { key: 'f', metaKey: true });
+      await act(() => vi.advanceTimersByTimeAsync(50));
+      expect(inspector()).toBeTruthy();
+      expect(within(header()).getByRole('button', { name: 'sidebar' }).getAttribute('aria-pressed')).toBe('true');
+      expect(document.activeElement).not.toBe(screen.getByRole('searchbox', { name: 'search presets' }));
+    } finally {
+      sheet.remove();
+    }
+  });
+
   it('opens on the library for VISUALS_VIEW=library, even with playlists', async () => {
     playlists = [manual('1', 'Warm up', [item(ROWS[0])])];
     deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path };
@@ -304,6 +375,39 @@ describe('a playlist’s grid', () => {
     fireEvent.keyDown(screen.getByRole('listitem', { name: '2. c' }), { key: 'Enter' });
     await act(() => vi.advanceTimersByTimeAsync(0));
     expect(sent('act').at(-1)).toEqual({ action: { kind: 'load', playlist: 0, index: 1 } });
+  });
+
+  it('keeps the pick on the preset as it moves (⌥→), and the inspector’s Play plays that tile', async () => {
+    const moved = [manual('1', 'Warm up', [item(ROWS[2]), item(ROWS[0])])];
+    invoke.mockImplementation((cmd: string) => Promise.resolve(cmd === 'playlist_move_item' ? { playlists: moved, deck } : answer(cmd)));
+    deck = { ...EMPTY_DECK, playlist: '1', index: 1, current: ROWS[2].path };
+    await mount();
+    fireEvent.click(screen.getByRole('listitem', { name: /^1\. a/ }));
+    fireEvent.keyDown(screen.getByRole('listitem', { name: /^1\. a/ }), { key: 'ArrowRight', altKey: true });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(sent('playlist_move_item')).toEqual([{ id: '1', from: 0, to: 1 }]);
+    // a is second now, and still the one picked; c, now first, isn't.
+    expect(screen.getByRole('listitem', { name: /^2\. a.*picked$/ })).toBeTruthy();
+    expect(screen.getByRole('listitem', { name: /^1\. c/ }).hasAttribute('data-picked')).toBe(false);
+    expect(within(inspector() as HTMLElement).getByRole('heading', { name: 'a' })).toBeTruthy();
+    invoke.mockClear();
+    fireEvent.click(within(inspector() as HTMLElement).getByRole('button', { name: 'play it' }));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(sent('act').at(-1)).toEqual({ action: { kind: 'go', index: 1 } });
+  });
+
+  it('lets go of a tile taken out (✕), and the inspector shows the playlist again, not a blank', async () => {
+    const left = [manual('1', 'Warm up', [item(ROWS[0])])];
+    invoke.mockImplementation((cmd: string) => Promise.resolve(cmd === 'playlist_remove' ? { playlists: left, deck } : answer(cmd)));
+    deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path };
+    await mount();
+    fireEvent.click(screen.getByRole('listitem', { name: /^2\. c/ }));
+    expect(within(inspector() as HTMLElement).getByRole('heading', { name: 'c' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Take c out of Warm up' }));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(screen.queryByRole('listitem', { name: /^2\./ })).toBeNull();
+    expect(within(inspector() as HTMLElement).queryByRole('heading', { name: 'c' })).toBeNull();
+    expect(inspector()!.textContent).toContain('Warm up');
   });
 
   it('shows the shared tile, with the name, the author line, its place and the playing mark', async () => {
@@ -384,6 +488,16 @@ describe('the transport bar', () => {
     expect(Number(bar.getAttribute('aria-valuenow'))).toBeGreaterThanOrEqual(2);
     act(() => heard.get('live')?.forEach((f) => f({ payload: { deck: { ...deck, hold: true }, opened: null, path: ROWS[0].path, error: null } })));
     expect(screen.queryByRole('progressbar', { name: 'time on this preset' })).toBeNull();
+    // Held, the time on it still counts, with no end.
+    expect(screen.getByRole('timer').getAttribute('aria-label')).toMatch(/^time on this preset: 0:0\d, until moved on$/);
+  });
+});
+
+describe('the hero', () => {
+  it('names a preset playing that the index doesn’t list', async () => {
+    await mount({ library: true });
+    act(() => heard.get('live')?.forEach((f) => f({ payload: { deck: { ...EMPTY_DECK, current: '/elsewhere/Odd one.milk' }, opened: null, path: '/elsewhere/Odd one.milk', error: null } })));
+    expect(within(document.querySelector('.hero') as HTMLElement).getByRole('heading', { name: 'Odd one' })).toBeTruthy();
   });
 });
 

@@ -211,9 +211,10 @@ export function strip(list: Playlist, ctx: StripContext): { tiles: StripTile[]; 
   const shuffled = ctx.playing !== null && list.settings.order === 'shuffle';
   let tiles: StripTile[];
   if (list.kind === 'manual') {
+    const seen = new Map<string, number>();
     const look = list.items.map((item, index) => {
       const p = byPath.get(item.path) ?? (item.hash ? byHash.get(item.hash) : undefined);
-      return { key: `${index}`, path: item.path, name: item.name, thumbnail: p?.row.thumbnail ?? null, missing: item.missing, index };
+      return { key: keyFor(seen, item.path), path: item.path, name: item.name, thumbnail: p?.row.thumbnail ?? null, missing: item.missing, index };
     });
     if (shuffled) {
       // The deck names paths only; a preset listed twice takes its places in turn.
@@ -231,15 +232,27 @@ export function strip(list: Playlist, ctx: StripContext): { tiles: StripTile[]; 
       tiles = look;
     }
   } else if (shuffled) {
-    tiles = ctx.playing!.map((path, i) => {
+    const seen = new Map<string, number>();
+    tiles = ctx.playing!.map((path) => {
       const p = byPath.get(path);
-      return { key: `${i}:${path}`, path, name: p?.title ?? fileName(path), thumbnail: p?.row.thumbnail ?? null, missing: false, index: null };
+      return { key: keyFor(seen, path), path, name: p?.title ?? fileName(path), thumbnail: p?.row.thumbnail ?? null, missing: false, index: null };
     });
   } else {
     const found = list.query ? matches(list.query, ctx.rows, ctx.played) : [];
     tiles = found.map((p, i) => ({ key: p.row.key, path: p.row.path, name: p.title, thumbnail: p.row.thumbnail, missing: false, index: i }));
   }
   return { tiles: tiles.slice(0, STRIP_CAP), total: tiles.length };
+}
+
+/**
+ * A strip tile's key: the preset's path, and which time it is listed (`#0`, `#1`…).
+ * It follows the preset, not its place, so what is picked stays on it as the
+ * playlist is reordered, and goes when it is taken out.
+ */
+function keyFor(seen: Map<string, number>, path: string): string {
+  const n = seen.get(path) ?? 0;
+  seen.set(path, n + 1);
+  return `${path}#${n}`;
 }
 
 /** The playlist's settings with one changed, kept within what the app allows. */

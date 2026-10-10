@@ -91,6 +91,8 @@ export interface HomeLibrary {
   toolbar?: HTMLElement | null;
   /** The presets picked, by index key, as Home holds them: the grid takes them when they differ from its own (Esc back to the source, a dot picked in the inspector, `VITE_HOME_PICK`). */
   selected?: readonly string[];
+  /** The id of what the grid's picks show (the inspector), for the grid's `aria-controls`: a press in it doesn't put that panel away. */
+  controls?: string;
 }
 
 /**
@@ -767,6 +769,7 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
           onPress={onPress && press}
           tileMin={tileMin}
           clickSelects={bare}
+          controls={home?.controls}
         />
       )}
       {!home && chosen.length > 0 && !empty && (
