@@ -2,6 +2,8 @@ node_modules/
 coverage/
 teaser/out/
 compare/out/
+# Pictures made from Apple's UI kit: never committed (kit/README.md).
+kit/out*/
 teaser/public/
 /target/
 engine/target/
