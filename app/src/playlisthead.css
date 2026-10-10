@@ -172,10 +172,72 @@
 }
 
 @media (max-width: 899px) {
-  .pl-cover {
+  .pl-head[data-variant='pane'] .pl-cover {
     width: 72px;
   }
-  .pl-head .pl-name {
+  .pl-head[data-variant='pane'] .pl-name {
     font-size: 18px;
   }
+}
+
+/* In the inspector (variant='inspector'): a card down the panel's width, as
+   the inspector shows a preset: the cover across it, then the words under it,
+   the name as large as a preset's (inspector-content.css's .insp-name) and
+   wrapping, how it plays on as many lines as it takes, and the actions
+   wrapping under them. The inspector's own padding is its margin. */
+.pl-head[data-variant='inspector'] {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+  padding: 4px 0 0;
+}
+.pl-head[data-variant='inspector'] .pl-cover {
+  width: 100%;
+  border-radius: 8px;
+}
+.pl-head[data-variant='inspector'] .pl-name {
+  margin: 4px 0 4px;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: normal;
+  overflow-wrap: break-word;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  text-wrap: balance;
+}
+.pl-head[data-variant='inspector'] .pl-name-input {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 22px;
+}
+.pl-head[data-variant='inspector'] .pl-summary {
+  line-height: 1.45;
+  white-space: normal;
+}
+/* ⋯ at the right end of the actions' first line, its menu hung from there into the panel; the others wrap short of it. */
+.pl-head[data-variant='inspector'] .pl-acts {
+  position: relative;
+  margin-top: 12px;
+  padding-right: 28px;
+}
+.pl-head[data-variant='inspector'] .pl-more {
+  position: absolute;
+  top: 0;
+  right: -4px;
+}
+/* How it plays opens across the card, under the actions, not from its button (the panel is too narrow to hang it from there). */
+.pl-head[data-variant='inspector'] .pl-pop:not(.pl-more) {
+  position: static;
+}
+.pl-head[data-variant='inspector'] .pl-pop:not(.pl-more) .vf-pop-panel {
+  right: 0;
+  left: 0;
+  width: auto;
+  max-width: none;
+}
+.pl-head[data-variant='inspector'] .home-settings {
+  max-width: none;
 }

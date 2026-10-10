@@ -25,7 +25,7 @@ export interface PlaylistHeadProps {
   onError(what: string): (e: unknown) => void;
   /** Shown above the caps label in a narrow window: the source menu, or nothing. */
   menu?: ReactNode;
-  /** Where it shows: over the playlist's pane (`pane`, the default, as today), or in the inspector; not used yet. */
+  /** Where it shows: over the playlist's pane (`pane`, the default: a row, the name the pane's h1), or in the inspector (`inspector`: a card down the panel's width, the cover over the words, the name an h2, ⋯ at the card's top right with its menu hung from there, how it plays opening across the card). */
   variant?: 'pane' | 'inspector';
 }
 
@@ -33,9 +33,12 @@ export interface PlaylistHeadProps {
  * The header over a playlist's strip on the home (decision 67): a cover of its
  * first four thumbnails, what it is, its name (double-click renames), a line on
  * how it plays, and its actions: play or stop, shuffle, how it plays (the
- * settings, in a popover) and more (rename, save to a file, delete).
+ * settings, in a popover) and more (rename, save to a file, delete). In the
+ * inspector (`variant='inspector'`) the same, as a vertical card.
  */
-export function PlaylistHead({ list, lists, tiles, total, onLists, onDeleted, onError, menu }: PlaylistHeadProps) {
+export function PlaylistHead({ list, lists, tiles, total, onLists, onDeleted, onError, menu, variant = 'pane' }: PlaylistHeadProps) {
+  const inspector = variant === 'inspector';
+  const Name = inspector ? 'h2' : 'h1';
   const [naming, setNaming] = useState<string | null>(null);
   const nameEdit = useRef(new NameEdit()).current;
   const [deleting, setDeleting] = useState(false);
@@ -70,7 +73,7 @@ export function PlaylistHead({ list, lists, tiles, total, onLists, onDeleted, on
   const cover = [0, 1, 2, 3].map((i) => tiles[i]?.thumbnail ?? null);
 
   return (
-    <header className="pl-head">
+    <header className="pl-head" data-variant={variant}>
       <div className="pl-cover" aria-hidden="true">
         {cover.map((src, i) => (
           <div key={i}>{src && <img src={src} alt="" decoding="async" draggable={false} />}</div>
@@ -90,15 +93,18 @@ export function PlaylistHead({ list, lists, tiles, total, onLists, onDeleted, on
             onKeyDown={(e) => {
               if (e.key === 'Enter') commitName();
               else if (e.key === 'Escape') {
+                // Esc ends the rename only, not the inspector it may sit in.
+                e.preventDefault();
+                e.stopPropagation();
                 nameEdit.cancel();
                 setNaming(null);
               }
             }}
           />
         ) : (
-          <h1 className="pl-name" title="Double-click to rename" onDoubleClick={startNaming}>
+          <Name className="pl-name" title="Double-click to rename" onDoubleClick={startNaming}>
             {list.name}
-          </h1>
+          </Name>
         )}
         <div className="pl-summary" title={summary}>
           {summary}
@@ -126,7 +132,15 @@ export function PlaylistHead({ list, lists, tiles, total, onLists, onDeleted, on
             <SettingsBar settings={list.settings} differs={active ? deck.differs : []} onChange={set} />
           </Popover>
           {deleting ? (
-            <span className="pl-confirm" onKeyDown={(e) => e.key === 'Escape' && setDeleting(false)}>
+            <span
+              className="pl-confirm"
+              onKeyDown={(e) => {
+                if (e.key !== 'Escape') return;
+                e.preventDefault();
+                e.stopPropagation();
+                setDeleting(false);
+              }}
+            >
               <button
                 type="button"
                 className="pl-btn"
@@ -146,7 +160,7 @@ export function PlaylistHead({ list, lists, tiles, total, onLists, onDeleted, on
               </button>
             </span>
           ) : (
-            <Popover className="pl-pop pl-more" name="more" label={<MoreDots />} role="menu" align="left" title="Rename, save to a file or delete">
+            <Popover className="pl-pop pl-more" name="more" label={<MoreDots />} role="menu" align={inspector ? 'right' : 'left'} title="Rename, save to a file or delete">
               {(close) => (
                 <>
                   <button
