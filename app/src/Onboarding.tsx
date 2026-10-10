@@ -202,7 +202,7 @@ export function Onboarding({ onDone: done, start = 'welcome', store = kept }: { 
 
   return (
     <div className="ob" data-step={step}>
-      <header className="ob-head">
+      <header className="ob-head" data-tauri-drag-region>
         <Mark />
         <ol className="ob-dots" aria-label="setup steps">
           {shown.map((s) => (

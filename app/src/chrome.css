@@ -1,0 +1,30 @@
+/* The main window's own chrome (chrome.ts): its title bar is an overlay, so the
+   page runs to the window's top edge and macOS draws its window buttons over the
+   page's top bar, at `trafficLightPosition` in tauri.conf.json (x 18, y 28: centred
+   in a 52px bar). Only with `data-chrome="overlay"` on the root — the main window,
+   on a Mac, and not full screen, where macOS hides the buttons — does each top
+   bar take the home header's 52px and leave the buttons their room on the left.
+   Elsewhere (Storybook, a page outside the app) the bars are as their own CSS
+   draws them. */
+:root {
+  --chrome-bar: 52px;
+  /* The buttons span 18px to about 78px; the bar's own things start 14px after
+     (the wordmark's text 18px after, the home header's gap). */
+  --chrome-lights: 92px;
+}
+
+:root[data-chrome='overlay']:not([data-fullscreen]) :is(.vf-header, .live-status-strip, .ob-head) {
+  /* At least the bar's height, not exactly: live.css wraps the strip on narrow
+     windows, and it grows then rather than overflowing. */
+  height: auto;
+  min-height: var(--chrome-bar);
+  padding-left: var(--chrome-lights);
+}
+
+/* The bars' empty space is the title bar: a drag there moves the window, a
+   double-click zooms it. Tauri's drag region (`data-tauri-drag-region` on the
+   bar) only takes a press on the bar itself, so the spacer and the wordmark let
+   presses through to it; buttons, the view switch and inputs keep theirs. */
+:root[data-chrome='overlay'] :is(.vf-header, .live-status-strip, .ob-head) > :is(.vf-fill, .vf-mark) {
+  pointer-events: none;
+}

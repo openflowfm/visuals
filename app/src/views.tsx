@@ -77,10 +77,14 @@ export function Mark() {
   );
 }
 
-/** Every view's header: the mark, the view switch, then whatever the view puts in it. */
+/**
+ * Every view's header: the mark, the view switch, then whatever the view puts in
+ * it. In the main window it is the title bar too (chrome.ts): its empty space
+ * drags the window.
+ */
 export function Header({ view, onChange, children }: { view: View; onChange(next: View): void; children?: ReactNode }) {
   return (
-    <header className="vf-header">
+    <header className="vf-header" data-tauri-drag-region>
       <Mark />
       <ViewSwitch view={view} onChange={onChange} />
       {children}

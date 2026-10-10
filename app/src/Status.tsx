@@ -383,7 +383,7 @@ export function Status({
   const peersTitle = linked(frame) ? ` · ${plural(frame.peers, 'other')} in the session` : '';
 
   return (
-    <div className="live-status-strip" ref={root}>
+    <div className="live-status-strip" ref={root} data-tauri-drag-region>
       <Light
         name="audio"
         label={audioLabel(hearing)}

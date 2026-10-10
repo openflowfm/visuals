@@ -5,12 +5,16 @@ import { DEFAULT_THEME } from '@openflow/widgets/theme/theme.ts';
 import '@openflow/widgets/palette.css';
 import '@openflow/widgets/tokens.css';
 import './app.css';
+import './chrome.css';
 import { App } from './App.tsx';
 import { Update } from './Update.tsx';
+import { startChrome } from './chrome.ts';
 
 // Served on its own (a browser tab on the dev port) the page has no app behind it:
 // no engine, no presets, no bench. The window `npm run app` opens is the editor.
 const inApp = '__TAURI_INTERNALS__' in window;
+// The main window's title bar is the page's own top bar (chrome.ts).
+if (inApp) startChrome();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
