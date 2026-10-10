@@ -760,6 +760,7 @@
   padding: 0 var(--lib-pad) 12px;
   font-size: 12px;
   letter-spacing: normal;
+  word-spacing: var(--sep-space);
 }
 .lib-home .lib-summary[data-error] {
   color: var(--red);

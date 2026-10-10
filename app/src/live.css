@@ -823,8 +823,9 @@
   border: 1px solid var(--bd3);
   border-radius: var(--radius-sm);
   color: var(--fg);
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: var(--text-label);
+  font-weight: var(--weight-medium);
   white-space: nowrap;
 }
 

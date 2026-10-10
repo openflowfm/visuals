@@ -72,6 +72,8 @@
   overflow: hidden;
   color: var(--caption);
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  word-spacing: var(--sep-space);
   white-space: nowrap;
   text-overflow: ellipsis;
 }

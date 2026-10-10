@@ -256,6 +256,7 @@
   border-radius: 5px;
   font-family: var(--font-num);
   font-variation-settings: var(--font-num-axes);
+  font-variant-numeric: tabular-nums;
   font-size: 10px;
 }
 .home .home-tile-next {

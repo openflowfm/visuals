@@ -22,15 +22,16 @@
   --surface-2: #161619; /* raised: popovers, menus, a tile's empty picture */
   --surface-3: #1e1e22; /* a field being typed in, a pressed key */
   /* Type. Chrome and labels, titles, numbers: each from its token, so the
-     font can change in one place. Recursive picks its cut by an axis. */
+     font can change in one place. All Instrument Sans (decision 69, app.css);
+     a rule in --font-num also sets `font-variant-numeric: tabular-nums`. */
   --font-ui: var(--sans);
   --font-ui-axes: var(--sans-axes);
   --font-display: var(--sans);
   --font-display-axes: var(--sans-axes);
-  --font-num: var(--mono);
-  --font-num-axes: var(--mono-axes);
-  --font-mark: var(--mono);
-  --font-mark-axes: var(--mono-axes);
+  --font-num: var(--sans);
+  --font-num-axes: var(--sans-axes);
+  --font-mark: var(--sans);
+  --font-mark-axes: var(--sans-axes);
   /* Small grey text at 4.5:1 or better on --surface-0 and -1 (the palette's is 3:1),
      and its lighter step for text on --surface-2 and -3, which the raised areas
      below take as their --caption (contrast.test.ts checks both). */
@@ -85,7 +86,7 @@
 .home .vf-header > .vf-mark {
   font-family: var(--font-mark);
   font-variation-settings: var(--font-mark-axes);
-  font-size: 13px;
+  font-size: 14px;
 }
 .home .vf-header .wdg-segmented-body {
   gap: 6px;

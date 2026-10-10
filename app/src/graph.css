@@ -72,8 +72,8 @@
   margin: 0;
   padding: 3px 4px;
   overflow: hidden;
-  font-family: var(--mono);
-  font-variation-settings: var(--mono-axes);
+  font-family: var(--code);
+  font-variation-settings: var(--code-axes);
   font-size: var(--text-label);
   line-height: 1.3;
   color: var(--caption);
@@ -159,16 +159,16 @@
 .inspector .code i {
   color: var(--caption);
   font-style: normal;
-  font-family: var(--mono);
-  font-variation-settings: var(--mono-axes);
+  font-family: var(--code);
+  font-variation-settings: var(--code-axes);
 }
 .inspector textarea {
   display: block;
   width: 100%;
   max-width: 100%;
   padding: 6px;
-  font-family: var(--mono);
-  font-variation-settings: var(--mono-axes);
+  font-family: var(--code);
+  font-variation-settings: var(--code-axes);
   font-size: var(--text-body);
   line-height: 1.45;
   resize: vertical;
@@ -230,8 +230,10 @@
 .inspector .file[open] summary {
   margin-bottom: 6px;
 }
+/* The .milk file's own names, equations and shader text are code: the lab keeps
+   Recursive's monospaced cut for them (--code, app.css); the rest is in the sans. */
 .inspector .file .values label > span {
-  font-family: var(--mono);
-  font-variation-settings: var(--mono-axes);
+  font-family: var(--code);
+  font-variation-settings: var(--code-axes);
   font-size: var(--text-label);
 }

@@ -46,8 +46,9 @@
 }
 .fx .fx-hit small {
   color: var(--caption);
-  font-family: var(--mono);
-  font-variation-settings: var(--mono-axes);
+  font-family: var(--sans);
+  font-variation-settings: var(--sans-axes);
+  font-variant-numeric: tabular-nums;
   font-size: var(--text-label);
   font-weight: var(--weight-normal);
   letter-spacing: var(--track-none);
@@ -105,8 +106,8 @@
 }
 .fx .fx-tempo b {
   color: var(--green);
-  font-family: var(--mono);
-  font-variation-settings: var(--mono-axes);
+  font-family: var(--sans);
+  font-variation-settings: var(--sans-axes);
   font-size: var(--text-heading);
   font-variant-numeric: tabular-nums;
 }

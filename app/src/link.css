@@ -32,14 +32,16 @@
 .link-status {
   margin: 0;
   color: var(--detail);
+  word-spacing: var(--sep-space);
 }
 .link-status[data-on] {
   color: var(--green);
 }
 .link-status b {
   color: var(--fg);
-  font-family: var(--mono);
-  font-variation-settings: var(--mono-axes);
+  font-family: var(--sans);
+  font-variation-settings: var(--sans-axes);
+  font-variant-numeric: tabular-nums;
   font-size: var(--text-heading);
 }
 
@@ -51,8 +53,8 @@
 .link-bar {
   min-width: 3ch;
   color: var(--fg);
-  font-family: var(--mono);
-  font-variation-settings: var(--mono-axes);
+  font-family: var(--sans);
+  font-variation-settings: var(--sans-axes);
   font-size: var(--text-title);
   font-weight: var(--weight-strong);
   font-variant-numeric: tabular-nums;
