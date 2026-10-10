@@ -21,8 +21,13 @@ export interface TransportBarProps {
   onStep(by: -1 | 0 | 1): void;
   /** Words added to the step buttons' tooltips, e.g. " in the playlist" ('' when none). */
   stepIn: string;
-  /** Seconds on the preset playing and its length before the deck moves on (the deck's `seconds`); null when nothing plays or it stays until moved on. */
-  position: { elapsed: number; length: number } | null;
+  /**
+   * Seconds on the preset playing and its length before the deck moves on (the
+   * deck's `seconds`); a null length when it stays until moved on (held, on
+   * Link's bars, moving on by itself off): the time on it counts, with no end.
+   * Null when nothing plays.
+   */
+  position: { elapsed: number; length?: number | null } | null;
   onAudioError(e: unknown): void;
 }
 
@@ -34,8 +39,9 @@ export function clock(seconds: number): string {
 
 /** The bar. */
 export function TransportBar({ playing, onPlayPause, onStep, stepIn, position, onAudioError }: TransportBarProps) {
-  const length = position ? Math.max(0, position.length) : 0;
-  const elapsed = position ? Math.min(Math.max(0, position.elapsed), length) : 0;
+  const open = position !== null && (position.length === null || position.length === undefined);
+  const length = position && !open ? Math.max(0, position.length ?? 0) : 0;
+  const elapsed = position ? (open ? Math.max(0, position.elapsed) : Math.min(Math.max(0, position.elapsed), length)) : 0;
   return (
     <div className="lay-transport" role="region" aria-label="transport">
       <div className="lay-transport-keys">
@@ -58,8 +64,17 @@ export function TransportBar({ playing, onPlayPause, onStep, stepIn, position, o
           R
         </button>
       </div>
-      <div className="lay-transport-time" data-off={position ? undefined : ''}>
-        {position ? (
+      <div className="lay-transport-time" data-off={position ? undefined : ''} data-open={open ? '' : undefined}>
+        {open ? (
+          <>
+            {/* No end to count down to: the time on it, and a track with nothing to fill. */}
+            <span className="lay-transport-num" role="timer" aria-label={`time on this preset: ${clock(elapsed)}, until moved on`}>
+              {clock(elapsed)}
+            </span>
+            <div className="lay-transport-track" aria-hidden="true" />
+            <span className="lay-transport-num" aria-hidden="true" />
+          </>
+        ) : position ? (
           <>
             <span className="lay-transport-num">{clock(elapsed)}</span>
             <div

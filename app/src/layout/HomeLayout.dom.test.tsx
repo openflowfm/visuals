@@ -178,11 +178,17 @@ describe('the shell', () => {
     expect(scrolls.filter((el) => !el.closest('.lay-cell'))).toEqual([main]);
   });
 
-  it('puts a pane in the grid’s place, under the hero', () => {
+  it('puts a pane in the grid’s place, under the hero, filling the column and scrolling itself', () => {
+    useSheets(SHEETS.map(css));
     render(<Window sidebarMode="docked" inspectorMode={null} pane={<section aria-label="Warm-up" />} />);
-    expect(screen.getByRole('main').contains(screen.getByRole('region', { name: 'Warm-up' }))).toBe(true);
+    const main = screen.getByRole('main');
+    expect(main.contains(screen.getByRole('region', { name: 'Warm-up' }))).toBe(true);
     expect(screen.queryByRole('listbox', { name: 'presets' })).toBeNull();
     expect(screen.getByRole('region', { name: 'now playing' })).toBeTruthy();
+    // The column doesn't scroll or pad it: the pane does both, lining up with the hero.
+    expect(getComputedStyle(main).overflowY).toBe('hidden');
+    expect(getComputedStyle(main).paddingLeft).toBe('0px');
+    expect(getComputedStyle(screen.getByRole('region', { name: 'Warm-up' })).minHeight).toBe('0');
   });
 
   it('leaves out a hidden sidebar and a closed inspector', () => {

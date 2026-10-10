@@ -1,20 +1,23 @@
 import { useState, type ReactNode } from 'react';
 import type { Decorator, Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, waitFor } from 'storybook/test';
+import type { SidebarMode } from './home-model.ts';
 import { HomeLayout } from './HomeLayout.tsx';
 import { TransportBar, type TransportBarProps } from './TransportBar.tsx';
 
 /** The window's width a story draws the bar in (the shell's sidebar takes its share), 1440 by default. */
 interface Frame {
   width?: number;
+  /** How the sidebar shows; docked by default. */
+  sidebar?: SidebarMode;
 }
 
 /** The bar in the shell's `bar` slot, in a window of the story's width. */
 const inWindow: Decorator = (Story, { parameters }) => {
-  const width = (parameters.frame as Frame | undefined)?.width ?? 1440;
+  const frame = (parameters.frame as Frame | undefined) ?? {};
   return (
-    <div style={{ width, height: 240 }}>
-      <HomeLayout sidebar={null} header={null} bar={<Story />} />
+    <div style={{ width: frame.width ?? 1440, height: 240 }}>
+      <HomeLayout sidebar={null} sidebarMode={frame.sidebar} header={null} bar={<Story />} />
     </div>
   );
 };
@@ -93,6 +96,33 @@ export const NothingPlaying: Story = {
     const bar = canvas.getByRole('button', { name: 'next preset' }).closest('.lay-transport');
     await expect(bar).not.toBeNull();
     await expect(getComputedStyle(bar!).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+  },
+};
+
+/** Staying until moved on (held, on Link's bars, moving on by itself off): the time on it counts, with no end and no countdown. */
+export const UntilMovedOn: Story = {
+  name: 'Until moved on',
+  args: { position: { elapsed: 75, length: null } },
+  play: async ({ canvas, canvasElement }) => {
+    await expect(canvas.getByRole('timer', { name: /time on this preset: 1:15/ })).toHaveTextContent('1:15');
+    await expect(canvas.queryByRole('progressbar')).toBeNull();
+    await expect(canvasElement.querySelector('.lay-transport-fill')).toBeNull();
+    await expect(canvas.queryByText(/^−/)).toBeNull();
+  },
+};
+
+/** In an 800 px window with no sidebar docked: the time gives way, and never runs under the audio input. */
+export const At800: Story = {
+  name: 'At 800 px',
+  parameters: { frame: { width: 800, sidebar: 'hidden' } },
+  play: async ({ canvasElement }) => {
+    const time = (canvasElement.querySelector('.lay-transport-time') as HTMLElement).getBoundingClientRect();
+    const right = (canvasElement.querySelector('.lay-transport-right') as HTMLElement).getBoundingClientRect();
+    const keys = (canvasElement.querySelector('.lay-transport-keys') as HTMLElement).getBoundingClientRect();
+    await expect(time.right).toBeLessThanOrEqual(right.left + 0.5);
+    await expect(time.left).toBeGreaterThanOrEqual(keys.right - 0.5);
+    const bar = canvasElement.querySelector('.lay-transport') as HTMLElement;
+    await expect(bar.scrollWidth).toBeLessThanOrEqual(bar.clientWidth);
   },
 };
 

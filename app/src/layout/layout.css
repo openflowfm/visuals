@@ -219,11 +219,9 @@
 .app.home.lay .lay-main {
   grid-area: main;
   /* app.css makes every main a grid, whose column grows to its widest
-     content: a long section title would widen the whole column. A block
      content: a long section title would widen the whole column. A column of
      blocks keeps it to the window's width; what is in it (a story's
-     sections, the grid, a pane) is spaced apart, no lines. The one region
-     that scrolls. */
+     sections) is spaced apart, no lines, and scrolls here. */
   display: flex;
   flex-direction: column;
   gap: var(--lay-section-gap);
@@ -235,6 +233,17 @@
 .app.home.lay .lay-main > * {
   flex: none;
   min-width: 0;
+}
+/* A pane (Home's grid, a playlist's): it fills the rest of the column and
+   scrolls itself, with its own side padding, so the column adds none and
+   doesn't scroll; the pane's padding lines its contents up with the hero's. */
+.app.home.lay .lay-main[data-pane] {
+  overflow-y: hidden;
+  padding: 0;
+}
+.app.home.lay .lay-main[data-pane] > * {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 .app.home.lay .lay-bar {
   grid-area: bar;

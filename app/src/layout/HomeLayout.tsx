@@ -47,7 +47,7 @@ export interface HomeLayoutProps {
   inspectorMode?: InspectorMode;
   /** Put away what is laid over the main column (the overlay sidebar or inspector): Escape, or a press outside it. A press on a control naming the panel in `aria-controls` (`SIDEBAR_ID`, `INSPECTOR_ID`: its toggle) counts as inside. */
   onDismiss?(): void;
-  /** A pane under the hero in place of `children` (a playlist's, the library's); it scrolls as they would. */
+  /** A pane under the hero in place of `children` (Home's grid, a playlist's): it fills the rest of the column and scrolls itself, with its own side padding (the column adds none and doesn't scroll). */
   pane?: ReactNode;
 }
 
@@ -176,7 +176,9 @@ export function HomeLayout({
             {hero}
           </section>
         )}
-        <main className="lay-main">{pane ?? children}</main>
+        <main className="lay-main" data-pane={pane ? '' : undefined}>
+          {pane ?? children}
+        </main>
         {bar && <div className="lay-bar">{bar}</div>}
       </div>
       {inspMode && (
