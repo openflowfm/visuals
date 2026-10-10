@@ -62,7 +62,7 @@ node_modules/.bin/vite --config vite.dev.config.ts --port "$PORT" --strictPort <
 vite=$!
 cargo run -p visuals-app --features "$features" </dev/null &
 app=$!
-node_modules/.bin/storybook dev --ci --no-open -p "$STORYBOOK_PORT" </dev/null &
+PORT="$STORYBOOK_PORT" node_modules/.bin/storybook dev --ci --no-open -p "$STORYBOOK_PORT" </dev/null &
 storybook=$!
 
 stop_group() {
