@@ -7,7 +7,7 @@ import { changeUnit, NameEdit, playsLike, saveFile, withSetting, type StripTile 
 import { queryName } from './librarySearch.ts';
 import * as pl from './playlists.ts';
 import type { Lists, Playlist, PlaylistSettings } from './playlists.ts';
-import { Popover } from './Popover.tsx';
+import { MoreDots, Popover } from './Popover.tsx';
 import { say, Say } from './words.ts';
 import './playlisthead.css';
 
@@ -144,7 +144,7 @@ export function PlaylistHead({ list, lists, tiles, total, onLists, onDeleted, on
               </button>
             </span>
           ) : (
-            <Popover className="pl-pop pl-more" name="more" label="···" role="menu" align="left" title="Rename, save to a file or delete">
+            <Popover className="pl-pop pl-more" name="more" label={<MoreDots />} role="menu" align="left" title="Rename, save to a file or delete">
               {(close) => (
                 <>
                   <button
