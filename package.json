@@ -22,7 +22,10 @@
     "app:build-ui": "vite build --config vite.app.config.ts",
     "app:build-ui:lab": "VITE_LAB=1 vite build --config vite.app.config.ts",
     "app": "app/run.sh",
-    "app:lab": "VITE_LAB=1 app/run.sh --features lab"
+    "app:lab": "VITE_LAB=1 app/run.sh --features lab",
+    "dev": "app/dev.sh",
+    "dev:lab": "VITE_LAB=1 app/dev.sh --features lab",
+    "check:no-dev-code": "node app/no-dev-code.mjs"
   },
   "dependencies": {
     "@openflow/widgets": "git+https://github.com/openflowfm/widgets.git#ef99d1b2331c8ee11ecabdaa5c7328e5fed2ef97",

@@ -5,6 +5,8 @@
 mod access;
 mod actions;
 mod bench;
+#[cfg(feature = "dev-bridge")]
+mod bridge;
 mod catalog;
 mod crash;
 #[cfg(target_os = "macos")]
@@ -211,6 +213,9 @@ fn main() {
                 listen::resume(&state);
                 dev::capture(app.handle());
             }
+            // `npm run dev`: the page in a browser, over a local bridge (`VISUALS_BRIDGE`).
+            #[cfg(feature = "dev-bridge")]
+            bridge::start(app.handle())?;
             Ok(())
         })
         .build(tauri::generate_context!())
