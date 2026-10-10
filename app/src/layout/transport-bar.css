@@ -1,0 +1,127 @@
+/* The transport along the bottom of the macOS layout's main column
+   (TransportBar.tsx): ◀ play/pause ▶ R, the time on the preset, the audio
+   input. It paints no background: the layout's root (.app.home.lay)
+   already paints the translucent --surface-0, and painting it again would make
+   a darker strip. No rule over it (decision 68); the
+   keys are glyphs and type with no boxes, the track a faint raised line with
+   the time in the numbers' face. The audio input is quiet as in HomeBar. */
+
+.lay-transport {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, auto);
+  align-items: center;
+  gap: 28px;
+  height: 64px;
+  padding: 0 var(--lay-pad, 22px);
+  box-sizing: border-box;
+  min-width: 0;
+  color: var(--ui);
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
+}
+
+.lay-transport-keys {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: -6px;
+}
+.lay-transport-key {
+  display: grid;
+  place-items: center;
+  height: 32px;
+  min-width: 32px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ui);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.lay-transport-key:hover {
+  color: var(--fg);
+}
+.lay-transport-key:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 0;
+}
+/* Previous is next turned round. */
+.lay-transport-prev .lay-icon {
+  transform: scaleX(-1);
+}
+/* Play and pause lead: brighter, and the glyph a step larger. */
+.lay-transport-play {
+  min-width: 36px;
+  color: var(--fg);
+}
+
+/* The time: elapsed, the track, what is left. */
+.lay-transport-time {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  max-width: 560px;
+  width: 100%;
+  justify-self: center;
+}
+.lay-transport-num {
+  flex: none;
+  min-width: 3.2em;
+  color: var(--caption);
+  font-family: var(--font-num);
+  font-variation-settings: var(--font-num-axes);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+.lay-transport-num:first-child {
+  text-align: right;
+}
+.lay-transport-track {
+  flex: 1;
+  min-width: 40px;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--surface-2);
+}
+.lay-transport-time[data-off] .lay-transport-track {
+  opacity: 0.5;
+}
+.lay-transport-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ui);
+}
+
+/* The audio input: quiet text and its meter, no box at rest (as in HomeBar). */
+.lay-transport-right {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+.lay-transport .audio-input {
+  gap: 8px;
+  min-width: 0;
+}
+.lay-transport .audio-input .wdg-select {
+  flex: 0 1 180px;
+  min-width: 0;
+}
+.lay-transport .audio-input .wdg-select-body {
+  justify-content: flex-end;
+  padding: 0 4px;
+  color: var(--detail);
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
+  font-size: 12px;
+  background: none;
+  border-color: transparent;
+  border-radius: 6px;
+}
+.lay-transport .audio-input .wdg-select-body:hover {
+  color: var(--fg);
+}

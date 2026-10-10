@@ -1,19 +1,33 @@
-/* The Now Playing card (Hero.tsx), at the top of the main column. Stub: the
-   picture large at 16:9 with the name, author and actions under it; the hero
-   lane draws it. The picture's backing is --surface-thumb, so the card takes
-   the raised caption (home.css). */
+/* The Now Playing card (Hero.tsx), at the top of the main column. The picture
+   is one 16:9 box with nothing over it, the box the native preview's hole would
+   be in the app (NowPanel's .now-preview): its corners are --lay-hero-radius
+   (as --hole-radius, for home.css's painted corners) and its height is capped
+   at --hero-cap, so its width is too and it keeps its shape. In a card of 900px
+   and up the words and actions sit beside it, along its foot; narrower, under
+   it. Near borderless (decision 68): the card is space, not a panel; the
+   actions are type with a glyph, the pressed one brighter. The picture's
+   backing is --surface-thumb, so the card takes the raised caption (home.css). */
 
 .lay .hero {
   --caption: var(--caption-raised);
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+  /* The picture's tallest: about half the window's height, never under 200px or over 440px. */
+  --hero-cap: clamp(200px, 46vh, 440px);
+  container: hero / inline-size;
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
 }
+.lay .hero > * {
+  /* The container is the card; its one child lays the two parts out. */
+  min-width: 0;
+}
+
 .lay .hero-pic {
+  --hole-radius: var(--lay-hero-radius);
+  position: relative;
+  width: min(100%, calc(var(--hero-cap) * 16 / 9));
   aspect-ratio: 16 / 9;
-  max-height: 46vh;
   overflow: hidden;
-  border-radius: var(--lay-hero-radius);
+  border-radius: var(--hole-radius);
   background: var(--surface-thumb);
 }
 .lay .hero-pic img {
@@ -22,36 +36,118 @@
   height: 100%;
   object-fit: cover;
 }
+.lay .hero-pic-none {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--caption);
+  font-size: 12px;
+  user-select: none;
+}
+
+.lay .hero-info {
+  min-width: 0;
+  padding-top: 16px;
+}
+.lay .hero-label {
+  margin: 0 0 6px;
+  color: var(--detail);
+  font-size: 11px;
+  font-weight: 500;
+}
 .lay .hero-name {
   margin: 0;
   color: var(--fg);
   font-family: var(--font-display);
   font-variation-settings: var(--font-display-axes);
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 600;
+  line-height: 1.2;
+  /* A long name takes two lines, then an ellipsis. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.lay .hero-name[data-none] {
+  color: var(--caption);
+  font-weight: 500;
 }
 .lay .hero-by,
 .lay .hero-from {
-  margin: 2px 0 0;
+  margin: 4px 0 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   color: var(--caption);
-  font-size: 12px;
+  font-size: 13px;
 }
+.lay .hero-by {
+  color: var(--ui);
+}
+.lay .hero-from {
+  font-size: 12px;
+  word-spacing: var(--sep-space);
+}
+
+/* The actions: type keys with a glyph, no boxes. */
 .lay .hero-actions {
   display: flex;
-  gap: 6px;
-  margin-top: 10px;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin: 14px 0 0 -6px;
 }
-.lay .hero-actions button {
-  display: grid;
-  place-items: center;
-  width: 32px;
+.lay .hero-act {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   height: 32px;
+  padding: 0 6px;
   border: 0;
-  border-radius: 50%;
+  border-radius: 6px;
   background: none;
   color: var(--ui);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
 }
-.lay .hero-actions button[aria-pressed='true'] {
+.lay .hero-act:hover:not(:disabled),
+.lay .hero-act[aria-pressed='true'] {
   color: var(--fg);
+}
+.lay .hero-act[aria-pressed='true'] .lay-icon {
+  fill: currentColor;
+}
+.lay .hero-act:disabled {
+  color: var(--caption);
+  cursor: default;
+  opacity: 0.6;
+}
+.lay .hero-act:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 0;
+}
+/* Play and pause lead, a step larger. */
+.lay .hero-play {
+  font-size: 14px;
+}
+
+/* A wide card: the picture on the left at its cap, the words beside it, along its foot. */
+@container hero (min-width: 900px) {
+  .lay .hero-row {
+    display: grid;
+    grid-template-columns: minmax(0, calc(var(--hero-cap) * 16 / 9)) minmax(260px, 1fr);
+    align-items: end;
+    column-gap: 32px;
+  }
+  .lay .hero-row .hero-pic {
+    width: 100%;
+  }
+  .lay .hero-row .hero-info {
+    padding: 0 0 4px;
+  }
 }
