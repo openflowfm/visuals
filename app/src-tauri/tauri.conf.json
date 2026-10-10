@@ -21,7 +21,7 @@
         "transparent": true,
         "theme": "Dark",
         "windowEffects": {
-          "effects": ["underWindowBackground"],
+          "effects": ["hudWindow"],
           "state": "active"
         },
         "visible": false

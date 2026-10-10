@@ -73,6 +73,12 @@ the live output window (both after `VISUALS_CAPTURE_AFTER` seconds, 8 by default
 `VISUALS_FX='[{"kind":"mirror","mode":"quad"}]'` sends those live actions (effects,
 hold…) 5 s after start (`VISUALS_FX_AFTER`), to check effects in a capture.
 `VISUALS_WINDOW_SIZE=WxH` (e.g. `800x900`) opens the main window at that size, to check a layout.
+In a debug build `VISUALS_FROST=<material>` gives the main window another frost than
+`tauri.conf.json`'s `hud`: `under-window`, `sidebar`, `hud`, `fullscreen-ui`, `popover`,
+`menu`, `header`, `content`, `window`, `glass` or `glass-clear` (macOS 26's Liquid Glass),
+or `off` for a solid window; `VISUALS_FROST_TINT=<0..1>` scales the page's tints over it
+(0: the material alone, 1: as shipped). Only a run on screen shows the frost: headless,
+the log says `VISUALS_FROST: the main window is …` and, but for `off`, `bench: stacked [Frost, Bench, Other]`.
 In a dev run `VITE_HOME_PANEL=1` opens the home's Now Playing panel at start in a window under
 900 px too (where it starts closed), to capture it, and `VITE_HOME_PANEL=0` starts it closed in a wide
 window (the bar with its small preview). `VITE_HOME_FILTER=<group>:<value>` (e.g. `style:Hypnotic`) starts the
