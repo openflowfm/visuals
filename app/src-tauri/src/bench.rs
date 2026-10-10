@@ -827,14 +827,16 @@ pub mod view {
                 return Some((0, 0));
             }
             let parent = unsafe { view.superview() }?;
-            // The page's coordinates start at the top left of the window's content
-            // layout rect, not of the view it sits in: the webview runs up under
-            // the title bar and the page begins below it (32pt here). The layout
-            // rect is in the window's coordinates, which are the content view's.
+            // The page's coordinates start at the window's top left: the title
+            // bar is an overlay (`tauri.conf.json`), so the content view, the
+            // webview and the page all run up to the window's top edge, under the
+            // window buttons. (With macOS's own title bar the page began below it,
+            // at the content layout rect's top; that rect still stops under the
+            // title bar's area, so it is no longer where the page starts.)
             let window = view.window()?;
-            let area = window.contentLayoutRect();
+            let area = parent.bounds();
             let left = area.origin.x + x;
-            let bottom = if parent.isFlipped() { window.frame().size.height - (area.origin.y + area.size.height) + y } else { area.origin.y + area.size.height - y - height };
+            let bottom = if parent.isFlipped() { area.origin.y + y } else { area.origin.y + area.size.height - y - height };
             view.setFrame(NSRect::new(NSPoint::new(left, bottom), NSSize::new(width, height)));
             let scale = window.backingScaleFactor();
             Some(((width * scale).round() as u32, (height * scale).round() as u32))

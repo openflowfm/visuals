@@ -20,6 +20,9 @@
         "minHeight": 640,
         "transparent": true,
         "theme": "Dark",
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": { "x": 18, "y": 28 },
         "windowEffects": {
           "effects": ["hudWindow"],
           "state": "active"
