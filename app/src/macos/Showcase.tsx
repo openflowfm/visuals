@@ -55,7 +55,8 @@ export function KitPicture({ symbol }: { symbol: string | null }) {
   const [missing, setMissing] = useState(false);
   const [width, setWidth] = useState<number>();
   if (!symbol || missing) return null;
-  const src = `kit/${symbol.split('/').map(encodeURIComponent).join('/')}${encodeURIComponent('@2x.png')}`;
+  // encodeURI, not encodeURIComponent: Storybook's static server takes "," and "@" as they are, not escaped.
+  const src = encodeURI(`kit/${symbol}@2x.png`);
   return (
     <img
       className="mac-kit-picture"

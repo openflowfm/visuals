@@ -25,6 +25,7 @@ const cell = (canvasElement: HTMLElement, size: MacSize, column: string, appeara
 const meta = {
   title: 'macOS/Disclosure button',
   component: MacDisclosure,
+  args: { 'aria-label': 'Details' },
   parameters: { scope: 'bare', ...PRESSED },
 } satisfies Meta<typeof MacDisclosure>;
 export default meta;

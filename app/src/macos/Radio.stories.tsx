@@ -14,7 +14,7 @@ const sheet = (value: MacToggleValue) => () => (
   <Sheet
     render={(size, column) => (
       <MacRadio size={size} defaultChecked={value} disabled={isDisabled(column)}>
-        Label
+        Radio Button Label
       </MacRadio>
     )}
     kit={kit(value)}

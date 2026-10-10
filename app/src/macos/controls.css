@@ -282,11 +282,12 @@
 
 .mac-switch-knob {
   --w: var(--knob-w);
+  --h: var(--knob-h);
   position: absolute;
-  top: calc((var(--track-h) - var(--knob-h)) / 2);
+  top: calc((var(--track-h) - var(--h)) / 2);
   left: var(--inset);
   width: var(--w);
-  height: var(--knob-h);
+  height: var(--h);
   border-radius: 999px;
   background: var(--mac-content-area-knobs-toggle-idle-bg);
   box-shadow: var(--mac-content-area-knobs-toggle-idle-shadow);
@@ -294,17 +295,20 @@
   backdrop-filter: var(--mac-content-area-knobs-toggle-idle-backdrop, none);
   transition:
     left 0.2s ease,
+    top 0.2s ease,
     width 0.2s ease,
+    height 0.2s ease,
     background-color 0.2s ease;
 }
 .mac-switch[aria-checked='true'] .mac-switch-knob {
   left: calc(var(--track-w) - var(--inset) - var(--w));
 }
-/* Pressed, the kit's knob turns to Liquid Glass and stretches: approximated as
-   a wider, see-through knob over a blur. */
+/* Pressed, the kit's knob turns to Liquid Glass and swells past the track:
+   approximated as a bigger, see-through knob over a blur, still held to its end. */
 .mac-switch:active:not(:disabled) .mac-switch-knob {
-  --w: calc(var(--knob-w) * 1.18);
-  background: rgb(255 255 255 / 0.45);
+  --w: calc(var(--knob-w) * 1.3);
+  --h: calc(var(--knob-h) * 1.35);
+  background: rgb(255 255 255 / 0.3);
   box-shadow: var(--mac-content-area-knobs-toggle-clicked-shadow);
   -webkit-backdrop-filter: blur(2px) saturate(1.6);
   backdrop-filter: blur(2px) saturate(1.6);

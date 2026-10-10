@@ -10,9 +10,7 @@ const kit = (on: boolean) => (appearance: Appearance, size: MacSize, column: Col
 };
 
 /** Every size and state of a switch at one value. */
-const sheet = (on: boolean) => () => (
-  <Sheet render={(size, column) => <MacSwitch aria-label="Label" size={size} defaultChecked={on} disabled={isDisabled(column)} />} kit={kit(on)} />
-);
+const sheet = (on: boolean) => () => <Sheet render={(size, column) => <MacSwitch aria-label="Label" size={size} defaultChecked={on} disabled={isDisabled(column)} />} kit={kit(on)} />;
 
 /** The switch in a cell. */
 const cell = (canvasElement: HTMLElement, size: MacSize, column: string, appearance = 'Light') =>
@@ -33,6 +31,7 @@ const knobGaps = (track: HTMLElement) => {
 const meta = {
   title: 'macOS/Switch',
   component: MacSwitch,
+  args: { 'aria-label': 'Label' },
   parameters: { scope: 'bare', ...PRESSED },
 } satisfies Meta<typeof MacSwitch>;
 export default meta;

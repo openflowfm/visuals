@@ -14,7 +14,7 @@ const sheet = (value: MacToggleValue) => () => (
   <Sheet
     render={(size, column) => (
       <MacCheckbox size={size} defaultChecked={value} disabled={isDisabled(column)}>
-        Label
+        Checkbox Label
       </MacCheckbox>
     )}
     kit={kit(value)}
