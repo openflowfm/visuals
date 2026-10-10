@@ -1,0 +1,114 @@
+/* Home in the macOS 26/27 app layout (HomeLayout.tsx), a Storybook reference.
+   The layout is Apple's kit's ("Library Preview"): a window with 26px corners;
+   an inset sidebar, a rounded panel 8px in from the window's edges, 240px wide,
+   18px corners, the full height, its top 52px left to the native window
+   buttons; the main column beside it, the header row, the hero, then sections
+   spaced apart. The look is the app's own (home.css): its surfaces, type and
+   captions, areas told apart by space and tone, no lines (decision 68).
+
+   The `--lay-*` sizes below are the contract the parts lay themselves out by
+   (inset-sidebar.css, hero.css, section.css): a part reads them, never sets
+   them. Everything hangs off `.app.home.lay`, which outranks app.css's and
+   home.css's grids. */
+
+.app.home.lay {
+  /* The window and the inset sidebar. */
+  --lay-window-radius: 26px;
+  --lay-inset: 8px;
+  --lay-side: 240px;
+  --lay-side-radius: 18px;
+  /* The band at the top for the native window buttons, and the header row's height beside it. */
+  --lay-titlebar: 52px;
+  /* A sidebar row, and the selected row's pill. */
+  --lay-row: 40px;
+  --lay-row-radius: 8px;
+  /* The main column: its side padding (home.css's --pad), the hero's corners, the space between sections and a section's tiles. */
+  --lay-pad: var(--pad);
+  --lay-hero-radius: 18px;
+  --lay-section-gap: 32px;
+  --lay-tile: 200px;
+  --lay-tile-gap: 16px;
+
+  display: grid;
+  grid-template-columns: calc(var(--lay-side) + 2 * var(--lay-inset)) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: var(--lay-window-radius);
+  background: var(--surface-0);
+  color: var(--ui);
+}
+
+/* The inset sidebar: a raised panel of its own over the window's tint, a hint
+   of glass at its top edge. It paints --surface-2, so it takes the raised
+   caption (home.css: small grey text stays at 4.5:1). */
+.app.home.lay .lay-side {
+  --caption: var(--caption-raised);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin: var(--lay-inset);
+  padding-top: var(--lay-titlebar);
+  border-radius: var(--lay-side-radius);
+  background: var(--surface-2);
+  box-shadow: var(--glass-edge);
+  overflow: hidden;
+}
+.app.home.lay .lay-side-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+/* The native window buttons' stand-in (stories only): three 12px dots, 8px apart. */
+.app.home.lay .lay-lights {
+  position: absolute;
+  top: 18px;
+  left: 16px;
+  display: flex;
+  gap: 8px;
+}
+.app.home.lay .lay-lights i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* The main column: the header row, the scrolling hero and sections, the bar. */
+.app.home.lay .lay-col {
+  display: grid;
+  grid-template-rows: var(--lay-titlebar) minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+}
+.app.home.lay .lay-head {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.app.home.lay .lay-head > * {
+  flex: 1;
+  min-width: 0;
+}
+.app.home.lay .lay-head .vf-header {
+  background: none;
+}
+.app.home.lay .lay-main {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 var(--lay-pad) var(--lay-section-gap);
+}
+.app.home.lay .lay-hero {
+  margin-top: 4px;
+}
+.app.home.lay .lay-sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lay-section-gap);
+  margin-top: var(--lay-section-gap);
+}
+.app.home.lay .lay-bar {
+  min-width: 0;
+}

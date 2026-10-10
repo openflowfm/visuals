@@ -1,0 +1,46 @@
+/* One titled section of the main column (Section.tsx). Stub: the title and its
+   action on one line, then the tiles in a row that scrolls sideways, each
+   --lay-tile wide, --lay-tile-gap apart; the sections lane draws it. */
+
+.lay .sec-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.lay .sec-title {
+  flex: 1;
+  margin: 0;
+  color: var(--fg);
+  font-family: var(--font-display);
+  font-variation-settings: var(--font-display-axes);
+  font-size: 17px;
+  font-weight: 600;
+}
+.lay .sec-action {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--caption);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.lay .sec-action:hover {
+  color: var(--fg);
+}
+.lay .sec-row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: var(--lay-tile);
+  gap: var(--lay-tile-gap);
+  list-style: none;
+  margin: 0;
+  padding: 0 0 8px;
+  overflow-x: auto;
+}
+.lay .sec-empty {
+  margin: 0;
+  color: var(--caption);
+  font-size: 12px;
+}
