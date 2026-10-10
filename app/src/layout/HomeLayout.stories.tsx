@@ -8,11 +8,14 @@ import { HomeLayout } from './HomeLayout.tsx';
 import { InsetSidebar } from './InsetSidebar.tsx';
 import { Hero } from './Hero.tsx';
 import { Section } from './Section.tsx';
+import { TransportBar } from './TransportBar.tsx';
 import { NOW, SECTIONS, SIDEBAR, STARRED } from './fixtures.ts';
+import { WARM_UP } from '../stories/fixtures.ts';
 
 /** The whole window, its parts on the fixtures: the sidebar's selection and folding work; the rest does nothing. */
 function Composed() {
-  const [selected, setSelected] = useState<Pane | null>({ kind: 'library' });
+  // The playlist playing is the one picked, as the kit's example has a folder picked.
+  const [selected, setSelected] = useState<Pane | null>({ kind: 'list', id: WARM_UP.id });
   const [collapsed, setCollapsed] = useState<string[]>([]);
   const toggle = (id: string) => setCollapsed((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]));
   return (
@@ -40,6 +43,7 @@ function Composed() {
           onAdd={() => {}}
         />
       }
+      bar={<TransportBar playing={NOW.playing} onPlayPause={() => {}} onStep={() => {}} stepIn=" in the playlist" position={{ elapsed: 12, length: 30 }} onAudioError={() => {}} />}
     >
       {SECTIONS.map((s) => (
         <Section key={s.title} title={s.title} action={{ label: 'See all', onPress: () => {} }} rows={s.rows} playing={NOW.path} starred={STARRED} />
@@ -71,12 +75,16 @@ export const Wide: Story = {
     await expect(canvas.getByRole('banner')).toBeVisible();
     await expect(canvas.getByRole('region', { name: 'now playing' })).toBeVisible();
     for (const s of SECTIONS) await expect(canvas.getByRole('region', { name: s.title })).toBeVisible();
-    // The sidebar's sections fold, and a row picked is the current one.
+    await expect(canvas.getByRole('region', { name: 'transport' })).toBeVisible();
+    // The playlist playing is the row picked.
+    await expect(canvas.getByRole('button', { name: new RegExp(`^${WARM_UP.name}`), current: true })).toBeVisible();
+    // The sidebar's sections fold, and unfold again (so the story ends as it starts).
     const playlists = canvas.getByRole('button', { name: 'Playlists' });
     await expect(playlists).toHaveAttribute('aria-expanded', 'true');
     await userEvent.click(playlists);
     await waitFor(() => expect(playlists).toHaveAttribute('aria-expanded', 'false'));
-    await expect(canvas.getByRole('button', { name: /^Library/, current: true })).toBeVisible();
+    await userEvent.click(playlists);
+    await waitFor(() => expect(playlists).toHaveAttribute('aria-expanded', 'true'));
   },
 };
 

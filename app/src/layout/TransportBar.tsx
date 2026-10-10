@@ -37,7 +37,7 @@ export function TransportBar({ playing, onPlayPause, onStep, stepIn, position, o
     <div className="lay-transport" role="region" aria-label="transport">
       <div className="lay-transport-keys">
         <button type="button" className="lay-transport-key lay-transport-prev" aria-label="previous preset" title={`Previous preset${stepIn} (←)`} onClick={() => onStep(-1)}>
-          <Icon name="next" />
+          <Icon name="previous" />
         </button>
         <button
           type="button"
