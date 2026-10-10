@@ -42,24 +42,26 @@ describe('select', () => {
 });
 
 describe('exportedFile', () => {
-  it('is the name as folders, with sketchtool’s scale suffix', () => {
-    expect(exportedFile('A/B/On, 1 - Idle', 2)).toBe('A/B/On, 1 - Idle@2x.png');
-    expect(exportedFile('A/On', 1)).toBe('A/On.png');
+  it('is the name as folders, with sketchtool’s scale suffix on PNGs', () => {
+    expect(exportedFile('A/B/On, 1 - Idle', 'png', 2)).toBe('A/B/On, 1 - Idle@2x.png');
+    expect(exportedFile('A/On', 'png', 1)).toBe('A/On.png');
+  });
+
+  it('never puts a scale on an SVG, which is exported at scale 1', () => {
+    expect(exportedFile('A/On', 'svg', 2)).toBe('A/On.svg');
   });
 });
 
 describe('sheetHtml', () => {
-  it('groups by folder and puts each symbol on its appearance’s window background', () => {
-    const html = sheetHtml(
-      [
-        { id: 'a', name: 'Sw/Dark/Rg/On, 1 - Idle' },
-        { id: 'b', name: 'Sw/Light/Rg/On' },
-      ],
-      2,
-    );
+  it('groups by folder and puts each symbol on its appearance’s window background, at its size in points', () => {
+    const html = sheetHtml([
+      { name: 'Sw/Dark/Rg/On, 1 - Idle', file: 'Sw/Dark/Rg/On, 1 - Idle@2x.png', zoom: 0.5 },
+      { name: 'Sw/Light/Rg/On', file: 'Sw/Light/Rg/On.svg', zoom: 1 },
+    ]);
     expect(html).toContain('<h2>Sw/Dark/Rg</h2>');
     expect(html).toContain('<h2>Sw/Light/Rg</h2>');
-    expect(html).toContain('src="Sw/Dark/Rg/On%2C%201%20-%20Idle%402x.png"');
+    expect(html).toContain('src="Sw/Dark/Rg/On%2C%201%20-%20Idle%402x.png" style="zoom:0.5"');
+    expect(html).toContain('src="Sw/Light/Rg/On.svg">');
     expect(html).toContain('background:#1e1e1e');
     expect(backgroundFor('Sw/Light/Rg/On')).toBe('#ffffff');
   });

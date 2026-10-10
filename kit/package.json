@@ -10,6 +10,7 @@
   },
   "scripts": {
     "export": "node --disable-warning=ExperimentalWarning src/export.ts",
+    "tokens": "node --disable-warning=ExperimentalWarning src/make-tokens.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run"
   },

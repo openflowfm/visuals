@@ -32,14 +32,26 @@ export function readSymbols(doc: string): KitSymbol[] {
   return found.sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/** `document.json` (shared swatches, text and layer styles) from an unpacked kit folder or a `.sketch` file. */
+export function readDocument(doc: string): unknown {
+  const json = statSync(doc).isDirectory() ? readFileSync(join(doc, 'document.json'), 'utf8') : execFileSync('unzip', ['-p', doc, 'document.json'], { encoding: 'utf8', maxBuffer: 1 << 30 });
+  return JSON.parse(json);
+}
+
 /** The symbols whose names start with any of the prefixes. */
 export function select(symbols: KitSymbol[], prefixes: string[]): KitSymbol[] {
   return symbols.filter((s) => prefixes.some((p) => s.name.startsWith(p)));
 }
 
-/** Where sketchtool writes a symbol: its name as folders, `@Nx` for scales other than 1. */
-export function exportedFile(name: string, scale: number): string {
-  return `${name}${scale === 1 ? '' : `@${scale}x`}.png`;
+export type Format = 'png' | 'svg';
+
+/**
+ * Where sketchtool writes a symbol: its name as folders, `@Nx` for scales
+ * other than 1. SVGs are exported at scale 1, so they never carry it.
+ */
+export function exportedFile(name: string, format: Format, scale: number): string {
+  const s = format === 'svg' ? 1 : scale;
+  return `${name}${s === 1 ? '' : `@${s}x`}.${format}`;
 }
 
 /** The window background a symbol sits on, from the appearance in its name. */
@@ -49,13 +61,16 @@ export function backgroundFor(name: string): string {
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 
+/** One picture on the sheet: the symbol, its file under DIR, and the zoom that shows it at its size in points. */
+export type SheetItem = { name: string; file: string; zoom: number };
+
 /**
  * A page laying out the exports, grouped by the symbol's folder, each on its
  * appearance's window background and shown at its size in points.
  */
-export function sheetHtml(symbols: KitSymbol[], scale: number): string {
-  const groups = new Map<string, KitSymbol[]>();
-  for (const s of symbols) {
+export function sheetHtml(items: SheetItem[]): string {
+  const groups = new Map<string, SheetItem[]>();
+  for (const s of items) {
     const folder = s.name.slice(0, s.name.lastIndexOf('/'));
     groups.set(folder, [...(groups.get(folder) ?? []), s]);
   }
@@ -63,8 +78,9 @@ export function sheetHtml(symbols: KitSymbol[], scale: number): string {
     .map(([folder, list]) => {
       const figures = list
         .map((s) => {
-          const src = exportedFile(s.name, scale).split('/').map(encodeURIComponent).join('/');
-          return `<figure style="background:${backgroundFor(s.name)}"><img src="${esc(src)}"><figcaption>${esc(s.name.slice(folder.length + 1))}</figcaption></figure>`;
+          const src = s.file.split('/').map(encodeURIComponent).join('/');
+          const zoom = s.zoom === 1 ? '' : ` style="zoom:${s.zoom}"`;
+          return `<figure style="background:${backgroundFor(s.name)}"><img src="${esc(src)}"${zoom}><figcaption>${esc(s.name.slice(folder.length + 1))}</figcaption></figure>`;
         })
         .join('');
       return `<h2>${esc(folder)}</h2><div class="row">${figures}</div>`;
@@ -76,6 +92,6 @@ h2{font-size:13px;margin:20px 0 8px}h2:first-of-type{margin-top:0}
 .row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start}
 figure{margin:0;padding:8px;border-radius:6px}
 figcaption{margin-top:4px;max-width:220px;color:#888}
-img{display:block;zoom:${1 / scale}}
+img{display:block}
 </style>${body}`;
 }
