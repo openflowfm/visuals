@@ -18,8 +18,8 @@
   padding: 6px 10px;
   background: var(--rail);
   border-bottom: 1px solid var(--bd);
-  font-family: var(--mono);
-  font-variation-settings: var(--mono-axes);
+  font-family: var(--sans);
+  font-variation-settings: var(--sans-axes);
   font-size: var(--text-control);
   white-space: nowrap;
 }
@@ -173,8 +173,8 @@
   padding: 10px;
   background: var(--panel);
   border: 1px solid var(--bd3);
-  font-family: var(--mono);
-  font-variation-settings: var(--mono-axes);
+  font-family: var(--sans);
+  font-variation-settings: var(--sans-axes);
   font-size: var(--text-control);
 }
 .ob-picker[data-off] {

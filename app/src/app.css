@@ -2,6 +2,45 @@
   box-sizing: border-box;
 }
 
+/* Instrument Sans (decision 69): one humane sans for UI, titles and numbers,
+   in place of the suite's Recursive (the widgets' type.css, left as it is). One
+   variable file, weights 400–700 and widths 75–100, bundled beside this file
+   with its licence (fonts/OFL.txt), so it loads from disk with no network
+   fetch; `block` waits for it rather than flashing a fallback. The WOFF2 is made
+   from the TTF beside it, from google/fonts' ofl/instrumentsans:
+   uvx --from 'fonttools[woff]==4.55.0' fonttools ttLib.woff2 compress -o app/src/fonts/InstrumentSans.woff2 app/src/fonts/InstrumentSans.ttf */
+@font-face {
+  font-family: 'Instrument Sans';
+  font-style: normal;
+  font-weight: 400 700;
+  font-stretch: 75% 100%;
+  font-display: block;
+  src: url('./fonts/InstrumentSans.woff2') format('woff2-variations');
+}
+
+/* The suite's type tokens, pointed at it. `html:root` outranks type.css's
+   `:root`, whatever order the stylesheets land in. Numbers no longer get a
+   monospace: each rule that sets one takes tabular figures
+   (`font-variant-numeric: tabular-nums`, Instrument Sans's `tnum`) instead, so
+   columns of counts still line up. Recursive stays only as `--code`, for what
+   really is code: the lab editor's equations and shader text. */
+html:root {
+  --sans: 'Instrument Sans', system-ui, -apple-system, sans-serif;
+  --mono: var(--sans);
+  --sans-axes: normal;
+  --mono-axes: normal;
+  --code: 'Recursive Variable', ui-monospace, Menlo, monospace;
+  --code-axes: 'MONO' 1, 'CASL' 0.38;
+  /* Instrument Sans's space is narrow (0.2em) and its middle dot hugs nothing,
+     so a line joined with " · " reads cramped: lines that carry one widen
+     their spaces by this much. */
+  --sep-space: 0.1em;
+}
+/* The widgets' readouts were all in the monospace: they keep their columns. */
+.vf-root .wdg {
+  font-variant-numeric: tabular-nums;
+}
+
 /* Transparent all the way down: the bench is a native view under the page, and
    shows through wherever nothing here paints. Every panel paints itself — which
    is why the theme root, which paints --bg elsewhere in the suite, doesn't here. */
@@ -49,8 +88,8 @@ body {
   background: var(--rail);
   border-bottom: 1px solid var(--bd);
   white-space: nowrap;
-  font-family: var(--mono);
-  font-variation-settings: var(--mono-axes);
+  font-family: var(--sans);
+  font-variation-settings: var(--sans-axes);
   font-size: var(--text-control);
 }
 /* A spacer that takes a flex row's free room, pushing what follows to the end. */
@@ -68,16 +107,20 @@ body {
   justify-content: center;
 }
 
-/* The wordmark, as mix[flow] draws its own. */
+/* The wordmark: mix[flow]'s shape (the name, its bracketed half in the primary
+   tone), set in Instrument Sans a touch heavier and tighter than the text
+   around it, as the font study drew it; a monospace mark read as the one robot
+   word in the window. */
 .vf-mark {
   display: inline-flex;
   align-items: center;
   height: var(--ctl-h);
   padding: 0 4px;
-  font-family: var(--mono);
-  font-variation-settings: var(--mono-axes);
+  font-family: var(--sans);
+  font-variation-settings: var(--sans-axes);
   font-size: var(--text-lead);
-  font-weight: var(--weight-strong);
+  font-weight: 650;
+  letter-spacing: -0.015em;
   color: var(--fg);
 }
 .vf-mark span {
@@ -160,8 +203,10 @@ body {
 .vf-stats,
 .vf-header .stats {
   color: var(--detail);
-  font-family: var(--mono);
-  font-variation-settings: var(--mono-axes);
+  font-family: var(--sans);
+  font-variation-settings: var(--sans-axes);
+  font-variant-numeric: tabular-nums;
+  word-spacing: var(--sep-space);
   font-size: var(--text-label);
   min-width: 120px;
   text-align: right;
@@ -353,8 +398,7 @@ main {
   white-space: pre-wrap;
 }
 .problem b {
-  font-family: var(--mono);
-  font-variation-settings: var(--mono-axes);
+  font-weight: var(--weight-strong);
 }
 .quiet {
   color: var(--caption);

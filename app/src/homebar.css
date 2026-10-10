@@ -87,6 +87,7 @@
   margin-top: 2px;
   color: var(--caption);
   font-size: 12px;
+  word-spacing: var(--sep-space);
 }
 .home-bar-num {
   font-family: var(--font-num);
