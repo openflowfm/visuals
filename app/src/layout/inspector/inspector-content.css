@@ -1,0 +1,292 @@
+/* The inspector (Inspector.tsx), "Scope": the preset placed among the
+   library. At the top the field (Field.tsx, field.css); under it the words,
+   near borderless (decision 68): the name large, the authors, the measures
+   read out as one line ("slow · dark · calm"), the colours as dots, then the
+   actions as a row of keys (a glyph over a short word, the pressed one
+   brighter, the star filled), my tags and the playlists holding it as quiet
+   lines. Areas are told apart by space alone. The panel paints --surface-2,
+   so --caption here is the raised one (inspector.css). */
+
+.lay .insp {
+  --insp-pad: 20px;
+  display: flex;
+  flex-direction: column;
+  padding: 14px var(--insp-pad) 24px;
+  color: var(--ui);
+  font-size: 13px;
+}
+
+/* Back to now playing: a quiet line above the field. */
+.lay .insp .insp-top {
+  margin: -4px 0 6px -6px;
+}
+.lay .insp .insp-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 6px 0 2px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--caption);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.lay .insp .insp-back:hover {
+  color: var(--fg);
+}
+
+/* Nothing playing: the field draws the library alone, and the words say so. */
+.lay .insp .insp-none {
+  margin-top: 18px;
+}
+.lay .insp .insp-none-title {
+  margin: 0 0 6px;
+  color: var(--fg);
+  font-size: 17px;
+  font-weight: 600;
+}
+.lay .insp .insp-quiet {
+  margin: 0;
+  color: var(--caption);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* The name and who made it. */
+.lay .insp .insp-head {
+  margin-top: 20px;
+}
+.lay .insp .insp-kicker {
+  display: flex;
+  align-items: center;
+  margin: 0 0 6px;
+  color: var(--caption);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lay .insp .insp-sep {
+  display: inline-block;
+  width: 3px;
+  height: 3px;
+  margin: 0 8px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.6;
+  vertical-align: middle;
+}
+.lay .insp .insp-name {
+  margin: 0;
+  color: var(--fg);
+  font-family: var(--font-display);
+  font-variation-settings: var(--font-display-axes);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  text-wrap: balance;
+}
+.lay .insp .insp-by,
+.lay .insp .insp-from {
+  margin: 4px 0 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 13px;
+}
+.lay .insp .insp-from {
+  color: var(--caption);
+  font-size: 12px;
+}
+
+/* The readout: the measures as words, the colours as dots. */
+.lay .insp .insp-read {
+  margin-top: 16px;
+}
+.lay .insp .insp-words {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 0;
+  color: var(--fg);
+  font-size: 15px;
+  font-weight: 500;
+}
+.lay .insp .insp-words > span {
+  display: inline-flex;
+  align-items: center;
+}
+.lay .insp .insp-words .insp-sep {
+  margin: 0 9px;
+}
+.lay .insp .insp-hues {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 0;
+  color: var(--caption);
+  font-size: 12px;
+}
+.lay .insp .insp-swatches {
+  display: inline-flex;
+  gap: 5px;
+}
+.lay .insp .insp-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+.lay .insp .insp-swatch[data-grey] {
+  background: var(--caption);
+  opacity: 0.6;
+}
+
+/* The keys: a glyph over a short word, no boxes; pressed is brighter, the star filled. */
+.lay .insp .insp-keys {
+  display: flex;
+  justify-content: space-between;
+  margin: 22px -6px 0;
+}
+.lay .insp .insp-key,
+.lay .insp .insp-key .vf-pop-button {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  min-width: 44px;
+  height: auto;
+  padding: 6px 4px 4px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ui);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.lay .insp .vf-pop.insp-key {
+  padding: 0;
+  min-width: 0;
+}
+.lay .insp .insp-key:hover,
+.lay .insp .insp-key[aria-pressed='true'],
+.lay .insp .insp-key .vf-pop-button:hover,
+.lay .insp .insp-key .vf-pop-button[aria-expanded='true'] {
+  color: var(--fg);
+  text-decoration: none;
+}
+/* Only the star fills; never play stays a line and reads as on by its colour. */
+.lay .insp .insp-key[aria-pressed='true'] .lay-icon[data-icon='star'] {
+  fill: currentColor;
+}
+.lay .insp .insp-key:focus-visible,
+.lay .insp .insp-key .vf-pop-button:focus-visible,
+.lay .insp .insp-back:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 0;
+}
+
+/* My tags (TagEditor.tsx: its parts' classes are fixed), and where it's kept. */
+.lay .insp .insp-mine {
+  margin-top: 20px;
+}
+.lay .insp .insp-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+.lay .insp .insp-tags .now-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 500;
+}
+.lay .insp .insp-tags .now-chip::before {
+  content: '#';
+  margin-right: 1px;
+  color: var(--caption);
+}
+.lay .insp .insp-tags .now-chip[data-some] {
+  color: var(--ui);
+}
+.lay .insp .insp-tags .now-chip-count {
+  margin-left: 2px;
+  color: var(--caption);
+  font-size: 11px;
+}
+.lay .insp .insp-tags .now-chip-x {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--caption);
+  cursor: pointer;
+  opacity: 0;
+}
+.lay .insp .insp-tags .now-chip:hover .now-chip-x,
+.lay .insp .insp-tags .now-chip-x:focus-visible {
+  opacity: 1;
+}
+.lay .insp .insp-tags .now-chip-x:hover {
+  color: var(--fg);
+}
+/* "+ Tag" and the box it becomes aren't tags: no "#". */
+.lay .insp .insp-tags .now-chip-add::before,
+.lay .insp .insp-tags .now-tag-input::before {
+  content: none;
+}
+.lay .insp .insp-tags .now-chip-add {
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--caption);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.lay .insp .insp-tags .now-chip-add:hover {
+  color: var(--fg);
+}
+.lay .insp .insp-tags .now-tag-input {
+  flex: 1;
+  min-width: 120px;
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--surface-3);
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+.lay .insp .insp-tags .now-chip-x:focus-visible,
+.lay .insp .insp-tags .now-chip-add:focus-visible,
+.lay .insp .insp-tags .now-tag-input:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 0;
+}
+.lay .insp .insp-in {
+  margin-top: 8px;
+}
