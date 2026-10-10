@@ -1,8 +1,8 @@
 //! Playlists: named lists of presets, each with its own settings, kept in one
 //! JSON file.
 //!
-//! The file is `~/.openflow/visuals/playlists.json` (`OPENFLOW_VISUALS_PLAYLISTS`
-//! overrides). Presets inside the library are stored relative to it, with `/`
+//! The file is `playlists.json` in the settings folder (`~/.openflow/visuals`,
+//! or `$OPENFLOW_HOME/visuals`; `OPENFLOW_VISUALS_PLAYLISTS` overrides). Presets inside the library are stored relative to it, with `/`
 //! between folders, so the library can move; anything outside it is stored whole.
 //! A playlist's position in the file is its number, which is how live control
 //! (`actions::Action::Load`) picks one.
@@ -324,7 +324,12 @@ pub struct Exported {
 
 /// Where playlists live unless `OPENFLOW_VISUALS_PLAYLISTS` says otherwise.
 pub fn default_file() -> PathBuf {
-    std::env::var_os("OPENFLOW_VISUALS_PLAYLISTS").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".openflow/visuals/playlists.json"))
+    file_from(std::env::var_os("OPENFLOW_VISUALS_PLAYLISTS"), &crate::settings::dir())
+}
+
+/// The playlists file: `set` if given, else `playlists.json` in `dir` (the settings folder).
+fn file_from(set: Option<std::ffi::OsString>, dir: &Path) -> PathBuf {
+    set.map(PathBuf::from).unwrap_or_else(|| dir.join("playlists.json"))
 }
 
 fn new_id() -> String {
@@ -720,6 +725,13 @@ impl Store {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn file_is_in_the_settings_folder_unless_set() {
+        let dir = Path::new("/scratch/openflow/visuals");
+        assert_eq!(file_from(None, dir), PathBuf::from("/scratch/openflow/visuals/playlists.json"));
+        assert_eq!(file_from(Some("/elsewhere/p.json".into()), dir), PathBuf::from("/elsewhere/p.json"));
+    }
 
     fn temp() -> PathBuf {
         let dir = std::env::temp_dir().join(format!("visuals-playlists-{}", new_id()));
