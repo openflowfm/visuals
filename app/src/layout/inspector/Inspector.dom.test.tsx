@@ -113,6 +113,16 @@ describe('the inspector in a DOM', () => {
     expect(p.onPick).not.toHaveBeenCalled();
   });
 
+  it('picking the dot playing while it is shown does nothing', async () => {
+    const user = userEvent.setup();
+    const p = mount();
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByRole('listbox'));
+    await user.keyboard('{Enter}');
+    expect(p.onBack).not.toHaveBeenCalled();
+    expect(p.onPick).not.toHaveBeenCalled();
+  });
+
   it('with nothing playing, says so and offers no action, the field still drawn', () => {
     mount({ subject: null, playing: null });
     expect(screen.getByText(/nothing playing/i)).toBeTruthy();

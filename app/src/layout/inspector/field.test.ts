@@ -40,6 +40,15 @@ describe("the inspector's field", () => {
     expect(bandOf(undefined)).toBe(BANDS);
   });
 
+  it("places a dot where the user's overrides put it, and leaves out one with no speed or brightness", () => {
+    const rows = [row('a', look({ speed: 0, brightness: 0 })), row('n', look({ speed: null as unknown as number, speed_level: null as unknown as 'mid' }))];
+    const dots = dotsOf(rows, { a: { overrides: { speed: 'high', brightness: 'high' } } });
+    expect(dots.map((d) => d.row.key)).toEqual(['a']);
+    // Fast and bright by the override's level (5/6 of the way), not slow and dark by the index's raw values.
+    expect(dots[0].x).toBeGreaterThan((3 * W) / 4);
+    expect(dots[0].y).toBeLessThan(H / 4);
+  });
+
   it('draws 9,800 presets as at most one path per band', () => {
     const rows = Array.from({ length: 9800 }, (_, i) => row(`p${i}`, look({ hues: i % 7 ? [(i * 37) % 360] : [], speed: (i % 97) / 12, brightness: (i % 89) / 89 })));
     const paths = bandPaths(dotsOf(rows));

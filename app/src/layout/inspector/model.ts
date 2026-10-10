@@ -3,7 +3,7 @@
  * character, from the preset index's analysis (`LibraryRow.look`) with the
  * user's overrides laid over it (`Prepared`), as words and marks.
  */
-import type { LibraryChange, LibraryRow, Level } from '../../api.ts';
+import type { LibraryChange, LibraryRow, Level, Look, Mine, Overrides } from '../../api.ts';
 import { colourOf, valueLabel, type Colour, type Prepared } from '../../librarySearch.ts';
 import type { Playlist } from '../../playlists.ts';
 import { tileBy, tileName } from '../../PresetTile.tsx';
@@ -20,6 +20,8 @@ export interface InspectorProps {
   playlists: Playlist[] | null;
   /** The library's rows, for the field: every one the index has measured is a dot. */
   library: readonly LibraryRow[];
+  /** What the user keeps about each preset, by key (`library.json`'s presets): their speed and brightness overrides move its dot. */
+  mine?: Readonly<Record<string, Mine>>;
   /** Change star / never play / tags on these preset keys. */
   onSet(keys: string[], change: LibraryChange): void;
   /** Add these preset paths to a manual playlist, by id. */
@@ -88,6 +90,20 @@ export const scaleOf = {
 /** A hue's swatch colour, as the library's colour chips draw them. */
 const hueCss = (hue: number) => `hsl(${Math.round(hue)} 72% 58%)`;
 
+/** Where a measure sits, 0–1: its raw value on its scale, or its level's middle when there is no raw value; null with neither. */
+const atOf = (level: Level | null | undefined, raw: number | null | undefined, scale: (v: number) => number): number | null =>
+  raw === null || raw === undefined ? (level ? { low: 1 / 6, mid: 1 / 2, high: 5 / 6 }[level] : null) : scale(raw);
+// An override changes the level only; the raw value then no longer says where it sits.
+const raw = <T>(over: unknown, v: T) => (over === undefined ? v : null);
+
+/** Where a preset sits by speed and brightness, 0–1, as `characterOf` reads it (the user's overrides applied); null for one not measured. */
+export function placeOf(look: Look | null, o: Overrides = {}): { speed: number | null; brightness: number | null } {
+  return {
+    speed: atOf(o.speed ?? look?.speed_level, raw(o.speed, look?.speed), scaleOf.speed),
+    brightness: atOf(o.brightness ?? look?.brightness_level, raw(o.brightness, look?.brightness), scaleOf.brightness),
+  };
+}
+
 /** The preset's character, from its index row and the user's overrides. */
 export function characterOf(p: Prepared): Character {
   const o = p.mine?.overrides ?? {};
@@ -96,10 +112,8 @@ export function characterOf(p: Prepared): Character {
   const measure = (level: Level | null | undefined, raw: number | null | undefined, word: (l: Level) => string, scale: (v: number) => number): Measure => ({
     level: level ?? null,
     word: level ? word(level) : null,
-    at: raw === null || raw === undefined ? (level ? { low: 1 / 6, mid: 1 / 2, high: 5 / 6 }[level] : null) : scale(raw),
+    at: atOf(level, raw, scale),
   });
-  // An override changes the level only; the raw value then no longer says where it sits.
-  const raw = <T>(over: unknown, v: T) => (over === undefined ? v : null);
   const by = tileBy(p.authors, '');
   return {
     name: tileName(p.title, p.row.path),

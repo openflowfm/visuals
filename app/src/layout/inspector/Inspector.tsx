@@ -20,14 +20,15 @@ export type { InspectorProps } from './model.ts';
  * beyond the field's pointer and keyboard cursor.
  */
 export function Inspector(props: InspectorProps) {
-  const { subject: p, playing, from, playlists, library, onSet, onAddTo, onPick, onBack, onPlay, onEdit } = props;
+  const { subject: p, playing, from, playlists, library, mine, onSet, onAddTo, onPick, onBack, onPlay, onEdit } = props;
   const picked = p !== null && p.row.key !== playing;
   const c = p ? characterOf(p) : null;
   const readout = c ? [c.speed.word, c.brightness.word, c.intensity.word].filter((w): w is string => !!w) : [];
   const colours = c ? colourNames(c) : [];
   const inLists = p ? holding(p, playlists) : null;
   const measured = library.reduce((n, r) => (r.look ? n + 1 : n), 0);
-  const pick = (row: LibraryRow) => (row.key === playing ? onBack() : onPick(row));
+  // The dot playing goes back to it, unless it is already shown.
+  const pick = (row: LibraryRow) => (row.key !== playing ? onPick(row) : picked ? onBack() : undefined);
   return (
     <div className="insp" data-none={p ? undefined : ''}>
       {picked && (
@@ -37,6 +38,7 @@ export function Inspector(props: InspectorProps) {
       )}
       <Field
         library={library}
+        mine={mine}
         subject={p?.row.key ?? null}
         playing={playing}
         intensity={c?.intensity.at ?? null}
@@ -112,7 +114,7 @@ export function Inspector(props: InspectorProps) {
           </div>
 
           <div className="insp-mine">
-            <TagEditor className="insp-tags" chosen={[p]} onSet={onSet} remove={<Icon name="close" size={10} />} />
+            <TagEditor key={p.row.key} className="insp-tags" chosen={[p]} onSet={onSet} remove={<Icon name="close" size={10} />} />
             {inLists && <p className="insp-quiet insp-in">{inLists.length ? `In ${listed(inLists)}` : 'In no playlist yet'}</p>}
           </div>
         </>

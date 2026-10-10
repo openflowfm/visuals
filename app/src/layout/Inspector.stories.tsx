@@ -96,6 +96,7 @@ function useInspector(start: Start, library: readonly LibraryRow[]) {
     from: playing ? NOW.from : '',
     playlists,
     library,
+    mine: data.presets,
     onSet: (keys, change) => setData((d) => applied(d, keys, change)),
     onAddTo: (id, paths) =>
       setPlaylists((ls) => ls.map((l) => (l.id === id ? { ...l, items: [...l.items, ...paths.map((path) => ({ path, name: path, group: '', missing: false, hash: null }))] } : l))),
@@ -334,6 +335,10 @@ export const InTheWindow: S = {
     await expect(canvas.getByRole('region', { name: 'transport' })).toBeVisible();
     const panel = panelOf(canvas);
     await expect(within(panel).getByRole('heading', { name: PLAYING_NAME })).toBeVisible();
+    // The Now Playing hero stays on top of the main column with the inspector open.
+    const hero = canvas.getByRole('region', { name: 'now playing' });
+    await expect(hero).toBeVisible();
+    await expect(within(hero).getByRole('heading', { name: PLAYING_NAME })).toBeVisible();
     // The main column narrows beside the panel: they don't overlap.
     await expect(canvas.getByRole('main').getBoundingClientRect().right).toBeLessThanOrEqual(panel.getBoundingClientRect().left + 0.5);
     const tile = within(canvas.getByRole('region', { name: 'Hypnotic' })).getAllByRole('button')[0];
@@ -349,5 +354,8 @@ export const InTheWindow: S = {
     await expect(toggle).toHaveAttribute('aria-pressed', 'false');
     await userEvent.click(toggle);
     await waitFor(() => expect(panelOf(canvas)).toBeVisible());
+    // Back to the top of the column (the tile's click scrolled it): the hero and the inspector side by side.
+    hero.scrollIntoView({ block: 'start' });
+    await expect(hero).toBeVisible();
   },
 };

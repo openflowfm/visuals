@@ -5,8 +5,8 @@
  * rather than a node per preset, and the two ways to reach one: the dot
  * nearest the pointer, and the nearest dot in an arrow key's direction.
  */
-import type { LibraryRow } from '../../api.ts';
-import { scaleOf } from './model.ts';
+import type { LibraryRow, Mine } from '../../api.ts';
+import { placeOf } from './model.ts';
 
 /** The field's drawing box, in its own units: 4:3, the plot inset by a margin that holds the ticks. */
 export const W = 240;
@@ -37,12 +37,19 @@ export const bandOf = (hue: number | undefined): number => (hue === undefined ? 
 /** A band's colour: its middle hue, at the dots' lightness; grey takes the caption's colour. */
 export const bandColour = (band: number): string => (band >= BANDS ? 'var(--caption)' : `hsl(${Math.round(band * BAND + BAND / 2)} 70% 62%)`);
 
-/** Every preset the index has measured, as a dot; a preset not drawn yet has no place. */
-export function dotsOf(library: readonly LibraryRow[]): Dot[] {
+/**
+ * Every preset the index has measured, as a dot where `characterOf` reads it
+ * (the user's speed and brightness overrides applied); a preset not drawn yet,
+ * or with no speed or brightness at all, has no place.
+ */
+export function dotsOf(library: readonly LibraryRow[], mine?: Readonly<Record<string, Mine>>): Dot[] {
   const dots: Dot[] = [];
   for (const row of library) {
     if (!row.look) continue;
-    dots.push({ row, x: xOf(scaleOf.speed(row.look.speed ?? 0)), y: yOf(scaleOf.brightness(row.look.brightness)), band: bandOf(row.look.hues[0]) });
+    const o = mine?.[row.key]?.overrides;
+    const at = placeOf(row.look, o);
+    if (at.speed === null || at.brightness === null) continue;
+    dots.push({ row, x: xOf(at.speed), y: yOf(at.brightness), band: bandOf((o?.hues ?? row.look.hues)[0]) });
   }
   return dots;
 }

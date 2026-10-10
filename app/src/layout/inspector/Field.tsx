@@ -1,5 +1,5 @@
 import { useId, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
-import type { LibraryRow } from '../../api.ts';
+import type { LibraryRow, Mine } from '../../api.ts';
 import { tileBy, tileName } from '../../PresetTile.tsx';
 import { bandColour, bandPaths, dotOf, dotsOf, H, M, nearest, step, W, xOf, yOf, type Direction, type Dot } from './field.ts';
 import './field.css';
@@ -7,6 +7,8 @@ import './field.css';
 export interface FieldProps {
   /** The library's rows: every measured one is a dot. */
   library: readonly LibraryRow[];
+  /** The user's data by key: speed and brightness overrides move a dot. */
+  mine?: Readonly<Record<string, Mine>>;
   /** The preset the panel shows (lit), or null. */
   subject: string | null;
   /** The preset playing: marked too while another one is shown. */
@@ -44,8 +46,8 @@ const nameOf = (row: LibraryRow) => tileName(row.title, row.path);
  * the nearest dot that way, Enter (or Space) picks it, and the cursor starts
  * on the subject. Its name shows in the same tip as hover's.
  */
-export function Field({ library, subject, playing, intensity, hue, description, onPick }: FieldProps) {
-  const dots = useMemo(() => dotsOf(library), [library]);
+export function Field({ library, mine, subject, playing, intensity, hue, description, onPick }: FieldProps) {
+  const dots = useMemo(() => dotsOf(library, mine), [library, mine]);
   const paths = useMemo(() => bandPaths(dots), [dots]);
   const [hover, setHover] = useState(-1);
   // The keyboard's cursor, by key, so it stays on its preset if the library changes under it.
