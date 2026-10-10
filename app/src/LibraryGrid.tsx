@@ -96,15 +96,21 @@ export function centreFor(row: number, rowHeight: number, height: number, look: 
   return Math.min(first, row) * rowHeight;
 }
 
-/** How a tile was picked: a plain click, ⌘-click (add or take it out of the selection), or ⇧-click (select up to it). */
-export type Pick = 'load' | 'toggle' | 'range';
+/**
+ * How a tile was picked: a plain click (the lab editor's column loads it), a plain
+ * click on the home's inspector grid (`select`: that tile alone, nothing loads),
+ * ⌘-click (add or take it out of the selection), or ⇧-click (select up to it).
+ */
+export type Pick = 'load' | 'select' | 'toggle' | 'range';
 
-export const pickOf = (ev: { metaKey: boolean; ctrlKey: boolean; shiftKey: boolean }): Pick => (ev.shiftKey ? 'range' : ev.metaKey || ev.ctrlKey ? 'toggle' : 'load');
+/** What a click with these modifiers picks; a plain one loads, or selects where clicks select (`clickSelects`). */
+export const pickOf = (ev: { metaKey: boolean; ctrlKey: boolean; shiftKey: boolean }, clickSelects = false): Pick =>
+  ev.shiftKey ? 'range' : ev.metaKey || ev.ctrlKey ? 'toggle' : clickSelects ? 'select' : 'load';
 
 /** The selection (keys) after the tile at `index` in `shown` is picked by `how`; a run starts at `anchor`. */
 export function pickInto(selection: readonly string[], shown: readonly Prepared[], index: number, how: Pick, anchor: string | null): string[] {
   const key = shown[index].row.key;
-  if (how === 'load') return [key];
+  if (how === 'load' || how === 'select') return [key];
   if (how === 'toggle') return selection.includes(key) ? selection.filter((k) => k !== key) : [...selection, key];
   const from = anchor === null ? -1 : shown.findIndex((p) => p.row.key === anchor);
   if (from < 0) return [key];
@@ -143,7 +149,13 @@ export interface LibraryGridProps {
   onPress?(index: number, ev: PointerEvent): void;
   /** The narrowest a tile gets, in px; `TILE.min` (two across the library column) by default. */
   tileMin?: number;
+  /** The home's inspector grid (decision 70): a plain click selects the tile (`select`), a double-click loads it; without it a click loads, as in the lab editor's column. */
+  clickSelects?: boolean;
 }
+
+/** The grid's spoken hint: how its keys and clicks pick. */
+export const gridHint = (clickSelects: boolean, into: string | null): string =>
+  `${clickSelects ? 'click selects, double-click or Enter plays, arrows move' : 'arrows move, Enter loads'}, Space or ⌘-click selects more, ⇧ selects a run, Esc lets go${into !== null ? `, + or A adds to ${into}` : ''}`;
 
 /**
  * The library as a grid of thumbnails, drawing only the rows in view (and a few
@@ -151,8 +163,9 @@ export interface LibraryGridProps {
  *
  * The grid is one tab stop and moves a highlighted tile with `aria-activedescendant`;
  * arrows move by a tile or a row, Enter loads, Space adds the tile to the selection.
+ * Every key it handles is `preventDefault`ed and stopped; Escape with nothing selected is let through.
  */
-export function LibraryGrid({ rows, active, selected, current, into, onMove, onPick, onAdd, onClear, reveal, onPress, tileMin }: LibraryGridProps) {
+export function LibraryGrid({ rows, active, selected, current, into, onMove, onPick, onAdd, onClear, reveal, onPress, tileMin, clickSelects = false }: LibraryGridProps) {
   const ref = useRef<HTMLDivElement>(null);
   // Its size, and whether it is on the home (decision 68's look, on the main pane's `--pad`) or in the lab editor's column.
   const [size, setSize] = useState({ width: 0, height: 0, home: false, pad: HOME_PAD, bar: 0 });
@@ -301,6 +314,7 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
           onAdd={onAdd}
           onPress={onPress}
           home={size.home}
+          clickSelects={clickSelects}
         />,
       );
     }
@@ -315,7 +329,7 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
       aria-multiselectable
       tabIndex={rows.length ? 0 : -1}
       aria-activedescendant={active >= 0 && active < rows.length ? id(active) : undefined}
-      data-hint={`arrows move, Enter loads, Space or ⌘-click selects more, ⇧ selects a run, Esc lets go${into ? `, + or A adds to ${into.name}` : ''}`}
+      data-hint={gridHint(clickSelects, into?.name ?? null)}
       onKeyDown={onKey}
       onFocus={onFocus}
       onScroll={onScroll}
@@ -356,6 +370,8 @@ export interface TileProps {
   onPress?(index: number, ev: PointerEvent): void;
   /** On the home: the shared tile (PresetTile.tsx, decision 68); otherwise the lab editor's own. */
   home?: boolean;
+  /** A plain click selects it and a double-click loads it (LibraryGridProps' `clickSelects`). */
+  clickSelects?: boolean;
 }
 
 /** What a tile says when pointed at, and to a screen reader: title, style and authors, then what's true of it now. */
@@ -365,8 +381,11 @@ export function tileSays(p: Prepared, playing: boolean, failed: boolean): string
 }
 
 /** One preset: its thumbnail (or its style, when it has none) and its title. */
-export const Tile = memo(function Tile({ id, index, p, active, selected, playing, failed, intoName, onPick, onAdd, onPress, home = false }: TileProps) {
+export const Tile = memo(function Tile({ id, index, p, active, selected, playing, failed, intoName, onPick, onAdd, onPress, home = false, clickSelects = false }: TileProps) {
   const says = tileSays(p, playing, failed);
+  const click = (ev: MouseEvent) => onPick(index, pickOf(ev, clickSelects));
+  // Where a click selects, a plain double-click plays (its clicks have already selected it).
+  const doubleClick = clickSelects ? (ev: MouseEvent) => !ev.shiftKey && !ev.metaKey && !ev.ctrlKey && onPick(index, 'load') : undefined;
   if (home) {
     const add = `add “${p.title}” to ${intoName} (+ key)`;
     return (
@@ -379,7 +398,8 @@ export const Tile = memo(function Tile({ id, index, p, active, selected, playing
         data-hidden={p.hidden ? '' : undefined}
         data-failed={failed ? '' : undefined}
         title={says}
-        onClick={(ev: MouseEvent) => onPick(index, pickOf(ev))}
+        onClick={click}
+        onDoubleClick={doubleClick}
         onPointerDown={onPress && ((ev: PointerEvent) => onPress(index, ev))}
         thumbnail={p.row.thumbnail}
         empty={p.style}
@@ -428,7 +448,8 @@ export const Tile = memo(function Tile({ id, index, p, active, selected, playing
       data-hidden={p.hidden ? '' : undefined}
       data-failed={failed ? '' : undefined}
       title={says}
-      onClick={(ev: MouseEvent) => onPick(index, pickOf(ev))}
+      onClick={click}
+      onDoubleClick={doubleClick}
       onPointerDown={onPress && ((ev) => onPress(index, ev))}
     >
       <div className="lib-thumb">

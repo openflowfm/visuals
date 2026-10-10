@@ -3,7 +3,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { LibraryRow } from './api.ts';
 import { prepareRow } from './librarySearch.ts';
-import { LAB_LOOK, TILE, Tile, centreFor, firstLaidOut, homeLook, layout, pickInto, pickOf, rangeAnchor, scrollFor, tileSays, windowOf } from './LibraryGrid.tsx';
+import { LAB_LOOK, TILE, Tile, centreFor, firstLaidOut, gridHint, homeLook, layout, pickInto, pickOf, rangeAnchor, scrollFor, tileSays, windowOf } from './LibraryGrid.tsx';
 
 describe('layout', () => {
   it('fits as many tiles across as their narrowest allows', () => {
@@ -147,6 +147,11 @@ describe('pickInto', () => {
     expect(pickInto(['a', 'c'], shown, 1, 'load', 'a')).toEqual(['b']);
   });
 
+  it('selects just the tile a plain click selects, on the home’s inspector grid', () => {
+    expect(pickInto(['a', 'c'], shown, 3, 'select', 'a')).toEqual(['d']);
+    expect(pickInto([], shown, 0, 'select', null)).toEqual(['a']);
+  });
+
   it('adds or takes out a ⌘-clicked tile', () => {
     expect(pickInto(['a'], shown, 2, 'toggle', 'a')).toEqual(['a', 'c']);
     expect(pickInto(['a', 'c'], shown, 2, 'toggle', 'a')).toEqual(['a']);
@@ -276,5 +281,19 @@ describe('pickOf', () => {
     expect(pickOf({ metaKey: true, ctrlKey: false, shiftKey: false })).toBe('toggle');
     expect(pickOf({ metaKey: false, ctrlKey: true, shiftKey: false })).toBe('toggle');
     expect(pickOf({ metaKey: true, ctrlKey: false, shiftKey: true })).toBe('range');
+  });
+
+  it('selects on a plain click where clicks select, the modifiers as before', () => {
+    expect(pickOf({ metaKey: false, ctrlKey: false, shiftKey: false }, true)).toBe('select');
+    expect(pickOf({ metaKey: true, ctrlKey: false, shiftKey: false }, true)).toBe('toggle');
+    expect(pickOf({ metaKey: false, ctrlKey: true, shiftKey: false }, true)).toBe('toggle');
+    expect(pickOf({ metaKey: false, ctrlKey: false, shiftKey: true }, true)).toBe('range');
+  });
+});
+
+describe('gridHint', () => {
+  it('says how the grid picks, there and in the lab editor’s column', () => {
+    expect(gridHint(true, null)).toBe('click selects, double-click or Enter plays, arrows move, Space or ⌘-click selects more, ⇧ selects a run, Esc lets go');
+    expect(gridHint(false, 'Set')).toBe('arrows move, Enter loads, Space or ⌘-click selects more, ⇧ selects a run, Esc lets go, + or A adds to Set');
   });
 });
