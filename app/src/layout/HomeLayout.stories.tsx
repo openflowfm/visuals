@@ -84,4 +84,9 @@ export const Wide: Story = {
 export const At900: Story = {
   name: 'At 900 px',
   globals: { viewport: { value: 'home900', isRotated: false } },
+  play: async ({ canvas }) => {
+    await expect(canvas.getByRole('navigation', { name: 'sources' })).toBeVisible();
+    await expect(canvas.getByRole('main')).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Playlists' })).toBeVisible();
+  },
 };

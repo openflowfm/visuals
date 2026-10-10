@@ -7,7 +7,7 @@
 import type { LibraryRow } from '../api.ts';
 import { playsFrom } from '../home.ts';
 import { DATA, LISTS, PLAYING_DECK, PLAYLISTS, RECENT, ROWS, STILL, WARM_UP } from '../stories/fixtures.ts';
-import { sidebarSections, type SidebarSection } from './InsetSidebar.tsx';
+import { sidebarSections, type SidebarSection } from './sidebar-model.ts';
 
 /** The index's row for a preset's path, when the slice has it. */
 export const rowAt = (path: string): LibraryRow | null => ROWS.find((r) => r.path === path) ?? null;
