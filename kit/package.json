@@ -3,18 +3,15 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Development-only: draws the symbols of a Sketch UI kit (Apple's macOS kit) into PNGs, to compare the page's controls against.",
+  "description": "Development-only: exports the symbols of a Sketch UI kit (Apple's macOS kit) as PNGs with sketchtool, to build the page's controls against.",
   "license": "MIT",
   "engines": {
     "node": ">=26"
   },
   "scripts": {
-    "render": "node --disable-warning=ExperimentalWarning src/render.ts",
+    "export": "node --disable-warning=ExperimentalWarning src/export.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run"
-  },
-  "dependencies": {
-    "playwright": "^1.63.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",
