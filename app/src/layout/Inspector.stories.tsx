@@ -346,7 +346,7 @@ export const Several: S = {
   },
 };
 
-/** No preset picked, the playlist playing as the source: its head as a card, with play or stop, shuffle, how it plays and more. */
+/** No preset picked, the playlist playing as the source: its head as a card, with how it plays and more (no playback controls). */
 export const Source: S = {
   name: 'The source',
   args: { start: 'source' },
@@ -354,8 +354,9 @@ export const Source: S = {
     const panelEl = panelOf(within(canvasElement));
     const panel = within(panelEl);
     await expect(panel.getByRole('heading', { level: 2, name: WARM_UP.name })).toBeVisible();
-    await expect(panel.getByRole('button', { name: /Stop/ })).toBeVisible();
-    await expect(panel.getByRole('button', { name: 'Shuffle' })).toBeVisible();
+    // No playback controls on the card: shuffle is in how it plays.
+    await expect(panel.queryByRole('button', { name: /Stop/ })).toBeNull();
+    await expect(panel.queryByRole('button', { name: 'Shuffle' })).toBeNull();
     await expect(panel.queryByRole('listbox')).toBeNull();
     await userEvent.click(panel.getByRole('button', { name: 'more' }));
     await expect(panel.getByRole('menu', { name: 'more' })).toBeVisible();
