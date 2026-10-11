@@ -83,8 +83,6 @@ impl Tuning {
 
 /// The hovered preset at `path` as the bench would play it: its own tune
 /// (`crate::userlib::tune_of`) and the bench's effects.
-// preview.rs's `hover_preview` calls this once it passes its AppHandle and path.
-#[allow(dead_code)]
 pub fn tuning(handle: &tauri::AppHandle, path: &Path) -> Tuning {
     Tuning { own: crate::userlib::tune_of(handle, path), fx: handle.try_state::<crate::actions::Deck>().map(|deck| deck.fx.clone()) }
 }
@@ -118,13 +116,13 @@ static TICKET: AtomicU32 = AtomicU32::new(0);
 /// Start drawing `preset` at `size` (clamped, [`clamp`]) in place of whatever
 /// was hovered, hearing `ring`. Returns its ticket: the pictures of this hover
 /// carry it, so a picture of the last one is never shown in this one's tile.
+/// The app draws with the preset's tune ([`show_tuned`]); the tests draw it as made.
+#[cfg(test)]
 pub fn show(preset: Preset, size: (u32, u32), ring: &Ring) -> u32 {
     show_tuned(preset, size, ring, Tuning::default())
 }
 
 /// [`show`], drawing `preset` with `tuning` ([`tuning`]) rather than as made.
-// preview.rs's `hover_preview` calls this once it passes its AppHandle and path.
-#[allow(dead_code)]
 pub fn show_tuned(preset: Preset, size: (u32, u32), ring: &Ring, tuning: Tuning) -> u32 {
     let ticket = next_ticket();
     let seed = std::time::UNIX_EPOCH.elapsed().map(|d| d.as_nanos() as u64).unwrap_or(1);

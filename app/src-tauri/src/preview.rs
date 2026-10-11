@@ -28,13 +28,14 @@ pub fn place_bench(x: f64, y: f64, width: f64, height: f64, handle: tauri::AppHa
 /// `width`×`height` (`bench::hover`), in place of the one hovered before; no
 /// path stops. Returns the hover's ticket, which its pictures carry (0 for none).
 #[tauri::command]
-pub async fn hover_preview(path: Option<String>, width: u32, height: u32, app: State<'_, App>) -> Result<u32, String> {
+pub async fn hover_preview(path: Option<String>, width: u32, height: u32, app: State<'_, App>, handle: tauri::AppHandle) -> Result<u32, String> {
     let Some(path) = path else {
         bench::hover::stop();
         return Ok(0);
     };
-    let text = engine::preset::decode(&crate::library::read_preset(std::path::Path::new(&path))?);
-    Ok(bench::hover::show(engine::preset::parse(&text), (width, height), &app.ring))
+    let file = std::path::Path::new(&path);
+    let text = engine::preset::decode(&crate::library::read_preset(file)?);
+    Ok(bench::hover::show_tuned(engine::preset::parse(&text), (width, height), &app.ring, bench::hover::tuning(&handle, file)))
 }
 
 /// The hover's latest picture as raw bytes: a 16-byte header (ticket, count,
