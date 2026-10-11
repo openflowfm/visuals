@@ -14,15 +14,26 @@ describe('the hover preview’s pictures', () => {
     const packed = (ticket: number, w: number, h: number, extra = 0) => {
       const b = new Uint8Array(HOVER_HEADER + w * h * 4 + extra).fill(9);
       const v = new DataView(b.buffer);
-      [ticket, w, h].forEach((n, i) => v.setUint32(i * 4, n, true));
+      [ticket, 5, w, h].forEach((n, i) => v.setUint32(i * 4, n, true));
       return b.buffer;
     };
-    const got = unpackHover(packed(3, 2, 1), 3)!;
-    expect([got.width, got.height, got.pixels.length, got.pixels[0]]).toEqual([2, 1, 8, 9]);
+    const got = unpackHover(packed(3, 2, 1), 3);
+    if (!got || got === 'failed') throw new Error('a picture');
+    expect([got.count, got.width, got.height, got.pixels.length, got.pixels[0]]).toEqual([5, 2, 1, 8, 9]);
     expect(unpackHover(packed(2, 2, 1), 3)).toBeNull();
     expect(unpackHover(packed(3, 2, 1, 4), 3)).toBeNull();
+    // Nothing newer than the count asked after.
     expect(unpackHover(new ArrayBuffer(0), 3)).toBeNull();
-    expect(unpackHover(packed(3, 0, 0), 3)).toBeNull();
+  });
+
+  it('say when the hover’s preset failed, for that hover only', () => {
+    const failed = (ticket: number) => {
+      const b = new ArrayBuffer(HOVER_HEADER);
+      new DataView(b).setUint32(0, ticket, true);
+      return b;
+    };
+    expect(unpackHover(failed(3), 3)).toBe('failed');
+    expect(unpackHover(failed(2), 3)).toBeNull();
   });
 });
 

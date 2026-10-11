@@ -29,11 +29,11 @@ const row = (key: string, authors: string[]): LibraryRow => ({
 });
 const ROWS = [row('Aurora', ['geiss']), row('Bloom', ['flexi', 'rovastar']), row('Coil', [])].map((r) => prepareRow(r, undefined));
 
-/** A hover picture as the app packs it: ticket, width, height, then RGBA. */
-function picture(ticket: number, width = 4, height = 2): ArrayBuffer {
+/** A hover picture as the app packs it: ticket, count, width, height, then RGBA. */
+function picture(ticket: number, width = 4, height = 2, count = 1): ArrayBuffer {
   const bytes = new Uint8Array(HOVER_HEADER + width * height * 4).fill(200);
   const view = new DataView(bytes.buffer);
-  [ticket, width, height].forEach((n, i) => view.setUint32(i * 4, n, true));
+  [ticket, count, width, height].forEach((n, i) => view.setUint32(i * 4, n, true));
   return bytes.buffer;
 }
 
@@ -172,6 +172,56 @@ describe('the hover preview', () => {
     act(() => void document.dispatchEvent(new Event('visibilitychange')));
     await act(() => vi.advanceTimersByTimeAsync(HOVER_DWELL_MS + 50));
     expect(hovers()).toEqual(['/p/Coil.milk', null, '/p/Coil.milk']);
+  });
+
+  it('forgets a hovered tile that goes out of the grid, so it starts nothing when it comes back', async () => {
+    const noop = () => {};
+    const grid = (rows: typeof ROWS) => (
+      <div className="app home">
+        <LibraryGrid rows={rows} active={-1} selected={new Set()} current={null} into={null} onMove={noop} onPick={noop} onAdd={noop} onClear={noop} reveal={0} home />
+      </div>
+    );
+    const { container, rerender } = render(grid(ROWS));
+    fireEvent.mouseEnter(tile(container, 'Bloom'));
+    // The tile unmounts with no mouseleave (scrolled out of the virtualised window).
+    rerender(grid([ROWS[0], ROWS[2]]));
+    await act(() => vi.advanceTimersByTimeAsync(10));
+    rerender(grid(ROWS));
+    await act(() => vi.advanceTimersByTimeAsync(HOVER_DWELL_MS * 3));
+    expect(hovers()).toEqual([]);
+    expect(tile(container, 'Bloom').querySelector('canvas')).toBeNull();
+  });
+
+  it('forgets the hovered tile when the pointer leaves the grid', async () => {
+    const { container } = mount();
+    fireEvent.mouseEnter(tile(container, 'Coil'));
+    expect(tile(container, 'Coil').querySelector('canvas')).not.toBeNull();
+    fireEvent.mouseLeave(container.querySelector('.lib-grid')!);
+    await act(() => vi.advanceTimersByTimeAsync(HOVER_DWELL_MS * 3));
+    expect(hovers()).toEqual([]);
+    expect(tile(container, 'Coil').querySelector('canvas')).toBeNull();
+  });
+
+  it('asks only for pictures newer than the last, and stops asking once the preset failed', async () => {
+    let polls = 0;
+    invoke.mockImplementation((cmd: string, args?: { after?: number }) => {
+      if (cmd === 'hover_preview') return Promise.resolve(7);
+      if (cmd === 'hover_frame') {
+        polls++;
+        if (polls === 1) return Promise.resolve(picture(7, 4, 2, 5));
+        expect(args?.after).toBe(5);
+        if (polls === 2) return Promise.resolve(new ArrayBuffer(0));
+        const failed = new ArrayBuffer(HOVER_HEADER);
+        new DataView(failed).setUint32(0, 7, true);
+        return Promise.resolve(failed);
+      }
+      return Promise.resolve(null);
+    });
+    const { container } = mount();
+    fireEvent.mouseEnter(tile(container, 'Aurora'));
+    await act(() => vi.advanceTimersByTimeAsync(HOVER_DWELL_MS + 500));
+    expect(polls).toBe(3);
+    expect(drawn).toHaveBeenCalledTimes(1);
   });
 
   it('lets the preset go when the grid goes (live mode, another view)', async () => {

@@ -21,8 +21,8 @@ use std::time::{Duration, Instant};
 /// The largest picture drawn: a big tile on a 2× display. More only costs.
 pub const MAX: (u32, u32) = (640, 360);
 
-/// The bytes before the picture in [`frame`]: ticket, width and height.
-pub const HEADER: usize = 12;
+/// The bytes before the picture in [`frame`]: ticket, count, width and height.
+pub const HEADER: usize = 16;
 
 /// How long between pictures: thirty a second, a preset's own step rate.
 const EVERY: Duration = Duration::from_nanos(1_000_000_000 / 30);
@@ -37,12 +37,13 @@ pub fn clamp(width: u32, height: u32) -> (u32, u32) {
     (((w * scale).round() as u32).max(1), ((h * scale).round() as u32).max(1))
 }
 
-/// A picture as the page reads it: three little-endian u32s — the ticket of the
-/// hover it is of ([`show`]'s answer), its width and its height — then its RGBA
-/// rows, top to bottom.
-pub fn packed(ticket: u32, picture: &super::Picture) -> Vec<u8> {
+/// A picture as the page reads it: four little-endian u32s — the ticket of the
+/// hover it is of ([`show`]'s answer), its count (which [`frame`] is asked
+/// after), its width and its height — then its RGBA rows, top to bottom. A
+/// hover whose preset failed is the header alone, 0×0.
+pub fn packed(ticket: u32, count: u32, picture: &super::Picture) -> Vec<u8> {
     let mut out = Vec::with_capacity(HEADER + picture.2.len());
-    for n in [ticket, picture.0, picture.1] {
+    for n in [ticket, count, picture.0, picture.1] {
         out.extend_from_slice(&n.to_le_bytes());
     }
     out.extend_from_slice(&picture.2);
@@ -56,8 +57,17 @@ enum Ask {
 
 /// The thread's commands, while it runs.
 static THREAD: Mutex<Option<Sender<Ask>>> = Mutex::new(None);
-/// The latest picture, [`packed`]; empty when none.
-static FRAME: Mutex<Vec<u8>> = Mutex::new(Vec::new());
+/// The latest picture of the hover, and whether its preset failed.
+struct Latest {
+    /// [`packed`]; empty when none.
+    bytes: Vec<u8>,
+    /// Counts every picture stored, so the page can ask only for a newer one.
+    count: u32,
+    /// The ticket whose preset failed to load or draw (0: none).
+    failed: u32,
+}
+
+static FRAME: Mutex<Latest> = Mutex::new(Latest { bytes: Vec::new(), count: 0, failed: 0 });
 /// The last hover's ticket.
 static TICKET: AtomicU32 = AtomicU32::new(0);
 
@@ -98,13 +108,33 @@ pub fn stop() {
 /// lock, so a picture of the old ticket being stored now can't land after.
 fn next_ticket() -> u32 {
     let mut frame = FRAME.lock().unwrap();
-    frame.clear();
+    frame.bytes.clear();
+    frame.failed = 0;
     TICKET.fetch_add(1, Ordering::Relaxed).wrapping_add(1)
 }
 
-/// The latest picture, [`packed`]; empty when there is none.
-pub fn frame() -> Vec<u8> {
-    FRAME.lock().unwrap().clone()
+/// The latest picture, [`packed`], when it is newer than the one counted
+/// `after`; empty when there is none newer. A hover whose preset failed answers
+/// its header alone (0×0), so the page stops asking.
+pub fn frame(after: u32) -> Vec<u8> {
+    let latest = FRAME.lock().unwrap();
+    let ticket = TICKET.load(Ordering::Relaxed);
+    if latest.failed != 0 && latest.failed == ticket {
+        return packed(ticket, latest.count, &(0, 0, Vec::new()));
+    }
+    if latest.bytes.is_empty() || latest.count == after {
+        return Vec::new();
+    }
+    latest.bytes.clone()
+}
+
+/// Mark `ticket`'s preset failed, while it is still the hover asked for.
+fn fail(ticket: u32) {
+    let mut frame = FRAME.lock().unwrap();
+    if TICKET.load(Ordering::Relaxed) == ticket {
+        frame.bytes.clear();
+        frame.failed = ticket;
+    }
 }
 
 /// What the thread is drawing.
@@ -162,10 +192,12 @@ fn run(rx: Receiver<Ask>, ring: Ring) {
                         Ok(Ok(_)) => Some(Drawing { ticket, size, last: Instant::now() }),
                         Ok(Err(e)) => {
                             eprintln!("hover: the preset didn't load ({e})");
+                            fail(ticket);
                             None
                         }
                         Err(why) => {
                             eprintln!("hover: the preset panicked loading ({why})");
+                            fail(ticket);
                             None
                         }
                     };
@@ -191,12 +223,14 @@ fn run(rx: Receiver<Ask>, ring: Ring) {
                 // Only while it is still the hover asked for: a stop or a newer show clears it.
                 let mut frame = FRAME.lock().unwrap();
                 if TICKET.load(Ordering::Relaxed) == ticket {
-                    *frame = packed(ticket, &picture);
+                    frame.count = frame.count.wrapping_add(1).max(1);
+                    frame.bytes = packed(ticket, frame.count, &picture);
                 }
             }
             Ok(None) => {}
             Err(why) => {
                 eprintln!("hover: the preset panicked drawing ({why}); stopped");
+                fail(ticket);
                 drawing = None;
                 continue;
             }
@@ -209,6 +243,9 @@ fn run(rx: Receiver<Ask>, ring: Ring) {
 mod tests {
     use super::*;
 
+    /// The hover is one per app: tests that use it take turns.
+    static ONE: Mutex<()> = Mutex::new(());
+
     #[test]
     fn sizes_stay_within_the_largest_and_keep_their_aspect() {
         assert_eq!(clamp(320, 180), (320, 180));
@@ -219,8 +256,8 @@ mod tests {
 
     #[test]
     fn a_picture_goes_to_the_page_with_its_ticket_and_size() {
-        let bytes = packed(7, &(2, 1, vec![1, 2, 3, 4, 5, 6, 7, 8]));
-        assert_eq!(&bytes[..HEADER], &[7, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0]);
+        let bytes = packed(7, 3, &(2, 1, vec![1, 2, 3, 4, 5, 6, 7, 8]));
+        assert_eq!(&bytes[..HEADER], &[7, 0, 0, 0, 3, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0]);
         assert_eq!(&bytes[HEADER..], &[1, 2, 3, 4, 5, 6, 7, 8]);
     }
 
@@ -228,13 +265,15 @@ mod tests {
     /// ticket and size, move, and stop with it. Passes without a GPU (nothing to draw on).
     #[test]
     fn a_hovered_preset_draws_moving_pictures_until_stopped() {
+        let _one = ONE.lock().unwrap_or_else(|e| e.into_inner());
         if engine::render::headless().is_none() {
             return;
         }
+        let count = |f: &[u8]| u32::from_le_bytes(f[4..8].try_into().unwrap());
         let wait = |ticket: u32, after: Option<&Vec<u8>>| -> Option<Vec<u8>> {
             let until = Instant::now() + Duration::from_secs(20);
             while Instant::now() < until {
-                let f = frame();
+                let f = frame(after.map_or(0, |a| count(a)));
                 if f.len() > HEADER && f[..4] == ticket.to_le_bytes() && after.is_none_or(|a| *a != f) {
                     return Some(f);
                 }
@@ -247,12 +286,35 @@ mod tests {
             engine::preset::parse("[preset00]\nnWaveMode=0\nzoom=1\nper_frame_1=wave_r=0.5+0.5*sin(time*7);wave_g=0.5+0.5*cos(time*5);\nper_frame_2=ob_size=0.1;ob_r=0.5+0.5*sin(time*3);ob_a=1;\n");
         let ticket = show(preset, (64, 36), &engine::live::ring());
         let first = wait(ticket, None).expect("a picture of the hovered preset");
-        assert_eq!(&first[4..HEADER], &[64, 0, 0, 0, 36, 0, 0, 0]);
+        assert_eq!(&first[8..HEADER], &[64, 0, 0, 0, 36, 0, 0, 0]);
         assert_eq!(first.len(), HEADER + 64 * 36 * 4);
-        assert!(wait(ticket, Some(&first)).is_some(), "the picture moves");
+        let second = wait(ticket, Some(&first)).expect("the picture moves");
+        assert_ne!(count(&second), count(&first));
         stop();
-        assert!(frame().is_empty());
+        assert!(frame(0).is_empty());
         std::thread::sleep(Duration::from_millis(200));
-        assert!(frame().is_empty(), "no pictures once stopped");
+        assert!(frame(0).is_empty(), "no pictures once stopped");
+    }
+
+    /// The page polls with the count it last saw: the same picture is never sent twice,
+    /// and a failed preset says so, so the page stops asking.
+    #[test]
+    fn a_picture_already_seen_is_not_sent_again_and_a_failure_is_said() {
+        let _one = ONE.lock().unwrap_or_else(|e| e.into_inner());
+        let ticket = next_ticket();
+        {
+            let mut latest = FRAME.lock().unwrap();
+            latest.count = 41;
+            latest.bytes = packed(ticket, 41, &(1, 1, vec![9, 9, 9, 9]));
+        }
+        assert_eq!(frame(40).len(), HEADER + 4);
+        assert!(frame(41).is_empty(), "nothing newer than what the page has");
+        fail(ticket);
+        let said = frame(41);
+        assert_eq!(said.len(), HEADER);
+        assert_eq!(&said[..4], &ticket.to_le_bytes());
+        assert_eq!(&said[8..HEADER], &[0; 8]);
+        next_ticket();
+        assert!(frame(0).is_empty(), "a new hover forgets the failure");
     }
 }

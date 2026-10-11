@@ -314,6 +314,16 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
     onMove(playing >= 0 ? playing : 0);
   };
 
+  // A hovered tile scrolled out (or gone from the rows) unmounts without a mouseleave: forget it, so it never starts a preview with no pointer on it when it comes back.
+  const shownFrom = first * lay.columns;
+  const shownTo = Math.min(rows.length, (last + 1) * lay.columns);
+  useEffect(() => {
+    if (hovered === null) return;
+    let shown = false;
+    for (let i = shownFrom; i < shownTo && !shown; i++) shown = rows[i].row.key === hovered;
+    if (!shown) setHovered(null);
+  }, [hovered, rows, shownFrom, shownTo]);
+
   const tiles = [];
   for (let r = first; r <= last; r++) {
     for (let c = 0; c < lay.columns; c++) {
@@ -361,6 +371,7 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
       onScroll={onScroll}
       onWheel={touch}
       onPointerDown={touch}
+      onMouseLeave={() => setHovered(null)}
     >
       <div className="lib-grid-space" role="presentation" style={{ height: lay.rows * lay.rowHeight + look.padTop + look.padBottom - look.rowGap }}>
         <div

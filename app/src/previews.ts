@@ -251,8 +251,8 @@ export function usePreview(which: number | undefined) {
 
 /** Show the preset at `path` moving in its tile at about `width`×`height`; null stops. Answers the hover's ticket. (Its home is api.ts, with the commands' other types.) */
 export const hoverPreview = (path: string | null, width = 0, height = 0) => invoke<number>('hover_preview', { path, width, height });
-/** The hover's latest picture, packed (`unpackHover`); empty until there is one. */
-export const hoverFrame = () => invoke<ArrayBuffer>('hover_frame');
+/** The hover's latest picture, packed (`unpackHover`), when newer than the one counted `after`; empty otherwise. */
+export const hoverFrame = (after = 0) => invoke<ArrayBuffer>('hover_frame', { after });
 
 /** How long the pointer rests on a tile before its preset is asked for: a sweep across the grid asks for nothing. */
 export const HOVER_DWELL_MS = 180;
@@ -260,8 +260,8 @@ export const HOVER_DWELL_MS = 180;
 export const HOVER_EVERY_MS = 33;
 /** The largest picture asked for (`bench::hover::MAX`). */
 export const HOVER_MAX = { width: 640, height: 360 };
-/** The bytes before the picture (`bench::hover::HEADER`): ticket, width, height. */
-export const HOVER_HEADER = 12;
+/** The bytes before the picture (`bench::hover::HEADER`): ticket, count, width, height. */
+export const HOVER_HEADER = 16;
 
 /** The picture to ask for a tile `css` px wide on a display of pixel ratio `dpr`: 16:9, its device pixels, within `HOVER_MAX`. */
 export function hoverSize(css: number, dpr: number): { width: number; height: number } {
@@ -269,13 +269,15 @@ export function hoverSize(css: number, dpr: number): { width: number; height: nu
   return { width, height: Math.round((width * 9) / 16) };
 }
 
-/** A hover picture's bytes as its size and pixels; null when empty, not whole, or of another hover than `ticket`. */
-export function unpackHover(buffer: ArrayBuffer, ticket: number): { width: number; height: number; pixels: Uint8ClampedArray<ArrayBuffer> } | null {
+/** A hover picture's bytes: its count, size and pixels; `failed` when the app says the hover's preset failed (the header alone, 0×0); null when empty (nothing newer), not whole, or of another hover than `ticket`. */
+export function unpackHover(buffer: ArrayBuffer, ticket: number): { count: number; width: number; height: number; pixels: Uint8ClampedArray<ArrayBuffer> } | 'failed' | null {
   if (buffer.byteLength < HOVER_HEADER) return null;
   const header = new DataView(buffer, 0, HOVER_HEADER);
-  const [got, width, height] = [0, 4, 8].map((at) => header.getUint32(at, true));
-  if (got !== ticket || width === 0 || height === 0 || buffer.byteLength !== HOVER_HEADER + width * height * 4) return null;
-  return { width, height, pixels: new Uint8ClampedArray(buffer, HOVER_HEADER) };
+  const [got, count, width, height] = [0, 4, 8, 12].map((at) => header.getUint32(at, true));
+  if (got !== ticket) return null;
+  if (width === 0 && height === 0 && buffer.byteLength === HOVER_HEADER) return 'failed';
+  if (width === 0 || height === 0 || buffer.byteLength !== HOVER_HEADER + width * height * 4) return null;
+  return { count, width, height, pixels: new Uint8ClampedArray(buffer, HOVER_HEADER) };
 }
 
 /** The hover's asks, one after another in the order made, so a stop never lands after the next tile's start. */
@@ -324,11 +326,13 @@ export function useHoverPreview(path: string | null) {
         return; // not a preset the app could read: the thumbnail stays
       }
       let first = true;
+      let seen = 0;
       while (!stopped) {
         const started = performance.now();
-        const got = unpackHover(await hoverFrame().catch(() => new ArrayBuffer(0)), ticket);
+        const got = unpackHover(await hoverFrame(seen).catch(() => new ArrayBuffer(0)), ticket);
         const canvas = ref.current;
-        if (stopped) break;
+        if (stopped || got === 'failed') break; // a preset that failed: the thumbnail stays
+        if (got) seen = got.count;
         if (got && canvas) {
           if (canvas.width !== got.width || canvas.height !== got.height) {
             canvas.width = got.width;

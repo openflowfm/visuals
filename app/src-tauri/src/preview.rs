@@ -37,12 +37,12 @@ pub async fn hover_preview(path: Option<String>, width: u32, height: u32, app: S
     Ok(bench::hover::show(engine::preset::parse(&text), (width, height), &app.ring))
 }
 
-/// The hover's latest picture as raw bytes: a 12-byte header (ticket, width,
-/// height), then its RGBA rows top to bottom (`bench::hover::packed`). Empty
-/// until there is one.
+/// The hover's latest picture as raw bytes: a 16-byte header (ticket, count,
+/// width, height), then its RGBA rows top to bottom (`bench::hover::packed`).
+/// Empty until there is one newer than the count `after`; 0×0 when the preset failed.
 #[tauri::command]
-pub async fn hover_frame() -> tauri::ipc::Response {
-    tauri::ipc::Response::new(bench::hover::frame())
+pub async fn hover_frame(after: u32) -> tauri::ipc::Response {
+    tauri::ipc::Response::new(bench::hover::frame(after))
 }
 
 #[tauri::command]
