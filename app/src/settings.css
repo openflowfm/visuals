@@ -1,11 +1,24 @@
 /* ⚙ Settings and the More effects drawer (Settings.tsx, MoreEffects.tsx): sheets
-   over any view, sized for a finger (44 px targets) and closed with Esc. */
+   over any view, sized for a finger (44 px targets) and closed with Esc.
+
+   Settings is in Home's instrument look (home.css, decisions 68–71), as the help
+   overlay and More effects are: one opaque inset panel down the window's right,
+   8px in from its edges, 18px corners and a hint of glass at its top edge, no
+   border (the picture under it is the native preview, which a blur never
+   reaches and anything translucent would show through). Inside, no lines:
+   sections are told apart by space, each under a quiet 11px heading in the
+   caption's grey; a setting is a row, its name first and its control at the
+   row's end, the controls of a section lined up down one edge, and any note
+   under both, quiet. The widgets are raised by tone alone, a finger's height;
+   a switch between words is type, the one chosen brighter and underlined, as
+   Home's header marks its view. It is mounted by App, outside `.app.home`, so
+   Home's tokens are read with their own values as the fallback. */
 
 .vf-scrim {
   position: fixed;
   inset: 0;
   z-index: 29;
-  background: rgb(0 0 0 / 0.35);
+  background: rgba(0, 0, 0, 0.55);
 }
 .vf-sheet:focus {
   outline: none;
@@ -19,17 +32,36 @@
   min-width: 44px;
 }
 
-/* Settings: a panel down the right-hand side, the whole window tall, its head
-   kept in view while the sections scroll under it. */
+/* The panel: the window's height less its inset, its head kept in view while
+   the sections scroll under it. */
 .vf-sheet.settings {
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: min(440px, 100vw);
+  --set-panel: var(--surface-corner, #18181a);
+  --set-raised: rgba(255, 255, 255, 0.05);
+  --set-raised-hover: rgba(255, 255, 255, 0.08);
+  --set-edge: var(--glass-edge, inset 0 1px 0 rgba(255, 255, 255, 0.07));
+  /* Home's caption: 4.5:1 and better on the opaque panel. */
+  --set-caption: #a4a4ac;
+  /* The controls' column: every row's control ends at the panel's right and starts here. */
+  --set-control: 236px;
+  /* The widgets' type at Home's sizes, not the editor's 9–10px. */
+  --text-control: 13px;
+  --text-label: 11px;
+  top: 8px;
+  right: 8px;
+  bottom: 8px;
+  width: min(440px, calc(100vw - 16px));
   max-height: none;
-  padding: 0 18px 24px;
-  border-width: 0 0 0 1px;
-  border-radius: 0;
+  padding: 0 20px 20px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--set-panel);
+  box-shadow:
+    var(--set-edge),
+    0 18px 48px rgba(0, 0, 0, 0.45);
+  color: var(--ui);
+  font-family: var(--font-ui, var(--sans));
+  font-variation-settings: var(--font-ui-axes, var(--sans-axes));
+  font-size: 13px;
   /* A control Tab lands on scrolls into view below the sticky head, not under it. */
   scroll-padding-top: 72px;
 }
@@ -37,55 +69,202 @@
   position: sticky;
   top: 0;
   z-index: 1;
-  margin: 0;
-  padding: 12px 0 10px;
-  background: var(--panel);
-  border-bottom: 1px solid var(--bd3);
+  margin: 0 -20px;
+  padding: 14px 20px 6px;
+  background: var(--set-panel);
+  box-shadow: var(--set-edge);
+}
+.vf-sheet.settings .vf-sheet-head h2 {
+  color: var(--fg);
+  font-family: var(--font-display, var(--sans));
+  font-variation-settings: var(--font-display-axes, var(--sans-axes));
+  font-size: 17px;
+  font-weight: 600;
+}
+/* ✕: Home's close glyph, quiet, brighter when pointed at. */
+.vf-sheet.settings .vf-sheet-close .wdg-button-body {
+  width: 44px;
+  margin-right: -12px;
+  border-radius: 10px;
+  background: none;
+  color: var(--set-caption);
+}
+.vf-sheet.settings .vf-sheet-close .wdg-button-body:hover {
+  color: var(--fg);
+  background: var(--set-raised);
 }
 
+/* The widgets inside (each `.wdg` sets its own tokens, so they are set on it):
+   no outlines, raised by tone alone, a finger's height, Home's type. */
+.vf-sheet.settings .wdg {
+  --wdg-edge: transparent;
+  --wdg-edge-live: transparent;
+  --wdg-face: var(--set-raised);
+  --wdg-well: var(--set-raised);
+  --wdg-caption: var(--set-caption);
+  --wdg-radius: 10px;
+  --wdg-field-height: 44px;
+  --wdg-inside-height: 44px;
+  --wdg-sans: var(--font-ui, var(--sans));
+  --wdg-sans-axes: var(--font-ui-axes, var(--sans-axes));
+}
+.vf-sheet.settings :is(.wdg-button-body, .wdg-toggle-body, .wdg-segmented-body button, .wdg-select-body, select, a, summary):focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 0;
+}
+.vf-sheet.settings :is(.wdg-button-body, .wdg-toggle-body):hover:not(:disabled) {
+  background: var(--set-raised-hover);
+}
+
+/* A section: a quiet heading over its rows, set apart by space alone. */
 .settings-section {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--bd3);
-}
-.settings-section:last-child {
-  border-bottom: 0;
+  padding: 14px 0 12px;
 }
 .settings-section h3 {
   margin: 0;
-  color: var(--caption);
-  font-size: var(--text-label);
-  font-weight: var(--weight-medium);
-  letter-spacing: var(--track-caps);
-  text-transform: uppercase;
+  color: var(--set-caption, var(--caption));
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
+
+/* A setting's row: its name first, its control in the controls' column at the
+   row's end, and any notes under both, on lines of their own. */
+.settings-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.settings-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, var(--set-control, 236px));
+  align-items: center;
+  column-gap: 16px;
+  row-gap: 4px;
+  min-width: 0;
+}
+.settings-row-name {
+  min-width: 0;
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 500;
+}
+.settings-row-control {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+.settings-row > :not(.settings-row-name, .settings-row-control) {
+  grid-column: 1 / -1;
+}
+/* The row's name says what each control is: the widgets' own small caption would say it twice. */
+.settings-row .wdg > .wdg-caption {
+  display: none;
+}
+.settings-row-control > .wdg-segmented,
+.settings-row-control > .wdg-slider-horizontal {
+  flex: 1;
+  min-width: 0;
+}
+.settings-row-control > .wdg-button {
+  flex: none;
+  min-width: 44px;
+}
+.settings-row-control > .wdg-toggle {
+  width: 96px;
+}
+/* A step down or up: a quiet glyph on the raised tone. */
+.vf-sheet.settings .settings-row-control > .wdg-button .wdg-button-body {
+  color: var(--ui);
+  font-size: 15px;
+}
+
+/* A quiet note: what a setting decides, who decides it, or why a change failed. */
 .vf-sheet .settings-line {
   margin: 0;
-  color: var(--caption);
-  font-size: var(--text-body);
-  line-height: 1.4;
+  color: var(--set-caption, var(--caption));
+  font-size: 12px;
+  line-height: 1.45;
 }
 .vf-sheet .settings-problem {
   color: var(--red);
 }
-/* A switch (`SwitchRow`: its name, then the switch), and under it who decides,
-   or why a change failed. */
+/* A switch (`SwitchRow`: its name first, macOS's switch at the row's end, as
+   the other rows end), and under it, quiet, what it means, who decides, or why
+   a change failed. */
 .settings-switch {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 4px;
 }
+.vf-sheet.settings .settings-switch > .vf-switch {
+  min-height: 44px;
+  font-size: 13px;
+  font-weight: 500;
+}
 .settings-switch > .wdg-button.settings-follow {
   align-self: flex-start;
   justify-items: start;
 }
+.vf-sheet.settings .settings-follow .wdg-button-body {
+  margin-left: -10px;
+  padding: 0 10px;
+  background: none;
+  color: var(--ui);
+  font-size: 12px;
+}
+.vf-sheet.settings .settings-follow .wdg-button-body:hover {
+  color: var(--fg);
+  background: var(--set-raised);
+}
 .settings-quality {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
+}
+/* The section's heading names it: the four levels across the panel, no caption. */
+.settings-quality > .wdg-segmented > .wdg-caption {
+  display: none;
+}
+.settings-quality .wdg-segmented-body {
+  margin: 0 -6px;
+}
+
+/* A switch between words (quality, the strobe's rate and colour): type, the
+   one chosen brighter and underlined, as More effects' mirror is. */
+.vf-sheet.settings .wdg-segmented-body {
+  display: flex;
+  justify-content: space-between;
+  gap: 2px;
+  background: none;
+  overflow: visible;
+}
+.vf-sheet.settings .wdg-segmented-body button {
+  flex: 1;
+  height: 44px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--set-caption);
+  font-size: 13px;
+  font-weight: 500;
+}
+.vf-sheet.settings .wdg-segmented-body button:hover:not([aria-checked='true']) {
+  color: var(--fg);
+  background: var(--set-raised);
+}
+.vf-sheet.settings .wdg-segmented-body button[aria-checked='true'] {
+  color: var(--fg);
+  background: none;
+  text-decoration: underline 2px var(--line-active, var(--primary));
+  text-underline-offset: 7px;
 }
 
 /* Sound: the source picker with its meter, and under them, on a line of their
@@ -107,28 +286,79 @@
 .vf-sheet.settings .audio-channels-name {
   flex: 1 0 auto;
   color: var(--fg);
-  font-size: var(--text-body);
+  font-size: 13px;
+  font-weight: 500;
+}
+/* A row's name, as every other row's starts: with a capital. */
+.vf-sheet.settings .audio-channels-name::first-letter {
+  text-transform: uppercase;
 }
 .settings .audio-note {
   order: 4;
   max-width: none;
   white-space: normal;
+  font-size: 12px;
 }
 
-/* Output: the display picked, and how the picture fits it. */
+/* Output: the display picked, and how the picture fits it, as quiet lines. */
 .output-settings {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 .vf-sheet .output-settings p {
   margin: 0;
   font-size: var(--text-body);
   line-height: 1.4;
 }
+.vf-sheet.settings .output-settings p {
+  color: var(--set-caption);
+  font-size: 12px;
+  line-height: 1.45;
+}
 .output-settings .output-fit b {
   color: var(--fg);
   font-weight: var(--weight-medium);
+}
+.vf-sheet.settings .output-settings > .wdg-select {
+  align-self: flex-start;
+  max-width: 100%;
+}
+
+/* Link: on or off as a row, the session's tempo quiet under it, and the one's
+   steps after its name. */
+.vf-sheet.settings .link-settings {
+  gap: 8px;
+  color: var(--ui);
+  font-size: 13px;
+}
+/* Its name is the row's; the switch says only on or off, as every switch here does. */
+.vf-sheet.settings .link-head .wdg > .wdg-caption {
+  display: none;
+}
+.vf-sheet.settings .link-head > span:first-child,
+.vf-sheet.settings .link-one-name {
+  color: var(--fg);
+  font-weight: 500;
+}
+.vf-sheet.settings .link-status {
+  color: var(--set-caption);
+  font-size: 12px;
+}
+.vf-sheet.settings .link-status[data-on] {
+  color: var(--green);
+}
+.vf-sheet.settings .link-status b {
+  font-family: var(--font-num, var(--sans));
+  font-variation-settings: var(--font-num-axes, var(--sans-axes));
+  font-size: 13px;
+  font-weight: 600;
+}
+.vf-sheet.settings .link-settings .link-one-name {
+  flex: 1 0 auto;
+}
+.vf-sheet.settings .link-settings .link-one .wdg-button {
+  min-width: 48px;
 }
 
 /* Presets: the pack bar (Pack.tsx, styled in credits.css for the library's
@@ -138,15 +368,36 @@
   padding: 0;
   border-top: 0;
 }
-.vf-sheet.settings .pack-count,
+.vf-sheet.settings .pack-count {
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: normal;
+}
 .vf-sheet.settings .pack-note {
-  font-size: var(--text-body);
+  color: var(--set-caption);
+  font-size: 12px;
+  letter-spacing: normal;
+  line-height: 1.45;
+}
+.vf-sheet.settings .pack-note[data-error] {
+  color: var(--red);
+}
+.vf-sheet.settings .pack-download button {
+  min-height: 44px;
+  padding: 6px 12px;
+  border-radius: 10px;
 }
 .vf-sheet.settings .pack-progress {
   height: 44px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--set-raised);
 }
 .vf-sheet.settings .pack-progress-label {
-  line-height: 42px;
+  padding: 0 12px;
+  line-height: 44px;
+  font-size: 13px;
 }
 .vf-sheet.settings .credits-head {
   padding: 0;
@@ -154,6 +405,20 @@
 .vf-sheet.settings .credits-body {
   overflow: visible;
   padding: 0;
+  color: var(--set-caption);
+  font-size: 12px;
+}
+
+/* Narrow: the controls' column narrows with the panel. */
+@media (max-width: 480px) {
+  .vf-sheet.settings {
+    --set-control: 200px;
+    padding: 0 16px 16px;
+  }
+  .vf-sheet.settings .vf-sheet-head {
+    margin: 0 -16px;
+    padding: 12px 16px 6px;
+  }
 }
 
 /* The library's pack offer (PackOffer.tsx), used on the home: one quiet line,
