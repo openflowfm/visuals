@@ -32,9 +32,9 @@ export function MoreFx({ state, set, send }: Pick<FxControl, 'set' | 'send'> & {
         </Toggle>
       </div>
       <div className="fx-hits">
-        <Hit kind="punch" on={state.punch} hold label="PUNCH" keyName="P" send={send} />
+        <Hit kind="punch" on={state.punch} hold label="Punch" keyName="P" send={send} />
       </div>
-      <Button onPress={() => send({ kind: 'fx_reset' })} className="more-fx-reset" title="Every effect back to normal; tempo and sensitivity stay (0)">
+      <Button tone="quiet" onPress={() => send({ kind: 'fx_reset' })} className="more-fx-reset" title="Every effect back to normal; tempo and sensitivity stay (0)">
         Reset: {Say('fx reset').toLowerCase()}
       </Button>
     </div>

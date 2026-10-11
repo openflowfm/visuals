@@ -39,6 +39,34 @@ describe('HelpOverlay in a DOM', () => {
     expect(document.activeElement).toBe(help);
   });
 
+  it('closes on ?, and on a click beside the panel but not on one inside it', async () => {
+    const user = userEvent.setup();
+    render(<Opener />);
+    const help = screen.getByRole('button', { name: 'Help' });
+    await user.click(help);
+    await user.keyboard('?');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(help);
+
+    await user.click(help);
+    const dialog = screen.getByRole('dialog', { name: 'Live controls' });
+    await user.click(screen.getByRole('heading', { name: 'Keys only' }));
+    expect(screen.getByRole('dialog')).toBe(dialog);
+    await user.click(dialog.parentElement as HTMLElement);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('keeps Tab inside the panel', async () => {
+    const user = userEvent.setup();
+    render(<Opener />);
+    await user.click(screen.getByRole('button', { name: 'Help' }));
+    const dialog = screen.getByRole('dialog', { name: 'Live controls' });
+    for (let i = 0; i < 3; i++) {
+      await user.tab();
+      expect(dialog.contains(document.activeElement)).toBe(true);
+    }
+  });
+
   it('closes from its ✕ button', async () => {
     const user = userEvent.setup();
     render(<Opener />);
