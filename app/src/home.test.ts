@@ -9,6 +9,7 @@ import {
   pickTiles,
   playsFrom,
   playsLike,
+  movesByItself,
   prefsAt,
   presetLength,
   recentList,
@@ -363,6 +364,21 @@ describe('playsFrom', () => {
     expect(playsFrom({ ...EMPTY_DECK, query: { groups: {}, text: 'x' } }, [warm])).toBe('from the library');
     expect(playsFrom(EMPTY_DECK, [warm])).toBe('opened on its own');
   });
+
+  it('never names a playlist for a preset it is not playing: the deck behind, or a preset opened from outside it', () => {
+    // The deck playing y, second in Warm up.
+    const playing = { ...EMPTY_DECK, playlist: 'w', index: 1, current: '/p/y.milk' };
+    expect(playsFrom(playing, [warm], true, '/p/y.milk')).toBe('from Warm up · 2 of 3');
+    // A library preset opened while the page's deck still says Warm up.
+    expect(playsFrom(playing, [warm], true, '/p/elsewhere.milk')).toBe('opened on its own');
+    expect(playsFrom(playing, [warm], false, '/p/elsewhere.milk')).toBe('opened on its own');
+    // The deck naming the preset opened but still holding Warm up's place: not Warm up's preset there.
+    expect(playsFrom({ ...playing, current: '/p/elsewhere.milk' }, [warm], true, '/p/elsewhere.milk')).toBe('opened on its own');
+    // A filter followed: the deck names what it plays.
+    const filter = { ...EMPTY_DECK, query: { groups: {}, text: 'x' }, index: 6, count: 412, current: '/p/q.milk' };
+    expect(playsFrom(filter, [warm], true, '/p/q.milk')).toBe('from the library · 7 of 412');
+    expect(playsFrom(filter, [warm], true, '/p/other.milk')).toBe('opened on its own');
+  });
 });
 
 describe('playsLike', () => {
@@ -409,6 +425,14 @@ describe('the inspector view (decision 70)', () => {
     expect(presetLength({ ...ticking, hold: true })).toBeNull();
     expect(presetLength({ ...ticking, auto: false })).toBeNull();
     expect(presetLength({ ...ticking, bars: 8 })).toBeNull();
+  });
+
+  it('moves on by itself on a clock, Link’s bars or Link’s beats, held or not', () => {
+    expect(movesByItself(EMPTY_DECK)).toBe(false);
+    expect(movesByItself({ ...EMPTY_DECK, auto: true, hold: true })).toBe(true);
+    expect(movesByItself({ ...EMPTY_DECK, bars: 8 })).toBe(true);
+    expect(movesByItself({ ...EMPTY_DECK, every: { unit: 'beats', every: 4 } } as typeof EMPTY_DECK)).toBe(true);
+    expect(movesByItself({ ...EMPTY_DECK, every: { unit: 'bars', every: 0 } } as typeof EMPTY_DECK)).toBe(false);
   });
 
   it('finds a preset by its whole path or its path in the pack', () => {

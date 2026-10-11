@@ -438,6 +438,14 @@ describe('a playlist’s grid', () => {
     playlists = [manual('1', 'Warm up', [item(ROWS[0]), item(ROWS[2])])];
   });
 
+  it('marks the next tile while held too, since → still steps to it', async () => {
+    deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path, next: ROWS[2].path, next_index: 1, count: 2, hold: true };
+    await mount();
+    const marked = document.querySelectorAll('[data-next]');
+    expect(marked.length).toBe(1);
+    expect(marked[0].querySelector('.home-tile-next')!.textContent).toBe('next');
+  });
+
   it('says how to pick, play and reorder it in its tooltip, not a line over it', async () => {
     deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path };
     await mount();
@@ -781,6 +789,68 @@ describe('the transport bar', () => {
     deck = { ...EMPTY_DECK, current: ROWS[2].path };
     await mount();
     expect(document.querySelector('.lay-transport-name')!.textContent).toBe('c');
+  });
+
+  it('never says "from" a playlist for a library preset played outside it, and reads the deck again after the open', async () => {
+    playlists = [manual('1', 'Warm up', [item(ROWS[0]), item(ROWS[1])])];
+    deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path };
+    resume = { playlist: '1', index: 0, current: ROWS[0].path, source: null, query: null };
+    await mount({ library: true, start: ROWS[0].path });
+    live(ROWS[0].path);
+    expect(document.querySelector('.lay-transport-from')!.textContent).toBe('from Warm up · 1 of 2');
+    // c is in no playlist; the deck behind it (as today's, which keeps Warm up's place) must not be named.
+    deck = { ...deck, current: ROWS[2].path };
+    invoke.mockClear();
+    fireEvent.click(tile('c'));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(sent('playlists').length).toBeGreaterThan(0);
+    expect(document.querySelector('.lay-transport-from')!.textContent).toBe('opened on its own');
+    expect(within(inspector() as HTMLElement).queryByText(/from Warm up/)).toBeNull();
+  });
+
+  it('says the deck moves on by itself and H stays, and H holds it', async () => {
+    deck = { ...EMPTY_DECK, auto: true, seconds: 30, current: ROWS[0].path };
+    await mount({ library: true, start: ROWS[0].path });
+    expect(document.querySelector('.lay-transport-hint')!.textContent).toBe('moves on by itself · H to stay');
+    invoke.mockClear();
+    fireEvent.keyDown(window, { key: 'h' });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(sent('act').map((a) => a.action)).toEqual([{ kind: 'hold', on: null }]);
+  });
+
+  it('says it moves on by itself on Link’s schedule in beats, where bars is 0', async () => {
+    deck = { ...EMPTY_DECK, current: ROWS[0].path, bars: 0, every: { unit: 'beats', every: 4 } } as typeof EMPTY_DECK;
+    await mount({ library: true, start: ROWS[0].path });
+    expect(document.querySelector('.lay-transport-hint')!.textContent).toBe('moves on by itself · H to stay');
+  });
+});
+
+describe('help on the home', () => {
+  const dialog = () => screen.queryByRole('dialog', { name: 'Home controls' });
+
+  it('opens on ? and closes on ? or Esc, the home’s own Esc left alone', async () => {
+    await mount({ library: true, start: ROWS[0].path });
+    expect(dialog()).toBeNull();
+    fireEvent.keyDown(window, { key: '?', shiftKey: true });
+    expect(dialog()).toBeTruthy();
+    expect(within(dialog()!).getByText('Hold')).toBeTruthy();
+    fireEvent.keyDown(window, { key: '?', shiftKey: true });
+    expect(dialog()).toBeNull();
+    fireEvent.keyDown(window, { key: '?', shiftKey: true });
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(dialog()).toBeNull();
+  });
+
+  it('opens from the header’s Help button, and the keys under it are left alone while it shows', async () => {
+    await mount({ library: true, start: ROWS[0].path });
+    fireEvent.click(within(header()).getByRole('button', { name: 'Help' }));
+    expect(dialog()).toBeTruthy();
+    invoke.mockClear();
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(sent('open')).toEqual([]);
+    fireEvent.click(within(dialog()!).getByRole('button', { name: 'Close home controls' }));
+    expect(dialog()).toBeNull();
   });
 });
 

@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, screen, userEvent } from 'storybook/test';
 import type { ReactNode } from 'react';
-import { GROUPS, HelpOverlay } from './HelpOverlay.tsx';
+import { GROUPS, HelpOverlay, HOME_HELP } from './HelpOverlay.tsx';
 
 /**
  * A window of `width` × 900 over the picture's stand-in, whatever the runner's
@@ -59,5 +59,22 @@ export const At800: Story = {
     await expect(screen.queryByText('Hide the controls')).toBeNull();
     await userEvent.keyboard('{Escape}');
     await expect(args.onClose).toHaveBeenCalled();
+  },
+};
+
+/** The home's own list (`HOME_HELP`), as Home mounts it on ? or its header's Help: its controls, and that a playlist moves on by itself until H holds it. */
+export const Home: Story = {
+  name: 'Home, at 1440 px',
+  args: { list: HOME_HELP, stage: false },
+  globals: { viewport: { value: 'home1440', isRotated: false } },
+  render: (args) => (
+    <Window width={1440}>
+      <HelpOverlay {...args} />
+    </Window>
+  ),
+  play: async () => {
+    await expect(await screen.findByRole('dialog', { name: 'Home controls' })).toBeVisible();
+    for (const g of HOME_HELP.groups) await expect(screen.getByRole('heading', { name: g.heading })).toBeVisible();
+    await expect(screen.getByText(/stops moving on by itself/)).toBeVisible();
   },
 };
