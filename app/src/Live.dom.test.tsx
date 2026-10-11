@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Live } from './Live.tsx';
 import { EMPTY_DECK } from './playlists.ts';
 import { CRATE_KEY } from './live/stage-model.ts';
-import type { StageCrateProps, StageHeadProps, StageLayoutProps } from './live/stage-model.ts';
+import type { FullScreenOfferProps, StageCrateProps, StageHeadProps, StageLayoutProps } from './live/stage-model.ts';
 
 const { invoke, on } = vi.hoisted(() => ({ invoke: vi.fn(), on: new Map<string, (e: { payload: unknown }) => void>() }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => invoke(...args), convertFileSrc: (p: string) => p }));
@@ -47,7 +47,8 @@ vi.mock('./live/StageHead.tsx', async () => {
         h('button', { onClick: () => p.onView('home') }, 'home'),
         h('button', { onClick: p.onHelp }, 'help'),
       ),
-    FullScreenOffer: () => h('p', null, 'Go full screen on…'),
+    // The offer, as a button putting the picture on the projector (its own tests press each display).
+    FullScreenOffer: (p: FullScreenOfferProps) => h('button', { type: 'button', onClick: () => p.live.show(2) }, 'Go full screen on…'),
   };
 });
 vi.mock('./live/StageCrate.tsx', async () => {
@@ -215,7 +216,8 @@ describe("the Stage's keys", () => {
     const release = () => act(() => void fireEvent.keyUp(document.body, { key: 'Escape' }));
 
     it('shows its progress on the Stage and leaves live after 3 s, the output on a display', async () => {
-      const { onMode } = await mount();
+      const { onMode } = await mount({ windowed: false });
+      expect(stage().dataset.inWindow).toBe('false');
       vi.useFakeTimers();
       await press('Escape');
       expect(stage().dataset.leaving).toBe('true');
@@ -287,7 +289,7 @@ describe('Live, around the Stage', () => {
   });
 
   it('with the output on a display, ✕ and ⌘⇧L leave at once too, as they are deliberate', async () => {
-    const { onMode } = await mount();
+    const { onMode } = await mount({ windowed: false });
     expect(stage().dataset.inWindow).toBe('false');
     await home();
     expect(onMode).toHaveBeenCalledOnce();
@@ -298,16 +300,52 @@ describe('Live, around the Stage', () => {
     expect(onMode).toHaveBeenCalledWith('home', '/p/a.milk');
   });
 
-  it('opens the output with two displays, and offers full screen when it plays in the window', async () => {
+  const opened = () => invoke.mock.calls.filter(([c]) => c === 'output_open');
+  const closed = () => invoke.mock.calls.some(([c]) => c === 'output_close');
+
+  it('plays in the window on the way in, even with two displays, and offers full screen', async () => {
     await mount();
-    expect(invoke.mock.calls.some(([c]) => c === 'output_open')).toBe(true);
-    expect(stage().dataset.inWindow).toBe('false');
-    expect(screen.queryByText('Go full screen on…')).toBeNull();
+    expect(opened()).toEqual([]);
+    expect(stage().dataset.inWindow).toBe('true');
+    expect(screen.getByRole('button', { name: 'Go full screen on…' })).toBeTruthy();
     cleanup();
     invoke.mockClear();
+    // live-windowed: the same.
     await mount({ windowed: true });
-    expect(invoke.mock.calls.some(([c]) => c === 'output_open')).toBe(false);
+    expect(opened()).toEqual([]);
     expect(stage().dataset.inWindow).toBe('true');
-    expect(screen.getByText('Go full screen on…')).toBeTruthy();
+  });
+
+  it('offers full screen with one display too, and opens nothing by itself', async () => {
+    displays = [displays[0]];
+    await mount();
+    expect(opened()).toEqual([]);
+    expect(screen.getByRole('button', { name: 'Go full screen on…' })).toBeTruthy();
+  });
+
+  it('opens the output on the display chosen in the offer, and closes it on leaving', async () => {
+    const { onMode } = await mount();
+    await act(async () => void fireEvent.click(screen.getByRole('button', { name: 'Go full screen on…' })));
+    expect(opened()).toEqual([['output_open', { id: 2 }]]);
+    act(() => on.get('output')?.({ payload: { display: displays[1], size: [1920, 1080] } }));
+    expect(stage().dataset.inWindow).toBe('false');
+    expect(screen.queryByRole('button', { name: 'Go full screen on…' })).toBeNull();
+    expect(closed()).toBe(false);
+    await home();
+    expect(onMode).toHaveBeenCalledWith('home', '/p/a.milk');
+    cleanup();
+    expect(closed()).toBe(true);
+  });
+
+  it('opens the output by itself only when started in live mode (VISUALS_LIVE=1)', async () => {
+    await mount({ windowed: false });
+    expect(opened()).toEqual([['output_open', { id: null }]]);
+    expect(stage().dataset.inWindow).toBe('false');
+    cleanup();
+    invoke.mockClear();
+    // With one display, not even then: it would cover the controls.
+    displays = [displays[0]];
+    await mount({ windowed: false });
+    expect(opened()).toEqual([]);
   });
 });

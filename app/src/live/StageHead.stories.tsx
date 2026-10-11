@@ -14,8 +14,8 @@ interface Args {
 
 /**
  * The header over the picture, `width` wide, on the stories' fake app: live's
- * real state (`useLive`, which opens the output on the projector unless
- * `windowed`), the window buttons drawn where macOS puts them, and the offer
+ * real state (`useLive`; with `windowed` false, as when the app starts in live
+ * mode, it opens the output on the projector), the window buttons drawn where macOS puts them, and the offer
  * under the header while it plays in the window.
  */
 function Window({ width, windowed, docked }: Args) {
@@ -109,7 +109,7 @@ export const LinkOff: Story = {
   },
 };
 
-/** Playing in the window (the welcome flow's way in): "In this window" in amber, and the offer to go full screen on either display. */
+/** Playing in the window (how going live starts): "In this window" in amber, and the offer to go full screen on either display. */
 export const InTheWindow: Story = {
   args: { windowed: true },
   play: async ({ canvas }) => {
