@@ -2,7 +2,8 @@
 //
 // The header over a playlist's strip on the home (decision 67), with the app's
 // commands faked: what it shows, play and stop, shuffle, how it plays in a
-// popover, and rename and delete from the "···" menu.
+// popover, and rename and delete from the "···" menu; in the inspector, no
+// playback controls, shuffle from how it plays, and "Add presets".
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { useState } from 'react';
 import { readFileSync } from 'node:fs';
@@ -11,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PlaylistHead } from './PlaylistHead.tsx';
 import { EMPTY_DECK, manual, type Deck, type Lists, type Playlist } from './playlists.ts';
-import { say } from './words.ts';
+import { say, Say } from './words.ts';
 
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => invoke(...args), convertFileSrc: (p: string) => p }));
@@ -149,7 +150,71 @@ describe('the playlist head in the inspector', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Chill' })).toBeTruthy();
     expect(head.firstElementChild?.className).toBe('pl-cover');
     expect(screen.getByText('3 presets · moves on every 30 s · in order · crossfade 2 s')).toBeTruthy();
-    for (const name of ['▶ Play', 'Shuffle', say('playlist settings'), 'more']) expect(screen.getByRole('button', { name })).toBeTruthy();
+    for (const name of [say('playlist settings'), 'more']) expect(screen.getByRole('button', { name })).toBeTruthy();
+  });
+
+  it('has no playback controls: no play, stop or shuffle, playing or not', async () => {
+    await mount(EMPTY_DECK, 'inspector');
+    for (const name of [/Play/, /Stop/, /Shuffle/]) expect(screen.queryByRole('button', { name })).toBeNull();
+    cleanup();
+    await mount({ ...EMPTY_DECK, playlist: chill.id, index: 0, count: 3 }, 'inspector');
+    expect(screen.getByText(/· playing 1 of 3$/)).toBeTruthy();
+    for (const name of [/Play/, /Stop/, /Shuffle/]) expect(screen.queryByRole('button', { name })).toBeNull();
+  });
+
+  it('shuffles from how it plays, with the same command the pane’s Shuffle sends, and keeps it', async () => {
+    await mount(EMPTY_DECK, 'inspector');
+    fireEvent.click(screen.getByRole('button', { name: say('playlist settings') }));
+    const order = within(screen.getByRole('dialog', { name: say('playlist settings') })).getByRole('radiogroup', { name: 'order' });
+    fireEvent.click(within(order).getByRole('radio', { name: 'shuffle' }));
+    await flush();
+    const [args] = sent('playlist_settings');
+    expect(args.id).toBe(chill.id);
+    expect((args.settings as { order: string }).order).toBe('shuffle');
+    expect(within(order).getByRole('radio', { name: 'shuffle' }).getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByText(/· shuffled ·/)).toBeTruthy();
+    fireEvent.click(within(order).getByRole('radio', { name: 'in order' }));
+    await flush();
+    expect((sent('playlist_settings')[1].settings as { order: string }).order).toBe('in_order');
+  });
+
+  it('offers "Add presets" on a manual playlist when given onQuickAdd, and not on a smart one or without it', async () => {
+    const onQuickAdd = vi.fn();
+    render(
+      <PlaylistHead
+        list={chill}
+        lists={{ playlists: [chill], deck: EMPTY_DECK }}
+        tiles={[]}
+        total={3}
+        onLists={() => {}}
+        onDeleted={() => {}}
+        onError={() => () => {}}
+        variant="inspector"
+        onQuickAdd={onQuickAdd}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: Say('quickadd button') }));
+    expect(onQuickAdd).toHaveBeenCalledOnce();
+    cleanup();
+    await mount(EMPTY_DECK, 'inspector');
+    expect(screen.queryByRole('button', { name: Say('quickadd button') })).toBeNull();
+    cleanup();
+    const smart: Playlist = { ...chill, kind: 'smart', items: [] };
+    render(
+      <PlaylistHead
+        list={smart}
+        lists={{ playlists: [smart], deck: EMPTY_DECK }}
+        tiles={[]}
+        total={0}
+        onLists={() => {}}
+        onDeleted={() => {}}
+        onError={() => () => {}}
+        variant="inspector"
+        onQuickAdd={onQuickAdd}
+      />,
+    );
+    expect(screen.getByText('Smart playlist')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: Say('quickadd button') })).toBeNull();
   });
 
   it('lays the card out down the panel, from playlisthead.css', async () => {
@@ -167,14 +232,8 @@ describe('the playlist head in the inspector', () => {
     }
   });
 
-  it('plays, shuffles, opens how it plays, and hangs ⋯ from the right', async () => {
+  it('opens how it plays, and hangs ⋯ from the right', async () => {
     await mount(EMPTY_DECK, 'inspector');
-    fireEvent.click(screen.getByRole('button', { name: '▶ Play' }));
-    await flush();
-    expect(sent('act')).toEqual([{ action: { kind: 'load', playlist: 1, index: null } }]);
-    fireEvent.click(screen.getByRole('button', { name: 'Shuffle' }));
-    await flush();
-    expect((sent('playlist_settings')[0].settings as { order: string }).order).toBe('shuffle');
     fireEvent.click(screen.getByRole('button', { name: say('playlist settings') }));
     const dialog = screen.getByRole('dialog', { name: say('playlist settings') });
     expect(within(dialog).getByRole('group', { name: 'how it plays' })).toBeTruthy();

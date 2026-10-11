@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { expect, fn, userEvent } from 'storybook/test';
+import { expect, fn, userEvent, within } from 'storybook/test';
 import { strip } from './home.ts';
 import { InspectorPanel } from './layout/HomeLayout.tsx';
 import { prepare } from './librarySearch.ts';
@@ -16,11 +16,11 @@ import './layout/inspector/inspector-content.css';
 const rows = prepare(ROWS, DATA);
 
 /** The head as the home's playlist pane (or the inspector) shows it: its tiles and total from the fixtures, its lists kept as they change. */
-function Head({ id, lists: start, variant }: { id: string; lists: Lists; variant?: 'pane' | 'inspector' }) {
+function Head({ id, lists: start, variant, onQuickAdd }: { id: string; lists: Lists; variant?: 'pane' | 'inspector'; onQuickAdd?: () => void }) {
   const [lists, setLists] = useState(start);
   const list = lists.playlists.find((p) => p.id === id) as Playlist;
   const { tiles, total } = strip(list, { rows, played: RECENT, playing: null });
-  return <PlaylistHead list={list} lists={lists} tiles={tiles} total={total} onLists={setLists} onDeleted={fn()} onError={() => () => {}} variant={variant} />;
+  return <PlaylistHead list={list} lists={lists} tiles={tiles} total={total} onLists={setLists} onDeleted={fn()} onError={() => () => {}} variant={variant} onQuickAdd={onQuickAdd} />;
 }
 
 /** The header over a playlist's strip on the home (decision 67): the cover, what it is, the name, how it plays, and play, shuffle, how it plays ▾ and ···; or, in the inspector, the same as a card. */
@@ -105,23 +105,34 @@ export const MoreOpen: Story = {
   },
 };
 
-/** In the inspector, as the source playing: a card down the panel, the cover over the words, the name an h2, the actions wrapping under. */
+/** In the inspector, as the source playing: a card down the panel, the cover over the words, the name an h2, how it plays and ⋯ under them; no playback controls. */
 export const InInspector: Story = {
   args: { variant: 'inspector' },
   play: async ({ canvas }) => {
     await expect(canvas.getByRole('heading', { level: 2, name: WARM_UP.name })).toBeVisible();
     await expect(canvas.queryByRole('heading', { level: 1 })).toBeNull();
-    await expect(canvas.getByRole('button', { name: /Stop/ })).toBeVisible();
+    for (const name of [/Play/, /Stop/, /Shuffle/]) await expect(canvas.queryByRole('button', { name })).toBeNull();
+    await expect(canvas.getByRole('button', { name: say('playlist settings') })).toBeVisible();
     await expect(canvas.getByRole('button', { name: 'more' })).toBeVisible();
   },
 };
 
-/** In the inspector, a smart playlist not playing: what it fills itself with, on as many lines as it takes. */
+/** In the inspector with quick add: "Add presets" beside how it plays, on a manual playlist. */
+export const InInspectorQuickAdd: Story = {
+  args: { variant: 'inspector', onQuickAdd: fn() },
+  play: async ({ canvas, args }) => {
+    await userEvent.click(canvas.getByRole('button', { name: Say('quickadd button') }));
+    await expect(args.onQuickAdd).toHaveBeenCalledOnce();
+  },
+};
+
+/** In the inspector, a smart playlist not playing: what it fills itself with, on as many lines as it takes; no "Add presets", even with quick add. */
 export const InInspectorSmart: Story = {
-  args: { variant: 'inspector', id: BRIGHT_FAST.id },
+  args: { variant: 'inspector', id: BRIGHT_FAST.id, onQuickAdd: fn() },
   play: async ({ canvas }) => {
     await expect(canvas.getByText('Smart playlist')).toBeVisible();
-    await expect(canvas.getByRole('button', { name: /Play/ })).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: /Play/ })).toBeNull();
+    await expect(canvas.queryByRole('button', { name: Say('quickadd button') })).toBeNull();
   },
 };
 
@@ -132,7 +143,7 @@ const inPanel = (canvasElement: HTMLElement, inner: HTMLElement) => {
   return r.left >= box.left - 0.5 && r.right <= box.right + 0.5;
 };
 
-/** In the inspector, how it plays open: across the card, inside the panel. */
+/** In the inspector, how it plays open: across the card, inside the panel; shuffle is its order, kept by the playlist. */
 export const InInspectorHowItPlays: Story = {
   args: { variant: 'inspector' },
   play: async ({ canvas, canvasElement }) => {
@@ -140,6 +151,9 @@ export const InInspectorHowItPlays: Story = {
     const panel = canvas.getByRole('dialog', { name: say('playlist settings') });
     await expect(panel).toBeVisible();
     await expect(inPanel(canvasElement, panel)).toBe(true);
+    const shuffle = within(panel).getByRole('radio', { name: 'shuffle' });
+    await userEvent.click(shuffle);
+    await expect(shuffle).toHaveAttribute('aria-checked', 'true');
   },
 };
 

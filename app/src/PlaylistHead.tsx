@@ -4,6 +4,7 @@ import { Segmented } from '@openflow/widgets/controls/Segmented.tsx';
 import type { Param } from '@openflow/widgets/param/param.ts';
 import { plural } from './controls.ts';
 import { changeUnit, NameEdit, playsLike, saveFile, withSetting, type StripTile } from './home.ts';
+import { offersQuickAdd } from './layout/home-model.ts';
 import { queryName } from './librarySearch.ts';
 import * as pl from './playlists.ts';
 import type { Lists, Playlist, PlaylistSettings } from './playlists.ts';
@@ -27,6 +28,8 @@ export interface PlaylistHeadProps {
   menu?: ReactNode;
   /** Where it shows: over the playlist's pane (`pane`, the default: a row, the name the pane's h1), or in the inspector (`inspector`: a card down the panel's width, the cover over the words, the name an h2, ⋯ at the card's top right with its menu hung from there, how it plays opening across the card). */
   variant?: 'pane' | 'inspector';
+  /** Opens quick add on this playlist: an "Add presets" button, shown for a manual playlist (`offersQuickAdd`) when given. */
+  onQuickAdd?: () => void;
 }
 
 /**
@@ -34,9 +37,10 @@ export interface PlaylistHeadProps {
  * first four thumbnails, what it is, its name (double-click renames), a line on
  * how it plays, and its actions: play or stop, shuffle, how it plays (the
  * settings, in a popover) and more (rename, save to a file, delete). In the
- * inspector (`variant='inspector'`) the same, as a vertical card.
+ * inspector (`variant='inspector'`) a vertical card with no playback controls:
+ * no play, stop or shuffle (shuffle is the order in how it plays).
  */
-export function PlaylistHead({ list, lists, tiles, total, onLists, onDeleted, onError, menu, variant = 'pane' }: PlaylistHeadProps) {
+export function PlaylistHead({ list, lists, tiles, total, onLists, onDeleted, onError, menu, variant = 'pane', onQuickAdd }: PlaylistHeadProps) {
   const inspector = variant === 'inspector';
   const Name = inspector ? 'h2' : 'h1';
   const [naming, setNaming] = useState<string | null>(null);
@@ -110,7 +114,7 @@ export function PlaylistHead({ list, lists, tiles, total, onLists, onDeleted, on
           {summary}
         </div>
         <div className="pl-acts">
-          {active ? (
+          {inspector ? null : active ? (
             <button type="button" className="pl-btn" data-on="" onClick={stop} title="Stop: ← → step through the library again">
               ■ Stop
             </button>
@@ -119,15 +123,22 @@ export function PlaylistHead({ list, lists, tiles, total, onLists, onDeleted, on
               ▶ Play
             </button>
           )}
-          <button
-            type="button"
-            className="pl-btn"
-            aria-pressed={shuffled}
-            onClick={() => set(withSetting(list.settings, 'order', shuffled ? 'in_order' : 'shuffle'))}
-            title="Play this playlist shuffled (it keeps this)"
-          >
-            Shuffle
-          </button>
+          {!inspector && (
+            <button
+              type="button"
+              className="pl-btn"
+              aria-pressed={shuffled}
+              onClick={() => set(withSetting(list.settings, 'order', shuffled ? 'in_order' : 'shuffle'))}
+              title="Play this playlist shuffled (it keeps this)"
+            >
+              Shuffle
+            </button>
+          )}
+          {onQuickAdd && offersQuickAdd(list) && (
+            <button type="button" className="pl-btn" onClick={onQuickAdd} title={`Pick presets to add to ${list.name}`}>
+              {Say('quickadd button')}
+            </button>
+          )}
           <Popover className="pl-pop" name={say('playlist settings')} label={`${Say('playlist settings')} ▾`} title="How often it moves on, in what order, the crossfade and the look it sets">
             <SettingsBar settings={list.settings} differs={active ? deck.differs : []} onChange={set} />
           </Popover>
