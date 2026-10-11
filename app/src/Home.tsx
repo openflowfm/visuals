@@ -241,16 +241,33 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
   }, [addingOk]);
   const addingPaths = useMemo(() => new Set(adding?.items.map((i) => i.path) ?? []), [adding]);
   // A preset goes in at most once: a click on one already in takes it out; one still being added or taken out waits for the answer.
+  // At most one change per playlist is in flight: the next waits for its answer and finds its index in the playlist as answered, never a stale one.
   const pending = useRef(new Set<string>());
+  const queues = useRef(new Map<string, Promise<unknown>>());
+  const latest = useRef(lists);
+  latest.current = lists;
   const toggleAdded = (e: Entry) => {
     if (!adding || pending.current.has(e.path)) return;
-    const at = adding.items.findIndex((i) => i.path === e.path);
-    const change = at >= 0 ? pl.removeItem(adding.id, at) : pl.add(adding.id, e.path);
+    const { id, name } = adding;
     pending.current.add(e.path);
-    run(
-      change.finally(() => pending.current.delete(e.path)),
-      at >= 0 ? `take ${e.name} out of ${adding.name}` : `add ${e.name} to ${adding.name}`,
-    );
+    const apply = async () => {
+      const items = latest.current?.playlists.find((p) => p.id === id)?.items ?? [];
+      const at = items.findIndex((i) => i.path === e.path);
+      const what = at >= 0 ? `take ${e.name} out of ${name}` : `add ${e.name} to ${name}`;
+      try {
+        const l = await (at >= 0 ? pl.removeItem(id, at) : pl.add(id, e.path));
+        if (l) {
+          latest.current = l;
+          setLists(l);
+        }
+      } catch (err) {
+        fail(`Couldn't ${what}.`)(err);
+      } finally {
+        pending.current.delete(e.path);
+      }
+    };
+    const next = (queues.current.get(id) ?? Promise.resolve()).then(apply);
+    queues.current.set(id, next);
   };
 
   // `VITE_HOME_PICK=<path in the pack>` (a dev run only) starts with that preset picked, once the index is read.
@@ -538,6 +555,8 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
             if (shown && samePane(next, shown) && !quickAdd) {
               setInfo(true);
               openInspector();
+            } else if (quickAdd && next.kind === 'library') {
+              // Quick add is the library already: it stays on.
             } else pick(next);
           }}
           collapsed={collapsed}
@@ -956,6 +975,9 @@ export function PlaylistPane({ list, lists, tiles, total, rows, dropping, picked
                 run(pl.moveItem(list.id, t.index!, to), `move ${t.name}`).then(() => requestAnimationFrame(() => (grid?.children[tileFocus(to, tiles.length)] as HTMLElement | undefined)?.focus()));
               } else if (e.key === 'Enter') {
                 e.preventDefault();
+                // As a click: the picks go, and the inspector shows what plays.
+                anchor.current = t.key;
+                if (picked.length) onPick([]);
                 onPlay(t);
               } else if (e.key === ' ') {
                 e.preventDefault();

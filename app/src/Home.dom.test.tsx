@@ -422,6 +422,20 @@ describe('a playlist’s grid', () => {
     expect(second.hasAttribute('data-picked')).toBe(false);
   });
 
+  it('lets go of the picks on Enter as on a click, and plays from that tile', async () => {
+    deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path };
+    resume = { playlist: null, index: null, current: ROWS[0].path, source: null, query: null };
+    await mount();
+    const first = screen.getByRole('listitem', { name: '1. a, playing' });
+    const second = screen.getByRole('listitem', { name: '2. c' });
+    fireEvent.click(first, { metaKey: true });
+    invoke.mockClear();
+    fireEvent.keyDown(second, { key: 'Enter' });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(sent('act').at(-1)).toEqual({ action: { kind: 'go', index: 1 } });
+    expect(first.hasAttribute('data-picked')).toBe(false);
+  });
+
   it('shows the playlist’s card in the inspector for its row menu’s Show info, until Esc', async () => {
     deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path };
     resume = { playlist: null, index: null, current: ROWS[0].path, source: null, query: null };
@@ -560,6 +574,31 @@ describe('quick add (#194)', () => {
     expect(sent('open')).toEqual([]);
   });
 
+  it('takes out two presets clicked quickly by where each is once the first is answered, one listed twice too', async () => {
+    playlists = [manual('1', 'Warm up', [item(ROWS[0]), item(ROWS[1]), item(ROWS[2]), item(ROWS[0])])];
+    const base = invoke.getMockImplementation()!;
+    invoke.mockImplementation((cmd: string, args: Record<string, unknown>) => (cmd === 'playlist_remove' ? new Promise((done) => setTimeout(() => done(base(cmd, args)), 50)) : base(cmd, args)));
+    await start();
+    invoke.mockClear();
+    fireEvent.click(tile('a'));
+    fireEvent.click(tile('c'));
+    await act(() => vi.advanceTimersByTimeAsync(200));
+    expect(sent('playlist_remove')).toEqual([
+      { id: '1', index: 0 },
+      { id: '1', index: 1 },
+    ]);
+    expect(playlists[0].items.map((i) => i.path)).toEqual([ROWS[1].path, ROWS[0].path]);
+    expect(tile('c').hasAttribute('data-added')).toBe(false);
+  });
+
+  it('stays on when the Library row is clicked, and ends when another source is picked', async () => {
+    await start();
+    fireEvent.click(sourceRow('Library'));
+    expect(strip()).toBeTruthy();
+    fireEvent.click(sourceRow('Warm up'));
+    expect(strip()).toBeNull();
+  });
+
   it('plays on ⌥-click or Space instead', async () => {
     await start();
     invoke.mockClear();
@@ -682,6 +721,13 @@ describe('the transport bar', () => {
     expect(screen.queryByRole('progressbar', { name: 'time on this preset' })).toBeNull();
     // Held, the time on it still counts, with no end.
     expect(screen.getByRole('timer').getAttribute('aria-label')).toMatch(/^time on this preset: \d+:\d\d, until moved on$/);
+  });
+
+  it('names the preset playing', async () => {
+    resume = { playlist: null, index: null, current: ROWS[2].path, source: null, query: null };
+    deck = { ...EMPTY_DECK, current: ROWS[2].path };
+    await mount();
+    expect(document.querySelector('.lay-transport-name')!.textContent).toBe('c');
   });
 });
 
