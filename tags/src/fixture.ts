@@ -112,12 +112,15 @@ export async function makeFixture(dir: string, opts: FixtureOptions = {}): Promi
   const n = opts.n ?? 120;
   const r = rng(opts.seed ?? 1);
   const noise = (s: number) => (r() + r() + r() - 1.5) * s;
+  // The near-copies' own noise, apart so it doesn't shift everything else's.
+  const rc = rng((opts.seed ?? 1) + 7919);
   const clipSize: [number, number] = [192, 144];
   const frames = 24;
   mkdirSync(join(dir, 'clips'), { recursive: true });
   const rows: FeatureRow[] = [];
   const truth: Record<string, Record<string, boolean>> = {};
   let base: Traits | null = null;
+  let parentFeatures: Record<string, number | null> | null = null;
   for (let i = 0; i < n; i++) {
     let t: Traits = {
       hue: r() * 360,
@@ -134,7 +137,7 @@ export async function makeFixture(dir: string, opts: FixtureOptions = {}): Promi
     const path = `Fixture/${String(i).padStart(3, '0')} ${t.outlier ? 'odd' : 'preset'}.milk`;
     const hash = createHash('sha256').update(path).digest('hex');
     const warmth = (hueShare(t.hue, 0) + hueShare(t.hue, 30) + hueShare(t.hue, 60) * 0.5 - hueShare(t.hue, 200) - hueShare(t.hue, 230)) * t.sat;
-    const features: Record<string, number | null> = {
+    const fresh: Record<string, number | null> = {
       hue_red: hueShare(t.hue, 0) * t.sat + noise(0.08),
       hue_blue: hueShare(t.hue, 225) * t.sat + noise(0.08),
       saturation: t.sat + noise(0.05),
@@ -146,6 +149,10 @@ export async function makeFixture(dir: string, opts: FixtureOptions = {}): Promi
       oddity: t.outlier ? 3 + noise(0.5) : noise(0.4),
       intensity: i % 11 === 3 ? null : t.motion * 0.5 + noise(0.2),
     };
+    // A near-copy measures almost exactly like the preset it copies.
+    const copy = i % 17 === 16 && parentFeatures;
+    const features: Record<string, number | null> = copy ? Object.fromEntries(Object.entries(copy).map(([k, v]) => [k, v === null ? null : v + (rc() - 0.5) * 0.01])) : fresh;
+    parentFeatures = features;
     const clipName = `${hash.slice(0, 16)}.webp`;
     writeFileSync(join(dir, 'clips', clipName), await clip(t, frames, clipSize[0], clipSize[1]));
     rows.push({ path, hash, style: t.sym ? 'Symmetric' : 'Abstract', features, clip: clipName });
