@@ -68,6 +68,21 @@ describe('PackOffer', () => {
     expect(screen.getByText('No network.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Try getting the full library again' })).toBeTruthy();
   });
+
+  it('says the full library came without its pictures, and retries for them', async () => {
+    status = { ...STARTER, installed: 9795, size: 53_000_000, bare: true };
+    const user = userEvent.setup();
+    render(<PackOffer />);
+    const line = await screen.findByRole('status');
+    expect(line.textContent).toContain('The full library came without its pictures');
+    await user.click(screen.getByRole('button', { name: 'Try again for the pictures (53 MB)' }));
+    expect(invoke).toHaveBeenCalledWith('pack_download');
+    await progress({ ...status, state: 'downloading', received: 26_500_000 });
+    expect(screen.getByRole('progressbar').getAttribute('aria-label')).toBe("Getting the full library's pictures… 50%");
+    // The retry brings the pictures: the offer goes.
+    await progress({ ...status, state: 'idle', bare: false });
+    expect(screen.queryByRole('status')).toBeNull();
+  });
 });
 
 describe('offers', () => {
@@ -79,6 +94,11 @@ describe('offers', () => {
   it('offers while a download runs or after one failed, whatever is in', () => {
     expect(offers({ ...STARTER, installed: 3000, state: 'downloading' })).toBe(true);
     expect(offers({ ...STARTER, installed: 3000, state: 'failed', error: 'No network.' })).toBe(true);
+  });
+
+  it('offers once the full library is in without its pictures', () => {
+    expect(offers({ ...STARTER, installed: 9795, bare: true })).toBe(true);
+    expect(offers({ ...STARTER, installed: 9795, bare: false })).toBe(false);
   });
 
   it('stops once more than the starter set is in', () => {
