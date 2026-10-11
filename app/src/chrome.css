@@ -36,6 +36,6 @@
    bar, and on the home's header row and sidebar band) only takes a press on the
    element itself, so the spacer and the wordmark let presses through to it;
    buttons, the view switch and inputs keep theirs. */
-:root[data-chrome='overlay'] :is(.vf-header, .ob-head) >:is(.vf-fill, .vf-mark) {
+:root[data-chrome='overlay'] :is(.vf-header, .ob-head) > :is(.vf-fill, .vf-mark) {
   pointer-events: none;
 }
