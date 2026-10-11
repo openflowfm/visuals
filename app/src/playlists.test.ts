@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS, freshName, nextSays, upNext, type Deck, type Lists, type Playlist } from './playlists.ts';
+import { DEFAULT_SETTINGS, freshName, movingOn, nextSays, timingChangedLive, upNext, type Deck, type Lists, type Playlist } from './playlists.ts';
 
 const item = (name: string, missing = false) => ({ path: `g/${name}.milk`, name, group: 'g', missing, hash: null });
 const list = (id: string, names: string[]): Playlist => ({ id, name: id, items: names.map((n) => item(n)), kind: 'manual', query: null, settings: DEFAULT_SETTINGS });
@@ -104,8 +104,8 @@ describe('nextSays', () => {
     expect(says.kind === 'item' && says.item.name).toBe('y');
   });
 
-  it('names nothing while held, even with a playlist playing', () => {
-    expect(nextSays(playing, true)).toEqual({ kind: 'held' });
+  it('says held while held, and still names what → opens (manual steps work under Hold)', () => {
+    expect(nextSays(playing, true)).toMatchObject({ kind: 'held', then: { kind: 'item', item: { name: 'y' } } });
   });
 
   it('names no file when stepping through the library', () => {
@@ -126,19 +126,39 @@ describe('nextSays', () => {
     expect(says).toMatchObject({ kind: 'filter', item: { name: 'calm' }, query });
   });
 
-  it('names nothing while held, even playing a filter', () => {
-    expect(nextSays(lists([], { next: '/p/Dancer/calm.milk' }), true)).toEqual({ kind: 'held' });
+  it('says held while held, playing a filter too, with what → still opens', () => {
+    expect(nextSays(lists([], { next: '/p/Dancer/calm.milk' }), true)).toMatchObject({ kind: 'held', then: { kind: 'filter', item: { name: 'calm' } } });
   });
 });
 
 describe('freshName', () => {
-  it('numbers from the count', () => {
+  it('numbers from 1, whatever else there is', () => {
     expect(freshName([])).toBe('playlist 1');
-    expect(freshName([list('a', [])])).toBe('playlist 2');
+    // Four smart and starter playlists don't make the first one "playlist 5".
+    expect(freshName([smart('Chill'), smart('Calm'), smart('Recent'), list('Warm', [])])).toBe('playlist 1');
   });
 
-  it('skips a name already taken', () => {
-    const taken = [{ ...list('a', []), name: 'playlist 2' }];
-    expect(freshName(taken)).toBe('playlist 3');
+  it('takes the first not taken', () => {
+    const named = (...ns: number[]) => ns.map((n) => ({ ...list(`l${n}`, []), name: `playlist ${n}` }));
+    expect(freshName(named(1, 2, 3))).toBe('playlist 4');
+    expect(freshName(named(1, 3))).toBe('playlist 2');
+  });
+});
+
+describe('movingOn', () => {
+  it('says the timing in effect', () => {
+    expect(movingOn(deck({ bars: 1, every: { every: 1, unit: 'bars' } }))).toBe('moves on every bar');
+    expect(movingOn(deck({ every: { every: 2, unit: 'beats' } }))).toBe('moves on every 2 beats');
+    expect(movingOn(deck({ bars: 8 }))).toBe('moves on every 8 bars');
+    expect(movingOn(deck({ auto: true, seconds: 30 }))).toBe('moves on every 30 s');
+    expect(movingOn(deck())).toBe('stays on each preset');
+  });
+});
+
+describe('timingChangedLive', () => {
+  it('is only the playing playlist whose change timing differs', () => {
+    expect(timingChangedLive(deck({ playlist: 'a', differs: ['change'] }), 'a')).toBe(true);
+    expect(timingChangedLive(deck({ playlist: 'a', differs: ['speed'] }), 'a')).toBe(false);
+    expect(timingChangedLive(deck({ playlist: 'b', differs: ['change'] }), 'a')).toBe(false);
   });
 });

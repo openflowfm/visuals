@@ -3,7 +3,7 @@ import { NumberField } from '@openflow/widgets/controls/NumberField.tsx';
 import { Segmented } from '@openflow/widgets/controls/Segmented.tsx';
 import type { Param } from '@openflow/widgets/param/param.ts';
 import { plural } from './controls.ts';
-import { changeUnit, NameEdit, playsLike, saveFile, withSetting, type StripTile } from './home.ts';
+import { changeUnit, movesOn, NameEdit, playsLike, saveFile, withSetting, type StripTile } from './home.ts';
 import { offersQuickAdd } from './layout/home-model.ts';
 import { queryName } from './librarySearch.ts';
 import * as pl from './playlists.ts';
@@ -67,10 +67,15 @@ export function PlaylistHead({ list, lists, tiles, total, onLists, onDeleted, on
   const stop = () => run(pl.act({ kind: 'unload' }), 'stop the playlist');
   const exportIt = () => pl.exportList(list.id).then((f) => saveFile(f.file_name, f.text), onError(`save ${list.name} to a file`));
   const shuffled = list.settings.order === 'shuffle';
+  // Its timing changed live (the Link panel's, say): the summary says what is in effect, and Put back undoes it.
+  const changedLive = pl.timingChangedLive(deck, list.id);
+  const own = movesOn(list.settings.change);
+  const putBack = () => run(pl.act({ kind: 'put_back' }), `put back ${list.name}’s timing`);
 
+  const plays = playsLike(list, total);
   const summary =
     (manual ? '' : `fills itself with ${list.query ? queryName(list.query) : 'nothing'} · `) +
-    playsLike(list, total) +
+    (changedLive ? plays.replace(own, `${pl.movingOn(deck)} (changed live)`) : plays) +
     (active && deck.index !== null ? ` · playing ${deck.index + 1} of ${manual ? list.items.length : deck.count}` : '');
   const cover = [0, 1, 2, 3].map((i) => tiles[i]?.thumbnail ?? null);
 
@@ -129,6 +134,11 @@ export function PlaylistHead({ list, lists, tiles, total, onLists, onDeleted, on
               title="Play this playlist shuffled (it keeps this)"
             >
               Shuffle
+            </button>
+          )}
+          {changedLive && (
+            <button type="button" className="pl-btn" onClick={putBack} title={`Back to ${list.name}’s own timing: it ${own}`}>
+              Put back
             </button>
           )}
           {onQuickAdd && offersQuickAdd(list) && (

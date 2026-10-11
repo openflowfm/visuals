@@ -10,8 +10,19 @@
 //! A playlist's settings ([`Settings`]: change timing, order, transition, speed,
 //! trails, hue) are taken by the deck when it loads. A live tweak of any of them
 //! lasts until the next playlist loads, and the deck reports which differ
-//! ([`DeckView::differs`]). A smart playlist (or an unsaved filter,
-//! [`Action::Query`]) is worked out when it loads and plays as it was then.
+//! ([`DeckView::differs`]), whoever made it (the Link panel's "change preset"
+//! too); [`Action::PutBack`] undoes a tweak of the change timing. A smart
+//! playlist (or an unsaved filter, [`Action::Query`]) is worked out when it
+//! loads and plays as it was then.
+//!
+//! Outside playlists (the library, a filter, a preset picked on its own) the deck
+//! moves on by its own timing ([`Live::outside`], kept in `timing.json`): what was
+//! last set while no playlist played, the welcome's "keep in time" included. It
+//! comes back whenever the deck leaves a playlist. Picking a preset the playing
+//! playlist doesn't have leaves the playlist ([`Live::opened`]).
+//!
+//! HOLD only stops the deck moving on by itself (auto-advance, Link's changes,
+//! stepping past a panic): next, previous, random, go, loading and picking still work.
 
 use crate::fx::{Fx, FxAction};
 use crate::link::{Every, Unit};
@@ -64,11 +75,15 @@ pub enum Action {
     Seconds {
         seconds: f64,
     },
-    /// Lock the current preset, or let it go (`null` toggles): while held, stepping,
-    /// loading a playlist and auto-advance change nothing.
+    /// Lock the current preset, or let it go (`null` toggles): while held nothing
+    /// moves it on by itself (auto-advance, Link's changes, a panic's skip); next,
+    /// previous, random, go, loading a playlist and picking still do.
     Hold {
         on: Option<bool>,
     },
+    /// The loaded playlist's own change timing again, undoing a live change of it
+    /// (the Link panel's "change preset", say). Nothing when no playlist is loaded.
+    PutBack,
     /// Change preset every this many bars on Link's bar lines, counted from the one
     /// (`crate::link`); 0 stops, more than 64 is 64. Turns the timed auto-advance off.
     Bars {
@@ -107,7 +122,38 @@ pub struct Live {
     /// schedule; this is what the page shows); 0 when off or when the schedule is
     /// in beats. Set only by [`Live::schedule`].
     pub bars: u32,
+    /// Link's schedule, which `Deck::settle` gives Link.
+    pub every: Every,
+    /// How the deck moves on outside playlists: what was last set while no
+    /// playlist played, taken again whenever it leaves one.
+    pub outside: Timing,
 }
+
+/// How the deck moves on by itself: auto-advance every `seconds` when `auto`,
+/// and Link's schedule `every`.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
+pub struct Timing {
+    pub auto: bool,
+    pub seconds: f64,
+    pub every: Every,
+}
+
+impl Default for Timing {
+    fn default() -> Self {
+        Timing { auto: false, seconds: 30.0, every: Every::OFF }
+    }
+}
+
+impl Timing {
+    /// Within its limits, as a hand edit of `timing.json` may not be.
+    pub fn checked(self) -> Timing {
+        let seconds = if self.seconds.is_finite() { self.seconds.clamp(1.0, 3600.0) } else { 30.0 };
+        Timing { seconds, every: self.every.clamped(), ..self }
+    }
+}
+
+/// Where the timing outside playlists is kept, in `crate::settings::dir`.
+const TIMING_FILE: &str = "timing.json";
 
 impl Default for Live {
     fn default() -> Self {
@@ -125,6 +171,8 @@ impl Default for Live {
             since: Instant::now(),
             hold: false,
             bars: 0,
+            every: Every::OFF,
+            outside: Timing::default(),
         }
     }
 }
@@ -156,6 +204,8 @@ pub struct DeckView {
     pub current: Option<String>,
     pub hold: bool,
     pub bars: u32,
+    /// Link's schedule in effect (bars or beats; off is 0).
+    pub every: Every,
     pub order: Order,
     /// The loaded playlist's settings.
     pub settings: Option<Settings>,
@@ -223,11 +273,45 @@ impl Live {
     /// preset. Returns the schedule Link is to keep.
     pub fn schedule(&mut self, every: Every) -> Every {
         let every = every.clamped();
-        self.bars = if every.unit == Unit::Bars { every.every } else { 0 };
+        self.set_every(every);
         if every.every > 0 {
             self.auto = false;
         }
+        self.keep_outside();
         every
+    }
+
+    fn set_every(&mut self, every: Every) {
+        self.every = every;
+        self.bars = if every.unit == Unit::Bars { every.every } else { 0 };
+    }
+
+    /// How the deck moves on by itself now.
+    pub fn timing(&self) -> Timing {
+        Timing { auto: self.auto, seconds: self.seconds, every: self.every }
+    }
+
+    /// A deck that starts with `outside` as its timing outside playlists.
+    pub fn with_outside(outside: Timing) -> Live {
+        let mut live = Live { outside: outside.checked(), ..Live::default() };
+        live.take_outside();
+        live
+    }
+
+    /// The timing just changed: with no playlist loaded, it is the timing outside playlists from now on.
+    fn keep_outside(&mut self) {
+        if self.playlist.is_none() {
+            self.outside = self.timing();
+        }
+    }
+
+    /// Move on by the timing outside playlists again, with a whole period from now.
+    fn take_outside(&mut self) {
+        let t = self.outside;
+        self.set_every(t.every.clamped());
+        self.auto = t.auto;
+        self.seconds = t.seconds;
+        self.since = Instant::now();
     }
 
     /// A playlist or filter is playing (not the library as a whole).
@@ -344,6 +428,7 @@ impl Live {
             current: self.current.as_ref().map(|p| p.to_string_lossy().into_owned()),
             hold: self.hold,
             bars: self.bars,
+            every: self.every,
             order: self.order,
             settings: self.settings,
             differs: self.differs(fx),
@@ -377,11 +462,14 @@ impl Live {
     }
 
     /// The page opened `path` itself (the grid, the start preset, a drop, the lab):
-    /// it plays now. Following the grid, the deck steps on from it when the grid
-    /// has it, and stops following otherwise, so it never steps from a stale place.
-    fn opened(&mut self, path: PathBuf) {
-        if self.playlist.is_none() && self.query.is_some() {
-            match self.items.iter().position(|p| *p == path) {
+    /// it plays now. When the playlist or filter playing has it, the deck is there
+    /// and steps on from it; otherwise the deck leaves the playlist or filter, so
+    /// the picked preset isn't moved on by the playlist's timing and the deck never
+    /// steps from a stale place. Outside playlists, their own timing applies.
+    pub(crate) fn opened(&mut self, path: PathBuf) {
+        if self.active() {
+            let here = self.index.filter(|&i| self.items.get(i) == Some(&path));
+            match here.or_else(|| self.items.iter().position(|p| *p == path)) {
                 Some(at) => self.index = Some(at),
                 None => self.unload(),
             }
@@ -389,14 +477,18 @@ impl Live {
         self.play(path);
     }
 
-    /// No playlist or filter: the library steps as a whole.
+    /// No playlist or filter: the library steps as a whole. Leaving a playlist,
+    /// the timing outside playlists comes back.
     fn unload(&mut self) {
-        self.playlist = None;
+        let left = self.playlist.take().is_some();
         self.query = None;
         self.items.clear();
         self.sequence.clear();
         self.settings = None;
         self.index = None;
+        if left {
+            self.take_outside();
+        }
     }
 
     /// Keep pointing at the same thing after the playlists were edited: a deleted
@@ -451,11 +543,8 @@ fn other(len: usize, at: Option<usize>, roll: u64) -> usize {
 /// `resolve` works out a smart playlist's or filter's presets (never hidden ones),
 /// asked for only when one loads.
 pub fn decide(live: &mut Live, action: &Action, store: &Store, library: &dyn Fn() -> Vec<PathBuf>, resolve: &dyn Fn(&LibraryQuery) -> Vec<PathBuf>, roll: u64) -> Result<Option<PathBuf>, String> {
-    // Following the grid opens nothing, so hold doesn't refuse it.
-    let steps = matches!(action, Action::Next | Action::Previous | Action::Random | Action::Go { .. } | Action::Load { .. } | Action::Query { at: None, .. });
-    if live.hold && steps {
-        return Err("held: let go of HOLD to change the preset".into());
-    }
+    // Hold refuses nothing here: it only stops the deck moving on by itself
+    // (`start_auto`, `advance`, `step_past`), and every action here is asked for.
     match action {
         Action::Next | Action::Previous | Action::Random => {
             let by = if *action == Action::Previous { -1 } else { 1 };
@@ -527,10 +616,18 @@ pub fn decide(live: &mut Live, action: &Action, store: &Store, library: &dyn Fn(
         Action::Auto { on } => {
             live.auto = on.unwrap_or(!live.auto);
             live.since = Instant::now();
+            live.keep_outside();
             Ok(None)
         }
         Action::Seconds { seconds } => {
             live.seconds = crate::fx::clamped(*seconds, 1.0, 3600.0, "seconds")?;
+            live.keep_outside();
+            Ok(None)
+        }
+        Action::PutBack => {
+            if let (Some(_), Some(s)) = (&live.playlist, live.settings) {
+                live.take_change(s.change);
+            }
             Ok(None)
         }
         Action::Hold { on } => {
@@ -572,12 +669,40 @@ pub struct Deck {
     pub fx: Arc<Mutex<Fx>>,
     /// The presets played, newest first, at most [`PLAYED`]; kept across launches.
     pub played: Mutex<Vec<String>>,
+    /// The timing outside playlists as `timing.json` has it, so it is written only when it changes.
+    kept_outside: Mutex<Timing>,
+    /// The app, once set up ([`start_auto`]): a pick from the page ([`Deck::opened`]) tells the page and Link from here.
+    handle: std::sync::OnceLock<AppHandle>,
 }
 
 impl Deck {
     pub fn new(store: Store) -> Deck {
         let played = crate::settings::load::<Vec<String>>(PLAYED_FILE).unwrap_or_default();
-        Deck { store: Mutex::new(store), live: Mutex::new(Live::default()), fx: Arc::new(Mutex::new(Fx::restored())), played: Mutex::new(played) }
+        let outside = crate::settings::load::<Timing>(TIMING_FILE).unwrap_or_default().checked();
+        Deck {
+            store: Mutex::new(store),
+            live: Mutex::new(Live::with_outside(outside)),
+            fx: Arc::new(Mutex::new(Fx::restored())),
+            played: Mutex::new(played),
+            kept_outside: Mutex::new(outside),
+            handle: std::sync::OnceLock::new(),
+        }
+    }
+
+    /// After any change to the deck: give Link the deck's schedule (Link ignores
+    /// one it has already) and keep the timing outside playlists when it changed.
+    pub fn settle(&self, handle: &AppHandle) {
+        let (every, outside) = {
+            let live = self.live.lock().unwrap();
+            (live.every, live.outside)
+        };
+        if let Some(link) = handle.try_state::<crate::link::Link>() {
+            link.set_every(every);
+        }
+        let mut kept = self.kept_outside.lock().unwrap();
+        if *kept != outside && crate::settings::save_json(TIMING_FILE, &outside) {
+            *kept = outside;
+        }
     }
 
     /// The deck as the page sees it. The effects are read first and let go, so
@@ -606,10 +731,17 @@ impl Deck {
         crate::settings::save_json(PLAYED_FILE, &*played);
     }
 
-    /// The page opened `path` itself (a library click): it is what plays now.
+    /// The page opened `path` itself (a library click): it is what plays now
+    /// ([`Live::opened`]: a preset the playlist playing doesn't have leaves it). The
+    /// page, Link and `crate::resume` hear where the deck is now.
     pub fn opened(&self, path: &Path) {
         self.live.lock().unwrap().opened(path.to_path_buf());
         self.record(path);
+        if let Some(handle) = self.handle.get() {
+            if let Err(e) = emit_deck(handle, self) {
+                eprintln!("deck: telling the page of a preset opened: {e}");
+            }
+        }
     }
 
     /// Tell the page the effects panel moved.
@@ -684,8 +816,10 @@ fn emit_deck(handle: &AppHandle, deck: &Deck) -> Result<(), String> {
     emit_now(handle, Now { deck: deck.view(), opened: None, path: None, error: None })
 }
 
-/// Send `now` as the `live` event, and let `crate::resume` keep where the deck is.
+/// Send `now` as the `live` event, let `crate::resume` keep where the deck is,
+/// and settle Link's schedule and the timing outside playlists ([`Deck::settle`]).
 fn emit_now(handle: &AppHandle, now: Now) -> Result<(), String> {
+    handle.state::<Deck>().settle(handle);
     crate::resume::note(handle, &now.deck);
     handle.emit("live", now).map_err(|e| e.to_string())
 }
@@ -722,8 +856,20 @@ pub fn dispatch(handle: &AppHandle, action: Action) -> Result<(), String> {
 /// Step on (next) from `failed`, which the bench stopped drawing because it
 /// panicked (`crate::resume`): it is passed over as one that failed to open,
 /// without opening it again or saying so again.
+/// Held, it stays: that is the deck moving on by itself.
 pub fn step_past(handle: &AppHandle, failed: &Path, why: &str) -> Result<(), String> {
+    if handle.state::<Deck>().live.lock().unwrap().hold {
+        return Err("held: not moving on by itself".into());
+    }
     dispatch_past(handle, Action::Next, vec![(failed.to_path_buf(), why.to_string())])
+}
+
+/// Move on by itself (Link's change on the beat): nothing while held.
+pub fn advance(handle: &AppHandle) -> Result<(), String> {
+    if handle.state::<Deck>().live.lock().unwrap().hold {
+        return Ok(());
+    }
+    dispatch(handle, Action::Next)
 }
 
 /// [`dispatch`], with `failed` already known to fail, and why.
@@ -743,7 +889,7 @@ fn dispatch_past(handle: &AppHandle, action: Action, failed: Vec<(PathBuf, Strin
     if let Action::Bars { bars } = action {
         return deck.set_schedule(handle, Every { every: bars, unit: Unit::Bars });
     }
-    if let Action::Hold { .. } = action {
+    if let Action::Hold { .. } | Action::PutBack = action {
         {
             let store = deck.store.lock().unwrap();
             let mut live = deck.live.lock().unwrap();
@@ -877,9 +1023,7 @@ fn step(
         Action::Query { query, .. } => Some(query.clone()),
         _ => None,
     };
-    // Held, the load is refused anyway: no need to work anything out (following the grid isn't refused).
-    let held = live.lock().unwrap().hold && !matches!(action, Action::Query { at: Some(_), .. });
-    let resolved = query.filter(|_| !held).map(|q| {
+    let resolved = query.map(|q| {
         let items = resolve(&q);
         (q, items)
     });
@@ -895,7 +1039,9 @@ fn step(
 }
 
 /// Advance on the active playlist (or the library) every `seconds` while auto is on.
+/// The deck keeps `handle` from here on, for picks from the page ([`Deck::opened`]).
 pub fn start_auto(handle: AppHandle) {
+    let _ = handle.state::<Deck>().handle.set(handle.clone());
     std::thread::spawn(move || {
         loop {
             std::thread::sleep(Duration::from_millis(100));
@@ -975,9 +1121,12 @@ pub fn playlist_rename(id: String, name: String, deck: State<Deck>) -> Result<Li
     edited(&deck, |s| s.rename(&id, &name))
 }
 
+/// Deleting the playlist playing leaves it: the timing outside playlists comes back, Link's too.
 #[tauri::command]
-pub fn playlist_delete(id: String, deck: State<Deck>) -> Result<Lists, String> {
-    edited(&deck, |s| s.delete(&id))
+pub fn playlist_delete(id: String, deck: State<Deck>, handle: AppHandle) -> Result<Lists, String> {
+    let lists = edited(&deck, |s| s.delete(&id))?;
+    deck.settle(&handle);
+    Ok(lists)
 }
 
 #[tauri::command]
@@ -1376,18 +1525,23 @@ mod tests {
     }
 
     #[test]
-    fn hold_ignores_steps_and_bars_leave_the_seconds() {
+    fn hold_lets_asked_for_steps_through_and_stays_on_and_bars_leave_the_seconds() {
         let (s, lib) = store();
+        let p = |n: &str| Some(lib.join(format!("{n}.milk")));
         let mut live = Live::default();
         d(&mut live, &Action::Load { playlist: 0, index: None }, &s).unwrap();
         d(&mut live, &Action::Hold { on: None }, &s).unwrap();
         assert!(live.hold);
-        for action in
-            [Action::Next, Action::Previous, Action::Random, Action::Go { index: 2 }, Action::Load { playlist: 0, index: Some(1) }, Action::Query { query: LibraryQuery::default(), at: None }]
-        {
-            assert!(d(&mut live, &action, &s).is_err(), "{action:?} while held");
-        }
-        assert_eq!(live.current, Some(lib.join("x.milk")));
+        // Hold only stops moving on by itself: next, previous, random, go and loading still work.
+        assert_eq!(d(&mut live, &Action::Next, &s).unwrap(), p("y"));
+        assert_eq!(d(&mut live, &Action::Previous, &s).unwrap(), p("x"));
+        assert_ne!(rolled(&mut live, &Action::Random, &s, 3).unwrap(), p("x"));
+        assert_eq!(d(&mut live, &Action::Go { index: 2 }, &s).unwrap(), p("z"));
+        assert_eq!(d(&mut live, &Action::Load { playlist: 0, index: Some(1) }, &s).unwrap(), p("y"));
+        // Picking from the library too.
+        live.opened(lib.join("x.milk"));
+        assert_eq!((live.current.clone(), live.index), (p("x"), Some(0)));
+        assert!(live.hold, "hold stays on");
         // Settings still change while held.
         d(&mut live, &Action::Seconds { seconds: 10.0 }, &s).unwrap();
         d(&mut live, &Action::Hold { on: Some(false) }, &s).unwrap();
@@ -1595,11 +1749,11 @@ mod tests {
         go(&mut live, follow("hidden"));
         assert_eq!(live.index, None);
         assert_eq!(go(&mut live, Action::Next), p("calm/1"));
-        // Held, the grid is still followed (it opens nothing), but steps are refused.
+        // Held, the grid is still followed and stepped through.
         live.hold = true;
         go(&mut live, follow("loud/2"));
         assert_eq!(live.index, Some(3));
-        assert!(decide(&mut live, &Action::Next, &s, &none, &resolve, 0).is_err());
+        assert_eq!(go(&mut live, Action::Next), p("calm/1"));
         live.hold = false;
         // With a playlist loaded, nothing changes.
         assert_eq!(go(&mut live, Action::Load { playlist: 0, index: None }), p("x"));
@@ -1708,6 +1862,79 @@ mod tests {
         let new2 = Settings { order: Order::InOrder, ..new };
         live.retake(&new, &new2, roll());
         assert_eq!(live.sequence, [0, 1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn a_preset_picked_outside_the_playing_playlist_leaves_it_and_one_in_it_moves_there() {
+        let (mut s, lib) = store();
+        let a = s.lists[0].id.clone();
+        s.set_settings(&a, Settings { change: Change::Seconds { every: 30.0 }, ..Settings::default() }).unwrap();
+        let p = |n: &str| lib.join(format!("{n}.milk"));
+        let mut live = Live::default();
+        d(&mut live, &Action::Load { playlist: 0, index: None }, &s).unwrap();
+        assert!(live.auto, "the playlist moves on every 30 s");
+        // One the playlist has: the deck is there, and steps on from it.
+        live.opened(p("z"));
+        assert_eq!((live.playlist.as_deref(), live.index), (Some(a.as_str()), Some(2)));
+        assert_eq!(live.next_path(), Some(&p("x")));
+        // One it doesn't have: out of the playlist, so its 30 s timer doesn't replace it.
+        live.opened(p("elsewhere"));
+        let view = live.view(&crate::fx::Settings::default());
+        assert_eq!((view.playlist, view.index, view.count, view.next, view.settings), (None, None, 0, None, None));
+        assert_eq!(view.current, Some(p("elsewhere").to_string_lossy().into_owned()));
+        assert!(!live.auto, "outside playlists, their own timing: off unless set");
+        // Next steps through the library from it.
+        let library = || vec![p("elsewhere"), p("other")];
+        assert_eq!(decide(&mut live, &Action::Next, &s, &library, &nothing, 0).unwrap(), Some(p("other")));
+    }
+
+    #[test]
+    fn link_s_change_is_a_live_tweak_of_the_playlist_and_the_timing_outside_playlists_comes_back() {
+        let (mut s, _) = store();
+        let a = s.lists[0].id.clone();
+        s.set_settings(&a, Settings { change: Change::Seconds { every: 30.0 }, ..Settings::default() }).unwrap();
+        let bars = |every| Every { every, unit: Unit::Bars };
+        let fx = crate::fx::Settings::default();
+        // The welcome's "keep in time, every 4 bars", with no playlist: the timing outside playlists.
+        let mut live = Live::default();
+        live.schedule(bars(4));
+        assert_eq!(live.outside, Timing { auto: false, seconds: 30.0, every: bars(4) });
+        // A playlist plays: its own timing, whatever the welcome said.
+        d(&mut live, &Action::Load { playlist: 0, index: None }, &s).unwrap();
+        assert_eq!((live.auto, live.every), (true, Every::OFF));
+        assert!(live.view(&fx).differs.is_empty());
+        // The Link panel's "every bar": a live change of the playlist, said so, the welcome's kept.
+        live.schedule(bars(1));
+        let view = live.view(&fx);
+        assert_eq!((view.every, view.bars, view.auto, view.differs), (bars(1), 1, false, vec!["change"]));
+        assert_eq!(live.outside.every, bars(4));
+        // Put back: the playlist's own timing again.
+        d(&mut live, &Action::PutBack, &s).unwrap();
+        assert_eq!((live.auto, live.seconds, live.every), (true, 30.0, Every::OFF));
+        assert!(live.view(&fx).differs.is_empty());
+        // Changed live again, then the playlist is left: the welcome's every 4 bars comes back.
+        live.schedule(bars(1));
+        d(&mut live, &Action::Unload, &s).unwrap();
+        assert_eq!(live.timing(), Timing { auto: false, seconds: 30.0, every: bars(4) });
+        // Changed with no playlist: that is the timing outside playlists from now on.
+        d(&mut live, &Action::Bars { bars: 8 }, &s).unwrap();
+        d(&mut live, &Action::Auto { on: Some(true) }, &s).unwrap();
+        assert_eq!(live.outside, Timing { auto: true, seconds: 30.0, every: bars(8) });
+        // Put back with no playlist changes nothing.
+        d(&mut live, &Action::PutBack, &s).unwrap();
+        assert_eq!(live.timing(), live.outside);
+        // Another playlist loaded over one tweaked: its own timing, not the tweak.
+        d(&mut live, &Action::Load { playlist: 0, index: None }, &s).unwrap();
+        live.schedule(bars(2));
+        d(&mut live, &Action::Load { playlist: 0, index: None }, &s).unwrap();
+        assert_eq!((live.auto, live.every), (true, Every::OFF));
+        // A deck starts with the timing kept, within its limits.
+        let kept = Live::with_outside(Timing { auto: false, seconds: f64::NAN, every: bars(1000) });
+        assert_eq!(kept.timing(), Timing { auto: false, seconds: 30.0, every: bars(64) });
+        assert_eq!(kept.bars, 64);
+        let back: Timing = serde_json::from_str(&serde_json::to_string(&kept.outside).unwrap()).unwrap();
+        assert_eq!(back, kept.outside);
+        assert_eq!(serde_json::from_str::<Action>(r#"{"kind":"put_back"}"#).unwrap(), Action::PutBack);
     }
 
     #[test]

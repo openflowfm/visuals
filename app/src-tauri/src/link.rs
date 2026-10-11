@@ -238,10 +238,16 @@ impl Link {
         }
     }
 
-    /// Change preset on this schedule, counted from the one. Only
-    /// `actions::Deck::set_schedule` calls it, so the live panel shows the same.
+    /// Change preset on this schedule, counted from the one. Only the deck
+    /// (`actions::Deck`) calls it, so the live panel shows the same. The schedule
+    /// Link has already changes nothing, so a change being slept toward stays.
     pub fn set_every(&self, every: Every) {
-        self.change(|h| h.every = every);
+        let mut held = self.held.lock().unwrap();
+        if held.every != every {
+            held.every = every;
+            held.generation += 1;
+            self.wake.notify_all();
+        }
     }
 
     /// Change what the app holds and wake the scheduler to it.
@@ -296,7 +302,8 @@ impl Link {
                     if std::env::var_os("VISUALS_LINK_LOG").is_some() {
                         eprintln!("link: change at beat {beat}");
                     }
-                    if let Err(e) = crate::actions::dispatch(handle, crate::actions::Action::Next) {
+                    // Held, nothing moves on by itself (`actions::advance`).
+                    if let Err(e) = crate::actions::advance(handle) {
                         eprintln!("link: change on the beat: {e}");
                     }
                 }
@@ -312,11 +319,16 @@ pub fn start(handle: AppHandle) {
     handle.manage(Link::new(enabled));
     // `VISUALS_LINK_EVERY=<bars>` starts with changes on, like the panel's "every N
     // bars" — so only once Link is managed, which the deck's schedule reaches.
-    if let Some(bars) = std::env::var("VISUALS_LINK_EVERY").ok().and_then(|s| s.parse().ok()) {
-        let deck = handle.state::<crate::actions::Deck>();
-        if let Err(e) = deck.set_schedule(&handle, Every { every: bars, unit: Unit::Bars }) {
-            eprintln!("VISUALS_LINK_EVERY: {e}");
+    // Otherwise Link starts on the deck's own schedule: the timing outside
+    // playlists kept from last time (`actions::Live::outside`).
+    let deck = handle.state::<crate::actions::Deck>();
+    match std::env::var("VISUALS_LINK_EVERY").ok().and_then(|s| s.parse().ok()) {
+        Some(bars) => {
+            if let Err(e) = deck.set_schedule(&handle, Every { every: bars, unit: Unit::Bars }) {
+                eprintln!("VISUALS_LINK_EVERY: {e}");
+            }
         }
+        None => deck.settle(&handle),
     }
     // Development: `VISUALS_LINK_LOG=1` prints the frame once a second.
     let log = std::env::var_os("VISUALS_LINK_LOG").is_some();
@@ -380,9 +392,11 @@ pub fn link_reset_one(link: State<Link>) -> Frame {
 }
 
 /// Change the preset every `every` bars or beats (0: off; at most 64 bars or 256 beats,
-/// more is clamped), through `actions::dispatch`'s Next — the playing playlist's next,
+/// more is clamped), through `actions::advance`'s Next — the playing playlist's next,
 /// or the library's. The deck's schedule ([`crate::actions::Deck::set_schedule`]) turns
-/// time-based auto-advance off, so the two never both change the preset.
+/// time-based auto-advance off, so the two never both change the preset. With a
+/// playlist playing it is a live change of that playlist's timing, until another
+/// loads (or it is put back); with none, it is the timing outside playlists, kept.
 #[tauri::command]
 pub fn link_sync(every: u32, unit: Unit, link: State<Link>, handle: AppHandle) -> Result<Frame, String> {
     handle.state::<crate::actions::Deck>().set_schedule(&handle, Every { every, unit })?;
