@@ -21,18 +21,34 @@ export const REDUCE_WHAT = 'Calms the app’s strobe, flashes and blackout. Pres
 /** The media query WebKit answers from macOS's Reduce motion. */
 export const SYSTEM_QUERY = '(prefers-reduced-motion: reduce)';
 
+/**
+ * What `reduced_motion` answers (`access::Access`): the motion, and macOS's
+ * Reduce transparency beside it. `reduced_motion_set` answers the motion alone,
+ * so `transparency` may be missing: the mark it last set then stays.
+ */
+export type Access = api.Motion & { transparency?: boolean };
+
+/** The media query for less transparency; WKWebView doesn't answer it, so the app's word (`transparency`) is what counts, but a WebKit that does is listened to as well. */
+export const TRANSPARENCY_QUERY = '(prefers-reduced-transparency: reduce)';
+
 let motion: api.Motion | null = null;
 const listeners = new Set<(m: api.Motion) => void>();
 
-/** Mark the document (or `root`) for `m`: `data-reduced-motion` while motion is reduced. */
-export function mark(m: api.Motion, root: { dataset: DOMStringMap } | undefined = typeof document === 'undefined' ? undefined : document.documentElement) {
+/**
+ * Mark the document (or `root`) for `m`: `data-reduced-motion` while motion is
+ * reduced, and `data-transparency="reduced"` while macOS's Reduce transparency
+ * is on (Home's inspector goes opaque, `layout/inspector.css`).
+ */
+export function mark(m: Access, root: { dataset: DOMStringMap } | undefined = typeof document === 'undefined' ? undefined : document.documentElement) {
   if (!root) return;
   if (m.reduced) root.dataset.reducedMotion = '';
   else delete root.dataset.reducedMotion;
+  if (m.transparency === true) root.dataset.transparency = 'reduced';
+  else if (m.transparency === false) delete root.dataset.transparency;
 }
 
 /** Take `m` as the setting now: mark the document and tell every `useMotion`. */
-export function publish(m: api.Motion) {
+export function publish(m: Access) {
   motion = m;
   mark(m);
   for (const l of listeners) l(m);
@@ -80,11 +96,12 @@ export function useAccessibility(): void {
       refresh().catch(() => {});
     };
     again();
-    const query = typeof window.matchMedia === 'function' ? window.matchMedia(SYSTEM_QUERY) : null;
-    query?.addEventListener('change', again);
+    // Reduce transparency changed in System Settings: the window comes back to the front after, and is read again then.
+    const queries = typeof window.matchMedia === 'function' ? [window.matchMedia(SYSTEM_QUERY), window.matchMedia(TRANSPARENCY_QUERY)] : [];
+    for (const q of queries) q.addEventListener('change', again);
     window.addEventListener('focus', again);
     return () => {
-      query?.removeEventListener('change', again);
+      for (const q of queries) q.removeEventListener('change', again);
       window.removeEventListener('focus', again);
     };
   }, []);

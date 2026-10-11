@@ -724,7 +724,6 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
               // The preset picked, else the one playing; the source's card for "Show info", or while nothing plays.
               subject={onSource ? null : (picked[0] ?? playingShown)}
               playing={playingShown?.row.key ?? null}
-              from={playsFrom(deck, playlists, false, current?.path ?? null)}
               playlists={lists?.playlists ?? null}
               library={libraryRows}
               mine={data?.presets}

@@ -1,7 +1,7 @@
 import { useId, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import type { LibraryRow, Mine } from '../../api.ts';
 import { tileBy, tileName } from '../../PresetTile.tsx';
-import { bandColour, bandPaths, dotOf, dotsOf, H, M, nearest, step, timesOf, tunedPath, tunedSays, W, xOf, yOf, type Direction, type Dot } from './field.ts';
+import { bandColour, bandPaths, dotOf, dotsOf, H, M, marksPath, nearest, step, timesOf, tunedPath, tunedSays, W, xOf, yOf, type Direction, type Dot } from './field.ts';
 import './field.css';
 
 export interface FieldProps {
@@ -19,6 +19,8 @@ export interface FieldProps {
   hue: string;
   /** What the field says about the subject ("Slow and dark, among 250 presets"). */
   description: string;
+  /** Several presets picked together, by key: each gets a small ring in the accent (no lit cursor: pass `subject` null with them). */
+  marked?: readonly string[];
   /** A dot picked, by click or Enter. */
   onPick(row: LibraryRow): void;
 }
@@ -36,8 +38,10 @@ const nameOf = (row: LibraryRow) => tileName(row.title, row.path);
  * The field: every preset in the library a faint dot by speed (slow to fast,
  * across) and brightness (dark to bright, up), the subject lit with a fine
  * cursor through it and a ring as wide as it is intense, the preset playing
- * marked with a ring of its own while another is shown. Markings at the edges,
- * no grid or frame.
+ * marked with a ring of its own while another is shown. With several picked
+ * (`marked`) there is no lit subject: each pick gets a small ring in the
+ * accent, all drawn as one path. Markings at the edges, no grid or frame; the
+ * edges' words are the inspector's character words (slow, fast; dark, bright).
  *
  * The dots are one SVG path per hue band, so the full pack's ~9,800 draw as a
  * dozen nodes. The pointer finds the dot nearest it: hover names it, a click
@@ -46,10 +50,16 @@ const nameOf = (row: LibraryRow) => tileName(row.title, row.path);
  * the nearest dot that way, Enter (or Space) picks it, and the cursor starts
  * on the subject. Its name shows in the same tip as hover's.
  */
-export function Field({ library, mine, subject, playing, intensity, hue, description, onPick }: FieldProps) {
+export function Field({ library, mine, subject, playing, intensity, hue, description, marked, onPick }: FieldProps) {
   const dots = useMemo(() => dotsOf(library, mine), [library, mine]);
   const paths = useMemo(() => bandPaths(dots), [dots]);
   const tuned = useMemo(() => tunedPath(dots), [dots]);
+  const marks = useMemo(() => (marked?.length ? marksPath(dots, marked) : ''), [dots, marked]);
+  // The first marked pick with a dot: where the keyboard's cursor starts with several picked (worked out only when it is needed).
+  const markedFirst = () => {
+    const want = new Set(marked);
+    return want.size ? dots.findIndex((d) => want.has(d.row.key)) : -1;
+  };
   const [hover, setHover] = useState(-1);
   // The keyboard's cursor, by key, so it stays on its preset if the library changes under it.
   const [cursorKey, setCursorKey] = useState<string | null>(null);
@@ -59,7 +69,11 @@ export function Field({ library, mine, subject, playing, intensity, hue, descrip
 
   const lit = dotOf(dots, subject);
   const mark = playing && playing !== subject ? dotOf(dots, playing) : -1;
-  const start = () => (lit >= 0 ? lit : mark >= 0 ? mark : nearest(dots, xOf(0.5), yOf(0.5), Infinity));
+  const start = () => {
+    if (lit >= 0) return lit;
+    const first = markedFirst();
+    return first >= 0 ? first : mark >= 0 ? mark : nearest(dots, xOf(0.5), yOf(0.5), Infinity);
+  };
 
   /** Where the pointer is, in the box's units: the svg keeps the box's 4:3, so its rectangle maps straight on. */
   const at = (ev: MouseEvent<SVGSVGElement>) => {
@@ -134,12 +148,13 @@ export function Field({ library, mine, subject, playing, intensity, hue, descrip
             ))}
             <path className="insp-field-centre" d={`M${xOf(0.5) - 2.5} ${yOf(0.5)} h5 M${xOf(0.5)} ${yOf(0.5) - 2.5} v5`} />
           </g>
-          <g className="insp-field-dots" data-dim={lit >= 0 ? '' : undefined}>
+          <g className="insp-field-dots" data-dim={lit >= 0 || marks ? '' : undefined}>
             {paths.map((p) => (
               <path key={p.band} d={p.d} stroke={bandColour(p.band)} />
             ))}
           </g>
           {tuned && <path className="insp-field-tuned" d={tuned} />}
+          {marks && <path className="insp-field-marked" d={marks} data-count={marked?.length} />}
           {mark >= 0 && <PlayingMark dot={dots[mark]} />}
           {lit >= 0 && <Lit dot={dots[lit]} ring={ring} hue={hue} />}
           {tip && <circle className="insp-field-hot" cx={tip.x} cy={tip.y} r={4} />}
@@ -152,7 +167,14 @@ export function Field({ library, mine, subject, playing, intensity, hue, descrip
           </span>
         )}
         {active && (
-          <span className="insp-field-sr" role="option" id={optionId} aria-selected={active.row.key === subject} aria-setsize={dots.length} aria-posinset={cursor + 1}>
+          <span
+            className="insp-field-sr"
+            role="option"
+            id={optionId}
+            aria-selected={active.row.key === subject || !!marked?.includes(active.row.key)}
+            aria-setsize={dots.length}
+            aria-posinset={cursor + 1}
+          >
             {optionName(active, playing)}
           </span>
         )}

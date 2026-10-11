@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LibraryRow, Look, Mine } from '../../api.ts';
 import { prepareRow } from '../../librarySearch.ts';
-import { Inspector, type InspectorProps } from './Inspector.tsx';
+import { TuneCard } from './Tune.tsx';
 
 afterEach(cleanup);
 
@@ -12,109 +12,136 @@ const look: Look = { hues: [200], brightness: 0.5, speed: 2, intensity: 10, brig
 const row = (key: string): LibraryRow => ({ key, path: `/p/${key}.milk`, hash: '', style: 'Hypnotic', sub_style: null, authors: [], title: key, thumbnail: null, look, starter: true });
 const BLOOM = row('Bloom');
 const CINDER = row('Cinder');
-
-function props(mine: Mine | undefined, over: Partial<InspectorProps> = {}): InspectorProps {
-  return {
-    subject: prepareRow(BLOOM, mine),
-    playing: BLOOM.key,
-    from: '',
-    playlists: [],
-    library: [BLOOM, CINDER],
-    onSet: vi.fn(),
-    onAddTo: vi.fn(),
-    onPick: vi.fn(),
-    onBack: vi.fn(),
-    ...over,
-  };
-}
+const bloom = (mine?: Mine) => prepareRow(BLOOM, mine);
+const cinder = (mine?: Mine) => prepareRow(CINDER, mine);
 
 const speed = () => screen.getByRole('slider', { name: 'speed' });
 const reacts = () => screen.getByRole('slider', { name: 'how much it reacts' });
+const text = (el: HTMLElement) => el.getAttribute('aria-valuetext');
 
 describe("the inspector's tune for one preset", () => {
   it('shows speed and how much it reacts at 1×, under "for this preset", with no reset', () => {
-    render(<Inspector {...props(undefined)} />);
+    render(<TuneCard subjects={[bloom()]} onSet={vi.fn()} />);
     expect(screen.getByRole('group', { name: 'for this preset' })).toBeTruthy();
-    expect(speed().getAttribute('aria-valuetext')).toBe('1×');
-    expect(reacts().getAttribute('aria-valuetext')).toBe('1×');
+    expect(text(speed())).toBe('1×');
+    expect(text(reacts())).toBe('1×');
     expect(screen.queryByRole('button', { name: 'as made' })).toBeNull();
   });
 
   it('shows what is kept, and "as made" sends the reset', async () => {
-    const p = props({ tune: { speed: 0.5 } });
-    render(<Inspector {...p} />);
-    expect(speed().getAttribute('aria-valuetext')).toBe('0.5×');
-    expect(reacts().getAttribute('aria-valuetext')).toBe('1×');
+    const onSet = vi.fn();
+    render(<TuneCard subjects={[bloom({ tune: { speed: 0.5 } })]} onSet={onSet} />);
+    expect(text(speed())).toBe('½×');
+    expect(text(reacts())).toBe('1×');
     await userEvent.click(screen.getByRole('button', { name: 'as made' }));
-    expect(p.onSet).toHaveBeenLastCalledWith([BLOOM.key], { clear_tune: true });
-    expect(speed().getAttribute('aria-valuetext')).toBe('1×');
+    expect(onSet).toHaveBeenLastCalledWith([BLOOM.key], { clear_tune: true });
+    expect(text(speed())).toBe('1×');
     expect(screen.queryByRole('button', { name: 'as made' })).toBeNull();
   });
 
-  it('steps with the arrow keys and sends once the slider rests, not every step', async () => {
-    // A key a frame apart, as a held key repeats: the slider takes each value back before the next step.
+  it('nudges with Shift+arrows and sends once the slider rests, not every step', async () => {
+    // A key a frame apart, as a held key repeats.
     const user = userEvent.setup({ delay: 40 });
-    const p = props(undefined);
-    render(<Inspector {...p} />);
+    const onSet = vi.fn();
+    render(<TuneCard subjects={[bloom()]} onSet={onSet} />);
     speed().focus();
-    await user.keyboard('{ArrowLeft}{ArrowLeft}{ArrowLeft}');
-    await waitFor(() => expect(speed().getAttribute('aria-valuetext')).toBe('0.84×'));
+    await user.keyboard('{Shift>}{ArrowLeft}{ArrowLeft}{ArrowLeft}{/Shift}');
+    await waitFor(() => expect(text(speed())).toBe('0.84×'));
     // "as made" shows as soon as it differs, before it is sent.
     expect(screen.getByRole('button', { name: 'as made' })).toBeTruthy();
-    await waitFor(() => expect(p.onSet).toHaveBeenCalled());
-    expect(p.onSet).toHaveBeenCalledTimes(1);
-    expect(p.onSet).toHaveBeenLastCalledWith([BLOOM.key], { tune: { speed: 0.841 } });
+    await waitFor(() => expect(onSet).toHaveBeenCalled());
+    expect(onSet).toHaveBeenCalledTimes(1);
+    expect(onSet).toHaveBeenLastCalledWith([BLOOM.key], { tune: { speed: 0.841 } });
   });
 
   it('Home and End go to the ends, ¼× and 4×, and both sliders go out together', async () => {
     const user = userEvent.setup();
-    const p = props(undefined);
-    render(<Inspector {...p} />);
+    const onSet = vi.fn();
+    render(<TuneCard subjects={[bloom()]} onSet={onSet} />);
     speed().focus();
     await user.keyboard('{End}');
     reacts().focus();
     await user.keyboard('{Home}');
-    await waitFor(() => expect(reacts().getAttribute('aria-valuetext')).toBe('0.25×'));
-    expect(speed().getAttribute('aria-valuetext')).toBe('4×');
-    await waitFor(() => expect(p.onSet).toHaveBeenCalled());
-    expect(p.onSet).toHaveBeenCalledTimes(1);
-    expect(p.onSet).toHaveBeenLastCalledWith([BLOOM.key], { tune: { speed: 4, sensitivity: 0.25 } });
+    await waitFor(() => expect(text(reacts())).toBe('¼×'));
+    expect(text(speed())).toBe('4×');
+    await waitFor(() => expect(onSet).toHaveBeenCalled());
+    expect(onSet).toHaveBeenCalledTimes(1);
+    expect(onSet).toHaveBeenLastCalledWith([BLOOM.key], { tune: { speed: 4, sensitivity: 0.25 } });
   });
 
   it('a step back onto the middle lands on exactly 1×, and is sent as 1 (which takes it off)', async () => {
     const user = userEvent.setup();
-    const p = props({ tune: { sensitivity: 1.059 } });
-    render(<Inspector {...p} />);
+    const onSet = vi.fn();
+    render(<TuneCard subjects={[bloom({ tune: { sensitivity: 1.059 } })]} onSet={onSet} />);
     reacts().focus();
     await user.keyboard('{ArrowLeft}');
-    await waitFor(() => expect(p.onSet).toHaveBeenCalled());
-    expect(p.onSet).toHaveBeenLastCalledWith([BLOOM.key], { tune: { sensitivity: 1 } });
-    expect(reacts().getAttribute('aria-valuetext')).toBe('1×');
+    await waitFor(() => expect(onSet).toHaveBeenCalled());
+    expect(onSet).toHaveBeenLastCalledWith([BLOOM.key], { tune: { sensitivity: 1 } });
+    expect(text(reacts())).toBe('1×');
   });
 
-  it('a change still waiting is sent for its preset when another is shown', async () => {
+  it('a change still waiting is sent for its preset when the card goes', async () => {
     const user = userEvent.setup();
-    const p = props(undefined);
-    const { rerender } = render(<Inspector {...p} />);
+    const onSet = vi.fn();
+    const { rerender } = render(<TuneCard key={BLOOM.key} subjects={[bloom()]} onSet={onSet} />);
     speed().focus();
     await user.keyboard('{ArrowRight}');
-    await waitFor(() => expect(speed().getAttribute('aria-valuetext')).toBe('1.06×'));
-    expect(p.onSet).not.toHaveBeenCalled();
-    rerender(<Inspector {...p} subject={prepareRow(CINDER, { tune: { speed: 2 } })} />);
-    expect(p.onSet).toHaveBeenCalledWith([BLOOM.key], { tune: { speed: 1.059 } });
-    expect(speed().getAttribute('aria-valuetext')).toBe('2×');
+    await waitFor(() => expect(text(speed())).toBe('2×'));
+    expect(onSet).not.toHaveBeenCalled();
+    rerender(<TuneCard key={CINDER.key} subjects={[cinder({ tune: { speed: 3 } })]} onSet={onSet} />);
+    expect(onSet).toHaveBeenCalledWith([BLOOM.key], { tune: { speed: 2 } });
+    expect(text(speed())).toBe('3.00×');
   });
 
   it('follows a change to what is kept made elsewhere', () => {
-    const p = props(undefined);
-    const { rerender } = render(<Inspector {...p} />);
-    rerender(<Inspector {...p} subject={prepareRow(BLOOM, { tune: { sensitivity: 3 } })} />);
-    expect(reacts().getAttribute('aria-valuetext')).toBe('3×');
+    const { rerender } = render(<TuneCard subjects={[bloom()]} onSet={vi.fn()} />);
+    rerender(<TuneCard subjects={[bloom({ tune: { sensitivity: 2 } })]} onSet={vi.fn()} />);
+    expect(text(reacts())).toBe('2×');
+  });
+});
+
+describe("the inspector's tune for several presets, or none", () => {
+  it('names the group for them, shows a shared value, and reads "Mixed" where they differ', () => {
+    render(<TuneCard subjects={[bloom({ tune: { speed: 2 } }), cinder({ tune: { speed: 0.5 } })]} onSet={vi.fn()} />);
+    expect(screen.getByRole('group', { name: 'for these presets' })).toBeTruthy();
+    expect(text(speed())).toBe('Mixed');
+    expect(text(reacts())).toBe('1×');
+    expect(document.querySelectorAll('.tune-slider-knob')).toHaveLength(1);
   });
 
-  it('shows none for several picked together', () => {
-    render(<Inspector {...props(undefined, { chosen: [prepareRow(BLOOM, undefined), prepareRow(CINDER, undefined)] })} />);
-    expect(screen.queryByRole('group', { name: 'for this preset' })).toBeNull();
-    expect(screen.queryByRole('slider')).toBeNull();
+  it('a move on a mixed slider sets it on all of them', async () => {
+    const user = userEvent.setup();
+    const onSet = vi.fn();
+    render(<TuneCard subjects={[bloom({ tune: { speed: 2 } }), cinder({ tune: { speed: 0.5 } })]} onSet={onSet} />);
+    speed().focus();
+    await user.keyboard('{ArrowRight}');
+    expect(text(speed())).toBe('2×');
+    await waitFor(() => expect(onSet).toHaveBeenCalled());
+    expect(onSet).toHaveBeenLastCalledWith([BLOOM.key, CINDER.key], { tune: { speed: 2 } });
+  });
+
+  it('"as made" shows when any differs from 1×, and clears them all', async () => {
+    const onSet = vi.fn();
+    render(<TuneCard subjects={[bloom(), cinder({ tune: { sensitivity: 3 } })]} onSet={onSet} />);
+    await userEvent.click(screen.getByRole('button', { name: 'as made' }));
+    expect(onSet).toHaveBeenLastCalledWith([BLOOM.key, CINDER.key], { clear_tune: true });
+    expect(text(reacts())).toBe('1×');
+  });
+
+  it('with none stays in place, disabled, reading "–", and sends nothing', async () => {
+    const user = userEvent.setup();
+    const onSet = vi.fn();
+    render(<TuneCard subjects={[]} onSet={onSet} />);
+    expect(screen.getByRole('group', { name: 'for this preset' })).toBeTruthy();
+    for (const s of [speed(), reacts()]) {
+      expect(s.getAttribute('aria-disabled')).toBe('true');
+      expect(text(s)).toBe('–');
+    }
+    expect(document.querySelector('.tune-slider-knob')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'as made' })).toBeNull();
+    speed().focus();
+    await user.keyboard('{End}');
+    await new Promise((r) => setTimeout(r, 350));
+    expect(onSet).not.toHaveBeenCalled();
   });
 });

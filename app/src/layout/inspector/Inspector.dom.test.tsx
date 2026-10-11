@@ -1,15 +1,18 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { LibraryRow, Look } from '../../api.ts';
+import type { LibraryRow, Level, Look } from '../../api.ts';
 import { prepareRow } from '../../librarySearch.ts';
-import { manual } from '../../playlists.ts';
-import { Inspector, type InspectorProps } from './Inspector.tsx';
+import { manual, type Item } from '../../playlists.ts';
+import { Inspector, TOAST_FOR, type InspectorProps } from './Inspector.tsx';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
-const look = (speed: number, brightness: number): Look => ({ hues: [200], brightness, speed, intensity: 10, brightness_level: 'mid', speed_level: 'mid', intensity_level: 'mid' });
+const look = (speed: number, brightness: number, speed_level: Level = 'mid'): Look => ({ hues: [200], brightness, speed, intensity: 10, brightness_level: 'mid', speed_level, intensity_level: 'mid' });
 const row = (key: string, l: Look | null, authors: string[] = []): LibraryRow => ({
   key,
   path: `/p/${key}.milk`,
@@ -22,17 +25,18 @@ const row = (key: string, l: Look | null, authors: string[] = []): LibraryRow =>
   look: l,
   starter: true,
 });
-// Along one row of brightness, slow to fast: Amber, Bloom (playing), Cinder.
+// Along one row of brightness, slow to fast: Amber, Bloom (playing), Cinder (measured fast).
 const AMBER = row('Amber', look(0.5, 0.5), ['geiss']);
 const BLOOM = row('Bloom', look(2, 0.5));
-const CINDER = row('Cinder', look(6, 0.5));
+const CINDER = row('Cinder', look(6, 0.5, 'high'));
 const LIBRARY = [AMBER, BLOOM, CINDER, row('Undrawn', null)];
+const item = (r: LibraryRow): Item => ({ path: r.path, name: r.title, group: '', missing: false, hash: null });
+const SOURCE = <section aria-label="the playlist">Warm-up</section>;
 
 function mount(over: Partial<InspectorProps> = {}) {
   const props: InspectorProps = {
     subject: prepareRow(BLOOM, { star: false, tags: ['warm'] }),
     playing: BLOOM.key,
-    from: 'from Warm-up',
     playlists: [],
     library: LIBRARY,
     onSet: vi.fn(),
@@ -53,112 +57,110 @@ async function tabTo(user: ReturnType<typeof userEvent.setup>, el: HTMLElement) 
 
 /** Whether `a` comes before `b` in the document. */
 const before = (a: Element, b: Element) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+const insp = () => document.querySelector('.insp')!;
+/** The actions' accessible names, in order. */
+const actions = () =>
+  within(screen.getByRole('group', { name: /^on th/ }))
+    .getAllByRole('button')
+    .map((b) => b.getAttribute('aria-label'));
+const several = () => [prepareRow(AMBER, { star: true, tags: ['warm'] }), prepareRow(BLOOM, { star: false, hidden: true, tags: ['warm', 'intro'] }), prepareRow(CINDER, { star: false, tags: [] })];
+const KEYS = [AMBER.key, BLOOM.key, CINDER.key];
 
-describe('the order the inspector reads in', () => {
-  // The header (back, the actions, ✕); then the name and artist, the facts (style, readout, colours, tags), the map, the tune and the playlists.
-  const order = () => {
-    const name = screen.getByRole('heading', { level: 2 });
-    const header = name.closest('.insp')!.querySelector('.insp-top')!;
-    const facts = screen.getByRole('group', { name: /^about th/ });
-    const tags = screen.getByRole('group', { name: 'my tags' });
-    const field = screen.queryByRole('listbox');
-    const star = screen.getByRole('button', { name: 'star' });
-    return { name, header, facts, tags, field, star };
+describe('one skeleton in every state', () => {
+  // header → identity → character → map → tune → playlists, each a direct section of the panel.
+  const skeleton = (tune: 'for this preset' | 'for these presets' = 'for this preset') => {
+    const parts = ['.insp-top', '.insp-id', '.insp-char', '.insp-map', '.insp-tune-slot', '.insp-lists'].map((s) => insp().querySelector(`:scope > ${s}`));
+    for (const p of parts) expect(p).not.toBeNull();
+    for (let i = 1; i < parts.length; i++) expect(before(parts[i - 1]!, parts[i]!)).toBe(true);
+    const [top, id, char, map, slot, lists] = parts as Element[];
+    expect(top.contains(screen.getByRole('group', { name: /^on th/ }))).toBe(true);
+    expect(char).toBe(screen.getByRole('group', { name: /^about th/ }));
+    expect(map.contains(screen.getByRole('listbox', { name: 'The library by speed and brightness' }))).toBe(true);
+    expect(slot.contains(screen.getByRole('group', { name: tune }))).toBe(true);
+    expect(lists).toBe(screen.getByRole('group', { name: 'In playlists' }));
+    return { top, id, char, map, slot, lists };
   };
 
-  it('the preset playing: the actions in the header, then name and artist, its facts, the map, then the rest', () => {
-    mount({ subject: prepareRow(AMBER, { star: false, tags: ['warm'] }), playing: AMBER.key, playlists: [manual('w', 'Warm-up', [])], onEdit: vi.fn() });
-    const { name, header, facts, tags, field, star } = order();
-    const insp = name.closest('.insp')!;
-    // The header row first, then the name: no status line between them.
-    expect(insp.firstElementChild).toBe(header);
-    expect(header.nextElementSibling).toBe(insp.querySelector('.insp-head'));
-    expect(name.parentElement!.textContent).toBe('Ambergeiss');
-    // Star, add, never play and edit are glyphs in the header, named for screen readers, with tooltips.
-    const keys = within(screen.getByRole('group', { name: 'on this preset' }));
-    expect(header.contains(star)).toBe(true);
-    for (const n of ['star', 'add to a playlist', 'never play', 'open in the editor']) {
-      const b = keys.getByRole('button', { name: n });
-      expect(b.textContent).toBe('');
-      expect(b.closest('[title]')).not.toBeNull();
-    }
-    expect(facts.textContent).toContain('Hypnotic');
-    expect(facts.querySelector('.insp-swatch')).not.toBeNull();
-    expect(facts.contains(tags)).toBe(true);
-    expect(before(name, facts)).toBe(true);
-    expect(facts.nextElementSibling?.contains(field!)).toBe(true);
-    const tune = screen.getByRole('group', { name: 'for this preset' });
-    const lists = screen.getByText('In no playlist yet');
-    expect(before(field!, tune)).toBe(true);
-    expect(before(tune, lists)).toBe(true);
+  it('the preset playing: name and artist with the style under them, then its character, map, tune and playlists', () => {
+    mount({ subject: prepareRow(AMBER, { tags: ['warm'] }), playing: AMBER.key });
+    const { id, char, lists } = skeleton();
+    expect(insp().getAttribute('data-state')).toBe('playing');
+    expect(within(id as HTMLElement).getByRole('heading', { level: 2, name: 'Amber' })).toBeTruthy();
+    expect(id.textContent).toBe('AmbergeissHypnotic');
+    expect(char.textContent).toContain('Speed');
+    expect(char.contains(screen.getByRole('group', { name: 'my tags' }))).toBe(true);
+    expect(lists.textContent).toBe('In playlistsNone yet');
   });
 
-  it('one picked: back, Play and the actions in the header, then the same order', () => {
+  it('one picked: the same order', () => {
     mount({ subject: prepareRow(CINDER, undefined), onPlay: vi.fn() });
-    const { name, header, facts, field, star } = order();
-    expect(header.contains(screen.getByRole('button', { name: 'back to now playing' }))).toBe(true);
-    expect(header.contains(screen.getByRole('button', { name: 'play it' }))).toBe(true);
-    expect(header.contains(star)).toBe(true);
-    expect(before(header, name)).toBe(true);
-    expect(before(name, facts)).toBe(true);
-    expect(before(facts, field!)).toBe(true);
+    skeleton();
+    expect(insp().getAttribute('data-state')).toBe('picked');
   });
 
-  it('several picked: star, add and never play in the header, then the count, their styles and tags, then their pictures', () => {
-    mount({ chosen: [prepareRow(AMBER, undefined), prepareRow(CINDER, undefined)], onEdit: vi.fn() });
-    const { name, header, facts, tags, field, star } = order();
-    expect(field).toBeNull();
-    const keys = within(screen.getByRole('group', { name: 'on these presets' }));
-    expect(keys.getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['star', 'add to a playlist', 'never play']);
-    expect(header.contains(star)).toBe(true);
-    const pictures = name.closest('.insp')!.querySelector('.insp-pictures')!;
-    expect(facts.contains(tags)).toBe(true);
-    expect(before(name, facts)).toBe(true);
-    expect(facts.nextElementSibling).toBe(pictures);
+  it('several picked: "n selected", their styles, the same order', () => {
+    mount({ chosen: several() });
+    const { id } = skeleton('for these presets');
+    expect(within(id as HTMLElement).getByRole('heading', { level: 2, name: '3 selected' })).toBeTruthy();
+    expect(id.querySelector('.insp-style')!.textContent).toBe('Hypnotic');
+    expect(screen.getByRole('group', { name: 'about these presets' })).toBeTruthy();
   });
 
-  it('the source and nothing playing have no actions', () => {
-    mount({ subject: null, source: <section aria-label="the playlist">Warm-up</section> });
-    expect(screen.queryByRole('button', { name: 'star' })).toBeNull();
-    cleanup();
+  it('nothing playing: says so with a prompt, the rest in place with dashes', () => {
     mount({ subject: null, playing: null });
-    expect(screen.queryByRole('button', { name: 'star' })).toBeNull();
-    expect(document.querySelector('.insp-top')).toBeNull();
+    const { id, char, lists } = skeleton();
+    expect(insp().getAttribute('data-state')).toBe('none');
+    expect(within(id as HTMLElement).getByRole('heading', { name: 'Nothing playing yet' })).toBeTruthy();
+    expect(id.querySelector('.insp-prompt')).not.toBeNull();
+    expect([...char.querySelectorAll('dd')].map((d) => d.textContent)).toEqual(['–', '–', '–', '–', '–']);
+    expect(lists.textContent).toBe('In playlists–');
   });
 
-  it('nothing playing: the words saying so, then the map', () => {
-    mount({ subject: null, playing: null });
-    expect(before(screen.getByText(/nothing playing/i), screen.getByRole('listbox'))).toBe(true);
+  it('the source: its card in the identity slot, the rest in place with dashes', () => {
+    mount({ subject: null, source: SOURCE });
+    const { id, char } = skeleton();
+    expect(insp().getAttribute('data-state')).toBe('source');
+    expect(id.contains(screen.getByRole('region', { name: 'the playlist' }))).toBe(true);
+    expect(screen.queryByText(/nothing playing/i)).toBeNull();
+    expect(char.getAttribute('aria-label')).toBe('about this preset');
+    expect(char.querySelector('dd')!.textContent).toBe('–');
+  });
+
+  it('a preset shown wins over the source', () => {
+    mount({ source: SOURCE });
+    expect(screen.getByRole('heading', { name: 'Bloom' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'the playlist' })).toBeNull();
+  });
+
+  it('one in chosen is no selection: the subject shows', () => {
+    mount({ chosen: [prepareRow(CINDER, undefined)] });
+    expect(screen.getByRole('heading', { name: 'Bloom' })).toBeTruthy();
   });
 });
 
-describe('the inspector in a DOM', () => {
-  it('shows the preset playing with no status line (the transport bar says where it plays from), and no way back', () => {
-    mount();
-    expect(screen.getByRole('heading', { name: 'Bloom' })).toBeTruthy();
-    expect(screen.queryByText(/Now playing/)).toBeNull();
-    expect(screen.queryByText(/from Warm-up/)).toBeNull();
-    expect(screen.queryByRole('button', { name: 'back to now playing' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'play it' })).toBeNull();
+describe('the character', () => {
+  it('reads as caption-then-value rows of words, at full contrast, then my tags', () => {
+    mount({ subject: prepareRow(AMBER, undefined), playing: AMBER.key });
+    const rows = [...screen.getByRole('group', { name: 'about this preset' }).querySelectorAll('.insp-row')].map((r) => [r.querySelector('dt')!.textContent, r.querySelector('dd')!.textContent]);
+    expect(rows.slice(0, 4)).toEqual([
+      ['Speed', 'steady'],
+      ['Brightness', 'dim'],
+      ['Intensity', 'lively'],
+      ['Colours', 'blue'],
+    ]);
+    expect(rows[4][0]).toBe('Tags');
   });
 
-  it('shows one picked with back and Play', async () => {
-    const p = mount({ subject: prepareRow(CINDER, undefined), onPlay: vi.fn() });
-    expect(screen.queryByText(/^Picked/)).toBeNull();
-    await userEvent.click(screen.getByRole('button', { name: 'back to now playing' }));
-    expect(p.onBack).toHaveBeenCalled();
-    await userEvent.click(screen.getByRole('button', { name: 'play it' }));
-    expect(p.onPlay).toHaveBeenCalled();
+  it('several: the measures that agree said, those that differ Mixed, the colours over all', () => {
+    mount({ chosen: [prepareRow(AMBER, undefined), prepareRow(CINDER, { overrides: { hues: [10] } })] });
+    const values = [...screen.getByRole('group', { name: 'about these presets' }).querySelectorAll('dd')].map((d) => d.textContent);
+    expect(values.slice(0, 4)).toEqual(['Mixed', 'dim', 'lively', 'blue and red']);
   });
 
-  it('star and never play toggle on the subject', async () => {
-    const p = mount();
-    const star = screen.getByRole('button', { name: 'star' });
-    expect(star.getAttribute('aria-pressed')).toBe('false');
-    await userEvent.click(star);
-    expect(p.onSet).toHaveBeenLastCalledWith([BLOOM.key], { star: true });
-    await userEvent.click(screen.getByRole('button', { name: 'never play' }));
-    expect(p.onSet).toHaveBeenLastCalledWith([BLOOM.key], { hidden: true });
+  it('a preset not drawn yet: dashes, and says so where its colours would be', () => {
+    mount({ subject: prepareRow(row('Undrawn', null), undefined), playing: null });
+    const values = [...screen.getByRole('group', { name: 'about this preset' }).querySelectorAll('dd')].map((d) => d.textContent);
+    expect(values.slice(0, 4)).toEqual(['–', '–', '–', 'Not drawn yet']);
   });
 
   it('edits my tags with the tag editor', async () => {
@@ -169,7 +171,170 @@ describe('the inspector in a DOM', () => {
     await userEvent.click(screen.getByRole('button', { name: 'take the tag warm off' }));
     expect(p.onSet).toHaveBeenLastCalledWith([BLOOM.key], { remove_tags: ['warm'] });
   });
+});
 
+describe('the actions in the header', () => {
+  it('the preset playing: star, add, edit, then never play apart; no Play or back; glyphs with tooltips', () => {
+    mount({ onEdit: vi.fn() });
+    expect(actions()).toEqual(['star', 'add to a playlist', 'open in the editor', 'never play']);
+    for (const n of ['star', 'add to a playlist', 'never play', 'open in the editor']) {
+      const b = screen.getByRole('button', { name: n });
+      expect(b.textContent).toBe('');
+      expect(b.closest('[title]')).not.toBeNull();
+    }
+    expect(screen.getByRole('button', { name: 'never play' }).classList.contains('insp-key-never')).toBe(true);
+    expect(screen.queryByRole('button', { name: 'play it' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'back to now playing' })).toBeNull();
+    expect(screen.queryByText(/Now playing/)).toBeNull();
+  });
+
+  it('one picked: back at the far left, Play first and tinted, and both work', async () => {
+    const p = mount({ subject: prepareRow(CINDER, undefined), onPlay: vi.fn(), onClose: vi.fn() });
+    expect(actions()).toEqual(['play it', 'star', 'add to a playlist', 'never play']);
+    const top = insp().querySelector('.insp-top')!;
+    expect(top.firstElementChild).toBe(screen.getByRole('button', { name: 'back to now playing' }));
+    expect(top.lastElementChild).toBe(screen.getByRole('button', { name: 'close info' }));
+    expect(screen.getByRole('button', { name: 'play it' }).classList.contains('insp-key-play')).toBe(true);
+    await userEvent.click(screen.getByRole('button', { name: 'back to now playing' }));
+    expect(p.onBack).toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'play it' }));
+    expect(p.onPlay).toHaveBeenCalled();
+  });
+
+  it('nothing playing and the source: the same set, disabled, not removed', () => {
+    for (const over of [
+      { subject: null, playing: null },
+      { subject: null, source: SOURCE },
+    ]) {
+      const p = mount({ ...over, onEdit: vi.fn() });
+      expect(actions()).toEqual(['star', 'add to a playlist', 'open in the editor', 'never play']);
+      for (const n of ['star', 'add to a playlist', 'open in the editor', 'never play']) expect((screen.getByRole('button', { name: n }) as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.click(screen.getByRole('button', { name: 'star' }));
+      expect(p.onSet).not.toHaveBeenCalled();
+      cleanup();
+    }
+  });
+
+  it('several: the same set, edit disabled', () => {
+    mount({ chosen: several(), onEdit: vi.fn() });
+    expect(actions()).toEqual(['star', 'add to a playlist', 'open in the editor', 'never play']);
+    expect((screen.getByRole('button', { name: 'open in the editor' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'star' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('star toggles on the subject; never play on shows "Never" beside its glyph', async () => {
+    const p = mount();
+    const star = screen.getByRole('button', { name: 'star' });
+    expect(star.getAttribute('aria-pressed')).toBe('false');
+    await userEvent.click(star);
+    expect(p.onSet).toHaveBeenLastCalledWith([BLOOM.key], { star: true });
+    expect(screen.getByRole('button', { name: 'never play' }).textContent).toBe('');
+    cleanup();
+    mount({ subject: prepareRow(BLOOM, { star: true, hidden: true }) });
+    expect(screen.getByRole('button', { name: 'star' }).getAttribute('aria-pressed')).toBe('true');
+    const never = screen.getByRole('button', { name: 'never play' });
+    expect(never.getAttribute('aria-pressed')).toBe('true');
+    expect(never.textContent).toBe('Never');
+  });
+
+  it('several: star and never play are mixed over some, and turn on for all of them', async () => {
+    const p = mount({ chosen: several() });
+    const star = screen.getByRole('button', { name: 'star' });
+    expect(star.getAttribute('aria-pressed')).toBe('mixed');
+    await userEvent.click(star);
+    expect(p.onSet).toHaveBeenLastCalledWith(KEYS, { star: true });
+    const never = screen.getByRole('button', { name: 'never play' });
+    expect(never.getAttribute('aria-pressed')).toBe('mixed');
+    await userEvent.click(never);
+    expect(p.onSet).toHaveBeenLastCalledWith(KEYS, { hidden: true });
+  });
+
+  it('star takes the star off all of them when every one has it', async () => {
+    const p = mount({ chosen: several().map((x) => ({ ...x, star: true })) });
+    expect(screen.getByRole('button', { name: 'star' }).getAttribute('aria-pressed')).toBe('true');
+    await userEvent.click(screen.getByRole('button', { name: 'star' }));
+    expect(p.onSet).toHaveBeenLastCalledWith(KEYS, { star: false });
+  });
+
+  it('adds all of them to a manual playlist', async () => {
+    const p = mount({ chosen: several(), playlists: [manual('w', 'Warm-up', []), { ...manual('s', 'Fast', []), kind: 'smart' as const }] });
+    await userEvent.click(screen.getByRole('button', { name: 'add to a playlist' }));
+    expect(screen.queryByRole('menuitem', { name: 'Fast' })).toBeNull();
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Warm-up' }));
+    expect(p.onAddTo).toHaveBeenCalledWith('w', [AMBER.path, BLOOM.path, CINDER.path]);
+  });
+});
+
+describe("never play's undo", () => {
+  const toast = () => screen.queryByRole('status');
+
+  it('turns never play on at once, with a toast under the header whose Undo puts back exactly what was there', () => {
+    const p = mount({ chosen: several() });
+    expect(toast()).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'never play' }));
+    expect(p.onSet).toHaveBeenLastCalledWith(KEYS, { hidden: true });
+    const t = toast()!;
+    expect(t.textContent).toContain('Won’t play them on their own');
+    // Just under the header, not at the panel's foot.
+    expect(insp().querySelector(':scope > .insp-top')!.nextElementSibling!.contains(t)).toBe(true);
+    fireEvent.click(within(t).getByRole('button', { name: 'Undo' }));
+    // Bloom was already never played: it stays so.
+    expect(p.onSet).toHaveBeenLastCalledWith([AMBER.key, CINDER.key], { hidden: false });
+    expect(toast()).toBeNull();
+  });
+
+  it('goes when another preset is shown or the picks change, so it never offers to undo for the wrong ones', () => {
+    const props: InspectorProps = { subject: prepareRow(BLOOM, undefined), playing: BLOOM.key, playlists: [], library: LIBRARY, onSet: vi.fn(), onAddTo: vi.fn(), onPick: vi.fn(), onBack: vi.fn() };
+    const { rerender } = render(<Inspector {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'never play' }));
+    expect(toast()).not.toBeNull();
+    // The same preset, its never play now kept: the toast stays.
+    rerender(<Inspector {...props} subject={prepareRow(BLOOM, { hidden: true })} />);
+    expect(toast()).not.toBeNull();
+    // Another one picked: gone.
+    rerender(<Inspector {...props} subject={prepareRow(CINDER, undefined)} />);
+    expect(toast()).toBeNull();
+    // Several picked, then the picks change: gone too.
+    rerender(<Inspector {...props} chosen={several()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'never play' }));
+    expect(toast()).not.toBeNull();
+    rerender(<Inspector {...props} chosen={several().slice(0, 2)} />);
+    expect(toast()).toBeNull();
+  });
+
+  it('turning it off shows no toast', () => {
+    mount({ subject: prepareRow(BLOOM, { hidden: true }) });
+    fireEvent.click(screen.getByRole('button', { name: 'never play' }));
+    expect(toast()).toBeNull();
+  });
+
+  it('hides by itself after a few seconds', () => {
+    vi.useFakeTimers();
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: 'never play' }));
+    expect(toast()!.textContent).toContain('Won’t play it on its own');
+    act(() => vi.advanceTimersByTime(TOAST_FOR - 100));
+    expect(toast()).not.toBeNull();
+    act(() => vi.advanceTimersByTime(200));
+    expect(toast()).toBeNull();
+  });
+
+  it('Escape dismisses the toast, not the inspector; the next Escape closes it', () => {
+    const p = mount({ onClose: vi.fn() });
+    fireEvent.click(screen.getByRole('button', { name: 'never play' }));
+    fireEvent.keyDown(within(toast()!).getByRole('button', { name: 'Undo' }), { key: 'Escape' });
+    expect(toast()).toBeNull();
+    expect(p.onClose).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'never play' }));
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(toast()).toBeNull();
+    expect(p.onClose).not.toHaveBeenCalled();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(p.onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the map', () => {
   it('the field is one stop: the arrows move among the dots, named, and Enter picks one', async () => {
     const user = userEvent.setup();
     const p = mount();
@@ -207,25 +372,85 @@ describe('the inspector in a DOM', () => {
     expect(p.onPick).not.toHaveBeenCalled();
   });
 
-  it('with nothing picked and a source passed, shows the source in place of the field', () => {
-    mount({ subject: null, source: <section aria-label="the playlist">Warm-up</section> });
-    expect(screen.getByRole('region', { name: 'the playlist' })).toBeTruthy();
-    expect(screen.queryByRole('listbox')).toBeNull();
-    expect(screen.queryByText(/nothing playing/i)).toBeNull();
+  it('several picked: every pick ringed, none lit', () => {
+    mount({ chosen: several() });
+    const marks = document.querySelector('.insp-field-marked')!;
+    expect(marks.getAttribute('d')!.match(/M/g)!.length).toBe(3);
+    expect(document.querySelector('.insp-field-lit')).toBeNull();
+    expect(screen.getByText(/3 picked, each ringed/)).toBeTruthy();
   });
 
-  it('a preset shown wins over the source', () => {
-    mount({ source: <section aria-label="the playlist">Warm-up</section> });
-    expect(screen.getByRole('heading', { name: 'Bloom' })).toBeTruthy();
-    expect(screen.queryByRole('region', { name: 'the playlist' })).toBeNull();
+  it('one shown: lit, no rings', () => {
+    mount();
+    expect(document.querySelector('.insp-field-lit')).not.toBeNull();
+    expect(document.querySelector('.insp-field-marked')).toBeNull();
   });
 
-  it('says what failed in an alert line, in every view', () => {
+  it('nothing playing: unmarked, the prompt said, the library counted truly', () => {
+    mount({ subject: null, playing: null });
+    expect(document.querySelector('.insp-field-lit')).toBeNull();
+    expect(document.querySelector('.insp-field-marked')).toBeNull();
+    // Three of the four drawn: the library's real count, never the measured three as if they were all of it.
+    expect(screen.getByText(/The library by speed and brightness: 3 of its 4 presets drawn so far\. Pick one to see it here/)).toBeTruthy();
+  });
+});
+
+describe('the playlists', () => {
+  const lists = () => screen.getByRole('group', { name: 'In playlists' });
+
+  it('one: the playlists holding it, quiet lines', () => {
+    mount({ playlists: [manual('w', 'Warm-up', [item(BLOOM)]), manual('x', 'Other', [item(AMBER)])] });
+    expect(
+      within(lists())
+        .getAllByRole('listitem')
+        .map((l) => l.textContent),
+    ).toEqual(['Warm-up']);
+  });
+
+  it('several: the union, with counts where only some are in it', () => {
+    mount({
+      chosen: several(),
+      playlists: [manual('w', 'Warm-up', [item(AMBER), item(BLOOM)]), manual('a', 'All', [item(AMBER), item(BLOOM), item(CINDER)]), manual('f', 'Fast', [item(CINDER)]), manual('n', 'None', [])],
+    });
+    expect(
+      within(lists())
+        .getAllByRole('listitem')
+        .map((l) => l.textContent),
+    ).toEqual(['Warm-up (2 of 3)', 'All', 'Fast (1 of 3)']);
+  });
+
+  it('a long tail goes behind "+n more", which expands', async () => {
+    const names = ['A', 'B', 'C', 'D', 'E', 'F'];
+    mount({ playlists: names.map((n) => manual(n, n, [item(BLOOM)])) });
+    expect(
+      within(lists())
+        .getAllByRole('listitem')
+        .map((l) => l.textContent),
+    ).toEqual(['A', 'B', 'C']);
+    const more = within(lists()).getByRole('button', { name: '+3 more' });
+    expect(more.getAttribute('aria-expanded')).toBe('false');
+    await userEvent.click(more);
+    expect(within(lists()).getAllByRole('listitem')).toHaveLength(6);
+    expect(within(lists()).getByRole('button', { name: 'Fewer' }).getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('a tail of one shows whole', () => {
+    mount({ playlists: ['A', 'B', 'C', 'D'].map((n) => manual(n, n, [item(BLOOM)])) });
+    expect(within(lists()).getAllByRole('listitem')).toHaveLength(4);
+    expect(within(lists()).queryByRole('button')).toBeNull();
+  });
+});
+
+describe('closing and errors', () => {
+  it('says what failed in an alert line, in every state', () => {
     mount({ error: 'Couldn’t star it: the disk is full' });
     expect(screen.getByRole('alert').textContent).toBe('Couldn’t star it: the disk is full');
     cleanup();
     mount({ subject: null, playing: null, error: 'Couldn’t read the library' });
     expect(screen.getByRole('alert').textContent).toBe('Couldn’t read the library');
+    cleanup();
+    mount({ chosen: several(), error: 'Couldn’t tag them' });
+    expect(screen.getByRole('alert').textContent).toBe('Couldn’t tag them');
     cleanup();
     mount({ error: null });
     expect(screen.queryByRole('alert')).toBeNull();
@@ -241,6 +466,8 @@ describe('the inspector in a DOM', () => {
     cleanup();
     mount();
     expect(screen.queryByRole('button', { name: 'close info' })).toBeNull();
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('heading', { name: 'Bloom' })).toBeTruthy();
   });
 
   it('Escape in the tag box or an open menu closes that, not the inspector', async () => {
@@ -254,89 +481,5 @@ describe('the inspector in a DOM', () => {
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('menu')).toBeNull();
     expect(p.onClose).not.toHaveBeenCalled();
-  });
-
-  it('with no onClose, Escape does nothing', async () => {
-    const user = userEvent.setup();
-    mount();
-    await user.keyboard('{Escape}');
-    expect(screen.getByRole('heading', { name: 'Bloom' })).toBeTruthy();
-  });
-
-  it('with nothing playing, says so and offers no action, the field still drawn', () => {
-    mount({ subject: null, playing: null });
-    expect(screen.getByText(/nothing playing/i)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'star' })).toBeNull();
-    expect(screen.getByRole('listbox', { name: 'The library by speed and brightness' })).toBeTruthy();
-    // Three of the four drawn: the library's real count, never the measured three as if they were all of it.
-    expect(screen.getByText(/The library by speed and brightness: 3 of its 4 presets drawn so far/)).toBeTruthy();
-  });
-});
-
-describe('the inspector over several picked', () => {
-  // Amber starred and tagged "warm", Bloom tagged "warm" and "intro", Cinder neither.
-  const several = () => [prepareRow(AMBER, { star: true, tags: ['warm'] }), prepareRow(BLOOM, { star: false, hidden: true, tags: ['warm', 'intro'] }), prepareRow(CINDER, { star: false, tags: [] })];
-  const keys = [AMBER.key, BLOOM.key, CINDER.key];
-  const LISTS = [manual('w', 'Warm-up', []), { ...manual('s', 'Fast', []), kind: 'smart' as const }];
-
-  it('says how many and their styles, with no field and no single preset', () => {
-    mount({ chosen: several() });
-    expect(screen.getByRole('heading', { name: '3 selected' })).toBeTruthy();
-    expect(screen.getByText('Hypnotic')).toBeTruthy();
-    expect(screen.queryByRole('listbox')).toBeNull();
-    expect(screen.queryByRole('heading', { name: 'Bloom' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'play it' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'open in the editor' })).toBeNull();
-  });
-
-  it('one in chosen is no selection: the subject shows', () => {
-    mount({ chosen: [prepareRow(CINDER, undefined)] });
-    expect(screen.getByRole('heading', { name: 'Bloom' })).toBeTruthy();
-  });
-
-  it('star and never play are mixed over some, and turn on for all of them', async () => {
-    const p = mount({ chosen: several() });
-    const star = screen.getByRole('button', { name: 'star' });
-    expect(star.getAttribute('aria-pressed')).toBe('mixed');
-    await userEvent.click(star);
-    expect(p.onSet).toHaveBeenLastCalledWith(keys, { star: true });
-    const never = screen.getByRole('button', { name: 'never play' });
-    expect(never.getAttribute('aria-pressed')).toBe('mixed');
-    await userEvent.click(never);
-    expect(p.onSet).toHaveBeenLastCalledWith(keys, { hidden: true });
-  });
-
-  it('star takes the star off all of them when every one has it', async () => {
-    const all = several().map((x) => ({ ...x, star: true }));
-    const p = mount({ chosen: all });
-    expect(screen.getByRole('button', { name: 'star' }).getAttribute('aria-pressed')).toBe('true');
-    await userEvent.click(screen.getByRole('button', { name: 'star' }));
-    expect(p.onSet).toHaveBeenLastCalledWith(keys, { star: false });
-  });
-
-  it('adds all of them to a manual playlist', async () => {
-    const p = mount({ chosen: several(), playlists: LISTS });
-    await userEvent.click(screen.getByRole('button', { name: 'add to a playlist' }));
-    expect(screen.queryByRole('menuitem', { name: 'Fast' })).toBeNull();
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Warm-up' }));
-    expect(p.onAddTo).toHaveBeenCalledWith('w', [AMBER.path, BLOOM.path, CINDER.path]);
-  });
-
-  it('edits the tags on all of them, a tag on some showing its count', async () => {
-    const p = mount({ chosen: several() });
-    const tags = screen.getByRole('group', { name: 'my tags' });
-    expect(tags.textContent).toContain('warm2');
-    await userEvent.click(screen.getByRole('button', { name: '+ Tag' }));
-    await userEvent.type(screen.getByRole('textbox', { name: 'add tags' }), 'peak{Enter}');
-    expect(p.onSet).toHaveBeenLastCalledWith(keys, { add_tags: ['peak'] });
-    await userEvent.click(screen.getByRole('button', { name: 'take the tag intro off (on 1 of 3)' }));
-    expect(p.onSet).toHaveBeenLastCalledWith(keys, { remove_tags: ['intro'] });
-  });
-
-  it('keeps the close and the error line', async () => {
-    const p = mount({ chosen: several(), onClose: vi.fn(), error: 'Couldn’t tag them' });
-    expect(screen.getByRole('alert').textContent).toBe('Couldn’t tag them');
-    await userEvent.click(screen.getByRole('button', { name: 'close info' }));
-    expect(p.onClose).toHaveBeenCalled();
   });
 });

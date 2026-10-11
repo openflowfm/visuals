@@ -15,8 +15,6 @@ export interface InspectorProps {
   subject: Prepared | null;
   /** The index key of the preset playing, or null when nothing plays (or it isn't in the index). A subject that isn't it is "picked": the way back to now playing and Play show, and its dot stays marked in the field. */
   playing: string | null;
-  /** Where the preset playing plays from ("from Warm-up · 3 of 10"). Not shown: the transport bar says it, and the inspector's top is the name. */
-  from: string;
   /** Every playlist (for "add to a playlist" and "in"); null until read. */
   playlists: Playlist[] | null;
   /** The library's rows, for the field: every one the index has measured is a dot. */
@@ -183,6 +181,65 @@ export function tuneAt(position: number): number {
 export function tunePosition(multiplier: number): number {
   if (!Number.isFinite(multiplier) || multiplier <= 0) return 0;
   return Math.min(TUNE_POSITION_MAX, Math.max(TUNE_POSITION_MIN, Math.log2(multiplier)));
+}
+
+/** The detents: ¼×, ½×, 1×, 2× and 4×, each a doubling apart, where a drag catches and the arrow keys stop. */
+export const TUNE_DETENTS: readonly number[] = [0.25, 0.5, 1, 2, 4];
+/** How near a detent (in doublings) a drag is caught by it: about a sixth of a doubling. */
+export const TUNE_CATCH = 1 / 6;
+
+const FRACTIONS: Record<number, string> = { 0.25: '¼', 0.5: '½', 1: '1', 2: '2', 4: '4' };
+
+/** A detent's label under the rail: "¼", "½", "1", "2", "4". */
+export const detentSays = (detent: number): string => FRACTIONS[detent] ?? String(detent);
+
+/** A multiplier as the readout says it: a fraction on a detent ("½×", "1×"), two decimals between ("0.71×"). */
+export function tuneSays(multiplier: number): string {
+  const f = FRACTIONS[multiplier];
+  return f ? `${f}×` : `${multiplier.toFixed(2)}×`;
+}
+
+/** Where a drag at `position` lands: on a detent when within `TUNE_CATCH` of one, otherwise on its twelfth (`tuneAt`). */
+export function tuneDragged(position: number): number {
+  if (!Number.isFinite(position)) return 1;
+  for (const d of TUNE_DETENTS) if (Math.abs(position - Math.log2(d)) <= TUNE_CATCH) return d;
+  return tuneAt(position);
+}
+
+/** The next detent above (`way` 1) or below (`way` −1) a multiplier; an end stays where it is. */
+export function tuneStepped(multiplier: number, way: 1 | -1): number {
+  const eps = 1e-9;
+  if (way > 0) return TUNE_DETENTS.find((d) => d > multiplier + eps) ?? TUNE_DETENTS[TUNE_DETENTS.length - 1];
+  return [...TUNE_DETENTS].reverse().find((d) => d < multiplier - eps) ?? TUNE_DETENTS[0];
+}
+
+/** A multiplier nudged one twelfth of a doubling up or down (onto the twelfths `tuneAt` keeps). */
+export const tuneNudged = (multiplier: number, way: 1 | -1): number => tuneAt(tunePosition(multiplier) + way / TUNE_STEPS_PER_DOUBLING);
+
+const TYPED_FRACTIONS: Record<string, number> = { '¼': 0.25, '½': 0.5, '¾': 0.75 };
+
+/**
+ * A multiplier typed into the readout: "0.5", ".75", "1/2", "½", "2x" or "2×";
+ * clamped to ¼–4 and kept to three decimals. Null for anything else (nothing,
+ * words, zero or less), which leaves the value as it was.
+ */
+export function tuneTyped(text: string): number | null {
+  const t = text.replace(/\s*[x×]?\s*$/i, '').trim();
+  let n: number;
+  const frac = /^(\d*\.?\d+)\s*\/\s*(\d*\.?\d+)$/.exec(t);
+  if (Object.hasOwn(TYPED_FRACTIONS, t)) n = TYPED_FRACTIONS[t];
+  else if (frac) n = Number(frac[1]) / Number(frac[2]);
+  else if (/^(\d+\.?\d*|\.\d+)$/.test(t)) n = Number(t);
+  else return null;
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Number(Math.min(TUNE_MAX, Math.max(TUNE_MIN, n)).toFixed(3));
+}
+
+/** The one value several presets share for `which`, or null when they differ ("Mixed"); 1 for none. */
+export function tuneShared(tunes: readonly Tune[], which: keyof Tune): number | null {
+  if (!tunes.length) return 1;
+  const first = tunes[0][which];
+  return tunes.every((t) => t[which] === first) ? first : null;
 }
 
 /**
