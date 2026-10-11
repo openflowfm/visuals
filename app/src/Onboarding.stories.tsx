@@ -57,6 +57,49 @@ export const WarningOwed: Story = {
   },
 };
 
+/**
+ * A window of `width` × 900 over the picture's stand-in, whatever the runner's
+ * viewport: its transform makes it the dialog's containing block, so the fixed
+ * scrim and dialog lay out in it as they would in a window that size.
+ */
+function Window({ width, children }: { width: number; children: ReactNode }) {
+  return <div style={{ position: 'relative', width, height: 900, overflow: 'hidden', transform: 'translateZ(0)', background: 'var(--sb-still) center / cover no-repeat #000' }}>{children}</div>;
+}
+
+/** Owed, in a 1440 px window: the switch on its raised row, enabled once the app has said, and I understand. */
+export const WarningAt1440: Story = {
+  name: 'Warning at 1440 px',
+  globals: { viewport: { value: 'home1440', isRotated: false } },
+  render: () => (
+    <Window width={1440}>
+      <FlashWarningDialog required onClose={fn()} onUnderstood={fn()} />
+    </Window>
+  ),
+  play: async () => {
+    const dialog = await screen.findByRole('dialog', { name: 'Flashing lights' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.contains(document.activeElement)).toBe(true);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Reduce flashing' })).toBeEnabled());
+    await expect(screen.getByRole('button', { name: 'I understand' })).toBeVisible();
+  },
+};
+
+/** Asked for from the menu, in an 800 px window, with reduce flashing turned on here: the switch shows on. */
+export const WarningAt800: Story = {
+  name: 'Warning at 800 px',
+  parameters: { tauri: { firstRun: false, flashUnderstood: true, motion: { reduced: true, system: false } } },
+  globals: { viewport: { value: 'home900', isRotated: false } },
+  render: () => (
+    <Window width={800}>
+      <FlashWarningDialog onClose={fn()} onUnderstood={fn()} />
+    </Window>
+  ),
+  play: async () => {
+    await expect(await screen.findByRole('dialog', { name: 'Flashing lights' })).toBeVisible();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Reduce flashing' })).toHaveAttribute('aria-pressed', 'true'));
+  },
+};
+
 /** Asked for again from the menu: the same dialog, which Esc or a click beside it also closes. */
 export const WarningAsked: Story = {
   parameters: { tauri: { firstRun: false, flashUnderstood: true } },

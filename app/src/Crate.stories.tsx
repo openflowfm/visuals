@@ -1,25 +1,22 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, fn } from 'storybook/test';
+import { expect, fn, userEvent } from 'storybook/test';
 import { Crate } from './Crate.tsx';
 import { CLOSING, DATA, LISTS, MOOD_DECK, row, WARM_UP } from './stories/fixtures.ts';
-// Live mode's look, which `Live.tsx` brings in the app.
-import './live.css';
 
 /**
- * Live mode's crate: the playlists to play with one tap, the user's tags as
- * moods, and what plays after Next.
+ * Live mode's crate, in Home's sidebar look: the playlists to play with one
+ * tap, the user's tags as moods, and what plays after Next, each section
+ * folding under its heading. On the Stage it sits in its panel
+ * (`live/StageCrate`); here, on the panel's tone.
  */
 const meta = {
   title: 'Live/Crate',
   component: Crate,
   args: { lists: LISTS, data: DATA, current: LISTS.deck.current, act: fn(), onLists: fn(), onError: fn() },
-  parameters: { scope: 'bare' },
   decorators: [
     (Story) => (
-      <div className="live" style={{ display: 'block', height: 'auto' }}>
-        <aside className="live-side" style={{ width: 320, height: 760 }}>
-          <Story />
-        </aside>
+      <div style={{ display: 'flex', flexDirection: 'column', width: 240, height: 640, padding: '12px 10px 0', background: 'var(--surface-corner)', borderRadius: 18 }}>
+        <Story />
       </div>
     ),
   ],
@@ -27,21 +24,34 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** Playing Warm-up in order: it lit, the moods, and the four after Next. */
+/** Playing Warm-up in order: it the pill with its green dot, the moods, and the four after Next. */
 export const PlayingPlaylist: Story = {
   play: async ({ canvas }) => {
     await expect(canvas.getByRole('heading', { name: 'Moods' })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Warm-up, playing' })).toHaveAttribute('aria-current', 'true');
     await expect(canvas.getByRole('list', { name: 'Up next, in play order' }).querySelectorAll('li').length).toBe(4);
   },
 };
 
-/** Playing the mood "peak", held: the chip lit, up next from the filter. */
+/** Playing the mood "peak", held: its row lit, up next from the filter. */
 export const PlayingMood: Story = {
   args: { lists: { ...LISTS, deck: MOOD_DECK }, current: MOOD_DECK.current },
   parameters: { tauri: { lists: { ...LISTS, deck: MOOD_DECK }, deckItems: [row(8).path, row(14).path, row(21).path] } },
   play: async ({ canvas }) => {
     await expect(canvas.getByRole('button', { name: 'peak' })).toHaveAttribute('aria-pressed', 'true');
     await expect(canvas.getByRole('button', { name: 'chill' })).toHaveAttribute('aria-pressed', 'false');
+  },
+};
+
+/** The keyboard: one tab stop, the arrows walk, ← folds a section. */
+export const Keyboard: Story = {
+  play: async ({ canvas }) => {
+    await userEvent.tab();
+    await expect(canvas.getByRole('button', { name: 'Warm-up, playing' })).toHaveFocus();
+    await userEvent.keyboard('{ArrowDown}');
+    await expect(canvas.getByRole('button', { name: /^Closing set, Saturday/ })).toHaveFocus();
+    await userEvent.keyboard('{ArrowLeft}{ArrowLeft}');
+    await expect(canvas.getByRole('button', { name: 'Playlists' })).toHaveAttribute('aria-expanded', 'false');
   },
 };
 

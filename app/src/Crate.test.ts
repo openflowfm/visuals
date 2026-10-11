@@ -19,6 +19,9 @@ import {
   nextPath,
   orderable,
   rowLabel,
+  tabStop,
+  crateStep,
+  type Stop,
   UP_NEXT,
   upNote,
   upcoming,
@@ -251,20 +254,65 @@ describe('the crate, to VoiceOver', () => {
     expect(rowLabel({ name: 'd', missing: true })).toBe('d, missing');
     expect(rowLabel({ name: 'e', missing: false })).toBe('e');
     // Playing c, next d (the Next line's): the rows are e a b.
-    const rows = html.match(/<li[^>]*class="live-crate-row"[^>]*>/g) ?? [];
+    const rows = html.match(/<li[^>]*class="scr-next"[^>]*>/g) ?? [];
     expect(rows).toHaveLength(3);
     expect(rows[0]).toContain('aria-label="e"');
-    for (const row of rows) {
-      expect(row).toContain('tabindex="0"');
-      expect(row).toContain('aria-describedby="live-crate-next-note"');
-    }
     // The note is for VoiceOver only; on screen the ≡ shows on hover.
-    expect(html).toMatch(/<span class="live-sr" id="live-crate-next-note">Alt\+↑/);
+    const note = html.match(/<span class="scr-sr" id="([^"]+)">Alt\+↑/)?.[1];
+    expect(note).toBeTruthy();
+    for (const row of rows) {
+      // Each is on the walk (one tab stop for the crate, so -1 until walked to).
+      expect(row).toMatch(/tabindex="-1"/);
+      expect(row).toContain(`aria-describedby="${note}"`);
+    }
     expect(html).not.toContain('Drag ≡');
   });
 
-  it('says whether a mood is playing', () => {
-    expect(html).toMatch(/<button[^>]*class="live-crate-chip"[^>]*aria-pressed="false"[^>]*>warm<\/button>/);
+  it('says whether a mood is playing, and which playlist plays', () => {
+    expect(html).toMatch(/<button[^>]*class="scr-row"[^>]*aria-pressed="false"[^>]*>.*?warm<\/span>/);
+    expect(html).toMatch(/<button[^>]*aria-current="true"[^>]*aria-label="Set, playing"/);
+    expect(html).toContain('aria-label="Calm, smart playlist"');
+  });
+});
+
+describe('the keyboard walk', () => {
+  const stops: Stop[] = [
+    { key: 'head:playlists', section: 'playlists', head: true },
+    { key: 'list:a', section: 'playlists', head: false },
+    { key: 'list:b', section: 'playlists', head: false },
+    { key: 'head:next', section: 'next', head: true },
+    { key: 'more', section: 'next', head: false },
+  ];
+
+  it('walks down and up the stops shown, and jumps to the first and the last', () => {
+    expect(crateStep(stops, 1, 'ArrowDown', [])).toEqual({ to: 'list:b' });
+    expect(crateStep(stops, 4, 'ArrowDown', [])).toEqual({ to: 'more' });
+    expect(crateStep(stops, 3, 'ArrowUp', [])).toEqual({ to: 'list:b' });
+    expect(crateStep(stops, 0, 'ArrowUp', [])).toEqual({ to: 'head:playlists' });
+    expect(crateStep(stops, 2, 'Home', [])).toEqual({ to: 'head:playlists' });
+    expect(crateStep(stops, 0, 'End', [])).toEqual({ to: 'more' });
+  });
+
+  it('← goes from an item to its heading and folds an open heading; → unfolds a folded one and goes into an open one', () => {
+    expect(crateStep(stops, 2, 'ArrowLeft', [])).toEqual({ to: 'head:playlists' });
+    expect(crateStep(stops, 0, 'ArrowLeft', [])).toEqual({ fold: 'playlists' });
+    expect(crateStep(stops, 0, 'ArrowLeft', ['playlists'])).toEqual({});
+    expect(crateStep(stops, 0, 'ArrowRight', ['playlists'])).toEqual({ fold: 'playlists' });
+    expect(crateStep(stops, 0, 'ArrowRight', [])).toEqual({ to: 'list:a' });
+    expect(crateStep(stops, 1, 'ArrowRight', [])).toEqual({});
+  });
+
+  it('leaves every other key alone', () => {
+    expect(crateStep(stops, 1, 'Enter', [])).toBeNull();
+    expect(crateStep(stops, 1, 'Escape', [])).toBeNull();
+    expect(crateStep(stops, 9, 'ArrowDown', [])).toBeNull();
+  });
+
+  it('has one tab stop: the stop walked to last, else the playlist playing, else the first heading', () => {
+    expect(tabStop(stops, 'more', 'list:b')).toBe('more');
+    expect(tabStop(stops, 'gone', 'list:b')).toBe('list:b');
+    expect(tabStop(stops, null, null)).toBe('head:playlists');
+    expect(tabStop([], null, null)).toBeUndefined();
   });
 });
 
@@ -275,7 +323,8 @@ describe('the crate, on screen', () => {
   it("doesn't count a playlist's presets, and marks a smart one", () => {
     const html = render(lists({}));
     expect(html).not.toMatch(/\d+ presets?/);
-    expect(html).toContain('class="live-crate-smart"');
+    expect(html).toContain('data-icon="smart-playlist"');
+    expect(html).toContain('data-icon="playlist"');
   });
 
   it('has no Moods section until there are moods', () => {
@@ -292,12 +341,12 @@ describe('the crate, on screen', () => {
     );
     const html = render({ playlists: [long], deck: { ...pl.EMPTY_DECK, playlist: 'm', index: 0, next_index: 1 } });
     // Next is b: the rows start at c.
-    const rows = html.match(/<li[^>]*class="live-crate-row"[^>]*>/g) ?? [];
+    const rows = html.match(/<li[^>]*class="scr-next"[^>]*>/g) ?? [];
     expect(rows).toHaveLength(UP_NEXT);
     expect(rows[0]).toContain('aria-label="c"');
-    expect(html).toMatch(/<button[^>]*class="live-crate-more"[^>]*aria-expanded="false"[^>]*>Show all<\/button>/);
+    expect(html).toMatch(/<button[^>]*class="scr-more"[^>]*aria-expanded="false"[^>]*>Show all<\/button>/);
     // Few enough to show them all: no disclosure.
-    expect(render(lists({ playlist: 'm', index: 2, next_index: 3 }))).not.toContain('live-crate-more');
+    expect(render(lists({ playlist: 'm', index: 2, next_index: 3 }))).not.toContain('scr-more');
   });
 
   it('"Show fewer" moves focus off a row it hides to the last row shown', () => {

@@ -1,0 +1,63 @@
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, fn, screen, userEvent, waitFor } from 'storybook/test';
+import type { ReactNode } from 'react';
+import { MoreEffects } from './MoreEffects.tsx';
+import { FX_BUSY } from './stories/fixtures.ts';
+
+/**
+ * A window of `width` × 900 over the picture's stand-in, whatever the runner's
+ * viewport: its transform makes it the drawer's containing block, so the fixed
+ * drawer lays out along its foot as it would in a window that size.
+ */
+function Window({ width, children }: { width: number; children: ReactNode }) {
+  return <div style={{ position: 'relative', width, height: 900, overflow: 'hidden', transform: 'translateZ(0)', background: 'var(--sb-still) center / cover no-repeat #000' }}>{children}</div>;
+}
+
+/**
+ * The More effects drawer, one tap from live, as `App` mounts it (outside the
+ * home's scope): along the window's foot, the show above it uncovered. Mirror
+ * and Invert as type, Punch a pad, Reset a quiet word.
+ */
+const meta = {
+  title: 'Sheets/More effects',
+  component: MoreEffects,
+  args: { open: true, onClose: fn() },
+  parameters: { scope: 'bare', layout: 'fullscreen' },
+} satisfies Meta<typeof MoreEffects>;
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+/** In a 1440 px window, every effect at rest: picking a mirror underlines it. */
+export const At1440: Story = {
+  name: 'At 1440 px',
+  globals: { viewport: { value: 'home1440', isRotated: false } },
+  render: (args) => (
+    <Window width={1440}>
+      <MoreEffects {...args} />
+    </Window>
+  ),
+  play: async () => {
+    await expect(await screen.findByRole('dialog', { name: 'More effects' })).toBeVisible();
+    await expect(await screen.findByRole('button', { name: 'Punch (P)' })).toBeVisible();
+    const quad = screen.getByRole('radio', { name: '4-way: mirror four ways' });
+    await userEvent.click(quad);
+    await waitFor(() => expect(quad).toHaveAttribute('aria-checked', 'true'));
+  },
+};
+
+/** In an 800 px window, mid-set: the mirror on and the colours inverted. */
+export const At800: Story = {
+  name: 'At 800 px',
+  parameters: { tauri: { fx: { ...FX_BUSY, invert: true, mirror: 'quad' } } },
+  globals: { viewport: { value: 'home900', isRotated: false } },
+  render: (args) => (
+    <Window width={800}>
+      <MoreEffects {...args} />
+    </Window>
+  ),
+  play: async () => {
+    await expect(await screen.findByRole('button', { name: 'invert' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(screen.getByRole('radio', { name: '4-way: mirror four ways' })).toHaveAttribute('aria-checked', 'true');
+    await expect(screen.getByRole('button', { name: 'Reset: back to normal' })).toBeVisible();
+  },
+};
