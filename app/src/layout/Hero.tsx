@@ -15,6 +15,12 @@ import './hero.css';
  * it in a wide card and under it in a narrow one, and its corners are
  * `--lay-hero-radius`. Its spread shadow paints the main column around it
  * (hero.css), and HomeLayout pins the card, so it never scrolls.
+ *
+ * With `preset` left out (round 2, Ryan's call: the playing preset's name and
+ * where it plays from are in the transport bar) the hero is the picture alone,
+ * marked `data-only`: centred in the main column, as wide as the column at
+ * 16:9, and never taller than half the column (HomeLayout measures it), where
+ * it narrows and stays centred.
  */
 export interface HeroProps {
   /** The preset playing, from the index; null before anything plays. Left out (round 2: the hero is only the picture, its name in the transport bar): no name or actions column. */
@@ -40,7 +46,7 @@ export function Hero({ preset, picture, playing = false, from = '', starred = fa
   const name = preset ? tileName(preset.title, preset.path) : null;
   const by = preset ? tileBy(preset.authors, preset.style) : '';
   return (
-    <div className="hero" data-none={preset ? undefined : ''}>
+    <div className="hero" data-none={preset ? undefined : ''} data-only={info ? undefined : ''}>
       <div className="hero-row">
         {picture && typeof picture !== 'string' ? (
           // The app's `<Preview className="hero-pic" />`: the box itself, the native preview's hole, so nothing wraps it.

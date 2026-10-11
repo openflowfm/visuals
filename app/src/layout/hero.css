@@ -36,6 +36,16 @@
   background: var(--surface-thumb);
   box-shadow: 0 0 0 100vmax var(--surface-0);
 }
+/* The picture alone (round 2: the name is in the transport bar): centred in the
+   column, as wide as it at 16:9, and never taller than half the main column,
+   which HomeLayout measures into --lay-col-h (half the window until it has);
+   capped by height it narrows and stays centred. */
+.lay .hero[data-only] {
+  --hero-cap: calc(var(--lay-col-h, 100vh) / 2);
+}
+.lay .hero[data-only] .hero-pic {
+  margin-inline: auto;
+}
 /* The hole: the native view shows through once it draws; until then a plain surface saying so. */
 .lay .hero-pic[data-hole] {
   background: transparent;
@@ -160,13 +170,13 @@
 
 /* A wide card: the picture on the left up to its cap, the words beside it, along its foot. From 680px, so the pinned hero stays short beside a docked inspector too. */
 @container hero (min-width: 680px) {
-  .lay .hero-row {
+  .lay .hero:not([data-only]) .hero-row {
     display: grid;
     grid-template-columns: minmax(0, calc(var(--hero-cap) * 16 / 9)) minmax(240px, 1fr);
     align-items: end;
     column-gap: 32px;
   }
-  .lay .hero-row .hero-pic {
+  .lay .hero:not([data-only]) .hero-row .hero-pic {
     width: 100%;
   }
   .lay .hero-row .hero-info {

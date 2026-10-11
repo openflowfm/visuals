@@ -64,8 +64,18 @@ function Window({ sidebarMode, inspectorMode, onDismiss, pane }: WindowProps) {
           <button type="button" aria-label="details" aria-controls={INSPECTOR_ID} />
         </Header>
       }
-      hero={<Hero preset={null} picture={<Preview className="hero-pic" />} playing from="" starred={false} onPlayPause={() => {}} onNext={() => {}} onStar={() => {}} onAdd={() => {}} />}
-      bar={<TransportBar playing onPlayPause={() => {}} onStep={() => {}} stepIn="" position={null} onAudioError={() => {}} />}
+      hero={<Hero picture={<Preview className="hero-pic" />} />}
+      bar={
+        <TransportBar
+          playing
+          onPlayPause={() => {}}
+          onStep={() => {}}
+          stepIn=""
+          position={{ elapsed: 12, length: 30 }}
+          onAudioError={() => {}}
+          now={{ name: 'Flexi - mindblob', from: 'from Warm-up · 3 of 10' }}
+        />
+      }
       inspector={inspectorMode ? <button type="button">Play it</button> : undefined}
       sidebarMode={sidebarMode}
       inspectorMode={inspectorMode}
@@ -202,6 +212,32 @@ describe('the shell', () => {
     render(<Window sidebarMode="docked" inspectorMode={null} />);
     const drags = [...document.querySelectorAll('[data-tauri-drag-region]')].map((el) => el.className);
     expect(drags).toEqual(['lay-side-band', 'lay-head', 'vf-header']);
+  });
+});
+
+describe('the hero’s size cap', () => {
+  it('keeps the main column’s height in --lay-col-h, which caps the picture alone at half of it', () => {
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return new DOMRect(0, 0, 1184, this.classList.contains('lay-col') ? 900 : 0);
+    });
+    try {
+      useSheets(SHEETS.map(css));
+      render(<Window sidebarMode="docked" inspectorMode={null} />);
+      const col = document.querySelector<HTMLElement>('.lay-col')!;
+      expect(col.style.getPropertyValue('--lay-col-h')).toBe('900px');
+      // The picture alone is marked so, and its cap is half that height (its centring and size: the Hero and HomeLayout stories, in Chromium).
+      const hero = document.querySelector<HTMLElement>('.hero')!;
+      expect(hero.hasAttribute('data-only')).toBe(true);
+      expect(getComputedStyle(hero).getPropertyValue('--hero-cap').replace(/\s+/g, ' ').trim()).toBe('calc(900px / 2)');
+      expect(document.querySelector('.hero-info')).toBeNull();
+    } finally {
+      rect.mockRestore();
+    }
+  });
+
+  it('leaves the fallback until the column is laid out', () => {
+    render(<Window sidebarMode="docked" inspectorMode={null} />);
+    expect(document.querySelector<HTMLElement>('.lay-col')!.style.getPropertyValue('--lay-col-h')).toBe('');
   });
 });
 

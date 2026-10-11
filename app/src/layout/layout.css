@@ -142,10 +142,13 @@
   right: 0;
   height: var(--lay-band);
 }
+/* The sidebar's content fills it and scrolls its own sections (InsetSidebar, between its mark and its pinned foot), so the body doesn't. */
 .app.home.lay .lay-side-body {
+  display: flex;
   flex: 1;
+  flex-direction: column;
   min-height: 0;
-  overflow-y: auto;
+  overflow: hidden;
 }
 /* The native window buttons' stand-in (stories only): three 12px dots, 8px
    apart, where tauri.conf.json's trafficLightPosition puts the real ones
