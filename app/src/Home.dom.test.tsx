@@ -72,6 +72,9 @@ const sent = (name: string) => invoke.mock.calls.filter(([cmd]) => cmd === name)
 /** The deck's actions sent, by kind. */
 const actions = () => sent('act').map((a) => (a.action as { kind: string }).kind);
 
+/** The deck's word that `path` now plays. */
+const live = (path: string) => act(() => heard.get('live')?.forEach((f) => f({ payload: { deck, opened: null, path, error: null } })));
+
 const viewport = (width: number) => (window as unknown as { happyDOM: { setViewport(v: { width: number; height: number }): void } }).happyDOM.setViewport({ width, height: 900 });
 
 async function mount(props: { start?: string | null; library?: boolean } = {}) {
@@ -251,6 +254,31 @@ describe('the home, an inspector view (decision 70)', () => {
     expect(sent('open').map((a) => a.path)).toEqual([ROWS[2].path]);
   });
 
+  it('follows the deck right after a library click: an open sends no live event, so nothing is held back for it', async () => {
+    resume = { playlist: null, index: null, current: ROWS[0].path, source: null, query: null };
+    await mount({ library: true, start: ROWS[0].path });
+    fireEvent.click(tile('b'));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    live(ROWS[2].path);
+    expect(within(inspector() as HTMLElement).getByRole('heading', { name: 'c' })).toBeTruthy();
+  });
+
+  it('puts back what the deck last said plays when a click fails, not an earlier click still on its way', async () => {
+    resume = { playlist: null, index: null, current: ROWS[0].path, source: null, query: null };
+    await mount({ library: true, start: ROWS[0].path });
+    live(ROWS[0].path);
+    invoke.mockImplementation((cmd: string, args?: { path?: string }) => {
+      if (cmd === 'open' && args?.path === ROWS[1].path) return new Promise(() => {});
+      if (cmd === 'open' && args?.path === ROWS[2].path) return Promise.reject(new Error('no'));
+      return Promise.resolve(answer(cmd));
+    });
+    fireEvent.click(tile('b'));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    fireEvent.click(tile('c'));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(within(inspector() as HTMLElement).getByRole('heading', { name: 'a' })).toBeTruthy();
+  });
+
   it('shows the source’s card when its row is picked again, until Esc', async () => {
     await mount({ library: true, start: ROWS[0].path });
     fireEvent.click(sourceRow('Library'));
@@ -420,6 +448,18 @@ describe('a playlist’s grid', () => {
     await act(() => vi.advanceTimersByTimeAsync(0));
     expect(sent('act').at(-1)).toEqual({ action: { kind: 'go', index: 1 } });
     expect(second.hasAttribute('data-picked')).toBe(false);
+  });
+
+  it('lets a step’s live event through right after a tile was played', async () => {
+    deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path };
+    resume = { playlist: null, index: null, current: ROWS[0].path, source: null, query: null };
+    await mount();
+    fireEvent.click(screen.getByRole('listitem', { name: '2. c' }));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    live(ROWS[1].path);
+    expect(within(inspector() as HTMLElement).getByRole('heading', { name: 'b' })).toBeTruthy();
   });
 
   it('lets go of the picks on Enter as on a click, and plays from that tile', async () => {

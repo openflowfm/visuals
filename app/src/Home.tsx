@@ -126,8 +126,15 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
   // Shows `e` as playing at once; the returned undo puts back what actually plays if playing it fails.
   // Only a click claims: a preset opened by the app itself (at start, a step) lets the deck's word through.
   const guess = useRef<object | null>(null);
+  // What actually plays: the last preset the deck's word named or an open resolved on; an undo puts this back, not a guess.
+  const confirmed = useRef<{ current: Entry | null; lastPath: string | null; since: number } | null>(null);
+  // An open resolved: it plays, and no live event follows it (library.rs `open`), so its claim ends here.
+  const opened = useCallback((e: Entry) => {
+    if (claim.current?.path === e.path) claim.current = null;
+    if (lastPath.current === e.path) confirmed.current = { current: currentRef.current ?? e, lastPath: e.path, since: sinceRef.current };
+  }, []);
   const optimistic = useCallback((e: Entry, clicked: boolean) => {
-    const before = { current: currentRef.current, lastPath: lastPath.current, since: sinceRef.current };
+    const before = confirmed.current ?? { current: currentRef.current, lastPath: lastPath.current, since: sinceRef.current };
     if (e.path !== lastPath.current) setSince(Date.now());
     lastPath.current = e.path;
     setCurrent(e);
@@ -151,12 +158,13 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
       dismiss();
       try {
         await api.open(e.path);
+        opened(e);
       } catch (err) {
         undo();
         setNotice(notice(`Couldn't open ${e.name}.`, err));
       }
     },
-    [dismiss, setNotice, optimistic],
+    [dismiss, setNotice, optimistic, opened],
   );
   // Picking up where the app left off, the preset put back stays: named in the hero (unless the deck said first), not opened again.
   const { library, loaded, search, setSearch, found } = useLibrary(start, load, fail, (e) => setCurrent((c) => c ?? e));
@@ -188,11 +196,15 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
     if (c && path !== c.path && Date.now() < c.until) return;
     claim.current = null;
     guess.current = null;
+    let at = sinceRef.current;
     if (path !== lastPath.current) {
       lastPath.current = path;
-      setSince(Date.now());
+      at = Date.now();
+      setSince(at);
     }
-    setCurrent(library.find((e) => e.path === path) ?? { path, name: nameOf(path), group: '' });
+    const e = library.find((e) => e.path === path) ?? { path, name: nameOf(path), group: '' };
+    confirmed.current = { current: e, lastPath: path, since: at };
+    setCurrent(e);
     setNotice(now.error ? openFailed(path, now.error) : null);
   });
 
@@ -328,6 +340,8 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
   }, [rows, library, search]);
   const step = useCallback(
     (by: number) => {
+      // A step is news: its live event must not be dropped by an earlier click's claim.
+      claim.current = null;
       if (playing || deck.query) {
         // Counted as in flight until the deck has answered and said what it opened, so the grid's follow waits for it.
         stepDeck({ kind: by === 0 ? 'random' : by > 0 ? 'next' : 'previous' }).catch(fail("Couldn't step the playlist."));
@@ -545,7 +559,7 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
     if (!list) return failed(`play ${name}`)();
     const at = playlists.indexOf(list);
     const active = deck.playlist === list.id;
-    if (index === null) return void api.open(path).catch(failed(`open ${name}`));
+    if (index === null) return void api.open(path).then(() => opened(library.find((e) => e.path === path) ?? { path, name, group: '' }), failed(`open ${name}`));
     // A place the list no longer has, or a preset gone from the library, can't play.
     if (index < 0 || (list.kind === 'manual' && (index >= list.items.length || list.items[index].missing))) return failed(`play ${name}`)();
     pl.act(active ? { kind: 'go', index } : { kind: 'load', playlist: at, index }).catch(failed(`play ${list.name}`));
