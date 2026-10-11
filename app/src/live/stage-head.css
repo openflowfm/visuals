@@ -198,12 +198,13 @@
   padding: 8px;
   font-size: 13px;
 }
-/* Tap tempo, at the top of the Beat panel: a soft key, lit while Link keeps the tempo. */
+/* Tap tempo, at the top of the Beat panel: a soft key, lit while Link keeps the tempo.
+   Its face fills the line: what a press does at the start, the tempo and T's keycap at the end. */
 .stage-bar .stage-pop .live-tap {
   display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   width: 100%;
   min-height: 48px;
   height: auto;
@@ -223,16 +224,35 @@
 .stage-bar .stage-pop .live-tap[data-on] {
   background: color-mix(in srgb, var(--primary) 24%, transparent);
 }
+.stage-bar .stage-pop .live-tap-what {
+  flex: 1;
+  text-align: start;
+}
+.stage-bar .stage-pop .live-tap-bpm {
+  color: var(--caption);
+  font-size: 11px;
+  font-weight: normal;
+}
 .stage-bar .stage-pop .live-tap b {
+  margin-inline-end: 3px;
+  color: var(--fg);
   font-family: var(--font-num);
   font-variation-settings: var(--font-num-axes);
   font-size: 22px;
   font-weight: 600;
 }
-.stage-bar .stage-pop .live-tap small {
+.stage-bar .stage-pop .live-tap kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  border: 1px solid color-mix(in srgb, var(--fg) 24%, transparent);
+  border-radius: 5px;
   color: var(--caption);
+  font: inherit;
   font-size: 11px;
-  font-weight: normal;
+  font-weight: 600;
 }
 /* Link (LinkPanel), in Home's look: no panel of its own, sentence-case caption, soft lights. */
 .stage-bar .stage-pop .link-panel {

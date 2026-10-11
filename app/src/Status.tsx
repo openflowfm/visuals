@@ -45,18 +45,22 @@ export function outputText(status: output.Status): { on: boolean; text: string }
 /** The tap button's name: what sets the tempo, and what it is. "Tap tempo, 120 BPM (T)". */
 export const tempoLabel = (linked: boolean, bpm: number | null): string => `${linked ? 'Link' : 'Tap'} tempo${bpm !== null && bpm > 0 ? `, ${Math.round(bpm)} BPM` : ''} (${control('tempo').keys})`;
 
+/** What the tap key says on its face: what a press does, or that Link keeps the tempo (a tap does nothing then). */
+export const tapWords = (linked: boolean): string => (linked ? 'Tempo from Link' : 'Tap in time');
+
 /**
- * Tap tempo, at the top of the beat popover: tapped in time, or lit
- * (not pressed) while Link keeps the tempo. T taps it from anywhere in live mode.
+ * Tap tempo, at the top of the beat popover, as a key: what a press does on the
+ * left, the tempo and T's keycap on the right; lit (not pressed) while Link keeps
+ * the tempo. T taps it from anywhere in live mode.
  */
 export function TapButton({ effects, onTap }: { effects: fx.Fx | null; onTap(): void }) {
   const linked = effects?.linked === true;
   const bpm = effects?.bpm ?? null;
   return (
     <ButtonFace className="live-tap" lit={linked} aria-label={tempoLabel(linked, bpm)} title={`${control('tempo').does} (${control('tempo').keys})`} onClick={onTap}>
-      {linked ? 'Link' : 'Tap'}
-      {bpm !== null && bpm > 0 && <b>{Math.round(bpm)}</b>}
-      <small aria-hidden="true">{control('tempo').keys}</small>
+      <span className="live-tap-what">{tapWords(linked)}</span>
+      <span className="live-tap-bpm">{bpm !== null && bpm > 0 ? <b>{Math.round(bpm)}</b> : <b>—</b>} BPM</span>
+      <kbd aria-hidden="true">{control('tempo').keys}</kbd>
     </ButtonFace>
   );
 }

@@ -581,6 +581,67 @@ describe('a playlist’s grid', () => {
   });
 });
 
+describe('an empty playlist', () => {
+  const pane = () => within(document.querySelector('.home-grid-pane') as HTMLElement);
+
+  beforeEach(() => {
+    playlists = [manual('1', 'Warm up', [item(ROWS[0])]), manual('2', 'Empty', [])];
+  });
+
+  it('has its head over the pane while a preset plays, with its name to rename and how it plays', async () => {
+    deck = { ...EMPTY_DECK, current: ROWS[0].path };
+    resume = { playlist: null, index: null, current: ROWS[0].path, source: null, query: null };
+    await mount();
+    fireEvent.click(sourceRow('Empty'));
+    expect(within(inspector() as HTMLElement).getByRole('heading', { name: 'a' })).toBeTruthy();
+    expect(pane().getByRole('heading', { level: 1, name: 'Empty' }).getAttribute('title')).toBe('Double-click to rename');
+    expect(pane().getByRole('button', { name: /Play/ }).hasAttribute('disabled')).toBe(true);
+    expect(pane().getByText(/Empty is empty/)).toBeTruthy();
+  });
+
+  it('has one head only when the inspector shows its card', async () => {
+    await mount();
+    fireEvent.click(sourceRow('Empty'));
+    fireEvent.click(sourceRow('Empty'));
+    expect(inspector()!.textContent).toContain('Empty');
+    expect(document.querySelectorAll('.pl-head').length).toBe(1);
+    expect(pane().queryByRole('heading', { name: 'Empty' })).toBeNull();
+  });
+});
+
+describe('adding a playlist from a file', () => {
+  const RENAMED = 'A playlist called “Warm up” was already here, so this one is “Warm up 2”.';
+
+  it('says so when its name was taken, and shows the playlist under the name it got', async () => {
+    playlists = [manual('1', 'Warm up', [item(ROWS[0])])];
+    const after = [...playlists, manual('9', 'Warm up 2', [item(ROWS[1])])];
+    invoke.mockImplementation((cmd: string) => Promise.resolve(cmd === 'playlist_import' ? { lists: { playlists: after, deck }, id: '9', name: 'Warm up 2', renamed: RENAMED } : answer(cmd)));
+    await mount();
+    const input = screen.getByTestId('isb-import') as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [new File(['{"name":"Warm up"}'], 'warm.json', { type: 'application/json' })] } });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(sent('playlist_import')).toEqual([{ text: '{"name":"Warm up"}' }]);
+    expect(screen.getByRole('alert').textContent).toContain(RENAMED);
+    expect(screen.getByRole('list', { name: 'Warm up 2, in the order it plays' })).toBeTruthy();
+  });
+
+  it('says nothing when the name was free', async () => {
+    const after = [manual('9', 'Shared', [item(ROWS[1])])];
+    invoke.mockImplementation((cmd: string) => Promise.resolve(cmd === 'playlist_import' ? { lists: { playlists: after, deck }, id: '9', name: 'Shared', renamed: null } : answer(cmd)));
+    await mount();
+    await act(async () => {
+      fireEvent.change(screen.getByTestId('isb-import'), { target: { files: [new File(['{}'], 'shared.json')] } });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByRole('list', { name: 'Shared, in the order it plays' })).toBeTruthy();
+  });
+});
+
 describe('quick add (#194)', () => {
   beforeEach(() => {
     playlists = [manual('1', 'Warm up', [item(ROWS[0])])];

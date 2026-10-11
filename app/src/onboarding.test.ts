@@ -158,6 +158,13 @@ describe('the full library step', () => {
     expect(libraryLine(status({ size: 0 }))).toBe('You have 40 to start with. The full library is 9,795 presets.');
   });
 
+  it('says when the library came without its pictures', () => {
+    expect(libraryLine(status({ installed: 9_795, bare: true }))).toBe(
+      "You have 9,795 to start with. The full library is 9,795 presets (130 MB). The full library came without its pictures: they couldn't be downloaded.",
+    );
+    expect(libraryLine(status({ bare: false }))).not.toContain('pictures');
+  });
+
   it('says what there is to start with from the starter set while the download counts up', () => {
     expect(libraryLine(status({ state: 'downloading', installed: 3_100, received: 40_000_000 }))).toBe('You have 40 to start with. The full library is 9,795 presets (130 MB).');
     expect(libraryLine(status({ state: 'downloading', installed: 3_100, starter: 0 }))).toBe('The full library is 9,795 presets (130 MB).');

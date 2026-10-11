@@ -158,18 +158,16 @@ export function handler(w: World) {
     const list = w.lists.playlists.find((p) => p.id === deck.playlist) ?? null;
     const items = list?.items ?? [];
     const at = (i: number) => live(play(w.lists, list, i, items[i]?.path ?? null));
+    // As the app's deck (#218): HOLD only stops it moving on by itself; next, previous and random still step.
     switch (action.kind) {
       case 'next':
-        if (deck.hold) return;
         if (items.length) at(deck.index === null ? 0 : (deck.index + 1) % items.length);
         else if (deck.next) live({ ...deck, current: deck.next });
         return;
       case 'previous':
-        if (deck.hold) return;
         if (items.length) at(deck.index === null || deck.index === 0 ? items.length - 1 : deck.index - 1);
         return;
       case 'random':
-        if (deck.hold) return;
         if (items.length) at(Math.floor(random() * items.length));
         else live({ ...deck, current: w.rows[Math.floor(random() * w.rows.length)].path });
         return;
@@ -201,6 +199,23 @@ export function handler(w: World) {
         live({ ...deck, bars: action.bars as number });
         setFx({ ...w.fx, bars: action.bars as number });
         return;
+      case 'put_back': {
+        // The loaded playlist's own timing again; outside a playlist there is nothing to put back.
+        const own = list && deck.settings ? list.settings.change : null;
+        if (!own) return;
+        const bars = own.unit === 'bars' ? own.every : 0;
+        live({
+          ...deck,
+          auto: own.unit === 'seconds' ? true : own.unit === 'off' ? false : deck.auto,
+          seconds: own.unit === 'bars' ? deck.seconds : own.every,
+          bars,
+          every: { every: bars, unit: 'bars' },
+          settings: { ...deck.settings!, change: own },
+          differs: deck.differs.filter((d) => d !== 'change'),
+        });
+        setFx({ ...w.fx, bars });
+        return;
+      }
       case 'query': {
         const q = action.query as api.LibraryQuery;
         const path = (action.at as string | undefined) ?? deck.current;
@@ -355,8 +370,22 @@ export function handler(w: World) {
         const p = w.lists.playlists.find((x) => x.id === args.id);
         return { file_name: `${p?.name ?? 'playlist'}.json`, text: JSON.stringify(p ?? {}) };
       }
-      case 'playlist_import':
-        return w.lists;
+      case 'playlist_import': {
+        // As `Store::import` names it: the file's name, or the first free one after it, said so.
+        let wanted = 'Shared';
+        try {
+          wanted = String((JSON.parse(args.text as string) as { name?: unknown }).name ?? wanted).trim() || wanted;
+        } catch {
+          // Not JSON: the fixture's name.
+        }
+        const taken = (n: string) => w.lists.playlists.some((p) => p.name.toLowerCase() === n.toLowerCase());
+        let name = wanted;
+        for (let n = 2; taken(name); n++) name = `${wanted} ${n}`;
+        const id = `p-${w.lists.playlists.length + 1}`;
+        const after = lists({ ...w.lists, playlists: [...w.lists.playlists, { id, name, items: [], kind: 'manual', query: null, settings: F.WARM_UP.settings }] });
+        const renamed = name === wanted ? null : `A playlist called “${wanted}” was already here, so this one is “${name}”.`;
+        return { lists: after, id, name, renamed } satisfies pl.Imported;
+      }
 
       // Live.
       case 'fx_state':

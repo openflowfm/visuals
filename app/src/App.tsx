@@ -49,10 +49,10 @@ export function App() {
   if (welcome.shown)
     return (
       <Onboarding
-        onDone={(end) => {
+        onDone={() => {
           welcome.close();
-          // Arriving from the flow, live mode plays in the window: the output isn't opened on a display.
-          setMode({ view: end === 'live' ? 'live' : HOME, preset: null, windowed: end === 'live' });
+          // Finished or skipped, the flow ends on the home.
+          setMode({ view: HOME, preset: null });
         }}
       />
     );

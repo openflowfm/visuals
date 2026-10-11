@@ -258,8 +258,19 @@ export interface Exported {
 }
 /** A playlist as a file's name and text, for the page to save. */
 export const exportList = (id: string) => invoke<Exported>('playlist_export', { id });
+/** `actions::ImportedLists`: a playlist file added. */
+export interface Imported {
+  /** The playlists after it. */
+  lists: Lists;
+  /** The new playlist's id. */
+  id: string;
+  /** The name it got: the file's, or, when a playlist had that already, the first free one after it ("Warm up 2"). */
+  name: string;
+  /** When the name isn't the file's, what to tell the user; null otherwise. */
+  renamed: string | null;
+}
 /** Add the playlist in `text` (what `exportList` wrote) to the playlists. */
-export const importList = (text: string) => invoke<Lists>('playlist_import', { text });
+export const importList = (text: string) => invoke<Imported>('playlist_import', { text });
 /** The paths playing, in play order: the playlist (shuffled when it is), the resolved smart list or the filter. */
 export const deckItems = () => invoke<string[]>('deck_items');
 /** The presets played lately, newest first. */

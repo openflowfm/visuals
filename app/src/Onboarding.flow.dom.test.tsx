@@ -53,7 +53,7 @@ describe('the welcome flow', () => {
     await user.click(screen.getByRole('button', { name: /Surprise me/ }));
     await settle();
     expect(onDone).toHaveBeenCalledWith('home');
-    expect(onDone).not.toHaveBeenCalledWith('live');
+    expect(onDone).toHaveBeenCalledTimes(1);
     expect(app.invoke).toHaveBeenCalledWith('act', { action: { kind: 'random' } });
     expect(app.invoke).toHaveBeenCalledWith('first_run_done', undefined);
     expect(localStorage.getItem(STEP_KEY)).toBeNull();
