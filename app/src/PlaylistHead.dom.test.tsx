@@ -90,6 +90,23 @@ describe('the playlist head', () => {
     expect(sent('act')).toEqual([{ action: { kind: 'unload' } }]);
   });
 
+  it('says the timing in effect when it was changed live, and puts the playlist’s own back', async () => {
+    // Playing, the Link panel's "every bar" over its own every 30 s.
+    await mount({ ...EMPTY_DECK, playlist: chill.id, index: 0, count: 3, bars: 1, every: { every: 1, unit: 'bars' }, differs: ['change'] });
+    expect(screen.getByText('3 presets · moves on every bar (changed live) · in order · crossfade 2 s · playing 1 of 3')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Put back' }));
+    await flush();
+    expect(sent('act')).toEqual([{ action: { kind: 'put_back' } }]);
+    // As its own timing, or not playing: its own words, and nothing to put back.
+    cleanup();
+    await mount({ ...EMPTY_DECK, playlist: chill.id, index: 0, count: 3 });
+    expect(screen.getByText(/moves on every 30 s/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Put back' })).toBeNull();
+    cleanup();
+    await mount({ ...EMPTY_DECK, bars: 1, differs: ['change'] });
+    expect(screen.queryByRole('button', { name: 'Put back' })).toBeNull();
+  });
+
   it('shuffles the playlist and keeps it', async () => {
     await mount();
     const shuffle = screen.getByRole('button', { name: 'Shuffle' });

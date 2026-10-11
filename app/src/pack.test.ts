@@ -31,7 +31,7 @@ describe('megabytes', () => {
 
 describe('packAction', () => {
   it('offers the full library with its count and size when idle', () => {
-    expect(packAction(status())).toEqual({ state: 'idle', label: 'Get the full library: 9,795 presets (11 MB)', progress: null, error: null });
+    expect(packAction(status())).toEqual({ state: 'idle', label: 'Get the full library: 9,795 presets (11 MB)', progress: null, error: null, note: null });
   });
   it('leaves the size out before it is known', () => {
     expect(packAction(status({ size: 0 }))?.label).toBe('Get the full library: 9,795 presets');
@@ -51,6 +51,24 @@ describe('packAction', () => {
   it('is gone once every preset is in', () => {
     expect(packAction(status({ installed: 9795 }))).toBeNull();
     expect(packAction(status({ installed: 9800, state: 'downloading' }))).toBeNull();
+  });
+  it("says the full library came without its pictures, and offers them again at the bundle's size", () => {
+    const bare = status({ installed: 9795, size: 53_005_539, bare: true });
+    expect(packAction(bare)).toEqual({
+      state: 'idle',
+      label: 'Try again for the pictures (53 MB)',
+      progress: null,
+      error: null,
+      note: "The full library came without its pictures: they couldn't be downloaded.",
+    });
+  });
+  it('follows the retry for the pictures, and says why when it fails again', () => {
+    const bare = status({ installed: 9795, size: 53_005_539, bare: true });
+    expect(packAction({ ...bare, state: 'downloading', received: 53_005_539 / 2 })?.label).toBe("Getting the full library's pictures… 50%");
+    const failed = packAction({ ...bare, state: 'failed', error: 'No network.' });
+    expect(failed?.label).toBe('Try getting the pictures again (53 MB)');
+    expect(failed?.error).toBe('No network.');
+    expect(failed?.note).toContain('without its pictures');
   });
 });
 

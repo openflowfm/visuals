@@ -9,7 +9,7 @@ import * as output from '../output.ts';
 import { leave } from '../OutputPanel.tsx';
 import * as pl from '../playlists.ts';
 import { notice, openFailed } from '../shell.ts';
-import { intensityOf, keyOf, playsWindowed, ratingOf, sendIntensity, starred, type LiveState } from './live-model.ts';
+import { intensityOf, keyOf, playsWindowed, ratingOf, sendIntensity, sinceAfter, starred, type LiveState } from './live-model.ts';
 
 /**
  * Live mode's state, read from the app and followed as it changes: the
@@ -25,6 +25,8 @@ import { intensityOf, keyOf, playsWindowed, ratingOf, sendIntensity, starred, ty
 export function useLive({ start, windowed = false }: { start: string | null; windowed?: boolean }): LiveState {
   const [lists, setLists] = useState<pl.Lists | null>(null);
   const [current, setCurrent] = useState<string | null>(null);
+  // When the preset playing started: going live counts as a start until the first open reports.
+  const [since, setSince] = useState(() => Date.now());
   const { notice: error, set: setError, fail, dismiss } = useNotice();
   const [status, setStatus] = useState<output.Status>({ display: null, size: null });
   const [displays, setDisplays] = useState<output.Display[] | null>(null);
@@ -87,6 +89,7 @@ export function useLive({ start, windowed = false }: { start: string | null; win
   useTauriEvent(pl.onLive, (now) => {
     setLists((l) => (l ? { ...l, deck: now.deck } : l));
     if (now.path) setCurrent(now.path);
+    setSince((was) => sinceAfter(was, now, Date.now()));
     // A preset that opened clears a failure to open the last one.
     if (now.error) setError(openFailed(now.path, now.error));
     else if (now.path) dismiss();
@@ -163,6 +166,7 @@ export function useLive({ start, windowed = false }: { start: string | null; win
     setIntensity,
     favourite,
     rate,
+    since,
   };
 }
 

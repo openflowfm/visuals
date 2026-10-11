@@ -136,6 +136,23 @@
   background: var(--ui);
 }
 
+/* After the time, what it does: "moves on by itself · H to stay". The quietest
+   thing in the bar, and the first to give way when the bar narrows. */
+.lay-transport-hint {
+  /* Shrinks long before the track does (the track's basis below gives it a
+     share to shrink from at all), so a narrow bar keeps the time readable. */
+  flex: 0 1000 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--caption);
+  font-size: 11px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.lay-transport-time:has(.lay-transport-hint) .lay-transport-track {
+  flex-basis: 120px;
+}
+
 /* The audio input: quiet text and its meter, no box at rest. */
 .lay-transport-right {
   display: flex;

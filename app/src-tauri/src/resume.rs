@@ -369,14 +369,21 @@ fn restore(handle: &AppHandle, r: &Resume) -> bool {
             if !act("loading the playlist at its position", Action::Load { playlist, index }) && !act("loading the playlist", Action::Load { playlist, index: None }) {
                 return playing();
             }
-            // A smart playlist is worked out again: go to where that preset is now.
-            let elsewhere = r.current.as_ref().and_then(|c| {
+            // The preset that was playing comes back as itself: where it is now in
+            // the playlist (a smart one is worked out again), or on its own.
+            let back = {
                 let live = deck.live.lock().unwrap();
-                let here = live.current.as_ref().is_some_and(|p| p.as_os_str() == c.as_str());
-                if here { None } else { live.items.iter().position(|p| p.as_os_str() == c.as_str()) }
-            });
-            if let Some(index) = elsewhere {
-                act("going back to the preset", Action::Go { index });
+                back_to_preset(r.current.as_deref(), live.current.as_deref(), &live.items)
+            };
+            match back {
+                Back::Here => {}
+                Back::Go(index) => {
+                    act("going back to the preset", Action::Go { index });
+                }
+                Back::Open(path) if path.is_file() => {
+                    open_here(&path);
+                }
+                Back::Open(_) => {}
             }
         }
         Plan::Query { query, current } => {
@@ -399,8 +406,32 @@ fn restore(handle: &AppHandle, r: &Resume) -> bool {
     playing()
 }
 
+/// How the preset that was playing comes back once its playlist has loaded again.
+#[derive(Debug, PartialEq)]
+enum Back {
+    /// The playlist opened on it (or none was kept).
+    Here,
+    /// At this place in the playlist now.
+    Go(usize),
+    /// The playlist doesn't have it (any more): open it on its own, which leaves the playlist.
+    Open(PathBuf),
+}
+
+/// How `kept`, the preset that was playing, comes back on a deck that loaded its
+/// playlist and is on `now`, with the playlist's `items`.
+fn back_to_preset(kept: Option<&str>, now: Option<&Path>, items: &[PathBuf]) -> Back {
+    let Some(kept) = kept else { return Back::Here };
+    if now.is_some_and(|p| p.as_os_str() == kept) {
+        return Back::Here;
+    }
+    match items.iter().position(|p| p.as_os_str() == kept) {
+        Some(at) => Back::Go(at),
+        None => Back::Open(PathBuf::from(kept)),
+    }
+}
+
 /// The actions that put `r`'s tweaks and hold back on a deck now at `deck`, with
-/// the effects `fx`: only what differs, and hold last, as it refuses loads.
+/// the effects `fx`: only what differs, and hold last.
 fn again(r: &Resume, deck: &DeckView, fx: &crate::fx::Settings) -> Vec<Action> {
     let mut actions = Vec::new();
     if let Some(t) = r.tweaks {
@@ -803,6 +834,35 @@ mod tests {
         let filter = Resume { query: Some(q.clone()), ..r(None, Some(2), Some("/y.milk")) };
         assert_eq!(plan(&filter, &ids), Plan::Query { query: q.clone(), current: Some("/y.milk".into()) });
         assert_eq!(plan(&Resume { query: Some(q.clone()), ..Resume::default() }, &ids), Plan::Query { query: q, current: None });
+    }
+
+    #[test]
+    fn the_preset_that_was_playing_comes_back_as_itself() {
+        let items: Vec<PathBuf> = ["/p/a.milk", "/p/b.milk"].iter().map(PathBuf::from).collect();
+        // The playlist opened on it: nothing more to do.
+        assert_eq!(back_to_preset(Some("/p/a.milk"), Some(Path::new("/p/a.milk")), &items), Back::Here);
+        assert_eq!(back_to_preset(None, Some(Path::new("/p/a.milk")), &items), Back::Here);
+        // Elsewhere in it now (a smart playlist worked out again): there.
+        assert_eq!(back_to_preset(Some("/p/b.milk"), Some(Path::new("/p/a.milk")), &items), Back::Go(1));
+        // Not in it (played outside it, as an older resume.json kept it): on its own.
+        assert_eq!(back_to_preset(Some("/p/x.milk"), Some(Path::new("/p/a.milk")), &items), Back::Open("/p/x.milk".into()));
+    }
+
+    #[test]
+    fn a_preset_picked_outside_the_playlist_is_kept_as_itself_not_as_the_playlist_s_place() {
+        let fx = crate::fx::Settings::default();
+        let mut live = crate::actions::Live {
+            playlist: Some("chill".into()),
+            items: vec!["/p/a.milk".into(), "/p/b.milk".into()],
+            sequence: vec![0, 1],
+            index: Some(1),
+            current: Some("/p/b.milk".into()),
+            ..crate::actions::Live::default()
+        };
+        live.opened("/p/x.milk".into());
+        let kept = kept_from(&live.view(&fx), &fx);
+        assert_eq!((kept.playlist.as_deref(), kept.index, kept.current.as_deref()), (None, None, Some("/p/x.milk")));
+        assert_eq!(plan(&kept, &["chill".to_string()]), Plan::Open("/p/x.milk".into()));
     }
 
     #[test]

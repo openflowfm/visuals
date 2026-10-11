@@ -24,7 +24,7 @@ vi.mock('./live/StageLayout.tsx', async () => {
       h(
         'div',
         { 'data-testid': 'stage', 'data-shown': String(p.panels.shown), 'data-width': p.width, 'data-in-window': String(p.inWindow) },
-        p.panels.shown ? h(Fragment, null, p.head, p.crate, p.dock) : null,
+        p.panels.shown ? h(Fragment, null, p.head, p.crate, p.dock) : h('button', { type: 'button', onClick: p.onPanels }, 'show controls'),
         p.centre,
         p.children,
       ),
@@ -158,6 +158,15 @@ describe("the Stage's keys", () => {
     expect(stage().dataset.shown).toBe('false');
     expect(screen.queryByRole('region', { name: 'Live controls' })).toBeNull();
     await press('\\');
+    expect(stage().dataset.shown).toBe('true');
+    expect(onMode).not.toHaveBeenCalled();
+  });
+
+  it('the hint shown with the panels hidden brings them back', async () => {
+    const { onMode } = await mount();
+    await press('\\');
+    expect(stage().dataset.shown).toBe('false');
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'show controls' })));
     expect(stage().dataset.shown).toBe('true');
     expect(onMode).not.toHaveBeenCalled();
   });

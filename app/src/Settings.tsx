@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { Segmented } from '@openflow/widgets/controls/Segmented.tsx';
-import { Toggle } from '@openflow/widgets/controls/Toggle.tsx';
 import * as api from './api.ts';
 import { Credits } from './Credits.tsx';
 import { EffectSettings, useFx } from './Effects.tsx';
@@ -10,10 +9,12 @@ import * as pack from './pack.ts';
 import { REDUCE_WHAT, setMotion, useMotion } from './access.ts';
 import { isTopTrap, leavesKeys, useFocusTrap } from './focusTrap.ts';
 import { useNotice, useTauriEvent } from './hooks.ts';
+import { Icon } from './layout/icons.tsx';
 import { LinkSettings } from './LinkPanel.tsx';
 import * as output from './output.ts';
 import { OutputSettings } from './OutputPanel.tsx';
 import { SourcePicker } from './SourcePicker.tsx';
+import { SwitchRow } from './Switch.tsx';
 import { NoticeBanner } from './views.tsx';
 import { say, Say } from './words.ts';
 import './settings.css';
@@ -74,8 +75,8 @@ export function Sheet({
       <div ref={ref} tabIndex={-1} className={`vf-sheet ${className}`} role="dialog" aria-label={title} aria-modal={modal ? 'true' : undefined}>
         <div className="vf-sheet-head">
           <h2>{title}</h2>
-          <Button tone="quiet" label={`Close ${title.toLowerCase()}`} title="Close (Esc)" onPress={onClose}>
-            ✕
+          <Button tone="quiet" className="vf-sheet-close" label={`Close ${title.toLowerCase()}`} title="Close (Esc)" onPress={onClose}>
+            <Icon name="close" />
           </Button>
         </div>
         {children}
@@ -172,7 +173,7 @@ export const readKept = (read: () => Promise<boolean>): Promise<{ on: boolean | 
   );
 
 /** A switch the app keeps: read once, shown at once when flipped, and put back, with why, if the app refuses it. */
-function KeptToggle({ read, write, name, title }: { read(): Promise<boolean>; write(on: boolean): Promise<unknown>; name: string; title: string }) {
+function KeptToggle({ read, write, name, title, note }: { read(): Promise<boolean>; write(on: boolean): Promise<unknown>; name: string; title: string; note?: ReactNode }) {
   const [on, setOn] = useState<boolean | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   useEffect(() => {
@@ -192,10 +193,8 @@ function KeptToggle({ read, write, name, title }: { read(): Promise<boolean>; wr
   };
   return (
     <div className="settings-switch">
-      <span>{name}</span>
-      <Toggle on={on === true} onChange={change} disabled={on === null} layout="inside" name={name.toLowerCase()} label={name} title={title}>
-        {on ? 'on' : 'off'}
-      </Toggle>
+      <SwitchRow name={name} on={on === true} onChange={change} disabled={on === null} title={title} />
+      {note && <p className="settings-line">{note}</p>}
       {problem && (
         <p className="settings-line settings-problem" role="status">
           {problem}
@@ -230,10 +229,7 @@ export function MotionSwitch({
   const name = Say('reduced motion');
   return (
     <div className="settings-switch">
-      <span>{name}</span>
-      <Toggle on={shown} onChange={onChange} disabled={motion === null} layout="inside" name={name.toLowerCase()} label={name} title={REDUCE_WHAT}>
-        {shown ? 'on' : 'off'}
-      </Toggle>
+      <SwitchRow name={name} on={shown} onChange={onChange} disabled={motion === null} title={REDUCE_WHAT} />
       {motion &&
         (motion.system ? (
           <p className="settings-line settings-follow">Following macOS's Reduce motion.</p>
@@ -366,8 +362,8 @@ export function Settings({ open, onClose }: { open: boolean; onClose(): void }) 
           write={api.crashReportsEnable}
           name="Send crash reports"
           title="Keep a note when the app crashes, and offer to send it as a GitHub issue you look over first"
+          note={`No ${say('telemetry')}: nothing about you or how you use the app leaves this Mac. A crash report only goes anywhere if you send it yourself.`}
         />
-        <p className="settings-line">No {say('telemetry')}: nothing about you or how you use the app leaves this Mac. A crash report only goes anywhere if you send it yourself.</p>
       </Section>
     </Sheet>
   );

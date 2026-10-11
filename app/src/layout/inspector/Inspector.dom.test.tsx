@@ -185,7 +185,8 @@ describe('the inspector in a DOM', () => {
     expect(screen.getByText(/nothing playing/i)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'star' })).toBeNull();
     expect(screen.getByRole('listbox', { name: 'The library by speed and brightness' })).toBeTruthy();
-    expect(screen.getByText(/The library: 3 presets by speed and brightness/)).toBeTruthy();
+    // Three of the four drawn: the library's real count, never the measured three as if they were all of it.
+    expect(screen.getByText(/The library by speed and brightness: 3 of its 4 presets drawn so far/)).toBeTruthy();
   });
 });
 

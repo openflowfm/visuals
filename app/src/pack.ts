@@ -2,8 +2,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { say } from './words.ts';
 
-// The presets the app has: the bundled starter set and the full pack's download.
-// A stub for now: issue #86 fills in the download (`pack::pack_download`).
+// The presets the app has: the bundled starter set and the full pack's download
+// (`pack::pack_download`), with what the pack bar and the library's offer say about it.
 
 /** `pack::State`: where the full pack's download is. */
 export type PackState = 'idle' | 'downloading' | 'failed';
@@ -23,6 +23,12 @@ export interface PackStatus {
   received: number;
   /** Why the last download failed. */
   error: string | null;
+  /**
+   * The full library came without its pictures: our bundle couldn't be had, so
+   * projectM's bare pack was fetched instead. A download now tries the bundle alone
+   * (`size` is its size). Optional only so older fixtures still type.
+   */
+  bare?: boolean;
 }
 
 /** `pack::PROGRESS`. */
@@ -71,21 +77,30 @@ export interface PackAction {
   progress: number | null;
   /** Why the last download failed, shown beside the retry. */
   error: string | null;
+  /** What to know before pressing it (the library came without its pictures), shown beside it; null when nothing. */
+  note: string | null;
 }
 
-/** What the pack bar offers for `s`; null once every preset of the full library is in. */
+/** What the pack bar and the library's offer say when the full library came without its pictures. */
+export const bareNote = (): string => `The ${say('pack')} came without its pictures: they couldn't be downloaded.`;
+
+/** What the pack bar offers for `s`; null once every preset of the full library is in, with its pictures. */
 export const packAction = (s: PackStatus): PackAction | null => {
-  if (s.total > 0 && s.installed >= s.total) return null;
+  const bare = s.bare === true;
+  if (!bare && s.total > 0 && s.installed >= s.total) return null;
   const pack = say('pack');
+  const size = s.size > 0 ? ` (${megabytes(s.size)})` : '';
   if (s.state === 'downloading') {
     const f = fraction(s);
-    return { state: s.state, label: `Getting the ${pack}… ${Math.floor(f * 100)}%`, progress: f, error: null };
+    const what = bare ? `the ${pack}'s pictures` : `the ${pack}`;
+    return { state: s.state, label: `Getting ${what}… ${Math.floor(f * 100)}%`, progress: f, error: null, note: null };
   }
   if (s.state === 'failed') {
-    return { state: s.state, label: `Try getting the ${pack} again`, progress: null, error: s.error ?? 'The download stopped.' };
+    const what = bare ? 'the pictures' : `the ${pack}`;
+    return { state: s.state, label: `Try getting ${what} again${bare ? size : ''}`, progress: null, error: s.error ?? 'The download stopped.', note: bare ? bareNote() : null };
   }
-  const size = s.size > 0 ? ` (${megabytes(s.size)})` : '';
-  return { state: s.state, label: `Get the ${pack}: ${count(s.total)} presets${size}`, progress: null, error: null };
+  if (bare) return { state: s.state, label: `Try again for the pictures${size}`, progress: null, error: null, note: bareNote() };
+  return { state: s.state, label: `Get the ${pack}: ${count(s.total)} presets${size}`, progress: null, error: null, note: null };
 };
 
 /** Splits an author part on the ways MilkDrop names join collaborators. */

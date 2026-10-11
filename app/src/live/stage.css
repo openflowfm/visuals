@@ -182,6 +182,9 @@
 }
 .app.home.lay.stage .stage-hint {
   margin: 0;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
   padding: 6px 12px;
   border-radius: 999px;
   background: var(--stage-panel);
@@ -198,7 +201,8 @@
   font-variation-settings: var(--font-num-axes);
   font-weight: 600;
 }
-.app.home.lay.stage > .stage-peek:hover .stage-hint {
+.app.home.lay.stage > .stage-peek:hover .stage-hint,
+.app.home.lay.stage .stage-hint:focus-visible {
   opacity: 1;
 }
 :root[data-reduced-motion] .app.home.lay.stage .stage-hint {

@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { LibraryQuery, Preset, Report } from './api.ts';
+import type { Every } from './link.ts';
 import { nameOf } from './shell.ts';
 
 /** `actions::Action`: one live action, from the page, the auto-advance timer or a controller. */
@@ -13,10 +14,12 @@ export type Action =
   | { kind: 'unload' }
   | { kind: 'auto'; on: boolean | null }
   | { kind: 'seconds'; seconds: number }
-  /** HOLD on or off; null flips it. */
+  /** HOLD on or off; null flips it. Held, nothing moves on by itself; next, previous, random, go, loading and picking still work. */
   | { kind: 'hold'; on: boolean | null }
   /** Change on Link's bar lines every this many bars. */
   | { kind: 'bars'; bars: number }
+  /** The loaded playlist's own change timing again, undoing a live change of it (the Link panel's, say). */
+  | { kind: 'put_back' }
   /** Play the presets matching a filter, as an unsaved smart playlist; hidden ones never. */
   | { kind: 'query'; query: LibraryQuery; at?: string };
 
@@ -86,10 +89,12 @@ export interface Deck {
   auto: boolean;
   seconds: number;
   current: string | null;
-  /** HOLD: steps, auto-advance and Link's changes are refused until it is let go. */
+  /** HOLD: nothing moves on by itself (auto-advance, Link's changes) until it is let go; next, previous and picking still work. */
   hold: boolean;
   /** Link's change interval in bars; 0 when off or when the schedule is in beats. */
   bars: number;
+  /** Link's schedule in effect, bars or beats (0 is off); missing from fixtures made before it was sent, where `bars` stands in. */
+  every?: Every;
   /** In order or shuffled. */
   order: Order;
   /** The loaded playlist's settings; null when none is loaded. */
@@ -183,8 +188,8 @@ export function upNext(lists: Lists | null): Up | null {
 
 /** What live mode's "next" line can honestly say. */
 export type NextSays =
-  /** HOLD is on: next, auto-advance and Link's changes are refused, so nothing is next. */
-  | { kind: 'held' }
+  /** HOLD is on: nothing moves on by itself, so the line says it holds; → still steps when pressed, to `then` (what it would say unheld; `nextSays` always gives it, fixtures may leave it out). */
+  | { kind: 'held'; then?: Unheld }
   /** The item → (and auto-advance, and Link's change) opens. */
   | { kind: 'item'; up: Up; item: Item }
   /** The playing playlist is empty. */
@@ -194,26 +199,43 @@ export type NextSays =
   /** No playlist: the next file in the library, which the page doesn't know by name. */
   | { kind: 'library' };
 
+/** What the "next" line says when not held. */
+export type Unheld = Exclude<NextSays, { kind: 'held' }>;
+
 /**
  * What → will open. Only `next` is predictable — R picks any other item, so the
  * line names what stepping on gives, never a random pick — and while held nothing
- * steps at all.
+ * moves on by itself, though → still opens what `then` names.
  */
 export function nextSays(lists: Lists | null, held: boolean): NextSays {
-  if (held) return { kind: 'held' };
+  const then = unheld(lists);
+  return held ? { kind: 'held', then } : then;
+}
+
+function unheld(lists: Lists | null): Unheld {
   const up = upNext(lists);
   if (!up) return lists?.deck.next ? { kind: 'filter', item: itemAt(lists.deck.next), query: lists.deck.query ?? null } : { kind: 'library' };
   if (up.next) return { kind: 'item', up, item: up.next };
   return up.count === 0 ? { kind: 'empty', up } : { kind: 'library' };
 }
 
-/** The name a new playlist gets: the first "playlist N" not taken. */
+/** The name a new playlist gets: the first "playlist N" from 1 not taken, whatever else there is (smart and starter playlists don't count). */
 export function freshName(playlists: readonly Playlist[]): string {
   const taken = new Set(playlists.map((p) => p.name));
-  let n = playlists.length + 1;
+  let n = 1;
   while (taken.has(`playlist ${n}`)) n++;
   return `playlist ${n}`;
 }
+
+/** How the deck moves on now, in the words `home.ts`'s `movesOn` uses for a playlist: "moves on every bar", "moves on every 2 beats", "moves on every 30 s", "stays on each preset". */
+export function movingOn(deck: Deck): string {
+  const every = deck.every ?? { every: deck.bars, unit: 'bars' };
+  if (every.every > 0) return `moves on every ${every.every === 1 ? every.unit.replace(/s$/, '') : `${every.every} ${every.unit}`}`;
+  return deck.auto ? `moves on every ${Math.round(deck.seconds)} s` : 'stays on each preset';
+}
+
+/** Whether playlist `id` is playing with its change timing changed live (the Link panel's "change preset", say): what is in effect isn't the playlist's own until it is put back or another loads. */
+export const timingChangedLive = (deck: Deck, id: string) => deck.playlist === id && deck.differs.includes('change');
 
 export const act = (action: Action) => invoke<void>('act', { action });
 export const lists = () => invoke<Lists>('playlists');

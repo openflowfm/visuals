@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { plural } from './controls.ts';
+import type { Change, Lists } from './playlists.ts';
 
 /** `link::Unit`. */
 export type Unit = 'bars' | 'beats';
@@ -80,6 +81,17 @@ export function beatsToNext(frame: Frame, now: number): number | null {
   return frame.next - (frame.beat + Math.max(0, now - frame.at) * (frame.tempo / 60000));
 }
 
+/** Whose timing the "change preset" picker shows: the one outside playlists (the welcome's choice, kept), the playing playlist's own, or a live change of it. */
+export type TimingSays = { kind: 'outside' } | { kind: 'playlist'; name: string } | { kind: 'changed'; name: string; own: Change };
+
+/** What the picker's timing is, from the deck and the playlists. */
+export function timingSays(lists: Lists | null): TimingSays {
+  const id = lists?.deck.playlist;
+  const list = id ? lists.playlists.find((p) => p.id === id) : undefined;
+  if (!lists || !list) return { kind: 'outside' };
+  return lists.deck.differs.includes('change') ? { kind: 'changed', name: list.name, own: list.settings.change } : { kind: 'playlist', name: list.name };
+}
+
 /** Who the clock follows, in a few words. */
 export function statusText(frame: Frame): string {
   const who = !frame.enabled ? 'off the network: our own clock' : frame.peers === 0 ? 'no one else in the session: our own clock' : plural(frame.peers, 'peer');
@@ -95,6 +107,10 @@ export const setOne = () => invoke<Frame>('link_set_one');
 export const nudge = (beats: number) => invoke<Frame>('link_nudge', { beats });
 /** Back to Link's own bar lines. */
 export const resetOne = () => invoke<Frame>('link_reset_one');
-/** Change the preset every `every` bars or beats, on the boundary; 0 is off. Turns auto-advance off. */
+/**
+ * Change the preset every `every` bars or beats, on the boundary; 0 is off. Turns auto-advance off.
+ * With a playlist playing it is a live change of its timing, until another loads or it is put back
+ * (`{ kind: 'put_back' }`); with none, it is the timing outside playlists, kept across launches.
+ */
 export const sync = (every: number, unit: Unit) => invoke<Frame>('link_sync', { every, unit });
 export const onFrame = (f: (frame: Frame) => void): Promise<UnlistenFn> => listen<Frame>('link', (e) => f(e.payload));

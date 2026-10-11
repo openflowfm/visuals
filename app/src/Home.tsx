@@ -21,6 +21,7 @@ import {
   matches,
   pickTiles,
   playsFrom,
+  movesByItself,
   prefsAt,
   presetLength,
   remember,
@@ -36,6 +37,7 @@ import {
   type TilePick,
 } from './home.ts';
 import { HomeLayout, INSPECTOR_ID, SIDEBAR_ID } from './layout/HomeLayout.tsx';
+import { HelpOverlay, HOME_HELP } from './HelpOverlay.tsx';
 import { modalOpen } from './liveKeys.ts';
 import { Hero } from './layout/Hero.tsx';
 import { TransportBar } from './layout/TransportBar.tsx';
@@ -129,9 +131,14 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
   // What actually plays: the last preset the deck's word named or an open resolved on; an undo puts this back, not a guess.
   const confirmed = useRef<{ current: Entry | null; lastPath: string | null; since: number } | null>(null);
   // An open resolved: it plays, and no live event follows it (library.rs `open`), so its claim ends here.
+  // The deck may have let go of its playlist or filter for a preset outside it, and says so only when asked: read it again.
   const opened = useCallback((e: Entry) => {
     if (claim.current?.path === e.path) claim.current = null;
     if (lastPath.current === e.path) confirmed.current = { current: currentRef.current ?? e, lastPath: e.path, since: sinceRef.current };
+    pl.lists().then(
+      (l) => setLists((was) => (was ? { ...was, deck: l.deck } : l)),
+      () => {},
+    );
   }, []);
   const optimistic = useCallback((e: Entry, clicked: boolean) => {
     const before = confirmed.current ?? { current: currentRef.current, lastPath: lastPath.current, since: sinceRef.current };
@@ -368,8 +375,12 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
     if (wantSearch.current) requestAnimationFrame(focusSearch);
   });
 
-  const keys = useRef({ step, toggleSidebar, toggleInspector, overlaid, dismissOverlays, sel, info, toSource, focusSearch, shown, pick, quickAdd, endQuickAdd });
-  keys.current = { step, toggleSidebar, toggleInspector, overlaid, dismissOverlays, sel, info, toSource, focusSearch, shown, pick, quickAdd, endQuickAdd };
+  // The ? overlay: the home's controls (HelpOverlay's HOME_HELP), from ? or the header's button.
+  const [help, setHelp] = useState(false);
+  const hold = useCallback(() => void pl.act({ kind: 'hold', on: null }).catch(fail("Couldn't hold the preset.")), [fail]);
+
+  const keys = useRef({ step, toggleSidebar, toggleInspector, overlaid, dismissOverlays, sel, info, toSource, focusSearch, shown, pick, quickAdd, endQuickAdd, hold });
+  keys.current = { step, toggleSidebar, toggleInspector, overlaid, dismissOverlays, sel, info, toSource, focusSearch, shown, pick, quickAdd, endQuickAdd, hold };
   useEffect(() => {
     const key = (e: globalThis.KeyboardEvent) => {
       const k = keys.current;
@@ -402,10 +413,17 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
         e.preventDefault();
         return;
       }
-      if (e.metaKey || e.ctrlKey || e.altKey || ownsArrows(e.target)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      // ? opens the help wherever the focus is (the overlay's own ? closes it, before this sees it).
+      if (e.key === '?') {
+        e.preventDefault();
+        return setHelp(true);
+      }
+      if (ownsArrows(e.target)) return;
       if (e.key === 'ArrowRight') k.step(1);
       else if (e.key === 'ArrowLeft') k.step(-1);
       else if (letter === 'r') k.step(0);
+      else if (letter === 'h' && !e.repeat) k.hold();
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
@@ -599,169 +617,187 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
 
   const length = presetLength(deck);
   const position = useElapsed(since, current !== null, length);
-  const from = playsFrom(deck, playlists);
+  // Where it plays from, as the deck says, for the preset shown playing: never a playlist that isn't playing it.
+  const from = playsFrom(deck, playlists, true, current?.path ?? null);
   const stepWords = playing ? ' in the playlist' : '';
 
   return (
-    <HomeLayout
-      sidebarMode={modes.sidebar}
-      inspectorMode={modes.inspector}
-      onDismiss={dismissOverlays}
-      sidebar={
-        <InsetSidebar
-          sections={sections}
-          selected={shown}
-          // The source shown, picked again: its card in the inspector (how the library's full-library offer is reached while a preset plays).
-          onSelect={(next) => {
-            if (shown && samePane(next, shown) && !quickAdd) {
-              setInfo(true);
-              openInspector();
-            } else if (quickAdd && next.kind === 'library') {
-              // Quick add is the library already: it stays on.
-            } else pick(next);
-          }}
-          collapsed={collapsed}
-          onToggle={(id) => setCollapsed((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]))}
-          lists={lists}
-          actions={actions}
-        />
-      }
-      header={
-        <Header
-          view="home"
-          // The mark is at the top of the sidebar (decision 71).
-          mark={false}
-          onChange={(next) => next !== 'home' && onMode(next, current?.path ?? null)}
-          lead={
+    <>
+      <HomeLayout
+        sidebarMode={modes.sidebar}
+        inspectorMode={modes.inspector}
+        onDismiss={dismissOverlays}
+        sidebar={
+          <InsetSidebar
+            sections={sections}
+            selected={shown}
+            // The source shown, picked again: its card in the inspector (how the library's full-library offer is reached while a preset plays).
+            onSelect={(next) => {
+              if (shown && samePane(next, shown) && !quickAdd) {
+                setInfo(true);
+                openInspector();
+              } else if (quickAdd && next.kind === 'library') {
+                // Quick add is the library already: it stays on.
+              } else pick(next);
+            }}
+            collapsed={collapsed}
+            onToggle={(id) => setCollapsed((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]))}
+            lists={lists}
+            actions={actions}
+          />
+        }
+        header={
+          <Header
+            view="home"
+            // The mark is at the top of the sidebar (decision 71).
+            mark={false}
+            onChange={(next) => next !== 'home' && onMode(next, current?.path ?? null)}
+            lead={
+              <button
+                type="button"
+                className="home-tool home-tool-sidebar"
+                aria-label={say('source list')}
+                aria-controls={SIDEBAR_ID}
+                aria-pressed={modes.sidebar !== 'hidden'}
+                title={`${modes.sidebar === 'hidden' ? 'Show' : 'Hide'} the ${say('source list')} (⌃⌘S)`}
+                onClick={toggleSidebar}
+              >
+                <Icon name="sidebar" />
+              </button>
+            }
+          >
+            <span className="vf-fill" />
+            <div className="home-toolbar" ref={setToolbar} />
             <button
               type="button"
-              className="home-tool home-tool-sidebar"
-              aria-label={say('source list')}
-              aria-controls={SIDEBAR_ID}
-              aria-pressed={modes.sidebar !== 'hidden'}
-              title={`${modes.sidebar === 'hidden' ? 'Show' : 'Hide'} the ${say('source list')} (⌃⌘S)`}
-              onClick={toggleSidebar}
+              className="home-tool home-tool-help"
+              aria-label="Help"
+              aria-haspopup="dialog"
+              aria-expanded={help}
+              aria-keyshortcuts="?"
+              title="Help: what every key and button on the home does (?)"
+              onClick={() => setHelp(true)}
+            >
+              <Icon name="help" />
+            </button>
+            <button
+              type="button"
+              className="home-tool home-tool-inspector"
+              aria-label={say('inspector')}
+              aria-controls={INSPECTOR_ID}
+              aria-pressed={modes.inspector !== null}
+              title={`${modes.inspector === null ? 'Show' : 'Hide'} the ${say('inspector')} (⌘I)`}
+              onClick={toggleInspector}
             >
               <Icon name="sidebar" />
             </button>
-          }
-        >
-          <span className="vf-fill" />
-          <div className="home-toolbar" ref={setToolbar} />
-          <button
-            type="button"
-            className="home-tool home-tool-inspector"
-            aria-label={say('inspector')}
-            aria-controls={INSPECTOR_ID}
-            aria-pressed={modes.inspector !== null}
-            title={`${modes.inspector === null ? 'Show' : 'Hide'} the ${say('inspector')} (⌘I)`}
-            onClick={toggleInspector}
-          >
-            <Icon name="sidebar" />
-          </button>
-        </Header>
-      }
-      // Round 2 (decision 71): the hero is the picture alone; the bar names what plays.
-      hero={<Hero picture={<Preview className="hero-pic" />} />}
-      bar={
-        <TransportBar
-          now={current ? { name: playingShown?.title ?? current.name, from } : null}
-          playing={!deck.hold}
-          onPlayPause={() => run(pl.act({ kind: 'hold', on: null }), 'hold the preset')}
-          onStep={step}
-          stepIn={stepWords}
-          position={position}
-          onAudioError={audioFailed}
-        />
-      }
-      inspector={
-        modes.inspector ? (
-          <Inspector
-            // The preset picked, else the one playing; the source's card for "Show info", or while nothing plays.
-            subject={onSource ? null : (picked[0] ?? playingShown)}
-            playing={playingShown?.row.key ?? null}
-            from={playsFrom(deck, playlists, false)}
-            playlists={lists?.playlists ?? null}
-            library={libraryRows}
-            mine={data?.presets}
-            onSet={setData}
-            onAddTo={addTo}
-            onPick={(row: LibraryRow) => {
-              setSel({ kind: 'presets', keys: [row.key] });
-              setTilesPicked([]);
-              setInfo(false);
-            }}
-            onBack={toSource}
-            onPlay={picked.length === 1 ? playPicked : undefined}
-            chosen={picked.length > 1 ? picked : undefined}
-            source={onSource ? sourceCard : undefined}
-            error={panelError}
-            // Its ✕ (and Esc anywhere) only while it is laid over the grid; docked, the header's toggle closes it.
-            onClose={modes.inspector === 'overlay' ? () => choose('inspector', false) : undefined}
+          </Header>
+        }
+        // Round 2 (decision 71): the hero is the picture alone; the bar names what plays.
+        hero={<Hero picture={<Preview className="hero-pic" />} />}
+        bar={
+          <TransportBar
+            now={current ? { name: playingShown?.title ?? current.name, from } : null}
+            playing={!deck.hold}
+            // It moves on by itself on a timer, or on Link's bars.
+            moves={movesByItself(deck)}
+            onPlayPause={hold}
+            onStep={step}
+            stepIn={stepWords}
+            position={position}
+            onAudioError={audioFailed}
           />
-        ) : undefined
-      }
-      // The grid scrolls itself under the pinned hero, on the column's padding (`--pad`, the hero's `--lay-pad`).
-      pane={
-        <div className="home-grid-pane">
-          <NoticeBanner className="home-notice" notice={banner} onDismiss={dismiss} />
-          <SettingsNotes />
-          {shown && shown.kind !== 'list' ? (
-            <>
-              {adding && <QuickAddStrip name={adding.name} count={adding.items.length} onDone={endQuickAdd} />}
-              <Library
-                key={shown.kind}
-                entries={library}
-                loaded={loaded}
-                search={search}
-                onSearch={setSearch}
-                found={found}
-                current={current?.path ?? null}
-                // While quick add is on a click adds, so the tiles' + goes.
-                into={adding ? null : into}
-                onLoad={(e) => {
-                  setInfo(false);
-                  void load(e, true);
-                }}
-                onAdd={(e) => into && run(pl.add(into.id, e.path), `add ${e.name} to ${into.name}`)}
-                onPress={(e, thumbnail, ev) => beginDrag(ev, { kind: 'preset', path: e.path, name: e.name, thumbnail }, dropping)}
-                tileMin={width < HOME_TILE.under ? HOME_TILE.small : HOME_TILE.wide}
-                home={{
-                  scope: shown.kind,
-                  title: sourceName,
-                  onChosen,
-                  bare: true,
-                  toolbar,
-                  selected: keysOf(sel),
-                  controls: INSPECTOR_ID,
-                  adding: adding && { name: adding.name, has: addingPaths, onToggle: toggleAdded },
-                }}
-              />
-            </>
-          ) : list && lists ? (
-            <PlaylistPane
-              key={list.id}
-              list={list}
-              lists={lists}
-              tiles={tiles}
-              total={total}
-              rows={rows}
-              dropping={dropping}
-              picked={tilesPicked}
-              onPick={pickInList}
-              onPlay={(t) => {
-                const undo = showPlayed(library.find((e) => e.path === t.path) ?? { path: t.path, name: t.name, group: '' });
-                playAt(t.index, t.path, t.name, undo);
+        }
+        inspector={
+          modes.inspector ? (
+            <Inspector
+              // The preset picked, else the one playing; the source's card for "Show info", or while nothing plays.
+              subject={onSource ? null : (picked[0] ?? playingShown)}
+              playing={playingShown?.row.key ?? null}
+              from={playsFrom(deck, playlists, false, current?.path ?? null)}
+              playlists={lists?.playlists ?? null}
+              library={libraryRows}
+              mine={data?.presets}
+              onSet={setData}
+              onAddTo={addTo}
+              onPick={(row: LibraryRow) => {
+                setSel({ kind: 'presets', keys: [row.key] });
+                setTilesPicked([]);
+                setInfo(false);
               }}
-              onLists={setLists}
-              onError={(what) => fail(`Couldn't ${what}.`)}
-              onLibrary={() => pick({ kind: 'library' })}
+              onBack={toSource}
+              onPlay={picked.length === 1 ? playPicked : undefined}
+              chosen={picked.length > 1 ? picked : undefined}
+              source={onSource ? sourceCard : undefined}
+              error={panelError}
+              // Its ✕ (and Esc anywhere) only while it is laid over the grid; docked, the header's toggle closes it.
+              onClose={modes.inspector === 'overlay' ? () => choose('inspector', false) : undefined}
             />
-          ) : null}
-          <DragGhost />
-        </div>
-      }
-    />
+          ) : undefined
+        }
+        // The grid scrolls itself under the pinned hero, on the column's padding (`--pad`, the hero's `--lay-pad`).
+        pane={
+          <div className="home-grid-pane">
+            <NoticeBanner className="home-notice" notice={banner} onDismiss={dismiss} />
+            <SettingsNotes />
+            {shown && shown.kind !== 'list' ? (
+              <>
+                {adding && <QuickAddStrip name={adding.name} count={adding.items.length} onDone={endQuickAdd} />}
+                <Library
+                  key={shown.kind}
+                  entries={library}
+                  loaded={loaded}
+                  search={search}
+                  onSearch={setSearch}
+                  found={found}
+                  current={current?.path ?? null}
+                  // While quick add is on a click adds, so the tiles' + goes.
+                  into={adding ? null : into}
+                  onLoad={(e) => {
+                    setInfo(false);
+                    void load(e, true);
+                  }}
+                  onAdd={(e) => into && run(pl.add(into.id, e.path), `add ${e.name} to ${into.name}`)}
+                  onPress={(e, thumbnail, ev) => beginDrag(ev, { kind: 'preset', path: e.path, name: e.name, thumbnail }, dropping)}
+                  tileMin={width < HOME_TILE.under ? HOME_TILE.small : HOME_TILE.wide}
+                  home={{
+                    scope: shown.kind,
+                    title: sourceName,
+                    onChosen,
+                    bare: true,
+                    toolbar,
+                    selected: keysOf(sel),
+                    controls: INSPECTOR_ID,
+                    adding: adding && { name: adding.name, has: addingPaths, onToggle: toggleAdded },
+                  }}
+                />
+              </>
+            ) : list && lists ? (
+              <PlaylistPane
+                key={list.id}
+                list={list}
+                lists={lists}
+                tiles={tiles}
+                total={total}
+                rows={rows}
+                dropping={dropping}
+                picked={tilesPicked}
+                onPick={pickInList}
+                onPlay={(t) => {
+                  const undo = showPlayed(library.find((e) => e.path === t.path) ?? { path: t.path, name: t.name, group: '' });
+                  playAt(t.index, t.path, t.name, undo);
+                }}
+                onLists={setLists}
+                onError={(what) => fail(`Couldn't ${what}.`)}
+                onLibrary={() => pick({ kind: 'library' })}
+              />
+            ) : null}
+            <DragGhost />
+          </div>
+        }
+      />
+      <HelpOverlay open={help} onClose={() => setHelp(false)} list={HOME_HELP} />
+    </>
   );
 }
 
@@ -950,7 +986,7 @@ export function PlaylistPane({ list, lists, tiles, total, rows, dropping, picked
   const shuffledNow = active && list.settings.order === 'shuffle';
   const reorderable = manual && !shuffledNow;
   const currentAt = (t: StripTile) => active && (manual || !shuffledNow ? deck.index !== null && t.index === deck.index : t.path === deck.current);
-  const nextAt = (t: StripTile) => active && !deck.hold && (manual || !shuffledNow ? deck.next_index !== null && t.index === deck.next_index : t.path === deck.next);
+  const nextAt = (t: StripTile) => active && (manual || !shuffledNow ? deck.next_index !== null && t.index === deck.next_index : t.path === deck.next);
   const tip = stripTip(reorderable);
 
   if (tiles.length === 0)
