@@ -64,18 +64,21 @@ describe('liveKeys', () => {
     expect(sent).toEqual([]);
   });
 
-  it('goes to the editor on Esc, unless modified or already taken by a menu', () => {
+  it('never leaves live on Esc: it takes it (so nothing else does) and does nothing more; ⌘⇧L leaves', () => {
     const { sent, press, prevented } = setup();
     press('Escape', { metaKey: true });
     press('Escape', { altKey: true });
     press('Escape', { defaultPrevented: true });
     expect(sent).toEqual([]);
     press('Escape');
+    press('Escape');
+    expect(sent).toEqual([]);
+    expect(prevented()).toBe(2);
+    press('L', { metaKey: true, shiftKey: true });
     expect(sent).toEqual(['editor']);
-    expect(prevented()).toBe(1);
   });
 
-  it('leaves Esc to a sheet open over live mode (⚙ Settings, More effects), and leaves again once it is closed', () => {
+  it('leaves Esc to a sheet open over live mode (⚙ Settings, More effects), and still never leaves once it is closed', () => {
     const sheet = { open: true };
     const { sent, press, prevented } = setup(sheet);
     press('Escape');
@@ -83,7 +86,8 @@ describe('liveKeys', () => {
     expect(prevented()).toBe(0);
     sheet.open = false;
     press('Escape');
-    expect(sent).toEqual(['editor']);
+    expect(sent).toEqual([]);
+    expect(prevented()).toBe(1);
   });
 
   it('ignores ? while a sheet is open, and opens the help once it is closed', () => {
@@ -132,12 +136,12 @@ describe('liveKeys', () => {
         expect(sent).toEqual([]);
       }
       page.html = '<div class="live-status-pop" data-pop="x" role="dialog" aria-label="x"></div>';
-      press('Escape');
-      expect(sent).toEqual(['editor']);
+      press('r');
+      expect(sent).toEqual([{ kind: 'random' }]);
       // Home's popover (the Stage's Beat and Output lights) isn't modal either.
       page.html = '<div class="vf-pop-panel" id="x" role="dialog" aria-label="x"></div>';
       press('r');
-      expect(sent).toEqual(['editor', { kind: 'random' }]);
+      expect(sent).toEqual([{ kind: 'random' }, { kind: 'random' }]);
     } finally {
       vi.unstubAllGlobals();
     }
@@ -268,7 +272,7 @@ describe('liveKeys', () => {
     expect(p).toBe(2);
   });
 
-  it('gives Esc to the Stage first (to show hidden panels), and leaves only when the Stage had no use for it', () => {
+  it('gives Esc to the Stage (to show hidden panels), and never leaves when the Stage had no use for it', () => {
     const sent: string[] = [];
     let hidden = true;
     const keys = liveKeys({
@@ -288,7 +292,7 @@ describe('liveKeys', () => {
     const esc = () => keys.keydown({ key: 'Escape', metaKey: false, shiftKey: false, ctrlKey: false, altKey: false, repeat: false, target: null, preventDefault: () => {} });
     esc();
     esc();
-    expect(sent).toEqual(['shown', 'editor']);
+    expect(sent).toEqual(['shown']);
   });
 
   it('does nothing for a key it has no use for', () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type * as pl from '../playlists.ts';
-import { nextName, nextWhenText } from './live-model.ts';
+import { nextName, nextWhenText, saysWhere } from './live-model.ts';
 import { crateModeFor, escapeDoes, panelsAtStart, STAGE_DOCK_AT, toggleCrate, togglePanels } from './stage-model.ts';
 
 describe("the Stage's crate", () => {
@@ -31,8 +31,8 @@ describe("the Stage's panels", () => {
     expect(togglePanels(togglePanels(p))).toEqual(p);
   });
 
-  it('take Esc to show themselves when hidden, and leave live only when shown', () => {
-    expect(escapeDoes(panelsAtStart(null))).toBe('leave');
+  it('take Esc to show themselves when hidden, and never leave live on it', () => {
+    expect(escapeDoes(panelsAtStart(null))).toBe('stay');
     expect(escapeDoes(togglePanels(panelsAtStart(null)))).toBe('show');
   });
 });
@@ -49,6 +49,15 @@ describe('the Next line', () => {
   it('names the next item, or says quietly why nothing is next', () => {
     expect(nextName({ kind: 'held' })).toMatchObject({ quiet: true });
     expect(nextName({ kind: 'item', item: { name: 'Warm', path: '/w.milk', missing: true } } as pl.NextSays)).toEqual({ text: 'Warm', quiet: false, missing: true });
-    expect(nextName({ kind: 'library' } as pl.NextSays)).toEqual({ text: 'the next preset in the library', quiet: true });
+    expect(nextName({ kind: 'library' } as pl.NextSays)).toEqual({ text: 'any preset in the library', quiet: true });
+  });
+
+  it('says where the next comes from only when the name did not already say it', () => {
+    const up = { playlist: { name: 'Chill' }, index: 2, next: null, nextIndex: null, count: 20 } as unknown as pl.Up;
+    expect(saysWhere({ kind: 'item' } as pl.NextSays, up, null)).toBe(true);
+    expect(saysWhere({ kind: 'library' }, null, null)).toBe(false);
+    expect(saysWhere({ kind: 'held' }, up, null)).toBe(false);
+    expect(saysWhere({ kind: 'empty', up }, up, null)).toBe(false);
+    expect(saysWhere({ kind: 'filter', item: { name: 'W', path: '/w', missing: false }, query: null } as pl.NextSays, null, null)).toBe(false);
   });
 });

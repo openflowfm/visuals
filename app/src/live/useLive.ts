@@ -9,7 +9,13 @@ import * as output from '../output.ts';
 import { leave } from '../OutputPanel.tsx';
 import * as pl from '../playlists.ts';
 import { notice, openFailed } from '../shell.ts';
-import { intensityOf, keyOf, playsWindowed, ratingOf, sendIntensity, starred, type LiveState } from './live-model.ts';
+import { HOLD_HINT, intensityOf, keyOf, LEAVE_HINT, LEAVE_MS, playsWindowed, ratingOf, sendIntensity, starred, type LiveState } from './live-model.ts';
+
+/** What the hint line says, and why: Hold keeping the preset, or leaving live waiting for its second press. */
+interface Hint {
+  kind: 'hold' | 'leave';
+  text: string;
+}
 
 /**
  * Live mode's state, read from the app and followed as it changes: the
@@ -92,24 +98,50 @@ export function useLive({ start, windowed = false }: { start: string | null; win
     else if (now.path) dismiss();
   });
 
+  // A quiet line over the dock (not a failure): Hold keeping the preset, or leaving live asking for a second press.
+  const [hint, setHint] = useState<Hint | null>(null);
+  // Letting go of Hold clears what it said.
+  useEffect(() => {
+    if (!held) setHint((h) => (h?.kind === 'hold' ? null : h));
+  }, [held]);
+
   const act = useCallback(
     (action: pl.Action) =>
-      void pl
-        .act(action)
-        .catch((e) =>
-          setError(
-            heldNow.current && (action.kind === 'next' || action.kind === 'previous' || action.kind === 'random')
-              ? notice(`HOLD is on, so the preset stays — press H to let go.`, e)
-              : notice(
-                  action.kind === 'next' || action.kind === 'previous' || action.kind === 'random'
-                    ? `Couldn't ${action.kind === 'random' ? 'pick a random preset' : `go to the ${action.kind} preset`}.`
-                    : "Couldn't play that.",
-                  e,
-                ),
-          ),
-        ),
+      void pl.act(action).catch((e) => {
+        const step = action.kind === 'next' || action.kind === 'previous' || action.kind === 'random';
+        // A step the deck refused under Hold isn't a failure: Hold is doing what it says. Say so as a state, until it's let go.
+        if (step && heldNow.current) return setHint({ kind: 'hold', text: HOLD_HINT });
+        setError(notice(step ? `Couldn't ${action.kind === 'random' ? 'pick a random preset' : `go to the ${action.kind} preset`}.` : "Couldn't play that.", e));
+      }),
     [setError],
   );
+
+  // Leaving live with the output on a display takes a second press within LEAVE_MS, so one stray click or ⌘⇧L can't close it mid-set.
+  const outputOpen = status.display !== null;
+  const armed = useRef<number | null>(null);
+  const askLeave = useCallback(
+    (go: () => void) => {
+      const now = Date.now();
+      if (!outputOpen || (armed.current !== null && now - armed.current < LEAVE_MS)) {
+        armed.current = null;
+        setHint(null);
+        return go();
+      }
+      armed.current = now;
+      setHint({ kind: 'leave', text: LEAVE_HINT });
+    },
+    [outputOpen],
+  );
+  // The second press's window passing (or the output closing) takes the question away.
+  useEffect(() => {
+    if (hint?.kind !== 'leave') return;
+    if (!outputOpen) return setHint(null);
+    const t = window.setTimeout(() => {
+      armed.current = null;
+      setHint((h) => (h?.kind === 'leave' ? null : h));
+    }, LEAVE_MS);
+    return () => window.clearTimeout(t);
+  }, [hint, outputOpen]);
   const actFx = useCallback((action: fx.FxAction) => void fx.act(action).catch(fail("Couldn't change that effect.")), [fail]);
 
   const key = useMemo(() => keyOf(rows, current), [rows, current]);
@@ -153,6 +185,8 @@ export function useLive({ start, windowed = false }: { start: string | null; win
     says: pl.nextSays(lists, held),
     up: pl.upNext(lists),
     error,
+    hint: hint?.text ?? null,
+    leave: askLeave,
     setError,
     fail,
     dismiss,

@@ -108,6 +108,17 @@ export const Busy: Story = {
   },
 };
 
+/** HOLD on and a step the deck refuses: a quiet line says the preset stays, as a state — no alert, nothing to dismiss. */
+export const HeldStep: Story = {
+  parameters: { tauri: { fx: { ...FX_BUSY }, lists: { ...LISTS, deck: { ...MOOD_DECK, hold: true } }, fail: { act: 'held' } } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText('Hold')).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: /random/i }));
+    await expect(await canvas.findByText(/^Hold is on: this preset stays/)).toBeVisible();
+    await expect(canvas.queryByRole('alert')).toBeNull();
+  },
+};
+
 /** An effect that won't change: the notice floats over the dock until dismissed. */
 export const Failing: Story = {
   parameters: { tauri: { fx: FX, fail: { act: 'the effects engine is busy' } } },

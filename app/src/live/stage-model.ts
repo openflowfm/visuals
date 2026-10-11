@@ -48,11 +48,12 @@ export const panelsAtStart = (crate: boolean | null): Panels => ({ shown: true, 
 export const togglePanels = (p: Panels): Panels => ({ ...p, shown: !p.shown });
 
 /**
- * Esc in live mode, before it leaves: with the panels hidden it shows them
- * (`show`), and only with them shown does it leave live (`leave`). A laid-over
- * crate takes its own Esc first (it puts itself away).
+ * Esc in live mode: with the panels hidden it shows them (`show`); with them
+ * shown it does nothing (`stay`). Esc never leaves live — leaving is ✕ or ⌘⇧L,
+ * so a stray press mid-set can't close the output. A laid-over crate takes its
+ * own Esc first (it puts itself away).
  */
-export const escapeDoes = (p: Panels): 'show' | 'leave' => (p.shown ? 'leave' : 'show');
+export const escapeDoes = (p: Panels): 'show' | 'stay' => (p.shown ? 'stay' : 'show');
 
 /** The crate's toggle: put it away when it shows at `width`, else show it. */
 export function toggleCrate(p: Panels, width: number): Panels {

@@ -201,8 +201,10 @@ describe('the lights’ popovers and live’s keys', () => {
     expect(editor).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(out);
 
-    // With the popover put away, Esc leaves live.
+    // With the popover put away, Esc still never leaves live: only ⌘⇧L (or ✕) does.
     await user.keyboard('{Escape}');
+    expect(editor).not.toHaveBeenCalled();
+    await user.keyboard('{Meta>}{Shift>}L{/Shift}{/Meta}');
     expect(editor).toHaveBeenCalledOnce();
   });
 
