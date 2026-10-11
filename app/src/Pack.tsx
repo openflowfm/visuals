@@ -85,8 +85,8 @@ export interface PackBarProps {
 
 /**
  * The foot of the library: how many presets it has, getting the full library
- * (with its progress, and a retry when it fails), adding a folder of presets,
- * and the credits.
+ * (with its progress, and a retry when it fails or came without its pictures),
+ * adding a folder of presets, and the credits.
  */
 export function PackBar({ presets, dropped, credits, onCredits }: PackBarProps) {
   const [status, setStatus] = useState<pack.PackStatus | null>(null);
@@ -147,6 +147,7 @@ export function PackBar({ presets, dropped, credits, onCredits }: PackBarProps) 
               {action.label}
             </Button>
           )}
+          {action.note && !action.error && <p className="pack-note">{action.note}</p>}
           {action.error && (
             <p className="pack-note" data-error="" role="alert">
               {action.error}

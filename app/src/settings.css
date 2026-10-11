@@ -194,8 +194,22 @@
 .vf-sheet .settings-problem {
   color: var(--red);
 }
-.settings-row > .wdg-button.settings-follow {
-  justify-self: start;
+/* A switch (`SwitchRow`: its name first, macOS's switch at the row's end, as
+   the other rows end), and under it, quiet, what it means, who decides, or why
+   a change failed. */
+.settings-switch {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+.vf-sheet.settings .settings-switch > .vf-switch {
+  min-height: 44px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.settings-switch > .wdg-button.settings-follow {
+  align-self: flex-start;
   justify-items: start;
 }
 .vf-sheet.settings .settings-follow .wdg-button-body {

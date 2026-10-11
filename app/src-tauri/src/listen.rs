@@ -352,15 +352,26 @@ fn fall_back(world: &dyn World, app: &App, slot: &mut Option<Listening>, gone: &
 }
 
 /// Come back listening to what was chosen last, or what stands in for it when
-/// it is gone; the system input when nothing was chosen.
+/// it is gone. Nothing chosen during the first run: nothing is opened, so macOS
+/// asks nothing about the microphone before the welcome's "Listen to" step has
+/// said why. Nothing chosen once the first run is done (finished, skipped, or an
+/// install from before the welcome): the system's default input, as before.
 pub fn resume(app: &App) {
-    let saved: Option<Saved> = crate::settings::load::<SavedFile>(SAVED).map(Saved::from);
+    resume_with(&Mac, app, crate::settings::load::<SavedFile>(SAVED).map(Saved::from), crate::settings::first_run());
+}
+
+fn resume_with(world: &dyn World, app: &App, saved: Option<Saved>, first_run: bool) {
     let mut slot = app.listening.lock().unwrap();
     *WANTED.lock().unwrap() = saved.clone();
-    let heard = match &saved {
-        Some(s) => listen_on(&Mac, app, &mut slot, Some(&s.source), Some(s.left), Some(s.right)).map(|(c, _)| c).or_else(|_| fall_back(&Mac, app, &mut slot, &s.source, s.left, s.right)),
-        None => listen_on(&Mac, app, &mut slot, None, None, None).map(|(c, _)| c),
+    let Some(s) = saved else {
+        if first_run {
+            eprintln!("nothing chosen to listen to yet");
+        } else if let Err(e) = listen_on(world, app, &mut slot, None, None, None) {
+            eprintln!("no audio input: {e}");
+        }
+        return;
     };
+    let heard = listen_on(world, app, &mut slot, Some(&s.source), Some(s.left), Some(s.right)).map(|(c, _)| c).or_else(|_| fall_back(world, app, &mut slot, &s.source, s.left, s.right));
     if let Err(e) = heard {
         eprintln!("no audio input: {e}");
     }
@@ -370,10 +381,16 @@ pub fn resume(app: &App) {
 /// to it when it returns (or, for an app, restarts or starts playing from a
 /// process the tap misses). Run each time the page asks what is heard, every
 /// few seconds. The choice is read under the listening lock, so a choice being
-/// made ([`choose`]) is never undone by one made before it.
-fn follow(world: &dyn World, app: &App) {
+/// made ([`choose`]) is never undone by one made before it. With nothing open
+/// and nothing chosen, the system's default input opens once `first_run` says
+/// the welcome is over (it was skipped without picking a source).
+fn follow(world: &dyn World, app: &App, first_run: impl Fn() -> bool) {
     let mut slot = app.listening.lock().unwrap();
     let wanted = WANTED.lock().unwrap().clone();
+    if slot.is_none() && wanted.is_none() && !first_run() {
+        let _ = listen_on(world, app, &mut slot, None, None, None);
+        return;
+    }
     let Some((source, tapped, main, left, right)) = slot.as_ref().map(|l| (l.source.clone(), l.tapped().0.to_vec(), l.tapped().1, l.left + 1, l.right + 1)) else { return };
     if let Some(w) = wanted {
         let changed = match &w.source {
@@ -402,7 +419,7 @@ pub struct Heard {
 /// What the bench is listening to, after following the chosen source ([`follow`]).
 #[tauri::command(async)]
 pub fn listening(app: State<App>) -> Heard {
-    follow(&Mac, &app);
+    follow(&Mac, &app, crate::settings::first_run);
     let l = app.listening.lock().unwrap();
     let denied = l.as_ref().is_some_and(|l| l.is_tap()) && tap::permission() == Permission::Denied;
     Heard { choice: l.as_ref().map(|l| l.choice()), channels: l.as_ref().map_or(0, |l| l.channels), denied }
@@ -513,13 +530,73 @@ mod tests {
         }
     }
 
+    /// `WANTED` is one for the process: tests that set it take turns.
+    static WANTS: Mutex<()> = Mutex::new(());
+
+    fn app() -> App {
+        App { bench: Mutex::new(None), ring: ring(), listening: Mutex::new(None), library: Default::default(), seed: Default::default() }
+    }
+
+    #[test]
+    fn opens_nothing_until_a_source_is_chosen_then_what_was_chosen() {
+        let _turn = WANTS.lock().unwrap_or_else(|e| e.into_inner());
+        let (said, opened) = std::sync::mpsc::channel();
+        let world = Slow(std::sync::Mutex::new(said));
+        let app = app();
+        // A first run: nothing saved, so no input opens (and macOS asks nothing).
+        resume_with(&world, &app, None, true);
+        assert!(opened.try_recv().is_err());
+        assert!(app.listening.lock().unwrap().is_none());
+        assert!(WANTED.lock().unwrap().is_none());
+        // Following finds nothing to follow, and opens nothing either.
+        follow(&world, &app, || true);
+        assert!(opened.try_recv().is_err());
+        // Once chosen, the next launch comes back to it.
+        let mic = SourceId::Device { name: "MacBook Pro Microphone".into(), size: 1 };
+        resume_with(&world, &app, Some(Saved { source: mic.clone(), left: 1, right: 1 }), false);
+        assert!(opened.try_recv().is_ok());
+        assert_eq!(app.listening.lock().unwrap().as_ref().unwrap().source, mic);
+    }
+
+    #[test]
+    fn an_upgrade_with_nothing_chosen_listens_to_the_system_input() {
+        let _turn = WANTS.lock().unwrap_or_else(|e| e.into_inner());
+        let (said, opened) = std::sync::mpsc::channel();
+        let world = Slow(std::sync::Mutex::new(said));
+        let app = app();
+        // The first run is done (an older install), but no audio.json was written.
+        resume_with(&world, &app, None, false);
+        assert!(opened.try_recv().is_ok());
+        assert!(app.listening.lock().unwrap().is_some());
+        assert!(WANTED.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn skipping_the_welcome_without_a_source_opens_the_system_input() {
+        let _turn = WANTS.lock().unwrap_or_else(|e| e.into_inner());
+        let (said, opened) = std::sync::mpsc::channel();
+        let world = Slow(std::sync::Mutex::new(said));
+        let app = app();
+        resume_with(&world, &app, None, true);
+        assert!(opened.try_recv().is_err());
+        // The welcome is skipped: the next poll opens the system input.
+        follow(&world, &app, || false);
+        assert!(opened.try_recv().is_ok());
+        assert!(app.listening.lock().unwrap().is_some());
+        // And a launch after it does too.
+        let later = self::app();
+        resume_with(&world, &later, None, false);
+        assert!(opened.try_recv().is_ok());
+    }
+
     #[test]
     fn following_never_undoes_a_choice_being_made() {
+        let _turn = WANTS.lock().unwrap_or_else(|e| e.into_inner());
         let (said, opening) = std::sync::mpsc::channel();
         let world = Slow(std::sync::Mutex::new(said));
         let daw = SourceId::App { bundle: "com.ableton.live".into() };
         let mic = SourceId::Device { name: "MacBook Pro Microphone".into(), size: 1 };
-        let app = App { bench: Mutex::new(None), ring: ring(), listening: Mutex::new(None), library: Default::default(), seed: Default::default() };
+        let app = app();
         *app.listening.lock().unwrap() = Some(world.open(Some(&daw), (0, 1), app.ring.clone()).unwrap());
         opening.recv().unwrap();
         *WANTED.lock().unwrap() = Some(Saved { source: daw, left: 1, right: 2 });
@@ -527,7 +604,7 @@ mod tests {
             let choosing = s.spawn(|| choose(&world, &app, Some(mic.clone()), Some(1), Some(2)));
             // The user's pick is opening (the prompt is up) when the poll comes.
             opening.recv().unwrap();
-            follow(&world, &app);
+            follow(&world, &app, || true);
             choosing.join().unwrap().unwrap();
         });
         assert_eq!(app.listening.lock().unwrap().as_ref().unwrap().source, mic);

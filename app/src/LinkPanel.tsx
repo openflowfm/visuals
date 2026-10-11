@@ -3,7 +3,9 @@ import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { Select } from '@openflow/widgets/controls/Select.tsx';
 import { Toggle } from '@openflow/widgets/controls/Toggle.tsx';
 import { useNotice, useTauriEvent } from './hooks.ts';
+import { movesOn } from './home.ts';
 import * as link from './link.ts';
+import * as pl from './playlists.ts';
 import { NoticeBanner } from './views.tsx';
 import { say, Say } from './words.ts';
 import './link.css';
@@ -32,6 +34,17 @@ function useLink() {
     );
   const trouble = notice && <NoticeBanner className="link-problem" notice={notice} onDismiss={dismiss} />;
   return { frame, run, trouble };
+}
+
+/** The playlists and the deck, read once and then followed: whose timing the "change preset" picker shows. */
+function useLists() {
+  const [lists, setLists] = useState<pl.Lists | null>(null);
+  useEffect(() => {
+    pl.lists().then(setLists, () => {});
+  }, []);
+  useTauriEvent(pl.onLists, setLists);
+  useTauriEvent(pl.onLive, (now: pl.Now) => setLists((l) => l && { ...l, deck: now.deck }));
+  return lists;
 }
 
 /**
@@ -94,10 +107,13 @@ export function LinkSettings() {
  * Ableton Link and the one: who is in the session and at what tempo, the bar counted
  * from the one with a light per beat, "set one" (with a beat's nudge either way), and
  * how often the preset changes on the beat. Visuals follow the session; nothing here
- * sets its tempo or transport.
+ * sets its tempo or transport. The picker shows the timing in effect and whose it is:
+ * outside playlists it is theirs (the welcome's choice, kept); while a playlist plays
+ * a change is a live one, said so, with Put back to the playlist's own.
  */
 export function LinkPanel() {
   const { frame, run, trouble } = useLink();
+  const lists = useLists();
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -124,6 +140,7 @@ export function LinkPanel() {
   const choices = link.choicesFor(frame.every);
   const at = choices.findIndex((c) => c.every === frame.every.every && c.unit === frame.every.unit);
   const toNext = link.beatsToNext(frame, now);
+  const whose = link.timingSays(lists);
 
   return (
     <section className="link-panel" aria-label="Ableton Link">
@@ -175,10 +192,28 @@ export function LinkPanel() {
           index={Math.max(0, at)}
           onChange={(i) => run(link.sync(choices[i].every, choices[i].unit), 'change the interval')}
           label="Change the preset"
-          title="Change the preset on the beat; turns auto-advance off"
+          title={
+            whose.kind === 'outside'
+              ? 'Change the preset on the beat outside playlists (kept); turns auto-advance off'
+              : `Change the preset on the beat: a live change of ${whose.name}, until another playlist plays`
+          }
         />
         {toNext !== null && <span className="link-quiet">in {Math.max(0, Math.ceil(toNext))} beats</span>}
       </div>
+      <p className="link-quiet link-whose" role="status">
+        {whose.kind === 'outside' ? (
+          'Outside playlists. A playlist plays by its own timing.'
+        ) : whose.kind === 'playlist' ? (
+          `${whose.name}’s own timing.`
+        ) : (
+          <>
+            Changed live: {whose.name} {movesOn(whose.own)} on its own.{' '}
+            <Button onPress={() => run(pl.act({ kind: 'put_back' }).then(link.state), `put back ${whose.name}’s timing`)} title={`Back to ${whose.name}’s own timing`}>
+              Put back
+            </Button>
+          </>
+        )}
+      </p>
       {trouble}
     </section>
   );

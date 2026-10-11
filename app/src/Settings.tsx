@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { Segmented } from '@openflow/widgets/controls/Segmented.tsx';
-import { Toggle } from '@openflow/widgets/controls/Toggle.tsx';
 import * as api from './api.ts';
 import { Credits } from './Credits.tsx';
 import { EffectSettings, useFx } from './Effects.tsx';
@@ -15,6 +14,7 @@ import { LinkSettings } from './LinkPanel.tsx';
 import * as output from './output.ts';
 import { OutputSettings } from './OutputPanel.tsx';
 import { SourcePicker } from './SourcePicker.tsx';
+import { SwitchRow } from './Switch.tsx';
 import { NoticeBanner } from './views.tsx';
 import { say, Say } from './words.ts';
 import './settings.css';
@@ -93,20 +93,6 @@ function Section({ name, children }: { name: string; children: ReactNode }) {
       <h3 id={id}>{name}</h3>
       {children}
     </section>
-  );
-}
-
-/**
- * One setting: its name first, its control at the row's end, and under both,
- * on lines of their own, its quiet notes (who decides, why a change failed).
- */
-function Row({ name, control, children }: { name: string; control: ReactNode; children?: ReactNode }) {
-  return (
-    <div className="settings-row">
-      <span className="settings-row-name">{name}</span>
-      <span className="settings-row-control">{control}</span>
-      {children}
-    </div>
   );
 }
 
@@ -206,21 +192,15 @@ function KeptToggle({ read, write, name, title, note }: { read(): Promise<boolea
     });
   };
   return (
-    <Row
-      name={name}
-      control={
-        <Toggle on={on === true} onChange={change} disabled={on === null} layout="inside" name={name.toLowerCase()} label={name} title={title}>
-          {on ? 'on' : 'off'}
-        </Toggle>
-      }
-    >
+    <div className="settings-switch">
+      <SwitchRow name={name} on={on === true} onChange={change} disabled={on === null} title={title} />
       {note && <p className="settings-line">{note}</p>}
       {problem && (
         <p className="settings-line settings-problem" role="status">
           {problem}
         </p>
       )}
-    </Row>
+    </div>
   );
 }
 
@@ -248,14 +228,8 @@ export function MotionSwitch({
 }) {
   const name = Say('reduced motion');
   return (
-    <Row
-      name={name}
-      control={
-        <Toggle on={shown} onChange={onChange} disabled={motion === null} layout="inside" name={name.toLowerCase()} label={name} title={REDUCE_WHAT}>
-          {shown ? 'on' : 'off'}
-        </Toggle>
-      }
-    >
+    <div className="settings-switch">
+      <SwitchRow name={name} on={shown} onChange={onChange} disabled={motion === null} title={REDUCE_WHAT} />
       {motion &&
         (motion.system ? (
           <p className="settings-line settings-follow">Following macOS's Reduce motion.</p>
@@ -269,7 +243,7 @@ export function MotionSwitch({
           {problem}
         </p>
       )}
-    </Row>
+    </div>
   );
 }
 

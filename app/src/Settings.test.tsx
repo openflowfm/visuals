@@ -133,16 +133,16 @@ describe('the sheets', () => {
 
   it('lay each switch out as a row: its name first, its control, and its quiet note under both', () => {
     const html = renderToStaticMarkup(<Settings open onClose={() => {}} />);
-    expect(html.match(/class="settings-row"/g)).toHaveLength(2);
-    expect(html).toMatch(/<div class="settings-row"><span class="settings-row-name">Reduce flashing<\/span><span class="settings-row-control">[^]*?aria-label="Reduce flashing"/);
+    expect(html.match(/class="settings-switch"/g)).toHaveLength(2);
+    expect(html).toMatch(/<div class="settings-switch"><label class="vf-switch"[^>]*><span class="vf-switch-name">Reduce flashing<\/span>[^]*?aria-label="Reduce flashing"/);
     expect(html).toMatch(
-      /<div class="settings-row"><span class="settings-row-name">Send crash reports<\/span><span class="settings-row-control">[^]*?aria-label="Send crash reports"[^]*?<\/span><p class="settings-line">No usage tracking: [^<]*<\/p><\/div>/,
+      /<div class="settings-switch"><label class="vf-switch"[^>]*><span class="vf-switch-name">Send crash reports<\/span>[^]*?aria-label="Send crash reports"[^]*?<\/label><p class="settings-line">No usage tracking: [^<]*<\/p><\/div>/,
     );
   });
 
   it('wait for the app before the reduce-flashing switch can be used', () => {
     const motion = switchTag(renderToStaticMarkup(<Settings open onClose={() => {}} />));
-    expect(motion).toContain('aria-pressed="false"');
+    expect(motion).toContain('aria-checked="false"');
     expect(motion).toContain('disabled=""');
   });
 });
@@ -155,10 +155,18 @@ describe('MotionSwitch', () => {
 
   it('says macOS decides while no choice has been made here', () => {
     const html = draw({ reduced: true, system: true });
-    expect(switchTag(html)).toContain('aria-pressed="true"');
+    expect(switchTag(html)).toContain('aria-checked="true"');
     expect(switchTag(html)).not.toContain('disabled');
     expect(html).toContain('Following macOS&#x27;s Reduce motion.');
     expect(html).not.toContain('Follow macOS&#x27;s Reduce motion"');
+  });
+
+  it('is one switch named once, with no "on" or "off" written in a field beside it', () => {
+    const html = draw({ reduced: false, system: true });
+    expect(switchTag(html)).toContain('role="switch"');
+    expect(html.match(/>Reduce flashing</g)).toHaveLength(1);
+    expect(html).not.toMatch(/>(on|off)</);
+    expect(html).not.toContain('wdg-toggle');
   });
 
   it('says in its tooltip what it calms, and that presets can still flash', () => {
@@ -168,7 +176,7 @@ describe('MotionSwitch', () => {
 
   it('offers to follow macOS again once a choice was made', () => {
     const html = draw({ reduced: false, system: false });
-    expect(switchTag(html)).toContain('aria-pressed="false"');
+    expect(switchTag(html)).toContain('aria-checked="false"');
     expect(html).toMatch(/<button[^>]*aria-label="Follow macOS&#x27;s Reduce motion"[^>]*>Follow macOS</);
     expect(html).not.toContain('Following macOS');
   });

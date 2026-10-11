@@ -77,7 +77,9 @@ export const At800: Story = {
   ),
   play: async ({ args }) => {
     await expect(await screen.findByRole('button', { name: "Follow macOS's Reduce motion" })).toBeVisible();
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Reduce flashing' })).toHaveAttribute('aria-pressed', 'true'));
+    // One name and one switch, lit.
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Reduce flashing' })).toHaveAttribute('aria-checked', 'true'));
+    await expect(screen.getAllByText('Reduce flashing')).toHaveLength(1);
     await userEvent.keyboard('{Escape}');
     await expect(args.onClose).toHaveBeenCalled();
   },

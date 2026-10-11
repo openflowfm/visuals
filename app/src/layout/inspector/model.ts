@@ -185,13 +185,19 @@ export function tunePosition(multiplier: number): number {
   return Math.min(TUNE_POSITION_MAX, Math.max(TUNE_POSITION_MIN, Math.log2(multiplier)));
 }
 
-/** What the field says about the subject: "Slow and dark, among 250 presets". */
-export function fieldSays(c: Character | null, count: number): string {
+/**
+ * What the field says about the subject: "Slow and dark, among 9,791 presets".
+ * `count` is how many presets the field draws (those measured) and `total` how
+ * many the library holds: the count is said only when the field draws them all,
+ * so a library of 9,791 with 250 measured never reads "among 250 presets".
+ */
+export function fieldSays(c: Character | null, count: number, total: number = count): string {
   const n = count.toLocaleString('en-US');
-  const among = `among ${n} presets`;
-  if (!c) return `The library: ${n} presets by speed and brightness`;
+  const all = count >= total;
+  const among = all ? `, among ${n} presets` : '';
+  if (!c) return all ? `The library: ${n} presets by speed and brightness` : `The library by speed and brightness: ${n} of its ${total.toLocaleString('en-US')} presets drawn so far`;
   const words = [c.speed.word, c.brightness.word].filter((w): w is string => !!w);
-  if (c.unmeasured || !words.length) return `Not drawn yet, ${among}`;
+  if (c.unmeasured || !words.length) return `Not drawn yet${among}`;
   const said = listed(words);
-  return `${said.charAt(0).toUpperCase()}${said.slice(1)}, ${among}`;
+  return `${said.charAt(0).toUpperCase()}${said.slice(1)}${among}`;
 }

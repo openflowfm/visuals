@@ -60,3 +60,23 @@ describe('the preset playing', () => {
     expect(container.querySelector('.lay-transport-now')).toBeNull();
   });
 });
+
+describe('what the time says it does', () => {
+  it('says it moves on by itself and that H stays, while it moves on', () => {
+    const { container } = bar({ position: { elapsed: 12, length: 30 }, moves: true });
+    expect(container.querySelector('.lay-transport-time .lay-transport-hint')!.textContent).toBe('moves on by itself · H to stay');
+  });
+
+  it('says it is staying and that H moves on, while held', () => {
+    const { container } = bar({ position: { elapsed: 75, length: null }, moves: true, playing: false });
+    expect(container.querySelector('.lay-transport-hint')!.textContent).toBe('staying · H to move on');
+    expect(screen.getByRole('button', { name: 'play' }).getAttribute('title')).toBe('Move on by itself again (H)');
+  });
+
+  it('says nothing when it does not move on by itself, or nothing plays', () => {
+    const { container, rerender } = bar({ position: { elapsed: 75, length: null } });
+    expect(container.querySelector('.lay-transport-hint')).toBeNull();
+    rerender(<TransportBar playing moves onPlayPause={() => {}} onStep={() => {}} stepIn="" position={null} onAudioError={() => {}} />);
+    expect(container.querySelector('.lay-transport-hint')).toBeNull();
+  });
+});
