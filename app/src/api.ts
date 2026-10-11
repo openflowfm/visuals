@@ -353,3 +353,6 @@ export const UPDATE_CHECK_EVENT = 'update-check';
 export const WELCOME_EVENT = 'welcome';
 /** Menu event: Credits was chosen. Listened to by #86. */
 export const CREDITS_EVENT = 'credits';
+/** Menu event: Settings… (⌘,) was chosen; the page opens its Settings sheet (`useSheet` in views.tsx). */
+export const MENU_SETTINGS_EVENT = 'menu-settings';
+export const onMenuSettings = (f: () => void): Promise<UnlistenFn> => listen(MENU_SETTINGS_EVENT, () => f());

@@ -32,6 +32,10 @@ export interface SidebarActions {
   /** Save a playlist to a file. */
   onExport(id: string): void;
   onDelete(id: string): void;
+  /** The row menu's "Show info": show a playlist's card in the inspector, by id. Optional until the sidebar and Home lanes wire it. */
+  onInfo?(id: string): void;
+  /** The quiet Settings row at the sidebar's foot: open the Settings sheet. Optional until the sidebar and Home lanes wire it. */
+  onSettings?(): void;
   /** How many presets a playlist holds (manual: items; smart: its matches); null while unknown. */
   count(p: Playlist): number | null;
   /** Something failed: `what` it was doing, then the error, as the home says it. */

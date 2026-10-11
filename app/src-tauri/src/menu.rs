@@ -1,23 +1,31 @@
-//! The macOS menu: the app menu (About, Check for Updates…, Welcome…, Flashing
-//! Lights Warning…, Credits, Hide, Hide Others, Quit) and the usual Edit and
-//! Window menus, so copy, paste and fullscreen keep working. The four custom
-//! items emit an event to the page.
+//! The macOS menu: the app menu (About, Settings… ⌘,, Check for Updates…,
+//! Welcome…, Flashing Lights Warning…, Credits, Hide, Hide Others, Quit) and the
+//! usual Edit and Window menus, so copy, paste and fullscreen keep working. The
+//! five custom items emit an event to the page.
 
 use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{App, Emitter, Runtime};
 
-/// The custom items' ids, each the name of the event it emits. `flash-warning`
+/// Settings…, in the standard spot after About, with macOS's own ⌘, : its id
+/// and the event it emits (the page opens its Settings sheet), its text, its key.
+pub const SETTINGS: (&str, &str, &str) = ("menu-settings", "Settings…", "CmdOrCtrl+,");
+
+/// The other custom items' ids, each the name of the event it emits. `flash-warning`
 /// shows the first run's photosensitivity warning again (#100).
 pub const ITEMS: [(&str, &str); 4] = [("update-check", "Check for Updates…"), ("welcome", "Welcome…"), ("flash-warning", "Flashing Lights Warning…"), ("credits", "Credits")];
 
 /// The event a menu item emits, if it is one of ours.
 pub fn event_for(id: &str) -> Option<&'static str> {
+    if id == SETTINGS.0 {
+        return Some(SETTINGS.0);
+    }
     ITEMS.iter().find(|(event, _)| *event == id).map(|(event, _)| *event)
 }
 
 /// Sets the app's menu and sends our items' events to the page.
 pub fn install<R: Runtime>(app: &App<R>) -> tauri::Result<()> {
     let h = app.handle();
+    let settings = MenuItem::with_id(h, SETTINGS.0, SETTINGS.1, true, Some(SETTINGS.2))?;
     let [updates, welcome, warning, credits] = ITEMS.map(|(id, text)| MenuItem::with_id(h, id, text, true, None::<&str>));
     let app_menu = Submenu::with_items(
         h,
@@ -25,6 +33,9 @@ pub fn install<R: Runtime>(app: &App<R>) -> tauri::Result<()> {
         true,
         &[
             &PredefinedMenuItem::about(h, None, Some(AboutMetadata::default()))?,
+            &PredefinedMenuItem::separator(h)?,
+            &settings,
+            &PredefinedMenuItem::separator(h)?,
             &updates?,
             &welcome?,
             &warning?,
@@ -78,5 +89,11 @@ mod tests {
         assert_eq!(event_for("flash-warning"), Some("flash-warning"));
         assert_eq!(event_for("credits"), Some("credits"));
         assert_eq!(event_for("quit"), None);
+    }
+
+    #[test]
+    fn settings_is_command_comma_and_emits_its_event() {
+        assert_eq!(SETTINGS, ("menu-settings", "Settings…", "CmdOrCtrl+,"));
+        assert_eq!(event_for("menu-settings"), Some("menu-settings"));
     }
 }

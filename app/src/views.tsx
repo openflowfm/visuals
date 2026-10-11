@@ -82,12 +82,13 @@ export function Mark() {
  * Every view's header: the mark, the view switch, then whatever the view puts in
  * it. In the main window it is the title bar too (chrome.ts): its empty space
  * drags the window. `lead` goes before the mark (the home's sidebar toggle).
+ * `mark={false}` leaves the mark out (the home shows it atop its sidebar).
  */
-export function Header({ view, onChange, lead, children }: { view: View; onChange(next: View): void; lead?: ReactNode; children?: ReactNode }) {
+export function Header({ view, onChange, lead, mark = true, children }: { view: View; onChange(next: View): void; lead?: ReactNode; mark?: boolean; children?: ReactNode }) {
   return (
     <header className="vf-header" data-tauri-drag-region>
       {lead}
-      <Mark />
+      {mark && <Mark />}
       <ViewSwitch view={view} onChange={onChange} />
       {children}
     </header>
@@ -191,7 +192,24 @@ export function useSheet(): { sheet: Sheet | null; close(): void } {
   useEffect(() => {
     const open = (e: Event) => setSheet((s) => sheetOf(e) ?? s);
     window.addEventListener(SHEET_EVENT, open);
-    return () => window.removeEventListener(SHEET_EVENT, open);
+    // The app menu's Settings… (⌘,) opens it too; outside the app (a story, a test) there is no menu.
+    let off: (() => void) | null = null;
+    let gone = false;
+    try {
+      api
+        .onMenuSettings(() => setSheet('settings'))
+        .then(
+          (un) => (gone ? un() : (off = un)),
+          () => {},
+        );
+    } catch {
+      // No Tauri here.
+    }
+    return () => {
+      gone = true;
+      off?.();
+      window.removeEventListener(SHEET_EVENT, open);
+    };
   }, []);
   const close = useCallback(() => setSheet(null), []);
   return { sheet, close };
