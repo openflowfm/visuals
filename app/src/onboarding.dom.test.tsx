@@ -89,7 +89,8 @@ describe('the flashing-lights warning over the app', () => {
 describe('the view to start in', () => {
   it('follows VISUALS_VIEW and VISUALS_LIVE, as the app says them', () => {
     expect(startIn('live-windowed', 'home')).toEqual({ view: 'live', windowed: true });
-    expect(startIn('live', 'home')).toEqual({ view: 'live' });
+    // Started in live mode: the one start that opens the output by itself.
+    expect(startIn('live', 'home')).toEqual({ view: 'live', windowed: false });
     expect(startIn('home', 'editor')).toEqual({ view: 'home' });
     expect(startIn(null, 'editor')).toEqual({ view: 'editor' });
   });

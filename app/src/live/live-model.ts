@@ -114,11 +114,16 @@ export const ratingOf = (data: api.LibraryData | null, key: string | null): numb
 export const starsText = (rating: number): string => '★'.repeat(rating) + '☆'.repeat(Math.max(0, 5 - rating));
 
 /**
- * Whether live mode plays in the window rather than opening the output: asked to
- * (first run), or only one display is connected, so a full-screen output would
- * cover the controls. Unknown displays (the call failed) keep the old behaviour.
+ * Whether live mode opens the output by itself on the way in. Going live never
+ * does: it plays in the window, and the picture goes to a display only when the
+ * user picks one ("Go full screen on…", the Output popover). Only the start
+ * variables (`VISUALS_LIVE=1`, `VISUALS_VIEW=live`; `windowed` false, see
+ * `output.startIn`) open it, so a launch in live mode, and the headless
+ * capture of the output, still gets one — and not with only one display, where
+ * a full-screen output would cover the controls. Unknown displays (the call
+ * failed) open it all the same.
  */
-export const playsWindowed = (windowed: boolean, displays: readonly output.Display[] | null): boolean => windowed || (displays !== null && displays.length <= 1);
+export const opensOnStart = (windowed: boolean | undefined, displays: readonly output.Display[] | null): boolean => windowed === false && (displays === null || displays.length > 1);
 
 /** The "next" line's when, from Link's next change: "in 3 beats"; null when changes aren't on the beat. */
 export function whenText(beats: number | null): string | null {

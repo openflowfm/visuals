@@ -14,7 +14,7 @@ import { useLive } from './live/useLive.ts';
 import './live.css';
 
 // Live mode's reckonings moved to live/live-model.ts (the Stage contract); they are still here for what imported them from Live.
-export { intensityOf, keyOf, openEffects, padLabel, playsWindowed, ratingOf, sendIntensity, starred, starsText, whenText, whereSr, whereText, type IntensityAction } from './live/live-model.ts';
+export { intensityOf, keyOf, openEffects, opensOnStart, padLabel, ratingOf, sendIntensity, starred, starsText, whenText, whereSr, whereText, type IntensityAction } from './live/live-model.ts';
 
 /** The window's width, followed as it is resized. */
 function useWidth(): number {
@@ -33,7 +33,8 @@ function useWidth(): number {
  * Home's opaque inset panels over it — the header's two capsules along the top
  * (`StageHead`), the crate down the left (`StageCrate`), the dock along the
  * bottom (`StageDock`), all laid out by `StageLayout` and fed from `useLive`.
- * Playing in the window, "Go full screen on…" sits over the picture's middle.
+ * Going live plays in this window; "Go full screen on…" sits over the picture's
+ * middle until the user puts the picture on a display (it, or the Output popover).
  *
  * The crate docks from `STAGE_DOCK_AT` px and is laid over the rest below it,
  * where it starts put away; the viewer's choice is kept (`CRATE_KEY`) where it
@@ -50,11 +51,16 @@ function useWidth(): number {
 export function Live({
   start,
   onMode,
-  windowed = false,
+  windowed,
 }: {
   start: string | null;
   onMode: (mode: View, path: string | null) => void;
-  /** Play in the window: don't open the output on the way in. */ windowed?: boolean;
+  /**
+   * Live always plays in the window on the way in (true or unset, as from
+   * Home or `live-windowed`); false only when the app was started in live
+   * mode (`VISUALS_LIVE=1`, `VISUALS_VIEW=live`), which opens the output.
+   */
+  windowed?: boolean;
 }) {
   const live = useLive({ start, windowed });
   const { current } = live;

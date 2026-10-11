@@ -68,11 +68,13 @@ remains the final call, and `compare/README.md` lists what can't match.
 `npm run app` runs the app (the home and live mode); `npm run app:lab` runs the lab
 build, which starts in the editor (`VITE_LAB=1 app/run.sh --features lab`; the headless
 capture above works with it too). `VISUALS_PRESET=<path in the pack>` starts either on a
-given preset. `VISUALS_LIVE=1` starts it in live mode, which opens the output window full screen
-on a display (`VISUALS_DISPLAY=<n>` picks display `n`, from 0; otherwise the one chosen
-last). `VISUALS_VIEW=home|library|live|live-windowed` starts it in that view and wins over
-`VISUALS_LIVE`; `library` is the home opened on its library pane (there is no library view
-of its own since decision 66), and `live-windowed` plays live in the main window without opening the output, so
+given preset. Going live never opens the output by itself: it plays in the main window
+until the user picks a display ("Go full screen on…" or the Output popover). Only a start
+in live mode does: `VISUALS_LIVE=1` starts it in live mode with the output window full screen
+on a display when another one can take it (`VISUALS_DISPLAY=<n>` picks display `n`, from 0; otherwise the one chosen
+last), so `VISUALS_CAPTURE_OUTPUT` has an output to capture. `VISUALS_VIEW=home|library|live|live-windowed` starts it in that view and wins over
+`VISUALS_LIVE`; `live` is `VISUALS_LIVE=1`'s, `library` is the home opened on its library pane (there is no library view
+of its own since decision 66), and `live-windowed` plays live in the main window, as going live from the home does, so
 its "Go full screen on…" overlay can be captured. With the flashing warning owed (first run
 done, "I understand" not yet chosen), live mode waits behind it; the answer is kept in
 `access.json`, so once answered in one dev run it holds for later runs, headless captures
