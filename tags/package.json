@@ -1,0 +1,28 @@
+{
+  "name": "@openflow/visuals-tags",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Development-only: empirical tags for the preset pack. Hand labels, Claude rubric scores and measured features turned into calibrated, held-out-checked scorers.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=26"
+  },
+  "scripts": {
+    "label": "node --disable-warning=ExperimentalWarning src/label.ts",
+    "rubric": "node --disable-warning=ExperimentalWarning src/rubric.ts",
+    "score": "node --disable-warning=ExperimentalWarning src/score.ts",
+    "fixture": "node --disable-warning=ExperimentalWarning src/fixture.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0",
+    "sharp": "^0.35.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
+  }
+}

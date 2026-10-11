@@ -48,11 +48,19 @@ describe('playing from a row', () => {
 describe('rowMenu', () => {
   const actions = (p: Playlist | undefined, playing = false) => rowMenu(p, playing, lists).map((i) => i.action);
 
-  it('offers play, rename, save to a file and delete for a playlist', () => {
-    expect(actions(chill)).toEqual(['play', 'rename', 'export', 'delete']);
-    expect(rowMenu(chill, false, lists).map((i) => i.label)).toEqual(['Play', 'Rename', 'Save to a file', 'Delete…']);
+  it('offers play, quick add, rename, save to a file and delete for a playlist, and no quick add for a smart one', () => {
+    expect(actions(chill)).toEqual(['play', 'quickadd', 'rename', 'export', 'delete']);
+    expect(rowMenu(chill, false, lists).map((i) => i.label)).toEqual(['Play', 'Quick add', 'Rename', 'Save to a file', 'Delete…']);
     expect(rowMenu(chill, false, lists).find((i) => i.action === 'delete')?.danger).toBe(true);
     expect(actions(calm)).toEqual(['play', 'rename', 'export', 'delete']);
+  });
+
+  it('offers show info, after play and quick add, for playlists and smart ones when the page can show it', () => {
+    const info = (p: Playlist) => rowMenu(p, false, lists, { info: true });
+    expect(info(chill).map((i) => i.action)).toEqual(['play', 'quickadd', 'info', 'rename', 'export', 'delete']);
+    expect(info(calm).map((i) => i.action)).toEqual(['play', 'info', 'rename', 'export', 'delete']);
+    expect(info(recent).map((i) => i.action)).toEqual(['play', 'info', 'export']);
+    expect(info(calm).find((i) => i.action === 'info')?.label).toBe('Show info');
   });
 
   it('offers stop for the one playing, and play disabled for an empty one', () => {

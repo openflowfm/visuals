@@ -1,6 +1,8 @@
 import type { Lists, Playlist } from '../playlists.ts';
 import { recentList, sections, type Pane } from '../home.ts';
 import { isOver, listTarget, type Drag } from '../drag.ts';
+import { say, Say } from '../words.ts';
+import { offersQuickAdd } from './home-model.ts';
 import type { IconName } from './icons.tsx';
 
 /**
@@ -63,7 +65,7 @@ export const canToggle = (p: Playlist, playing: boolean): boolean => playing || 
 export const toggleTitle = (p: Playlist, playing: boolean): string => (playing ? `Stop ${p.name}` : canToggle(p, playing) ? `Play ${p.name}` : 'Add presets to play it');
 
 /** One item in a row's menu. */
-export type MenuAction = 'play' | 'stop' | 'rename' | 'export' | 'delete';
+export type MenuAction = 'play' | 'stop' | 'quickadd' | 'info' | 'rename' | 'export' | 'delete';
 export interface MenuItem {
   action: MenuAction;
   label: string;
@@ -74,16 +76,20 @@ export interface MenuItem {
 }
 
 /**
- * A row's menu: play (or stop), rename, save to a file, and delete (which asks
- * first), for a playlist; nothing for the library and starred, which are not
- * playlists. "Recently played" is the app's own: it plays and saves, but keeps
- * its name and can't be deleted.
+ * A row's menu: play (or stop), quick add (a manual playlist's), show info
+ * (when `info`: the page shows a playlist's card in the inspector), rename,
+ * save to a file, and delete (which asks first), for a playlist; nothing for
+ * the library and starred, which are not playlists. "Recently played" is the
+ * app's own: it plays, shows its info and saves, but keeps its name and can't
+ * be deleted.
  */
-export function rowMenu(p: Playlist | null | undefined, playing: boolean, lists: Lists | null | undefined): MenuItem[] {
+export function rowMenu(p: Playlist | null | undefined, playing: boolean, lists: Lists | null | undefined, opts: { info?: boolean } = {}): MenuItem[] {
   if (!p) return [];
   const items: MenuItem[] = [
     playing ? { action: 'stop', label: 'Stop', title: toggleTitle(p, true) } : { action: 'play', label: 'Play', title: toggleTitle(p, false), disabled: !canToggle(p, false) },
   ];
+  if (offersQuickAdd(p)) items.push({ action: 'quickadd', label: Say('quickadd'), title: `Add presets to ${p.name} with a click on each in the library` });
+  if (opts.info) items.push({ action: 'info', label: Say('show inspector'), title: `Show ${p.name}'s card in the ${say('inspector')} pane` });
   const own = recentList(lists?.playlists ?? []) === p;
   if (!own) items.push({ action: 'rename', label: 'Rename', title: `Give ${p.name} another name` });
   items.push({ action: 'export', label: 'Save to a file', title: 'Save to a file, to keep or to give someone: its presets by name and content' });

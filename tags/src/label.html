@@ -1,0 +1,761 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Preset labels</title>
+    <style>
+      :root {
+        --black: #000;
+        --ink: #e9ecf5;
+        --dim: #8a90a3;
+        --faint: #3a3f4d;
+        --line: rgba(233, 236, 245, 0.12);
+        --yes: #f4f7ff;
+        --yes-glow: rgba(170, 196, 255, 0.55);
+        --unsure: #f0b44c;
+        --no: #4b5163;
+        --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        background: var(--black);
+        color: var(--ink);
+        font: 14px/1.4 var(--font);
+        -webkit-font-smoothing: antialiased;
+      }
+      button {
+        font: inherit;
+        color: inherit;
+        background: none;
+        border: 0;
+        cursor: pointer;
+      }
+      button:focus-visible,
+      .tag:focus-visible {
+        outline: 1px solid var(--ink);
+        outline-offset: 2px;
+      }
+
+      /* The question: what you're looking for, big. */
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: end;
+        gap: 6px 24px;
+        padding: 18px 20px 14px;
+        background: rgba(0, 0, 0, 0.78);
+        backdrop-filter: blur(18px) saturate(1.4);
+        -webkit-backdrop-filter: blur(18px) saturate(1.4);
+      }
+      .which {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+        color: var(--dim);
+      }
+      .which button {
+        padding: 0;
+        color: var(--ink);
+        font-weight: 600;
+        letter-spacing: 0.01em;
+      }
+      .which button::after {
+        content: '';
+        display: inline-block;
+        width: 5px;
+        height: 5px;
+        margin: 0 0 3px 7px;
+        border-right: 1px solid var(--dim);
+        border-bottom: 1px solid var(--dim);
+        transform: rotate(45deg);
+      }
+      h1 {
+        grid-column: 1;
+        margin: 0;
+        font-size: clamp(22px, 2.9vw, 40px);
+        font-weight: 300;
+        line-height: 1.12;
+        letter-spacing: -0.015em;
+        max-width: 38ch;
+      }
+      .actions {
+        grid-column: 2;
+        grid-row: 1 / span 2;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .actions button {
+        padding: 8px 12px;
+        border-radius: 999px;
+        color: var(--dim);
+      }
+      .actions button:hover {
+        color: var(--ink);
+      }
+      .actions .done {
+        color: var(--black);
+        background: var(--ink);
+        font-weight: 600;
+        padding: 8px 16px;
+      }
+      .actions .done:hover {
+        color: var(--black);
+        background: #fff;
+      }
+      kbd {
+        font: inherit;
+        font-size: 11px;
+        opacity: 0.6;
+        margin-left: 6px;
+      }
+      .progress {
+        display: flex;
+        gap: 14px;
+        font-variant-numeric: tabular-nums;
+      }
+      .progress b {
+        font-weight: 500;
+        color: var(--ink);
+      }
+      .progress .u b {
+        color: var(--unsure);
+      }
+
+      /* The clips: edge to edge, nothing between them but a hairline of black. */
+      main {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 2px;
+      }
+      .clip {
+        position: relative;
+        aspect-ratio: var(--aspect, 4 / 3);
+        background-color: #05060a;
+        background-repeat: no-repeat;
+        background-size: calc(var(--frames, 24) * 100%) 100%;
+        animation: play var(--duration, 2s) steps(var(--frames, 24), jump-none) infinite;
+        cursor: pointer;
+        outline: none;
+        transition: filter 0.18s;
+      }
+      @keyframes play {
+        from {
+          background-position: 0% 0;
+        }
+        to {
+          background-position: 100% 0;
+        }
+      }
+      .clip::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        transition:
+          box-shadow 0.16s,
+          background 0.16s;
+      }
+      .clip:focus-visible::after,
+      body.keys .clip.focus::after {
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.85);
+      }
+      .clip.yes::after {
+        box-shadow:
+          inset 0 0 0 3px var(--yes),
+          inset 0 0 28px 4px var(--yes-glow);
+      }
+      .clip.unsure::after {
+        box-shadow: inset 0 0 0 3px var(--unsure);
+        background: rgba(0, 0, 0, 0.22);
+      }
+      main.marking .clip:not(.yes):not(.unsure) {
+        filter: brightness(0.62) saturate(0.8);
+      }
+      main.marking .clip:not(.yes):not(.unsure):hover,
+      main.marking .clip.focus:not(.yes):not(.unsure) {
+        filter: none;
+      }
+      .mark {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        font-size: 13px;
+        font-weight: 700;
+        opacity: 0;
+        transform: scale(0.6);
+        transition:
+          opacity 0.16s,
+          transform 0.16s;
+      }
+      .yes .mark {
+        opacity: 1;
+        transform: none;
+        background: var(--yes);
+        color: var(--black);
+        box-shadow: 0 0 14px var(--yes-glow);
+      }
+      .unsure .mark {
+        opacity: 1;
+        transform: none;
+        background: var(--unsure);
+        color: var(--black);
+      }
+      .path {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        padding: 18px 10px 7px;
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.86);
+        background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        opacity: 0;
+        transition: opacity 0.15s;
+        pointer-events: none;
+      }
+      .clip:hover .path,
+      .clip.focus .path {
+        opacity: 1;
+      }
+
+      .empty {
+        grid-column: 1 / -1;
+        padding: 18vh 20px;
+        text-align: center;
+        color: var(--dim);
+        font-size: 18px;
+        font-weight: 300;
+      }
+      .empty strong {
+        display: block;
+        color: var(--ink);
+        font-size: 26px;
+        font-weight: 300;
+        margin-bottom: 8px;
+      }
+
+      /* Tags: a drawer from the left, each with a line showing how far its labels go. */
+      .scrim {
+        position: fixed;
+        inset: 0;
+        z-index: 9;
+        background: rgba(0, 0, 0, 0.5);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s;
+      }
+      .open .scrim {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      nav {
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 10;
+        width: min(340px, 88vw);
+        overflow-y: auto;
+        padding: 22px 0 40px;
+        background: rgba(8, 9, 14, 0.94);
+        backdrop-filter: blur(24px);
+        -webkit-backdrop-filter: blur(24px);
+        border-right: 1px solid var(--line);
+        transform: translateX(-102%);
+        transition: transform 0.22s cubic-bezier(0.2, 0.7, 0.2, 1);
+      }
+      .open nav {
+        transform: none;
+      }
+      nav h2 {
+        margin: 22px 22px 6px;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--dim);
+        text-transform: capitalize;
+      }
+      nav h2:first-child {
+        margin-top: 0;
+      }
+      .tag {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 5px 10px;
+        width: 100%;
+        padding: 8px 22px;
+        text-align: left;
+      }
+      .tag:hover {
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .tag.current {
+        background: rgba(255, 255, 255, 0.07);
+      }
+      .tag .n {
+        color: var(--dim);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+      .bar {
+        grid-column: 1 / -1;
+        display: flex;
+        height: 2px;
+        background: var(--faint);
+        border-radius: 1px;
+        overflow: hidden;
+      }
+      .bar i {
+        display: block;
+      }
+      .bar .y {
+        background: var(--yes);
+      }
+      .bar .u {
+        background: var(--unsure);
+      }
+      .bar .o {
+        background: var(--dim);
+      }
+
+      /* Keys. */
+      dialog {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 22px 26px;
+        background: rgba(10, 11, 17, 0.96);
+        color: var(--ink);
+        max-width: 420px;
+      }
+      dialog::backdrop {
+        background: rgba(0, 0, 0, 0.55);
+      }
+      dialog h2 {
+        margin: 0 0 14px;
+        font-size: 16px;
+        font-weight: 500;
+      }
+      dialog dl {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 8px 18px;
+        margin: 0;
+      }
+      dialog dt {
+        color: var(--ink);
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      dialog dd {
+        margin: 0;
+        color: var(--dim);
+      }
+
+      .toast {
+        position: fixed;
+        left: 50%;
+        bottom: 22px;
+        z-index: 20;
+        transform: translate(-50%, 20px);
+        padding: 10px 16px;
+        border-radius: 999px;
+        background: #2a1414;
+        color: #ffd9d4;
+        opacity: 0;
+        transition:
+          opacity 0.2s,
+          transform 0.2s;
+        pointer-events: none;
+      }
+      .toast.show {
+        opacity: 1;
+        transform: translate(-50%, 0);
+      }
+
+      @media (max-width: 720px) {
+        header {
+          grid-template-columns: 1fr;
+          padding: 14px 16px 12px;
+        }
+        .actions {
+          grid-column: 1;
+          grid-row: auto;
+          justify-content: flex-end;
+        }
+        kbd {
+          display: none;
+        }
+        main {
+          grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .clip {
+          animation-duration: calc(var(--duration, 2s) * 4);
+        }
+        nav,
+        .scrim,
+        .toast,
+        .mark,
+        .clip::after {
+          transition: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="which">
+        <button id="tagButton" title="All tags (t)">…</button>
+        <span class="progress" id="progress"></span>
+      </div>
+      <h1 id="question">Loading…</h1>
+      <div class="actions">
+        <button id="skip" title="Show another grid without saving (r)">Skip<kbd>r</kbd></button>
+        <button id="help" title="Keys (?)">?</button>
+        <button id="done" class="done" title="Save no for the rest, then the next grid (Enter)">Next grid<kbd>↵</kbd></button>
+      </div>
+    </header>
+    <main id="grid" aria-label="Clips"></main>
+    <div class="scrim" id="scrim"></div>
+    <nav id="tags" aria-label="Tags"></nav>
+    <dialog id="keys">
+      <h2>Keys</h2>
+      <dl>
+        <dt>Click, space</dt>
+        <dd>Has the tag (again to un-mark)</dd>
+        <dt>Shift-click, u</dt>
+        <dd>Not sure</dd>
+        <dt>Arrows</dt>
+        <dd>Move over the grid</dd>
+        <dt>Enter</dt>
+        <dd>Save no for the rest, next grid</dd>
+        <dt>r</dt>
+        <dd>Another grid, without saving the rest</dd>
+        <dt>] or n, [ or p</dt>
+        <dd>Next or previous tag</dd>
+        <dt>t</dt>
+        <dd>All tags</dd>
+        <dt>?</dt>
+        <dd>These keys</dd>
+        <dt>Esc</dt>
+        <dd>Close</dd>
+      </dl>
+    </dialog>
+    <div class="toast" id="toast" role="status"></div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const grid = $('grid');
+      let state = null; // from /api/state
+      let tag = null; // the current tag's id
+      let items = []; // [{hash, path, clip, mark: 'yes'|'unsure'|null, saved: answer|null, el}]
+      let focus = 0;
+      let loading = false;
+      let queue = Promise.resolve();
+
+      const remember = (k, v) => {
+        try {
+          localStorage.setItem(k, v);
+        } catch {}
+      };
+      const recall = (k) => {
+        try {
+          return localStorage.getItem(k);
+        } catch {
+          return null;
+        }
+      };
+
+      function toast(text) {
+        const t = $('toast');
+        t.textContent = text;
+        t.classList.add('show');
+        clearTimeout(toast.timer);
+        toast.timer = setTimeout(() => t.classList.remove('show'), 4000);
+      }
+
+      async function api(path, body) {
+        const res = await fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {});
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `${res.status} ${res.statusText}`);
+        return data;
+      }
+
+      const current = () => state.tags.find((t) => t.id === tag);
+
+      // Saves run one after another, so the file's order is the order they were given: the latest answer wins.
+      function save(answers) {
+        if (!answers.length) return queue;
+        const forTag = tag;
+        queue = queue
+          .then(() => api('/api/labels', { tag: forTag, answers }))
+          .then((r) => {
+            const t = state.tags.find((t) => t.id === forTag);
+            const before = t.counts.yes + t.counts.no + t.counts.unsure;
+            t.counts = r.counts;
+            t.remaining -= t.counts.yes + t.counts.no + t.counts.unsure - before;
+            drawProgress();
+            drawTags();
+          })
+          .catch((e) => toast(`Couldn't save: ${e.message}. Your marks on screen weren't all kept.`));
+        return queue;
+      }
+
+      function drawProgress() {
+        const t = current();
+        if (!t) return;
+        const c = t.counts;
+        $('progress').innerHTML = `<span><b>${c.yes}</b> yes</span><span><b>${c.no}</b> no</span><span class="u"><b>${c.unsure}</b> unsure</span><span><b>${t.remaining}</b> left</span>`;
+      }
+
+      function drawTags() {
+        const nav = $('tags');
+        nav.textContent = '';
+        for (const g of state.groups) {
+          const h = document.createElement('h2');
+          h.textContent = g;
+          nav.append(h);
+          for (const t of state.tags.filter((t) => t.group === g)) {
+            const b = document.createElement('button');
+            b.className = 'tag' + (t.id === tag ? ' current' : '');
+            const total = state.presets || 1;
+            const pct = (n) => `${((100 * n) / total).toFixed(2)}%`;
+            const c = t.counts;
+            b.innerHTML = `<span></span><span class="n">${c.yes} of ${c.yes + c.no + c.unsure}</span><span class="bar"><i class="y" style="width:${pct(c.yes)}"></i><i class="u" style="width:${pct(c.unsure)}"></i><i class="o" style="width:${pct(c.no)}"></i></span>`;
+            b.firstChild.textContent = t.name;
+            b.title = `${c.yes} yes, ${c.no} no, ${c.unsure} unsure, ${t.remaining} left`;
+            b.onclick = () => {
+              closeTags();
+              choose(t.id);
+            };
+            nav.append(b);
+          }
+        }
+      }
+
+      function openTags() {
+        document.body.classList.add('open');
+        const cur = $('tags').querySelector('.current');
+        if (cur) {
+          cur.focus();
+          cur.scrollIntoView({ block: 'center' });
+        }
+      }
+      function closeTags() {
+        document.body.classList.remove('open');
+      }
+      const tagsOpen = () => document.body.classList.contains('open');
+
+      function choose(id) {
+        tag = id;
+        remember('labels.tag', id);
+        const t = current();
+        $('tagButton').textContent = t.name;
+        $('question').textContent = t.question;
+        document.title = `${t.name} · labels`;
+        drawProgress();
+        drawTags();
+        load();
+      }
+
+      function step(d) {
+        const i = state.tags.findIndex((t) => t.id === tag);
+        choose(state.tags[(i + d + state.tags.length) % state.tags.length].id);
+      }
+
+      async function load() {
+        if (loading) return;
+        loading = true;
+        const forTag = tag;
+        try {
+          await queue;
+          const g = await api(`/api/grid?tag=${encodeURIComponent(forTag)}`);
+          if (forTag !== tag) return;
+          const t = current();
+          t.counts = g.counts;
+          t.remaining = g.remaining;
+          drawProgress();
+          drawGrid(g.items);
+        } catch (e) {
+          toast(`Couldn't load a grid: ${e.message}`);
+        } finally {
+          loading = false;
+          if (forTag !== tag) load();
+        }
+      }
+
+      function drawGrid(list) {
+        grid.textContent = '';
+        grid.classList.remove('marking');
+        focus = 0;
+        const { frames, fps, size } = state.clip;
+        grid.style.setProperty('--frames', frames);
+        grid.style.setProperty('--duration', `${frames / fps}s`);
+        grid.style.setProperty('--aspect', `${size[0]} / ${size[1]}`);
+        items = list.map((it, i) => {
+          const el = document.createElement('div');
+          el.className = 'clip';
+          el.tabIndex = i === 0 ? 0 : -1;
+          el.setAttribute('role', 'checkbox');
+          el.setAttribute('aria-checked', 'false');
+          el.setAttribute('aria-label', it.path);
+          el.style.backgroundImage = `url("/clips/${encodeURIComponent(it.clip)}")`;
+          el.style.animationDelay = `${(-Math.random() * frames) / fps}s`;
+          el.innerHTML = '<span class="mark"></span><span class="path"></span>';
+          el.lastChild.textContent = it.path;
+          const item = { ...it, mark: null, saved: null, el };
+          el.addEventListener('click', (e) => {
+            setFocus(i, false);
+            mark(item, e.shiftKey ? 'unsure' : 'yes');
+          });
+          grid.append(el);
+          return item;
+        });
+        if (!items.length) {
+          const t = current();
+          const div = document.createElement('div');
+          div.className = 'empty';
+          div.innerHTML = '<strong></strong>Every preset has an answer for this tag. Pick another tag with t, or ] for the next.';
+          div.firstChild.textContent = `Nothing left to label for ${t.name}.`;
+          grid.append(div);
+          return;
+        }
+        window.scrollTo({ top: 0 });
+        setFocus(0, false);
+      }
+
+      // Toggles a mark: the same gesture again un-marks, which saves a no (the latest answer wins).
+      function mark(item, kind) {
+        item.mark = item.mark === kind ? null : kind;
+        const answer = item.mark ?? 'no';
+        item.el.classList.toggle('yes', item.mark === 'yes');
+        item.el.classList.toggle('unsure', item.mark === 'unsure');
+        item.el.firstChild.textContent = item.mark === 'yes' ? '✓' : item.mark === 'unsure' ? '?' : '';
+        item.el.setAttribute('aria-checked', item.mark === 'yes' ? 'true' : item.mark === 'unsure' ? 'mixed' : 'false');
+        grid.classList.toggle(
+          'marking',
+          items.some((i) => i.mark),
+        );
+        if (item.saved !== answer) {
+          item.saved = answer;
+          save([{ hash: item.hash, answer }]);
+        }
+      }
+
+      function setFocus(i, scroll = true) {
+        if (!items.length) return;
+        focus = Math.max(0, Math.min(items.length - 1, i));
+        items.forEach((it, j) => {
+          it.el.classList.toggle('focus', j === focus);
+          it.el.tabIndex = j === focus ? 0 : -1;
+        });
+        const el = items[focus].el;
+        el.focus({ preventScroll: true });
+        if (scroll) el.scrollIntoView({ block: 'nearest' });
+      }
+
+      function columns() {
+        if (items.length < 2) return 1;
+        const top = items[0].el.offsetTop;
+        const n = items.findIndex((it) => it.el.offsetTop !== top);
+        return n < 0 ? items.length : n;
+      }
+
+      async function submit() {
+        if (loading) return;
+        const rest = items.filter((it) => !it.mark && it.saved !== 'no');
+        for (const it of rest) it.saved = 'no';
+        save(rest.map((it) => ({ hash: it.hash, answer: 'no' })));
+        load();
+      }
+
+      document.addEventListener('keydown', (e) => {
+        if (e.metaKey || e.ctrlKey || e.altKey) return;
+        if ($('keys').open) return; // the dialog closes itself on Esc
+        if (tagsOpen()) {
+          if (e.key === 'Escape' || e.key === 't') {
+            e.preventDefault();
+            closeTags();
+            setFocus(focus, false);
+          } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            const all = [...$('tags').querySelectorAll('.tag')];
+            const i = all.indexOf(document.activeElement);
+            all[Math.max(0, Math.min(all.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))]?.focus();
+          }
+          return;
+        }
+        if (e.target instanceof HTMLButtonElement && (e.key === 'Enter' || e.key === ' ')) return; // the button's own action
+        const keys = document.body.classList;
+        const cols = columns();
+        const moves = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -cols, ArrowDown: cols };
+        if (e.key in moves) {
+          e.preventDefault();
+          keys.add('keys');
+          setFocus(focus + moves[e.key]);
+        } else if (e.key === ' ') {
+          e.preventDefault();
+          keys.add('keys');
+          if (items[focus]) mark(items[focus], e.shiftKey ? 'unsure' : 'yes');
+        } else if (e.key === 'u' || e.key === 'U') {
+          keys.add('keys');
+          if (items[focus]) mark(items[focus], 'unsure');
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          submit();
+        } else if (e.key === 'r') {
+          load();
+        } else if (e.key === ']' || e.key === 'n') {
+          step(1);
+        } else if (e.key === '[' || e.key === 'p') {
+          step(-1);
+        } else if (e.key === 't') {
+          openTags();
+        } else if (e.key === '?') {
+          $('keys').showModal();
+        }
+      });
+      document.addEventListener('mousemove', () => document.body.classList.remove('keys'));
+
+      $('tagButton').onclick = () => (tagsOpen() ? closeTags() : openTags());
+      $('scrim').onclick = closeTags;
+      $('skip').onclick = () => load();
+      $('done').onclick = () => submit();
+      $('help').onclick = () => $('keys').showModal();
+      $('keys').addEventListener('click', (e) => {
+        if (e.target === $('keys')) $('keys').close();
+      });
+
+      (async () => {
+        try {
+          state = await api('/api/state');
+        } catch (e) {
+          $('question').textContent = `Couldn't reach the labelling server: ${e.message}`;
+          return;
+        }
+        const saved = recall('labels.tag');
+        const fromHash = decodeURIComponent(location.hash.slice(1));
+        const pick = [fromHash, saved].find((id) => id && state.tags.some((t) => t.id === id)) ?? state.tags[0].id;
+        choose(pick);
+      })();
+    </script>
+  </body>
+</html>

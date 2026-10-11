@@ -1,0 +1,153 @@
+{
+  "version": 1,
+  "groups": ["colour", "temperature", "motion", "texture", "character", "structure"],
+  "tags": [
+    { "id": "red", "name": "Red", "group": "colour", "question": "Which of these are Red: red is the main colour?", "proxy": { "feature": "hue_red", "direction": "high" } },
+    { "id": "orange", "name": "Orange", "group": "colour", "question": "Which of these are Orange: orange is the main colour?", "proxy": { "feature": "hue_orange", "direction": "high" } },
+    { "id": "yellow", "name": "Yellow", "group": "colour", "question": "Which of these are Yellow: yellow or gold is the main colour?", "proxy": { "feature": "hue_yellow", "direction": "high" } },
+    { "id": "green", "name": "Green", "group": "colour", "question": "Which of these are Green: green is the main colour?", "proxy": { "feature": "hue_green", "direction": "high" } },
+    { "id": "cyan", "name": "Cyan", "group": "colour", "question": "Which of these are Cyan: cyan or teal is the main colour?", "proxy": { "feature": "hue_cyan", "direction": "high" } },
+    { "id": "blue", "name": "Blue", "group": "colour", "question": "Which of these are Blue: blue is the main colour?", "proxy": { "feature": "hue_blue", "direction": "high" } },
+    { "id": "purple", "name": "Purple", "group": "colour", "question": "Which of these are Purple: purple or violet is the main colour?", "proxy": { "feature": "hue_purple", "direction": "high" } },
+    { "id": "pink", "name": "Pink", "group": "colour", "question": "Which of these are Pink: pink or magenta is the main colour?", "proxy": { "feature": "hue_pink", "direction": "high" } },
+    {
+      "id": "mono",
+      "name": "Mono",
+      "group": "colour",
+      "question": "Which of these are Mono: black and white, grey, or a single hue throughout?",
+      "proxy": { "feature": "saturation", "direction": "low" }
+    },
+    { "id": "warm", "name": "Warm", "group": "temperature", "question": "Which of these are Warm: reds, oranges and yellows dominate?", "proxy": { "feature": "warmth", "direction": "high" } },
+    { "id": "cold", "name": "Cold", "group": "temperature", "question": "Which of these are Cold: blues, cyans and greens dominate?", "proxy": { "feature": "warmth", "direction": "low" } },
+    { "id": "busy", "name": "Busy", "group": "motion", "question": "Which of these are Busy: lots going on at once, everywhere?", "proxy": { "feature": "motion", "direction": "high" } },
+    { "id": "still", "name": "Still", "group": "motion", "question": "Which of these are Still: hardly moving at all?", "proxy": { "feature": "motion", "direction": "low" } },
+    { "id": "quiet", "name": "Quiet", "group": "motion", "question": "Which of these are Quiet: calm and restrained, nothing loud?", "proxy": { "feature": "intensity", "direction": "low" } },
+    {
+      "id": "reactive",
+      "name": "Reactive",
+      "group": "motion",
+      "question": "Which of these are Reactive: visibly moves with the music?",
+      "proxy": { "feature": "audio_response", "direction": "high" }
+    },
+    { "id": "ambient", "name": "Ambient", "group": "motion", "question": "Which of these are Ambient: slow, drifting, good as a background?", "proxy": { "feature": "speed", "direction": "low" } },
+    { "id": "pulsing", "name": "Pulsing", "group": "motion", "question": "Which of these are Pulsing: swells and throbs in a rhythm?", "proxy": { "feature": "pulse", "direction": "high" } },
+    { "id": "flashy", "name": "Flashy", "group": "motion", "question": "Which of these are Flashy: sudden bright flashes or strobing?", "proxy": { "feature": "flash_rate", "direction": "high" } },
+    {
+      "id": "chaotic",
+      "name": "Chaotic",
+      "group": "motion",
+      "question": "Which of these are Chaotic: disordered, unpredictable motion with no clear pattern?",
+      "proxy": { "feature": "motion_coherence", "direction": "low" }
+    },
+    { "id": "contrast", "name": "Contrast", "group": "texture", "question": "Which of these are Contrast: hard darks against bright lights?", "proxy": { "feature": "contrast", "direction": "high" } },
+    {
+      "id": "metallic",
+      "name": "Metallic",
+      "group": "texture",
+      "question": "Which of these are Metallic: shiny, chrome or polished-metal surfaces?",
+      "proxy": { "feature": "specular", "direction": "high" },
+      "rubric": "Metallic: surfaces look like chrome, polished metal or liquid mercury, with sharp specular highlights, reflections or embossed sheen. 1 = clearly metallic throughout; 0.5 = metallic in places or briefly; 0 = no metallic look (flat colour, glow, soft gradients)."
+    },
+    {
+      "id": "liquid",
+      "name": "Liquid",
+      "group": "texture",
+      "question": "Which of these are Liquid: flowing, fluid motion?",
+      "proxy": { "feature": "flow", "direction": "high" },
+      "rubric": "Liquid: the picture flows like a fluid: smooth swirling, smearing, rippling or melting motion, like ink in water or paint being stirred. Judge across the frames. 1 = clearly fluid throughout; 0.5 = partly or weakly fluid; 0 = rigid, geometric or static motion."
+    },
+    {
+      "id": "glow",
+      "name": "Glow",
+      "group": "texture",
+      "question": "Which of these Glow: soft light bleeding from bright shapes?",
+      "proxy": { "feature": "bloom", "direction": "high" },
+      "rubric": "Glow: bright shapes give off soft light that bleeds into the dark around them, like neon, embers or light trails. 1 = glowing light is the main look; 0.5 = some glow; 0 = hard-edged or flat, no light bleeding."
+    },
+    {
+      "id": "grainy",
+      "name": "Grainy",
+      "group": "texture",
+      "question": "Which of these are Grainy: noisy, speckled or sandy texture?",
+      "proxy": { "feature": "noise", "direction": "high" },
+      "rubric": "Grainy: the picture has a fine noisy texture: speckle, static, sand, film grain or dithering. 1 = grain covers most of the picture; 0.5 = grain in parts; 0 = smooth surfaces and clean gradients."
+    },
+    {
+      "id": "waveform",
+      "name": "Waveform",
+      "group": "character",
+      "question": "Which of these show a Waveform: a visible audio line or oscilloscope trace?",
+      "proxy": { "feature": "wave_share", "direction": "high" },
+      "rubric": "Waveform: a visible audio waveform is a clear element: a line, ring or oscilloscope trace that wiggles like sound, drawn over or within the picture. 1 = an obvious waveform; 0.5 = faint or only in some frames; 0 = none visible."
+    },
+    {
+      "id": "unique",
+      "name": "Unique",
+      "group": "character",
+      "question": "Which of these are Unique: unlike anything else you've seen in the pack?",
+      "scorer": "nearest-neighbour"
+    },
+    {
+      "id": "wtf",
+      "name": "WTF",
+      "group": "character",
+      "question": "Which of these are WTF: bizarre, surprising, makes you look twice?",
+      "rubric": "WTF: the picture is bizarre or surprising for a music visualizer: strange recognisable imagery, glitches that look intentional, unsettling or absurd forms, or a style unlike typical MilkDrop presets (swirls, tunnels, waveforms). 1 = genuinely weird; 0.5 = somewhat odd; 0 = a typical, expected visualizer look."
+    },
+    {
+      "id": "symmetric",
+      "name": "Symmetric",
+      "group": "structure",
+      "question": "Which of these are Symmetric: mirror-symmetric left to right or top to bottom?",
+      "proxy": { "feature": "symmetry", "direction": "high" }
+    },
+    {
+      "id": "kaleidoscope",
+      "name": "Kaleidoscope",
+      "group": "structure",
+      "question": "Which of these are Kaleidoscope: repeated mirrored wedges around a centre?",
+      "proxy": { "feature": "radial_symmetry", "direction": "high" },
+      "rubric": "Kaleidoscope: the picture repeats as mirrored wedges or segments around a centre point, like a kaleidoscope or mandala. 1 = clear repeated radial mirroring; 0.5 = partial or loose radial repetition; 0 = no radial repetition (simple left-right mirror doesn't count)."
+    },
+    {
+      "id": "tunnel",
+      "name": "Tunnel",
+      "group": "structure",
+      "question": "Which of these are Tunnel: flying into or out of a tunnel or vortex?",
+      "proxy": { "feature": "zoom", "direction": "high" },
+      "rubric": "Tunnel: the picture reads as moving through a tunnel, tube or vortex: concentric rings or walls rushing towards or away from a vanishing point. 1 = a clear tunnel; 0.5 = a hint of depth towards a centre; 0 = flat, no sense of travelling into depth."
+    },
+    {
+      "id": "spiral",
+      "name": "Spiral",
+      "group": "structure",
+      "question": "Which of these are Spiral: spiral arms or a spinning twist?",
+      "proxy": { "feature": "rotation", "direction": "high" },
+      "rubric": "Spiral: spiral arms, a twisting vortex or a swirl winding around a centre are a main element. 1 = an obvious spiral; 0.5 = some twisting around a centre; 0 = no spiral form."
+    },
+    {
+      "id": "geometric",
+      "name": "Geometric",
+      "group": "structure",
+      "question": "Which of these are Geometric: hard-edged shapes, lines, grids or polygons?",
+      "proxy": { "feature": "edge_density", "direction": "high" },
+      "rubric": "Geometric: the picture is built from clean mathematical shapes: straight lines, polygons, circles, grids, regular patterns with hard edges. 1 = clearly geometric; 0.5 = geometric elements mixed with soft or organic ones; 0 = soft, organic or formless."
+    },
+    {
+      "id": "organic",
+      "name": "Organic",
+      "group": "structure",
+      "question": "Which of these are Organic: forms that look grown or alive, like cells, plants, smoke or flesh?",
+      "proxy": { "feature": "edge_density", "direction": "low" },
+      "rubric": "Organic: forms look natural or alive: cells, tendrils, petals, coral, smoke, clouds, skin or tissue, with irregular curved edges. 1 = clearly organic; 0.5 = partly natural-looking; 0 = mechanical, geometric or abstract noise."
+    },
+    {
+      "id": "fractal",
+      "name": "Fractal",
+      "group": "structure",
+      "question": "Which of these are Fractal: self-similar detail repeating at smaller and smaller scales?",
+      "proxy": { "feature": "fractal_dimension", "direction": "high" },
+      "rubric": "Fractal: the picture shows self-similar structure, the same shape repeating at smaller and smaller scales (Mandelbrot or Julia sets, recursive feedback zooms, branching that repeats). 1 = clearly fractal; 0.5 = some recursive repetition; 0 = no self-similarity across scales."
+    }
+  ]
+}

@@ -3,8 +3,9 @@
 // The home's inset sidebar mounted in a DOM: its order (the library, starred and
 // recently played, then the playlists, then the smart playlists), its counts,
 // picking and playing rows, making and adding a playlist, drop targets while a
-// preset is dragged, the empty sections' hints, and a row's menu (play, rename,
-// save to a file, delete) from the pointer and the keyboard.
+// preset is dragged, the empty sections' hints, the mark at its top and the
+// Settings row at its foot, and a row's menu (play, quick add, show info,
+// rename, save to a file, delete) from the pointer and the keyboard.
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -149,6 +150,32 @@ describe('the inset sidebar', () => {
     expect(actions.onImport).toHaveBeenCalledWith(text);
   });
 
+  it('shows the visual[flow] mark first, above the sections, out of the keyboard walk', () => {
+    render(<Harness actions={fakeActions()} />);
+    const root = document.querySelector('.isb')!;
+    const mark = root.firstElementChild!;
+    expect(mark.className).toBe('isb-mark');
+    expect(mark.textContent).toBe('visual[flow]');
+    expect(mark.querySelector('button, [tabindex]')).toBeNull();
+  });
+
+  it('has a Settings row at its foot, after the sections, that opens Settings', () => {
+    const actions = { ...fakeActions(), onSettings: vi.fn<() => void>() };
+    render(<Harness actions={actions} />);
+    const settings = screen.getByRole('button', { name: 'Settings' });
+    const foot = document.querySelector('.isb')!.lastElementChild!;
+    expect(foot.className).toBe('isb-foot');
+    expect(foot.contains(settings)).toBe(true);
+    expect(document.querySelector('.isb-sections')!.contains(settings)).toBe(false);
+    fireEvent.click(settings);
+    expect(actions.onSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('has no Settings row without onSettings', () => {
+    render(<Harness actions={fakeActions()} />);
+    expect(screen.queryByRole('button', { name: 'Settings' })).toBeNull();
+  });
+
   it('says what an empty section is for', () => {
     render(<Harness actions={fakeActions()} theLists={{ playlists: [], deck: EMPTY_DECK }} />);
     expect(screen.getByText('None yet: + makes one.')).toBeTruthy();
@@ -205,8 +232,40 @@ describe("a row's menu", () => {
   it('opens on a right-click, named after the playlist, with its first item focused', () => {
     render(<Harness actions={fakeActions()} />);
     fireEvent.contextMenu(rowButton('Chill'));
-    expect(items().map((b) => b.textContent)).toEqual(['Play', 'Rename', 'Save to a file', 'Delete…']);
+    expect(items().map((b) => b.textContent)).toEqual(['Play', 'Quick add', 'Rename', 'Save to a file', 'Delete…']);
     expect(document.activeElement).toBe(items()[0]);
+  });
+
+  it('starts quick add on a manual playlist, and offers none on a smart one or Recently played', () => {
+    const actions = fakeActions();
+    render(<Harness actions={actions} />);
+    fireEvent.contextMenu(rowButton('Chill'));
+    fireEvent.click(within(menu()).getByRole('menuitem', { name: 'Quick add' }));
+    expect(actions.onQuickAdd).toHaveBeenCalledWith('chill');
+    expect(screen.queryByRole('menu')).toBeNull();
+    for (const name of ['Calm', 'Recently played']) {
+      fireEvent.contextMenu(rowButton(name));
+      expect(within(screen.getByRole('menu', { name })).queryByRole('menuitem', { name: 'Quick add' })).toBeNull();
+      fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+    }
+  });
+
+  it('shows info for a playlist and a smart one, when the page can', () => {
+    const actions = { ...fakeActions(), onInfo: vi.fn<(id: string) => void>() };
+    render(<Harness actions={actions} />);
+    fireEvent.contextMenu(rowButton('Chill'));
+    fireEvent.click(within(menu()).getByRole('menuitem', { name: 'Show info' }));
+    expect(actions.onInfo).toHaveBeenCalledWith('chill');
+    expect(screen.queryByRole('menu')).toBeNull();
+    fireEvent.contextMenu(rowButton('Calm'));
+    fireEvent.click(within(screen.getByRole('menu', { name: 'Calm' })).getByRole('menuitem', { name: 'Show info' }));
+    expect(actions.onInfo).toHaveBeenLastCalledWith('calm');
+  });
+
+  it('has no Show info without onInfo', () => {
+    render(<Harness actions={fakeActions()} />);
+    fireEvent.contextMenu(rowButton('Calm'));
+    expect(within(screen.getByRole('menu', { name: 'Calm' })).queryByRole('menuitem', { name: 'Show info' })).toBeNull();
   });
 
   it('opens on Shift+F10 on the focused row, and from its "More" button', () => {
@@ -224,14 +283,14 @@ describe("a row's menu", () => {
   it('walks its items with the arrow keys, Home and End', () => {
     render(<Harness actions={fakeActions()} />);
     fireEvent.contextMenu(rowButton('Chill'));
-    const [play, rename, save, del] = items();
+    const [play, quick, rename, , del] = items();
     const key = (k: string) => fireEvent.keyDown(document.activeElement!, { key: k });
     key('ArrowDown');
-    expect(document.activeElement).toBe(rename);
+    expect(document.activeElement).toBe(quick);
     key('ArrowDown');
-    expect(document.activeElement).toBe(save);
-    key('ArrowUp');
     expect(document.activeElement).toBe(rename);
+    key('ArrowUp');
+    expect(document.activeElement).toBe(quick);
     key('End');
     expect(document.activeElement).toBe(del);
     key('ArrowDown');
