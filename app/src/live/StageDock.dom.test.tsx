@@ -5,8 +5,9 @@
 // did (blackout toggles, strobe and freeze hold while pressed and latch on
 // Shift), Intensity moves from the keyboard and goes back to the middle on a
 // double-click, and More effects… opens its sheet.
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { clock } from '../layout/TransportBar.tsx';
 import * as pl from '../playlists.ts';
 import { FX, LISTS, PLAYING_DECK } from '../stories/fixtures.ts';
 import { SHEET_EVENT, sheetOf } from '../views.tsx';
@@ -79,6 +80,25 @@ describe('the transport', () => {
     fireEvent.click(screen.getByRole('button', { name: 'next preset' }));
     fireEvent.click(screen.getByRole('button', { name: 'random preset' }));
     expect(vi.mocked(live.act).mock.calls.map(([a]) => a.kind)).toEqual(['previous', 'next', 'random']);
+  });
+
+  it('counts the time on the preset from when it opened, restarting on a re-open of the same preset', () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+    try {
+      vi.setSystemTime(100_000);
+      const live = liveState({ since: 100_000 });
+      const { rerender, container } = dock(live);
+      const shown = () => container.querySelector('.lay-transport-num')?.textContent;
+      act(() => vi.advanceTimersByTime(5000));
+      expect(shown()).toBe(clock(5));
+
+      rerender(<StageDock live={{ ...live, since: Date.now() }} />);
+      expect(shown()).toBe(clock(0));
+      act(() => vi.advanceTimersByTime(2000));
+      expect(shown()).toBe(clock(2));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
