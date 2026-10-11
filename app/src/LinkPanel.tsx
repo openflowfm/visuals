@@ -6,6 +6,7 @@ import { useNotice, useTauriEvent } from './hooks.ts';
 import { movesOn } from './home.ts';
 import * as link from './link.ts';
 import * as pl from './playlists.ts';
+import { SwitchRow } from './Switch.tsx';
 import { NoticeBanner } from './views.tsx';
 import { say, Say } from './words.ts';
 import './link.css';
@@ -67,19 +68,12 @@ export function LinkSettings() {
   const start = say('the one');
   return (
     <div className="wdg link-settings">
-      <div className="link-head">
-        <span>{Say('Ableton Link')}</span>
-        <Toggle
-          on={frame.enabled}
-          onChange={(on) => run(link.enable(on), on ? 'join the Link session' : 'leave the Link session')}
-          layout="inside"
-          name="link"
-          label={say('Ableton Link')}
-          title="Join the Link session on the network, to follow its tempo and bars"
-        >
-          {frame.enabled ? 'on' : 'off'}
-        </Toggle>
-      </div>
+      <SwitchRow
+        name={Say('Ableton Link')}
+        on={frame.enabled}
+        onChange={(on) => run(link.enable(on), on ? 'join the Link session' : 'leave the Link session')}
+        title="Join the Link session on the network, to follow its tempo and bars"
+      />
       <p className="link-status" data-on={frame.enabled && frame.peers > 0 ? '' : undefined}>
         <b>{frame.tempo.toFixed(1)}</b> bpm · {link.statusText(frame)}
       </p>

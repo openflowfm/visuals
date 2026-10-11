@@ -9,6 +9,7 @@ import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Entry, Quality, QualityLevel } from './api.ts';
+import type { Frame } from './link.ts';
 import type { PackStatus } from './pack.ts';
 
 const app = vi.hoisted(() => ({
@@ -95,6 +96,23 @@ const ENTRIES: Entry[] = [
   { path: '/p/c.milk', name: 'Rovastar - Fractal', group: 'B' },
 ];
 
+const LINK_OFF: Frame = {
+  enabled: false,
+  tempo: 120,
+  peers: 0,
+  playing: false,
+  beat: 0,
+  phase: 0,
+  quantum: 4,
+  one: 0,
+  bar: 1,
+  beatInBar: 1,
+  barPhase: 0,
+  every: { every: 0, unit: 'bars' },
+  next: null,
+  at: 0,
+};
+
 /** What the app's commands answer for the whole sheet. */
 function answer(cmd: string): unknown {
   if (cmd === 'pack_status') return STARTER;
@@ -104,6 +122,7 @@ function answer(cmd: string): unknown {
   if (cmd === 'levels') return [0, 0];
   if (cmd === 'output_status') return { display: null, size: null };
   if (cmd === 'displays') return [];
+  if (cmd === 'link_state' || cmd === 'link_enable') return LINK_OFF;
   return null;
 }
 
@@ -124,6 +143,16 @@ describe('the settings sheet', () => {
     expect(within(channels).getByRole('combobox', { name: 'right channel' })).toBeTruthy();
     expect(within(sound).queryByText('Advanced')).toBeNull();
     expect(sound.querySelector('details')).toBeNull();
+  });
+
+  it('turns Link on with a switch, as the other settings are', async () => {
+    const user = userEvent.setup();
+    render(<Settings open onClose={() => {}} />);
+    const linked = section('Link');
+    const on = await within(linked).findByRole('switch', { name: 'Keep in time with Ableton' });
+    expect(on.getAttribute('aria-checked')).toBe('false');
+    await user.click(on);
+    expect(app.invoke).toHaveBeenCalledWith('link_enable', { on: true });
   });
 
   it('offers the full library under Presets, and opens the credits in its place and back', async () => {

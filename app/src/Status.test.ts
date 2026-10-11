@@ -22,6 +22,7 @@ import {
   outputLabel,
   outputText,
   TapButton,
+  tapWords,
   tempoLabel,
 } from './Status.tsx';
 
@@ -156,6 +157,17 @@ describe('tap tempo, in the beat popover', () => {
     const tap = renderToStaticMarkup(createElement(TapButton, { effects: { bpm: 120, linked: false } as Fx, onTap: () => {} }));
     expect(tap).toContain('aria-label="Tap tempo, 120 BPM (T)"');
     expect(tap).not.toContain('data-on');
+  });
+
+  it('reads as a key: what a press does, the tempo and T’s keycap, never a bare word and a number', () => {
+    const tap = renderToStaticMarkup(createElement(TapButton, { effects: { bpm: 120, linked: false } as Fx, onTap: () => {} }));
+    expect(tap).toContain('<span class="live-tap-what">Tap in time</span>');
+    expect(tap).toContain('<b>120</b> BPM');
+    expect(tap).toContain('<kbd aria-hidden="true">T</kbd>');
+    const linked = renderToStaticMarkup(createElement(TapButton, { effects: { bpm: 128, linked: true } as Fx, onTap: () => {} }));
+    expect(linked).toContain(`>${tapWords(true)}<`);
+    const unknown = renderToStaticMarkup(createElement(TapButton, { effects: null, onTap: () => {} }));
+    expect(unknown).toContain('<b>—</b> BPM');
   });
 });
 

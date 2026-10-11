@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import * as api from './api.ts';
 import type { Entry, LibraryChange, LibraryData, LibraryRow } from './api.ts';
@@ -443,10 +443,11 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
   };
 
   const imported = (text: string) =>
-    pl.importList(text).then((l) => {
-      setLists(l);
-      const made = l.playlists[l.playlists.length - 1];
-      if (made) pick({ kind: 'list', id: made.id });
+    pl.importList(text).then((got) => {
+      setLists(got.lists);
+      pick({ kind: 'list', id: got.id });
+      // Its name was taken: the banner over the grid says what it is called instead.
+      if (got.renamed) setNotice(notice(got.renamed));
     }, fail("Couldn't add that playlist file."));
 
   // How many presets each source holds, for the sidebar and the source card.
@@ -596,24 +597,33 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
   };
 
   const sourceName = paneName(shown, lists);
+  // The playlist's head: its card in the inspector, or over its pane while it is empty.
+  const playlistHead = (variant: 'pane' | 'inspector') =>
+    list &&
+    lists && (
+      <PlaylistHead
+        variant={variant}
+        list={list}
+        lists={lists}
+        tiles={tiles}
+        total={total}
+        onLists={setLists}
+        onDeleted={() => pick({ kind: 'library' })}
+        onError={(what) => fail(`Couldn't ${what}.`)}
+        onQuickAdd={offersQuickAdd(list) ? () => startQuickAdd(list.id) : undefined}
+      />
+    );
   // Before the playlists are read nothing is shown yet: the card names the library, as it will most likely be.
   const sourceCard = !shown ? (
     <SourceCard name={sourceName} count={counts.library} offer={false} />
   ) : list && lists ? (
-    <PlaylistHead
-      variant="inspector"
-      list={list}
-      lists={lists}
-      tiles={tiles}
-      total={total}
-      onLists={setLists}
-      onDeleted={() => pick({ kind: 'library' })}
-      onError={(what) => fail(`Couldn't ${what}.`)}
-      onQuickAdd={offersQuickAdd(list) ? () => startQuickAdd(list.id) : undefined}
-    />
+    playlistHead('inspector')
   ) : (
     <SourceCard name={sourceName} count={shown.kind === 'starred' ? counts.starred : counts.library} offer={shown.kind === 'library'} />
   );
+  // An empty playlist has no grid to pick from, so its card may never show in the inspector (something plays):
+  // its head goes over the pane instead, unless the inspector shows that card already.
+  const emptyHead = tiles.length === 0 && !(modes.inspector && onSource) ? playlistHead('pane') : undefined;
 
   const length = presetLength(deck);
   const position = useElapsed(since, current !== null, length);
@@ -790,6 +800,7 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
                 onLists={setLists}
                 onError={(what) => fail(`Couldn't ${what}.`)}
                 onLibrary={() => pick({ kind: 'library' })}
+                head={emptyHead || undefined}
               />
             ) : null}
             <DragGhost />
@@ -965,15 +976,17 @@ interface PaneProps {
   onLists(lists: Lists): void;
   onError(what: string): (e: unknown) => void;
   onLibrary(): void;
+  /** Over the note while it is empty: its head (`PlaylistHead`), when the inspector doesn't show it. */
+  head?: ReactNode;
 }
 
 /**
  * A playlist's presets as a wrapping grid in the order they play (its head is the
- * inspector's source card): a click or Enter plays from there, ⌘ or ⇧ (or
+ * inspector's source card; empty, `head` over its note): a click or Enter plays from there, ⌘ or ⇧ (or
  * Space) picks; in a manual playlist each tile is dragged, or moved with ⌥← ⌥→, to a
  * new place, and ✕ takes it out. Each tile shows its place, and "next".
  */
-export function PlaylistPane({ list, lists, tiles, total, rows, dropping, picked, onPick, onPlay, onLists, onError, onLibrary }: PaneProps) {
+export function PlaylistPane({ list, lists, tiles, total, rows, dropping, picked, onPick, onPlay, onLists, onError, onLibrary, head }: PaneProps) {
   const drag = useDrag();
   const { deck } = lists;
   const active = deck.playlist === list.id;
@@ -991,21 +1004,24 @@ export function PlaylistPane({ list, lists, tiles, total, rows, dropping, picked
 
   if (tiles.length === 0)
     return (
-      <p className="home-note home-grid-empty">
-        {manual ? (
-          <>
-            {list.name} is empty. Open the{' '}
-            <button type="button" className="home-link" onClick={onLibrary}>
-              library
-            </button>{' '}
-            and drag presets onto <b>{list.name}</b> in the {say('source list')}, or add the one playing from the {say('inspector')} pane.
-          </>
-        ) : rows === null ? (
-          'Reading the library…'
-        ) : (
-          'Nothing in the library matches this yet.'
-        )}
-      </p>
+      <>
+        {head}
+        <p className="home-note home-grid-empty">
+          {manual ? (
+            <>
+              {list.name} is empty. Open the{' '}
+              <button type="button" className="home-link" onClick={onLibrary}>
+                library
+              </button>{' '}
+              and drag presets onto <b>{list.name}</b> in the {say('source list')}, or add the one playing from the {say('inspector')} pane.
+            </>
+          ) : rows === null ? (
+            'Reading the library…'
+          ) : (
+            'Nothing in the library matches this yet.'
+          )}
+        </p>
+      </>
     );
 
   return (

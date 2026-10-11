@@ -58,13 +58,14 @@ export function sizeText(bytes: number): string {
 
 const count = (n: number) => n.toLocaleString('en-US');
 
-/** What the library step says the app has now, and what the full library adds. */
+/** What the library step says the app has now, and what the full library adds; and, when it came without its pictures, so. */
 export function libraryLine(s: pack.PackStatus): string {
   // While downloading, `installed` counts up file by file: what there is to start with is the starter set.
   const have = s.state === 'downloading' ? s.starter : Math.max(s.installed, s.starter);
   const size = sizeText(s.size);
   const full = `The ${say('pack')} is ${count(s.total)} ${s.total === 1 ? 'preset' : 'presets'}${size ? ` (${size})` : ''}`;
-  return have > 0 ? `You have ${count(have)} to start with. ${full}.` : `${full}.`;
+  const line = have > 0 ? `You have ${count(have)} to start with. ${full}.` : `${full}.`;
+  return s.bare ? `${line} ${pack.bareNote()}` : line;
 }
 
 /** The full library is already here: nothing to download. */
@@ -156,10 +157,9 @@ export function useWelcome(): { shown: boolean | null; close(): void } {
 
 /**
  * How the welcome flow ended: finished (`home`: Home, playing the vibe picked,
- * with live a step away) or skipped. It never ends in `live`, which `App`
- * still knows; the flow used to end in live mode, windowed.
+ * with live a step away) or skipped.
  */
-export type Ending = 'home' | 'live' | 'skipped';
+export type Ending = 'home' | 'skipped';
 
 /** Where the page keeps the step the welcome flow was on, so leaving halfway resumes there. */
 export const STEP_KEY = 'welcome-step';

@@ -26,7 +26,7 @@
 
 use crate::fx::{Fx, FxAction};
 use crate::link::{Every, Unit};
-use crate::playlists::{Change, Exported, Kind, Order, Settings, Store, View};
+use crate::playlists::{Change, Exported, Imported, Kind, Order, Settings, Store, View};
 use crate::query::LibraryQuery;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -1198,13 +1198,28 @@ pub fn playlist_export(id: String, deck: State<Deck>) -> Result<Exported, String
     deck.store.lock().unwrap().export(&id)
 }
 
+/// A playlist file added ([`playlist_import`]): the playlists after it, the new
+/// playlist's id and name, and, when its name was taken, what to tell the user.
+#[derive(Serialize)]
+pub struct ImportedLists {
+    lists: Lists,
+    #[serde(flatten)]
+    imported: Imported,
+}
+
+/// Add the playlist in `text` to the deck's store, and say how it went.
+fn import_into(deck: &Deck, text: &str) -> Result<ImportedLists, String> {
+    let imported = edit(deck, |s| s.import(text))?;
+    Ok(ImportedLists { lists: deck.lists(), imported })
+}
+
 /// Add the playlist a shared file's `text` holds. Its presets not where it says
 /// are looked for by their hash.
 #[tauri::command]
-pub fn playlist_import(text: String, deck: State<Deck>, handle: AppHandle) -> Result<Lists, String> {
-    edit(&deck, |s| s.import(&text))?;
+pub fn playlist_import(text: String, deck: State<Deck>, handle: AppHandle) -> Result<ImportedLists, String> {
+    let out = import_into(&deck, &text)?;
     crate::userlib::rematch(&handle);
-    Ok(deck.lists())
+    Ok(out)
 }
 
 /// What the playlist or filter playing plays, in its play order.
@@ -1946,5 +1961,32 @@ mod tests {
         d(&mut live, &Action::Load { playlist: 0, index: Some(2) }, &s).unwrap();
         let view = live.view(&Default::default());
         assert_eq!((view.next.as_deref(), view.next_index), (Some(lib.join("x.milk").to_string_lossy().as_ref()), Some(3)));
+    }
+
+    #[test]
+    fn an_import_hands_the_page_the_lists_and_what_to_say_when_the_name_was_taken() {
+        let dir = std::env::temp_dir().join(format!("visuals-actions-{}-{}", std::process::id(), roll()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let s = Store::open(dir.join("p.json"), dir.join("lib"));
+        // Built by hand, not `Deck::new`: nothing is read from the user's settings.
+        let deck = Deck {
+            store: Mutex::new(s),
+            live: Mutex::new(Live::default()),
+            fx: Arc::new(Mutex::new(Fx::new(Instant::now()))),
+            played: Mutex::new(Vec::new()),
+            kept_outside: Mutex::new(Timing::default()),
+            handle: std::sync::OnceLock::new(),
+        };
+        let file = format!(r#"{{"format":"{}","version":1,"name":"Warm up","items":[]}}"#, crate::playlists::SHARED_FORMAT);
+
+        let first = serde_json::to_value(import_into(&deck, &file).unwrap()).unwrap();
+        assert_eq!((first["name"].as_str(), first["renamed"].is_null()), (Some("Warm up"), true), "a free name says nothing");
+        let again = serde_json::to_value(import_into(&deck, &file).unwrap()).unwrap();
+        assert_eq!(again["name"], "Warm up 2");
+        assert_eq!(again["renamed"], "A playlist called “Warm up” was already here, so this one is “Warm up 2”.");
+        let lists = again["lists"]["playlists"].as_array().unwrap();
+        assert_eq!(lists.last().unwrap()["id"], again["id"], "the lists hold the new playlist, under the id handed back");
+        assert!(again["lists"]["deck"].is_object());
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

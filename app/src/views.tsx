@@ -218,7 +218,7 @@ export function useSheet(enabled = true): { sheet: Sheet | null; close(): void }
 }
 
 /** The resting line of the hint strip: the keys every browsing view answers. */
-export const RESTING_HINT = '← → previous / next preset · R random · point at anything to read what it does';
+export const RESTING_HINT = '← → previous / next preset · R random · H hold · ? help · point at anything to read what it does';
 
 /** The strip along the bottom that says what the pointer or the focus is on. */
 export function Hints({ resting = RESTING_HINT }: { resting?: string }) {
