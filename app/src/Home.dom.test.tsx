@@ -17,6 +17,7 @@ import { EMPTY_DECK, manual, type Deck, type Playlist } from './playlists.ts';
 import { SEEDED_KEY } from './home.ts';
 import { INSPECTOR_KEY, SIDEBAR_KEY } from './layout/home-model.ts';
 import { INSPECTOR_ID, SIDEBAR_ID } from './layout/HomeLayout.tsx';
+import { SHEET_EVENT, sheetOf } from './views.tsx';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -158,6 +159,19 @@ describe('the home, an inspector view (decision 70)', () => {
       expect(painted).toEqual([]);
     } finally {
       style.remove();
+    }
+  });
+
+  it('opens Settings from the sidebar’s Settings row, as ⌘, does', async () => {
+    await mount({ library: true });
+    const asked: (string | null)[] = [];
+    const heard = (e: Event) => asked.push(sheetOf(e));
+    window.addEventListener(SHEET_EVENT, heard);
+    try {
+      fireEvent.click(within(document.querySelector('.lay-side') as HTMLElement).getByRole('button', { name: /Settings/ }));
+      expect(asked).toEqual(['settings']);
+    } finally {
+      window.removeEventListener(SHEET_EVENT, heard);
     }
   });
 
@@ -408,6 +422,19 @@ describe('a playlist’s grid', () => {
     expect(second.hasAttribute('data-picked')).toBe(false);
   });
 
+  it('shows the playlist’s card in the inspector for its row menu’s Show info, until Esc', async () => {
+    deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path };
+    resume = { playlist: null, index: null, current: ROWS[0].path, source: null, query: null };
+    await mount({ library: true });
+    fireEvent.contextMenu(sourceRow('Warm up'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Show info' }));
+    expect(screen.getByRole('list', { name: 'Warm up, in the order it plays' })).toBeTruthy();
+    expect(within(inspector() as HTMLElement).queryByRole('heading', { name: 'a' })).toBeNull();
+    expect(inspector()!.textContent).toContain('Warm up');
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(within(inspector() as HTMLElement).getByRole('heading', { name: 'a' })).toBeTruthy();
+  });
+
   it('shows the playlist’s card in the inspector when its row is picked again, until something is picked', async () => {
     deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path };
     resume = { playlist: null, index: null, current: ROWS[0].path, source: null, query: null };
@@ -564,6 +591,16 @@ describe('quick add (#194)', () => {
     await act(() => vi.advanceTimersByTimeAsync(0));
     expect(sent('open').map((a) => a.path)).toEqual([ROWS[1].path]);
     expect(sent('playlist_add')).toEqual([]);
+  });
+
+  it('starts from the playlist’s row menu in the sidebar too', async () => {
+    resume = { playlist: null, index: null, current: ROWS[2].path, source: null, query: null };
+    await mount();
+    fireEvent.contextMenu(sourceRow('Warm up'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Quick add' }));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(strip()!.textContent).toContain('Warm up');
+    expect(grid()).toBeTruthy();
   });
 
   it('ends when the playlist is deleted', async () => {

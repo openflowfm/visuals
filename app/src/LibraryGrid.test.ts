@@ -276,13 +276,41 @@ describe('a tile on the home', () => {
 
   it('shows ✓ on a preset already in the playlist quick add fills, and says so', () => {
     const added = renderToStaticMarkup(
-      createElement(Tile, { id: 't', index: 0, p, active: false, selected: false, playing: false, failed: false, intoName: null, onPick: () => {}, onAdd: () => {}, home: true, adding: true, addedTo: 'Mine' }),
+      createElement(Tile, {
+        id: 't',
+        index: 0,
+        p,
+        active: false,
+        selected: false,
+        playing: false,
+        failed: false,
+        intoName: null,
+        onPick: () => {},
+        onAdd: () => {},
+        home: true,
+        adding: true,
+        addedTo: 'Mine',
+      }),
     );
     expect(added).toContain('data-added=""');
     expect(added).toContain('<span class="tile-added" aria-hidden="true">✓</span>');
     expect(tileSays(p, false, false, 'Mine')).toBe('42 — A, by geiss & flexi · in Mine');
     const notYet = renderToStaticMarkup(
-      createElement(Tile, { id: 't', index: 0, p, active: false, selected: false, playing: false, failed: false, intoName: null, onPick: () => {}, onAdd: () => {}, home: true, adding: true, addedTo: null }),
+      createElement(Tile, {
+        id: 't',
+        index: 0,
+        p,
+        active: false,
+        selected: false,
+        playing: false,
+        failed: false,
+        intoName: null,
+        onPick: () => {},
+        onAdd: () => {},
+        home: true,
+        adding: true,
+        addedTo: null,
+      }),
     );
     expect(notYet).not.toContain('tile-added');
   });
