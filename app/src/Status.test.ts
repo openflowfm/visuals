@@ -8,11 +8,10 @@ import {
   addStop,
   noteText,
   stopText,
-  audioLabel,
+  BeatDot,
   beatLabel,
   beatLit,
-  hearingAt,
-  SILENT_AFTER,
+  SkipNote,
   SKIP_FADE,
   SKIP_SHOWN_FOR,
   skipNextChange,
@@ -21,10 +20,7 @@ import {
   bpmText,
   fpsShown,
   outputLabel,
-  outputShown,
   outputText,
-  peersText,
-  Status,
   TapButton,
   tempoLabel,
 } from './Status.tsx';
@@ -73,11 +69,8 @@ describe('the status strip', () => {
 
   it("shows a Link session's tempo and who keeps it, otherwise the effects' tempo", () => {
     expect(bpmText(frame({ tempo: 123.6 }), effects)).toBe('124 BPM');
-    expect(peersText(frame())).toBe('· 2 in time');
     expect(bpmText(frame({ peers: 0 }), effects)).toBe('128 BPM');
-    expect(peersText(frame({ peers: 0 }))).toBeNull();
     expect(bpmText(frame({ enabled: false }), effects)).toBe('128 BPM');
-    expect(peersText(frame({ enabled: false }))).toBeNull();
     expect(bpmText(null, null)).toBeNull();
   });
 
@@ -85,35 +78,6 @@ describe('the status strip', () => {
     const display = { id: 1, index: 1, name: 'Projector', width: 1920, height: 1080, main: false };
     expect(outputText({ display, size: [1920, 1080] })).toEqual({ on: true, text: 'on Projector' });
     expect(outputText({ display: null, size: null })).toEqual({ on: false, text: 'in this window' });
-  });
-
-  it("shows words by the output's light only while the picture isn't on a display", () => {
-    const display = { id: 1, index: 1, name: 'Projector', width: 1920, height: 1080, main: false };
-    expect(outputShown({ display, size: null })).toBeNull();
-    expect(outputShown({ display: null, size: null })).toBe('in this window');
-  });
-});
-
-describe('the status strip, on screen', () => {
-  const noop = () => {};
-  const display = { id: 1, index: 1, name: 'Projector', width: 1920, height: 1080, main: false };
-  const html = renderToStaticMarkup(createElement(Status, { output: { display, size: null }, show: noop, effects, onHelp: noop, onLeave: noop, onError: noop }));
-  const visible = html
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  it('has no captions: just the lights, the tempo, and ? ⚙ ✕', () => {
-    for (const word of ['AUDIO', 'BEAT', 'OUTPUT', 'Projector']) expect(visible).not.toContain(word);
-    expect(visible).toBe('128 BPM ? ⚙ ✕');
-  });
-
-  it('sets ✕ apart from ? and ⚙', () => {
-    const end = /<span class="live-status-end">(.*?)<\/span><span class="live-status-leave">(.*)<\/span><\/div>$/.exec(html);
-    expect(end?.[1]).toContain('aria-label="Help"');
-    expect(end?.[1]).toContain('aria-label="Settings"');
-    expect(end?.[1]).not.toContain('Leave live');
-    expect(end?.[2]).toContain('aria-label="Leave live"');
   });
 });
 
@@ -195,48 +159,23 @@ describe('tap tempo, in the beat popover', () => {
   });
 });
 
-describe('the status strip, to VoiceOver', () => {
-  const noop = () => {};
-  const html = renderToStaticMarkup(createElement(Status, { output: { display: null, size: null }, show: noop, effects, onHelp: noop, onLeave: noop, onError: noop }));
-  const tagOf = (attr: string) => [...html.matchAll(/<button[^>]*>/g)].map((m) => m[0]).find((t) => t.includes(attr)) ?? '';
-
-  it('names ?, ⚙ and ✕ in words', () => {
-    expect(tagOf('aria-label="Help"')).toContain('aria-keyshortcuts="?"');
-    expect(tagOf('aria-label="Settings"')).toContain('aria-haspopup="dialog"');
-    expect(tagOf('aria-label="Leave live"')).toContain('aria-keyshortcuts="Escape Meta+Shift+L"');
-  });
-
-  it('names each light by what it shows, and says it opens a popover', () => {
-    expect(tagOf('data-light="audio"')).toContain('aria-label="Audio, silent"');
-    expect(tagOf('data-light="beat"')).toContain('aria-label="Beat, 128 BPM"');
-    expect(tagOf('data-light="output"')).toContain('aria-label="Output, in this window"');
-    for (const light of ['audio', 'beat', 'output']) {
-      expect(tagOf(`data-light="${light}"`)).toContain('aria-haspopup="dialog"');
-      expect(tagOf(`data-light="${light}"`)).toContain('aria-expanded="false"');
-    }
+describe('the live pieces, to VoiceOver', () => {
+  it('names the beat and output by what they show', () => {
     expect(beatLabel(frame({ tempo: 123.6 }), effects)).toBe('Beat, 124 BPM, 2 in time');
+    expect(beatLabel(frame({ peers: 0 }), effects)).toBe('Beat, 128 BPM');
     expect(beatLabel(null, null)).toBe('Beat');
     expect(outputLabel({ display: { id: 1, index: 1, name: 'Projector', width: 1, height: 1, main: false }, size: null })).toBe('Output, on Projector');
-    expect(audioLabel(true)).toBe('Audio, hearing');
-    expect(audioLabel(false)).toBe('Audio, silent');
-  });
-
-  it('calls the audio silent only after a second of nothing, not in a gap between notes', () => {
-    expect(hearingAt(null, 5000)).toBe(false);
-    expect(hearingAt(5000, 5000)).toBe(true);
-    expect(hearingAt(5000, 5000 + SILENT_AFTER - 1)).toBe(true);
-    expect(hearingAt(5000, 5000 + SILENT_AFTER)).toBe(false);
+    expect(outputLabel({ display: null, size: null })).toBe('Output, in this window');
   });
 
   it('reads the skipped note politely, from a live region that is there before anything is said', () => {
-    const lives = html.match(/<[^>]*aria-live[^>]*>[^<]*/g) ?? [];
-    expect(lives).toHaveLength(1);
-    expect(lives[0]).toContain('class="live-status-skipped"');
-    expect(lives[0]).toContain('aria-live="polite"');
-    expect(lives[0]).toMatch(/>$/);
+    const html = renderToStaticMarkup(createElement(SkipNote, { className: 'stage-skipped' }));
+    expect(html).toContain('class="stage-skipped"');
+    expect(html).toContain('aria-live="polite"');
+    expect(html).toMatch(/><\/span>$/);
   });
 
-  it('keeps the meter and the beat dot, which change every frame, away from VoiceOver', () => {
-    for (const dot of html.match(/<span class="live-status-(dot|meter)"[^>]*>/g) ?? []) expect(dot).toContain('aria-hidden="true"');
+  it('keeps the beat dot, which changes every frame, away from VoiceOver', () => {
+    expect(renderToStaticMarkup(createElement(BeatDot, { frame: null, className: 'stage-beat-dot' }))).toContain('aria-hidden="true"');
   });
 });
