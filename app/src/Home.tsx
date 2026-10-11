@@ -445,6 +445,7 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
     setTilesPicked(keys);
     const paths = new Set(tiles.filter((t) => keys.includes(t.key)).map((t) => t.path));
     const found = [...paths].flatMap((p) => byPath.get(p)?.row.key ?? []);
+    if (found.length) setInfo(false);
     setSel(found.length ? { kind: 'presets', keys: found } : SOURCE);
   };
   // Picks that went (the index read again, the library or a playlist changed, a tile taken out) are let go; none left, back to the source.

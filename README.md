@@ -93,7 +93,7 @@ When something crashes, a report is written on your Mac, in `~/.openflow/visuals
 backtrace and the name of the preset on screen; never audio, your files' paths or your
 name or your Mac's (a name shorter than 3 characters is only removed as part of your home
 folder's path). Crash reports are off by default. With **Send crash reports** turned on
-in Settings (⚙) › Privacy, the app shows you a new one on the next launch, and **Send
+in Settings (⌘, or the sidebar's Settings row) › Privacy, the app shows you a new one on the next launch, and **Send
 report** opens it as a GitHub issue for you to read and submit yourself.
 
 ## For developers

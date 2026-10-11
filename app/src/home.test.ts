@@ -433,7 +433,7 @@ describe('the inspector view (decision 70)', () => {
 describe('openSettings', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("asks for the Settings sheet, the ⚙ in the home's header", () => {
+  it("asks for the Settings sheet, as the sidebar's Settings row and ⌘, do", () => {
     // The node test environment has no `window`; an event target stands in for it.
     const page = new EventTarget();
     vi.stubGlobal('window', page);

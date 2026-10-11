@@ -348,26 +348,54 @@ describe("the home's inspector grid (bare, decision 70)", () => {
     expect(pane().querySelector('.lib-picked, .lib-chips')).toBeNull();
   });
 
-  it('selects on a click and plays on a double-click, the deck then following the grid', async () => {
+  it('plays on one click (decision 71), the deck then following the grid and the picks let go; ⌘ and ⇧ pick', async () => {
     const onLoad = vi.fn();
     const onChosen = vi.fn();
     await mount({ onLoad, onChosen });
-    fireEvent.click(tile('b'));
+    fireEvent.click(tile('b'), { metaKey: true });
     expect(onChosen).toHaveBeenLastCalledWith(['b']);
     expect(onLoad).not.toHaveBeenCalled();
     expect(follows()).toEqual([]);
     fireEvent.click(tile('c'), { metaKey: true });
     expect(onChosen).toHaveBeenLastCalledWith(['b', 'c']);
-    fireEvent.doubleClick(tile('c'));
+    fireEvent.click(tile('a'));
+    expect(onLoad).toHaveBeenCalledWith(ENTRIES[0]);
+    expect(follows()).toEqual([ROWS[0].path]);
+    expect(onChosen).toHaveBeenLastCalledWith([]);
+  });
+
+  it('adds on a click while quick add is on, plays on ⌥-click, and marks what the playlist holds', async () => {
+    const onLoad = vi.fn();
+    const onToggle = vi.fn();
+    render(
+      <Library
+        entries={ENTRIES}
+        loaded
+        search=""
+        onSearch={() => {}}
+        found={searchLibrary(ENTRIES, '')}
+        current={null}
+        into={null}
+        onLoad={onLoad}
+        onAdd={() => {}}
+        home={{ scope: 'library', title: 'Library', onChosen: () => {}, bare: true, toolbar, adding: { name: 'Mine', has: new Set([ROWS[0].path]), onToggle } }}
+      />,
+    );
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(screen.getByRole('listbox', { name: 'presets' }).hasAttribute('data-adding')).toBe(true);
+    expect(tile('a').getAttribute('aria-label')).toContain('in Mine');
+    fireEvent.click(tile('b'));
+    expect(onToggle).toHaveBeenCalledWith(ENTRIES[1]);
+    expect(onLoad).not.toHaveBeenCalled();
+    fireEvent.click(tile('c'), { altKey: true });
     expect(onLoad).toHaveBeenCalledWith(ENTRIES[2]);
-    expect(follows()).toEqual([ROWS[2].path]);
-    expect(onChosen).toHaveBeenLastCalledWith(['c']);
+    expect(onToggle).toHaveBeenCalledTimes(1);
   });
 
   it('lets go of the selection on Escape, and lets Escape through when nothing is selected', async () => {
     const onChosen = vi.fn();
     await mount({ onChosen });
-    fireEvent.click(tile('a'));
+    fireEvent.click(tile('a'), { metaKey: true });
     const grid = screen.getByRole('listbox', { name: 'presets' });
     const outside = vi.fn();
     window.addEventListener('keydown', outside);
@@ -393,9 +421,9 @@ describe("the home's inspector grid (bare, decision 70)", () => {
     r.rerender(bare({ onChosen, selected: ['b', 'c'] }));
     expect(onChosen.mock.calls.length).toBe(calls);
     // The grid's own pick, then Home echoing it: kept.
-    fireEvent.click(tile('a'));
-    r.rerender(bare({ onChosen, selected: ['a'] }));
-    expect(onChosen).toHaveBeenLastCalledWith(['a']);
+    fireEvent.click(tile('a'), { metaKey: true });
+    r.rerender(bare({ onChosen, selected: ['b', 'c', 'a'] }));
+    expect(onChosen).toHaveBeenLastCalledWith(['b', 'c', 'a']);
   });
 });
 
