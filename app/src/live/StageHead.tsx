@@ -3,7 +3,7 @@ import { Icon } from '../layout/icons.tsx';
 import { LinkPanel } from '../LinkPanel.tsx';
 import { OutputPanel } from '../OutputPanel.tsx';
 import { Popover } from '../Popover.tsx';
-import { BeatDot, beatLabel, bpmText, Fps, linked, openSettings, outputLabel, outputText, SkipNote, TapButton } from '../Status.tsx';
+import { BeatDot, beatLabel, bpmText, Fps, linked, openSettings, outputLabel, SkipNote, TapButton } from '../Status.tsx';
 import { ViewSwitch } from '../views.tsx';
 import { say } from '../words.ts';
 import type { LiveState } from './live-model.ts';
@@ -14,7 +14,7 @@ import './stage-head.css';
 /** The crate's toggle's tooltip: what it does now, show or hide. */
 export const crateTitle = (open: boolean): string => `${open ? 'Hide' : 'Show'} the ${say('crate')}`;
 
-/** What the Output light shows beside its glyph: the display the picture is on, or "In this window" (in amber) while it is on none. */
+/** What the Output light shows beside its glyph: the display the picture is on, or "In this window" (in the header's normal ink) while it is on none. */
 export const outputWords = (live: Pick<LiveState, 'status'>): string => live.status.display?.name ?? 'In this window';
 
 /**
@@ -53,9 +53,8 @@ function BeatLight({ live }: { live: LiveState }) {
   );
 }
 
-/** The Output light: where the picture goes, the display's name or "In this window" in amber; its popover picks the display and says how it fits. */
+/** The Output light: where the picture goes, the display's name or "In this window" in the header's normal ink; its popover picks the display and says how it fits. */
 function OutputLight({ live }: { live: LiveState }) {
-  const on = outputText(live.status).on;
   return (
     <Popover
       className="stage-light"
@@ -65,9 +64,7 @@ function OutputLight({ live }: { live: LiveState }) {
       label={
         <>
           <Icon name="output" size={14} />
-          <span className="stage-light-text" data-warn={on ? undefined : ''}>
-            {outputWords(live)}
-          </span>
+          <span className="stage-light-text">{outputWords(live)}</span>
         </>
       }
     >

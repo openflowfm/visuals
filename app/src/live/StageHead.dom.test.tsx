@@ -129,12 +129,13 @@ describe('the Stage header, in a DOM', () => {
     expect(within(pop).getByText(/Fills Projector \(HDMI\)\./)).toBeTruthy();
   });
 
-  it('says "In this window" in amber while the output is closed, and its popover shows it', async () => {
+  it('says "In this window" in normal ink, not as a warning, while the output is closed, and its popover shows it', async () => {
     const user = userEvent.setup();
     const live = liveOf({ status: OUTPUT_OFF });
     head({ live });
     const out = screen.getByRole('button', { name: 'Output, in this window' });
-    expect(out.querySelector('[data-warn]')?.textContent).toBe('In this window');
+    expect(out.querySelector('.stage-light-text')?.textContent).toBe('In this window');
+    expect(out.querySelector('[data-warn]')).toBeNull();
     await user.click(out);
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Show' }));
     // The display that isn't the one with the menu bar, once the displays are read.
