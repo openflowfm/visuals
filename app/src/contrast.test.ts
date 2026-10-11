@@ -180,7 +180,7 @@ describe('caption contrast on every surface, over every frost', () => {
     const block = home.match(/((?:\.app\.home [^,{]+,\s*)*\.app\.home [^,{]+)\{\s*--caption: var\(--caption-raised\);/);
     expect(block).not.toBeNull();
     const raised = block![1].split(',').map((s) => s.trim().replace(/^\.app\.home /, ''));
-    const sheets = ['home.css', 'tile.css', 'nowpanel.css', 'homebar.css', 'playlisthead.css', 'sources.css', 'popover.css', 'library.css'];
+    const sheets = ['home.css', 'tile.css', 'playlisthead.css', 'popover.css', 'library.css'];
     const uncovered: string[] = [];
     for (const file of sheets) {
       const css = uncomment(read(file));
@@ -201,8 +201,6 @@ describe('the preview’s corners over the frost (decision 69)', () => {
     expect(rule![1].split(',').map((s) => s.trim())).toEqual(['.home [data-hole]:not([data-loading])::before']);
     expect(rule![2]).toContain('--r: var(--hole-radius)');
     for (const [file, hole] of [
-      ['nowpanel.css', '.now-panel .now-preview'],
-      ['homebar.css', '.home-bar .home-bar-mini'],
       // The inspector view's hole (decision 70): the hero's preview, at the layout's --lay-hero-radius.
       ['layout/hero.css', '.lay .hero-pic'],
     ]) {

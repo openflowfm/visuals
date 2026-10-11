@@ -16,7 +16,6 @@
    strip's one-line tip (now the grid's tooltip); the Now Playing panel taking
    the main pane's place in a narrow window (the hero is always there); and a
    click playing a tile (a click picks it, a double-click or Enter plays it).
-   Sources.tsx, NowPanel.tsx and HomeBar.tsx are no longer used by Home.
 
    Decision 71 (round 2): the hero is the picture alone, its name and where it
    plays from in the transport bar; one click on a tile plays it again (⌘ and ⇧
@@ -97,13 +96,11 @@
    paints one of those surfaces must be under one of these (contrast.test.ts checks). */
 .app.home .home-ghost,
 .app.home .tile-pic,
-.app.home .now-panel .now-chip,
 .app.home .lib-home .lib-name-input,
 .app.home .lib-home .pack-offer .pack-progress,
 .app.home .vf-pop-panel,
 .app.home .pl-cover > div,
-.app.home .pl-head .pl-name-input,
-.app.home .home-bar .vf-meters .wdg-meter-body {
+.app.home .pl-head .pl-name-input {
   --caption: var(--caption-raised);
 }
 /* The frost a dev run picked instead (VISUALS_FROST, which sets data-frost on

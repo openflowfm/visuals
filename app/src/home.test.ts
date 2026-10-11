@@ -30,7 +30,6 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { firstPane, openSettings, PlaylistPane, stripTileSays } from './Home.tsx';
 import { rowSays } from './layout/home-model.ts';
 import { SettingsBar } from './PlaylistHead.tsx';
-import { Sidebar } from './Sources.tsx';
 import { SHEET_EVENT, sheetOf } from './views.tsx';
 
 const row = (name: string, speed: Level = 'mid', intensity: Level = 'mid', over: Partial<LibraryRow> = {}): LibraryRow => ({
@@ -450,24 +449,10 @@ describe('the home, read aloud', () => {
   const mine = manual('Mine', ['/presets/g/a.milk', '/presets/g/b.milk']);
   const calm = smart('Calm', { groups: {}, text: '' });
   const lists: Lists = { playlists: [mine, calm], deck: { ...EMPTY_DECK, playlist: 'Mine', index: 0, next_index: 1 } };
-  const counts = { library: 2, starred: 0, list: (p: Playlist) => (p.kind === 'manual' ? p.items.length : null) };
 
   it('names each playlist row with its kind, its count and whether it plays', () => {
     expect(rowSays(mine, true)).toBe('Mine, playlist, 2 presets, playing');
     expect(rowSays(calm, false)).toBe('Calm, smart playlist, fills itself with all presets');
-    const html = renderToStaticMarkup(createElement(Sidebar, { lists, shown: null, counts, onPick: none, onLists: none, onImport: none, onError: fails }));
-    expect(html).toContain('aria-label="Mine, playlist, 2 presets, playing"');
-    expect(html).toContain('aria-label="Calm, smart playlist, fills itself with all presets"');
-    // The count is in the label, so the number itself isn't read again.
-    expect(html).toContain('<i aria-hidden="true">2</i>');
-  });
-
-  it('keeps + and ⤓ beside the headings, not in them', () => {
-    const html = renderToStaticMarkup(createElement(Sidebar, { lists, shown: null, counts, onPick: none, onLists: none, onImport: none, onError: fails }));
-    const headings = [...html.matchAll(/<h2[^>]*>(.*?)<\/h2>/g)].map((m) => m[1]);
-    expect(headings).toEqual(['Playlists', 'Smart playlists']);
-    expect(html).toContain('aria-label="new playlist"');
-    expect(html).toContain('aria-label="add from a file"');
   });
 
   it('names each tile in the strip with its place, and whether it plays now or next', () => {

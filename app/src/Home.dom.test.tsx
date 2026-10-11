@@ -94,11 +94,17 @@ const sourceRow = (name: string) =>
     .getAllByRole('button', { name: new RegExp(`^${name}`) })
     .find((b) => b.classList.contains('isb-row'))!;
 
+/** `Math.random`, seeded for each test. */
+let random: { mockRestore(): void } | null = null;
+
 beforeEach(() => {
   // A wide window: the sidebar and the inspector docked, unless a test says otherwise.
   viewport(1440);
   vi.useFakeTimers();
+  // Nothing put back, as on a first run, unless a test says otherwise; the page
+  // then opens a preset of its own, at random: seeded, so it is always the first (a).
   resume = null;
+  random = vi.spyOn(Math, 'random').mockReturnValue(0);
   deck = EMPTY_DECK;
   playlists = [];
   forgetResumedQuery(true);
@@ -108,6 +114,8 @@ beforeEach(() => {
   invoke.mockImplementation((cmd: string) => Promise.resolve(answer(cmd)));
 });
 afterEach(() => {
+  random?.mockRestore();
+  random = null;
   cleanup();
   localStorage.clear();
   vi.useRealTimers();
@@ -233,6 +241,11 @@ describe('the home, an inspector view (decision 70)', () => {
     expect(tile('b').getAttribute('aria-selected')).toBe('false');
     expect(insp().queryByRole('heading', { name: 'b' })).toBeNull();
     expect(insp().getByRole('heading', { name: 'a' })).toBeTruthy();
+  });
+
+  it('opens a preset of its own when nothing was put back: the random pick, seeded here to the first', async () => {
+    await mount({ library: true });
+    expect(sent('open').map((a) => a.path)).toEqual([ROWS[0].path]);
   });
 
   it('plays a preset on one click, the deck following the grid from it, and the inspector shows it playing', async () => {
