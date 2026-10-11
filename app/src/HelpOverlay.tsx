@@ -38,8 +38,8 @@ export type ControlId =
   | 'crate' /* the Stage's crate toggle */
   | 'panels'; /* the Stage's \: hide or show the panels */
 
-/** Where a control is: the status bar, what's playing, the control grid, the crate, or only on a key. */
-export type Where = 'status' | 'playing' | 'controls' | 'crate' | 'keys';
+/** Where a control is: the status bar, what's playing, the control grid, the dock's transport bar, the crate, or only on a key. */
+export type Where = 'status' | 'playing' | 'controls' | 'dock' | 'crate' | 'keys';
 
 /** A live control: what it's called, its keys (empty when none), and what it does. */
 export interface Control {
@@ -57,7 +57,7 @@ export interface Control {
  * it and the ? overlay shows it, so the overlay names every control.
  */
 export const CONTROLS: readonly Control[] = [
-  { id: 'audio', where: 'status', name: 'Audio', keys: '', does: `What it's listening to, and how loud. Click to pick what to ${say('audio input')}` },
+  { id: 'audio', where: 'dock', name: 'Audio', keys: '', does: `What it's listening to, with its left and right levels beside it. Click to pick what to ${say('audio input')}` },
   { id: 'beat', where: 'status', name: 'Beat', keys: '', does: `The tempo, flashing on each beat. Click to tap the tempo or ${say('Ableton Link')}` },
   { id: 'output', where: 'status', name: 'Output', keys: '', does: 'Where the picture shows. Click to pick a display' },
   { id: 'fps', where: 'status', name: 'Frames per second', keys: '', does: 'Only shown when the picture runs slow, under 50' },
@@ -95,6 +95,7 @@ export const GROUPS: readonly { where: Where; heading: string }[] = [
   { where: 'status', heading: 'Along the top' },
   { where: 'playing', heading: "What's playing" },
   { where: 'controls', heading: 'Controls' },
+  { where: 'dock', heading: 'Along the bottom' },
   { where: 'crate', heading: 'Playlists and up next' },
   { where: 'keys', heading: 'Keys only' },
 ];

@@ -151,6 +151,12 @@ describe('the ? overlay, to VoiceOver', () => {
     expect(stage).toContain('Playlists and up next');
   });
 
+  it("files the audio input along the bottom, in the dock's transport bar, with its levels", () => {
+    const audio = control('audio');
+    expect(GROUPS.find((g) => g.where === audio.where)?.heading).toBe('Along the bottom');
+    expect(audio.does).toContain('levels');
+  });
+
   it('draws nothing while closed', () => {
     expect(renderToStaticMarkup(createElement(HelpOverlay, { open: false, onClose: () => {} }))).toBe('');
   });
