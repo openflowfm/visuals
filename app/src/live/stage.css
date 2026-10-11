@@ -1,0 +1,204 @@
+/* Live's Stage (StageLayout.tsx): the picture full-bleed across the main
+   window, Home's inset panels floating over it. Home's sizes (layout.css's
+   --lay-*: 8px in, 18px corners, the 52px title bar), tokens and type; areas
+   told apart by space and tone, no lines.
+
+   Who paints what: the picture is the native preview under the page (the
+   hole, `.stage-picture`), the whole window always, so the root and every
+   wrapper paint nothing. Every panel over it paints opaque --surface-corner
+   and no backdrop-filter: a blur never reaches the native view, and anything
+   translucent would show the picture through unblurred. Everything hangs off
+   `.stage`, the root, which also carries `.app.home.lay` (Home's tokens and
+   the inset sidebar's rules) and outranks them. Nothing animates but the
+   hint's fade. */
+
+.app.home.lay.stage {
+  --stage-crate: calc(var(--lay-side) + 2 * var(--lay-inset));
+  --stage-panel: var(--surface-corner);
+  --stage-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+  /* The window buttons' room: they sit at x 24, 12px each and 8px apart. */
+  --stage-lights: 84px;
+  --stage-z-panel: 1;
+  --stage-z-centre: 2;
+  display: block;
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  background: none;
+}
+
+/* The picture: the whole window, whatever shows over it. */
+.app.home.lay.stage > .stage-picture,
+.app.home.lay.stage > .stage-dark {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 0;
+  border-radius: 0;
+}
+.app.home.lay.stage > .stage-picture[data-hole] {
+  background: transparent;
+  box-shadow: none;
+}
+/* Square: the window's own corners are macOS's, so the hole paints no corners of its own (home.css's). */
+.app.home.lay.stage > .stage-picture[data-hole]::before {
+  content: none;
+}
+/* Until it draws, a plain opaque surface saying so. */
+.app.home.lay.stage > .stage-picture[data-loading] {
+  display: grid;
+  place-items: center;
+  background: var(--stage-panel);
+}
+.app.home.lay.stage > .stage-picture .bench-loading {
+  color: var(--caption);
+  font-size: 12px;
+}
+/* The warning owed: nothing plays, a dark window (--surface-corner half way to black), opaque over whatever the native view last showed. */
+.app.home.lay.stage > .stage-dark {
+  background: #0d0d0e;
+}
+
+/* The crate: Home's inset sidebar, opaque, over the picture's left edge.
+   Docked, the header and the dock keep clear of it; laid over (a narrow
+   window), it covers them. The cell paints nothing and lets presses through
+   around its panel. */
+.app.home.lay.stage > .stage-crate-cell {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: var(--stage-z-panel);
+  display: flex;
+  width: var(--stage-crate);
+  padding: var(--lay-inset);
+  box-sizing: border-box;
+  background: none;
+  pointer-events: none;
+}
+.app.home.lay.stage > .stage-crate-cell[data-mode='overlay'] {
+  z-index: var(--lay-z-overlay);
+}
+/* Over layout.css's .lay-side, whose --surface-2 is a tint for the frost: here it would show the picture through. */
+.app.home.lay.stage > .stage-crate-cell > .lay-side {
+  pointer-events: auto;
+  background: var(--stage-panel);
+  box-shadow: var(--glass-edge), var(--stage-shadow);
+}
+
+/* The header row: the title bar's 52px, the capsules (StageHead) centred on
+   the window buttons' line (y 28). The row paints nothing; the empty line
+   between and around the capsules is the title bar, and drags the window. It
+   leaves the window buttons room, or starts beside a docked crate (whose band
+   holds them). */
+.app.home.lay.stage > .stage-head {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: var(--stage-z-panel);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--lay-titlebar);
+  padding: 0 var(--lay-inset) 0 var(--stage-lights);
+  box-sizing: border-box;
+  background: none;
+}
+.app.home.lay.stage[data-crate='docked'] > .stage-head {
+  left: var(--stage-crate);
+  padding-left: 0;
+}
+
+/* Over the picture's middle: "Go full screen on…" just under the header, or
+   the warning centred where the picture would be (above the dock). Only what
+   it holds takes presses. */
+.app.home.lay.stage > .stage-centre {
+  position: absolute;
+  top: calc(var(--lay-titlebar) + 12px);
+  right: 0;
+  left: 0;
+  z-index: var(--stage-z-centre);
+  display: flex;
+  justify-content: center;
+  padding: 0 16px;
+  background: none;
+  pointer-events: none;
+}
+.app.home.lay.stage > .stage-centre > * {
+  pointer-events: auto;
+}
+.app.home.lay.stage > .stage-centre[data-for='warning'] {
+  bottom: 140px;
+  align-items: center;
+}
+.app.home.lay.stage[data-panels='hidden'] > .stage-centre[data-for='warning'] {
+  bottom: 0;
+}
+.app.home.lay.stage[data-crate='docked'] > .stage-centre {
+  left: var(--stage-crate);
+}
+
+/* The dock: an inset panel along the bottom (its content is StageDock's). */
+.app.home.lay.stage > .stage-dock {
+  position: absolute;
+  right: var(--lay-inset);
+  bottom: var(--lay-inset);
+  left: var(--lay-inset);
+  z-index: var(--stage-z-panel);
+  min-width: 0;
+  border-radius: var(--lay-side-radius);
+  background: var(--stage-panel);
+  box-shadow: var(--glass-edge), var(--stage-shadow);
+}
+.app.home.lay.stage[data-crate='docked'] > .stage-dock {
+  left: var(--stage-crate);
+}
+/* The warning owed: the controls wait for "I understand". */
+.app.home.lay.stage[data-warning] > .stage-dock,
+.app.home.lay.stage[data-warning] > .stage-crate-cell {
+  opacity: 0.4;
+}
+
+/* Panels hidden: only the picture, and along the bottom a strip that paints
+   nothing until the pointer nears it, then a quiet capsule: \ for controls. */
+.app.home.lay.stage > .stage-peek {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: var(--stage-z-panel);
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  height: 96px;
+  padding-bottom: 16px;
+  box-sizing: border-box;
+  background: none;
+}
+.app.home.lay.stage .stage-hint {
+  margin: 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--stage-panel);
+  box-shadow: var(--glass-edge), var(--stage-shadow);
+  color: var(--caption-raised);
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  user-select: none;
+}
+.app.home.lay.stage .stage-hint kbd {
+  color: var(--fg);
+  font-family: var(--font-num);
+  font-variation-settings: var(--font-num-axes);
+  font-weight: 600;
+}
+.app.home.lay.stage > .stage-peek:hover .stage-hint {
+  opacity: 1;
+}
+:root[data-reduced-motion] .app.home.lay.stage .stage-hint {
+  transition: none;
+}
