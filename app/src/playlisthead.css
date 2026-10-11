@@ -184,7 +184,8 @@
    the inspector shows a preset: the cover across it, then the words under it,
    the name as large as a preset's (inspector-content.css's .insp-name) and
    wrapping, how it plays on as many lines as it takes, and the actions
-   wrapping under them. The inspector's own padding is its margin. */
+   wrapping under them: no playback controls, only how it plays ▾, add
+   presets (quick add) and ⋯. The inspector's own padding is its margin. */
 .pl-head[data-variant='inspector'] {
   flex-direction: column;
   align-items: stretch;
