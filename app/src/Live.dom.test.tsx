@@ -113,9 +113,12 @@ describe("the Stage's crate, by the window's width", () => {
     expect(crate()).toBe('hidden');
     cleanup();
     localStorage.setItem(CRATE_KEY, '1');
+    await mount();
+    expect(crate()).toBe('docked');
+    cleanup();
     viewport(900);
     await mount();
-    expect(crate()).toBe('overlay');
+    expect(crate()).toBe('hidden');
   });
 
   it('follows the window as it is resized', async () => {

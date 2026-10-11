@@ -58,7 +58,7 @@ export function Live({
   const { current } = live;
   const [help, setHelp] = useState(false);
   const width = useWidth();
-  const [panels, setPanels] = useState<Panels>(() => panelsAtStart(rememberedChoice(CRATE_KEY)));
+  const [panels, setPanels] = useState<Panels>(() => panelsAtStart(width < STAGE_DOCK_AT ? null : rememberedChoice(CRATE_KEY)));
   const mode = crateModeFor(width, panels.crate);
 
   const leaveLive = useCallback(() => onMode(HOME, current), [onMode, current]);
