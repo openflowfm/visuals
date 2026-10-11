@@ -3,8 +3,9 @@
 // Live's wiring of the Stage, mounted in a DOM with the app's commands faked
 // and the Stage's parts stood in for (their lanes test them): the crate's mode
 // at a window's width and the viewer's choice kept for next time, `\` hiding
-// the panels, Esc's order (hidden panels, then a laid-over crate, then
-// leaving), Home | Live, and the ? overlay listing the Stage's own controls.
+// the panels, Esc (hidden panels, then a laid-over crate, never leaving, here
+// or on the output), ✕ and ⌘⇧L leaving (twice with the output on a display),
+// and the ? overlay listing the Stage's own controls.
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Live } from './Live.tsx';
@@ -12,9 +13,14 @@ import { EMPTY_DECK } from './playlists.ts';
 import { CRATE_KEY } from './live/stage-model.ts';
 import type { StageCrateProps, StageHeadProps, StageLayoutProps } from './live/stage-model.ts';
 
-const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
+const { invoke, on } = vi.hoisted(() => ({ invoke: vi.fn(), on: new Map<string, (e: { payload: unknown }) => void>() }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => invoke(...args), convertFileSrc: (p: string) => p }));
-vi.mock('@tauri-apps/api/event', () => ({ listen: () => Promise.resolve(() => {}) }));
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: (name: string, f: (e: { payload: unknown }) => void) => {
+    on.set(name, f);
+    return Promise.resolve(() => {});
+  },
+}));
 
 // The Stage's parts, stood in for: what they were handed, in the DOM.
 vi.mock('./live/StageLayout.tsx', async () => {
@@ -171,26 +177,34 @@ describe("the Stage's keys", () => {
     expect(onMode).not.toHaveBeenCalled();
   });
 
-  it('Esc shows hidden panels first, and only then leaves live', async () => {
-    const { onMode } = await mount();
+  it('Esc shows hidden panels, and never leaves live', async () => {
+    const { onMode } = await mount({ windowed: true });
     await press('\\');
     await press('Escape');
     expect(stage().dataset.shown).toBe('true');
-    expect(onMode).not.toHaveBeenCalled();
     await press('Escape');
-    expect(onMode).toHaveBeenCalledWith('home', '/p/a.milk');
+    expect(onMode).not.toHaveBeenCalled();
   });
 
-  it('Esc puts a laid-over crate away before it leaves', async () => {
+  it('Esc puts a laid-over crate away, and never leaves live', async () => {
     viewport(900);
-    const { onMode } = await mount();
+    const { onMode } = await mount({ windowed: true });
     await act(() => void fireEvent.click(toggle()));
     expect(crate()).toBe('overlay');
     await press('Escape');
     expect(crate()).toBe('hidden');
-    expect(onMode).not.toHaveBeenCalled();
     await press('Escape');
-    expect(onMode).toHaveBeenCalledWith('home', '/p/a.milk');
+    expect(onMode).not.toHaveBeenCalled();
+  });
+
+  it('Esc on the output shows hidden panels, and never leaves live', async () => {
+    const { onMode } = await mount();
+    await press('\\');
+    expect(stage().dataset.shown).toBe('false');
+    await act(() => on.get('output-escape')?.({ payload: null }));
+    expect(stage().dataset.shown).toBe('true');
+    await act(() => on.get('output-escape')?.({ payload: null }));
+    expect(onMode).not.toHaveBeenCalled();
   });
 
   it('lists the Stage’s own controls in the ? overlay', async () => {
@@ -202,9 +216,29 @@ describe("the Stage's keys", () => {
 });
 
 describe('Live, around the Stage', () => {
-  it('goes Home from the header’s Home | Live, with the preset playing', async () => {
+  const home = () => act(() => void fireEvent.click(screen.getByRole('button', { name: 'home' })));
+  const cmdShiftL = () => act(() => void fireEvent.keyDown(document.body, { key: 'L', metaKey: true, shiftKey: true }));
+
+  it('leaves at once by ✕ or ⌘⇧L with no output on a display', async () => {
+    const { onMode } = await mount({ windowed: true });
+    await home();
+    expect(onMode).toHaveBeenCalledWith('home', '/p/a.milk');
+    onMode.mockClear();
+    await cmdShiftL();
+    expect(onMode).toHaveBeenCalledWith('home', '/p/a.milk');
+  });
+
+  it('with the output on a display, ✕ and ⌘⇧L ask on the first press and leave on the second', async () => {
     const { onMode } = await mount();
-    await act(() => void fireEvent.click(screen.getByRole('button', { name: 'home' })));
+    expect(stage().dataset.inWindow).toBe('false');
+    await home();
+    expect(onMode).not.toHaveBeenCalled();
+    await home();
+    expect(onMode).toHaveBeenCalledWith('home', '/p/a.milk');
+    onMode.mockClear();
+    await cmdShiftL();
+    expect(onMode).not.toHaveBeenCalled();
+    await cmdShiftL();
     expect(onMode).toHaveBeenCalledWith('home', '/p/a.milk');
   });
 

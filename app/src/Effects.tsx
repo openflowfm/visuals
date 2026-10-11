@@ -11,8 +11,11 @@ import type { Notice } from './shell.ts';
 import { say, Say } from './words.ts';
 import './effects.css';
 
-// Sensitivity is a multiplier on a log taper: the slider holds the position
-// (log2, −2..2, 0 at 1×) and `positionToMultiplier` turns it back.
+// Speed and sensitivity are multipliers on a log taper: the slider holds the
+// position (log2, −2..2, 0 at 1×) and `positionToMultiplier` turns it back.
+export const SPEED = range('speed', POSITION_MIN, POSITION_MAX, 0);
+export const HUE = range('hue', 0, 1, 0);
+export const TRAILS = range('trails', 0, 1, 0);
 const BRIGHTNESS = range('brightness', 0, 2, 1);
 const SENSITIVITY = range('sensitivity', POSITION_MIN, POSITION_MAX, 0);
 const FADE = range('blackout fade', 0, 10, 0);
@@ -118,9 +121,16 @@ export function useFx(): FxControl {
 }
 
 /** A horizontal slider with its value inside, as the effects draw them. */
-const slide = (param: Param, value: number, onChange: (v: number) => void, display: string, title: string) => (
+export const slide = (param: Param, value: number, onChange: (v: number) => void, display: string, title: string) => (
   <Slider param={param} value={value} onChange={onChange} display={display} orientation="horizontal" layout="inside" title={`${title} (double-click resets)`} />
 );
+
+/** A multiplier's slider on the log taper (¼× to 4×): it holds the position and hands back the multiplier. */
+export const taperSlide = (param: Param, multiplier: number, onChange: (m: number) => void, title: string) =>
+  slide(param, multiplierToPosition(multiplier), (p) => onChange(positionToMultiplier(p)), formatMultiplier(multiplier), title);
+
+/** The hue (0–1, a turn of the colour wheel) as degrees. */
+export const hueText = (hue: number) => `${Math.round(hue * 360)}°`;
 
 /** A setting's row, as every row in ⚙ Settings is drawn (settings.css): its name first, then its control. */
 function Row({ name, children }: { name: string; children: React.ReactNode }) {

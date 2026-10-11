@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest';
+// @vitest-environment happy-dom
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MoreFx } from './MoreEffects.tsx';
 import { EffectSettings } from './Effects.tsx';
@@ -32,7 +34,44 @@ const REST: fx.Fx = {
 
 const none = () => {};
 
+afterEach(cleanup);
+
 describe('MoreFx', () => {
+  it('leads with Speed, Colour and Trails, each a slider with its reading', () => {
+    const html = renderToStaticMarkup(<MoreFx state={{ ...REST, speed: 2, hue: 0.5, trails: 0.25 }} set={none} send={none} />);
+    const at = (name: string) => html.indexOf(`<span>${name}</span>`);
+    expect(at('Speed')).toBeGreaterThanOrEqual(0);
+    expect(at('Speed')).toBeLessThan(at('Colour'));
+    expect(at('Colour')).toBeLessThan(at('Trails'));
+    expect(at('Trails')).toBeLessThan(at('Mirror'));
+    for (const name of ['speed', 'hue', 'trails']) expect(html).toMatch(new RegExp(`role="slider"[^>]*aria-label="${name}"`));
+    expect(html).toContain('aria-valuetext="180°"');
+    expect(html).toContain('aria-valuetext="0.25"');
+    expect(html).toContain('(double-click resets)');
+  });
+
+  // The sliders hand their value on at the next frame, so each check waits for it.
+  it('sends speed as a multiplier on the log taper, and double-click puts it back to 1×', async () => {
+    const set = vi.fn();
+    render(<MoreFx state={{ ...REST, speed: 2 }} set={set} send={none} />);
+    const speed = screen.getByRole('slider', { name: 'speed' });
+    fireEvent.keyDown(speed, { key: 'End' });
+    await vi.waitFor(() => expect(set).toHaveBeenLastCalledWith({ kind: 'speed', speed: 4 }, { speed: 4 }));
+    fireEvent.keyDown(speed, { key: 'Home' });
+    await vi.waitFor(() => expect(set).toHaveBeenLastCalledWith({ kind: 'speed', speed: 0.25 }, { speed: 0.25 }));
+    fireEvent.doubleClick(speed);
+    await vi.waitFor(() => expect(set).toHaveBeenLastCalledWith({ kind: 'speed', speed: 1 }, { speed: 1 }));
+  });
+
+  it('sends the colour turn and the trails as their live actions', async () => {
+    const set = vi.fn();
+    render(<MoreFx state={REST} set={set} send={none} />);
+    fireEvent.keyDown(screen.getByRole('slider', { name: 'hue' }), { key: 'End' });
+    await vi.waitFor(() => expect(set).toHaveBeenLastCalledWith({ kind: 'hue', value: 1 }, { hue: 1 }));
+    fireEvent.keyDown(screen.getByRole('slider', { name: 'trails' }), { key: 'End' });
+    await vi.waitFor(() => expect(set).toHaveBeenLastCalledWith({ kind: 'trails', value: 1 }, { trails: 1 }));
+  });
+
   it('holds Mirror, Invert, Punch and Reset', () => {
     const html = renderToStaticMarkup(<MoreFx state={REST} set={none} send={none} />);
     for (const name of ['Mirror', 'Invert', 'Punch', 'Reset: back to normal']) expect(html).toContain(name);

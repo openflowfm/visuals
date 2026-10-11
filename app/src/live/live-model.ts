@@ -48,6 +48,14 @@ export interface LiveState {
   up: pl.Up | null;
   /** The notice showing (a failure), or null. */
   error: Notice | null;
+  /** A quiet line over the dock that is a state, not a failure: Hold keeping the preset (until it's let go), or leaving waiting for its second press. */
+  hint?: string | null;
+  /**
+   * Leave live through this: with the output on a display, the first call only
+   * asks (the hint) and a second within `LEAVE_MS` calls `go`; otherwise `go`
+   * at once. Esc never leaves (liveKeys), so this is ✕'s and ⌘⇧L's way out.
+   */
+  leave?(go: () => void): void;
   setError(n: Notice | null): void;
   /** A handler that shows `message` with the error it is given. */
   fail(message: string): (e: unknown) => void;
@@ -77,6 +85,12 @@ export interface LiveState {
 export function sinceAfter(was: number, now: Pick<pl.Now, 'path' | 'error'>, at: number): number {
   return now.path && !now.error ? at : was;
 }
+
+/** How long leaving live waits for its second press while the output shows on a display. */
+export const LEAVE_MS = 4000;
+
+/** What the dock says after the first press to leave with the output showing. */
+export const LEAVE_HINT = 'The output is showing: press ⌘⇧L (or ✕) again to leave live and close it.';
 
 /**
  * The Intensity slider's position, 0–1, read back from the sensitivity it set:
@@ -135,11 +149,20 @@ export function nextWhenText(frame: link.Frame | null, deck: pl.Deck | null, now
 
 /** What the Next line names: the item stepping on opens (and whether it's missing from the library), or, quietly, why nothing is next. */
 export function nextName(says: pl.NextSays): { text: string; quiet: boolean; missing?: boolean } {
-  if (says.kind === 'held') return { text: 'held — nothing changes until you let go of HOLD (H)', quiet: true };
+  if (says.kind === 'held') return { text: 'held — it stays until you let go of Hold (H)', quiet: true };
   if (says.kind === 'item' || says.kind === 'filter') return { text: says.item.name, quiet: false, missing: says.item.missing };
-  if (says.kind === 'empty') return { text: `${says.up.playlist.name} is empty — add presets in the library.`, quiet: true };
-  return { text: 'the next preset in the library', quiet: true };
+  if (says.kind === 'empty') return { text: `${says.up.playlist.name} is empty — add presets in the library`, quiet: true };
+  return { text: 'any preset in the library', quiet: true };
 }
+
+/**
+ * Whether the Next line should say where the next preset comes from (to screen
+ * readers, after its name): only when it adds something — a playlist with
+ * presets in it, a mood or a filter — not when the name already said it (the
+ * whole library, an empty playlist).
+ */
+export const saysWhere = (says: pl.NextSays, up: pl.Up | null, deck: pl.Deck | null): boolean =>
+  says.kind !== 'held' && says.kind !== 'empty' && says.kind !== 'library' && (up !== null || !!deck?.query);
 
 /** Where the next preset comes from, for the Next line's tooltip: "From Chill, 1 of 20", the mood, or the whole library. */
 export function whereText(up: pl.Up | null, deck: pl.Deck | null): string {

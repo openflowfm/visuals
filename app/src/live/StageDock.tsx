@@ -10,7 +10,7 @@ import { SilenceBanner } from '../Onboarding.tsx';
 import { nameOf, notice } from '../shell.ts';
 import { NoticeBanner } from '../views.tsx';
 import { say, Say } from '../words.ts';
-import { nextName, nextWhenText, openEffects, padLabel, starsText, whereSr, whereText, type LiveState } from './live-model.ts';
+import { nextName, nextWhenText, openEffects, padLabel, saysWhere, starsText, whereSr, whereText, type LiveState } from './live-model.ts';
 import type { StageDockProps } from './stage-model.ts';
 import { useLinkFrame } from './useLive.ts';
 import './stage-dock.css';
@@ -53,7 +53,13 @@ function useTransport(live: LiveState): TransportBarProps {
 /** When the next preset comes: its own leaf, as Link's frames come ten times a second. */
 function NextWhen({ deck }: { deck: LiveState['deck'] }) {
   const when = nextWhenText(useLinkFrame(), deck, Date.now());
-  return when ? <em className="sd-when">{when}</em> : null;
+  // Set apart from the name by a dot (and a comma for screen readers), and named in its tooltip: "every 30 s" is when it changes.
+  return when ? (
+    <em className="sd-when" title={`When the next preset comes: ${when}`}>
+      <span className="sd-sr">, changes </span>
+      {when}
+    </em>
+  ) : null;
 }
 
 /** The deck's Next line, with HOLD, the favourite's star and the rating before it: what the transport's now line doesn't say. */
@@ -64,7 +70,7 @@ function NextLine({ live }: { live: LiveState }) {
   return (
     <div className="sd-next">
       {live.held && (
-        <span className="sd-held" title={`${Say('hold')}: steps, ${say('auto-advance')} and Link's changes wait until you let go (H)`}>
+        <span className="sd-held" title={`${Say('hold')}: this preset stays — ${say('auto-advance')} and Link's changes wait until you let go (H)`}>
           Hold
         </span>
       )}
@@ -89,7 +95,7 @@ function NextLine({ live }: { live: LiveState }) {
         ) : (
           <span className="sd-quiet">{next.text}</span>
         )}
-        {says.kind !== 'held' && <span className="sd-sr">{whereSr(live.up, live.deck)}</span>}
+        {saysWhere(says, live.up, live.deck) && <span className="sd-sr">{whereSr(live.up, live.deck)}</span>}
         {says.kind !== 'held' && live.deck && <NextWhen deck={live.deck} />}
       </p>
     </div>
@@ -230,6 +236,10 @@ export function StageDock({ live }: StageDockProps) {
       <div className="sd-banners">
         <SilenceBanner />
         <NoticeBanner className="sd-notice" notice={live.error} onDismiss={live.dismiss} />
+        {/* A state, not a failure (Hold keeping the preset, leaving asking for a second press): quiet, polite, no dismiss. */}
+        <p className="sd-hint" role="status" hidden={!live.hint}>
+          {live.hint}
+        </p>
       </div>
       <TransportBar {...transport} />
       <div className="sd-row">

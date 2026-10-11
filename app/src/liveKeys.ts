@@ -8,7 +8,7 @@ export type Stars = 1 | 2 | 3 | 4 | 5;
 
 /** Where live mode's keys go. */
 export interface LiveKeyTargets {
-  /** ⌘⇧L or Esc: back to the editor. */
+  /** ⌘⇧L: leave live (never Esc, so a stray press mid-set can't close the output). */
   editor: () => void;
   /** A step: previous, next, random. */
   act: (action: pl.Action) => void;
@@ -24,7 +24,7 @@ export interface LiveKeyTargets {
   sheetOpen?: () => boolean;
   /** \: hide the Stage's panels, or show them again (only the Stage has them). */
   panels?: () => void;
-  /** Esc, before it leaves: true when it was used (the Stage's hidden panels shown), so live doesn't leave. */
+  /** Esc: shows the Stage's hidden panels or puts a laid-over crate away; true when it was used. Esc never leaves live. */
   escape?: () => boolean;
 }
 
@@ -67,9 +67,10 @@ export function liveKeys(to: LiveKeyTargets) {
       if (e.key === 'Escape') {
         // A menu, sheet or dialog that took its own Esc keeps it (decision 17q: the ⚙ sheet takes Esc before live does).
         if (e.defaultPrevented) return;
+        // Esc shows hidden panels or puts a laid-over crate away, and never leaves live: a stray Esc mid-set mustn't close the
+        // output. Leaving is deliberate: ✕ or ⌘⇧L.
         e.preventDefault();
-        if (to.escape?.()) return;
-        to.editor();
+        to.escape?.();
         return;
       }
       if (e.key === '\\') {

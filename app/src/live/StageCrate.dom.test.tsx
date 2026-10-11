@@ -53,11 +53,13 @@ const mount = (mode: CrateMode, live = liveOf(LISTS), onAway = vi.fn()) => {
 afterEach(cleanup);
 
 describe('The Stage crate', () => {
-  it('shows the mark over the crate, and plays a playlist picked', () => {
+  it('shows the mark over the crate, and plays a playlist cued with its Play button', () => {
     const act = vi.fn();
-    mount('docked', liveOf(LISTS, act));
+    mount('docked', liveOf({ ...LISTS, deck: { ...pl.EMPTY_DECK } }, act));
     expect(document.querySelector('.scr-mark .vf-mark')).not.toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Set, playing' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Set' }));
+    expect(act).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Play Set' }));
     expect(act).toHaveBeenCalledWith({ kind: 'load', playlist: 0, index: null });
   });
 

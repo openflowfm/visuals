@@ -99,11 +99,15 @@
   outline-offset: 0;
 }
 
-/* The body: the switches down the left, Punch beside them, Reset under both. */
+/* The body: Speed, Colour and Trails across the top, the switches down the left
+   under them, Punch beside the switches, Reset under both. */
 .more-fx .more-fx-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 168px;
   grid-template-areas:
+    'speed speed'
+    'hue hue'
+    'trails trails'
     'mirror punch'
     'invert punch'
     'reset reset';
@@ -111,10 +115,19 @@
   padding: 0;
   background: none;
 }
-.more-fx .more-fx-row:nth-child(1) {
+.more-fx .more-fx-speed {
+  grid-area: speed;
+}
+.more-fx .more-fx-hue {
+  grid-area: hue;
+}
+.more-fx .more-fx-trails {
+  grid-area: trails;
+}
+.more-fx .more-fx-mirror {
   grid-area: mirror;
 }
-.more-fx .more-fx-row:nth-child(2) {
+.more-fx .more-fx-invert {
   grid-area: invert;
 }
 .more-fx .more-fx-body > .fx-hits {
@@ -133,6 +146,12 @@
   color: var(--ui);
   font-size: 13px;
   font-weight: 500;
+}
+
+/* Speed, Colour, Trails: the widgets' slider with its reading inside, filling the row beside its name. */
+.more-fx-row .wdg-slider-horizontal {
+  flex: 0 1 calc(100% - 92px);
+  min-width: 0;
 }
 
 /* Mirror: four words, the one chosen brighter and underlined, as Home's header marks its view. */
@@ -240,6 +259,9 @@
   .more-fx .more-fx-body {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
+      'speed'
+      'hue'
+      'trails'
       'mirror'
       'invert'
       'punch'

@@ -119,11 +119,59 @@ describe('The crate in a DOM', () => {
     return act;
   };
 
-  it('plays a playlist picked, and marks the one playing as the pill', () => {
-    const act = mount(lists({ playlist: 'm', index: 0, current: 'pack/a.milk', next_index: 1 }));
+  const PLAYING_SET = { playlist: 'm', index: 0, current: 'pack/a.milk', next_index: 1 };
+  const LOAD_CALM = { kind: 'load', playlist: 1, index: null };
+
+  it('only cues a playlist tapped, and plays it with its Play button, clearing the cue', () => {
+    const act = mount(lists(PLAYING_SET));
     expect(screen.getByRole('button', { name: 'Set, playing' }).getAttribute('aria-current')).toBe('true');
+    const calm = screen.getByRole('button', { name: 'Calm, smart playlist' });
+    expect(screen.queryByRole('button', { name: 'Play Calm' })).toBeNull();
+    fireEvent.click(calm);
+    expect(act).not.toHaveBeenCalled();
+    expect(calm.getAttribute('aria-pressed')).toBe('true');
+    expect(calm.hasAttribute('data-cued')).toBe(true);
+    // The one playing keeps its mark.
+    expect(screen.getByRole('button', { name: 'Set, playing' }).getAttribute('aria-current')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'Play Calm' }));
+    expect(act).toHaveBeenCalledTimes(1);
+    expect(act).toHaveBeenCalledWith(LOAD_CALM);
+    expect(calm.getAttribute('aria-pressed')).toBe('false');
+    expect(screen.queryByRole('button', { name: 'Play Calm' })).toBeNull();
+  });
+
+  it('plays a playlist with Enter or a double-click, and cues one with Space', () => {
+    const act = mount(lists(PLAYING_SET));
+    const calm = screen.getByRole('button', { name: 'Calm, smart playlist' });
+    fireEvent.keyDown(calm, { key: ' ' });
+    expect(act).not.toHaveBeenCalled();
+    fireEvent.keyDown(calm, { key: 'Enter' });
+    expect(act).toHaveBeenLastCalledWith(LOAD_CALM);
+    fireEvent.doubleClick(calm);
+    expect(act).toHaveBeenCalledTimes(2);
+    expect(act).toHaveBeenLastCalledWith(LOAD_CALM);
+  });
+
+  it('cues nothing on a tap of the playlist playing, nor plays it again', () => {
+    const act = mount(lists(PLAYING_SET));
+    const set = screen.getByRole('button', { name: 'Set, playing' });
+    fireEvent.click(set);
+    fireEvent.keyDown(set, { key: 'Enter' });
+    fireEvent.doubleClick(set);
+    expect(act).not.toHaveBeenCalled();
+    expect(set.getAttribute('aria-pressed')).toBe('false');
+    expect(screen.queryByRole('button', { name: 'Play Set' })).toBeNull();
+  });
+
+  it('clears the cue once the deck plays the cued playlist', () => {
+    const view = render(crate(lists(PLAYING_SET)));
     fireEvent.click(screen.getByRole('button', { name: 'Calm, smart playlist' }));
-    expect(act).toHaveBeenCalledWith({ kind: 'load', playlist: 1, index: null });
+    expect(screen.getByRole('button', { name: 'Play Calm' })).toBeTruthy();
+    vi.mocked(pl.deckItems).mockResolvedValue([]);
+    view.rerender(crate(lists({ playlist: 's', count: 0 })));
+    view.rerender(crate(lists(PLAYING_SET)));
+    expect(screen.queryByRole('button', { name: 'Play Calm' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Calm, smart playlist' }).getAttribute('aria-pressed')).toBe('false');
   });
 
   it('plays a mood, mixes another in, and takes a lit one out', () => {

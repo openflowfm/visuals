@@ -11,7 +11,7 @@ import { clock } from '../layout/TransportBar.tsx';
 import * as pl from '../playlists.ts';
 import { FX, LISTS, PLAYING_DECK } from '../stories/fixtures.ts';
 import { SHEET_EVENT, sheetOf } from '../views.tsx';
-import type { LiveState } from './live-model.ts';
+import { LEAVE_HINT, type LiveState } from './live-model.ts';
 import { StageDock } from './StageDock.tsx';
 
 /** What the app's commands answer: the bar's meter and audio input, the frame rate, no Link session; nothing else. */
@@ -111,12 +111,32 @@ describe('the Next line', () => {
     expect(within(line as HTMLElement).getByText(live.says.item.name)).toBeTruthy();
     expect(line.textContent).toContain(`every ${PLAYING_DECK.seconds} s`);
     expect(line.textContent).toContain(', from Warm-up');
+    // "every 20 s" reads as when it changes, apart from the name.
+    expect(line.querySelector('.sd-when')!.textContent).toBe(`, changes every ${PLAYING_DECK.seconds} s`);
   });
 
-  it('says nothing comes while held', () => {
+  it('says the preset stays while held', () => {
     const { container } = dock(liveState({ held: true }));
-    expect(container.querySelector('.sd-next-line')!.textContent).toContain('held — nothing changes until you let go of HOLD (H)');
+    expect(container.querySelector('.sd-next-line')!.textContent).toContain('held — it stays until you let go of Hold (H)');
     expect(container.querySelector('.sd-when')).toBeNull();
+  });
+
+  it('says the whole library once, with no stray space or repetition', () => {
+    const lists = { playlists: LISTS.playlists, deck: { ...pl.EMPTY_DECK, current: PLAYING_DECK.current } };
+    const live = liveState({ lists, deck: lists.deck, up: null, says: { kind: 'library' } });
+    const { container } = dock(live);
+    const text = container.querySelector('.sd-next-line')!.textContent!;
+    expect(text).toBe('Next: any preset in the library');
+  });
+});
+
+describe('the hint', () => {
+  it('shows a state (leaving) quietly over the dock, not as an alert', () => {
+    const { container, rerender } = dock(liveState({ hint: LEAVE_HINT }));
+    expect(screen.getByRole('status').textContent).toBe(LEAVE_HINT);
+    expect(screen.queryByRole('alert')).toBeNull();
+    rerender(<StageDock live={liveState({ hint: null })} />);
+    expect((container.querySelector('.sd-hint') as HTMLElement).hidden).toBe(true);
   });
 });
 

@@ -202,8 +202,10 @@ describe('the lights’ popovers and live’s keys', () => {
     expect(editor).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(out);
 
-    // With the popover put away, Esc leaves live.
+    // With the popover put away, Esc still never leaves live: only ⌘⇧L (or ✕) does.
     await user.keyboard('{Escape}');
+    expect(editor).not.toHaveBeenCalled();
+    await user.keyboard('{Meta>}{Shift>}L{/Shift}{/Meta}');
     expect(editor).toHaveBeenCalledOnce();
   });
 
@@ -239,6 +241,6 @@ describe('Go full screen on…', () => {
   it('says the picture will cover this window when there is only one display', () => {
     render(<FullScreenOffer live={liveOf({ status: OUTPUT_OFF, displays: [DISPLAYS[0]] })} />);
     expect(screen.getByRole('button', { name: 'Go full screen on Built-in Retina Display' })).toBeTruthy();
-    expect(screen.getByText('One display: the picture will cover this window. Esc comes back.')).toBeTruthy();
+    expect(screen.getByText('One display: the picture will cover this window. ✕ or ⌘⇧L comes back.')).toBeTruthy();
   });
 });

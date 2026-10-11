@@ -68,6 +68,23 @@
 .sd .sd-banners .sd-notice {
   gap: 8px;
 }
+/* A state over the dock (Hold keeping the preset, leaving asking again): quiet, the panel's colour, no alarm. */
+.sd .sd-banners .sd-hint {
+  max-width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--surface-corner);
+  box-shadow:
+    var(--glass-edge),
+    0 8px 24px rgba(0, 0, 0, 0.35);
+  color: var(--ui);
+  font-size: 12px;
+}
+.sd .sd-banners .sd-hint[hidden] {
+  display: none;
+}
 
 /* The row under the transport: Next takes what's left, the effects keep their size. */
 .sd .sd-row {
@@ -151,6 +168,12 @@
   font-variant-numeric: tabular-nums;
   font-size: 12px;
   font-style: normal;
+}
+/* A dot sets the when apart from the name before it. */
+.sd .sd-when::before {
+  content: '·' / '';
+  margin-right: 10px;
+  color: var(--caption);
 }
 
 /* The effects: the keys, Intensity, More effects. */
