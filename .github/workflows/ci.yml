@@ -156,3 +156,24 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+
+  # The tagging tools' TypeScript: the vocabulary, labels, the label server,
+  # rubric requests, the scorers and the report, on a made-up fixture. tags/ is
+  # its own package; labelling and the rubric need a features run and a key.
+  tags:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tags
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: tags/package-lock.json
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
