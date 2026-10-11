@@ -1,8 +1,7 @@
 /* Live mode, as the Stage: the picture full-bleed under the page (the bench is a
    native view under it, so nothing behind it may paint), and the panels laid
-   over it. The Stage's own parts style themselves (live/); here are the light
-   and output panels' and the crate's rows (Status, OutputPanel, Crate), and
-   focus.
+   over it. The Stage's own parts style themselves (live/); here are the
+   lights' and the output's panels (Status, OutputPanel) and focus.
 
    `.live` itself takes no box: the Stage's shell lays out the window, and
    `.live` only scopes the rules below and carries what Live is doing
@@ -10,16 +9,6 @@
 
 .live {
   display: contents;
-}
-
-/* Only for VoiceOver: words the picture doesn't need. */
-.live-sr {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
 }
 
 /* The status strip: the audio, beat and output lights (no captions), the frame rate, ? ⚙, and ✕ apart. */
@@ -255,206 +244,8 @@
   line-height: 1.45;
 }
 
-/* The crate's panel in its own stories (Crate.stories.tsx): playlists, moods, up next. It scrolls on its own. */
-.live-side {
-  min-height: 0;
-  overflow-y: auto;
-  background: var(--panel);
-  border-left: 1px solid var(--bd3);
-}
-.live-crate {
-  display: flex;
-  flex-direction: column;
-}
-.live-crate-section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  border-bottom: 1px solid var(--bd3);
-}
-.live-crate-section h2 {
-  margin: 0;
-  color: var(--caption);
-  font-size: var(--text-label);
-  font-weight: var(--weight-medium);
-  letter-spacing: var(--track-caps);
-  text-transform: uppercase;
-}
-.live-crate-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.live-crate-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.live-crate-playlist {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-height: 44px;
-  padding: 0 10px;
-  border: 1px solid transparent;
-  border-radius: var(--radius);
-  background: none;
-  color: var(--ui);
-  font: inherit;
-  font-size: var(--text-heading);
-  text-align: left;
-  cursor: pointer;
-  appearance: none;
-}
-.live-crate-playlist:hover {
-  border-color: var(--bd3);
-  color: var(--fg);
-}
-.live-crate-playlist[data-on] {
-  border-color: var(--fg);
-  color: var(--fg);
-  font-weight: var(--weight-medium);
-  box-shadow: var(--edge-left) var(--green);
-}
-.live-crate-smart {
-  flex: none;
-  color: var(--caption);
-  font-size: var(--text-label);
-  font-weight: var(--weight-normal);
-  padding: 1px 6px;
-  border: 1px solid var(--bd3);
-  border-radius: var(--radius-pill);
-  letter-spacing: var(--track-label);
-}
-.live-crate-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.live-crate-chip {
-  min-height: 44px;
-  padding: 0 16px;
-  border: 1px solid var(--bd3);
-  border-radius: var(--radius-pill);
-  background: none;
-  color: var(--ui);
-  font: inherit;
-  font-size: var(--text-body);
-  cursor: pointer;
-  appearance: none;
-}
-.live-crate-chip:hover {
-  color: var(--fg);
-}
-.live-crate-chip[data-on] {
-  border-color: var(--fg);
-  background: var(--fg);
-  color: var(--bg);
-  font-weight: var(--weight-medium);
-}
-.live-crate-row {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 44px;
-  padding: 0 10px;
-  border-radius: var(--radius);
-  color: var(--ui);
-  font-size: var(--text-body);
-}
-.live-crate-row[data-missing] {
-  color: var(--detail);
-  opacity: 0.6;
-}
-.live-crate-row[data-dragging] {
-  opacity: 0.35;
-}
-/* The ≡ handle, over the row's right end, only while the row is hovered, focused or dragged. */
-.live-crate-handle {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  border-radius: var(--radius);
-  background: var(--panel);
-  color: var(--detail);
-  font-size: var(--text-heading);
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
-  opacity: 0;
-}
-.live-crate-row:is(:hover, :focus-within, [data-dragging]) .live-crate-handle {
-  opacity: 1;
-}
-.live-crate-row:has(.live-crate-handle):is(:hover, :focus-visible) {
-  background: var(--sel);
-}
-.live-crate-row:has(.live-crate-handle):is(:hover, :focus-visible) .live-crate-handle {
-  background: var(--sel);
-}
-.live-crate-handle:active {
-  cursor: grabbing;
-}
-/* "Show all": a small disclosure under the rows. */
-.live-crate-more {
-  align-self: flex-start;
-  min-height: 44px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: var(--radius);
-  background: none;
-  color: var(--detail);
-  font: inherit;
-  font-size: var(--text-body);
-  cursor: pointer;
-  appearance: none;
-}
-.live-crate-more::after {
-  content: ' ▾';
-}
-.live-crate-more[aria-expanded='true']::after {
-  content: ' ▴';
-}
-.live-crate-more:hover {
-  color: var(--fg);
-}
-.live-crate-drop {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 2px;
-  border-radius: 1px;
-  background: var(--fg);
-  pointer-events: none;
-}
-.live-crate-drop[data-at='before'] {
-  top: -2px;
-}
-.live-crate-drop[data-at='after'] {
-  bottom: -2px;
-}
-.live-crate-note {
-  margin: 0;
-  color: var(--detail);
-  font-size: var(--text-body);
-  line-height: 1.45;
-}
-
 /* Focus on every control here, in the ring every view uses (access.css). */
-.live :is(.live-status-light, .live-status-btn, .live-tap, .live-crate-playlist, .live-crate-chip, .live-crate-row, .live-crate-more, .wdg-button-body, [role='slider'], [role='radio']):focus-visible {
+.live :is(.live-status-light, .live-status-btn, .live-tap, .wdg-button-body, [role='slider'], [role='radio']):focus-visible {
   outline: 2px solid var(--vf-focus-ring);
   outline-offset: 2px;
 }
