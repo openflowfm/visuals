@@ -60,7 +60,12 @@ describe('the multiplier taper', () => {
     expect(formatMultiplier(1)).toBe('1×');
     expect(formatMultiplier(0.5)).toBe('0.5×');
     expect(formatMultiplier(0.25)).toBe('0.25×');
-    expect(formatMultiplier(2.83)).toBe('2.8×');
+    expect(formatMultiplier(2.83)).toBe('2.83×');
+    expect(formatMultiplier(2)).toBe('2×');
+    expect(formatMultiplier(1.5)).toBe('1.5×');
+    // Adjacent steps above 1× read apart.
+    expect(formatMultiplier(1.059)).toBe('1.06×');
+    expect(formatMultiplier(1.122)).toBe('1.12×');
     expect(formatMultiplier(4)).toBe('4×');
   });
 });

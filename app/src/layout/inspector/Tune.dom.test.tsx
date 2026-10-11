@@ -98,7 +98,7 @@ describe("the inspector's tune for one preset", () => {
     const { rerender } = render(<Inspector {...p} />);
     speed().focus();
     await user.keyboard('{ArrowRight}');
-    await waitFor(() => expect(speed().getAttribute('aria-valuetext')).toBe('1.1×'));
+    await waitFor(() => expect(speed().getAttribute('aria-valuetext')).toBe('1.06×'));
     expect(p.onSet).not.toHaveBeenCalled();
     rerender(<Inspector {...p} subject={prepareRow(CINDER, { tune: { speed: 2 } })} />);
     expect(p.onSet).toHaveBeenCalledWith([BLOOM.key], { tune: { speed: 1.059 } });

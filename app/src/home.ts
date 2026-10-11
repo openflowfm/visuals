@@ -316,9 +316,8 @@ export function playsLike(list: Playlist, total: number): string {
   return [n, movesOn(s.change), s.order === 'shuffle' ? 'shuffled' : 'in order', `crossfade ${Number(s.transition.toFixed(1))} s`, ...look].filter(Boolean).join(' · ');
 }
 
-/** The browser storage keys for what a viewer leaves open on the home: the library's filter chips, and the Now Playing panel in a wide window (before decision 70; the inspector view keeps its panes under home-model.ts's keys). */
+/** The browser storage key for what a viewer leaves open on the home: the library's filter chips (the inspector view keeps its panes under home-model.ts's keys). */
 export const FILTERS_KEY = 'visuals.home.filters';
-export const PANEL_KEY = 'visuals.home.panel';
 
 /** A remembered open-or-closed, `fallback` when nothing was kept or storage can't be read. */
 export function remembered(key: string, fallback: boolean): boolean {

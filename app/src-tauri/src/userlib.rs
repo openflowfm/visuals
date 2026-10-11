@@ -133,7 +133,6 @@ pub struct PresetTune {
     pub sensitivity: Option<f64>,
 }
 
-#[allow(dead_code)] // `speed` and `sensitivity`: until the apply lane fills in `crate::tune`.
 impl PresetTune {
     fn is_empty(&self) -> bool {
         *self == PresetTune::default()
@@ -750,7 +749,6 @@ pub fn data(handle: &AppHandle) -> LibraryData {
 /// The user's own speed and sensitivity for the preset at `path` (absolute, in
 /// one of the preset folders): as made (both 1) when none is kept or the file is
 /// in none of them.
-#[allow(dead_code)] // Until the apply lane fills in `crate::tune`.
 pub fn tune_of(handle: &AppHandle, path: &Path) -> PresetTune {
     tune_in(&crate::pack::folders(handle), &handle.state::<Store>().data.lock().unwrap(), path)
 }

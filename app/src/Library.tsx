@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { KeyboardEvent, PointerEvent, ReactNode } from 'react';
+import type { KeyboardEvent, PointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { FILTERS_KEY, remember, remembered } from './home.ts';
 import { PackOffer } from './PackOffer.tsx';
@@ -76,8 +76,6 @@ export interface HomeLibrary {
   scope: 'library' | 'starred';
   /** The pane's title: "Library", "Starred". */
   title: string;
-  /** The narrow window's source menu, shown in place of the title. */
-  menu?: ReactNode;
   /** Several presets picked in the grid (⌘ or ⇧), or one; for the Now Playing panel. */
   onChosen(chosen: Prepared[]): void;
   /**
@@ -542,7 +540,6 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
   const chipsShown = !empty && filters && !bare;
   const title = home && (
     <div className="lib-head">
-      {home.menu}
       <h1 className="lib-title-head">{home.title}</h1>
       <span className="lib-count" title={filtered ? `${count(shown.length)} of ${count(paneTotal)} presets shown` : undefined}>
         {count(filtered ? shown.length : paneTotal)}

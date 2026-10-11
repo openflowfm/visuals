@@ -54,8 +54,11 @@ export function positionToMultiplier(position: number): number {
   return Math.abs(p) < CENTRE_SNAP ? 1 : 2 ** p;
 }
 
-/** A multiplier as the panel shows it: `0.25×`, `0.5×`, `1×`, `2.8×`. */
+/**
+ * A multiplier as the panel shows it, to two decimals with trailing zeros
+ * trimmed: `0.25×`, `0.5×`, `1×`, `1.06×`, `2.83×`, so the steps either side of
+ * 1× (1.059, 1.122) read apart.
+ */
 export function formatMultiplier(multiplier: number): string {
-  const digits = multiplier < 1 ? 2 : 1;
-  return `${Number(multiplier.toFixed(digits))}×`;
+  return `${Number(multiplier.toFixed(2))}×`;
 }
