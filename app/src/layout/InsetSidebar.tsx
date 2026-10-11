@@ -258,9 +258,7 @@ export function InsetSidebar({ sections, selected, onSelect, collapsed, onToggle
                       <Icon name="plus" size={14} />
                     </button>
                     <button type="button" className="isb-tool" aria-label="add from a file" title="Add from a file: a playlist someone saved" onClick={() => file.current?.click()}>
-                      <span className="isb-tool-glyph" aria-hidden="true">
-                        ⤓
-                      </span>
+                      <Icon name="import" size={14} />
                     </button>
                     <input
                       ref={file}
@@ -388,9 +386,7 @@ export function InsetSidebar({ sections, selected, onSelect, collapsed, onToggle
       {actions?.onSettings && (
         <div className="isb-foot">
           <button type="button" className="isb-settings" title="Settings (⌘,)" onClick={() => actions.onSettings?.()}>
-            <span className="isb-gear" aria-hidden="true">
-              ⚙
-            </span>
+            <Icon className="isb-gear" name="gear" />
             <span className="isb-name">Settings</span>
           </button>
         </div>

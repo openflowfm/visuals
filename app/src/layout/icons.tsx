@@ -36,6 +36,8 @@ export const ICON_NAMES = [
   'close',
   'never',
   'edit',
+  'gear',
+  'import',
   // Live's (the Stage): its pads, lights and header tools.
   'random',
   'hold',
@@ -205,6 +207,16 @@ const GLYPHS: Record<IconName, ReactNode> = {
       <circle cx="10.5" cy="11.25" r="1.75" />
     </>
   ),
+  // A gear: Home's Settings row. A ring for the hub and eight short teeth around it.
+  gear: (
+    <>
+      <circle cx="8" cy="8" r="3.75" />
+      <circle cx="8" cy="8" r="1.25" />
+      <path d="M8 1.75V4.25M8 11.75V14.25M1.75 8H4.25M11.75 8H14.25M3.58 3.58 5.35 5.35M10.65 10.65 12.42 12.42M3.58 12.42 5.35 10.65M10.65 5.35 12.42 3.58" />
+    </>
+  ),
+  // An arrow down into a tray: add (import) from a file.
+  import: <path d="M8 2.25V9.75M4.75 6.5 8 9.75 11.25 6.5M2.75 10.75V12.25A1 1 0 0 0 3.75 13.25H12.25A1 1 0 0 0 13.25 12.25V10.75" />,
   // A four-pointed spark: the effects.
   effects: <path d="M8 1.75Q8.5 7.5 14.25 8Q8.5 8.5 8 14.25Q7.5 8.5 1.75 8Q7.5 7.5 8 1.75Z" />,
   // A waveform's bars: what it hears.
