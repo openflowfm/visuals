@@ -20,6 +20,8 @@
   --stage-lights: 84px;
   --stage-z-panel: 1;
   --stage-z-centre: 2;
+  /* Above the centre: the header's popovers open over "Go full screen on…". */
+  --stage-z-head: 3;
   display: block;
   position: relative;
   height: 100%;
@@ -98,7 +100,7 @@
   top: 0;
   right: 0;
   left: 0;
-  z-index: var(--stage-z-panel);
+  z-index: var(--stage-z-head);
   display: flex;
   align-items: center;
   gap: 8px;

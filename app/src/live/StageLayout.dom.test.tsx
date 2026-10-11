@@ -161,7 +161,7 @@ describe('the crate', () => {
     useSheets(SHEETS.map(css));
     const away = vi.fn();
     render(<Stage onCrateAway={away} />);
-    const nav = screen.getByRole('navigation', { name: 'crate' });
+    const nav = screen.getByRole('navigation', { name: 'playlists and up next' });
     expect(nav.id).toBe(STAGE_CRATE_ID);
     expect(nav.textContent).toBe('Warm-up');
     expect(getComputedStyle(document.querySelector('.stage-head')!).left).not.toBe('0px');
@@ -176,7 +176,7 @@ describe('the crate', () => {
     useSheets(SHEETS.map(css));
     const away = vi.fn();
     const { rerender } = render(<Stage width={800} panels={panelsAtStart(false)} onCrateAway={away} />);
-    expect(screen.queryByRole('navigation', { name: 'crate' })).toBeNull();
+    expect(screen.queryByRole('navigation', { name: 'playlists and up next' })).toBeNull();
     rerender(<Stage width={800} panels={panelsAtStart(true)} onCrateAway={away} />);
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Warm-up' }));
     expect(getComputedStyle(document.querySelector('.stage-crate-cell')!).zIndex).toBe('10');
@@ -192,10 +192,30 @@ describe('the crate', () => {
     expect(away).toHaveBeenCalledTimes(2);
   });
 
+  it('laid over: a press in a sheet, dialog or popover, or Escape while typing, leaves it', () => {
+    const away = vi.fn();
+    render(<Stage width={800} panels={panelsAtStart(true)} onCrateAway={away} />);
+    for (const over of ['<div role="dialog"><button>x</button></div>', '<div class="vf-sheet"><span>x</span></div>', '<div class="vf-pop-panel"><span>x</span></div>']) {
+      const host = document.createElement('div');
+      host.innerHTML = over;
+      document.body.append(host);
+      fireEvent.pointerDown(host.querySelector('button, span')!);
+      host.remove();
+    }
+    for (const field of ['<input>', '<textarea></textarea>', '<select></select>', '<div contenteditable="true"></div>']) {
+      const host = document.createElement('div');
+      host.innerHTML = field;
+      document.body.append(host);
+      expect(fireEvent.keyDown(host.firstElementChild!, { key: 'Escape' })).toBe(true);
+      host.remove();
+    }
+    expect(away).not.toHaveBeenCalled();
+  });
+
   it('starts put away in a narrow window', () => {
     expect(crateModeFor(800, null)).toBe('hidden');
     render(<Stage width={800} />);
-    expect(screen.queryByRole('navigation', { name: 'crate' })).toBeNull();
+    expect(screen.queryByRole('navigation', { name: 'playlists and up next' })).toBeNull();
   });
 });
 
@@ -217,7 +237,7 @@ describe('the panels', () => {
     render(<Stage panels={togglePanels(panelsAtStart(true))} centre={<button type="button">Go full screen</button>} />);
     expect(hole()).toBeTruthy();
     expect(root().getAttribute('data-panels')).toBe('hidden');
-    expect(screen.queryByRole('navigation', { name: 'crate' })).toBeNull();
+    expect(screen.queryByRole('navigation', { name: 'playlists and up next' })).toBeNull();
     expect(screen.queryByRole('region', { name: 'Live controls' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'crate toggle' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Go full screen' })).toBeNull();
@@ -225,6 +245,13 @@ describe('the panels', () => {
     // Still a title bar to drag the window by.
     expect(document.querySelector('.stage-head')!.hasAttribute('data-tauri-drag-region')).toBe(true);
     expect(screen.getByText('notice')).toBeTruthy();
+  });
+
+  it('keeps the header (and its popovers) above the offer', () => {
+    useSheets(SHEETS.map(css));
+    render(<Stage inWindow centre={<p>Go full screen on…</p>} />);
+    const z = (sel: string) => Number(getComputedStyle(document.querySelector(sel)!).zIndex);
+    expect(z('.stage-head')).toBeGreaterThan(z('.stage-centre'));
   });
 
   it('in the window: the offer over the picture, under the header', () => {

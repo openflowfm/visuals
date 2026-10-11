@@ -1,11 +1,22 @@
 import { useEffect, useRef, type RefObject } from 'react';
 import { Preview } from '../views.tsx';
+import { isTyping } from '../shell.ts';
+import { say } from '../words.ts';
 import { crateModeFor, STAGE_CRATE_ID, type CrateMode, type StageLayoutProps } from './stage-model.ts';
 import '../layout/layout.css';
 import './stage.css';
 
 /** What the crate is called to a screen reader. */
-export const CRATE_LABEL = 'crate';
+export const CRATE_LABEL = say('crate');
+
+/** Where a press belongs to something laid over the crate (Settings, More effects, Help, popovers), not outside it. */
+const OVER_CRATE = '[role="dialog"], .vf-sheet, .vf-pop-panel';
+
+/** Typing in a field, where Escape is the field's (liveKeys' `isTyping`, and contenteditable). */
+function typing(e: KeyboardEvent): boolean {
+  const t = e.target;
+  return isTyping(e) || (t instanceof Element && (t.closest('[contenteditable]:not([contenteditable="false"])') != null || (t instanceof HTMLElement && t.isContentEditable)));
+}
 
 /** What the dock's panel is called to a screen reader. */
 export const DOCK_LABEL = 'Live controls';
@@ -62,10 +73,11 @@ function useDismiss(on: boolean, panel: RefObject<HTMLElement | null>, away: () 
       const el = t instanceof Element ? t : t.parentElement;
       const names = el?.closest('[aria-controls]')?.getAttribute('aria-controls')?.split(/\s+/) ?? [];
       if (names.includes(STAGE_CRATE_ID)) return;
+      if (el?.closest(OVER_CRATE)) return;
       latest.current();
     };
     const key = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (e.key !== 'Escape' || e.defaultPrevented || typing(e)) return;
       e.preventDefault();
       latest.current();
     };

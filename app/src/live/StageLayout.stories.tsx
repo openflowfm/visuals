@@ -122,7 +122,7 @@ const picture = (canvas: { getByRole: (role: string, o: { name: RegExp }) => HTM
 /** 1440 × 900: the crate docked over the picture's left edge, the header and the dock beside it, the picture the whole window. */
 export const Wide: Story = {
   play: async ({ canvas }) => {
-    await expect(canvas.getByRole('navigation', { name: 'crate' })).toBeVisible();
+    await expect(canvas.getByRole('navigation', { name: 'playlists and up next' })).toBeVisible();
     await expect(canvas.getByRole('region', { name: 'Live controls' })).toBeVisible();
     const hole = picture(canvas).getBoundingClientRect();
     await expect([hole.left, hole.top, hole.width, hole.height]).toEqual([0, 0, 1440, 900]);
@@ -133,11 +133,11 @@ export const Wide: Story = {
 export const Narrow: Story = {
   args: { width: 800 },
   play: async ({ canvas }) => {
-    await expect(canvas.queryByRole('navigation', { name: 'crate' })).toBeNull();
+    await expect(canvas.queryByRole('navigation', { name: 'playlists and up next' })).toBeNull();
     await userEvent.click(canvas.getByRole('button', { name: 'crate' }));
-    await expect(canvas.getByRole('navigation', { name: 'crate' })).toBeVisible();
+    await expect(canvas.getByRole('navigation', { name: 'playlists and up next' })).toBeVisible();
     await userEvent.keyboard('{Escape}');
-    await waitFor(() => expect(canvas.queryByRole('navigation', { name: 'crate' })).toBeNull());
+    await waitFor(() => expect(canvas.queryByRole('navigation', { name: 'playlists and up next' })).toBeNull());
   },
 };
 
@@ -145,7 +145,7 @@ export const Narrow: Story = {
 export const CrateOver: Story = {
   args: { width: 800, crate: true },
   play: async ({ canvas }) => {
-    await expect(canvas.getByRole('navigation', { name: 'crate' })).toBeVisible();
+    await expect(canvas.getByRole('navigation', { name: 'playlists and up next' })).toBeVisible();
     const hole = picture(canvas).getBoundingClientRect();
     await expect([hole.left, hole.width]).toEqual([0, 800]);
   },
