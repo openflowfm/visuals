@@ -138,7 +138,7 @@
       "name": "Tunnel",
       "group": "structure",
       "question": "Which of these are Tunnel: flying into or out of a tunnel or vortex?",
-      "proxy": { "feature": "motion_radial", "direction": "high" },
+      "proxy": { "feature": "motion_radial_strength", "direction": "high" },
       "rubric": "Tunnel: the picture reads as moving through a tunnel, tube or vortex: concentric rings or walls rushing towards or away from a vanishing point. 1 = a clear tunnel; 0.5 = a hint of depth towards a centre; 0 = flat, no sense of travelling into depth."
     },
     {
@@ -146,7 +146,7 @@
       "name": "Spiral",
       "group": "structure",
       "question": "Which of these are Spiral: spiral arms or a spinning twist?",
-      "proxy": { "feature": "motion_swirl", "direction": "high" },
+      "proxy": { "feature": "motion_swirl_strength", "direction": "high" },
       "rubric": "Spiral: spiral arms, a twisting vortex or a swirl winding around a centre are a main element. 1 = an obvious spiral; 0.5 = some twisting around a centre; 0 = no spiral form."
     },
     {
