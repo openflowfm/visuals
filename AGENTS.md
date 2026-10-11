@@ -176,4 +176,16 @@ and its words in `words.ts`. Its stub: `app/src-tauri/src/tune.rs` (`apply_prese
 called from `resume::open_reported` on every preset load, and `retune`, called from
 `userlib::library_set` after a tune changes).
 
+The Stage contract (live mode as the picture full-bleed with Home's inset panels over it)
+adds, as contract files: `app/src/live/live-model.ts` (`LiveState`, the one shape every
+live part is handed, and live's reckonings: intensity, stars, the Next line's name and
+when; Live.tsx re-exports the ones it had) and `app/src/live/stage-model.ts` (the crate
+docked from `STAGE_DOCK_AT` 1100 px or laid over below, `\` hiding the panels and Esc
+showing them before it leaves, and each part's props). Live's glyphs are in
+`layout/icons.tsx`; the help list's Stage-only controls (`crate`, `panels`) show with
+`HelpOverlay`'s `stage`; `liveKeys` takes `panels` and `escape`. `app/src/live/useLive.ts`
+is live's state, read from the app (Live.tsx's, moved). Its stubs, each in the lane's own
+file: `StageLayout.tsx` (the shell), `StageDock.tsx`, `StageCrate.tsx` and `StageHead.tsx`
+(with `FullScreenOffer`), all in `app/src/live/`; Live.tsx mounts them last.
+
 Every agent commit must end with a blank line and a GitHub-compatible co-author trailer naming the agent that actually made it, for example `Co-authored-by: Codex <noreply@openai.com>` or `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Never name an agent that didn't write the commit.

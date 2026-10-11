@@ -22,6 +22,10 @@ export interface LiveKeyTargets {
   help: () => void;
   /** Whether a sheet (⚙ Settings, More effects) or another modal is open over live mode: it takes Esc, so live doesn't leave. */
   sheetOpen?: () => boolean;
+  /** \: hide the Stage's panels, or show them again (only the Stage has them). */
+  panels?: () => void;
+  /** Esc, before it leaves: true when it was used (the Stage's hidden panels shown), so live doesn't leave. */
+  escape?: () => boolean;
 }
 
 /** Whether `target` is inside a dialog, which answers its own Esc. */
@@ -30,8 +34,8 @@ function inDialog(target: EventTarget | null): boolean {
   return typeof el?.closest === 'function' && el.closest('[role="dialog"], [aria-modal="true"]') !== null;
 }
 
-/** An open sheet (⚙ Settings, More effects) or modal; the status bar's popovers are dialogs too, but not modal. */
-const MODAL = '[aria-modal="true"], .vf-sheet, [role="dialog"]:not(.live-status-pop)';
+/** An open sheet (⚙ Settings, More effects) or modal; the status bar's popovers, and Home's (`Popover`, the Stage's lights), are dialogs too, but not modal. */
+const MODAL = '[aria-modal="true"], .vf-sheet, [role="dialog"]:not(.live-status-pop):not(.vf-pop-panel)';
 
 /** Whether a modal (a sheet, the ? overlay) is open in the page. */
 export const modalOpen = (): boolean => typeof document !== 'undefined' && document.querySelector(MODAL) !== null;
@@ -64,7 +68,14 @@ export function liveKeys(to: LiveKeyTargets) {
         // A menu, sheet or dialog that took its own Esc keeps it (decision 17q: the ⚙ sheet takes Esc before live does).
         if (e.defaultPrevented) return;
         e.preventDefault();
+        if (to.escape?.()) return;
         to.editor();
+        return;
+      }
+      if (e.key === '\\') {
+        if (!to.panels) return;
+        e.preventDefault();
+        if (!e.repeat) to.panels();
         return;
       }
       if (e.key === 'ArrowRight' || e.key === 'ArrowDown') to.act({ kind: 'next' });
@@ -114,6 +125,8 @@ export function useLiveKeys(to: LiveKeyTargets) {
       favourite: () => latest.current.favourite(),
       help: () => latest.current.help(),
       sheetOpen: () => (latest.current.sheetOpen ?? modalOpen)(),
+      panels: () => latest.current.panels?.(),
+      escape: () => latest.current.escape?.() === true,
     });
     const keydown = (e: KeyboardEvent) => keys.keydown(e);
     const keyup = (e: KeyboardEvent) => keys.keyup(e);

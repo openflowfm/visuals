@@ -34,6 +34,8 @@ const IDS: Record<ControlId, true> = {
   invert: true,
   mirror: true,
   reset: true,
+  crate: true,
+  panels: true,
 };
 
 const ARROWS: Record<string, string> = { '←': 'ArrowLeft', '→': 'ArrowRight', '↑': 'ArrowUp', '↓': 'ArrowDown' };
@@ -47,7 +49,7 @@ function pressesOf(keys: string): Partial<KeyLike>[] {
       for (let d = Number(range[1]); d <= Number(range[2]); d++) out.push({ key: String(d) });
       continue;
     }
-    const m = /^(⌘?)(⇧?)(Esc|[A-Z0-9?]|[←→↑↓])$/.exec(token);
+    const m = /^(⌘?)(⇧?)(Esc|[A-Z0-9?\\]|[←→↑↓])$/.exec(token);
     if (!m) continue;
     const key = m[3] === 'Esc' ? 'Escape' : (ARROWS[m[3]] ?? m[3]);
     out.push({ key, metaKey: m[1] === '⌘', shiftKey: m[2] === '⇧' || key === '?' });
@@ -58,7 +60,7 @@ function pressesOf(keys: string): Partial<KeyLike>[] {
 function sends(press: Partial<KeyLike>): number {
   let sent = 0;
   const count = () => void sent++;
-  const keys = liveKeys({ editor: count, act: count, fx: count, rate: count, favourite: count, help: count });
+  const keys = liveKeys({ editor: count, act: count, fx: count, rate: count, favourite: count, help: count, panels: count });
   keys.keydown({ key: '', metaKey: false, shiftKey: false, ctrlKey: false, altKey: false, repeat: false, target: null, preventDefault: () => {}, ...press });
   return sent;
 }
@@ -128,6 +130,13 @@ describe('the ? overlay, to VoiceOver', () => {
 
   it('names its ✕ in words', () => {
     expect(html).toContain('aria-label="Close live controls"');
+  });
+
+  it("lists the Stage's own controls only when told the Stage is showing", () => {
+    expect(html).not.toContain('Hide the controls');
+    const stage = renderToStaticMarkup(createElement(HelpOverlay, { open: true, onClose: () => {}, stage: true }));
+    expect(stage).toContain('Hide the controls');
+    expect(stage).toContain('Playlists and up next');
   });
 
   it('draws nothing while closed', () => {

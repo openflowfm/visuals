@@ -33,7 +33,9 @@ export type ControlId =
   | 'punch'
   | 'invert'
   | 'mirror'
-  | 'reset';
+  | 'reset'
+  | 'crate' /* the Stage's crate toggle */
+  | 'panels'; /* the Stage's \: hide or show the panels */
 
 /** Where a control is: the status bar, what's playing, the control grid, the crate, or only on a key. */
 export type Where = 'status' | 'playing' | 'controls' | 'crate' | 'keys';
@@ -45,6 +47,8 @@ export interface Control {
   keys: string;
   does: string;
   where: Where;
+  /** Only in the Stage layout: the ? overlay lists it only when it is told the Stage is showing (`stage`). */
+  stage?: true;
 }
 
 /**
@@ -81,6 +85,8 @@ export const CONTROLS: readonly Control[] = [
   { id: 'invert', where: 'keys', name: 'Invert', keys: 'I', does: "Turns the picture's colours inside out, and back" },
   { id: 'mirror', where: 'keys', name: 'Mirror', keys: 'M', does: 'Mirrors the picture: across, down, four ways, off' },
   { id: 'reset', where: 'keys', name: 'Reset effects', keys: '0', does: 'Turns every effect off' },
+  { id: 'crate', where: 'status', stage: true, name: Say('crate'), keys: '', does: 'Shows or puts away the panel down the left' },
+  { id: 'panels', where: 'keys', stage: true, name: `Hide the ${say('panels')}`, keys: '\\', does: `Only the picture shows in this window; \\ or Esc brings the ${say('panels')} back` },
 ];
 
 /** The headings the overlay groups the controls under, in order. */
@@ -125,12 +131,12 @@ export function padKey(id: ControlId): string {
  * button) when it closes. Esc or ? closes it (before live mode's own keys see
  * them), as do ✕ and a click outside.
  */
-export function HelpOverlay({ open, onClose }: { open: boolean; onClose(): void }): ReactElement | null {
-  return open ? <HelpDialog onClose={onClose} /> : null;
+export function HelpOverlay({ open, onClose, stage = false }: { open: boolean; onClose(): void; /** Live shows the Stage: list its own controls too. */ stage?: boolean }): ReactElement | null {
+  return open ? <HelpDialog onClose={onClose} stage={stage} /> : null;
 }
 
 /** The overlay while it is open: mounted only then, so the focus trap takes focus on open and gives it back on close. */
-function HelpDialog({ onClose }: { onClose(): void }) {
+function HelpDialog({ onClose, stage }: { onClose(): void; stage: boolean }) {
   const panel = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
   close.current = onClose;
@@ -163,7 +169,7 @@ function HelpDialog({ onClose }: { onClose(): void }) {
           <section className="live-help-group" key={g.where}>
             <h3>{g.heading}</h3>
             <dl>
-              {CONTROLS.filter((c) => c.where === g.where).map((c) => (
+              {CONTROLS.filter((c) => c.where === g.where && (stage || !c.stage)).map((c) => (
                 <div className="live-help-row" key={c.id}>
                   <dt>{c.name}</dt>
                   <dd className="live-help-keys">{c.keys ? <kbd>{c.keys}</kbd> : null}</dd>

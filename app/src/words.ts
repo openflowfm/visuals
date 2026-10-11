@@ -62,7 +62,7 @@ export const WORDS = {
   /* Home's layout (decision 67): the panel beside the grid with the preset playing (the code's stage), and the button that opens live mode. */
   stage: 'now playing',
   'live mode': 'go live',
-  /* Home's panes either side of the main column: the one about the preset playing or picked (the code's inspector), and the one with the library and the playlists (Sources.tsx's source list, the code's sidebar). */
+  /* Home's panes either side of the main column: the one about the preset playing or picked (the code's inspector), and the one with the library and the playlists (the sidebar). */
   inspector: 'info',
   'source list': 'sidebar',
   /* The sidebar row menu's item that shows a playlist's card in the inspector. */
@@ -92,6 +92,9 @@ export const WORDS = {
   /* The library's search box ("Search 9,795 presets") and an open group's own ("find an author"). */
   'search box': 'search',
   'find value': 'find',
+  /* Live's Stage layout: the panel down the left with the playlists, moods and up next (the code's crate), and the panels laid over the picture that \ hides (the code's panels). */
+  crate: 'playlists and up next',
+  panels: 'controls',
   /* The crash prompt's reminder (decision 54): the scrub can't catch every name. */
   'crash report check': "Read the text before you submit it: a name the app can't recognise, such as a device's or a display's, may still be in it.",
 } as const;
