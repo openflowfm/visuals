@@ -15,7 +15,8 @@
 //! (`tempo.json.bad`, `.bad.1`, …, as `crate::userlib` does) and reads as nothing
 //! kept. Each of these, and a failed write, becomes a [`Problem`] in plain words
 //! the page shows ([`settings_problems`], and the [`PROBLEMS`] event), as does a
-//! version 1 `playlists.json` whose backup couldn't be written (`crate::playlists`).
+//! version 1 `playlists.json` whose backup couldn't be written (`crate::playlists`)
+//! and a `library.json` or `playlists.json` that couldn't be read ([`user_file_reset`]).
 
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -59,6 +60,7 @@ const SPECS: &[Spec] = &[
     Spec { name: FIRST_RUN, version: 1, what: "first-run setting", wrapped: false, migrate: nothing },
     Spec { name: "played.json", version: 1, what: "recently played list", wrapped: true, migrate: nothing },
     Spec { name: "resume.json", version: 1, what: "place in the show", wrapped: false, migrate: nothing },
+    Spec { name: "timing.json", version: 1, what: "change timing outside playlists", wrapped: false, migrate: nothing },
     Spec { name: "failed.json", version: 1, what: "list of presets that failed", wrapped: false, migrate: nothing },
     Spec { name: "access.json", version: 1, what: "reduced motion setting", wrapped: false, migrate: nothing },
 ];
@@ -203,11 +205,50 @@ fn spec_of(path: &Path) -> &'static Spec {
 
 /// Move `path` aside as damaged, and say so: `why` is how it is wrong.
 fn set_aside(path: &Path, what: &str, why: &str) -> String {
+    moved_aside(path, what, false, why).0
+}
+
+/// Move `path` aside (`.bad`, `.bad.1`, …): what to say, in `what`'s words
+/// (`plural`: "they were reset"), and whether it moved.
+fn moved_aside(path: &Path, what: &str, plural: bool, why: &str) -> (String, bool) {
     let aside = crate::userlib::aside(path);
+    let it = if plural { "they were" } else { "it was" };
     match std::fs::rename(path, &aside) {
-        Ok(()) => format!("Your {what} {why}, so it was reset; the old file is kept as {}.", aside.file_name().unwrap_or_default().to_string_lossy()),
-        Err(e) => format!("Your {what} {why}, and it couldn't be moved aside ({e}); it is ignored for now."),
+        Ok(()) => (format!("Your {what} {why}, so {it} reset; the old file is kept as {}.", aside.file_name().unwrap_or_default().to_string_lossy()), true),
+        Err(e) => (format!("Your {what} {why}, and the file couldn't be moved aside ({e}); it is ignored for now."), false),
     }
+}
+
+/// Why a file of the user's own couldn't be read ([`user_file_reset`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Unreadable {
+    /// It isn't JSON, or doesn't hold what it should.
+    Damaged,
+    /// A newer version of the app wrote it.
+    Newer,
+}
+
+/// A file of the user's own that a module keeps itself (`library.json` in
+/// `crate::userlib`, `playlists.json` in `crate::playlists`) couldn't be read:
+/// move it aside as the small files are (`.bad`, `.bad.1`, …) and tell the page
+/// ([`settings_problems`]), naming the kept file. `what` is what was lost, in
+/// plain words, and `plural` whether it reads as "they". Returns whether it was
+/// moved; when it couldn't be, the message says why.
+pub fn user_file_reset(path: &Path, what: &str, plural: bool, why: Unreadable) -> bool {
+    let was = if plural { "were" } else { "was" };
+    let why = match why {
+        Unreadable::Damaged => format!("{was} damaged"),
+        Unreadable::Newer => format!("{was} saved by a newer version of visual[flow]"),
+    };
+    let (message, moved) = moved_aside(path, what, plural, &why);
+    user_file_problem(path, message);
+    moved
+}
+
+/// Tell the page about a file of the user's own that couldn't be read
+/// ([`user_file_reset`]), in plain words: `message`.
+pub fn user_file_problem(path: &Path, message: String) {
+    report(&path.file_name().unwrap_or_default().to_string_lossy(), Kind::Read, Some(message));
 }
 
 /// Read `path`: its value at the current version, and whether it was moved up from an older one.

@@ -41,6 +41,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 /// The file format's version.
 pub const VERSION: u32 = 2;
 
+/// What the file keeps, in the words the page shows when it is lost ([`crate::settings::user_file_reset`]).
+const WHAT: &str = "playlists";
+
 /// When a playlist moves on to its next preset. The page sees `off` as its own
 /// unit; files (`playlists.json` and shared playlists) write it as
 /// `{ "unit": "seconds", "every": …, "auto": false }` ([`stored`]), which builds
@@ -261,6 +264,9 @@ pub struct Store {
     /// A version 1 file not yet kept as a backup: until it is, nothing is
     /// written over it ([`Store::save`] tries the backup again first).
     pending_backup: Option<Vec<u8>>,
+    /// The file is there but couldn't be read, nor moved aside: the playlists
+    /// are kept in memory only, and [`Store::save`] never writes over it.
+    kept_off: bool,
 }
 
 /// One playlist item as the page shows it.
@@ -322,6 +328,15 @@ pub struct Exported {
     pub text: String,
 }
 
+/// An imported playlist ([`Store::import`]): its id, the name it got, and, when
+/// that isn't the file's (a playlist had it already), what to tell the user.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct Imported {
+    pub id: String,
+    pub name: String,
+    pub renamed: Option<String>,
+}
+
 /// Where playlists live unless `OPENFLOW_VISUALS_PLAYLISTS` says otherwise.
 pub fn default_file() -> PathBuf {
     file_from(std::env::var_os("OPENFLOW_VISUALS_PLAYLISTS"), &crate::settings::dir())
@@ -373,12 +388,17 @@ impl Store {
     /// hashing the items whose files are there. Settings out of their limits
     /// (a hand-edited file) are brought within them.
     pub fn open(file: PathBuf, library: PathBuf) -> Store {
-        let mut store = Store { file, folders: vec![library], lists: Vec::new(), pending_backup: None };
+        let mut store = Store { file, folders: vec![library], lists: Vec::new(), pending_backup: None, kept_off: false };
         let bytes = match std::fs::read(&store.file) {
             Ok(bytes) => bytes,
-            Err(_) => return store,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return store,
+            Err(e) => {
+                crate::settings::user_file_problem(&store.file, format!("Couldn't read your {WHAT} ({e}), so they are left out for now."));
+                store.kept_off = true;
+                return store;
+            }
         };
-        let problem = match serde_json::from_slice::<File>(&bytes) {
+        let why = match serde_json::from_slice::<File>(&bytes) {
             Ok(f) if f.version == VERSION => {
                 store.lists = checked(f.playlists);
                 return store;
@@ -391,12 +411,17 @@ impl Store {
                 }
                 return store;
             }
-            Ok(f) => format!("is version {}, newer than {VERSION}", f.version),
-            Err(e) => format!("does not parse ({e})"),
+            Ok(f) => {
+                eprintln!("playlists: {} is version {}, newer than {VERSION}", store.file.display(), f.version);
+                crate::settings::Unreadable::Newer
+            }
+            Err(e) => {
+                eprintln!("playlists: {} does not parse ({e})", store.file.display());
+                crate::settings::Unreadable::Damaged
+            }
         };
-        let aside = crate::userlib::aside(&store.file);
-        eprintln!("playlists: {} {problem}; moved to {}", store.file.display(), aside.display());
-        let _ = std::fs::rename(&store.file, &aside);
+        // Not moved aside: kept in memory only, so nothing is saved over it.
+        store.kept_off = !crate::settings::user_file_reset(&store.file, WHAT, true, why);
         store
     }
 
@@ -463,8 +488,12 @@ impl Store {
 
     /// Write the whole file, through a temporary file so a crash never leaves
     /// half of one. A version 1 file not yet backed up is kept first, or nothing
-    /// is written.
+    /// is written. A file that couldn't be read nor moved aside is never
+    /// written over: the playlists stay in memory only, as the page was told.
     pub fn save(&mut self) -> Result<(), String> {
+        if self.kept_off {
+            return Ok(());
+        }
         if let Some(dir) = self.file.parent() {
             std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
         }
@@ -682,11 +711,23 @@ impl Store {
         Ok(Exported { file_name: format!("{}.visualflow.json", safe.trim()), text: serde_json::to_string_pretty(&shared).map_err(|e| e.to_string())? })
     }
 
-    /// Add the playlist a shared file's `text` holds, as a new playlist; returns its id.
+    /// `name`, or when a playlist is already called that (in any case) the first
+    /// of "`name` 2", "`name` 3", … that isn't.
+    fn free_name(&self, name: &str) -> String {
+        let taken = |n: &str| self.lists.iter().any(|l| l.name.to_lowercase() == n.to_lowercase());
+        if !taken(name) {
+            return name.to_string();
+        }
+        (2..).map(|n| format!("{name} {n}")).find(|n| !taken(n)).expect("some number is free")
+    }
+
+    /// Add the playlist a shared file's `text` holds, as a new playlist ([`Imported`]).
+    /// A name already taken gets a number ("Warm up 2"), so an import never
+    /// makes two playlists of one name; [`Imported::renamed`] says so.
     /// Items whose file isn't where it says are kept, to be found again by their hash.
     /// Item paths are only ever inside the library folders: a file naming an
     /// absolute path or one through `..` is refused. A smart playlist keeps no items.
-    pub fn import(&mut self, text: &str) -> Result<String, String> {
+    pub fn import(&mut self, text: &str) -> Result<Imported, String> {
         let shared: Shared = serde_json::from_str(text).map_err(|e| format!("not a playlist file ({e})"))?;
         if shared.format != SHARED_FORMAT {
             return Err("not a visual[flow] playlist file".into());
@@ -716,9 +757,11 @@ impl Store {
             .collect();
         let query = if shared.kind == Kind::Smart { shared.query } else { None };
         let id = new_id();
+        let free = self.free_name(&name);
+        let renamed = (free != name).then(|| format!("A playlist called “{name}” was already here, so this one is “{free}”."));
         // Never a starter: an imported playlist is the user's own.
-        self.lists.push(Playlist { id: id.clone(), name, kind: shared.kind, query, settings, presets, starter: None });
-        Ok(id)
+        self.lists.push(Playlist { id: id.clone(), name: free.clone(), kind: shared.kind, query, settings, presets, starter: None });
+        Ok(Imported { id, name: free, renamed })
     }
 }
 
@@ -861,7 +904,7 @@ mod tests {
         assert_eq!(views.iter().map(|v| v.starter.as_deref()).collect::<Vec<_>>(), [Some("calm"), None, None]);
         let shared = s.export(&ours).unwrap();
         assert!(!shared.text.contains("starter"), "{}", shared.text);
-        let copy = s.import(&shared.text).unwrap();
+        let copy = s.import(&shared.text).unwrap().id;
         assert_eq!(s.find(&copy).unwrap().starter, None, "an imported copy is the user's own");
         std::fs::remove_dir_all(dir).unwrap();
     }
@@ -932,8 +975,11 @@ mod tests {
         let shared: Shared = serde_json::from_str(&out.text).unwrap();
         assert_eq!(shared.items, [SharedItem { path: "a/one.milk".into(), hash: Some(engine::index::hash(b"")) }]);
         let b = s.import(&out.text).unwrap();
-        let (one, two) = (&s.lists[0], s.find(&b).unwrap());
-        assert_eq!((two.name.as_str(), two.settings.order, &two.presets), (one.name.as_str(), Order::Shuffle, &one.presets));
+        let (one, two) = (&s.lists[0], s.find(&b.id).unwrap());
+        assert_eq!((two.settings.order, &two.presets), (Order::Shuffle, &one.presets));
+        // Its name was taken, so it gets a number, and the result says so.
+        assert_eq!((two.name.as_str(), b.name.as_str()), ("Warm / up 2", "Warm / up 2"));
+        assert_eq!(b.renamed.as_deref(), Some("A playlist called “Warm / up” was already here, so this one is “Warm / up 2”."));
         assert!(s.import("{}").is_err());
         assert!(s.import(&out.text.replace(SHARED_FORMAT, "other")).is_err());
         std::fs::remove_dir_all(dir).unwrap();
@@ -1027,13 +1073,67 @@ mod tests {
         let shared: Shared = serde_json::from_str(&text).unwrap();
         assert_eq!(shared.items, [SharedItem { path: "far.milk".into(), hash: Some(engine::index::hash(b"[preset00]\n")) }]);
         // And comes back in as that, to be found by its hash.
-        let b = s.import(&text).unwrap();
+        let b = s.import(&text).unwrap().id;
         assert_eq!(s.find(&b).unwrap().presets[0].hash, shared.items[0].hash);
 
         // A smart playlist's file keeps no items.
         let smart = format!(r#"{{"format":"{SHARED_FORMAT}","version":1,"name":"s","kind":"smart","query":{{"text":"warm"}},"items":[{{"path":"a/one.milk"}}]}}"#);
-        let id = s.import(&smart).unwrap();
+        let id = s.import(&smart).unwrap().id;
         assert!(s.find(&id).unwrap().presets.is_empty());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn an_import_never_takes_a_name_already_there() {
+        let dir = temp();
+        let mut s = Store::open(dir.join("p.json"), dir.join("lib"));
+        let file = |name: &str| format!(r#"{{"format":"{SHARED_FORMAT}","version":1,"name":{},"items":[]}}"#, serde_json::to_string(name).unwrap());
+        let first = s.import(&file(" Warm up ")).unwrap();
+        assert_eq!((first.name.as_str(), first.renamed), ("Warm up", None), "a free name is kept as it is");
+        s.create("Warm up 2").unwrap();
+        // Taken in another case, and its "2" too: the first number free.
+        let again = s.import(&file("warm UP")).unwrap();
+        assert_eq!(again.name, "warm UP 3");
+        assert_eq!(again.renamed.as_deref(), Some("A playlist called “warm UP” was already here, so this one is “warm UP 3”."));
+        let names: Vec<_> = s.lists.iter().map(|l| l.name.as_str()).collect();
+        assert_eq!(names, ["Warm up", "Warm up 2", "warm UP 3"]);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn an_unreadable_file_is_said_to_the_page() {
+        let dir = temp();
+        let file = dir.join("said-playlists.json");
+        let said = || crate::settings::settings_problems().into_iter().find(|p| p.file == "said-playlists.json").map(|p| p.message);
+        std::fs::write(&file, "{ not json").unwrap();
+        Store::open(file.clone(), dir.join("lib"));
+        assert_eq!(said().as_deref(), Some("Your playlists were damaged, so they were reset; the old file is kept as said-playlists.json.bad."));
+        std::fs::write(&file, r#"{"version":3,"playlists":[]}"#).unwrap();
+        Store::open(file.clone(), dir.join("lib"));
+        assert_eq!(said().as_deref(), Some("Your playlists were saved by a newer version of visual[flow], so they were reset; the old file is kept as said-playlists.json.bad.1."));
+        // One that can't be read at all (a folder) is left alone, and said too.
+        std::fs::create_dir_all(&file).unwrap();
+        assert!(Store::open(file.clone(), dir.join("lib")).lists.is_empty());
+        assert!(file.is_dir());
+        assert!(said().unwrap().starts_with("Couldn't read your playlists ("), "{:?}", said());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_file_that_cant_be_moved_aside_is_never_saved_over() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = temp();
+        let file = dir.join("p.json");
+        std::fs::write(&file, "{ not json").unwrap();
+        // A folder that can't be written to: the file reads, but can't be renamed.
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o555)).unwrap();
+        let mut s = Store::open(file.clone(), dir.join("lib"));
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(s.lists.is_empty());
+        assert!(s.save().is_ok());
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "{ not json");
+        assert!(!dir.join("p.json.bad").exists());
         std::fs::remove_dir_all(dir).unwrap();
     }
 
