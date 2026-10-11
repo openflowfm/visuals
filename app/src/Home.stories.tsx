@@ -33,8 +33,12 @@ type Story = StoryObj<typeof meta>;
 export const Wide: Story = {
   globals: { viewport: { value: 'home1440', isRotated: false } },
   play: async ({ canvas, canvasElement }) => {
-    await expect(await canvas.findByRole('list', { name: `${WARM_UP.name}, in the order it plays` })).toBeTruthy();
+    const list = await canvas.findByRole('list', { name: `${WARM_UP.name}, in the order it plays` });
     await heroNamesPlaying(canvasElement);
+    // The tiles carry their names on the picture, and no number: the order is the order.
+    const first = (await within(list).findAllByRole('listitem'))[0];
+    await expect(first.querySelector('.tile-pic .tile-caption .tile-name')).toBeTruthy();
+    await expect(first.querySelector('.home-tile-n')).toBeNull();
   },
 };
 

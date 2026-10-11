@@ -1,14 +1,16 @@
 /* One tile (PresetTile.tsx) for the home's library grid and a playlist's strip
    (decision 68): a 16:9 picture, cover-cropped, with 6px corners and no edge;
-   a 12px name and an 11px author under it. States differ by kind, not by more
-   lines: hover lifts the picture, the selection is a ring with a gap, playing is
-   green (a level badge and ▶ before the name), and the keyboard's tile shows the
-   focus ring. The label lines add up to 39px, which LibraryGrid's `homeLook`
-   counts on. Everything hangs off `.home`: the lab editor keeps library.css. */
+   its 12px name and 11px author on the picture's foot, over a soft scrim that
+   fades up into the picture (no box, no line). States differ by kind, not by
+   more lines: hover lifts the picture (and in the library, the preset moves in
+   it), the selection is a ring with a gap, playing is green (level bars before
+   the name), and the keyboard's tile shows the focus ring. Nothing sits under
+   the picture, which LibraryGrid's `homeLook` counts on (label 0). Everything
+   hangs off `.home`: the lab editor keeps library.css. */
 
 .home .tile {
-  /* The labels' height under the picture: 7 + 16 + 1 + 15. */
-  --tile-label: 39px;
+  /* Nothing under the picture: the name and author are on it. */
+  --tile-label: 0px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -46,6 +48,36 @@
   text-align: center;
   overflow: hidden;
 }
+/* The hovered preset moving (LibraryGrid's TileMotion): over the thumbnail, under the name, faded in with its first picture. */
+.home .tile-motion {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 160ms ease;
+  pointer-events: none;
+}
+.home .tile-motion[data-drawn] {
+  opacity: 1;
+}
+
+/* The name and author on the picture's foot: white over a scrim that is darkest
+   at the edge and gone by the middle, so a bright picture or a dark one reads
+   the same, and the picture above stays whole. A shadow on the letters carries
+   the rest. Room on the right for a chip that sits on the same line. */
+.home .tile-caption {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  flex-direction: column;
+  padding: 22px 9px 7px;
+  background: linear-gradient(to top, rgb(0 0 0 / 0.66), rgb(0 0 0 / 0.38) 45%, rgb(0 0 0 / 0));
+  color: #fff;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.5);
+  pointer-events: none;
+}
 .home .tile-name,
 .home .tile-by {
   display: block;
@@ -54,16 +86,21 @@
   text-overflow: ellipsis;
 }
 .home .tile-name {
-  margin-top: 7px;
-  color: var(--ui);
   font-size: 12px;
+  font-weight: 500;
   line-height: 16px;
 }
 .home .tile-by {
-  margin-top: 1px;
-  color: var(--caption);
+  color: rgb(255 255 255 / 0.72);
   font-size: 11px;
-  line-height: 15px;
+  line-height: 14px;
+}
+/* A chip at the bottom right (failed !, the strip's "next") keeps the name and author clear of it. */
+.home .tile[data-failed] .tile-caption {
+  padding-right: 28px;
+}
+.home .tile[data-next] .tile-caption {
+  padding-right: 54px;
 }
 
 /* Hover: the picture lifts, no line. */
@@ -85,47 +122,33 @@
   outline-offset: 2px;
 }
 
-/* Playing: green. A level badge on the picture, ▶ before the name. */
+/* Playing: green level bars before the name, which goes bold. */
 .home .tile[data-playing] .tile-name {
-  color: var(--fg);
-  font-weight: 600;
-}
-.home .tile[data-playing] .tile-name::before {
-  content: '▶';
-  margin-right: 5px;
-  color: var(--playing);
-  font-size: 9px;
-  vertical-align: 1px;
+  font-weight: 650;
 }
 .home .tile-live {
-  position: absolute;
-  left: 7px;
-  bottom: 7px;
-  display: flex;
+  display: inline-flex;
   align-items: flex-end;
   gap: 2px;
-  box-sizing: content-box;
-  height: 12px;
-  padding: 3px 5px;
-  border-radius: 5px;
-  background: rgb(0 0 0 / 0.55);
-  backdrop-filter: blur(6px);
-  pointer-events: none;
+  height: 10px;
+  margin-right: 6px;
+  vertical-align: -1px;
 }
 .home .tile-live i {
   width: 2px;
-  height: 6px;
+  height: 5px;
   border-radius: 1px;
   background: var(--playing);
+  box-shadow: 0 0 2px rgb(0 0 0 / 0.5);
 }
 .home .tile-live i:nth-child(2) {
   height: 10px;
 }
 .home .tile-live i:nth-child(3) {
-  height: 4px;
+  height: 3px;
 }
 .home .tile-live i:nth-child(4) {
-  height: 8px;
+  height: 7px;
 }
 
 /* Starred: a white star, top left. */
@@ -158,9 +181,11 @@
   opacity: 0.55;
 }
 /* Never played: quieter. */
-.home .tile[data-hidden] .tile-pic img,
-.home .tile[data-hidden] .tile-name {
+.home .tile[data-hidden] .tile-pic img {
   opacity: 0.4;
+}
+.home .tile[data-hidden] .tile-caption {
+  opacity: 0.6;
 }
 
 /* Quick add: ✓ on a preset already in the playlist being filled, top right where + would be (+ is off while adding). */
@@ -242,7 +267,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(var(--tile-min), 1fr));
   align-content: start;
-  gap: 16px 12px;
+  gap: 12px;
   flex: 1;
   min-height: 0;
   margin: 0;
@@ -260,8 +285,7 @@
   outline: 2px solid var(--vf-focus-ring);
   outline-offset: 2px;
 }
-/* Its place in the playlist, top left; "next" a quiet chip, bottom right. */
-.home .home-tile-n,
+/* "next": a quiet chip, bottom right. (Its place in the playlist is said, not shown: the order shows it.) */
 .home .home-tile-next {
   position: absolute;
   color: var(--fg);
@@ -269,18 +293,6 @@
   background: rgb(0 0 0 / 0.55);
   backdrop-filter: blur(6px);
   pointer-events: none;
-}
-.home .home-tile-n {
-  top: 6px;
-  left: 6px;
-  padding: 1px 6px;
-  border-radius: 5px;
-  font-family: var(--font-num);
-  font-variation-settings: var(--font-num-axes);
-  font-variant-numeric: tabular-nums;
-  font-size: 10px;
-}
-.home .home-tile-next {
   bottom: 7px;
   right: 7px;
   padding: 1px 8px;
@@ -313,9 +325,7 @@
 .home .home-tile-tools .wdg-button-body:hover {
   background: rgb(0 0 0 / 0.75);
 }
-.home .home-tile[data-missing] .tile-pic,
-.home .home-tile[data-missing] .tile-name,
-.home .home-tile[data-missing] .tile-by {
+.home .home-tile[data-missing] .tile-pic {
   opacity: 0.4;
 }
 .home .home-tile[data-dragged] {

@@ -38,17 +38,24 @@ describe('layout', () => {
 });
 
 describe('the home’s look (decision 68)', () => {
-  it('spaces tiles 12 px across and 16 px down, on the main pane’s padding', () => {
-    expect(homeLook()).toMatchObject({ gap: 12, rowGap: 16, padX: 22 });
+  it('spaces tiles 12 px across and down, on the main pane’s padding', () => {
+    expect(homeLook()).toMatchObject({ gap: 12, rowGap: 12, padX: 22 });
     expect(homeLook(16).padX).toBe(16);
   });
 
-  it('counts a 16:9 picture and the name and author lines in a row', () => {
+  it('counts only the 16:9 picture in a row: the name and author are on it', () => {
     // The main pane at 1440 px with the panel open: 1440 − 220 − 340.
     const l = layout(880, 100, 150, homeLook(22));
+    expect(homeLook().label).toBe(0);
     expect(l.columns).toBe(5);
     expect(l.tile).toBeCloseTo((880 - 44 - 4 * 12) / 5);
-    expect(l.rowHeight).toBe(Math.round((l.tile * 9) / 16 + 39 + 16));
+    expect(l.rowHeight).toBe(Math.round((l.tile * 9) / 16 + 12));
+  });
+
+  it('fits more rows in a view than with the labels under the picture', () => {
+    const l = layout(880, 100, 150, homeLook(22));
+    const before = Math.round((l.tile * 9) / 16 + 39 + 16);
+    expect(l.rowHeight).toBeLessThan(before);
   });
 
   it('has three across at 900 px with the panel open', () => {

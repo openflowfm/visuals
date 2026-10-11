@@ -41,16 +41,23 @@ describe('tileBy', () => {
 describe('PresetTile', () => {
   const html = (playing: boolean) => renderToStaticMarkup(createElement(PresetTile, { as: 'li', className: 'home-tile', thumbnail: 'thumb:x', name: 'Aurora', by: 'geiss', playing, star: true }));
 
-  it('is a 16:9 picture with a name and an author line under it', () => {
+  it('is a 16:9 picture with its name and author on it, nothing under it', () => {
     expect(html(false)).toMatch(/^<li class="tile home-tile"><div class="tile-pic"><img src="thumb:x"/);
-    expect(html(false)).toContain('<span class="tile-name">Aurora</span><span class="tile-by">geiss</span>');
+    expect(html(false)).toContain('<span class="tile-caption"><span class="tile-name">Aurora</span><span class="tile-by">geiss</span></span>');
+    expect(html(false)).toMatch(/<\/div><\/li>$/);
     expect(html(false)).toContain('tile-star');
   });
 
-  it('marks the one playing, with a level badge', () => {
+  it('marks the one playing, with level bars before its name', () => {
     expect(html(true)).toContain('data-playing=""');
-    expect(html(true)).toContain('class="tile-live"');
+    expect(html(true)).toMatch(/<span class="tile-name"><span class="tile-live" aria-hidden="true">(<i><\/i>){4}<\/span>Aurora<\/span>/);
     expect(html(false)).not.toContain('data-playing');
     expect(html(false)).not.toContain('tile-live');
+  });
+
+  it('leaves out an empty author line, and puts the moving preset between the thumbnail and the name', () => {
+    const out = renderToStaticMarkup(createElement(PresetTile, { thumbnail: 'thumb:x', name: 'Aurora', by: '', motion: createElement('canvas', { className: 'tile-motion' }) }));
+    expect(out).not.toContain('tile-by');
+    expect(out).toMatch(/<img [^>]*\/><canvas class="tile-motion"><\/canvas><span class="tile-caption">/);
   });
 });

@@ -152,6 +152,7 @@ export function handler(w: World) {
           hash: null,
         };
   };
+  let hoverTicket = 0;
 
   function act(action: Args) {
     const deck = w.lists.deck;
@@ -431,6 +432,11 @@ export function handler(w: World) {
       case 'test_sound':
         return null;
       case 'previews':
+        return new ArrayBuffer(0);
+      // A hover gets a ticket but never a picture: an empty reply is "no new frame", so the tile keeps its thumbnail.
+      case 'hover_preview':
+        return ++hoverTicket;
+      case 'hover_frame':
         return new ArrayBuffer(0);
       case 'audio_sources':
         return w.sources;
