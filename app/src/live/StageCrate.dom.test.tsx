@@ -41,6 +41,7 @@ function liveOf(lists: pl.Lists | null, act = vi.fn()): LiveState {
     setIntensity: noop,
     favourite: noop,
     rate: noop,
+    since: 0,
   };
 }
 
