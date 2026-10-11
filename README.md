@@ -76,8 +76,8 @@ nudge or reset in live mode's Link panel.
 
 ### Live mode
 
-Live mode is the show: the output full screen on a display of your choice (remembered for
-next time), performance effects (strobe, blackout, punch, freeze, mirror, speed, trails…)
+Live mode is the show: it plays in the window, and **Go full screen on…** puts the
+picture full screen on a display of your choice (remembered for next time), performance effects (strobe, blackout, punch, freeze, mirror, speed, trails…)
 with keys, playlists that move on by themselves, and **stay on this one** to hold a
 preset. Hold Esc for 3 s, or press ⌘⇧L, to leave it.
 
@@ -146,8 +146,8 @@ library data and the small files, not the presets or the playlists.
 | variable | what it does |
 |---|---|
 | `VISUALS_PRESET=<path>` | start on that preset: absolute, or a path in the pack |
-| `VISUALS_LIVE=1` | start in live mode: the output window full screen on a display |
-| `VISUALS_VIEW=<view>` | start in `home`, `library` (the home on its library pane), `live` or `live-windowed` (live in the main window, no output); wins over `VISUALS_LIVE` |
+| `VISUALS_LIVE=1` | start in live mode with the output window full screen on a display (when another one can take it; going live in the app never opens it by itself) |
+| `VISUALS_VIEW=<view>` | start in `home`, `library` (the home on its library pane), `live` (as `VISUALS_LIVE=1`) or `live-windowed` (live in the main window, no output, as going live from the home does); wins over `VISUALS_LIVE` |
 | `VISUALS_DISPLAY=<n>` | the display for the output window, from 0 (otherwise the one chosen last) |
 | `VISUALS_LINK=0` | start with Link off |
 | `VISUALS_LINK_EVERY=<bars>` | start with preset changes on the bar on, every that many bars |

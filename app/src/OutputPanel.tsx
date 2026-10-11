@@ -86,7 +86,7 @@ export function leave() {
 /**
  * Where the live output goes: whether it is showing, the display it fills, how
  * the picture fits it, and a warning when it covers the display with the menu bar. `status` and `show` are
- * Live's, which opens the output on the way in.
+ * Live's, which plays in the window until a display is picked here or in "Go full screen on…".
  */
 export function OutputPanel({ status, show }: { status: output.Status; show: (id: number | null) => void }) {
   const [displays, setDisplays] = useState<output.Display[]>([]);

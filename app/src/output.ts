@@ -24,19 +24,23 @@ export interface Status {
 
 /**
  * The view to start in: `VISUALS_VIEW=home|library|live|live-windowed`, or
- * `live` with `VISUALS_LIVE=1`; null for the page's own start. `live-windowed`
- * plays live in the window, without opening the output on a display, and
- * `library` is the home opened on its library pane.
+ * `live` with `VISUALS_LIVE=1`; null for the page's own start. `live` opens the
+ * output on a display as it starts (the one place live does so by itself, for
+ * launches and headless captures of the output); `live-windowed` plays in the
+ * window, as going live from Home does; `library` is the home opened on its
+ * library pane.
  */
 export type StartView = 'home' | 'library' | 'live' | 'live-windowed';
 export const liveStart = () => invoke<StartView | null>('live_start');
 
 /**
  * The page's view for `liveStart`'s answer, with whether live plays in the window
- * and whether the home opens on its library pane; `home` (the build's own start)
+ * (`windowed` false: it opens the output as it starts, `Live`'s `windowed`) and
+ * whether the home opens on its library pane; `home` (the build's own start)
  * when it names none.
  */
 export function startIn<V extends string>(view: StartView | null, home: V): { view: V | 'live' | 'home'; windowed?: boolean; library?: boolean } {
+  if (view === 'live') return { view: 'live', windowed: false };
   if (view === 'live-windowed') return { view: 'live', windowed: true };
   if (view === 'library') return { view: 'home', library: true };
   return { view: view ?? home };
