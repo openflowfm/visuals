@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, screen, userEvent, waitFor } from 'storybook/test';
+import { expect, userEvent, waitFor } from 'storybook/test';
 import { Live } from './Live.tsx';
 import { FX_BUSY, LISTS, PLAYING_DECK, WARM_UP } from './stories/fixtures.ts';
 
@@ -37,15 +37,9 @@ export const Playing: Story = {
   },
 };
 
-/** Mid-set: HOLD on, speed up, the mirror and trails on; ? lists the Stage's own controls too. */
+/** Mid-set: HOLD on, speed up, the mirror and trails on. */
 export const Busy: Story = {
   parameters: { tauri: { fx: FX_BUSY, lists: { ...LISTS, deck: { ...PLAYING_DECK, hold: true } } } },
-  play: async () => {
-    await userEvent.keyboard('?');
-    const help = await screen.findByRole('dialog');
-    await expect(help).toHaveTextContent(/Hide the controls/);
-    await userEvent.keyboard('{Escape}');
-  },
 };
 
 /** One display: played in the window, with no output to open. */

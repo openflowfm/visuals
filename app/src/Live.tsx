@@ -112,12 +112,13 @@ export function Live({
         dock={<StageDock live={live} />}
         centre={offer ? <FullScreenOffer live={live} /> : undefined}
         onCrateAway={crateAway}
-      />
-      {/* Over the Stage, whatever the panels are doing: the silence banner and the ? overlay. */}
-      <div className="live-banner">
-        <SilenceBanner />
-      </div>
-      <HelpOverlay open={help} onClose={() => setHelp(false)} stage />
+      >
+        {/* Laid over everything: the silence banner and the ? overlay. */}
+        <div className="live-banner">
+          <SilenceBanner />
+        </div>
+        <HelpOverlay open={help} onClose={() => setHelp(false)} stage />
+      </StageLayout>
     </div>
   );
 }

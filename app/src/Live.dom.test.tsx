@@ -28,6 +28,7 @@ vi.mock('./live/StageLayout.tsx', async () => {
         { 'data-testid': 'stage', 'data-shown': String(p.panels.shown), 'data-width': p.width, 'data-in-window': String(p.inWindow) },
         p.panels.shown ? h(Fragment, null, p.head, p.crate, p.dock) : null,
         p.centre,
+        p.children,
       ),
   };
 });
