@@ -1,9 +1,9 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FxAction } from './fx.ts';
 import { HelpOverlay } from './HelpOverlay.tsx';
-import { liveKeys, modalOpen, type KeyLike } from './liveKeys.ts';
+import { LEAVE_HOLD_MS, liveKeys, modalOpen, type KeyLike } from './liveKeys.ts';
 import { MoreEffects } from './MoreEffects.tsx';
 import { Settings } from './Settings.tsx';
 import type { Action } from './playlists.ts';
@@ -64,7 +64,7 @@ describe('liveKeys', () => {
     expect(sent).toEqual([]);
   });
 
-  it('never leaves live on Esc: it takes it (so nothing else does) and does nothing more; ⌘⇧L leaves', () => {
+  it('never leaves live on a press of Esc: it takes it (so nothing else does) and does nothing more; ⌘⇧L leaves at once', () => {
     const { sent, press, prevented } = setup();
     press('Escape', { metaKey: true });
     press('Escape', { altKey: true });
@@ -78,7 +78,7 @@ describe('liveKeys', () => {
     expect(sent).toEqual(['editor']);
   });
 
-  it('leaves Esc to a sheet open over live mode (⚙ Settings, More effects), and still never leaves once it is closed', () => {
+  it('leaves Esc to a sheet open over live mode (⚙ Settings, More effects), and still never leaves on a press once it is closed', () => {
     const sheet = { open: true };
     const { sent, press, prevented } = setup(sheet);
     press('Escape');
@@ -293,6 +293,129 @@ describe('liveKeys', () => {
     esc();
     esc();
     expect(sent).toEqual(['shown']);
+  });
+
+  describe('Esc held to leave', () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    function held() {
+      const sent: string[] = [];
+      const keys = liveKeys({
+        editor: () => sent.push('leave'),
+        act: () => {},
+        fx: () => {},
+        rate: () => {},
+        favourite: () => {},
+        help: () => {},
+        escape: () => (sent.push('escape'), true),
+        holding: (on) => sent.push(on ? 'holding' : 'let go'),
+      });
+      const esc = (more: Partial<KeyLike> = {}) =>
+        keys.keydown({ key: 'Escape', metaKey: false, shiftKey: false, ctrlKey: false, altKey: false, repeat: false, target: null, preventDefault: () => {}, ...more });
+      return { sent, keys, esc };
+    }
+
+    it('leaves after LEAVE_HOLD_MS (3 s), the press doing what it does first', () => {
+      const { sent, esc } = held();
+      expect(LEAVE_HOLD_MS).toBe(3000);
+      esc();
+      expect(sent).toEqual(['escape', 'holding']);
+      vi.advanceTimersByTime(2999);
+      expect(sent).not.toContain('leave');
+      vi.advanceTimersByTime(1);
+      expect(sent).toEqual(['escape', 'holding', 'let go', 'leave']);
+    });
+
+    it('doesn’t leave when let go early, and a later hold starts again from nothing', () => {
+      const { sent, keys, esc } = held();
+      esc();
+      vi.advanceTimersByTime(2500);
+      keys.keyup({ key: 'Escape' });
+      expect(sent).toEqual(['escape', 'holding', 'let go']);
+      vi.advanceTimersByTime(10_000);
+      expect(sent).not.toContain('leave');
+      esc();
+      vi.advanceTimersByTime(2999);
+      expect(sent).not.toContain('leave');
+      vi.advanceTimersByTime(1);
+      expect(sent.at(-1)).toBe('leave');
+    });
+
+    it('times the hold from the first press: repeats neither restart it nor press again', () => {
+      const { sent, esc } = held();
+      esc();
+      for (let t = 0; t < 29; t++) {
+        vi.advanceTimersByTime(100);
+        esc({ repeat: true });
+      }
+      expect(sent).toEqual(['escape', 'holding']);
+      vi.advanceTimersByTime(100);
+      expect(sent).toEqual(['escape', 'holding', 'let go', 'leave']);
+    });
+
+    it('cancels on the window losing focus', () => {
+      const { sent, keys, esc } = held();
+      esc();
+      vi.advanceTimersByTime(2000);
+      keys.blur();
+      vi.advanceTimersByTime(5000);
+      expect(sent).toEqual(['escape', 'holding', 'let go']);
+    });
+
+    it('holds a taken press (the laid-over crate took it) all the same, but not one in a field, a dialog, a sheet or with a modifier', () => {
+      const { sent, keys, esc } = held();
+      esc({ defaultPrevented: true });
+      expect(sent).toEqual(['holding']);
+      keys.keyup({ key: 'Escape' });
+      sent.length = 0;
+      esc({ target: { closest: () => ({}) } as unknown as EventTarget });
+      esc({ metaKey: true });
+      vi.advanceTimersByTime(5000);
+      expect(sent).toEqual([]);
+    });
+
+    it('holds Esc from the output the same way (down and up from Rust)', () => {
+      const { sent, keys } = held();
+      keys.escapeDown();
+      keys.escapeDown();
+      expect(keys.holding).toBe(true);
+      vi.advanceTimersByTime(1000);
+      keys.escapeUp();
+      expect(keys.holding).toBe(false);
+      expect(sent).toEqual(['holding', 'let go']);
+      keys.escapeDown();
+      vi.advanceTimersByTime(3000);
+      expect(sent).toEqual(['holding', 'let go', 'holding', 'let go', 'leave']);
+    });
+
+    it('doesn’t leave when a sheet opened mid-hold (⌘, opening Settings)', () => {
+      const sent: string[] = [];
+      let sheet = false;
+      const keys = liveKeys({
+        editor: () => sent.push('leave'),
+        act: () => {},
+        fx: () => {},
+        rate: () => {},
+        favourite: () => {},
+        help: () => {},
+        sheetOpen: () => sheet,
+        holding: (on) => sent.push(on ? 'holding' : 'let go'),
+      });
+      keys.escapeDown();
+      vi.advanceTimersByTime(1000);
+      sheet = true;
+      vi.advanceTimersByTime(5000);
+      expect(sent).toEqual(['holding', 'let go']);
+    });
+
+    it('stops timing when disposed, telling no one', () => {
+      const { sent, keys, esc } = held();
+      esc();
+      keys.dispose();
+      vi.advanceTimersByTime(5000);
+      expect(sent).toEqual(['escape', 'holding']);
+    });
   });
 
   it('does nothing for a key it has no use for', () => {

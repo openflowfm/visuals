@@ -10,7 +10,7 @@
    translucent would show the picture through unblurred. Everything hangs off
    `.stage`, the root, which also carries `.app.home.lay` (Home's tokens and
    the inset sidebar's rules) and outranks them. Nothing animates but the
-   hint's fade. */
+   hint's fade and Esc's hold to leave (its ring). */
 
 .app.home.lay.stage {
   --stage-crate: calc(var(--lay-side) + 2 * var(--lay-inset));
@@ -207,4 +207,77 @@
 }
 :root[data-reduced-motion] .app.home.lay.stage .stage-hint {
   transition: none;
+}
+
+/* Esc held to leave live: over everything in this window (never the output),
+   an opaque card in the picture's middle with a ring filling over the hold
+   (--stage-leave-hold, from the press) and the line to keep holding. It shows
+   after a beat, so a short Esc (showing the panels) flashes nothing; the ring
+   fills from the press all the same. Presses go through to what's under it. */
+.app.home.lay.stage > .stage-leaving {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: calc(var(--lay-z-overlay) + 2);
+  display: grid;
+  place-items: center;
+  background: none;
+  pointer-events: none;
+  animation: stage-leaving-in 0.15s ease-out 0.2s both;
+}
+.app.home.lay.stage .stage-leaving-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 28px 16px 18px;
+  border-radius: 999px;
+  background: var(--stage-panel);
+  box-shadow: var(--glass-edge), var(--stage-shadow);
+}
+.app.home.lay.stage .stage-leaving-card p {
+  margin: 0;
+  color: var(--fg);
+  font-size: 17px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.app.home.lay.stage .stage-leaving-ring {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  transform: rotate(-90deg);
+}
+.app.home.lay.stage .stage-leaving-ring circle {
+  fill: none;
+  stroke-width: 4;
+}
+.app.home.lay.stage .stage-leaving-track {
+  stroke: var(--caption);
+  opacity: 0.35;
+}
+.app.home.lay.stage .stage-leaving-fill {
+  stroke: var(--fg);
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: stage-leaving-fill var(--stage-leave-hold, 3s) linear forwards;
+}
+@keyframes stage-leaving-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes stage-leaving-fill {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+/* The ring is the hold's progress, not decoration, so it still fills; only the fade goes (the beat before it shows stays). */
+:root[data-reduced-motion] .app.home.lay.stage > .stage-leaving {
+  animation-duration: 0s;
 }

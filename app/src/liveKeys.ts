@@ -6,9 +6,16 @@ import { isTyping } from './shell.ts';
 /** A rating, in stars. */
 export type Stars = 1 | 2 | 3 | 4 | 5;
 
+/**
+ * How long Esc is held to leave live (ms). ✕ and ⌘⇧L leave at once, as they are
+ * deliberate; a short Esc only shows hidden panels or puts a laid-over crate
+ * away, so a stray press mid-set never closes the output.
+ */
+export const LEAVE_HOLD_MS = 3000;
+
 /** Where live mode's keys go. */
 export interface LiveKeyTargets {
-  /** ⌘⇧L: leave live (never Esc, so a stray press mid-set can't close the output). */
+  /** ⌘⇧L at once, or Esc held for `LEAVE_HOLD_MS`: leave live. */
   editor: () => void;
   /** A step: previous, next, random. */
   act: (action: pl.Action) => void;
@@ -24,8 +31,10 @@ export interface LiveKeyTargets {
   sheetOpen?: () => boolean;
   /** \: hide the Stage's panels, or show them again (only the Stage has them). */
   panels?: () => void;
-  /** Esc: shows the Stage's hidden panels or puts a laid-over crate away; true when it was used. Esc never leaves live. */
+  /** Esc pressed: shows the Stage's hidden panels or puts a laid-over crate away; true when it was used. Only Esc held leaves. */
   escape?: () => boolean;
+  /** Esc went down and is being held toward leaving (true), or the hold ended: let go, cancelled or done (false). */
+  holding?: (on: boolean) => void;
 }
 
 /** Whether `target` is inside a dialog, which answers its own Esc. */
@@ -47,11 +56,48 @@ export type KeyLike = Pick<KeyboardEvent, 'key' | 'metaKey' | 'shiftKey' | 'ctrl
  * Live mode's keys, without the window: a press, a release, and the window
  * losing focus. It keeps the hold keys that are down, so their release (or the
  * blur) lets go of the effect they hold.
+ *
+ * Esc held for `holdMs` leaves live (`editor`), timed from its first press:
+ * its repeats don't start it again, and letting go, or the window losing
+ * focus, before then cancels it. `holding` follows the hold, for the progress
+ * the Stage shows. The output's Esc (which the page hears from Rust, as down
+ * and up) holds the same way, through `escapeDown` and `escapeUp`.
  */
-export function liveKeys(to: LiveKeyTargets) {
+export function liveKeys(to: LiveKeyTargets, holdMs = LEAVE_HOLD_MS) {
   const down = new Set<fx.Hit>();
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  /** Esc down: start timing the hold, unless it is already held (a repeat, or held on both windows). */
+  const escapeDown = () => {
+    if (timer !== null) return;
+    to.holding?.(true);
+    timer = setTimeout(() => {
+      timer = null;
+      to.holding?.(false);
+      // A sheet or modal that opened mid-hold (⌘, opens Settings) takes the hold: never leave live under it.
+      if (to.sheetOpen?.()) return;
+      to.editor();
+    }, holdMs);
+  };
+  /** Esc up, or focus lost: the hold ends before leaving. */
+  const escapeUp = () => {
+    if (timer === null) return;
+    clearTimeout(timer);
+    timer = null;
+    to.holding?.(false);
+  };
   return {
     down,
+    escapeDown,
+    escapeUp,
+    /** Whether Esc is being held toward leaving. */
+    get holding() {
+      return timer !== null;
+    },
+    /** Stop timing a hold without telling anyone (the keys are going away). */
+    dispose() {
+      if (timer !== null) clearTimeout(timer);
+      timer = null;
+    },
     keydown(e: KeyLike) {
       if (e.metaKey && e.shiftKey && e.key.toLowerCase() === 'l') {
         e.preventDefault();
@@ -65,12 +111,16 @@ export function liveKeys(to: LiveKeyTargets) {
       // sheet (or close the sheet under someone mid-choice), so ? waits until it is closed. The open help closes itself on ?.
       if (to.sheetOpen?.()) return;
       if (e.key === 'Escape') {
-        // A menu, sheet or dialog that took its own Esc keeps it (decision 17q: the ⚙ sheet takes Esc before live does).
-        if (e.defaultPrevented) return;
-        // Esc shows hidden panels or puts a laid-over crate away, and never leaves live: a stray Esc mid-set mustn't close the
-        // output. Leaving is deliberate: ✕ or ⌘⇧L.
-        e.preventDefault();
-        to.escape?.();
+        // A press shows hidden panels or puts a laid-over crate away; only Esc held leaves, so a stray Esc mid-set can't
+        // close the output. Its repeats change nothing: the hold is timed from the first press.
+        if (e.repeat) return e.preventDefault();
+        // A menu or the laid-over crate that took its own Esc keeps the press (decision 17q: the ⚙ sheet takes Esc before
+        // live does, above); held on, it still leaves.
+        if (!e.defaultPrevented) {
+          e.preventDefault();
+          to.escape?.();
+        }
+        escapeDown();
         return;
       }
       if (e.key === '\\') {
@@ -103,20 +153,33 @@ export function liveKeys(to: LiveKeyTargets) {
       e.preventDefault();
     },
     keyup(e: Pick<KeyboardEvent, 'key'>) {
+      if (e.key === 'Escape') return escapeUp();
       const hit = fx.HOLD_KEYS[e.key.toLowerCase()];
       if (hit && down.delete(hit)) to.fx(fx.hitAction(hit, false));
     },
     blur() {
+      escapeUp();
       for (const hit of down) to.fx(fx.hitAction(hit, false));
       down.clear();
     },
   };
 }
 
-/** {@link liveKeys} on the window, for as long as the component is shown. */
-export function useLiveKeys(to: LiveKeyTargets) {
+/** Esc from outside the window (the output's, from Rust), held the same way as the window's own. */
+export interface EscapeFeed {
+  escapeDown(): void;
+  escapeUp(): void;
+}
+
+/**
+ * {@link liveKeys} on the window, for as long as the component is shown. It
+ * gives back where to feed Esc pressed and let go elsewhere (the output).
+ */
+export function useLiveKeys(to: LiveKeyTargets): EscapeFeed {
   const latest = useRef(to);
   latest.current = to;
+  const live = useRef<ReturnType<typeof liveKeys> | null>(null);
+  const feed = useRef<EscapeFeed>({ escapeDown: () => live.current?.escapeDown(), escapeUp: () => live.current?.escapeUp() });
   useEffect(() => {
     const keys = liveKeys({
       editor: () => latest.current.editor(),
@@ -128,17 +191,28 @@ export function useLiveKeys(to: LiveKeyTargets) {
       sheetOpen: () => (latest.current.sheetOpen ?? modalOpen)(),
       panels: () => latest.current.panels?.(),
       escape: () => latest.current.escape?.() === true,
+      holding: (on) => latest.current.holding?.(on),
     });
+    live.current = keys;
     const keydown = (e: KeyboardEvent) => keys.keydown(e);
     const keyup = (e: KeyboardEvent) => keys.keyup(e);
     const blur = () => keys.blur();
+    // The page hidden (the app left while Esc was held on the output, with no window of ours key to blur): let go too.
+    const visibility = () => {
+      if (document.visibilityState === 'hidden') keys.blur();
+    };
     window.addEventListener('keydown', keydown);
     window.addEventListener('keyup', keyup);
     window.addEventListener('blur', blur);
+    document.addEventListener('visibilitychange', visibility);
     return () => {
+      document.removeEventListener('visibilitychange', visibility);
       window.removeEventListener('keydown', keydown);
       window.removeEventListener('keyup', keyup);
       window.removeEventListener('blur', blur);
+      keys.dispose();
+      live.current = null;
     };
   }, []);
+  return feed.current;
 }

@@ -3,8 +3,8 @@
 //! a Metal layer the bench's render thread presents the same finished picture
 //! to, scaled to fit the display with the preset's aspect kept, black around it
 //! — or, on a display rotated to portrait, drawn at its aspect to fill it
-//! ([`place`]). Esc on it leaves live mode, as Esc in the main window does
-//! (the `output-escape` event).
+//! ([`place`]). Esc held on it for 3 s leaves live mode, as Esc held in the
+//! main window does (the `output-escape` event, told on Esc down and up).
 //!
 //! Live mode in the page opens it and leaving live mode closes it. While it is
 //! open it paces the render thread (it waits for its display's refresh) and the
@@ -146,10 +146,50 @@ pub enum KeyWindow {
     None,
 }
 
-/// Whether a key press leaves live mode from outside the page: Esc, with no
-/// modifier, while the output is open, sent to the output or to no window.
+/// Whether a key press is the output's Esc, which the page hears from outside
+/// itself: Esc, with no modifier, while the output is open, sent to the output
+/// or to no window. A short press shows the page's hidden panels; held for 3 s
+/// it leaves live mode, so the page is told when it goes down and when it comes
+/// up ([`escape_says`]).
 pub fn escapes(key_code: u16, modifiers: bool, to: KeyWindow, open: bool) -> bool {
     key_code == ESC && !modifiers && open && to != KeyWindow::Main
+}
+
+/// One event the output's key monitor sees, for [`escape_says`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum KeyEvent {
+    /// A key went down; `repeat` when it is the key repeating while held.
+    Down { code: u16, modifiers: bool, repeat: bool },
+    /// A key came up.
+    Up { code: u16 },
+    /// The app stopped being the active one: a key held then never comes up here.
+    Deactivated,
+}
+
+/// What the output's Esc tells the page: the `output-escape` event's payload.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum EscapeSays {
+    Down,
+    Up,
+}
+
+/// What one event does about the output's Esc, given whether it is held
+/// (`held`, a down told and no up yet): what to tell the page, if anything, and
+/// whether the event is taken (not passed on to a window).
+///
+/// A first press of the output's Esc ([`escapes`]) is told as down, and its
+/// repeats are taken and not told, so they can't restart the page's timing of
+/// a hold. Once held, Esc coming up anywhere, or the app being left, is told
+/// as up, so a hold never outlives the key; an up on the main window is passed
+/// on too, as its page hears its own keys.
+pub fn escape_says(event: KeyEvent, to: KeyWindow, open: bool, held: bool) -> (Option<EscapeSays>, bool) {
+    match event {
+        KeyEvent::Down { code, modifiers, repeat } if escapes(code, modifiers, to, open) => (if repeat { None } else { Some(EscapeSays::Down) }, true),
+        KeyEvent::Up { code } if code == ESC && held => (Some(EscapeSays::Up), to != KeyWindow::Main),
+        KeyEvent::Deactivated if held => (Some(EscapeSays::Up), false),
+        _ => (None, false),
+    }
 }
 
 fn tell(status: &Status) {
@@ -238,11 +278,14 @@ pub fn output_status(handle: AppHandle) -> Result<Status, String> {
 pub mod native {
     //! The window, kept on the main thread.
 
-    use super::{Display, HANDLE, INSTANCE, KeyWindow, Status, escapes, place, tell};
+    use super::{Display, EscapeSays, HANDLE, INSTANCE, KeyEvent, KeyWindow, Status, escape_says, place, tell};
     use crate::bench;
     use objc2::MainThreadMarker;
     use objc2::rc::Retained;
-    use objc2_app_kit::{NSBackingStoreType, NSColor, NSEvent, NSEventMask, NSEventModifierFlags, NSScreen, NSStatusWindowLevel, NSView, NSWindow, NSWindowCollectionBehavior, NSWindowStyleMask};
+    use objc2_app_kit::{
+        NSBackingStoreType, NSColor, NSEvent, NSEventMask, NSEventModifierFlags, NSEventSubtype, NSEventType, NSScreen, NSStatusWindowLevel, NSView, NSWindow, NSWindowCollectionBehavior,
+        NSWindowStyleMask,
+    };
     use objc2_foundation::{NSNumber, NSPoint, NSRect, NSSize, ns_string};
     use std::cell::RefCell;
     use tauri::{AppHandle, Emitter, Manager};
@@ -490,10 +533,19 @@ pub mod native {
             .expect("output cursor thread");
     }
 
+    thread_local! {
+        /// The output's Esc is held: its down was told and its up not yet.
+        static ESC_HELD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    }
+
     /// Esc while the output is open, sent to the output or to no window (the
     /// output never becomes the key window, so a key pressed after clicking it
-    /// can land on none): tell the page, which leaves live mode as its own Esc
-    /// does (`output-escape`). Esc in the main window is the page's to handle.
+    /// can land on none): tell the page when it goes down and when it comes up
+    /// (`output-escape`, "down" or "up"), so it can time a hold: held 3 s,
+    /// it leaves live mode, as Esc held in the main window does; a short press
+    /// shows the hidden panels. Repeats are taken and not told, and the app
+    /// being left while it is held is told as up ([`escape_says`]). Esc in the
+    /// main window is the page's to handle.
     pub fn watch_escape() {
         let Some(handle) = HANDLE.get() else { return };
         let _ = handle.run_on_main_thread(|| {
@@ -507,17 +559,28 @@ pub mod native {
                     Some(w) if output.as_ref().is_some_and(|o| *o == w) => KeyWindow::Output,
                     Some(_) => KeyWindow::Main,
                 };
-                let modifiers = e.modifierFlags().intersects(NSEventModifierFlags::Command | NSEventModifierFlags::Option | NSEventModifierFlags::Control | NSEventModifierFlags::Shift);
-                if escapes(e.keyCode(), modifiers, to, output.is_some()) {
-                    if let Some(h) = HANDLE.get() {
-                        let _ = h.emit("output-escape", ());
+                // Only a key event has a key code (asking another for one raises).
+                let key = match e.r#type() {
+                    NSEventType::KeyDown => {
+                        let modifiers = e.modifierFlags().intersects(NSEventModifierFlags::Command | NSEventModifierFlags::Option | NSEventModifierFlags::Control | NSEventModifierFlags::Shift);
+                        KeyEvent::Down { code: e.keyCode(), modifiers, repeat: e.isARepeat() }
                     }
-                    return std::ptr::null_mut();
+                    NSEventType::KeyUp => KeyEvent::Up { code: e.keyCode() },
+                    NSEventType::AppKitDefined if e.subtype() == NSEventSubtype::ApplicationDeactivated => KeyEvent::Deactivated,
+                    _ => return event.as_ptr(),
+                };
+                let (says, taken) = escape_says(key, to, output.is_some(), ESC_HELD.get());
+                if let Some(says) = says {
+                    ESC_HELD.set(says == EscapeSays::Down);
+                    if let Some(h) = HANDLE.get() {
+                        let _ = h.emit("output-escape", says);
+                    }
                 }
-                event.as_ptr()
+                if taken { std::ptr::null_mut() } else { event.as_ptr() }
             });
             // SAFETY: the handler returns the event it was given, or null to drop it.
-            let monitor = unsafe { NSEvent::addLocalMonitorForEventsMatchingMask_handler(NSEventMask::KeyDown, &block) };
+            let mask = NSEventMask::KeyDown | NSEventMask::KeyUp | NSEventMask::AppKitDefined;
+            let monitor = unsafe { NSEvent::addLocalMonitorForEventsMatchingMask_handler(mask, &block) };
             // Kept for the app's life.
             std::mem::forget(monitor);
         });
@@ -560,6 +623,34 @@ mod tests {
         assert!(!escapes(ESC, false, KeyWindow::None, false));
         assert!(!escapes(ESC, true, KeyWindow::Output, true));
         assert!(!escapes(36, false, KeyWindow::Output, true));
+    }
+
+    #[test]
+    fn tells_the_outputs_esc_down_and_up_so_a_hold_can_be_timed() {
+        let down = |repeat| KeyEvent::Down { code: ESC, modifiers: false, repeat };
+        let up = KeyEvent::Up { code: ESC };
+        // The first press is told and taken; its repeats are taken and not told.
+        assert_eq!(escape_says(down(false), KeyWindow::Output, true, false), (Some(EscapeSays::Down), true));
+        assert_eq!(escape_says(down(true), KeyWindow::Output, true, true), (None, true));
+        assert_eq!(escape_says(down(false), KeyWindow::None, true, false), (Some(EscapeSays::Down), true));
+        // Coming up while held is told, wherever it lands; on the main window its page hears it too.
+        assert_eq!(escape_says(up, KeyWindow::Output, true, true), (Some(EscapeSays::Up), true));
+        assert_eq!(escape_says(up, KeyWindow::Main, true, true), (Some(EscapeSays::Up), false));
+        // The output closed while held (leaving live): the up is still told.
+        assert_eq!(escape_says(up, KeyWindow::None, false, true), (Some(EscapeSays::Up), true));
+        // Not held: an up is nobody's business here.
+        assert_eq!(escape_says(up, KeyWindow::Output, true, false), (None, false));
+        // The app left while held cancels the hold; not held, it says nothing.
+        assert_eq!(escape_says(KeyEvent::Deactivated, KeyWindow::None, true, true), (Some(EscapeSays::Up), false));
+        assert_eq!(escape_says(KeyEvent::Deactivated, KeyWindow::None, true, false), (None, false));
+        // Esc in the main window, another key, or a modifier: the page's, untouched.
+        assert_eq!(escape_says(down(false), KeyWindow::Main, true, false), (None, false));
+        assert_eq!(escape_says(KeyEvent::Down { code: 36, modifiers: false, repeat: false }, KeyWindow::Output, true, false), (None, false));
+        assert_eq!(escape_says(KeyEvent::Up { code: 36 }, KeyWindow::Output, true, true), (None, false));
+        assert_eq!(escape_says(KeyEvent::Down { code: ESC, modifiers: true, repeat: false }, KeyWindow::Output, true, false), (None, false));
+        // The payload the page reads.
+        assert_eq!(serde_json::to_string(&EscapeSays::Down).unwrap(), "\"down\"");
+        assert_eq!(serde_json::to_string(&EscapeSays::Up).unwrap(), "\"up\"");
     }
 
     #[test]

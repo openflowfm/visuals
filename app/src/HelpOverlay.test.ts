@@ -60,7 +60,8 @@ function pressesOf(keys: string): Partial<KeyLike>[] {
 function sends(press: Partial<KeyLike>): number {
   let sent = 0;
   const count = () => void sent++;
-  const keys = liveKeys({ editor: count, act: count, fx: count, rate: count, favourite: count, help: count, panels: count });
+  // Esc held leaves after a while: its press starting the hold counts.
+  const keys = liveKeys({ editor: count, act: count, fx: count, rate: count, favourite: count, help: count, panels: count, holding: (on) => void (on && sent++) });
   keys.keydown({ key: '', metaKey: false, shiftKey: false, ctrlKey: false, altKey: false, repeat: false, target: null, preventDefault: () => {}, ...press });
   return sent;
 }
@@ -111,8 +112,8 @@ describe('the live controls', () => {
         .flatMap((c) => pressesOf(c.keys))
         .map((p) => p.key?.toLowerCase()),
     );
-    // Esc no longer leaves live: it only brings the hidden panels back, which the panels' row says in words.
-    for (const key of ['arrowleft', 'arrowright', 'arrowup', 'arrowdown', 'r', 'h', 's', 'p', 'b', 't', 'i', 'm', '0', '1', '2', '3', '4', '5', 'f', '?', 'l']) {
+    // Esc held leaves live (the leave row's "hold Esc"); pressed, it brings the hidden panels back, which the panels' row says in words.
+    for (const key of ['escape', 'arrowleft', 'arrowright', 'arrowup', 'arrowdown', 'r', 'h', 's', 'p', 'b', 't', 'i', 'm', '0', '1', '2', '3', '4', '5', 'f', '?', 'l']) {
       expect(named.has(key), key).toBe(true);
     }
   });

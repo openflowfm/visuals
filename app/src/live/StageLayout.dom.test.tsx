@@ -6,7 +6,8 @@
 // in the window) and nothing paints under it; the panels over it paint an
 // opaque surface; a laid-over crate goes on Escape or a press outside it; the
 // panels hidden leave only the picture and the hint; the warning owed darkens
-// the window and makes the controls inert.
+// the window and makes the controls inert; Esc held shows its progress over
+// everything.
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -14,7 +15,8 @@ import { fileURLToPath } from 'node:url';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { crateModeFor, panelsAtStart, STAGE_CRATE_ID, togglePanels, type Panels } from './stage-model.ts';
-import { PANELS_HINT, PANELS_HINT_LABEL, StageLayout } from './StageLayout.tsx';
+import { LEAVING_TEXT, PANELS_HINT, PANELS_HINT_LABEL, StageLayout } from './StageLayout.tsx';
+import { LEAVE_HOLD_MS } from '../liveKeys.ts';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: () => Promise.resolve(null), convertFileSrc: (p: string) => p }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: () => Promise.resolve(() => {}) }));
@@ -43,15 +45,17 @@ interface StageProps {
   panels?: Panels;
   warning?: boolean;
   inWindow?: boolean;
+  leaving?: boolean;
   centre?: ReactNode;
   onCrateAway?(): void;
   onPanels?(): void;
 }
 
 /** The Stage as Live composes it, the parts stand-ins: a toggle naming the crate in the header. */
-function Stage({ width = 1440, panels = panelsAtStart(null), warning = false, inWindow = false, centre, onCrateAway = () => {}, onPanels }: StageProps) {
+function Stage({ width = 1440, panels = panelsAtStart(null), warning = false, inWindow = false, leaving, centre, onCrateAway = () => {}, onPanels }: StageProps) {
   return (
     <StageLayout
+      leaving={leaving}
       onPanels={onPanels}
       width={width}
       panels={panels}
@@ -271,6 +275,35 @@ describe('the panels', () => {
     expect(root().hasAttribute('data-windowed')).toBe(true);
     const offer = screen.getByRole('button', { name: 'Go full screen' });
     expect(offer.parentElement!.getAttribute('data-for')).toBe('offer');
+  });
+});
+
+describe('Esc held to leave', () => {
+  it('shows nothing until Esc is held', () => {
+    render(<Stage />);
+    expect(screen.queryByText(LEAVING_TEXT)).toBeNull();
+    expect(document.querySelector('.stage-leaving')).toBeNull();
+  });
+
+  it('shows its progress over everything, opaque, with the panels hidden too, taking no presses', () => {
+    useSheets(SHEETS.map(css));
+    const { rerender } = render(<Stage width={900} panels={panelsAtStart(true)} leaving />);
+    const status = screen.getByRole('status');
+    expect(status.textContent).toBe(LEAVING_TEXT);
+    expect(status.querySelector('svg.stage-leaving-ring')).toBeTruthy();
+    // Filling over the hold, from the press.
+    expect(status.style.getPropertyValue('--stage-leave-hold')).toBe(`${LEAVE_HOLD_MS}ms`);
+    // Over everything: last in the Stage, and above the laid-over crate's layer (happy-dom can't work out a calc() z-index).
+    expect(document.querySelector('.stage')!.lastElementChild).toBe(status);
+    expect(css('live/stage.css')).toMatch(/\.stage-leaving \{[^}]*z-index: calc\(var\(--lay-z-overlay\) \+ 2\)/);
+    expect(getComputedStyle(status).pointerEvents).toBe('none');
+    const card = status.querySelector('.stage-leaving-card')!;
+    expect(paints(card)).toBe(true);
+    expect(alpha(getComputedStyle(card).backgroundColor)).toBe(1);
+    rerender(<Stage panels={togglePanels(panelsAtStart(true))} leaving />);
+    expect(screen.getByText(LEAVING_TEXT)).toBeTruthy();
+    rerender(<Stage panels={togglePanels(panelsAtStart(true))} />);
+    expect(screen.queryByText(LEAVING_TEXT)).toBeNull();
   });
 });
 

@@ -63,7 +63,7 @@ export const CONTROLS: readonly Control[] = [
   { id: 'fps', where: 'status', name: 'Frames per second', keys: '', does: 'Only shown when the picture runs slow, under 50' },
   { id: 'help', where: 'status', name: 'Help', keys: '?', does: 'This list of every live control' },
   { id: 'settings', where: 'status', name: 'Settings', keys: '', does: 'How the app looks, listens and draws' },
-  { id: 'leave', where: 'status', name: 'Leave live', keys: '⌘⇧L', does: 'Back to your playlists and the library' },
+  { id: 'leave', where: 'status', name: 'Leave live', keys: 'hold Esc, ⌘⇧L', does: 'Back to your playlists and the library: ✕ or ⌘⇧L at once, or hold Esc for 3 seconds' },
   { id: 'now', where: 'playing', name: 'Now', keys: '', does: "What's playing" },
   { id: 'next', where: 'playing', name: 'Next', keys: '', does: 'What comes next, and when, for example in 8 beats' },
   { id: 'fullscreen', where: 'playing', name: 'Go full screen on…', keys: '', does: 'Puts the picture full screen on that display. Shows when it is on one display' },

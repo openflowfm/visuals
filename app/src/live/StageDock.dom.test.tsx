@@ -11,7 +11,10 @@ import { clock } from '../layout/TransportBar.tsx';
 import * as pl from '../playlists.ts';
 import { FX, LISTS, PLAYING_DECK } from '../stories/fixtures.ts';
 import { SHEET_EVENT, sheetOf } from '../views.tsx';
-import { LEAVE_HINT, type LiveState } from './live-model.ts';
+import type { LiveState } from './live-model.ts';
+
+/** A state the hint line could say (leaving no longer asks twice, so none is said today). */
+const HINT = 'Holding this preset until you let go.';
 import { StageDock } from './StageDock.tsx';
 
 /** What the app's commands answer: the bar's meter and audio input, the frame rate, no Link session; nothing else. */
@@ -131,9 +134,9 @@ describe('the Next line', () => {
 });
 
 describe('the hint', () => {
-  it('shows a state (leaving) quietly over the dock, not as an alert', () => {
-    const { container, rerender } = dock(liveState({ hint: LEAVE_HINT }));
-    expect(screen.getByRole('status').textContent).toBe(LEAVE_HINT);
+  it('shows a state quietly over the dock, not as an alert', () => {
+    const { container, rerender } = dock(liveState({ hint: HINT }));
+    expect(screen.getByRole('status').textContent).toBe(HINT);
     expect(screen.queryByRole('alert')).toBeNull();
     rerender(<StageDock live={liveState({ hint: null })} />);
     expect((container.querySelector('.sd-hint') as HTMLElement).hidden).toBe(true);

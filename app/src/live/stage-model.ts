@@ -75,6 +75,8 @@ export interface StageLayoutProps {
   warning?: boolean;
   /** Playing in the window (no output on a display). */
   inWindow: boolean;
+  /** Esc is being held to leave live: the hold's progress shows over everything, panels hidden or not (never on the output). */
+  leaving?: boolean;
   /** The crate panel (`StageCrate`), down the left. */
   crate: ReactNode;
   /** The header's two capsules (`StageHead`), on the traffic lights' line. */
