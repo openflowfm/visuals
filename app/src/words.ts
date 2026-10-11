@@ -35,6 +35,11 @@ export const WORDS = {
   'strobe rate': 'flashes per beat',
   'blackout fade': 'fade to black',
   'fx reset': 'back to normal',
+  /* The inspector's per-preset tuning (library.json's `tune`): its heading, its two sliders, and the button that puts both back to 1. */
+  'preset tune': 'for this preset',
+  'preset speed': 'speed',
+  'preset sensitivity': 'how much it reacts',
+  'preset tune reset': 'as made',
   'output fit': 'how the picture fills the screen',
   /* A deck following the library grid's filter (any query that isn't a mood). */
   'library query': 'the library',

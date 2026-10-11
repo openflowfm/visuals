@@ -13,8 +13,14 @@
 //!     "cream-of-the-crop/Dancer/Whirl/ORB - Xenon.milk": {
 //!       "hash": "<SHA-256 of the file, hex>",
 //!       "star": true, "rating": 4, "tags": ["warm up"], "hidden": false,
-//!       "overrides": { "style": "Hypnotic", "speed": "low" } } } }
+//!       "overrides": { "style": "Hypnotic", "speed": "low" },
+//!       "tune": { "speed": 0.5, "sensitivity": 1.5 } } } }
 //! ```
+//!
+//! `tune` is the user's own pace for the preset ([`PresetTune`]): multipliers,
+//! 0.25–4, on the playlist's or live speed and sensitivity while it plays
+//! (`crate::tune`); one left out is 1, and 1 is never written. (`overrides.speed`
+//! is another thing: the index's speed group, how fast it looks.)
 //!
 //! Every field of a preset but the key may be left out (false, empty, none).
 //! Fields this build doesn't know, at the top, on a preset or in its
@@ -111,6 +117,61 @@ impl Overrides {
     }
 }
 
+/// The slowest and fastest a preset's own speed and sensitivity go, as the live effects' ([`crate::fx`]).
+pub const TUNE_MIN: f64 = 0.25;
+pub const TUNE_MAX: f64 = 4.0;
+
+/// The user's own pace for one preset: multipliers on the playlist's or live
+/// speed and sensitivity while it plays (`crate::tune`). `None` is 1, as made;
+/// 1 is never kept, so a preset put back as made writes nothing.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct PresetTune {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speed: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sensitivity: Option<f64>,
+}
+
+#[allow(dead_code)] // `speed` and `sensitivity`: until the apply lane fills in `crate::tune`.
+impl PresetTune {
+    fn is_empty(&self) -> bool {
+        *self == PresetTune::default()
+    }
+
+    /// The speed multiplier, 1 when none is kept.
+    pub fn speed(&self) -> f64 {
+        self.speed.unwrap_or(1.0)
+    }
+
+    /// The sensitivity multiplier, 1 when none is kept.
+    pub fn sensitivity(&self) -> f64 {
+        self.sensitivity.unwrap_or(1.0)
+    }
+
+    /// Takes each value `other` sets, clamped to [`TUNE_MIN`]–[`TUNE_MAX`]; 1
+    /// takes it off, and a value that isn't a number changes nothing.
+    fn merge(&mut self, other: PresetTune) {
+        fn take(into: &mut Option<f64>, from: Option<f64>) {
+            if let Some(v) = from.filter(|v| v.is_finite()) {
+                *into = tidy(Some(v));
+            }
+        }
+        take(&mut self.speed, other.speed);
+        take(&mut self.sensitivity, other.sensitivity);
+    }
+
+    /// As [`PresetTune::merge`] keeps it: in range, and 1 or a value that isn't a number left out.
+    fn tidied(self) -> PresetTune {
+        PresetTune { speed: tidy(self.speed), sensitivity: tidy(self.sensitivity) }
+    }
+}
+
+/// A kept multiplier: clamped to [`TUNE_MIN`]–[`TUNE_MAX`], `None` for 1 or not a number.
+fn tidy(v: Option<f64>) -> Option<f64> {
+    v.filter(|v| v.is_finite()).map(|v| v.clamp(TUNE_MIN, TUNE_MAX)).filter(|v| (v - 1.0).abs() > 1e-9)
+}
+
 /// What the user keeps about one preset.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(default)]
@@ -133,6 +194,9 @@ pub struct Mine {
     pub rating: Option<u8>,
     #[serde(skip_serializing_if = "Overrides::is_empty")]
     pub overrides: Overrides,
+    /// The user's own speed and sensitivity for it; none when it plays as made.
+    #[serde(skip_serializing_if = "PresetTune::is_empty")]
+    pub tune: PresetTune,
     /// Fields of the preset this build doesn't know.
     #[serde(flatten)]
     pub unknown: Unknown,
@@ -142,7 +206,7 @@ impl Mine {
     /// Nothing kept: a preset with fields this build doesn't know is never
     /// empty, so clearing what it knows doesn't drop them.
     fn is_empty(&self) -> bool {
-        !self.star && !self.hidden && self.rating.is_none() && self.tags.is_empty() && self.overrides.is_empty() && self.unknown.is_empty()
+        !self.star && !self.hidden && self.rating.is_none() && self.tags.is_empty() && self.overrides.is_empty() && self.tune.is_empty() && self.unknown.is_empty()
     }
 }
 
@@ -179,6 +243,11 @@ pub struct Change {
     pub clear_overrides: bool,
     /// Values to set; the ones left out stay as they are.
     pub overrides: Option<Overrides>,
+    /// Put the preset's speed and sensitivity back to 1 before `tune` is applied.
+    pub clear_tune: bool,
+    /// Values to set, clamped to [`TUNE_MIN`]–[`TUNE_MAX`]; the ones left out
+    /// stay as they are, and 1 takes one off.
+    pub tune: Option<PresetTune>,
 }
 
 /// Applies `change` to the presets at `keys`. A preset left with nothing kept is dropped.
@@ -206,6 +275,12 @@ pub fn apply(data: &mut LibraryData, keys: &[String], change: &Change) {
         if let Some(o) = &change.overrides {
             mine.overrides.merge(o.clone());
         }
+        if change.clear_tune {
+            mine.tune = PresetTune::default();
+        }
+        if let Some(t) = change.tune {
+            mine.tune.merge(t);
+        }
         if mine.is_empty() {
             data.presets.remove(key);
         }
@@ -224,9 +299,10 @@ pub fn load(file: &Path) -> Result<LibraryData, String> {
     };
     let problem = match serde_json::from_slice::<LibraryData>(&bytes) {
         Ok(mut data) if data.version <= VERSION => {
-            // A hand-edited rating above 5 stars reads as 5.
+            // A hand-edited rating above 5 stars reads as 5, and a tune out of range as its end.
             for mine in data.presets.values_mut() {
                 mine.rating = mine.rating.map(|r| r.min(5));
+                mine.tune = mine.tune.tidied();
             }
             return Ok(LibraryData { version: VERSION, ..data });
         }
@@ -671,6 +747,19 @@ pub fn data(handle: &AppHandle) -> LibraryData {
     handle.state::<Store>().data.lock().unwrap().clone()
 }
 
+/// The user's own speed and sensitivity for the preset at `path` (absolute, in
+/// one of the preset folders): as made (both 1) when none is kept or the file is
+/// in none of them.
+#[allow(dead_code)] // Until the apply lane fills in `crate::tune`.
+pub fn tune_of(handle: &AppHandle, path: &Path) -> PresetTune {
+    tune_in(&crate::pack::folders(handle), &handle.state::<Store>().data.lock().unwrap(), path)
+}
+
+/// [`tune_of`], keyed against `folders`.
+fn tune_in(folders: &[PathBuf], data: &LibraryData, path: &Path) -> PresetTune {
+    key_in(folders, path).and_then(|k| data.presets.get(&k)).map(|m| m.tune).unwrap_or_default()
+}
+
 /// Look for moved presets again even if the presets haven't changed: playlist
 /// items just came in (an imported playlist) whose files may be elsewhere.
 pub fn rematch(handle: &AppHandle) {
@@ -693,6 +782,9 @@ pub fn library_data(store: State<Store>, handle: AppHandle) -> LibraryData {
 pub fn library_set(keys: Vec<String>, change: Change, store: State<Store>, handle: AppHandle) -> Result<LibraryData, String> {
     rematch_once(&handle, &store);
     let data = set(&store, &keys, &change, &crate::pack::folders(&handle))?;
+    if change.clear_tune || change.tune.is_some() {
+        crate::tune::retune(&handle);
+    }
     handle.emit(CHANGED, &data).map_err(|e| e.to_string())?;
     Ok(data)
 }
@@ -831,6 +923,52 @@ mod tests {
         assert_eq!(data.presets["a.milk"].overrides, Overrides { title: Some("Mine".into()), ..Default::default() });
         apply(&mut data, &key, &Change { clear_overrides: true, ..Default::default() });
         assert!(data.presets.is_empty());
+    }
+
+    #[test]
+    fn a_tune_sets_clamps_clears_and_round_trips() {
+        let dir = temp("tune");
+        let file = dir.join("library.json");
+        let mut data = LibraryData::default();
+        let key = ["a.milk".to_string()];
+        let tune = |speed, sensitivity| Change { tune: Some(PresetTune { speed, sensitivity }), ..Default::default() };
+        apply(&mut data, &key, &tune(Some(0.5), None));
+        apply(&mut data, &key, &tune(None, Some(9.0)));
+        assert_eq!(data.presets["a.milk"].tune, PresetTune { speed: Some(0.5), sensitivity: Some(TUNE_MAX) });
+        assert_eq!((data.presets["a.milk"].tune.speed(), data.presets["a.milk"].tune.sensitivity()), (0.5, 4.0));
+        // Written beside the rest, and read back the same.
+        save(&file, &data).unwrap();
+        let text = std::fs::read_to_string(&file).unwrap();
+        assert!(text.contains(r#""tune": {"#) && text.contains(r#""speed": 0.5"#), "{text}");
+        assert_eq!(load(&file).unwrap(), data);
+        // 1 takes a value off; a NaN or too slow a speed is kept in range or dropped.
+        apply(&mut data, &key, &tune(Some(f64::NAN), Some(1.0)));
+        assert_eq!(data.presets["a.milk"].tune, PresetTune { speed: Some(0.5), sensitivity: None });
+        apply(&mut data, &key, &tune(Some(0.01), None));
+        assert_eq!(data.presets["a.milk"].tune.speed, Some(TUNE_MIN));
+        // The reset: nothing kept, so the preset drops out and nothing is written.
+        apply(&mut data, &key, &Change { star: Some(true), clear_tune: true, ..Default::default() });
+        assert_eq!(data.presets["a.milk"], Mine { star: true, ..Default::default() });
+        assert!(!serde_json::to_string(&data).unwrap().contains("tune"));
+        apply(&mut data, &key, &Change { star: Some(false), ..Default::default() });
+        assert!(data.presets.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_old_file_without_a_tune_plays_as_made_and_one_out_of_range_reads_in_range() {
+        let dir = temp("tune-old");
+        let file = dir.join("library.json");
+        std::fs::write(&file, r#"{"version":1,"presets":{"a.milk":{"star":true},"b.milk":{"tune":{"speed":10,"sensitivity":1}}}}"#).unwrap();
+        let data = load(&file).unwrap();
+        assert_eq!(data.presets["a.milk"].tune, PresetTune::default());
+        assert_eq!(data.presets["b.milk"].tune, PresetTune { speed: Some(TUNE_MAX), sensitivity: None });
+        // Looked up by path, against the folders the presets are in.
+        let folders = [PathBuf::from("/lib/presets")];
+        assert_eq!(tune_in(&folders, &data, Path::new("/lib/presets/b.milk")).speed(), 4.0);
+        assert_eq!(tune_in(&folders, &data, Path::new("/lib/presets/a.milk")), PresetTune::default());
+        assert_eq!(tune_in(&folders, &data, Path::new("/elsewhere/b.milk")), PresetTune::default());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// A matcher not keeping what it searched, and the moment `secs` after `t0`.

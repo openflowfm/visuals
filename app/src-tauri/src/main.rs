@@ -28,6 +28,7 @@ mod resume;
 mod settings;
 mod tap;
 mod testsound;
+mod tune;
 mod updater;
 mod userlib;
 

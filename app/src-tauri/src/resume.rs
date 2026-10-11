@@ -631,6 +631,10 @@ pub fn open_reported(handle: &AppHandle, app: &crate::App, path: &Path) -> Resul
     if let Some(failed) = failed {
         set_mark(handle, path, if failed { Verdict::Failed } else { Verdict::Loaded });
     }
+    // On the bench now (one that failed left the last preset playing): its own speed and sensitivity.
+    if failed == Some(false) {
+        crate::tune::apply_preset_tune(handle, path);
+    }
     result
 }
 
