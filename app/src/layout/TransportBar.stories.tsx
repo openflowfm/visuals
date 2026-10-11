@@ -50,6 +50,8 @@ const meta = {
     stepIn: ' in the playlist',
     position: { elapsed: 12, length: 30 },
     onAudioError: fn(),
+    // As Home has it with a playlist moving on by itself: the time says so, and that H stays.
+    moves: true,
   },
   parameters: { scope: 'bare', layout: 'fullscreen' },
 } satisfies Meta<typeof TransportBar>;
@@ -222,6 +224,34 @@ export const RunOut: Story = {
     await expect(canvas.getByRole('timer', { name: 'time on this preset: 0:31' })).toHaveTextContent('0:31');
     await expect(canvas.queryByRole('progressbar')).toBeNull();
     await expect(canvas.queryByText(/^−/)).toBeNull();
+  },
+};
+
+/** What the time does, said after it: moving on by itself and H to stay; once held, staying and H to move on. Narrow, the words give way before the track. */
+export const SaysWhatItDoes: Story = {
+  name: 'Says it moves on, and H holds',
+  play: async ({ canvas, canvasElement }) => {
+    await expect(canvas.getByText('moves on by itself · H to stay')).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'pause' }));
+    await waitFor(() => expect(canvas.getByText('staying · H to move on')).toBeVisible());
+    const track = (canvasElement.querySelector('.lay-transport-track') as HTMLElement).getBoundingClientRect();
+    await expect(track.width).toBeGreaterThanOrEqual(100);
+  },
+};
+
+/** The words after the time in an 800 px window with a long name: they give way (ellipsised) and the track keeps its width. */
+export const SaysAt800: Story = {
+  name: 'Says it moves on, 800 px',
+  parameters: { frame: { width: 800, sidebar: 'hidden' } },
+  args: { now: { name: 'Flexi - mindblob mix', from: 'from Warm-up · 3 of 10' } },
+  play: async ({ canvasElement }) => {
+    // The time is narrow here with or without the words: they give way entirely, the track keeps its least.
+    const track = (canvasElement.querySelector('.lay-transport-track') as HTMLElement).getBoundingClientRect();
+    const hint = (canvasElement.querySelector('.lay-transport-hint') as HTMLElement).getBoundingClientRect();
+    await expect(track.width).toBeGreaterThanOrEqual(40);
+    await expect(hint.width).toBeLessThan(track.width);
+    const bar = canvasElement.querySelector('.lay-transport') as HTMLElement;
+    await expect(bar.scrollWidth).toBeLessThanOrEqual(bar.clientWidth);
   },
 };
 
