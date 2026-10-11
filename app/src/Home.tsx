@@ -16,7 +16,7 @@ import type { Lists, Playlist } from './playlists.ts';
 import { useNotice, useTauriEvent } from './hooks.ts';
 import { isTyping, nameOf, notice, openFailed } from './shell.ts';
 import { plural } from './controls.ts';
-import { beginDrag, dropAction, isOver, itemTarget, nudge, runDrop, useDrag, type DragHandlers, type Payload } from './drag.ts';
+import { beginDrag, dragging, dropAction, isOver, itemTarget, nudge, runDrop, useDrag, type DragHandlers, type Payload } from './drag.ts';
 import {
   keyAt,
   localMark,
@@ -1018,6 +1018,13 @@ export function PlaylistPane({ list, lists, tiles, total, rows, dropping, picked
   };
   const menuTile = menu ? tiles.find((t) => t.key === menu.key) : undefined;
   const menuOn = menuTile ? menuChosen(menuTile.key, new Set(picked), tiles, (t) => t.key) : [];
+  // A preset in the playlist twice is one preset to the menu's actions (Remove still goes by place).
+  const menuPresets = [...new Map(menuOn.flatMap((t) => byPath.get(t.path) ?? []).map((p) => [p.row.key, p] as const)).values()];
+  // The menu's tile gone (the pane emptied, or the tile taken out): the menu goes too, so it can't come back at its old spot.
+  const menuGone = menu !== null && menuTile === undefined;
+  useEffect(() => {
+    if (menuGone) setMenu(null);
+  }, [menuGone]);
 
   if (tiles.length === 0)
     return (
@@ -1065,7 +1072,9 @@ export function PlaylistPane({ list, lists, tiles, total, rows, dropping, picked
             playing={currentAt(t)}
             marks={nextAt(t) && <span className="home-tile-next">next</span>}
             motion={hovered === t.key && !t.missing ? <TileMotion path={t.path} /> : undefined}
-            onMouseEnter={() => setHovered(t.key)}
+            onMouseEnter={() => {
+              if (!dragging()) setHovered(t.key);
+            }}
             onMouseLeave={() => setHovered((h) => (h === t.key ? null : h))}
             onContextMenu={(e: MouseEvent) => {
               e.preventDefault();
@@ -1141,7 +1150,7 @@ export function PlaylistPane({ list, lists, tiles, total, rows, dropping, picked
       {menuTile && menuActions && (
         <TileMenu
           at={menu!.at}
-          chosen={menuOn.flatMap((t) => byPath.get(t.path) ?? [])}
+          chosen={menuPresets}
           actions={menuActions}
           onPlay={
             menuOn.length === 1

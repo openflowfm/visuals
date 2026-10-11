@@ -209,6 +209,9 @@ export function beginDrag(ev: { button: number; clientX: number; clientY: number
   window.addEventListener('keydown', key, true);
 }
 
+/** Whether a drag is under way now (the body is marked while one is): a hover preview waits it out. */
+export const dragging = (): boolean => typeof document !== 'undefined' && 'dragging' in document.body.dataset;
+
 /** The drag under way, re-rendering as it moves; null when there is none. */
 export const useDrag = (): Drag | null => useSyncExternalStore(drags.subscribe, drags.get, () => null);
 

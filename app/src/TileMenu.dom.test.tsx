@@ -167,32 +167,107 @@ describe('a library tile’s menu', () => {
 });
 
 describe('a playlist tile’s menu', () => {
-  function pane(picked: string[] = [], onPlay = vi.fn()) {
-    const list = LISTS[0];
-    const { tiles, total } = strip(list, { rows: ROWS, played: [], playing: null });
-    const keys = picked.map((name) => tiles.find((t) => t.name === name)!.key);
-    const view = render(
-      <div className="app home">
-        <TileMenuContext.Provider value={actions}>
-          <PlaylistPane
-            list={list}
-            lists={{ playlists: LISTS, deck: EMPTY_DECK }}
-            tiles={tiles}
-            total={total}
-            rows={ROWS}
-            dropping={{ accepts: () => false, onDrop: () => {} }}
-            picked={keys}
-            onPick={() => {}}
-            onPlay={onPlay}
-            onLists={() => {}}
-            onError={() => () => {}}
-            onLibrary={() => {}}
-          />
-        </TileMenuContext.Provider>
-      </div>,
-    );
-    return { ...view, onPlay };
+  function pane(picked: string[] = [], onPlay = vi.fn(), list: Playlist = LISTS[0], pickAll = false) {
+    const ui = (l: Playlist) => {
+      const { tiles, total } = strip(l, { rows: ROWS, played: [], playing: null });
+      const keys = pickAll ? tiles.map((t) => t.key) : picked.map((name) => tiles.find((t) => t.name === name)!.key);
+      return (
+        <div className="app home">
+          <TileMenuContext.Provider value={actions}>
+            <PlaylistPane
+              list={l}
+              lists={{ playlists: LISTS, deck: EMPTY_DECK }}
+              tiles={tiles}
+              total={total}
+              rows={ROWS}
+              dropping={{ accepts: () => false, onDrop: () => {} }}
+              picked={keys}
+              onPick={() => {}}
+              onPlay={onPlay}
+              onLists={() => {}}
+              onError={() => () => {}}
+              onLibrary={() => {}}
+            />
+          </TileMenuContext.Provider>
+        </div>
+      );
+    };
+    const view = render(ui(list));
+    return { ...view, onPlay, show: (l: Playlist) => view.rerender(ui(l)) };
   }
+
+  it('counts a preset in the playlist twice once, but takes out each place', async () => {
+    const twice = manual(
+      'twice',
+      'Twice',
+      [ROWS[0], ROWS[1], ROWS[0]].map((p) => ({ path: p.row.path, name: p.title, group: 'Hypnotic', missing: false, hash: p.row.hash })),
+    );
+    invoke.mockImplementation((cmd: string) => Promise.resolve(cmd === 'playlist_remove' ? { playlists: LISTS, deck: EMPTY_DECK } : null));
+    const { container } = pane([], vi.fn(), twice, true);
+    fireEvent.contextMenu(tile(container, 'Bloom'));
+    expect(menu().getAttribute('aria-label')).toBe('2 presets');
+    fireEvent.click(screen.getByRole('menuitem', { name: /Add to playlist/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Late' }));
+    expect(actions.onAddTo).toHaveBeenCalledWith('late', ['/p/Aurora.milk', '/p/Bloom.milk']);
+    fireEvent.contextMenu(tile(container, 'Bloom'));
+    await act(async () => fireEvent.click(screen.getByRole('menuitem', { name: 'Remove from Twice' })));
+    const removes = invoke.mock.calls.filter(([c]) => c === 'playlist_remove').map(([, a]) => (a as { index: number }).index);
+    expect(removes).toEqual([2, 1, 0]);
+  });
+
+  it('closes when its tile goes, and doesn’t come back when the tiles do', () => {
+    const { container, show } = pane();
+    fireEvent.contextMenu(tile(container, 'Coil'));
+    expect(menu()).toBeTruthy();
+    show(manual('warm', 'Warm up', []));
+    expect(screen.queryByRole('menu')).toBeNull();
+    show(LISTS[0]);
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('closes on a wheel or a scroll of the page', () => {
+    const { container } = pane();
+    fireEvent.contextMenu(tile(container, 'Coil'));
+    fireEvent.wheel(container);
+    expect(screen.queryByRole('menu')).toBeNull();
+    fireEvent.contextMenu(tile(container, 'Coil'));
+    fireEvent.scroll(document);
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('closes on Escape, giving focus back, and arrows walk its actions round', () => {
+    const { container } = pane();
+    const aurora = tile(container, 'Aurora');
+    aurora.focus();
+    fireEvent.keyDown(aurora, { key: 'ContextMenu' });
+    expect(document.activeElement?.textContent).toBe('Play');
+    fireEvent.keyDown(document.activeElement!, { key: 'ArrowDown' });
+    expect(document.activeElement?.textContent).toBe('Star');
+    fireEvent.keyDown(document.activeElement!, { key: 'End' });
+    expect(document.activeElement?.textContent).toContain('Remove from Warm up');
+    fireEvent.keyDown(document.activeElement!, { key: 'ArrowDown' });
+    expect(document.activeElement?.textContent).toBe('Play');
+    fireEvent.keyDown(document.activeElement!, { key: 'ArrowUp' });
+    expect(document.activeElement?.textContent).toContain('Remove from Warm up');
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(document.activeElement).toBe(aurora);
+  });
+
+  it('starts no hover preview during a drag, here or in the library’s grid', () => {
+    document.body.dataset.dragging = '';
+    try {
+      const { container } = pane();
+      fireEvent.mouseEnter(tile(container, 'Coil'));
+      expect(container.querySelector('canvas.tile-motion')).toBeNull();
+      cleanup();
+      const g = grid();
+      fireEvent.mouseEnter(tile(g.container, 'Coil'));
+      expect(g.container.querySelector('canvas.tile-motion')).toBeNull();
+    } finally {
+      delete document.body.dataset.dragging;
+    }
+  });
 
   it('ends with Remove from the playlist, which takes the tiles out, the last place first', async () => {
     invoke.mockImplementation((cmd: string) => Promise.resolve(cmd === 'playlist_remove' ? { playlists: LISTS, deck: EMPTY_DECK } : null));

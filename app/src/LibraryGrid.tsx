@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { dragging } from './drag.ts';
 import type { FocusEvent, KeyboardEvent, MouseEvent, PointerEvent } from 'react';
 import { ButtonFace } from '@openflow/widgets/controls/ButtonFace.tsx';
 import { PresetTile, tileBy, tileName } from './PresetTile.tsx';
@@ -191,7 +192,10 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
   const [topRow, setTopRow] = useState(0);
   // The tile the pointer is on (its key), whose preset moves in it on the home (`useHoverPreview`).
   const [hovered, setHovered] = useState<string | null>(null);
-  const onHover = useCallback((key: string, on: boolean) => setHovered((h) => (on ? key : h === key ? null : h)), []);
+  const onHover = useCallback((key: string, on: boolean) => {
+    if (on && dragging()) return;
+    setHovered((h) => (on ? key : h === key ? null : h));
+  }, []);
   const failed = useFailedPresets();
   // The tile whose context menu is open (on the home, where Home hands the menu its actions), and where it hangs.
   const menuActions = useTileMenuActions();

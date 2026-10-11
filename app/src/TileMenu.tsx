@@ -142,11 +142,19 @@ export function TileMenu({ at, chosen, actions, onPlay, remove, onClose, contain
       if (!panel.current?.contains(e.target as Node)) onClose();
     };
     const away = () => onClose();
+    // Scrolling the page under it (a wheel, or a scroll anywhere but in the menu) leaves it hanging off its tile: it closes.
+    const scrolled = (e: Event) => {
+      if (!panel.current?.contains(e.target as Node)) onClose();
+    };
     window.addEventListener('pointerdown', press, { capture: true });
+    window.addEventListener('wheel', scrolled, { capture: true, passive: true });
+    window.addEventListener('scroll', scrolled, { capture: true, passive: true });
     window.addEventListener('blur', away);
     window.addEventListener('resize', away);
     return () => {
       window.removeEventListener('pointerdown', press, { capture: true });
+      window.removeEventListener('wheel', scrolled, { capture: true });
+      window.removeEventListener('scroll', scrolled, { capture: true });
       window.removeEventListener('blur', away);
       window.removeEventListener('resize', away);
     };
