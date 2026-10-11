@@ -84,9 +84,15 @@ export interface HomeLibrary {
    * The inspector view's grid (decision 70): only the grid, its notes and its
    * empty states in the pane, no title, count, chips or pack offer (the sidebar
    * names the pane, the inspector's source card counts it and offers the full
-   * library). A click on a tile selects it; a double-click or Enter plays it.
+   * library). A click on a tile, or Enter, plays it (decision 71); ⌘ or ⇧ picks.
    */
   bare?: boolean;
+  /**
+   * Quick add on: a click on a tile (or Enter) hands it to `onToggle`, which adds it
+   * to the playlist `name` or takes it out when its path is in `has` (those show ✓);
+   * Space or ⌥-click plays it. Null or left out: off.
+   */
+  adding?: { name: string; has: ReadonlySet<string>; onToggle(e: Entry): void } | null;
   /** Where the search and "Filter ▾" go (a portal into the header's toolbar); null until it mounts, when they wait. */
   toolbar?: HTMLElement | null;
   /** The presets picked, by index key, as Home holds them: the grid takes them when they differ from its own (Esc back to the source, a dot picked in the inspector, `VITE_HOME_PICK`). */
@@ -299,8 +305,9 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
     };
   }, [one]);
 
-  const handlers = useRef({ onLoad, onAdd, onPress, onSearch, shown, selection, anchor, active, entryOf, query, current, settled });
-  handlers.current = { onLoad, onAdd, onPress, onSearch, shown, selection, anchor, active, entryOf, query, current, settled };
+  const adding = home?.adding ?? null;
+  const handlers = useRef({ onLoad, onAdd, onPress, onSearch, shown, selection, anchor, active, entryOf, query, current, settled, adding, bare });
+  handlers.current = { onLoad, onAdd, onPress, onSearch, shown, selection, anchor, active, entryOf, query, current, settled, adding, bare };
 
   // Home's selection, when it changes to something other than the grid's own (Esc back to the source, a dot picked in
   // the inspector): the grid takes it. What the grid reports back through onChosen is then the same, so nothing loops.
@@ -397,10 +404,17 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
     const h = handlers.current;
     const p = h.shown[i];
     if (!p) return;
+    setActive(p.row.key);
+    // Quick add: into the playlist (or out of it), the picks left as they are.
+    if (how === 'add') {
+      setAnchor(p.row.key);
+      h.adding?.onToggle(h.entryOf(p));
+      return;
+    }
     // The first ⇧ move or click runs from the highlighted tile.
     const from = rangeAnchor(h.anchor, h.active, h.shown);
-    setSelection(pickInto(h.selection, h.shown, i, how, from));
-    setActive(p.row.key);
+    // On the home a click plays and lets the picks go, so the inspector shows what plays (decision 71).
+    setSelection(how === 'load' && h.bare ? [] : pickInto(h.selection, h.shown, i, how, from));
     setError(null);
     if (how !== 'range') setAnchor(p.row.key);
     else if (from !== h.anchor) setAnchor(from);
@@ -751,7 +765,7 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
           {home ? 'Loading presets…' : 'loading presets…'}
         </p>
       ) : empty ? (
-        <p className="lib-note lib-first-run">No presets yet. Drop .milk files or a folder of them here, or use Add a folder… {home ? 'in Settings (⚙)' : 'below'}.</p>
+        <p className="lib-note lib-first-run">No presets yet. Drop .milk files or a folder of them here, or use Add a folder… {home ? 'in Settings (⌘,)' : 'below'}.</p>
       ) : home && !shown.length && (filtered || starred) ? (
         emptyState
       ) : (
@@ -768,7 +782,8 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
           reveal={reveal}
           onPress={onPress && press}
           tileMin={tileMin}
-          clickSelects={bare}
+          home={bare}
+          adding={adding && { name: adding.name, has: adding.has }}
           controls={home?.controls}
         />
       )}

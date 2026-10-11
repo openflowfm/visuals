@@ -147,9 +147,9 @@ describe('pickInto', () => {
     expect(pickInto(['a', 'c'], shown, 1, 'load', 'a')).toEqual(['b']);
   });
 
-  it('selects just the tile a plain click selects, on the home’s inspector grid', () => {
-    expect(pickInto(['a', 'c'], shown, 3, 'select', 'a')).toEqual(['d']);
-    expect(pickInto([], shown, 0, 'select', null)).toEqual(['a']);
+  it('leaves the selection as it was for a quick add click', () => {
+    expect(pickInto(['a', 'c'], shown, 3, 'add', 'a')).toEqual(['a', 'c']);
+    expect(pickInto([], shown, 0, 'add', null)).toEqual([]);
   });
 
   it('adds or takes out a ⌘-clicked tile', () => {
@@ -273,6 +273,47 @@ describe('a tile on the home', () => {
     expect(tile(false, true)).toContain('tile-failed');
     expect(tile(false)).toMatch(/<button type="button" class="tile-add" tabindex="-1" aria-hidden="true"/);
   });
+
+  it('shows ✓ on a preset already in the playlist quick add fills, and says so', () => {
+    const added = renderToStaticMarkup(
+      createElement(Tile, {
+        id: 't',
+        index: 0,
+        p,
+        active: false,
+        selected: false,
+        playing: false,
+        failed: false,
+        intoName: null,
+        onPick: () => {},
+        onAdd: () => {},
+        home: true,
+        adding: true,
+        addedTo: 'Mine',
+      }),
+    );
+    expect(added).toContain('data-added=""');
+    expect(added).toContain('<span class="tile-added" aria-hidden="true">✓</span>');
+    expect(tileSays(p, false, false, 'Mine')).toBe('42 — A, by geiss & flexi · in Mine');
+    const notYet = renderToStaticMarkup(
+      createElement(Tile, {
+        id: 't',
+        index: 0,
+        p,
+        active: false,
+        selected: false,
+        playing: false,
+        failed: false,
+        intoName: null,
+        onPick: () => {},
+        onAdd: () => {},
+        home: true,
+        adding: true,
+        addedTo: null,
+      }),
+    );
+    expect(notYet).not.toContain('tile-added');
+  });
 });
 
 describe('pickOf', () => {
@@ -283,8 +324,9 @@ describe('pickOf', () => {
     expect(pickOf({ metaKey: true, ctrlKey: false, shiftKey: true })).toBe('range');
   });
 
-  it('selects on a plain click where clicks select, the modifiers as before', () => {
-    expect(pickOf({ metaKey: false, ctrlKey: false, shiftKey: false }, true)).toBe('select');
+  it('adds on a plain click while quick add is on, plays on ⌥-click, the modifiers as before', () => {
+    expect(pickOf({ metaKey: false, ctrlKey: false, shiftKey: false }, true)).toBe('add');
+    expect(pickOf({ metaKey: false, ctrlKey: false, shiftKey: false, altKey: true }, true)).toBe('load');
     expect(pickOf({ metaKey: true, ctrlKey: false, shiftKey: false }, true)).toBe('toggle');
     expect(pickOf({ metaKey: false, ctrlKey: true, shiftKey: false }, true)).toBe('toggle');
     expect(pickOf({ metaKey: false, ctrlKey: false, shiftKey: true }, true)).toBe('range');
@@ -292,8 +334,9 @@ describe('pickOf', () => {
 });
 
 describe('gridHint', () => {
-  it('says how the grid picks, there and in the lab editor’s column', () => {
-    expect(gridHint(true, null)).toBe('click selects, double-click or Enter plays, arrows move, Space or ⌘-click selects more, ⇧ selects a run, Esc lets go');
-    expect(gridHint(false, 'Set')).toBe('arrows move, Enter loads, Space or ⌘-click selects more, ⇧ selects a run, Esc lets go, + or A adds to Set');
+  it('says how the grid picks: on the home, while quick add is on, and in the lab editor’s column', () => {
+    expect(gridHint('play', null)).toBe('click or Enter plays, arrows move, Space or ⌘-click selects more, ⇧ selects a run, Esc lets go');
+    expect(gridHint('add', 'Set')).toBe('click or Enter adds to Set or takes out one already in it, Space or ⌥-click plays, arrows move, ⌘-click selects, ⇧ selects a run, Esc is done');
+    expect(gridHint('load', 'Set')).toBe('arrows move, Enter loads, Space or ⌘-click selects more, ⇧ selects a run, Esc lets go, + or A adds to Set');
   });
 });

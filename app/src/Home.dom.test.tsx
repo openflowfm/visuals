@@ -17,6 +17,7 @@ import { EMPTY_DECK, manual, type Deck, type Playlist } from './playlists.ts';
 import { SEEDED_KEY } from './home.ts';
 import { INSPECTOR_KEY, SIDEBAR_KEY } from './layout/home-model.ts';
 import { INSPECTOR_ID, SIDEBAR_ID } from './layout/HomeLayout.tsx';
+import { SHEET_EVENT, sheetOf } from './views.tsx';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -84,6 +85,11 @@ const grid = () => screen.queryByRole('listbox', { name: 'presets' });
 const tile = (name: string) => within(grid()!).getByRole('option', { name: new RegExp(`^${name} — `) });
 const header = () => document.querySelector<HTMLElement>('.vf-header')!;
 const inspector = () => document.querySelector('.insp');
+/** A source's row in the sidebar (not its section's heading of the same name). */
+const sourceRow = (name: string) =>
+  within(document.querySelector('.lay-side') as HTMLElement)
+    .getAllByRole('button', { name: new RegExp(`^${name}`) })
+    .find((b) => b.classList.contains('isb-row'))!;
 
 beforeEach(() => {
   // A wide window: the sidebar and the inspector docked, unless a test says otherwise.
@@ -115,14 +121,17 @@ describe('the home, an inspector view (decision 70)', () => {
     ).toEqual(['home', 'live']);
   });
 
-  it('has the sidebar’s toggle, the search and Filter, the inspector’s toggle and ⚙ in the header, and no key-hint footer', async () => {
+  it('has the sidebar’s toggle, the search and Filter and the inspector’s toggle in the header, no ⚙, no mark and no key-hint footer', async () => {
     await mount({ library: true });
     const h = header();
     const buttons = within(h)
       .getAllByRole('button')
       .map((b) => b.getAttribute('aria-label') ?? b.textContent);
     expect(buttons[0]).toBe('sidebar');
-    expect(buttons.slice(-2)).toEqual(['info', 'settings']);
+    expect(buttons.at(-1)).toBe('info');
+    expect(buttons).not.toContain('settings');
+    expect(h.textContent).not.toContain('⚙');
+    expect(h.querySelector('.vf-mark')).toBeNull();
     expect(buttons).toContain('filter');
     expect(within(h).getByRole('searchbox', { name: 'search presets' })).toBeTruthy();
     expect(document.querySelector('.vf-footer')).toBeNull();
@@ -150,6 +159,19 @@ describe('the home, an inspector view (decision 70)', () => {
       expect(painted).toEqual([]);
     } finally {
       style.remove();
+    }
+  });
+
+  it('opens Settings from the sidebar’s Settings row, as ⌘, does', async () => {
+    await mount({ library: true });
+    const asked: (string | null)[] = [];
+    const heard = (e: Event) => asked.push(sheetOf(e));
+    window.addEventListener(SHEET_EVENT, heard);
+    try {
+      fireEvent.click(within(document.querySelector('.lay-side') as HTMLElement).getByRole('button', { name: /Settings/ }));
+      expect(asked).toEqual(['settings']);
+    } finally {
+      window.removeEventListener(SHEET_EVENT, heard);
     }
   });
 
@@ -190,26 +212,52 @@ describe('the home, an inspector view (decision 70)', () => {
     expect(toggle.getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('picks a preset with a click and shows it in the inspector; Esc goes back to the source', async () => {
+  it('shows the preset playing in the inspector; a ⌘-click picks one instead, and Esc goes back to the one playing', async () => {
+    await mount({ library: true, start: ROWS[0].path });
+    const insp = () => within(inspector() as HTMLElement);
+    expect(insp().getByRole('heading', { name: 'a' })).toBeTruthy();
+    expect(inspector()!.textContent).toContain('Now playing');
+    invoke.mockClear();
+    fireEvent.click(tile('b'), { metaKey: true });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(sent('open')).toEqual([]);
+    expect(tile('b').getAttribute('aria-selected')).toBe('true');
+    expect(insp().getByRole('heading', { name: 'b' })).toBeTruthy();
+    fireEvent.click(tile('c'), { metaKey: true });
+    expect(inspector()!.textContent).toContain('2 selected');
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(tile('b').getAttribute('aria-selected')).toBe('false');
+    expect(insp().queryByRole('heading', { name: 'b' })).toBeNull();
+    expect(insp().getByRole('heading', { name: 'a' })).toBeTruthy();
+  });
+
+  it('plays a preset on one click, the deck following the grid from it, and the inspector shows it playing', async () => {
     await mount({ library: true, start: ROWS[0].path });
     invoke.mockClear();
     fireEvent.click(tile('b'));
     await act(() => vi.advanceTimersByTimeAsync(0));
-    expect(sent('open')).toEqual([]);
-    expect(tile('b').getAttribute('aria-selected')).toBe('true');
-    expect(within(inspector() as HTMLElement).getByRole('heading', { name: 'b' })).toBeTruthy();
-    fireEvent.keyDown(window, { key: 'Escape' });
-    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(sent('open').map((a) => a.path)).toEqual([ROWS[1].path]);
+    expect(sent('act').some((a) => (a.action as { kind: string }).kind === 'query')).toBe(true);
     expect(tile('b').getAttribute('aria-selected')).toBe('false');
-    expect(within(inspector() as HTMLElement).queryByRole('heading', { name: 'b' })).toBeNull();
+    expect(within(inspector() as HTMLElement).getByRole('heading', { name: 'b' })).toBeTruthy();
+    expect(inspector()!.textContent).toContain('Now playing');
+    // A double-click's second click doesn't open it again.
+    invoke.mockClear();
+    fireEvent.click(tile('c'), { detail: 1 });
+    fireEvent.click(tile('c'), { detail: 2 });
+    fireEvent.doubleClick(tile('c'));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(sent('open').map((a) => a.path)).toEqual([ROWS[2].path]);
   });
 
-  it('plays a preset on a double-click, and the deck follows the grid from it', async () => {
+  it('shows the source’s card when its row is picked again, until Esc', async () => {
     await mount({ library: true, start: ROWS[0].path });
-    fireEvent.doubleClick(tile('b'));
-    await act(() => vi.advanceTimersByTimeAsync(0));
-    expect(sent('open').map((a) => a.path)).toContain(ROWS[1].path);
-    expect(sent('act').some((a) => (a.action as { kind: string }).kind === 'query')).toBe(true);
+    fireEvent.click(sourceRow('Library'));
+    expect(within(inspector() as HTMLElement).getByRole('heading', { name: 'Library' })).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(within(inspector() as HTMLElement).queryByRole('heading', { name: 'Library' })).toBeNull();
+    expect(within(inspector() as HTMLElement).getByRole('heading', { name: 'a' })).toBeTruthy();
   });
 
   it('plays the preset highlighted in the grid on Enter', async () => {
@@ -252,11 +300,14 @@ describe('the home, an inspector view (decision 70)', () => {
     ).toEqual(['b']);
   });
 
-  it('goes back to the source when the presets picked leave the index', async () => {
+  it('goes back to the source when the presets picked leave the index, with nothing playing', async () => {
     let rows = ROWS;
     invoke.mockImplementation((cmd: string) => Promise.resolve(cmd === 'library_index' ? rows : answer(cmd)));
+    // The app put back nothing playing, so the page opens nothing of its own.
+    resume = { playlist: null, index: null, current: null, source: null, query: null };
     await mount({ library: true });
-    fireEvent.click(tile('b'));
+    expect(within(inspector() as HTMLElement).getByRole('heading', { name: 'Library' })).toBeTruthy();
+    fireEvent.click(tile('b'), { metaKey: true });
     expect(within(inspector() as HTMLElement).getByRole('heading', { name: 'b' })).toBeTruthy();
     rows = [ROWS[0], ROWS[2]];
     act(() => heard.get('presets-changed')?.forEach((f) => f({ payload: null })));
@@ -284,7 +335,7 @@ describe('the home, an inspector view (decision 70)', () => {
     await mount({ library: true });
     fireEvent.click(within(header()).getByRole('button', { name: 'info' }));
     fireEvent.pointerDown(tile('b'));
-    fireEvent.click(tile('b'));
+    fireEvent.click(tile('b'), { metaKey: true });
     expect(within(inspector() as HTMLElement).getByRole('heading', { name: 'b' })).toBeTruthy();
     // A press elsewhere still puts it away.
     fireEvent.pointerDown(header());
@@ -355,18 +406,60 @@ describe('a playlist’s grid', () => {
     expect(document.querySelector('.home-strip-tip')).toBeNull();
   });
 
-  it('picks a tile with a click, and plays from it on a double-click', async () => {
+  it('picks a tile with a ⌘-click, and plays from a tile on one click, letting the picks go', async () => {
     deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path };
+    resume = { playlist: null, index: null, current: ROWS[0].path, source: null, query: null };
     await mount();
     invoke.mockClear();
     const second = screen.getByRole('listitem', { name: '2. c' });
-    fireEvent.click(second);
+    fireEvent.click(second, { metaKey: true });
     expect(screen.getByRole('listitem', { name: '2. c, picked' })).toBe(second);
     expect(sent('act')).toEqual([]);
     expect(within(inspector() as HTMLElement).getByRole('heading', { name: 'c' })).toBeTruthy();
-    fireEvent.doubleClick(second);
+    fireEvent.click(second);
     await act(() => vi.advanceTimersByTimeAsync(0));
     expect(sent('act').at(-1)).toEqual({ action: { kind: 'go', index: 1 } });
+    expect(second.hasAttribute('data-picked')).toBe(false);
+  });
+
+  it('lets go of the picks on Enter as on a click, and plays from that tile', async () => {
+    deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path };
+    resume = { playlist: null, index: null, current: ROWS[0].path, source: null, query: null };
+    await mount();
+    const first = screen.getByRole('listitem', { name: '1. a, playing' });
+    const second = screen.getByRole('listitem', { name: '2. c' });
+    fireEvent.click(first, { metaKey: true });
+    invoke.mockClear();
+    fireEvent.keyDown(second, { key: 'Enter' });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(sent('act').at(-1)).toEqual({ action: { kind: 'go', index: 1 } });
+    expect(first.hasAttribute('data-picked')).toBe(false);
+  });
+
+  it('shows the playlist’s card in the inspector for its row menu’s Show info, until Esc', async () => {
+    deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path };
+    resume = { playlist: null, index: null, current: ROWS[0].path, source: null, query: null };
+    await mount({ library: true });
+    fireEvent.contextMenu(sourceRow('Warm up'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Show info' }));
+    expect(screen.getByRole('list', { name: 'Warm up, in the order it plays' })).toBeTruthy();
+    expect(within(inspector() as HTMLElement).queryByRole('heading', { name: 'a' })).toBeNull();
+    expect(inspector()!.textContent).toContain('Warm up');
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(within(inspector() as HTMLElement).getByRole('heading', { name: 'a' })).toBeTruthy();
+  });
+
+  it('shows the playlist’s card in the inspector when its row is picked again, until something is picked', async () => {
+    deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path };
+    resume = { playlist: null, index: null, current: ROWS[0].path, source: null, query: null };
+    await mount();
+    const insp = () => within(inspector() as HTMLElement);
+    expect(insp().getByRole('heading', { name: 'a' })).toBeTruthy();
+    fireEvent.click(within(document.querySelector('.lay-side') as HTMLElement).getByRole('button', { name: /^Warm up/ }));
+    expect(insp().queryByRole('heading', { name: 'a' })).toBeNull();
+    expect(inspector()!.textContent).toContain('Warm up');
+    fireEvent.click(screen.getByRole('listitem', { name: /^2\. c/ }), { metaKey: true });
+    expect(insp().getByRole('heading', { name: 'c' })).toBeTruthy();
   });
 
   it('loads the playlist from the tile when it isn’t the one playing', async () => {
@@ -384,7 +477,7 @@ describe('a playlist’s grid', () => {
     // The app put the deck back (as it does when a playlist plays), so the page opens no random preset of its own.
     resume = { playlist: null, index: null, current: ROWS[2].path, source: null, query: null };
     await mount();
-    fireEvent.click(screen.getByRole('listitem', { name: /^1\. a/ }));
+    fireEvent.click(screen.getByRole('listitem', { name: /^1\. a/ }), { metaKey: true });
     fireEvent.keyDown(screen.getByRole('listitem', { name: /^1\. a/ }), { key: 'ArrowRight', altKey: true });
     await act(() => vi.advanceTimersByTimeAsync(0));
     expect(sent('playlist_move_item')).toEqual([{ id: '1', from: 0, to: 1 }]);
@@ -398,18 +491,19 @@ describe('a playlist’s grid', () => {
     expect(sent('act').at(-1)).toEqual({ action: { kind: 'go', index: 1 } });
   });
 
-  it('lets go of a tile taken out (✕), and the inspector shows the playlist again, not a blank', async () => {
+  it('lets go of a tile taken out (✕), and the inspector shows the preset playing again, not a blank', async () => {
     const left = [manual('1', 'Warm up', [item(ROWS[0])])];
     invoke.mockImplementation((cmd: string) => Promise.resolve(cmd === 'playlist_remove' ? { playlists: left, deck } : answer(cmd)));
     deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path };
+    resume = { playlist: null, index: null, current: ROWS[0].path, source: null, query: null };
     await mount();
-    fireEvent.click(screen.getByRole('listitem', { name: /^2\. c/ }));
+    fireEvent.click(screen.getByRole('listitem', { name: /^2\. c/ }), { metaKey: true });
     expect(within(inspector() as HTMLElement).getByRole('heading', { name: 'c' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Take c out of Warm up' }));
     await act(() => vi.advanceTimersByTimeAsync(0));
     expect(screen.queryByRole('listitem', { name: /^2\./ })).toBeNull();
     expect(within(inspector() as HTMLElement).queryByRole('heading', { name: 'c' })).toBeNull();
-    expect(inspector()!.textContent).toContain('Warm up');
+    expect(within(inspector() as HTMLElement).getByRole('heading', { name: 'a' })).toBeTruthy();
   });
 
   it('shows the shared tile, with the name, the author line, its place and the playing mark', async () => {
@@ -423,6 +517,141 @@ describe('a playlist’s grid', () => {
     expect(first.hasAttribute('data-playing')).toBe(true);
     expect(first.querySelector('.home-tile-n')!.textContent).toBe('1');
     expect(second.hasAttribute('data-playing')).toBe(false);
+  });
+});
+
+describe('quick add (#194)', () => {
+  beforeEach(() => {
+    playlists = [manual('1', 'Warm up', [item(ROWS[0])])];
+    // Nothing playing, so the inspector shows the playlist's card with its "Add presets".
+    resume = { playlist: null, index: null, current: null, source: null, query: null };
+    invoke.mockImplementation((cmd: string, args: Record<string, unknown>) => {
+      const list = playlists[0];
+      if (cmd === 'playlist_add') {
+        const r = ROWS.find((x) => x.path === args.path)!;
+        playlists = [{ ...list, items: [...list.items, item(r)] } as Playlist];
+        return Promise.resolve({ playlists, deck });
+      }
+      if (cmd === 'playlist_remove') {
+        playlists = [{ ...list, items: list.items.filter((_, i) => i !== args.index) } as Playlist];
+        return Promise.resolve({ playlists, deck });
+      }
+      return Promise.resolve(answer(cmd));
+    });
+  });
+
+  const side = () => within(document.querySelector('.lay-side') as HTMLElement);
+  const strip = () => document.querySelector<HTMLElement>('.home-quickadd');
+  async function start() {
+    await mount();
+    fireEvent.click(side().getByRole('button', { name: /^Warm up/ }));
+    fireEvent.click(within(inspector() as HTMLElement).getByRole('button', { name: 'Add presets' }));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+  }
+
+  it('starts from the playlist’s Add presets: the library, with a strip naming the playlist and ✓ on what it holds', async () => {
+    await start();
+    expect(grid()).toBeTruthy();
+    expect(strip()!.textContent).toBe('Adding to “Warm up”·1 presetDone');
+    expect(tile('a').hasAttribute('data-added')).toBe(true);
+    expect(tile('b').hasAttribute('data-added')).toBe(false);
+    // The tiles' + is off while a click adds.
+    expect(grid()!.querySelector('.tile-add')).toBeNull();
+  });
+
+  it('adds a preset on a click, and takes out one already in on a click on its ✓, opening nothing', async () => {
+    await start();
+    invoke.mockClear();
+    fireEvent.click(tile('b'));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(sent('playlist_add')).toEqual([{ id: '1', path: ROWS[1].path, at: null }]);
+    expect(tile('b').hasAttribute('data-added')).toBe(true);
+    expect(strip()!.textContent).toContain('2 presets');
+    fireEvent.click(tile('a'));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(sent('playlist_remove')).toEqual([{ id: '1', index: 0 }]);
+    expect(tile('a').hasAttribute('data-added')).toBe(false);
+    expect(sent('open')).toEqual([]);
+  });
+
+  it('takes out two presets clicked quickly by where each is once the first is answered, one listed twice too', async () => {
+    playlists = [manual('1', 'Warm up', [item(ROWS[0]), item(ROWS[1]), item(ROWS[2]), item(ROWS[0])])];
+    const base = invoke.getMockImplementation()!;
+    invoke.mockImplementation((cmd: string, args: Record<string, unknown>) => (cmd === 'playlist_remove' ? new Promise((done) => setTimeout(() => done(base(cmd, args)), 50)) : base(cmd, args)));
+    await start();
+    invoke.mockClear();
+    fireEvent.click(tile('a'));
+    fireEvent.click(tile('c'));
+    await act(() => vi.advanceTimersByTimeAsync(200));
+    expect(sent('playlist_remove')).toEqual([
+      { id: '1', index: 0 },
+      { id: '1', index: 1 },
+    ]);
+    expect(playlists[0].items.map((i) => i.path)).toEqual([ROWS[1].path, ROWS[0].path]);
+    expect(tile('c').hasAttribute('data-added')).toBe(false);
+  });
+
+  it('stays on when the Library row is clicked, and ends when another source is picked', async () => {
+    await start();
+    fireEvent.click(sourceRow('Library'));
+    expect(strip()).toBeTruthy();
+    fireEvent.click(sourceRow('Warm up'));
+    expect(strip()).toBeNull();
+  });
+
+  it('plays on ⌥-click or Space instead', async () => {
+    await start();
+    invoke.mockClear();
+    fireEvent.click(tile('b'), { altKey: true });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(sent('open').map((a) => a.path)).toEqual([ROWS[1].path]);
+    const g = grid()!;
+    fireEvent.focus(g);
+    fireEvent.keyDown(g, { key: 'ArrowRight' });
+    fireEvent.keyDown(g, { key: ' ' });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(sent('open').map((a) => a.path)).toEqual([ROWS[1].path, ROWS[2].path]);
+    expect(sent('playlist_add')).toEqual([]);
+  });
+
+  it('ends on Done or Esc, back on the playlist; a click plays again', async () => {
+    await start();
+    fireEvent.click(within(strip()!).getByRole('button', { name: 'Done' }));
+    expect(strip()).toBeNull();
+    expect(screen.getByRole('list', { name: 'Warm up, in the order it plays' })).toBeTruthy();
+    fireEvent.click(within(inspector() as HTMLElement).getByRole('button', { name: 'Add presets' }));
+    expect(strip()).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(strip()).toBeNull();
+    expect(screen.getByRole('list', { name: 'Warm up, in the order it plays' })).toBeTruthy();
+    fireEvent.click(sourceRow('Library'));
+    invoke.mockClear();
+    fireEvent.click(tile('b'));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(sent('open').map((a) => a.path)).toEqual([ROWS[1].path]);
+    expect(sent('playlist_add')).toEqual([]);
+  });
+
+  it('starts from the playlist’s row menu in the sidebar too', async () => {
+    resume = { playlist: null, index: null, current: ROWS[2].path, source: null, query: null };
+    await mount();
+    fireEvent.contextMenu(sourceRow('Warm up'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Quick add' }));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(strip()!.textContent).toContain('Warm up');
+    expect(grid()).toBeTruthy();
+  });
+
+  it('ends when the playlist is deleted', async () => {
+    await start();
+    act(() => heard.get('lists')?.forEach((f) => f({ payload: { playlists: [], deck } })));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(strip()).toBeNull();
+    expect(grid()).toBeTruthy();
+    invoke.mockClear();
+    fireEvent.click(tile('b'));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(sent('open').map((a) => a.path)).toEqual([ROWS[1].path]);
   });
 });
 
@@ -493,23 +722,31 @@ describe('the transport bar', () => {
     // Held, the time on it still counts, with no end.
     expect(screen.getByRole('timer').getAttribute('aria-label')).toMatch(/^time on this preset: \d+:\d\d, until moved on$/);
   });
+
+  it('names the preset playing', async () => {
+    resume = { playlist: null, index: null, current: ROWS[2].path, source: null, query: null };
+    deck = { ...EMPTY_DECK, current: ROWS[2].path };
+    await mount();
+    expect(document.querySelector('.lay-transport-name')!.textContent).toBe('c');
+  });
 });
 
-describe('the hero', () => {
-  it('names a preset playing that the index doesn’t list', async () => {
+describe('the hero (decision 71)', () => {
+  it('is the picture alone; the inspector names a preset playing that the index doesn’t list', async () => {
     await mount({ library: true });
     act(() => heard.get('live')?.forEach((f) => f({ payload: { deck: { ...EMPTY_DECK, current: '/elsewhere/Odd one.milk' }, opened: null, path: '/elsewhere/Odd one.milk', error: null } })));
-    expect(within(document.querySelector('.hero') as HTMLElement).getByRole('heading', { name: 'Odd one' })).toBeTruthy();
+    expect(document.querySelector('.hero .hero-info')).toBeNull();
+    expect(within(inspector() as HTMLElement).getByRole('heading', { name: 'Odd one' })).toBeTruthy();
   });
 });
 
 describe('picking up where the app left off', () => {
-  it('names the preset put back in the hero without opening another', async () => {
+  it('names the preset put back in the inspector without opening another', async () => {
     resume = { playlist: null, index: null, current: ROWS[2].path, source: null, query: null };
     deck = { ...EMPTY_DECK, current: ROWS[2].path };
     await mount();
     expect(sent('open')).toEqual([]);
-    expect(within(document.querySelector('.hero') as HTMLElement).getByRole('heading', { name: 'c' })).toBeTruthy();
+    expect(within(inspector() as HTMLElement).getByRole('heading', { name: 'c' })).toBeTruthy();
   });
 
   it('shows the filter it picked up in the library, with the deck following it', async () => {

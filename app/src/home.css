@@ -1,8 +1,8 @@
 /* The home (Home.tsx). Since decision 70 an inspector view, as Finder's and
    Photos' are, in the shell of layout/HomeLayout.tsx (layout.css): the inset
    sidebar picking a source (layout/InsetSidebar.tsx); the main column, the
-   header row (the sidebar's and the inspector's toggles, the mark, home | live,
-   the library's search and "Filter ▾", ⚙), the Now Playing hero pinned at its
+   header row (the sidebar's and the inspector's toggles, home | live, the
+   library's search and "Filter ▾"), the preview's hero pinned at its
    top (layout/Hero.tsx) and under it only a plain grid of the source's presets,
    with transient notes over it; the inspector down the right (layout/inspector),
    about the presets picked, else the source; and the transport bar
@@ -17,6 +17,14 @@
    the main pane's place in a narrow window (the hero is always there); and a
    click playing a tile (a click picks it, a double-click or Enter plays it).
    Sources.tsx, NowPanel.tsx and HomeBar.tsx are no longer used by Home.
+
+   Decision 71 (round 2): the hero is the picture alone, its name and where it
+   plays from in the transport bar; one click on a tile plays it again (⌘ and ⇧
+   pick; while quick add is on a click adds to the playlist, ⌥-click or Space
+   plays); the inspector shows the preset playing until something is picked, and
+   Esc goes back to it, a source's card showing for the sidebar's "Show info" (or
+   its row picked again); the mark moves to the sidebar's top, and Settings to the
+   app menu (⌘,) and the sidebar's foot, so the header has no ⚙.
 
    The hero's picture is the preview, a hole onto the native view under the
    page: it paints the main column round itself with its spread shadow, so
@@ -132,9 +140,9 @@
 }
 
 /* The header: no background of its own (the hole's shadow and the window paint
-   what is behind it), no rule under it; the sidebar's toggle, the mark, home |
-   live as two words with the one shown underlined, the library's toolbar, the
-   inspector's toggle and ⚙, each a 30px target. */
+   what is behind it), no rule under it; the sidebar's toggle, home | live as
+   two words with the one shown underlined, the library's toolbar and the
+   inspector's toggle, each a 30px target. */
 .home .vf-header {
   height: 52px;
   padding: 0 14px 0 18px;
@@ -242,6 +250,50 @@
 .home .home-grid-pane > .lib {
   flex: 1;
   min-height: 0;
+}
+
+/* Quick add's strip over the library's grid (decision 71): "Adding to “Warm up” · 3 presets", and Done as type, no rule. */
+.home .home-quickadd {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 10px var(--pad) 0;
+  padding: 6px 6px 6px 12px;
+  border-radius: 8px;
+  background: var(--surface-1);
+  font-size: 12px;
+}
+.home .home-quickadd-text {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ui);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home .home-quickadd-text b {
+  color: var(--fg);
+  font-weight: 600;
+}
+.home .home-quickadd-sep {
+  margin: 0 6px;
+  color: var(--detail);
+}
+.home .home-quickadd-done {
+  flex: none;
+  margin: 0 0 0 auto;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--fg);
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.home .home-quickadd-done:hover {
+  background: color-mix(in srgb, var(--fg) 10%, transparent);
 }
 
 /* The inspector's card for the library or the starred presets while nothing is picked. */

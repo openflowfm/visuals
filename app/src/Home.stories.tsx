@@ -1,14 +1,15 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { expect, fireEvent, userEvent, waitFor, within } from 'storybook/test';
 import { Home } from './Home.tsx';
 import { PLAYING_DECK, row, WARM_UP } from './stories/fixtures.ts';
 
 /** The preset the deck plays: Warm-up's third, `row(7)`. */
 const PLAYING = row(7);
 
-/** The hero names the deck's preset, not one picked at random. */
+/** The hero is the picture alone (decision 71); the inspector, where it shows, names the deck's preset, not one picked at random. */
 const heroNamesPlaying = async (canvasElement: HTMLElement) => {
-  await waitFor(() => expect(canvasElement.querySelector('.hero .hero-name')?.textContent).toBe(PLAYING.title));
+  await expect(canvasElement.querySelector('.hero .hero-info')).toBeNull();
+  if (canvasElement.querySelector('.insp')) await waitFor(() => expect(canvasElement.querySelector('.insp .insp-name')?.textContent).toBe(PLAYING.title));
 };
 
 /**
@@ -52,15 +53,33 @@ export const Narrow: Story = {
   globals: { viewport: { value: 'narrow', isRotated: false } },
 };
 
-/** Opened on the library (`VISUALS_VIEW=library`) while Warm-up plays, with a preset picked: the inspector shows it. */
+/** Opened on the library (`VISUALS_VIEW=library`) while Warm-up plays, with a preset picked (⌘-click; a plain click plays): the inspector shows it. */
 export const Library: Story = {
   args: { library: true },
   globals: { viewport: { value: 'home1440', isRotated: false } },
   play: async ({ canvas, canvasElement }) => {
     const grid = await canvas.findByRole('listbox', { name: 'presets' });
     const first = (await within(grid).findAllByRole('option'))[0];
-    await userEvent.click(first);
+    fireEvent.click(first, { metaKey: true });
     await waitFor(() => expect(first.getAttribute('aria-selected')).toBe('true'));
     await expect(canvasElement.querySelector('.vf-header .lib-toolbar')).toBeTruthy();
+  },
+};
+
+/** Quick add on Warm-up (its card's "Add presets", from its row picked again): the library with the strip over it, ✓ on what Warm-up holds. */
+export const QuickAdd: Story = {
+  name: 'Quick add',
+  globals: { viewport: { value: 'home1440', isRotated: false } },
+  play: async ({ canvas, canvasElement }) => {
+    await canvas.findByRole('list', { name: `${WARM_UP.name}, in the order it plays` });
+    // In a narrow frame the sidebar and the inspector start put away: open them from the header.
+    if (!canvasElement.querySelector('.lay-side')) await userEvent.click(canvas.getByRole('button', { name: 'sidebar' }));
+    const side = within(canvasElement.querySelector('.lay-side') as HTMLElement);
+    const row = (await side.findAllByRole('button', { name: new RegExp(`^${WARM_UP.name}`) })).find((b) => b.classList.contains('isb-row'))!;
+    await userEvent.click(row);
+    if (!canvasElement.querySelector('.insp')) await userEvent.click(canvas.getByRole('button', { name: 'info' }));
+    await userEvent.click(await canvas.findByRole('button', { name: 'Add presets' }));
+    await waitFor(() => expect(canvasElement.querySelector('.home-quickadd')?.textContent).toContain(WARM_UP.name));
+    await waitFor(() => expect(canvasElement.querySelectorAll('.lib-grid .tile[data-added]').length).toBeGreaterThan(0));
   },
 };
