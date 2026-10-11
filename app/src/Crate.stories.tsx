@@ -4,8 +4,8 @@ import { Crate } from './Crate.tsx';
 import { CLOSING, DATA, LISTS, MOOD_DECK, row, WARM_UP } from './stories/fixtures.ts';
 
 /**
- * Live mode's crate, in Home's sidebar look: the playlists to play with one
- * tap, the user's tags as moods, and what plays after Next, each section
+ * Live mode's crate, in Home's sidebar look: the playlists (a tap cues one,
+ * its Play button plays it), the user's tags as moods, and what plays after Next, each section
  * folding under its heading. On the Stage it sits in its panel
  * (`live/StageCrate`); here, on the panel's tone.
  */
@@ -52,6 +52,18 @@ export const Keyboard: Story = {
     await expect(canvas.getByRole('button', { name: /^Closing set, Saturday/ })).toHaveFocus();
     await userEvent.keyboard('{ArrowLeft}{ArrowLeft}');
     await expect(canvas.getByRole('button', { name: 'Playlists' })).toHaveAttribute('aria-expanded', 'false');
+  },
+};
+
+/** A tap only cues a playlist: its row marked, a Play button at its end; playing is that button, Enter or a double-click. */
+export const Cued: Story = {
+  play: async ({ args, canvas }) => {
+    const row = canvas.getByRole('button', { name: /^Closing set, Saturday/ });
+    await userEvent.click(row);
+    await expect(row).toHaveAttribute('aria-pressed', 'true');
+    await expect(args.act).not.toHaveBeenCalled();
+    await expect(canvas.getByRole('button', { name: 'Play Closing set, Saturday' })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Warm-up, playing' })).toHaveAttribute('aria-current', 'true');
   },
 };
 

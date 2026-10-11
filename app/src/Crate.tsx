@@ -248,8 +248,10 @@ interface Props {
 }
 
 /**
- * Live mode's crate, in Home's sidebar look (stage-crate.css): the playlists to
- * play with one tap (the one playing the soft pill with its green dot), the
+ * Live mode's crate, in Home's sidebar look (stage-crate.css): the playlists,
+ * where a tap only cues one (a mis-tap mid-set never switches the set) and its
+ * Play button, Enter or a double-click plays it (the one playing the soft pill
+ * with its green dot), the
  * user's tags as moods to play (and mix) once there are any, and what plays
  * after the deck's Next — four rows, the rest behind "Show all" — which, for a
  * playlist in order, can be dragged by the ≡ that shows on hover or focus (or
@@ -258,7 +260,9 @@ interface Props {
  *
  * One tab stop, as Home's sidebar has: the arrow keys walk the headings and
  * the items shown (`crateStep`), Home and End jump to the first and the last,
- * Enter or Space plays a playlist, plays or mixes a mood, or folds a section.
+ * Space cues a playlist and Enter plays it; Enter or Space plays or mixes a
+ * mood, or folds a section. The cued row's Play button is outside the walk
+ * (Enter on the row does the same); VoiceOver and the pointer reach it.
  */
 export function Crate({ lists, data, act, onLists, onError, current }: Props) {
   const { playlists, deck } = lists;
@@ -288,6 +292,21 @@ export function Crate({ lists, data, act, onLists, onError, current }: Props) {
     };
     // `onError` is the page's; a new one each render isn't a reason to ask again.
   }, [fetching, deck.playlist, query, deck.order, deck.count, reshuffle]);
+
+  // The playlist cued: tapped, not yet played. Playing is its own step (Play, Enter, a double-click), so a mis-tap mid-set never switches it.
+  const [cued, setCued] = useState<string | null>(null);
+  const playingList = deck.query ? null : deck.playlist;
+  // Once the deck plays the cued playlist (from here or anywhere), the cue is done.
+  useEffect(() => {
+    if (playingList !== null) setCued((c) => (c === playingList ? null : c));
+  }, [playingList]);
+  const cue = cued !== null && cued !== playingList && playlists.some((p) => p.id === cued) ? cued : null;
+  // The playlist playing already plays: playing it again would only restart it.
+  const playList = (id: string, i: number) => {
+    if (id === playingList) return;
+    setCued(null);
+    act({ kind: 'load', playlist: i, index: null });
+  };
 
   const all = moods(data);
   const lit = litMoods(deck);
@@ -437,22 +456,41 @@ export function Crate({ lists, data, act, onLists, onError, current }: Props) {
         {head('playlists', 'Playlists')}
         <div id={`${uid}-playlists`} className="scr-body" hidden={folded.includes('playlists')}>
           {playlists.length === 0 ? (
-            <p className="scr-note">No playlists yet: make one in the library, then tap it here to play it.</p>
+            <p className="scr-note">No playlists yet: make one in the library, then tap it here to cue it and Play to play it.</p>
           ) : (
             <ul className="scr-rows">
               {playlists.map((p, i) => {
                 const on = deck.playlist === p.id && !deck.query;
                 const smart = p.kind === 'smart';
+                const isCued = cue === p.id;
+                const kind = smart ? ', a smart playlist (whatever matches its filter)' : '';
                 return (
-                  <li key={p.id}>
+                  <li key={p.id} className="scr-list">
                     <button
                       type="button"
                       className="scr-row"
                       data-playing={on || undefined}
+                      data-cued={isCued || undefined}
                       aria-current={on ? 'true' : undefined}
+                      aria-pressed={isCued}
+                      aria-keyshortcuts={on ? undefined : 'Enter'}
                       aria-label={`${p.name}${smart ? ', smart playlist' : ''}${on ? ', playing' : ''}`}
-                      title={on ? `${p.name} is playing` : `Play ${p.name}${smart ? ': a smart playlist, whatever matches its filter' : ''}`}
-                      onClick={() => act({ kind: 'load', playlist: i, index: null })}
+                      title={
+                        on
+                          ? `${p.name} is playing`
+                          : isCued
+                            ? `${p.name}${kind} is cued: Play, Enter or a double-click switches the set to it`
+                            : `${p.name}${kind}: tap to cue it; double-click or Enter plays it`
+                      }
+                      onClick={() => setCued(on ? null : p.id)}
+                      onDoubleClick={() => playList(p.id, i)}
+                      onKeyDown={(e) => {
+                        if (e.key !== 'Enter' || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+                        // Enter plays; Space (the button's click) only cues.
+                        e.preventDefault();
+                        e.stopPropagation();
+                        playList(p.id, i);
+                      }}
                       {...bind(listKey(p.id))}
                     >
                       <Icon className="scr-icon" name={smart ? 'smart-playlist' : 'playlist'} />
@@ -460,6 +498,13 @@ export function Crate({ lists, data, act, onLists, onError, current }: Props) {
                       {/* The playlist playing: the green dot after its name, as Home's sidebar marks it. */}
                       {on && <span className="scr-dot" aria-hidden="true" />}
                     </button>
+                    {/* Out of the walk (Enter on the row plays it); VoiceOver and the pointer reach it. */}
+                    {isCued && (
+                      <button type="button" className="scr-play" tabIndex={-1} aria-label={`Play ${p.name}`} title={`Switch the set to ${p.name}`} onClick={() => playList(p.id, i)}>
+                        <Icon name="play" size={10} />
+                        <span aria-hidden="true">Play</span>
+                      </button>
+                    )}
                   </li>
                 );
               })}

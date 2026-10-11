@@ -117,14 +117,54 @@
 .scr-row:hover .scr-icon {
   color: var(--fg);
 }
-/* The playlist playing, and the moods playing: the soft pill, the name in --fg and heavier. */
-.scr-row:is([aria-current='true'], [aria-pressed='true']) {
+/* The playlist playing, and the moods playing: the soft pill, the name in --fg and heavier. A cued playlist's aria-pressed isn't playing. */
+.scr-row:is([aria-current='true'], [aria-pressed='true']:not([data-cued])) {
   color: var(--fg);
   font-weight: 600;
   background: color-mix(in srgb, var(--fg) 9%, transparent);
 }
-.scr-row:is([aria-current='true'], [aria-pressed='true']) .scr-icon {
+.scr-row:is([aria-current='true'], [aria-pressed='true']:not([data-cued])) .scr-icon {
   color: var(--fg);
+}
+
+/* A playlist cued (tapped, not yet playing): a fainter pill, its name in --fg at its usual weight, room for Play at its end. */
+.scr-list {
+  position: relative;
+}
+.scr-row[data-cued] {
+  padding-right: 64px;
+  color: var(--fg);
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+}
+.scr-row[data-cued] .scr-icon {
+  color: var(--fg);
+}
+/* Play on the cued row: a small capsule at its end, the one step that switches the set. */
+.scr-play {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 9px 0 7px;
+  border: 0;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--fg) 12%, transparent);
+  color: var(--fg);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transform: translateY(-50%);
+  user-select: none;
+}
+.scr-play:hover {
+  background: color-mix(in srgb, var(--fg) 18%, transparent);
+}
+.scr-play .lay-icon {
+  color: var(--playing);
 }
 .scr-name {
   flex: 0 1 auto;
@@ -252,8 +292,8 @@
 }
 
 /* The focus ring goes inside: the crate scrolls, and would clip one drawn outside. */
-.vf-root :is(.scr-row, .scr-toggle, .scr-next, .scr-more):focus-visible,
-:is(.scr-row, .scr-toggle, .scr-next, .scr-more):focus-visible {
+.vf-root :is(.scr-row, .scr-toggle, .scr-next, .scr-more, .scr-play):focus-visible,
+:is(.scr-row, .scr-toggle, .scr-next, .scr-more, .scr-play):focus-visible {
   outline: 2px solid var(--vf-focus-ring);
   outline-offset: -2px;
 }
