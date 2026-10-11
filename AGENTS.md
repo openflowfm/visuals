@@ -165,4 +165,12 @@ own file: `Home.tsx` (#96: the home view, since decision 66 the only one that br
 GitHub issue the user submits). Each `.rs` stub's `start` (or `install`) is already
 called from `main.rs`.
 
+The per-preset tune contract (a preset's own speed and sensitivity) adds `library.json`'s
+`tune` (`{ "speed": 0.5, "sensitivity": 1.5 }`, multipliers 0.25–4, 1 never written;
+`userlib::PresetTune`, `Change.tune`/`clear_tune`, `userlib::tune_of`), its types in
+`api.ts` (`PresetTune`, `TUNE_MIN`/`TUNE_MAX`, `Mine.tune`, `LibraryChange.tune`/`clear_tune`)
+and its words in `words.ts`. Its stub: `app/src-tauri/src/tune.rs` (`apply_preset_tune`,
+called from `resume::open_reported` on every preset load, and `retune`, called from
+`userlib::library_set` after a tune changes).
+
 Every agent commit must end with a blank line and a GitHub-compatible co-author trailer naming the agent that actually made it, for example `Co-authored-by: Codex <noreply@openai.com>` or `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Never name an agent that didn't write the commit.

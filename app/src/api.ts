@@ -195,6 +195,19 @@ export interface Overrides {
   intensity?: Level;
 }
 
+/**
+ * `userlib::PresetTune`: the user's own pace for one preset, multiplying the playlist's or live
+ * value while it plays. Each 0.25–4; one left out is 1 (as made), and 1 is never kept.
+ */
+export interface PresetTune {
+  speed?: number;
+  sensitivity?: number;
+}
+
+/** `userlib::TUNE_MIN`, `TUNE_MAX`: the range a preset's speed and sensitivity are clamped to. */
+export const TUNE_MIN = 0.25;
+export const TUNE_MAX = 4;
+
 /** `userlib::Mine`: what the user keeps about one preset; a field left out is false, empty or none. */
 export interface Mine {
   hash?: string;
@@ -205,6 +218,8 @@ export interface Mine {
   /** 1–5 stars; left out when unrated. */
   rating?: number;
   overrides?: Overrides;
+  /** Left out when the preset plays as made. */
+  tune?: PresetTune;
 }
 
 /** `userlib::LibraryData` (`library.json`): only the presets the user has touched, by key. */
@@ -225,6 +240,10 @@ export interface LibraryChange {
   clear_overrides?: boolean;
   /** Values to set; the ones left out stay. */
   overrides?: Overrides;
+  /** Put the preset's speed and sensitivity back to 1 before `tune` is applied (the inspector's reset). */
+  clear_tune?: boolean;
+  /** Values to set (clamped to `TUNE_MIN`–`TUNE_MAX`); the ones left out stay, and 1 takes one off. */
+  tune?: PresetTune;
 }
 
 export const libraryData = () => invoke<LibraryData>('library_data');
