@@ -846,9 +846,90 @@
 }
 
 /* Keep focus visible on everything focusable here: no fill or edge to fall back on. */
-.lib-home :is(.lib-search, .lib-search-clear, .lib-filter, .lib-chip, .lib-link, .lib-values-find, .lib-empty-clear, .lib-name-input, .pack-offer .wdg-button-body):focus-visible {
+.lib-home
+  :is(.lib-search, .lib-search-clear, button.lib-search-glyph, .lib-filter, .lib-chip, .lib-link, .lib-values-find, .lib-empty-clear, .lib-name-input, .pack-offer .wdg-button-body):focus-visible {
   outline: 2px solid var(--vf-focus-ring);
   outline-offset: 2px;
+}
+
+/* The inspector view (decision 70): the pane is only the grid, its notes and its empty states. */
+.lib-bare {
+  min-height: 0;
+}
+
+/* Its search and "Filter ▾" in the header's toolbar (portalled there; the wrapper is also .lib-home, so the rules above reach it). */
+.lib-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.lib-toolbar .lib-search-field {
+  flex: 0 1 220px;
+}
+.lib-toolbar button.lib-search-glyph {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font: inherit;
+  font-size: 13px;
+  color: var(--detail);
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  cursor: text;
+}
+.lib-toolbar .lib-filter-badge {
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+}
+.lib-toolbar .lib-filter-caret {
+  color: var(--detail);
+  font-size: 10px;
+}
+
+/* The filter's popover: the groups, the open group's values, what is picked and the count, Clear and Save. */
+.lib-toolbar .lib-filter-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(400px, calc(100vw - 48px));
+  padding: 4px;
+}
+.lib-toolbar .lib-filter-panel :is(.lib-chips, .lib-picked) {
+  padding: 0;
+}
+.lib-toolbar .lib-filter-panel .lib-values {
+  margin: 0;
+  max-height: 40vh;
+}
+.lib-toolbar .lib-filter-none {
+  margin: 0;
+  font-size: 12px;
+}
+
+/* Under 700 px the search folds to its ⌕, a button that opens it; it stays open while focused or holding text (⌘F focuses it). */
+@media (max-width: 699px) {
+  /* .lib-home.lib-toolbar: above the 899 px rule below, which lets the search grow. */
+  .lib-home.lib-toolbar .lib-search-field {
+    flex: none;
+    min-width: 0;
+    gap: 0;
+  }
+  .lib-toolbar .lib-search-field:not(:focus-within):not([data-text]) .lib-search {
+    flex: 0 0 0;
+    width: 0;
+    padding: 0;
+  }
+  .lib-toolbar .lib-search-field:not(:focus-within):not([data-text]) button.lib-search-glyph {
+    cursor: pointer;
+  }
+  .lib-home.lib-toolbar .lib-search-field:is(:focus-within, [data-text]) {
+    flex: 1 1 180px;
+    min-width: 120px;
+    gap: 8px;
+  }
 }
 
 /* A narrow window: the menu takes the title's place, and the search takes the room left. */

@@ -203,10 +203,13 @@ describe('the preview’s corners over the frost (decision 69)', () => {
     for (const [file, hole] of [
       ['nowpanel.css', '.now-panel .now-preview'],
       ['homebar.css', '.home-bar .home-bar-mini'],
+      // The inspector view's hole (decision 70): the hero's preview, at the layout's --lay-hero-radius.
+      ['layout/hero.css', '.lay .hero-pic'],
     ]) {
-      const body = read(file).match(new RegExp(`${hole.replace(/\./g, '\\.')} \\{([^}]*)\\}`))![1];
-      expect(body, file).toMatch(/--hole-radius: \d+px;/);
+      const body = read(file).match(new RegExp(`${hole.replace(/[.[\]]/g, '\\$&')} \\{([^}]*)\\}`))![1];
+      expect(body, file).toMatch(/--hole-radius: (\d+px|var\(--lay-hero-radius\));/);
       expect(body, file).toContain('border-radius: var(--hole-radius);');
     }
+    expect(read('layout/layout.css')).toMatch(/--lay-hero-radius: \d+px;/);
   });
 });

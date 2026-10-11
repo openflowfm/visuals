@@ -1,13 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import * as api from './api.ts';
 import type { Entry, LibraryChange, LibraryData, LibraryRow } from './api.ts';
-import { HomeBar } from './HomeBar.tsx';
 import { Library } from './Library.tsx';
 import { browsable, browseOrder, facet, stepIn, prepare, type Prepared } from './librarySearch.ts';
 import { useLibrary, rereadOn, stepDeck } from './library.ts';
-import { NowPanel } from './NowPanel.tsx';
 import { onChanged } from './pack.ts';
+import { PackOffer } from './PackOffer.tsx';
 import { PlaylistHead } from './PlaylistHead.tsx';
 import { PresetTile, tileBy, tileName } from './PresetTile.tsx';
 import * as pl from './playlists.ts';
@@ -16,59 +15,89 @@ import { useNotice, useTauriEvent } from './hooks.ts';
 import { isTyping, nameOf, notice, openFailed } from './shell.ts';
 import { plural } from './controls.ts';
 import { beginDrag, dropAction, isOver, itemTarget, nudge, runDrop, useDrag, type DragHandlers, type Payload } from './drag.ts';
-import { localMark, matches, PANEL_KEY, playsFrom, remember, remembered, seedStarters, strip, tileFocus, type Pane, type StripTile } from './home.ts';
-import { Sidebar, SourceMenu, paneName, type SidebarProps } from './Sources.tsx';
-import { Header, NoticeBanner, openSheet, type View } from './views.tsx';
+import {
+  keyAt,
+  localMark,
+  matches,
+  pickTiles,
+  playsFrom,
+  prefsAt,
+  presetLength,
+  remember,
+  rememberedChoice,
+  saveFile,
+  seedStarters,
+  startPrefs,
+  strip,
+  tileFocus,
+  type Pane,
+  type Prefs,
+  type StripTile,
+  type TilePick,
+} from './home.ts';
+import { HomeLayout, INSPECTOR_ID, SIDEBAR_ID } from './layout/HomeLayout.tsx';
+import { modalOpen } from './liveKeys.ts';
+import { Hero } from './layout/Hero.tsx';
+import { TransportBar } from './layout/TransportBar.tsx';
+import { InsetSidebar, sidebarSections } from './layout/InsetSidebar.tsx';
+import { Inspector } from './layout/inspector/Inspector.tsx';
+import { Icon } from './layout/icons.tsx';
+import { INSPECTOR_AT, INSPECTOR_KEY, modesFor, paneName, SIDEBAR_AT, SIDEBAR_KEY, type Selection, type SidebarActions } from './layout/home-model.ts';
+import { Header, NoticeBanner, openSheet, Preview, type View } from './views.tsx';
 import { problemKey, useSettingsProblems } from './survive.ts';
+import { say } from './words.ts';
 import './home.css';
 
-export { Sidebar, rowSays } from './Sources.tsx';
-export { SettingsBar } from './PlaylistHead.tsx';
 export type { Pane } from './home.ts';
 
 /**
- * The narrowest a library tile gets on the home, where the library has the main
- * pane's width: `small` under `under` px, where the sidebar and the panel narrow
- * (home.css), so the grid keeps three across at 900 px with the panel open (decision 68).
+ * The narrowest a library tile gets on the home: `small` in a window under
+ * `under` px, where the main column narrows between the sidebar and the inspector.
  */
 export const HOME_TILE = { wide: 150, small: 124, under: 1100 };
 
-/** Under this width (px) the sidebar is a menu and the Now Playing panel an overlay, closed at first (decision 67). */
-export const NARROW = 900;
-
-/** True while the window is narrower than `NARROW`. */
-const useNarrow = (): boolean => useNarrowerThan(NARROW);
-
-/** True while the window is narrower than `width` px. */
-function useNarrowerThan(width: number): boolean {
-  const query = `(max-width: ${width - 1}px)`;
-  const [narrow, setNarrow] = useState(() => typeof window.matchMedia === 'function' && window.matchMedia(query).matches);
+/** The window's width, followed as it is resized. */
+function useWidth(): number {
+  const [width, setWidth] = useState(() => window.innerWidth);
   useEffect(() => {
-    if (typeof window.matchMedia !== 'function') return;
-    const m = window.matchMedia(query);
-    const change = () => setNarrow(m.matches);
-    change();
-    m.addEventListener?.('change', change);
-    return () => m.removeEventListener?.('change', change);
-  }, [query]);
-  return narrow;
+    const resize = () => setWidth(window.innerWidth);
+    resize();
+    window.addEventListener('resize', resize);
+    return () => window.removeEventListener('resize', resize);
+  }, []);
+  return width;
 }
 
+/** No presets picked. */
+const SOURCE: Selection = { kind: 'source' };
+
+/** The keys a selection picks. */
+const keysOf = (s: Selection): readonly string[] => (s.kind === 'presets' ? s.keys : NONE);
+const NONE: readonly string[] = [];
+
+/** Whether a key went to something that moves with the arrows itself (the grid, the sidebar, the inspector's field, a switch): ← → R leave it alone. */
+const ownsArrows = (target: EventTarget | null): boolean => {
+  const t = target as { closest?: (selector: string) => unknown } | null;
+  return typeof t?.closest === 'function' && t.closest('[role="listbox"], [role="tree"], [role="grid"], [role="radiogroup"], [role="menu"], [role="slider"], [role="dialog"], .isb') != null;
+};
+
 /**
- * The home (#96; since decision 66 the one place to browse; since 67 laid out
- * like a music app): the header (the mark, home | live, ⚙); a source list down
- * the left (the library, starred, recently played, then the playlists and the
- * smart playlists); the main pane, the library's grid or a playlist's strip
- * under its header; the Now Playing panel on the right with the big preview of
- * the preset playing, which can be closed; and the bottom bar with what plays,
- * ◀ ▶ R, what the app listens to, the panel's toggle and "go live". Under 900 px
- * the source list is a menu at the top of the main pane, the panel, opened,
- * takes the main pane's place, and the bar carries a small preview that opens
- * it. Closing the panel puts focus on the bar's way back to it; opening it from
- * the bar moves focus into it. Presets are dragged
- * from the library onto a playlist in the source list, and about within a
- * playlist's strip. `library` opens it on the library pane
- * (`VISUALS_VIEW=library`), as it opens anyway unless a playlist plays.
+ * The home (#96; since decision 66 the one place to browse; since decision 70
+ * an inspector view, as Finder's and Photos' are): the header (the sidebar's
+ * toggle, the mark, home | live, the search and "Filter ▾" while the library
+ * shows, the inspector's toggle, ⚙); the inset sidebar down the left picking a
+ * source (the library, starred, recently played, the playlists and the smart
+ * playlists); the main column, the Now Playing hero pinned over a plain grid of
+ * the source's presets; the inspector down the right, about the presets picked
+ * in the grid, else the source; and the transport bar along the bottom.
+ *
+ * A click on a tile picks it (⌘ or ⇧ picks more) and the inspector shows it; a
+ * double-click or Enter plays it; Esc goes back to the source. The sidebar docks
+ * from 900 px and the inspector from 1200 px; narrower, each is laid over the
+ * grid when opened (⌃⌘S, ⌘I, or their header buttons). Presets are dragged from
+ * the grid onto a playlist in the sidebar, and about within a playlist's grid.
+ * `library` opens it on the library (`VISUALS_VIEW=library`), as it opens anyway
+ * unless a playlist plays.
  */
 export function Home({ start, onMode, library: startOnLibrary = false }: { start: string | null; onMode(view: View, path: string | null): void; library?: boolean }) {
   const [current, setCurrent] = useState<Entry | null>(null);
@@ -89,10 +118,14 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
     },
     [dismiss, setNotice],
   );
-  // Picking up where the app left off, the preset put back stays: named in the bar and the panel (unless the deck said first), not opened again.
+  // Picking up where the app left off, the preset put back stays: named in the hero (unless the deck said first), not opened again.
   const { library, loaded, search, setSearch, found } = useLibrary(start, load, fail, (e) => setCurrent((c) => c ?? e));
-  const { rows, apply } = useLibraryRows();
+  const { rows, data, apply } = useLibraryRows();
   const played = usePlayed();
+
+  // How long the preset playing has played: counted from when the app last said what plays (D9).
+  const [since, setSince] = useState(() => Date.now());
+  const lastPath = useRef<string | null>(null);
 
   // The playlists, and the starter smart playlists the first time the home opens.
   useEffect(() => {
@@ -104,7 +137,7 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
     }, fail("Couldn't read the playlists."));
   }, [fail]);
   useTauriEvent(pl.onLists, setLists);
-  // `VITE_HOME_PLAYLIST=<name>` (a dev run only) opens that playlist's pane once the playlists are read, for a headless capture of it.
+  // `VITE_HOME_PLAYLIST=<name>` (a dev run only) opens that playlist once the playlists are read, for a headless capture of it.
   const devList = import.meta.env.DEV ? String(import.meta.env.VITE_HOME_PLAYLIST ?? '') : '';
   const devListId = devList ? lists?.playlists.find((p) => p.name === devList)?.id : undefined;
   useEffect(() => {
@@ -115,46 +148,76 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
     played.reread();
     if (!now.path) return;
     const path = now.path;
+    if (path !== lastPath.current) {
+      lastPath.current = path;
+      setSince(Date.now());
+    }
     setCurrent(library.find((e) => e.path === path) ?? { path, name: nameOf(path), group: '' });
     setNotice(now.error ? openFailed(path, now.error) : null);
   });
 
-  // The pane opens on the playlist playing, else the library.
+  // The source shown: the one picked, else the playlist playing, else the library.
   const playlists = lists?.playlists ?? [];
   const deck = lists?.deck ?? pl.EMPTY_DECK;
   const shown: Pane | null = pane && (pane.kind !== 'list' || playlists.some((p) => p.id === pane.id)) ? pane : lists ? firstPane(lists) : null;
   const list = shown?.kind === 'list' ? (playlists.find((p) => p.id === shown.id) ?? null) : null;
-  // The playlist the library's + adds to: the last manual one picked, or the one playing.
+  // The playlist the grid's + adds to: the last manual one picked, or the one playing.
   const [lastManual, setLastManual] = useState<string | null>(null);
   const into = playlists.find((p) => p.kind === 'manual' && p.id === (lastManual ?? deck.playlist)) ?? null;
-  const pick = (next: Pane) => {
-    setPane(next);
-    if (next.kind === 'list' && playlists.find((p) => p.id === next.id)?.kind === 'manual') setLastManual(next.id);
+
+  // What is picked (D1): presets by index key, or none (the inspector shows the source); in a playlist's grid, its tiles too.
+  const [sel, setSel] = useState<Selection>(SOURCE);
+  const [tilesPicked, setTilesPicked] = useState<string[]>([]);
+  const toSource = useCallback(() => {
+    setSel(SOURCE);
+    setTilesPicked([]);
+  }, []);
+  const onChosen = useCallback((chosen: Prepared[]) => {
+    const keys = chosen.map((p) => p.row.key);
+    setSel((s) => (keys.length === 0 ? (s.kind === 'source' ? s : SOURCE) : keysOf(s).join('\n') === keys.join('\n') ? s : { kind: 'presets', keys }));
+  }, []);
+
+  // The panes either side (D5): docked or laid over by the window's width, shown or hidden as the viewer chose.
+  const width = useWidth();
+  const [choices, setChoices] = useState(() =>
+    startPrefs(
+      { sidebar: rememberedChoice(SIDEBAR_KEY), inspector: rememberedChoice(INSPECTOR_KEY) },
+      import.meta.env.DEV ? { panel: String(import.meta.env.VITE_HOME_PANEL ?? ''), sidebar: String(import.meta.env.VITE_HOME_SIDEBAR ?? '') } : {},
+    ),
+  );
+  const at = { sidebar: SIDEBAR_AT, inspector: INSPECTOR_AT };
+  const modes = modesFor(width, prefsAt(width, at, choices.wide, choices.narrow));
+  const choose = (pane: keyof Prefs, show: boolean) => {
+    const docks = width >= at[pane];
+    // Kept for next time only where the pane docks; laid over the grid, it starts closed again.
+    if (docks) remember(pane === 'sidebar' ? SIDEBAR_KEY : INSPECTOR_KEY, show);
+    setChoices((c) => (docks ? { ...c, wide: { ...c.wide, [pane]: show } } : { ...c, narrow: { ...c.narrow, [pane]: show } }));
+  };
+  const toggleSidebar = () => choose('sidebar', modes.sidebar === 'hidden');
+  const toggleInspector = () => choose('inspector', modes.inspector === null);
+  const overlaid = modes.sidebar === 'overlay' || modes.inspector === 'overlay';
+  const dismissOverlays = () => {
+    if (modes.sidebar === 'overlay') choose('sidebar', false);
+    if (modes.inspector === 'overlay') choose('inspector', false);
   };
 
-  // The Now Playing panel: open in a wide window as the viewer left it; in the main pane's place, and closed at first, in a narrow one.
-  const narrow = useNarrow();
-  const tileMin = useNarrowerThan(HOME_TILE.under) ? HOME_TILE.small : HOME_TILE.wide;
-  // `VITE_HOME_PANEL=0` (a dev run only) starts with it closed in a wide window, for a headless capture of the bar with its small preview.
-  const [panelWide, setPanelWide] = useState(() => !(import.meta.env.DEV && import.meta.env.VITE_HOME_PANEL === '0') && remembered(PANEL_KEY, true));
-  // `VITE_HOME_PANEL=1` (a dev run only) starts with it open in a narrow window too, for a headless capture of it.
-  const [panelNarrow, setPanelNarrow] = useState(() => import.meta.env.DEV && import.meta.env.VITE_HOME_PANEL === '1');
-  const panel = narrow ? panelNarrow : panelWide;
-  // Where focus goes once the panel has opened or closed: into it, or to the bar's way back to it.
-  const focusAfter = useRef<'panel' | 'bar' | null>(null);
-  const setPanel = (open: boolean, focus: 'panel' | 'bar' | null = null) => {
-    focusAfter.current = focus;
-    if (narrow) return setPanelNarrow(open);
-    remember(PANEL_KEY, open);
-    setPanelWide(open);
+  const pick = (next: Pane) => {
+    setPane(next);
+    toSource();
+    if (next.kind === 'list' && playlists.find((p) => p.id === next.id)?.kind === 'manual') setLastManual(next.id);
+    // Laid over the grid, the sidebar goes once a source is picked.
+    if (modes.sidebar === 'overlay') choose('sidebar', false);
   };
+
+  // `VITE_HOME_PICK=<path in the pack>` (a dev run only) starts with that preset picked, once the index is read.
+  const devPick = import.meta.env.DEV ? String(import.meta.env.VITE_HOME_PICK ?? '') : '';
+  const devPicked = useRef(false);
   useEffect(() => {
-    const to = focusAfter.current;
-    focusAfter.current = null;
-    if (to === 'panel') document.querySelector<HTMLElement>('.now-panel .now-close')?.focus();
-    // In a narrow window the bar's toggle is hidden: its small preview opens the panel instead.
-    else if (to === 'bar') document.querySelector<HTMLElement>(narrow ? '.home-bar-mini-button' : '.home-bar [aria-label="now playing panel"]')?.focus();
-  }, [panel, narrow]);
+    if (!devPick || devPicked.current || !rows) return;
+    devPicked.current = true;
+    const key = keyAt(rows, devPick);
+    if (key) setSel({ kind: 'presets', keys: [key] });
+  }, [devPick, rows]);
 
   const playing = deck.playlist;
   // What ←, → and R step through while the deck follows nothing: the library's grid as it browses (decision
@@ -179,20 +242,67 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
     },
     [playing, deck.query, browsing, found.shown, library, current, load, fail],
   );
+
+  // ⌘F: the search, which only the library has; from a playlist it opens the library first.
+  const wantSearch = useRef(false);
+  const focusSearch = useCallback(() => {
+    const box = document.querySelector<HTMLInputElement>('.lib-toolbar .lib-search');
+    if (box) {
+      wantSearch.current = false;
+      box.focus();
+      box.select();
+    } else wantSearch.current = true;
+  }, []);
+  const [toolbar, setToolbar] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (wantSearch.current) requestAnimationFrame(focusSearch);
+  });
+
+  const keys = useRef({ step, toggleSidebar, toggleInspector, overlaid, dismissOverlays, sel, toSource, focusSearch, shown, pick });
+  keys.current = { step, toggleSidebar, toggleInspector, overlaid, dismissOverlays, sel, toSource, focusSearch, shown, pick };
   useEffect(() => {
     const key = (e: globalThis.KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e)) return;
-      if (e.key === 'ArrowRight') step(1);
-      else if (e.key === 'ArrowLeft') step(-1);
-      else if (e.key.toLowerCase() === 'r') step(0);
+      const k = keys.current;
+      const letter = e.key.toLowerCase();
+      // A sheet or dialog open over the home (⚙ Settings, a popover) has the keys: no pane or search moves under it.
+      if (modalOpen()) return;
+      if (e.metaKey && e.ctrlKey && !e.altKey && letter === 's') {
+        e.preventDefault();
+        return k.toggleSidebar();
+      }
+      if (e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && letter === 'i') {
+        e.preventDefault();
+        return k.toggleInspector();
+      }
+      if (e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && letter === 'f') {
+        e.preventDefault();
+        if (k.shown?.kind === 'list') {
+          wantSearch.current = true;
+          return k.pick({ kind: 'library' });
+        }
+        return k.focusSearch();
+      }
+      if (e.defaultPrevented || isTyping(e)) return;
+      if (e.key === 'Escape') {
+        // A pane laid over the grid goes first; then the presets picked, back to the source.
+        if (k.overlaid) k.dismissOverlays();
+        else if (k.sel.kind === 'presets') k.toSource();
+        else return;
+        e.preventDefault();
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey || ownsArrows(e.target)) return;
+      if (e.key === 'ArrowRight') k.step(1);
+      else if (e.key === 'ArrowLeft') k.step(-1);
+      else if (letter === 'r') k.step(0);
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
-  }, [step]);
+  }, []);
 
   const run = (p: Promise<Lists | void>, what: string) => p.then((l) => l && setLists(l), fail(`Couldn't ${what}.`));
 
-  // A drop anywhere on the home: onto a playlist in the source list, or a place in the strip.
+  // A drop anywhere on the home: onto a playlist in the sidebar, or a place in a playlist's grid.
   const dropping: DragHandlers = {
     accepts: (target, payload) => dropAction(payload, target, playlists) !== null,
     onDrop: (target, payload) => {
@@ -210,8 +320,8 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
       if (made) pick({ kind: 'list', id: made.id });
     }, fail("Couldn't add that playlist file."));
 
-  // How many presets each source holds, for the source list.
-  const counts = useMemo<SidebarProps['counts']>(() => {
+  // How many presets each source holds, for the sidebar and the source card.
+  const counts = useMemo(() => {
     const smart = new Map<string, number>();
     if (rows) for (const p of playlists) if (p.kind === 'smart' && p.query) smart.set(p.id, matches(p.query, rows, played.paths).length);
     return {
@@ -221,14 +331,85 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
       list: (p: Playlist) => (p.kind === 'manual' ? p.items.length : (smart.get(p.id) ?? null)),
     };
   }, [rows, playlists, played.paths]);
-  const sources: SidebarProps = { lists, shown, counts, onPick: pick, onLists: setLists, onImport: imported, onError: (what) => fail(`Couldn't ${what}.`) };
-  const menu = <SourceMenu {...sources} />;
 
-  // What the panel is about: several presets picked in the grid, else the one playing.
-  const [chosen, setChosen] = useState<Prepared[]>([]);
+  // What the sidebar's rows and their menus do (home-model.ts), from the playlists' commands.
+  const actions: SidebarActions = {
+    onPlay: (id) => {
+      const at = playlists.findIndex((p) => p.id === id);
+      const name = playlists[at]?.name ?? 'the playlist';
+      if (at >= 0) run(pl.act({ kind: 'load', playlist: at, index: null }), `play ${name}`);
+    },
+    onStop: () => run(pl.act({ kind: 'unload' }), 'stop the playlist'),
+    onCreate: () =>
+      pl.create(pl.freshName(playlists)).then((l) => {
+        setLists(l);
+        const made = l.playlists[l.playlists.length - 1];
+        if (made) pick({ kind: 'list', id: made.id });
+      }, fail("Couldn't make a playlist.")),
+    onImport: imported,
+    onRename: (id, name) => run(pl.rename(id, name), 'rename the playlist'),
+    onExport: (id) => {
+      const name = playlists.find((p) => p.id === id)?.name ?? 'the playlist';
+      pl.exportList(id).then((f) => saveFile(f.file_name, f.text), fail(`Couldn't save ${name} to a file.`));
+    },
+    onDelete: (id) => {
+      if (shown?.kind === 'list' && shown.id === id) pick({ kind: 'library' });
+      run(pl.remove(id), 'delete the playlist');
+    },
+    count: counts.list,
+    onError: (what) => fail(`Couldn't ${what}.`),
+  };
+
+  const sections = useMemo(
+    () =>
+      sidebarSections(lists, { library: counts.library, starred: counts.starred }).map((s) => ({
+        ...s,
+        rows: s.rows.map((r) => {
+          if (r.pane.kind !== 'list') return r;
+          const id = r.pane.id;
+          const p = playlists.find((x) => x.id === id);
+          return p ? { ...r, count: counts.list(p) } : r;
+        }),
+      })),
+    [lists, playlists, counts],
+  );
+  const [collapsed, setCollapsed] = useState<string[]>([]);
+
+  // The playlist shown, as its grid shows it (the deck's own order while it plays shuffled).
+  const { tiles, total } = useStrip(list, lists, rows, played.paths);
+
+  // The inspector: about the presets picked, else the source; the preset playing when nothing is picked.
+  const byKey = useMemo(() => new Map((rows ?? []).map((p) => [p.row.key, p])), [rows]);
   const byPath = useMemo(() => new Map((rows ?? []).map((p) => [p.row.path, p])), [rows]);
   const playingRow = current ? byPath.get(current.path) : undefined;
-  const subject = shown?.kind !== 'list' && chosen.length > 1 ? chosen : playingRow ? [playingRow] : [];
+  const picked = useMemo(() => keysOf(sel).flatMap((k) => byKey.get(k) ?? []), [sel, byKey]);
+  // Presets picked that aren't in the index any more show the source's card, never a blank inspector.
+  const onSource = sel.kind === 'source' || picked.length === 0;
+
+  // Tiles picked in a playlist's grid (by tile key, which follows the preset): the presets they are.
+  const pickInList = (keys: string[]) => {
+    setTilesPicked(keys);
+    const paths = new Set(tiles.filter((t) => keys.includes(t.key)).map((t) => t.path));
+    const found = [...paths].flatMap((p) => byPath.get(p)?.row.key ?? []);
+    setSel(found.length ? { kind: 'presets', keys: found } : SOURCE);
+  };
+  // Picks that went (the index read again, the library or a playlist changed, a tile taken out) are let go; none left, back to the source.
+  const tileKeys = tiles.map((t) => t.key).join('\n');
+  useEffect(() => {
+    if (tilesPicked.length === 0) return;
+    if (!list) return toSource();
+    const there = new Set(tileKeys.split('\n'));
+    const live = tilesPicked.filter((k) => there.has(k));
+    if (live.length !== tilesPicked.length) pickInList(live);
+  }, [tileKeys, list?.id]); // only when the tiles change
+  useEffect(() => {
+    if (!rows || sel.kind !== 'presets') return;
+    const live = sel.keys.filter((k) => byKey.has(k));
+    if (live.length === sel.keys.length) return;
+    if (live.length === 0) toSource();
+    else setSel({ kind: 'presets', keys: live });
+  }, [rows, byKey, sel, toSource]);
+  const libraryRows = useMemo(() => (rows ?? []).map((p) => p.row), [rows]);
   const [panelError, setPanelError] = useState<string | null>(null);
   const setData = (keys: string[], change: LibraryChange) => {
     setPanelError(null);
@@ -240,88 +421,240 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
     const all = paths.reduce<Promise<Lists | void>>((was, path) => was.then(() => pl.add(id, path)), Promise.resolve());
     run(all, `add ${paths.length === 1 ? 'it' : plural(paths.length, 'preset')} to ${name}`);
   };
+  const entryOf = (p: Prepared): Entry => library.find((e) => e.path === p.row.path) ?? { path: p.row.path, name: p.title, group: p.subStyle ? `${p.style}/${p.subStyle}` : p.style };
 
+  // Playing from a playlist's grid: from that place in it.
+  const playAt = (index: number | null, path: string, name: string) => {
+    if (!list) return;
+    const at = playlists.indexOf(list);
+    const active = deck.playlist === list.id;
+    if (index === null) return void api.open(path).catch(fail(`Couldn't open ${name}.`));
+    run(pl.act(active ? { kind: 'go', index } : { kind: 'load', playlist: at, index }), `play ${list.name}`);
+  };
+  // The inspector's Play, for the one picked: from its place in the playlist shown, else on its own.
+  const playPicked = () => {
+    const p = picked[0];
+    if (!p) return;
+    const tile = list ? tiles.find((t) => tilesPicked.includes(t.key) && t.path === p.row.path) : undefined;
+    if (tile) playAt(tile.index, tile.path, tile.name);
+    else load(entryOf(p));
+  };
+
+  const openInspector = () => {
+    if (modes.inspector === null) choose('inspector', true);
+  };
+
+  const sourceName = paneName(shown, lists);
+  // Before the playlists are read nothing is shown yet: the card names the library, as it will most likely be.
+  const sourceCard = !shown ? (
+    <SourceCard name={sourceName} count={counts.library} offer={false} />
+  ) : list && lists ? (
+    <PlaylistHead
+      variant="inspector"
+      list={list}
+      lists={lists}
+      tiles={tiles}
+      total={total}
+      onLists={setLists}
+      onDeleted={() => pick({ kind: 'library' })}
+      onError={(what) => fail(`Couldn't ${what}.`)}
+    />
+  ) : (
+    <SourceCard name={sourceName} count={shown.kind === 'starred' ? counts.starred : counts.library} offer={shown.kind === 'library'} />
+  );
+
+  const length = presetLength(deck);
+  const position = useElapsed(since, current !== null, length);
   const from = playsFrom(deck, playlists);
+  const stepWords = playing ? ' in the playlist' : '';
+
   return (
-    <div className="app home" data-view="home" data-panel={panel ? '' : undefined}>
-      <Header view="home" onChange={(next) => next !== 'home' && onMode(next, current?.path ?? null)}>
-        <span className="vf-fill" />
-        <Button tone="quiet" onPress={openSettings} label="settings" title="Settings: sound, presets, the output, quality and more">
-          ⚙
-        </Button>
-      </Header>
-      <aside className="home-side">
-        <Sidebar {...sources} />
-      </aside>
-      <main className="home-main">
-        <NoticeBanner className="home-notice" notice={banner} onDismiss={dismiss} />
-        <SettingsNotes />
-        {shown && shown.kind !== 'list' ? (
-          <Library
-            entries={library}
-            loaded={loaded}
-            search={search}
-            onSearch={setSearch}
-            found={found}
-            current={current?.path ?? null}
-            into={into}
-            onLoad={load}
-            onAdd={(e) => into && run(pl.add(into.id, e.path), `add ${e.name} to ${into.name}`)}
-            onPress={(e, thumbnail, ev) => beginDrag(ev, { kind: 'preset', path: e.path, name: e.name, thumbnail }, dropping)}
-            tileMin={tileMin}
-            home={{ scope: shown.kind, title: paneName(shown, lists), menu, onChosen: setChosen }}
-          />
-        ) : list && lists ? (
-          <PlaylistPane
-            key={list.id}
-            list={list}
-            lists={lists}
-            rows={rows}
-            played={played.paths}
-            dropping={dropping}
-            onLists={setLists}
-            onDeleted={() => setPane({ kind: 'library' })}
-            onError={(what) => fail(`Couldn't ${what}.`)}
-            onLibrary={() => pick({ kind: 'library' })}
-            menu={menu}
-          />
-        ) : null}
-      </main>
-      {panel && (
-        <div className="home-now">
-          <NowPanel
-            chosen={subject}
-            current={current}
+    <HomeLayout
+      sidebarMode={modes.sidebar}
+      inspectorMode={modes.inspector}
+      onDismiss={dismissOverlays}
+      sidebar={
+        <InsetSidebar
+          sections={sections}
+          selected={shown}
+          onSelect={pick}
+          collapsed={collapsed}
+          onToggle={(id) => setCollapsed((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]))}
+          lists={lists}
+          actions={actions}
+        />
+      }
+      header={
+        <Header
+          view="home"
+          onChange={(next) => next !== 'home' && onMode(next, current?.path ?? null)}
+          lead={
+            <button
+              type="button"
+              className="home-tool home-tool-sidebar"
+              aria-label={say('source list')}
+              aria-controls={SIDEBAR_ID}
+              aria-pressed={modes.sidebar !== 'hidden'}
+              title={`${modes.sidebar === 'hidden' ? 'Show' : 'Hide'} the ${say('source list')} (⌃⌘S)`}
+              onClick={toggleSidebar}
+            >
+              <Icon name="sidebar" />
+            </button>
+          }
+        >
+          <span className="vf-fill" />
+          <div className="home-toolbar" ref={setToolbar} />
+          <button
+            type="button"
+            className="home-tool home-tool-inspector"
+            aria-label={say('inspector')}
+            aria-controls={INSPECTOR_ID}
+            aria-pressed={modes.inspector !== null}
+            title={`${modes.inspector === null ? 'Show' : 'Hide'} the ${say('inspector')} (⌘I)`}
+            onClick={toggleInspector}
+          >
+            <Icon name="sidebar" />
+          </button>
+          <Button tone="quiet" onPress={openSettings} label="settings" title="Settings: sound, presets, the output, quality and more">
+            ⚙
+          </Button>
+        </Header>
+      }
+      hero={
+        <Hero
+          preset={playingRow?.row ?? (current ? unindexed(current) : null)}
+          picture={<Preview className="hero-pic" />}
+          playing={!deck.hold}
+          from={current ? from : ''}
+          starred={!!playingRow?.star}
+          onPlayPause={() => run(pl.act({ kind: 'hold', on: null }), deck.hold ? 'let go of the preset' : 'hold the preset')}
+          onNext={() => step(1)}
+          onStar={() => playingRow && setData([playingRow.row.key], { star: !playingRow.star })}
+          // The inspector holds "add to a playlist": it opens on the preset playing.
+          onAdd={() => {
+            if (!playingRow) return;
+            setSel({ kind: 'presets', keys: [playingRow.row.key] });
+            setTilesPicked([]);
+            openInspector();
+          }}
+        />
+      }
+      bar={
+        <TransportBar
+          playing={!deck.hold}
+          onPlayPause={() => run(pl.act({ kind: 'hold', on: null }), 'hold the preset')}
+          onStep={step}
+          stepIn={stepWords}
+          position={position}
+          onAudioError={audioFailed}
+        />
+      }
+      inspector={
+        modes.inspector ? (
+          <Inspector
+            // Nothing picked: the source's card (D8), not a preset.
+            subject={onSource ? null : picked[0]}
+            playing={playingRow?.row.key ?? null}
             from={playsFrom(deck, playlists, false)}
             playlists={lists?.playlists ?? null}
+            library={libraryRows}
+            mine={data?.presets}
             onSet={setData}
             onAddTo={addTo}
-            onClose={() => setPanel(false, 'bar')}
+            onPick={(row: LibraryRow) => {
+              setSel({ kind: 'presets', keys: [row.key] });
+              setTilesPicked([]);
+            }}
+            onBack={toSource}
+            onPlay={picked.length === 1 ? playPicked : undefined}
+            chosen={picked.length > 1 ? picked : undefined}
+            source={onSource ? sourceCard : undefined}
             error={panelError}
+            // Its ✕ (and Esc anywhere) only while it is laid over the grid; docked, the header's toggle closes it.
+            onClose={modes.inspector === 'overlay' ? () => choose('inspector', false) : undefined}
           />
+        ) : undefined
+      }
+      // The grid scrolls itself under the pinned hero, on the column's padding (`--pad`, the hero's `--lay-pad`).
+      pane={
+        <div className="home-grid-pane">
+          <NoticeBanner className="home-notice" notice={banner} onDismiss={dismiss} />
+          <SettingsNotes />
+          {shown && shown.kind !== 'list' ? (
+            <Library
+              key={shown.kind}
+              entries={library}
+              loaded={loaded}
+              search={search}
+              onSearch={setSearch}
+              found={found}
+              current={current?.path ?? null}
+              into={into}
+              onLoad={load}
+              onAdd={(e) => into && run(pl.add(into.id, e.path), `add ${e.name} to ${into.name}`)}
+              onPress={(e, thumbnail, ev) => beginDrag(ev, { kind: 'preset', path: e.path, name: e.name, thumbnail }, dropping)}
+              tileMin={width < HOME_TILE.under ? HOME_TILE.small : HOME_TILE.wide}
+              home={{ scope: shown.kind, title: sourceName, onChosen, bare: true, toolbar, selected: keysOf(sel), controls: INSPECTOR_ID }}
+            />
+          ) : list && lists ? (
+            <PlaylistPane
+              key={list.id}
+              list={list}
+              lists={lists}
+              tiles={tiles}
+              total={total}
+              rows={rows}
+              dropping={dropping}
+              picked={tilesPicked}
+              onPick={pickInList}
+              onPlay={(t) => playAt(t.index, t.path, t.name)}
+              onLists={setLists}
+              onError={(what) => fail(`Couldn't ${what}.`)}
+              onLibrary={() => pick({ kind: 'library' })}
+            />
+          ) : null}
+          <DragGhost />
         </div>
-      )}
-      <HomeBar
-        name={playingRow?.title ?? current?.name ?? null}
-        from={current ? from : ''}
-        onStep={step}
-        stepIn={playing ? ' in the playlist' : ''}
-        panel={panel}
-        // The toggle keeps focus; the small preview, which goes as the panel opens, hands it to the panel.
-        onPanel={(from) => setPanel(!panel, from === 'mini' && !panel ? 'panel' : null)}
-        mini={!panel}
-        onLive={() => onMode('live', current?.path ?? null)}
-        onAudioError={audioFailed}
-      />
-      <DragGhost />
+      }
+    />
+  );
+}
+
+/** The inspector's card for the library or the starred presets, while nothing is picked: its name, how many, and (the library) the full library's offer. */
+export function SourceCard({ name, count, offer }: { name: string; count: number | null; offer: boolean }) {
+  return (
+    <div className="home-source">
+      <p className="home-source-kicker">Showing</p>
+      <h2 className="home-source-name">{name}</h2>
+      {count !== null && <p className="home-source-count">{plural(count, 'preset')}</p>}
+      <p className="home-source-hint">Click a preset to see it here; double-click it, or press Enter, to play it.</p>
+      {offer && <PackOffer />}
     </div>
   );
 }
 
+/** The hero's row for a preset playing that the index doesn't list (a file opened from elsewhere, the index not read yet): its name, as the app gave it. */
+export function unindexed(e: Entry): LibraryRow {
+  const [style = '', sub = null] = e.group ? e.group.split('/') : [];
+  return { key: e.path, path: e.path, hash: '', style, sub_style: sub, authors: [], title: e.name, thumbnail: null, look: null, starter: false };
+}
+
+/** Seconds on the preset playing, ticking each second while `on`, with its length before the deck moves on, or a null length when it stays until moved on; null (the bar's time line blank) while nothing plays. */
+function useElapsed(since: number, on: boolean, length: number | null): { elapsed: number; length: number | null } | null {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!on) return;
+    setNow(Date.now());
+    const t = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, [on, since]);
+  return on ? { elapsed: Math.max(0, (now - since) / 1000), length } : null;
+}
+
 /**
  * Settings files that couldn't be read or kept (#99), each a quiet note over the
- * main pane in the words the app wrote, until dismissed for this session. The
- * live region is always there, so a problem that comes later is read out too.
+ * grid in the words the app wrote, until dismissed for this session. The live
+ * region is always there, so a problem that comes later is read out too.
  */
 function SettingsNotes() {
   const { problems, dismiss } = useSettingsProblems();
@@ -345,7 +678,7 @@ function SettingsNotes() {
 /** The header's ⚙: the Settings sheet (#98), over the home. */
 export const openSettings = () => openSheet('settings');
 
-/** The pane to show when none has been picked: the playlist playing, else the library (decision 67), which shows the filter the deck follows (#161). */
+/** The source to show when none has been picked: the playlist playing, else the library (decision 67), which shows the filter the deck follows (#161). */
 export function firstPane(lists: Lists): Pane {
   return lists.deck.playlist && lists.playlists.some((p) => p.id === lists.deck.playlist) ? { kind: 'list', id: lists.deck.playlist } : { kind: 'library' };
 }
@@ -370,7 +703,7 @@ function useLibraryRows() {
   }, []);
   const rows = useMemo(() => (index ? prepare(index, data) : null), [index, data]);
   const apply = useCallback((answer: Promise<LibraryData>) => answer.then((d) => void setData(d)), []);
-  return { rows, apply };
+  return { rows, data, apply };
 }
 
 /** The presets played lately, newest first; `reread` asks again (after the preset changes). */
@@ -381,48 +714,12 @@ function usePlayed() {
   return { paths, reread };
 }
 
-/** Enter or space on a tile, as a click. */
-const onActivate = (f: () => void) => (e: KeyboardEvent) => {
-  if (e.target !== e.currentTarget) return;
-  if (e.key === 'Enter' || e.key === ' ') {
-    e.preventDefault();
-    f();
-  }
-};
-
-/** What a tile in the strip says to a screen reader: its place, its name, and whether it plays now, plays next or is gone from the library. */
-export function stripTileSays(t: StripTile, place: number, playing: boolean, next: boolean): string {
-  return [`${place}. ${t.name}`, playing && 'playing', next && 'next', t.missing && 'not in the library any more'].filter(Boolean).join(', ');
-}
-
-/** The strip's one-line tip: how to play from a preset, and, in a playlist you can reorder, how to move one and take it out. */
-export const stripTip = (reorderable: boolean): string => (reorderable ? 'Click a preset to play from there · drag it, or ⌥← ⌥→, to move it · ✕ takes it out' : 'Click a preset to play from there');
-
-interface PaneProps {
-  list: Playlist;
-  lists: Lists;
-  rows: Prepared[] | null;
-  played: string[];
-  dropping: DragHandlers;
-  onLists(lists: Lists): void;
-  onDeleted(): void;
-  onError(what: string): (e: unknown) => void;
-  onLibrary(): void;
-  /** The narrow window's source menu, for the header. */
-  menu?: ReactNode;
-}
-
-/** A playlist: its header (name, how it plays, play, shuffle, its settings and more), and its presets as a strip in the order they play. */
-export function PlaylistPane({ list, lists, rows, played, dropping, onLists, onDeleted, onError, onLibrary, menu }: PaneProps) {
-  const drag = useDrag();
-  const { playlists, deck } = lists;
-  const at = playlists.indexOf(list);
-  const active = deck.playlist === list.id;
-  const run = (p: Promise<Lists | void>, what: string) => p.then((l) => l && onLists(l), onError(what));
-
-  // What the deck plays, in its order, while this playlist plays: a shuffled order the page can't work out itself.
+/** A playlist's presets as its grid shows them, in play order: while it plays shuffled, the deck's own order, which the page can't work out itself. */
+function useStrip(list: Playlist | null, lists: Lists | null, rows: Prepared[] | null, played: string[]): { tiles: StripTile[]; total: number } {
+  const deck = lists?.deck ?? pl.EMPTY_DECK;
+  const active = !!list && deck.playlist === list.id;
   const [order, setOrder] = useState<string[] | null>(null);
-  const orderKey = active ? `${deck.order}:${deck.count}:${list.items.length}` : null;
+  const orderKey = active && list ? `${list.id}:${deck.order}:${deck.count}:${list.items.length}` : null;
   useEffect(() => {
     if (orderKey === null) return setOrder(null);
     let live = true;
@@ -434,107 +731,158 @@ export function PlaylistPane({ list, lists, rows, played, dropping, onLists, onD
       live = false;
     };
   }, [orderKey]);
-  const { tiles, total } = useMemo(() => strip(list, { rows: rows ?? [], played, playing: active ? order : null }), [list, rows, played, active, order]);
-  // Each tile's library row, for its name and author line.
-  const byPath = useMemo(() => new Map((rows ?? []).map((p) => [p.row.path, p])), [rows]);
+  return useMemo(() => (list ? strip(list, { rows: rows ?? [], played, playing: active ? order : null }) : { tiles: [], total: 0 }), [list, rows, played, active, order]);
+}
 
-  const play = (index: number | null) => run(pl.act(active && index !== null ? { kind: 'go', index } : { kind: 'load', playlist: at, index }), `play ${list.name}`);
+/** What a tile in a playlist's grid says to a screen reader: its place, its name, and whether it plays now, plays next or is gone from the library. */
+export function stripTileSays(t: StripTile, place: number, playing: boolean, next: boolean, picked = false): string {
+  return [`${place}. ${t.name}`, playing && 'playing', next && 'next', t.missing && 'not in the library any more', picked && 'picked'].filter(Boolean).join(', ');
+}
+
+/** How a playlist's grid is used (its tooltip, and a hint for VoiceOver): how to pick and play, and, in a playlist you can reorder, how to move a preset and take it out. */
+export const stripTip = (reorderable: boolean): string =>
+  reorderable ? 'Click a preset to see it, double-click to play from there · drag it, or ⌥← ⌥→, to move it · ✕ takes it out' : 'Click a preset to see it, double-click to play from there';
+
+/** How a click picks a tile: ⇧ a run, ⌘ (or Ctrl) one more, else just it. */
+const tilePickOf = (e: MouseEvent): TilePick => (e.shiftKey ? 'range' : e.metaKey || e.ctrlKey ? 'toggle' : 'select');
+
+interface PaneProps {
+  list: Playlist;
+  lists: Lists;
+  /** Its presets in play order (`strip`). */
+  tiles: StripTile[];
+  /** How many it holds; `tiles` stops at `STRIP_CAP`. */
+  total: number;
+  rows: Prepared[] | null;
+  dropping: DragHandlers;
+  /** The tiles picked, by tile key. */
+  picked: readonly string[];
+  onPick(keys: string[]): void;
+  /** Play from this tile. */
+  onPlay(t: StripTile): void;
+  onLists(lists: Lists): void;
+  onError(what: string): (e: unknown) => void;
+  onLibrary(): void;
+}
+
+/**
+ * A playlist's presets as a wrapping grid in the order they play (its head is the
+ * inspector's source card): a click picks, a double-click or Enter plays from
+ * there; in a manual playlist each tile is dragged, or moved with ⌥← ⌥→, to a
+ * new place, and ✕ takes it out. Each tile shows its place, and "next".
+ */
+export function PlaylistPane({ list, lists, tiles, total, rows, dropping, picked, onPick, onPlay, onLists, onError, onLibrary }: PaneProps) {
+  const drag = useDrag();
+  const { deck } = lists;
+  const active = deck.playlist === list.id;
+  const run = (p: Promise<Lists | void>, what: string) => p.then((l) => l && onLists(l), onError(what));
+  const byPath = useMemo(() => new Map((rows ?? []).map((p) => [p.row.path, p])), [rows]);
+  const anchor = useRef<string | null>(null);
+  const tileKeys = useMemo(() => tiles.map((t) => t.key), [tiles]);
 
   const manual = list.kind === 'manual';
   const shuffledNow = active && list.settings.order === 'shuffle';
   const reorderable = manual && !shuffledNow;
   const currentAt = (t: StripTile) => active && (manual || !shuffledNow ? deck.index !== null && t.index === deck.index : t.path === deck.current);
   const nextAt = (t: StripTile) => active && !deck.hold && (manual || !shuffledNow ? deck.next_index !== null && t.index === deck.next_index : t.path === deck.next);
+  const tip = stripTip(reorderable);
+
+  if (tiles.length === 0)
+    return (
+      <p className="home-note home-grid-empty">
+        {manual ? (
+          <>
+            {list.name} is empty. Open the{' '}
+            <button type="button" className="home-link" onClick={onLibrary}>
+              library
+            </button>{' '}
+            and drag presets onto <b>{list.name}</b> in the {say('source list')}, or add the one playing from the {say('inspector')} pane.
+          </>
+        ) : rows === null ? (
+          'Reading the library…'
+        ) : (
+          'Nothing in the library matches this yet.'
+        )}
+      </p>
+    );
 
   return (
-    <div className="home-pane">
-      <PlaylistHead list={list} lists={lists} tiles={tiles} total={total} onLists={onLists} onDeleted={onDeleted} onError={onError} menu={menu} />
-      {tiles.length === 0 ? (
-        <p className="home-note home-strip-empty">
-          {manual ? (
-            <>
-              {list.name} is empty. Open the{' '}
-              <button type="button" className="home-link" onClick={onLibrary}>
-                library
-              </button>{' '}
-              and drag presets onto <b>{list.name}</b> in the sidebar, or use + playlist in the now playing panel.
-            </>
-          ) : rows === null ? (
-            'Reading the library…'
-          ) : (
-            'Nothing in the library matches this yet.'
-          )}
-        </p>
-      ) : (
-        <>
-          {/* What the hint footer used to say about the strip, kept where the strip is. */}
-          <p className="home-strip-tip">{stripTip(reorderable)}</p>
-          <ol className="home-strip" aria-label={`${list.name}, in the order it plays`} data-hint={stripTip(reorderable)}>
-            {tiles.map((t, i) => {
-              const target = manual && t.index !== null ? itemTarget(list.id, t.index) : undefined;
-              const payload: Payload | null = reorderable && t.index !== null ? { kind: 'item', list: list.id, index: t.index, path: t.path, name: t.name, thumbnail: t.thumbnail } : null;
-              const open = () => (t.index !== null ? play(t.index) : api.open(t.path).catch(onError(`open ${t.name}`)));
-              const known = byPath.get(t.path);
-              return (
-                <PresetTile
-                  as="li"
-                  key={t.key}
-                  className="home-tile"
-                  thumbnail={t.thumbnail}
-                  name={tileName(known?.title ?? t.name, t.path)}
-                  by={known ? tileBy(known.authors, known.style) : ''}
-                  playing={currentAt(t)}
-                  marks={
-                    <>
-                      <b className="home-tile-n">{i + 1}</b>
-                      {nextAt(t) && <span className="home-tile-next">next</span>}
-                    </>
-                  }
-                  tools={
-                    manual &&
-                    t.index !== null && (
-                      <span className="home-tile-tools" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
-                        <Button
-                          tone="quiet"
-                          onPress={() => run(pl.removeItem(list.id, t.index!), `take ${t.name} out`)}
-                          label={`Take ${t.name} out of ${list.name}`}
-                          title="Take it out of the playlist"
-                        >
-                          ✕
-                        </Button>
-                      </span>
-                    )
-                  }
-                  tabIndex={0}
-                  aria-label={stripTileSays(t, i + 1, currentAt(t), nextAt(t))}
-                  aria-current={currentAt(t) ? 'true' : undefined}
-                  data-next={nextAt(t) ? '' : undefined}
-                  data-missing={t.missing ? '' : undefined}
-                  data-drop={reorderable ? target : undefined}
-                  data-over={target && isOver(drag, target) ? (drag?.payload.kind === 'item' && drag.payload.list === list.id && drag.payload.index < (t.index ?? 0) ? 'after' : 'before') : undefined}
-                  data-dragged={drag?.payload.kind === 'item' && drag.payload.list === list.id && drag.payload.index === t.index ? '' : undefined}
-                  title={t.missing ? `Not in the library any more: ${t.path}` : `${t.name} — click to play from here`}
-                  onClick={open}
-                  onPointerDown={payload ? (e) => beginDrag(e, payload, dropping) : undefined}
-                  onKeyDown={(e) => {
-                    const by = e.altKey && e.key === 'ArrowLeft' ? -1 : e.altKey && e.key === 'ArrowRight' ? 1 : 0;
-                    const to = by && reorderable && t.index !== null && e.target === e.currentTarget ? nudge(t.index, by, list.items.length) : null;
-                    if (to === null) return onActivate(open)(e);
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const strip = e.currentTarget.parentElement;
-                    run(pl.moveItem(list.id, t.index!, to), `move ${t.name}`).then(() =>
-                      requestAnimationFrame(() => (strip?.children[tileFocus(to, tiles.length)] as HTMLElement | undefined)?.focus()),
-                    );
-                  }}
-                />
-              );
-            })}
-            {total > tiles.length && <li className="home-more">and {plural(total - tiles.length, 'more')}</li>}
-          </ol>
-        </>
-      )}
-    </div>
+    // What is picked here is what the inspector shows: a press in the grid doesn't put away the inspector laid over it.
+    <ol className="home-grid" aria-label={`${list.name}, in the order it plays`} aria-controls={INSPECTOR_ID} title={tip} data-hint={tip}>
+      {tiles.map((t, i) => {
+        const target = manual && t.index !== null ? itemTarget(list.id, t.index) : undefined;
+        const payload: Payload | null = reorderable && t.index !== null ? { kind: 'item', list: list.id, index: t.index, path: t.path, name: t.name, thumbnail: t.thumbnail } : null;
+        const known = byPath.get(t.path);
+        const chosen = picked.includes(t.key);
+        const choose = (how: TilePick) => {
+          const next = pickTiles(picked, tileKeys, i, how, anchor.current);
+          if (how !== 'range') anchor.current = t.key;
+          onPick(next);
+        };
+        return (
+          <PresetTile
+            as="li"
+            key={t.key}
+            className="home-tile"
+            thumbnail={t.thumbnail}
+            name={tileName(known?.title ?? t.name, t.path)}
+            by={known ? tileBy(known.authors, known.style) : ''}
+            playing={currentAt(t)}
+            marks={
+              <>
+                <b className="home-tile-n">{i + 1}</b>
+                {nextAt(t) && <span className="home-tile-next">next</span>}
+              </>
+            }
+            tools={
+              manual &&
+              t.index !== null && (
+                <span className="home-tile-tools" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+                  <Button tone="quiet" onPress={() => run(pl.removeItem(list.id, t.index!), `take ${t.name} out`)} label={`Take ${t.name} out of ${list.name}`} title="Take it out of the playlist">
+                    ✕
+                  </Button>
+                </span>
+              )
+            }
+            tabIndex={0}
+            aria-label={stripTileSays(t, i + 1, currentAt(t), nextAt(t), chosen)}
+            aria-current={currentAt(t) ? 'true' : undefined}
+            data-picked={chosen ? '' : undefined}
+            data-next={nextAt(t) ? '' : undefined}
+            data-missing={t.missing ? '' : undefined}
+            data-drop={reorderable ? target : undefined}
+            data-over={target && isOver(drag, target) ? (drag?.payload.kind === 'item' && drag.payload.list === list.id && drag.payload.index < (t.index ?? 0) ? 'after' : 'before') : undefined}
+            data-dragged={drag?.payload.kind === 'item' && drag.payload.list === list.id && drag.payload.index === t.index ? '' : undefined}
+            title={t.missing ? `Not in the library any more: ${t.path}` : `${t.name} — double-click to play from here`}
+            onClick={(e: MouseEvent) => choose(tilePickOf(e))}
+            onDoubleClick={() => onPlay(t)}
+            onPointerDown={payload ? (e) => beginDrag(e, payload, dropping) : undefined}
+            onKeyDown={(e: KeyboardEvent) => {
+              if (e.target !== e.currentTarget) return;
+              const by = e.altKey && e.key === 'ArrowLeft' ? -1 : e.altKey && e.key === 'ArrowRight' ? 1 : 0;
+              const to = by && reorderable && t.index !== null ? nudge(t.index, by, list.items.length) : null;
+              if (to !== null) {
+                e.preventDefault();
+                e.stopPropagation();
+                const grid = e.currentTarget.parentElement;
+                run(pl.moveItem(list.id, t.index!, to), `move ${t.name}`).then(() => requestAnimationFrame(() => (grid?.children[tileFocus(to, tiles.length)] as HTMLElement | undefined)?.focus()));
+              } else if (e.key === 'Enter') {
+                e.preventDefault();
+                onPlay(t);
+              } else if (e.key === ' ') {
+                e.preventDefault();
+                choose(e.shiftKey ? 'range' : 'toggle');
+              } else if (e.key === 'Escape' && picked.length) {
+                e.preventDefault();
+                e.stopPropagation();
+                onPick([]);
+              }
+            }}
+          />
+        );
+      })}
+      {total > tiles.length && <li className="home-more">and {plural(total - tiles.length, 'more')}</li>}
+    </ol>
   );
 }
 

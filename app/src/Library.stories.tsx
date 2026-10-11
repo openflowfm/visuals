@@ -115,6 +115,43 @@ export const NoResults: Story = {
   },
 };
 
+/** The inspector view's grid (decision 70), bare, its search and "Filter ▾" in a toolbar over it as Home's header holds them. */
+function BareLibrary({ search: start = '', loaded = true, current = null, onLoad, onAdd }: HomeLibraryProps) {
+  const [search, setSearch] = useState(start);
+  const [toolbar, setToolbar] = useState<HTMLElement | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  const entries = loaded ? ENTRIES : [];
+  return (
+    <main className="home-main" style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <div ref={setToolbar} data-testid="toolbar" style={{ display: 'flex', justifyContent: 'flex-end', padding: '8px 22px' }} />
+      <Library
+        entries={entries}
+        loaded={loaded}
+        search={search}
+        onSearch={setSearch}
+        found={searchLibrary(entries, search)}
+        current={current}
+        into={null}
+        onLoad={onLoad}
+        onAdd={onAdd}
+        home={{ scope: 'library', title: 'Library', onChosen: (c) => setSelected(c.map((p) => p.row.key)), bare: true, toolbar, selected }}
+      />
+    </main>
+  );
+}
+
+/** Bare, as the inspector view shows it: the search and Filter in the toolbar, only the grid in the pane. */
+export const Bare: Story = {
+  render: (args) => <BareLibrary {...args} />,
+  play: async ({ canvas }) => {
+    const toolbar = within(await canvas.findByTestId('toolbar'));
+    await expect(await toolbar.findByRole('searchbox', { name: 'search presets' })).toBeVisible();
+    await expect(toolbar.getByRole('button', { name: 'filter' })).toBeVisible();
+    await expect((await canvas.findAllByRole('option')).length).toBeGreaterThan(12);
+    await expect(canvas.queryByRole('heading', { name: 'Library' })).toBeNull();
+  },
+};
+
 /** Before the presets and the index have come: the heading, and a note while it reads them. */
 export const Loading: Story = {
   args: { loaded: false },

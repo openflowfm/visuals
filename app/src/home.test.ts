@@ -2,10 +2,35 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LibraryQuery, LibraryRow, Level } from './api.ts';
 import { prepareRow, type Prepared } from './librarySearch.ts';
 import { DEFAULT_SETTINGS, EMPTY_DECK, type Lists, type Playlist } from './playlists.ts';
-import { changeUnit, matches, playsFrom, playsLike, recentList, RECENT, sections, seedStarters, SEEDED_KEY, STARTERS, STRIP_CAP, strip, NameEdit, tileFocus, withSetting, type Mark } from './home.ts';
+import {
+  changeUnit,
+  keyAt,
+  matches,
+  pickTiles,
+  playsFrom,
+  playsLike,
+  prefsAt,
+  presetLength,
+  recentList,
+  RECENT,
+  sections,
+  seedStarters,
+  SEEDED_KEY,
+  startPrefs,
+  STARTERS,
+  STRIP_CAP,
+  strip,
+  NameEdit,
+  tileFocus,
+  withSetting,
+  type Mark,
+} from './home.ts';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { firstPane, openSettings, PlaylistPane, rowSays, SettingsBar, Sidebar, stripTileSays } from './Home.tsx';
+import { firstPane, openSettings, PlaylistPane, stripTileSays } from './Home.tsx';
+import { rowSays } from './layout/home-model.ts';
+import { SettingsBar } from './PlaylistHead.tsx';
+import { Sidebar } from './Sources.tsx';
 import { SHEET_EVENT, sheetOf } from './views.tsx';
 
 const row = (name: string, speed: Level = 'mid', intensity: Level = 'mid', over: Partial<LibraryRow> = {}): LibraryRow => ({
@@ -233,6 +258,20 @@ describe('strip', () => {
     expect(second.tiles.map((t) => t.index)).toEqual([1, 0, 2]);
   });
 
+  it('keys each tile by its preset, not its place, so a pick follows it as the playlist is reordered or a tile taken out', () => {
+    const before = strip(manual('m', ['/presets/g/a.milk', '/presets/g/b.milk', '/presets/g/a.milk', '/presets/g/c.milk']), ctx).tiles;
+    expect(new Set(before.map((t) => t.key)).size).toBe(4);
+    const b = before[1].key;
+    // b moved to the end: its key goes with it.
+    const moved = strip(manual('m', ['/presets/g/a.milk', '/presets/g/a.milk', '/presets/g/c.milk', '/presets/g/b.milk']), ctx).tiles;
+    expect(moved.find((t) => t.key === b)).toMatchObject({ name: 'b', index: 3 });
+    // c taken out: its key is gone, the others keep theirs.
+    const c = before[3].key;
+    const out = strip(manual('m', ['/presets/g/a.milk', '/presets/g/b.milk', '/presets/g/a.milk']), ctx).tiles;
+    expect(out.some((t) => t.key === c)).toBe(false);
+    expect(out.find((t) => t.key === b)).toMatchObject({ name: 'b', index: 1 });
+  });
+
   it('keeps the listed order for a shuffled playlist that is not playing', () => {
     const list = manual('m', ['/presets/g/a.milk', '/presets/g/b.milk'], { settings: { ...DEFAULT_SETTINGS, order: 'shuffle' } });
     expect(strip(list, ctx).tiles.map((t) => t.name)).toEqual(['a', 'b']);
@@ -345,6 +384,52 @@ describe('recentList', () => {
   });
 });
 
+describe('the inspector view (decision 70)', () => {
+  const at = { sidebar: 900, inspector: 1200 };
+
+  it('starts with what was kept where a pane docks, and closed where it is laid over', () => {
+    const { wide, narrow } = startPrefs({ sidebar: false, inspector: true });
+    expect(wide).toEqual({ sidebar: false, inspector: true });
+    expect(narrow).toEqual({ sidebar: null, inspector: null });
+    expect(prefsAt(1440, at, wide, narrow)).toEqual({ sidebar: false, inspector: true });
+    expect(prefsAt(1000, at, wide, narrow)).toEqual({ sidebar: false, inspector: null });
+    expect(prefsAt(800, at, wide, narrow)).toEqual({ sidebar: null, inspector: null });
+  });
+
+  it("takes a dev run's VITE_HOME_PANEL and VITE_HOME_SIDEBAR at every width, and ignores anything else", () => {
+    const opened = startPrefs({ sidebar: false, inspector: false }, { panel: '1', sidebar: '1' });
+    expect(prefsAt(800, at, opened.wide, opened.narrow)).toEqual({ sidebar: true, inspector: true });
+    expect(prefsAt(1440, at, opened.wide, opened.narrow)).toEqual({ sidebar: true, inspector: true });
+    const closed = startPrefs({ sidebar: true, inspector: true }, { panel: '0', sidebar: '' });
+    expect(closed.wide).toEqual({ sidebar: true, inspector: false });
+  });
+
+  it('runs the time line to the deck’s seconds only while it moves on by itself on a clock', () => {
+    const ticking = { ...EMPTY_DECK, auto: true, seconds: 45 };
+    expect(presetLength(ticking)).toBe(45);
+    expect(presetLength({ ...ticking, hold: true })).toBeNull();
+    expect(presetLength({ ...ticking, auto: false })).toBeNull();
+    expect(presetLength({ ...ticking, bars: 8 })).toBeNull();
+  });
+
+  it('finds a preset by its whole path or its path in the pack', () => {
+    const rows = [prep(row('a')), prep(row('b'))];
+    expect(keyAt(rows, '/presets/g/b.milk')).toBe('g/b.milk');
+    expect(keyAt(rows, 'g/a.milk')).toBe('g/a.milk');
+    expect(keyAt(rows, 'nope.milk')).toBeNull();
+    expect(keyAt(rows, '')).toBeNull();
+  });
+
+  it('picks tiles as Finder does: a click one, ⌘ one more or one less, ⇧ a run from the anchor', () => {
+    const keys = ['0', '1', '2', '3'];
+    expect(pickTiles(['0', '2'], keys, 1, 'select', null)).toEqual(['1']);
+    expect(pickTiles(['0'], keys, 2, 'toggle', '0')).toEqual(['0', '2']);
+    expect(pickTiles(['0', '2'], keys, 2, 'toggle', '0')).toEqual(['0']);
+    expect(pickTiles(['3'], keys, 1, 'range', '3')).toEqual(['1', '2', '3']);
+    expect(pickTiles([], keys, 1, 'range', null)).toEqual(['1']);
+  });
+});
+
 describe('openSettings', () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -387,21 +472,28 @@ describe('the home, read aloud', () => {
 
   it('names each tile in the strip with its place, and whether it plays now or next', () => {
     expect(stripTileSays({ key: 'k', path: '/x.milk', name: 'x', thumbnail: null, missing: true, index: 2 }, 3, false, false)).toBe('3. x, not in the library any more');
+    const rows = [prep(row('a')), prep(row('b'))];
+    const { tiles, total } = strip(mine, { rows, played: [], playing: null });
     const html = renderToStaticMarkup(
       createElement(PlaylistPane, {
         list: mine,
         lists,
-        rows: [prep(row('a')), prep(row('b'))],
-        played: [],
+        tiles,
+        total,
+        rows,
         dropping: { accepts: () => true, onDrop: none },
+        picked: [tiles[1].key],
+        onPick: none,
+        onPlay: none,
         onLists: none,
-        onDeleted: none,
         onError: fails,
         onLibrary: none,
       }),
     );
     expect(html).toContain('aria-label="1. a, playing"');
-    expect(html).toContain('aria-label="2. b, next"');
+    // The one picked says so, and is marked for its ring.
+    expect(html).toContain('aria-label="2. b, next, picked"');
+    expect(html).toContain('data-picked=""');
   });
 
   it('names every field of how a playlist plays, with no <label> round controls it can’t label', () => {

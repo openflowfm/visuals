@@ -3,7 +3,7 @@
 // Home's playlist settings bar, read as a screen reader would.
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { SettingsBar } from './Home.tsx';
+import { SettingsBar } from './PlaylistHead.tsx';
 import { DEFAULT_SETTINGS } from './playlists.ts';
 import { say } from './words.ts';
 

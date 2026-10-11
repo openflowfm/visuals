@@ -211,9 +211,10 @@ export function strip(list: Playlist, ctx: StripContext): { tiles: StripTile[]; 
   const shuffled = ctx.playing !== null && list.settings.order === 'shuffle';
   let tiles: StripTile[];
   if (list.kind === 'manual') {
+    const seen = new Map<string, number>();
     const look = list.items.map((item, index) => {
       const p = byPath.get(item.path) ?? (item.hash ? byHash.get(item.hash) : undefined);
-      return { key: `${index}`, path: item.path, name: item.name, thumbnail: p?.row.thumbnail ?? null, missing: item.missing, index };
+      return { key: keyFor(seen, item.path), path: item.path, name: item.name, thumbnail: p?.row.thumbnail ?? null, missing: item.missing, index };
     });
     if (shuffled) {
       // The deck names paths only; a preset listed twice takes its places in turn.
@@ -231,15 +232,27 @@ export function strip(list: Playlist, ctx: StripContext): { tiles: StripTile[]; 
       tiles = look;
     }
   } else if (shuffled) {
-    tiles = ctx.playing!.map((path, i) => {
+    const seen = new Map<string, number>();
+    tiles = ctx.playing!.map((path) => {
       const p = byPath.get(path);
-      return { key: `${i}:${path}`, path, name: p?.title ?? fileName(path), thumbnail: p?.row.thumbnail ?? null, missing: false, index: null };
+      return { key: keyFor(seen, path), path, name: p?.title ?? fileName(path), thumbnail: p?.row.thumbnail ?? null, missing: false, index: null };
     });
   } else {
     const found = list.query ? matches(list.query, ctx.rows, ctx.played) : [];
     tiles = found.map((p, i) => ({ key: p.row.key, path: p.row.path, name: p.title, thumbnail: p.row.thumbnail, missing: false, index: i }));
   }
   return { tiles: tiles.slice(0, STRIP_CAP), total: tiles.length };
+}
+
+/**
+ * A strip tile's key: the preset's path, and which time it is listed (`#0`, `#1`…).
+ * It follows the preset, not its place, so what is picked stays on it as the
+ * playlist is reordered, and goes when it is taken out.
+ */
+function keyFor(seen: Map<string, number>, path: string): string {
+  const n = seen.get(path) ?? 0;
+  seen.set(path, n + 1);
+  return `${path}#${n}`;
 }
 
 /** The playlist's settings with one changed, kept within what the app allows. */
@@ -303,7 +316,7 @@ export function playsLike(list: Playlist, total: number): string {
   return [n, movesOn(s.change), s.order === 'shuffle' ? 'shuffled' : 'in order', `crossfade ${Number(s.transition.toFixed(1))} s`, ...look].filter(Boolean).join(' · ');
 }
 
-/** The browser storage keys for what a viewer leaves open on the home: the library's filter chips, and the Now Playing panel in a wide window. */
+/** The browser storage keys for what a viewer leaves open on the home: the library's filter chips, and the Now Playing panel in a wide window (before decision 70; the inspector view keeps its panes under home-model.ts's keys). */
 export const FILTERS_KEY = 'visuals.home.filters';
 export const PANEL_KEY = 'visuals.home.panel';
 
@@ -320,6 +333,72 @@ export function remember(key: string, open: boolean): void {
   } catch {
     // Storage full or refused: it opens as it would next time.
   }
+}
+
+/** A remembered show-or-hide, null when the viewer never chose or storage can't be read. */
+export function rememberedChoice(key: string): boolean | null {
+  const v = localMark()?.get(key);
+  return v === '1' ? true : v === '0' ? false : null;
+}
+
+/** What the viewer chose for the sidebar and the inspector (home-model.ts's `LayoutPrefs`, repeated here so home.ts needs nothing from layout/). */
+export interface Prefs {
+  sidebar: boolean | null;
+  inspector: boolean | null;
+}
+
+/**
+ * The choices the home starts with (decision 70): `wide` is what the viewer kept
+ * for a window where the pane docks (the sidebar from 900 px, the inspector from
+ * 1200), and `narrow` what this run chose where it is laid over (never kept: a
+ * pane laid over the grid starts closed). A dev run's `VITE_HOME_PANEL` and
+ * `VITE_HOME_SIDEBAR` ('1' or '0') set both, for captures, without keeping them.
+ */
+export function startPrefs(kept: Prefs, dev: { panel?: string; sidebar?: string } = {}): { wide: Prefs; narrow: Prefs } {
+  const flag = (v: string | undefined) => (v === '1' ? true : v === '0' ? false : null);
+  const panel = flag(dev.panel);
+  const sidebar = flag(dev.sidebar);
+  return {
+    wide: { sidebar: sidebar ?? kept.sidebar, inspector: panel ?? kept.inspector },
+    narrow: { sidebar, inspector: panel },
+  };
+}
+
+/** The choices that count in a window `width` px wide: the kept ones where a pane docks, this run's where it is laid over. */
+export function prefsAt(width: number, at: { sidebar: number; inspector: number }, wide: Prefs, narrow: Prefs): Prefs {
+  return { sidebar: width >= at.sidebar ? wide.sidebar : narrow.sidebar, inspector: width >= at.inspector ? wide.inspector : narrow.inspector };
+}
+
+/**
+ * How long the preset playing lasts before the deck moves on by itself, as the
+ * bar's time line shows it (decision 70, D9): the deck's seconds while it moves
+ * on on a clock; null while it is held, auto-advance is off, or Link's bars move
+ * it on (the page can't tell when the next bar lands).
+ */
+export function presetLength(deck: pl.Deck): number | null {
+  return deck.auto && !deck.hold && deck.bars === 0 ? deck.seconds : null;
+}
+
+/** The index key of the preset at `path` (a whole path, or one in the pack, `VITE_HOME_PICK`), or null. */
+export function keyAt(rows: readonly Prepared[], path: string): string | null {
+  if (!path) return null;
+  const tail = `/${path.replace(/^\/+/, '')}`;
+  return (rows.find((p) => p.row.path === path) ?? rows.find((p) => p.row.path.endsWith(tail)))?.row.key ?? null;
+}
+
+/** How a tile in a playlist's grid was picked: a plain click, ⌘-click (add or take it out), or ⇧-click (select up to it from `anchor`). */
+export type TilePick = 'select' | 'toggle' | 'range';
+
+/** The tiles picked (by tile key) after the one at `index` of `keys` is picked by `how`. */
+export function pickTiles(picked: readonly string[], keys: readonly string[], index: number, how: TilePick, anchor: string | null): string[] {
+  const key = keys[index];
+  if (key === undefined) return [...picked];
+  if (how === 'select') return [key];
+  if (how === 'toggle') return picked.includes(key) ? picked.filter((k) => k !== key) : [...picked, key];
+  const from = anchor === null ? -1 : keys.indexOf(anchor);
+  if (from < 0) return [key];
+  const [a, b] = from < index ? [from, index] : [index, from];
+  return keys.slice(a, b + 1);
 }
 
 const clamp = (v: number, lo: number, hi: number) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : lo);

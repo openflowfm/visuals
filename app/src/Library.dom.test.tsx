@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Entry, LibraryRow, Resume } from './api.ts';
 import { Library } from './Library.tsx';
 import { forgetResumedQuery, stepDeck } from './library.ts';
-import { searchLibrary } from './librarySearch.ts';
+import { searchLibrary, type Prepared } from './librarySearch.ts';
 import { EMPTY_DECK, type Deck } from './playlists.ts';
 
 const { invoke, heard } = vi.hoisted(() => ({
@@ -266,6 +266,136 @@ describe("the home's library pane (decision 68)", () => {
     expect(screen.getByRole('heading', { name: 'Nothing starred yet' }).closest('.lib-empty')).toBeTruthy();
     expect(count()).toBe('0');
     expect(searchbox().getAttribute('placeholder')).toBe('Search 0 presets');
+  });
+});
+
+describe("the home's inspector grid (bare, decision 70)", () => {
+  let toolbar: HTMLElement;
+  beforeEach(() => {
+    localStorage.clear();
+    toolbar = document.createElement('div');
+    document.body.append(toolbar);
+  });
+  afterEach(() => toolbar.remove());
+
+  interface Bare {
+    search?: string;
+    onSearch?: (s: string) => void;
+    onLoad?: (e: Entry) => void;
+    onChosen?: (keys: string[]) => void;
+    selected?: readonly string[];
+    bar?: HTMLElement | null;
+  }
+  // One handler per `onChosen`, as Home keeps one: a new one each render would report the selection again.
+  const keysTo = new WeakMap<(keys: string[]) => void, (c: Prepared[]) => void>();
+  const reporter = (f: (keys: string[]) => void) => keysTo.get(f) ?? keysTo.set(f, (c) => f(c.map((p) => p.row.key))).get(f)!;
+  const quiet = () => {};
+  const bare = ({ search = '', onSearch = quiet, onLoad = quiet, onChosen = quiet, selected, bar = toolbar }: Bare = {}) => (
+    <Library
+      entries={ENTRIES}
+      loaded
+      search={search}
+      onSearch={onSearch}
+      found={searchLibrary(ENTRIES, search)}
+      current={null}
+      into={null}
+      onLoad={onLoad}
+      onAdd={() => {}}
+      home={{ scope: 'library', title: 'Library', onChosen: reporter(onChosen), bare: true, toolbar: bar, selected }}
+    />
+  );
+  const mount = async (props: Bare = {}) => {
+    const r = render(bare(props));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    return r;
+  };
+  const pane = () => document.querySelector('.lib-bare') as HTMLElement;
+  const tile = (key: string) => screen.getAllByRole('option').find((o) => o.getAttribute('aria-label')!.startsWith(`${key} —`))!;
+
+  it('shows only the grid in the pane, and the search and Filter in the toolbar', async () => {
+    await mount();
+    expect(pane().className).toBe('lib lib-home lib-bare');
+    expect(pane().querySelector('.lib-head, .lib-count, .lib-chips, .lib-search, .pack-offer')).toBeNull();
+    expect(within(pane()).getByRole('listbox', { name: 'presets' })).toBeTruthy();
+    const bar = within(toolbar);
+    expect(bar.getByRole('searchbox', { name: 'search presets' }).classList).toContain('lib-search');
+    expect(toolbar.querySelector('.lib-toolbar .lib-search')).toBeTruthy();
+    expect(bar.getByRole('button', { name: 'search' }).getAttribute('title')).toBe('Search (⌘F)');
+    expect(bar.getByRole('button', { name: 'filter' }).getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('renders nothing in the toolbar while there is none', async () => {
+    await mount({ bar: null });
+    expect(screen.queryByRole('searchbox')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'filter' })).toBeNull();
+    expect(toolbar.childElementCount).toBe(0);
+  });
+
+  it("holds the groups, the picked values, Clear and Save as smart playlist in Filter's popover", async () => {
+    await mount();
+    fireEvent.click(within(toolbar).getByRole('button', { name: 'filter' }));
+    const panel = within(toolbar).getByRole('dialog', { name: 'filter' });
+    expect(within(panel).getByText('3 presets')).toBeTruthy();
+    fireEvent.click(within(panel).getByRole('button', { name: 'style' }));
+    fireEvent.click(within(panel).getByRole('button', { name: 'A, 3 presets' }));
+    expect(within(panel).getByRole('button', { name: 'stop filtering by A' })).toBeTruthy();
+    expect(within(panel).getByRole('button', { name: 'clear the filter' })).toBeTruthy();
+    expect(within(panel).getByRole('button', { name: 'Save as smart playlist' })).toBeTruthy();
+    const filter = within(toolbar).getByRole('button', { name: 'filter' });
+    expect(filter.getAttribute('aria-pressed')).toBe('true');
+    expect(filter.querySelector('.lib-filter-badge')!.textContent).toBe('1');
+    // None of it in the pane.
+    expect(pane().querySelector('.lib-picked, .lib-chips')).toBeNull();
+  });
+
+  it('selects on a click and plays on a double-click, the deck then following the grid', async () => {
+    const onLoad = vi.fn();
+    const onChosen = vi.fn();
+    await mount({ onLoad, onChosen });
+    fireEvent.click(tile('b'));
+    expect(onChosen).toHaveBeenLastCalledWith(['b']);
+    expect(onLoad).not.toHaveBeenCalled();
+    expect(follows()).toEqual([]);
+    fireEvent.click(tile('c'), { metaKey: true });
+    expect(onChosen).toHaveBeenLastCalledWith(['b', 'c']);
+    fireEvent.doubleClick(tile('c'));
+    expect(onLoad).toHaveBeenCalledWith(ENTRIES[2]);
+    expect(follows()).toEqual([ROWS[2].path]);
+    expect(onChosen).toHaveBeenLastCalledWith(['c']);
+  });
+
+  it('lets go of the selection on Escape, and lets Escape through when nothing is selected', async () => {
+    const onChosen = vi.fn();
+    await mount({ onChosen });
+    fireEvent.click(tile('a'));
+    const grid = screen.getByRole('listbox', { name: 'presets' });
+    const outside = vi.fn();
+    window.addEventListener('keydown', outside);
+    fireEvent.keyDown(grid, { key: 'Escape' });
+    expect(onChosen).toHaveBeenLastCalledWith([]);
+    expect(outside).not.toHaveBeenCalled();
+    fireEvent.keyDown(grid, { key: 'Escape' });
+    expect(outside).toHaveBeenCalledTimes(1);
+    expect(outside.mock.calls[0][0].defaultPrevented).toBe(false);
+    window.removeEventListener('keydown', outside);
+  });
+
+  it("takes Home's selection when it changes, and doesn't hand it back changed", async () => {
+    const onChosen = vi.fn();
+    const r = await mount({ onChosen });
+    r.rerender(bare({ onChosen, selected: ['b', 'c'] }));
+    expect(onChosen).toHaveBeenLastCalledWith(['b', 'c']);
+    expect(tile('b').getAttribute('aria-selected')).toBe('true');
+    expect(tile('c').getAttribute('aria-selected')).toBe('true');
+    expect(tile('a').getAttribute('aria-selected')).toBe('false');
+    const calls = onChosen.mock.calls.length;
+    // The same keys again: nothing changes.
+    r.rerender(bare({ onChosen, selected: ['b', 'c'] }));
+    expect(onChosen.mock.calls.length).toBe(calls);
+    // The grid's own pick, then Home echoing it: kept.
+    fireEvent.click(tile('a'));
+    r.rerender(bare({ onChosen, selected: ['a'] }));
+    expect(onChosen).toHaveBeenLastCalledWith(['a']);
   });
 });
 

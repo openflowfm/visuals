@@ -1,12 +1,27 @@
-/* The home (Home.tsx), laid out like a music app (decision 67): the header across
-   the top; the source list (Sources.tsx) down the left; the main pane, the
-   library's grid or a playlist's strip under its header (PlaylistHead.tsx); the
-   Now Playing panel (NowPanel.tsx) on the right, which can be closed; and the
-   bottom bar (HomeBar.tsx). Under 900px the source list is a menu at the top of
-   the main pane, and the panel, opened, takes the main pane's place. The panel and the bar
-   carry the preview, a hole onto the native view under the page: they paint
-   themselves with its shadow, so nothing here may paint behind them. Rules hang
-   off `.home`, which outranks app.css's own.
+/* The home (Home.tsx). Since decision 70 an inspector view, as Finder's and
+   Photos' are, in the shell of layout/HomeLayout.tsx (layout.css): the inset
+   sidebar picking a source (layout/InsetSidebar.tsx); the main column, the
+   header row (the sidebar's and the inspector's toggles, the mark, home | live,
+   the library's search and "Filter ▾", ⚙), the Now Playing hero pinned at its
+   top (layout/Hero.tsx) and under it only a plain grid of the source's presets,
+   with transient notes over it; the inspector down the right (layout/inspector),
+   about the presets picked, else the source; and the transport bar
+   (layout/TransportBar.tsx). The sidebar docks from 900px and the inspector
+   from 1200px; narrower, each is laid over the grid when opened.
+
+   What decision 70 moved or dropped: the source menu of a narrow window (the
+   sidebar is laid over instead); the bar's small preview and its "go live"
+   (home | live in the header is the way to live); the pane's title h1 (the
+   sidebar's pill names the source, the inspector's source card titles it); the
+   strip's one-line tip (now the grid's tooltip); the Now Playing panel taking
+   the main pane's place in a narrow window (the hero is always there); and a
+   click playing a tile (a click picks it, a double-click or Enter plays it).
+   Sources.tsx, NowPanel.tsx and HomeBar.tsx are no longer used by Home.
+
+   The hero's picture is the preview, a hole onto the native view under the
+   page: it paints the main column round itself with its spread shadow, so
+   nothing here may paint behind it (the header, the grid and the bar paint no
+   background). Rules hang off `.home`, which outranks app.css's own.
 
    Since decision 68 Home looks like an instrument, near borderless: areas are
    told apart by space and tone, not lines; controls are type, the active one
@@ -64,12 +79,8 @@
   --playing: var(--green);
   /* The shadow a hovered tile lifts on. */
   --lift: 0 10px 24px rgb(0 0 0 / 0.55);
-  /* One padding for the main pane: its head, chips and grid share a left edge. */
+  /* One padding for the main column: its hero, notes and grid share a left edge. */
   --pad: 22px;
-  --home-side: 220px;
-  --home-now: 340px;
-  grid-template-columns: var(--home-side) minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr) auto;
   font-family: var(--font-ui);
   font-variation-settings: var(--font-ui-axes);
 }
@@ -120,13 +131,15 @@
   --wdg-mono-axes: var(--font-num-axes);
 }
 
-/* The header: on the window's own surface, no rule under it; the mark, home | live
-   as two words with the one shown underlined, and ⚙ as a 30px target. */
+/* The header: no background of its own (the hole's shadow and the window paint
+   what is behind it), no rule under it; the sidebar's toggle, the mark, home |
+   live as two words with the one shown underlined, the library's toolbar, the
+   inspector's toggle and ⚙, each a 30px target. */
 .home .vf-header {
   height: 52px;
   padding: 0 14px 0 18px;
   gap: 18px;
-  background: var(--surface-0);
+  background: none;
   border-bottom: 0;
   font-family: var(--font-ui);
   font-variation-settings: var(--font-ui-axes);
@@ -176,57 +189,95 @@
 .home .vf-header .wdg-button-body:hover {
   color: var(--fg);
 }
-.app.home[data-panel] {
-  grid-template-columns: var(--home-side) minmax(0, 1fr) var(--home-now);
+/* The sidebar's and the inspector's toggles: a quiet glyph, brighter while its pane shows; the inspector's mirrors the sidebar's. */
+.home .home-tool {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: var(--detail);
+  background: none;
+  cursor: pointer;
 }
-
-/* The source list: it scrolls. */
-.home .home-side {
-  grid-column: 1;
-  grid-row: 2;
+.home .home-tool:hover,
+.home .home-tool[aria-pressed='true'] {
+  color: var(--fg);
+}
+.home .home-tool:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 0;
+}
+.home .home-tool-inspector .lay-icon {
+  transform: scaleX(-1);
+}
+/* Where the library puts its search and "Filter ▾" (a portal, Library.tsx); empty for a playlist. */
+.home .home-toolbar {
   display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  background: var(--surface-0);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
-/* Its narrow stand-in, the source menu, only in a narrow window. */
-.home .src-menu {
+.home .home-toolbar:empty {
   display: none;
 }
 
-/* The Now Playing panel's cell: transparent, the panel paints itself round the preview. */
-.home .home-now {
-  grid-column: 3;
-  grid-row: 2;
+/* The preview in the hero (`<Preview className="hero-pic">`, the picture's box
+   itself) and who paints round it: layout.css and hero.css. Only its rounded
+   corners are painted here (below). */
+
+/* Under the hero: the notes, then the grid filling the rest of the column; the grid scrolls, the hero stays. */
+.home .home-grid-pane {
   display: flex;
   flex-direction: column;
+  flex: 1;
   min-width: 0;
   min-height: 0;
+  height: 100%;
 }
-.home .home-now > .now-panel {
+.home .home-grid-pane > .lib {
   flex: 1;
   min-height: 0;
 }
 
-/* The bottom bar, the whole width. */
-.home .home-bar {
-  grid-column: 1 / -1;
-  grid-row: 3;
-}
-
-/* The main pane. */
-.app.home main.home-main {
-  grid-column: 2;
-  grid-row: 2;
+/* The inspector's card for the library or the starred presets while nothing is picked. */
+.home .home-source {
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  justify-content: flex-start;
-  min-width: 0;
-  min-height: 0;
-  background: var(--surface-0);
+  gap: 6px;
+  padding: 4px 0 12px;
+}
+.home .home-source-kicker {
+  margin: 0;
+  color: var(--detail);
+  font-size: 11px;
+  font-weight: 500;
+}
+.home .home-source-name {
+  margin: 0;
+  color: var(--fg);
+  font-family: var(--font-display);
+  font-variation-settings: var(--font-display-axes);
+  font-size: 20px;
+  font-weight: 600;
+}
+.home .home-source-count {
+  margin: 0;
+  color: var(--ui);
+  font-family: var(--font-num);
+  font-variation-settings: var(--font-num-axes);
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+}
+.home .home-source-hint {
+  margin: 4px 0 8px;
+  color: var(--caption);
+  font-size: 12px;
+  line-height: 1.5;
 }
 /* Something that went wrong (a preset that wouldn't open), over the main pane: a tinted note, no rule. */
 .home .home-notice {
@@ -289,14 +340,7 @@
   cursor: pointer;
 }
 
-.home .home-pane {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-}
-
-/* The playlist's strip and its tiles: tile.css, one tile with the library's grid. */
+/* A playlist's grid and its tiles: tile.css, one tile with the library's grid. */
 
 /* The preset being dragged, following the pointer: a lifted card, no outline; brighter over a place it can land. */
 .home-ghost {
@@ -334,45 +378,17 @@
   white-space: nowrap;
 }
 
-/* Under 1100px the sidebar and the panel narrow and the pane's padding tightens, so the grid keeps three tiles across down to 900px. */
+/* Under 1100px the main column's padding tightens, with smaller tiles (tile.css). */
 @media (max-width: 1099px) {
   .app.home {
-    --home-side: 184px;
-    --home-now: 280px;
     --pad: 16px;
   }
 }
-
-/* Under 900px (down to the 560px minimum, decision 63): the source list is a
-   menu at the top of the main pane, and the panel, closed at first, takes the
-   main pane's place when opened (the bar's small preview opens it, ✕ puts the
-   main pane back). The main pane isn't drawn while it is open: nothing may
-   paint under the preview (#163). */
-@media (max-width: 899px) {
-  .app.home,
-  .app.home[data-panel] {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .home .home-side {
-    display: none;
-  }
-  .home .src-menu {
-    display: inline-flex;
-  }
-  .app.home main.home-main {
-    grid-column: 1;
-  }
-  .home .home-now {
-    grid-column: 1;
-  }
-  .app.home[data-panel] main.home-main {
-    display: none;
-  }
-}
-/* The home's header holds only the mark, home | live and ⚙ now, so the mark keeps its place down to 560px (app.css hides it under 640 for the other views). */
-@media (max-width: 639px) {
-  .home .vf-header > .vf-mark {
-    display: inline-flex;
+/* Under 700px (down to the 560px minimum, decision 63) the header closes up and the search folds to its glyph (library.css). */
+@media (max-width: 699px) {
+  .home .vf-header {
+    gap: 10px;
+    padding: 0 8px 0 12px;
   }
 }
 

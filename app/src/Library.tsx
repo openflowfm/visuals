@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent, PointerEvent, ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { FILTERS_KEY, remember, remembered } from './home.ts';
 import { PackOffer } from './PackOffer.tsx';
+import { Popover } from './Popover.tsx';
 import * as api from './api.ts';
 import type { Entry, LibraryChange, LibraryData, LibraryGroup, LibraryQuery, LibraryRow } from './api.ts';
 import * as pl from './playlists.ts';
@@ -78,10 +80,19 @@ export interface HomeLibrary {
   menu?: ReactNode;
   /** Several presets picked in the grid (⌘ or ⇧), or one; for the Now Playing panel. */
   onChosen(chosen: Prepared[]): void;
-  /** Just the grid and its search, without the title and count over it (the inspector view titles the pane); not used yet. */
+  /**
+   * The inspector view's grid (decision 70): only the grid, its notes and its
+   * empty states in the pane, no title, count, chips or pack offer (the sidebar
+   * names the pane, the inspector's source card counts it and offers the full
+   * library). A click on a tile selects it; a double-click or Enter plays it.
+   */
   bare?: boolean;
-  /** Where the search and the filter button go instead (a portal into the header's toolbar); null until it mounts; not used yet. */
+  /** Where the search and "Filter ▾" go (a portal into the header's toolbar); null until it mounts, when they wait. */
   toolbar?: HTMLElement | null;
+  /** The presets picked, by index key, as Home holds them: the grid takes them when they differ from its own (Esc back to the source, a dot picked in the inspector, `VITE_HOME_PICK`). */
+  selected?: readonly string[];
+  /** The id of what the grid's picks show (the inspector), for the grid's `aria-controls`: a press in it doesn't put that panel away. */
+  controls?: string;
 }
 
 /**
@@ -261,8 +272,11 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
   const byKey = useMemo(() => new Map(prepared.map((p) => [p.row.key, p])), [prepared]);
   const selectedSet = useMemo(() => new Set(selection), [selection]);
   const chosen = useMemo(() => selection.map((k) => byKey.get(k)).filter((p): p is Prepared => !!p), [selection, byKey]);
-  const onChosen = home?.onChosen;
-  useEffect(() => onChosen?.(chosen), [chosen, onChosen]);
+  // Reported when the selection changes, not when the caller hands a new function (a caller's inline one would loop).
+  const onChosen = useRef(home?.onChosen);
+  onChosen.current = home?.onChosen;
+  useEffect(() => onChosen.current?.(chosen), [chosen]);
+  const bare = !!home?.bare;
 
   // The App's entries, by path, so a load hands it the entry it knows.
   const byPath = useMemo(() => new Map(entries.map((e) => [e.path, e])), [entries]);
@@ -287,6 +301,20 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
 
   const handlers = useRef({ onLoad, onAdd, onPress, onSearch, shown, selection, anchor, active, entryOf, query, current, settled });
   handlers.current = { onLoad, onAdd, onPress, onSearch, shown, selection, anchor, active, entryOf, query, current, settled };
+
+  // Home's selection, when it changes to something other than the grid's own (Esc back to the source, a dot picked in
+  // the inspector): the grid takes it. What the grid reports back through onChosen is then the same, so nothing loops.
+  const wanted = home?.selected;
+  const wantedKey = wanted?.join('\n');
+  useEffect(() => {
+    if (wanted === undefined || wantedKey === handlers.current.selection.join('\n')) return;
+    setSelection([...wanted]);
+    const first = wanted[0];
+    if (first !== undefined && handlers.current.shown.some((p) => p.row.key === first)) {
+      setActive(first);
+      setAnchor(first);
+    }
+  }, [wantedKey]);
 
   // Playing from the grid: open it, and have ←, → and R follow the grid (the deck keeps a loaded playlist).
   const following = useRef(false);
@@ -428,6 +456,7 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
   const pickedCount = picked.reduce((n, g) => n + (groups[g]?.length ?? 0), 0);
   // The title counts `paneTotal` (above), or what is shown while filtering.
   const searchInput = useRef<HTMLInputElement>(null);
+  const root = useRef<HTMLDivElement>(null);
   const clearSearch = () => {
     filterChanged();
     onSearch('');
@@ -451,7 +480,8 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
     ev.preventDefault();
     ev.stopPropagation();
     if (at < 0) setActive(shown[0].row.key);
-    (ev.currentTarget.closest('.lib')?.querySelector('.lib-grid') as HTMLElement | null)?.focus();
+    // By the pane, not the search's ancestors: on the inspector view the search is in the header's toolbar.
+    root.current?.querySelector<HTMLElement>('.lib-grid')?.focus();
   };
 
   const searchInputBox = (
@@ -471,12 +501,19 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
       disabled={empty}
     />
   );
-  // On the home the search is type on the pane: a ⌕, the text, and a ✕ to clear it.
+  // On the home the search is type on the pane: a ⌕, the text, and a ✕ to clear it. In the inspector view's toolbar the ⌕
+  // is a button: under 700 px the field folds to it (library.css), and it opens the field again.
   const searchBox = home ? (
-    <div className="lib-search-field">
-      <span className="lib-search-glyph" aria-hidden="true">
-        ⌕
-      </span>
+    <div className="lib-search-field" data-text={search ? '' : undefined}>
+      {bare ? (
+        <button type="button" className="lib-search-glyph" aria-label="search" title="Search (⌘F)" tabIndex={-1} onClick={() => searchInput.current?.focus()}>
+          <span aria-hidden="true">⌕</span>
+        </button>
+      ) : (
+        <span className="lib-search-glyph" aria-hidden="true">
+          ⌕
+        </span>
+      )}
       {searchInputBox}
       {search && (
         <button type="button" className="lib-search-clear" aria-label={say('clear search')} title={Say('clear search')} onClick={clearSearch}>
@@ -488,7 +525,7 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
     searchInputBox
   );
   // On the home the chips wait behind "Filter"; the editor's column always shows them.
-  const chipsShown = !empty && filters;
+  const chipsShown = !empty && filters && !bare;
   const title = home && (
     <div className="lib-head">
       {home.menu}
@@ -554,99 +591,145 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
     </div>
   );
 
-  return (
-    <div className={home ? 'lib lib-home' : 'lib'} data-drop={drop.over ? '' : undefined}>
-      {title || searchBox}
-      {chipsShown && (
-        <div className="lib-chips" role="group" aria-label="groups">
-          {GROUPS.filter((g) => !(starred && g === 'star')).map((g) => {
-            const on = query.groups[g]?.length ?? 0;
-            // Until the index is read there is no look to count, so these wait rather than show nothing.
-            const waiting = !index && LOOK_GROUPS.includes(g);
-            return (
-              <button
-                key={g}
-                type="button"
-                className="lib-chip"
-                aria-expanded={open === g}
-                aria-label={chipSays(g, on)}
-                disabled={waiting}
-                data-on={on ? '' : undefined}
-                title={waiting ? `${GROUP_LABEL[g]} comes once the library has been read` : `Show only presets with these ${GROUP_LABEL[g]} values; pick several to see any of them`}
-                onClick={() => {
-                  setOpen((o) => (o === g ? null : g));
-                  setFind('');
-                }}
-              >
-                {home ? groupTitle(g) : GROUP_LABEL[g]}
-                {on > 0 && (
-                  <span className="lib-chip-count" aria-hidden="true">
-                    {on}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      )}
-      {chipsShown && open && !(!index && LOOK_GROUPS.includes(open)) && (
-        <Values group={open} values={valuesFor(open, faceted, query)} selected={query.groups[open] ?? []} find={find} onFind={setFind} onPick={(v) => pickValue(open, v)} home={!!home} />
-      )}
-      {/* On the home, a search alone that finds nothing has only the centred state: its line would say "0 presets" and offer to save nothing. */}
-      {filtered && !(home && !picked.length && !shown.length) && (
-        <div className="lib-picked">
-          {picked.flatMap((g) =>
-            groups[g]!.map((v) => (
-              <button
-                key={`${g}:${v}`}
-                type="button"
-                className="lib-chip lib-chip-picked"
-                aria-label={`stop filtering by ${unstarred(valueLabel(g, v))}`}
-                title={`Stop filtering by ${valueLabel(g, v)}`}
-                onClick={() => pickValue(g, v)}
-              >
-                {g === 'colour' && <span className="lib-swatch" aria-hidden="true" style={{ background: SWATCH[v as Colour] }} />}
-                {valueLabel(g, v)}{' '}
-                <span className="lib-x" aria-hidden="true">
-                  {home ? '✕' : '×'}
-                </span>
-              </button>
-            )),
-          )}
-          {home && (
-            <>
-              <span className="lib-picked-count" role="status">
-                {summary}
+  const chips = (
+    <div className="lib-chips" role="group" aria-label="groups">
+      {GROUPS.filter((g) => !(starred && g === 'star')).map((g) => {
+        const on = query.groups[g]?.length ?? 0;
+        // Until the index is read there is no look to count, so these wait rather than show nothing.
+        const waiting = !index && LOOK_GROUPS.includes(g);
+        return (
+          <button
+            key={g}
+            type="button"
+            className="lib-chip"
+            aria-expanded={open === g}
+            aria-label={chipSays(g, on)}
+            disabled={waiting}
+            data-on={on ? '' : undefined}
+            title={waiting ? `${GROUP_LABEL[g]} comes once the library has been read` : `Show only presets with these ${GROUP_LABEL[g]} values; pick several to see any of them`}
+            onClick={() => {
+              setOpen((o) => (o === g ? null : g));
+              setFind('');
+            }}
+          >
+            {home ? groupTitle(g) : GROUP_LABEL[g]}
+            {on > 0 && (
+              <span className="lib-chip-count" aria-hidden="true">
+                {on}
               </span>
-              <span className="lib-fill" />
-            </>
-          )}
-          <button type="button" className="lib-link" aria-label="clear the filter" onClick={clearAll} title="Show every preset">
-            {home ? 'Clear' : 'clear'}
+            )}
           </button>
-          {naming === null ? (
-            <button type="button" className="lib-link" onClick={() => setNaming(queryName(query))} title="Keep this filter as a playlist that fills itself">
-              {home ? Say('save query') : say('save query')}
-            </button>
-          ) : (
-            <input
-              className="lib-name-input"
-              aria-label="smart playlist name"
-              autoFocus
-              value={naming}
-              onChange={(ev) => setNaming(ev.target.value)}
-              onKeyDown={(ev) => {
-                if (ev.key === 'Enter') save(naming);
-                else if (ev.key === 'Escape') setNaming(null);
-                else return;
-                ev.preventDefault();
-                ev.stopPropagation();
-              }}
-              onBlur={() => setNaming(null)}
-            />
-          )}
-        </div>
+        );
+      })}
+    </div>
+  );
+  const values = open && !(!index && LOOK_GROUPS.includes(open)) && (
+    <Values group={open} values={valuesFor(open, faceted, query)} selected={query.groups[open] ?? []} find={find} onFind={setFind} onPick={(v) => pickValue(open, v)} home={!!home} />
+  );
+  // On the home, a search alone that finds nothing has only the centred state: its line would say "0 presets" and offer to save nothing.
+  const pickedLine = filtered && !(home && !picked.length && !shown.length) && (
+    <div className="lib-picked">
+      {picked.flatMap((g) =>
+        groups[g]!.map((v) => (
+          <button
+            key={`${g}:${v}`}
+            type="button"
+            className="lib-chip lib-chip-picked"
+            aria-label={`stop filtering by ${unstarred(valueLabel(g, v))}`}
+            title={`Stop filtering by ${valueLabel(g, v)}`}
+            onClick={() => pickValue(g, v)}
+          >
+            {g === 'colour' && <span className="lib-swatch" aria-hidden="true" style={{ background: SWATCH[v as Colour] }} />}
+            {valueLabel(g, v)}{' '}
+            <span className="lib-x" aria-hidden="true">
+              {home ? '✕' : '×'}
+            </span>
+          </button>
+        )),
       )}
+      {home && (
+        <>
+          <span className="lib-picked-count" role="status">
+            {summary}
+          </span>
+          <span className="lib-fill" />
+        </>
+      )}
+      <button type="button" className="lib-link" aria-label="clear the filter" onClick={clearAll} title="Show every preset">
+        {home ? 'Clear' : 'clear'}
+      </button>
+      {naming === null ? (
+        <button type="button" className="lib-link" onClick={() => setNaming(queryName(query))} title="Keep this filter as a playlist that fills itself">
+          {home ? Say('save query') : say('save query')}
+        </button>
+      ) : (
+        <input
+          className="lib-name-input"
+          aria-label="smart playlist name"
+          autoFocus
+          value={naming}
+          onChange={(ev) => setNaming(ev.target.value)}
+          onKeyDown={(ev) => {
+            if (ev.key === 'Enter') save(naming);
+            else if (ev.key === 'Escape') setNaming(null);
+            else return;
+            ev.preventDefault();
+            ev.stopPropagation();
+          }}
+          onBlur={() => setNaming(null)}
+        />
+      )}
+    </div>
+  );
+
+  // The inspector view's search and "Filter ▾", in the header's toolbar: the filter's groups, values, what is picked, Clear and Save in its popover (D4).
+  const toolbar =
+    bare && home?.toolbar
+      ? createPortal(
+          <div className="lib-home lib-toolbar">
+            {searchBox}
+            <Popover
+              className="lib-filter-pop"
+              name={say('facets')}
+              align="right"
+              pressed={pickedCount > 0}
+              title="Filter by style, author, colour, speed, intensity, star or your tags"
+              label={
+                <>
+                  {Say('facets')}
+                  {pickedCount > 0 && (
+                    <span className="lib-filter-badge" aria-hidden="true">
+                      {pickedCount}
+                    </span>
+                  )}
+                  <span className="lib-filter-caret" aria-hidden="true">
+                    ▾
+                  </span>
+                </>
+              }
+            >
+              <div className="lib-filter-panel">
+                {chips}
+                {values}
+                {pickedLine || (
+                  <p className="lib-picked-count lib-filter-none" role="status">
+                    {count(shown.length)} preset{shown.length === 1 ? '' : 's'}
+                  </p>
+                )}
+              </div>
+            </Popover>
+          </div>,
+          home.toolbar,
+        )
+      : null;
+
+  return (
+    <div ref={root} className={bare ? 'lib lib-home lib-bare' : home ? 'lib lib-home' : 'lib'} data-drop={drop.over ? '' : undefined}>
+      {toolbar}
+      {!bare && (title || searchBox)}
+      {chipsShown && chips}
+      {chipsShown && values}
+      {!bare && pickedLine}
       {home ? (
         <>
           {(saveNote || drop.note) && (
@@ -654,7 +737,7 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
               {[saveNote, drop.note?.text].filter(Boolean).join(' · ')}
             </div>
           )}
-          {!empty && !starred && <PackOffer />}
+          {!empty && !starred && !bare && <PackOffer />}
         </>
       ) : (
         (summary || saveNote) && (
@@ -685,6 +768,8 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
           reveal={reveal}
           onPress={onPress && press}
           tileMin={tileMin}
+          clickSelects={bare}
+          controls={home?.controls}
         />
       )}
       {!home && chosen.length > 0 && !empty && (
