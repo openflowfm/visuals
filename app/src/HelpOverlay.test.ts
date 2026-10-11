@@ -128,8 +128,20 @@ describe('the ? overlay, to VoiceOver', () => {
     expect(html).toContain('<h2 id="live-help-title">Live controls</h2>');
   });
 
-  it('names its ✕ in words', () => {
-    expect(html).toContain('aria-label="Close live controls"');
+  it('names its ✕ in words, the glyph hidden from VoiceOver', () => {
+    const close = /<button[^>]*aria-label="Close live controls"[^>]*>(.*?)<\/button>/.exec(html);
+    expect(close).not.toBeNull();
+    expect(close?.[1]).toContain('aria-hidden="true"');
+  });
+
+  it('heads each group, and lists every control with its keys and what it does', () => {
+    const headings = [...html.matchAll(/<h3>([^<]*)<\/h3>/g)].map((m) => m[1].replace(/&#x27;/g, "'"));
+    expect(headings).toEqual(GROUPS.map((g) => g.heading));
+    const all = renderToStaticMarkup(createElement(HelpOverlay, { open: true, onClose: () => {}, stage: true }));
+    for (const c of CONTROLS) {
+      if (c.keys) expect(all, c.id).toContain(`<kbd>${c.keys.replace(/&/g, '&amp;')}</kbd>`);
+    }
+    expect([...all.matchAll(/<dt>/g)].length).toBe(CONTROLS.length);
   });
 
   it("lists the Stage's own controls only when told the Stage is showing", () => {

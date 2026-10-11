@@ -1,7 +1,8 @@
-import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { useEffect, useRef, type ReactElement } from 'react';
 import { isTopTrap, useFocusTrap } from './focusTrap.ts';
+import { Icon } from './layout/icons.tsx';
 import { Say, say } from './words.ts';
+import './help.css';
 
 /** Every control live mode has, on screen or on a key. */
 export type ControlId =
@@ -153,32 +154,37 @@ function HelpDialog({ onClose, stage }: { onClose(): void; stage: boolean }) {
   }, []);
   return (
     <div
-      className="live-help"
+      className="help"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="live-help-panel" ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="live-help-title">
-        <div className="live-help-head">
+      <div className="help-panel" ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="live-help-title">
+        <div className="help-head">
           <h2 id="live-help-title">Live controls</h2>
-          <Button tone="quiet" label="Close live controls" title="Close (Esc or ?)" onPress={onClose}>
-            ✕
-          </Button>
+          <span className="help-hint" aria-hidden="true">
+            <kbd>?</kbd> or <kbd>Esc</kbd> closes
+          </span>
+          <button type="button" className="help-close" aria-label="Close live controls" title="Close (Esc or ?)" onClick={onClose}>
+            <Icon name="close" />
+          </button>
         </div>
-        {GROUPS.map((g) => (
-          <section className="live-help-group" key={g.where}>
-            <h3>{g.heading}</h3>
-            <dl>
-              {CONTROLS.filter((c) => c.where === g.where && (stage || !c.stage)).map((c) => (
-                <div className="live-help-row" key={c.id}>
-                  <dt>{c.name}</dt>
-                  <dd className="live-help-keys">{c.keys ? <kbd>{c.keys}</kbd> : null}</dd>
-                  <dd>{c.does}</dd>
-                </div>
-              ))}
-            </dl>
-          </section>
-        ))}
+        <div className="help-groups">
+          {GROUPS.map((g) => (
+            <section className="help-group" key={g.where}>
+              <h3>{g.heading}</h3>
+              <dl>
+                {CONTROLS.filter((c) => c.where === g.where && (stage || !c.stage)).map((c) => (
+                  <div className="help-row" key={c.id}>
+                    <dt>{c.name}</dt>
+                    <dd className="help-keys">{c.keys ? <kbd>{c.keys}</kbd> : null}</dd>
+                    <dd className="help-does">{c.does}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          ))}
+        </div>
       </div>
     </div>
   );

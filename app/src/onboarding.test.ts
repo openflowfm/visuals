@@ -298,6 +298,19 @@ describe('the flashing-lights warning from the menu', () => {
     expect(WARNING_TEXT).toContain('Many presets flash');
   });
 
+  it('puts the reduce-flashing switch in the dialog, its name before it and what it does under it, ahead of I understand', () => {
+    const html = renderToStaticMarkup(createElement(FlashWarningDialog, { onClose: () => {} }));
+    const name = html.indexOf('class="ob-reduce-name"');
+    const toggle = html.indexOf('aria-label="Reduce flashing"');
+    const hint = html.indexOf(`<p class="ob-note">${REDUCE_HINT.slice(0, 30)}`);
+    const understand = html.indexOf('I understand');
+    expect(name).toBeGreaterThan(-1);
+    expect(name).toBeLessThan(toggle);
+    expect(toggle).toBeLessThan(hint);
+    expect(hint).toBeLessThan(understand);
+    expect(html).toMatch(/class="ob-reduce-setting"/);
+  });
+
   it('offers the reduce-flashing switch, disabled until the app has said', () => {
     const off = renderToStaticMarkup(createElement(ReduceFlashing, { motion: null, onChange: () => {} }));
     expect(off).toContain('aria-label="Reduce flashing"');

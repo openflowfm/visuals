@@ -35,8 +35,27 @@ const none = () => {};
 describe('MoreFx', () => {
   it('holds Mirror, Invert, Punch and Reset', () => {
     const html = renderToStaticMarkup(<MoreFx state={REST} set={none} send={none} />);
-    for (const name of ['Mirror', 'Invert', 'PUNCH', 'Reset: back to normal']) expect(html).toContain(name);
+    for (const name of ['Mirror', 'Invert', 'Punch', 'Reset: back to normal']) expect(html).toContain(name);
     for (const mode of ['off', 'X', 'Y', '4-way']) expect(html).toContain(`>${mode}<`);
+  });
+
+  it('draws Punch as a pad that holds, with its key, and Reset as a quiet word', () => {
+    const html = renderToStaticMarkup(<MoreFx state={REST} set={none} send={none} />);
+    expect(html).toMatch(/<button[^>]*data-kind="punch"[^>]*class="[^"]*fx-hit[^"]*"/);
+    expect(html).toContain('aria-label="Punch (P)"');
+    expect(html).toContain('title="Punch: hold P, or press and hold here; Shift latches it"');
+    expect(html).toMatch(/<small aria-hidden="true">P<\/small>/);
+    expect(html).toMatch(/<button[^>]*data-tone="quiet"[^>]*>Reset: back to normal<\/button>/);
+  });
+
+  it('shows the hit lit while it is held', () => {
+    const pad = (html: string) => /<button[^>]*data-kind="punch"[^>]*>/.exec(html)?.[0] ?? '';
+    const rest = pad(renderToStaticMarkup(<MoreFx state={REST} set={none} send={none} />));
+    expect(rest).toContain('aria-pressed="false"');
+    expect(rest).not.toContain('data-on');
+    const held = pad(renderToStaticMarkup(<MoreFx state={{ ...REST, punch: true }} set={none} send={none} />));
+    expect(held).toContain('aria-pressed="true"');
+    expect(held).toContain('data-on=""');
   });
 
   it('names its controls for VoiceOver', () => {

@@ -470,10 +470,10 @@ export const REDUCE_HINT = `${REDUCE_WHAT} It follows macOS’s Reduce motion un
 export function ReduceFlashing({ motion, onChange }: { motion: api.Motion | null; onChange(on: boolean): void }) {
   return (
     <div className="ob-reduce">
+      <span className="ob-reduce-name">{Say('reduced motion')}</span>
       <Toggle on={motion?.reduced === true} onChange={onChange} disabled={!motion} layout="inside" name={say('reduced motion')} label={Say('reduced motion')} title={REDUCE_HINT}>
         {motion?.reduced ? 'on' : 'off'}
       </Toggle>
-      <span>{Say('reduced motion')}</span>
     </div>
   );
 }
@@ -487,11 +487,11 @@ function ReduceFlashingSetting() {
     setMotion(on).catch((e) => setProblem(notice(`Couldn't ${on ? 'turn on' : 'turn off'} ${say('reduced motion')}.`, e)));
   };
   return (
-    <>
+    <div className="ob-reduce-setting">
       <ReduceFlashing motion={motion} onChange={change} />
       <p className="ob-note">{REDUCE_HINT}</p>
       <NoticeBanner className="ob-problem" notice={problem} onDismiss={() => setProblem(null)} />
-    </>
+    </div>
   );
 }
 
