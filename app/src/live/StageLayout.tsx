@@ -24,6 +24,9 @@ export const DOCK_LABEL = 'Live controls';
 /** The quiet way back with the panels hidden, shown when the pointer nears the bottom. */
 export const PANELS_HINT = 'for controls';
 
+/** The hint's name to a screen reader: it is a button that shows the panels. */
+export const PANELS_HINT_LABEL = 'Show controls (\\)';
+
 /** What can take focus inside a panel, in order. */
 const FOCUSABLE = 'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
 
@@ -114,7 +117,7 @@ function useDismiss(on: boolean, panel: RefObject<HTMLElement | null>, away: () 
  * crate and the dock inert and dimmed, and `centre` (the warning) centred over
  * where the picture would be, even with the panels hidden.
  */
-export function StageLayout({ width, panels, warning = false, inWindow, crate, head, dock, centre, children, onCrateAway }: StageLayoutProps) {
+export function StageLayout({ width, panels, warning = false, inWindow, crate, head, dock, centre, children, onCrateAway, onPanels }: StageLayoutProps) {
   const shown = panels.shown;
   const mode: CrateMode = shown ? crateModeFor(width, panels.crate) : 'hidden';
   const panel = useRef<HTMLElement | null>(null);
@@ -150,9 +153,9 @@ export function StageLayout({ width, panels, warning = false, inWindow, crate, h
         </section>
       ) : (
         <div className="stage-peek">
-          <p className="stage-hint">
+          <button type="button" className="stage-hint" aria-label={PANELS_HINT_LABEL} onClick={onPanels}>
             <kbd>\</kbd> {PANELS_HINT}
-          </p>
+          </button>
         </div>
       )}
 
