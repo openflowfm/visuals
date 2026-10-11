@@ -69,10 +69,51 @@ pub enum Cmd {
 /// A picture: its width and height in pixels, and its RGBA rows top to bottom.
 pub type Picture = (u32, u32, Vec<u8>);
 
+/// How round the bench's corners are, in points, for a hole at `rect` (x, y,
+/// width, height in points from the top left) in a content view `area` big,
+/// whose page asked for `radius`: the hole's own border-radius, which only
+/// Home's hero has (`--lay-hero-radius`, 18); 0, square, for every other hole.
+/// Never rounded where it reaches the window's edge (live's full-bleed picture:
+/// the window's own corners are macOS's), and never more than half the shorter side.
+pub fn corner_radius(rect: (f64, f64, f64, f64), area: (f64, f64), radius: f64) -> f64 {
+    let (x, y, w, h) = rect;
+    // Half a point of slack: the page's rects are fractional.
+    let edge = 0.5;
+    if radius.is_nan() || radius <= 0.0 || x <= edge || y <= edge || x + w >= area.0 - edge || y + h >= area.1 - edge {
+        return 0.0;
+    }
+    radius.min(w.min(h) / 2.0).max(0.0)
+}
+
+/// How much of the pixel at (`x`, `y`) in a `w`×`h` box with corners of radius
+/// `r` (all in pixels) the box covers, 0 to 1: anti-aliased over a pixel, as
+/// Core Animation's mask is, so a capture's edge matches the screen's.
+fn coverage(x: i64, y: i64, w: i64, h: i64, r: f64) -> f64 {
+    if r <= 0.0 {
+        return 1.0;
+    }
+    let (cx, cy) = (x as f64 + 0.5, y as f64 + 0.5);
+    let into = |c: f64, len: f64| {
+        if c < r {
+            r - c
+        } else if c > len - r {
+            c - (len - r)
+        } else {
+            0.0
+        }
+    };
+    let (dx, dy) = (into(cx, w as f64), into(cy, h as f64));
+    if dx <= 0.0 || dy <= 0.0 {
+        return 1.0;
+    }
+    (r - dx.hypot(dy) + 0.5).clamp(0.0, 1.0)
+}
+
 /// Paste `picture` into `rgba` (an image `size` big), scaled (nearest pixel) to
 /// fill `rect` (x, y, width, height in pixels from the top left), cut off where
-/// it runs past the image's edges.
-pub fn paste(rgba: &mut [u8], size: (u32, u32), rect: (i64, i64, i64, i64), picture: &Picture) {
+/// it runs past the image's edges, with its corners rounded by `radius` pixels
+/// as the bench's layer is (0: square), what was there showing past them.
+pub fn paste(rgba: &mut [u8], size: (u32, u32), rect: (i64, i64, i64, i64), radius: f64, picture: &Picture) {
     let (x0, y0, rw, rh) = rect;
     let (pw, ph, pixels) = (picture.0 as i64, picture.1 as i64, &picture.2);
     if rw <= 0 || rh <= 0 || pw <= 0 || ph <= 0 {
@@ -81,11 +122,17 @@ pub fn paste(rgba: &mut [u8], size: (u32, u32), rect: (i64, i64, i64, i64), pict
     for y in y0.max(0)..(y0 + rh).min(size.1 as i64) {
         let sy = (y - y0) * ph / rh;
         for x in x0.max(0)..(x0 + rw).min(size.0 as i64) {
+            let c = coverage(x - x0, y - y0, rw, rh, radius);
+            if c <= 0.0 {
+                continue;
+            }
             let sx = (x - x0) * pw / rw;
             let from = ((sy * pw + sx) * 4) as usize;
             let to = ((y * size.0 as i64 + x) * 4) as usize;
+            for i in 0..3 {
+                rgba[to + i] = (rgba[to + i] as f64 * (1.0 - c) + pixels[from + i] as f64 * c).round() as u8;
+            }
             // Opaque, as the bench's layer is.
-            rgba[to..to + 3].copy_from_slice(&pixels[from..from + 3]);
             rgba[to + 3] = 255;
         }
     }
@@ -616,7 +663,7 @@ pub mod view {
 
     use super::Layer;
     use objc2::rc::Retained;
-    use objc2::MainThreadMarker;
+    use objc2::{class, msg_send, MainThreadMarker};
     use objc2_app_kit::{NSView, NSWindow, NSWindowOrderingMode};
     use objc2_foundation::{NSPoint, NSRect, NSSize};
     use raw_window_handle::{AppKitDisplayHandle, AppKitWindowHandle, RawDisplayHandle, RawWindowHandle};
@@ -648,6 +695,10 @@ pub mod view {
         let content = window.contentView().expect("content view");
         let rect = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(1.0, 1.0));
         let view = metal_view(mtm, rect, window.backingScaleFactor());
+        // Clipped to its corners, which [`place`] sets (the output's view stays square).
+        if let Some(layer) = view.layer() {
+            layer.setMasksToBounds(true);
+        }
         insert(&content, &view);
         let surface = surface_on(&view, instance);
         VIEW.with(|v| *v.borrow_mut() = Some(view));
@@ -786,7 +837,9 @@ pub mod view {
             let scale = w as f64 / frame.width;
             let px = |v: f64| (v * scale).round() as i64;
             let rect = (px(r.origin.x), px(frame.height - r.origin.y - r.size.height), px(r.size.width), px(r.size.height));
-            super::paste(&mut rgba, (w, h), rect, picture);
+            // Rounded as the layer is ([`place`]), so the capture shows the screen's corners.
+            let radius = view.layer().filter(|l| l.masksToBounds()).map_or(0.0, |l| l.cornerRadius() * scale);
+            super::paste(&mut rgba, (w, h), rect, radius, picture);
         }
         engine::picture::save_png(path, w, h, &rgba).map_err(|e| e.to_string())
     }
@@ -818,7 +871,8 @@ pub mod view {
 
     /// Move the view to `rect`, in the content view's points from its top left.
     /// Returns its size in pixels: 0×0 for an empty rect, which hides the bench.
-    pub fn place(x: f64, y: f64, width: f64, height: f64) -> Option<(u32, u32)> {
+    /// Its corners are rounded by `radius` points, as [`super::corner_radius`] allows.
+    pub fn place(x: f64, y: f64, width: f64, height: f64, radius: f64) -> Option<(u32, u32)> {
         VIEW.with(|v| {
             let view = v.borrow();
             let view = view.as_ref()?;
@@ -840,6 +894,18 @@ pub mod view {
             let left = area.origin.x + x;
             let bottom = if parent.isFlipped() { area.origin.y + y } else { area.origin.y + area.size.height - y - height };
             view.setFrame(NSRect::new(NSPoint::new(left, bottom), NSSize::new(width, height)));
+            let radius = super::corner_radius((x, y, width, height), (area.size.width, area.size.height), radius);
+            if let Some(layer) = view.layer().filter(|l| l.cornerRadius() != radius) {
+                // At once: Core Animation would otherwise ease the corners in or out over a quarter second, going live or back.
+                unsafe {
+                    let _: () = msg_send![class!(CATransaction), begin];
+                    let _: () = msg_send![class!(CATransaction), setDisableActions: true];
+                }
+                layer.setCornerRadius(radius);
+                unsafe {
+                    let _: () = msg_send![class!(CATransaction), commit];
+                }
+            }
             let scale = window.backingScaleFactor();
             Some(((width * scale).round() as u32, (height * scale).round() as u32))
         })
@@ -898,7 +964,7 @@ mod tests {
         // A 2×1 picture, red then green, into a 4×2 image of grey.
         let picture = (2, 1, vec![255, 0, 0, 9, 0, 255, 0, 9]);
         let mut image = vec![7; 4 * 2 * 4];
-        paste(&mut image, (4, 2), (1, 0, 4, 2), &picture);
+        paste(&mut image, (4, 2), (1, 0, 4, 2), 0.0, &picture);
         let px = |x: usize, y: usize| image[(y * 4 + x) * 4..][..4].to_vec();
         assert_eq!(px(0, 0), [7, 7, 7, 7]);
         // Twice the size: each picture pixel covers two columns, made opaque.
@@ -908,9 +974,52 @@ mod tests {
         assert_eq!(px(3, 1), [0, 255, 0, 255]);
         // Wholly outside, or empty: nothing changes.
         let before = image.clone();
-        paste(&mut image, (4, 2), (9, 9, 2, 2), &picture);
-        paste(&mut image, (4, 2), (0, 0, 0, 2), &picture);
+        paste(&mut image, (4, 2), (9, 9, 2, 2), 0.0, &picture);
+        paste(&mut image, (4, 2), (0, 0, 0, 2), 0.0, &picture);
         assert_eq!(image, before);
+    }
+
+    #[test]
+    fn pastes_with_rounded_corners_and_a_soft_edge() {
+        // A red 20×20 picture over grey, rounded by 8 pixels.
+        let picture = (20, 20, [255, 0, 0, 255].repeat(400));
+        let mut image = vec![100; 20 * 20 * 4];
+        paste(&mut image, (20, 20), (0, 0, 20, 20), 8.0, &picture);
+        let px = |x: usize, y: usize| image[(y * 20 + x) * 4..][..4].to_vec();
+        // Past the curve, in every corner, what was there shows.
+        for (x, y) in [(0, 0), (19, 0), (0, 19), (19, 19), (1, 1), (18, 18)] {
+            assert_eq!(px(x, y), [100, 100, 100, 100], "({x}, {y})");
+        }
+        // Along the straight edges and inside, the picture, opaque.
+        for (x, y) in [(10, 0), (0, 10), (19, 10), (10, 19), (10, 10), (8, 8)] {
+            assert_eq!(px(x, y), [255, 0, 0, 255], "({x}, {y})");
+        }
+        // On the curve, a blend of the two: no hard step and no dark fringe.
+        let edge = px(1, 3);
+        assert!(edge[0] > 100 && edge[0] < 255 && edge[1] < 100 && edge[1] > 0, "{edge:?}");
+        assert_eq!(edge[3], 255);
+        // Mirrored corners blend alike.
+        assert_eq!(px(1, 3), px(18, 16));
+    }
+
+    #[test]
+    fn rounds_only_the_hole_that_asks_and_never_the_full_bleed_picture() {
+        let window = (1440.0, 900.0);
+        let hero = (264.0, 72.0, 780.0, 438.75);
+        // Home's hero, inset in the main column, asks for --lay-hero-radius.
+        assert_eq!(corner_radius(hero, window, 18.0), 18.0);
+        // Another inset hole (onboarding's, the editor's) asks for none: square.
+        assert_eq!(corner_radius(hero, window, 0.0), 0.0);
+        assert_eq!(corner_radius(hero, window, f64::NAN), 0.0);
+        assert_eq!(corner_radius(hero, window, -4.0), 0.0);
+        // Live's picture fills the window, or reaches any of its edges: square whatever is asked.
+        assert_eq!(corner_radius((0.0, 0.0, 1440.0, 900.0), window, 18.0), 0.0);
+        assert_eq!(corner_radius((0.0, 40.0, 1440.0, 860.0), window, 18.0), 0.0);
+        assert_eq!(corner_radius((100.0, 100.0, 1340.0, 400.0), window, 18.0), 0.0);
+        // Fractional rects a hair inside the edge are still full bleed.
+        assert_eq!(corner_radius((0.25, 0.0, 1439.5, 900.0), window, 18.0), 0.0);
+        // Never more than half the shorter side.
+        assert_eq!(corner_radius((100.0, 100.0, 200.0, 20.0), window, 18.0), 10.0);
     }
 
     #[test]
