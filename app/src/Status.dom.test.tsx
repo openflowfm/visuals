@@ -25,8 +25,8 @@ afterEach(() => {
 });
 
 describe('the skipped note in a DOM', () => {
-  it('is an empty live region until a skip, then says it, with the whole line in its tooltip for when a narrow strip cuts it short', () => {
-    render(<SkipNote />);
+  it('is an empty live region until a skip, then says it, with the whole line in its tooltip for when a narrow header cuts it short', () => {
+    render(<SkipNote className="stage-skipped" />);
     const note = screen.getByRole('status');
     expect(note.textContent).toBe('');
     expect(note.getAttribute('title')).toBeNull();
@@ -39,7 +39,7 @@ describe('the skipped note in a DOM', () => {
   });
 
   it('says when stepping stopped instead of counting one more skip', () => {
-    render(<SkipNote />);
+    render(<SkipNote className="stage-skipped" />);
     const note = screen.getByRole('status');
     act(() => skipped.forEach((f) => f('pack/broken.milk')));
     act(() => stopped.forEach((f) => f(8)));
