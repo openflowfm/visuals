@@ -33,7 +33,7 @@ export const samePane = (a: Pane, b: Pane | null): boolean => !!b && a.kind === 
 /** A row's key, for React and for tests. */
 export const paneKey = (p: Pane): string => (p.kind === 'list' ? `list:${p.id}` : p.kind);
 
-/** The sections from the app's playlists, as today's source list groups them (Sources.tsx): the library, starred and recently played; the playlists; the smart playlists. */
+/** The sidebar's sections from the app's playlists (home.ts's `sections`): the library, starred and recently played; the playlists; the smart playlists. */
 export function sidebarSections(lists: Lists | null, counts?: { library?: number | null; starred?: number | null }): SidebarSection[] {
   const playlists = lists?.playlists ?? [];
   const recent = recentList(playlists);

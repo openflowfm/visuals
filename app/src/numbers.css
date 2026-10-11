@@ -1,0 +1,7 @@
+/* The numbers' face (Numbers.tsx): counts, times and "7 of 9,795" in the
+   figures' font, each digit the same width so a count that changes doesn't jog. */
+.numbers {
+  font-family: var(--font-num);
+  font-variation-settings: var(--font-num-axes);
+  font-variant-numeric: tabular-nums;
+}

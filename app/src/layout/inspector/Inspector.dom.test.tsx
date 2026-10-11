@@ -74,7 +74,7 @@ describe('the inspector in a DOM', () => {
     expect(p.onSet).toHaveBeenLastCalledWith([BLOOM.key], { hidden: true });
   });
 
-  it("edits my tags with NowPanel's tag editor", async () => {
+  it('edits my tags with the tag editor', async () => {
     const p = mount();
     await userEvent.click(screen.getByRole('button', { name: '+ Tag' }));
     await userEvent.type(screen.getByRole('textbox', { name: 'add tags' }), 'intro{Enter}');

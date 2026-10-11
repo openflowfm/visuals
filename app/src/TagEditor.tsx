@@ -3,24 +3,24 @@ import type { LibraryChange } from './api.ts';
 import { parseTags, type Prepared } from './librarySearch.ts';
 import { tagCounts } from './PresetDrawer.tsx';
 import { say } from './words.ts';
+import './tag-editor.css';
 
 export interface TagEditorProps {
   /** The presets the tags are on: one, or several picked at once (a tag on only some shows its count). */
   chosen: readonly Prepared[];
   /** Change the tags on these preset keys. */
   onSet(keys: string[], change: LibraryChange): void;
-  /** The group's class; the parts' classes are fixed (`now-chip`, `now-chip-count`, `now-chip-x`, `now-chip-add`, `now-tag-input`), scoped by the panel showing them. */
-  className?: string;
   /** What the take-off button shows; "×" by default. */
   remove?: ReactNode;
 }
 
 /**
  * My tags on `chosen`, each removable, and "+ Tag", which becomes a text box
- * (Enter adds, commas split, Esc cancels). Today's Now Playing panel
- * (NowPanel.tsx) and the macOS layout's inspector both show it.
+ * (Enter adds, commas split, Esc cancels). The inspector shows it; its look is
+ * tag-editor.css (`tag-editor`, `tag-chip`, `tag-chip-count`, `tag-chip-x`,
+ * `tag-chip-add`, `tag-chip-input`).
  */
-export function TagEditor({ chosen, onSet, className = 'now-tags', remove = '×' }: TagEditorProps) {
+export function TagEditor({ chosen, onSet, remove = '×' }: TagEditorProps) {
   const [adding, setAdding] = useState(false);
   const [typing, setTyping] = useState('');
   const keys = chosen.map((p) => p.row.key);
@@ -52,14 +52,14 @@ export function TagEditor({ chosen, onSet, className = 'now-tags', remove = '×'
   };
 
   return (
-    <div className={className} role="group" aria-label={say('user tags')}>
+    <div className="tag-editor" role="group" aria-label={say('user tags')}>
       {tags.map(({ tag, count }) => (
-        <span key={tag} className="now-chip" data-some={count < n ? '' : undefined} title={count < n ? `on ${count} of ${n}` : undefined}>
+        <span key={tag} className="tag-chip" data-some={count < n ? '' : undefined} title={count < n ? `on ${count} of ${n}` : undefined}>
           {tag}
-          {count < n && <span className="now-chip-count">{count}</span>}
+          {count < n && <span className="tag-chip-count">{count}</span>}
           <button
             type="button"
-            className="now-chip-x"
+            className="tag-chip-x"
             aria-label={`take the tag ${tag} off${count < n ? ` (on ${count} of ${n})` : ''}`}
             title={`Take “${tag}” off${n > 1 ? ' all of them' : ''}`}
             onClick={() => onSet(keys, { remove_tags: [tag] })}
@@ -70,7 +70,7 @@ export function TagEditor({ chosen, onSet, className = 'now-tags', remove = '×'
       ))}
       {adding ? (
         <input
-          className="now-chip now-tag-input"
+          className="tag-chip tag-chip-input"
           type="text"
           aria-label="add tags"
           placeholder="tags, split by commas"
@@ -84,7 +84,7 @@ export function TagEditor({ chosen, onSet, className = 'now-tags', remove = '×'
       ) : (
         <button
           type="button"
-          className="now-chip now-chip-add"
+          className="tag-chip tag-chip-add"
           title={`Add a tag${n > 1 ? ' to all of them' : ''}`}
           onClick={() => {
             cancelled.current = false;

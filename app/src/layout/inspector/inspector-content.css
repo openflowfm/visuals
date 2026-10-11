@@ -273,92 +273,14 @@
   outline-offset: 0;
 }
 
-/* My tags (TagEditor.tsx: its parts' classes are fixed), and where it's kept. */
+/* My tags (TagEditor.tsx, its look in tag-editor.css), and where it's kept. */
 .lay .insp .insp-mine {
   margin-top: 20px;
 }
-.lay .insp .insp-tags {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 12px;
-}
-.lay .insp .insp-tags .now-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  color: var(--fg);
-  font-size: 12px;
-  font-weight: 500;
-}
-.lay .insp .insp-tags .now-chip::before {
-  content: '#';
-  margin-right: 1px;
-  color: var(--caption);
-}
-.lay .insp .insp-tags .now-chip[data-some] {
-  color: var(--ui);
-}
-.lay .insp .insp-tags .now-chip-count {
-  margin-left: 2px;
-  color: var(--caption);
-  font-size: 11px;
-}
-.lay .insp .insp-tags .now-chip-x {
-  display: inline-grid;
-  place-items: center;
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: none;
-  color: var(--caption);
-  cursor: pointer;
-  opacity: 0;
-}
-.lay .insp .insp-tags .now-chip:hover .now-chip-x,
-.lay .insp .insp-tags .now-chip-x:focus-visible {
-  opacity: 1;
-}
-.lay .insp .insp-tags .now-chip-x:hover {
-  color: var(--fg);
-}
-/* "+ Tag" and the box it becomes aren't tags: no "#". */
-.lay .insp .insp-tags .now-chip-add::before,
-.lay .insp .insp-tags .now-tag-input::before {
-  content: none;
-}
-.lay .insp .insp-tags .now-chip-add {
-  height: 22px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--caption);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-}
-.lay .insp .insp-tags .now-chip-add:hover {
-  color: var(--fg);
-}
-.lay .insp .insp-tags .now-tag-input {
-  flex: 1;
-  min-width: 120px;
-  height: 24px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 6px;
-  background: var(--surface-3);
-  color: var(--fg);
-  font: inherit;
-  font-size: 12px;
-  outline: none;
-}
-.lay .insp .insp-tags .now-chip-x:focus-visible,
-.lay .insp .insp-tags .now-chip-add:focus-visible,
-.lay .insp .insp-tags .now-tag-input:focus-visible {
+/* The ring hugs the small type keys here, as the panel's other keys have it. */
+.lay .insp .tag-editor .tag-chip-x:focus-visible,
+.lay .insp .tag-editor .tag-chip-add:focus-visible,
+.lay .insp .tag-editor .tag-chip-input:focus-visible {
   outline: 2px solid var(--vf-focus-ring);
   outline-offset: 0;
 }

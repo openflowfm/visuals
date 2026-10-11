@@ -24,8 +24,6 @@ export interface PlaylistHeadProps {
   /** The playlist was deleted: the home shows the library. */
   onDeleted(): void;
   onError(what: string): (e: unknown) => void;
-  /** Shown above the caps label in a narrow window: the source menu, or nothing. */
-  menu?: ReactNode;
   /** Where it shows: over the playlist's pane (`pane`, the default: a row, the name the pane's h1), or in the inspector (`inspector`: a card down the panel's width, the cover over the words, the name an h2, ⋯ at the card's top right with its menu hung from there, how it plays opening across the card). */
   variant?: 'pane' | 'inspector';
   /** Opens quick add on this playlist: an "Add presets" button, shown for a manual playlist (`offersQuickAdd`) when given. */
@@ -40,7 +38,7 @@ export interface PlaylistHeadProps {
  * inspector (`variant='inspector'`) a vertical card with no playback controls:
  * no play, stop or shuffle (shuffle is the order in how it plays).
  */
-export function PlaylistHead({ list, lists, tiles, total, onLists, onDeleted, onError, menu, variant = 'pane', onQuickAdd }: PlaylistHeadProps) {
+export function PlaylistHead({ list, lists, tiles, total, onLists, onDeleted, onError, variant = 'pane', onQuickAdd }: PlaylistHeadProps) {
   const inspector = variant === 'inspector';
   const Name = inspector ? 'h2' : 'h1';
   const [naming, setNaming] = useState<string | null>(null);
@@ -84,7 +82,6 @@ export function PlaylistHead({ list, lists, tiles, total, onLists, onDeleted, on
         ))}
       </div>
       <div className="pl-head-text">
-        {menu}
         <div className="pl-caps">{manual ? 'Playlist' : 'Smart playlist'}</div>
         {naming !== null ? (
           <input

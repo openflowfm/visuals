@@ -14,10 +14,10 @@ import index from '../../src-tauri/presets/starter/cream-of-the-crop/index.json'
 import { HomeLayout, InspectorPanel, INSPECTOR_LABEL } from './HomeLayout.tsx';
 import { InsetSidebar } from './InsetSidebar.tsx';
 import { Hero } from './Hero.tsx';
-import { Section } from './Section.tsx';
+import { StoryGrid } from './StoryGrid.tsx';
 import { TransportBar } from './TransportBar.tsx';
 import { Icon } from './icons.tsx';
-import { NOW, SECTIONS, SIDEBAR } from './fixtures.ts';
+import { NOW, SIDEBAR } from './fixtures.ts';
 import { Inspector, type InspectorProps } from './inspector/Inspector.tsx';
 import { dotsOf, H, nearest, W } from './inspector/field.ts';
 
@@ -42,7 +42,7 @@ function SourceHead() {
 const PLAYING_NAME = tileName(NOW.preset!.title, NOW.preset!.path);
 const PICKED_NAME = tileName(PICKED.title, PICKED.path);
 
-/** The starter set: the stories' slice of the library (the 63 rows the sections, the preset playing and the one picked come from) and every other preset its index has drawn. */
+/** The starter set: the stories' slice of the library (the 63 rows the main column's tiles, the preset playing and the one picked come from) and every other preset its index has drawn. */
 const STARTER: LibraryRow[] = [
   ...ROWS,
   ...(index.rows as { path: string; style: string; sub_style: string | null; authors: string[]; title: string; look: Look | null }[])
@@ -191,9 +191,7 @@ function InWindow({ start, library }: { start: Start; library: readonly LibraryR
         bar={<TransportBar playing={NOW.playing} onPlayPause={() => {}} onStep={() => {}} stepIn=" in the playlist" position={{ elapsed: 12, length: 30 }} onAudioError={() => {}} />}
         inspector={open ? <Inspector {...props} /> : undefined}
       >
-        {SECTIONS.map((s) => (
-          <Section key={s.title} title={s.title} rows={s.rows} playing={playing?.path ?? null} starred={starred} onPlay={pick} />
-        ))}
+        <StoryGrid title="Hypnotic" rows={ROWS.filter((r) => r.style === 'Hypnotic')} playing={playing?.path ?? null} starred={starred} onPlay={pick} />
       </HomeLayout>
     </div>
   );
@@ -218,7 +216,7 @@ function Story({ start, window, pack, error, overlay }: Args) {
  * the library, a field of every preset by speed and brightness with this one
  * lit, then its character (style, authors, the measures in words, its
  * colours) and the actions on it. It is about the preset playing, or one
- * picked (a dot in the field, or a tile in a section) until "back".
+ * picked (a dot in the field, or a tile in the main column) until "back".
  */
 const meta = {
   title: 'Layout/Inspector',
@@ -294,7 +292,7 @@ export const PickedInTheField: S = {
   },
 };
 
-/** One picked (as a section's tile would): its name, its star, and back goes to the preset playing. */
+/** One picked (as a tile's click would): its name, its star, and back goes to the preset playing. */
 export const Picked: S = {
   name: 'Picked',
   args: { start: 'picked' },

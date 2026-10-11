@@ -88,8 +88,8 @@ const rightClick = (el: HTMLElement) => {
 };
 
 /**
- * The macOS layout's inset sidebar (Apple's kit's "Library Preview"), in the
- * app's own look: the mark at its top, today's source list (Home/Sources) as collapsible sections,
+ * The app's inset sidebar (laid out as Apple's kit's "Library Preview"), in the
+ * app's own look: the mark at its top, the library and the playlists as collapsible sections,
  * rows of 40 px, the row picked a soft pill, the playlist playing its green
  * dot. Shown in the inset panel as HomeLayout draws it, the window buttons'
  * band clear at its top.

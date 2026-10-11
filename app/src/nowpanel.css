@@ -1,4 +1,7 @@
-/* The home's now playing panel (NowPanel.tsx, decisions 67 and 68). The preview is a hole
+/* Retired with NowPanel.tsx (the inspector replaced it): nothing imports this
+   sheet; contrast.test.ts still reads it, and it goes once that test no longer does.
+
+   The home's now playing panel (NowPanel.tsx, decisions 67 and 68). The preview is a hole
    the engine's native view shows through, so neither it nor anything holding it
    paints a background: the panel's colour (--surface-1, one faint step up from the
    window) is the preview's spread shadow, clipped by the panel. The shadow also

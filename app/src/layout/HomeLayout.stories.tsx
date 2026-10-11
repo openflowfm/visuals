@@ -7,12 +7,12 @@ import { Header } from '../views.tsx';
 import { HomeLayout, INSPECTOR_ID, SIDEBAR_ID } from './HomeLayout.tsx';
 import { InsetSidebar } from './InsetSidebar.tsx';
 import { Hero } from './Hero.tsx';
-import { Section } from './Section.tsx';
+import { StoryGrid } from './StoryGrid.tsx';
 import { TransportBar } from './TransportBar.tsx';
 import { Icon } from './icons.tsx';
 import { modesFor, type LayoutPrefs } from './home-model.ts';
-import { NOW, SECTIONS, SIDEBAR, STARRED } from './fixtures.ts';
-import { WARM_UP } from '../stories/fixtures.ts';
+import { NOW, SIDEBAR, STARRED } from './fixtures.ts';
+import { ROWS, WARM_UP } from '../stories/fixtures.ts';
 
 /** The window's width, and what the viewer chose (home-model.ts's `LayoutPrefs`): the story starts from these. */
 interface Args {
@@ -106,9 +106,7 @@ function Composed({ width, prefs: start }: Args) {
           </div>
         }
       >
-        {SECTIONS.map((s) => (
-          <Section key={s.title} title={s.title} action={{ label: 'See all', onPress: () => {} }} rows={s.rows} playing={NOW.path} starred={STARRED} />
-        ))}
+        <StoryGrid title="Library" rows={ROWS} playing={NOW.path} starred={STARRED} />
       </HomeLayout>
     </div>
   );
@@ -117,7 +115,7 @@ function Composed({ width, prefs: start }: Args) {
 /**
  * Home as an inspector view, in the app's own look: the inset sidebar, the
  * main column with the header row, the Now Playing hero pinned and the
- * sections scrolling under it, the transport bar, and the inspector down the
+ * presets' tiles scrolling under it, the transport bar, and the inspector down the
  * right, each panel docked, laid over the column or put away as the window's
  * width and the viewer's choices say.
  */
@@ -150,7 +148,7 @@ export const Wide: Story = {
     await expect(canvas.getByRole('main')).toBeVisible();
     await expect(canvas.getByRole('banner')).toBeVisible();
     await expect(canvas.getByRole('region', { name: 'now playing' })).toBeVisible();
-    for (const s of SECTIONS) await expect(canvas.getByRole('region', { name: s.title })).toBeVisible();
+    await expect(canvas.getByRole('region', { name: 'Library' })).toBeVisible();
     await expect(canvas.getByRole('region', { name: 'transport' })).toBeVisible();
     await expect(canvas.queryByRole('complementary')).toBeNull();
     await expect(root(canvasElement)).toHaveAttribute('data-sidebar', 'docked');
