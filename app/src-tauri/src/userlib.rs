@@ -32,8 +32,9 @@
 //! renamed into place; one that won't parse is moved aside (`library.json.bad`,
 //! then `.bad.1`, …) rather than overwritten, as `playlists.rs` does; so is one
 //! of a newer version than this app knows. One that can't be read for another
-//! reason is left alone: changes are then kept in memory only. Each change goes
-//! out to the page as [`CHANGED`].
+//! reason, or can't be moved aside, is left alone: changes are then kept in
+//! memory only. Either way the page is told, as for the small settings files
+//! (`crate::settings::settings_problems`). Each change goes out to the page as [`CHANGED`].
 //!
 //! A preset whose key has been gone a while ([`GRACE`]; the user reorganised
 //! the folder) is found again by its hash among the presets no data is kept
@@ -286,17 +287,24 @@ pub fn apply(data: &mut LibraryData, keys: &[String], change: &Change) {
     }
 }
 
+/// What the library file keeps, in the words the page shows when it is lost.
+const WHAT: &str = "library (stars, ratings, tags…)";
+
 /// Reads `file`: a missing one is no data; one that won't parse, or is of a
 /// newer version, is moved aside (`library.json.bad`, then `.bad.1`, …) and
-/// reads as no data. Any other failure to read it is an error, and the file is
-/// left alone.
+/// reads as no data. Any other failure to read it, or to move it aside, is an
+/// error, and the file is left alone. Either is said to the page
+/// ([`crate::settings::user_file_reset`]).
 pub fn load(file: &Path) -> Result<LibraryData, String> {
     let bytes = match std::fs::read(file) {
         Ok(bytes) => bytes,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(LibraryData::default()),
-        Err(e) => return Err(format!("couldn't read {}: {e}", file.display())),
+        Err(e) => {
+            crate::settings::user_file_problem(file, format!("Couldn't read your {WHAT} ({e}); what you change now won't be saved until it can be."));
+            return Err(format!("couldn't read {}: {e}", file.display()));
+        }
     };
-    let problem = match serde_json::from_slice::<LibraryData>(&bytes) {
+    let why = match serde_json::from_slice::<LibraryData>(&bytes) {
         Ok(mut data) if data.version <= VERSION => {
             // A hand-edited rating above 5 stars reads as 5, and a tune out of range as its end.
             for mine in data.presets.values_mut() {
@@ -305,13 +313,21 @@ pub fn load(file: &Path) -> Result<LibraryData, String> {
             }
             return Ok(LibraryData { version: VERSION, ..data });
         }
-        Ok(data) => format!("is version {}, newer than {VERSION}", data.version),
-        Err(e) => format!("does not parse ({e})"),
+        Ok(data) => {
+            eprintln!("library: {} is version {}, newer than {VERSION}", file.display(), data.version);
+            crate::settings::Unreadable::Newer
+        }
+        Err(e) => {
+            eprintln!("library: {} does not parse ({e})", file.display());
+            crate::settings::Unreadable::Damaged
+        }
     };
-    let aside = aside(file);
-    eprintln!("library: {} {problem}; moved to {}", file.display(), aside.display());
-    let _ = std::fs::rename(file, &aside);
-    Ok(LibraryData::default())
+    if crate::settings::user_file_reset(file, WHAT, false, why) {
+        Ok(LibraryData::default())
+    } else {
+        // Not moved aside: kept in memory only, so nothing is saved over it.
+        Err(format!("couldn't move {} aside", file.display()))
+    }
 }
 
 /// Where an unreadable `file` is moved: `library.json.bad`, or the first of
@@ -905,6 +921,26 @@ mod tests {
         std::fs::write(&file, "[]").unwrap();
         load(&file).unwrap();
         assert_eq!(std::fs::read_to_string(dir.join("library.json.bad.2")).unwrap(), "[]");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn an_unreadable_file_is_said_to_the_page() {
+        let dir = temp("said");
+        let file = dir.join("said-library.json");
+        let said = || crate::settings::settings_problems().into_iter().find(|p| p.file == "said-library.json").map(|p| p.message);
+        std::fs::write(&file, "{ not json").unwrap();
+        load(&file).unwrap();
+        assert_eq!(said().as_deref(), Some("Your library (stars, ratings, tags…) was damaged, so it was reset; the old file is kept as said-library.json.bad."));
+        std::fs::write(&file, r#"{ "version": 99, "presets": {} }"#).unwrap();
+        load(&file).unwrap();
+        assert_eq!(said().as_deref(), Some("Your library (stars, ratings, tags…) was saved by a newer version of visual[flow], so it was reset; the old file is kept as said-library.json.bad.1."));
+        // One that can't be read at all (a folder) is left alone, not saved over, and said.
+        std::fs::create_dir_all(&file).unwrap();
+        let store = Store::open(file.clone());
+        assert!(store.save(&LibraryData::default()).is_err());
+        assert!(file.is_dir());
+        assert!(said().unwrap().starts_with("Couldn't read your library (stars, ratings, tags…) ("), "{:?}", said());
         std::fs::remove_dir_all(dir).unwrap();
     }
 
