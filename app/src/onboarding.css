@@ -242,49 +242,20 @@
 }
 
 /* The reduce-flashing switch under the warning: a raised row, its name, then
-   the switch; what it does under it in the caption's grey. */
+   macOS's switch (`SwitchRow`); what it does under it in the caption's grey. */
 .ob-reduce-setting {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-.ob-reduce {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  color: var(--fg);
-  font-size: var(--text-body);
-}
 .ob-warning .ob-reduce {
-  min-height: 52px;
-  padding: 0 8px 0 14px;
+  min-height: 48px;
+  padding: 0 12px 0 14px;
   border-radius: 12px;
   background: var(--ob-raised);
   box-shadow: var(--ob-edge);
   font-size: 13px;
   font-weight: 500;
-}
-/* The widgets' switch on a tone, not an outline (each `.wdg` sets its own tokens, so they are set on it). */
-.ob-warning .ob-reduce .wdg {
-  --wdg-edge: transparent;
-  --wdg-edge-live: transparent;
-  --wdg-face: rgba(255, 255, 255, 0.06);
-  --wdg-radius: 10px;
-  --wdg-field-height: 36px;
-  --wdg-inside-height: 36px;
-}
-.ob-warning .ob-reduce .wdg-toggle {
-  flex: none;
-  width: 72px;
-}
-/* The row's name says what the switch is: the widget's own small caption would say it twice. */
-.ob-warning .ob-reduce .wdg-toggle > .wdg-caption {
-  display: none;
-}
-.ob-warning .ob-reduce .wdg-toggle-body:focus-visible {
-  outline: 2px solid var(--vf-focus-ring);
-  outline-offset: 0;
 }
 .ob-warning .ob-reduce-setting .ob-note {
   padding: 0 14px;

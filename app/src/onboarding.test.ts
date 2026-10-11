@@ -16,7 +16,10 @@ import {
   resetWelcomeEnded,
   type WarningStore,
   haveAll,
+  keepStep,
+  keptStep,
   ReduceFlashing,
+  STEP_KEY,
   libraryLine,
   QUIET_MS,
   silenceWatch,
@@ -105,11 +108,59 @@ describe('the welcome steps', () => {
   });
 });
 
+describe('the step kept for the next launch', () => {
+  const memory = () => {
+    const m = new Map<string, string>();
+    const page = { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), removeItem: (k: string) => void m.delete(k) };
+    return { m, page: () => page };
+  };
+
+  it('resumes on the step kept, and on the welcome when none or a strange one is', () => {
+    const { m, page } = memory();
+    expect(keptStep(page)).toBe('welcome');
+    keepStep('warning', page);
+    expect(m.get(STEP_KEY)).toBe('warning');
+    expect(keptStep(page)).toBe('warning');
+    m.set(STEP_KEY, 'nonsense');
+    expect(keptStep(page)).toBe('welcome');
+  });
+
+  it("resumes Ableton's step on the one after it, as Ableton may not be there yet", () => {
+    const { page } = memory();
+    keepStep('link', page);
+    expect(keptStep(page)).toBe('library');
+  });
+
+  it('forgets the step once the flow ends, or back at the welcome', () => {
+    const { m, page } = memory();
+    keepStep('vibe', page);
+    keepStep(null, page);
+    expect(m.has(STEP_KEY)).toBe(false);
+    keepStep('listen', page);
+    keepStep('welcome', page);
+    expect(m.has(STEP_KEY)).toBe(false);
+  });
+
+  it('starts at the welcome, and never throws, without storage', () => {
+    const broken = () => {
+      throw new Error('no storage');
+    };
+    expect(keptStep(broken)).toBe('welcome');
+    expect(() => keepStep('vibe', broken)).not.toThrow();
+    expect(keptStep(() => undefined)).toBe('welcome');
+  });
+});
+
 describe('the full library step', () => {
   it('says what there is now and what the download is', () => {
     expect(libraryLine(status())).toBe('You have 40 to start with. The full library is 9,795 presets (130 MB).');
     expect(libraryLine(status({ starter: 0 }))).toBe('The full library is 9,795 presets (130 MB).');
     expect(libraryLine(status({ size: 0 }))).toBe('You have 40 to start with. The full library is 9,795 presets.');
+  });
+
+  it('says what there is to start with from the starter set while the download counts up', () => {
+    expect(libraryLine(status({ state: 'downloading', installed: 3_100, received: 40_000_000 }))).toBe('You have 40 to start with. The full library is 9,795 presets (130 MB).');
+    expect(libraryLine(status({ state: 'downloading', installed: 3_100, starter: 0 }))).toBe('The full library is 9,795 presets (130 MB).');
   });
 
   it('sizes downloads plainly', () => {
@@ -300,7 +351,7 @@ describe('the flashing-lights warning from the menu', () => {
 
   it('puts the reduce-flashing switch in the dialog, its name before it and what it does under it, ahead of I understand', () => {
     const html = renderToStaticMarkup(createElement(FlashWarningDialog, { onClose: () => {} }));
-    const name = html.indexOf('class="ob-reduce-name"');
+    const name = html.indexOf('class="vf-switch-name"');
     const toggle = html.indexOf('aria-label="Reduce flashing"');
     const hint = html.indexOf(`<p class="ob-note">${REDUCE_HINT.slice(0, 30)}`);
     const understand = html.indexOf('I understand');
@@ -316,7 +367,10 @@ describe('the flashing-lights warning from the menu', () => {
     expect(off).toContain('aria-label="Reduce flashing"');
     expect(off).toMatch(/disabled/);
     const on = renderToStaticMarkup(createElement(ReduceFlashing, { motion: { reduced: true, system: true }, onChange: () => {} }));
-    expect(on).toMatch(/aria-(checked|pressed)="true"/);
+    expect(on).toMatch(/role="switch"[^>]*aria-checked="true"/);
     expect(on).not.toMatch(/disabled=""/);
+    // Named once, beside the switch, with no "on" or "off" written in a field.
+    expect(on.match(/>Reduce flashing</g)).toHaveLength(1);
+    expect(on).not.toMatch(/>(on|off)</);
   });
 });

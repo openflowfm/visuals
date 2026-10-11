@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { Segmented } from '@openflow/widgets/controls/Segmented.tsx';
-import { Toggle } from '@openflow/widgets/controls/Toggle.tsx';
 import * as api from './api.ts';
 import { Credits } from './Credits.tsx';
 import { EffectSettings, useFx } from './Effects.tsx';
@@ -14,6 +13,7 @@ import { LinkSettings } from './LinkPanel.tsx';
 import * as output from './output.ts';
 import { OutputSettings } from './OutputPanel.tsx';
 import { SourcePicker } from './SourcePicker.tsx';
+import { SwitchRow } from './Switch.tsx';
 import { NoticeBanner } from './views.tsx';
 import { say, Say } from './words.ts';
 import './settings.css';
@@ -192,10 +192,7 @@ function KeptToggle({ read, write, name, title }: { read(): Promise<boolean>; wr
   };
   return (
     <div className="settings-switch">
-      <span>{name}</span>
-      <Toggle on={on === true} onChange={change} disabled={on === null} layout="inside" name={name.toLowerCase()} label={name} title={title}>
-        {on ? 'on' : 'off'}
-      </Toggle>
+      <SwitchRow name={name} on={on === true} onChange={change} disabled={on === null} title={title} />
       {problem && (
         <p className="settings-line settings-problem" role="status">
           {problem}
@@ -230,10 +227,7 @@ export function MotionSwitch({
   const name = Say('reduced motion');
   return (
     <div className="settings-switch">
-      <span>{name}</span>
-      <Toggle on={shown} onChange={onChange} disabled={motion === null} layout="inside" name={name.toLowerCase()} label={name} title={REDUCE_WHAT}>
-        {shown ? 'on' : 'off'}
-      </Toggle>
+      <SwitchRow name={name} on={shown} onChange={onChange} disabled={motion === null} title={REDUCE_WHAT} />
       {motion &&
         (motion.system ? (
           <p className="settings-line settings-follow">Following macOS's Reduce motion.</p>
