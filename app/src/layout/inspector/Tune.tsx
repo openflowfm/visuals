@@ -9,9 +9,6 @@ import './tune.css';
 /** How long a slider rests before its value is kept: a drag or held arrow key sends once, not on every step. */
 export const TUNE_SEND_AFTER = 300;
 
-/** The card's heading for several presets at once (words.ts has the one for a single preset). */
-export const FOR_THESE = 'for these presets';
-
 /** Each value shown: a multiplier, or null where the presets differ ("Mixed"). */
 type Shown = { [K in keyof Tune]: number | null };
 
@@ -80,7 +77,7 @@ export function TuneCard({ subjects, onSet }: { subjects: readonly Prepared[]; o
     <div className="insp-tune" role="group" aria-labelledby={heading} data-appearance="dark">
       <div className="insp-tune-head">
         <p className="insp-tune-title" id={heading}>
-          {several ? FOR_THESE : say('preset tune')}
+          {say(several ? 'preset tune many' : 'preset tune')}
         </p>
         {tuned && (
           <button
