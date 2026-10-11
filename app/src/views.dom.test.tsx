@@ -65,4 +65,17 @@ describe('the sheets, from the app menu', () => {
     unmount();
     expect(heard.has('menu-settings')).toBe(false);
   });
+
+  it('ignore Settings… while disabled (onboarding up), and never open it later by itself', async () => {
+    function Gated({ enabled }: { enabled: boolean }) {
+      const { sheet } = useSheet(enabled);
+      return <p>{sheet ?? 'none'}</p>;
+    }
+    const { rerender } = render(<Gated enabled={false} />);
+    await act(async () => {});
+    act(() => heard.get('menu-settings')?.());
+    expect(screen.getByText('none')).toBeTruthy();
+    rerender(<Gated enabled />);
+    expect(screen.getByText('none')).toBeTruthy();
+  });
 });

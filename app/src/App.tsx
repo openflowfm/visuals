@@ -43,7 +43,7 @@ export function App() {
     );
   }, []);
   const onMode = useCallback((view: View, preset: string | null) => setMode({ view, preset }), []);
-  const { sheet, close } = useSheet();
+  const { sheet, close } = useSheet(welcome.shown === false);
   useAccessibility();
   if (!mode || welcome.shown === null) return null;
   if (welcome.shown)

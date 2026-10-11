@@ -186,9 +186,11 @@ export function sheetOf(e: Event): Sheet | null {
   return detail === 'settings' || detail === 'effects' ? detail : null;
 }
 
-/** The sheet showing, opened by `openSheet`, for `App` to mount; `close` puts it away. */
-export function useSheet(): { sheet: Sheet | null; close(): void } {
+/** The sheet showing, opened by `openSheet`, for `App` to mount; `close` puts it away. While `enabled` is false (onboarding up, say), the menu's Settings… is ignored. */
+export function useSheet(enabled = true): { sheet: Sheet | null; close(): void } {
   const [sheet, setSheet] = useState<Sheet | null>(null);
+  const on = useRef(enabled);
+  on.current = enabled;
   useEffect(() => {
     const open = (e: Event) => setSheet((s) => sheetOf(e) ?? s);
     window.addEventListener(SHEET_EVENT, open);
@@ -197,7 +199,7 @@ export function useSheet(): { sheet: Sheet | null; close(): void } {
     let gone = false;
     try {
       api
-        .onMenuSettings(() => setSheet('settings'))
+        .onMenuSettings(() => on.current && setSheet('settings'))
         .then(
           (un) => (gone ? un() : (off = un)),
           () => {},
