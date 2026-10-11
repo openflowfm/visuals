@@ -381,6 +381,8 @@ describe('a playlist’s grid', () => {
     const moved = [manual('1', 'Warm up', [item(ROWS[2]), item(ROWS[0])])];
     invoke.mockImplementation((cmd: string) => Promise.resolve(cmd === 'playlist_move_item' ? { playlists: moved, deck } : answer(cmd)));
     deck = { ...EMPTY_DECK, playlist: '1', index: 1, current: ROWS[2].path };
+    // The app put the deck back (as it does when a playlist plays), so the page opens no random preset of its own.
+    resume = { playlist: null, index: null, current: ROWS[2].path, source: null, query: null };
     await mount();
     fireEvent.click(screen.getByRole('listitem', { name: /^1\. a/ }));
     fireEvent.keyDown(screen.getByRole('listitem', { name: /^1\. a/ }), { key: 'ArrowRight', altKey: true });
