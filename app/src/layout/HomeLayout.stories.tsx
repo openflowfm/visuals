@@ -7,6 +7,7 @@ import { Header } from '../views.tsx';
 import { HomeLayout, INSPECTOR_ID, SIDEBAR_ID } from './HomeLayout.tsx';
 import { InsetSidebar } from './InsetSidebar.tsx';
 import { Hero } from './Hero.tsx';
+import { tileName } from '../PresetTile.tsx';
 import { Section } from './Section.tsx';
 import { TransportBar } from './TransportBar.tsx';
 import { Icon } from './icons.tsx';
@@ -84,20 +85,18 @@ function Composed({ width, prefs: start }: Args) {
             </Button>
           </Header>
         }
-        hero={
-          <Hero
-            preset={NOW.preset}
-            picture={NOW.picture}
+        hero={<Hero picture={NOW.picture} />}
+        bar={
+          <TransportBar
             playing={NOW.playing}
-            from={NOW.from}
-            starred={!!NOW.preset && STARRED.includes(NOW.preset.key)}
             onPlayPause={() => {}}
-            onNext={() => {}}
-            onStar={() => {}}
-            onAdd={() => {}}
+            onStep={() => {}}
+            stepIn=" in the playlist"
+            position={{ elapsed: 12, length: 30 }}
+            onAudioError={() => {}}
+            now={NOW.preset ? { name: tileName(NOW.preset.title, NOW.preset.path), from: NOW.from } : null}
           />
         }
-        bar={<TransportBar playing={NOW.playing} onPlayPause={() => {}} onStep={() => {}} stepIn=" in the playlist" position={{ elapsed: 12, length: 30 }} onAudioError={() => {}} />}
         inspector={
           <div style={{ padding: '20px 18px' }}>
             <p className="hero-label">About the preset</p>
@@ -143,6 +142,20 @@ async function heroPinned(el: HTMLElement) {
   main.scrollTop = 0;
 }
 
+/** The picture alone: 16:9, centred in the column, filling its width unless that would make it taller than half the column. */
+async function heroCapped(el: HTMLElement) {
+  const col = (el.querySelector('.lay-col') as HTMLElement).getBoundingClientRect();
+  const slot = el.querySelector('.lay-hero') as HTMLElement;
+  const pad = parseFloat(getComputedStyle(slot).paddingLeft);
+  const room = slot.getBoundingClientRect().width - 2 * pad;
+  const box = (el.querySelector('.hero-pic') as HTMLElement).getBoundingClientRect();
+  await expect(Math.abs(box.width / box.height - 16 / 9)).toBeLessThan(0.02);
+  await expect(box.height).toBeLessThanOrEqual(col.height / 2 + 0.5);
+  // Filled one way or the other: the column's width, or half its height.
+  await expect(Math.min(Math.abs(box.width - room), Math.abs(box.height - col.height / 2))).toBeLessThan(1);
+  await expect(Math.abs((box.left + box.right) / 2 - (col.left + col.right) / 2)).toBeLessThan(1);
+}
+
 /** At 1440×900, the sidebar docked and the inspector closed: the header's button opens it beside the column, and closes it. */
 export const Wide: Story = {
   play: async ({ canvas, canvasElement }) => {
@@ -158,6 +171,10 @@ export const Wide: Story = {
     await expect(getComputedStyle(root(canvasElement)).backgroundColor).toBe('rgba(0, 0, 0, 0)');
     await expect(getComputedStyle(canvasElement.querySelector('.hero-pic')!).boxShadow).toMatch(/0px 0px 0px \d+(\.\d+)?px/);
     await heroPinned(canvasElement);
+    await heroCapped(canvasElement);
+    // The preset playing and where from are in the bar, not the hero.
+    await expect(canvas.getByRole('region', { name: 'transport' })).toHaveTextContent(/from Warm-up/);
+    await expect(canvasElement.querySelector('.hero-info')).toBeNull();
     // The playlist playing is the row picked.
     await expect(canvas.getByRole('button', { name: new RegExp(`^${WARM_UP.name}`), current: true })).toBeVisible();
     const details = canvas.getByRole('button', { name: "show the preset's details" });
@@ -236,5 +253,6 @@ export const Narrow: Story = {
     await waitFor(() => expect(canvas.queryByRole('navigation', { name: 'sources' })).toBeNull());
     await expect(canvas.queryByRole('complementary')).toBeNull();
     await heroPinned(canvasElement);
+    await heroCapped(canvasElement);
   },
 };

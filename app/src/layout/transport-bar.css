@@ -1,5 +1,5 @@
 /* The transport along the bottom of the macOS layout's main column
-   (TransportBar.tsx): ◀ play/pause ▶ R, the time on the preset, the slow
+   (TransportBar.tsx): ◀ play/pause ▶ R, the preset playing and the time on it, the slow
    warning, the audio input. It paints no background: the main column is
    already painted the translucent --surface-0 (by the hero's spread shadow,
    layout.css), and painting it again would make a darker strip, or cover the
@@ -58,15 +58,48 @@
   color: var(--fg);
 }
 
+/* The middle: the preset playing, then the time; centred, and never over its
+   neighbours however narrow the bar (the keys and the audio input keep their
+   room, layout above). */
+.lay-transport-mid {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  min-width: 0;
+  overflow: hidden;
+}
+/* The preset playing on one line, the name brighter and where it plays from
+   quieter after it; at most about half the middle, ellipsised. */
+.lay-transport-now {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 50%;
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 13px;
+}
+.lay-transport-name {
+  color: var(--fg);
+  font-weight: 600;
+}
+.lay-transport-from {
+  margin-left: 10px;
+  color: var(--caption);
+  font-size: 12px;
+  word-spacing: var(--sep-space);
+}
+
 /* The time: elapsed, the track, what is left. */
 .lay-transport-time {
   display: flex;
+  flex: 1 1 200px;
   align-items: center;
   gap: 12px;
   min-width: 0;
   max-width: 560px;
-  width: 100%;
-  justify-self: center;
   /* Never over its neighbours, however narrow the bar. */
   overflow: hidden;
 }

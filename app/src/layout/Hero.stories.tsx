@@ -162,6 +162,60 @@ export const At900: Story = {
   },
 };
 
+/**
+ * The picture alone (round 2: the name and where it plays from are in the
+ * transport bar): 16:9, centred in the column, as wide as it, but never taller
+ * than half the column, where it narrows and stays centred.
+ */
+async function pictureAlone(root: HTMLElement) {
+  await expect(root.querySelector('.hero-info')).toBeNull();
+  await expect(root.querySelector('.hero')).toHaveAttribute('data-only');
+  const col = (root.querySelector('.lay-col') as HTMLElement).getBoundingClientRect();
+  const slot = root.querySelector('.lay-hero') as HTMLElement;
+  const room = slot.getBoundingClientRect().width - 2 * parseFloat(getComputedStyle(slot).paddingLeft);
+  const box = (root.querySelector('.hero-pic') as HTMLElement).getBoundingClientRect();
+  await expect(Math.abs(box.width / box.height - 16 / 9)).toBeLessThan(0.02);
+  await expect(box.height).toBeLessThanOrEqual(col.height / 2 + 0.5);
+  await expect(Math.abs((box.left + box.right) / 2 - (col.left + col.right) / 2)).toBeLessThan(1);
+  return { box, col, room };
+}
+
+/** The picture alone in a 1440 × 800 window: half the column's height caps it, so it narrows, centred. */
+export const PictureOnly: Story = {
+  name: 'Picture only',
+  render: (args) => <Hero picture={args.picture} />,
+  play: async ({ canvasElement }) => {
+    const { box, col, room } = await pictureAlone(canvasElement);
+    await expect(Math.abs(box.height - col.height / 2)).toBeLessThan(1);
+    await expect(box.width).toBeLessThan(room);
+  },
+};
+
+/** The picture alone in an 800 px window: the column's width caps it first, so it fills it. */
+export const PictureOnlyAt800: Story = {
+  name: 'Picture only, 800 px',
+  render: (args) => <Hero picture={args.picture} />,
+  parameters: { frame: { width: 800 } },
+  play: async ({ canvasElement }) => {
+    const { box, room } = await pictureAlone(canvasElement);
+    await expect(Math.abs(box.width - room)).toBeLessThan(1);
+  },
+};
+
+/** The preview itself, alone: the hole keeps the painting rules (its shadow paints the column, its corners painted), centred and capped. */
+export const PictureOnlyPreview: Story = {
+  name: 'Picture only, the preview (in the app)',
+  render: () => <Hero picture={<Preview className="hero-pic" />} />,
+  play: async ({ canvas, canvasElement }) => {
+    const pic = canvas.getByRole('img', { name: /^preview of the playing preset/ });
+    await waitFor(() => expect(pic).not.toHaveAttribute('data-loading'));
+    await expect(getComputedStyle(pic).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    await expect(getComputedStyle(pic).boxShadow).toMatch(/0px 0px 0px \d+(\.\d+)?px/);
+    await expect(getComputedStyle(pic, '::before').content).not.toBe('none');
+    await pictureAlone(canvasElement);
+  },
+};
+
 /** In a 1600 px window: the picture at its cap on the left, the words beside it. */
 export const At1600: Story = {
   name: 'At 1600 px',
