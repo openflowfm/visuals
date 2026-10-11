@@ -74,6 +74,8 @@ const SOURCE: Selection = { kind: 'source' };
 /** The keys a selection picks. */
 const keysOf = (s: Selection): readonly string[] => (s.kind === 'presets' ? s.keys : NONE);
 const NONE: readonly string[] = [];
+/** How long after a tile is played live events naming another preset are taken as the deck catching up, not news. */
+const CLAIM_MS = 2000;
 
 /** Whether a key went to something that moves with the arrows itself (the grid, the sidebar, the inspector's field, a switch): ← → R leave it alone. */
 const ownsArrows = (target: EventTarget | null): boolean => {
@@ -111,26 +113,55 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
   const [pane, setPane] = useState<Pane | null>(startOnLibrary ? { kind: 'library' } : null);
   const audioFailed = useMemo(() => fail("Couldn't read the audio input."), [fail]);
 
+  // How long the preset playing has played: counted from when the app last said what plays (D9), or a tile was played.
+  const [since, setSince] = useState(() => Date.now());
+  const lastPath = useRef<string | null>(null);
+  const currentRef = useRef<Entry | null>(null);
+  currentRef.current = current;
+  const sinceRef = useRef(since);
+  sinceRef.current = since;
+  // A preset played from here, until the deck's word on it comes (or CLAIM_MS pass): live events for other paths are
+  // the deck catching up on what played before (auto-advance racing the click), not news.
+  const claim = useRef<{ path: string; until: number } | null>(null);
+  // Shows `e` as playing at once; the returned undo puts back what actually plays if playing it fails.
+  // Only a click claims: a preset opened by the app itself (at start, a step) lets the deck's word through.
+  const guess = useRef<object | null>(null);
+  const optimistic = useCallback((e: Entry, clicked: boolean) => {
+    const before = { current: currentRef.current, lastPath: lastPath.current, since: sinceRef.current };
+    if (e.path !== lastPath.current) setSince(Date.now());
+    lastPath.current = e.path;
+    setCurrent(e);
+    const mine = { path: e.path, until: Date.now() + CLAIM_MS };
+    claim.current = clicked ? mine : null;
+    guess.current = mine;
+    return () => {
+      // Undone only while nothing has been shown since: not a later click, nor the deck's word.
+      if (guess.current !== mine) return;
+      guess.current = null;
+      claim.current = null;
+      lastPath.current = before.lastPath;
+      setSince(before.since);
+      setCurrent(before.current);
+    };
+  }, []);
+
   const load = useCallback(
-    async (e: Entry) => {
-      setCurrent(e);
+    async (e: Entry, clicked = false) => {
+      const undo = optimistic(e, clicked);
       dismiss();
       try {
         await api.open(e.path);
       } catch (err) {
+        undo();
         setNotice(notice(`Couldn't open ${e.name}.`, err));
       }
     },
-    [dismiss, setNotice],
+    [dismiss, setNotice, optimistic],
   );
   // Picking up where the app left off, the preset put back stays: named in the hero (unless the deck said first), not opened again.
   const { library, loaded, search, setSearch, found } = useLibrary(start, load, fail, (e) => setCurrent((c) => c ?? e));
   const { rows, data, apply } = useLibraryRows();
   const played = usePlayed();
-
-  // How long the preset playing has played: counted from when the app last said what plays (D9).
-  const [since, setSince] = useState(() => Date.now());
-  const lastPath = useRef<string | null>(null);
 
   // The playlists, and the starter smart playlists the first time the home opens.
   useEffect(() => {
@@ -153,6 +184,10 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
     played.reread();
     if (!now.path) return;
     const path = now.path;
+    const c = claim.current;
+    if (c && path !== c.path && Date.now() < c.until) return;
+    claim.current = null;
+    guess.current = null;
     if (path !== lastPath.current) {
       lastPath.current = path;
       setSince(Date.now());
@@ -499,15 +534,21 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
   // before, while the deck's own word on what plays is on its way; that word then keeps the inspector following the deck.
   const showPlayed = (e: Entry) => {
     setInfo(false);
-    setCurrent(e);
+    return optimistic(e, true);
   };
-  // Playing from a playlist's grid: from that place in it.
-  const playAt = (index: number | null, path: string, name: string) => {
-    if (!list) return;
+  // Playing from a playlist's grid: from that place in it. `undo` puts back what plays when it can't be played.
+  const playAt = (index: number | null, path: string, name: string, undo: () => void = () => {}) => {
+    const failed = (what: string) => (err?: unknown) => {
+      undo();
+      fail(`Couldn't ${what}.`)(err);
+    };
+    if (!list) return failed(`play ${name}`)();
     const at = playlists.indexOf(list);
     const active = deck.playlist === list.id;
-    if (index === null) return void api.open(path).catch(fail(`Couldn't open ${name}.`));
-    run(pl.act(active ? { kind: 'go', index } : { kind: 'load', playlist: at, index }), `play ${list.name}`);
+    if (index === null) return void api.open(path).catch(failed(`open ${name}`));
+    // A place the list no longer has, or a preset gone from the library, can't play.
+    if (index < 0 || (list.kind === 'manual' && (index >= list.items.length || list.items[index].missing))) return failed(`play ${name}`)();
+    pl.act(active ? { kind: 'go', index } : { kind: 'load', playlist: at, index }).catch(failed(`play ${list.name}`));
   };
   // The inspector's Play, for the one picked: from its place in the playlist shown, else on its own.
   const playPicked = () => {
@@ -666,7 +707,7 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
                 into={adding ? null : into}
                 onLoad={(e) => {
                   setInfo(false);
-                  void load(e);
+                  void load(e, true);
                 }}
                 onAdd={(e) => into && run(pl.add(into.id, e.path), `add ${e.name} to ${into.name}`)}
                 onPress={(e, thumbnail, ev) => beginDrag(ev, { kind: 'preset', path: e.path, name: e.name, thumbnail }, dropping)}
@@ -695,8 +736,8 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
               picked={tilesPicked}
               onPick={pickInList}
               onPlay={(t) => {
-                showPlayed(library.find((e) => e.path === t.path) ?? { path: t.path, name: t.name, group: '' });
-                playAt(t.index, t.path, t.name);
+                const undo = showPlayed(library.find((e) => e.path === t.path) ?? { path: t.path, name: t.name, group: '' });
+                playAt(t.index, t.path, t.name, undo);
               }}
               onLists={setLists}
               onError={(what) => fail(`Couldn't ${what}.`)}

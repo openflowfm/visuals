@@ -788,9 +788,91 @@ describe('a tile played shows in the inspector at once', () => {
     expect(insp().getByRole('heading', { name: 'c' })).toBeTruthy();
     await act(() => vi.advanceTimersByTimeAsync(0));
     expect(sent('act').at(-1)).toEqual({ action: { kind: 'go', index: 1 } });
-    // Then the deck moves on (auto-advance): the inspector follows it.
-    act(() => heard.get('live')?.forEach((f) => f({ payload: { deck: { ...deck, index: 0 }, opened: null, path: ROWS[0].path, error: null } })));
+    // The deck says c plays; then it moves on (auto-advance): the inspector follows it.
+    live(ROWS[2].path);
+    live(ROWS[0].path);
     expect(insp().getByRole('heading', { name: 'a' })).toBeTruthy();
+  });
+
+  const live = (path: string) => act(() => heard.get('live')?.forEach((f) => f({ payload: { deck, opened: null, path, error: null } })));
+  const name = () => document.querySelector('.lay-transport-name')!.textContent;
+  const time = () =>
+    screen
+      .getByRole('timer')
+      .getAttribute('aria-label')!
+      .match(/(\d+:\d\d)/)![1];
+  const playC = async () => {
+    await mount();
+    fireEvent.click(sourceRow('Warm up'));
+    fireEvent.click(screen.getByRole('listitem', { name: /^2\. c/ }));
+    expect(insp().getByRole('heading', { name: 'c' })).toBeTruthy();
+  };
+
+  it('puts back what plays when the deck won’t play it, and says so', async () => {
+    invoke.mockImplementation((cmd: string) => (cmd === 'act' ? Promise.reject(new Error('no')) : Promise.resolve(answer(cmd))));
+    await mount();
+    await act(() => vi.advanceTimersByTimeAsync(65_000));
+    fireEvent.click(sourceRow('Warm up'));
+    fireEvent.click(screen.getByRole('listitem', { name: /^2\. c/ }));
+    expect(time()).toBe('0:00');
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(insp().getByRole('heading', { name: 'a' })).toBeTruthy();
+    expect(name()).toBe('a');
+    expect(time()).toBe('1:05');
+    expect(screen.getByRole('alert').textContent).toContain("Couldn't play Warm up.");
+  });
+
+  it('puts back what plays for a tile gone from the library, and says so', async () => {
+    playlists = [manual('1', 'Warm up', [item(ROWS[0]), { ...item(ROWS[2]), missing: true }])];
+    await mount();
+    fireEvent.click(sourceRow('Warm up'));
+    fireEvent.click(screen.getByRole('listitem', { name: /^2\. c/ }));
+    expect(insp().getByRole('heading', { name: 'a' })).toBeTruthy();
+    expect(name()).toBe('a');
+    expect(sent('act')).toEqual([]);
+    expect(screen.getByRole('alert').textContent).toContain("Couldn't play c.");
+  });
+
+  it('puts back what plays when the library’s preset won’t open, and says so', async () => {
+    invoke.mockImplementation((cmd: string) => (cmd === 'open' ? Promise.reject(new Error('no')) : Promise.resolve(answer(cmd))));
+    await mount({ library: true });
+    fireEvent.click(sourceRow('Library'));
+    fireEvent.click(tile('b'));
+    expect(insp().getByRole('heading', { name: 'b' })).toBeTruthy();
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(insp().getByRole('heading', { name: 'a' })).toBeTruthy();
+    expect(name()).toBe('a');
+    expect(screen.getByRole('alert').textContent).toContain("Couldn't open b.");
+  });
+
+  it('isn’t flipped back by a late word on the preset before it, until its own word comes', async () => {
+    await playC();
+    live(ROWS[0].path);
+    expect(insp().getByRole('heading', { name: 'c' })).toBeTruthy();
+    expect(name()).toBe('c');
+    live(ROWS[2].path);
+    live(ROWS[0].path);
+    expect(name()).toBe('a');
+  });
+
+  it('trusts the deck again once its word on the tile is overdue', async () => {
+    await playC();
+    await act(() => vi.advanceTimersByTimeAsync(2100));
+    live(ROWS[0].path);
+    expect(name()).toBe('a');
+  });
+
+  it('counts the time on it from the click, and not again from the deck’s word on it', async () => {
+    await mount();
+    await act(() => vi.advanceTimersByTimeAsync(65_000));
+    expect(time()).toBe('1:05');
+    fireEvent.click(sourceRow('Warm up'));
+    fireEvent.click(screen.getByRole('listitem', { name: /^2\. c/ }));
+    expect(time()).toBe('0:00');
+    await act(() => vi.advanceTimersByTimeAsync(3000));
+    live(ROWS[2].path);
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+    expect(time()).toBe('0:04');
   });
 
   it('from the library’s grid, over its card', async () => {
