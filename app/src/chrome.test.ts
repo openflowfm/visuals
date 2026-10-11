@@ -114,7 +114,8 @@ describe('the window buttons, in one place for every view', () => {
     // The buttons are 12px, 8px apart: 52px from the first's left edge.
     expect(px(chrome, '--chrome-lights')).toBeGreaterThanOrEqual(at.x + 52 + 12);
     const rule = chrome.match(/([^{}]+)\{[^{}]*padding-left: var\(--chrome-lights\);/)![1];
-    expect(rule).toContain(':is(.vf-header, .live-status-strip, .ob-head)');
+    expect(rule).toContain(':is(.vf-header, .ob-head)');
+    expect(chrome).not.toContain('live-status');
     expect(rule).toContain(":not(.lay[data-sidebar='docked'] .vf-header)");
     expect(rule).toContain(':not([data-fullscreen])');
   });
