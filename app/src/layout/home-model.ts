@@ -32,6 +32,8 @@ export interface SidebarActions {
   /** Save a playlist to a file. */
   onExport(id: string): void;
   onDelete(id: string): void;
+  /** Start quick add on a manual playlist, by id. */
+  onQuickAdd(id: string): void;
   /** The row menu's "Show info": show a playlist's card in the inspector, by id. Optional until the sidebar and Home lanes wire it. */
   onInfo?(id: string): void;
   /** The quiet Settings row at the sidebar's foot: open the Settings sheet. Optional until the sidebar and Home lanes wire it. */
@@ -40,6 +42,14 @@ export interface SidebarActions {
   count(p: Playlist): number | null;
   /** Something failed: `what` it was doing, then the error, as the home says it. */
   onError(what: string): (e: unknown) => void;
+}
+
+/** Quick add: the manual playlist, by id, a click on a library tile adds to (or removes from, when already in it); null: not adding. */
+export type QuickAdd = { id: string } | null;
+
+/** Whether a playlist offers quick add: manual ones only (a smart one fills itself). */
+export function offersQuickAdd(p: Playlist): boolean {
+  return p.kind === 'manual';
 }
 
 /** What the viewer chose, kept between runs: whether they showed (true) or hid (false) the sidebar, and opened or closed the inspector; null: never chose. */
