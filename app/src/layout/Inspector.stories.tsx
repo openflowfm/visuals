@@ -223,10 +223,10 @@ function Story({ start, window, pack, error, overlay, tuned }: Args) {
 
 /**
  * The inspector ("Scope"), the macOS layout's inset panel down the window's
- * right (macOS 26's inspector), mirroring the sidebar: the preset placed among
- * the library, a field of every preset by speed and brightness with this one
- * lit, then its character (style, authors, the measures in words, its
- * colours) and the actions on it. It is about the preset playing, or one
+ * right (macOS 26's inspector), mirroring the sidebar: the preset's name and
+ * authors first, then its facts (style, the measures in words, its colours,
+ * my tags), then the map (a field of every preset by speed and brightness with
+ * this one lit), then the actions on it. It is about the preset playing, or one
  * picked (a dot in the field, or a tile in the main column) until "back".
  */
 const meta = {
@@ -256,13 +256,23 @@ function dotOnScreen(panel: HTMLElement, library: readonly LibraryRow[], key: st
   return { svg, at: { clientX, clientY }, row: hit, name: tileName(hit.title, hit.path) };
 }
 
-/** Now playing: the name and where it plays from, the actions (star toggling), and a tag added. */
+/** Whether `a` comes before `b` in the document. */
+const before = (a: Element, b: Element) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+/** Now playing: the name and where it plays from first, its facts, then the field, the actions (star toggling), and a tag added. */
 export const NowPlaying: S = {
   name: 'Now playing',
   play: async ({ canvasElement }) => {
-    const panel = within(panelOf(within(canvasElement)));
-    await expect(panel.getByRole('heading', { name: PLAYING_NAME })).toBeVisible();
+    const panelEl = panelOf(within(canvasElement));
+    const panel = within(panelEl);
+    const name = panel.getByRole('heading', { name: PLAYING_NAME });
+    await expect(name).toBeVisible();
     await expect(panel.getByText(NOW.from)).toBeVisible();
+    // The order: name, facts, the field, the keys.
+    const facts = panel.getByRole('group', { name: 'about this preset' });
+    await expect(before(name, facts)).toBe(true);
+    await expect(before(facts, fieldOf(panelEl))).toBe(true);
+    await expect(before(fieldOf(panelEl), panel.getByRole('button', { name: 'star' }))).toBe(true);
     await expect(panel.queryByRole('button', { name: 'back to now playing' })).toBeNull();
     const star = panel.getByRole('button', { name: 'star' });
     const was = star.getAttribute('aria-pressed');
@@ -358,15 +368,20 @@ export const NothingPlaying: S = {
   },
 };
 
-/** Several picked in a section together: their first pictures, "9 selected", and star, add, never play and tags over all of them. */
+/** Several picked in a section together: "9 selected", their styles and tags, their first pictures, and star, add, never play over all of them. */
 export const Several: S = {
   name: 'Several picked',
   args: { start: 'several' },
   play: async ({ canvasElement }) => {
     const panelEl = panelOf(within(canvasElement));
     const panel = within(panelEl);
-    await expect(panel.getByRole('heading', { name: `${SEVERAL.length} selected` })).toBeVisible();
+    const name = panel.getByRole('heading', { name: `${SEVERAL.length} selected` });
+    await expect(name).toBeVisible();
     await expect(panel.queryByRole('listbox')).toBeNull();
+    const facts = panel.getByRole('group', { name: 'about these presets' });
+    await expect(before(name, facts)).toBe(true);
+    await expect(before(facts, panelEl.querySelector('.insp-pictures')!)).toBe(true);
+    await expect(before(panelEl.querySelector('.insp-pictures')!, panel.getByRole('button', { name: 'star' }))).toBe(true);
     await expect(panel.queryByRole('button', { name: 'play it' })).toBeNull();
     const star = panel.getByRole('button', { name: 'star' });
     await userEvent.click(star);
