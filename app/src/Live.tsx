@@ -4,7 +4,6 @@ import { remember, rememberedChoice } from './home.ts';
 import { useLiveKeys } from './liveKeys.ts';
 import * as output from './output.ts';
 import { useTauriEvent } from './hooks.ts';
-import { SilenceBanner } from './Onboarding.tsx';
 import { HOME, type View } from './views.tsx';
 import { StageCrate } from './live/StageCrate.tsx';
 import { StageDock } from './live/StageDock.tsx';
@@ -113,10 +112,7 @@ export function Live({
         centre={offer ? <FullScreenOffer live={live} /> : undefined}
         onCrateAway={crateAway}
       >
-        {/* Laid over everything: the silence banner and the ? overlay. */}
-        <div className="live-banner">
-          <SilenceBanner />
-        </div>
+        {/* Laid over everything: the ? overlay (the dock shows the silence banner and the notice). */}
         <HelpOverlay open={help} onClose={() => setHelp(false)} stage />
       </StageLayout>
     </div>

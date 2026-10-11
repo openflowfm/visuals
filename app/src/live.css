@@ -1,8 +1,8 @@
 /* Live mode, as the Stage: the picture full-bleed under the page (the bench is a
    native view under it, so nothing behind it may paint), and the panels laid
-   over it. The Stage's own parts style themselves (live/); here is what Live's
-   wiring places over them (the silence banner), the light and output panels'
-   and the crate's rows (Status, OutputPanel, Crate), and focus.
+   over it. The Stage's own parts style themselves (live/); here are the light
+   and output panels' and the crate's rows (Status, OutputPanel, Crate), and
+   focus.
 
    `.live` itself takes no box: the Stage's shell lays out the window, and
    `.live` only scopes the rules below and carries what Live is doing
@@ -253,20 +253,6 @@
   color: var(--caution);
   font-size: var(--text-body);
   line-height: 1.45;
-}
-
-/* The silence banner ("No sound…"), over the Stage below the header's capsules, centred; it takes no room while it says nothing. */
-.live-banner {
-  position: fixed;
-  top: 64px;
-  left: 50%;
-  z-index: 25;
-  width: max-content;
-  max-width: min(640px, calc(100vw - 32px));
-  transform: translateX(-50%);
-}
-.live-banner:empty {
-  display: none;
 }
 
 /* The crate's panel in its own stories (Crate.stories.tsx): playlists, moods, up next. It scrolls on its own. */

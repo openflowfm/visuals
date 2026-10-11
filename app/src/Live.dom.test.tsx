@@ -15,8 +15,6 @@ import type { StageCrateProps, StageHeadProps, StageLayoutProps } from './live/s
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => invoke(...args), convertFileSrc: (p: string) => p }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: () => Promise.resolve(() => {}) }));
-// The silence banner asks for the levels in a loop; it isn't what these tests are about.
-vi.mock('./Onboarding.tsx', async (original) => ({ ...(await original<object>()), SilenceBanner: () => null }));
 
 // The Stage's parts, stood in for: what they were handed, in the DOM.
 vi.mock('./live/StageLayout.tsx', async () => {
