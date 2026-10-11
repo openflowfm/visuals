@@ -84,8 +84,8 @@ export function leave() {
 }
 
 /**
- * Where the live output goes: whether it is showing, the display it fills, and a
- * warning when it covers the display with the menu bar. `status` and `show` are
+ * Where the live output goes: whether it is showing, the display it fills, how
+ * the picture fits it, and a warning when it covers the display with the menu bar. `status` and `show` are
  * Live's, which opens the output on the way in.
  */
 export function OutputPanel({ status, show }: { status: output.Status; show: (id: number | null) => void }) {
@@ -132,6 +132,9 @@ export function OutputPanel({ status, show }: { status: output.Status; show: (id
       ) : (
         <p className="live-note">No displays found.</p>
       )}
+      <p className="live-fit">
+        <b>{Say('output fit')}:</b> {fitLine(status)}
+      </p>
       {alone ? (
         <p className="live-warn" role="note">
           Only one display is connected, so the output covers this one — the menu bar and this window too. Connect a projector or a second display and pick it here; Esc or ⌘⇧L closes the output.

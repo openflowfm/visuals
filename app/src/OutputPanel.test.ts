@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { fitLine, leave, OutputSettings } from './OutputPanel.tsx';
+import { fitLine, leave, OutputPanel, OutputSettings } from './OutputPanel.tsx';
 import type { Display } from './output.ts';
 
 const display = (width: number, height: number): Display => ({ id: 1, index: 0, name: 'Projector', width, height, main: false });
@@ -24,6 +24,20 @@ describe('fitLine', () => {
   it('says where the black bars go', () => {
     expect(fitLine({ display: display(1920, 1080), size: [1440, 1080] })).toBe('The whole picture, 1440×1080 on Projector, with black bars at the sides.');
     expect(fitLine({ display: display(1920, 1200), size: [1920, 1080] })).toBe('The whole picture, 1920×1080 on Projector, with black bars above and below.');
+  });
+});
+
+describe('OutputPanel', () => {
+  it('says how the picture fits the display it is on, as the Stage’s Output light shows it', () => {
+    const html = renderToStaticMarkup(createElement(OutputPanel, { status: { display: display(1920, 1200), size: [1920, 1080] }, show: () => {} }));
+    expect(html).toContain('<p class="live-fit"><b>How the picture fills the screen:</b> The whole picture, 1920×1080 on Projector, with black bars above and below.</p>');
+  });
+
+  it('offers to show the output while it is not showing, and still says how it will fit', () => {
+    const html = renderToStaticMarkup(createElement(OutputPanel, { status: { display: null, size: null }, show: () => {} }));
+    expect(html).toContain('Not showing');
+    expect(html).toContain('>Show<');
+    expect(html).toMatch(/class="live-fit"><b>How the picture fills the screen:<\/b> The whole picture, with black bars/);
   });
 });
 
