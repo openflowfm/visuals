@@ -240,13 +240,7 @@ fn run(folder: &Path, out: &Path, count: Option<usize>, jobs: usize, timeout: Du
         eprintln!("features: {left} presets not drawn: children couldn't start ({}); the file so far is saved, run again to go on", gave_up.join("; "));
         std::process::exit(1);
     }
-    println!(
-        "{}: {} presets measured, {} skipped; drew {to_draw} in {secs:.1}s ({:.2} presets/s)",
-        file.display(),
-        features.rows.len(),
-        features.skipped.len(),
-        to_draw as f64 / secs.max(1e-9)
-    );
+    println!("{}: {} presets measured, {} skipped; drew {to_draw} in {secs:.1}s ({:.2} presets/s)", file.display(), features.rows.len(), features.skipped.len(), to_draw as f64 / secs.max(1e-9));
     for s in &features.skipped {
         println!("skipped\t{}\t{}", s.why, s.path);
     }

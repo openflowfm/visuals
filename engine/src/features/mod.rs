@@ -334,11 +334,13 @@ impl Collector {
             (total > 0).then(|| {
                 let want = (p * total as f64).ceil().max(1.0) as u64;
                 let mut seen = 0;
-                self.histogram.iter().position(|&n| {
-                    seen += n;
-                    seen >= want
-                })
-                .unwrap_or(255) as f64
+                self.histogram
+                    .iter()
+                    .position(|&n| {
+                        seen += n;
+                        seen >= want
+                    })
+                    .unwrap_or(255) as f64
                     / 255.0
             })
         };
