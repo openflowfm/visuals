@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, type ReactNode, type RefObject } from 'react';
 import { say } from '../words.ts';
 import type { InspectorMode, SidebarMode } from './home-model.ts';
 import './layout.css';
@@ -133,6 +133,26 @@ function useDismiss(side: RefObject<HTMLElement | null>, insp: RefObject<HTMLEle
   }, [on, key, side, insp]);
 }
 
+/**
+ * The main column's height, kept in its `--lay-col-h` (px) for the hero's cap
+ * (hero.css: the picture alone is never taller than half the column). Measured
+ * rather than a size container: containment would make the column the
+ * containing block of what is fixed inside it (the dragged preset's ghost).
+ */
+function useColumnHeight(col: RefObject<HTMLElement | null>) {
+  useLayoutEffect(() => {
+    const el = col.current;
+    if (!el) return;
+    // Nothing laid out yet (0): hero.css's fallback, half the window, stands until it is.
+    const set = (h: number) => h > 0 && el.style.setProperty('--lay-col-h', `${Math.round(h)}px`);
+    set(el.getBoundingClientRect().height);
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => set(entries[0]?.contentRect.height ?? el.getBoundingClientRect().height));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [col]);
+}
+
 /** The window: the sidebar, the main column and the inspector, each shown as its mode says. */
 export function HomeLayout({
   sidebar,
@@ -151,6 +171,8 @@ export function HomeLayout({
 }: HomeLayoutProps) {
   const side = useRef<HTMLElement | null>(null);
   const insp = useRef<HTMLElement | null>(null);
+  const col = useRef<HTMLDivElement | null>(null);
+  useColumnHeight(col);
   const inspMode = inspector ? inspectorMode : null;
   const sideOver = sidebarMode === 'overlay';
   const inspOver = inspMode === 'overlay';
@@ -167,7 +189,7 @@ export function HomeLayout({
           </nav>
         </div>
       )}
-      <div className="lay-col">
+      <div className="lay-col" ref={col}>
         <div className="lay-head" data-tauri-drag-region>
           {header}
         </div>

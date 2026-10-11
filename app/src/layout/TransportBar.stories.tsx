@@ -169,6 +169,62 @@ export const At900: Story = {
   },
 };
 
+/** The preset playing left of the time: its name, and where it plays from quieter, on one line. */
+export const NowPlaying: Story = {
+  name: 'Now playing',
+  args: { now: { name: 'Flexi - mindblob mix', from: 'from Warm-up · 3 of 10' } },
+  play: async ({ canvas, canvasElement }) => {
+    await expect(canvas.getByText('Flexi - mindblob mix')).toBeVisible();
+    await expect(canvas.getByText(/from Warm-up/)).toBeVisible();
+    const now = (canvasElement.querySelector('.lay-transport-now') as HTMLElement).getBoundingClientRect();
+    const time = (canvasElement.querySelector('.lay-transport-time') as HTMLElement).getBoundingClientRect();
+    await expect(now.right).toBeLessThanOrEqual(time.left + 0.5);
+    // One line.
+    await expect(now.height).toBeLessThan(24);
+  },
+};
+
+/** A long name in an 800 px window with no sidebar: it ellipsises; the keys, the time and the audio input keep their places, nothing overlapping. */
+export const NowLongAt800: Story = {
+  name: 'Now playing, long name, 800 px',
+  parameters: { frame: { width: 800, sidebar: 'hidden' } },
+  args: {
+    now: {
+      name: 'Geiss + Rovastar + Zylot + Flexi - the longest title anyone ever gave a MilkDrop preset, (Phat edit) [remix of a remix]',
+      from: 'from the library · 1,204 of 9,795',
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const rect = (sel: string) => (canvasElement.querySelector(sel) as HTMLElement).getBoundingClientRect();
+    const keys = rect('.lay-transport-keys');
+    const now = rect('.lay-transport-now');
+    const time = rect('.lay-transport-time');
+    const right = rect('.lay-transport-right');
+    await expect(now.left).toBeGreaterThanOrEqual(keys.right - 0.5);
+    await expect(now.right).toBeLessThanOrEqual(time.left + 0.5);
+    await expect(time.right).toBeLessThanOrEqual(right.left + 0.5);
+    const el = canvasElement.querySelector('.lay-transport-now') as HTMLElement;
+    // Ellipsised on one line.
+    await expect(el.scrollWidth).toBeGreaterThan(el.clientWidth);
+    await expect(now.height).toBeLessThan(24);
+    // The time keeps a usable width.
+    await expect(time.width).toBeGreaterThanOrEqual(100);
+    const bar = canvasElement.querySelector('.lay-transport') as HTMLElement;
+    await expect(bar.scrollWidth).toBeLessThanOrEqual(bar.clientWidth);
+  },
+};
+
+/** The length run out (30 s of 30, or past it): the time on it alone, not a countdown stuck at −0:00. */
+export const RunOut: Story = {
+  name: 'Length run out',
+  args: { position: { elapsed: 31, length: 30 } },
+  play: async ({ canvas }) => {
+    await expect(canvas.getByRole('timer', { name: 'time on this preset: 0:31' })).toHaveTextContent('0:31');
+    await expect(canvas.queryByRole('progressbar')).toBeNull();
+    await expect(canvas.queryByText(/^−/)).toBeNull();
+  },
+};
+
 /** In a 1600 px window: the track no wider than its cap, in the middle. */
 export const At1600: Story = {
   name: 'At 1600 px',

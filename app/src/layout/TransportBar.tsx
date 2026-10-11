@@ -1,3 +1,4 @@
+import { Numbers } from '../Numbers.tsx';
 import { SourcePicker } from '../SourcePicker.tsx';
 import { FrameRate } from '../views.tsx';
 import { Icon } from './icons.tsx';
@@ -5,10 +6,10 @@ import './transport-bar.css';
 
 /**
  * The bar along the bottom of the macOS layout's main column (HomeLayout's
- * `bar` slot): today's HomeBar reduced to the transport, since the hero above
- * carries the preview, the name and where it plays from. ◀ play/pause ▶ R on
- * the left, the time on the preset and how long until the next one in the
- * middle, the audio input on the right, and before it a warning only while the
+ * `bar` slot): today's HomeBar reduced to the transport, the hero above being
+ * the picture alone. ◀ play/pause ▶ R on the left; in the middle the preset
+ * playing and where it plays from (`now`), then the time on it and how long
+ * until the next one (the time on it alone once that has run out); the audio input on the right, and before it a warning only while the
  * picture draws slowly (`FrameRate slowOnly`, as HomeBar has it). No preview,
  * so no hole: the bar paints nothing, sitting over the hero's spread shadow,
  * which paints the main column.
@@ -29,7 +30,7 @@ export interface TransportBarProps {
    */
   position: { elapsed: number; length?: number | null } | null;
   onAudioError(e: unknown): void;
-  /** The preset playing, left of the time: its name, and where it plays from as `playsFrom` says it ("from Warm-up · 3 of 10"); null or left out: nothing playing. Accepted but not drawn yet (round 2's bar lane draws it). */
+  /** The preset playing, left of the time: its name, and where it plays from as `playsFrom` says it ("from Warm-up · 3 of 10"); null or left out: nothing playing. One line, the name brighter, ellipsised before the controls or the audio input give way. */
   now?: { name: string; from?: string } | null;
 }
 
@@ -40,8 +41,11 @@ export function clock(seconds: number): string {
 }
 
 /** The bar. */
-export function TransportBar({ playing, onPlayPause, onStep, stepIn, position, onAudioError }: TransportBarProps) {
-  const open = position !== null && (position.length === null || position.length === undefined);
+export function TransportBar({ playing, onPlayPause, onStep, stepIn, position, onAudioError, now }: TransportBarProps) {
+  const endless = position !== null && (position.length === null || position.length === undefined);
+  // Once the length has run out (the deck about to move on, or held there), there is nothing left to count down: the time on it alone, as with no end.
+  const spent = position !== null && !endless && position.elapsed >= Math.max(0, position.length ?? 0);
+  const open = endless || spent;
   const length = position && !open ? Math.max(0, position.length ?? 0) : 0;
   const elapsed = position ? (open ? Math.max(0, position.elapsed) : Math.min(Math.max(0, position.elapsed), length)) : 0;
   return (
@@ -66,35 +70,47 @@ export function TransportBar({ playing, onPlayPause, onStep, stepIn, position, o
           R
         </button>
       </div>
-      <div className="lay-transport-time" data-off={position ? undefined : ''} data-open={open ? '' : undefined}>
-        {open ? (
-          <>
-            {/* No end to count down to: the time on it, and a track with nothing to fill. */}
-            <span className="lay-transport-num" role="timer" aria-label={`time on this preset: ${clock(elapsed)}, until moved on`}>
-              {clock(elapsed)}
-            </span>
-            <div className="lay-transport-track" aria-hidden="true" />
-            <span className="lay-transport-num" aria-hidden="true" />
-          </>
-        ) : position ? (
-          <>
-            <span className="lay-transport-num">{clock(elapsed)}</span>
-            <div
-              className="lay-transport-track"
-              role="progressbar"
-              aria-label="time on this preset"
-              aria-valuemin={0}
-              aria-valuemax={length}
-              aria-valuenow={elapsed}
-              aria-valuetext={`${clock(elapsed)} of ${clock(length)}`}
-            >
-              <div className="lay-transport-fill" style={{ width: length ? `${(elapsed / length) * 100}%` : '0%' }} />
-            </div>
-            <span className="lay-transport-num">−{clock(length - elapsed)}</span>
-          </>
-        ) : (
-          <div className="lay-transport-track" aria-hidden="true" />
+      <div className="lay-transport-mid">
+        {now && (
+          <p className="lay-transport-now" title={now.from ? `${now.name} ${now.from}` : now.name}>
+            <span className="lay-transport-name">{now.name}</span>
+            {now.from && (
+              <span className="lay-transport-from">
+                <Numbers text={now.from} />
+              </span>
+            )}
+          </p>
         )}
+        <div className="lay-transport-time" data-off={position ? undefined : ''} data-open={open ? '' : undefined}>
+          {open ? (
+            <>
+              {/* No end to count down to (or none left): the time on it, and a track with nothing to fill. */}
+              <span className="lay-transport-num" role="timer" aria-label={`time on this preset: ${clock(elapsed)}${endless ? ', until moved on' : ''}`}>
+                {clock(elapsed)}
+              </span>
+              <div className="lay-transport-track" aria-hidden="true" />
+              <span className="lay-transport-num" aria-hidden="true" />
+            </>
+          ) : position ? (
+            <>
+              <span className="lay-transport-num">{clock(elapsed)}</span>
+              <div
+                className="lay-transport-track"
+                role="progressbar"
+                aria-label="time on this preset"
+                aria-valuemin={0}
+                aria-valuemax={length}
+                aria-valuenow={elapsed}
+                aria-valuetext={`${clock(elapsed)} of ${clock(length)}`}
+              >
+                <div className="lay-transport-fill" style={{ width: length ? `${(elapsed / length) * 100}%` : '0%' }} />
+              </div>
+              <span className="lay-transport-num">−{clock(length - elapsed)}</span>
+            </>
+          ) : (
+            <div className="lay-transport-track" aria-hidden="true" />
+          )}
+        </div>
       </div>
       <div className="lay-transport-right">
         <FrameRate slowOnly />
