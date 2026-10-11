@@ -1,13 +1,13 @@
 import { useId, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import type { LibraryRow, Mine } from '../../api.ts';
 import { tileBy, tileName } from '../../PresetTile.tsx';
-import { bandColour, bandPaths, dotOf, dotsOf, H, M, nearest, step, W, xOf, yOf, type Direction, type Dot } from './field.ts';
+import { bandColour, bandPaths, dotOf, dotsOf, H, M, nearest, step, timesOf, tunedPath, tunedSays, W, xOf, yOf, type Direction, type Dot } from './field.ts';
 import './field.css';
 
 export interface FieldProps {
   /** The library's rows: every measured one is a dot. */
   library: readonly LibraryRow[];
-  /** The user's data by key: speed and brightness overrides move a dot. */
+  /** The user's data by key: speed and brightness overrides move a dot, and so does its own speed (`tune.speed`), which marks it too. */
   mine?: Readonly<Record<string, Mine>>;
   /** The preset the panel shows (lit), or null. */
   subject: string | null;
@@ -49,6 +49,7 @@ const nameOf = (row: LibraryRow) => tileName(row.title, row.path);
 export function Field({ library, mine, subject, playing, intensity, hue, description, onPick }: FieldProps) {
   const dots = useMemo(() => dotsOf(library, mine), [library, mine]);
   const paths = useMemo(() => bandPaths(dots), [dots]);
+  const tuned = useMemo(() => tunedPath(dots), [dots]);
   const [hover, setHover] = useState(-1);
   // The keyboard's cursor, by key, so it stays on its preset if the library changes under it.
   const [cursorKey, setCursorKey] = useState<string | null>(null);
@@ -138,6 +139,7 @@ export function Field({ library, mine, subject, playing, intensity, hue, descrip
               <path key={p.band} d={p.d} stroke={bandColour(p.band)} />
             ))}
           </g>
+          {tuned && <path className="insp-field-tuned" d={tuned} />}
           {mark >= 0 && <PlayingMark dot={dots[mark]} />}
           {lit >= 0 && <Lit dot={dots[lit]} ring={ring} hue={hue} />}
           {tip && <circle className="insp-field-hot" cx={tip.x} cy={tip.y} r={4} />}
@@ -145,6 +147,7 @@ export function Field({ library, mine, subject, playing, intensity, hue, descrip
         {tip && (
           <span className="insp-field-tip" aria-hidden="true" style={{ left: `${(tip.x / W) * 100}%`, top: `${(tip.y / H) * 100}%`, ['--at' as string]: tip.x / W }}>
             {nameOf(tip.row)}
+            {tip.tuned && <span className="insp-field-tip-note"> · {timesOf(tip.tuned.speed)} speed</span>}
             {tip.row.key === playing && <span className="insp-field-tip-note"> · playing</span>}
           </span>
         )}
@@ -155,7 +158,7 @@ export function Field({ library, mine, subject, playing, intensity, hue, descrip
         )}
       </div>
       <span className="insp-field-sr" id={`${id}-says`}>
-        {description}. Arrow keys move among the presets; Enter shows one.
+        {description}.{lit >= 0 && dots[lit].tuned ? ` ${tunedSays(dots[lit])}.` : ''} Arrow keys move among the presets; Enter shows one.
       </span>
       <span className="insp-field-axis insp-field-axis-low" aria-hidden="true">
         dark
@@ -168,12 +171,11 @@ export function Field({ library, mine, subject, playing, intensity, hue, descrip
   );
 }
 
-/** "Spiral, by geiss, playing": an option's name. */
+/** "Spiral, by geiss, at 0.5× speed, playing": an option's name. */
 function optionName(d: Dot, playing: string | null): string {
   const by = tileBy(d.row.authors, '');
-  return `${nameOf(d.row)}${by ? `, by ${by}` : ''}${d.row.key === playing ? ', playing' : ''}`;
+  return `${nameOf(d.row)}${by ? `, by ${by}` : ''}${d.tuned ? `, at ${timesOf(d.tuned.speed)} speed` : ''}${d.row.key === playing ? ', playing' : ''}`;
 }
-
 /** The subject: a fine cursor through it to the edges' ticks, a ring as wide as it is intense, a point in its hue. */
 function Lit({ dot: { x, y }, ring, hue }: { dot: Dot; ring: number; hue: string }) {
   return (

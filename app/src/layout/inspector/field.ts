@@ -29,7 +29,20 @@ export interface Dot {
   y: number;
   /** Its strongest hue's band, 0 to BANDS - 1, or BANDS for grey. */
   band: number;
+  /** With the user's own speed (`Mine.tune.speed`, not 1): that multiplier and where across the preset sits as made. */
+  tuned?: { speed: number; madeX: number };
 }
+
+/**
+ * Where a preset sits across once the user's speed multiplier is applied: the
+ * axis reads motion on a square-root scale (`scaleOf.speed`, √(v/8)), so motion
+ * times `k` moves the place by √k (twice as fast, about 1.41 times as far
+ * along), clamped to the field. An unmeasured place stays one.
+ */
+export const tunedAt = (at: number, k: number | undefined): number => (k === undefined || !(k > 0) || k === 1 ? at : Math.min(1, Math.max(0, at * Math.sqrt(k))));
+
+/** A speed multiplier as said: "0.5×", "2×", "1.25×". */
+export const timesOf = (k: number): string => `${Math.round(k * 100) / 100}×`;
 
 /** The band a hue falls in. */
 export const bandOf = (hue: number | undefined): number => (hue === undefined ? BANDS : Math.floor((((hue % 360) + 360) % 360) / BAND) % BANDS);
@@ -39,19 +52,51 @@ export const bandColour = (band: number): string => (band >= BANDS ? 'var(--capt
 
 /**
  * Every preset the index has measured, as a dot where `characterOf` reads it
- * (the user's speed and brightness overrides applied); a preset not drawn yet,
- * or with no speed or brightness at all, has no place.
+ * (the user's speed and brightness overrides applied), moved across by the
+ * user's own speed for it (`tunedAt`), so it sits at its speed as it plays; a
+ * preset not drawn yet, or with no speed or brightness at all, has no place.
  */
 export function dotsOf(library: readonly LibraryRow[], mine?: Readonly<Record<string, Mine>>): Dot[] {
   const dots: Dot[] = [];
   for (const row of library) {
     if (!row.look) continue;
-    const o = mine?.[row.key]?.overrides;
+    const m = mine?.[row.key];
+    const o = m?.overrides;
     const at = placeOf(row.look, o);
     if (at.speed === null || at.brightness === null) continue;
-    dots.push({ row, x: xOf(at.speed), y: yOf(at.brightness), band: bandOf((o?.hues ?? row.look.hues)[0]) });
+    const dot: Dot = { row, x: xOf(at.speed), y: yOf(at.brightness), band: bandOf((o?.hues ?? row.look.hues)[0]) };
+    const k = m?.tune?.speed;
+    if (k !== undefined && k > 0 && k !== 1) {
+      dot.tuned = { speed: k, madeX: dot.x };
+      dot.x = xOf(tunedAt(at.speed, k));
+    }
+    dots.push(dot);
   }
   return dots;
+}
+
+/** "Played at 0.5× speed, so it sits slower than measured": what the field says about a tuned preset; empty for one as made. */
+export function tunedSays(d: Dot): string {
+  if (!d.tuned) return '';
+  const way = d.x === d.tuned.madeX ? 'at the edge, as measured' : d.x < d.tuned.madeX ? 'slower than measured' : 'faster than measured';
+  return `Played at ${timesOf(d.tuned.speed)} speed, so it sits ${way}`;
+}
+
+/**
+ * The marks of the presets the user has sped up or slowed down, as one path: a
+ * fine ring round each, and a hairline back across to where it sits as made,
+ * stopping at the ring, so the shift reads at a glance.
+ */
+export function tunedPath(dots: readonly Dot[]): string {
+  const R = 2.8;
+  let d = '';
+  for (const { x, y, tuned } of dots) {
+    if (!tuned) continue;
+    d += `M${(x - R).toFixed(1)} ${y.toFixed(1)}a${R} ${R} 0 1 0 ${2 * R} 0a${R} ${R} 0 1 0 ${-2 * R} 0`;
+    const run = tuned.madeX - x;
+    if (Math.abs(run) > R) d += `M${(x + Math.sign(run) * R).toFixed(1)} ${y.toFixed(1)}H${tuned.madeX.toFixed(1)}v-1.5v3`;
+  }
+  return d;
 }
 
 /** The dots as one path per band: each dot a zero-length segment that a round cap draws as a disc. */

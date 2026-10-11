@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LibraryRow, Look } from '../../api.ts';
-import { BANDS, bandOf, bandPaths, dotOf, dotsOf, nearest, step, W, H, type Dot } from './field.ts';
+import { BANDS, bandOf, bandPaths, dotOf, dotsOf, nearest, step, timesOf, tunedAt, tunedPath, tunedSays, W, H, type Dot } from './field.ts';
 
 const look = (over: Partial<Look> = {}): Look => ({ hues: [10], brightness: 0.5, speed: 2, intensity: 10, brightness_level: 'mid', speed_level: 'mid', intensity_level: 'mid', ...over });
 const row = (key: string, l: Look | null): LibraryRow => ({
@@ -47,6 +47,38 @@ describe("the inspector's field", () => {
     // Fast and bright by the override's level (5/6 of the way), not slow and dark by the index's raw values.
     expect(dots[0].x).toBeGreaterThan((3 * W) / 4);
     expect(dots[0].y).toBeLessThan(H / 4);
+  });
+
+  it("places a preset at its speed as played: the measured speed times the user's own, on the axis's scale, clamped", () => {
+    // Speed 8 is the right edge, 2 the middle (√(2/8) = 0.5), 0.5 a quarter of the way.
+    const rows = [row('fast', look({ speed: 8 })), row('mid', look({ speed: 2 })), row('slow', look({ speed: 0.5 })), row('same', look({ speed: 2 }))];
+    const dots = dotsOf(rows, { fast: { tune: { speed: 0.25 } }, mid: { tune: { speed: 4 } }, slow: { tune: { speed: 4 } }, same: { star: true } });
+    const [fast, mid, slow, same] = dots;
+    // A fast preset slowed to a quarter plays as a steady one: it sits with the middle, where it was made marked.
+    expect(fast.x).toBeCloseTo(same.x, 5);
+    expect(fast.tuned).toEqual({ speed: 0.25, madeX: W - 8 });
+    expect(tunedSays(fast)).toBe('Played at 0.25× speed, so it sits slower than measured');
+    // Sped up 4 times it would run past the edge: clamped.
+    expect(mid.x).toBeCloseTo(W - 8, 5);
+    expect(slow.x).toBeCloseTo(same.x, 5);
+    expect(tunedSays(slow)).toContain('faster than measured');
+    expect(same.tuned).toBeUndefined();
+    expect(tunedSays(same)).toBe('');
+    expect(tunedAt(0.5, 1)).toBe(0.5);
+    expect(tunedAt(0.5, undefined)).toBe(0.5);
+    expect(tunedAt(0.9, 4)).toBe(1);
+    expect(tunedAt(0.5, 0.25)).toBeCloseTo(0.25, 5);
+  });
+
+  it('marks only the tuned presets, with a line back to where each was made', () => {
+    const dots = dotsOf([row('a', look({ speed: 8 })), row('b', look({ speed: 2 }))], { a: { tune: { speed: 0.25 } } });
+    const d = tunedPath(dots);
+    // One ring (two arcs) and one line ending at the as-made place.
+    expect(d.match(/a/g)?.length).toBe(2);
+    expect(d).toContain(`H${(W - 8).toFixed(1)}`);
+    expect(tunedPath(dotsOf([row('b', look({ speed: 2 }))]))).toBe('');
+    expect(timesOf(0.5)).toBe('0.5×');
+    expect(timesOf(1.333)).toBe('1.33×');
   });
 
   it('draws 9,800 presets as at most one path per band', () => {
