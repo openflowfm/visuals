@@ -69,6 +69,8 @@ const ACTIONS: SidebarActions = {
   onExport: fn(),
   onDelete: fn(),
   onQuickAdd: fn(),
+  onInfo: fn(),
+  onSettings: fn(),
   count: fn((p: Playlist) => (p.kind === 'manual' ? p.items.length : SMART_COUNT)),
   onError: fn((what: string) => (e: unknown) => console.error(`Couldn't ${what}:`, e)),
 };
@@ -87,7 +89,7 @@ const rightClick = (el: HTMLElement) => {
 
 /**
  * The macOS layout's inset sidebar (Apple's kit's "Library Preview"), in the
- * app's own look: today's source list (Home/Sources) as collapsible sections,
+ * app's own look: the mark at its top, today's source list (Home/Sources) as collapsible sections,
  * rows of 40 px, the row picked a soft pill, the playlist playing its green
  * dot. Shown in the inset panel as HomeLayout draws it, the window buttons'
  * band clear at its top.
@@ -183,12 +185,12 @@ export const Collapsed: Story = {
   },
 };
 
-/** Many playlists, some with long names: the names end in an ellipsis and the panel scrolls inside itself, the window buttons' band staying put. */
+/** Many playlists, some with long names: the names end in an ellipsis and the sections scroll inside the panel, the window buttons' band, the mark and the foot staying put. */
 export const LongNamesManyPlaylists: Story = {
   name: 'Long names, many playlists',
   args: { sections: sidebarSections(MANY, { library: 250, starred: 12 }), lists: MANY },
   play: async ({ canvasElement, canvas }) => {
-    const body = canvasElement.querySelector<HTMLElement>('.lay-side-body')!;
+    const body = canvasElement.querySelector<HTMLElement>('.isb-sections')!;
     await expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
     const long = canvas.getByText(/^Closing set, Saturday night/);
     await expect(long.scrollWidth).toBeGreaterThan(long.clientWidth);
@@ -211,6 +213,11 @@ export const RowMenu: Story = {
     const menu = await canvas.findByRole('menu', { name: WARM_UP.name });
     // Warm-up is playing: the menu opens on Stop.
     await waitFor(() => expect(canvas.getByRole('menuitem', { name: 'Stop' })).toHaveFocus());
+    // Warm-up is a manual playlist: quick add, then show info.
+    await userEvent.keyboard('{ArrowDown}');
+    await expect(canvas.getByRole('menuitem', { name: 'Quick add' })).toHaveFocus();
+    await userEvent.keyboard('{ArrowDown}');
+    await expect(canvas.getByRole('menuitem', { name: 'Show info' })).toHaveFocus();
     await userEvent.keyboard('{ArrowDown}');
     await expect(canvas.getByRole('menuitem', { name: 'Rename' })).toHaveFocus();
     await userEvent.keyboard('{End}');
@@ -227,6 +234,58 @@ export const RowMenu: Story = {
     await expect(args.actions!.onExport).toHaveBeenCalledWith(WARM_UP.id);
     await waitFor(() => expect(canvas.queryByRole('menu')).toBeNull());
     await expect(args.actions!.onDelete).not.toHaveBeenCalled();
+  },
+};
+
+/** A smart playlist's menu: no quick add (it fills itself); Show info asks the page for its card, and Quick add on a manual one starts adding. */
+export const InfoAndQuickAdd: Story = {
+  name: 'Show info and quick add',
+  play: async ({ canvas, args }) => {
+    await rightClick(rowNamed(canvas, BRIGHT_FAST.name));
+    await canvas.findByRole('menu', { name: BRIGHT_FAST.name });
+    await expect(canvas.queryByRole('menuitem', { name: 'Quick add' })).toBeNull();
+    await userEvent.click(canvas.getByRole('menuitem', { name: 'Show info' }));
+    await expect(args.actions!.onInfo).toHaveBeenCalledWith(BRIGHT_FAST.id);
+    await waitFor(() => expect(canvas.queryByRole('menu')).toBeNull());
+    await rightClick(rowNamed(canvas, CLOSING.name));
+    await userEvent.click(await canvas.findByRole('menuitem', { name: 'Quick add' }));
+    await expect(args.actions!.onQuickAdd).toHaveBeenCalledWith(CLOSING.id);
+  },
+};
+
+/** The mark atop the sidebar under the window buttons, and the quiet Settings row pinned to its foot: it stays at the bottom while the rows scroll under it. */
+export const MarkAndSettings: Story = {
+  name: 'Mark and Settings',
+  args: { sections: sidebarSections(MANY, { library: 250, starred: 12 }), lists: MANY },
+  play: async ({ canvasElement, canvas, args }) => {
+    const panel = canvasElement.querySelector<HTMLElement>('.lay-side')!;
+    const scroller = canvasElement.querySelector<HTMLElement>('.isb-sections')!;
+    const mark = canvasElement.querySelector<HTMLElement>('.isb-mark')!;
+    await expect(mark).toHaveTextContent('visual[flow]');
+    // Under the window buttons' band, not in it.
+    await expect(mark.getBoundingClientRect().top).toBeGreaterThanOrEqual(canvasElement.querySelector('.lay-side-body')!.getBoundingClientRect().top);
+    const markTop = mark.getBoundingClientRect().top;
+    const settings = canvas.getByRole('button', { name: 'Settings' });
+    const atFoot = () => expect(Math.abs(panel.getBoundingClientRect().bottom - settings.closest('.isb-foot')!.getBoundingClientRect().bottom)).toBeLessThan(1);
+    await atFoot();
+    // The rows scroll; the mark and the foot stay where they were.
+    scroller.scrollTop = scroller.scrollHeight / 2;
+    await waitFor(() => expect(scroller.scrollTop).toBeGreaterThan(0));
+    await atFoot();
+    await expect(mark.getBoundingClientRect().top).toBe(markTop);
+    await userEvent.click(settings);
+    await expect(args.actions!.onSettings).toHaveBeenCalled();
+  },
+};
+
+/** Few rows: the Settings row still sits at the panel's foot, the space between empty. */
+export const SettingsFewRows: Story = {
+  name: 'Settings with few rows',
+  args: { sections: sidebarSections(EMPTY, { library: ROWS.length, starred: STARRED.length }), lists: EMPTY, selected: { kind: 'library' } },
+  play: async ({ canvasElement, canvas }) => {
+    const panel = canvasElement.querySelector<HTMLElement>('.lay-side')!;
+    const foot = canvas.getByRole('button', { name: 'Settings' }).closest('.isb-foot')!;
+    await expect(Math.abs(panel.getBoundingClientRect().bottom - foot.getBoundingClientRect().bottom)).toBeLessThan(1);
   },
 };
 

@@ -4,6 +4,7 @@ import type { Lists, Playlist } from '../playlists.ts';
 import { plural } from '../controls.ts';
 import { useDrag } from '../drag.ts';
 import { queryName } from '../librarySearch.ts';
+import { Mark } from '../views.tsx';
 import { say } from '../words.ts';
 import { rowSays, type SidebarActions } from './home-model.ts';
 import { Icon } from './icons.tsx';
@@ -15,7 +16,8 @@ import './inset-sidebar.css';
 export { paneKey, samePane, sidebarSections, type SidebarRow, type SidebarSection } from './sidebar-model.ts';
 
 /**
- * The home's sidebar (HomeLayout's `sidebar` slot, inside its `nav`):
+ * The home's sidebar (HomeLayout's `sidebar` slot, inside its `nav`): the
+ * visual[flow] mark at its top, just under the window buttons' band; then
  * collapsible sections ("Library", "Playlists", "Smart playlists"), each a
  * quiet heading with a chevron over its rows; a row an icon, a name, a count
  * and, for the playlist playing, the green dot after its name. The row picked
@@ -25,9 +27,11 @@ export { paneKey, samePane, sidebarSections, type SidebarRow, type SidebarSectio
  * hover, a double-click plays or stops it, and it is a place to drop a preset
  * (a smart one refuses, faded, while one is dragged). Its menu, drawn by the
  * page (decision D11), opens on a right-click, ⇧F10 (or the menu key) and the
- * "…" that shows on hover: play or stop, rename (in place), save to a file,
- * delete (asking first). The playlists' heading has + (a new playlist) and ⤓
- * (add one from a file).
+ * "…" that shows on hover: play or stop, quick add (a manual playlist's), show
+ * info (the playlist's card in the inspector), rename (in place), save to a
+ * file, delete (asking first). The playlists' heading has + (a new playlist)
+ * and ⤓ (add one from a file). At the foot, pinned under the rows, a quiet
+ * Settings row (⚙) opens Settings.
  *
  * One tab stop: the arrow keys walk the headings and the rows shown, Home and
  * End jump to the first and the last, Enter or Space picks a row or folds a
@@ -200,6 +204,8 @@ export function InsetSidebar({ sections, selected, onSelect, collapsed, onToggle
     }
     closeMenu(true);
     if (action === 'play' || action === 'stop') toggle(p, playingNow(menu));
+    else if (action === 'quickadd') actions.onQuickAdd(p.id);
+    else if (action === 'info') actions.onInfo?.(p.id);
     else if (action === 'export') actions.onExport(p.id);
   };
 
@@ -220,159 +226,176 @@ export function InsetSidebar({ sections, selected, onSelect, collapsed, onToggle
         if (!(e.target instanceof HTMLInputElement)) e.preventDefault();
       }}
     >
-      {sections.map((s) => {
-        const open = !collapsed.includes(s.id);
-        const body = `${uid}-isb-${s.id}`;
-        return (
-          <div key={s.id} className="isb-section">
-            <div className="isb-headrow">
-              <h2 className="isb-head">
-                <button
-                  type="button"
-                  className="isb-toggle"
-                  aria-expanded={open}
-                  aria-controls={body}
-                  title={open ? `Hide ${s.title.toLowerCase()}` : `Show ${s.title.toLowerCase()}`}
-                  onClick={() => onToggle(s.id)}
-                  {...bind(headKey(s.id))}
-                >
-                  <span className="isb-title">{s.title}</span>
-                  <Icon className="isb-chevron" name={open ? 'chevron-down' : 'chevron-right'} size={12} />
-                </button>
-              </h2>
-              {/* Beside the heading, not in it: a heading's name is just its title. */}
-              {s.id === 'playlists' && actions && (
-                <span className="isb-tools">
-                  <button type="button" className="isb-tool" aria-label="new playlist" title="Make a new, empty playlist" onClick={() => actions.onCreate()}>
-                    <Icon name="plus" size={14} />
-                  </button>
-                  <button type="button" className="isb-tool" aria-label="add from a file" title="Add from a file: a playlist someone saved" onClick={() => file.current?.click()}>
-                    <span className="isb-tool-glyph" aria-hidden="true">
-                      ⤓
-                    </span>
-                  </button>
-                  <input
-                    ref={file}
-                    type="file"
-                    accept=".json,application/json"
-                    hidden
-                    data-testid="isb-import"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      e.target.value = '';
-                      if (f) f.text().then((text) => actions.onImport(text), actions.onError('read that file'));
-                    }}
-                  />
-                </span>
-              )}
-            </div>
-            <ul id={body} className="isb-rows" hidden={!open}>
-              {s.rows.map((r) => {
-                const picked = samePane(r.pane, selected);
-                const p = listOf(r, lists);
-                const playing = !!r.playing;
-                const live = !!(p && actions);
-                const drop = dropState(live ? p : null, drag);
-                const count = p && actions ? actions.count(p) : r.count;
-                const key = rowKey(r);
-                const menuOpen = menu?.key === key;
-                const onContextMenu = (e: ReactMouseEvent) => {
-                  if (e.target instanceof HTMLInputElement) return;
-                  e.preventDefault();
-                  if (p) openMenu(r, p, e.clientX, e.clientY, items.current.get(key) ?? null);
-                };
-                return (
-                  <li
-                    key={paneKey(r.pane)}
-                    className="isb-item"
-                    data-live={live ? '' : undefined}
-                    data-menu={menuOpen ? '' : undefined}
-                    // Set here, on the row's whole box, so whatever part of it the pointer is over (the play button, the "…") finds the target.
-                    data-drop={drop.drop}
-                    data-over={drop.over ? '' : undefined}
-                    data-refuses={drop.refuses ? '' : undefined}
-                    onContextMenu={onContextMenu}
+      {/* The mark, the sidebar's first item, just under the window buttons' band (HomeLayout's, which stays the drag region). */}
+      <div className="isb-mark">
+        <Mark />
+      </div>
+      <div className="isb-sections">
+        {sections.map((s) => {
+          const open = !collapsed.includes(s.id);
+          const body = `${uid}-isb-${s.id}`;
+          return (
+            <div key={s.id} className="isb-section">
+              <div className="isb-headrow">
+                <h2 className="isb-head">
+                  <button
+                    type="button"
+                    className="isb-toggle"
+                    aria-expanded={open}
+                    aria-controls={body}
+                    title={open ? `Hide ${s.title.toLowerCase()}` : `Show ${s.title.toLowerCase()}`}
+                    onClick={() => onToggle(s.id)}
+                    {...bind(headKey(s.id))}
                   >
-                    {live && p && renaming === p.id ? (
-                      <div className="isb-row" data-renaming="">
-                        <Icon className="isb-icon" name={r.icon} />
-                        <RenameBox name={p.name} onDone={(typed, back) => finishRename(r, p, typed, back)} />
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        className="isb-row"
-                        aria-label={rowLabel(r, p)}
-                        aria-current={picked ? 'true' : undefined}
-                        aria-haspopup={live ? 'menu' : undefined}
-                        data-playing={playing ? '' : undefined}
-                        title={rowTitle(r, p)}
-                        onClick={() => onSelect(r.pane)}
-                        onDoubleClick={() => p && toggle(p, playing)}
-                        onKeyDown={(e) => {
-                          if (!p || !live) return;
-                          if ((e.key === 'F10' && e.shiftKey) || e.key === 'ContextMenu') {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            const box = e.currentTarget.getBoundingClientRect();
-                            openMenu(r, p, box.left + 24, box.bottom, e.currentTarget);
-                          }
-                        }}
-                        {...bind(key)}
-                      >
-                        <Icon className="isb-icon" name={r.icon} />
-                        <span className="isb-name">{r.name}</span>
-                        {/* The playlist playing: a small green dot after its name. */}
-                        {playing && <span className="isb-dot" aria-hidden="true" />}
-                        {count !== null && count !== undefined && (
-                          <i className="isb-count" aria-hidden="true">
-                            {count.toLocaleString('en-US')}
-                          </i>
-                        )}
-                      </button>
-                    )}
-                    {live && p && renaming !== p.id && (
-                      <>
-                        {/* Over the icon on hover: play or stop. The keyboard plays from the menu (⇧F10), so this is no tab stop. */}
+                    <span className="isb-title">{s.title}</span>
+                    <Icon className="isb-chevron" name={open ? 'chevron-down' : 'chevron-right'} size={12} />
+                  </button>
+                </h2>
+                {/* Beside the heading, not in it: a heading's name is just its title. */}
+                {s.id === 'playlists' && actions && (
+                  <span className="isb-tools">
+                    <button type="button" className="isb-tool" aria-label="new playlist" title="Make a new, empty playlist" onClick={() => actions.onCreate()}>
+                      <Icon name="plus" size={14} />
+                    </button>
+                    <button type="button" className="isb-tool" aria-label="add from a file" title="Add from a file: a playlist someone saved" onClick={() => file.current?.click()}>
+                      <span className="isb-tool-glyph" aria-hidden="true">
+                        ⤓
+                      </span>
+                    </button>
+                    <input
+                      ref={file}
+                      type="file"
+                      accept=".json,application/json"
+                      hidden
+                      data-testid="isb-import"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        e.target.value = '';
+                        if (f) f.text().then((text) => actions.onImport(text), actions.onError('read that file'));
+                      }}
+                    />
+                  </span>
+                )}
+              </div>
+              <ul id={body} className="isb-rows" hidden={!open}>
+                {s.rows.map((r) => {
+                  const picked = samePane(r.pane, selected);
+                  const p = listOf(r, lists);
+                  const playing = !!r.playing;
+                  const live = !!(p && actions);
+                  const drop = dropState(live ? p : null, drag);
+                  const count = p && actions ? actions.count(p) : r.count;
+                  const key = rowKey(r);
+                  const menuOpen = menu?.key === key;
+                  const onContextMenu = (e: ReactMouseEvent) => {
+                    if (e.target instanceof HTMLInputElement) return;
+                    e.preventDefault();
+                    if (p) openMenu(r, p, e.clientX, e.clientY, items.current.get(key) ?? null);
+                  };
+                  return (
+                    <li
+                      key={paneKey(r.pane)}
+                      className="isb-item"
+                      data-live={live ? '' : undefined}
+                      data-menu={menuOpen ? '' : undefined}
+                      // Set here, on the row's whole box, so whatever part of it the pointer is over (the play button, the "…") finds the target.
+                      data-drop={drop.drop}
+                      data-over={drop.over ? '' : undefined}
+                      data-refuses={drop.refuses ? '' : undefined}
+                      onContextMenu={onContextMenu}
+                    >
+                      {live && p && renaming === p.id ? (
+                        <div className="isb-row" data-renaming="">
+                          <Icon className="isb-icon" name={r.icon} />
+                          <RenameBox name={p.name} onDone={(typed, back) => finishRename(r, p, typed, back)} />
+                        </div>
+                      ) : (
                         <button
                           type="button"
-                          className="isb-play"
-                          tabIndex={-1}
-                          aria-label={playing ? `Stop ${p.name}` : `Play ${p.name}`}
-                          title={toggleTitle(p, playing)}
-                          disabled={!canToggle(p, playing)}
-                          onClick={() => toggle(p, playing)}
-                        >
-                          <Icon name={playing ? 'stop' : 'play'} size={12} />
-                        </button>
-                        {/* The row's menu, from the pointer; over the count on hover. */}
-                        <button
-                          type="button"
-                          className="isb-more"
-                          tabIndex={-1}
-                          aria-label={`More for ${p.name}`}
-                          aria-haspopup="menu"
-                          aria-expanded={menuOpen}
-                          title="Play, rename, save to a file or delete"
-                          onClick={(e) => {
-                            if (menuOpen) return closeMenu(false);
-                            const box = e.currentTarget.getBoundingClientRect();
-                            openMenu(r, p, box.left, box.bottom + 4, items.current.get(key) ?? e.currentTarget);
+                          className="isb-row"
+                          aria-label={rowLabel(r, p)}
+                          aria-current={picked ? 'true' : undefined}
+                          aria-haspopup={live ? 'menu' : undefined}
+                          data-playing={playing ? '' : undefined}
+                          title={rowTitle(r, p)}
+                          onClick={() => onSelect(r.pane)}
+                          onDoubleClick={() => p && toggle(p, playing)}
+                          onKeyDown={(e) => {
+                            if (!p || !live) return;
+                            if ((e.key === 'F10' && e.shiftKey) || e.key === 'ContextMenu') {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const box = e.currentTarget.getBoundingClientRect();
+                              openMenu(r, p, box.left + 24, box.bottom, e.currentTarget);
+                            }
                           }}
+                          {...bind(key)}
                         >
-                          <Icon name="more" size={14} />
+                          <Icon className="isb-icon" name={r.icon} />
+                          <span className="isb-name">{r.name}</span>
+                          {/* The playlist playing: a small green dot after its name. */}
+                          {playing && <span className="isb-dot" aria-hidden="true" />}
+                          {count !== null && count !== undefined && (
+                            <i className="isb-count" aria-hidden="true">
+                              {count.toLocaleString('en-US')}
+                            </i>
+                          )}
                         </button>
-                      </>
-                    )}
-                  </li>
-                );
-              })}
-              {!s.rows.length && <li className="isb-empty">{emptySays(s.id)}</li>}
-            </ul>
-          </div>
-        );
-      })}
-      {menu && <RowMenu name={menu.list.name} items={rowMenu(menu.list, playingNow(menu), lists)} at={menu} onChoose={choose} onClose={closeMenu} />}
+                      )}
+                      {live && p && renaming !== p.id && (
+                        <>
+                          {/* Over the icon on hover: play or stop. The keyboard plays from the menu (⇧F10), so this is no tab stop. */}
+                          <button
+                            type="button"
+                            className="isb-play"
+                            tabIndex={-1}
+                            aria-label={playing ? `Stop ${p.name}` : `Play ${p.name}`}
+                            title={toggleTitle(p, playing)}
+                            disabled={!canToggle(p, playing)}
+                            onClick={() => toggle(p, playing)}
+                          >
+                            <Icon name={playing ? 'stop' : 'play'} size={12} />
+                          </button>
+                          {/* The row's menu, from the pointer; over the count on hover. */}
+                          <button
+                            type="button"
+                            className="isb-more"
+                            tabIndex={-1}
+                            aria-label={`More for ${p.name}`}
+                            aria-haspopup="menu"
+                            aria-expanded={menuOpen}
+                            title="Play, show info, rename, save to a file or delete"
+                            onClick={(e) => {
+                              if (menuOpen) return closeMenu(false);
+                              const box = e.currentTarget.getBoundingClientRect();
+                              openMenu(r, p, box.left, box.bottom + 4, items.current.get(key) ?? e.currentTarget);
+                            }}
+                          >
+                            <Icon name="more" size={14} />
+                          </button>
+                        </>
+                      )}
+                    </li>
+                  );
+                })}
+                {!s.rows.length && <li className="isb-empty">{emptySays(s.id)}</li>}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
+      {/* The foot, pinned under the rows (it stays put while they scroll): a quiet Settings row. */}
+      {actions?.onSettings && (
+        <div className="isb-foot">
+          <button type="button" className="isb-settings" title="Settings (⌘,)" onClick={() => actions.onSettings?.()}>
+            <span className="isb-gear" aria-hidden="true">
+              ⚙
+            </span>
+            <span className="isb-name">Settings</span>
+          </button>
+        </div>
+      )}
+      {menu && <RowMenu name={menu.list.name} items={rowMenu(menu.list, playingNow(menu), lists, { info: !!actions?.onInfo })} at={menu} onChoose={choose} onClose={closeMenu} />}
     </div>
   );
 }
