@@ -9,9 +9,9 @@ struct Settings {
 }
 
 const PRESETS: [&str; 3] = [
-    include_str!("../../../presets/starter/cream-of-the-crop/Reaction/Liquid Gradient/Rovastar - Harlequin's Liquid Dragon.milk"),
-    include_str!("../../../presets/starter/cream-of-the-crop/Reaction/Liquid Gradient/Krash and Fvese - Molten Indecision (Fvese Remix).milk"),
-    include_str!("../../../presets/starter/cream-of-the-crop/Drawing/Liquid/Pithlit - Psychotrip (Spinning colours mix) - orthorotate recursive helicities3.milk"),
+    include_str!("../../presets/starter/cream-of-the-crop/Reaction/Liquid Gradient/Rovastar - Harlequin's Liquid Dragon.milk"),
+    include_str!("../../presets/starter/cream-of-the-crop/Reaction/Liquid Gradient/Krash and Fvese - Molten Indecision (Fvese Remix).milk"),
+    include_str!("../../presets/starter/cream-of-the-crop/Drawing/Liquid/Pithlit - Psychotrip (Spinning colours mix) - orthorotate recursive helicities3.milk"),
 ];
 
 fn dimensions(request: &Request) -> Result<(u32, u32, f32), &'static str> {

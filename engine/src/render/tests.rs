@@ -822,3 +822,20 @@ fn zero_camera_mix_preserves_the_ordinary_render_exactly() {
     play(&mut camera, &mut Audio::default(), 9, 1.0 / 60.0);
     assert_eq!(read_target(&ordinary, &ordinary.comp), read_target(&camera, &camera.comp));
 }
+
+#[test]
+fn camera_fractional_refresh_approaches_the_next_feedback_step() {
+    let Some(mut r) = renderer(W, H, "[preset00]\nfDecay=1\nfWaveAlpha=0\nzoom=1\nwarp=0\n") else { return };
+    let mut audio = Audio::default();
+    r.set_camera_frame(1, 1, &[255, 0, 0, 255], 1.0).unwrap();
+    r.render(&mut audio, 1.0 / 30.0);
+    r.set_camera_frame(1, 1, &[0, 0, 255, 255], 1.0).unwrap();
+    r.render(&mut audio, 1.0 / 60.0);
+    let shown = read_target(&r, &r.display);
+    assert!((120..=136).contains(&shown[0]) && (120..=136).contains(&shown[2]), "half-step should show halfway to fresh blue: {:?}", &shown[..4]);
+    let fed = read_target(&r, &r.feedback[r.current]);
+    assert!(fed[0] > 240 && fed[2] < 15, "fractional refresh must not feed back");
+    r.render(&mut audio, 1.0 / 60.0);
+    let fed = read_target(&r, &r.feedback[r.current]);
+    assert!(fed[0] < 15 && fed[2] > 240);
+}

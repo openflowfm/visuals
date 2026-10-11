@@ -38,6 +38,11 @@ let stream: MediaStream | null = null;
 let generation = 0;
 let posting: Promise<void> = Promise.resolve();
 let settingsChain: Promise<void> = Promise.resolve();
+let lifecycle: Promise<void> = Promise.resolve();
+function ordered(action: () => Promise<void>) {
+  lifecycle = lifecycle.catch(() => {}).then(action);
+  return lifecycle;
+}
 let frames = 0;
 let rateAt = performance.now();
 let rescueUntil = 0;
@@ -177,8 +182,11 @@ async function stop() {
   $('welcome').hidden = false;
   ctx.clearRect(0, 0, 960, 540);
   status('Stopped. Feedback cleared.');
-  await posting.catch(() => {});
-  await post('camera/stop').catch(() => {});
+  const lastFrame = posting;
+  await ordered(async () => {
+    await lastFrame.catch(() => {});
+    await post('camera/stop').catch(() => {});
+  });
 }
 async function start(next: 'demo' | 'camera') {
   const id = generation + 1;
@@ -200,7 +208,9 @@ async function start(next: 'demo' | 'camera') {
         void stop();
       };
     }
-    await settings(true);
+    await ordered(async () => {
+      if (id === generation) await settings(true);
+    });
     if (id !== generation) return;
     mode = next;
     $('welcome').hidden = true;
@@ -259,8 +269,5 @@ addEventListener('pagehide', () => {
   } catch {
     /* native source expires in two seconds */
   }
-});
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) void stop();
 });
 if (!token) status('Open the camera URL with the token printed by npm run dev.');

@@ -7,19 +7,21 @@ This is a local live preview, not a virtual webcam device or a hosted service.
 Run the existing unified launcher from this checkout:
 
 ```sh
-OPENFLOW_HOME="$PWD/work/camera-state" PORT=4287 STORYBOOK_PORT=6117 VISUALS_DEV_OPEN=0 npm run dev
+VISUALS_CAMERA_LAB=1 OPENFLOW_HOME="$PWD/work/camera-state" PORT=4287 STORYBOOK_PORT=6117 VISUALS_DEV_OPEN=0 npm run dev
 ```
 
 Open the URL it prints, replacing `/` before `?token=` with `/camera.html`.
 Keep the token. The launcher owns the headless app, Vite and Storybook; stop it
 as a whole with Ctrl-C. `OPENFLOW_HOME` keeps the experiment's app settings away
-from your everyday OpenFlow state.
+from your everyday OpenFlow state. `VISUALS_CAMERA_LAB=1` prevents the native
+app from resuming any saved microphone or system-audio source in this dev run.
 
 Click **Run demo** for an animated synthetic test subject, or **Start camera**
 to ask the browser for video permission. Audio is never requested. Nothing
-starts the camera automatically. **Stop**, hiding the tab and leaving the page
+starts the camera automatically. **Stop** and leaving the page
 release the browser's camera tracks. The native source expires after two seconds
-without frames and clears its feedback. The browser sends images only to the
+without frames and clears its feedback. Switching tabs keeps the experiment
+running (browser background throttling may still expire the native source). The browser sends images only to the
 authenticated loopback dev bridge; there is no remote upload or recording.
 
 - **Liquid identity**: Rovastar's Harlequin's Liquid Dragon.

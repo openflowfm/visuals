@@ -214,7 +214,10 @@ fn main() {
                 dev::send_fx(app.handle());
                 let thread = bench::start(instance, surface, (1, 1), state.ring.clone(), effects);
                 *state.bench.lock().unwrap() = Some(thread);
-                listen::resume(&state);
+                // The opt-in camera experiment must never resume a saved microphone or system-audio source.
+                if !(cfg!(feature = "dev-bridge") && std::env::var("VISUALS_CAMERA_LAB").as_deref() == Ok("1")) {
+                    listen::resume(&state);
+                }
                 dev::capture(app.handle());
             }
             // `npm run dev`: the page in a browser, over a local bridge (`VISUALS_BRIDGE`).
