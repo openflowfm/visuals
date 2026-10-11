@@ -15,8 +15,9 @@ function Window({ width, children }: { width: number; children: ReactNode }) {
 
 /**
  * The More effects drawer, one tap from live, as `App` mounts it (outside the
- * home's scope): along the window's foot, the show above it uncovered. Mirror
- * and Invert as type, Punch a pad, Reset a quiet word.
+ * home's scope): along the window's foot, the show above it uncovered. Speed,
+ * Colour and Trails as sliders, Mirror and Invert as type, Punch a pad, Reset a
+ * quiet word.
  */
 const meta = {
   title: 'Sheets/More effects',
@@ -39,6 +40,7 @@ export const At1440: Story = {
   play: async () => {
     await expect(await screen.findByRole('dialog', { name: 'More effects' })).toBeVisible();
     await expect(await screen.findByRole('button', { name: 'Punch (P)' })).toBeVisible();
+    for (const name of ['speed', 'hue', 'trails']) await expect(screen.getByRole('slider', { name })).toBeVisible();
     const quad = screen.getByRole('radio', { name: '4-way: mirror four ways' });
     await userEvent.click(quad);
     await waitFor(() => expect(quad).toHaveAttribute('aria-checked', 'true'));

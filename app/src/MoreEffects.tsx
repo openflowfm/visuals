@@ -1,20 +1,33 @@
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { Segmented } from '@openflow/widgets/controls/Segmented.tsx';
 import { Toggle } from '@openflow/widgets/controls/Toggle.tsx';
-import { Hit, MIRROR_LABELS, MIRROR_NAMES, MIRRORS, useFx, type FxControl } from './Effects.tsx';
+import { Hit, HUE, hueText, MIRROR_LABELS, MIRROR_NAMES, MIRRORS, slide, SPEED, taperSlide, TRAILS, useFx, type FxControl } from './Effects.tsx';
 import type * as fx from './fx.ts';
 import { Sheet } from './Settings.tsx';
 import { NoticeBanner } from './views.tsx';
 import { Say } from './words.ts';
 
 /**
- * The drawer's controls: Mirror, Invert, a held Punch, and everything back to
- * normal. Each goes out as a live action, as a controller's would (M, I, P, 0).
+ * The drawer's controls: Speed, Colour and Trails (double-click resets each),
+ * Mirror, Invert, a held Punch, and everything back to normal. Each goes out as
+ * a live action, as a controller's would (M, I, P, 0).
  */
 export function MoreFx({ state, set, send }: Pick<FxControl, 'set' | 'send'> & { state: fx.Fx }) {
   return (
     <div className="wdg fx more-fx-body">
-      <div className="more-fx-row">
+      <div className="more-fx-row more-fx-speed">
+        <span>Speed</span>
+        {taperSlide(SPEED, state.speed, (v) => set({ kind: 'speed', speed: v }, { speed: v }), 'How fast the preset runs, ¼× to 4×')}
+      </div>
+      <div className="more-fx-row more-fx-hue">
+        <span>Colour</span>
+        {slide(HUE, state.hue, (v) => set({ kind: 'hue', value: v }, { hue: v }), hueText(state.hue), 'Turn the colours round the wheel')}
+      </div>
+      <div className="more-fx-row more-fx-trails">
+        <span>Trails</span>
+        {slide(TRAILS, state.trails, (v) => set({ kind: 'trails', value: v }, { trails: v }), state.trails.toFixed(2), 'Trails: how much of the last frames stays')}
+      </div>
+      <div className="more-fx-row more-fx-mirror">
         <span>Mirror</span>
         <Segmented
           name="mirror"
@@ -25,7 +38,7 @@ export function MoreFx({ state, set, send }: Pick<FxControl, 'set' | 'send'> & {
           title="Mirror the picture side to side, top to bottom, or both (M steps through)"
         />
       </div>
-      <div className="more-fx-row">
+      <div className="more-fx-row more-fx-invert">
         <span>Invert</span>
         <Toggle on={state.invert} onChange={(on) => set({ kind: 'invert', on }, { invert: on })} layout="inside" name="invert" label="invert" title="Flip the colours (I)">
           {state.invert ? 'on' : 'off'}

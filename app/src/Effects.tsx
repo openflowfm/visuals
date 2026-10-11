@@ -15,11 +15,11 @@ import './effects.css';
 
 // Speed and sensitivity are multipliers on a log taper: the slider holds the
 // position (log2, −2..2, 0 at 1×) and `taper` turns it back into the multiplier.
-const SPEED = range('speed', POSITION_MIN, POSITION_MAX, 0);
+export const SPEED = range('speed', POSITION_MIN, POSITION_MAX, 0);
 const TRANSITION = range('transition', 0, 10, 2);
 const BRIGHTNESS = range('brightness', 0, 2, 1);
-const HUE = range('hue', 0, 1, 0);
-const TRAILS = range('trails', 0, 1, 0);
+export const HUE = range('hue', 0, 1, 0);
+export const TRAILS = range('trails', 0, 1, 0);
 const SENSITIVITY = range('sensitivity', POSITION_MIN, POSITION_MAX, 0);
 const INTENSITY = range('strobe level', 0, 1, 1);
 const FADE = range('blackout fade', 0, 10, 0);
@@ -104,11 +104,8 @@ export function Effects({ state, onState, send }: { state: fx.Fx; onState: React
     onState((s) => s && { ...s, ...patch });
     send(action);
   };
-  const slider = (param: Param, value: number, onChange: (v: number) => void, display: string, title: string) => (
-    <Slider param={param} value={value} onChange={onChange} display={display} orientation="horizontal" layout="inside" title={`${title} (double-click resets)`} />
-  );
-  const taper = (param: Param, multiplier: number, onChange: (m: number) => void, title: string) =>
-    slider(param, multiplierToPosition(multiplier), (p) => onChange(positionToMultiplier(p)), formatMultiplier(multiplier), title);
+  const slider = slide;
+  const taper = taperSlide;
 
   return (
     // `wdg` on the group: the bare hit faces read the widgets' variables from it.
@@ -200,7 +197,7 @@ export function Effects({ state, onState, send }: { state: fx.Fx; onState: React
         {taper(SPEED, state.speed, (v) => set({ kind: 'speed', speed: v }, { speed: v }), 'How fast the preset runs, ¼× to 4×')}
         {slider(TRANSITION, state.transition, (v) => set({ kind: 'transition', seconds: v }, { transition: v }), `${state.transition.toFixed(1)} s`, 'The blend into the next preset; 0 is a hard cut')}
         {slider(BRIGHTNESS, state.brightness, (v) => set({ kind: 'brightness', value: v }, { brightness: v }), state.brightness.toFixed(2), 'Brightness; 1 is as drawn')}
-        {slider(HUE, state.hue, (v) => set({ kind: 'hue', value: v }, { hue: v }), `${Math.round(state.hue * 360)}°`, 'Turn the colours round the wheel')}
+        {slider(HUE, state.hue, (v) => set({ kind: 'hue', value: v }, { hue: v }), hueText(state.hue), 'Turn the colours round the wheel')}
         {slider(TRAILS, state.trails, (v) => set({ kind: 'trails', value: v }, { trails: v }), state.trails.toFixed(2), 'Trails: how much of the last frames stays')}
         {taper(SENSITIVITY, state.sensitivity, (v) => set({ kind: 'sensitivity', value: v }, { sensitivity: v }), 'How loud the presets hear the audio, ¼× to 4×')}
         {slider(
@@ -248,9 +245,16 @@ export function useFx(): FxControl {
 }
 
 /** A horizontal slider with its value inside, as the effects draw them. */
-const slide = (param: Param, value: number, onChange: (v: number) => void, display: string, title: string) => (
+export const slide = (param: Param, value: number, onChange: (v: number) => void, display: string, title: string) => (
   <Slider param={param} value={value} onChange={onChange} display={display} orientation="horizontal" layout="inside" title={`${title} (double-click resets)`} />
 );
+
+/** A multiplier's slider on the log taper (¼× to 4×): it holds the position and hands back the multiplier. */
+export const taperSlide = (param: Param, multiplier: number, onChange: (m: number) => void, title: string) =>
+  slide(param, multiplierToPosition(multiplier), (p) => onChange(positionToMultiplier(p)), formatMultiplier(multiplier), title);
+
+/** The hue (0–1, a turn of the colour wheel) as degrees. */
+export const hueText = (hue: number) => `${Math.round(hue * 360)}°`;
 
 /** A setting's row: its name, then its control. */
 function Row({ name, children }: { name: string; children: React.ReactNode }) {
