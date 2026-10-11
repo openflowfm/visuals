@@ -8,12 +8,12 @@ import { HomeLayout, INSPECTOR_ID, SIDEBAR_ID } from './HomeLayout.tsx';
 import { InsetSidebar } from './InsetSidebar.tsx';
 import { Hero } from './Hero.tsx';
 import { tileName } from '../PresetTile.tsx';
-import { Section } from './Section.tsx';
+import { StoryGrid } from './StoryGrid.tsx';
 import { TransportBar } from './TransportBar.tsx';
 import { Icon } from './icons.tsx';
 import { modesFor, type LayoutPrefs } from './home-model.ts';
-import { NOW, SECTIONS, SIDEBAR, STARRED } from './fixtures.ts';
-import { WARM_UP } from '../stories/fixtures.ts';
+import { NOW, SIDEBAR, STARRED } from './fixtures.ts';
+import { ROWS, WARM_UP } from '../stories/fixtures.ts';
 
 /** The window's width, and what the viewer chose (home-model.ts's `LayoutPrefs`): the story starts from these. */
 interface Args {
@@ -105,9 +105,7 @@ function Composed({ width, prefs: start }: Args) {
           </div>
         }
       >
-        {SECTIONS.map((s) => (
-          <Section key={s.title} title={s.title} action={{ label: 'See all', onPress: () => {} }} rows={s.rows} playing={NOW.path} starred={STARRED} />
-        ))}
+        <StoryGrid title="Library" rows={ROWS} playing={NOW.path} starred={STARRED} />
       </HomeLayout>
     </div>
   );
@@ -116,7 +114,7 @@ function Composed({ width, prefs: start }: Args) {
 /**
  * Home as an inspector view, in the app's own look: the inset sidebar, the
  * main column with the header row, the Now Playing hero pinned and the
- * sections scrolling under it, the transport bar, and the inspector down the
+ * presets' tiles scrolling under it, the transport bar, and the inspector down the
  * right, each panel docked, laid over the column or put away as the window's
  * width and the viewer's choices say.
  */
@@ -163,7 +161,7 @@ export const Wide: Story = {
     await expect(canvas.getByRole('main')).toBeVisible();
     await expect(canvas.getByRole('banner')).toBeVisible();
     await expect(canvas.getByRole('region', { name: 'now playing' })).toBeVisible();
-    for (const s of SECTIONS) await expect(canvas.getByRole('region', { name: s.title })).toBeVisible();
+    await expect(canvas.getByRole('region', { name: 'Library' })).toBeVisible();
     await expect(canvas.getByRole('region', { name: 'transport' })).toBeVisible();
     await expect(canvas.queryByRole('complementary')).toBeNull();
     await expect(root(canvasElement)).toHaveAttribute('data-sidebar', 'docked');
@@ -201,7 +199,7 @@ export const InspectorDocked: Story = {
   },
 };
 
-/** At 1100: the inspector laid over the column, under the header row, in glass; Escape puts it away and focus goes back to its button. */
+/** At 1100: the inspector laid over the column, under the header row, opaque; Escape puts it away and focus goes back to its button. */
 export const InspectorOverlay: Story = {
   name: 'Inspector laid over, 1100 px',
   args: { width: 1100, prefs: { sidebar: null, inspector: null } },
@@ -243,12 +241,14 @@ export const Narrow: Story = {
     await expect(canvas.getByRole('complementary', { name: 'about the preset' })).toBeVisible();
     await expect(root(canvasElement)).toHaveAttribute('data-sidebar', 'overlay');
     await expect(root(canvasElement)).toHaveAttribute('data-inspector', 'overlay');
-    // Glass, near opaque: the frost's blur can't reach the native preview under it.
-    const glass = getComputedStyle(side)
-      .backgroundColor.match(/rgba?\(([^)]*)\)/)![1]
-      .split(',')
-      .map(Number);
-    await expect(glass[3] ?? 1).toBeGreaterThanOrEqual(0.8);
+    // Opaque: the native preview under them would show through anything less.
+    for (const panel of [side, canvas.getByRole('complementary', { name: 'about the preset' })]) {
+      const paint = getComputedStyle(panel)
+        .backgroundColor.match(/rgba?\(([^)]*)\)/)![1]
+        .split(',')
+        .map(Number);
+      await expect(paint[3] ?? 1).toBe(1);
+    }
     await userEvent.click(canvas.getByRole('region', { name: 'transport' }));
     await waitFor(() => expect(canvas.queryByRole('navigation', { name: 'sources' })).toBeNull());
     await expect(canvas.queryByRole('complementary')).toBeNull();

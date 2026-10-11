@@ -1,6 +1,6 @@
 /* The inset sidebar's content (InsetSidebar.tsx), inside layout.css's panel
-   (which paints --surface-2 and takes the raised caption). Today's source list
-   (sources.css) in the macOS layout: quiet sentence-case headings that fold
+   (which paints --surface-2 and takes the raised caption). The app's source
+   list: quiet sentence-case headings that fold
    with a chevron, rows of --lay-row, the row picked a soft pill of
    --lay-row-radius in --fg, heavier, the playlist playing its green dot. No
    lines: areas told apart by space and tone (decision 68). The panel's top band

@@ -6,12 +6,11 @@
  */
 import type { LibraryRow } from '../api.ts';
 import { playsFrom } from '../home.ts';
-import { DATA, LISTS, PLAYING_DECK, PLAYLISTS, RECENT, ROWS, STILL, WARM_UP } from '../stories/fixtures.ts';
+import { DATA, LISTS, PLAYING_DECK, PLAYLISTS, ROWS, STILL } from '../stories/fixtures.ts';
 import { sidebarSections, type SidebarSection } from './sidebar-model.ts';
 
 /** The index's row for a preset's path, when the slice has it. */
 export const rowAt = (path: string): LibraryRow | null => ROWS.find((r) => r.path === path) ?? null;
-const rowsAt = (paths: readonly string[]): LibraryRow[] => paths.map(rowAt).filter((r): r is LibraryRow => r !== null);
 
 /** The preset playing, the preview's picture, and where it plays from. */
 export const NOW = {
@@ -29,10 +28,3 @@ export const STARRED: string[] = Object.entries(DATA.presets)
 
 /** The sidebar's sections, with the library's and the starred counts. */
 export const SIDEBAR: SidebarSection[] = sidebarSections(LISTS, { library: ROWS.length, starred: STARRED.length });
-
-/** The main column's sections: recently played, the playlist playing, a style. */
-export const SECTIONS: { title: string; rows: LibraryRow[] }[] = [
-  { title: 'Recently played', rows: rowsAt(RECENT) },
-  { title: WARM_UP.name, rows: rowsAt(WARM_UP.items.map((i) => i.path)) },
-  { title: 'Hypnotic', rows: ROWS.filter((r) => r.style === 'Hypnotic') },
-];

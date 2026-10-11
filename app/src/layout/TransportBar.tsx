@@ -6,11 +6,11 @@ import './transport-bar.css';
 
 /**
  * The bar along the bottom of the macOS layout's main column (HomeLayout's
- * `bar` slot): today's HomeBar reduced to the transport, the hero above being
+ * `bar` slot): the transport, the hero above being
  * the picture alone. ◀ play/pause ▶ R on the left; in the middle the preset
  * playing and where it plays from (`now`), then the time on it and how long
  * until the next one (the time on it alone once that has run out); the audio input on the right, and before it a warning only while the
- * picture draws slowly (`FrameRate slowOnly`, as HomeBar has it). No preview,
+ * picture draws slowly (`FrameRate slowOnly`). No preview,
  * so no hole: the bar paints nothing, sitting over the hero's spread shadow,
  * which paints the main column.
  */

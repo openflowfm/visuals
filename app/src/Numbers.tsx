@@ -1,5 +1,4 @@
-// The numbers' face (`.home-bar-num`) is still in the bar's sheet.
-import './homebar.css';
+import './numbers.css';
 
 /** `text` with its numbers ("7 of 9,795") in the numbers' face. */
 export function Numbers({ text }: { text: string }) {
@@ -8,7 +7,7 @@ export function Numbers({ text }: { text: string }) {
     <>
       {parts.map((part, i) =>
         i % 2 ? (
-          <span key={i} className="home-bar-num">
+          <span key={i} className="numbers">
             {part}
           </span>
         ) : (

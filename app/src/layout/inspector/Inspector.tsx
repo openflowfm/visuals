@@ -153,7 +153,7 @@ function Scope({ subject: p, playing, from, playlists, library, mine, onSet, onA
           </div>
 
           <div className="insp-mine">
-            <TagEditor key={p.row.key} className="insp-tags" chosen={[p]} onSet={onSet} remove={<Icon name="close" size={10} />} />
+            <TagEditor key={p.row.key} chosen={[p]} onSet={onSet} remove={<Icon name="close" size={10} />} />
             {inLists && <p className="insp-quiet insp-in">{inLists.length ? `In ${listed(inLists)}` : 'In no playlist yet'}</p>}
           </div>
         </>
@@ -200,7 +200,7 @@ function Selected({ chosen, playlists, onSet, onAddTo }: InspectorProps & { chos
         </NeverAction>
       </div>
       <div className="insp-mine">
-        <TagEditor key={chosen.map((p) => p.row.key).join('\n')} className="insp-tags" chosen={chosen} onSet={onSet} remove={<Icon name="close" size={10} />} />
+        <TagEditor key={chosen.map((p) => p.row.key).join('\n')} chosen={chosen} onSet={onSet} remove={<Icon name="close" size={10} />} />
       </div>
     </>
   );

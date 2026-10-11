@@ -1,4 +1,8 @@
-/* The home's bottom bar (decisions 67 and 68): what plays, ◀ ▶ R, the audio
+/* Retired with HomeBar.tsx (the inspector view's TransportBar replaced it):
+   nothing imports this sheet; contrast.test.ts still reads it, and it goes
+   once that test no longer does.
+
+   The home's bottom bar (decisions 67 and 68): what plays, ◀ ▶ R, the audio
    input, the panel's toggle and go live. On the window's own surface with no
    rule over it; its controls are type, with no boxes. */
 .home-bar {
@@ -90,12 +94,6 @@
   font-size: 12px;
   word-spacing: var(--sep-space);
 }
-.home-bar-num {
-  font-family: var(--font-num);
-  font-variation-settings: var(--font-num-axes);
-  font-variant-numeric: tabular-nums;
-}
-
 /* ◀ ▶ R: type keys, no boxes. */
 .home-bar-transport {
   display: flex;

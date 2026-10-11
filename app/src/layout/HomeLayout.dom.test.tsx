@@ -3,7 +3,7 @@
 // The home's shell (HomeLayout) mounted in a DOM with the app's real
 // stylesheets: nothing paints under the hero's picture, the native preview's
 // hole, in any of the window's shapes (home-model.ts's `modesFor`); a panel
-// laid over the main column paints near-opaque glass; Escape and a press
+// laid over the main column paints an opaque surface; Escape and a press
 // outside put it away; focus goes into it when it opens and back when it goes;
 // the parts come in the order a screen reader walks them, and only the grid or
 // pane under the pinned hero scrolls.
@@ -119,11 +119,11 @@ function paintedUnder(hole: Element): string[] {
   for (const cell of root.querySelectorAll(':scope > .lay-cell')) {
     const s = getComputedStyle(cell);
     if (s.position === 'absolute') {
-      // Laid over the column: the cell itself paints nothing, its panel near-opaque glass.
+      // Laid over the column: the cell itself paints nothing, its panel an opaque surface (the native view would show through anything less).
       if (paints(cell)) painted.push(`${label(cell)} (laid over it)`);
       const panel = cell.firstElementChild!;
-      const glass = getComputedStyle(root).getPropertyValue('--surface-float').trim();
-      if (getComputedStyle(panel).backgroundColor !== glass || alpha(glass) < 0.8) painted.push(`${label(panel)} (laid over it, not glass)`);
+      const solid = getComputedStyle(root).getPropertyValue('--surface-corner').trim();
+      if (getComputedStyle(panel).backgroundColor !== solid || !/^#[0-9a-f]{6}$|^rgb\(/i.test(solid) || alpha(solid) < 1) painted.push(`${label(panel)} (laid over it, not opaque)`);
     } else if (cell.getAttribute('data-mode') === 'overlay') painted.push(`${label(cell)} (meant to be laid over it, but in the grid)`);
     else if (meet(span(s.gridColumn, columns), at)) painted.push(`${label(cell)} (shares its cell)`);
   }

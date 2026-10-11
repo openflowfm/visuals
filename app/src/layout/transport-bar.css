@@ -1,11 +1,11 @@
-/* The transport along the bottom of the macOS layout's main column
+/* The app's transport along the bottom of Home's main column
    (TransportBar.tsx): ◀ play/pause ▶ R, the preset playing and the time on it, the slow
    warning, the audio input. It paints no background: the main column is
    already painted the translucent --surface-0 (by the hero's spread shadow,
    layout.css), and painting it again would make a darker strip, or cover the
    preview were it under. No rule over it (decision 68); the
    keys are glyphs and type with no boxes, the track a faint raised line with
-   the time in the numbers' face. The audio input is quiet as in HomeBar. */
+   the time in the numbers' face. The audio input is quiet text. */
 
 .lay-transport {
   display: grid;
@@ -136,7 +136,7 @@
   background: var(--ui);
 }
 
-/* The audio input: quiet text and its meter, no box at rest (as in HomeBar). */
+/* The audio input: quiet text and its meter, no box at rest. */
 .lay-transport-right {
   display: flex;
   align-items: center;

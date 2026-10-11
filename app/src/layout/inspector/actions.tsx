@@ -11,7 +11,7 @@ import type { InspectorProps } from './model.ts';
  * together): each a button with a name a screen reader and voice control find
  * it by, its state in aria-pressed (mixed when only some of them have it), and
  * a glyph from the layout's icons. A toggle turns it on for all of them unless
- * every one already has it, as NowPanel and the library's drawer do. The
+ * every one already has it, as the library's drawer does. The
  * inspector lays them out and styles them by `className`; what they do and say
  * stays here.
  */

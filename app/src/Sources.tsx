@@ -11,6 +11,10 @@ import { say } from './words.ts';
 import './sources.css';
 
 /**
+ * Retired: the inspector view's InsetSidebar replaced it, and the app no longer
+ * shows it. It stays only while home.test.ts renders `Sidebar`; it goes, with
+ * sources.css, once that test no longer does.
+ *
  * The home's source list (decision 67, "Music-style"): the library, the starred
  * presets and "Recently played" up top; then the playlists, with + and ⤓ beside
  * their heading; then the smart playlists. Each row opens its pane; a playlist

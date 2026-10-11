@@ -113,11 +113,12 @@ npm run dev      # the player's page in your browser with hot reload, driving th
 npm run storybook  # the page's components on their own, with hot reload, on port 6006 (or $PORT); no app needed
 ```
 
-Storybook shows the page's components (the home, the library, the Now Playing panel, live
-mode, the sheets and prompts) in the app's own look, each in its important states. Behind
-them is a fake app answering the Tauri commands from fixtures made of the starter set's real
-presets and thumbnails (`app/src/stories/`), so no story needs Rust. The stories sit beside
-their components (`app/src/*.stories.tsx`); the toolbar's theme picker swaps the stand-in
+Storybook shows the page's components (the home with its sidebar, the picture, the
+inspector and the transport bar; the library, live mode, the sheets and prompts) in the
+app's own look, each in its important states. Behind them is a fake app answering the
+Tauri commands from fixtures made of the starter set's real presets and thumbnails
+(`app/src/stories/`), so no story needs Rust. The stories sit beside their components
+(`app/src/*.stories.tsx`, and the home's parts in `app/src/layout/`); the toolbar's theme picker swaps the stand-in
 for the frosted window between a dark desktop, a light one and Reduce transparency, and the
 viewport picker has 560, 900 and 1440 px. `npm run build-storybook` builds it into
 `storybook-static/`. None of it reaches the app's build.

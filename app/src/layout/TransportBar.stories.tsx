@@ -37,7 +37,7 @@ function Stateful(props: TransportBarProps): ReactNode {
   );
 }
 
-/** The macOS layout's bottom bar: HomeBar reduced to the transport (the hero has the preview and the name). */
+/** Home's bottom bar: the transport and the preset playing (the hero above is the picture alone). */
 const meta = {
   title: 'Layout/Transport bar',
   component: TransportBar,

@@ -31,7 +31,7 @@ export interface HomeLayoutProps {
   header: ReactNode;
   /** The Now Playing card pinned at the top of the main column (`Hero`), in a region named "now playing"; it never scrolls. */
   hero?: ReactNode;
-  /** What scrolls under the hero (the grid, or a story's `Section`s), unless `pane` is given. */
+  /** What scrolls under the hero (the grid, or a story's tiles), unless `pane` is given. */
   children?: ReactNode;
   /** The bar along the bottom of the main column: the transport. */
   bar?: ReactNode;
