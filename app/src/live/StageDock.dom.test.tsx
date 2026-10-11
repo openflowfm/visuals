@@ -51,6 +51,7 @@ function liveState(over: Partial<LiveState> = {}): LiveState {
     setIntensity: vi.fn(),
     favourite: vi.fn(),
     rate: vi.fn(),
+    since: 0,
     ...over,
   };
 }
