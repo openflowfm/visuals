@@ -121,9 +121,23 @@ describe('the sheets', () => {
     expect(drawer).not.toContain('aria-modal');
   });
 
-  it('name their close buttons in words, not by the ✕', () => {
-    expect(renderToStaticMarkup(<Settings open onClose={() => {}} />)).toMatch(/aria-label="Close settings"[^>]*>✕</);
-    expect(renderToStaticMarkup(<MoreEffects open onClose={() => {}} />)).toMatch(/aria-label="Close more effects"[^>]*>✕</);
+  it("name their close buttons in words, drawn with Home's close icon, hidden from VoiceOver", () => {
+    for (const [html, label] of [
+      [renderToStaticMarkup(<Settings open onClose={() => {}} />), 'Close settings'],
+      [renderToStaticMarkup(<MoreEffects open onClose={() => {}} />), 'Close more effects'],
+    ]) {
+      expect(html).toMatch(new RegExp(`aria-label="${label}"[^>]*><svg[^>]*class="lay-icon"[^>]*data-icon="close"[^>]*aria-hidden="true"`));
+      expect(html).not.toContain('✕');
+    }
+  });
+
+  it('lay each switch out as a row: its name first, its control, and its quiet note under both', () => {
+    const html = renderToStaticMarkup(<Settings open onClose={() => {}} />);
+    expect(html.match(/class="settings-row"/g)).toHaveLength(2);
+    expect(html).toMatch(/<div class="settings-row"><span class="settings-row-name">Reduce flashing<\/span><span class="settings-row-control">[^]*?aria-label="Reduce flashing"/);
+    expect(html).toMatch(
+      /<div class="settings-row"><span class="settings-row-name">Send crash reports<\/span><span class="settings-row-control">[^]*?aria-label="Send crash reports"[^]*?<\/span><p class="settings-line">No usage tracking: [^<]*<\/p><\/div>/,
+    );
   });
 
   it('wait for the app before the reduce-flashing switch can be used', () => {
