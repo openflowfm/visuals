@@ -13,7 +13,8 @@ import './hero.css';
  * The picture is one box (`.hero-pic`) with nothing laid over it: in the app it
  * is the native preview's hole (`Preview`), so the words and actions sit beside
  * it in a wide card and under it in a narrow one, and its corners are
- * `--lay-hero-radius`. Its spread shadow paints the main column around it
+ * `--lay-hero-radius`, which the native view is rounded to as well (bench.rs's
+ * `HERO_RADIUS`; live's full-bleed picture stays square). Its spread shadow paints the main column around it
  * (hero.css), and HomeLayout pins the card, so it never scrolls.
  *
  * With `preset` left out (round 2, Ryan's call: the playing preset's name and

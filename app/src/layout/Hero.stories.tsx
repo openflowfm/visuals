@@ -77,6 +77,22 @@ async function pictureKept(root: HTMLElement) {
   return { box, card: card.getBoundingClientRect() };
 }
 
+/**
+ * The hole's corners: rounded to --lay-hero-radius (the native view under it is
+ * rounded to the same, bench.rs's HERO_RADIUS), clipping what it holds, with
+ * no opaque corners painted over them; its spread shadow follows the curve.
+ */
+async function roundedHole(pic: HTMLElement) {
+  const radius = getComputedStyle(pic.closest('.lay') as HTMLElement)
+    .getPropertyValue('--lay-hero-radius')
+    .trim();
+  await expect(radius).toBe('18px');
+  await expect(getComputedStyle(pic).borderTopLeftRadius).toBe(radius);
+  await expect(getComputedStyle(pic).borderBottomRightRadius).toBe(radius);
+  await expect(getComputedStyle(pic).overflow).toBe('hidden');
+  await expect(getComputedStyle(pic, '::before').content).toBe('none');
+}
+
 /** Warm-up playing its third preset: pause holds it, and star toggles. */
 export const Playing: Story = {
   play: async ({ canvas, canvasElement, args }) => {
@@ -112,7 +128,8 @@ export const Paused: Story = {
  * In the app: the picture is the native preview's hole, `<Preview className="hero-pic" />`,
  * the box itself with nothing around it. Once it draws it paints nothing (the
  * engine's view shows through; here the desktop's stand-in), its spread shadow
- * paints the column around it, and its corners are painted opaque.
+ * paints the column around it, and its corners are rounded (the native view
+ * under it to the same radius), with nothing painted over them.
  */
 export const ThePreview: Story = {
   name: 'The preview (in the app)',
@@ -124,7 +141,7 @@ export const ThePreview: Story = {
     await waitFor(() => expect(pic).not.toHaveAttribute('data-loading'));
     await expect(getComputedStyle(pic).backgroundColor).toBe('rgba(0, 0, 0, 0)');
     await expect(getComputedStyle(pic).boxShadow).toMatch(/0px 0px 0px \d+(\.\d+)?px/);
-    await expect(getComputedStyle(pic, '::before').content).not.toBe('none');
+    await roundedHole(pic);
     await pictureKept(canvasElement);
   },
 };
@@ -202,7 +219,7 @@ export const PictureOnlyAt800: Story = {
   },
 };
 
-/** The preview itself, alone: the hole keeps the painting rules (its shadow paints the column, its corners painted), centred and capped. */
+/** The preview itself, alone: the hole keeps the painting rules (its shadow paints the column, its corners rounded), centred and capped. */
 export const PictureOnlyPreview: Story = {
   name: 'Picture only, the preview (in the app)',
   render: () => <Hero picture={<Preview className="hero-pic" />} />,
@@ -211,7 +228,7 @@ export const PictureOnlyPreview: Story = {
     await waitFor(() => expect(pic).not.toHaveAttribute('data-loading'));
     await expect(getComputedStyle(pic).backgroundColor).toBe('rgba(0, 0, 0, 0)');
     await expect(getComputedStyle(pic).boxShadow).toMatch(/0px 0px 0px \d+(\.\d+)?px/);
-    await expect(getComputedStyle(pic, '::before').content).not.toBe('none');
+    await roundedHole(pic);
     await pictureAlone(canvasElement);
   },
 };

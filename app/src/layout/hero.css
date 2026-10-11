@@ -4,8 +4,11 @@
    Its spread shadow paints the main column instead, the window's --surface-0
    out to the column's edges (HomeLayout clips it there, and the header, the
    grid and the bar sit above it), which also rounds its corners: the corners
-   are --lay-hero-radius (as --hole-radius, for home.css's opaque painted
-   corners, `.home [data-hole]:not([data-loading])::before`). Its height is
+   are --lay-hero-radius (as --hole-radius). The native view is rounded to the
+   same radius itself (bench.rs's HERO_RADIUS, kept equal to layout.css's
+   --lay-hero-radius; layout/hero.test.ts checks), so the frost shows past its
+   corners as it does around it, and home.css's opaque painted corners are off
+   here. Its height is
    capped at --hero-cap, so its width is too and it keeps its shape. In a card
    of 680px and up the words and actions sit beside it, along its foot;
    narrower, under it. Near borderless (decision 68): the card is space, not a
@@ -49,6 +52,10 @@
 /* The hole: the native view shows through once it draws; until then a plain surface saying so. */
 .lay .hero-pic[data-hole] {
   background: transparent;
+}
+/* The native view rounds its own corners (bench.rs), so nothing is painted over them: an opaque patch would show against the translucent column. */
+.lay .hero-pic[data-hole]:not([data-loading])::before {
+  content: none;
 }
 .lay .hero-pic[data-hole][data-loading] {
   display: grid;

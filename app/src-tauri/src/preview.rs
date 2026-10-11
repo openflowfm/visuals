@@ -6,6 +6,8 @@ use tauri::State;
 use tauri::Manager;
 
 /// The page's hole for the bench, in CSS pixels from the window's top left.
+/// The view takes the hole's corners from where it is (`bench::corner_radius`):
+/// Home's hero rounded, live's full-bleed picture square.
 #[tauri::command]
 pub fn place_bench(x: f64, y: f64, width: f64, height: f64, handle: tauri::AppHandle) -> Result<(), String> {
     #[cfg(target_os = "macos")]
