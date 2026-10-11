@@ -119,7 +119,7 @@ impl Field {
 
     /// How much neighbouring blocks agree on where they went: the mean cosine
     /// between each moving block's vector and its right and lower neighbours'
-    /// (1 all one way, 0 unrelated, −1 opposed). `None` with fewer than 8 such
+    /// (1 all one way, 0 unrelated, −1 opposed). `None` with fewer than 4 such
     /// pairs (a still or flat picture).
     pub fn coherence(&self) -> Option<f64> {
         let at = |c: usize, r: usize| match self.blocks[r * self.cols + c] {
@@ -136,7 +136,7 @@ impl Field {
                 }
             }
         }
-        (pairs >= 8).then(|| sum / pairs as f64)
+        (pairs >= 4).then(|| sum / pairs as f64)
     }
 
     /// The mean part of the found vectors pointing away from the picture's

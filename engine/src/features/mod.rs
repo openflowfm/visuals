@@ -20,7 +20,8 @@ use std::path::Path;
 pub const VERSION: u32 = 1;
 /// The version of the drawing and measuring. Bump it when either changes what
 /// a feature or a clip comes out as; the next run redraws every row.
-pub const ANALYSIS: u32 = 1;
+/// 2: the beat's share of a series is taken after slow drift is out.
+pub const ANALYSIS: u32 = 2;
 /// The size presets are drawn at.
 pub const SIZE: (u32, u32) = (384, 288);
 /// Pictures shrunk to this for colour, motion, symmetry and the clip.
@@ -144,8 +145,8 @@ pub const NAMES: [(&str, &str); 51] = [
     ("reactivity", "mean difference between the pictures with music and in silence, luma 0–255"),
     ("reactivity_motion", "frame difference with music minus in silence, luma 0–255: how much more it moves to sound"),
     ("silence_difference", "mean frame difference per step in silence, luma 0–255: how much it moves on its own"),
-    ("pulse_brightness", "share of the mean luma's variance that repeats with the beat (every 15 steps), whatever its delay; noise ~0.06; null when steady"),
-    ("pulse_motion", "share of the frame difference's variance that repeats with the beat; noise ~0.06; null when steady"),
+    ("pulse_brightness", "share of the mean luma's variance, slow drift taken out, that repeats with the beat (every 15 steps) whatever its delay; noise ~0.06; null when steady"),
+    ("pulse_motion", "share of the frame difference's variance, slow drift taken out, that repeats with the beat; noise ~0.06; null when steady"),
     ("waves_difference", "mean difference between the pictures with and without the waves (custom and basic), luma 0–255"),
     ("shapes_difference", "mean difference between the pictures with and without the custom shapes, luma 0–255"),
 ];

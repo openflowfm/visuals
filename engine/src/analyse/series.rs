@@ -29,16 +29,20 @@ pub fn percentile(v: &[f64], p: f64) -> Option<f64> {
 }
 
 /// How much of a series' variance repeats every `period` steps: the variance
-/// of its mean at each phase of the period over its whole variance, 0–1. A
-/// series following the beat whatever its shape or delay comes near 1; noise
-/// comes to about `period / len`. `None` for fewer than two periods, or a
-/// series that hardly varies (deviation under `floor`).
+/// of its mean at each phase of the period over its whole variance, 0–1, after
+/// slow drift is taken out (each value less the mean of the `period` values
+/// around it, which leaves anything repeating every `period` steps as it
+/// was). A series following the beat whatever its shape or delay comes near 1;
+/// noise comes to about `period / len`. `None` for fewer than three periods, or
+/// a series that hardly varies once drift is out (deviation under `floor`).
 pub fn periodic(v: &[f64], period: usize, floor: f64) -> Option<f64> {
-    if period == 0 || v.len() < 2 * period {
+    if period == 0 || v.len() < 3 * period {
         return None;
     }
+    let half = period / 2;
+    let detrended: Vec<f64> = (half..v.len() - (period - half)).map(|i| v[i] - v[i - half..i - half + period].iter().sum::<f64>() / period as f64).collect();
     // Whole periods only, so every phase is weighted alike.
-    let v = &v[..v.len() / period * period];
+    let v = &detrended[..detrended.len() / period * period];
     let m = mean(v)?;
     let total = v.iter().map(|x| (x - m).powi(2)).sum::<f64>() / v.len() as f64;
     if total.sqrt() < floor {
@@ -69,6 +73,11 @@ mod tests {
         // A kick's decay every 15 steps, delayed by 4.
         let beat: Vec<f64> = (0..270).map(|i| (-(((i + 11) % 15) as f64) / 3.0).exp()).collect();
         assert!(periodic(&beat, 15, 1e-3).unwrap() > 0.99);
+        // On a slow drift ten times its size, still the beat.
+        let drifting: Vec<f64> = beat.iter().enumerate().map(|(i, b)| b + 10.0 * (i as f64 / 90.0).sin()).collect();
+        assert!(periodic(&drifting, 15, 1e-3).unwrap() > 0.9, "{:?}", periodic(&drifting, 15, 1e-3));
+        let ramp: Vec<f64> = (0..270).map(|i| i as f64).collect();
+        assert_eq!(periodic(&ramp, 15, 1e-3), None, "a ramp is all drift");
         let mut x = 1u64;
         let noise: Vec<f64> = (0..270)
             .map(|_| {
