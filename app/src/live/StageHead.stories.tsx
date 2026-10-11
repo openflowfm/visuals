@@ -109,7 +109,7 @@ export const LinkOff: Story = {
   },
 };
 
-/** Playing in the window (how going live starts): "In this window" in amber, and the offer to go full screen on either display. */
+/** Playing in the window (how going live starts): "In this window" in the header's normal ink, and the offer to go full screen on either display. */
 export const InTheWindow: Story = {
   args: { windowed: true },
   play: async ({ canvas }) => {

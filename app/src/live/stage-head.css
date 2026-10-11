@@ -141,9 +141,6 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.stage-bar .stage-light-text[data-warn] {
-  color: var(--caution);
-}
 .stage-bar .stage-beat-dot {
   flex: none;
   width: 7px;
