@@ -48,6 +48,28 @@ pub enum Source {
     Border(usize),
 }
 
+/// Drawing stages left out of the picture, for measuring what they add (the
+/// `features` bin): their equations still run, so nothing else changes. Off
+/// by default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Hide {
+    /// The custom waves and the basic waveform.
+    pub waves: bool,
+    /// The custom shapes.
+    pub shapes: bool,
+}
+
+impl Hide {
+    /// Whether a command drawn by `source` stays in.
+    pub fn keeps(&self, source: Source) -> bool {
+        match source {
+            Source::Wave(_) | Source::Basic => !self.waves,
+            Source::Shape(_) => !self.shapes,
+            _ => true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct Cmd {
     pub topology: Topology,
@@ -666,6 +688,16 @@ mod tests {
             l.push(Topology::LineStrip, Blend::Alpha, vertices.clone());
         }
         l
+    }
+
+    #[test]
+    fn hide_leaves_out_only_what_it_names() {
+        let all = [Source::Motion, Source::Shape(1), Source::Wave(2), Source::Basic, Source::Darken, Source::Border(0)];
+        assert!(all.iter().all(|&s| Hide::default().keeps(s)));
+        let waves = Hide { waves: true, shapes: false };
+        assert_eq!(all.map(|s| waves.keeps(s)), [true, true, false, false, true, true]);
+        let shapes = Hide { waves: false, shapes: true };
+        assert_eq!(all.map(|s| shapes.keeps(s)), [true, false, true, true, true, true]);
     }
 
     #[test]

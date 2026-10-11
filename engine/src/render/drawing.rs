@@ -72,6 +72,10 @@ impl Renderer {
         std::mem::swap(&mut self.shown_list, &mut self.draw_list);
         let mut list = std::mem::take(&mut self.draw_list);
         crate::draw::frame(self.runner.as_mut().unwrap(), audio, &self.uvs, &globals, &size, &mut list);
+        if self.hide != crate::draw::Hide::default() {
+            let hide = self.hide;
+            list.cmds.retain(|c| hide.keeps(c.source));
+        }
         upload(&self.device, &self.queue, &list, &mut self.draw_buffer);
         for cmd in &list.cmds {
             self.draw_pipeline(cmd.topology, cmd.blend);
