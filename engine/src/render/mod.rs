@@ -24,6 +24,7 @@
 //! comp. See "The preset clock" in docs/milkdrop-engine.md.
 
 mod blur;
+mod camera;
 mod drawing;
 mod gpu;
 mod output;
@@ -57,6 +58,7 @@ pub struct Loaded {
 }
 
 pub struct Renderer {
+    camera: Option<camera::Camera>,
     device: wgpu::Device,
     queue: wgpu::Queue,
     /// What presets read: the size they draw at and the mesh.
@@ -249,6 +251,7 @@ impl Renderer {
             })
             .collect();
         let mut renderer = Self {
+            camera: None,
             feedback: [Target::mipped(&device, full, "feedback a"), Target::mipped(&device, full, "feedback b")],
             current: 0,
             comp: Target::new(&device, full, "comp"),
@@ -612,6 +615,7 @@ impl Renderer {
             pass.set_bind_group(0, &group, &[]);
             self.mesh_draw(&mut pass, &self.warp_uvs);
         }
+        self.inject_camera(&mut encoder, &self.feedback[self.current].out, 1.0);
         self.preview(&mut encoder, 0, &self.feedback[self.current].view);
         self.blur(&mut encoder, &self.feedback[self.current].view, false);
         if self.blur_passes > 0 {
@@ -692,6 +696,7 @@ impl Renderer {
                 pass.set_bind_group(0, &shaded, &[]);
                 self.mesh_draw(&mut pass, &self.display_shaded_uvs);
             }
+            self.inject_camera(&mut encoder, &self.display.out, fraction);
             self.blur(&mut encoder, &self.display.view, true);
             let textured = self.between_list.vertices.iter().any(|v| v.textured > 0.5);
             if textured {
@@ -762,6 +767,8 @@ impl Renderer {
     /// `rand_frame` and the clock starting where a new renderer's do. Two runs of a
     /// preset with the same seed after this draw the same pictures.
     pub fn clear(&mut self) {
+        self.trails_pass = None;
+        self.trails_on = false;
         let mut encoder = self.device.create_command_encoder(&Default::default());
         let blurs = self.blur.iter().chain(&self.display_blur).flat_map(|(a, b)| [a, b]);
         for t in self.feedback.iter().chain([&self.comp, &self.display, &self.bare, &self.outgoing]).chain(blurs).chain(self.textured_source.as_ref()) {

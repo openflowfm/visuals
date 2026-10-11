@@ -24,6 +24,8 @@
 //! The main window's own page is put away (`about:blank`) so only the browser's
 //! page drives the app.
 
+mod camera;
+
 use crate::{bench, catalog, App};
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Read, Write};
@@ -244,6 +246,9 @@ impl Bridge {
             return respond(&mut stream, "403 Forbidden", "text/plain", b"the dev bridge wants its token");
         }
         match (request.method.as_str(), request.path.as_str()) {
+            ("POST", "/__bridge/camera/frame") => self.camera_frame(&mut stream, &request),
+            ("POST", "/__bridge/camera/settings") => self.camera_settings(&mut stream, &request.body),
+            ("POST", "/__bridge/camera/stop") => self.camera_stop(&mut stream),
             ("POST", "/__bridge/invoke") => self.invoke(&mut stream, &request.body),
             ("POST", "/__bridge/listen") => self.listen(&mut stream, &request.body),
             ("GET", "/__bridge/events") => self.events(stream),

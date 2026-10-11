@@ -13,7 +13,7 @@ const bridge = process.env.VISUALS_BRIDGE ?? '127.0.0.1:0';
 const devEntry = (): Plugin => ({
   name: 'visuals-dev-bridge',
   apply: 'serve',
-  transformIndexHtml: () => [{ tag: 'script', attrs: { type: 'module', src: '/src/dev/entry.ts' }, injectTo: 'head' }],
+  transformIndexHtml: (html, ctx) => (ctx.path === '/camera.html' ? html : [{ tag: 'script', attrs: { type: 'module', src: '/src/dev/entry.ts' }, injectTo: 'head' }]),
 });
 
 export default mergeConfig(

@@ -791,3 +791,34 @@ comp_3=`}
     let spread = reds.iter().map(|v| (v - 0.5).abs()).fold(0.0, f64::max);
     assert!(spread < 0.15, "every pixel near grey, the furthest {spread} from it");
 }
+
+#[test]
+fn camera_injection_is_oriented_and_recursive_and_can_be_disabled() {
+    let Some(mut r) = renderer(W, H, "[preset00]\nfDecay=1\nfWaveAlpha=0\nzoom=1\nwarp=0\n") else { return };
+    let mut audio = Audio::default();
+    // Top red, bottom blue, deliberately asymmetric to catch vertical flips.
+    r.set_camera_frame(1, 2, &[255, 0, 0, 255, 0, 0, 255, 255], 1.0).unwrap();
+    r.render(&mut audio, 1.0 / 30.0);
+    let pixels = read_targets(r.device(), r.queue(), &[&r.feedback[r.current]], true).unwrap();
+    assert!(pixels[0] > 240 && pixels[2] < 15, "camera top stays at picture top");
+    let bottom = ((H - 1) * W * 4) as usize;
+    assert!(pixels[bottom + 2] > 240 && pixels[bottom] < 15);
+    r.clear_camera();
+    r.render(&mut audio, 1.0 / 30.0);
+    let kept = read_targets(r.device(), r.queue(), &[&r.feedback[r.current]], true).unwrap();
+    assert!(kept[0] > 200, "input is part of recursive feedback, not only a final overlay");
+    assert!(r.camera.is_none());
+    assert!(r.set_camera_frame(0, 1, &[], 1.0).is_err());
+    assert!(r.set_camera_frame(1, 1, &[0; 4], f32::NAN).is_err());
+    assert!(r.set_camera_frame(u32::MAX, 1, &[], 1.0).is_err());
+}
+
+#[test]
+fn zero_camera_mix_preserves_the_ordinary_render_exactly() {
+    let Some(mut ordinary) = renderer(W, H, SPIRAL) else { return };
+    let Some(mut camera) = renderer(W, H, SPIRAL) else { return };
+    camera.set_camera_frame(1, 1, &[255, 0, 255, 255], 0.0).unwrap();
+    play(&mut ordinary, &mut Audio::default(), 9, 1.0 / 60.0);
+    play(&mut camera, &mut Audio::default(), 9, 1.0 / 60.0);
+    assert_eq!(read_target(&ordinary, &ordinary.comp), read_target(&camera, &camera.comp));
+}

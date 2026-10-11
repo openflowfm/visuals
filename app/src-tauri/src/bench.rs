@@ -38,6 +38,12 @@ pub fn draw_size(output: (u32, u32)) -> (u32, u32) {
 }
 
 pub enum Cmd {
+    #[cfg(feature = "dev-bridge")]
+    CameraFrame(u32, u32, Vec<u8>, f32, Sender<Result<(), String>>),
+    #[cfg(feature = "dev-bridge")]
+    CameraSettings(f64, f32),
+    #[cfg(feature = "dev-bridge")]
+    CameraStop(Sender<()>),
     /// Load a preset with this seed; its file, when it has one (the editor's has none),
     /// is what [`on_drawing`] names.
     Load(Box<Preset>, u64, Option<PathBuf>, Sender<Result<engine::render::Loaded, String>>),
@@ -213,6 +219,10 @@ pub fn start(instance: wgpu::Instance, surface: wgpu::Surface<'static>, size: (u
     let now = Instant::now();
     let bench = Loop {
         renderer,
+        #[cfg(feature = "dev-bridge")]
+        camera: None,
+        #[cfg(feature = "dev-bridge")]
+        camera_settings: (1.0, 0.0),
         adapter,
         surface,
         config,
@@ -248,6 +258,10 @@ struct Output {
 /// refresh and presents it to the bench and the output.
 struct Loop {
     renderer: Renderer,
+    #[cfg(feature = "dev-bridge")]
+    camera: Option<Instant>,
+    #[cfg(feature = "dev-bridge")]
+    camera_settings: (f64, f32),
     adapter: wgpu::Adapter,
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
@@ -383,6 +397,21 @@ impl Loop {
 
     fn command(&mut self, cmd: Cmd) {
         match cmd {
+            #[cfg(feature = "dev-bridge")]
+            Cmd::CameraFrame(w, h, rgba, mix, reply) => {
+                let result = self.renderer.set_camera_frame(w, h, &rgba, mix).map_err(str::to_owned);
+                if result.is_ok() {
+                    self.camera = Some(Instant::now());
+                }
+                let _ = reply.send(result);
+            }
+            #[cfg(feature = "dev-bridge")]
+            Cmd::CameraSettings(speed, persistence) => self.camera_settings = (speed, persistence),
+            #[cfg(feature = "dev-bridge")]
+            Cmd::CameraStop(reply) => {
+                self.stop_camera();
+                let _ = reply.send(());
+            }
             Cmd::Load(preset, seed, source, reply) => {
                 // In the show (the output open), a new preset crossfades from the
                 // last one's picture; the editor's reloads on every edit never do.
@@ -489,7 +518,19 @@ impl Loop {
     /// Frozen, the clock stands still and the picture holds. A window that
     /// isn't on screen gets no refreshes to wait for, and the loop would spin;
     /// below a 4 ms round it is paced by sleeping instead.
+    #[cfg(feature = "dev-bridge")]
+    fn stop_camera(&mut self) {
+        self.camera = None;
+        self.renderer.clear_camera();
+        self.renderer.set_trails(0.0);
+        self.renderer.clear();
+    }
+
     fn frame(&mut self) {
+        #[cfg(feature = "dev-bridge")]
+        if self.camera.is_some_and(|last| last.elapsed() > Duration::from_secs(2)) {
+            self.stop_camera();
+        }
         let unpaced = !self.refresh.is_zero() && self.refresh < Duration::from_millis(4);
         if unpaced {
             std::thread::sleep(UNPACED.saturating_sub(self.last.elapsed()));
@@ -499,6 +540,8 @@ impl Loop {
             let fx = self.fx.lock().unwrap();
             (fx.speed_now(now), fx.gain() as f32, fx.echo())
         };
+        #[cfg(feature = "dev-bridge")]
+        let (speed, echo) = if self.camera.is_some() { self.camera_settings } else { (speed, echo) };
         let frozen = speed < STILL;
         // A stall (a slow load, the machine asleep) moves the preset on at most a
         // quarter second; otherwise whole refreshes, evened out (`Pacer`).
