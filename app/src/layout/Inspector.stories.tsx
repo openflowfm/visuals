@@ -118,7 +118,6 @@ function useInspector(start: Start, library: readonly LibraryRow[], tune = false
     chosen: start === 'several' ? SEVERAL.map((r) => prepareRow(r, data.presets[r.key])) : undefined,
     source: start === 'source' ? <SourceHead /> : undefined,
     playing: playing?.key ?? null,
-    from: playing ? NOW.from : '',
     playlists,
     library,
     mine: data.presets,
@@ -134,7 +133,23 @@ function useInspector(start: Start, library: readonly LibraryRow[], tune = false
 }
 
 /** The inspector on its own, in its panel at its width; laid over (`overlay`), it has a ✕ and Esc, and closed it leaves a button to open it again. */
-function Alone({ start, library, error, overlay, tuned }: { start: Start; library: readonly LibraryRow[]; error?: string; overlay?: boolean; tuned?: boolean }) {
+function Alone({
+  start,
+  library,
+  error,
+  overlay,
+  tuned,
+  bright,
+  reduced,
+}: {
+  start: Start;
+  library: readonly LibraryRow[];
+  error?: string;
+  overlay?: boolean;
+  tuned?: boolean;
+  bright?: boolean;
+  reduced?: boolean;
+}) {
   const { props } = useInspector(start, library, tuned);
   const [open, setOpen] = useState(true);
   if (!open)
@@ -143,14 +158,25 @@ function Alone({ start, library, error, overlay, tuned }: { start: Start; librar
         Show the inspector
       </button>
     );
-  return (
-    <div className="app home lay" data-inspector-alone="" style={{ height: 860 }}>
+  const panel = (
+    <div className="app home lay" data-inspector-alone="" data-transparency={reduced ? 'reduced' : undefined} style={{ height: 860 }}>
       <InspectorPanel>
         <Inspector {...props} error={error ?? null} onClose={overlay ? () => setOpen(false) : undefined} />
       </InspectorPanel>
     </div>
   );
+  // Over a bright preset: the worst a MilkDrop picture does behind the frost, white and saturated bands at full brightness.
+  return bright || reduced ? (
+    <div className="insp-story-backdrop" style={{ display: 'inline-block', background: BRIGHT }}>
+      {panel}
+    </div>
+  ) : (
+    panel
+  );
 }
+
+/** A hostile backdrop: a bright, saturated preset's bands, white among them. */
+const BRIGHT = 'conic-gradient(from 20deg at 40% 45%, #fff 0 9%, #ffe600 9% 22%, #00f0ff 22% 37%, #fff 37% 50%, #ff2bd6 50% 64%, #fffbe0 64% 80%, #7cff4f 80%)';
 
 /** The whole window with the inspector open beside the main column and the transport bar under it: a tile's click picks it, the header's button opens and closes the panel. */
 function InWindow({ start, library }: { start: Start; library: readonly LibraryRow[] }) {
@@ -215,10 +241,14 @@ interface Args {
   overlay?: boolean;
   /** The preset playing has a tune kept: half speed, reacting 1.5×. */
   tuned?: boolean;
+  /** Over a bright preset. */
+  bright?: boolean;
+  /** As with "Reduce transparency" on (and over the bright preset, to show it). */
+  reduced?: boolean;
 }
-function Story({ start, window, pack, error, overlay, tuned }: Args) {
+function Story({ start, window, pack, error, overlay, tuned, bright, reduced }: Args) {
   const library = pack ? FULL_PACK : STARTER;
-  return window ? <InWindow start={start} library={library} /> : <Alone start={start} library={library} error={error} overlay={overlay} tuned={tuned} />;
+  return window ? <InWindow start={start} library={library} /> : <Alone start={start} library={library} error={error} overlay={overlay} tuned={tuned} bright={bright} reduced={reduced} />;
 }
 
 /**
@@ -234,7 +264,12 @@ const meta = {
   title: 'Layout/Inspector',
   component: Story,
   args: { start: 'playing', window: false, pack: false },
-  argTypes: { start: { control: 'inline-radio', options: ['playing', 'picked', 'several', 'source', 'nothing'] }, tuned: { control: 'boolean' } },
+  argTypes: {
+    start: { control: 'inline-radio', options: ['playing', 'picked', 'several', 'source', 'nothing'] },
+    tuned: { control: 'boolean' },
+    bright: { control: 'boolean' },
+    reduced: { control: 'boolean' },
+  },
   parameters: { scope: 'bare', layout: 'fullscreen' },
 } satisfies Meta<typeof Story>;
 export default meta;
@@ -266,6 +301,7 @@ export const NowPlaying: S = {
   play: async ({ canvasElement }) => {
     const panelEl = panelOf(within(canvasElement));
     const panel = within(panelEl);
+    await skeleton(panelEl);
     const name = panel.getByRole('heading', { name: PLAYING_NAME });
     await expect(name).toBeVisible();
     // No status line: the transport bar says where it plays from.
@@ -283,9 +319,17 @@ export const NowPlaying: S = {
     await waitFor(() => expect(star).toHaveAttribute('aria-pressed', was === 'true' ? 'false' : 'true'));
     await userEvent.click(star);
     await waitFor(() => expect(star).toHaveAttribute('aria-pressed', was ?? 'false'));
+    // Never goes on at once and is undone from the toast under the header, not a confirm.
     const never = panel.getByRole('button', { name: 'never play' });
     await userEvent.click(never);
     await waitFor(() => expect(never).toHaveAttribute('aria-pressed', 'true'));
+    const toast = panel.getByRole('status');
+    await expect(toast).toHaveTextContent('Won’t play it on its own');
+    await userEvent.click(within(toast).getByRole('button', { name: 'Undo' }));
+    await waitFor(() => expect(never).toHaveAttribute('aria-pressed', 'false'));
+    await expect(panel.queryByRole('status')).toBeNull();
+    // Play only for one picked: this one plays.
+    await expect(panel.queryByRole('button', { name: 'play it' })).toBeNull();
     await expect(panel.getByRole('button', { name: 'add to a playlist' })).toBeVisible();
     await expect(panel.getByRole('button', { name: 'open in the editor' })).toBeVisible();
     await userEvent.click(panel.getByRole('button', { name: '+ Tag' }));
@@ -321,7 +365,9 @@ export const Picked: S = {
   name: 'Picked',
   args: { start: 'picked' },
   play: async ({ canvasElement }) => {
-    const panel = within(panelOf(within(canvasElement)));
+    const panelEl = panelOf(within(canvasElement));
+    const panel = within(panelEl);
+    await skeleton(panelEl);
     await expect(panel.getByRole('heading', { name: PICKED_NAME })).toBeVisible();
     await expect(panel.getByRole('button', { name: 'star' })).toHaveAttribute('aria-pressed', 'true');
     await expect(panel.getByRole('group', { name: 'my tags' })).toHaveTextContent('peak');
@@ -332,7 +378,7 @@ export const Picked: S = {
   },
 };
 
-/** "For this preset": the preset playing kept at half speed and reacting 1.5×; the arrows step speed, and "as made" puts both back to 1×. */
+/** "For this preset": the preset playing kept at half speed and reacting 1.5×; the arrows step speed between the detents, the readout takes a typed value, and "as made" puts both back to 1×. */
 export const ForThisPreset: S = {
   name: 'For this preset',
   args: { tuned: true },
@@ -341,13 +387,19 @@ export const ForThisPreset: S = {
     const group = within(panel.getByRole('group', { name: 'for this preset' }));
     const speed = group.getByRole('slider', { name: 'speed' });
     const reacts = group.getByRole('slider', { name: 'how much it reacts' });
-    await expect(speed).toHaveAttribute('aria-valuetext', '0.5×');
-    await expect(reacts).toHaveAttribute('aria-valuetext', '1.5×');
+    await expect(speed).toHaveAttribute('aria-valuetext', '½×');
+    await expect(reacts).toHaveAttribute('aria-valuetext', '1.50×');
     speed.focus();
     await userEvent.keyboard('{ArrowRight}');
-    await waitFor(() => expect(speed).toHaveAttribute('aria-valuetext', '0.53×'));
+    await waitFor(() => expect(speed).toHaveAttribute('aria-valuetext', '1×'));
     await userEvent.keyboard('{ArrowRight}');
-    await waitFor(() => expect(speed).toHaveAttribute('aria-valuetext', '0.56×'));
+    await waitFor(() => expect(speed).toHaveAttribute('aria-valuetext', '2×'));
+    // The readout is a field to type in.
+    await userEvent.click(group.getByRole('button', { name: /^speed 2×/ }));
+    const entry = group.getByRole('textbox', { name: 'speed, as a multiple' });
+    await userEvent.clear(entry);
+    await userEvent.type(entry, '3/4{Enter}');
+    await waitFor(() => expect(speed).toHaveAttribute('aria-valuetext', '0.75×'));
     await userEvent.click(group.getByRole('button', { name: 'as made' }));
     await waitFor(() => expect(speed).toHaveAttribute('aria-valuetext', '1×'));
     await expect(reacts).toHaveAttribute('aria-valuetext', '1×');
@@ -358,16 +410,27 @@ export const ForThisPreset: S = {
   },
 };
 
-/** Nothing playing: the field still draws the library, the words say so, and no action shows. */
+/** The one skeleton: header, who, character, map, tune, playlists, in that order. */
+async function skeleton(panelEl: HTMLElement) {
+  const insp = panelEl.querySelector('.insp')!;
+  const parts = ['.insp-top', '.insp-id', '.insp-char', '.insp-map', '.insp-tune-slot', '.insp-lists'].map((s) => insp.querySelector(`:scope > ${s}`));
+  for (const p of parts) await expect(p).not.toBeNull();
+  for (let i = 1; i < parts.length; i++) await expect(before(parts[i - 1]!, parts[i]!)).toBe(true);
+}
+
+/** Nothing playing: the same skeleton, the actions there but off, dashes where nothing applies, the map unmarked and the tune disabled. */
 export const NothingPlaying: S = {
   name: 'Nothing playing',
   args: { start: 'nothing' },
   play: async ({ canvasElement }) => {
     const panelEl = panelOf(within(canvasElement));
     const panel = within(panelEl);
-    await expect(panel.getByText(/nothing playing/i)).toBeVisible();
-    await expect(panel.queryByRole('button', { name: 'star' })).toBeNull();
+    await skeleton(panelEl);
+    await expect(panel.getByRole('heading', { name: /nothing playing/i })).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'star' })).toBeDisabled();
+    await expect(panel.getByRole('button', { name: 'never play' })).toBeDisabled();
     await expect(fieldOf(panelEl)).toBeVisible();
+    await expect(panel.getByRole('slider', { name: 'speed' })).toHaveAttribute('aria-disabled', 'true');
   },
 };
 
@@ -378,12 +441,16 @@ export const Several: S = {
   play: async ({ canvasElement }) => {
     const panelEl = panelOf(within(canvasElement));
     const panel = within(panelEl);
+    await skeleton(panelEl);
     const name = panel.getByRole('heading', { name: `${SEVERAL.length} selected` });
     await expect(name).toBeVisible();
-    await expect(panel.queryByRole('listbox')).toBeNull();
     const facts = panel.getByRole('group', { name: 'about these presets' });
     await expect(before(name, facts)).toBe(true);
-    await expect(before(facts, panelEl.querySelector('.insp-pictures')!)).toBe(true);
+    // Every pick ringed on the map, no single one lit.
+    await expect(before(facts, fieldOf(panelEl))).toBe(true);
+    await expect(panelEl.querySelector('.insp-field-marked')).not.toBeNull();
+    await expect(panelEl.querySelector('.insp-field-lit')).toBeNull();
+    await expect(panel.getByRole('group', { name: 'for these presets' })).toBeVisible();
     await expect(before(panel.getByRole('button', { name: 'star' }), name)).toBe(true);
     await expect(panel.queryByRole('button', { name: 'play it' })).toBeNull();
     const star = panel.getByRole('button', { name: 'star' });
@@ -406,11 +473,14 @@ export const Source: S = {
   play: async ({ canvasElement }) => {
     const panelEl = panelOf(within(canvasElement));
     const panel = within(panelEl);
+    await skeleton(panelEl);
     await expect(panel.getByRole('heading', { level: 2, name: WARM_UP.name })).toBeVisible();
     // No playback controls on the card: shuffle is in how it plays.
     await expect(panel.queryByRole('button', { name: /Stop/ })).toBeNull();
     await expect(panel.queryByRole('button', { name: 'Shuffle' })).toBeNull();
-    await expect(panel.queryByRole('listbox')).toBeNull();
+    // The same skeleton under the card: the map unmarked, the actions there but off.
+    await expect(fieldOf(panelEl)).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'star' })).toBeDisabled();
     await userEvent.click(panel.getByRole('button', { name: 'more' }));
     await expect(panel.getByRole('menu', { name: 'more' })).toBeVisible();
   },
@@ -423,6 +493,32 @@ export const Failed: S = {
   play: async ({ canvasElement }) => {
     const panel = within(panelOf(within(canvasElement)));
     await expect(panel.getByRole('alert')).toHaveTextContent('read-only');
+  },
+};
+
+/** Over a bright preset: the panel's denser tint and blur keep the name, the values and the sliders legible over white and saturated bands. */
+export const OverABrightPreset: S = {
+  name: 'Over a bright preset',
+  args: { bright: true, tuned: true },
+  play: async ({ canvasElement }) => {
+    const panelEl = panelOf(within(canvasElement));
+    await skeleton(panelEl);
+    await expect(within(panelEl).getByRole('heading', { name: PLAYING_NAME })).toBeVisible();
+    // The panel paints a tint of its own and blurs what is under it.
+    const style = getComputedStyle(panelEl.closest('.lay-insp') ?? panelEl);
+    await expect(style.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+  },
+};
+
+/** "Reduce transparency" (here asked for on the layout, as a page can't switch the system's setting): the panel goes opaque, no blur, over the same bright preset. */
+export const ReducedTransparency: S = {
+  name: 'Reduced transparency',
+  args: { reduced: true, tuned: true },
+  play: async ({ canvasElement }) => {
+    const panelEl = panelOf(within(canvasElement));
+    const style = getComputedStyle(panelEl.closest('.lay-insp') ?? panelEl);
+    await expect(style.backgroundColor).toMatch(/^rgb\(/);
+    await expect(style.backdropFilter === 'none' || style.backdropFilter === '').toBe(true);
   },
 };
 

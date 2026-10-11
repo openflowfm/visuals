@@ -3,17 +3,26 @@
    brightness (up, dark to bright), tinted by its strongest hue's band; the
    subject lit in its own hue, with a fine cursor through it and a ring as wide
    as it is intense; the preset playing a quiet ring with a play mark while
-   another is shown. No frame and no grid: the edges carry a scale's markings
-   (five hairline ticks, the middle one longer, a small cross at the centre)
-   and four words in tiny type, as an oscilloscope's graticule is engraved.
+   another is shown; several picked each a small ring in the accent. It sits
+   on a flat plate a tone darker than the panel (never glass), its corners
+   concentric with the panel's. No frame and no grid: the edges carry a
+   scale's markings (five hairline ticks, the middle one longer, a small cross
+   at the centre) and four small words, the character rows' own, as an
+   oscilloscope's graticule is engraved.
    The dot under the pointer, or the keyboard's cursor, gets a fine ring and
    its name in a small tip. */
 
 .lay .insp-field {
   --insp-hair: rgba(255, 255, 255, 0.22);
+  /* The plate sits --insp-field-out in from the panel's edge (out past the
+     content's padding), so its corners are the panel's less that: concentric. */
+  --insp-field-out: 10px;
   position: relative;
-  margin: 6px 0 0;
-  padding: 16px 0 18px;
+  margin: 0 calc(var(--insp-field-out) - var(--insp-pad, 20px));
+  padding: 26px 12px 28px;
+  border-radius: calc(var(--lay-side-radius, 18px) - var(--insp-field-out));
+  /* Flat content, never glass: one tonal step down from the panel. */
+  background: rgba(0, 0, 0, 0.24);
 }
 .lay .insp-field-plot {
   position: relative;
@@ -33,29 +42,28 @@
 .lay .insp-field-scope[data-hot] {
   cursor: pointer;
 }
+/* The edges' words: the character rows' own words (slow, fast; dark, bright), in their case, small. */
 .lay .insp-field-axis {
   position: absolute;
-  left: 0;
+  left: 12px;
   color: var(--caption);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
-  letter-spacing: 0.06em;
   line-height: 1;
-  text-transform: uppercase;
   pointer-events: none;
   user-select: none;
 }
 .lay .insp-field-axis-top {
-  top: 2px;
+  top: 10px;
 }
 .lay .insp-field-axis-low {
-  bottom: 30px;
-  left: 10px;
+  bottom: 40px;
+  left: 22px;
   opacity: 0.8;
 }
 .lay .insp-field-axis-x {
-  right: 0;
-  bottom: 0;
+  right: 12px;
+  bottom: 10px;
   display: flex;
   justify-content: space-between;
 }
@@ -118,6 +126,15 @@
   stroke: currentColor;
   stroke-width: 1.5;
   vector-effect: non-scaling-stroke;
+}
+
+/* Several picked: a small ring in the accent round each, no lit cursor. */
+.lay .insp-field-marked {
+  fill: none;
+  stroke: var(--primary, var(--fg));
+  stroke-width: 1.25;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
 }
 
 /* The preset playing, while another is shown. */

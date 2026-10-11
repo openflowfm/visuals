@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LibraryRow, Look } from '../../api.ts';
-import { BANDS, bandOf, bandPaths, dotOf, dotsOf, nearest, step, timesOf, tunedAt, tunedPath, tunedSays, W, H, type Dot } from './field.ts';
+import { BANDS, bandOf, bandPaths, dotOf, dotsOf, marksPath, nearest, step, timesOf, tunedAt, tunedPath, tunedSays, W, H, type Dot } from './field.ts';
 
 const look = (over: Partial<Look> = {}): Look => ({ hues: [10], brightness: 0.5, speed: 2, intensity: 10, brightness_level: 'mid', speed_level: 'mid', intensity_level: 'mid', ...over });
 const row = (key: string, l: Look | null): LibraryRow => ({
@@ -79,6 +79,17 @@ describe("the inspector's field", () => {
     expect(tunedPath(dotsOf([row('b', look({ speed: 2 }))]))).toBe('');
     expect(timesOf(0.5)).toBe('0.5×');
     expect(timesOf(1.333)).toBe('1.33×');
+  });
+
+  it('marks several picks as one path: a ring round each drawn one, once each', () => {
+    const dots = dotsOf([row('a', look({ speed: 0 })), row('b', look({ speed: 8 })), row('c', look()), row('u', null)]);
+    const d = marksPath(dots, ['b', 'a', 'u', 'a']);
+    // Two rings (two arcs each): a and b; u has no dot, the second a no second ring.
+    expect(d.match(/a/g)?.length).toBe(4);
+    expect(d.match(/M/g)?.length).toBe(2);
+    expect(d.startsWith(`M${(dots[0].x - 3.6).toFixed(1)} `)).toBe(true);
+    expect(marksPath(dots, [])).toBe('');
+    expect(marksPath(dots, ['u'])).toBe('');
   });
 
   it('draws 9,800 presets as at most one path per band', () => {
