@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import type { LibraryData } from './api.ts';
 import * as pl from './playlists.ts';
 import { plural } from './controls.ts';
+import { Icon } from './layout/icons.tsx';
 import { nameOf } from './shell.ts';
 import { say } from './words.ts';
+import './live/stage-crate.css';
 
 /** How many presets "Up next" shows until "Show all" is open. */
 export const UP_NEXT = 4;
@@ -162,10 +164,10 @@ export function upNote(lists: pl.Lists): string | null {
   return 'A smart playlist plays its matches in library order.';
 }
 
-/** An up-next row's accessible name, saying when its file is missing (the strike-through doesn't). */
 /** Where focus goes when "Show fewer" hides the rows past UP_NEXT: a focused hidden row hands it to the last row still shown; otherwise it stays put (null). */
 export const collapseFocus = (focused: number): number | null => (focused >= UP_NEXT ? UP_NEXT - 1 : null);
 
+/** An up-next row's accessible name, saying when its file is missing (the strike-through doesn't). */
 export const rowLabel = (r: Pick<Upcoming, 'name' | 'missing'>): string => (r.missing ? `${r.name}, missing` : r.name);
 
 /** Where a row dragged to `y` lands, from the rows' tops and heights: before row `slot`, or after the last when `slot` is their count. */
@@ -189,6 +191,52 @@ export function moveFor(rows: readonly Upcoming[], row: number, slot: number): {
   return to === from ? null : { from, to };
 }
 
+/** The crate's sections, in order: each folds under its heading. */
+export type CrateSection = 'playlists' | 'moods' | 'next';
+
+/** One stop on the keyboard's walk: a section's heading, or an item under it (a playlist, a mood, an up-next row that moves, "Show all"). */
+export interface Stop {
+  key: string;
+  section: CrateSection;
+  head: boolean;
+}
+
+/** What a key does on the walk: focus another stop (`to`), fold or unfold a section (`fold`), or nothing of the walk's (null: the key isn't the walk's). */
+export type Step = { to?: string; fold?: CrateSection } | null;
+
+/**
+ * The keyboard's walk over the crate, as Home's sidebar walks its own: ↓ ↑ the
+ * next and previous stop, Home and End the first and the last, ← from an item
+ * to its heading and on an open heading folds it, → on a folded heading
+ * unfolds it and on an open one goes to its first item. `stops` are only the
+ * ones shown (a folded section's items aren't); `at` is the focused one's index.
+ */
+export function crateStep(stops: readonly Stop[], at: number, key: string, folded: readonly CrateSection[]): Step {
+  const here = stops[at];
+  if (!here) return null;
+  const open = !folded.includes(here.section);
+  if (key === 'ArrowDown') return { to: stops[Math.min(at + 1, stops.length - 1)].key };
+  if (key === 'ArrowUp') return { to: stops[Math.max(at - 1, 0)].key };
+  if (key === 'Home') return { to: stops[0].key };
+  if (key === 'End') return { to: stops[stops.length - 1].key };
+  if (key === 'ArrowLeft') {
+    if (!here.head) return { to: stops.find((s) => s.head && s.section === here.section)?.key };
+    return open ? { fold: here.section } : {};
+  }
+  if (key === 'ArrowRight') {
+    if (!here.head) return {};
+    if (!open) return { fold: here.section };
+    const first = stops[at + 1];
+    return first && !first.head && first.section === here.section ? { to: first.key } : {};
+  }
+  return null;
+}
+
+/** The one tab stop: the stop focused last when it still shows, else the playlist playing, else the first heading. */
+export function tabStop(stops: readonly Stop[], active: string | null, playing: string | null): string | undefined {
+  return stops.find((s) => s.key === active)?.key ?? stops.find((s) => s.key === playing)?.key ?? stops[0]?.key;
+}
+
 interface Props {
   lists: pl.Lists;
   data: LibraryData | null;
@@ -200,11 +248,17 @@ interface Props {
 }
 
 /**
- * Live mode's crate: the playlists to play with one tap, the user's tags as
- * moods to play (and mix) once there are any, and what plays after the deck's
- * Next — four rows, the rest behind "Show all" — which, for a playlist in
- * order, can be dragged by the ≡ that shows on hover or focus (or Alt+↑ ↓) into
- * a new order.
+ * Live mode's crate, in Home's sidebar look (stage-crate.css): the playlists to
+ * play with one tap (the one playing the soft pill with its green dot), the
+ * user's tags as moods to play (and mix) once there are any, and what plays
+ * after the deck's Next — four rows, the rest behind "Show all" — which, for a
+ * playlist in order, can be dragged by the ≡ that shows on hover or focus (or
+ * Alt+↑ ↓) into a new order. Each section folds under its quiet heading; the
+ * sections scroll inside the crate.
+ *
+ * One tab stop, as Home's sidebar has: the arrow keys walk the headings and
+ * the items shown (`crateStep`), Home and End jump to the first and the last,
+ * Enter or Space plays a playlist, plays or mixes a mood, or folds a section.
  */
 export function Crate({ lists, data, act, onLists, onError, current }: Props) {
   const { playlists, deck } = lists;
@@ -244,6 +298,12 @@ export function Crate({ lists, data, act, onLists, onError, current }: Props) {
   const rows = expanded ? every : every.slice(0, UP_NEXT);
   const more = every.length > UP_NEXT;
   const note = upNote(lists);
+
+  const uid = useId();
+  // The sections folded away, and the stop focused last (the walk's one tab stop).
+  const [folded, setFolded] = useState<CrateSection[]>([]);
+  const [active, setActive] = useState<string | null>(null);
+  const els = useRef(new Map<string, HTMLElement>());
 
   const refs = useRef<(HTMLLIElement | null)[]>([]);
   // The row held by its identity, not its index: auto-advance can move the deck mid-drag, and the rows shift under the pointer.
@@ -305,122 +365,209 @@ export function Crate({ lists, data, act, onLists, onError, current }: Props) {
   };
   const marker = (row: number) => {
     if (!drag || dragRow < 0 || drag.slot === dragRow || drag.slot === dragRow + 1) return null;
-    if (drag.slot === row) return <span className="live-crate-drop" data-at="before" aria-hidden="true" />;
-    if (drag.slot === rows.length && row === rows.length - 1) return <span className="live-crate-drop" data-at="after" aria-hidden="true" />;
+    if (drag.slot === row) return <span className="scr-drop" data-at="before" aria-hidden="true" />;
+    if (drag.slot === rows.length && row === rows.length - 1) return <span className="scr-drop" data-at="after" aria-hidden="true" />;
     return null;
   };
 
+  // The keyboard's walk, in order: each heading, then its items while it is open.
+  const sections: CrateSection[] = all.length > 0 ? ['playlists', 'moods', 'next'] : ['playlists', 'next'];
+  const stops: Stop[] = [];
+  for (const s of sections) {
+    stops.push({ key: headKey(s), section: s, head: true });
+    if (folded.includes(s)) continue;
+    if (s === 'playlists') for (const p of playlists) stops.push({ key: listKey(p.id), section: s, head: false });
+    if (s === 'moods') for (const m of all) stops.push({ key: moodKey(m.tag), section: s, head: false });
+    if (s === 'next') {
+      // Only the rows that move are stops: the others do nothing.
+      if (list) rows.forEach((r, i) => stops.push({ key: nextKey(r, i), section: s, head: false }));
+      if (more) stops.push({ key: MORE, section: s, head: false });
+    }
+  }
+  const stop = tabStop(stops, active, deck.playlist !== null && !deck.query ? listKey(deck.playlist) : null);
+  const bind = (key: string) => ({
+    ref: (el: HTMLElement | null) => {
+      if (el) els.current.set(key, el);
+      else els.current.delete(key);
+    },
+    tabIndex: key === stop ? 0 : -1,
+    onFocus: () => setActive(key),
+  });
+  const fold = (s: CrateSection) => setFolded((f) => (f.includes(s) ? f.filter((x) => x !== s) : [...f, s]));
+  const walk = (e: KeyboardEvent) => {
+    // Arrows, Home and End with a modifier aren't the walk's: Alt+↑ ↓ moves an up-next row, the rest are the system's.
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const at = stops.findIndex((s) => els.current.get(s.key) === e.target);
+    const step = at < 0 ? null : crateStep(stops, at, e.key, folded);
+    if (!step) return;
+    // The walk's keys are the crate's: live mode's keys (← → step presets) never see them.
+    e.preventDefault();
+    e.stopPropagation();
+    if (step.fold) fold(step.fold);
+    if (step.to) {
+      setActive(step.to);
+      els.current.get(step.to)?.focus();
+    }
+  };
+  const head = (s: CrateSection, title: string) => {
+    const open = !folded.includes(s);
+    return (
+      <h2 className="scr-head">
+        <button
+          type="button"
+          className="scr-toggle"
+          aria-expanded={open}
+          aria-controls={`${uid}-${s}`}
+          title={open ? `Hide ${title.toLowerCase()}` : `Show ${title.toLowerCase()}`}
+          onClick={() => fold(s)}
+          {...bind(headKey(s))}
+        >
+          <span className="scr-title">{title}</span>
+          <Icon className="scr-chevron" name={open ? 'chevron-down' : 'chevron-right'} size={12} />
+        </button>
+      </h2>
+    );
+  };
+  const noteId = `${uid}-next-note`;
+  const rowsId = `${uid}-next-rows`;
+
   return (
-    <div className="live-crate">
-      <section className="live-crate-section" aria-labelledby="live-crate-playlists">
-        <h2 id="live-crate-playlists">Playlists</h2>
-        {playlists.length === 0 ? (
-          <p className="live-crate-note">No playlists yet: make one in the library, then tap it here to play it.</p>
-        ) : (
-          <ul className="live-crate-list">
-            {playlists.map((p, i) => {
-              const on = deck.playlist === p.id && !deck.query;
-              return (
-                <li key={p.id}>
-                  <button
-                    type="button"
-                    className="live-crate-playlist"
-                    data-on={on || undefined}
-                    aria-current={on ? 'true' : undefined}
-                    title={on ? `${p.name} is playing` : `Play ${p.name}`}
-                    onClick={() => act({ kind: 'load', playlist: i, index: null })}
-                  >
-                    <span className="live-crate-name">{p.name}</span>
-                    {p.kind === 'smart' && (
-                      <span className="live-crate-smart" title="A smart playlist: whatever matches its filter">
-                        smart
-                      </span>
-                    )}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
+    <div className="scr" onKeyDown={walk}>
+      <div className="scr-section">
+        {head('playlists', 'Playlists')}
+        <div id={`${uid}-playlists`} className="scr-body" hidden={folded.includes('playlists')}>
+          {playlists.length === 0 ? (
+            <p className="scr-note">No playlists yet: make one in the library, then tap it here to play it.</p>
+          ) : (
+            <ul className="scr-rows">
+              {playlists.map((p, i) => {
+                const on = deck.playlist === p.id && !deck.query;
+                const smart = p.kind === 'smart';
+                return (
+                  <li key={p.id}>
+                    <button
+                      type="button"
+                      className="scr-row"
+                      data-playing={on || undefined}
+                      aria-current={on ? 'true' : undefined}
+                      aria-label={`${p.name}${smart ? ', smart playlist' : ''}${on ? ', playing' : ''}`}
+                      title={on ? `${p.name} is playing` : `Play ${p.name}${smart ? ': a smart playlist, whatever matches its filter' : ''}`}
+                      onClick={() => act({ kind: 'load', playlist: i, index: null })}
+                      {...bind(listKey(p.id))}
+                    >
+                      <Icon className="scr-icon" name={smart ? 'smart-playlist' : 'playlist'} />
+                      <span className="scr-name">{p.name}</span>
+                      {/* The playlist playing: the green dot after its name, as Home's sidebar marks it. */}
+                      {on && <span className="scr-dot" aria-hidden="true" />}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </div>
 
       {/* Moods only once there are some: the user's tags, made in the library. */}
       {all.length > 0 && (
-        <section className="live-crate-section" aria-labelledby="live-crate-moods">
-          <h2 id="live-crate-moods">Moods</h2>
-          <div className="live-crate-chips" role="group" aria-label="Moods">
-            {all.map(({ tag, count }) => {
-              const on = lit.includes(tag);
-              return (
-                <button
-                  key={tag}
-                  type="button"
-                  className="live-crate-chip"
-                  data-on={on || undefined}
-                  aria-pressed={on}
-                  title={`${plural(count, 'preset')} tagged ${tag}. ${on ? 'Tap to take it out' : lit.length ? 'Tap to mix it in' : 'Tap to play it'}`}
-                  onClick={() => act(chipAction(lit, tag))}
-                >
-                  {tag}
-                </button>
-              );
-            })}
+        <div className="scr-section">
+          {head('moods', 'Moods')}
+          <div id={`${uid}-moods`} className="scr-body" hidden={folded.includes('moods')}>
+            <ul className="scr-rows" aria-label="Moods">
+              {all.map(({ tag, count }) => {
+                const on = lit.includes(tag);
+                return (
+                  <li key={tag}>
+                    <button
+                      type="button"
+                      className="scr-row"
+                      aria-pressed={on}
+                      title={`${plural(count, 'preset')} tagged ${tag}. ${on ? 'Tap to take it out' : lit.length ? 'Tap to mix it in' : 'Tap to play it'}`}
+                      onClick={() => act(chipAction(lit, tag))}
+                      {...bind(moodKey(tag))}
+                    >
+                      <Icon className="scr-icon" name="mood" />
+                      <span className="scr-name">{tag}</span>
+                      {on && <span className="scr-dot" aria-hidden="true" />}
+                      <i className="scr-count" aria-hidden="true">
+                        {count.toLocaleString('en-US')}
+                      </i>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
-        </section>
+        </div>
       )}
 
-      <section className="live-crate-section" aria-labelledby="live-crate-next">
-        <h2 id="live-crate-next">Up next</h2>
-        {note !== null && <p className="live-crate-note">{note}</p>}
-        {list && (
-          <span className="live-sr" id="live-crate-next-note">
-            {MOVE_NOTE}
-          </span>
-        )}
-        {rows.length > 0 && (
-          <ol className="live-crate-list" id="live-crate-next-rows" aria-label="Up next, in play order">
-            {rows.map((r, i) => (
-              <li
-                // A row that can be dragged is keyed by its playlist index, so it stays the same element (and keeps the pointer) when the rows shift mid-drag.
-                key={r.at !== null ? `${r.at}:${r.path}` : `x:${i}:${r.path}`}
-                ref={(el) => {
-                  refs.current[i] = el;
-                }}
-                className="live-crate-row"
-                data-missing={r.missing || undefined}
-                data-dragging={(drag !== null && dragRow === i) || undefined}
-                tabIndex={list ? 0 : undefined}
-                aria-keyshortcuts={list ? 'Alt+ArrowUp Alt+ArrowDown' : undefined}
-                aria-label={rowLabel(r)}
-                aria-describedby={list ? 'live-crate-next-note' : undefined}
-                onKeyDown={list ? nudge(i) : undefined}
-                title={r.missing ? `${r.name}: the file is missing` : r.name}
-              >
-                {marker(i)}
-                <span className="live-crate-name">{r.missing ? <s>{r.name}</s> : r.name}</span>
-                {list && (
-                  <span
-                    className="live-crate-handle"
-                    aria-hidden="true"
-                    title="Drag to change when it plays (or Alt+↑ ↓)"
-                    onPointerDown={grab(i)}
-                    onPointerMove={drift}
-                    onPointerUp={drop}
-                    onPointerCancel={() => setDrag(null)}
+      <div className="scr-section">
+        {head('next', 'Up next')}
+        <div id={`${uid}-next`} className="scr-body" hidden={folded.includes('next')}>
+          {note !== null && <p className="scr-note">{note}</p>}
+          {list && (
+            <span className="scr-sr" id={noteId}>
+              {MOVE_NOTE}
+            </span>
+          )}
+          {rows.length > 0 && (
+            <ol className="scr-rows" id={rowsId} aria-label="Up next, in play order">
+              {rows.map((r, i) => {
+                const b = list ? bind(nextKey(r, i)) : null;
+                return (
+                  <li
+                    // A row that can be dragged is keyed by its playlist index, so it stays the same element (and keeps the pointer) when the rows shift mid-drag.
+                    key={nextKey(r, i)}
+                    ref={(el) => {
+                      refs.current[i] = el;
+                      b?.ref(el);
+                    }}
+                    className="scr-next"
+                    data-missing={r.missing || undefined}
+                    data-moves={list ? '' : undefined}
+                    data-dragging={(drag !== null && dragRow === i) || undefined}
+                    tabIndex={b?.tabIndex}
+                    onFocus={b?.onFocus}
+                    aria-keyshortcuts={list ? 'Alt+ArrowUp Alt+ArrowDown' : undefined}
+                    aria-label={rowLabel(r)}
+                    aria-describedby={list ? noteId : undefined}
+                    onKeyDown={list ? nudge(i) : undefined}
+                    title={r.missing ? `${r.name}: the file is missing` : r.name}
                   >
-                    ≡
-                  </span>
-                )}
-              </li>
-            ))}
-          </ol>
-        )}
-        {more && (
-          <button type="button" className="live-crate-more" aria-expanded={expanded} aria-controls="live-crate-next-rows" onClick={toggle}>
-            {expanded ? 'Show fewer' : 'Show all'}
-          </button>
-        )}
-      </section>
+                    {marker(i)}
+                    <span className="scr-name">{r.missing ? <s>{r.name}</s> : r.name}</span>
+                    {list && (
+                      <span
+                        className="scr-handle"
+                        aria-hidden="true"
+                        title="Drag to change when it plays (or Alt+↑ ↓)"
+                        onPointerDown={grab(i)}
+                        onPointerMove={drift}
+                        onPointerUp={drop}
+                        onPointerCancel={() => setDrag(null)}
+                      >
+                        ≡
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+          {more && (
+            <button type="button" className="scr-more" aria-expanded={expanded} aria-controls={rowsId} onClick={toggle} {...bind(MORE)}>
+              {expanded ? 'Show fewer' : 'Show all'}
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
+
+/** The walk's keys: a heading's, a playlist's, a mood's, an up-next row's (as React keys it) and "Show all"'s. */
+const headKey = (s: CrateSection) => `head:${s}`;
+const listKey = (id: string) => `list:${id}`;
+const moodKey = (tag: string) => `mood:${tag}`;
+const nextKey = (r: Upcoming, i: number) => (r.at !== null ? `${r.at}:${r.path}` : `x:${i}:${r.path}`);
+const MORE = 'more';
