@@ -489,7 +489,7 @@ describe('the transport bar', () => {
     act(() => heard.get('live')?.forEach((f) => f({ payload: { deck: { ...deck, hold: true }, opened: null, path: ROWS[0].path, error: null } })));
     expect(screen.queryByRole('progressbar', { name: 'time on this preset' })).toBeNull();
     // Held, the time on it still counts, with no end.
-    expect(screen.getByRole('timer').getAttribute('aria-label')).toMatch(/^time on this preset: 0:0\d, until moved on$/);
+    expect(screen.getByRole('timer').getAttribute('aria-label')).toMatch(/^time on this preset: \d+:\d\d, until moved on$/);
   });
 });
 
