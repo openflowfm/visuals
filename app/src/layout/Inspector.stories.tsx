@@ -91,14 +91,23 @@ function applied(data: LibraryData, keys: string[], change: LibraryChange): Libr
     let tags = was.tags ?? [];
     if (change.add_tags) tags = [...tags, ...change.add_tags.filter((t) => !tags.includes(t))];
     if (change.remove_tags) tags = tags.filter((t) => !change.remove_tags!.includes(t));
-    presets[key] = { ...was, star: change.star ?? was.star, hidden: change.hidden ?? was.hidden, tags };
+    // The tune: reset first, then each value set, 1 taken off.
+    const tune = { ...(change.clear_tune ? {} : was.tune), ...change.tune };
+    for (const k of ['speed', 'sensitivity'] as const) if (tune[k] === 1) delete tune[k];
+    presets[key] = { ...was, star: change.star ?? was.star, hidden: change.hidden ?? was.hidden, tags, tune: Object.keys(tune).length ? tune : undefined };
   }
   return { ...data, presets };
 }
 
+/** The user's data with the preset playing slowed to half and reacting half as much again: its tune kept. */
+function tuned(data: LibraryData): LibraryData {
+  const key = NOW.preset!.key;
+  return { ...data, presets: { ...data.presets, [key]: { ...data.presets[key], tune: { speed: 0.5, sensitivity: 1.5 } } } };
+}
+
 /** What a Home holds for the inspector: the user's data, the playlists and the one picked, so its actions, picks and "back" work. */
-function useInspector(start: Start, library: readonly LibraryRow[]) {
-  const [data, setData] = useState(DATA);
+function useInspector(start: Start, library: readonly LibraryRow[], tune = false) {
+  const [data, setData] = useState(() => (tune ? tuned(DATA) : DATA));
   const [playlists, setPlaylists] = useState<Playlist[]>(PLAYLISTS);
   const [picked, setPicked] = useState<LibraryRow | null>(start === 'picked' ? PICKED : null);
   const playing = start === 'nothing' ? null : NOW.preset;
@@ -125,8 +134,8 @@ function useInspector(start: Start, library: readonly LibraryRow[]) {
 }
 
 /** The inspector on its own, in its panel at its width; laid over (`overlay`), it has a ✕ and Esc, and closed it leaves a button to open it again. */
-function Alone({ start, library, error, overlay }: { start: Start; library: readonly LibraryRow[]; error?: string; overlay?: boolean }) {
-  const { props } = useInspector(start, library);
+function Alone({ start, library, error, overlay, tuned }: { start: Start; library: readonly LibraryRow[]; error?: string; overlay?: boolean; tuned?: boolean }) {
+  const { props } = useInspector(start, library, tuned);
   const [open, setOpen] = useState(true);
   if (!open)
     return (
@@ -204,10 +213,12 @@ interface Args {
   pack: boolean;
   error?: string;
   overlay?: boolean;
+  /** The preset playing has a tune kept: half speed, reacting 1.5×. */
+  tuned?: boolean;
 }
-function Story({ start, window, pack, error, overlay }: Args) {
+function Story({ start, window, pack, error, overlay, tuned }: Args) {
   const library = pack ? FULL_PACK : STARTER;
-  return window ? <InWindow start={start} library={library} /> : <Alone start={start} library={library} error={error} overlay={overlay} />;
+  return window ? <InWindow start={start} library={library} /> : <Alone start={start} library={library} error={error} overlay={overlay} tuned={tuned} />;
 }
 
 /**
@@ -222,7 +233,7 @@ const meta = {
   title: 'Layout/Inspector',
   component: Story,
   args: { start: 'playing', window: false, pack: false },
-  argTypes: { start: { control: 'inline-radio', options: ['playing', 'picked', 'several', 'source', 'nothing'] } },
+  argTypes: { start: { control: 'inline-radio', options: ['playing', 'picked', 'several', 'source', 'nothing'] }, tuned: { control: 'boolean' } },
   parameters: { scope: 'bare', layout: 'fullscreen' },
 } satisfies Meta<typeof Story>;
 export default meta;
@@ -305,6 +316,32 @@ export const Picked: S = {
     await userEvent.click(panel.getByRole('button', { name: 'back to now playing' }));
     await waitFor(() => expect(panel.getByRole('heading', { name: PLAYING_NAME })).toBeVisible());
     await expect(panel.queryByRole('button', { name: 'back to now playing' })).toBeNull();
+  },
+};
+
+/** "For this preset": the preset playing kept at half speed and reacting 1.5×; the arrows step speed, and "as made" puts both back to 1×. */
+export const ForThisPreset: S = {
+  name: 'For this preset',
+  args: { tuned: true },
+  play: async ({ canvasElement }) => {
+    const panel = within(panelOf(within(canvasElement)));
+    const group = within(panel.getByRole('group', { name: 'for this preset' }));
+    const speed = group.getByRole('slider', { name: 'speed' });
+    const reacts = group.getByRole('slider', { name: 'how much it reacts' });
+    await expect(speed).toHaveAttribute('aria-valuetext', '0.5×');
+    await expect(reacts).toHaveAttribute('aria-valuetext', '1.5×');
+    speed.focus();
+    await userEvent.keyboard('{ArrowRight}');
+    await waitFor(() => expect(speed).toHaveAttribute('aria-valuetext', '0.53×'));
+    await userEvent.keyboard('{ArrowRight}');
+    await waitFor(() => expect(speed).toHaveAttribute('aria-valuetext', '0.56×'));
+    await userEvent.click(group.getByRole('button', { name: 'as made' }));
+    await waitFor(() => expect(speed).toHaveAttribute('aria-valuetext', '1×'));
+    await expect(reacts).toHaveAttribute('aria-valuetext', '1×');
+    await expect(group.queryByRole('button', { name: 'as made' })).toBeNull();
+    // Kept after the rest: back to 1× stays 1×.
+    await new Promise((r) => setTimeout(r, 400));
+    await expect(speed).toHaveAttribute('aria-valuetext', '1×');
   },
 };
 
