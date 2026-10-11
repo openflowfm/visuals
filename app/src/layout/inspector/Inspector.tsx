@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import type { LibraryChange, LibraryRow } from '../../api.ts';
 import type { Prepared } from '../../librarySearch.ts';
 import { TagEditor } from '../../TagEditor.tsx';
+import { say } from '../../words.ts';
 import { Icon } from '../icons.tsx';
 import { AddAction, BackAction, CloseAction, EditAction, holdingAll, NeverAction, PlayAction, StarAction } from './actions.tsx';
 import { Field } from './Field.tsx';
@@ -114,7 +115,7 @@ export function Inspector(props: InspectorProps) {
               dismiss();
             }}
           >
-            <span>{toast.n > 1 ? 'Won’t play them on their own' : 'Won’t play it on its own'}</span>
+            <span>{say(toast.n > 1 ? 'never toast many' : 'never toast one')}</span>
             <button
               type="button"
               className="insp-toast-undo"

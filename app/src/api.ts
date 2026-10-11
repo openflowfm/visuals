@@ -293,6 +293,11 @@ export interface Motion {
   reduced: boolean;
   /** No choice made in the app: macOS's "Reduce motion" decides. */
   system: boolean;
+  /**
+   * macOS's Reduce transparency is on (`access::Access`, only from `reduced_motion`);
+   * `reduced_motion_set` answers the motion alone, so it is missing there.
+   */
+  transparency?: boolean;
 }
 export const reducedMotion = () => invoke<Motion>('reduced_motion');
 /** Reduce motion (true), don't (false), or follow macOS (null). */
