@@ -4,7 +4,7 @@
  * user's overrides laid over it (`Prepared`), as words and marks.
  */
 import type { ReactNode } from 'react';
-import type { LibraryChange, LibraryRow, Level, Look, Mine, Overrides } from '../../api.ts';
+import { TUNE_MAX, TUNE_MIN, type LibraryChange, type LibraryRow, type Level, type Look, type Mine, type Overrides } from '../../api.ts';
 import { colourOf, valueLabel, type Colour, type Prepared } from '../../librarySearch.ts';
 import type { Playlist } from '../../playlists.ts';
 import { tileBy, tileName } from '../../PresetTile.tsx';
@@ -146,6 +146,44 @@ export function listed(words: readonly string[]): string {
 
 /** Its colours' names, each once, the strongest first. */
 export const colourNames = (c: Character): string[] => [...new Set(c.hues.map((h) => h.colour))];
+
+/** A preset's own speed and sensitivity, each a multiplier: 1 (as made) where `library.json` keeps none. */
+export interface Tune {
+  speed: number;
+  sensitivity: number;
+}
+
+/** What the user keeps about a preset, as its tune: 1 for either left out. */
+export const tuneOf = (mine: Mine | null | undefined): Tune => ({ speed: mine?.tune?.speed ?? 1, sensitivity: mine?.tune?.sensitivity ?? 1 });
+
+/** Played as made: neither differs from 1. */
+export const asMade = (t: Tune): boolean => t.speed === 1 && t.sensitivity === 1;
+
+/**
+ * The tune sliders run on a log taper, as the live effects' speed and
+ * sensitivity do: the position is the multiplier's log2, −2 (¼×) to 2 (4×),
+ * 1× in the middle and every doubling the same distance. A position lands on
+ * twelfths of a doubling (about 6% apart), so 1× is a detent the drag and the
+ * arrow keys both stop on, and what is kept reads cleanly.
+ */
+export const TUNE_POSITION_MIN = Math.log2(TUNE_MIN);
+export const TUNE_POSITION_MAX = Math.log2(TUNE_MAX);
+export const TUNE_STEPS_PER_DOUBLING = 12;
+/** How many positions the slider has, ends included. */
+export const TUNE_STEPS = (TUNE_POSITION_MAX - TUNE_POSITION_MIN) * TUNE_STEPS_PER_DOUBLING + 1;
+
+/** A slider position as the multiplier kept: clamped, on its twelfth, exactly 1 at the centre, three decimals. */
+export function tuneAt(position: number): number {
+  if (!Number.isFinite(position)) return 1;
+  const p = Math.round(Math.min(TUNE_POSITION_MAX, Math.max(TUNE_POSITION_MIN, position)) * TUNE_STEPS_PER_DOUBLING) / TUNE_STEPS_PER_DOUBLING;
+  return p === 0 ? 1 : Number((2 ** p).toFixed(3));
+}
+
+/** A multiplier's place on the slider, −2 to 2; out of range clamps, and one not a positive number is the centre. */
+export function tunePosition(multiplier: number): number {
+  if (!Number.isFinite(multiplier) || multiplier <= 0) return 0;
+  return Math.min(TUNE_POSITION_MAX, Math.max(TUNE_POSITION_MIN, Math.log2(multiplier)));
+}
 
 /** What the field says about the subject: "Slow and dark, among 250 presets". */
 export function fieldSays(c: Character | null, count: number): string {

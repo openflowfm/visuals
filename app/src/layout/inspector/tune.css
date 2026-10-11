@@ -1,0 +1,47 @@
+/* "For this preset" (Tune.tsx): its own speed and how much it reacts, two
+   rows of the widgets' inside slider, the name and the reading laid over the
+   track; "as made" a quiet word beside the heading, as the panel's back is. */
+.lay .insp .insp-tune {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 22px;
+  --wdg-inside-height: 30px;
+}
+.lay .insp .insp-tune-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 18px;
+}
+.lay .insp .insp-tune-head .insp-kicker {
+  margin: 0;
+}
+.lay .insp .insp-tune-slider {
+  width: 100%;
+  min-width: 0;
+}
+.lay .insp .insp-tune-slider .wdg-slider-body {
+  min-height: 30px;
+}
+.lay .insp .insp-tune-reset {
+  flex: none;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--caption);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.lay .insp .insp-tune-reset:hover {
+  color: var(--fg);
+}
+.lay .insp .insp-tune-reset:focus-visible,
+.lay .insp .insp-tune-slider .wdg-slider-body:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 0;
+}

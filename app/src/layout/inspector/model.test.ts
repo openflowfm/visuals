@@ -1,7 +1,7 @@
 import { describe as group, expect, it } from 'vitest';
 import type { LibraryRow, Look } from '../../api.ts';
 import { prepareRow } from '../../librarySearch.ts';
-import { characterOf, colourNames, fieldSays, listed, scaleOf } from './model.ts';
+import { asMade, characterOf, colourNames, fieldSays, listed, scaleOf, TUNE_STEPS, tuneAt, tuneOf, tunePosition } from './model.ts';
 
 const look: Look = { hues: [278, 5], brightness: 0.1, speed: 0.5, intensity: 3, brightness_level: 'low', speed_level: 'low', intensity_level: 'low' };
 const row = (over: Partial<LibraryRow> = {}): LibraryRow => ({
@@ -56,5 +56,36 @@ group('the inspector model', () => {
   it('lists words as a sentence does', () => {
     expect(listed(['a'])).toBe('a');
     expect(listed(['a', 'b', 'c'])).toBe('a, b and c');
+  });
+});
+
+group("a preset's tune", () => {
+  it('is 1 for each the user keeps none of', () => {
+    expect(tuneOf(undefined)).toEqual({ speed: 1, sensitivity: 1 });
+    expect(tuneOf({ tune: { speed: 0.5 } })).toEqual({ speed: 0.5, sensitivity: 1 });
+    expect(asMade(tuneOf({}))).toBe(true);
+    expect(asMade(tuneOf({ tune: { sensitivity: 2 } }))).toBe(false);
+  });
+
+  it('has 1× in the middle of a log scale from ¼× to 4×, a doubling a step of twelve', () => {
+    expect(TUNE_STEPS).toBe(49);
+    expect(tunePosition(1)).toBe(0);
+    expect(tunePosition(0.25)).toBe(-2);
+    expect(tunePosition(4)).toBe(2);
+    expect(tunePosition(16)).toBe(2);
+    expect(tunePosition(0)).toBe(0);
+    expect(tuneAt(-2)).toBe(0.25);
+    expect(tuneAt(2)).toBe(4);
+    expect(tuneAt(-1)).toBe(0.5);
+    expect(tuneAt(9)).toBe(4);
+  });
+
+  it('snaps to exactly 1× near the middle, and keeps three decimals off it', () => {
+    expect(tuneAt(0.03)).toBe(1);
+    expect(tuneAt(-0.04)).toBe(1);
+    expect(tuneAt(1 / 12)).toBe(1.059);
+    expect(tuneAt(Number.NaN)).toBe(1);
+    // What is kept reads back onto the same step.
+    expect(tuneAt(tunePosition(tuneAt(5 / 12)))).toBe(tuneAt(5 / 12));
   });
 });

@@ -6,6 +6,7 @@ import { Icon } from '../icons.tsx';
 import { AddAction, BackAction, CloseAction, EditAction, holding, NeverAction, PlayAction, StarAction } from './actions.tsx';
 import { Field } from './Field.tsx';
 import { characterOf, colourNames, fieldSays, listed, type InspectorProps } from './model.ts';
+import { TuneCard } from './Tune.tsx';
 import './inspector-content.css';
 
 export type { InspectorProps } from './model.ts';
@@ -15,10 +16,12 @@ export type { InspectorProps } from './model.ts';
  * inspectors show it. For one preset, the preset placed among the library, as
  * an instrument's XY display would: the field first, then the name large, its
  * authors, its measures read out as one line of words, its colours as dots,
- * its actions as a row of keys, my tags and the playlists holding it. It is
+ * its actions as a row of keys, its own speed and how much it reacts ("for
+ * this preset", Tune.tsx), my tags and the playlists holding it. It is
  * about the preset playing, or one picked (a dot in the field, or a tile the
  * Home passes in) until "back". For several picked together (`chosen`), their
- * pictures, "n selected" and the actions and tags over all of them. With no
+ * pictures, "n selected" and the actions and tags over all of them (a tune is
+ * one preset's, so none shows for several). With no
  * preset, the source the Home passes (`source`, a playlist's head); with
  * neither, the field still draws the library, and it says so. Mount it in
  * HomeLayout's `inspector` slot (its panel is InspectorPanel); it holds no
@@ -151,6 +154,8 @@ function Scope({ subject: p, playing, from, playlists, library, mine, onSet, onA
               <span aria-hidden="true">Edit</span>
             </EditAction>
           </div>
+
+          <TuneCard key={p.row.key} subject={p} onSet={onSet} />
 
           <div className="insp-mine">
             <TagEditor key={p.row.key} chosen={[p]} onSet={onSet} remove={<Icon name="close" size={10} />} />
