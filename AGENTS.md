@@ -159,7 +159,7 @@ recently played), `app/src-tauri/src/query.rs` (a `LibraryQuery` worked out in R
 mirroring the page's filter), and `app/src/playlists.ts`. Its stubs, each in the lane's
 own file: `Home.tsx` (#96: the home view, since decision 66 the only one that browses),
 `Settings.tsx` and `MoreEffects.tsx` (#98, opened with `openSheet` from
-`views.tsx`), `app/src-tauri/src/resume.rs` (#99: `resume_state`, and the deck's
+`views.tsx`; the app menu's Settings… ⌘, sends `menu-settings`, which opens it too), `app/src-tauri/src/resume.rs` (#99: `resume_state`, and the deck's
 `note` and `open_failed` hooks), `access.rs` and `access.ts` (#100: `reduced_motion`),
 `quality.rs` (#101: `quality_get`, `quality_set`), and `crash.rs` and `CrashPrompt.tsx`
 (#102: `crash_reports`, `crash_report_open`, the opt-in; written locally, sent only as a

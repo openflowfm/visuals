@@ -60,6 +60,8 @@ export const WORDS = {
   /* Home's panes either side of the main column: the one about the preset playing or picked (the code's inspector), and the one with the library and the playlists (Sources.tsx's source list, the code's sidebar). */
   inspector: 'info',
   'source list': 'sidebar',
+  /* The sidebar row menu's item that shows a playlist's card in the inspector. */
+  'show inspector': 'show info',
   /* The library's filter chips (facets), behind a button, and a playlist's settings, in a popover (decision 67). */
   facets: 'filter',
   'playlist settings': 'how it plays',

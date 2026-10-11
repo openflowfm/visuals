@@ -33,11 +33,11 @@ function Stateful(props: HeroProps): ReactNode {
       starred={starred}
       onPlayPause={() => {
         setPlaying((p) => !p);
-        props.onPlayPause();
+        props.onPlayPause?.();
       }}
       onStar={() => {
         setStarred((s) => !s);
-        props.onStar();
+        props.onStar?.();
       }}
     />
   );

@@ -16,6 +16,7 @@ describe('the plain words', () => {
     expect(say('sensitivity')).toBe('how much it reacts');
     expect(say('hold')).toBe('stay on this one');
     expect(say('the one')).toBe('bar start');
+    expect(Say('show inspector')).toBe('Show info');
   });
 
   it('start a sentence with a capital', () => {

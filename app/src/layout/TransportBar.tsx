@@ -29,6 +29,8 @@ export interface TransportBarProps {
    */
   position: { elapsed: number; length?: number | null } | null;
   onAudioError(e: unknown): void;
+  /** The preset playing, left of the time: its name, and where it plays from as `playsFrom` says it ("from Warm-up · 3 of 10"); null or left out: nothing playing. Accepted but not drawn yet (round 2's bar lane draws it). */
+  now?: { name: string; from?: string } | null;
 }
 
 /** Seconds as m:ss. */
