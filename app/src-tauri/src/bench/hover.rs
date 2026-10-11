@@ -8,15 +8,22 @@
 //! draws only while a tile is hovered ([`show`] to [`stop`]); idle for
 //! [`IDLE`], the thread ends and lets its device go, and the next [`show`]
 //! starts another.
+//!
+//! It draws the preset as the bench would play it ([`Tuning`]): at the
+//! preset's own speed, hearing the bench's sensitivity times the preset's own.
 
+use crate::fx::Fx;
+use crate::userlib::PresetTune;
 use engine::audio::Audio;
 use engine::live::Ring;
 use engine::preset::Preset;
 use engine::render::Renderer;
+use std::path::Path;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use tauri::Manager;
 
 /// The largest picture drawn: a big tile on a 2× display. More only costs.
 pub const MAX: (u32, u32) = (640, 360);
@@ -50,8 +57,45 @@ pub fn packed(ticket: u32, count: u32, picture: &super::Picture) -> Vec<u8> {
     out
 }
 
+/// How a hovered preset is drawn: its own speed and sensitivity, and the
+/// bench's effects for the sensitivity the user set. The default is untuned:
+/// as made, hearing the sound as it is.
+#[derive(Default, Clone)]
+pub struct Tuning {
+    /// The hovered preset's own tune (`crate::tune`).
+    pub own: PresetTune,
+    /// The bench's effects, read each picture so a sensitivity changed while
+    /// hovering is heard at once.
+    pub fx: Option<Arc<Mutex<Fx>>>,
+}
+
+impl Tuning {
+    /// The speed and the gain on what the preset hears, now. The speed is the
+    /// preset's own alone: the live or playlist speed is the bench's (frozen,
+    /// it would freeze every hover too). The gain is the bench's sensitivity
+    /// times the preset's own, never `Fx::gain`, which carries the playing
+    /// preset's tune rather than this one's.
+    fn now(&self) -> (f64, f32) {
+        let bench = self.fx.as_ref().map_or(1.0, |fx| fx.lock().map_or(1.0, |fx| fx.settings.sensitivity));
+        (self.own.speed(), (bench * self.own.sensitivity()) as f32)
+    }
+}
+
+/// The hovered preset at `path` as the bench would play it: its own tune
+/// (`crate::userlib::tune_of`) and the bench's effects.
+// preview.rs's `hover_preview` calls this once it passes its AppHandle and path.
+#[allow(dead_code)]
+pub fn tuning(handle: &tauri::AppHandle, path: &Path) -> Tuning {
+    Tuning { own: crate::userlib::tune_of(handle, path), fx: handle.try_state::<crate::actions::Deck>().map(|deck| deck.fx.clone()) }
+}
+
+/// What the preset hears: `samples` scaled by `gain`, as the bench scales its own.
+fn heard<'a>(samples: impl Iterator<Item = &'a f32>, gain: f32) -> Vec<f32> {
+    samples.map(|s| s * gain).collect()
+}
+
 enum Ask {
-    Show { preset: Box<Preset>, seed: u64, size: (u32, u32), ticket: u32 },
+    Show { preset: Box<Preset>, seed: u64, size: (u32, u32), ticket: u32, tuning: Tuning },
     Stop,
 }
 
@@ -75,9 +119,16 @@ static TICKET: AtomicU32 = AtomicU32::new(0);
 /// was hovered, hearing `ring`. Returns its ticket: the pictures of this hover
 /// carry it, so a picture of the last one is never shown in this one's tile.
 pub fn show(preset: Preset, size: (u32, u32), ring: &Ring) -> u32 {
+    show_tuned(preset, size, ring, Tuning::default())
+}
+
+/// [`show`], drawing `preset` with `tuning` ([`tuning`]) rather than as made.
+// preview.rs's `hover_preview` calls this once it passes its AppHandle and path.
+#[allow(dead_code)]
+pub fn show_tuned(preset: Preset, size: (u32, u32), ring: &Ring, tuning: Tuning) -> u32 {
     let ticket = next_ticket();
     let seed = std::time::UNIX_EPOCH.elapsed().map(|d| d.as_nanos() as u64).unwrap_or(1);
-    let mut ask = Ask::Show { preset: Box::new(preset), seed, size: clamp(size.0, size.1), ticket };
+    let mut ask = Ask::Show { preset: Box::new(preset), seed, size: clamp(size.0, size.1), ticket, tuning };
     let mut thread = THREAD.lock().unwrap();
     if let Some(tx) = thread.as_ref() {
         match tx.send(ask) {
@@ -142,6 +193,7 @@ struct Drawing {
     ticket: u32,
     size: (u32, u32),
     last: Instant,
+    tuning: Tuning,
 }
 
 fn run(rx: Receiver<Ask>, ring: Ring) {
@@ -183,13 +235,13 @@ fn run(rx: Receiver<Ask>, ring: Ring) {
         if let Some(ask) = ask {
             match ask {
                 Ask::Stop => drawing = None,
-                Ask::Show { preset, seed, size, ticket } => {
+                Ask::Show { preset, seed, size, ticket, tuning } => {
                     let r = renderer.get_or_insert_with(|| Renderer::new(device.clone(), queue.clone(), size.0, size.1));
                     if r.output_size() != size {
                         r.resize(size.0, size.1);
                     }
                     drawing = match super::survive(|| r.load_preset(*preset, seed)) {
-                        Ok(Ok(_)) => Some(Drawing { ticket, size, last: Instant::now() }),
+                        Ok(Ok(_)) => Some(Drawing { ticket, size, last: Instant::now(), tuning }),
                         Ok(Err(e)) => {
                             eprintln!("hover: the preset didn't load ({e})");
                             fail(ticket);
@@ -209,14 +261,15 @@ fn run(rx: Receiver<Ask>, ring: Ring) {
         let now = Instant::now();
         let elapsed = now.duration_since(d.last).as_secs_f64().min(0.25);
         d.last = now;
+        let (speed, gain) = d.tuning.now();
         {
             let ring = ring.lock().unwrap();
-            let (l, r): (Vec<f32>, Vec<f32>) = (ring.0.iter().copied().collect(), ring.1.iter().copied().collect());
+            let (l, r) = (heard(ring.0.iter(), gain), heard(ring.1.iter(), gain));
             audio.update(&l, &r);
         }
         let (ticket, size) = (d.ticket, d.size);
         match super::survive(|| {
-            r.render(&mut audio, elapsed);
+            r.render(&mut audio, elapsed * speed);
             super::snapshot(r, size)
         }) {
             Ok(Some(picture)) => {
@@ -245,6 +298,41 @@ mod tests {
 
     /// The hover is one per app: tests that use it take turns.
     static ONE: Mutex<()> = Mutex::new(());
+
+    /// The bench's effects with the live speed 2 and sensitivity 1.5, playing a
+    /// preset tuned to half speed and twice the sensitivity.
+    fn bench() -> Arc<Mutex<Fx>> {
+        let now = Instant::now();
+        let mut fx = Fx::new(now);
+        fx.apply(&crate::fx::FxAction::Speed { speed: 2.0 }, now).unwrap();
+        fx.apply(&crate::fx::FxAction::Sensitivity { value: 1.5 }, now).unwrap();
+        fx.tune = crate::fx::Tune { speed: 0.5, sensitivity: 2.0 };
+        Arc::new(Mutex::new(fx))
+    }
+
+    #[test]
+    fn an_untuned_hover_draws_as_made() {
+        assert_eq!(Tuning::default().now(), (1.0, 1.0));
+    }
+
+    #[test]
+    fn a_hover_takes_its_own_tune_and_the_benchs_sensitivity_but_not_the_playing_presets() {
+        let own = PresetTune { speed: Some(0.25), sensitivity: Some(2.0) };
+        assert_eq!(Tuning { own, fx: None }.now(), (0.25, 2.0), "its own tune alone");
+        let fx = bench();
+        let tuning = Tuning { own, fx: Some(fx.clone()) };
+        // The live speed 2 and the playing preset's tune (0.5, 2) leave it be.
+        assert_eq!(tuning.now(), (0.25, 3.0));
+        fx.lock().unwrap().apply(&crate::fx::FxAction::Sensitivity { value: 0.5 }, Instant::now()).unwrap();
+        assert_eq!(tuning.now(), (0.25, 1.0), "a sensitivity changed while hovering is heard at once");
+        assert_eq!(Tuning { own: PresetTune::default(), fx: Some(fx) }.now(), (1.0, 0.5), "untuned: the bench's sensitivity alone");
+    }
+
+    #[test]
+    fn the_sound_is_scaled_by_the_gain() {
+        assert_eq!(heard([0.5, -0.25, 0.0].iter(), 2.0), vec![1.0, -0.5, 0.0]);
+        assert_eq!(heard([0.5].iter(), 1.0), vec![0.5]);
+    }
 
     #[test]
     fn sizes_stay_within_the_largest_and_keep_their_aspect() {

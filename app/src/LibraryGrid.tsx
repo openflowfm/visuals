@@ -5,6 +5,7 @@ import { PresetTile, tileBy, tileName } from './PresetTile.tsx';
 import { tileFor, type Prepared } from './librarySearch.ts';
 import { FAILED_SAYS, useFailedPresets } from './survive.ts';
 import { useHoverPreview } from './previews.ts';
+import { menuAtElement, menuChosen, opensMenu, TileMenu, useMenuGuard, useTileMenuActions, type MenuAt } from './TileMenu.tsx';
 
 /**
  * The narrowest a tile gets, the gap between tiles, the title line under a thumbnail
@@ -192,6 +193,25 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
   const [hovered, setHovered] = useState<string | null>(null);
   const onHover = useCallback((key: string, on: boolean) => setHovered((h) => (on ? key : h === key ? null : h)), []);
   const failed = useFailedPresets();
+  // The tile whose context menu is open (on the home, where Home hands the menu its actions), and where it hangs.
+  const menuActions = useTileMenuActions();
+  const [menu, setMenu] = useState<{ key: string; at: MenuAt } | null>(null);
+  const guard = useMenuGuard();
+  const closeMenu = useCallback(() => setMenu(null), []);
+  const openMenu = (index: number, at: MenuAt) => {
+    const p = rows[index];
+    if (!menuActions || !p) return;
+    guard.opened();
+    setMenu({ key: p.row.key, at });
+  };
+  // A ⌃-click that opened the menu isn't a ⌘-click pick too.
+  const pickTile = useCallback(
+    (index: number, how: Pick) => {
+      if (how === 'toggle' && guard.justOpened()) return;
+      onPick(index, how);
+    },
+    [onPick],
+  );
   const look = useMemo(() => (size.home ? homeLook(size.pad, size.bar) : LAB_LOOK), [size.home, size.pad, size.bar]);
   const lay = layout(size.width, rows.length, tileMin, look);
   const { first, last } = windowOf(topRow * lay.rowHeight, size.height, lay.rowHeight, lay.rows);
@@ -285,6 +305,12 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
   const onKey = (ev: KeyboardEvent<HTMLDivElement>) => {
     if (ev.target !== ev.currentTarget) return; // keys on the grid itself, not a tile's + button
     touch();
+    if (menuActions && opensMenu(ev) && active >= 0 && active < rows.length) {
+      openMenu(active, menuAtElement(document.getElementById(id(active))));
+      ev.preventDefault();
+      ev.stopPropagation();
+      return;
+    }
     const to = tileFor(ev.key, active, rows.length, lay.columns, page);
     if (to !== null) {
       // ⇧ extends the run from the anchor (a pick also moves); a plain move lets the anchor go.
@@ -306,6 +332,16 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
     }
     ev.preventDefault();
     ev.stopPropagation();
+  };
+
+  // Right-click or ⌃-click on a tile opens its menu; the context-menu key's own event (on the grid itself) opens the highlighted tile's.
+  const onContextMenu = (ev: MouseEvent<HTMLDivElement>) => {
+    if (!menuActions) return;
+    ev.preventDefault();
+    const tile = (ev.target as Element).closest<HTMLElement>('[role="option"]');
+    const index = tile ? Number(tile.id.replace('lib-tile-', '')) : active;
+    if (!Number.isInteger(index) || index < 0 || index >= rows.length) return;
+    openMenu(index, tile ? { x: ev.clientX, y: ev.clientY } : menuAtElement(document.getElementById(id(index))));
   };
 
   const onFocus = (ev: FocusEvent<HTMLDivElement>) => {
@@ -341,9 +377,10 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
           playing={p.row.path === current}
           failed={failed.has(p.row.path)}
           intoName={into?.name ?? null}
-          onPick={onPick}
+          onPick={pickTile}
           onAdd={onAdd}
           onPress={onPress}
+          menu={menu?.key === p.row.key}
           home={size.home}
           adding={!!adding}
           addedTo={adding?.has.has(p.row.path) ? adding.name : null}
@@ -367,6 +404,7 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
       data-hint={adding ? gridHint('add', adding.name) : gridHint(homeGrid ? 'play' : 'load', into?.name ?? null)}
       data-adding={adding ? '' : undefined}
       onKeyDown={onKey}
+      onContextMenu={onContextMenu}
       onFocus={onFocus}
       onScroll={onScroll}
       onWheel={touch}
@@ -388,7 +426,33 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
           {tiles}
         </div>
       </div>
+      {menu && menuActions && <GridMenu menu={menu} rows={rows} selected={selected} actions={menuActions} onPlay={(i) => onPick(i, 'load')} onClose={closeMenu} grid={ref.current} />}
     </div>
+  );
+}
+
+/** The open menu of the tile `menu.key`: on it, or on every one picked when it is one of several; Play plays it as a click does. */
+function GridMenu({
+  menu,
+  rows,
+  selected,
+  actions,
+  onPlay,
+  onClose,
+  grid,
+}: {
+  menu: { key: string; at: MenuAt };
+  rows: readonly Prepared[];
+  selected: ReadonlySet<string>;
+  actions: NonNullable<ReturnType<typeof useTileMenuActions>>;
+  onPlay(index: number): void;
+  onClose(): void;
+  grid: HTMLElement | null;
+}) {
+  const chosen = menuChosen(menu.key, selected, rows, (p) => p.row.key);
+  const index = rows.findIndex((p) => p.row.key === menu.key);
+  return (
+    <TileMenu at={menu.at} chosen={chosen} actions={actions} onPlay={chosen.length === 1 && index >= 0 ? () => onPlay(index) : undefined} onClose={onClose} container={grid?.closest('.app') ?? null} />
   );
 }
 
@@ -415,6 +479,8 @@ export interface TileProps {
   hovered?: boolean;
   /** The pointer came onto (true) or left (false) the tile with key `key`. */
   onHover?(key: string, on: boolean): void;
+  /** Its context menu is open (TileMenu.tsx): it shows ringed. */
+  menu?: boolean;
 }
 
 /** The hovered tile's preset, moving: a canvas over the thumbnail, shown once its first picture is in. */
@@ -447,6 +513,7 @@ export const Tile = memo(function Tile({
   addedTo = null,
   hovered = false,
   onHover,
+  menu = false,
 }: TileProps) {
   const says = tileSays(p, playing, failed, addedTo);
   // A double-click's second click does nothing more: the first already played it (or added it, which a second would undo).
@@ -463,6 +530,7 @@ export const Tile = memo(function Tile({
         data-hidden={p.hidden ? '' : undefined}
         data-failed={failed ? '' : undefined}
         data-added={addedTo !== null ? '' : undefined}
+        data-menu={menu ? '' : undefined}
         title={says}
         onClick={click}
         onPointerDown={onPress && ((ev: PointerEvent) => onPress(index, ev))}

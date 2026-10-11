@@ -9,6 +9,8 @@ import { onChanged } from './pack.ts';
 import { PackOffer } from './PackOffer.tsx';
 import { PlaylistHead } from './PlaylistHead.tsx';
 import { PresetTile, tileBy, tileName } from './PresetTile.tsx';
+import { TileMotion } from './LibraryGrid.tsx';
+import { menuAtElement, menuChosen, opensMenu, removeItems, TileMenu, TileMenuContext, useMenuGuard, useTileMenuActions, type MenuAt } from './TileMenu.tsx';
 import * as pl from './playlists.ts';
 import type { Lists, Playlist } from './playlists.ts';
 import { useNotice, useTauriEvent } from './hooks.ts';
@@ -746,64 +748,67 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
         }
         // The grid scrolls itself under the pinned hero, on the column's padding (`--pad`, the hero's `--lay-pad`).
         pane={
-          <div className="home-grid-pane">
-            <NoticeBanner className="home-notice" notice={banner} onDismiss={dismiss} />
-            <SettingsNotes />
-            {shown && shown.kind !== 'list' ? (
-              <>
-                {adding && <QuickAddStrip name={adding.name} count={adding.items.length} onDone={endQuickAdd} />}
-                <Library
-                  key={shown.kind}
-                  entries={library}
-                  loaded={loaded}
-                  search={search}
-                  onSearch={setSearch}
-                  found={found}
-                  current={current?.path ?? null}
-                  // While quick add is on a click adds, so the tiles' + goes.
-                  into={adding ? null : into}
-                  onLoad={(e) => {
-                    setInfo(false);
-                    void load(e, true);
+          // The tiles' context menus act as the inspector's header does, with its handlers.
+          <TileMenuContext.Provider value={{ playlists: lists?.playlists ?? null, onSet: setData, onAddTo: addTo }}>
+            <div className="home-grid-pane">
+              <NoticeBanner className="home-notice" notice={banner} onDismiss={dismiss} />
+              <SettingsNotes />
+              {shown && shown.kind !== 'list' ? (
+                <>
+                  {adding && <QuickAddStrip name={adding.name} count={adding.items.length} onDone={endQuickAdd} />}
+                  <Library
+                    key={shown.kind}
+                    entries={library}
+                    loaded={loaded}
+                    search={search}
+                    onSearch={setSearch}
+                    found={found}
+                    current={current?.path ?? null}
+                    // While quick add is on a click adds, so the tiles' + goes.
+                    into={adding ? null : into}
+                    onLoad={(e) => {
+                      setInfo(false);
+                      void load(e, true);
+                    }}
+                    onAdd={(e) => into && run(pl.add(into.id, e.path), `add ${e.name} to ${into.name}`)}
+                    onPress={(e, thumbnail, ev) => beginDrag(ev, { kind: 'preset', path: e.path, name: e.name, thumbnail }, dropping)}
+                    tileMin={width < HOME_TILE.under ? HOME_TILE.small : HOME_TILE.wide}
+                    home={{
+                      scope: shown.kind,
+                      title: sourceName,
+                      onChosen,
+                      bare: true,
+                      toolbar,
+                      selected: keysOf(sel),
+                      controls: INSPECTOR_ID,
+                      adding: adding && { name: adding.name, has: addingPaths, onToggle: toggleAdded },
+                    }}
+                  />
+                </>
+              ) : list && lists ? (
+                <PlaylistPane
+                  key={list.id}
+                  list={list}
+                  lists={lists}
+                  tiles={tiles}
+                  total={total}
+                  rows={rows}
+                  dropping={dropping}
+                  picked={tilesPicked}
+                  onPick={pickInList}
+                  onPlay={(t) => {
+                    const undo = showPlayed(library.find((e) => e.path === t.path) ?? { path: t.path, name: t.name, group: '' });
+                    playAt(t.index, t.path, t.name, undo);
                   }}
-                  onAdd={(e) => into && run(pl.add(into.id, e.path), `add ${e.name} to ${into.name}`)}
-                  onPress={(e, thumbnail, ev) => beginDrag(ev, { kind: 'preset', path: e.path, name: e.name, thumbnail }, dropping)}
-                  tileMin={width < HOME_TILE.under ? HOME_TILE.small : HOME_TILE.wide}
-                  home={{
-                    scope: shown.kind,
-                    title: sourceName,
-                    onChosen,
-                    bare: true,
-                    toolbar,
-                    selected: keysOf(sel),
-                    controls: INSPECTOR_ID,
-                    adding: adding && { name: adding.name, has: addingPaths, onToggle: toggleAdded },
-                  }}
+                  onLists={setLists}
+                  onError={(what) => fail(`Couldn't ${what}.`)}
+                  onLibrary={() => pick({ kind: 'library' })}
+                  head={emptyHead || undefined}
                 />
-              </>
-            ) : list && lists ? (
-              <PlaylistPane
-                key={list.id}
-                list={list}
-                lists={lists}
-                tiles={tiles}
-                total={total}
-                rows={rows}
-                dropping={dropping}
-                picked={tilesPicked}
-                onPick={pickInList}
-                onPlay={(t) => {
-                  const undo = showPlayed(library.find((e) => e.path === t.path) ?? { path: t.path, name: t.name, group: '' });
-                  playAt(t.index, t.path, t.name, undo);
-                }}
-                onLists={setLists}
-                onError={(what) => fail(`Couldn't ${what}.`)}
-                onLibrary={() => pick({ kind: 'library' })}
-                head={emptyHead || undefined}
-              />
-            ) : null}
-            <DragGhost />
-          </div>
+              ) : null}
+              <DragGhost />
+            </div>
+          </TileMenuContext.Provider>
         }
       />
       <HelpOverlay open={help} onClose={() => setHelp(false)} list={HOME_HELP} />
@@ -1000,6 +1005,19 @@ export function PlaylistPane({ list, lists, tiles, total, rows, dropping, picked
   const currentAt = (t: StripTile) => active && (manual || !shuffledNow ? deck.index !== null && t.index === deck.index : t.path === deck.current);
   const nextAt = (t: StripTile) => active && (manual || !shuffledNow ? deck.next_index !== null && t.index === deck.next_index : t.path === deck.next);
   const tip = stripTip(reorderable);
+  // The tile the pointer is on, whose preset moves in it as in the library's grid; and the tile whose context menu is open.
+  const [hovered, setHovered] = useState<string | null>(null);
+  const menuActions = useTileMenuActions();
+  const [menu, setMenu] = useState<{ key: string; at: MenuAt } | null>(null);
+  const guard = useMenuGuard();
+  const closeMenu = useCallback(() => setMenu(null), []);
+  const openMenu = (t: StripTile, at: MenuAt) => {
+    if (!menuActions) return;
+    guard.opened();
+    setMenu({ key: t.key, at });
+  };
+  const menuTile = menu ? tiles.find((t) => t.key === menu.key) : undefined;
+  const menuOn = menuTile ? menuChosen(menuTile.key, new Set(picked), tiles, (t) => t.key) : [];
 
   if (tiles.length === 0)
     return (
@@ -1025,7 +1043,7 @@ export function PlaylistPane({ list, lists, tiles, total, rows, dropping, picked
 
   return (
     // What is picked here is what the inspector shows: a press in the grid doesn't put away the inspector laid over it.
-    <ol className="home-grid" aria-label={`${list.name}, in the order it plays`} aria-controls={INSPECTOR_ID} title={tip} data-hint={tip}>
+    <ol className="home-grid" aria-label={`${list.name}, in the order it plays`} aria-controls={INSPECTOR_ID} title={tip} data-hint={tip} onMouseLeave={() => setHovered(null)}>
       {tiles.map((t, i) => {
         const target = manual && t.index !== null ? itemTarget(list.id, t.index) : undefined;
         const payload: Payload | null = reorderable && t.index !== null ? { kind: 'item', list: list.id, index: t.index, path: t.path, name: t.name, thumbnail: t.thumbnail } : null;
@@ -1046,6 +1064,14 @@ export function PlaylistPane({ list, lists, tiles, total, rows, dropping, picked
             by={known ? tileBy(known.authors, known.style) : ''}
             playing={currentAt(t)}
             marks={nextAt(t) && <span className="home-tile-next">next</span>}
+            motion={hovered === t.key && !t.missing ? <TileMotion path={t.path} /> : undefined}
+            onMouseEnter={() => setHovered(t.key)}
+            onMouseLeave={() => setHovered((h) => (h === t.key ? null : h))}
+            onContextMenu={(e: MouseEvent) => {
+              e.preventDefault();
+              openMenu(t, { x: e.clientX, y: e.clientY });
+            }}
+            data-menu={menu?.key === t.key ? '' : undefined}
             tools={
               manual &&
               t.index !== null && (
@@ -1070,6 +1096,8 @@ export function PlaylistPane({ list, lists, tiles, total, rows, dropping, picked
               // A double-click's second click doesn't play it again.
               if (e.detail > 1) return;
               const how = tilePickOf(e);
+              // A ⌃-click that opened the menu isn't a pick too.
+              if (how === 'toggle' && guard.justOpened()) return;
               if (how) return choose(how);
               // Played, the picks go: the inspector shows what plays.
               anchor.current = t.key;
@@ -1079,6 +1107,11 @@ export function PlaylistPane({ list, lists, tiles, total, rows, dropping, picked
             onPointerDown={payload ? (e) => beginDrag(e, payload, dropping) : undefined}
             onKeyDown={(e: KeyboardEvent) => {
               if (e.target !== e.currentTarget) return;
+              if (menuActions && opensMenu(e)) {
+                e.preventDefault();
+                e.stopPropagation();
+                return openMenu(t, menuAtElement(e.currentTarget));
+              }
               const by = e.altKey && e.key === 'ArrowLeft' ? -1 : e.altKey && e.key === 'ArrowRight' ? 1 : 0;
               const to = by && reorderable && t.index !== null ? nudge(t.index, by, list.items.length) : null;
               if (to !== null) {
@@ -1105,6 +1138,39 @@ export function PlaylistPane({ list, lists, tiles, total, rows, dropping, picked
         );
       })}
       {total > tiles.length && <li className="home-more">and {plural(total - tiles.length, 'more')}</li>}
+      {menuTile && menuActions && (
+        <TileMenu
+          at={menu!.at}
+          chosen={menuOn.flatMap((t) => byPath.get(t.path) ?? [])}
+          actions={menuActions}
+          onPlay={
+            menuOn.length === 1
+              ? () => {
+                  anchor.current = menuTile.key;
+                  if (picked.length) onPick([]);
+                  onPlay(menuTile);
+                }
+              : undefined
+          }
+          remove={
+            manual && menuOn.some((t) => t.index !== null)
+              ? {
+                  name: list.name,
+                  onRemove: () =>
+                    void run(
+                      removeItems(
+                        list.id,
+                        menuOn.flatMap((t) => (t.index === null ? [] : [t.index])),
+                      ),
+                      `take ${menuOn.length > 1 ? plural(menuOn.length, 'preset') : menuTile.name} out`,
+                    ),
+                }
+              : undefined
+          }
+          onClose={closeMenu}
+          container={document.querySelector('.app.home')}
+        />
+      )}
     </ol>
   );
 }
