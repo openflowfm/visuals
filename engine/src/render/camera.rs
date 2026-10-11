@@ -29,8 +29,9 @@ impl Renderer {
                 view_formats: &[],
             });
             let view = texture.create_view(&Default::default());
-            // BLIT flips the browser's top-down rows into MilkDrop's bottom-up storage.
-            let shader = self.device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("camera injection"), source: wgpu::ShaderSource::Wgsl(super::output::BLIT.into()) });
+            // Keep the input row order through injection. The preset comp and
+            // final presentation establish the displayed orientation together.
+            let shader = self.device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("camera injection"), source: wgpu::ShaderSource::Wgsl(super::output::CARRY.into()) });
             let blend = wgpu::BlendComponent { src_factor: wgpu::BlendFactor::Constant, dst_factor: wgpu::BlendFactor::OneMinusConstant, operation: wgpu::BlendOperation::Add };
             let pipeline = pipeline(
                 &self.device,

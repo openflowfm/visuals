@@ -799,13 +799,15 @@ fn camera_injection_is_oriented_and_recursive_and_can_be_disabled() {
     // Top red, bottom blue, deliberately asymmetric to catch vertical flips.
     r.set_camera_frame(1, 2, &[255, 0, 0, 255, 0, 0, 255, 255], 1.0).unwrap();
     r.render(&mut audio, 1.0 / 30.0);
-    let pixels = read_targets(r.device(), r.queue(), &[&r.feedback[r.current]], true).unwrap();
+    let pixels = read_targets(r.device(), r.queue(), &[&r.feedback[r.current]], false).unwrap();
     assert!(pixels[0] > 240 && pixels[2] < 15, "camera top stays at picture top");
     let bottom = ((H - 1) * W * 4) as usize;
     assert!(pixels[bottom + 2] > 240 && pixels[bottom] < 15);
+    let output = presented(&mut r, Master::default());
+    assert!(output[0] > 240 && output[2] < 15, "presented top must stay red: {:?}", &output[..4]);
     r.clear_camera();
     r.render(&mut audio, 1.0 / 30.0);
-    let kept = read_targets(r.device(), r.queue(), &[&r.feedback[r.current]], true).unwrap();
+    let kept = read_targets(r.device(), r.queue(), &[&r.feedback[r.current]], false).unwrap();
     assert!(kept[0] > 200, "input is part of recursive feedback, not only a final overlay");
     assert!(r.camera.is_none());
     assert!(r.set_camera_frame(0, 1, &[], 1.0).is_err());
