@@ -72,6 +72,9 @@ const sent = (name: string) => invoke.mock.calls.filter(([cmd]) => cmd === name)
 /** The deck's actions sent, by kind. */
 const actions = () => sent('act').map((a) => (a.action as { kind: string }).kind);
 
+/** The deck's word that `path` now plays. */
+const live = (path: string) => act(() => heard.get('live')?.forEach((f) => f({ payload: { deck, opened: null, path, error: null } })));
+
 const viewport = (width: number) => (window as unknown as { happyDOM: { setViewport(v: { width: number; height: number }): void } }).happyDOM.setViewport({ width, height: 900 });
 
 async function mount(props: { start?: string | null; library?: boolean } = {}) {
@@ -251,6 +254,31 @@ describe('the home, an inspector view (decision 70)', () => {
     expect(sent('open').map((a) => a.path)).toEqual([ROWS[2].path]);
   });
 
+  it('follows the deck right after a library click: an open sends no live event, so nothing is held back for it', async () => {
+    resume = { playlist: null, index: null, current: ROWS[0].path, source: null, query: null };
+    await mount({ library: true, start: ROWS[0].path });
+    fireEvent.click(tile('b'));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    live(ROWS[2].path);
+    expect(within(inspector() as HTMLElement).getByRole('heading', { name: 'c' })).toBeTruthy();
+  });
+
+  it('puts back what the deck last said plays when a click fails, not an earlier click still on its way', async () => {
+    resume = { playlist: null, index: null, current: ROWS[0].path, source: null, query: null };
+    await mount({ library: true, start: ROWS[0].path });
+    live(ROWS[0].path);
+    invoke.mockImplementation((cmd: string, args?: { path?: string }) => {
+      if (cmd === 'open' && args?.path === ROWS[1].path) return new Promise(() => {});
+      if (cmd === 'open' && args?.path === ROWS[2].path) return Promise.reject(new Error('no'));
+      return Promise.resolve(answer(cmd));
+    });
+    fireEvent.click(tile('b'));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    fireEvent.click(tile('c'));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(within(inspector() as HTMLElement).getByRole('heading', { name: 'a' })).toBeTruthy();
+  });
+
   it('shows the source’s card when its row is picked again, until Esc', async () => {
     await mount({ library: true, start: ROWS[0].path });
     fireEvent.click(sourceRow('Library'));
@@ -420,6 +448,18 @@ describe('a playlist’s grid', () => {
     await act(() => vi.advanceTimersByTimeAsync(0));
     expect(sent('act').at(-1)).toEqual({ action: { kind: 'go', index: 1 } });
     expect(second.hasAttribute('data-picked')).toBe(false);
+  });
+
+  it('lets a step’s live event through right after a tile was played', async () => {
+    deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path };
+    resume = { playlist: null, index: null, current: ROWS[0].path, source: null, query: null };
+    await mount();
+    fireEvent.click(screen.getByRole('listitem', { name: '2. c' }));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    live(ROWS[1].path);
+    expect(within(inspector() as HTMLElement).getByRole('heading', { name: 'b' })).toBeTruthy();
   });
 
   it('lets go of the picks on Enter as on a click, and plays from that tile', async () => {
@@ -768,5 +808,118 @@ describe('the notice banner', () => {
     expect(alert.textContent).toContain("Couldn't open a.");
     fireEvent.click(within(alert).getByRole('button', { name: 'Dismiss' }));
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+describe('a tile played shows in the inspector at once', () => {
+  // The deck's live event never comes here unless a test sends it: what the inspector shows can't wait for it.
+  beforeEach(() => {
+    playlists = [manual('1', 'Warm up', [item(ROWS[0]), item(ROWS[2])])];
+    deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path };
+    resume = { playlist: null, index: null, current: ROWS[0].path, source: null, query: null };
+  });
+  const insp = () => within(inspector() as HTMLElement);
+
+  it('from a playlist’s grid, over its card, then follows what plays', async () => {
+    await mount();
+    fireEvent.click(sourceRow('Warm up'));
+    expect(insp().queryByRole('heading', { name: 'a' })).toBeNull();
+    fireEvent.click(screen.getByRole('listitem', { name: /^2\. c/ }));
+    expect(insp().getByRole('heading', { name: 'c' })).toBeTruthy();
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(sent('act').at(-1)).toEqual({ action: { kind: 'go', index: 1 } });
+    // The deck says c plays; then it moves on (auto-advance): the inspector follows it.
+    live(ROWS[2].path);
+    live(ROWS[0].path);
+    expect(insp().getByRole('heading', { name: 'a' })).toBeTruthy();
+  });
+
+  const live = (path: string) => act(() => heard.get('live')?.forEach((f) => f({ payload: { deck, opened: null, path, error: null } })));
+  const name = () => document.querySelector('.lay-transport-name')!.textContent;
+  const time = () =>
+    screen
+      .getByRole('timer')
+      .getAttribute('aria-label')!
+      .match(/(\d+:\d\d)/)![1];
+  const playC = async () => {
+    await mount();
+    fireEvent.click(sourceRow('Warm up'));
+    fireEvent.click(screen.getByRole('listitem', { name: /^2\. c/ }));
+    expect(insp().getByRole('heading', { name: 'c' })).toBeTruthy();
+  };
+
+  it('puts back what plays when the deck won’t play it, and says so', async () => {
+    invoke.mockImplementation((cmd: string) => (cmd === 'act' ? Promise.reject(new Error('no')) : Promise.resolve(answer(cmd))));
+    await mount();
+    await act(() => vi.advanceTimersByTimeAsync(65_000));
+    fireEvent.click(sourceRow('Warm up'));
+    fireEvent.click(screen.getByRole('listitem', { name: /^2\. c/ }));
+    expect(time()).toBe('0:00');
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(insp().getByRole('heading', { name: 'a' })).toBeTruthy();
+    expect(name()).toBe('a');
+    expect(time()).toBe('1:05');
+    expect(screen.getByRole('alert').textContent).toContain("Couldn't play Warm up.");
+  });
+
+  it('puts back what plays for a tile gone from the library, and says so', async () => {
+    playlists = [manual('1', 'Warm up', [item(ROWS[0]), { ...item(ROWS[2]), missing: true }])];
+    await mount();
+    fireEvent.click(sourceRow('Warm up'));
+    fireEvent.click(screen.getByRole('listitem', { name: /^2\. c/ }));
+    expect(insp().getByRole('heading', { name: 'a' })).toBeTruthy();
+    expect(name()).toBe('a');
+    expect(sent('act')).toEqual([]);
+    expect(screen.getByRole('alert').textContent).toContain("Couldn't play c.");
+  });
+
+  it('puts back what plays when the library’s preset won’t open, and says so', async () => {
+    invoke.mockImplementation((cmd: string) => (cmd === 'open' ? Promise.reject(new Error('no')) : Promise.resolve(answer(cmd))));
+    await mount({ library: true });
+    fireEvent.click(sourceRow('Library'));
+    fireEvent.click(tile('b'));
+    expect(insp().getByRole('heading', { name: 'b' })).toBeTruthy();
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(insp().getByRole('heading', { name: 'a' })).toBeTruthy();
+    expect(name()).toBe('a');
+    expect(screen.getByRole('alert').textContent).toContain("Couldn't open b.");
+  });
+
+  it('isn’t flipped back by a late word on the preset before it, until its own word comes', async () => {
+    await playC();
+    live(ROWS[0].path);
+    expect(insp().getByRole('heading', { name: 'c' })).toBeTruthy();
+    expect(name()).toBe('c');
+    live(ROWS[2].path);
+    live(ROWS[0].path);
+    expect(name()).toBe('a');
+  });
+
+  it('trusts the deck again once its word on the tile is overdue', async () => {
+    await playC();
+    await act(() => vi.advanceTimersByTimeAsync(2100));
+    live(ROWS[0].path);
+    expect(name()).toBe('a');
+  });
+
+  it('counts the time on it from the click, and not again from the deck’s word on it', async () => {
+    await mount();
+    await act(() => vi.advanceTimersByTimeAsync(65_000));
+    expect(time()).toBe('1:05');
+    fireEvent.click(sourceRow('Warm up'));
+    fireEvent.click(screen.getByRole('listitem', { name: /^2\. c/ }));
+    expect(time()).toBe('0:00');
+    await act(() => vi.advanceTimersByTimeAsync(3000));
+    live(ROWS[2].path);
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+    expect(time()).toBe('0:04');
+  });
+
+  it('from the library’s grid, over its card', async () => {
+    await mount({ library: true });
+    fireEvent.click(sourceRow('Library'));
+    expect(insp().getByRole('heading', { name: 'Library' })).toBeTruthy();
+    fireEvent.click(tile('b'));
+    expect(insp().getByRole('heading', { name: 'b' })).toBeTruthy();
   });
 });
