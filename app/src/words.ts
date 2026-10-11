@@ -40,6 +40,10 @@ export const WORDS = {
   'preset speed': 'speed',
   'preset sensitivity': 'how much it reacts',
   'preset tune reset': 'as made',
+  'preset tune many': 'for these presets',
+  /* The toast after turning Never on in the inspector, for one preset or several (Undo puts it back). */
+  'never toast one': 'Won’t play it on its own',
+  'never toast many': 'Won’t play them on their own',
   'output fit': 'how the picture fills the screen',
   /* A deck following the library grid's filter (any query that isn't a mood). */
   'library query': 'the library',
