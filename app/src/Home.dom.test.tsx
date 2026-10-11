@@ -242,6 +242,27 @@ describe('the home, an inspector view (decision 70)', () => {
     expect(insp().getByRole('heading', { name: 'a' })).toBeTruthy();
   });
 
+  it('with the never-play toast showing over picks, the first Esc closes only the toast; the next goes back to the one playing', async () => {
+    await mount({ library: true, start: ROWS[0].path });
+    const insp = () => within(inspector() as HTMLElement);
+    fireEvent.click(tile('b'), { metaKey: true });
+    fireEvent.click(tile('c'), { metaKey: true });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(inspector()!.textContent).toContain('2 selected');
+    fireEvent.click(insp().getByRole('button', { name: 'never play' }));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(insp().getByRole('status').textContent).toContain('Won’t play them on their own');
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(insp().queryByRole('status')).toBeNull();
+    expect(inspector()!.textContent).toContain('2 selected');
+    expect(tile('b').getAttribute('aria-selected')).toBe('true');
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(tile('b').getAttribute('aria-selected')).toBe('false');
+    expect(insp().getByRole('heading', { name: 'a' })).toBeTruthy();
+  });
+
   it('opens a preset of its own when nothing was put back: the random pick, seeded here to the first', async () => {
     await mount({ library: true });
     expect(sent('open').map((a) => a.path)).toEqual([ROWS[0].path]);

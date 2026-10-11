@@ -40,13 +40,15 @@
     --caption: var(--fg);
   }
 }
-/* The same opaque panel on request (data-transparency="reduced" on the
-   layout): what the stories and captures use to show it, since a page can't
-   switch the system's setting itself. */
+/* The same opaque panel from data-transparency="reduced": on the document,
+   set by access.ts from macOS's Reduce transparency (WKWebView doesn't answer
+   the media query above), or on the layout, as the stories ask for it. */
+:root[data-transparency='reduced'] .app.home.lay,
 .app.home.lay[data-transparency='reduced'] {
   --insp-tint: var(--surface-corner);
   --insp-blur: none;
 }
+:root[data-transparency='reduced'] .app.home.lay .insp .tune-slider-knob,
 .app.home.lay[data-transparency='reduced'] .insp .tune-slider-knob {
   background: rgb(236 236 236);
   -webkit-backdrop-filter: none;

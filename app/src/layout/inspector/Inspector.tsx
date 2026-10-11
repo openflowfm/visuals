@@ -68,6 +68,9 @@ export function Inspector(props: InspectorProps) {
     const t = setTimeout(() => setToast(null), TOAST_FOR);
     return () => clearTimeout(t);
   }, [toast]);
+  // The toast is about the presets it turned Never on for: another shown, or other picks, and it goes.
+  const shownKeys = keys.join('\n');
+  useEffect(() => setToast(null), [shownKeys]);
   useEscape(onClose, toast ? dismiss : undefined);
 
   // Never play goes on at once, and the toast keeps what to put back: only those that weren't already never played.
@@ -176,12 +179,11 @@ function useEscape(onClose: InspectorProps['onClose'], dismiss: (() => void) | u
   const toast = useRef(dismiss);
   toast.current = dismiss;
   const on = !!onClose || !!dismiss;
+  const toasting = !!dismiss;
   useEffect(() => {
     if (!on) return;
     const key = (ev: KeyboardEvent) => {
-      if (ev.key !== 'Escape' || ev.defaultPrevented) return;
-      const t = ev.target as HTMLElement | null;
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      if (ev.key !== 'Escape' || ev.defaultPrevented || typing(ev)) return;
       const act = toast.current ?? close.current;
       if (!act) return;
       ev.preventDefault();
@@ -190,6 +192,26 @@ function useEscape(onClose: InspectorProps['onClose'], dismiss: (() => void) | u
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
   }, [on]);
+  // The toast goes before anything else Escape does in the window (Home's own Escape lets go of the picks): heard
+  // first, on the way down, unless it was pressed in a menu or popover open over the panel, which takes it itself.
+  useEffect(() => {
+    if (!toasting) return;
+    const key = (ev: KeyboardEvent) => {
+      if (ev.key !== 'Escape' || ev.defaultPrevented || typing(ev)) return;
+      const t = ev.target as HTMLElement | null;
+      if (t && typeof t.closest === 'function' && t.closest('[role="menu"], [role="dialog"], [role="listbox"]:not(.insp-field-plot), .vf-pop-panel')) return;
+      ev.preventDefault();
+      toast.current?.();
+    };
+    window.addEventListener('keydown', key, true);
+    return () => window.removeEventListener('keydown', key, true);
+  }, [toasting]);
+}
+
+/** Whether a key was typed in a text box (its Escape is the box's). */
+function typing(ev: KeyboardEvent): boolean {
+  const t = ev.target as HTMLElement | null;
+  return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
 }
 
 /** Who it is: the name and authors with the style under them; "n selected" and their styles; or nothing playing and how to start. */

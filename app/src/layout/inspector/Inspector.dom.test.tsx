@@ -283,6 +283,25 @@ describe("never play's undo", () => {
     expect(toast()).toBeNull();
   });
 
+  it('goes when another preset is shown or the picks change, so it never offers to undo for the wrong ones', () => {
+    const props: InspectorProps = { subject: prepareRow(BLOOM, undefined), playing: BLOOM.key, playlists: [], library: LIBRARY, onSet: vi.fn(), onAddTo: vi.fn(), onPick: vi.fn(), onBack: vi.fn() };
+    const { rerender } = render(<Inspector {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'never play' }));
+    expect(toast()).not.toBeNull();
+    // The same preset, its never play now kept: the toast stays.
+    rerender(<Inspector {...props} subject={prepareRow(BLOOM, { hidden: true })} />);
+    expect(toast()).not.toBeNull();
+    // Another one picked: gone.
+    rerender(<Inspector {...props} subject={prepareRow(CINDER, undefined)} />);
+    expect(toast()).toBeNull();
+    // Several picked, then the picks change: gone too.
+    rerender(<Inspector {...props} chosen={several()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'never play' }));
+    expect(toast()).not.toBeNull();
+    rerender(<Inspector {...props} chosen={several().slice(0, 2)} />);
+    expect(toast()).toBeNull();
+  });
+
   it('turning it off shows no toast', () => {
     mount({ subject: prepareRow(BLOOM, { hidden: true }) });
     fireEvent.click(screen.getByRole('button', { name: 'never play' }));
