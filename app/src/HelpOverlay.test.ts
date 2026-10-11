@@ -111,7 +111,8 @@ describe('the live controls', () => {
         .flatMap((c) => pressesOf(c.keys))
         .map((p) => p.key?.toLowerCase()),
     );
-    for (const key of ['arrowleft', 'arrowright', 'arrowup', 'arrowdown', 'r', 'h', 's', 'p', 'b', 't', 'i', 'm', '0', '1', '2', '3', '4', '5', 'f', '?', 'escape', 'l']) {
+    // Esc no longer leaves live: it only brings the hidden panels back, which the panels' row says in words.
+    for (const key of ['arrowleft', 'arrowright', 'arrowup', 'arrowdown', 'r', 'h', 's', 'p', 'b', 't', 'i', 'm', '0', '1', '2', '3', '4', '5', 'f', '?', 'l']) {
       expect(named.has(key), key).toBe(true);
     }
   });
