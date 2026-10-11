@@ -152,6 +152,8 @@ pub struct Renderer {
     /// Small copies of the stages' pictures an editor asked for, by [`PREVIEWS`]
     /// index (`None` where not asked for); empty when it asked for none.
     previews: Vec<Option<Target>>,
+    /// Drawing stages left out ([`Renderer::set_hide`]); none by default.
+    hide: crate::draw::Hide,
 }
 
 /// The base size of a stage's preview picture: what a node shows at 1×, and
@@ -307,6 +309,7 @@ impl Renderer {
             uvs: Vec::new(),
             rng,
             previews: Vec::new(),
+            hide: crate::draw::Hide::default(),
             size,
             output: full,
             quality,
@@ -745,6 +748,36 @@ impl Renderer {
         let mut encoder = self.device.create_command_encoder(&Default::default());
         self.comp.copy_to(&mut encoder, &self.outgoing);
         self.queue.submit([encoder.finish()]);
+    }
+
+    /// Leave the drawing stages `hide` names out of the picture from the next
+    /// step on; their equations still run. For measuring what they add.
+    pub fn set_hide(&mut self, hide: crate::draw::Hide) {
+        self.hide = hide;
+    }
+
+    /// Make every picture kept black — the feedback with its mip levels, the
+    /// blurs and the finished picture — so the next preset loaded starts from
+    /// black, as on a new renderer, whatever was drawn before, with
+    /// `rand_frame` and the clock starting where a new renderer's do. Two runs of a
+    /// preset with the same seed after this draw the same pictures.
+    pub fn clear(&mut self) {
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+        let blurs = self.blur.iter().chain(&self.display_blur).flat_map(|(a, b)| [a, b]);
+        for t in self.feedback.iter().chain([&self.comp, &self.display, &self.bare, &self.outgoing]).chain(blurs).chain(self.textured_source.as_ref()) {
+            if t.levels.is_empty() {
+                drop(begin(&mut encoder, &t.out, true));
+            }
+            for level in &t.levels {
+                drop(begin(&mut encoder, level, true));
+            }
+        }
+        self.queue.submit([encoder.finish()]);
+        self.shown_list.clear();
+        self.draw_list.clear();
+        // `rand_frame`'s source and the clock, where a new renderer's start.
+        self.rng = noise_data().1;
+        self.clock = Clock::default();
     }
 
     /// Change one of the running preset's values without reloading it. Returns

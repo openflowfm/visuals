@@ -225,6 +225,29 @@ fn a_preset_draws_something() {
     assert!(pixels.chunks(4).all(|p| p[3] == 255), "comp writes opaque pixels");
 }
 
+#[test]
+fn cleared_runs_repeat_and_hidden_stages_drop_out() {
+    let Some(mut r) = renderer(128, 96, SPIRAL) else { return };
+    // Something drawn before, so the first run doesn't start from black by chance.
+    play(&mut r, &mut Audio::default(), 20, 1.0 / 30.0);
+    let run = |r: &mut Renderer, hide: crate::draw::Hide| {
+        r.clear();
+        r.set_hide(hide);
+        r.load(SPIRAL, 7).unwrap();
+        play(r, &mut Audio::default(), 40, 1.0 / 30.0);
+        r.read_back()
+    };
+    use crate::draw::Hide;
+    let first = run(&mut r, Hide::default());
+    assert_eq!(first, run(&mut r, Hide::default()), "a cleared run with the same seed draws the same picture");
+    let no_waves = run(&mut r, Hide { waves: true, shapes: false });
+    let no_shapes = run(&mut r, Hide { waves: false, shapes: true });
+    assert!(mean_difference(&first, &no_waves) > 0.5, "the waves drew something");
+    assert_ne!(first, no_shapes, "the shape drew something");
+    assert_ne!(no_waves, no_shapes);
+    assert_eq!(first, run(&mut r, Hide::default()), "nothing hidden draws as before");
+}
+
 /// The Spiral fixture at 64×36, run for `seconds` of real time at `hz`
 /// refreshes a second and `speed`, hearing the same tone throughout.
 fn run_at(hz: f64, speed: f64, seconds: f64) -> Option<Renderer> {
