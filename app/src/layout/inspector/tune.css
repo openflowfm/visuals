@@ -1,12 +1,22 @@
-/* "For this preset" (Tune.tsx): its own speed and how much it reacts, two
-   rows of the widgets' inside slider, the name and the reading laid over the
-   track; "as made" a quiet word beside the heading, as the panel's back is. */
+/* "For this preset" (Tune.tsx): its own speed and how much it reacts, as
+   macOS 26's sliders over glass. The widgets' inside slider keeps its
+   behaviour (drag, arrows, double-click back to 1×); here it is drawn as the
+   kit's over-glass slider (kit/tokens.css, read in its dark appearance, which
+   the card asks for with data-appearance): its name and reading on a line
+   above, then a rounded rail, the part from 1× to the value filled in the
+   suite's colour (as Switch.tsx lights its track), the 1× detent a tick at
+   the centre, and the knob a capsule of glass. "as made" is a quiet word
+   beside the heading, as the panel's back is. */
+@import '../../../../kit/tokens.css';
+
 .lay .insp .insp-tune {
+  --tune-knob-w: 26px;
+  --tune-knob-h: 16px;
+  --tune-rail: 5px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
   margin-top: 22px;
-  --wdg-inside-height: 30px;
 }
 .lay .insp .insp-tune-head {
   display: flex;
@@ -15,15 +25,12 @@
   gap: 8px;
   min-height: 18px;
 }
-.lay .insp .insp-tune-head .insp-kicker {
+.lay .insp .insp-tune-title {
   margin: 0;
-}
-.lay .insp .insp-tune-slider {
-  width: 100%;
-  min-width: 0;
-}
-.lay .insp .insp-tune-slider .wdg-slider-body {
-  min-height: 30px;
+  color: var(--caption);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
 }
 .lay .insp .insp-tune-reset {
   flex: none;
@@ -40,8 +47,94 @@
 .lay .insp .insp-tune-reset:hover {
   color: var(--fg);
 }
+
+/* One slider: the name and the reading on a line, the rail under them. */
+.lay .insp .insp-tune-slider {
+  width: 100%;
+  min-width: 0;
+  row-gap: 4px;
+}
+.lay .insp .insp-tune-slider > .wdg-caption,
+.lay .insp .insp-tune-slider > .wdg-readout {
+  grid-row: 1;
+  padding: 0;
+  font-size: 12px;
+}
+.lay .insp .insp-tune-slider > .wdg-caption {
+  color: var(--ui);
+}
+.lay .insp .insp-tune-slider > .wdg-readout {
+  color: var(--fg);
+  font-weight: 500;
+}
+.lay .insp .insp-tune-slider > .wdg-body {
+  grid-row: 2;
+}
+
+/* The rail: no field around it; the knob may hang past the ends of the body. */
+.lay .insp .insp-tune-slider .wdg-slider-body {
+  height: 22px;
+  min-height: 22px;
+  overflow: visible;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+}
+.lay .insp .insp-tune-slider .wdg-slider-body::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: var(--tune-rail);
+  border-radius: 999px;
+  background: var(--mac-over-glass-tracks-inactive-filled-idle-bg, rgb(255 255 255 / 0.22));
+  transform: translateY(-50%);
+  content: '';
+}
+/* The 1× detent: a tick through the rail at its centre, under the fill and the knob. */
+.lay .insp .insp-tune-slider .wdg-slider-body::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 2px;
+  height: 11px;
+  border-radius: 1px;
+  background: var(--mac-over-glass-tracks-tick-mark-centerpoint-idle-bg, rgb(217 217 217));
+  transform: translate(-50%, -50%);
+  content: '';
+}
+/* The fill, from 1× to the value; the knob's centre runs half its width in from each end. */
+.lay .insp .insp-tune-slider .wdg-slider-fill {
+  z-index: 1;
+  inset: 50% auto auto calc(var(--tune-knob-w) / 2 + var(--wdg-fill-start) * (100% - var(--tune-knob-w)));
+  width: calc(var(--wdg-fill-size) * (100% - var(--tune-knob-w)));
+  height: var(--tune-rail);
+  border-radius: 999px;
+  background: var(--green, var(--mac-over-glass-tracks-active-filled-idle-bg));
+  transform: translateY(-50%);
+}
+/* The knob: a capsule of glass, lit at its edges as the kit layers it. */
+.lay .insp .insp-tune-slider .wdg-slider-thumb {
+  z-index: 2;
+  inset: 50% auto auto calc(var(--tune-knob-w) / 2 + var(--wdg-fraction) * (100% - var(--tune-knob-w)));
+  width: var(--tune-knob-w);
+  height: var(--tune-knob-h);
+  border-radius: 999px;
+  background: var(--mac-over-glass-knobs-toggle-idle-bg, rgb(255 255 255 / 0.875));
+  box-shadow:
+    0 1px 3px rgb(0 0 0 / 0.35),
+    var(--mac-over-glass-knobs-toggle-idle-shadow, 0 0 0 0.5px rgb(255 255 255 / 0.4));
+  -webkit-backdrop-filter: var(--mac-over-glass-knobs-toggle-idle-backdrop, blur(3.75px) saturate(1.15));
+  backdrop-filter: var(--mac-over-glass-knobs-toggle-idle-backdrop, blur(3.75px) saturate(1.15));
+  transform: translate(-50%, -50%);
+  transition: transform 120ms ease;
+}
+.lay .insp .insp-tune-slider .wdg-slider-body:active .wdg-slider-thumb {
+  transform: translate(-50%, -50%) scale(1.08);
+}
+
 .lay .insp .insp-tune-reset:focus-visible,
 .lay .insp .insp-tune-slider .wdg-slider-body:focus-visible {
   outline: 2px solid var(--vf-focus-ring);
-  outline-offset: 0;
+  outline-offset: 2px;
 }

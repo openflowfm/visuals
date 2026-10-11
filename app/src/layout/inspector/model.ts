@@ -15,7 +15,7 @@ export interface InspectorProps {
   subject: Prepared | null;
   /** The index key of the preset playing, or null when nothing plays (or it isn't in the index). A subject that isn't it is "picked": the way back to now playing and Play show, and its dot stays marked in the field. */
   playing: string | null;
-  /** Where the preset playing plays from ("from Warm-up · 3 of 10"); shown only while the subject is the one playing. */
+  /** Where the preset playing plays from ("from Warm-up · 3 of 10"). Not shown: the transport bar says it, and the inspector's top is the name. */
   from: string;
   /** Every playlist (for "add to a playlist" and "in"); null until read. */
   playlists: Playlist[] | null;

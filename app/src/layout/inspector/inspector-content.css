@@ -1,12 +1,12 @@
-/* The inspector (Inspector.tsx), "Scope", near borderless (decision 68). At
-   the top what it is: the name large, the authors, a quiet line saying it
-   plays (and from where) or is picked. Then its facts: the style, the
-   measures read out as one line ("slow · dark · calm"), the colours as dots,
-   my tags. Then the map (the field, Field.tsx, field.css), then the actions
-   as a row of keys (a glyph over a short word, the pressed one brighter, the
-   star filled), the tune and the playlists holding it as a quiet line. Areas
-   are told apart by space alone. The panel paints --surface-2, so --caption
-   here is the raised one (inspector.css). */
+/* The inspector (Inspector.tsx), "Scope", near borderless (decision 68). The
+   header row: back at the left, the actions as bare glyphs at the right (the
+   pressed one brighter, the star filled), then ✕. Under it what it is: the
+   name large, the authors. Then its facts: the style, the measures read out
+   as one line ("slow · dark · calm"), the colours as dots, my tags. Then the
+   map (the field, Field.tsx, field.css), the tune (tune.css) and the
+   playlists holding it as a quiet line. Areas are told apart by space alone.
+   The panel paints --surface-2, so --caption here is the raised one
+   (inspector.css). */
 
 .lay .insp {
   --insp-pad: 20px;
@@ -17,12 +17,16 @@
   font-size: 13px;
 }
 
-/* Back to now playing, and close (laid over): a quiet line above the field, back at the left, ✕ at the right. */
+/* The header row: back to now playing at the left; the actions, then close (laid over), at the right. */
 .lay .insp .insp-top {
   display: flex;
   align-items: center;
-  min-height: 26px;
-  margin: -4px -6px 6px -6px;
+  gap: 2px;
+  min-height: 28px;
+  margin: -4px -6px 10px -6px;
+}
+.lay .insp .insp-keys + .insp-close {
+  margin-left: 4px;
 }
 .lay .insp .insp-close {
   display: inline-grid;
@@ -86,11 +90,6 @@
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-/* Over several, three keys: spaced as a group, not across the panel. */
-.lay .insp .insp-keys[data-many] {
-  justify-content: flex-start;
-  gap: 18px;
-}
 .lay .insp .insp-back {
   display: inline-flex;
   align-items: center;
@@ -124,9 +123,12 @@
   line-height: 1.45;
 }
 
-/* First, the name and who made it, then whether it plays or is picked. */
+/* First, the name and who made it. */
 .lay .insp .insp-head {
   margin-top: 4px;
+}
+.lay .insp .insp-top + .insp-head {
+  margin-top: 0;
 }
 .lay .insp .insp-sep {
   display: inline-block;
@@ -154,21 +156,12 @@
   overflow-wrap: break-word;
   text-wrap: balance;
 }
-.lay .insp .insp-by,
-.lay .insp .insp-from {
+.lay .insp .insp-by {
   margin: 4px 0 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
   font-size: 13px;
-}
-.lay .insp .insp-from {
-  margin-top: 6px;
-  color: var(--caption);
-  font-size: 12px;
-}
-.lay .insp .insp-from .insp-sep {
-  margin: 0 7px;
 }
 
 /* The facts: the style, the readout (the measures as words, the colours as dots) and my tags. */
@@ -223,33 +216,30 @@
   opacity: 0.6;
 }
 
-/* The keys: a glyph over a short word, no boxes; pressed is brighter, the star filled. */
+/* The keys, in the header row: bare glyphs, no boxes, their names in their tooltips; pressed is brighter, the star filled. */
 .lay .insp .insp-keys {
   display: flex;
-  justify-content: space-between;
-  margin: 22px -6px 0;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
 }
 .lay .insp .insp-key,
 .lay .insp .insp-key .vf-pop-button {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
-  min-width: 44px;
-  height: auto;
-  padding: 6px 4px 4px;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   border: 0;
-  border-radius: 8px;
+  border-radius: 7px;
   background: none;
-  color: var(--ui);
+  color: var(--caption);
   font: inherit;
-  font-size: 11px;
-  font-weight: 500;
   cursor: pointer;
 }
 .lay .insp .vf-pop.insp-key {
-  padding: 0;
-  min-width: 0;
+  width: auto;
+  height: auto;
 }
 .lay .insp .insp-key:hover,
 .lay .insp .insp-key[aria-pressed='true'],

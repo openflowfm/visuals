@@ -13,32 +13,45 @@ export type { InspectorProps } from './model.ts';
 
 /**
  * The inspector ("Scope"): what is selected, as Finder's and Photos'
- * inspectors show it. Every state reads in one order: what it is (the name
- * large, its authors, whether it plays or is picked), then its facts (style,
- * its measures read out as one line of words, its colours as dots, my tags),
- * then the map (the field: the preset placed among the library, as an
- * instrument's XY display would), then its actions as a row of keys, its own
- * speed and how much it reacts ("for this preset", Tune.tsx) and the playlists
+ * inspectors show it. Its header row holds the panel's controls and the
+ * actions on what it is about, as glyphs: back (for one picked) at the left;
+ * Play (for one picked), star, add, never play and edit at the right, then ✕.
+ * Under it every state reads in one order: what it is (the name large, its
+ * authors), then its facts (style, its measures read out as one line of words,
+ * its colours as dots, my tags), then the map (the field: the preset placed
+ * among the library, as an instrument's XY display would), then its own speed
+ * and how much it reacts ("for this preset", Tune.tsx) and the playlists
  * holding it. It is about the preset playing, or one picked (a dot in the
  * field, or a tile the Home passes in) until "back". For several picked
  * together (`chosen`), "n selected", their styles and tags, their pictures in
- * the map's place, and the actions over all of them (a tune is one preset's,
- * so none shows for several). With no
- * preset, the source the Home passes (`source`, a playlist's head); with
- * neither, the field still draws the library, and it says so. Mount it in
- * HomeLayout's `inspector` slot (its panel is InspectorPanel); it holds no
- * state of its own beyond the field's pointer and keyboard cursor.
+ * the map's place, and the actions over all of them in the header (a tune is
+ * one preset's, so none shows for several). With no preset, the source the
+ * Home passes (`source`, a playlist's head); with neither, the field still
+ * draws the library, and it says so. Mount it in HomeLayout's `inspector`
+ * slot (its panel is InspectorPanel); it holds no state of its own beyond the
+ * field's pointer and keyboard cursor.
  */
 export function Inspector(props: InspectorProps) {
-  const { subject: p, playing, chosen, source, error, onBack, onClose } = props;
+  const { subject: p, playing, chosen, source, error, playlists, onSet, onAddTo, onPlay, onEdit, onBack, onClose } = props;
   const many = chosen && chosen.length > 1 ? chosen : null;
   const picked = !many && p !== null && p.row.key !== playing;
+  // What the actions act on: several picked, or the one shown (none for the source or nothing).
+  const on = many ?? (p ? [p] : null);
   useEscape(onClose);
   return (
     <div className="insp" data-none={many || p || source ? undefined : ''}>
-      {(picked || onClose) && (
+      {(picked || onClose || on) && (
         <div className="insp-top">
           {picked && <BackAction className="insp-back" onBack={onBack} />}
+          {on && (
+            <div className="insp-keys" role="group" aria-label={many ? 'on these presets' : 'on this preset'}>
+              {picked && <PlayAction className="insp-key" onPlay={onPlay} children="" />}
+              <StarAction className="insp-key" chosen={on} onSet={onSet} children="" />
+              <AddAction className="insp-key" chosen={on} playlists={playlists} onAddTo={onAddTo} children="" />
+              <NeverAction className="insp-key" chosen={on} onSet={onSet} children="" />
+              {!many && <EditAction className="insp-key" onEdit={onEdit} children="" />}
+            </div>
+          )}
           <CloseAction className="insp-close" onClose={onClose} />
         </div>
       )}
@@ -71,8 +84,8 @@ function useEscape(onClose: InspectorProps['onClose']) {
   }, [on]);
 }
 
-/** One preset (or none): its name, its facts and tags, the field, then its actions, tune and playlists. With none, the words saying so above the field. */
-function Scope({ subject: p, playing, from, playlists, library, mine, onSet, onAddTo, onPick, onBack, onPlay, onEdit, picked }: InspectorProps & { picked: boolean }) {
+/** One preset (or none): its name, its facts and tags, the field, then its tune and playlists (its actions are in the header). With none, the words saying so above the field. */
+function Scope({ subject: p, playing, playlists, library, mine, onSet, onPick, onBack, picked }: InspectorProps & { picked: boolean }) {
   const c = p ? characterOf(p) : null;
   const readout = c ? [c.speed.word, c.brightness.word, c.intensity.word].filter((w): w is string => !!w) : [];
   const colours = c ? colourNames(c) : [];
@@ -109,15 +122,6 @@ function Scope({ subject: p, playing, from, playlists, library, mine, onSet, onA
           {c.name}
         </h2>
         {c.by && <p className="insp-by">{c.by}</p>}
-        <p className="insp-from">
-          <span>{picked ? 'Picked' : 'Now playing'}</span>
-          {!picked && from && (
-            <>
-              <span className="insp-sep" aria-hidden="true" />
-              <span>{from}</span>
-            </>
-          )}
-        </p>
       </div>
 
       <div className="insp-meta" role="group" aria-label="about this preset">
@@ -151,24 +155,6 @@ function Scope({ subject: p, playing, from, playlists, library, mine, onSet, onA
 
       {field}
 
-      <div className="insp-keys">
-        {picked && (
-          <PlayAction className="insp-key" onPlay={onPlay}>
-            <span aria-hidden="true">Play</span>
-          </PlayAction>
-        )}
-        <StarAction className="insp-key" chosen={[p]} onSet={onSet} />
-        <AddAction className="insp-key" chosen={[p]} playlists={playlists} onAddTo={onAddTo}>
-          <span aria-hidden="true">Add</span>
-        </AddAction>
-        <NeverAction className="insp-key" chosen={[p]} onSet={onSet}>
-          <span aria-hidden="true">Never</span>
-        </NeverAction>
-        <EditAction className="insp-key" onEdit={onEdit}>
-          <span aria-hidden="true">Edit</span>
-        </EditAction>
-      </div>
-
       <TuneCard key={p.row.key} subject={p} onSet={onSet} />
 
       {inLists && <p className="insp-quiet insp-in">{inLists.length ? `In ${listed(inLists)}` : 'In no playlist yet'}</p>}
@@ -187,8 +173,8 @@ export function stylesSaid(chosen: readonly Prepared[]): string {
   return `${styles.slice(0, 2).join(', ')} and ${rest} other styles`;
 }
 
-/** Several presets picked together: how many, their styles and tags over all of them, their pictures, then star, add and never play over all of them. */
-function Selected({ chosen, playlists, onSet, onAddTo }: InspectorProps & { chosen: Prepared[] }) {
+/** Several presets picked together: how many, their styles and tags over all of them, and their pictures (star, add and never play over all of them are in the header). */
+function Selected({ chosen, onSet }: InspectorProps & { chosen: Prepared[] }) {
   const n = chosen.length;
   const more = n - PICTURES;
   const styles = stylesSaid(chosen);
@@ -208,15 +194,6 @@ function Selected({ chosen, playlists, onSet, onAddTo }: InspectorProps & { chos
           <div key={p.row.key}>{p.row.thumbnail && <img src={p.row.thumbnail} alt="" decoding="async" draggable={false} />}</div>
         ))}
         {more > 0 && <span className="insp-pictures-more">+{more.toLocaleString('en-US')}</span>}
-      </div>
-      <div className="insp-keys" data-many="">
-        <StarAction className="insp-key" chosen={chosen} onSet={onSet} />
-        <AddAction className="insp-key" chosen={chosen} playlists={playlists} onAddTo={onAddTo}>
-          <span aria-hidden="true">Add</span>
-        </AddAction>
-        <NeverAction className="insp-key" chosen={chosen} onSet={onSet}>
-          <span aria-hidden="true">Never</span>
-        </NeverAction>
       </div>
     </>
   );
