@@ -112,8 +112,9 @@ export function StageHead({ live, crateOpen, onCrate, help, onHelp, onView }: St
 }
 
 /**
- * "Go full screen on…", over the picture while it plays in the window (one
- * display, or from the welcome flow): a button for each display, and with only
+ * "Go full screen on…", over the picture while it plays in the window (as it
+ * does on the way in: live never opens the output by itself): a button for
+ * each display, and with only
  * one the note that the picture will cover this window. Nothing while the output
  * is on a display, or before the displays are known.
  */

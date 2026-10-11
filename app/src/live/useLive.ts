@@ -9,20 +9,20 @@ import * as output from '../output.ts';
 import { leave } from '../OutputPanel.tsx';
 import * as pl from '../playlists.ts';
 import { notice, openFailed } from '../shell.ts';
-import { intensityOf, keyOf, playsWindowed, ratingOf, sendIntensity, sinceAfter, starred, type LiveState } from './live-model.ts';
+import { intensityOf, keyOf, opensOnStart, ratingOf, sendIntensity, sinceAfter, starred, type LiveState } from './live-model.ts';
 
 /**
  * Live mode's state, read from the app and followed as it changes: the
  * playlists and the deck, the preset playing, the effects, where the output is,
  * and the user's stars and ratings, with the actions on them.
  *
- * Mounting it is going live: the output opens full screen on the way in when
- * another display can take it (not when `windowed`, or with one display), the
- * previews stop, and with nothing playing it starts `start` (else what the app
- * puts back, else any preset). Unmounting closes the output and puts the
- * effects back (`leave`).
+ * Mounting it is going live: it plays in the window (the output opens only when
+ * the user picks a display, `show`, or when the app was started in live mode,
+ * `windowed` false: `opensOnStart`), the previews stop, and with nothing
+ * playing it starts `start` (else what the app puts back, else any preset).
+ * Unmounting closes the output and puts the effects back (`leave`).
  */
-export function useLive({ start, windowed = false }: { start: string | null; windowed?: boolean }): LiveState {
+export function useLive({ start, windowed }: { start: string | null; windowed?: boolean }): LiveState {
   const [lists, setLists] = useState<pl.Lists | null>(null);
   const [current, setCurrent] = useState<string | null>(null);
   // When the preset playing started: going live counts as a start until the first open reports.
@@ -38,7 +38,7 @@ export function useLive({ start, windowed = false }: { start: string | null; win
 
   const show = useCallback((id: number | null) => void output.open(id).then(setStatus, fail("Couldn't show the output on that display.")), [fail]);
 
-  // Live mode is the output: open it on the way in when another display can take it, close it (and reset the effects) on the way out.
+  // Live plays in the window: the output opens on the way in only when started in live mode; it closes (and the effects reset) on the way out.
   useEffect(() => {
     api.setPreviews([]).catch(() => {});
     // Left before the displays came back: don't open an output nothing would close.
@@ -47,10 +47,10 @@ export function useLive({ start, windowed = false }: { start: string | null; win
       (ds) => {
         if (gone) return;
         setDisplays(ds);
-        if (!playsWindowed(windowed, ds)) show(null);
+        if (opensOnStart(windowed, ds)) show(null);
       },
       () => {
-        if (!gone && !windowed) show(null);
+        if (!gone && opensOnStart(windowed, null)) show(null);
       },
     );
     fx.state().then(setEffects, fail("Couldn't read the effects."));

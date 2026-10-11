@@ -154,9 +154,13 @@ paced by the display; the page leaves a transparent hole and reports its rectang
 root, so the engine's tests also run from there as `cargo test -p visuals-engine`.
 
 **Live mode and the output.** The page's switch is *library | live* (*library | editor |
-live* in a lab build). Live mode is the show: entering it opens the output, leaving it
-closes it — there is no output in the library or the editor. Arriving from the welcome,
-live mode plays in the window without opening the output. In live mode the editor isn't
+live* in a lab build). Live mode is the show. Entering it never opens the output by
+itself: it plays in the main window (the Stage), with "Go full screen on…" over the
+picture, and the picture goes to a display only when the user picks one there or in the
+Output popover. Leaving closes the output — there is no output in the library or the
+editor. Only a start in live mode (`VISUALS_LIVE=1` or `VISUALS_VIEW=live`) opens it on
+the way in, when another display can take it, so launches and headless captures of the
+output still get one. In live mode the editor isn't
 rendered (no graph, no inspector) and stage previews are off
 (`set_previews` with none); the page shows a small preview of the bench, what's playing and
 what's next in the playing playlist, previous / random / next (all through
@@ -196,7 +200,7 @@ its display has gone; the page shows "not showing" with a button to show it agai
 
 Commands: `displays`, `output_open {id | null}`, `output_close`, `output_status`, and the
 `output` event; `live_start` reads `VISUALS_LIVE`. Development: `VISUALS_LIVE=1` starts in
-live mode (with `VISUALS_PRESET`, on that preset), `VISUALS_DISPLAY=<n>` sends the output
+live mode with the output open (with `VISUALS_PRESET`, on that preset), `VISUALS_DISPLAY=<n>` sends the output
 to display `n` (from 0, the system's order), and `VISUALS_CAPTURE_OUTPUT=<png>` saves the
 output window beside `VISUALS_CAPTURE`'s main window.
 
