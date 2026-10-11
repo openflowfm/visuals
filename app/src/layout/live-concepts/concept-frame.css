@@ -1,0 +1,189 @@
+/* Concept C, "One frame" (ConceptFrame.tsx; stories only): Home's window
+   (HomeLayout) with live's pane under the picture. Everything here is the pane
+   and the few things the frame adds; the shell, the hero, the bar and the
+   inspector are Home's own and their CSS is untouched.
+
+   Painting: the root paints nothing (the hero's spread shadow paints the main
+   column, layout.css); the pane sits above that shadow with no background of
+   its own; what is laid over the picture (the help) is opaque. */
+
+.app.home.lc.cf {
+  /* Not app.css's grid: the frame is HomeLayout's, inside. */
+  display: block;
+  background: none;
+}
+
+/* The bar's slot keeps Home's own transport as its child for layout; the
+   wrapper is there only to make it inert while the warning is owed. */
+.cf .cf-bar {
+  display: contents;
+}
+
+/* The header's live lights, between the fill and the tools. */
+.cf .cf-lights {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* The performing pane: the pads and Intensity nearest the picture, then up
+   next, then the moods; spaced apart, no lines (Home's sections). */
+.cf .cf-live {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+.cf .lay-main:has(> .cf-live) {
+  /* Under the picture the pane starts closer than Home's grid does: it is the instrument's front panel. */
+  padding-top: 16px;
+}
+
+/* The pads and the fader: four pads, then Intensity and More effects in a column of their own. */
+.cf .cf-deck {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(200px, 1fr);
+  align-items: center;
+  gap: 18px 28px;
+}
+.cf .cf-dial {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  min-width: 0;
+}
+.cf .cf-dial .lc-fader {
+  width: 100%;
+}
+.cf .lay-main {
+  container: cf-main / inline-size;
+}
+@container cf-main (max-width: 680px) {
+  .cf .cf-deck {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cf .cf-dial {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+}
+
+/* A section's caption and what it says after it. */
+.cf .cf-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  margin-bottom: 8px;
+}
+.cf .cf-head .lc-label {
+  margin: 0;
+}
+.cf .cf-head-note {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--caption);
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.cf .cf-empty {
+  margin: 0;
+  color: var(--caption);
+  font-size: 12px;
+}
+
+/* Up next: Home's tiles, smaller, one line of them (the rest wrap out of sight). */
+.cf .cf-up {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  grid-template-rows: auto;
+  grid-auto-rows: 0;
+  gap: 0 14px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  list-style: none;
+}
+.cf .cf-up[data-held] .tile {
+  opacity: 0.5;
+}
+.cf .cf-next-mark {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+  color: var(--fg);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* The moods: the user's tags as chips, the playing ones lit. */
+.cf .cf-moods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cf .cf-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 11px 0 9px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-2);
+  box-shadow: var(--glass-edge);
+  color: var(--ui);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.cf .cf-chip:hover {
+  color: var(--fg);
+  background: var(--surface-3);
+}
+.cf .cf-chip[aria-pressed='true'] {
+  color: var(--fg);
+  background: var(--lc-on);
+}
+.cf .cf-chip:focus-visible {
+  outline: 2px solid var(--line-active);
+  outline-offset: 2px;
+}
+.cf .cf-chip-count {
+  color: var(--caption);
+  font-size: 11px;
+}
+
+/* The warning owed: its card in the pane, under the picture's blank. */
+.cf .cf-gate {
+  display: grid;
+  justify-items: center;
+}
+.cf .cf-waiting {
+  display: grid;
+  place-items: center;
+  margin-inline: auto;
+}
+.cf .cf-waiting span {
+  color: var(--caption);
+  font-size: 12px;
+}
+
+/* The help, laid over the picture: no scrim (the native view under it would
+   show through one unscrimmed), and an opaque panel in Home's glass. */
+.cf .live-help {
+  background: none;
+}
+.cf .live-help-panel {
+  border: 0;
+  border-radius: 18px;
+  background: var(--surface-corner);
+  box-shadow:
+    var(--glass-edge),
+    0 18px 48px rgba(0, 0, 0, 0.45);
+}

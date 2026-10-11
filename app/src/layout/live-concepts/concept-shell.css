@@ -1,0 +1,275 @@
+/* Concept A, "Home's shell" (ConceptShell.tsx; stories only): Live in Home's
+   own window. Everything hangs off `.cs`, the concept's root (with `.lc` for
+   the shared parts). Home's rules hold: no lines, areas told apart by space
+   and tone; the picture is the native preview's hole and nothing paints
+   under it (the column is painted by the hero's spread shadow); a panel laid
+   over the hero is opaque. */
+
+/* A slot's wrapper (the sidebar's, the bar's): it only carries `inert`. */
+.cs .cs-fill {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The header's right end: the beat and the output as Home's popovers, a gap,
+   then ?, the sliders and the inspector's toggle. */
+.cs .cs-tools {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+.cs .cs-gap {
+  width: 10px;
+}
+
+/* --- The crate, as Home's inset sidebar (inset-sidebar.css's .isb). ------ */
+
+.cs .cs-side {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0 10px;
+  font-size: 13px;
+}
+.cs .cs-crate {
+  flex: 1;
+  min-height: 0;
+  margin: 0 -10px;
+  padding: 0 10px 14px;
+  overflow-y: auto;
+}
+.cs .cs-quiet {
+  margin: 0;
+  padding: 4px 10px;
+  color: var(--caption);
+  font-size: 11px;
+}
+.cs .live-crate {
+  gap: 14px;
+}
+.cs .live-crate-section {
+  gap: 0;
+  padding: 0;
+  border: 0;
+}
+/* A section's heading: the sidebar's quiet sentence-case caption. */
+.cs .live-crate-section h2 {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  margin: 0;
+  padding: 0 10px;
+  color: var(--caption);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: none;
+}
+.cs .live-crate-list {
+  gap: 0;
+}
+
+/* A playlist: the sidebar's row, its icon, the name, the green dot when it plays. */
+.cs .live-crate-playlist {
+  gap: 10px;
+  min-height: 0;
+  height: var(--lay-row);
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--lay-row-radius);
+  color: var(--ui);
+  font-size: 13px;
+  font-weight: normal;
+  box-shadow: none;
+}
+.cs .live-crate-playlist::before {
+  content: '';
+  flex: none;
+  width: 16px;
+  height: 16px;
+  background: var(--detail);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.25 3.75H13.75M2.25 7.75H13.75M2.25 11.75H7.25M10.25 9.5 14 11.75 10.25 14Z'/%3E%3C/svg%3E")
+    center / 16px no-repeat;
+}
+.cs .live-crate-playlist:has(.live-crate-smart)::before {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.25 3.75H13.75M2.25 7.75H13.75M2.25 11.75H7.25M12 9.25Q12.25 11.5 14.5 11.75Q12.25 12 12 14.25Q11.75 12 9.5 11.75Q11.75 11.5 12 9.25Z'/%3E%3C/svg%3E");
+}
+.cs .live-crate-playlist .live-crate-name {
+  flex: 0 1 auto;
+}
+.cs .live-crate-playlist:hover {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
+}
+.cs .live-crate-playlist:hover::before {
+  background: var(--fg);
+}
+.cs .live-crate-playlist[data-on] {
+  color: var(--fg);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--fg) 9%, transparent);
+  box-shadow: none;
+}
+.cs .live-crate-playlist[data-on]::before {
+  background: var(--fg);
+}
+.cs .live-crate-playlist[data-on] .live-crate-name::after {
+  content: '';
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin: 0 0 2px 6px;
+  border-radius: 50%;
+  background: var(--playing);
+  vertical-align: middle;
+}
+.cs .live-crate-smart {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  color: var(--caption);
+  font-size: 11px;
+  font-weight: normal;
+  letter-spacing: 0;
+}
+
+/* Moods: soft pills; the ones playing brighter, with the playing dot. */
+.cs .live-crate-chips {
+  gap: 6px;
+  padding: 2px 6px 0;
+}
+.cs .live-crate-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 0;
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+  color: var(--ui);
+  font-size: 12px;
+}
+.cs .live-crate-chip:hover {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--fg) 10%, transparent);
+}
+.cs .live-crate-chip[data-on] {
+  background: color-mix(in srgb, var(--fg) 16%, transparent);
+  color: var(--fg);
+  font-weight: 600;
+}
+.cs .live-crate-chip[data-on]::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--playing);
+}
+
+/* Up next: quieter rows than the playlists, the ≡ at the end on hover. */
+.cs .live-crate-row {
+  min-height: 0;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: var(--lay-row-radius);
+  color: var(--ui);
+  font-size: 12px;
+}
+.cs .live-crate-row:has(.live-crate-handle):is(:hover, :focus-visible),
+.cs .live-crate-row:has(.live-crate-handle):is(:hover, :focus-visible) .live-crate-handle {
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
+}
+.cs .live-crate-handle {
+  width: 32px;
+  border-radius: var(--lay-row-radius);
+  background: none;
+  color: var(--caption);
+  font-size: 14px;
+}
+.cs .live-crate-row:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: -2px;
+}
+.cs .live-crate-note {
+  padding: 0 10px 4px;
+  color: var(--caption);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.cs .live-crate-more {
+  min-height: 0;
+  height: 28px;
+  padding: 0 10px;
+  color: var(--caption);
+  font-size: 11px;
+  font-weight: 600;
+}
+.cs .live-crate-drop {
+  background: var(--fg);
+}
+
+/* --- The main column under the picture: the performing controls. -------- */
+
+/* Its own tighter rhythm than Home's sections: everything in one reach. */
+.cs .lay-main {
+  padding-top: 20px;
+  padding-bottom: 20px;
+}
+.cs .cs-deck {
+  display: grid;
+  gap: 18px;
+  width: 100%;
+  max-width: 920px;
+  margin-inline: auto;
+}
+.cs .cs-deck .lc-pad {
+  min-height: 96px;
+}
+.cs .cs-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  min-width: 0;
+}
+.cs .cs-fader {
+  flex: 1;
+  min-width: 0;
+}
+.cs .cs-notice {
+  margin: 0;
+}
+.cs .cs-fullscreen,
+.cs .cs-deck > .lc-fullscreen {
+  justify-content: center;
+}
+.cs .cs-waits {
+  margin: 0;
+  color: var(--caption);
+  font-size: 13px;
+}
+
+/* The warning owed: the controls behind it wait, faded. */
+.cs[data-owed] [inert] {
+  opacity: 0.4;
+}
+.cs[data-owed] .lay-side [inert],
+.cs[data-owed] .lay-head [inert] {
+  opacity: 0.5;
+}
+/* The picture's place holding the warning: opaque (it would sit over the native view's hole), the card centred. */
+.cs .cs-warning-slot {
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  background: color-mix(in srgb, var(--surface-corner) 60%, #000);
+}
+.cs .cs-warning-slot .lc-warning {
+  box-shadow: var(--glass-edge);
+}
