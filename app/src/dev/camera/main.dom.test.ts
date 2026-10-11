@@ -4,6 +4,10 @@ import { waitFor } from '@testing-library/dom';
 
 const getUserMedia = vi.fn();
 let requests: string[];
+function outputResponse(url: string) {
+  return url.includes('camera/output') ? new Response(new Uint8Array(4 * 2 * 2), { status: 200, headers: { 'X-Frame-Width': '2', 'X-Frame-Height': '2' } }) : new Response('null', { status: 200 });
+}
+
 beforeEach(async () => {
   vi.resetModules();
   document.body.innerHTML = '<div id="camera-app"></div>';
@@ -13,16 +17,41 @@ beforeEach(async () => {
     'fetch',
     vi.fn(async (url: string) => {
       requests.push(String(url));
-      return new Response(String(url).includes('/frame?token') ? new Blob(['frame']) : 'null', { status: 200 });
+      return outputResponse(String(url));
     }),
   );
   vi.stubGlobal(
     'createImageBitmap',
     vi.fn(async () => ({ width: 960, height: 540, close: vi.fn() })),
   );
+  vi.stubGlobal(
+    'Worker',
+    class {
+      onmessage: ((event: { data: unknown }) => void) | null = null;
+      onerror: (() => void) | null = null;
+      constructor() {
+        queueMicrotask(() => this.onmessage?.({ data: { type: 'ready' } }));
+      }
+      postMessage() {
+        queueMicrotask(() => this.onmessage?.({ data: { type: 'mask', mask: { data: new Float32Array(256 * 144).fill(1), width: 256, height: 144, inferenceMs: 1 } } }));
+      }
+      terminate() {}
+    },
+  );
+  vi.stubGlobal(
+    'ImageData',
+    class {
+      constructor(
+        public data: Uint8ClampedArray,
+        public width: number,
+        public height: number,
+      ) {}
+    },
+  );
+  vi.spyOn(HTMLImageElement.prototype, 'decode').mockResolvedValue();
   Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia } });
   const context = new Proxy(
-    { getImageData: () => ({ data: new Uint8ClampedArray(640 * 360 * 4) }) },
+    { getImageData: () => ({ data: new Uint8ClampedArray(320 * 180 * 4) }) },
     { get: (target, key) => (key in target ? target[key as keyof typeof target] : vi.fn()), set: () => true },
   );
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context as unknown as CanvasRenderingContext2D);
@@ -44,7 +73,7 @@ afterEach(async () => {
 test('does not request camera permission on load or in demo; demo reaches native bridge', async () => {
   expect(getUserMedia).not.toHaveBeenCalled();
   document.getElementById('demo')!.click();
-  await waitFor(() => expect(requests.some((r) => r.includes('camera/frame?w=640&h=360'))).toBe(true));
+  await waitFor(() => expect(requests.some((r) => r.includes('camera/frame?w=320&h=180'))).toBe(true));
   expect(getUserMedia).not.toHaveBeenCalled();
   expect(document.getElementById('signal')!.textContent).toContain('TEST SUBJECT');
   document.getElementById('stop')!.click();
@@ -85,7 +114,7 @@ test('a delayed older stop cannot clear a newer demo session', async () => {
       await new Promise<void>((r) => {
         finishOldStop = r;
       });
-    return new Response('null', { status: 200 });
+    return outputResponse(String(url));
   });
   document.getElementById('demo')!.click();
   await waitFor(() => expect(stops).toBe(1));
@@ -101,4 +130,33 @@ test('a delayed older stop cannot clear a newer demo session', async () => {
   expect(beforeFrame.filter((r) => r.includes('camera/stop'))).toHaveLength(2);
   expect(beforeFrame.filter((r) => r.includes('camera/settings'))).toHaveLength(1);
   expect(document.getElementById('signal')!.textContent).toContain('TEST SUBJECT');
+});
+
+test('person model failure never silently sends the whole scene', async () => {
+  vi.stubGlobal(
+    'Worker',
+    class {
+      constructor() {
+        throw new Error('WASM unavailable');
+      }
+    },
+  );
+  document.getElementById('demo')!.click();
+  await waitFor(() => expect(document.getElementById('mask-status')!.textContent).toContain('Person isolation unavailable'));
+  expect(requests.some((r) => r.includes('camera/frame'))).toBe(false);
+  const checkbox = document.getElementById('person-only') as HTMLInputElement;
+  checkbox.checked = false;
+  checkbox.dispatchEvent(new Event('change'));
+  await waitFor(() => expect(requests.some((r) => r.includes('camera/frame'))).toBe(true));
+  expect(document.getElementById('mask-status')!.textContent).toContain('Whole scene');
+});
+
+test('malformed raw output stops the input instead of drawing invalid data', async () => {
+  vi.mocked(fetch).mockImplementation(async (url) => {
+    requests.push(String(url));
+    return String(url).includes('camera/output') ? new Response(new Uint8Array(1), { status: 200, headers: { 'X-Frame-Width': '2', 'X-Frame-Height': '2' } }) : outputResponse(String(url));
+  });
+  document.getElementById('demo')!.click();
+  await waitFor(() => expect(document.getElementById('status')!.textContent).toContain('Invalid native RGBA'));
+  expect(document.getElementById('signal')!.textContent).toBe('NO INPUT');
 });

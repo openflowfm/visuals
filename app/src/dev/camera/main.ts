@@ -1,26 +1,40 @@
 import './style.css';
 import { TOKEN_KEY, tokenFrom } from '../bridge';
+import { Contours, rawFrameSize } from './contours';
+import { PersonMask } from './person-mask';
+import demoPhotoUrl from './person-assets/astronaut.png?url';
 
 const root = document.querySelector<HTMLDivElement>('#camera-app')!;
 root.innerHTML = `
 <header><a class="wordmark" href="#">open<span>flow</span></a><div class="edition">EXPERIMENT 001 <span>↗ LIVE CAMERA LAB</span></div><div class="local"><i></i> LOCAL SIGNAL</div></header>
 <main><div class="intro"><div><p class="eyebrow">YOUR FACE. THE FEEDBACK LOOP.</p><h1>Camera <em>possession.</em></h1></div><p class="lede">Become a beautiful signal problem.<br>Feed yourself into the MilkDrop machine.</p></div>
 <section class="instrument" aria-label="Camera instrument"><div class="stage"><canvas id="output" width="960" height="540" aria-label="Processed native engine output"></canvas><div class="stage-top"><span id="signal">NO INPUT</span><span id="rate">NATIVE MILKDROP / METAL</span></div><div id="welcome"><div class="orb">◎</div><h2>Something wants to see you.</h2><p>Try the test subject first. Then become it.</p><button id="demo-center">Run demo <span>↗</span></button></div><div class="stage-bottom"><span id="status" role="status" aria-live="polite">Ready when you are.</span><button id="fullscreen" aria-label="Full screen output">⛶</button></div></div>
-<aside><div class="section-title">01 <span>CHOOSE YOUR AFFLICTION</span></div><div class="presets"><button data-preset="0" class="selected"><b>Liquid identity</b><span>A face that refuses to stay put</span><i>01</i></button><button data-preset="1"><b>Molten mind</b><span>Spill into the room around you</span><i>02</i></button><button data-preset="2"><b>Psychotrip</b><span>Turn the whole world inside out</span><i>03</i></button></div>
+<aside><div class="section-title">01 <span>CHOOSE YOUR AFFLICTION</span></div><div class="presets"><button data-preset="0" class="selected"><b>Echo tunnel</b><span>Your outline, infinitely receding</span><i>01</i></button><button data-preset="1"><b>Mirror cathedral</b><span>Turn your silhouette into architecture</span><i>02</i></button><button data-preset="2"><b>Liquid wire</b><span>Bend the lines that make you</span><i>03</i></button></div>
 <div class="section-title">02 <span>LOSE YOUR COMPOSURE</span></div>
 <label class="knob"><span>Fresh camera <output id="mix-value">14%</output></span><input id="mix" type="range" min="0" max="100" value="14"/><small>Ghosts ← → Recognition</small></label>
 <label class="knob"><span>Afterimage <output id="persistence-value">65%</output></span><input id="persistence" type="range" min="0" max="98" value="65"/><small>Let your past selves linger</small></label>
 <label class="knob"><span>Speed <output id="speed-value">0.8×</output></span><input id="speed" type="range" min="10" max="300" value="80"/><small>Slow hypnosis → Full possession</small></label>
 <label class="mirror"><input id="mirror" type="checkbox" checked/> Mirror source <span>↔</span></label><button id="rescue">Bring my face back <span>↶</span></button></aside></section>
-<div class="transport"><div><button id="camera" class="primary">Start camera <span>↗</span></button><button id="demo">Run demo</button><button id="stop" disabled>Stop</button></div><p id="source-info">No camera or microphone access until you ask.</p></div>
-<footer><span>Camera → native OpenFlow feedback → browser</span><span>Flashing & moving imagery. Start gently.</span></footer><p class="credits" id="credits"></p></main>`;
+<section class="input-tools" aria-label="Source preparation"><div class="input-preview"><canvas id="prepared" width="320" height="180" aria-label="Prepared input sent to feedback"></canvas><span id="input-cost">INPUT TO THE LOOP</span></div><div class="input-choice"><p class="eyebrow">DISTILL THE SIGNAL</p><div class="source-modes"><button id="contour-mode" class="selected" aria-pressed="true">Contours</button><button id="raw-mode" aria-pressed="false">Raw camera</button></div><label class="person-choice"><input id="person-only" type="checkbox" checked/> Person only</label><p id="mask-status" role="status">Local subject isolation for camera input.</p></div><label class="knob"><span>Edge detail <output id="detail-value">45%</output></span><input id="detail" type="range" min="0" max="100" value="45"/><small>Soft silhouette → Fine features</small></label><label class="knob"><span>Noise cutoff <output id="threshold-value">12</output></span><input id="threshold" type="range" min="1" max="60" value="12"/><small>Raise to remove room texture</small></label></section><div class="transport"><div><button id="camera" class="primary">Start camera <span>↗</span></button><button id="demo">Run demo</button><button id="stop" disabled>Stop</button></div><p id="source-info">No camera or microphone access until you ask.</p></div>
+<footer><span>Person → contours → OpenFlow feedback → browser</span><span>Flashing & moving imagery. Start gently.</span></footer><p class="credits" id="credits"></p></main>`;
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const output = $<HTMLCanvasElement>('output');
 const ctx = output.getContext('2d')!;
 const input = document.createElement('canvas');
-input.width = 640;
-input.height = 360;
+const WIDTH = 320,
+  HEIGHT = 180,
+  FRAME_MS = 1000 / 30;
+input.width = WIDTH;
+input.height = HEIGHT;
+const contours = new Contours(WIDTH, HEIGHT);
+const prepared = $<HTMLCanvasElement>('prepared');
+const preparedContext = prepared.getContext('2d')!;
+let useContours = true;
+let personMask: PersonMask | null = null;
+let preparationMs = 0;
 const g = input.getContext('2d', { willReadFrequently: true })!;
+const demoPhoto = new Image();
+demoPhoto.src = demoPhotoUrl;
 const video = document.createElement('video');
 video.muted = true;
 video.playsInline = true;
@@ -31,7 +45,7 @@ try {
 } catch {
   token = tokenFrom(location.search, null);
 }
-const authors = ['Harlequin’s Liquid Dragon · Rovastar', 'Molten Indecision · Krash & Fvese (Fvese Remix)', 'Psychotrip · Pithlit (Spinning colours mix / orthorotate recursive helicities3)'];
+const authors = ['Echo tunnel', 'Mirror cathedral', 'Liquid wire'];
 let preset = 0;
 let mode: 'demo' | 'camera' | null = null;
 let stream: MediaStream | null = null;
@@ -64,74 +78,49 @@ function settings(load = false) {
   return settingsChain;
 }
 function drawDemo(t: number) {
-  g.fillStyle = '#121526';
-  g.fillRect(0, 0, 640, 360);
-  for (let x = 0; x < 640; x += 40) {
-    g.strokeStyle = '#404569';
-    g.beginPath();
-    g.moveTo(x, 0);
-    g.lineTo(x, 360);
-    g.stroke();
-  }
-  for (let y = 0; y < 360; y += 40) {
-    g.beginPath();
-    g.moveTo(0, y);
-    g.lineTo(640, y);
-    g.stroke();
-  }
-  g.save();
-  g.translate(320 + Math.sin(t * 0.7) * 95, 180 + Math.cos(t) * 22);
-  g.rotate(Math.sin(t * 0.8) * 0.2);
-  g.fillStyle = '#a89aff';
-  g.beginPath();
-  g.ellipse(0, 0, 89, 122, 0, 0, Math.PI * 2);
-  g.fill();
-  g.fillStyle = '#efff92';
-  g.fillRect(-63, -46, 46, 31);
-  g.fillRect(17, -46, 46, 31);
-  g.fillStyle = '#1c1b35';
-  g.fillRect(-41 + Math.sin(t) * 6, -39, 10, 20);
-  g.fillRect(35 + Math.sin(t) * 6, -39, 10, 20);
-  g.strokeStyle = '#1c1b35';
-  g.lineWidth = 8;
-  g.beginPath();
-  g.moveTo(0, -5);
-  g.lineTo(-11, 29);
-  g.lineTo(10, 29);
-  g.stroke();
-  g.strokeStyle = '#ff677e';
-  g.lineWidth = 15;
-  g.beginPath();
-  g.arc(0, 43, 36, 0.2, Math.PI - 0.2);
-  g.stroke();
-  g.restore();
-  g.fillStyle = '#efff92';
-  g.font = 'bold 14px monospace';
-  g.fillText('TEST SUBJECT / 001', 20, 30);
+  // Public-domain NASA photo: low-contrast face, clothing and textured room.
+  // It takes the exact same person-mask + edge path as the live camera.
+  g.fillStyle = '#6f706a';
+  g.fillRect(0, 0, WIDTH, HEIGHT);
+  const size = HEIGHT * 1.25;
+  g.drawImage(demoPhoto, (WIDTH - size) / 2 + Math.sin(t * 0.5) * 8, -8 + Math.cos(t * 0.6) * 3, size, size);
 }
 function renderInput() {
   g.save();
   if ($<HTMLInputElement>('mirror').checked) {
-    g.translate(640, 0);
+    g.translate(WIDTH, 0);
     g.scale(-1, 1);
   }
   if (mode === 'demo') drawDemo(performance.now() / 1000);
   else {
-    const scale = Math.max(640 / video.videoWidth, 360 / video.videoHeight);
+    const scale = Math.max(WIDTH / video.videoWidth, HEIGHT / video.videoHeight);
     const w = video.videoWidth * scale;
     const h = video.videoHeight * scale;
-    g.drawImage(video, (640 - w) / 2, (360 - h) / 2, w, h);
+    g.drawImage(video, (WIDTH - w) / 2, (HEIGHT - h) / 2, w, h);
   }
   g.restore();
 }
 async function capture(id: number) {
   while (id === generation && mode) {
     const start = performance.now();
-    renderInput();
-    const mix = performance.now() < rescueUntil ? 0.8 : value('mix') / 100;
-    const data = g.getImageData(0, 0, 640, 360).data;
-    posting = post(`camera/frame?w=640&h=360&mix=${mix}`, data.buffer);
     try {
+      renderInput();
+      const isolate = $<HTMLInputElement>('person-only').checked;
+      if (isolate && !personMask) preparePersonMask();
+      if (isolate) personMask?.update(input);
+      const mask = isolate ? personMask?.latest : null;
+      if (isolate && mask) $('mask-status').textContent = 'Person mask active · background removed locally.';
+      if (isolate && !mask) {
+        await new Promise((r) => setTimeout(r, FRAME_MS));
+        continue;
+      }
+      const mix = performance.now() < rescueUntil ? 0.8 : value('mix') / 100;
+      const filterStarted = performance.now();
+      const source = g.getImageData(0, 0, WIDTH, HEIGHT).data;
+      const data = useContours ? contours.process(source, value('detail'), value('threshold'), mask ?? undefined) : mask ? contours.cutout(source, mask) : source;
+      preparedContext.putImageData(new ImageData(new Uint8ClampedArray(data.buffer as ArrayBuffer), WIDTH, HEIGHT), 0, 0);
+      preparationMs = performance.now() - filterStarted;
+      posting = post(`camera/frame?w=${WIDTH}&h=${HEIGHT}&mix=${mix}`, data.buffer as ArrayBuffer);
       await posting;
     } catch (e) {
       if (id === generation) {
@@ -140,26 +129,32 @@ async function capture(id: number) {
       }
       return;
     }
-    await new Promise((r) => setTimeout(r, Math.max(0, 66 - (performance.now() - start))));
+    await new Promise((r) => setTimeout(r, Math.max(0, FRAME_MS - (performance.now() - start))));
   }
 }
 async function paint(id: number) {
   while (id === generation && mode) {
     const start = performance.now();
     try {
-      const r = await fetch(path('frame'), { cache: 'no-store' });
+      const r = await fetch(path('camera/output'), { cache: 'no-store' });
       if (r.status !== 200) throw new Error(`Output unavailable (${r.status})`);
-      const image = await createImageBitmap(await r.blob());
+      const buffer = await r.arrayBuffer();
+      const [width, height] = rawFrameSize(r.headers, buffer.byteLength);
+      const image = new ImageData(new Uint8ClampedArray(buffer), width, height);
       if (id === generation) {
-        ctx.drawImage(image, 0, 0, output.width, output.height);
+        if (output.width !== width || output.height !== height) {
+          output.width = width;
+          output.height = height;
+        }
+        ctx.putImageData(image, 0, 0);
         frames++;
         if (performance.now() - rateAt >= 1000) {
           $('rate').textContent = `${((frames * 1000) / (performance.now() - rateAt)).toFixed(0)} FPS / NATIVE OUTPUT`;
+          $('input-cost').textContent = `${useContours ? 'CONTOURS' : 'RAW'} / ${preparationMs.toFixed(1)} MS`;
           frames = 0;
           rateAt = performance.now();
         }
       }
-      image.close();
     } catch (e) {
       if (id === generation) {
         await stop();
@@ -167,12 +162,15 @@ async function paint(id: number) {
       }
       return;
     }
-    await new Promise((r) => setTimeout(r, Math.max(0, 50 - (performance.now() - start))));
+    await new Promise((r) => setTimeout(r, Math.max(0, FRAME_MS - (performance.now() - start))));
   }
 }
 async function stop() {
   generation++;
   mode = null;
+  personMask?.dispose();
+  personMask = null;
+  $('mask-status').textContent = 'Local subject isolation for camera input.';
   stream?.getTracks().forEach((t) => t.stop());
   stream = null;
   video.srcObject = null;
@@ -180,7 +178,8 @@ async function stop() {
   $<HTMLButtonElement>('stop').disabled = true;
   $('source-info').textContent = 'Input stopped. Camera tracks released.';
   $('welcome').hidden = false;
-  ctx.clearRect(0, 0, 960, 540);
+  ctx.clearRect(0, 0, output.width, output.height);
+  preparedContext.clearRect(0, 0, WIDTH, HEIGHT);
   status('Stopped. Feedback cleared.');
   const lastFrame = posting;
   await ordered(async () => {
@@ -195,8 +194,9 @@ async function start(next: 'demo' | 'camera') {
   status(next === 'camera' ? 'Waiting for camera permission…' : 'Waking the engine…');
   $<HTMLButtonElement>('stop').disabled = false;
   try {
+    if (next === 'demo') await demoPhoto.decode();
     if (next === 'camera') {
-      const acquired = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 15, max: 15 } }, audio: false });
+      const acquired = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 30, max: 30 } }, audio: false });
       if (id !== generation) {
         acquired.getTracks().forEach((t) => t.stop());
         return;
@@ -213,9 +213,11 @@ async function start(next: 'demo' | 'camera') {
     });
     if (id !== generation) return;
     mode = next;
+    $('mask-status').textContent = $<HTMLInputElement>('person-only').checked ? 'Loading local person model…' : 'Whole scene · background included.';
+    if ($<HTMLInputElement>('person-only').checked) preparePersonMask();
     $('welcome').hidden = true;
-    $('signal').textContent = next === 'demo' ? '● TEST SUBJECT' : '● CAMERA LIVE';
-    $('source-info').textContent = next === 'demo' ? 'Synthetic source. Your camera is off.' : 'Camera on · 640 × 360 · loopback only · no microphone';
+    $('signal').textContent = next === 'demo' ? '● PHOTO TEST SUBJECT' : '● CAMERA LIVE';
+    $('source-info').textContent = next === 'demo' ? 'Photo demo: Eileen Collins / NASA (public domain) · camera off.' : 'Camera on · contours prepared locally · no microphone';
     status('Inside the feedback loop.');
     rateAt = performance.now();
     frames = 0;
@@ -243,11 +245,11 @@ $('fullscreen').onclick = () => {
 $('rescue').onclick = () => {
   rescueUntil = performance.now() + 1000;
 };
-for (const id of ['mix', 'persistence', 'speed']) {
+for (const id of ['mix', 'persistence', 'speed', 'detail', 'threshold']) {
   $<HTMLInputElement>(id).oninput = () => {
-    $(id + '-value').textContent = id === 'speed' ? `${(value(id) / 100).toFixed(1)}×` : `${value(id)}%`;
+    $(id + '-value').textContent = id === 'speed' ? `${(value(id) / 100).toFixed(1)}×` : id === 'threshold' ? `${value(id)}` : `${value(id)}%`;
   };
-  if (id !== 'mix')
+  if (id === 'persistence' || id === 'speed')
     $<HTMLInputElement>(id).onchange = () => {
       if (mode) void settings().catch((e) => status(String(e)));
     };
@@ -256,13 +258,14 @@ for (const button of document.querySelectorAll<HTMLButtonElement>('[data-preset]
   button.onclick = () => {
     preset = Number(button.dataset.preset);
     document.querySelectorAll('[data-preset]').forEach((b) => b.classList.toggle('selected', b === button));
-    $('credits').textContent = `Preset: ${authors[preset]}. Included OpenFlow starter presets; original artists credited.`;
+    $('credits').textContent = `Preset: ${authors[preset]}. Camera-native OpenFlow preset.`;
     if (mode) void settings(true).catch((e) => status(String(e)));
   };
 }
-$('credits').textContent = `Preset: ${authors[0]}. Included OpenFlow starter presets; original artists credited.`;
+$('credits').textContent = `Preset: ${authors[0]}. Camera-native OpenFlow preset.`;
 addEventListener('pagehide', () => {
   generation++;
+  personMask?.dispose();
   stream?.getTracks().forEach((t) => t.stop());
   try {
     navigator.sendBeacon(path('camera/stop'));
@@ -271,3 +274,44 @@ addEventListener('pagehide', () => {
   }
 });
 if (!token) status('Open the camera URL with the token printed by npm run dev.');
+
+for (const [id, enabled] of [
+  ['contour-mode', true],
+  ['raw-mode', false],
+] as const) {
+  $(id).onclick = () => {
+    useContours = enabled;
+    for (const [key, active] of [
+      ['contour-mode', enabled],
+      ['raw-mode', !enabled],
+    ] as const) {
+      $(key).classList.toggle('selected', active);
+      $(key).setAttribute('aria-pressed', String(active));
+    }
+    for (const key of ['detail', 'threshold']) $<HTMLInputElement>(key).disabled = !enabled;
+  };
+}
+
+function preparePersonMask() {
+  if (personMask) return;
+  const id = generation;
+  personMask = new PersonMask({
+    intervalMs: 100,
+    onStatus: (state, error) => {
+      if (id !== generation || state === 'disposed') return;
+      $('mask-status').textContent =
+        state === 'failed'
+          ? `Person isolation unavailable: ${error ?? 'model failed'}. Uncheck Person only to use the whole scene.`
+          : state === 'ready'
+            ? 'Finding the person in this frame…'
+            : 'Loading local person model…';
+    },
+  });
+}
+$<HTMLInputElement>('person-only').onchange = () => {
+  personMask?.dispose();
+  personMask = null;
+  const enabled = $<HTMLInputElement>('person-only').checked;
+  $('mask-status').textContent = enabled ? 'Loading local person model…' : 'Whole scene · background included.';
+  if (mode && enabled) preparePersonMask();
+};

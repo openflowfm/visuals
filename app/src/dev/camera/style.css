@@ -376,3 +376,76 @@ footer {
     letter-spacing: -1.5px;
   }
 }
+.input-tools {
+  display: grid;
+  grid-template-columns: 160px minmax(200px, 1fr) 1fr 1fr;
+  gap: 25px;
+  align-items: center;
+  padding: 18px;
+  background: #1b1e19;
+  border: 1px solid #41443b;
+  border-top: 0;
+}
+.input-preview {
+  position: relative;
+  background: #080a08;
+  line-height: 0;
+}
+.input-preview canvas {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+}
+.input-preview > span {
+  display: block;
+  padding: 9px 5px;
+  font:
+    8px ui-monospace,
+    monospace;
+  letter-spacing: 0.5px;
+  line-height: 1;
+  color: #a7b597;
+}
+.input-choice .eyebrow {
+  font-size: 9px;
+  margin-bottom: 10px;
+}
+.input-choice p:last-child {
+  color: #8b9680;
+  font-size: 10px;
+  margin: 10px 0 0;
+}
+.source-modes {
+  display: flex;
+}
+.source-modes button {
+  border: 1px solid #505847;
+  background: transparent;
+  color: #a5b098;
+  font-size: 11px;
+  padding: 9px 12px;
+}
+.source-modes button.selected {
+  background: #d9ff85;
+  border-color: #d9ff85;
+  color: #202718;
+}
+.input-tools .knob {
+  margin: 0;
+}
+@media (max-width: 900px) {
+  .input-tools {
+    grid-template-columns: 120px 1fr;
+    gap: 18px;
+  }
+}
+.person-choice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: #c9d0bf;
+  margin-top: 10px;
+}
+.person-choice input {
+  accent-color: #d9ff85;
+}
