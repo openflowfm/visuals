@@ -162,10 +162,12 @@ rendered (no graph, no inspector) and stage previews are off
 what's next in the playing playlist, previous / random / next (all through
 `actions::act`, as a controller would), the playlists panel with play/stop and
 auto-advance, the audio input, and the output's display picker and status. Keys: ← ↑
-previous, → ↓ next, R random. Esc, ⌘⇧L or the switch leaves live mode (Esc not while
-typing in a field). The output never becomes the key window, so Esc after a click on it
-lands on the main window's page, or on no window, which a local `NSEvent` monitor
-(`output::native::watch_escape`) turns into the page's `output-escape` event.
+previous, → ↓ next, R random. ⌘⇧L or ✕ leaves live mode; with the output on a display
+the first press only asks, and a second within 4 s leaves. Esc never leaves: it shows
+hidden panels or puts a laid-over crate away. The output never becomes the key window, so
+Esc after a click on it lands on the main window's page, or on no window, which a local
+`NSEvent` monitor (`output::native::watch_escape`) turns into the page's `output-escape`
+event, which shows the panels.
 
 The output (`output.rs`) is a borderless native `NSWindow` with no webview, the size of
 the chosen display (`NSScreen`), at the status window level so neither the menu bar nor

@@ -124,7 +124,7 @@ export const Narrow: Story = {
   args: { width: 800 },
   parameters: { tauri: { displays: [DISPLAYS[0]] } },
   play: async ({ canvas, canvasElement }) => {
-    await expect(await canvas.findByText('One display: the picture will cover this window. Esc comes back.')).toBeVisible();
+    await expect(await canvas.findByText('One display: the picture will cover this window. ✕ or ⌘⇧L comes back.')).toBeVisible();
     await fits(canvasElement);
   },
 };

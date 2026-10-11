@@ -132,7 +132,7 @@ export function FullScreenOffer({ live }: FullScreenOfferProps) {
           </span>
         </button>
       ))}
-      {live.displays.length === 1 && <p className="stage-offer-note">One display: the picture will cover this window. Esc comes back.</p>}
+      {live.displays.length === 1 && <p className="stage-offer-note">One display: the picture will cover this window. ✕ or ⌘⇧L comes back.</p>}
     </div>
   );
 }

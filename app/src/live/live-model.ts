@@ -75,9 +75,6 @@ export interface LiveState {
   rate(stars: Stars): void;
 }
 
-/** What the dock says when a step waits on Hold: a state (it clears when Hold is let go), never a failure. */
-export const HOLD_HINT = 'Hold is on: this preset stays until you let go (H).';
-
 /** How long leaving live waits for its second press while the output shows on a display. */
 export const LEAVE_MS = 4000;
 

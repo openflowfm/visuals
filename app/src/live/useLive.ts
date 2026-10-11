@@ -9,11 +9,11 @@ import * as output from '../output.ts';
 import { leave } from '../OutputPanel.tsx';
 import * as pl from '../playlists.ts';
 import { notice, openFailed } from '../shell.ts';
-import { HOLD_HINT, intensityOf, keyOf, LEAVE_HINT, LEAVE_MS, playsWindowed, ratingOf, sendIntensity, starred, type LiveState } from './live-model.ts';
+import { intensityOf, keyOf, LEAVE_HINT, LEAVE_MS, playsWindowed, ratingOf, sendIntensity, starred, type LiveState } from './live-model.ts';
 
-/** What the hint line says, and why: Hold keeping the preset, or leaving live waiting for its second press. */
+/** What the hint line says, and why: leaving live waiting for its second press. */
 interface Hint {
-  kind: 'hold' | 'leave';
+  kind: 'leave';
   text: string;
 }
 
@@ -39,8 +39,6 @@ export function useLive({ start, windowed = false }: { start: string | null; win
   const [rows, setRows] = useState<api.LibraryRow[]>([]);
 
   const held = (effects?.hold ?? lists?.deck.hold) === true;
-  const heldNow = useRef(held);
-  heldNow.current = held;
 
   const show = useCallback((id: number | null) => void output.open(id).then(setStatus, fail("Couldn't show the output on that display.")), [fail]);
 
@@ -98,19 +96,13 @@ export function useLive({ start, windowed = false }: { start: string | null; win
     else if (now.path) dismiss();
   });
 
-  // A quiet line over the dock (not a failure): Hold keeping the preset, or leaving live asking for a second press.
+  // A quiet line over the dock (not a failure): leaving live asking for a second press.
   const [hint, setHint] = useState<Hint | null>(null);
-  // Letting go of Hold clears what it said.
-  useEffect(() => {
-    if (!held) setHint((h) => (h?.kind === 'hold' ? null : h));
-  }, [held]);
 
   const act = useCallback(
     (action: pl.Action) =>
       void pl.act(action).catch((e) => {
         const step = action.kind === 'next' || action.kind === 'previous' || action.kind === 'random';
-        // A step the deck refused under Hold isn't a failure: Hold is doing what it says. Say so as a state, until it's let go.
-        if (step && heldNow.current) return setHint({ kind: 'hold', text: HOLD_HINT });
         setError(notice(step ? `Couldn't ${action.kind === 'random' ? 'pick a random preset' : `go to the ${action.kind} preset`}.` : "Couldn't play that.", e));
       }),
     [setError],

@@ -240,6 +240,6 @@ describe('Go full screen on…', () => {
   it('says the picture will cover this window when there is only one display', () => {
     render(<FullScreenOffer live={liveOf({ status: OUTPUT_OFF, displays: [DISPLAYS[0]] })} />);
     expect(screen.getByRole('button', { name: 'Go full screen on Built-in Retina Display' })).toBeTruthy();
-    expect(screen.getByText('One display: the picture will cover this window. Esc comes back.')).toBeTruthy();
+    expect(screen.getByText('One display: the picture will cover this window. ✕ or ⌘⇧L comes back.')).toBeTruthy();
   });
 });
