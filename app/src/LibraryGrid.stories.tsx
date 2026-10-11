@@ -65,11 +65,13 @@ export const SeveralSelected: Story = {
   },
 };
 
-/** One playing: the green level badge and ▶ before its name. */
+/** One playing: green level bars before its name, on its picture. */
 export const Playing: Story = {
   args: { current: rows[6].row.path },
   play: async ({ canvas }) => {
-    await expect(await canvas.findByRole('option', { name: /playing/ })).toBeVisible();
+    const playing = await canvas.findByRole('option', { name: /playing/ });
+    await expect(playing).toBeVisible();
+    await expect(playing.querySelector('.tile-pic .tile-caption .tile-name .tile-live')).toBeTruthy();
   },
 };
 

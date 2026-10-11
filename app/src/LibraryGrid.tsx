@@ -4,6 +4,7 @@ import { ButtonFace } from '@openflow/widgets/controls/ButtonFace.tsx';
 import { PresetTile, tileBy, tileName } from './PresetTile.tsx';
 import { tileFor, type Prepared } from './librarySearch.ts';
 import { FAILED_SAYS, useFailedPresets } from './survive.ts';
+import { useHoverPreview } from './previews.ts';
 
 /**
  * The narrowest a tile gets, the gap between tiles, the title line under a thumbnail
@@ -32,16 +33,17 @@ export const LAB_LOOK: Look = { gap: TILE.gap, rowGap: TILE.gap, label: TILE.lab
 export const HOME_PAD = 22;
 
 /**
- * The home's look (decision 68): 16:9 pictures under a 12 px name and an 11 px
- * author (tile.css: 7 + 16 + 1 + 15 px), 12 px between columns and 16 between
- * rows, on the main pane's padding `pad`, with room above for a ring and a lift.
- * A scrollbar that takes room (`scrollbar` px: a classic one, not an overlay) comes
- * out of the right padding, so the columns don't change with it (3 at 900 px).
+ * The home's look (decision 68): 16:9 pictures with their name and author on
+ * the picture itself (tile.css), so no label line under it; 12 px between
+ * columns and rows alike, on the main pane's padding `pad`, with room above for
+ * a ring and a lift. A scrollbar that takes room (`scrollbar` px: a classic one,
+ * not an overlay) comes out of the right padding, so the columns don't change
+ * with it (3 at 900 px).
  */
 export const homeLook = (pad: number = HOME_PAD, scrollbar = 0): Look => ({
   gap: 12,
-  rowGap: 16,
-  label: 39,
+  rowGap: 12,
+  label: 0,
   padX: pad,
   padRight: Math.max(0, pad - scrollbar),
   padTop: 8,
@@ -186,6 +188,9 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
   const [size, setSize] = useState({ width: 0, height: 0, home: false, pad: HOME_PAD, bar: 0 });
   // The first row in view: state changes only when a scroll crosses a row.
   const [topRow, setTopRow] = useState(0);
+  // The tile the pointer is on (its key), whose preset moves in it on the home (`useHoverPreview`).
+  const [hovered, setHovered] = useState<string | null>(null);
+  const onHover = useCallback((key: string, on: boolean) => setHovered((h) => (on ? key : h === key ? null : h)), []);
   const failed = useFailedPresets();
   const look = useMemo(() => (size.home ? homeLook(size.pad, size.bar) : LAB_LOOK), [size.home, size.pad, size.bar]);
   const lay = layout(size.width, rows.length, tileMin, look);
@@ -332,6 +337,8 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
           home={size.home}
           adding={!!adding}
           addedTo={adding?.has.has(p.row.path) ? adding.name : null}
+          hovered={hovered === p.row.key}
+          onHover={onHover}
         />,
       );
     }
@@ -393,6 +400,16 @@ export interface TileProps {
   adding?: boolean;
   /** The playlist quick add fills, when the preset is already in it: it shows ✓. */
   addedTo?: string | null;
+  /** The pointer is on it: on the home, its preset moves in it (the hover preview). */
+  hovered?: boolean;
+  /** The pointer came onto (true) or left (false) the tile with key `key`. */
+  onHover?(key: string, on: boolean): void;
+}
+
+/** The hovered tile's preset, moving: a canvas over the thumbnail, shown once its first picture is in. */
+export function TileMotion({ path }: { path: string }) {
+  const { ref, drawn } = useHoverPreview(path);
+  return <canvas ref={ref} className="tile-motion" data-drawn={drawn ? '' : undefined} aria-hidden="true" />;
 }
 
 /** What a tile says when pointed at, and to a screen reader: title, style and authors, then what's true of it now (in the playlist quick add fills, `addedTo`). */
@@ -402,7 +419,24 @@ export function tileSays(p: Prepared, playing: boolean, failed: boolean, addedTo
 }
 
 /** One preset: its thumbnail (or its style, when it has none) and its title. */
-export const Tile = memo(function Tile({ id, index, p, active, selected, playing, failed, intoName, onPick, onAdd, onPress, home = false, adding = false, addedTo = null }: TileProps) {
+export const Tile = memo(function Tile({
+  id,
+  index,
+  p,
+  active,
+  selected,
+  playing,
+  failed,
+  intoName,
+  onPick,
+  onAdd,
+  onPress,
+  home = false,
+  adding = false,
+  addedTo = null,
+  hovered = false,
+  onHover,
+}: TileProps) {
   const says = tileSays(p, playing, failed, addedTo);
   // A double-click's second click does nothing more: the first already played it (or added it, which a second would undo).
   const click = (ev: MouseEvent) => ev.detail < 2 && onPick(index, pickOf(ev, adding));
@@ -421,6 +455,9 @@ export const Tile = memo(function Tile({ id, index, p, active, selected, playing
         title={says}
         onClick={click}
         onPointerDown={onPress && ((ev: PointerEvent) => onPress(index, ev))}
+        onMouseEnter={onHover && (() => onHover(p.row.key, true))}
+        onMouseLeave={onHover && (() => onHover(p.row.key, false))}
+        motion={hovered ? <TileMotion path={p.row.path} /> : undefined}
         thumbnail={p.row.thumbnail}
         empty={p.style}
         name={tileName(p.title, p.row.path)}

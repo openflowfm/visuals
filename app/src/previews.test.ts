@@ -1,5 +1,30 @@
 import { describe, expect, it } from 'vitest';
-import { DIM, HEADER, MAX_GAIN, SETTLE_MS, STEPS, layerOver, needed, settler, stepFor, unpack, wanted, withinBudget, ZOOM_IN } from './previews.ts';
+import { DIM, HEADER, HOVER_HEADER, HOVER_MAX, MAX_GAIN, SETTLE_MS, STEPS, hoverSize, layerOver, needed, settler, stepFor, unpack, unpackHover, wanted, withinBudget, ZOOM_IN } from './previews.ts';
+
+describe('the hover preview’s pictures', () => {
+  it('are asked for at the tile’s device pixels, 16:9, within the largest', () => {
+    expect(hoverSize(200, 2)).toEqual({ width: 400, height: 225 });
+    expect(hoverSize(300, 1)).toEqual({ width: 300, height: 169 });
+    expect(hoverSize(500, 2)).toEqual(HOVER_MAX);
+    // Not laid out yet: the base preview size.
+    expect(hoverSize(0, 0).width).toBe(192);
+  });
+
+  it('are read only when whole and of the hover asked for', () => {
+    const packed = (ticket: number, w: number, h: number, extra = 0) => {
+      const b = new Uint8Array(HOVER_HEADER + w * h * 4 + extra).fill(9);
+      const v = new DataView(b.buffer);
+      [ticket, w, h].forEach((n, i) => v.setUint32(i * 4, n, true));
+      return b.buffer;
+    };
+    const got = unpackHover(packed(3, 2, 1), 3)!;
+    expect([got.width, got.height, got.pixels.length, got.pixels[0]]).toEqual([2, 1, 8, 9]);
+    expect(unpackHover(packed(2, 2, 1), 3)).toBeNull();
+    expect(unpackHover(packed(3, 2, 1, 4), 3)).toBeNull();
+    expect(unpackHover(new ArrayBuffer(0), 3)).toBeNull();
+    expect(unpackHover(packed(3, 0, 0), 3)).toBeNull();
+  });
+});
 
 /** The device pixels a 192 CSS px picture covers, as the poll works it out. */
 const need = (node: number, graph: number, dpr: number) => needed(192, { node, graph }, dpr);

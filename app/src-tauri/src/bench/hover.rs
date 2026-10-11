@@ -243,7 +243,8 @@ mod tests {
             None
         };
         // A wave that turns with time: no two pictures the same.
-        let preset = engine::preset::parse("[preset00]\nnWaveMode=0\nzoom=1\nper_frame_1=wave_r=0.5+0.5*sin(time*7);wave_g=0.5+0.5*cos(time*5);\nper_frame_2=ob_size=0.1;ob_r=0.5+0.5*sin(time*3);ob_a=1;\n");
+        let preset =
+            engine::preset::parse("[preset00]\nnWaveMode=0\nzoom=1\nper_frame_1=wave_r=0.5+0.5*sin(time*7);wave_g=0.5+0.5*cos(time*5);\nper_frame_2=ob_size=0.1;ob_r=0.5+0.5*sin(time*3);ob_a=1;\n");
         let ticket = show(preset, (64, 36), &engine::live::ring());
         let first = wait(ticket, None).expect("a picture of the hovered preset");
         assert_eq!(&first[4..HEADER], &[64, 0, 0, 0, 36, 0, 0, 0]);

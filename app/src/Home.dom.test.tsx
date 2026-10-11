@@ -567,7 +567,7 @@ describe('a playlist’s grid', () => {
     expect(within(inspector() as HTMLElement).getByRole('heading', { name: 'a' })).toBeTruthy();
   });
 
-  it('shows the shared tile, with the name, the author line, its place and the playing mark', async () => {
+  it('shows the shared tile, with the name, the author line and the playing mark, but not its place (said, not shown)', async () => {
     const rows = [{ ...ROWS[0], authors: ['geiss', 'flexi'] }, ROWS[1], ROWS[2]];
     invoke.mockImplementation((cmd: string) => Promise.resolve(cmd === 'library_index' ? rows : answer(cmd)));
     deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path };
@@ -576,7 +576,9 @@ describe('a playlist’s grid', () => {
     expect(first.querySelector('.tile-name')!.textContent).toBe('a');
     expect(first.querySelector('.tile-by')!.textContent).toBe('geiss & flexi');
     expect(first.hasAttribute('data-playing')).toBe(true);
-    expect(first.querySelector('.home-tile-n')!.textContent).toBe('1');
+    expect(first.querySelector('.home-tile-n')).toBeNull();
+    expect(first.textContent).not.toMatch(/\d/);
+    expect(first.getAttribute('aria-label')).toMatch(/^1\. a/);
     expect(second.hasAttribute('data-playing')).toBe(false);
   });
 });
@@ -781,7 +783,7 @@ describe('the library grid on the home (decision 68)', () => {
   it.each([
     [1440, '8px 22px 22px'],
     [1000, '8px 16px 22px'],
-  ] as const)('lays out at %ipx on the main column’s padding (%s), 12 px across and 16 px down', async (width, padding) => {
+  ] as const)('lays out at %ipx on the main column’s padding (%s), 12 px across and down', async (width, padding) => {
     viewport(width);
     const style = document.createElement('style');
     style.textContent = [':root { --bg: rgb(1, 1, 1); }', css('home.css'), css('tile.css')].join('\n');
@@ -790,7 +792,7 @@ describe('the library grid on the home (decision 68)', () => {
       await mount({ library: true });
       const win = document.querySelector<HTMLElement>('.lib-grid-window')!;
       expect(win.style.padding).toBe(padding);
-      expect(win.style.gap).toBe('16px 12px');
+      expect(win.style.gap).toBe('12px');
       expect(grid()!.querySelector('.tile .tile-pic')).toBeTruthy();
     } finally {
       style.remove();
