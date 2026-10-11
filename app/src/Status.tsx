@@ -33,7 +33,7 @@ export function beatLit(frame: link.Frame | null, now: number): boolean {
 }
 
 /** Whether the tempo is a Link session's: on the network with someone else in it. */
-const linked = (frame: link.Frame | null): frame is link.Frame => frame !== null && frame.enabled && frame.peers > 0;
+export const linked = (frame: link.Frame | null): frame is link.Frame => frame !== null && frame.enabled && frame.peers > 0;
 
 /** The tempo the BEAT light shows: a Link session's when there is one, otherwise the effects' tempo; null before either is known. */
 export function bpmText(frame: link.Frame | null, effects: fx.Fx | null): string | null {
@@ -132,8 +132,8 @@ function AudioLevel({ onHearing }: { onHearing(hearing: boolean): void }) {
   );
 }
 
-/** The BEAT light's dot: lit at the start of each beat. Its own leaf, checked every animation frame, re-rendering only when it turns on or off. */
-function BeatDot({ frame }: { frame: link.Frame | null }) {
+/** The BEAT light's dot: lit at the start of each beat. Its own leaf, checked every animation frame, re-rendering only when it turns on or off. `className` is the strip's dot unless the Stage's header gives its own. */
+export function BeatDot({ frame, className = 'live-status-dot' }: { frame: link.Frame | null; className?: string }) {
   const [lit, setLit] = useState(false);
   const latest = useRef(frame);
   latest.current = frame;
@@ -146,11 +146,11 @@ function BeatDot({ frame }: { frame: link.Frame | null }) {
     tick();
     return () => cancelAnimationFrame(id);
   }, []);
-  return <span className="live-status-dot" data-on={lit ? '' : undefined} aria-hidden="true" />;
+  return <span className={className} data-on={lit ? '' : undefined} aria-hidden="true" />;
 }
 
 /** The frame rate, read once a second and shown only while it is low. Its own leaf, so a reading re-renders nothing else. */
-function Fps() {
+export function Fps({ className = 'live-status-fps' }: { className?: string }) {
   const [fps, setFps] = useState(0);
   useEffect(() => {
     const t = window.setInterval(() => {
@@ -164,7 +164,7 @@ function Fps() {
   const shown = fpsShown(fps);
   if (!shown) return null;
   return (
-    <span className="live-status-fps" title="the picture is drawing fewer frames a second than usual: try a simpler preset or close other apps">
+    <span className={className} title="the picture is drawing fewer frames a second than usual: try a simpler preset or close other apps">
       {shown}
     </span>
   );
@@ -221,7 +221,7 @@ export const noteText = (note: Skips): string => (note.stopped !== undefined ? s
  * In a narrow window it takes only the room the strip has left, wrapping onto a
  * second line and then cutting short (`live.css`); its tooltip says it whole.
  */
-export function SkipNote() {
+export function SkipNote({ className = 'live-status-skipped' }: { className?: string }) {
   const [note, setNote] = useState<Skips | null>(null);
   const [now, setNow] = useState(0);
   useTauriEvent(api.onPresetSkipped, () => {
@@ -243,7 +243,7 @@ export function SkipNote() {
   const phase = skipPhase(note, now);
   const text = note && phase !== 'gone' ? noteText(note) : '';
   return (
-    <span className="live-status-skipped" role="status" aria-live="polite" title={text || undefined} data-fading={phase === 'fading' ? '' : undefined}>
+    <span className={className} role="status" aria-live="polite" title={text || undefined} data-fading={phase === 'fading' ? '' : undefined}>
       {text}
     </span>
   );
