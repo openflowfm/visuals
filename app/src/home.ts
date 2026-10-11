@@ -394,6 +394,16 @@ export function presetLength(deck: pl.Deck): number | null {
   return deck.auto && !deck.hold && deck.bars === 0 ? deck.seconds : null;
 }
 
+/**
+ * Whether the deck moves on by itself: auto-advance on a clock, or Link's schedule
+ * in bars or beats (`every`, read optionally: fixtures made before it was sent have
+ * only `bars`). Hold doesn't change it; the hint says H stays.
+ */
+export function movesByItself(deck: pl.Deck): boolean {
+  const every = (deck as pl.Deck & { every?: { every: number } }).every;
+  return deck.auto || deck.bars > 0 || (every?.every ?? 0) > 0;
+}
+
 /** The index key of the preset at `path` (a whole path, or one in the pack, `VITE_HOME_PICK`), or null. */
 export function keyAt(rows: readonly Prepared[], path: string): string | null {
   if (!path) return null;

@@ -9,6 +9,7 @@ import {
   pickTiles,
   playsFrom,
   playsLike,
+  movesByItself,
   prefsAt,
   presetLength,
   recentList,
@@ -424,6 +425,14 @@ describe('the inspector view (decision 70)', () => {
     expect(presetLength({ ...ticking, hold: true })).toBeNull();
     expect(presetLength({ ...ticking, auto: false })).toBeNull();
     expect(presetLength({ ...ticking, bars: 8 })).toBeNull();
+  });
+
+  it('moves on by itself on a clock, Link’s bars or Link’s beats, held or not', () => {
+    expect(movesByItself(EMPTY_DECK)).toBe(false);
+    expect(movesByItself({ ...EMPTY_DECK, auto: true, hold: true })).toBe(true);
+    expect(movesByItself({ ...EMPTY_DECK, bars: 8 })).toBe(true);
+    expect(movesByItself({ ...EMPTY_DECK, every: { unit: 'beats', every: 4 } } as typeof EMPTY_DECK)).toBe(true);
+    expect(movesByItself({ ...EMPTY_DECK, every: { unit: 'bars', every: 0 } } as typeof EMPTY_DECK)).toBe(false);
   });
 
   it('finds a preset by its whole path or its path in the pack', () => {

@@ -21,6 +21,7 @@ import {
   matches,
   pickTiles,
   playsFrom,
+  movesByItself,
   prefsAt,
   presetLength,
   remember,
@@ -699,7 +700,7 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
             now={current ? { name: playingShown?.title ?? current.name, from } : null}
             playing={!deck.hold}
             // It moves on by itself on a timer, or on Link's bars.
-            moves={deck.auto || deck.bars > 0}
+            moves={movesByItself(deck)}
             onPlayPause={hold}
             onStep={step}
             stepIn={stepWords}
@@ -985,7 +986,7 @@ export function PlaylistPane({ list, lists, tiles, total, rows, dropping, picked
   const shuffledNow = active && list.settings.order === 'shuffle';
   const reorderable = manual && !shuffledNow;
   const currentAt = (t: StripTile) => active && (manual || !shuffledNow ? deck.index !== null && t.index === deck.index : t.path === deck.current);
-  const nextAt = (t: StripTile) => active && !deck.hold && (manual || !shuffledNow ? deck.next_index !== null && t.index === deck.next_index : t.path === deck.next);
+  const nextAt = (t: StripTile) => active && (manual || !shuffledNow ? deck.next_index !== null && t.index === deck.next_index : t.path === deck.next);
   const tip = stripTip(reorderable);
 
   if (tiles.length === 0)

@@ -438,6 +438,14 @@ describe('a playlist’s grid', () => {
     playlists = [manual('1', 'Warm up', [item(ROWS[0]), item(ROWS[2])])];
   });
 
+  it('marks the next tile while held too, since → still steps to it', async () => {
+    deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path, next: ROWS[2].path, next_index: 1, count: 2, hold: true };
+    await mount();
+    const marked = document.querySelectorAll('[data-next]');
+    expect(marked.length).toBe(1);
+    expect(marked[0].querySelector('.home-tile-next')!.textContent).toBe('next');
+  });
+
   it('says how to pick, play and reorder it in its tooltip, not a line over it', async () => {
     deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path };
     await mount();
@@ -808,6 +816,12 @@ describe('the transport bar', () => {
     fireEvent.keyDown(window, { key: 'h' });
     await act(() => vi.advanceTimersByTimeAsync(0));
     expect(sent('act').map((a) => a.action)).toEqual([{ kind: 'hold', on: null }]);
+  });
+
+  it('says it moves on by itself on Link’s schedule in beats, where bars is 0', async () => {
+    deck = { ...EMPTY_DECK, current: ROWS[0].path, bars: 0, every: { unit: 'beats', every: 4 } } as typeof EMPTY_DECK;
+    await mount({ library: true, start: ROWS[0].path });
+    expect(document.querySelector('.lay-transport-hint')!.textContent).toBe('moves on by itself · H to stay');
   });
 });
 
