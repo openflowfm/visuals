@@ -94,3 +94,19 @@ describe('person mask worker lifecycle', () => {
     expect(second.error).toBe('WASM failed');
   });
 });
+
+it('rejects a delayed mask based on source capture time, not arrival time', () => {
+  const mask = new PersonMask();
+  const worker = FakeWorker.current;
+  worker.emit({ type: 'ready' });
+  const result = { data: new Float32Array([1]), width: 1, height: 1, inferenceMs: 20, capturedAt: 1000 };
+  worker.emit({ type: 'mask', mask: result });
+  expect(mask.current(1249)).toBe(result);
+  expect(mask.current(1251)).toBeNull();
+  vi.mocked(performance.now).mockReturnValue(1500);
+  worker.emit({ type: 'mask', mask: result });
+  expect(mask.current()).toBeNull();
+  worker.emit({ type: 'mask', mask: { ...result, capturedAt: 1490 } });
+  expect(mask.current()).not.toBeNull();
+  mask.dispose();
+});

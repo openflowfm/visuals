@@ -51,6 +51,7 @@ let mode: 'demo' | 'camera' | null = null;
 let stream: MediaStream | null = null;
 let generation = 0;
 let posting: Promise<void> = Promise.resolve();
+let reading: Promise<void> = Promise.resolve();
 let settingsChain: Promise<void> = Promise.resolve();
 let lifecycle: Promise<void> = Promise.resolve();
 function ordered(action: () => Promise<void>) {
@@ -108,9 +109,10 @@ async function capture(id: number) {
       const isolate = $<HTMLInputElement>('person-only').checked;
       if (isolate && !personMask) preparePersonMask();
       if (isolate) personMask?.update(input);
-      const mask = isolate ? personMask?.latest : null;
+      const mask = isolate ? personMask?.current() : null;
       if (isolate && mask) $('mask-status').textContent = 'Person mask active · background removed locally.';
       if (isolate && !mask) {
+        if (personMask?.status === 'ready') $('mask-status').textContent = 'Waiting for a fresh person mask…';
         await new Promise((r) => setTimeout(r, FRAME_MS));
         continue;
       }
@@ -136,25 +138,28 @@ async function paint(id: number) {
   while (id === generation && mode) {
     const start = performance.now();
     try {
-      const r = await fetch(path('camera/output'), { cache: 'no-store' });
-      if (r.status !== 200) throw new Error(`Output unavailable (${r.status})`);
-      const buffer = await r.arrayBuffer();
-      const [width, height] = rawFrameSize(r.headers, buffer.byteLength);
-      const image = new ImageData(new Uint8ClampedArray(buffer), width, height);
-      if (id === generation) {
-        if (output.width !== width || output.height !== height) {
-          output.width = width;
-          output.height = height;
+      reading = (async () => {
+        const r = await fetch(path('camera/output'), { cache: 'no-store' });
+        if (r.status !== 200) throw new Error(`Output unavailable (${r.status})`);
+        const buffer = await r.arrayBuffer();
+        const [width, height] = rawFrameSize(r.headers, buffer.byteLength);
+        const image = new ImageData(new Uint8ClampedArray(buffer), width, height);
+        if (id === generation) {
+          if (output.width !== width || output.height !== height) {
+            output.width = width;
+            output.height = height;
+          }
+          ctx.putImageData(image, 0, 0);
+          frames++;
+          if (performance.now() - rateAt >= 1000) {
+            $('rate').textContent = `${((frames * 1000) / (performance.now() - rateAt)).toFixed(0)} FPS / NATIVE OUTPUT`;
+            $('input-cost').textContent = `${useContours ? 'CONTOURS' : 'RAW'} / ${preparationMs.toFixed(1)} MS`;
+            frames = 0;
+            rateAt = performance.now();
+          }
         }
-        ctx.putImageData(image, 0, 0);
-        frames++;
-        if (performance.now() - rateAt >= 1000) {
-          $('rate').textContent = `${((frames * 1000) / (performance.now() - rateAt)).toFixed(0)} FPS / NATIVE OUTPUT`;
-          $('input-cost').textContent = `${useContours ? 'CONTOURS' : 'RAW'} / ${preparationMs.toFixed(1)} MS`;
-          frames = 0;
-          rateAt = performance.now();
-        }
-      }
+      })();
+      await reading;
     } catch (e) {
       if (id === generation) {
         await stop();
@@ -175,6 +180,8 @@ async function stop() {
   stream = null;
   video.srcObject = null;
   $('signal').textContent = 'NO INPUT';
+  $('rate').textContent = 'NATIVE OUTPUT / IDLE';
+  $('input-cost').textContent = 'INPUT TO THE LOOP';
   $<HTMLButtonElement>('stop').disabled = true;
   $('source-info').textContent = 'Input stopped. Camera tracks released.';
   $('welcome').hidden = false;
@@ -182,8 +189,9 @@ async function stop() {
   preparedContext.clearRect(0, 0, WIDTH, HEIGHT);
   status('Stopped. Feedback cleared.');
   const lastFrame = posting;
+  const lastOutput = reading;
   await ordered(async () => {
-    await lastFrame.catch(() => {});
+    await Promise.all([lastFrame.catch(() => {}), lastOutput.catch(() => {})]);
     await post('camera/stop').catch(() => {});
   });
 }
@@ -308,10 +316,42 @@ function preparePersonMask() {
     },
   });
 }
-$<HTMLInputElement>('person-only').onchange = () => {
+/** Source-coordinate and isolation changes are a barrier, not just a checkbox.
+ * Old uploads finish before native reset; old output responses fail the generation
+ * check. Camera tracks stay live while a matching new mask is acquired. */
+async function resetPreparation() {
   personMask?.dispose();
   personMask = null;
+  preparedContext.clearRect(0, 0, WIDTH, HEIGHT);
+  ctx.clearRect(0, 0, output.width, output.height);
   const enabled = $<HTMLInputElement>('person-only').checked;
-  $('mask-status').textContent = enabled ? 'Loading local person model…' : 'Whole scene · background included.';
-  if (mode && enabled) preparePersonMask();
+  $('mask-status').textContent = enabled ? 'Waiting for a fresh person mask…' : 'Whole scene · background included.';
+  if (!mode) return;
+  const id = ++generation;
+  const lastFrame = posting;
+  const lastOutput = reading;
+  status('Clearing the previous source…');
+  try {
+    await ordered(async () => {
+      await Promise.all([lastFrame.catch(() => {}), lastOutput.catch(() => {})]);
+      await post('camera/stop');
+      if (id === generation && mode) await settings();
+    });
+    if (id !== generation || !mode) return;
+    if (enabled) preparePersonMask();
+    status('Inside the feedback loop.');
+    void capture(id);
+    void paint(id);
+  } catch (error) {
+    if (id === generation) {
+      await stop();
+      status(String(error));
+    }
+  }
+}
+$<HTMLInputElement>('person-only').onchange = () => {
+  void resetPreparation();
+};
+$<HTMLInputElement>('mirror').onchange = () => {
+  void resetPreparation();
 };

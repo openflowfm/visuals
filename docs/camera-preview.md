@@ -26,7 +26,10 @@ authenticated loopback dev bridge; there is no remote upload or recording.
 
 - **Person only** is on by default. A pinned local MediaPipe model runs in a
   browser worker at up to 10 inferences/second. The latest foreground confidence
-  mask removes the room; its outer silhouette and strong internal edges feed the
+  mask removes the room; results older than 250 ms are rejected until fresh
+  inference arrives. Mirror and isolation changes drain in-flight uploads/output,
+  clear browser images and native feedback, then reacquire a matching mask.
+  The mask's outer silhouette and strong internal edges feed the
   effect at up to 30 fps. No frame uploads before the first valid mask. Model
   failure pauses injection and offers an explicit whole-scene choice; it never
   silently labels the room as a person-only result.

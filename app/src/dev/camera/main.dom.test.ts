@@ -4,6 +4,26 @@ import { waitFor } from '@testing-library/dom';
 
 const getUserMedia = vi.fn();
 let requests: string[];
+let canvasEvents: { id: string; action: string; first?: number }[];
+class MaskWorker {
+  static instances: MaskWorker[] = [];
+  static automatic = true;
+  onmessage: ((event: { data: unknown }) => void) | null = null;
+  timestamp = 0;
+  terminate = vi.fn();
+  constructor() {
+    MaskWorker.instances.push(this);
+    queueMicrotask(() => this.onmessage?.({ data: { type: 'ready' } }));
+  }
+  postMessage(message: { timestamp: number }) {
+    this.timestamp = message.timestamp;
+    if (MaskWorker.automatic) queueMicrotask(() => this.complete());
+  }
+  complete() {
+    this.onmessage?.({ data: { type: 'mask', mask: { data: new Float32Array(256 * 144).fill(1), width: 256, height: 144, inferenceMs: 1, capturedAt: this.timestamp } } });
+  }
+}
+
 function outputResponse(url: string) {
   return url.includes('camera/output') ? new Response(new Uint8Array(4 * 2 * 2), { status: 200, headers: { 'X-Frame-Width': '2', 'X-Frame-Height': '2' } }) : new Response('null', { status: 200 });
 }
@@ -13,6 +33,9 @@ beforeEach(async () => {
   document.body.innerHTML = '<div id="camera-app"></div>';
   sessionStorage.setItem('visuals.dev.bridge-token', 'test-token');
   requests = [];
+  canvasEvents = [];
+  MaskWorker.instances = [];
+  MaskWorker.automatic = true;
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string) => {
@@ -24,20 +47,7 @@ beforeEach(async () => {
     'createImageBitmap',
     vi.fn(async () => ({ width: 960, height: 540, close: vi.fn() })),
   );
-  vi.stubGlobal(
-    'Worker',
-    class {
-      onmessage: ((event: { data: unknown }) => void) | null = null;
-      onerror: (() => void) | null = null;
-      constructor() {
-        queueMicrotask(() => this.onmessage?.({ data: { type: 'ready' } }));
-      }
-      postMessage() {
-        queueMicrotask(() => this.onmessage?.({ data: { type: 'mask', mask: { data: new Float32Array(256 * 144).fill(1), width: 256, height: 144, inferenceMs: 1 } } }));
-      }
-      terminate() {}
-    },
-  );
+  vi.stubGlobal('Worker', MaskWorker);
   vi.stubGlobal(
     'ImageData',
     class {
@@ -50,11 +60,22 @@ beforeEach(async () => {
   );
   vi.spyOn(HTMLImageElement.prototype, 'decode').mockResolvedValue();
   Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia } });
-  const context = new Proxy(
-    { getImageData: () => ({ data: new Uint8ClampedArray(320 * 180 * 4) }) },
-    { get: (target, key) => (key in target ? target[key as keyof typeof target] : vi.fn()), set: () => true },
-  );
-  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context as unknown as CanvasRenderingContext2D);
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (this: HTMLCanvasElement) {
+    const id = this.id;
+    const context = new Proxy(
+      {
+        getImageData: () => ({ data: new Uint8ClampedArray(320 * 180 * 4) }),
+        putImageData: (image: ImageData) => {
+          canvasEvents.push({ id, action: 'paint', first: image.data[0] });
+        },
+        clearRect: () => {
+          canvasEvents.push({ id, action: 'clear' });
+        },
+      },
+      { get: (target, key) => (key in target ? target[key as keyof typeof target] : vi.fn()), set: () => true },
+    );
+    return context as unknown as CanvasRenderingContext2D;
+  });
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
   await import('./main');
 });
@@ -159,4 +180,83 @@ test('malformed raw output stops the input instead of drawing invalid data', asy
   document.getElementById('demo')!.click();
   await waitFor(() => expect(document.getElementById('status')!.textContent).toContain('Invalid native RGBA'));
   expect(document.getElementById('signal')!.textContent).toBe('NO INPUT');
+});
+
+test('mirror change discards delayed old-coordinate masks and acquires a fresh one', async () => {
+  MaskWorker.automatic = false;
+  document.getElementById('demo')!.click();
+  await waitFor(() => expect(MaskWorker.instances[0]?.timestamp).toBeGreaterThan(0));
+  const old = MaskWorker.instances[0];
+  const mirror = document.getElementById('mirror') as HTMLInputElement;
+  mirror.checked = !mirror.checked;
+  mirror.dispatchEvent(new Event('change'));
+  await waitFor(() => expect(MaskWorker.instances[1]?.timestamp).toBeGreaterThan(0));
+  expect(old.terminate).toHaveBeenCalledOnce();
+  old.complete();
+  await new Promise((r) => setTimeout(r, 40));
+  expect(requests.filter((r) => r.includes('camera/frame'))).toHaveLength(0);
+  MaskWorker.instances[1].complete();
+  await waitFor(() => expect(requests.some((r) => r.includes('camera/frame'))).toBe(true));
+});
+
+test('person-only transition drains old uploads, clears feedback and rejects late room output', async () => {
+  MaskWorker.automatic = false;
+  const person = document.getElementById('person-only') as HTMLInputElement;
+  person.checked = false;
+  let finishUpload!: () => void;
+  let finishOutput!: () => void;
+  let finishReset!: () => void;
+  let heldUpload = false,
+    heldOutput = false;
+  vi.mocked(fetch).mockImplementation(async (url) => {
+    const route = String(url);
+    requests.push(route);
+    if (route.includes('camera/frame') && !heldUpload) {
+      heldUpload = true;
+      await new Promise<void>((done) => {
+        finishUpload = done;
+      });
+    }
+    if (route.includes('camera/output') && !heldOutput) {
+      heldOutput = true;
+      await new Promise<void>((done) => {
+        finishOutput = done;
+      });
+      return new Response(new Uint8Array(16).fill(99), { status: 200, headers: { 'X-Frame-Width': '2', 'X-Frame-Height': '2' } });
+    }
+    if (route.includes('camera/stop') && requests.filter((r) => r.includes('camera/stop')).length === 2)
+      await new Promise<void>((done) => {
+        finishReset = done;
+      });
+    return outputResponse(route);
+  });
+  document.getElementById('demo')!.click();
+  await waitFor(() => expect(heldUpload && heldOutput).toBe(true));
+  const eventsBefore = canvasEvents.length;
+  person.checked = true;
+  person.dispatchEvent(new Event('change'));
+  expect(canvasEvents.slice(eventsBefore)).toEqual(
+    expect.arrayContaining([
+      { id: 'prepared', action: 'clear' },
+      { id: 'output', action: 'clear' },
+    ]),
+  );
+  await new Promise((r) => setTimeout(r, 20));
+  expect(requests.filter((r) => r.includes('camera/stop'))).toHaveLength(1);
+  finishUpload();
+  await new Promise((r) => setTimeout(r, 20));
+  expect(requests.filter((r) => r.includes('camera/stop'))).toHaveLength(1);
+  finishOutput();
+  await waitFor(() => expect(requests.filter((r) => r.includes('camera/stop'))).toHaveLength(2));
+  expect(requests.filter((r) => r.includes('camera/settings'))).toHaveLength(1);
+  expect(MaskWorker.instances).toHaveLength(0);
+  finishReset();
+  await waitFor(() => expect(MaskWorker.instances[0]?.timestamp).toBeGreaterThan(0));
+  const lastStop = requests.map((r) => r.includes('camera/stop')).lastIndexOf(true);
+  expect(requests.map((r) => r.includes('camera/settings')).lastIndexOf(true)).toBeGreaterThan(lastStop);
+  expect(requests.filter((r) => r.includes('camera/stop'))).toHaveLength(2);
+  expect(requests.filter((r) => r.includes('camera/frame'))).toHaveLength(1);
+  expect(canvasEvents.some((e) => e.id === 'output' && e.action === 'paint' && e.first === 99)).toBe(false);
+  MaskWorker.instances[0].complete();
+  await waitFor(() => expect(requests.filter((r) => r.includes('camera/frame')).length).toBeGreaterThan(1));
 });

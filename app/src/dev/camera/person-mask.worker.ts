@@ -24,7 +24,10 @@ async function initialize() {
         if (!source) throw new Error('Selfie model returned no confidence mask.');
         // Callback memory expires on return; copy once and transfer ownership.
         const confidence = source.getAsFloat32Array().slice();
-        self.postMessage({ type: 'mask', mask: { data: confidence, width: source.width, height: source.height, inferenceMs: performance.now() - start } }, { transfer: [confidence.buffer] });
+        self.postMessage(
+          { type: 'mask', mask: { data: confidence, width: source.width, height: source.height, inferenceMs: performance.now() - start, capturedAt: data.timestamp } },
+          { transfer: [confidence.buffer] },
+        );
       });
     } catch (error) {
       self.postMessage({ type: 'error', error: String(error) });

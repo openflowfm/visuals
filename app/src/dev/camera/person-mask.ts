@@ -4,7 +4,10 @@ export interface PersonConfidenceMask {
   width: number;
   height: number;
   inferenceMs: number;
+  /** Main-thread clock when the source bitmap was requested, before inference. */
+  capturedAt: number;
 }
+export const MAX_MASK_AGE_MS = 250;
 export type PersonMaskStatus = 'loading' | 'ready' | 'failed' | 'disposed';
 export interface PersonMaskOptions {
   intervalMs?: number;
@@ -38,6 +41,12 @@ export class PersonMask {
       // Defer so callers can finish assigning their instance before the callback.
       queueMicrotask(() => this.fail(String(error)));
     }
+  }
+
+  /** A stale result must never gate newer camera pixels indefinitely. */
+  current(now = performance.now()): PersonConfidenceMask | null {
+    const mask = this.latest;
+    return mask && Number.isFinite(mask.capturedAt) && now >= mask.capturedAt && now - mask.capturedAt <= MAX_MASK_AGE_MS ? mask : null;
   }
 
   /** Snapshot at most 10 times/second; busy calls are discarded, never queued. */
