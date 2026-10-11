@@ -51,5 +51,8 @@ export const ReduceMotionOn: Story = {
   parameters: { tauri: { motion: { reduced: true, system: false } } },
   play: async () => {
     await expect(await screen.findByRole('button', { name: "Follow macOS's Reduce motion" })).toBeVisible();
+    // One name and one switch, lit.
+    await expect(screen.getByRole('switch', { name: 'Reduce flashing' })).toHaveAttribute('aria-checked', 'true');
+    await expect(screen.getAllByText('Reduce flashing')).toHaveLength(1);
   },
 };

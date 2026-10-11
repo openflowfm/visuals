@@ -128,7 +128,7 @@ describe('the sheets', () => {
 
   it('wait for the app before the reduce-flashing switch can be used', () => {
     const motion = switchTag(renderToStaticMarkup(<Settings open onClose={() => {}} />));
-    expect(motion).toContain('aria-pressed="false"');
+    expect(motion).toContain('aria-checked="false"');
     expect(motion).toContain('disabled=""');
   });
 });
@@ -141,10 +141,18 @@ describe('MotionSwitch', () => {
 
   it('says macOS decides while no choice has been made here', () => {
     const html = draw({ reduced: true, system: true });
-    expect(switchTag(html)).toContain('aria-pressed="true"');
+    expect(switchTag(html)).toContain('aria-checked="true"');
     expect(switchTag(html)).not.toContain('disabled');
     expect(html).toContain('Following macOS&#x27;s Reduce motion.');
     expect(html).not.toContain('Follow macOS&#x27;s Reduce motion"');
+  });
+
+  it('is one switch named once, with no "on" or "off" written in a field beside it', () => {
+    const html = draw({ reduced: false, system: true });
+    expect(switchTag(html)).toContain('role="switch"');
+    expect(html.match(/>Reduce flashing</g)).toHaveLength(1);
+    expect(html).not.toMatch(/>(on|off)</);
+    expect(html).not.toContain('wdg-toggle');
   });
 
   it('says in its tooltip what it calms, and that presets can still flash', () => {
@@ -154,7 +162,7 @@ describe('MotionSwitch', () => {
 
   it('offers to follow macOS again once a choice was made', () => {
     const html = draw({ reduced: false, system: false });
-    expect(switchTag(html)).toContain('aria-pressed="false"');
+    expect(switchTag(html)).toContain('aria-checked="false"');
     expect(html).toMatch(/<button[^>]*aria-label="Follow macOS&#x27;s Reduce motion"[^>]*>Follow macOS</);
     expect(html).not.toContain('Following macOS');
   });

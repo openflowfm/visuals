@@ -300,7 +300,7 @@ describe('the flashing-lights warning from the menu', () => {
 
   it('puts the reduce-flashing switch in the dialog, its name before it and what it does under it, ahead of I understand', () => {
     const html = renderToStaticMarkup(createElement(FlashWarningDialog, { onClose: () => {} }));
-    const name = html.indexOf('class="ob-reduce-name"');
+    const name = html.indexOf('class="vf-switch-name"');
     const toggle = html.indexOf('aria-label="Reduce flashing"');
     const hint = html.indexOf(`<p class="ob-note">${REDUCE_HINT.slice(0, 30)}`);
     const understand = html.indexOf('I understand');
@@ -316,7 +316,10 @@ describe('the flashing-lights warning from the menu', () => {
     expect(off).toContain('aria-label="Reduce flashing"');
     expect(off).toMatch(/disabled/);
     const on = renderToStaticMarkup(createElement(ReduceFlashing, { motion: { reduced: true, system: true }, onChange: () => {} }));
-    expect(on).toMatch(/aria-(checked|pressed)="true"/);
+    expect(on).toMatch(/role="switch"[^>]*aria-checked="true"/);
     expect(on).not.toMatch(/disabled=""/);
+    // Named once, beside the switch, with no "on" or "off" written in a field.
+    expect(on.match(/>Reduce flashing</g)).toHaveLength(1);
+    expect(on).not.toMatch(/>(on|off)</);
   });
 });

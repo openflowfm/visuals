@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, fn, screen, waitFor } from 'storybook/test';
+import { expect, fn, screen, userEvent, waitFor } from 'storybook/test';
 import type { ReactNode } from 'react';
 import { useAccessibility } from './access.ts';
 import { FlashWarningDialog, Onboarding, WARNING_TEXT } from './Onboarding.tsx';
@@ -45,7 +45,12 @@ export const WarningStep: Story = {
     await expect(await screen.findByRole('heading', { name: 'Flashing lights' })).toBeVisible();
     await expect(screen.getByText(WARNING_TEXT)).toBeVisible();
     // The reduce-flashing switch, enabled once the app has said where it stands.
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Reduce flashing' })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Reduce flashing' })).toBeEnabled());
+    // Named once, beside the switch: no second caption inside it.
+    await expect(screen.getAllByText('Reduce flashing')).toHaveLength(1);
+    // The name flips it too.
+    await userEvent.click(screen.getByText('Reduce flashing'));
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Reduce flashing' })).toHaveAttribute('aria-checked', 'true'));
   },
 };
 
@@ -79,7 +84,7 @@ export const WarningAt1440: Story = {
     const dialog = await screen.findByRole('dialog', { name: 'Flashing lights' });
     await expect(dialog).toBeVisible();
     await expect(dialog.contains(document.activeElement)).toBe(true);
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Reduce flashing' })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Reduce flashing' })).toBeEnabled());
     await expect(screen.getByRole('button', { name: 'I understand' })).toBeVisible();
   },
 };
@@ -96,7 +101,7 @@ export const WarningAt800: Story = {
   ),
   play: async () => {
     await expect(await screen.findByRole('dialog', { name: 'Flashing lights' })).toBeVisible();
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Reduce flashing' })).toHaveAttribute('aria-pressed', 'true'));
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Reduce flashing' })).toHaveAttribute('aria-checked', 'true'));
   },
 };
 

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 
 import { listen } from '@tauri-apps/api/event';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { Select } from '@openflow/widgets/controls/Select.tsx';
-import { Toggle } from '@openflow/widgets/controls/Toggle.tsx';
 import { REDUCE_WHAT, setMotion, useMotion } from './access.ts';
 import * as api from './api.ts';
 import { isTopTrap, useFocusTrap } from './focusTrap.ts';
@@ -13,6 +12,7 @@ import * as pack from './pack.ts';
 import * as pl from './playlists.ts';
 import { notice, type Notice } from './shell.ts';
 import { SourcePicker } from './SourcePicker.tsx';
+import { SwitchRow } from './Switch.tsx';
 import { Mark, NoticeBanner, Preview } from './views.tsx';
 import { Say, say } from './words.ts';
 import './onboarding.css';
@@ -468,14 +468,7 @@ export const REDUCE_HINT = `${REDUCE_WHAT} It follows macOS’s Reduce motion un
 
 /** The reduce-flashing switch, shown with the warning: off and disabled until the app has said. */
 export function ReduceFlashing({ motion, onChange }: { motion: api.Motion | null; onChange(on: boolean): void }) {
-  return (
-    <div className="ob-reduce">
-      <span className="ob-reduce-name">{Say('reduced motion')}</span>
-      <Toggle on={motion?.reduced === true} onChange={onChange} disabled={!motion} layout="inside" name={say('reduced motion')} label={Say('reduced motion')} title={REDUCE_HINT}>
-        {motion?.reduced ? 'on' : 'off'}
-      </Toggle>
-    </div>
-  );
+  return <SwitchRow className="ob-reduce" name={Say('reduced motion')} on={motion?.reduced === true} onChange={onChange} disabled={!motion} title={REDUCE_HINT} />;
 }
 
 /** The switch, wired to the app's setting; a refusal is said under it. */

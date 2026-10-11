@@ -70,24 +70,16 @@
 .vf-sheet .settings-problem {
   color: var(--red);
 }
+/* A switch (`SwitchRow`: its name, then the switch), and under it who decides,
+   or why a change failed. */
 .settings-switch {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px 12px;
-  color: var(--fg);
-  font-size: var(--text-body);
-}
-.settings-switch .wdg-toggle {
-  width: 96px;
-}
-/* Under the switch, on a line of its own: who decides, or why a change failed. */
-.settings-switch > .settings-follow,
-.settings-switch > .settings-problem {
-  flex: 1 0 100%;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
 }
 .settings-switch > .wdg-button.settings-follow {
+  align-self: flex-start;
   justify-items: start;
 }
 .settings-quality {
