@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { crateModeFor, panelsAtStart, STAGE_CRATE_ID, togglePanels, type Panels } from './stage-model.ts';
-import { PANELS_HINT, StageLayout } from './StageLayout.tsx';
+import { PANELS_HINT, PANELS_HINT_LABEL, StageLayout } from './StageLayout.tsx';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: () => Promise.resolve(null), convertFileSrc: (p: string) => p }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: () => Promise.resolve(() => {}) }));
@@ -45,12 +45,14 @@ interface StageProps {
   inWindow?: boolean;
   centre?: ReactNode;
   onCrateAway?(): void;
+  onPanels?(): void;
 }
 
 /** The Stage as Live composes it, the parts stand-ins: a toggle naming the crate in the header. */
-function Stage({ width = 1440, panels = panelsAtStart(null), warning = false, inWindow = false, centre, onCrateAway = () => {} }: StageProps) {
+function Stage({ width = 1440, panels = panelsAtStart(null), warning = false, inWindow = false, centre, onCrateAway = () => {}, onPanels }: StageProps) {
   return (
     <StageLayout
+      onPanels={onPanels}
       width={width}
       panels={panels}
       warning={warning}
@@ -245,6 +247,15 @@ describe('the panels', () => {
     // Still a title bar to drag the window by.
     expect(document.querySelector('.stage-head')!.hasAttribute('data-tauri-drag-region')).toBe(true);
     expect(screen.getByText('notice')).toBeTruthy();
+  });
+
+  it('hidden: the hint is a button, reachable by Tab, that shows the panels', () => {
+    const onPanels = vi.fn();
+    render(<Stage panels={togglePanels(panelsAtStart(true))} onPanels={onPanels} />);
+    const hint = screen.getByRole('button', { name: PANELS_HINT_LABEL });
+    expect(hint.tabIndex).toBe(0);
+    fireEvent.click(hint);
+    expect(onPanels).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the header (and its popovers) above the offer', () => {
