@@ -163,6 +163,41 @@
   opacity: 0.4;
 }
 
+/* Quick add: ✓ on a preset already in the playlist being filled, top right where + would be (+ is off while adding). */
+.home .tile-added {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  color: #fff;
+  background: rgb(0 0 0 / 0.6);
+  backdrop-filter: blur(6px);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+}
+/* While adding, a tile not yet in the playlist offers + on hover, as a cue that a click adds. */
+.home .lib-grid[data-adding] .tile:not([data-added]):hover .tile-pic::after {
+  content: '+';
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  color: #fff;
+  background: rgb(0 0 0 / 0.45);
+  font-size: 14px;
+  line-height: 1;
+}
+
 /* +: a small round dark button, top right, on hover (or on the keyboard's tile). */
 .home .tile-add {
   position: absolute;

@@ -97,20 +97,22 @@ export function centreFor(row: number, rowHeight: number, height: number, look: 
 }
 
 /**
- * How a tile was picked: a plain click (the lab editor's column loads it), a plain
- * click on the home's inspector grid (`select`: that tile alone, nothing loads),
- * ⌘-click (add or take it out of the selection), or ⇧-click (select up to it).
+ * How a tile was picked: a plain click or Enter (`load`: it plays, decision 71),
+ * ⌘-click (add or take it out of the selection), ⇧-click (select up to it), or,
+ * while quick add is on, a plain click or Enter (`add`: into the playlist, or out
+ * of it when already in).
  */
-export type Pick = 'load' | 'select' | 'toggle' | 'range';
+export type Pick = 'load' | 'toggle' | 'range' | 'add';
 
-/** What a click with these modifiers picks; a plain one loads, or selects where clicks select (`clickSelects`). */
-export const pickOf = (ev: { metaKey: boolean; ctrlKey: boolean; shiftKey: boolean }, clickSelects = false): Pick =>
-  ev.shiftKey ? 'range' : ev.metaKey || ev.ctrlKey ? 'toggle' : clickSelects ? 'select' : 'load';
+/** What a click with these modifiers picks: a plain one loads, or while quick add is on (`adding`) adds, ⌥ then loading instead. */
+export const pickOf = (ev: { metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey?: boolean }, adding = false): Pick =>
+  ev.shiftKey ? 'range' : ev.metaKey || ev.ctrlKey ? 'toggle' : adding && !ev.altKey ? 'add' : 'load';
 
-/** The selection (keys) after the tile at `index` in `shown` is picked by `how`; a run starts at `anchor`. */
+/** The selection (keys) after the tile at `index` in `shown` is picked by `how`; a run starts at `anchor`. An add leaves it as it was. */
 export function pickInto(selection: readonly string[], shown: readonly Prepared[], index: number, how: Pick, anchor: string | null): string[] {
   const key = shown[index].row.key;
-  if (how === 'load' || how === 'select') return [key];
+  if (how === 'add') return [...selection];
+  if (how === 'load') return [key];
   if (how === 'toggle') return selection.includes(key) ? selection.filter((k) => k !== key) : [...selection, key];
   const from = anchor === null ? -1 : shown.findIndex((p) => p.row.key === anchor);
   if (from < 0) return [key];
@@ -149,15 +151,26 @@ export interface LibraryGridProps {
   onPress?(index: number, ev: PointerEvent): void;
   /** The narrowest a tile gets, in px; `TILE.min` (two across the library column) by default. */
   tileMin?: number;
-  /** The home's inspector grid (decision 70): a plain click selects the tile (`select`), a double-click loads it; without it a click loads, as in the lab editor's column. */
-  clickSelects?: boolean;
+  /** The home's grid (decision 71): its hint says a click plays; without it, the lab editor's column ("Enter loads"). */
+  home?: boolean;
+  /**
+   * Quick add on (the home): the playlist a plain click or Enter adds a tile to, and
+   * the paths already in it, which show ✓ and a click takes out; Space or ⌥-click
+   * plays. Null or left out: off.
+   */
+  adding?: { name: string; has: ReadonlySet<string> } | null;
   /** The id of the panel its picks show (the home's inspector), as the grid's `aria-controls`. */
   controls?: string;
 }
 
+/** How the grid is used: the lab editor's column (`load`), the home's (`play`), or the home's while quick add is on (`add`). */
+export type GridUse = 'load' | 'play' | 'add';
+
 /** The grid's spoken hint: how its keys and clicks pick. */
-export const gridHint = (clickSelects: boolean, into: string | null): string =>
-  `${clickSelects ? 'click selects, double-click or Enter plays, arrows move' : 'arrows move, Enter loads'}, Space or ⌘-click selects more, ⇧ selects a run, Esc lets go${into !== null ? `, + or A adds to ${into}` : ''}`;
+export const gridHint = (use: GridUse, into: string | null): string =>
+  use === 'add'
+    ? `click or Enter adds to ${into ?? 'the playlist'} or takes out one already in it, Space or ⌥-click plays, arrows move, ⌘-click selects, ⇧ selects a run, Esc is done`
+    : `${use === 'play' ? 'click or Enter plays, arrows move' : 'arrows move, Enter loads'}, Space or ⌘-click selects more, ⇧ selects a run, Esc lets go${into !== null ? `, + or A adds to ${into}` : ''}`;
 
 /**
  * The library as a grid of thumbnails, drawing only the rows in view (and a few
@@ -167,7 +180,7 @@ export const gridHint = (clickSelects: boolean, into: string | null): string =>
  * arrows move by a tile or a row, Enter loads, Space adds the tile to the selection.
  * Every key it handles is `preventDefault`ed and stopped; Escape with nothing selected is let through.
  */
-export function LibraryGrid({ rows, active, selected, current, into, onMove, onPick, onAdd, onClear, reveal, onPress, tileMin, clickSelects = false, controls }: LibraryGridProps) {
+export function LibraryGrid({ rows, active, selected, current, into, onMove, onPick, onAdd, onClear, reveal, onPress, tileMin, home: homeGrid = false, adding = null, controls }: LibraryGridProps) {
   const ref = useRef<HTMLDivElement>(null);
   // Its size, and whether it is on the home (decision 68's look, on the main pane's `--pad`) or in the lab editor's column.
   const [size, setSize] = useState({ width: 0, height: 0, home: false, pad: HOME_PAD, bar: 0 });
@@ -275,9 +288,10 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
         else onMove(to);
       }
     } else if (ev.key === 'Enter' && active >= 0) {
-      onPick(active, 'load');
+      onPick(active, adding ? 'add' : 'load');
     } else if (ev.key === ' ' && active >= 0) {
-      onPick(active, 'toggle');
+      // While quick add is on, Space plays the tile (a click adds it).
+      onPick(active, adding ? 'load' : 'toggle');
     } else if ((ev.key === '+' || ev.key === 'a' || ev.key === 'A') && active >= 0 && into) {
       onAdd(active);
     } else if (ev.key === 'Escape' && selected.size) {
@@ -316,7 +330,8 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
           onAdd={onAdd}
           onPress={onPress}
           home={size.home}
-          clickSelects={clickSelects}
+          adding={!!adding}
+          addedTo={adding?.has.has(p.row.path) ? adding.name : null}
         />,
       );
     }
@@ -332,7 +347,8 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
       aria-controls={controls}
       tabIndex={rows.length ? 0 : -1}
       aria-activedescendant={active >= 0 && active < rows.length ? id(active) : undefined}
-      data-hint={gridHint(clickSelects, into?.name ?? null)}
+      data-hint={adding ? gridHint('add', adding.name) : gridHint(homeGrid ? 'play' : 'load', into?.name ?? null)}
+      data-adding={adding ? '' : undefined}
       onKeyDown={onKey}
       onFocus={onFocus}
       onScroll={onScroll}
@@ -373,22 +389,23 @@ export interface TileProps {
   onPress?(index: number, ev: PointerEvent): void;
   /** On the home: the shared tile (PresetTile.tsx, decision 68); otherwise the lab editor's own. */
   home?: boolean;
-  /** A plain click selects it and a double-click loads it (LibraryGridProps' `clickSelects`). */
-  clickSelects?: boolean;
+  /** Quick add is on: a plain click adds it (or takes it out), ⌥-click plays it. */
+  adding?: boolean;
+  /** The playlist quick add fills, when the preset is already in it: it shows ✓. */
+  addedTo?: string | null;
 }
 
-/** What a tile says when pointed at, and to a screen reader: title, style and authors, then what's true of it now. */
-export function tileSays(p: Prepared, playing: boolean, failed: boolean): string {
+/** What a tile says when pointed at, and to a screen reader: title, style and authors, then what's true of it now (in the playlist quick add fills, `addedTo`). */
+export function tileSays(p: Prepared, playing: boolean, failed: boolean, addedTo: string | null = null): string {
   const full = `${p.title} — ${p.subStyle ? `${p.style} › ${p.subStyle}` : p.style}${p.authors.length ? `, by ${p.authors.join(' & ')}` : ''}`;
-  return [full, playing && 'playing', failed && FAILED_SAYS, p.star && 'starred', p.hidden && 'never played'].filter(Boolean).join(' · ');
+  return [full, playing && 'playing', addedTo !== null && `in ${addedTo}`, failed && FAILED_SAYS, p.star && 'starred', p.hidden && 'never played'].filter(Boolean).join(' · ');
 }
 
 /** One preset: its thumbnail (or its style, when it has none) and its title. */
-export const Tile = memo(function Tile({ id, index, p, active, selected, playing, failed, intoName, onPick, onAdd, onPress, home = false, clickSelects = false }: TileProps) {
-  const says = tileSays(p, playing, failed);
-  const click = (ev: MouseEvent) => onPick(index, pickOf(ev, clickSelects));
-  // Where a click selects, a plain double-click plays (its clicks have already selected it).
-  const doubleClick = clickSelects ? (ev: MouseEvent) => !ev.shiftKey && !ev.metaKey && !ev.ctrlKey && onPick(index, 'load') : undefined;
+export const Tile = memo(function Tile({ id, index, p, active, selected, playing, failed, intoName, onPick, onAdd, onPress, home = false, adding = false, addedTo = null }: TileProps) {
+  const says = tileSays(p, playing, failed, addedTo);
+  // A double-click's second click does nothing more: the first already played it (or added it, which a second would undo).
+  const click = (ev: MouseEvent) => ev.detail < 2 && onPick(index, pickOf(ev, adding));
   if (home) {
     const add = `add “${p.title}” to ${intoName} (+ key)`;
     return (
@@ -400,9 +417,9 @@ export const Tile = memo(function Tile({ id, index, p, active, selected, playing
         data-active={active ? '' : undefined}
         data-hidden={p.hidden ? '' : undefined}
         data-failed={failed ? '' : undefined}
+        data-added={addedTo !== null ? '' : undefined}
         title={says}
         onClick={click}
-        onDoubleClick={doubleClick}
         onPointerDown={onPress && ((ev: PointerEvent) => onPress(index, ev))}
         thumbnail={p.row.thumbnail}
         empty={p.style}
@@ -415,6 +432,11 @@ export const Tile = memo(function Tile({ id, index, p, active, selected, playing
             {failed && (
               <span className="tile-failed" aria-hidden="true">
                 !
+              </span>
+            )}
+            {addedTo !== null && (
+              <span className="tile-added" aria-hidden="true">
+                ✓
               </span>
             )}
             {intoName !== null && (
@@ -452,7 +474,6 @@ export const Tile = memo(function Tile({ id, index, p, active, selected, playing
       data-failed={failed ? '' : undefined}
       title={says}
       onClick={click}
-      onDoubleClick={doubleClick}
       onPointerDown={onPress && ((ev) => onPress(index, ev))}
     >
       <div className="lib-thumb">
