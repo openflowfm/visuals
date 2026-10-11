@@ -246,6 +246,7 @@ impl Bridge {
             return respond(&mut stream, "403 Forbidden", "text/plain", b"the dev bridge wants its token");
         }
         match (request.method.as_str(), request.path.as_str()) {
+            ("GET", "/__bridge/camera/output") => self.camera_output(&mut stream),
             ("POST", "/__bridge/camera/frame") => self.camera_frame(&mut stream, &request),
             ("POST", "/__bridge/camera/settings") => self.camera_settings(&mut stream, &request.body),
             ("POST", "/__bridge/camera/stop") => self.camera_stop(&mut stream),

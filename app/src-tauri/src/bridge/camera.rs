@@ -8,11 +8,15 @@ struct Settings {
     persistence: f32,
 }
 
-const PRESETS: [&str; 3] = [
-    include_str!("../../presets/starter/cream-of-the-crop/Reaction/Liquid Gradient/Rovastar - Harlequin's Liquid Dragon.milk"),
-    include_str!("../../presets/starter/cream-of-the-crop/Reaction/Liquid Gradient/Krash and Fvese - Molten Indecision (Fvese Remix).milk"),
-    include_str!("../../presets/starter/cream-of-the-crop/Drawing/Liquid/Pithlit - Psychotrip (Spinning colours mix) - orthorotate recursive helicities3.milk"),
-];
+const PRESETS: [&str; 3] = [include_str!("echo-tunnel.milk"), include_str!("mirror-cathedral.milk"), include_str!("liquid-wire.milk")];
+
+/// The timing includes waiting for the render thread, GPU readback, and packing.
+/// Socket transfer is measured by the caller: it cannot appear in prior headers.
+fn output_header(w: u32, h: u32, bytes: usize, snapshot_ms: f64) -> String {
+    format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {bytes}\r\nCache-Control: no-store\r\nX-Bridge: 1\r\nX-Frame-Width: {w}\r\nX-Frame-Height: {h}\r\nX-Snapshot-Ms: {snapshot_ms:.3}\r\nServer-Timing: snapshot;dur={snapshot_ms:.3}\r\nConnection: close\r\n\r\n"
+    )
+}
 
 fn dimensions(request: &Request) -> Result<(u32, u32, f32), &'static str> {
     let w = request.param("w").and_then(|v| v.parse::<u32>().ok()).unwrap_or(0);
@@ -25,6 +29,18 @@ fn dimensions(request: &Request) -> Result<(u32, u32, f32), &'static str> {
 }
 
 impl Bridge {
+    pub(super) fn camera_output(&self, stream: &mut TcpStream) {
+        let start = std::time::Instant::now();
+        let picture = self.app.state::<App>().ask(|reply| bench::Cmd::Snapshot(false, reply)).ok().flatten();
+        match picture {
+            Some((w, h, rgba)) if w > 0 && h > 0 => {
+                let head = output_header(w, h, rgba.len(), start.elapsed().as_secs_f64() * 1000.0);
+                let _ = stream.write_all(head.as_bytes()).and_then(|_| stream.write_all(&rgba));
+            }
+            _ => respond(stream, "204 No Content", "application/octet-stream", b""),
+        }
+    }
+
     pub(super) fn camera_frame(&self, stream: &mut TcpStream, request: &Request) {
         let (w, h, mix) = match dimensions(request) {
             Ok(v) => v,
@@ -62,7 +78,7 @@ impl Bridge {
         }
         app.send(bench::Cmd::CameraSettings(settings.speed, settings.persistence));
         // Fixed bounded readback, independent of browser layout and display scale.
-        app.send(bench::Cmd::Resize(960, 540));
+        app.send(bench::Cmd::Resize(640, 360));
         respond(stream, "200 OK", "application/json", b"null");
     }
 
@@ -77,6 +93,23 @@ impl Bridge {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn raw_output_describes_the_packed_frame_and_readback_cost() {
+        let head = output_header(640, 360, 640 * 360 * 4, 2.125);
+        for field in [
+            "Content-Type: application/octet-stream",
+            "Content-Length: 921600",
+            "X-Frame-Width: 640",
+            "X-Frame-Height: 360",
+            "X-Snapshot-Ms: 2.125",
+            "Server-Timing: snapshot;dur=2.125",
+            "Cache-Control: no-store",
+        ] {
+            assert!(head.contains(field), "{field}");
+        }
+        assert!(head.ends_with("\r\n\r\n"));
+    }
+
     #[test]
     fn camera_frames_are_bounded_and_exact() {
         let mut r =

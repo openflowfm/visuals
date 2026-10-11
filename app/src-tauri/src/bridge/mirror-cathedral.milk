@@ -1,0 +1,31 @@
+[preset00]
+fRating=5
+fGammaAdj=1
+fDecay=0.96
+fVideoEchoZoom=1
+fVideoEchoAlpha=0
+nVideoEchoOrientation=0
+fWaveAlpha=0
+bTexWrap=0
+bDarkenCenter=0
+bBrighten=0
+bDarken=0
+bSolarize=0
+bInvert=0
+fShader=0
+zoom=1
+rot=0
+cx=0.5
+cy=0.5
+warp=0
+sx=1
+sy=1
+ob_a=0
+ib_a=0
+mv_a=0
+per_frame_1=zoom=1.008; rot=0;
+comp_1=`shader_body
+comp_2=`{
+comp_3=`float2 p = float2(abs(uv.x-0.5)+0.5, uv.y);
+comp_4=`ret = tex2D(sampler_main, p).xyz;
+comp_5=`}

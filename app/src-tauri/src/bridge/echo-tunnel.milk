@@ -1,0 +1,26 @@
+[preset00]
+fRating=5
+fGammaAdj=1
+fDecay=0.96
+fVideoEchoZoom=1
+fVideoEchoAlpha=0
+nVideoEchoOrientation=0
+fWaveAlpha=0
+bTexWrap=0
+bDarkenCenter=0
+bBrighten=0
+bDarken=0
+bSolarize=0
+bInvert=0
+fShader=0
+zoom=1
+rot=0
+cx=0.5
+cy=0.5
+warp=0
+sx=1
+sy=1
+ob_a=0
+ib_a=0
+mv_a=0
+per_frame_1=zoom=1.012; rot=0.0025*sin(time*0.3);
