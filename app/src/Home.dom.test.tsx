@@ -227,7 +227,6 @@ describe('the home, an inspector view (decision 70)', () => {
     await mount({ library: true, start: ROWS[0].path });
     const insp = () => within(inspector() as HTMLElement);
     expect(insp().getByRole('heading', { name: 'a' })).toBeTruthy();
-    expect(inspector()!.textContent).toContain('Now playing');
     invoke.mockClear();
     fireEvent.click(tile('b'), { metaKey: true });
     await act(() => vi.advanceTimersByTimeAsync(0));
@@ -257,7 +256,6 @@ describe('the home, an inspector view (decision 70)', () => {
     expect(sent('act').some((a) => (a.action as { kind: string }).kind === 'query')).toBe(true);
     expect(tile('b').getAttribute('aria-selected')).toBe('false');
     expect(within(inspector() as HTMLElement).getByRole('heading', { name: 'b' })).toBeTruthy();
-    expect(inspector()!.textContent).toContain('Now playing');
     // A double-click's second click doesn't open it again.
     invoke.mockClear();
     fireEvent.click(tile('c'), { detail: 1 });

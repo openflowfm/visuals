@@ -19,7 +19,8 @@ const SENSITIVITY = position(say('preset sensitivity'));
  * "For this preset": the preset's own speed and how much it reacts, each a
  * multiplier on the playlist's or live value while it plays, for a preset that
  * moves too fast (or too little) beside the rest. Two sliders on a log scale,
- * ¼× to 4× with 1× in the middle, and "as made" to put both back once either
+ * ¼× to 4× with 1× in the middle (filled from there, drawn as macOS 26's
+ * sliders over glass in tune.css), and "as made" to put both back once either
  * differs. What the sliders show runs ahead of what is kept: a change is sent
  * as `onSet([key], { tune })` once the slider rests, and any still waiting is
  * sent when the inspector moves to another preset. Mount it keyed by the
@@ -72,6 +73,8 @@ export function TuneCard({ subject, onSet }: { subject: Prepared; onSet: Inspect
       display={formatMultiplier(shown[which])}
       orientation="horizontal"
       layout="inside"
+      fill
+      origin="center"
       length="auto"
       name={param.name}
       label={param.name}
@@ -81,9 +84,9 @@ export function TuneCard({ subject, onSet }: { subject: Prepared; onSet: Inspect
   );
 
   return (
-    <div className="insp-tune" role="group" aria-labelledby={heading}>
+    <div className="insp-tune" role="group" aria-labelledby={heading} data-appearance="dark">
       <div className="insp-tune-head">
-        <p className="insp-kicker" id={heading}>
+        <p className="insp-tune-title" id={heading}>
           {say('preset tune')}
         </p>
         {!asMade(shown) && (

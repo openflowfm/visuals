@@ -13,30 +13,45 @@ export type { InspectorProps } from './model.ts';
 
 /**
  * The inspector ("Scope"): what is selected, as Finder's and Photos'
- * inspectors show it. For one preset, the preset placed among the library, as
- * an instrument's XY display would: the field first, then the name large, its
- * authors, its measures read out as one line of words, its colours as dots,
- * its actions as a row of keys, its own speed and how much it reacts ("for
- * this preset", Tune.tsx), my tags and the playlists holding it. It is
- * about the preset playing, or one picked (a dot in the field, or a tile the
- * Home passes in) until "back". For several picked together (`chosen`), their
- * pictures, "n selected" and the actions and tags over all of them (a tune is
- * one preset's, so none shows for several). With no
- * preset, the source the Home passes (`source`, a playlist's head); with
- * neither, the field still draws the library, and it says so. Mount it in
- * HomeLayout's `inspector` slot (its panel is InspectorPanel); it holds no
- * state of its own beyond the field's pointer and keyboard cursor.
+ * inspectors show it. Its header row holds the panel's controls and the
+ * actions on what it is about, as glyphs: back (for one picked) at the left;
+ * Play (for one picked), star, add, never play and edit at the right, then ✕.
+ * Under it every state reads in one order: what it is (the name large, its
+ * authors), then its facts (style, its measures read out as one line of words,
+ * its colours as dots, my tags), then the map (the field: the preset placed
+ * among the library, as an instrument's XY display would), then its own speed
+ * and how much it reacts ("for this preset", Tune.tsx) and the playlists
+ * holding it. It is about the preset playing, or one picked (a dot in the
+ * field, or a tile the Home passes in) until "back". For several picked
+ * together (`chosen`), "n selected", their styles and tags, their pictures in
+ * the map's place, and the actions over all of them in the header (a tune is
+ * one preset's, so none shows for several). With no preset, the source the
+ * Home passes (`source`, a playlist's head); with neither, the field still
+ * draws the library, and it says so. Mount it in HomeLayout's `inspector`
+ * slot (its panel is InspectorPanel); it holds no state of its own beyond the
+ * field's pointer and keyboard cursor.
  */
 export function Inspector(props: InspectorProps) {
-  const { subject: p, playing, chosen, source, error, onBack, onClose } = props;
+  const { subject: p, playing, chosen, source, error, playlists, onSet, onAddTo, onPlay, onEdit, onBack, onClose } = props;
   const many = chosen && chosen.length > 1 ? chosen : null;
   const picked = !many && p !== null && p.row.key !== playing;
+  // What the actions act on: several picked, or the one shown (none for the source or nothing).
+  const on = many ?? (p ? [p] : null);
   useEscape(onClose);
   return (
     <div className="insp" data-none={many || p || source ? undefined : ''}>
-      {(picked || onClose) && (
+      {(picked || onClose || on) && (
         <div className="insp-top">
           {picked && <BackAction className="insp-back" onBack={onBack} />}
+          {on && (
+            <div className="insp-keys" role="group" aria-label={many ? 'on these presets' : 'on this preset'}>
+              {picked && <PlayAction className="insp-key" onPlay={onPlay} children="" />}
+              <StarAction className="insp-key" chosen={on} onSet={onSet} children="" />
+              <AddAction className="insp-key" chosen={on} playlists={playlists} onAddTo={onAddTo} children="" />
+              <NeverAction className="insp-key" chosen={on} onSet={onSet} children="" />
+              {!many && <EditAction className="insp-key" onEdit={onEdit} children="" />}
+            </div>
+          )}
           <CloseAction className="insp-close" onClose={onClose} />
         </div>
       )}
@@ -69,8 +84,8 @@ function useEscape(onClose: InspectorProps['onClose']) {
   }, [on]);
 }
 
-/** One preset (or none): the field, then its character, actions, tags and playlists. */
-function Scope({ subject: p, playing, from, playlists, library, mine, onSet, onAddTo, onPick, onBack, onPlay, onEdit, picked }: InspectorProps & { picked: boolean }) {
+/** One preset (or none): its name, its facts and tags, the field, then its tune and playlists (its actions are in the header). With none, the words saying so above the field. */
+function Scope({ subject: p, playing, playlists, library, mine, onSet, onPick, onBack, picked }: InspectorProps & { picked: boolean }) {
   const c = p ? characterOf(p) : null;
   const readout = c ? [c.speed.word, c.brightness.word, c.intensity.word].filter((w): w is string => !!w) : [];
   const colours = c ? colourNames(c) : [];
@@ -78,91 +93,71 @@ function Scope({ subject: p, playing, from, playlists, library, mine, onSet, onA
   const measured = library.reduce((n, r) => (r.look ? n + 1 : n), 0);
   // The dot playing goes back to it, unless it is already shown.
   const pick = (row: LibraryRow) => (row.key !== playing ? onPick(row) : picked ? onBack() : undefined);
-  return (
-    <>
-      <Field
-        library={library}
-        mine={mine}
-        subject={p?.row.key ?? null}
-        playing={playing}
-        intensity={c?.intensity.at ?? null}
-        hue={c?.hues[0]?.css ?? 'var(--fg)'}
-        description={fieldSays(c, measured, library.length)}
-        onPick={pick}
-      />
-      {!p || !c ? (
-        <div className="insp-none">
+  const field = (
+    <Field
+      library={library}
+      mine={mine}
+      subject={p?.row.key ?? null}
+      playing={playing}
+      intensity={c?.intensity.at ?? null}
+      hue={c?.hues[0]?.css ?? 'var(--fg)'}
+      description={fieldSays(c, measured, library.length)}
+      onPick={pick}
+    />
+  );
+  if (!p || !c)
+    return (
+      <>
+        <div className="insp-head insp-none">
           <p className="insp-none-title">Nothing playing yet</p>
           <p className="insp-quiet">Each dot is a preset, by how fast it moves and how bright it is. Pick one to see it here, or play one and it lights up.</p>
         </div>
-      ) : (
-        <>
-          <div className="insp-head">
-            <p className="insp-kicker">
-              {picked ? 'Picked' : 'Now playing'}
-              {c.style && (
-                <>
-                  <span className="insp-sep" aria-hidden="true" />
-                  {c.subStyle ? `${c.style}, ${c.subStyle}` : c.style}
-                </>
-              )}
-            </p>
-            <h2 className="insp-name" title={c.name}>
-              {c.name}
-            </h2>
-            {c.by && <p className="insp-by">{c.by}</p>}
-            {!picked && from && <p className="insp-from">{from}</p>}
-          </div>
+        {field}
+      </>
+    );
+  return (
+    <>
+      <div className="insp-head">
+        <h2 className="insp-name" title={c.name}>
+          {c.name}
+        </h2>
+        {c.by && <p className="insp-by">{c.by}</p>}
+      </div>
 
-          <div className="insp-read">
-            {c.unmeasured ? (
-              <p className="insp-quiet">Not drawn yet</p>
-            ) : (
-              <p className="insp-words">
-                {readout.map((w, i) => (
-                  <span key={w + i}>
-                    {i > 0 && <span className="insp-sep" aria-hidden="true" />}
-                    {w}
-                  </span>
-                ))}
-              </p>
-            )}
-            {(c.hues.length > 0 || c.grey) && (
-              <p className="insp-hues">
-                <span className="insp-swatches" aria-hidden="true">
-                  {c.hues.length ? c.hues.map((h, i) => <span key={i} className="insp-swatch" style={{ background: h.css }} />) : <span className="insp-swatch" data-grey="" />}
+      <div className="insp-meta" role="group" aria-label="about this preset">
+        {c.style && <p className="insp-style">{c.subStyle ? `${c.style}, ${c.subStyle}` : c.style}</p>}
+        <div className="insp-read">
+          {c.unmeasured ? (
+            <p className="insp-quiet">Not drawn yet</p>
+          ) : (
+            <p className="insp-words">
+              {readout.map((w, i) => (
+                <span key={w + i}>
+                  {i > 0 && <span className="insp-sep" aria-hidden="true" />}
+                  {w}
                 </span>
-                <span>{colours.length ? listed(colours) : 'grey'}</span>
-              </p>
-            )}
-          </div>
+              ))}
+            </p>
+          )}
+          {(c.hues.length > 0 || c.grey) && (
+            <p className="insp-hues">
+              <span className="insp-swatches" aria-hidden="true">
+                {c.hues.length ? c.hues.map((h, i) => <span key={i} className="insp-swatch" style={{ background: h.css }} />) : <span className="insp-swatch" data-grey="" />}
+              </span>
+              <span>{colours.length ? listed(colours) : 'grey'}</span>
+            </p>
+          )}
+        </div>
+        <div className="insp-mine">
+          <TagEditor key={p.row.key} chosen={[p]} onSet={onSet} remove={<Icon name="close" size={10} />} />
+        </div>
+      </div>
 
-          <div className="insp-keys">
-            {picked && (
-              <PlayAction className="insp-key" onPlay={onPlay}>
-                <span aria-hidden="true">Play</span>
-              </PlayAction>
-            )}
-            <StarAction className="insp-key" chosen={[p]} onSet={onSet} />
-            <AddAction className="insp-key" chosen={[p]} playlists={playlists} onAddTo={onAddTo}>
-              <span aria-hidden="true">Add</span>
-            </AddAction>
-            <NeverAction className="insp-key" chosen={[p]} onSet={onSet}>
-              <span aria-hidden="true">Never</span>
-            </NeverAction>
-            <EditAction className="insp-key" onEdit={onEdit}>
-              <span aria-hidden="true">Edit</span>
-            </EditAction>
-          </div>
+      {field}
 
-          <TuneCard key={p.row.key} subject={p} onSet={onSet} />
+      <TuneCard key={p.row.key} subject={p} onSet={onSet} />
 
-          <div className="insp-mine">
-            <TagEditor key={p.row.key} chosen={[p]} onSet={onSet} remove={<Icon name="close" size={10} />} />
-            {inLists && <p className="insp-quiet insp-in">{inLists.length ? `In ${listed(inLists)}` : 'In no playlist yet'}</p>}
-          </div>
-        </>
-      )}
+      {inLists && <p className="insp-quiet insp-in">{inLists.length ? `In ${listed(inLists)}` : 'In no playlist yet'}</p>}
     </>
   );
 }
@@ -178,34 +173,27 @@ export function stylesSaid(chosen: readonly Prepared[]): string {
   return `${styles.slice(0, 2).join(', ')} and ${rest} other styles`;
 }
 
-/** Several presets picked together: their pictures, how many, their styles, and star, add, never play and tags over all of them. */
-function Selected({ chosen, playlists, onSet, onAddTo }: InspectorProps & { chosen: Prepared[] }) {
+/** Several presets picked together: how many, their styles and tags over all of them, and their pictures (star, add and never play over all of them are in the header). */
+function Selected({ chosen, onSet }: InspectorProps & { chosen: Prepared[] }) {
   const n = chosen.length;
   const more = n - PICTURES;
+  const styles = stylesSaid(chosen);
   return (
     <>
+      <div className="insp-head">
+        <h2 className="insp-name">{`${n.toLocaleString('en-US')} selected`}</h2>
+      </div>
+      <div className="insp-meta" role="group" aria-label="about these presets">
+        {styles && <p className="insp-style">{styles}</p>}
+        <div className="insp-mine">
+          <TagEditor key={chosen.map((p) => p.row.key).join('\n')} chosen={chosen} onSet={onSet} remove={<Icon name="close" size={10} />} />
+        </div>
+      </div>
       <div className="insp-pictures" aria-hidden="true">
         {chosen.slice(0, PICTURES).map((p) => (
           <div key={p.row.key}>{p.row.thumbnail && <img src={p.row.thumbnail} alt="" decoding="async" draggable={false} />}</div>
         ))}
         {more > 0 && <span className="insp-pictures-more">+{more.toLocaleString('en-US')}</span>}
-      </div>
-      <div className="insp-head">
-        <p className="insp-kicker">Selected</p>
-        <h2 className="insp-name">{`${n.toLocaleString('en-US')} selected`}</h2>
-        {stylesSaid(chosen) && <p className="insp-by">{stylesSaid(chosen)}</p>}
-      </div>
-      <div className="insp-keys" data-many="">
-        <StarAction className="insp-key" chosen={chosen} onSet={onSet} />
-        <AddAction className="insp-key" chosen={chosen} playlists={playlists} onAddTo={onAddTo}>
-          <span aria-hidden="true">Add</span>
-        </AddAction>
-        <NeverAction className="insp-key" chosen={chosen} onSet={onSet}>
-          <span aria-hidden="true">Never</span>
-        </NeverAction>
-      </div>
-      <div className="insp-mine">
-        <TagEditor key={chosen.map((p) => p.row.key).join('\n')} chosen={chosen} onSet={onSet} remove={<Icon name="close" size={10} />} />
       </div>
     </>
   );

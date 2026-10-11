@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LibraryRow, Look } from '../../api.ts';
@@ -45,19 +45,106 @@ function mount(over: Partial<InspectorProps> = {}) {
   return props;
 }
 
-describe('the inspector in a DOM', () => {
-  it('shows the preset playing with where it plays from, and no way back', () => {
-    mount();
-    expect(screen.getByRole('heading', { name: 'Bloom' })).toBeTruthy();
-    expect(screen.getByText(/^Now playing/)).toBeTruthy();
-    expect(screen.getByText('from Warm-up')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'back to now playing' })).toBeNull();
+/** Tab forward, as a keyboard user would, until `el` has focus (the field comes after the tags). */
+async function tabTo(user: ReturnType<typeof userEvent.setup>, el: HTMLElement) {
+  for (let i = 0; i < 20 && document.activeElement !== el; i++) await user.tab();
+  expect(document.activeElement).toBe(el);
+}
+
+/** Whether `a` comes before `b` in the document. */
+const before = (a: Element, b: Element) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+describe('the order the inspector reads in', () => {
+  // The header (back, the actions, ✕); then the name and artist, the facts (style, readout, colours, tags), the map, the tune and the playlists.
+  const order = () => {
+    const name = screen.getByRole('heading', { level: 2 });
+    const header = name.closest('.insp')!.querySelector('.insp-top')!;
+    const facts = screen.getByRole('group', { name: /^about th/ });
+    const tags = screen.getByRole('group', { name: 'my tags' });
+    const field = screen.queryByRole('listbox');
+    const star = screen.getByRole('button', { name: 'star' });
+    return { name, header, facts, tags, field, star };
+  };
+
+  it('the preset playing: the actions in the header, then name and artist, its facts, the map, then the rest', () => {
+    mount({ subject: prepareRow(AMBER, { star: false, tags: ['warm'] }), playing: AMBER.key, playlists: [manual('w', 'Warm-up', [])], onEdit: vi.fn() });
+    const { name, header, facts, tags, field, star } = order();
+    const insp = name.closest('.insp')!;
+    // The header row first, then the name: no status line between them.
+    expect(insp.firstElementChild).toBe(header);
+    expect(header.nextElementSibling).toBe(insp.querySelector('.insp-head'));
+    expect(name.parentElement!.textContent).toBe('Ambergeiss');
+    // Star, add, never play and edit are glyphs in the header, named for screen readers, with tooltips.
+    const keys = within(screen.getByRole('group', { name: 'on this preset' }));
+    expect(header.contains(star)).toBe(true);
+    for (const n of ['star', 'add to a playlist', 'never play', 'open in the editor']) {
+      const b = keys.getByRole('button', { name: n });
+      expect(b.textContent).toBe('');
+      expect(b.closest('[title]')).not.toBeNull();
+    }
+    expect(facts.textContent).toContain('Hypnotic');
+    expect(facts.querySelector('.insp-swatch')).not.toBeNull();
+    expect(facts.contains(tags)).toBe(true);
+    expect(before(name, facts)).toBe(true);
+    expect(facts.nextElementSibling?.contains(field!)).toBe(true);
+    const tune = screen.getByRole('group', { name: 'for this preset' });
+    const lists = screen.getByText('In no playlist yet');
+    expect(before(field!, tune)).toBe(true);
+    expect(before(tune, lists)).toBe(true);
   });
 
-  it('shows one picked with back and Play, not where the playing one plays from', async () => {
+  it('one picked: back, Play and the actions in the header, then the same order', () => {
+    mount({ subject: prepareRow(CINDER, undefined), onPlay: vi.fn() });
+    const { name, header, facts, field, star } = order();
+    expect(header.contains(screen.getByRole('button', { name: 'back to now playing' }))).toBe(true);
+    expect(header.contains(screen.getByRole('button', { name: 'play it' }))).toBe(true);
+    expect(header.contains(star)).toBe(true);
+    expect(before(header, name)).toBe(true);
+    expect(before(name, facts)).toBe(true);
+    expect(before(facts, field!)).toBe(true);
+  });
+
+  it('several picked: star, add and never play in the header, then the count, their styles and tags, then their pictures', () => {
+    mount({ chosen: [prepareRow(AMBER, undefined), prepareRow(CINDER, undefined)], onEdit: vi.fn() });
+    const { name, header, facts, tags, field, star } = order();
+    expect(field).toBeNull();
+    const keys = within(screen.getByRole('group', { name: 'on these presets' }));
+    expect(keys.getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['star', 'add to a playlist', 'never play']);
+    expect(header.contains(star)).toBe(true);
+    const pictures = name.closest('.insp')!.querySelector('.insp-pictures')!;
+    expect(facts.contains(tags)).toBe(true);
+    expect(before(name, facts)).toBe(true);
+    expect(facts.nextElementSibling).toBe(pictures);
+  });
+
+  it('the source and nothing playing have no actions', () => {
+    mount({ subject: null, source: <section aria-label="the playlist">Warm-up</section> });
+    expect(screen.queryByRole('button', { name: 'star' })).toBeNull();
+    cleanup();
+    mount({ subject: null, playing: null });
+    expect(screen.queryByRole('button', { name: 'star' })).toBeNull();
+    expect(document.querySelector('.insp-top')).toBeNull();
+  });
+
+  it('nothing playing: the words saying so, then the map', () => {
+    mount({ subject: null, playing: null });
+    expect(before(screen.getByText(/nothing playing/i), screen.getByRole('listbox'))).toBe(true);
+  });
+});
+
+describe('the inspector in a DOM', () => {
+  it('shows the preset playing with no status line (the transport bar says where it plays from), and no way back', () => {
+    mount();
+    expect(screen.getByRole('heading', { name: 'Bloom' })).toBeTruthy();
+    expect(screen.queryByText(/Now playing/)).toBeNull();
+    expect(screen.queryByText(/from Warm-up/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'back to now playing' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'play it' })).toBeNull();
+  });
+
+  it('shows one picked with back and Play', async () => {
     const p = mount({ subject: prepareRow(CINDER, undefined), onPlay: vi.fn() });
-    expect(screen.getByText(/^Picked/)).toBeTruthy();
-    expect(screen.queryByText('from Warm-up')).toBeNull();
+    expect(screen.queryByText(/^Picked/)).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'back to now playing' }));
     expect(p.onBack).toHaveBeenCalled();
     await userEvent.click(screen.getByRole('button', { name: 'play it' }));
@@ -87,8 +174,7 @@ describe('the inspector in a DOM', () => {
     const user = userEvent.setup();
     const p = mount();
     const field = screen.getByRole('listbox', { name: 'The library by speed and brightness' });
-    await user.tab();
-    expect(document.activeElement).toBe(field);
+    await tabTo(user, field);
     // Focus from the keyboard puts the cursor on the subject; the arrows move it.
     expect(screen.getByRole('option', { name: 'Bloom, playing' }).getAttribute('aria-selected')).toBe('true');
     await user.keyboard('{ArrowRight}');
@@ -104,9 +190,7 @@ describe('the inspector in a DOM', () => {
   it('picking the dot playing goes back to it', async () => {
     const user = userEvent.setup();
     const p = mount({ subject: prepareRow(CINDER, undefined) });
-    await user.tab();
-    await user.tab();
-    expect(document.activeElement).toBe(screen.getByRole('listbox'));
+    await tabTo(user, screen.getByRole('listbox'));
     await user.keyboard('{ArrowLeft}');
     expect(screen.getByRole('option', { name: 'Bloom, playing' })).toBeTruthy();
     await user.keyboard('{Enter}');
@@ -117,8 +201,7 @@ describe('the inspector in a DOM', () => {
   it('picking the dot playing while it is shown does nothing', async () => {
     const user = userEvent.setup();
     const p = mount();
-    await user.tab();
-    expect(document.activeElement).toBe(screen.getByRole('listbox'));
+    await tabTo(user, screen.getByRole('listbox'));
     await user.keyboard('{Enter}');
     expect(p.onBack).not.toHaveBeenCalled();
     expect(p.onPick).not.toHaveBeenCalled();
