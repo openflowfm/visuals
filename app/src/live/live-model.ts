@@ -73,6 +73,17 @@ export interface LiveState {
   favourite(): void;
   /** Rate the preset playing; the same number again takes the rating off. */
   rate(stars: Stars): void;
+  /** When the playing preset last started (ms, `Date.now()`): reset on every open, the same preset again included. */
+  since: number;
+}
+
+/**
+ * `LiveState.since` after a `live` event at `at` (ms): a preset that opened
+ * (re-opening the one playing included) starts it again; an event that opened
+ * nothing, or failed, leaves it.
+ */
+export function sinceAfter(was: number, now: Pick<pl.Now, 'path' | 'error'>, at: number): number {
+  return now.path && !now.error ? at : was;
 }
 
 /** How long leaving live waits for its second press while the output shows on a display. */

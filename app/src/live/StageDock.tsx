@@ -18,18 +18,15 @@ import './stage-dock.css';
 /** Intensity's range: 0–1, a double-click back to the middle (1× sensitivity), as Live's slider had it. */
 const INTENSITY = range('intensity', 0, 1, 0.5);
 
-/** Seconds on the preset playing, ticking each second while one plays, from when `current` last changed; null while nothing plays. */
-function useElapsed(current: string | null, length: number | null): TransportBarProps['position'] {
-  const [since, setSince] = useState(() => Date.now());
+/** Seconds on the preset playing, ticking each second while one plays, from when it opened (`since`, ms; a re-open of the same preset restarts it); null while nothing plays. */
+function useElapsed(current: string | null, since: number, length: number | null): TransportBarProps['position'] {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const at = Date.now();
-    setSince(at);
-    setNow(at);
+    setNow(Date.now());
     if (!current) return;
     const t = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(t);
-  }, [current]);
+  }, [current, since]);
   return current ? { elapsed: Math.max(0, (now - since) / 1000), length } : null;
 }
 
@@ -40,7 +37,7 @@ function useElapsed(current: string | null, length: number | null): TransportBar
  */
 function useTransport(live: LiveState): TransportBarProps {
   const deck = live.deck;
-  const position = useElapsed(live.current, deck ? presetLength({ ...deck, hold: live.held }) : null);
+  const position = useElapsed(live.current, live.since, deck ? presetLength({ ...deck, hold: live.held }) : null);
   const name = live.current ? nameOf(live.current) : null;
   return {
     playing: !live.held,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type * as pl from '../playlists.ts';
-import { nextName, nextWhenText, saysWhere } from './live-model.ts';
+import { nextName, nextWhenText, saysWhere, sinceAfter } from './live-model.ts';
 import { crateModeFor, escapeDoes, panelsAtStart, STAGE_DOCK_AT, toggleCrate, togglePanels } from './stage-model.ts';
 
 describe("the Stage's crate", () => {
@@ -59,5 +59,17 @@ describe('the Next line', () => {
     expect(saysWhere({ kind: 'held' }, up, null)).toBe(false);
     expect(saysWhere({ kind: 'empty', up }, up, null)).toBe(false);
     expect(saysWhere({ kind: 'filter', item: { name: 'W', path: '/w', missing: false }, query: null } as pl.NextSays, null, null)).toBe(false);
+  });
+});
+
+describe('since', () => {
+  it('restarts on every open, the same preset again included', () => {
+    const first = sinceAfter(100, { path: 'a.milk', error: null }, 200);
+    expect(first).toBe(200);
+    expect(sinceAfter(first, { path: 'a.milk', error: null }, 300)).toBe(300);
+  });
+  it('stays when nothing opened or the open failed', () => {
+    expect(sinceAfter(100, { path: null, error: null }, 200)).toBe(100);
+    expect(sinceAfter(100, { path: 'b.milk', error: 'bad shader' }, 200)).toBe(100);
   });
 });

@@ -73,10 +73,6 @@
 /* The gear, where the rows' 16 px icons sit. */
 .lay .isb-gear {
   flex: none;
-  width: 16px;
-  font-size: 14px;
-  line-height: 1;
-  text-align: center;
 }
 .lay .isb-section + .isb-section {
   margin-top: 14px;
@@ -242,10 +238,6 @@
 .lay .isb-tool:hover {
   color: var(--fg);
   background: color-mix(in srgb, var(--fg) 6%, transparent);
-}
-.lay .isb-tool-glyph {
-  font-size: 14px;
-  line-height: 1;
 }
 
 /* A playlist's row: the play button over its icon and the "…" over its count, on hover. */

@@ -1,0 +1,22 @@
+/* A setting that is on or off (Switch.tsx): its name at the start of the line,
+   macOS's switch at the end, no field or border around either. On, the track
+   takes the suite's colour rather than macOS's blue. */
+.vf-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 28px;
+  color: var(--fg);
+  font-size: var(--text-body);
+  cursor: default;
+}
+.vf-switch-name {
+  min-width: 0;
+}
+.vf-switch[data-disabled] .vf-switch-name {
+  color: var(--caption);
+}
+.vf-switch .mac-switch[aria-checked='true']:not(:disabled) {
+  --track: var(--green);
+}

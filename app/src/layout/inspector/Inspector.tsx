@@ -87,7 +87,7 @@ function Scope({ subject: p, playing, from, playlists, library, mine, onSet, onA
         playing={playing}
         intensity={c?.intensity.at ?? null}
         hue={c?.hues[0]?.css ?? 'var(--fg)'}
-        description={fieldSays(c, measured)}
+        description={fieldSays(c, measured, library.length)}
         onPick={pick}
       />
       {!p || !c ? (

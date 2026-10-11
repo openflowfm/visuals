@@ -1,151 +1,26 @@
-/* The live effects: the four hits big enough to hit blind, then tempo and the
-   picture's switches, then its amounts. Lit hits are bright enough to read in the dark. */
-
-.fx {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-width: 0;
-  padding: 12px 22px 14px;
-  background: var(--panel);
-}
-.fx h2 {
-  margin: 0;
-  color: var(--caption);
-  font-size: var(--text-label);
-  font-weight: var(--weight-medium);
-  letter-spacing: var(--track-caps);
-  text-transform: uppercase;
-}
-.fx-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
+/* A hit (Effects.tsx's Hit), as More effects' Punch draws it (below): a pad,
+   held while pressed, so it takes no text selection and no touch scrolling.
+   The old live effects panel (`.fx` with its tempo, switches and amounts) went
+   with the Stage, which has pads of its own; the effects' settings are rows in
+   ⚙ Settings (settings.css). */
 
 .fx-hits {
   display: flex;
   gap: 8px;
 }
-.fx .fx-hit {
-  flex: 1;
+.fx-hit {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
   gap: 2px;
-  height: auto;
-  min-height: 52px;
-  padding: 8px 6px;
-  color: var(--fg);
-  font-size: var(--text-heading);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--track-label);
   user-select: none;
   touch-action: none;
 }
-.fx .fx-hit small {
-  color: var(--caption);
-  font-family: var(--sans);
-  font-variation-settings: var(--sans-axes);
+.fx-hit small {
+  font-family: var(--font-num, var(--sans));
+  font-variation-settings: var(--font-num-axes, var(--sans-axes));
   font-variant-numeric: tabular-nums;
-  font-size: var(--text-label);
-  font-weight: var(--weight-normal);
-  letter-spacing: var(--track-none);
-}
-.fx .fx-hit[data-on] {
-  color: var(--bg);
-  background: var(--fg);
-  border-color: var(--fg);
-}
-.fx .fx-hit[data-on] small {
-  color: var(--bg);
-}
-.fx .fx-hit[data-kind='freeze'][data-on] {
-  background: var(--blue);
-  border-color: var(--blue);
-}
-.fx .fx-hit[data-kind='punch'][data-on] {
-  background: var(--green);
-  border-color: var(--green);
-}
-.fx .fx-hit[data-kind='blackout'][data-on] {
-  color: var(--fg);
-  background: var(--bg);
-  border-color: var(--red);
-  box-shadow: var(--ring) var(--red);
-}
-.fx .fx-hit[data-kind='blackout'][data-on] small {
-  color: var(--red);
-}
-
-.fx-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 8px 14px;
-}
-.fx-row .wdg-toggle {
-  width: 120px;
-}
-.fx .fx-tempo {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  height: auto;
-  min-width: 96px;
-  padding: 6px 12px;
-  color: var(--ui);
-  font-size: var(--text-lead);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--track-slight);
-}
-.fx span.fx-tempo {
-  border: 1px solid var(--bd3);
-  border-radius: var(--radius);
-}
-.fx .fx-tempo b {
-  color: var(--green);
-  font-family: var(--sans);
-  font-variation-settings: var(--sans-axes);
-  font-size: var(--text-heading);
-  font-variant-numeric: tabular-nums;
-}
-
-.fx-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 6px 14px;
-}
-
-/* The effects in ⚙ Settings (EffectSettings): a row per setting, its name over
-   its control; the fine ones with a step down and up either side. */
-.fx-settings {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.fx-setting {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.fx-setting-name {
-  color: var(--caption);
-  font-size: var(--text-body);
-}
-.fx-setting-control {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.fx-setting-control > .wdg-segmented,
-.fx-setting-control > .wdg-slider-horizontal {
-  flex: 1;
-  min-width: 0;
-}
-.fx-setting-control > .wdg-button {
-  min-width: 44px;
+  font-weight: 400;
+  letter-spacing: normal;
 }
 
 /* The More effects drawer (MoreEffects.tsx): along the bottom, the show above it

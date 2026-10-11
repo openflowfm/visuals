@@ -107,7 +107,7 @@ export function StageHead({ live, crateOpen, onCrate, help, onHelp, onView }: St
           <Icon name="help" />
         </button>
         <button type="button" className="stage-tool" aria-label="Settings" aria-haspopup="dialog" aria-keyshortcuts="Meta+," title={`${titleOf('settings')} (⌘,)`} onClick={openSettings}>
-          <Icon name="settings" />
+          <Icon name="gear" />
         </button>
       </div>
     </header>

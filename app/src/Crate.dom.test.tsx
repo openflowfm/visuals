@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LibraryData } from './api.ts';
-import { Crate } from './Crate.tsx';
+import { Crate, FOLDS_KEY, readFolds } from './Crate.tsx';
 import * as pl from './playlists.ts';
 
 vi.mock('./playlists.ts', async (original) => ({ ...(await original<typeof import('./playlists.ts')>()), moveItem: vi.fn(), deckItems: vi.fn() }));
@@ -27,6 +27,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  window.localStorage.clear();
 });
 
 const crate = (l: pl.Lists) => <Crate lists={l} data={null} act={() => {}} onLists={() => {}} onError={(e) => expect.unreachable(String(e))} current={l.deck.current} />;
@@ -230,5 +231,23 @@ describe('The crate in a DOM', () => {
     expect(heading.getAttribute('aria-expanded')).toBe('true');
     fireEvent.click(screen.getByRole('button', { name: 'Up next' }));
     expect(screen.queryByRole('list', { name: 'Up next, in play order' })).toBeNull();
+  });
+
+  it('remembers the folded sections in local storage, and opens all when storage is blocked', () => {
+    mount(lists({ playlist: 'm', index: 0, current: 'pack/a.milk', next_index: 1 }));
+    fireEvent.click(screen.getByRole('button', { name: 'Up next' }));
+    expect(JSON.parse(window.localStorage.getItem(FOLDS_KEY) ?? '')).toEqual(['next']);
+    cleanup();
+    mount(lists({ playlist: 'm', index: 0, current: 'pack/a.milk', next_index: 1 }));
+    expect(screen.getByRole('button', { name: 'Up next' }).getAttribute('aria-expanded')).toBe('false');
+    expect(screen.getByRole('button', { name: 'Playlists' }).getAttribute('aria-expanded')).toBe('true');
+    cleanup();
+    vi.spyOn(window, 'localStorage', 'get').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    expect(readFolds()).toEqual([]);
+    mount(lists({ playlist: 'm', index: 0, current: 'pack/a.milk', next_index: 1 }));
+    expect(screen.getByRole('button', { name: 'Up next' }).getAttribute('aria-expanded')).toBe('true');
+    vi.restoreAllMocks();
   });
 });

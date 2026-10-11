@@ -87,6 +87,8 @@ export interface StageLayoutProps {
   children?: ReactNode;
   /** The laid-over crate was dismissed (Esc, or a press outside it). */
   onCrateAway(): void;
+  /** Show the panels again (the "\ for controls" hint clicked); without it the hint is plain text. */
+  onPanels?: () => void;
 }
 
 /**

@@ -130,4 +130,11 @@ describe('EffectSettings', () => {
     expect(html).toMatch(/role="radio"[^>]*aria-label="4 flashes per beat"[^>]*>4</);
     expect(html).toMatch(/aria-label="[^"]+ up a step"[^]*aria-label="[^"]+ up a step"/);
   });
+
+  it("draws each setting as one of ⚙ Settings' rows, its name first", () => {
+    const html = renderToStaticMarkup(<EffectSettings state={REST} set={none} />);
+    expect(html.match(/<div class="settings-row"><span class="settings-row-name">/g)).toHaveLength(5);
+    expect(html).toMatch(/<span class="settings-row-name">Brightness<\/span><span class="settings-row-control">[^]*?aria-label="Brightness down a step"/);
+    expect(html).not.toContain('fx-setting');
+  });
 });

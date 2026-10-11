@@ -194,6 +194,28 @@ export function moveFor(rows: readonly Upcoming[], row: number, slot: number): {
 /** The crate's sections, in order: each folds under its heading. */
 export type CrateSection = 'playlists' | 'moods' | 'next';
 
+/** Where the folded sections are kept between runs. */
+export const FOLDS_KEY = 'visuals.live.crate.folds';
+const SECTIONS: readonly CrateSection[] = ['playlists', 'moods', 'next'];
+
+/** The sections folded last run; all open when storage is blocked or holds nothing usable. */
+export function readFolds(): CrateSection[] {
+  try {
+    const v: unknown = JSON.parse(window.localStorage.getItem(FOLDS_KEY) ?? '[]');
+    return Array.isArray(v) ? SECTIONS.filter((s) => v.includes(s)) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeFolds(folded: readonly CrateSection[]) {
+  try {
+    window.localStorage.setItem(FOLDS_KEY, JSON.stringify(folded));
+  } catch {
+    // Storage blocked: the folds last only this mount.
+  }
+}
+
 /** One stop on the keyboard's walk: a section's heading, or an item under it (a playlist, a mood, an up-next row that moves, "Show all"). */
 export interface Stop {
   key: string;
@@ -320,7 +342,8 @@ export function Crate({ lists, data, act, onLists, onError, current }: Props) {
 
   const uid = useId();
   // The sections folded away, and the stop focused last (the walk's one tab stop).
-  const [folded, setFolded] = useState<CrateSection[]>([]);
+  const [folded, setFolded] = useState<CrateSection[]>(readFolds);
+  useEffect(() => writeFolds(folded), [folded]);
   const [active, setActive] = useState<string | null>(null);
   const els = useRef(new Map<string, HTMLElement>());
 

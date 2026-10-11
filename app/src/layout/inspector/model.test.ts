@@ -46,6 +46,14 @@ group('the inspector model', () => {
     expect(fieldSays(null, 250)).toBe('The library: 250 presets by speed and brightness');
   });
 
+  it('never counts only the presets measured as the library: 250 drawn of 9,791 installed says no count', () => {
+    const c = characterOf(prepareRow(row(), undefined));
+    expect(fieldSays(c, 9791, 9791)).toBe('Slow and dark, among 9,791 presets');
+    expect(fieldSays(c, 250, 9791)).toBe('Slow and dark');
+    expect(fieldSays(characterOf(prepareRow(row({ look: null }), undefined)), 250, 9791)).toBe('Not drawn yet');
+    expect(fieldSays(null, 250, 9791)).toBe('The library by speed and brightness: 250 of its 9,791 presets drawn so far');
+  });
+
   it('places measures on 0–1 scales, the median near the middle', () => {
     expect(scaleOf.speed(2.9)).toBeGreaterThan(0.5);
     expect(scaleOf.speed(2.9)).toBeLessThan(0.7);

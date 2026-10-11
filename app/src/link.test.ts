@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { beatsToNext, CHOICES, choicesFor, runOn, statusText, type Frame } from './link.ts';
+import { beatsToNext, CHOICES, choicesFor, runOn, statusText, timingSays, type Frame } from './link.ts';
 import { LinkSettings } from './LinkPanel.tsx';
+import { EMPTY_DECK, manual, type Deck, type Lists } from './playlists.ts';
 
 const frame = (over: Partial<Frame> = {}): Frame => ({
   enabled: true,
@@ -72,6 +73,25 @@ describe('statusText', () => {
     expect(statusText(frame())).toBe('no one else in the session: our own clock');
     expect(statusText(frame({ peers: 1 }))).toBe('1 peer');
     expect(statusText(frame({ peers: 2, playing: true }))).toBe('2 peers · playing');
+  });
+});
+
+describe('timingSays', () => {
+  const chill = manual('c', 'Chill', []);
+  const lists = (deck: Partial<Deck>): Lists => ({ playlists: [chill], deck: { ...EMPTY_DECK, ...deck } });
+
+  it('is the timing outside playlists with none playing', () => {
+    expect(timingSays(null)).toEqual({ kind: 'outside' });
+    expect(timingSays(lists({}))).toEqual({ kind: 'outside' });
+    // A filter playing is outside playlists too.
+    expect(timingSays(lists({ query: { groups: {}, text: '' } }))).toEqual({ kind: 'outside' });
+  });
+
+  it('is the playlist’s own, or a live change of it with its own to put back', () => {
+    expect(timingSays(lists({ playlist: 'c' }))).toEqual({ kind: 'playlist', name: 'Chill' });
+    expect(timingSays(lists({ playlist: 'c', differs: ['change'] }))).toEqual({ kind: 'changed', name: 'Chill', own: { unit: 'seconds', every: 30 } });
+    // A look tweaked isn't the timing.
+    expect(timingSays(lists({ playlist: 'c', differs: ['speed'] }))).toEqual({ kind: 'playlist', name: 'Chill' });
   });
 });
 

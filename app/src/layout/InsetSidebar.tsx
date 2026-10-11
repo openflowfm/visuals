@@ -30,8 +30,8 @@ export { paneKey, samePane, sidebarSections, type SidebarRow, type SidebarSectio
  * "…" that shows on hover: play or stop, quick add (a manual playlist's), show
  * info (the playlist's card in the inspector), rename (in place), save to a
  * file, delete (asking first). The playlists' heading has + (a new playlist)
- * and ⤓ (add one from a file). At the foot, pinned under the rows, a quiet
- * Settings row (⚙) opens Settings.
+ * and an import arrow (add one from a file). At the foot, pinned under the
+ * rows, a quiet Settings row (the gear) opens Settings.
  *
  * One tab stop: the arrow keys walk the headings and the rows shown, Home and
  * End jump to the first and the last, Enter or Space picks a row or folds a
@@ -258,9 +258,7 @@ export function InsetSidebar({ sections, selected, onSelect, collapsed, onToggle
                       <Icon name="plus" size={14} />
                     </button>
                     <button type="button" className="isb-tool" aria-label="add from a file" title="Add from a file: a playlist someone saved" onClick={() => file.current?.click()}>
-                      <span className="isb-tool-glyph" aria-hidden="true">
-                        ⤓
-                      </span>
+                      <Icon name="import" size={14} />
                     </button>
                     <input
                       ref={file}
@@ -388,9 +386,7 @@ export function InsetSidebar({ sections, selected, onSelect, collapsed, onToggle
       {actions?.onSettings && (
         <div className="isb-foot">
           <button type="button" className="isb-settings" title="Settings (⌘,)" onClick={() => actions.onSettings?.()}>
-            <span className="isb-gear" aria-hidden="true">
-              ⚙
-            </span>
+            <Icon className="isb-gear" name="gear" />
             <span className="isb-name">Settings</span>
           </button>
         </div>

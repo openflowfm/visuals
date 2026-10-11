@@ -36,6 +36,7 @@ function liveOf(lists: pl.Lists | null): LiveState {
     setIntensity: fn(),
     favourite: fn(),
     rate: fn(),
+    since: 0,
   };
 }
 

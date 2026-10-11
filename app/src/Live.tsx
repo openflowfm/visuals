@@ -117,6 +117,7 @@ export function Live({
         dock={<StageDock live={live} />}
         centre={offer ? <FullScreenOffer live={live} /> : undefined}
         onCrateAway={crateAway}
+        onPanels={() => setPanels((p) => ({ ...p, shown: true }))}
       >
         {/* Laid over everything: the ? overlay (the dock shows the silence banner and the notice). */}
         <HelpOverlay open={help} onClose={() => setHelp(false)} stage />
