@@ -14,7 +14,8 @@
 //!
 //! Incremental by content hash: a preset already measured by the current
 //! analysis (`features::ANALYSIS`) with its clip on disk isn't drawn again,
-//! nor one skipped before (unless `--retry`). The file is saved every few
+//! nor one skipped before with the same content (unless `--retry`); a skipped
+//! file that has changed since is drawn again. The file is saved every few
 //! seconds, so it can be built in short runs. `--sample N` takes N presets
 //! spread evenly over the sorted paths, so over the styles, the same every
 //! time; rows of the folder's other presets already in the file are kept, and
@@ -104,7 +105,7 @@ fn file_path(rel: &Path) -> String {
     rel.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect::<Vec<_>>().join("/")
 }
 
-/// What an old file already knows: features by content hash (clip on disk), and skips by path.
+/// What an old file already knows: features by content hash (clip on disk), and skips, as `index` keeps them.
 #[derive(Debug, Default)]
 struct Known {
     drawn: HashMap<String, BTreeMap<String, Option<f32>>>,
@@ -119,7 +120,7 @@ impl Known {
         }
         if !retry {
             for s in old.iter().flat_map(|o| &o.skipped) {
-                known.failed.insert(s.path.clone(), s.why.clone());
+                known.failed.insert(s.hash.clone(), s.why.clone());
             }
         }
         known
@@ -174,8 +175,8 @@ fn run(folder: &Path, out: &Path, count: Option<usize>, jobs: usize, timeout: Du
         taken.insert(row.path.clone());
         if let Some(f) = drawn.get(&hash) {
             features.rows.push(Row { path: row.path, clip: features::clip_name(&hash), hash, style: row.style, features: f.clone() });
-        } else if let Some(why) = failed.get(&row.path) {
-            features.skipped.push(Skipped { path: row.path, why: why.clone() });
+        } else if let Some(why) = failed.get(&hash) {
+            features.skipped.push(Skipped { path: row.path, hash, why: why.clone() });
         } else {
             let at = waiting.entry(hash.clone()).or_default();
             if at.is_empty() {
@@ -220,7 +221,7 @@ fn run(folder: &Path, out: &Path, count: Option<usize>, jobs: usize, timeout: Du
             }
             Reply::Failed(why) => {
                 eprintln!("features: {why}\t{}", path.display());
-                features.skipped.extend(presets.into_iter().map(|(p, _)| Skipped { path: p, why: why.clone() }));
+                features.skipped.extend(presets.into_iter().map(|(p, _)| Skipped { path: p, hash: hash.clone(), why: why.clone() }));
             }
         }
         if done % 25 == 0 {
@@ -329,11 +330,13 @@ mod tests {
         let mut old = Features::default();
         old.rows.push(row("A/a.milk", "aaaa"));
         old.rows.push(row("A/lost.milk", "cccc"));
-        old.skipped.push(Skipped { path: "A/x.milk".into(), why: "timed out".into() });
+        old.skipped.push(Skipped { path: "A/x.milk".into(), hash: "dddd".into(), why: "timed out".into() });
         let on_disk = |c: &str| c != features::clip_name("cccc");
         let known = Known::from(Some(&old), on_disk, false);
         assert_eq!(known.drawn.keys().collect::<Vec<_>>(), ["aaaa"]);
-        assert_eq!(known.failed.get("A/x.milk").map(String::as_str), Some("timed out"));
+        // By content: the same file under another name is still skipped, a changed one isn't.
+        assert_eq!(known.failed.get("dddd").map(String::as_str), Some("timed out"));
+        assert_eq!(known.failed.len(), 1);
         assert!(Known::from(Some(&old), on_disk, true).failed.is_empty());
     }
 
@@ -341,7 +344,7 @@ mod tests {
     fn rows_not_taken_are_kept_while_in_the_folder() {
         let mut old = Features::default();
         old.rows.extend([row("A/taken.milk", "aaaa"), row("A/kept.milk", "bbbb"), row("A/gone.milk", "cccc")]);
-        old.skipped.push(Skipped { path: "B/hung.milk".into(), why: "timed out".into() });
+        old.skipped.push(Skipped { path: "B/hung.milk".into(), hash: "dddd".into(), why: "timed out".into() });
         let folder: HashSet<String> = ["A/taken.milk", "A/kept.milk", "B/hung.milk"].map(String::from).into();
         let taken: HashSet<String> = ["A/taken.milk".to_string()].into();
         let mut f = Features::default();

@@ -80,6 +80,45 @@ fn a_still_red_picture_and_a_moving_blue_one_differ_as_they_should() {
     }
 }
 
+/// A pattern periodic in the log of the radius and in the angle, so it can zoom
+/// and turn forever: each step it zooms by e^`zoom` and turns `turn` radians
+/// anticlockwise on screen.
+fn spinning(zoom: f32, turn: f32) -> impl Fn(Condition, u32) -> Vec<u8> {
+    let polar: Vec<(f32, f32)> = (0..W * H)
+        .map(|i| {
+            let (x, y) = ((i % W) as f32 - W as f32 / 2.0 + 0.5, H as f32 / 2.0 - (i / W) as f32 - 0.5);
+            (x.hypot(y).max(1.0).ln(), y.atan2(x))
+        })
+        .collect();
+    move |_, step| {
+        let (du, dt) = (zoom * step as f32, turn * step as f32);
+        polar
+            .iter()
+            .flat_map(|&(u, t)| {
+                let (u, t) = (u - du, t - dt);
+                let pattern = (u * 9.0).sin() * (t * 10.0).cos() + 0.5 * (u * 23.0).sin() * (t * 7.0).sin();
+                let v = (120.0 + 80.0 * pattern.clamp(-1.0, 1.0)) as u8;
+                [v, v / 2, v / 3, 255]
+            })
+            .collect()
+    }
+}
+
+#[test]
+fn zooming_out_and_turning_clockwise_are_as_strong_as_their_opposites() {
+    let strength = |f: &BTreeMap<String, Option<f32>>, name: &str| get(f, name).unwrap_or_else(|| panic!("{name} unmeasured"));
+    let (anticlockwise, clockwise) = (collect(spinning(0.0, 0.015)), collect(spinning(0.0, -0.015)));
+    let (zoom_in, zoom_out) = (collect(spinning(0.015, 0.0)), collect(spinning(-0.015, 0.0)));
+    let (a, c) = (strength(&anticlockwise, "motion_swirl_strength"), strength(&clockwise, "motion_swirl_strength"));
+    assert!(a > 0.3 && (a - c).abs() < 0.2 * a, "anticlockwise {a}, clockwise {c}");
+    assert!(strength(&anticlockwise, "motion_swirl") > 0.3 && strength(&clockwise, "motion_swirl") < -0.3, "the signed swirl keeps its way");
+    assert!(strength(&anticlockwise, "motion_radial_strength") < 0.5 * a, "a turn isn't a zoom");
+    let (i, o) = (strength(&zoom_in, "motion_radial_strength"), strength(&zoom_out, "motion_radial_strength"));
+    assert!(i > 0.3 && (i - o).abs() < 0.2 * i, "in {i}, out {o}");
+    assert!(strength(&zoom_in, "motion_radial") * strength(&zoom_out, "motion_radial") < 0.0, "the signed radial keeps its way");
+    assert!(strength(&zoom_in, "motion_swirl_strength") < 0.5 * i, "a zoom isn't a turn");
+}
+
 #[test]
 fn reactivity_and_waves_come_from_the_other_conditions() {
     let f = collect(|c, s| match c {
@@ -120,7 +159,7 @@ fn the_file_round_trips_and_starts_afresh_when_measured_otherwise() {
     let file = dir.join("features.json");
     let mut f = Features::default();
     f.rows.push(Row { path: "b/x.milk".into(), hash: "ab".into(), style: "b".into(), features: [("speed".to_string(), None), ("brightness".to_string(), Some(0.5))].into(), clip: "ab.webp".into() });
-    f.skipped.push(Skipped { path: "a/y.milk".into(), why: "timed out".into() });
+    f.skipped.push(Skipped { path: "a/y.milk".into(), hash: "cd".into(), why: "timed out".into() });
     f.save(&file).unwrap();
     let text = std::fs::read_to_string(&file).unwrap();
     assert!(text.contains("\"speed\": null") && text.contains("\"conditions\": [\n    \"music\""), "{text}");

@@ -21,7 +21,8 @@ pub const VERSION: u32 = 1;
 /// The version of the drawing and measuring. Bump it when either changes what
 /// a feature or a clip comes out as; the next run redraws every row.
 /// 2: the beat's share of a series is taken after slow drift is out.
-pub const ANALYSIS: u32 = 2;
+/// 3: radial and swirl strength, whichever way.
+pub const ANALYSIS: u32 = 3;
 /// The size presets are drawn at.
 pub const SIZE: (u32, u32) = (384, 288);
 /// Pictures shrunk to this for colour, motion, symmetry and the clip.
@@ -97,7 +98,7 @@ impl Condition {
 }
 
 /// Every feature, and what it is.
-pub const NAMES: [(&str, &str); 51] = [
+pub const NAMES: [(&str, &str); 53] = [
     ("hue_red", "share of the coloured weight (saturation × value) at hues 345–15°; null when grey"),
     ("hue_orange", "share of the coloured weight at hues 15–45°; null when grey"),
     ("hue_yellow", "share of the coloured weight at hues 45–75°; null when grey"),
@@ -132,6 +133,8 @@ pub const NAMES: [(&str, &str); 51] = [
     ("motion_coherence", "mean cosine between neighbouring blocks' motion vectors (1 all one way, 0 unrelated); null when still"),
     ("motion_radial", "mean motion away from the centre per step, px: positive zooming in or down a tunnel, negative out"),
     ("motion_swirl", "mean motion around the centre per step, px: positive anticlockwise, negative clockwise"),
+    ("motion_radial_strength", "mean over the steps of |motion away from the centre|, px: high zooming either way, into or out of a tunnel"),
+    ("motion_swirl_strength", "mean over the steps of |motion around the centre|, px: high spinning either way"),
     ("difference", "mean frame difference per step, luma 0–255 at 192×144"),
     ("difference_variation", "standard deviation over the mean of the per-step frame difference; null when nearly still"),
     ("correlation", "mean Pearson correlation of each picture with the step before (1 barely changes, 0 a new picture each step); null when flat"),
@@ -362,6 +365,9 @@ impl Collector {
         put("motion_coherence", enough(&self.coherence));
         put("motion_radial", enough(&self.radial));
         put("motion_swirl", enough(&self.swirl));
+        let strength = |v: &Vec<f64>| enough(&v.iter().map(|x| x.abs()).collect());
+        put("motion_radial_strength", strength(&self.radial));
+        put("motion_swirl_strength", strength(&self.swirl));
         put("difference", mean(&self.differences));
         put("difference_variation", series::variation(&self.differences, 0.5));
         put("correlation", mean(&self.correlations));
@@ -402,6 +408,8 @@ pub struct Row {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Skipped {
     pub path: String,
+    /// SHA-256 of the file's bytes when it was skipped: a changed file is drawn again.
+    pub hash: String,
     pub why: String,
 }
 
