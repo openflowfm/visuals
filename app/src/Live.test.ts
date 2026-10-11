@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LibraryData, LibraryRow } from './api.ts';
-import { intensityOf, keyOf, openEffects, padLabel, playsWindowed, ratingOf, starred, starsText, whenText, whereSr, whereText } from './live/live-model.ts';
+import { intensityOf, keyOf, openEffects, opensOnStart, padLabel, ratingOf, starred, starsText, whenText, whereSr, whereText } from './live/live-model.ts';
 import * as pl from './playlists.ts';
 import { openSettings } from './Status.tsx';
 import { SHEET_EVENT, sheetOf } from './views.tsx';
@@ -47,18 +47,21 @@ describe('live mode', () => {
     expect(starsText(5)).toBe('★★★★★');
   });
 
-  it('plays in the window when asked to or with only one display', () => {
+  it('opens the output by itself only when started in live mode, with another display', () => {
     const one = [{ id: 0, name: 'Built-in' }] as never[];
     const two = [
       { id: 0, name: 'Built-in' },
       { id: 1, name: 'Projector' },
     ] as never[];
-    expect(playsWindowed(false, two)).toBe(false);
-    expect(playsWindowed(true, two)).toBe(true);
-    expect(playsWindowed(false, one)).toBe(true);
-    expect(playsWindowed(false, [])).toBe(true);
-    // Displays unknown: the old behaviour, the output opens.
-    expect(playsWindowed(false, null)).toBe(false);
+    // Going live from Home, or live-windowed: never.
+    expect(opensOnStart(undefined, two)).toBe(false);
+    expect(opensOnStart(true, two)).toBe(false);
+    expect(opensOnStart(undefined, null)).toBe(false);
+    // VISUALS_LIVE=1: with another display, or displays unknown.
+    expect(opensOnStart(false, two)).toBe(true);
+    expect(opensOnStart(false, null)).toBe(true);
+    expect(opensOnStart(false, one)).toBe(false);
+    expect(opensOnStart(false, [])).toBe(false);
   });
 
   it('opens the Settings sheet from ⚙ and the More effects sheet from its button', () => {
