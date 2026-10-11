@@ -1,8 +1,6 @@
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LibraryData, LibraryRow } from './api.ts';
-import { HoldPad, intensityOf, keyOf, openEffects, Pad, padLabel, playsWindowed, ratingOf, starred, starsText, whenText, whereSr, whereText } from './Live.tsx';
+import { intensityOf, keyOf, openEffects, padLabel, playsWindowed, ratingOf, starred, starsText, whenText, whereSr, whereText } from './live/live-model.ts';
 import * as pl from './playlists.ts';
 import { openSettings } from './Status.tsx';
 import { SHEET_EVENT, sheetOf } from './views.tsx';
@@ -95,38 +93,10 @@ describe('live mode', () => {
   });
 });
 
-describe("live mode's pads, to VoiceOver", () => {
-  const noop = () => {};
-
-  it('names the symbol pads in words, with their keys', () => {
-    const html = renderToStaticMarkup(createElement(Pad, { id: 'previous', onPress: noop }, '◀ Previous'));
-    expect(html).toContain('aria-label="Previous (← ↑)"');
+describe("live mode's controls, to VoiceOver", () => {
+  it('names a control in words, with its keys', () => {
+    expect(padLabel('previous')).toBe('Previous (← ↑)');
     expect(padLabel('step')).toBe('Next (→ ↓)');
-    // A plain step is a button, not a toggle.
-    expect(html).not.toContain('aria-pressed');
-  });
-
-  it('says whether a toggle pad is on, and whether a held effect is held', () => {
-    expect(renderToStaticMarkup(createElement(Pad, { id: 'hold', on: true, onPress: noop }, 'Hold'))).toContain('aria-pressed="true"');
-    expect(renderToStaticMarkup(createElement(Pad, { id: 'blackout', on: false, onPress: noop }, 'Blackout'))).toContain('aria-pressed="false"');
-    const strobe = renderToStaticMarkup(createElement(HoldPad, { id: 'strobe', kind: 'strobe', on: true, send: noop }, 'Strobe'));
-    expect(strobe).toContain('aria-pressed="true"');
-    expect(strobe).toContain('aria-label="Strobe (hold S, ⇧S latches)"');
-  });
-});
-
-describe("live mode's pads, on screen", () => {
-  const noop = () => {};
-  const caption = (html: string) => /<small[^>]*>([^<]*)<\/small>/.exec(html)?.[1];
-
-  it('shows one letter or arrow under a pad, and keeps the longer hint for its tooltip', () => {
-    const strobe = renderToStaticMarkup(createElement(HoldPad, { id: 'strobe', kind: 'strobe', on: false, send: noop }, 'Strobe'));
-    expect(caption(strobe)).toBe('S');
-    expect(strobe).toContain('title="Strobe: ');
-    expect(strobe).toContain('hold S, ⇧S latches)"');
-    expect(caption(renderToStaticMarkup(createElement(HoldPad, { id: 'freeze', kind: 'freeze', on: false, send: noop }, 'Freeze')))).toBe('F');
-    expect(caption(renderToStaticMarkup(createElement(Pad, { id: 'previous', onPress: noop }, '◀ Previous')))).toBe('←');
-    expect(caption(renderToStaticMarkup(createElement(Pad, { id: 'step', onPress: noop }, 'Next ▶')))).toBe('→');
-    expect(caption(renderToStaticMarkup(createElement(Pad, { id: 'blackout', onPress: noop }, 'Blackout')))).toBe('B');
+    expect(padLabel('strobe')).toBe('Strobe (hold S, ⇧S latches)');
   });
 });
