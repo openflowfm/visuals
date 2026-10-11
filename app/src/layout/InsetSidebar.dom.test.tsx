@@ -42,6 +42,7 @@ function fakeActions() {
     onRename: vi.fn<(id: string, name: string) => void>(),
     onExport: vi.fn<(id: string) => void>(),
     onDelete: vi.fn<(id: string) => void>(),
+    onQuickAdd: vi.fn<(id: string) => void>(),
     count: vi.fn((p: Playlist) => (p.kind === 'manual' ? p.items.length : p.id === 'calm' ? 318 : null)),
     onError: vi.fn((_what: string) => (_e: unknown) => {}),
   } satisfies SidebarActions;

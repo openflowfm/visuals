@@ -356,6 +356,7 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
       if (shown?.kind === 'list' && shown.id === id) pick({ kind: 'library' });
       run(pl.remove(id), 'delete the playlist');
     },
+    onQuickAdd: () => {},
     count: counts.list,
     onError: (what) => fail(`Couldn't ${what}.`),
   };

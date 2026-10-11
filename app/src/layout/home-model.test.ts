@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS, EMPTY_DECK, type Lists, type Playlist } from '../playlists.ts';
-import { INSPECTOR_AT, INSPECTOR_KEY, modesFor, paneName, rowSays, SIDEBAR_AT, SIDEBAR_KEY } from './home-model.ts';
+import { INSPECTOR_AT, INSPECTOR_KEY, modesFor, offersQuickAdd, paneName, rowSays, SIDEBAR_AT, SIDEBAR_KEY } from './home-model.ts';
 
 const unset = { sidebar: null, inspector: null };
 
@@ -43,5 +43,13 @@ describe('the words a row and a pane say', () => {
     expect(paneName({ kind: 'starred' }, lists)).toBe('Starred');
     expect(paneName({ kind: 'list', id: 'mine' }, lists)).toBe('Mine');
     expect(paneName({ kind: 'list', id: 'gone' }, lists)).toBe('Library');
+  });
+});
+
+describe('offersQuickAdd', () => {
+  it('offers quick add on manual playlists only', () => {
+    const manual: Playlist = { id: 'm', name: 'M', items: [], kind: 'manual', query: null, settings: DEFAULT_SETTINGS };
+    expect(offersQuickAdd(manual)).toBe(true);
+    expect(offersQuickAdd({ ...manual, kind: 'smart' })).toBe(false);
   });
 });

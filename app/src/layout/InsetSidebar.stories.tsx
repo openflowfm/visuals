@@ -68,6 +68,7 @@ const ACTIONS: SidebarActions = {
   onRename: fn(),
   onExport: fn(),
   onDelete: fn(),
+  onQuickAdd: fn(),
   count: fn((p: Playlist) => (p.kind === 'manual' ? p.items.length : SMART_COUNT)),
   onError: fn((what: string) => (e: unknown) => console.error(`Couldn't ${what}:`, e)),
 };

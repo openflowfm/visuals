@@ -62,6 +62,11 @@ export const WORDS = {
   'source list': 'sidebar',
   /* The sidebar row menu's item that shows a playlist's card in the inspector. */
   'show inspector': 'show info',
+  /* Quick add: a manual playlist's sidebar menu item and header button, and the library's strip while adding to it. */
+  'quick add': 'Quick add',
+  'add presets': 'Add presets',
+  'adding to': 'Adding to',
+  'done adding': 'Done',
   /* The library's filter chips (facets), behind a button, and a playlist's settings, in a popover (decision 67). */
   facets: 'filter',
   'playlist settings': 'how it plays',
