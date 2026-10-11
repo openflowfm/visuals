@@ -262,8 +262,26 @@ const TAP_GAP: f64 = 2.0;
 /// Two heard beats are at least this far apart.
 const BEAT_GAP: f64 = 0.22;
 
+/// The playing preset's own pace (`library.json`'s `tune`, set by `crate::tune`):
+/// multipliers on [`Settings::speed`] and [`Settings::sensitivity`] while it
+/// plays, never written into them, so the playlist's and live values stay as set.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Tune {
+    pub speed: f64,
+    pub sensitivity: f64,
+}
+
+impl Default for Tune {
+    /// As made: 1 and 1.
+    fn default() -> Self {
+        Tune { speed: 1.0, sensitivity: 1.0 }
+    }
+}
+
 pub struct Fx {
     pub settings: Settings,
+    /// The playing preset's own speed and sensitivity.
+    pub tune: Tune,
     pub bpm: f64,
     /// The tempo is a Link session's ([`Fx::follow`]), not the taps'.
     pub linked: bool,
@@ -403,6 +421,7 @@ impl Fx {
     pub fn new(now: Instant) -> Fx {
         Fx {
             settings: Settings::default(),
+            tune: Tune::default(),
             bpm: 120.0,
             linked: false,
             intensity: 0.5,
@@ -593,14 +612,21 @@ impl Fx {
     }
 
     /// The scale on the preset clock (1 is the preset's own 30 steps a second;
-    /// the picture still renders every refresh): the speed, 0.25–4, and 0 while
-    /// frozen, coming back up over [`THAW`] once released.
+    /// the picture still renders every refresh): the speed, 0.25–4, times the
+    /// playing preset's own ([`Fx::tune`]), and 0 while frozen, coming back up
+    /// over [`THAW`] once released.
     pub fn speed_now(&self, now: Instant) -> f64 {
         if self.settings.freeze {
             return 0.0;
         }
         let thaw = self.timing.thawed.map_or(1.0, |t| (secs(t, now) / THAW).min(1.0));
-        self.settings.speed * thaw * thaw * (3.0 - 2.0 * thaw)
+        self.settings.speed * self.tune.speed * thaw * thaw * (3.0 - 2.0 * thaw)
+    }
+
+    /// The gain on what the presets hear: the sensitivity times the playing
+    /// preset's own ([`Fx::tune`]).
+    pub fn gain(&self) -> f64 {
+        self.settings.sensitivity * self.tune.sensitivity
     }
 
     /// How long a blackout takes to fade in or out: as set, and with motion
@@ -880,6 +906,28 @@ mod tests {
         assert_eq!(fx.master(t(0.0)), Master::default());
         assert_eq!(fx.speed_now(t(0.0)), 1.0);
         assert_eq!(fx.echo(), 0.0);
+    }
+
+    #[test]
+    fn a_presets_tune_multiplies_the_speed_and_sensitivity_without_changing_them() {
+        let mut fx = fx();
+        assert_eq!((fx.speed_now(t(0.0)), fx.gain()), (1.0, 1.0), "no tune: as set");
+        act(&mut fx, FxAction::Speed { speed: 2.0 }, 0.0);
+        act(&mut fx, FxAction::Sensitivity { value: 1.5 }, 0.0);
+        fx.tune = Tune { speed: 0.25, sensitivity: 2.0 };
+        assert_eq!((fx.speed_now(t(0.0)), fx.gain()), (0.5, 3.0));
+        assert_eq!((fx.settings.speed, fx.settings.sensitivity), (2.0, 1.5), "the live values are kept as set");
+        // A live change while it plays still multiplies.
+        act(&mut fx, FxAction::Speed { speed: 4.0 }, 0.0);
+        assert_eq!(fx.speed_now(t(0.0)), 1.0);
+        // Frozen is still frozen; the thaw comes up to the tuned speed.
+        act(&mut fx, FxAction::Freeze { on: Some(true) }, 0.0);
+        assert_eq!(fx.speed_now(t(1.0)), 0.0);
+        act(&mut fx, FxAction::Freeze { on: Some(false) }, 1.0);
+        assert_eq!(fx.speed_now(t(2.0)), 1.0);
+        // Reset puts the live speed back, never the preset's own.
+        act(&mut fx, FxAction::FxReset, 2.0);
+        assert_eq!((fx.speed_now(t(3.0)), fx.tune), (0.25, Tune { speed: 0.25, sensitivity: 2.0 }));
     }
 
     #[test]

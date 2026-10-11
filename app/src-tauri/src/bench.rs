@@ -495,7 +495,7 @@ impl Loop {
         let now = Instant::now();
         let (speed, gain, echo) = {
             let fx = self.fx.lock().unwrap();
-            (fx.speed_now(now), fx.settings.sensitivity as f32, fx.echo())
+            (fx.speed_now(now), fx.gain() as f32, fx.echo())
         };
         let frozen = speed < STILL;
         // A stall (a slow load, the machine asleep) moves the preset on at most a
