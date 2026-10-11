@@ -13,11 +13,11 @@
    panel; the main column is painted by the picture's own spread shadow
    (hero.css), clipped to the column, and the header, the grid and the bar sit
    above that shadow with no background of their own. A panel laid over the
-   column paints near-opaque --surface-float: the frost's blur can't reach the
-   native view under it.
+   column paints opaque --surface-corner: the native view under it would show
+   through anything less.
 
    The `--lay-*` sizes below are the contract the parts lay themselves out by
-   (inset-sidebar.css, hero.css, section.css): a part reads them, never sets
+   (inset-sidebar.css, hero.css): a part reads them, never sets
    them. Everything hangs off `.app.home.lay`, which outranks app.css's and
    home.css's grids. Nothing here animates: a panel shows or goes at once. */
 
@@ -96,11 +96,13 @@
   pointer-events: none;
   background: none;
 }
+/* Opaque: it can lie over the hero, whose picture is the native view under the
+   page, and anything less than opaque lets that picture show through on screen
+   (the frost's blur never reaches it). --surface-corner is the page's one
+   opaque dark tone, near the material's under the panel's tint. */
 .app.home.lay > .lay-cell[data-mode='overlay'] > * {
   pointer-events: auto;
-  background: var(--surface-float);
-  -webkit-backdrop-filter: var(--glass);
-  backdrop-filter: var(--glass);
+  background: var(--surface-corner);
   box-shadow:
     var(--glass-edge),
     0 18px 48px rgba(0, 0, 0, 0.45);
@@ -142,10 +144,13 @@
   right: 0;
   height: var(--lay-band);
 }
+/* The sidebar's content fills it and scrolls its own sections (InsetSidebar, between its mark and its pinned foot), so the body doesn't. */
 .app.home.lay .lay-side-body {
+  display: flex;
   flex: 1;
+  flex-direction: column;
   min-height: 0;
-  overflow-y: auto;
+  overflow: hidden;
 }
 /* The native window buttons' stand-in (stories only): three 12px dots, 8px
    apart, where tauri.conf.json's trafficLightPosition puts the real ones

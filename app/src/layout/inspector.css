@@ -5,8 +5,8 @@
    its top edge. Docked (a wide window), it has a column of its own, the full
    height, its cell painting the window's surface around it, and the main
    column narrows beside it. Laid over the column (a narrower window), it hangs
-   under the header row, so the header's toggle stays in reach, and paints the
-   glass (layout.css's overlay cells). It paints --surface-2 docked, so it
+   under the header row, so the header's toggle stays in reach, and paints an
+   opaque surface (layout.css's overlay cells). It paints --surface-2 docked, so it
    takes the raised caption (home.css). Kept apart from layout.css so the
    shell's own sizes stay there; this adds one: the panel's width, between the
    sidebar's 240 and the hero's words beside a picture.
