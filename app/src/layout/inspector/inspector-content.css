@@ -1,11 +1,12 @@
-/* The inspector (Inspector.tsx), "Scope": the preset placed among the
-   library. At the top the field (Field.tsx, field.css); under it the words,
-   near borderless (decision 68): the name large, the authors, the measures
-   read out as one line ("slow · dark · calm"), the colours as dots, then the
-   actions as a row of keys (a glyph over a short word, the pressed one
-   brighter, the star filled), my tags and the playlists holding it as quiet
-   lines. Areas are told apart by space alone. The panel paints --surface-2,
-   so --caption here is the raised one (inspector.css). */
+/* The inspector (Inspector.tsx), "Scope", near borderless (decision 68). The
+   header row: back at the left, the actions as bare glyphs at the right (the
+   pressed one brighter, the star filled), then ✕. Under it what it is: the
+   name large, the authors. Then its facts: the style, the measures read out
+   as one line ("slow · dark · calm"), the colours as dots, my tags. Then the
+   map (the field, Field.tsx, field.css), the tune (tune.css) and the
+   playlists holding it as a quiet line. Areas are told apart by space alone.
+   The panel paints --surface-2, so --caption here is the raised one
+   (inspector.css). */
 
 .lay .insp {
   --insp-pad: 20px;
@@ -16,12 +17,16 @@
   font-size: 13px;
 }
 
-/* Back to now playing, and close (laid over): a quiet line above the field, back at the left, ✕ at the right. */
+/* The header row: back to now playing at the left; the actions, then close (laid over), at the right. */
 .lay .insp .insp-top {
   display: flex;
   align-items: center;
-  min-height: 26px;
-  margin: -4px -6px 6px -6px;
+  gap: 2px;
+  min-height: 28px;
+  margin: -4px -6px 10px -6px;
+}
+.lay .insp .insp-keys + .insp-close {
+  margin-left: 4px;
 }
 .lay .insp .insp-close {
   display: inline-grid;
@@ -52,13 +57,13 @@
   line-height: 1.45;
 }
 
-/* Several picked: their first pictures, three across, the count of the rest over the last. */
+/* Several picked: their first pictures, three across, the count of the rest over the last; in the map's place, under the facts. */
 .lay .insp .insp-pictures {
   position: relative;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 2px;
-  margin-top: 4px;
+  margin-top: 22px;
   border-radius: 8px;
   overflow: hidden;
 }
@@ -85,11 +90,6 @@
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-/* Over several, three keys: spaced as a group, not across the panel. */
-.lay .insp .insp-keys[data-many] {
-  justify-content: flex-start;
-  gap: 18px;
-}
 .lay .insp .insp-back {
   display: inline-flex;
   align-items: center;
@@ -109,10 +109,7 @@
   color: var(--fg);
 }
 
-/* Nothing playing: the field draws the library alone, and the words say so. */
-.lay .insp .insp-none {
-  margin-top: 18px;
-}
+/* Nothing playing: the words say so in the name's place, and the field under them draws the library alone. */
 .lay .insp .insp-none-title {
   margin: 0 0 6px;
   color: var(--fg);
@@ -126,20 +123,12 @@
   line-height: 1.45;
 }
 
-/* The name and who made it. */
+/* First, the name and who made it. */
 .lay .insp .insp-head {
-  margin-top: 20px;
+  margin-top: 4px;
 }
-.lay .insp .insp-kicker {
-  display: flex;
-  align-items: center;
-  margin: 0 0 6px;
-  color: var(--caption);
-  font-size: 11px;
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.lay .insp .insp-top + .insp-head {
+  margin-top: 0;
 }
 .lay .insp .insp-sep {
   display: inline-block;
@@ -167,22 +156,27 @@
   overflow-wrap: break-word;
   text-wrap: balance;
 }
-.lay .insp .insp-by,
-.lay .insp .insp-from {
+.lay .insp .insp-by {
   margin: 4px 0 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
   font-size: 13px;
 }
-.lay .insp .insp-from {
-  color: var(--caption);
-  font-size: 12px;
-}
 
-/* The readout: the measures as words, the colours as dots. */
-.lay .insp .insp-read {
-  margin-top: 16px;
+/* The facts: the style, the readout (the measures as words, the colours as dots) and my tags. */
+.lay .insp .insp-meta {
+  margin-top: 18px;
+}
+.lay .insp .insp-style {
+  margin: 0 0 6px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--caption);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
 }
 .lay .insp .insp-words {
   display: flex;
@@ -222,33 +216,30 @@
   opacity: 0.6;
 }
 
-/* The keys: a glyph over a short word, no boxes; pressed is brighter, the star filled. */
+/* The keys, in the header row: bare glyphs, no boxes, their names in their tooltips; pressed is brighter, the star filled. */
 .lay .insp .insp-keys {
   display: flex;
-  justify-content: space-between;
-  margin: 22px -6px 0;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
 }
 .lay .insp .insp-key,
 .lay .insp .insp-key .vf-pop-button {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
-  min-width: 44px;
-  height: auto;
-  padding: 6px 4px 4px;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   border: 0;
-  border-radius: 8px;
+  border-radius: 7px;
   background: none;
-  color: var(--ui);
+  color: var(--caption);
   font: inherit;
-  font-size: 11px;
-  font-weight: 500;
   cursor: pointer;
 }
 .lay .insp .vf-pop.insp-key {
-  padding: 0;
-  min-width: 0;
+  width: auto;
+  height: auto;
 }
 .lay .insp .insp-key:hover,
 .lay .insp .insp-key[aria-pressed='true'],
@@ -273,9 +264,12 @@
   outline-offset: 0;
 }
 
-/* My tags (TagEditor.tsx, its look in tag-editor.css), and where it's kept. */
+/* My tags (TagEditor.tsx, its look in tag-editor.css), the last of the facts. */
 .lay .insp .insp-mine {
-  margin-top: 20px;
+  margin-top: 14px;
+}
+.lay .insp .insp-meta > .insp-mine:first-child {
+  margin-top: 0;
 }
 /* The ring hugs the small type keys here, as the panel's other keys have it. */
 .lay .insp .tag-editor .tag-chip-x:focus-visible,
@@ -284,6 +278,7 @@
   outline: 2px solid var(--vf-focus-ring);
   outline-offset: 0;
 }
+/* The playlists holding it: a quiet line, last. */
 .lay .insp .insp-in {
-  margin-top: 8px;
+  margin-top: 20px;
 }
