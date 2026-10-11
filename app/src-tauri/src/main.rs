@@ -44,6 +44,8 @@ macro_rules! commands {
             userlib::library_set,
             preview::place_bench,
             preview::stats,
+            preview::hover_preview,
+            preview::hover_frame,
             listen::inputs,
             listen::audio_sources,
             listen::listen_to,

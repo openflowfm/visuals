@@ -1045,12 +1045,7 @@ export function PlaylistPane({ list, lists, tiles, total, rows, dropping, picked
             name={tileName(known?.title ?? t.name, t.path)}
             by={known ? tileBy(known.authors, known.style) : ''}
             playing={currentAt(t)}
-            marks={
-              <>
-                <b className="home-tile-n">{i + 1}</b>
-                {nextAt(t) && <span className="home-tile-next">next</span>}
-              </>
-            }
+            marks={nextAt(t) && <span className="home-tile-next">next</span>}
             tools={
               manual &&
               t.index !== null && (

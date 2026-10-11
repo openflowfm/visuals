@@ -15,6 +15,8 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
+pub mod hover;
+
 /// The size presets draw at, whatever the size of the hole they are shown in,
 /// and on a landscape output: a 4K display shows it scaled up, an ultrawide
 /// with bars at the sides. It caps the GPU's work per refresh.

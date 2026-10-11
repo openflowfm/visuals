@@ -22,20 +22,71 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+/** The name and author on the picture's foot, over a soft scrim; nothing under the picture. */
 export const Normal: Story = {
-  play: async ({ canvas }) => {
-    await expect(canvas.getByText(tileName(sample.title, sample.path))).toBeVisible();
+  play: async ({ canvas, canvasElement }) => {
+    const name = canvas.getByText(tileName(sample.title, sample.path));
+    await expect(name).toBeVisible();
+    await expect(name.closest('.tile-pic')).toBeTruthy();
+    await expect(canvas.getByText(tileBy(sample.authors, sample.style)).closest('.tile-caption')).toBeTruthy();
+    // The tile is as tall as its picture.
+    const tile = canvasElement.querySelector('.tile')!;
+    await expect(tile.getBoundingClientRect().height).toBeCloseTo(tile.querySelector('.tile-pic')!.getBoundingClientRect().height, 0);
   },
 };
 
 /** The picture lifts under the pointer. */
 export const Hover: Story = { parameters: { pseudo: { hover: true } } };
 
+/** Hovered in the library: the preset moving over the thumbnail (here a still stand-in), the name still on it. */
+export const Moving: Story = {
+  args: {
+    motion: (
+      <canvas
+        className="tile-motion"
+        data-drawn=""
+        width={64}
+        height={36}
+        ref={(c) => {
+          const g = c?.getContext('2d');
+          if (!g) return;
+          const grad = g.createLinearGradient(0, 0, 64, 36);
+          grad.addColorStop(0, '#ff3d7f');
+          grad.addColorStop(1, '#3dc3ff');
+          g.fillStyle = grad;
+          g.fillRect(0, 0, 64, 36);
+        }}
+      />
+    ),
+  },
+  play: async ({ canvas, canvasElement }) => {
+    await expect(canvasElement.querySelector('.tile-motion')).toBeVisible();
+    await expect(canvas.getByText(tileName(sample.title, sample.path))).toBeVisible();
+  },
+};
+
 /** Picked in the grid: the ring with a gap. */
 export const Selected: Story = { args: { 'aria-selected': true } };
 
-/** Playing: the green level badge, and ▶ before the name. */
-export const Playing: Story = { args: { playing: true, star: true } };
+/** Playing: green level bars before the name. */
+export const Playing: Story = {
+  args: { playing: true, star: true },
+  play: async ({ canvasElement }) => {
+    await expect(canvasElement.querySelector('.tile-caption .tile-name .tile-live')).toBeVisible();
+  },
+};
+
+/** Failed to draw: the ! chip at the bottom right, the name kept clear of it. */
+export const Failed: Story = {
+  args: {
+    'data-failed': '',
+    marks: (
+      <span className="tile-failed" aria-hidden="true">
+        !
+      </span>
+    ),
+  } as Story['args'],
+};
 
 /** No thumbnail yet: the picture's own backing, saying so. */
 export const EmptyPicture: Story = { args: { thumbnail: null, empty: 'Not drawn yet' } };

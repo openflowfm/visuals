@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { useEffect, useRef, useState } from 'react';
 import * as api from './api.ts';
 
 /**
@@ -238,4 +239,119 @@ export function usePreview(which: number | undefined) {
     };
   }, [which]);
   return ref;
+}
+
+/*
+ * The hover preview: the preset under the pointer in Home's library, moving in
+ * its tile. The app draws it with a second engine render of its own
+ * (`bench/hover.rs`), never the bench's, so the main picture and the live output
+ * don't change; the page asks for one preset at the tile's size and polls its
+ * latest picture, about thirty a second, until the pointer leaves.
+ */
+
+/** Show the preset at `path` moving in its tile at about `width`×`height`; null stops. Answers the hover's ticket. (Its home is api.ts, with the commands' other types.) */
+export const hoverPreview = (path: string | null, width = 0, height = 0) => invoke<number>('hover_preview', { path, width, height });
+/** The hover's latest picture, packed (`unpackHover`), when newer than the one counted `after`; empty otherwise. */
+export const hoverFrame = (after = 0) => invoke<ArrayBuffer>('hover_frame', { after });
+
+/** How long the pointer rests on a tile before its preset is asked for: a sweep across the grid asks for nothing. */
+export const HOVER_DWELL_MS = 180;
+/** How often the hover's picture is read: thirty a second, as the app draws it. */
+export const HOVER_EVERY_MS = 33;
+/** The largest picture asked for (`bench::hover::MAX`). */
+export const HOVER_MAX = { width: 640, height: 360 };
+/** The bytes before the picture (`bench::hover::HEADER`): ticket, count, width, height. */
+export const HOVER_HEADER = 16;
+
+/** The picture to ask for a tile `css` px wide on a display of pixel ratio `dpr`: 16:9, its device pixels, within `HOVER_MAX`. */
+export function hoverSize(css: number, dpr: number): { width: number; height: number } {
+  const width = Math.max(64, Math.min(HOVER_MAX.width, Math.round((css || api.PREVIEW.width) * (dpr || 1))));
+  return { width, height: Math.round((width * 9) / 16) };
+}
+
+/** A hover picture's bytes: its count, size and pixels; `failed` when the app says the hover's preset failed (the header alone, 0×0); null when empty (nothing newer), not whole, or of another hover than `ticket`. */
+export function unpackHover(buffer: ArrayBuffer, ticket: number): { count: number; width: number; height: number; pixels: Uint8ClampedArray<ArrayBuffer> } | 'failed' | null {
+  if (buffer.byteLength < HOVER_HEADER) return null;
+  const header = new DataView(buffer, 0, HOVER_HEADER);
+  const [got, count, width, height] = [0, 4, 8, 12].map((at) => header.getUint32(at, true));
+  if (got !== ticket) return null;
+  if (width === 0 && height === 0 && buffer.byteLength === HOVER_HEADER) return 'failed';
+  if (width === 0 || height === 0 || buffer.byteLength !== HOVER_HEADER + width * height * 4) return null;
+  return { count, width, height, pixels: new Uint8ClampedArray(buffer, HOVER_HEADER) };
+}
+
+/** The hover's asks, one after another in the order made, so a stop never lands after the next tile's start. */
+let asks: Promise<unknown> = Promise.resolve();
+function ask<T>(f: () => Promise<T>): Promise<T> {
+  const p = asks.then(f);
+  asks = p.catch(() => {});
+  return p;
+}
+
+/** Whether the page is shown: a hidden window (or minimised one) asks for no pictures. */
+function usePageShown(): boolean {
+  const [shown, setShown] = useState(() => typeof document === 'undefined' || document.visibilityState !== 'hidden');
+  useEffect(() => {
+    const on = () => setShown(document.visibilityState !== 'hidden');
+    document.addEventListener('visibilitychange', on);
+    return () => document.removeEventListener('visibilitychange', on);
+  }, []);
+  return shown;
+}
+
+/**
+ * A canvas showing the preset at `path` moving, for the tile the pointer rests
+ * on; null shows nothing. After `HOVER_DWELL_MS` it asks the app for that
+ * preset at the canvas's size and draws each new picture of it; `drawn` turns
+ * true with the first, so the thumbnail stays until there is something to show.
+ * Unmounted, given another path or null, or with the page hidden, it stops the
+ * app drawing it.
+ */
+export function useHoverPreview(path: string | null) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const [drawn, setDrawn] = useState(false);
+  const shown = usePageShown();
+  useEffect(() => {
+    setDrawn(false);
+    if (path === null || !shown) return;
+    let stopped = false;
+    let asked = false;
+    const dwell = setTimeout(async () => {
+      asked = true;
+      const { width, height } = hoverSize(ref.current?.offsetWidth ?? 0, window.devicePixelRatio);
+      let ticket: number;
+      try {
+        ticket = await ask(() => hoverPreview(path, width, height));
+      } catch {
+        return; // not a preset the app could read: the thumbnail stays
+      }
+      let first = true;
+      let seen = 0;
+      while (!stopped) {
+        const started = performance.now();
+        const got = unpackHover(await hoverFrame(seen).catch(() => new ArrayBuffer(0)), ticket);
+        const canvas = ref.current;
+        if (stopped || got === 'failed') break; // a preset that failed: the thumbnail stays
+        if (got) seen = got.count;
+        if (got && canvas) {
+          if (canvas.width !== got.width || canvas.height !== got.height) {
+            canvas.width = got.width;
+            canvas.height = got.height;
+          }
+          canvas.getContext('2d')?.putImageData(new ImageData(got.pixels, got.width, got.height), 0, 0);
+          if (first) {
+            first = false;
+            setDrawn(true);
+          }
+        }
+        await new Promise((r) => setTimeout(r, Math.max(0, HOVER_EVERY_MS - (performance.now() - started))));
+      }
+    }, HOVER_DWELL_MS);
+    return () => {
+      stopped = true;
+      clearTimeout(dwell);
+      if (asked) void ask(() => hoverPreview(null)).catch(() => {});
+    };
+  }, [path, shown]);
+  return { ref, drawn };
 }
