@@ -79,7 +79,7 @@ async function pictureKept(root: HTMLElement) {
 
 /**
  * The hole's corners: rounded to --lay-hero-radius (the native view under it is
- * rounded to the same, bench.rs's HERO_RADIUS), clipping what it holds, with
+ * rounded to the same: `usePlaceBench` sends this border-radius), clipping what it holds, with
  * no opaque corners painted over them; its spread shadow follows the curve.
  */
 async function roundedHole(pic: HTMLElement) {

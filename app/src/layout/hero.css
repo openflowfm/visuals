@@ -5,8 +5,8 @@
    out to the column's edges (HomeLayout clips it there, and the header, the
    grid and the bar sit above it), which also rounds its corners: the corners
    are --lay-hero-radius (as --hole-radius). The native view is rounded to the
-   same radius itself (bench.rs's HERO_RADIUS, kept equal to layout.css's
-   --lay-hero-radius; layout/hero.test.ts checks), so the frost shows past its
+   same radius itself (`usePlaceBench` sends the hole's border-radius with its
+   place; holes without one stay square), so the frost shows past its
    corners as it does around it, and home.css's opaque painted corners are off
    here. Its height is
    capped at --hero-cap, so its width is too and it keeps its shape. In a card

@@ -4,24 +4,37 @@ import * as api from './api.ts';
 import { notice, type Notice } from './shell.ts';
 
 type Rect = { left: number; top: number; width: number; height: number };
-type Place = { x: number; y: number; width: number; height: number };
+type Place = { x: number; y: number; width: number; height: number; radius?: number };
 
-/** A check to run with a rect over and over: it calls `send` only when the rect differs from the last one sent. */
+/**
+ * A check to run with a rect (and the hole's corner radius) over and over: it
+ * calls `send` only when either differs from the last one sent. A radius of 0
+ * is left out, so a square hole's place is just its rect.
+ */
 export function sendOnChange(send: (place: Place) => void) {
   let last = '';
-  return (r: Rect) => {
-    const key = `${r.left},${r.top},${r.width},${r.height}`;
+  return (r: Rect, radius = 0) => {
+    const key = `${r.left},${r.top},${r.width},${r.height},${radius}`;
     if (key === last) return;
     last = key;
-    send({ x: r.left, y: r.top, width: r.width, height: r.height });
+    send({ x: r.left, y: r.top, width: r.width, height: r.height, ...(radius > 0 ? { radius } : {}) });
   };
+}
+
+/** A hole's corner radius in CSS pixels from its computed `border-top-left-radius` ("18px", or "18px 12px" for an elliptical one, whose first is taken); 0 for none, or for a percentage. */
+export function holeRadius(computed: string): number {
+  const first = computed.trim().split(/\s+/)[0] ?? '';
+  const px = first.endsWith('px') ? parseFloat(first) : 0;
+  return Number.isFinite(px) && px > 0 ? px : 0;
 }
 
 /**
  * Report the bench's hole to the app, which moves the native view under it.
  * Anything above the hole (a notice banner, the effects, wrapping text) or a
  * scroll can move it without resizing it, so its rect is read every animation
- * frame and sent only when it actually changed.
+ * frame and sent only when it actually changed. Its corners go too: the
+ * native view is rounded to the hole's own border-radius (Home's hero's
+ * --lay-hero-radius), and every other hole, square, stays square.
  */
 export function usePlaceBench(ref: React.RefObject<HTMLElement | null>) {
   useLayoutEffect(() => {
@@ -30,7 +43,7 @@ export function usePlaceBench(ref: React.RefObject<HTMLElement | null>) {
     const check = sendOnChange((place) => api.placeBench(place).catch(() => {}));
     let frame = 0;
     const tick = () => {
-      check(el.getBoundingClientRect());
+      check(el.getBoundingClientRect(), holeRadius(getComputedStyle(el).borderTopLeftRadius));
       frame = requestAnimationFrame(tick);
     };
     tick();

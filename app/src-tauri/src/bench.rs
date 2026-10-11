@@ -69,26 +69,20 @@ pub enum Cmd {
 /// A picture: its width and height in pixels, and its RGBA rows top to bottom.
 pub type Picture = (u32, u32, Vec<u8>);
 
-/// The corners of Home's hero, in points: layout.css's `--lay-hero-radius`,
-/// which hero.css rounds the bench's hole with, so the native view and the page
-/// agree on the curve. 18 is the window's 26 less the panels' 8 inset, the same
-/// as the sidebar's and the inspector's corners. Change both together;
-/// `layout/hero.test.ts` checks they match.
-pub const HERO_RADIUS: f64 = 18.0;
-
 /// How round the bench's corners are, in points, for a hole at `rect` (x, y,
-/// width, height in points from the top left) in a content view `area` big:
-/// [`HERO_RADIUS`] for Home's hero, which sits inset from the window's edges,
-/// and square for live's full-bleed picture, which reaches them (the window's
-/// own corners are macOS's). Never more than half the shorter side.
-pub fn corner_radius(rect: (f64, f64, f64, f64), area: (f64, f64)) -> f64 {
+/// width, height in points from the top left) in a content view `area` big,
+/// whose page asked for `radius`: the hole's own border-radius, which only
+/// Home's hero has (`--lay-hero-radius`, 18); 0, square, for every other hole.
+/// Never rounded where it reaches the window's edge (live's full-bleed picture:
+/// the window's own corners are macOS's), and never more than half the shorter side.
+pub fn corner_radius(rect: (f64, f64, f64, f64), area: (f64, f64), radius: f64) -> f64 {
     let (x, y, w, h) = rect;
     // Half a point of slack: the page's rects are fractional.
     let edge = 0.5;
-    if x <= edge || y <= edge || x + w >= area.0 - edge || y + h >= area.1 - edge {
+    if radius.is_nan() || radius <= 0.0 || x <= edge || y <= edge || x + w >= area.0 - edge || y + h >= area.1 - edge {
         return 0.0;
     }
-    HERO_RADIUS.min(w.min(h) / 2.0).max(0.0)
+    radius.min(w.min(h) / 2.0).max(0.0)
 }
 
 /// How much of the pixel at (`x`, `y`) in a `w`×`h` box with corners of radius
@@ -877,7 +871,8 @@ pub mod view {
 
     /// Move the view to `rect`, in the content view's points from its top left.
     /// Returns its size in pixels: 0×0 for an empty rect, which hides the bench.
-    pub fn place(x: f64, y: f64, width: f64, height: f64) -> Option<(u32, u32)> {
+    /// Its corners are rounded by `radius` points, as [`super::corner_radius`] allows.
+    pub fn place(x: f64, y: f64, width: f64, height: f64, radius: f64) -> Option<(u32, u32)> {
         VIEW.with(|v| {
             let view = v.borrow();
             let view = view.as_ref()?;
@@ -899,7 +894,7 @@ pub mod view {
             let left = area.origin.x + x;
             let bottom = if parent.isFlipped() { area.origin.y + y } else { area.origin.y + area.size.height - y - height };
             view.setFrame(NSRect::new(NSPoint::new(left, bottom), NSSize::new(width, height)));
-            let radius = super::corner_radius((x, y, width, height), (area.size.width, area.size.height));
+            let radius = super::corner_radius((x, y, width, height), (area.size.width, area.size.height), radius);
             if let Some(layer) = view.layer().filter(|l| l.cornerRadius() != radius) {
                 // At once: Core Animation would otherwise ease the corners in or out over a quarter second, going live or back.
                 unsafe {
@@ -1008,18 +1003,23 @@ mod tests {
     }
 
     #[test]
-    fn rounds_the_hero_and_leaves_the_full_bleed_picture_square() {
+    fn rounds_only_the_hole_that_asks_and_never_the_full_bleed_picture() {
         let window = (1440.0, 900.0);
-        // Home's hero, inset in the main column.
-        assert_eq!(corner_radius((264.0, 72.0, 780.0, 438.75), window), HERO_RADIUS);
-        // Live's picture fills the window, or reaches any of its edges.
-        assert_eq!(corner_radius((0.0, 0.0, 1440.0, 900.0), window), 0.0);
-        assert_eq!(corner_radius((0.0, 40.0, 1440.0, 860.0), window), 0.0);
-        assert_eq!(corner_radius((100.0, 100.0, 1340.0, 400.0), window), 0.0);
+        let hero = (264.0, 72.0, 780.0, 438.75);
+        // Home's hero, inset in the main column, asks for --lay-hero-radius.
+        assert_eq!(corner_radius(hero, window, 18.0), 18.0);
+        // Another inset hole (onboarding's, the editor's) asks for none: square.
+        assert_eq!(corner_radius(hero, window, 0.0), 0.0);
+        assert_eq!(corner_radius(hero, window, f64::NAN), 0.0);
+        assert_eq!(corner_radius(hero, window, -4.0), 0.0);
+        // Live's picture fills the window, or reaches any of its edges: square whatever is asked.
+        assert_eq!(corner_radius((0.0, 0.0, 1440.0, 900.0), window, 18.0), 0.0);
+        assert_eq!(corner_radius((0.0, 40.0, 1440.0, 860.0), window, 18.0), 0.0);
+        assert_eq!(corner_radius((100.0, 100.0, 1340.0, 400.0), window, 18.0), 0.0);
         // Fractional rects a hair inside the edge are still full bleed.
-        assert_eq!(corner_radius((0.25, 0.0, 1439.5, 900.0), window), 0.0);
+        assert_eq!(corner_radius((0.25, 0.0, 1439.5, 900.0), window, 18.0), 0.0);
         // Never more than half the shorter side.
-        assert_eq!(corner_radius((100.0, 100.0, 200.0, 20.0), window), 10.0);
+        assert_eq!(corner_radius((100.0, 100.0, 200.0, 20.0), window, 18.0), 10.0);
     }
 
     #[test]

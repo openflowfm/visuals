@@ -6,23 +6,24 @@ use tauri::State;
 use tauri::Manager;
 
 /// The page's hole for the bench, in CSS pixels from the window's top left.
-/// The view takes the hole's corners from where it is (`bench::corner_radius`):
-/// Home's hero rounded, live's full-bleed picture square.
+/// `radius` is the hole's corner radius (Home's hero's `--lay-hero-radius`),
+/// which the view is rounded to; left out, it is square, as every other hole
+/// is (`bench::corner_radius`).
 #[tauri::command]
-pub fn place_bench(x: f64, y: f64, width: f64, height: f64, handle: tauri::AppHandle) -> Result<(), String> {
+pub fn place_bench(x: f64, y: f64, width: f64, height: f64, radius: Option<f64>, handle: tauri::AppHandle) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         let inner = handle.clone();
         handle
             .run_on_main_thread(move || {
-                if let Some((w, h)) = bench::view::place(x, y, width, height) {
+                if let Some((w, h)) = bench::view::place(x, y, width, height, radius.unwrap_or(0.0)) {
                     inner.state::<App>().send(bench::Cmd::Resize(w, h));
                 }
             })
             .map_err(|e| e.to_string())?;
     }
     #[cfg(not(target_os = "macos"))]
-    let _ = (x, y, width, height, handle);
+    let _ = (x, y, width, height, radius, handle);
     Ok(())
 }
 
