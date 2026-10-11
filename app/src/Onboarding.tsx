@@ -21,7 +21,7 @@ import './onboarding.css';
  * The first run: a minute that gets the app hearing music, keeping in time and
  * holding presets, and then plays. Welcome → listen to → keep in time with
  * Ableton (only when Ableton is on the network) → the full library → the
- * flashing-light warning → pick a vibe → live. Shown once (`api.firstRun`), and
+ * flashing-light warning → pick a vibe → Home, playing it. Shown once (`api.firstRun`), and
  * again when the menu asks (`showWelcome`). Live mode's `SilenceBanner` lives
  * here too: the same question, asked again when the music stops.
  */
@@ -60,7 +60,8 @@ const count = (n: number) => n.toLocaleString('en-US');
 
 /** What the library step says the app has now, and what the full library adds. */
 export function libraryLine(s: pack.PackStatus): string {
-  const have = Math.max(s.installed, s.starter);
+  // While downloading, `installed` counts up file by file: what there is to start with is the starter set.
+  const have = s.state === 'downloading' ? s.starter : Math.max(s.installed, s.starter);
   const size = sizeText(s.size);
   const full = `The ${say('pack')} is ${count(s.total)} ${s.total === 1 ? 'preset' : 'presets'}${size ? ` (${size})` : ''}`;
   return have > 0 ? `You have ${count(have)} to start with. ${full}.` : `${full}.`;
@@ -134,7 +135,11 @@ export function useWelcome(): { shown: boolean | null; close(): void } {
   const [shown, setShown] = useState<boolean | null>(null);
   useEffect(() => {
     api.firstRun().then(
-      (first) => setShown((s) => s || first),
+      (first) => {
+        // Past the first run, a step kept from a flow opened from the menu and left halfway is stale.
+        if (!first) keepStep(null);
+        setShown((s) => s || first);
+      },
       () => setShown((s) => s ?? false),
     );
     const open = () => setShown(true);
@@ -149,19 +154,59 @@ export function useWelcome(): { shown: boolean | null; close(): void } {
   return { shown, close };
 }
 
-/** How the welcome flow ended: into live mode, windowed (the last step), or skipped. */
-export type Ending = 'live' | 'skipped';
+/**
+ * How the welcome flow ended: finished (`home`: Home, playing the vibe picked,
+ * with live a step away) or skipped. It never ends in `live`, which `App`
+ * still knows; the flow used to end in live mode, windowed.
+ */
+export type Ending = 'home' | 'live' | 'skipped';
+
+/** Where the page keeps the step the welcome flow was on, so leaving halfway resumes there. */
+export const STEP_KEY = 'welcome-step';
+
+type StepStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+const pageStorage = (): StepStorage | undefined => globalThis.localStorage;
 
 /**
- * The welcome flow, filling the window, from `start` (the welcome). `onDone`
- * hears how it ended, finished or skipped; either way the first run is marked
- * done, so it doesn't come back by itself.
+ * The step the welcome flow was left on at an earlier launch, or the welcome.
+ * Ableton's step resumes on the one after it: whether Ableton is on the
+ * network isn't known yet, and that step only shows when it is.
  */
-export function Onboarding({ onDone: done, start = 'welcome', store = kept }: { onDone(ending: Ending): void; start?: Step; store?: WarningStore }) {
-  const [step, setStep] = useState<Step>(start);
+export function keptStep(page: () => StepStorage | undefined = pageStorage): Step {
+  let at: string | null = null;
+  try {
+    at = page()?.getItem(STEP_KEY) ?? null;
+  } catch {
+    // No storage: start at the welcome.
+  }
+  const step = STEPS.find((s) => s === at);
+  if (!step) return 'welcome';
+  return step === 'link' ? 'library' : step;
+}
+
+/** Keep `step` for the next launch, or forget it (`null`: the flow ended). Never throws. */
+export function keepStep(step: Step | null, page: () => StepStorage | undefined = pageStorage): void {
+  try {
+    if (step && step !== 'welcome') page()?.setItem(STEP_KEY, step);
+    else page()?.removeItem(STEP_KEY);
+  } catch {
+    // Not kept: the next launch starts at the welcome.
+  }
+}
+
+/**
+ * The welcome flow, filling the window, from `start` (where it was left at an
+ * earlier launch, else the welcome). `onDone` hears how it ended, finished or
+ * skipped; either way the first run is marked done, so it doesn't come back by
+ * itself. Until then each step is kept, so quitting halfway resumes there.
+ */
+export function Onboarding({ onDone: done, start, store = kept }: { onDone(ending: Ending): void; start?: Step; store?: WarningStore }) {
+  const [step, setStep] = useState<Step>(() => start ?? keptStep());
   const [peers, setPeers] = useState(0);
+  useEffect(() => keepStep(step), [step]);
   const onDone = (ending: Ending) => {
     api.firstRunDone().catch(() => {});
+    keepStep(null);
     welcomeEnded();
     done(ending);
   };
@@ -183,7 +228,7 @@ export function Onboarding({ onDone: done, start = 'welcome', store = kept }: { 
   const next = () => {
     const to = after(step, peers);
     if (to) setStep(to);
-    else onDone('live');
+    else onDone('home');
   };
   const back = before(step, peers);
   const shown = stepsFor(peers);
@@ -224,7 +269,7 @@ export function Onboarding({ onDone: done, start = 'welcome', store = kept }: { 
         {step === 'link' && <KeepTime onNext={next} />}
         {step === 'library' && <FullLibrary onNext={next} />}
         {step === 'warning' && <Warning onNext={understand} />}
-        {step === 'vibe' && <PickVibe onPicked={() => onDone('live')} />}
+        {step === 'vibe' && <PickVibe onPicked={() => onDone('home')} />}
       </main>
       {back && (
         <footer className="ob-foot">
@@ -724,7 +769,7 @@ function PickVibe({ onPicked }: { onPicked(): void }) {
   return (
     <section className="ob-step">
       <h1>Pick a vibe</h1>
-      <p className="ob-lead">Something to start on. It plays in this window; send it to a screen of its own from live mode.</p>
+      <p className="ob-lead">Something to start on. It plays on Home; go live from there to send it to a screen of its own.</p>
       <ul className="ob-vibes">
         {offered.map((v) => (
           <li key={v.index}>
@@ -745,7 +790,7 @@ function PickVibe({ onPicked }: { onPicked(): void }) {
       {problem && (
         <div className="ob-actions">
           <Button tone="quiet" onPress={onPicked}>
-            Go live anyway
+            Carry on anyway
           </Button>
         </div>
       )}

@@ -33,6 +33,7 @@ type Story = StoryObj<typeof meta>;
 
 /** The first step: what the app is, Start and Skip setup. */
 export const Welcome: Story = {
+  args: { start: 'welcome' },
   play: async () => {
     await expect(await screen.findByRole('heading', { name: /Welcome to/ })).toBeVisible();
   },
