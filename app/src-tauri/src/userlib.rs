@@ -1153,9 +1153,10 @@ mod tests {
         let store = Store::open(root.join("library.json"));
         store.data.lock().unwrap().presets.insert("old.milk".into(), Mine { star: true, ..Default::default() });
         let moves = vec![("old.milk".to_string(), "new.milk".to_string())];
-        // Playlists that can't be saved (their file is a folder): nothing moves.
-        std::fs::create_dir_all(root.join("bad.json")).unwrap();
+        // Playlists that can't be saved (their file became a folder after they
+        // were read, so the write fails): nothing moves.
         let mut bad = crate::playlists::Store::open(root.join("bad.json"), root.clone());
+        std::fs::create_dir_all(root.join("bad.json")).unwrap();
         bad.lists = vec![Playlist::manual("1", "set", vec!["old.milk".into()])];
         assert!(commit(&store, Some(&mut bad), moves.clone()).is_err());
         assert_eq!(bad.lists[0].presets, ["old.milk"]);
