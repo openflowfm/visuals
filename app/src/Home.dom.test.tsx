@@ -770,3 +770,34 @@ describe('the notice banner', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 });
+
+describe('a tile played shows in the inspector at once', () => {
+  // The deck's live event never comes here unless a test sends it: what the inspector shows can't wait for it.
+  beforeEach(() => {
+    playlists = [manual('1', 'Warm up', [item(ROWS[0]), item(ROWS[2])])];
+    deck = { ...EMPTY_DECK, playlist: '1', index: 0, current: ROWS[0].path };
+    resume = { playlist: null, index: null, current: ROWS[0].path, source: null, query: null };
+  });
+  const insp = () => within(inspector() as HTMLElement);
+
+  it('from a playlist’s grid, over its card, then follows what plays', async () => {
+    await mount();
+    fireEvent.click(sourceRow('Warm up'));
+    expect(insp().queryByRole('heading', { name: 'a' })).toBeNull();
+    fireEvent.click(screen.getByRole('listitem', { name: /^2\. c/ }));
+    expect(insp().getByRole('heading', { name: 'c' })).toBeTruthy();
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(sent('act').at(-1)).toEqual({ action: { kind: 'go', index: 1 } });
+    // Then the deck moves on (auto-advance): the inspector follows it.
+    act(() => heard.get('live')?.forEach((f) => f({ payload: { deck: { ...deck, index: 0 }, opened: null, path: ROWS[0].path, error: null } })));
+    expect(insp().getByRole('heading', { name: 'a' })).toBeTruthy();
+  });
+
+  it('from the library’s grid, over its card', async () => {
+    await mount({ library: true });
+    fireEvent.click(sourceRow('Library'));
+    expect(insp().getByRole('heading', { name: 'Library' })).toBeTruthy();
+    fireEvent.click(tile('b'));
+    expect(insp().getByRole('heading', { name: 'b' })).toBeTruthy();
+  });
+});

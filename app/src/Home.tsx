@@ -495,6 +495,12 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
   };
   const entryOf = (p: Prepared): Entry => library.find((e) => e.path === p.row.path) ?? { path: p.row.path, name: p.title, group: p.subStyle ? `${p.style}/${p.subStyle}` : p.style };
 
+  // A tile played (a click or Enter): the inspector shows it at once, not the source's card ("Show info" ends) nor what played
+  // before, while the deck's own word on what plays is on its way; that word then keeps the inspector following the deck.
+  const showPlayed = (e: Entry) => {
+    setInfo(false);
+    setCurrent(e);
+  };
   // Playing from a playlist's grid: from that place in it.
   const playAt = (index: number | null, path: string, name: string) => {
     if (!list) return;
@@ -658,7 +664,10 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
                 current={current?.path ?? null}
                 // While quick add is on a click adds, so the tiles' + goes.
                 into={adding ? null : into}
-                onLoad={load}
+                onLoad={(e) => {
+                  setInfo(false);
+                  void load(e);
+                }}
                 onAdd={(e) => into && run(pl.add(into.id, e.path), `add ${e.name} to ${into.name}`)}
                 onPress={(e, thumbnail, ev) => beginDrag(ev, { kind: 'preset', path: e.path, name: e.name, thumbnail }, dropping)}
                 tileMin={width < HOME_TILE.under ? HOME_TILE.small : HOME_TILE.wide}
@@ -685,7 +694,10 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
               dropping={dropping}
               picked={tilesPicked}
               onPick={pickInList}
-              onPlay={(t) => playAt(t.index, t.path, t.name)}
+              onPlay={(t) => {
+                showPlayed(library.find((e) => e.path === t.path) ?? { path: t.path, name: t.name, group: '' });
+                playAt(t.index, t.path, t.name);
+              }}
               onLists={setLists}
               onError={(what) => fail(`Couldn't ${what}.`)}
               onLibrary={() => pick({ kind: 'library' })}
