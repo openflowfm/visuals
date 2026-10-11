@@ -103,7 +103,8 @@ launch, for headless tests. In a debug build, or in any headless run, the app do
 an existing full pack up to the pinned bundle at launch; in a debug build
 `VISUALS_PACK_UPDATE=1` turns that background update back on, to test it headless with
 `VISUALS_PACK_URL`. Beside the user's settings and `library.json`, the app keeps
-`resume.json` (what to resume at the next launch), `failed.json` (presets that wouldn't load)
+`resume.json` (what to resume at the next launch), `timing.json` (the change timing
+outside playlists, kept when no playlist is loaded), `failed.json` (presets that wouldn't load)
 and `access.json` (the reduce-flashing choice, none meaning follow macOS, and the flashing warning's answer).
 
 **Agents always run the app headless** (`VISUALS_HEADLESS=1`), from the first run on: the

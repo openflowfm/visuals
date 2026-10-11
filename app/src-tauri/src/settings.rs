@@ -60,6 +60,7 @@ const SPECS: &[Spec] = &[
     Spec { name: FIRST_RUN, version: 1, what: "first-run setting", wrapped: false, migrate: nothing },
     Spec { name: "played.json", version: 1, what: "recently played list", wrapped: true, migrate: nothing },
     Spec { name: "resume.json", version: 1, what: "place in the show", wrapped: false, migrate: nothing },
+    Spec { name: "timing.json", version: 1, what: "change timing outside playlists", wrapped: false, migrate: nothing },
     Spec { name: "failed.json", version: 1, what: "list of presets that failed", wrapped: false, migrate: nothing },
     Spec { name: "access.json", version: 1, what: "reduced motion setting", wrapped: false, migrate: nothing },
 ];

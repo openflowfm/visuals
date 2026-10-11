@@ -264,6 +264,9 @@ pub struct Store {
     /// A version 1 file not yet kept as a backup: until it is, nothing is
     /// written over it ([`Store::save`] tries the backup again first).
     pending_backup: Option<Vec<u8>>,
+    /// The file is there but couldn't be read, nor moved aside: the playlists
+    /// are kept in memory only, and [`Store::save`] never writes over it.
+    kept_off: bool,
 }
 
 /// One playlist item as the page shows it.
@@ -385,12 +388,13 @@ impl Store {
     /// hashing the items whose files are there. Settings out of their limits
     /// (a hand-edited file) are brought within them.
     pub fn open(file: PathBuf, library: PathBuf) -> Store {
-        let mut store = Store { file, folders: vec![library], lists: Vec::new(), pending_backup: None };
+        let mut store = Store { file, folders: vec![library], lists: Vec::new(), pending_backup: None, kept_off: false };
         let bytes = match std::fs::read(&store.file) {
             Ok(bytes) => bytes,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return store,
             Err(e) => {
                 crate::settings::user_file_problem(&store.file, format!("Couldn't read your {WHAT} ({e}), so they are left out for now."));
+                store.kept_off = true;
                 return store;
             }
         };
@@ -416,7 +420,8 @@ impl Store {
                 crate::settings::Unreadable::Damaged
             }
         };
-        crate::settings::user_file_reset(&store.file, WHAT, true, why);
+        // Not moved aside: kept in memory only, so nothing is saved over it.
+        store.kept_off = !crate::settings::user_file_reset(&store.file, WHAT, true, why);
         store
     }
 
@@ -483,8 +488,12 @@ impl Store {
 
     /// Write the whole file, through a temporary file so a crash never leaves
     /// half of one. A version 1 file not yet backed up is kept first, or nothing
-    /// is written.
+    /// is written. A file that couldn't be read nor moved aside is never
+    /// written over: the playlists stay in memory only, as the page was told.
     pub fn save(&mut self) -> Result<(), String> {
+        if self.kept_off {
+            return Ok(());
+        }
         if let Some(dir) = self.file.parent() {
             std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
         }
@@ -1107,6 +1116,24 @@ mod tests {
         assert!(Store::open(file.clone(), dir.join("lib")).lists.is_empty());
         assert!(file.is_dir());
         assert!(said().unwrap().starts_with("Couldn't read your playlists ("), "{:?}", said());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_file_that_cant_be_moved_aside_is_never_saved_over() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = temp();
+        let file = dir.join("p.json");
+        std::fs::write(&file, "{ not json").unwrap();
+        // A folder that can't be written to: the file reads, but can't be renamed.
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o555)).unwrap();
+        let mut s = Store::open(file.clone(), dir.join("lib"));
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(s.lists.is_empty());
+        assert!(s.save().is_ok());
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "{ not json");
+        assert!(!dir.join("p.json.bad").exists());
         std::fs::remove_dir_all(dir).unwrap();
     }
 
