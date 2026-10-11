@@ -33,17 +33,19 @@ function useListen(subscribe: () => Promise<UnlistenFn>) {
   }, []);
 }
 
-/** Whether to offer: s.installed <= s.starter, or a download running or failed. Exported for the test. */
+/** Whether to offer: s.installed <= s.starter, a download running or failed, or the full library in without its pictures. Exported for the test. */
 export function offers(s: pack.PackStatus): boolean {
-  return s.installed <= s.starter || s.state === 'downloading' || s.state === 'failed';
+  return s.installed <= s.starter || s.state === 'downloading' || s.state === 'failed' || s.bare === true;
 }
 
 /**
  * The library's one-line empty-state offer (decision 67): "These are the 120
  * starter presets. [Get the full library: 9,795 presets (180 MB)]" while only
  * the starter set is in; the download's progress while it runs (a progressbar
- * named like Pack.tsx's), and its error with the retry; nothing once more than
- * the starter set is installed or the pack is complete.
+ * named like Pack.tsx's), and its error with the retry; when the full library
+ * came without its pictures (projectM's fallback), that, with the retry for
+ * them; nothing once more than the starter set is installed or the pack is
+ * complete with its pictures.
  */
 export function PackOffer(): JSX.Element | null {
   const [status, setStatus] = useState<pack.PackStatus | null>(null);
@@ -82,6 +84,8 @@ export function PackOffer(): JSX.Element | null {
         <>
           {action.error ? (
             <span className="pack-offer-error">{action.error}</span>
+          ) : action.note ? (
+            <span>{action.note}</span>
           ) : (
             <span>
               These are the {count(status.starter)} {say('starter set')}.
