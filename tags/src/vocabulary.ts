@@ -48,8 +48,10 @@ export function vocabularyProblems(v: Vocabulary): string[] {
     names.add(t.name);
     if (!v.groups?.includes(t.group)) out.push(`${at}: group ${String(t.group)} isn't one of the groups`);
     if (typeof t.question !== 'string' || !t.question.endsWith('?') || !t.question.includes(t.name)) out.push(`${at}: the question must name the tag and end with "?"`);
-    if (t.proxy !== undefined && (typeof t.proxy.feature !== 'string' || !t.proxy.feature || (t.proxy.direction !== 'high' && t.proxy.direction !== 'low'))) out.push(`${at}: proxy needs a feature and a direction (high or low)`);
-    if (t.rubric !== undefined && (typeof t.rubric !== 'string' || t.rubric.length < 40 || !/\b1\b/.test(t.rubric) || !/\b0\b/.test(t.rubric))) out.push(`${at}: rubric must describe the tag and anchor 0 and 1`);
+    if (t.proxy !== undefined && (typeof t.proxy.feature !== 'string' || !t.proxy.feature || (t.proxy.direction !== 'high' && t.proxy.direction !== 'low')))
+      out.push(`${at}: proxy needs a feature and a direction (high or low)`);
+    if (t.rubric !== undefined && (typeof t.rubric !== 'string' || t.rubric.length < 40 || !/\b1\b/.test(t.rubric) || !/\b0\b/.test(t.rubric)))
+      out.push(`${at}: rubric must describe the tag and anchor 0 and 1`);
     if (t.scorer !== undefined && t.scorer !== 'nearest-neighbour') out.push(`${at}: unknown scorer ${String(t.scorer)}`);
   }
   return out;

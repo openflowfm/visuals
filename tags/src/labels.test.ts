@@ -1,6 +1,6 @@
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { answersFor, appendLabels, countsFor, readLabels, type Label } from './labels.ts';
 
@@ -23,6 +23,8 @@ describe('label storage', () => {
     expect(text.split('\n').filter((l) => l.includes('"hash"'))).toHaveLength(2);
     expect(readLabels(file).labels.map((l) => l.hash)).toEqual(['a', 'b']);
     expect(JSON.parse(text).labels[0]).toEqual({ hash: 'a', tag: 'red', answer: 'yes', at, path: 'A.milk' });
+    // Written through a temporary file of its own, which doesn't stay behind.
+    expect(readdirSync(dirname(file))).toEqual(['labels.json']);
   });
 
   it('refuses a malformed label and leaves the file alone', () => {

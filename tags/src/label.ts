@@ -9,6 +9,8 @@
 // Routes: GET / (the page), GET /api/state (the vocabulary, clip info and each
 // tag's counts), GET /api/grid?tag=… (the next grid), POST /api/labels
 // ({tag, answers: [{hash, answer}]}), GET /clips/<name> (a row's clip only).
+// Any request whose Host isn't 127.0.0.1:<port> or localhost:<port> gets a
+// 403, and a POST that isn't `Content-Type: application/json` a 415.
 
 import { readFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
@@ -119,7 +121,15 @@ export async function startServer(opts: ServerOptions): Promise<Running> {
     return t;
   };
 
+  // Set once listening. A page on another site can make the browser send
+  // requests here (DNS rebinding, or a form posted cross-origin), so only a
+  // Host naming this server is answered, and a POST must be JSON, which a
+  // cross-origin form can't send without a preflight.
+  let port = 0;
   const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+    const host = req.headers.host ?? '';
+    if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`) throw new HttpError(403, `wrong host ${JSON.stringify(host)}`);
+    if (req.method === 'POST' && (req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase() !== 'application/json') throw new HttpError(415, 'a POST must be application/json');
     const url = new URL(req.url ?? '/', 'http://127.0.0.1');
     const path = url.pathname;
     if (req.method === 'GET' && (path === '/' || path === '/index.html')) return send(res, 200, page, 'text/html; charset=utf-8');
@@ -191,7 +201,7 @@ export async function startServer(opts: ServerOptions): Promise<Running> {
     server.once('error', reject);
     server.listen(opts.port ?? 0, '127.0.0.1', () => resolve());
   });
-  const { port } = server.address() as AddressInfo;
+  port = (server.address() as AddressInfo).port;
   return {
     url: `http://127.0.0.1:${port}/`,
     server,

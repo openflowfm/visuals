@@ -10,17 +10,35 @@
     { "id": "blue", "name": "Blue", "group": "colour", "question": "Which of these are Blue: blue is the main colour?", "proxy": { "feature": "hue_blue", "direction": "high" } },
     { "id": "purple", "name": "Purple", "group": "colour", "question": "Which of these are Purple: purple or violet is the main colour?", "proxy": { "feature": "hue_purple", "direction": "high" } },
     { "id": "pink", "name": "Pink", "group": "colour", "question": "Which of these are Pink: pink or magenta is the main colour?", "proxy": { "feature": "hue_pink", "direction": "high" } },
-    { "id": "mono", "name": "Mono", "group": "colour", "question": "Which of these are Mono: black and white, grey, or a single hue throughout?", "proxy": { "feature": "saturation", "direction": "low" } },
+    {
+      "id": "mono",
+      "name": "Mono",
+      "group": "colour",
+      "question": "Which of these are Mono: black and white, grey, or a single hue throughout?",
+      "proxy": { "feature": "saturation", "direction": "low" }
+    },
     { "id": "warm", "name": "Warm", "group": "temperature", "question": "Which of these are Warm: reds, oranges and yellows dominate?", "proxy": { "feature": "warmth", "direction": "high" } },
     { "id": "cold", "name": "Cold", "group": "temperature", "question": "Which of these are Cold: blues, cyans and greens dominate?", "proxy": { "feature": "warmth", "direction": "low" } },
     { "id": "busy", "name": "Busy", "group": "motion", "question": "Which of these are Busy: lots going on at once, everywhere?", "proxy": { "feature": "motion", "direction": "high" } },
     { "id": "still", "name": "Still", "group": "motion", "question": "Which of these are Still: hardly moving at all?", "proxy": { "feature": "motion", "direction": "low" } },
     { "id": "quiet", "name": "Quiet", "group": "motion", "question": "Which of these are Quiet: calm and restrained, nothing loud?", "proxy": { "feature": "intensity", "direction": "low" } },
-    { "id": "reactive", "name": "Reactive", "group": "motion", "question": "Which of these are Reactive: visibly moves with the music?", "proxy": { "feature": "audio_response", "direction": "high" } },
+    {
+      "id": "reactive",
+      "name": "Reactive",
+      "group": "motion",
+      "question": "Which of these are Reactive: visibly moves with the music?",
+      "proxy": { "feature": "audio_response", "direction": "high" }
+    },
     { "id": "ambient", "name": "Ambient", "group": "motion", "question": "Which of these are Ambient: slow, drifting, good as a background?", "proxy": { "feature": "speed", "direction": "low" } },
     { "id": "pulsing", "name": "Pulsing", "group": "motion", "question": "Which of these are Pulsing: swells and throbs in a rhythm?", "proxy": { "feature": "pulse", "direction": "high" } },
     { "id": "flashy", "name": "Flashy", "group": "motion", "question": "Which of these are Flashy: sudden bright flashes or strobing?", "proxy": { "feature": "flash_rate", "direction": "high" } },
-    { "id": "chaotic", "name": "Chaotic", "group": "motion", "question": "Which of these are Chaotic: disordered, unpredictable motion with no clear pattern?", "proxy": { "feature": "motion_coherence", "direction": "low" } },
+    {
+      "id": "chaotic",
+      "name": "Chaotic",
+      "group": "motion",
+      "question": "Which of these are Chaotic: disordered, unpredictable motion with no clear pattern?",
+      "proxy": { "feature": "motion_coherence", "direction": "low" }
+    },
     { "id": "contrast", "name": "Contrast", "group": "texture", "question": "Which of these are Contrast: hard darks against bright lights?", "proxy": { "feature": "contrast", "direction": "high" } },
     {
       "id": "metallic",
@@ -76,7 +94,13 @@
       "question": "Which of these are WTF: bizarre, surprising, makes you look twice?",
       "rubric": "WTF: the picture is bizarre or surprising for a music visualizer: strange recognisable imagery, glitches that look intentional, unsettling or absurd forms, or a style unlike typical MilkDrop presets (swirls, tunnels, waveforms). 1 = genuinely weird; 0.5 = somewhat odd; 0 = a typical, expected visualizer look."
     },
-    { "id": "symmetric", "name": "Symmetric", "group": "structure", "question": "Which of these are Symmetric: mirror-symmetric left to right or top to bottom?", "proxy": { "feature": "symmetry", "direction": "high" } },
+    {
+      "id": "symmetric",
+      "name": "Symmetric",
+      "group": "structure",
+      "question": "Which of these are Symmetric: mirror-symmetric left to right or top to bottom?",
+      "proxy": { "feature": "symmetry", "direction": "high" }
+    },
     {
       "id": "kaleidoscope",
       "name": "Kaleidoscope",

@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { loadVocabulary, vocabularyProblems, type Vocabulary } from './vocabulary.ts';
 
-const ALL = 'Red Orange Yellow Green Cyan Blue Purple Pink Mono Warm Cold Busy Still Quiet Contrast Metallic Liquid Waveform Chaotic Unique WTF Reactive Ambient Pulsing Flashy Symmetric Kaleidoscope Tunnel Spiral Glow Grainy Geometric Organic Fractal'.split(' ');
+const ALL =
+  'Red Orange Yellow Green Cyan Blue Purple Pink Mono Warm Cold Busy Still Quiet Contrast Metallic Liquid Waveform Chaotic Unique WTF Reactive Ambient Pulsing Flashy Symmetric Kaleidoscope Tunnel Spiral Glow Grainy Geometric Organic Fractal'.split(
+    ' ',
+  );
 
 describe('vocabulary.json', () => {
   const v = loadVocabulary();

@@ -52,26 +52,27 @@ function scorerTable(t: TagReport): string {
     .map((s) => scorerRow(s, s.id === t.chosen))
     .join('');
   const more = features.length > SHOWN_FEATURES ? `<p class="more">and ${features.length - SHOWN_FEATURES} more single features below these</p>` : '';
-  return `<table><thead><tr><th></th><th>scorer</th><th>AP</th><th>precision</th><th>recall</th><th>best P</th></tr></thead><tbody>${rows}</tbody></table>${more}`;
+  return `<div><table><thead><tr><th></th><th>scorer</th><th>AP</th><th>precision</th><th>recall</th><th>best P</th></tr></thead><tbody>${rows}</tbody></table>${more}<p class="more">cross-validated on all the labels: these chose the scorer, so they flatter it</p></div>`;
 }
 
 function tagSection(t: TagReport, rows: Map<string, FeatureRow>, dir: string): string {
   const c = t.counts;
   const status = t.ships ? '<span class="pill ships">ships</span>' : '<span class="pill">not yet</span>';
-  const at = t.threshold !== null ? (t.ships ? `confidence ≥ ${n2(t.threshold)}` : `best F1 at confidence ${n2(t.threshold)}`) : '';
-  const nums =
-    t.threshold !== null
-      ? `<div class="nums"><div><b>${n2(t.precision)}</b>precision</div><div><b>${n2(t.precisionLower)}</b>lower bound</div><div><b>${n2(t.recall)}</b>recall</div><div><b>${n2(t.threshold)}</b>${t.ships ? 'threshold' : 'best F1 at'}</div></div>`
-      : '';
+  const h = t.heldOut;
+  const sel = t.selection ? ` On the labels that chose it the same threshold gives P ${n2(t.selection.precision)} R ${n2(t.selection.recall)}.` : '';
+  const nums = h
+    ? `<div><div class="nums"><div><b>${n2(t.precision)}</b>held-out precision</div><div><b>${n2(t.precisionLower)}</b>95 % lower bound</div><div><b>${n2(t.recall)}</b>held-out recall</div><div><b>${t.threshold === null ? 'none' : n2(t.threshold)}</b>threshold</div></div><p class="more">nested ${t.folds}-fold: ${h.tp} right, ${h.fp} wrong, ${h.fn} missed on presets that played no part in choosing, calibrating or thresholding the scorer.${esc(sel)}</p></div>`
+    : '';
   const clips =
-    t.examplesAt !== null
-      ? strip('Tagged, and right', t.examples.truePositives, rows, dir, 'none above the threshold') +
-        strip('Tagged, but labelled no', t.examples.falsePositives, rows, dir, 'none: every preset above the threshold was a yes') +
+    t.examplesRule !== null
+      ? `<p class="more">${esc(t.examplesRule)}</p>` +
+        strip('Tagged, and right', t.examples.truePositives, rows, dir, 'none tagged') +
+        strip('Tagged, but labelled no', t.examples.falsePositives, rows, dir, 'none: every preset tagged was a yes') +
         strip('Labelled yes, but missed', t.examples.missed, rows, dir, 'none missed')
       : '';
   return `<section id="tag-${esc(t.id)}">
 <header><h2>${esc(t.name)}</h2><span class="group">${esc(t.group)}</span>${status}<span class="counts">${c.usableYes} yes · ${c.usableNo} no${c.unsure ? ` · ${c.unsure} unsure` : ''}${t.folds ? ` · ${t.folds}-fold` : ''}</span></header>
-<p class="diag">${esc(t.diagnosis)}${at && !t.ships ? ` <span>(examples at ${esc(at)})</span>` : ''}</p>
+<p class="diag">${esc(t.diagnosis)}</p>
 <div class="body">${nums}${scorerTable(t)}</div>
 ${clips}
 </section>`;
@@ -150,6 +151,7 @@ figcaption { color: var(--dim); font-size: 11px; margin-top: 4px; white-space: n
 <main>
 <h1>Tags</h1>
 <p class="sub">${shipping} of ${report.tags.length} tags ship · ${report.presets} presets (${report.skipped} skipped by the features run) · ${report.rubricScores} with rubric scores · held-out precision target ${n2(report.options.target)}</p>
+<p class="diag">Held-out precision is nested cross-validation: the labelled presets are split into folds, near-duplicates kept together; for each fold, the scorer is chosen, calibrated and thresholded using only the other folds (with folds of their own), then tags that fold's presets, which none of it saw. Precision is the presets tagged that were labelled yes, over all those tagged, pooled over the folds; recall is the yeses tagged over all the yeses. A tag ships when that precision is at least ${n2(report.options.target)} with at least ${report.options.minPositives} right; the 95 % lower bound beside it is how low the true precision could plausibly be with that many labels. It measures the whole way of choosing and fitting a scorer on presets it never saw; the scorer table's numbers are the ones that chose it, and flatter it.</p>
 <nav>${index}</nav>
 ${[...report.tags.filter((t) => t.ships), ...report.tags.filter((t) => !t.ships && t.scorers.length)].map((t) => tagSection(t, rows, dir)).join('\n')}
 ${waiting.length ? `<section id="waiting"><header><h2>Waiting for labels</h2><span class="counts">${waiting.length} tags</span></header><ul class="waiting">${waiting.map((t) => `<li id="tag-${esc(t.id)}"><b>${esc(t.name)}</b><span>${esc(t.diagnosis)}</span></li>`).join('')}</ul></section>` : ''}

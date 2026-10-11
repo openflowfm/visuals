@@ -28,8 +28,9 @@ features ──▶ label ──▶ rubric ──▶ score ──▶ (read the re
 3. **Rubric.** For tags a picture judgement suits, Claude rates every preset
    0–1 from a sheet of its frames.
 4. **Score.** Fit and compare scorers per tag under cross-validation, pick the
-   best, calibrate it, find the threshold that reaches 85 % precision, and
-   write the report.
+   best, calibrate it, find the threshold that reaches 85 % precision, check
+   that whole procedure on presets it never saw (nested cross-validation),
+   and write the report.
 5. **Iterate.** The report says what each tag lacks: more labels, a better
    rubric, or a measurement lane A doesn't take yet ("best single feature
    only reaches 0.6"). Label more where it's close, add or fix the measurement
@@ -51,8 +52,11 @@ invalid one.
 ## `npm run label -- <features DIR> [--labels FILE] [--port N] [--size 48]`
 
 A local page on 127.0.0.1 (a free port unless `--port`; the URL is printed,
-nothing is opened; Ctrl-C stops it). One tag at a time, a grid of 48 moving
-clips:
+nothing is opened; Ctrl-C stops it). It answers only requests whose Host is
+`127.0.0.1:<port>` or `localhost:<port>` (403 otherwise, against DNS
+rebinding) and saves only POSTs sent as `application/json` (415 otherwise, so
+another site's form can't post answers). One tag at a time, a grid of 48
+moving clips:
 
 - **click** (or space) marks a clip as having the tag; again un-marks it;
 - **shift-click** (or `u`) marks it unsure;
@@ -85,8 +89,10 @@ than sending again), checks every 30 s, and stores the scores as they come.
 ## `npm run score -- <features DIR> [--labels FILE] [--rubric FILE] [--out DIR] [--folds K] [--min-yes N] [--min-no N] [--seed S]`
 
 For each tag with enough labels (10 yes and 10 no by default; unsure answers
-are left out), compared under stratified k-fold cross-validation (5 folds, or
-fewer when positives are few):
+are left out), these scorers are compared under stratified group k-fold
+cross-validation (5 folds, or fewer when positives are few; every
+near-duplicate cluster, below, stays whole in one fold, so a preset is never
+tested against a near-copy that was trained on):
 
 - a threshold on each single feature, in either direction;
 - an L2-regularised logistic regression over all features (standardised on
@@ -97,35 +103,65 @@ fewer when positives are few):
 - for Unique, the distance to the nearest other preset in standardised
   feature space.
 
-The scorer with the best held-out average precision is chosen. One line per
-tag is printed, and `out/report.json` (every number), `out/report.html` (per
-tag: label counts, each scorer's held-out precision, recall and AP, the chosen
-scorer and threshold, ships or not yet with why, and moving clips of what it
-gets right, what it tags wrongly and what it misses; then clusters of
-near-duplicate presets) and `out/tags.json` (each preset's confidence for
-every tag that ships, and the fitted scorers to reproduce them) are written.
+**The recipe**, run on a set of labelled presets: cross-validate every scorer
+on it, choose the one with the best out-of-fold average precision, keep its
+k fold models, fit Platt scaling (a logistic curve) to its out-of-fold scores
+against the labels, and take as threshold the lowest confidence whose
+out-of-fold precision is at least 0.85 with at least 5 true positives above
+it (the most recall that keeps the precision).
 
-**Confidence** is the chosen scorer's output passed through Platt scaling (a
-logistic curve fitted to the held-out scores against the labels), so 0.8
-means about 80 % of presets scored like that were labelled yes.
+**Held-out precision** — the number a tag ships on — is nested
+cross-validation. The labelled presets are split into outer folds (near-
+duplicates kept together). For each outer fold the whole recipe runs on the
+other folds only, with inner folds of its own, so choosing the scorer,
+calibrating it and picking its threshold never see the outer fold; then it
+tags the outer fold's presets. Precision is the tagged presets labelled yes
+over all those tagged, pooled over the outer folds; recall is the yeses
+tagged over all the yeses. It is the precision to expect from this way of
+choosing and fitting a scorer on presets it never saw. Picking the best of ~30
+scorers and its threshold on the same predictions that measure it flatters
+the number (on pure-noise labels it reaches 0.85 about half the time), which
+is why those numbers, still shown in each tag's scorer table, don't decide
+anything.
 
-**Ships** means there is a confidence threshold at which the chosen scorer's
-held-out precision is at least 0.85 with at least 5 true positives (the
-threshold taken is the one with the most recall; a 95 % Wilson lower bound is
-shown beside it, as the threshold was picked on the same predictions). Every
-held-out number comes from presets the scorer was not fitted on. A tag that
-doesn't ship says why: not enough labels (with the counts), or the best any
-scorer reaches ("best single feature (flow, high) only reaches 0.61
-precision; logistic 0.70; needs a measurement").
+**Ships** means that held-out precision is at least 0.85 with at least 5 true
+positives, and the recipe run on all the labels found a threshold. Its 95 %
+Wilson lower bound is shown beside it: with few labels the true precision may
+be well under the estimate. A tag that doesn't ship says why: not enough
+labels (with the counts); a scorer that reaches the target on the labels that
+chose it but not held out ("needs more labels or a better measurement"); or
+the best any scorer reaches ("best single feature (flow, high) only reaches
+0.61 precision; logistic 0.70; needs a measurement").
+
+**Confidence** is what ships in `out/tags.json`: the recipe run on all the
+labels, scoring every preset in the pack with the **mean of its k fold
+models' raw scores**, through the Platt curve fitted on those same fold
+models' out-of-fold scores, so 0.8 means about 80 % of presets scored like
+that were labelled yes. Shipping the fold models' average, rather than a
+model refitted on all the labels, keeps the shipped scores on the scale the
+calibration and the threshold were fitted on (a refit's scores can sit on
+another scale, which the Platt curve was never fitted to).
+Confidences and thresholds are both rounded to 4 places, and a preset has the
+tag when its confidence is at or over the threshold, exactly as the report
+counts it.
+
+One line per tag is printed, and `out/report.json` (every number),
+`out/report.html` (per tag: label counts, the held-out precision, its lower
+bound, recall and the threshold, each scorer's cross-validated AP, precision
+and recall, ships or not yet with why, and moving clips of held-out presets
+it gets right, tags wrongly and misses; then clusters of near-duplicate
+presets) and `out/tags.json` (each preset's confidence for every tag that
+ships, and the fold models, calibration and threshold to reproduce them) are
+written.
 
 **Near-duplicates**: presets whose nearest neighbour is closer than a quarter
 of the median nearest-neighbour distance are joined; each connected group is
-a cluster.
+a cluster. The same clusters are the cross-validation's groups.
 
 ## Checks
 
 `npm test` and `npm run typecheck` here (the root ones don't reach this
 folder). The tests cover the vocabulary, label storage, grid picking, the
 label server, the rubric's batch requests and result parsing (no real API
-calls), the scorers and calibration on synthetic data, and the report on the
-fixture.
+calls), the scorers and calibration on synthetic data, the group folds, that
+pure-noise labels never ship, and the report on the fixture.

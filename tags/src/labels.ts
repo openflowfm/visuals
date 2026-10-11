@@ -3,6 +3,7 @@
 // given; later answers for the same preset and tag replace earlier ones, so
 // the file only ever grows and a correction is just another label.
 
+import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -49,8 +50,9 @@ export function formatLabels(f: LabelFile): string {
   return `{\n  "version": 1,\n  "labels": [\n${lines.join(',\n')}\n  ]\n}\n`;
 }
 
+/** Written whole to a temporary file of its own (unique per write, so two writers never share one), then renamed over the old file. */
 export function writeLabels(f: LabelFile, file: string = LABELS_FILE): void {
-  const tmp = `${file}.tmp`;
+  const tmp = `${file}.${process.pid}.${randomUUID()}.tmp`;
   writeFileSync(tmp, formatLabels(f));
   renameSync(tmp, file);
 }

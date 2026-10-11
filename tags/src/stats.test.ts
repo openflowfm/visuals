@@ -13,6 +13,7 @@ import {
   seeded,
   sigmoid,
   stratifiedFolds,
+  stratifiedGroupFolds,
   thresholdForPrecision,
   wilsonLower,
 } from './stats.ts';
@@ -89,6 +90,47 @@ describe('stratifiedFolds', () => {
     }
     expect(stratifiedFolds(y, k, 7)).toEqual(fold);
     expect(stratifiedFolds(y, k, 8)).not.toEqual(fold);
+  });
+});
+
+describe('stratifiedGroupFolds', () => {
+  it('keeps every group in one fold and still evens out the yeses', () => {
+    const r = seeded(3);
+    const y = Array.from({ length: 150 }, () => r() < 0.25);
+    // Groups of 1 to 4 consecutive samples.
+    const groups: number[] = [];
+    let g = 0;
+    while (groups.length < y.length) {
+      const size = 1 + Math.floor(r() * 4);
+      for (let j = 0; j < size && groups.length < y.length; j++) groups.push(g);
+      g++;
+    }
+    const k = 5;
+    const fold = stratifiedGroupFolds(y, groups, k, 11);
+    for (let i = 0; i < y.length; i++) for (let j = 0; j < y.length; j++) if (groups[i] === groups[j]) expect(fold[i]).toBe(fold[j]);
+    const yes = y.filter(Boolean).length;
+    for (let f = 0; f < k; f++) {
+      const idx = fold.map((h, i) => (h === f ? i : -1)).filter((i) => i >= 0);
+      expect(Math.abs(idx.filter((i) => y[i]).length - yes / k)).toBeLessThanOrEqual(3);
+      expect(Math.abs(idx.length - y.length / k)).toBeLessThanOrEqual(6);
+    }
+    expect(stratifiedGroupFolds(y, groups, k, 11)).toEqual(fold);
+  });
+
+  it('deals singletons like stratified k-fold', () => {
+    const y = Array.from({ length: 103 }, (_, i) => i % 4 === 0);
+    const fold = stratifiedGroupFolds(
+      y,
+      y.map((_, i) => i),
+      5,
+      7,
+    );
+    const yes = y.filter(Boolean).length;
+    for (let f = 0; f < 5; f++) {
+      const idx = fold.map((h, i) => (h === f ? i : -1)).filter((i) => i >= 0);
+      expect(Math.abs(idx.filter((i) => y[i]).length - yes / 5)).toBeLessThanOrEqual(1);
+      expect(Math.abs(idx.length - 103 / 5)).toBeLessThanOrEqual(1);
+    }
   });
 });
 

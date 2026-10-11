@@ -155,6 +155,51 @@ export function stratifiedFolds(y: boolean[], k: number, seed: number): number[]
   return fold;
 }
 
+/**
+ * Stratified group k-fold: the fold (0..k-1) of each sample, with every
+ * sample of a group (`groups[i]`, any number; near-duplicates share one) in
+ * the same fold, so no group is both trained and tested on. Groups are
+ * shuffled (seeded), then taken most yeses first, biggest first, each into
+ * the fold where it brings the yes and no counts closest to an even share
+ * (ties: the fold with fewest samples, then the lowest). With every group a
+ * single sample this deals like `stratifiedFolds`.
+ */
+export function stratifiedGroupFolds(y: boolean[], groups: number[], k: number, seed: number): number[] {
+  const r = seeded(seed);
+  const members = new Map<number, number[]>();
+  y.forEach((_, i) => {
+    const m = members.get(groups[i]);
+    if (m) m.push(i);
+    else members.set(groups[i], [i]);
+  });
+  const yesIn = (g: number[]) => g.filter((i) => y[i]).length;
+  const list = shuffle([...members.values()], r).sort((a, b) => yesIn(b) - yesIn(a) || b.length - a.length);
+  const P = Math.max(1, y.filter(Boolean).length);
+  const N = Math.max(1, y.length - y.filter(Boolean).length);
+  const pos = new Array<number>(k).fill(0);
+  const neg = new Array<number>(k).fill(0);
+  const fold = new Array<number>(y.length).fill(0);
+  for (const g of list) {
+    const gp = yesIn(g);
+    const gn = g.length - gp;
+    let best = 0;
+    let bestCost = Infinity;
+    for (let f = 0; f < k; f++) {
+      const off = (p: number, n: number) => (p / P - 1 / k) ** 2 + (n / N - 1 / k) ** 2;
+      const cost = off(pos[f] + gp, neg[f] + gn) - off(pos[f], neg[f]);
+      const size = pos[f] + neg[f];
+      if (cost < bestCost - 1e-12 || (Math.abs(cost - bestCost) <= 1e-12 && size < pos[best] + neg[best])) {
+        best = f;
+        bestCost = cost;
+      }
+    }
+    for (const i of g) fold[i] = best;
+    pos[best] += gp;
+    neg[best] += gn;
+  }
+  return fold;
+}
+
 function meanOf(xs: (number | null)[]): number {
   let s = 0;
   let c = 0;

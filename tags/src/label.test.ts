@@ -27,16 +27,16 @@ afterAll(async () => {
 const get = (path: string) => fetch(new URL(path, srv.url));
 const post = (body: unknown) => fetch(new URL('/api/labels', srv.url), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
-/** A GET with the path sent exactly as written (fetch would resolve `..`). */
-function raw(path: string): Promise<number> {
+/** A request with the path sent exactly as written (fetch would resolve `..`), and the headers given. */
+function raw(path: string, opts: { method?: string; headers?: Record<string, string>; body?: string } = {}): Promise<number> {
   const u = new URL(srv.url);
   return new Promise((resolve, reject) => {
-    const req = request({ host: u.hostname, port: u.port, path, method: 'GET' }, (res) => {
+    const req = request({ host: u.hostname, port: u.port, path, method: opts.method ?? 'GET', headers: opts.headers }, (res) => {
       res.resume();
       resolve(res.statusCode ?? 0);
     });
     req.on('error', reject);
-    req.end();
+    req.end(opts.body);
   });
 }
 
@@ -108,9 +108,32 @@ describe('the labelling server', () => {
     expect((await post({ tag: 'red', answers: [{ hash: 'not-a-preset', answer: 'yes' }] })).status).toBe(400);
     expect((await post({ tag: 'red', answers: [{ hash, answer: 'maybe' }] })).status).toBe(400);
     expect((await post({ tag: 'red' })).status).toBe(400);
-    expect((await fetch(new URL('/api/labels', srv.url), { method: 'POST', body: '{' })).status).toBe(400);
+    expect((await fetch(new URL('/api/labels', srv.url), { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{' })).status).toBe(400);
     expect((await get('/api/grid?tag=nope')).status).toBe(400);
     expect(readLabels(labelsFile).labels.some((l) => l.hash === 'not-a-preset' || l.tag === 'nope')).toBe(false);
+  });
+
+  it('answers only requests addressed to itself', async () => {
+    const port = new URL(srv.url).port;
+    expect(await raw('/api/state', { headers: { host: `localhost:${port}` } })).toBe(200);
+    expect(await raw('/api/state', { headers: { host: `127.0.0.1:${port}` } })).toBe(200);
+    expect(await raw('/api/state', { headers: { host: 'evil.example' } })).toBe(403);
+    expect(await raw('/api/state', { headers: { host: `evil.example:${port}` } })).toBe(403);
+    expect(await raw('/', { headers: { host: '127.0.0.1:1' } })).toBe(403);
+    const hash = fx.features.rows[1].hash;
+    const body = JSON.stringify({ tag: 'warm', answers: [{ hash, answer: 'yes' }] });
+    expect(await raw('/api/labels', { method: 'POST', headers: { host: `rebound.example:${port}`, 'content-type': 'application/json' }, body })).toBe(403);
+    expect(readLabels(labelsFile).labels.some((l) => l.tag === 'warm')).toBe(false);
+  });
+
+  it('takes only JSON posts', async () => {
+    const hash = fx.features.rows[2].hash;
+    const body = JSON.stringify({ tag: 'cold', answers: [{ hash, answer: 'yes' }] });
+    expect(await raw('/api/labels', { method: 'POST', headers: { 'content-type': 'text/plain' }, body })).toBe(415);
+    expect(await raw('/api/labels', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body })).toBe(415);
+    expect(await raw('/api/labels', { method: 'POST', body })).toBe(415);
+    expect(readLabels(labelsFile).labels.some((l) => l.tag === 'cold')).toBe(false);
+    expect(await raw('/api/labels', { method: 'POST', headers: { 'content-type': 'application/json; charset=utf-8' }, body })).toBe(200);
   });
 
   it("serves a row's clip as webp, and nothing else", async () => {
