@@ -280,14 +280,30 @@ export function changeUnit(s: PlaylistSettings, unit: pl.Change['unit']): Playli
  * Where the preset playing comes from, as the bottom bar's second line and the
  * Now Playing panel say it: "from Chill · 3 of 20", "from the library · 7 of
  * 412" while the deck follows the library's filter, else "opened on its own".
- * `place` false leaves out "· n of m" (the panel's line).
+ * `place` false leaves out "· n of m" (the panel's line). Given the `path`
+ * the page shows playing, a playlist or filter that isn't playing it (the deck
+ * not caught up, or a preset opened from outside it) is never named.
  */
-export function playsFrom(deck: pl.Deck, playlists: readonly Playlist[], place = true): string {
+export function playsFrom(deck: pl.Deck, playlists: readonly Playlist[], place = true, path: string | null = null): string {
+  if (path !== null && !deckPlays(deck, playlists, path)) return say('played alone');
   const of = (index: number | null, count: number) => (place && index !== null && count > 0 ? ` · ${(index + 1).toLocaleString('en-US')} of ${count.toLocaleString('en-US')}` : '');
   const up = pl.upNext({ deck, playlists: [...playlists] });
   if (up) return `from ${up.playlist.name}${of(up.index, up.count)}`;
   if (deck.query) return `from ${say('library query')}${of(deck.index, deck.count)}`;
   return say('played alone');
+}
+
+/**
+ * Whether the deck's playlist or filter is what plays `path`: the deck names
+ * that preset as its own, and a manual playlist has it at the deck's place.
+ * Nothing loaded is always true (there is nothing to name).
+ */
+export function deckPlays(deck: pl.Deck, playlists: readonly Playlist[], path: string): boolean {
+  if (!deck.playlist && !deck.query) return true;
+  if (deck.current !== null && deck.current !== path) return false;
+  const list = deck.playlist ? playlists.find((p) => p.id === deck.playlist) : undefined;
+  if (list?.kind === 'manual' && deck.index !== null) return list.items[deck.index]?.path === path;
+  return true;
 }
 
 /** What the main pane shows: a playlist, by id; the library; or the library's starred presets. */

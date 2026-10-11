@@ -363,6 +363,21 @@ describe('playsFrom', () => {
     expect(playsFrom({ ...EMPTY_DECK, query: { groups: {}, text: 'x' } }, [warm])).toBe('from the library');
     expect(playsFrom(EMPTY_DECK, [warm])).toBe('opened on its own');
   });
+
+  it('never names a playlist for a preset it is not playing: the deck behind, or a preset opened from outside it', () => {
+    // The deck playing y, second in Warm up.
+    const playing = { ...EMPTY_DECK, playlist: 'w', index: 1, current: '/p/y.milk' };
+    expect(playsFrom(playing, [warm], true, '/p/y.milk')).toBe('from Warm up · 2 of 3');
+    // A library preset opened while the page's deck still says Warm up.
+    expect(playsFrom(playing, [warm], true, '/p/elsewhere.milk')).toBe('opened on its own');
+    expect(playsFrom(playing, [warm], false, '/p/elsewhere.milk')).toBe('opened on its own');
+    // The deck naming the preset opened but still holding Warm up's place: not Warm up's preset there.
+    expect(playsFrom({ ...playing, current: '/p/elsewhere.milk' }, [warm], true, '/p/elsewhere.milk')).toBe('opened on its own');
+    // A filter followed: the deck names what it plays.
+    const filter = { ...EMPTY_DECK, query: { groups: {}, text: 'x' }, index: 6, count: 412, current: '/p/q.milk' };
+    expect(playsFrom(filter, [warm], true, '/p/q.milk')).toBe('from the library · 7 of 412');
+    expect(playsFrom(filter, [warm], true, '/p/other.milk')).toBe('opened on its own');
+  });
 });
 
 describe('playsLike', () => {

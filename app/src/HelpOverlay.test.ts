@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { CONTROLS, control, GROUPS, HelpOverlay, titleOf, type ControlId } from './HelpOverlay.tsx';
+import { CONTROLS, control, GROUPS, HelpOverlay, HOME_HELP, titleOf, type ControlId } from './HelpOverlay.tsx';
 import { liveKeys, type KeyLike } from './liveKeys.ts';
 
 const IDS: Record<ControlId, true> = {
@@ -159,5 +159,24 @@ describe('the ? overlay, to VoiceOver', () => {
 
   it('draws nothing while closed', () => {
     expect(renderToStaticMarkup(createElement(HelpOverlay, { open: false, onClose: () => {} }))).toBe('');
+  });
+});
+
+describe("the home's ? overlay", () => {
+  const html = renderToStaticMarkup(createElement(HelpOverlay, { open: true, onClose: () => {}, list: HOME_HELP }));
+
+  it('is its own dialog, named Home controls, with a ✕ named for it', () => {
+    const dialog = /<[a-z]+[^>]*role="dialog"[^>]*>/.exec(html)?.[0] ?? '';
+    expect(dialog).toContain('aria-labelledby="home-help-title"');
+    expect(html).toContain('<h2 id="home-help-title">Home controls</h2>');
+    expect(html).toContain('aria-label="Close home controls"');
+    expect(html).not.toContain('Live controls');
+  });
+
+  it('lists the keys the home answers, and says a playlist moves on by itself until H holds it', () => {
+    for (const keys of ['←', '→', 'R', 'H', '?', 'Esc', '⌘F', '⌘I', '⌃⌘S', 'Click or Enter']) expect(html, keys).toContain(`<kbd>${keys}</kbd>`);
+    const hold = HOME_HELP.groups.flatMap((g) => g.rows).find((r) => r.keys === 'H');
+    expect(hold?.does).toMatch(/moving on by itself/);
+    expect([...html.matchAll(/<dt>/g)].length).toBe(HOME_HELP.groups.reduce((n, g) => n + g.rows.length, 0));
   });
 });
