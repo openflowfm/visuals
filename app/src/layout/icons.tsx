@@ -49,7 +49,6 @@ export const ICON_NAMES = [
   'output',
   'fullscreen',
   'help',
-  'settings',
   'effects',
   'audio',
   'mood',
@@ -199,15 +198,7 @@ const GLYPHS: Record<IconName, ReactNode> = {
       <circle {...solid} stroke="none" cx="8" cy="11.5" r=".9" />
     </>
   ),
-  // Two sliders: settings.
-  settings: (
-    <>
-      <path d="M2.25 4.75H3.75M7.25 4.75H13.75M2.25 11.25H8.75M12.25 11.25H13.75" />
-      <circle cx="5.5" cy="4.75" r="1.75" />
-      <circle cx="10.5" cy="11.25" r="1.75" />
-    </>
-  ),
-  // A gear: Home's Settings row. A ring for the hub and eight short teeth around it.
+  // A gear: settings, everywhere (Home's Settings row, the Stage's header). A ring for the hub and eight short teeth around it.
   gear: (
     <>
       <circle cx="8" cy="8" r="3.75" />

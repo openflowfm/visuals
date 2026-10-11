@@ -30,8 +30,8 @@ export { paneKey, samePane, sidebarSections, type SidebarRow, type SidebarSectio
  * "…" that shows on hover: play or stop, quick add (a manual playlist's), show
  * info (the playlist's card in the inspector), rename (in place), save to a
  * file, delete (asking first). The playlists' heading has + (a new playlist)
- * and ⤓ (add one from a file). At the foot, pinned under the rows, a quiet
- * Settings row (⚙) opens Settings.
+ * and an import arrow (add one from a file). At the foot, pinned under the
+ * rows, a quiet Settings row (the gear) opens Settings.
  *
  * One tab stop: the arrow keys walk the headings and the rows shown, Home and
  * End jump to the first and the last, Enter or Space picks a row or folds a
