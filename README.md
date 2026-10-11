@@ -79,8 +79,7 @@ nudge or reset in live mode's Link panel.
 Live mode is the show: the output full screen on a display of your choice (remembered for
 next time), performance effects (strobe, blackout, punch, freeze, mirror, speed, trails…)
 with keys, playlists that move on by themselves, and **stay on this one** to hold a
-preset. Esc or ⌘⇧L
-leaves it.
+preset. Hold Esc for 3 s, or press ⌘⇧L, to leave it.
 
 ### Privacy
 

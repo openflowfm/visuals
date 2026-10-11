@@ -2,9 +2,9 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HelpOverlay } from './HelpOverlay.tsx';
-import { useLiveKeys } from './liveKeys.ts';
+import { type EscapeFeed, useLiveKeys } from './liveKeys.ts';
 
 afterEach(cleanup);
 
@@ -41,5 +41,37 @@ describe('? in live mode, in a DOM', () => {
     expect(screen.getByRole('dialog', { name: 'Live controls' })).toBeTruthy();
     await user.keyboard('?');
     expect(screen.queryByRole('dialog', { name: 'Live controls' })).toBeNull();
+  });
+});
+
+describe('Esc held in live mode, in a DOM', () => {
+  it('lets go when the page is hidden (the app left mid-hold), so it never leaves', () => {
+    vi.useFakeTimers();
+    try {
+      const sent: string[] = [];
+      let feed: EscapeFeed | null = null;
+      function Held() {
+        feed = useLiveKeys({
+          editor: () => sent.push('leave'),
+          act: () => {},
+          fx: () => {},
+          rate: () => {},
+          favourite: () => {},
+          help: () => {},
+          holding: (on) => sent.push(on ? 'holding' : 'let go'),
+        });
+        return null;
+      }
+      render(<Held />);
+      feed!.escapeDown();
+      vi.advanceTimersByTime(1000);
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+      document.dispatchEvent(new Event('visibilitychange'));
+      vi.advanceTimersByTime(5000);
+      expect(sent).toEqual(['holding', 'let go']);
+    } finally {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+      vi.useRealTimers();
+    }
   });
 });

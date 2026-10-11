@@ -389,6 +389,26 @@ describe('liveKeys', () => {
       expect(sent).toEqual(['holding', 'let go', 'holding', 'let go', 'leave']);
     });
 
+    it('doesn’t leave when a sheet opened mid-hold (⌘, opening Settings)', () => {
+      const sent: string[] = [];
+      let sheet = false;
+      const keys = liveKeys({
+        editor: () => sent.push('leave'),
+        act: () => {},
+        fx: () => {},
+        rate: () => {},
+        favourite: () => {},
+        help: () => {},
+        sheetOpen: () => sheet,
+        holding: (on) => sent.push(on ? 'holding' : 'let go'),
+      });
+      keys.escapeDown();
+      vi.advanceTimersByTime(1000);
+      sheet = true;
+      vi.advanceTimersByTime(5000);
+      expect(sent).toEqual(['holding', 'let go']);
+    });
+
     it('stops timing when disposed, telling no one', () => {
       const { sent, keys, esc } = held();
       esc();

@@ -73,6 +73,8 @@ export function liveKeys(to: LiveKeyTargets, holdMs = LEAVE_HOLD_MS) {
     timer = setTimeout(() => {
       timer = null;
       to.holding?.(false);
+      // A sheet or modal that opened mid-hold (⌘, opens Settings) takes the hold: never leave live under it.
+      if (to.sheetOpen?.()) return;
       to.editor();
     }, holdMs);
   };
@@ -195,10 +197,16 @@ export function useLiveKeys(to: LiveKeyTargets): EscapeFeed {
     const keydown = (e: KeyboardEvent) => keys.keydown(e);
     const keyup = (e: KeyboardEvent) => keys.keyup(e);
     const blur = () => keys.blur();
+    // The page hidden (the app left while Esc was held on the output, with no window of ours key to blur): let go too.
+    const visibility = () => {
+      if (document.visibilityState === 'hidden') keys.blur();
+    };
     window.addEventListener('keydown', keydown);
     window.addEventListener('keyup', keyup);
     window.addEventListener('blur', blur);
+    document.addEventListener('visibilitychange', visibility);
     return () => {
+      document.removeEventListener('visibilitychange', visibility);
       window.removeEventListener('keydown', keydown);
       window.removeEventListener('keyup', keyup);
       window.removeEventListener('blur', blur);
