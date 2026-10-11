@@ -1,112 +1,50 @@
-import { useCallback, useRef, useState } from 'react';
-import { Button } from '@openflow/widgets/controls/Button.tsx';
-import { ButtonFace } from '@openflow/widgets/controls/ButtonFace.tsx';
-import { Slider } from '@openflow/widgets/controls/Slider.tsx';
-import { range } from './controls.ts';
-import { Crate } from './Crate.tsx';
-import * as fx from './fx.ts';
-import { HelpOverlay, padKey, titleOf, type ControlId } from './HelpOverlay.tsx';
+import { useCallback, useEffect, useState } from 'react';
+import { HelpOverlay } from './HelpOverlay.tsx';
+import { remember, rememberedChoice } from './home.ts';
 import { useLiveKeys } from './liveKeys.ts';
 import * as output from './output.ts';
 import { useTauriEvent } from './hooks.ts';
-import { nameOf } from './shell.ts';
 import { SilenceBanner } from './Onboarding.tsx';
-import { Status } from './Status.tsx';
-import { HOME, NoticeBanner, Preview, type View } from './views.tsx';
-import { say, Say } from './words.ts';
-import { nextWhenText, openEffects, padLabel, starsText, whereSr, whereText } from './live/live-model.ts';
-import { useLinkFrame, useLive } from './live/useLive.ts';
+import { HOME, type View } from './views.tsx';
+import { StageCrate } from './live/StageCrate.tsx';
+import { StageDock } from './live/StageDock.tsx';
+import { FullScreenOffer, StageHead } from './live/StageHead.tsx';
+import { StageLayout } from './live/StageLayout.tsx';
+import { CRATE_KEY, crateModeFor, escapeDoes, panelsAtStart, STAGE_DOCK_AT, toggleCrate, togglePanels, type Panels } from './live/stage-model.ts';
+import { useLive } from './live/useLive.ts';
 import './live.css';
 
 // Live mode's reckonings moved to live/live-model.ts (the Stage contract); they are still here for what imported them from Live.
 export { intensityOf, keyOf, openEffects, padLabel, playsWindowed, ratingOf, sendIntensity, starred, starsText, whenText, whereSr, whereText, type IntensityAction } from './live/live-model.ts';
 
-const INTENSITY = range('intensity', 0, 1, 0.5);
-
-/** The key under a pad's name: one letter or arrow; the rest of its keys are in its tooltip and the ? overlay. */
-function PadKey({ id }: { id: ControlId }) {
-  const key = padKey(id);
-  return key ? <small aria-hidden="true">{key}</small> : null;
+/** The window's width, followed as it is resized. */
+function useWidth(): number {
+  const [width, setWidth] = useState(() => window.innerWidth);
+  useEffect(() => {
+    const resize = () => setWidth(window.innerWidth);
+    resize();
+    window.addEventListener('resize', resize);
+    return () => window.removeEventListener('resize', resize);
+  }, []);
+  return width;
 }
 
 /**
- * One of the big buttons; `id` names it from the help list. `on` makes it a
- * toggle (`aria-pressed`).
- */
-export function Pad({ id, onPress, on, label, children }: { id: ControlId; onPress(): void; on?: boolean; label?: string; children?: React.ReactNode }) {
-  return (
-    <ButtonFace className="live-pad" data-pad={id} aria-pressed={on} aria-label={label ?? padLabel(id)} title={titleOf(id)} onClick={onPress}>
-      {children}
-      <PadKey id={id} />
-    </ButtonFace>
-  );
-}
-
-/**
- * A held effect's pad: on while the pointer is down, off when it comes up or
- * leaves; Shift-click latches. From the keyboard (Enter or space) it toggles.
- */
-export function HoldPad({ id, kind, on, send, children }: { id: ControlId; kind: fx.Hit; on: boolean; send(action: fx.FxAction): void; children?: React.ReactNode }) {
-  const pressed = useRef(false);
-  const release = () => {
-    if (!pressed.current) return;
-    pressed.current = false;
-    send(fx.hitAction(kind, false));
-  };
-  return (
-    <ButtonFace
-      className="live-pad"
-      data-pad={id}
-      aria-pressed={on}
-      aria-label={padLabel(id)}
-      title={titleOf(id)}
-      onPointerDown={(e) => {
-        if (e.button !== 0) return;
-        if (e.shiftKey) {
-          send(fx.hitAction(kind, null));
-          return;
-        }
-        pressed.current = true;
-        e.currentTarget.setPointerCapture?.(e.pointerId);
-        send(fx.hitAction(kind, true));
-      }}
-      onPointerUp={release}
-      onPointerCancel={release}
-      onLostPointerCapture={release}
-      onKeyDown={(e) => {
-        if (e.key !== 'Enter' && e.key !== ' ') return;
-        e.preventDefault();
-        e.stopPropagation();
-        if (!e.repeat) send(fx.hitAction(kind, null));
-      }}
-    >
-      {children}
-      <PadKey id={id} />
-    </ButtonFace>
-  );
-}
-
-/** When the next preset comes on Link's beat: its own leaf, as Link's frames come ten times a second. */
-function NextWhen({ deck }: { deck: Parameters<typeof nextWhenText>[1] }) {
-  const when = nextWhenText(useLinkFrame(), deck, Date.now());
-  return when ? <em className="live-when">{when}</em> : null;
-}
-
-/**
- * Live mode: performing, not editing. Along the top the status strip (what it
- * hears, the beat and tap tempo, where the picture goes, help, settings, and
- * leave apart); then what's playing and what's next, two lines over the
- * preview, which takes the rest of the height; the pads in two rows — previous,
- * random, next; hold, strobe, blackout, freeze — and one Intensity slider; and
- * beside them the crate: playlists, moods from the user's tags, and up next.
- * Everything else is a key (the ? overlay names them all) or in More effects.
+ * Live mode, as the Stage: the picture full-bleed across the main window, and
+ * Home's opaque inset panels over it — the header's two capsules along the top
+ * (`StageHead`), the crate down the left (`StageCrate`), the dock along the
+ * bottom (`StageDock`), all laid out by `StageLayout` and fed from `useLive`.
+ * Playing in the window, "Go full screen on…" sits over the picture's middle.
  *
- * The output opens full screen on the way in when there's a display for it;
- * with one display, or from the welcome flow, live plays in the window with a
- * big "Go full screen on…" button. Leaving is ✕, ⌘⇧L or Esc — here (not while
- * typing in a field) or on the output, which tells the page (`output.onEscape`).
- * Leaving also puts the effects back, so nothing is left inverted or frozen.
- * The state and the actions are `useLive`'s.
+ * The crate docks from `STAGE_DOCK_AT` px and is laid over the rest below it,
+ * where it starts put away; the viewer's choice is kept (`CRATE_KEY`) where it
+ * docks, as Home keeps its sidebar's. `\` hides every panel, leaving only the
+ * picture, and shows them again. Esc first shows hidden panels, then puts a
+ * laid-over crate away, and only then leaves live — as ✕ and ⌘⇧L do, here or
+ * on the output, which tells the page (`output.onEscape`). Leaving puts the
+ * effects back (`useLive`'s unmount), so nothing is left inverted or frozen.
+ * With the flashing warning owed, `App` doesn't mount live at all until it is
+ * understood.
  */
 export function Live({
   start,
@@ -118,131 +56,68 @@ export function Live({
   /** Play in the window: don't open the output on the way in. */ windowed?: boolean;
 }) {
   const live = useLive({ start, windowed });
-  const { current, effects, status, displays, held, star, rating, says, up, deck, act, actFx, show } = live;
+  const { current } = live;
   const [help, setHelp] = useState(false);
+  const width = useWidth();
+  const [panels, setPanels] = useState<Panels>(() => panelsAtStart(rememberedChoice(CRATE_KEY)));
+  const mode = crateModeFor(width, panels.crate);
 
   const leaveLive = useCallback(() => onMode(HOME, current), [onMode, current]);
+  const onView = useCallback((next: View) => next !== 'live' && onMode(next, current), [onMode, current]);
 
-  useLiveKeys({ editor: leaveLive, act, fx: actFx, rate: live.rate, favourite: live.favourite, help: () => setHelp((h) => !h) });
+  /** Show or put away the crate; kept for next time only where it docks (laid over the picture, it starts put away again). */
+  const chooseCrate = useCallback(
+    (next: Panels) => {
+      if (width >= STAGE_DOCK_AT && next.crate !== null) remember(CRATE_KEY, next.crate);
+      setPanels(next);
+    },
+    [width],
+  );
+  const onCrate = () => chooseCrate(toggleCrate(panels, width));
+  const crateAway = () => chooseCrate({ ...panels, crate: false });
+
+  useLiveKeys({
+    editor: leaveLive,
+    act: live.act,
+    fx: live.actFx,
+    rate: live.rate,
+    favourite: live.favourite,
+    help: () => setHelp((h) => !h),
+    panels: () => setPanels(togglePanels),
+    escape: () => {
+      if (escapeDoes(panels) === 'show') {
+        setPanels((p) => ({ ...p, shown: true }));
+        return true;
+      }
+      // A crate laid over the picture takes Esc before live does.
+      if (mode === 'overlay') {
+        crateAway();
+        return true;
+      }
+      return false;
+    },
+  });
   useTauriEvent(output.onEscape, leaveLive);
 
-  const inWindow = status.display === null && displays !== null;
+  const offer = live.inWindow && (live.displays?.length ?? 0) > 0;
 
   return (
-    <div className="live" data-windowed={inWindow ? '' : undefined}>
-      <Status
-        output={status}
-        show={show}
-        effects={effects}
-        onHelp={() => setHelp(true)}
-        onTap={() => actFx({ kind: 'tap' })}
-        onLeave={leaveLive}
-        onError={live.fail("Couldn't use that audio input.")}
-        titles={{ audio: titleOf('audio'), beat: titleOf('beat'), output: titleOf('output'), help: titleOf('help'), settings: titleOf('settings'), leave: titleOf('leave') }}
+    <div className="live" data-windowed={live.inWindow ? '' : undefined} data-panels={panels.shown ? undefined : 'hidden'} data-crate={mode}>
+      <StageLayout
+        width={width}
+        panels={panels}
+        inWindow={live.inWindow}
+        head={<StageHead live={live} crateOpen={mode !== 'hidden'} onCrate={onCrate} help={help} onHelp={() => setHelp(true)} onView={onView} />}
+        crate={<StageCrate live={live} mode={mode} onAway={crateAway} />}
+        dock={<StageDock live={live} />}
+        centre={offer ? <FullScreenOffer live={live} /> : undefined}
+        onCrateAway={crateAway}
       />
+      {/* Over the Stage, whatever the panels are doing: the silence banner and the ? overlay. */}
       <div className="live-banner">
         <SilenceBanner />
       </div>
-      <section className="live-stage">
-        <div className="live-deck">
-          {/* A polite status: VoiceOver says the new preset (and its star, rating and HOLD) when it changes, not on every frame. */}
-          <div className="live-now" title={current ?? titleOf('now')} role="status" aria-atomic="true">
-            {current ? <b>{nameOf(current)}</b> : <b className="live-none">Nothing playing — press R for a random preset, or play a playlist.</b>}
-            {star && (
-              <span className="live-star" title="A favourite (L takes the star off)" role="img" aria-label="favourite">
-                ★
-              </span>
-            )}
-            {rating !== null && (
-              <span className="live-rating" title={`Rated ${rating} of 5 (press ${rating} again to take it off)`} role="img" aria-label={`rated ${rating} of 5`}>
-                {starsText(rating)}
-              </span>
-            )}
-            {held && (
-              <span className="live-held" title={`${Say('hold')}: steps, ${say('auto-advance')} and Link's changes wait until you let go (H)`}>
-                HOLD
-              </span>
-            )}
-          </div>
-          <div className="live-next" title={`${titleOf('next')}. ${whereText(up, deck)}`}>
-            <span className="live-sr">Next: </span>
-            {says.kind === 'held' ? (
-              <span className="live-none">held — nothing changes until you let go of HOLD (H)</span>
-            ) : says.kind === 'item' || says.kind === 'filter' ? (
-              <span data-missing={says.item.missing ? '' : undefined} title={says.item.missing ? `Not in the library any more: ${says.item.path}` : says.item.path}>
-                {says.item.name}
-                {says.item.missing && <em> — missing from the library, it won't open</em>}
-              </span>
-            ) : says.kind === 'empty' ? (
-              <span className="live-none">{says.up.playlist.name} is empty — add presets in the library.</span>
-            ) : (
-              <span className="live-none">the next preset in the library</span>
-            )}
-            {says.kind !== 'held' && <span className="live-sr">{whereSr(up, deck)}</span>}
-            {says.kind !== 'held' && deck && <NextWhen deck={deck} />}
-          </div>
-        </div>
-        <NoticeBanner className="live-problem" notice={live.error} onDismiss={live.dismiss} />
-        <div className="live-preview-cell">
-          <Preview className="live-preview" />
-          {inWindow && displays.length > 0 && (
-            <div className="live-fullscreen" title={titleOf('fullscreen')}>
-              {displays.map((d) => (
-                <Button key={d.id} className="live-fullscreen-go" onPress={() => show(d.id)} label={`Go full screen on ${d.name}`} title={titleOf('fullscreen')}>
-                  Go full screen on {d.name}
-                </Button>
-              ))}
-              {displays.length === 1 && <p className="live-fullscreen-note">One display: the picture will cover this window. Esc comes back.</p>}
-            </div>
-          )}
-        </div>
-        <div className="wdg live-pads" role="group" aria-label="Live controls">
-          <div className="live-pads-row" data-row="presets" role="group" aria-label="Presets">
-            <Pad id="previous" onPress={() => act({ kind: 'previous' })}>
-              ◀ Previous
-            </Pad>
-            <Pad id="random" onPress={() => act({ kind: 'random' })}>
-              Random
-            </Pad>
-            <Pad id="step" onPress={() => act({ kind: 'next' })}>
-              Next ▶
-            </Pad>
-          </div>
-          <div className="live-pads-row" data-row="effects" role="group" aria-label="Effects">
-            <Pad id="hold" on={held} onPress={() => actFx({ kind: 'hold', on: null })}>
-              Hold
-            </Pad>
-            <HoldPad id="strobe" kind="strobe" on={effects?.strobe === true} send={actFx}>
-              Strobe
-            </HoldPad>
-            <Pad id="blackout" on={effects?.blackout === true} onPress={() => actFx({ kind: 'blackout', on: null })}>
-              Blackout
-            </Pad>
-            <HoldPad id="freeze" kind="freeze" on={effects?.freeze === true} send={actFx}>
-              Freeze
-            </HoldPad>
-          </div>
-        </div>
-        <div className="wdg live-intensity">
-          <Slider
-            param={INTENSITY}
-            value={live.intensity}
-            onChange={live.setIntensity}
-            display={`${Math.round(live.intensity * 100)}%`}
-            orientation="horizontal"
-            layout="inside"
-            length="auto"
-            name="Intensity"
-            label="Intensity"
-            title={titleOf('intensity')}
-          />
-          <Button className="live-more" onPress={openEffects} title={titleOf('more')}>
-            More effects…
-          </Button>
-        </div>
-      </section>
-      <aside className="live-side">{live.lists && <Crate lists={live.lists} data={live.data} act={act} onLists={live.setLists} onError={live.setError} current={current} />}</aside>
-      <HelpOverlay open={help} onClose={() => setHelp(false)} />
+      <HelpOverlay open={help} onClose={() => setHelp(false)} stage />
     </div>
   );
 }

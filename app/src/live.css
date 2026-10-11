@@ -1,24 +1,15 @@
-/* Live mode. As in the editor, nothing behind the preview may paint: the bench is
-   a native view under the page. The page itself is transparent, every panel
-   paints itself, and the bars beside the 16:9 preview are its own shadow,
-   clipped to its cell.
+/* Live mode, as the Stage: the picture full-bleed under the page (the bench is a
+   native view under it, so nothing behind it may paint), and the panels laid
+   over it. The Stage's own parts style themselves (live/); here is what Live's
+   wiring places over them (the silence banner), the light and output panels'
+   and the crate's rows (Status, OutputPanel, Crate), and focus.
 
-   Along the top the status strip; then now and next over the preview, which
-   takes what's left; the pads in two rows and the Intensity row; the crate
-   beside them. The ? overlay lists the keys. Everything a hand reaches for
-   during a show is at least 44px. One look for "on": a pressed pad fills
-   white; amber (--caution) only means HOLD or a problem, red only Blackout or
-   an error. */
+   `.live` itself takes no box: the Stage's shell lays out the window, and
+   `.live` only scopes the rules below and carries what Live is doing
+   (`data-windowed`, `data-panels`, `data-crate`). */
 
 .live {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  grid-template-areas:
-    'strip strip'
-    'banner banner'
-    'stage side';
-  height: 100%;
+  display: contents;
 }
 
 /* Only for VoiceOver: words the picture doesn't need. */
@@ -33,7 +24,6 @@
 
 /* The status strip: the audio, beat and output lights (no captions), the frame rate, ? ⚙, and ✕ apart. */
 .live-status-strip {
-  grid-area: strip;
   position: relative;
   z-index: 20;
   display: flex;
@@ -265,294 +255,22 @@
   line-height: 1.45;
 }
 
+/* The silence banner ("No sound…"), over the Stage below the header's capsules, centred; it takes no room while it says nothing. */
 .live-banner {
-  grid-area: banner;
-  min-width: 0;
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  z-index: 25;
+  width: max-content;
+  max-width: min(640px, calc(100vw - 32px));
+  transform: translateX(-50%);
 }
 .live-banner:empty {
   display: none;
 }
 
-.live-stage {
-  grid-area: stage;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  overflow-y: auto;
-}
-
-/* Now and next: two lines, no captions. Now wraps to two lines rather than losing the end of its name; next is smaller and muted, its when folded in. */
-.live-deck {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 16px 22px 14px;
-  background: var(--panel);
-  border-bottom: 1px solid var(--bd3);
-}
-.live-now,
-.live-next {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  min-width: 0;
-}
-.live-now b {
-  display: -webkit-box;
-  min-width: 0;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow-wrap: anywhere;
-  color: var(--fg);
-  font-size: calc(var(--text-title) * 1.5);
-  font-weight: var(--weight-strong);
-  letter-spacing: var(--track-tight);
-  line-height: 1.2;
-}
-.live-next > span:not(.live-sr) {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.live-star {
-  flex: none;
-  align-self: center;
-  color: var(--caution);
-  font-size: var(--text-title);
-}
-.live-rating {
-  flex: none;
-  align-self: center;
-  color: var(--caution);
-  font-size: var(--text-heading);
-  letter-spacing: var(--track-label);
-}
-.live-held {
-  flex: none;
-  align-self: center;
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-  background: var(--caution);
-  color: var(--bg);
-  font-size: var(--text-lead);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--track-label);
-}
-.live-next span {
-  color: var(--detail);
-  font-size: var(--text-heading);
-  font-weight: var(--weight-normal);
-}
-.live-next span[data-missing] {
-  color: var(--detail);
-  text-decoration: line-through;
-}
-.live-next span em {
-  color: var(--caution);
-  font-style: normal;
-  font-size: var(--text-body);
-  text-decoration: none;
-  display: inline-block;
-}
-.live-when {
-  flex: none;
-  color: var(--caption);
-  font-style: normal;
-  font-size: var(--text-heading);
-  white-space: nowrap;
-}
-.live-deck .live-none {
-  color: var(--detail);
-  font-size: var(--text-heading);
-  font-weight: var(--weight-normal);
-  letter-spacing: var(--track-none);
-  white-space: normal;
-}
-
-/* An error (a `NoticeBanner`, laid out by .vf-notice): a band across the stage. */
-.live-problem {
-  gap: 8px;
-  padding: 8px 12px 8px 22px;
-  background: var(--panel);
-  border-bottom: 1px solid var(--bd3);
-  box-shadow: var(--edge-left) var(--red);
-  font-size: var(--text-body);
-}
-
-/* The preview: a hole, ringed by its own shadow, once the bench draws; until
-   then a loading surface (`.live-preview[data-loading]` in app.css). */
-.live-preview-cell {
-  position: relative;
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  min-height: 140px;
-  padding: 12px;
-  container-type: size;
-}
-.live-preview {
-  /* As big as its cell allows, at 16:9: the whole height the stage leaves it, or the whole width. */
-  aspect-ratio: 16 / 9;
-  width: min(100cqw, 100cqh * 16 / 9);
-  height: auto;
-  background: transparent;
-  box-shadow: 0 0 0 100vmax #000;
-}
-/* Playing in the window: a big way out to a display, over the preview. Only the buttons paint. */
-.live-fullscreen {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 16px;
-  pointer-events: none;
-}
-.live-fullscreen > * {
-  pointer-events: auto;
-}
-.live-fullscreen-go .wdg-button-body {
-  min-height: 64px;
-  height: auto;
-  padding: 12px 28px;
-  border-color: var(--fg);
-  background: var(--panel);
-  color: var(--fg);
-  font-size: var(--text-title);
-  font-weight: var(--weight-bold);
-  white-space: normal;
-  box-shadow: var(--shadow-lift);
-}
-.live-fullscreen-note {
-  max-width: 420px;
-  margin: 0;
-  padding: 6px 10px;
-  border-radius: var(--radius);
-  background: var(--panel);
-  color: var(--detail);
-  font-size: var(--text-body);
-  text-align: center;
-}
-
-/* The pads, in two groups with a clear gap between: the presets (previous,
-   random, and next, the widest), then the effects (hold, strobe, blackout,
-   freeze). Each group is one row at any width. */
-.live-pads {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  padding: 14px 22px 12px;
-  background: var(--panel);
-  border-top: 1px solid var(--bd3);
-}
-.live-pads-row {
-  display: grid;
-  gap: 8px;
-}
-.live-pads-row[data-row='presets'] {
-  grid-template-columns: minmax(64px, 1fr) minmax(64px, 1fr) minmax(64px, 2fr);
-}
-.live-pads-row[data-row='effects'] {
-  grid-template-columns: repeat(4, minmax(64px, 1fr));
-}
-.live-pads .live-pad {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  /* The toggles (aria-pressed) are wdg-toggle-body, which sizes to its text: every pad fills its cell. */
-  width: 100%;
-  max-width: none;
-  min-width: 64px;
-  min-height: 56px;
-  height: auto;
-  padding: 6px 8px;
-  border: 1px solid var(--bd3);
-  border-radius: var(--radius);
-  background: var(--panel);
-  color: var(--fg);
-  font-size: var(--text-heading);
-  font-weight: var(--weight-medium);
-  white-space: normal;
-  text-align: center;
-}
-.live-pad small {
-  color: var(--caption);
-  font-size: var(--text-label);
-  font-weight: var(--weight-normal);
-  letter-spacing: var(--track-label);
-}
-/* One look for "on": a pressed pad fills white. */
-.live-pads .live-pad[aria-pressed='true'] {
-  border-color: var(--fg);
-  background: var(--fg);
-  color: var(--bg);
-  font-weight: var(--weight-bold);
-}
-.live-pads .live-pad[aria-pressed='true'] small {
-  color: inherit;
-  opacity: 0.75;
-}
-/* Except HOLD, the one amber: --caution, not --amber, as the theme makes amber its (grey) primary, and HOLD must be seen. */
-.live-pads .live-pad[data-pad='hold'][aria-pressed='true'] {
-  border-color: var(--caution);
-  background: var(--caution);
-}
-/* And Blackout, the one red: outlined at rest, filled when the picture is black. */
-.live-pads .live-pad[data-pad='blackout'] {
-  border-color: var(--red);
-}
-.live-pads .live-pad[data-pad='blackout'][aria-pressed='true'] {
-  border-color: var(--red);
-  background: var(--red);
-  color: var(--bg);
-}
-
-/* Intensity, and More effects beside it. */
-.live-intensity {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 22px 14px;
-  background: var(--panel);
-  border-bottom: 1px solid var(--bd3);
-  --wdg-inside-height: 44px;
-}
-.live-intensity > .wdg-slider {
-  flex: 1;
-  min-width: 0;
-  min-height: 44px;
-}
-.live-intensity .wdg-slider-body {
-  min-height: 44px;
-}
-.live-intensity .wdg-slider-thumb {
-  --wdg-mark-width: 4px;
-}
-.live-more {
-  flex: none;
-  display: flex;
-}
-.live-more .wdg-button-body {
-  min-width: 44px;
-  min-height: 44px;
-  height: auto;
-  padding: 0 14px;
-  font-size: var(--text-body);
-}
-
-/* The crate: playlists, moods, up next. It scrolls on its own. */
+/* The crate's panel in its own stories (Crate.stories.tsx): playlists, moods, up next. It scrolls on its own. */
 .live-side {
-  grid-area: side;
   min-height: 0;
   overflow-y: auto;
   background: var(--panel);
@@ -749,101 +467,8 @@
   line-height: 1.45;
 }
 
-/* Help: every control and its keys, over everything. */
-.live-help {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-  background: var(--wdg-modal-scrim);
-}
-.live-help-panel {
-  width: min(760px, 100%);
-  max-height: 100%;
-  overflow-y: auto;
-  padding: 16px 20px 20px;
-  border: 1px solid var(--bd3);
-  border-radius: var(--radius-lg);
-  background: var(--panel);
-  box-shadow: var(--shadow-modal);
-  outline: none;
-}
-.live-help-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 8px;
-}
-.live-help-head h2 {
-  margin: 0;
-  color: var(--fg);
-  font-size: var(--text-title);
-  font-weight: var(--weight-strong);
-}
-.live-help-head .wdg-button-body {
-  min-width: 44px;
-  min-height: 44px;
-  font-size: var(--text-heading);
-}
-.live-help-group h3 {
-  margin: 16px 0 6px;
-  color: var(--caption);
-  font-size: var(--text-label);
-  font-weight: var(--weight-medium);
-  letter-spacing: var(--track-caps);
-  text-transform: uppercase;
-}
-.live-help-group dl {
-  margin: 0;
-}
-.live-help-row {
-  display: grid;
-  grid-template-columns: 9rem 8rem minmax(0, 1fr);
-  gap: 12px;
-  align-items: baseline;
-  padding: 6px 0;
-  border-top: 1px solid var(--bd3);
-  font-size: var(--text-body);
-}
-.live-help-row dt {
-  color: var(--fg);
-  font-weight: var(--weight-medium);
-}
-.live-help-row dd {
-  margin: 0;
-  color: var(--ui);
-}
-.live-help-keys kbd {
-  display: inline-block;
-  padding: 1px 6px;
-  border: 1px solid var(--bd3);
-  border-radius: var(--radius-sm);
-  color: var(--fg);
-  font-family: var(--sans);
-  font-size: var(--text-label);
-  font-weight: var(--weight-medium);
-  white-space: nowrap;
-}
-
 /* Focus on every control here, in the ring every view uses (access.css). */
-.live
-  :is(
-    .live-status-light,
-    .live-status-btn,
-    .live-pad,
-    .live-tap,
-    .live-crate-playlist,
-    .live-crate-chip,
-    .live-crate-row,
-    .live-crate-more,
-    .wdg-button-body,
-    [role='slider'],
-    [role='radio']
-  ):focus-visible {
+.live :is(.live-status-light, .live-status-btn, .live-tap, .live-crate-playlist, .live-crate-chip, .live-crate-row, .live-crate-more, .wdg-button-body, [role='slider'], [role='radio']):focus-visible {
   outline: 2px solid var(--vf-focus-ring);
   outline-offset: 2px;
 }
@@ -852,54 +477,9 @@
   outline-offset: -2px;
 }
 
-@media (max-width: 600px) {
-  .live-help-row {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 2px;
-  }
-}
-
-/* Narrow: one column, the crate under the stage, and the whole page scrolls. */
+/* Narrow: the status strip wraps. */
 @media (max-width: 899px) {
-  .live {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto;
-    grid-template-areas:
-      'strip'
-      'banner'
-      'stage'
-      'side';
-    overflow-y: auto;
-  }
   .live-status-strip {
     flex-wrap: wrap;
-  }
-  /* Each row as tall as what's in it: with min-height 0 the rows shrink to fit the window and overlap. */
-  .live-stage,
-  .live-side {
-    overflow: visible;
-    min-height: auto;
-  }
-  .live-stage > * {
-    flex-shrink: 0;
-  }
-  .live-side {
-    border-left: 0;
-    border-top: 1px solid var(--bd3);
-  }
-  .live-deck,
-  .live-pads,
-  .live-intensity {
-    padding-left: 16px;
-    padding-right: 16px;
-  }
-  /* The page scrolls here, so the cell sizes to the preview rather than the preview to the cell. */
-  .live-preview-cell {
-    flex: none;
-    container-type: normal;
-  }
-  /* No more than about half the window tall, so the pads stay in reach. */
-  .live-preview {
-    width: min(100%, calc(48vh * 16 / 9));
   }
 }
