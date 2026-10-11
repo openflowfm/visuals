@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor } from 'storybook/test';
 import { Icon } from '../layout/icons.tsx';
+import { useLiveKeys } from '../liveKeys.ts';
 import { ViewSwitch } from '../views.tsx';
 import { crateModeFor, escapeDoes, panelsAtStart, STAGE_CRATE_ID, toggleCrate, togglePanels, type Panels } from './stage-model.ts';
 import { StageLayout } from './StageLayout.tsx';
@@ -16,6 +17,8 @@ interface Args {
   hidden: boolean;
   warning: boolean;
   inWindow: boolean;
+  /** Esc held at start, as if pressed and not let go: the progress toward leaving. */
+  leaving?: boolean;
 }
 
 /** The native preview's stand-in: where the engine's view shows through the hole, a still from the starter set (preview.tsx sets --sb-still). */
@@ -36,26 +39,43 @@ const STAND_IN = `html[data-sb-desk] .app.home.lay.stage > .stage-picture[data-h
  * and show the panels, Esc showing hidden panels, Esc or a press outside
  * putting a laid-over crate away.
  */
-function Composed({ width, height, crate, hidden, warning, inWindow }: Args) {
+function Composed({ width, height, crate, hidden, warning, inWindow, leaving: heldAtStart = false }: Args) {
   const [panels, setPanels] = useState<Panels>(hidden ? togglePanels(panelsAtStart(crate)) : panelsAtStart(crate));
+  const [leaving, setLeaving] = useState(heldAtStart);
+  const [left, setLeft] = useState(false);
   const open = crateModeFor(width, panels.crate) !== 'hidden';
-  useEffect(() => {
-    const key = (e: KeyboardEvent) => {
-      if (e.defaultPrevented) return;
-      if (e.key === '\\') setPanels(togglePanels);
-      if (e.key === 'Escape') setPanels((p) => (escapeDoes(p) === 'show' ? togglePanels(p) : p));
-    };
-    window.addEventListener('keydown', key);
-    return () => window.removeEventListener('keydown', key);
-  }, []);
+  const none = () => {};
+  // Live's keys as Live wires them: Esc pressed shows hidden panels, held 3 s leaves (here, says so).
+  useLiveKeys({
+    editor: () => setLeft(true),
+    act: none,
+    fx: none,
+    rate: none,
+    favourite: none,
+    help: none,
+    sheetOpen: () => false,
+    panels: () => setPanels(togglePanels),
+    escape: () => {
+      if (escapeDoes(panels) === 'show') {
+        setPanels(togglePanels);
+        return true;
+      }
+      // A crate laid over the picture takes Esc before live does.
+      if (crateModeFor(width, panels.crate) !== 'overlay') return false;
+      setPanels((p) => ({ ...p, crate: false }));
+      return true;
+    },
+    holding: setLeaving,
+  });
   return (
-    <div style={{ position: 'relative', width, height, overflow: 'hidden' }}>
+    <div style={{ position: 'relative', width, height, overflow: 'hidden' }} data-left={left ? '' : undefined}>
       <style>{STAND_IN}</style>
       <StageLayout
         width={width}
         panels={panels}
         warning={warning}
         inWindow={inWindow}
+        leaving={leaving}
         onCrateAway={() => setPanels((p) => ({ ...p, crate: false }))}
         crate={
           <div className="sb-stage-crate">
@@ -111,7 +131,7 @@ function Composed({ width, height, crate, hidden, warning, inWindow }: Args) {
 const meta = {
   title: 'Live/Stage/Layout',
   component: Composed,
-  args: { width: 1440, height: 900, crate: null, hidden: false, warning: false, inWindow: false },
+  args: { width: 1440, height: 900, crate: null, hidden: false, warning: false, inWindow: false, leaving: false },
   parameters: { scope: 'bare', layout: 'fullscreen' },
 } satisfies Meta<typeof Composed>;
 export default meta;
@@ -167,6 +187,25 @@ export const Windowed: Story = {
   args: { inWindow: true },
   play: async ({ canvas }) => {
     await expect(canvas.getByRole('button', { name: 'Go full screen on Projector' })).toBeVisible();
+  },
+};
+
+/** Esc held to leave live: a ring filling over 3 s and "Keep holding Esc to leave live" over the picture's middle; let go early, it goes. */
+export const EscHeld: Story = {
+  args: { leaving: true },
+  play: async ({ canvas, canvasElement }) => {
+    // It fades in after a beat, so a short press shows nothing.
+    await waitFor(() => expect(canvas.getByText('Keep holding Esc to leave live')).toBeVisible());
+    // Held from the keyboard (one user, so it knows the key is down): shows, and let go early, goes without leaving.
+    const user = userEvent.setup();
+    await user.keyboard('{Escape>}');
+    await user.keyboard('{/Escape}');
+    await waitFor(() => expect(canvas.queryByText('Keep holding Esc to leave live')).toBeNull());
+    await user.keyboard('{Escape>}');
+    await expect(await canvas.findByRole('status')).toBeInTheDocument();
+    await user.keyboard('{/Escape}');
+    await waitFor(() => expect(canvas.queryByRole('status')).toBeNull());
+    await expect(canvasElement.querySelector('[data-left]')).toBeNull();
   },
 };
 

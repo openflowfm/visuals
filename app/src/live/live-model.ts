@@ -48,14 +48,8 @@ export interface LiveState {
   up: pl.Up | null;
   /** The notice showing (a failure), or null. */
   error: Notice | null;
-  /** A quiet line over the dock that is a state, not a failure: Hold keeping the preset (until it's let go), or leaving waiting for its second press. */
+  /** A quiet line over the dock that is a state, not a failure (none is said today). */
   hint?: string | null;
-  /**
-   * Leave live through this: with the output on a display, the first call only
-   * asks (the hint) and a second within `LEAVE_MS` calls `go`; otherwise `go`
-   * at once. Esc never leaves (liveKeys), so this is ✕'s and ⌘⇧L's way out.
-   */
-  leave?(go: () => void): void;
   setError(n: Notice | null): void;
   /** A handler that shows `message` with the error it is given. */
   fail(message: string): (e: unknown) => void;
@@ -85,12 +79,6 @@ export interface LiveState {
 export function sinceAfter(was: number, now: Pick<pl.Now, 'path' | 'error'>, at: number): number {
   return now.path && !now.error ? at : was;
 }
-
-/** How long leaving live waits for its second press while the output shows on a display. */
-export const LEAVE_MS = 4000;
-
-/** What the dock says after the first press to leave with the output showing. */
-export const LEAVE_HINT = 'The output is showing: press ⌘⇧L (or ✕) again to leave live and close it.';
 
 /**
  * The Intensity slider's position, 0–1, read back from the sensitivity it set:

@@ -1,4 +1,5 @@
-import { useEffect, useRef, type RefObject } from 'react';
+import { useEffect, useRef, type CSSProperties, type RefObject } from 'react';
+import { LEAVE_HOLD_MS } from '../liveKeys.ts';
 import { Preview } from '../views.tsx';
 import { isTyping } from '../shell.ts';
 import { say } from '../words.ts';
@@ -26,6 +27,28 @@ export const PANELS_HINT = 'for controls';
 
 /** The hint's name to a screen reader: it is a button that shows the panels. */
 export const PANELS_HINT_LABEL = 'Show controls (\\)';
+
+/** What the progress says while Esc is held to leave live. */
+export const LEAVING_TEXT = 'Keep holding Esc to leave live';
+
+/**
+ * Esc held toward leaving: a ring filling over `LEAVE_HOLD_MS` from the press,
+ * and the line saying to keep holding, in an opaque card over the picture's
+ * middle. It fades in after a beat (stage.css), so a short press shows nothing.
+ */
+function Leaving() {
+  return (
+    <div className="stage-leaving" role="status" style={{ '--stage-leave-hold': `${LEAVE_HOLD_MS}ms` } as CSSProperties}>
+      <div className="stage-leaving-card">
+        <svg className="stage-leaving-ring" viewBox="0 0 40 40" aria-hidden="true">
+          <circle className="stage-leaving-track" cx="20" cy="20" r="17" />
+          <circle className="stage-leaving-fill" cx="20" cy="20" r="17" pathLength={1} />
+        </svg>
+        <p>{LEAVING_TEXT}</p>
+      </div>
+    </div>
+  );
+}
 
 /** What can take focus inside a panel, in order. */
 const FOCUSABLE = 'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
@@ -62,7 +85,8 @@ function useOverlayFocus(panel: RefObject<HTMLElement | null>, mode: CrateMode) 
 /**
  * Escape, or a press outside the laid-over crate and its toggle (a control
  * naming `STAGE_CRATE_ID` in `aria-controls`), calls `away`. Escape is taken
- * (`preventDefault`), so live mode's keys don't also leave live on it.
+ * (`preventDefault`), so live mode's keys don't also act on the press (held on,
+ * it still leaves live).
  */
 function useDismiss(on: boolean, panel: RefObject<HTMLElement | null>, away: () => void) {
   const latest = useRef(away);
@@ -115,9 +139,11 @@ function useDismiss(on: boolean, panel: RefObject<HTMLElement | null>, away: () 
  * hint, shown as the pointer nears the bottom, that `\` brings them back.
  * With the warning owed the picture is dark (the preview isn't mounted), the
  * crate and the dock inert and dimmed, and `centre` (the warning) centred over
- * where the picture would be, even with the panels hidden.
+ * where the picture would be, even with the panels hidden. While Esc is held
+ * to leave live (`leaving`), its progress shows over everything, the panels
+ * hidden or not; the output, the audience's picture, never shows it.
  */
-export function StageLayout({ width, panels, warning = false, inWindow, crate, head, dock, centre, children, onCrateAway, onPanels }: StageLayoutProps) {
+export function StageLayout({ width, panels, warning = false, inWindow, leaving = false, crate, head, dock, centre, children, onCrateAway, onPanels }: StageLayoutProps) {
   const shown = panels.shown;
   const mode: CrateMode = shown ? crateModeFor(width, panels.crate) : 'hidden';
   const panel = useRef<HTMLElement | null>(null);
@@ -160,6 +186,8 @@ export function StageLayout({ width, panels, warning = false, inWindow, crate, h
       )}
 
       {children}
+
+      {leaving && <Leaving />}
     </div>
   );
 }

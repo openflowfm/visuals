@@ -3,8 +3,8 @@
 // Live's wiring of the Stage, mounted in a DOM with the app's commands faked
 // and the Stage's parts stood in for (their lanes test them): the crate's mode
 // at a window's width and the viewer's choice kept for next time, `\` hiding
-// the panels, Esc (hidden panels, then a laid-over crate, never leaving, here
-// or on the output), ✕ and ⌘⇧L leaving (twice with the output on a display),
+// the panels, Esc (pressed: hidden panels, then a laid-over crate; held 3 s:
+// leaving, its progress shown, here or on the output), ✕ and ⌘⇧L leaving at once,
 // and the ? overlay listing the Stage's own controls.
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -29,7 +29,7 @@ vi.mock('./live/StageLayout.tsx', async () => {
     StageLayout: (p: StageLayoutProps) =>
       h(
         'div',
-        { 'data-testid': 'stage', 'data-shown': String(p.panels.shown), 'data-width': p.width, 'data-in-window': String(p.inWindow) },
+        { 'data-testid': 'stage', 'data-shown': String(p.panels.shown), 'data-width': p.width, 'data-in-window': String(p.inWindow), 'data-leaving': String(p.leaving === true) },
         p.panels.shown ? h(Fragment, null, p.head, p.crate, p.dock) : h('button', { type: 'button', onClick: p.onPanels }, 'show controls'),
         p.centre,
         p.children,
@@ -197,14 +197,72 @@ describe("the Stage's keys", () => {
     expect(onMode).not.toHaveBeenCalled();
   });
 
-  it('Esc on the output shows hidden panels, and never leaves live', async () => {
+  it('Esc pressed on the output shows hidden panels, and never leaves live', async () => {
     const { onMode } = await mount();
     await press('\\');
     expect(stage().dataset.shown).toBe('false');
-    await act(() => on.get('output-escape')?.({ payload: null }));
+    await act(() => on.get('output-escape')?.({ payload: 'down' }));
     expect(stage().dataset.shown).toBe('true');
-    await act(() => on.get('output-escape')?.({ payload: null }));
+    await act(() => on.get('output-escape')?.({ payload: 'up' }));
+    expect(stage().dataset.leaving).toBe('false');
+    await act(() => on.get('output-escape')?.({ payload: 'down' }));
+    await act(() => on.get('output-escape')?.({ payload: 'up' }));
     expect(onMode).not.toHaveBeenCalled();
+  });
+
+  describe('Esc held', () => {
+    afterEach(() => vi.useRealTimers());
+    const release = () => act(() => void fireEvent.keyUp(document.body, { key: 'Escape' }));
+
+    it('shows its progress on the Stage and leaves live after 3 s, the output on a display', async () => {
+      const { onMode } = await mount();
+      vi.useFakeTimers();
+      await press('Escape');
+      expect(stage().dataset.leaving).toBe('true');
+      await act(() => void vi.advanceTimersByTime(2900));
+      expect(onMode).not.toHaveBeenCalled();
+      // Repeats don't start it again.
+      await act(() => void fireEvent.keyDown(document.body, { key: 'Escape', repeat: true }));
+      await act(() => void vi.advanceTimersByTime(100));
+      expect(onMode).toHaveBeenCalledWith('home', '/p/a.milk');
+      expect(stage().dataset.leaving).toBe('false');
+    });
+
+    it('let go early, shows nothing more and stays', async () => {
+      const { onMode } = await mount();
+      vi.useFakeTimers();
+      await press('Escape');
+      await act(() => void vi.advanceTimersByTime(2000));
+      await release();
+      expect(stage().dataset.leaving).toBe('false');
+      await act(() => void vi.advanceTimersByTime(5000));
+      expect(onMode).not.toHaveBeenCalled();
+    });
+
+    it('cancels when the window loses focus', async () => {
+      const { onMode } = await mount();
+      vi.useFakeTimers();
+      await press('Escape');
+      await act(() => void window.dispatchEvent(new Event('blur')));
+      expect(stage().dataset.leaving).toBe('false');
+      await act(() => void vi.advanceTimersByTime(5000));
+      expect(onMode).not.toHaveBeenCalled();
+    });
+
+    it('on the output, shows its progress here and leaves after 3 s; let go early, stays', async () => {
+      const { onMode } = await mount();
+      vi.useFakeTimers();
+      await act(() => on.get('output-escape')?.({ payload: 'down' }));
+      expect(stage().dataset.leaving).toBe('true');
+      await act(() => void vi.advanceTimersByTime(1000));
+      await act(() => on.get('output-escape')?.({ payload: 'up' }));
+      expect(stage().dataset.leaving).toBe('false');
+      await act(() => void vi.advanceTimersByTime(5000));
+      expect(onMode).not.toHaveBeenCalled();
+      await act(() => on.get('output-escape')?.({ payload: 'down' }));
+      await act(() => void vi.advanceTimersByTime(3000));
+      expect(onMode).toHaveBeenCalledWith('home', '/p/a.milk');
+    });
   });
 
   it('lists the Stage’s own controls in the ? overlay', async () => {
@@ -228,17 +286,15 @@ describe('Live, around the Stage', () => {
     expect(onMode).toHaveBeenCalledWith('home', '/p/a.milk');
   });
 
-  it('with the output on a display, ✕ and ⌘⇧L ask on the first press and leave on the second', async () => {
+  it('with the output on a display, ✕ and ⌘⇧L leave at once too, as they are deliberate', async () => {
     const { onMode } = await mount();
     expect(stage().dataset.inWindow).toBe('false');
     await home();
-    expect(onMode).not.toHaveBeenCalled();
-    await home();
+    expect(onMode).toHaveBeenCalledOnce();
     expect(onMode).toHaveBeenCalledWith('home', '/p/a.milk');
     onMode.mockClear();
     await cmdShiftL();
-    expect(onMode).not.toHaveBeenCalled();
-    await cmdShiftL();
+    expect(onMode).toHaveBeenCalledOnce();
     expect(onMode).toHaveBeenCalledWith('home', '/p/a.milk');
   });
 

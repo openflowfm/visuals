@@ -162,12 +162,17 @@ rendered (no graph, no inspector) and stage previews are off
 what's next in the playing playlist, previous / random / next (all through
 `actions::act`, as a controller would), the playlists panel with play/stop and
 auto-advance, the audio input, and the output's display picker and status. Keys: ← ↑
-previous, → ↓ next, R random. ⌘⇧L or ✕ leaves live mode; with the output on a display
-the first press only asks, and a second within 4 s leaves. Esc never leaves: it shows
-hidden panels or puts a laid-over crate away. The output never becomes the key window, so
-Esc after a click on it lands on the main window's page, or on no window, which a local
-`NSEvent` monitor (`output::native::watch_escape`) turns into the page's `output-escape`
-event, which shows the panels.
+previous, → ↓ next, R random. ⌘⇧L or ✕ leaves live mode at once, as they are
+deliberate. Esc held for 3 s (`LEAVE_HOLD_MS` in `liveKeys.ts`) leaves too, timed from
+its first press (repeats don't restart it; letting go or the window losing focus cancels
+it), while the Stage shows a ring filling with "Keep holding Esc to leave live" in the
+main window, never on the output; a short Esc only shows hidden panels or puts a
+laid-over crate away, so a stray press mid-set can't close the output. The output never
+becomes the key window, so Esc after a click on it lands on the main window's page, or on
+no window, which a local `NSEvent` monitor (`output::native::watch_escape`) turns into the
+page's `output-escape` event: `"down"` on the first press (repeats are swallowed) and
+`"up"` on its release or the app being left (`output::escape_says`), so the page times
+the hold the same way.
 
 The output (`output.rs`) is a borderless native `NSWindow` with no webview, the size of
 the chosen display (`NSScreen`), at the status window level so neither the menu bar nor
@@ -228,8 +233,8 @@ the frame every second and each change's beat.
 Not yet: one output only (no mirroring to several displays); the presets still draw at
 about `bench::DRAW`'s 1920×1080 pixels and are scaled to the display, so a 4K projector
 gets an upscaled picture, and a landscape display that isn't 16:9 (an ultrawide) gets
-bars; on a single display the output covers the app's window, and only the keys (Esc,
-⌘⇧L) get back out. The mouse cursor is hidden while it is over the output (a check
+bars; on a single display the output covers the app's window, and only the keys (Esc
+held, ⌘⇧L) get back out. The mouse cursor is hidden while it is over the output (a check
 ten times a second on the main thread, as the output never becomes the key window; macOS
 only hides it while the app is the active one).
 

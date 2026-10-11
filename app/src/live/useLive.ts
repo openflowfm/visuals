@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import * as api from '../api.ts';
 import * as fx from '../fx.ts';
 import { useNotice, useTauriEvent } from '../hooks.ts';
@@ -9,13 +9,7 @@ import * as output from '../output.ts';
 import { leave } from '../OutputPanel.tsx';
 import * as pl from '../playlists.ts';
 import { notice, openFailed } from '../shell.ts';
-import { intensityOf, keyOf, LEAVE_HINT, LEAVE_MS, playsWindowed, ratingOf, sendIntensity, sinceAfter, starred, type LiveState } from './live-model.ts';
-
-/** What the hint line says, and why: leaving live waiting for its second press. */
-interface Hint {
-  kind: 'leave';
-  text: string;
-}
+import { intensityOf, keyOf, playsWindowed, ratingOf, sendIntensity, sinceAfter, starred, type LiveState } from './live-model.ts';
 
 /**
  * Live mode's state, read from the app and followed as it changes: the
@@ -99,9 +93,6 @@ export function useLive({ start, windowed = false }: { start: string | null; win
     else if (now.path) dismiss();
   });
 
-  // A quiet line over the dock (not a failure): leaving live asking for a second press.
-  const [hint, setHint] = useState<Hint | null>(null);
-
   const act = useCallback(
     (action: pl.Action) =>
       void pl.act(action).catch((e) => {
@@ -111,32 +102,6 @@ export function useLive({ start, windowed = false }: { start: string | null; win
     [setError],
   );
 
-  // Leaving live with the output on a display takes a second press within LEAVE_MS, so one stray click or ⌘⇧L can't close it mid-set.
-  const outputOpen = status.display !== null;
-  const armed = useRef<number | null>(null);
-  const askLeave = useCallback(
-    (go: () => void) => {
-      const now = Date.now();
-      if (!outputOpen || (armed.current !== null && now - armed.current < LEAVE_MS)) {
-        armed.current = null;
-        setHint(null);
-        return go();
-      }
-      armed.current = now;
-      setHint({ kind: 'leave', text: LEAVE_HINT });
-    },
-    [outputOpen],
-  );
-  // The second press's window passing (or the output closing) takes the question away.
-  useEffect(() => {
-    if (hint?.kind !== 'leave') return;
-    if (!outputOpen) return setHint(null);
-    const t = window.setTimeout(() => {
-      armed.current = null;
-      setHint((h) => (h?.kind === 'leave' ? null : h));
-    }, LEAVE_MS);
-    return () => window.clearTimeout(t);
-  }, [hint, outputOpen]);
   const actFx = useCallback((action: fx.FxAction) => void fx.act(action).catch(fail("Couldn't change that effect.")), [fail]);
 
   const key = useMemo(() => keyOf(rows, current), [rows, current]);
@@ -180,8 +145,7 @@ export function useLive({ start, windowed = false }: { start: string | null; win
     says: pl.nextSays(lists, held),
     up: pl.upNext(lists),
     error,
-    hint: hint?.text ?? null,
-    leave: askLeave,
+    hint: null,
     setError,
     fail,
     dismiss,

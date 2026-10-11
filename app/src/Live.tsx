@@ -28,8 +28,6 @@ function useWidth(): number {
   return width;
 }
 
-const goNow = (go: () => void) => go();
-
 /**
  * Live mode, as the Stage: the picture full-bleed across the main window, and
  * Home's opaque inset panels over it — the header's two capsules along the top
@@ -40,10 +38,11 @@ const goNow = (go: () => void) => go();
  * The crate docks from `STAGE_DOCK_AT` px and is laid over the rest below it,
  * where it starts put away; the viewer's choice is kept (`CRATE_KEY`) where it
  * docks, as Home keeps its sidebar's. `\` hides every panel, leaving only the
- * picture, and shows them again. Esc shows hidden panels, or puts a laid-over
- * crate away, and never leaves live, here or on the output (which tells the
- * page, `output.onEscape`). ✕ and ⌘⇧L leave through `useLive`'s `leave`: with
- * the output on a display, only a second press within 4 s leaves. Leaving puts the
+ * picture, and shows them again. Esc pressed shows hidden panels, or puts a
+ * laid-over crate away; held for 3 s (`LEAVE_HOLD_MS`) it leaves live, here or
+ * on the output (which tells the page of Esc down and up, `output.onEscape`),
+ * the Stage showing the hold's progress in this window and never on the output.
+ * ✕ and ⌘⇧L leave at once, as they are deliberate. Leaving puts the
  * effects back (`useLive`'s unmount), so nothing is left inverted or frozen.
  * With the flashing warning owed, `App` doesn't mount live at all until it is
  * understood.
@@ -64,10 +63,10 @@ export function Live({
   const [panels, setPanels] = useState<Panels>(() => panelsAtStart(width < STAGE_DOCK_AT ? null : rememberedChoice(CRATE_KEY)));
   const mode = crateModeFor(width, panels.crate);
 
-  // Every way out goes through `live.leave`: with the output on a display, the first press only asks.
-  const leave = live.leave ?? goNow;
-  const leaveLive = useCallback(() => leave(() => onMode(HOME, current)), [leave, onMode, current]);
-  const onView = useCallback((next: View) => next !== 'live' && leave(() => onMode(next, current)), [leave, onMode, current]);
+  // ✕ and ⌘⇧L leave at once; Esc leaves only held for LEAVE_HOLD_MS (liveKeys), with its progress shown while held.
+  const [leaving, setLeaving] = useState(false);
+  const leaveLive = useCallback(() => onMode(HOME, current), [onMode, current]);
+  const onView = useCallback((next: View) => next !== 'live' && onMode(next, current), [onMode, current]);
 
   /** Show or put away the crate; kept for next time only where it docks (laid over the picture, it starts put away again). */
   const chooseCrate = useCallback(
@@ -80,8 +79,9 @@ export function Live({
   const onCrate = () => chooseCrate(toggleCrate(panels, width));
   const crateAway = () => chooseCrate({ ...panels, crate: false });
 
-  useLiveKeys({
+  const escapes = useLiveKeys({
     editor: leaveLive,
+    holding: setLeaving,
     act: live.act,
     fx: live.actFx,
     rate: live.rate,
@@ -101,8 +101,12 @@ export function Live({
       return false;
     },
   });
-  // Esc on the output does what it does here, never leaving: it shows hidden panels.
-  useTauriEvent(output.onEscape, () => setPanels((p) => (p.shown ? p : { ...p, shown: true })));
+  // Esc on the output does what it does here: pressed, it shows hidden panels; held, it leaves (shown here, never on the output).
+  useTauriEvent(output.onEscape, (says) => {
+    if (says === 'up') return escapes.escapeUp();
+    setPanels((p) => (p.shown ? p : { ...p, shown: true }));
+    escapes.escapeDown();
+  });
 
   const offer = live.inWindow && (live.displays?.length ?? 0) > 0;
 
@@ -112,6 +116,7 @@ export function Live({
         width={width}
         panels={panels}
         inWindow={live.inWindow}
+        leaving={leaving}
         head={<StageHead live={live} crateOpen={mode !== 'hidden'} onCrate={onCrate} help={help} onHelp={() => setHelp(true)} onView={onView} />}
         crate={<StageCrate live={live} mode={mode} onAway={crateAway} />}
         dock={<StageDock live={live} />}
