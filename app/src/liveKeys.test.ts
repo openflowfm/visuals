@@ -103,7 +103,7 @@ describe('liveKeys', () => {
     const matches = (tag: string, sel: string) => {
       if (sel === '.vf-sheet') return /class="(vf-sheet|vf-sheet\s[^"]*)"/.test(tag);
       if (sel === '[aria-modal="true"]') return tag.includes('aria-modal="true"');
-      if (sel === '[role="dialog"]:not(.live-status-pop)') return tag.includes('role="dialog"') && !tag.includes('live-status-pop');
+      if (sel === '[role="dialog"]:not(.live-status-pop):not(.vf-pop-panel)') return tag.includes('role="dialog"') && !tag.includes('live-status-pop') && !tag.includes('vf-pop-panel');
       throw new Error(`unexpected selector ${sel}`);
     };
     vi.stubGlobal('document', { querySelector: (s: string) => (s.split(',').some((sel) => tags().some((t) => matches(t, sel.trim()))) ? {} : null) });
@@ -134,6 +134,10 @@ describe('liveKeys', () => {
       page.html = '<div class="live-status-pop" data-pop="x" role="dialog" aria-label="x"></div>';
       press('Escape');
       expect(sent).toEqual(['editor']);
+      // Home's popover (the Stage's Beat and Output lights) isn't modal either.
+      page.html = '<div class="vf-pop-panel" id="x" role="dialog" aria-label="x"></div>';
+      press('r');
+      expect(sent).toEqual(['editor', { kind: 'random' }]);
     } finally {
       vi.unstubAllGlobals();
     }
@@ -246,6 +250,45 @@ describe('liveKeys', () => {
     press('?', { shiftKey: true, repeat: true });
     expect(sent).toEqual(['help']);
     expect(prevented()).toBe(2);
+  });
+
+  it("hides or shows the Stage's panels on \\, once however long it repeats; without the Stage it leaves \\ alone", () => {
+    const { sent, press, prevented } = setup();
+    press('\\');
+    expect(sent).toEqual([]);
+    expect(prevented()).toBe(0);
+    const panels: string[] = [];
+    let p = 0;
+    const keys = liveKeys({ editor: () => panels.push('editor'), act: () => {}, fx: () => {}, rate: () => {}, favourite: () => {}, help: () => {}, panels: () => panels.push('panels') });
+    const stage = (key: string, more: Partial<KeyLike> = {}) =>
+      keys.keydown({ key, metaKey: false, shiftKey: false, ctrlKey: false, altKey: false, repeat: false, target: null, preventDefault: () => p++, ...more });
+    stage('\\');
+    stage('\\', { repeat: true });
+    expect(panels).toEqual(['panels']);
+    expect(p).toBe(2);
+  });
+
+  it('gives Esc to the Stage first (to show hidden panels), and leaves only when the Stage had no use for it', () => {
+    const sent: string[] = [];
+    let hidden = true;
+    const keys = liveKeys({
+      editor: () => sent.push('editor'),
+      act: () => {},
+      fx: () => {},
+      rate: () => {},
+      favourite: () => {},
+      help: () => {},
+      escape: () => {
+        if (!hidden) return false;
+        hidden = false;
+        sent.push('shown');
+        return true;
+      },
+    });
+    const esc = () => keys.keydown({ key: 'Escape', metaKey: false, shiftKey: false, ctrlKey: false, altKey: false, repeat: false, target: null, preventDefault: () => {} });
+    esc();
+    esc();
+    expect(sent).toEqual(['shown', 'editor']);
   });
 
   it('does nothing for a key it has no use for', () => {
