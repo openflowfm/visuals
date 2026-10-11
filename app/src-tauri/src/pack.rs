@@ -8,8 +8,9 @@
 //! their `index.json` and `thumbnails/`, kept in the openflowfm/visual-presets
 //! repo and downloaded as its archive at a pinned commit, so the library arrives
 //! grouped and with pictures. When it can't be reached, projectM's bare pack is
-//! fetched instead
-//! ([`PROJECTM`]). The download unpacks as it arrives, each file written beside
+//! fetched instead ([`PROJECTM`]), and the page is told the library came
+//! without its pictures ([`PackStatus::bare`]) and offered the bundle again.
+//! The download unpacks as it arrives, each file written beside
 //! its place and then renamed into it, so the library fills in as it goes and a
 //! retry only fetches what is missing. The presets folder is watched, and the
 //! page told when it changes ([`CHANGED`]).
@@ -157,6 +158,10 @@ pub struct PackStatus {
     received: u64,
     /// Why the last download failed.
     error: Option<String>,
+    /// The pack in the presets folder came without its index and thumbnails:
+    /// the bundle couldn't be had and projectM's bare pack was fetched instead
+    /// ([`bare`]). The page says so and offers the bundle again.
+    bare: bool,
 }
 
 /// The download as it goes, shared by [`pack_download`] and [`pack_status`].
@@ -172,8 +177,23 @@ struct Download {
 
 static DOWNLOAD: Mutex<Download> = Mutex::new(Download { state: State::Idle, received: 0, error: None, installed: 0, size: BUNDLE.size });
 
-fn status(d: &Download, starter: usize, installed: usize) -> PackStatus {
-    PackStatus { starter, installed, total: TOTAL, size: d.size, state: d.state, received: d.received, error: d.error.clone() }
+fn status(d: &Download, starter: usize, installed: usize, bare: bool) -> PackStatus {
+    PackStatus { starter, installed, total: TOTAL, size: d.size, state: d.state, received: d.received, error: d.error.clone(), bare }
+}
+
+/// Whether the pack in `dest` came whole from the fallback, without its index
+/// and thumbnails: an archive was unpacked whole ([`RECORD`] is there), or every
+/// preset is in, yet there's no `index.json` (our bundle places it last, once
+/// it is all in). A first download cut off part-way is neither.
+fn bare(dest: &Path) -> bool {
+    !dest.join(INDEX).is_file() && (dest.join(RECORD).is_file() || engine::preset::milk_files(dest).len() >= TOTAL)
+}
+
+/// Where to download from: `all` ([`sources`]), or only the bundle when the pack
+/// is [`bare`]. Falling back again would fetch the same bare pack over itself,
+/// so a retry for the pictures either brings them or says why it couldn't.
+fn sources_for(all: Vec<Source>, bare: bool) -> Vec<Source> {
+    if bare { all.into_iter().take(1).collect() } else { all }
 }
 
 fn starter_count(handle: &AppHandle) -> usize {
@@ -185,17 +205,22 @@ fn starter_count(handle: &AppHandle) -> usize {
 pub fn pack_status(handle: AppHandle, app: tauri::State<App>) -> PackStatus {
     let d = DOWNLOAD.lock().unwrap();
     let installed = if d.state == State::Downloading { d.installed } else { engine::preset::milk_files(&app.library).len() };
-    status(&d, starter_count(&handle), installed)
+    status(&d, starter_count(&handle), installed, bare(&app.library.join(FOLDER)))
 }
 
 /// Download the full pack into the presets folder, telling the page how it goes
 /// on [`PROGRESS`]. Resolves when it ends; a call while one runs returns at once.
+/// When the bundle can't be had, projectM's bare pack is fetched instead, without
+/// asking: the presets are what was asked for, and the page then says they came
+/// without their pictures ([`PackStatus::bare`]); pressed again, it tries the
+/// bundle alone ([`sources_for`]).
 #[tauri::command]
 pub async fn pack_download(handle: AppHandle) -> Result<(), String> {
     if !begin(None) {
         return Ok(());
     }
-    let thread = std::thread::spawn(move || download(&handle, &sources(), false));
+    let bare = bare(&handle.state::<App>().library.join(FOLDER));
+    let thread = std::thread::spawn(move || download(&handle, &sources_for(sources(), bare), false));
     tauri::async_runtime::spawn_blocking(move || thread.join()).await.map_err(|e| e.to_string())?.unwrap_or_else(|_| Err("the download stopped unexpectedly".into()))
 }
 
@@ -265,6 +290,8 @@ fn download(handle: &AppHandle, sources: &[Source], quiet: bool) -> Result<(), S
     let library = handle.state::<App>().library.clone();
     let dest = library.join(FOLDER);
     let starter = starter_count(handle);
+    // A retry for the pictures stays bare until the bundle's index lands, at its end.
+    let was_bare = bare(&dest);
     let others = engine::preset::milk_files(&library).iter().filter(|p| !p.starts_with(&dest)).count();
     let mut last: Option<Instant> = None;
     let result = crate::crash::catch(std::panic::AssertUnwindSafe(|| {
@@ -277,15 +304,26 @@ fn download(handle: &AppHandle, sources: &[Source], quiet: bool) -> Result<(), S
             }
             if last.is_none_or(|t| t.elapsed() >= Duration::from_millis(100)) {
                 last = Some(Instant::now());
-                let _ = handle.emit(PROGRESS, status(&d, starter, d.installed));
+                let _ = handle.emit(PROGRESS, status(&d, starter, d.installed, was_bare));
             }
         })
     }))
     .unwrap_or_else(|_| Err("the download stopped unexpectedly".into()));
     let installed = engine::preset::milk_files(&library).len();
     let mut d = DOWNLOAD.lock().unwrap();
+    finish(&mut d, &result, quiet, installed, self::sources().first().map_or(0, |s| s.size));
+    let _ = handle.emit(PROGRESS, status(&d, starter, installed, bare(&dest)));
+    result.map(|_| ())
+}
+
+/// The download's state once it has ended with `result`: idle, or failed with
+/// why (a `quiet` one's failure is only logged), `installed` presets in, and
+/// the size the next download would fetch: the bundle's (`next`), which it
+/// always tries first, not the size of the fallback that may have come last.
+fn finish(d: &mut Download, result: &Result<usize, String>, quiet: bool, installed: usize, next: u64) {
     d.installed = installed;
-    match &result {
+    d.size = next;
+    match result {
         Ok(_) => (d.state, d.error) = (State::Idle, None),
         Err(e) if quiet => {
             eprintln!("pack: couldn't bring the pack up to date, trying again next launch: {e}");
@@ -293,8 +331,6 @@ fn download(handle: &AppHandle, sources: &[Source], quiet: bool) -> Result<(), S
         }
         Err(e) => (d.state, d.error) = (State::Failed, Some(e.clone())),
     }
-    let _ = handle.emit(PROGRESS, status(&d, starter, installed));
-    result.map(|_| ())
 }
 
 /// Counts the bytes read through it, and notes when the download broke off
@@ -1332,9 +1368,63 @@ mod tests {
     #[test]
     fn a_quiet_update_reads_as_installed_so_no_pack_bar_shows() {
         let d = Download { state: State::Downloading, received: 0, error: None, installed: quiet_count(120), size: 1 };
-        let s = status(&d, 0, d.installed);
+        let s = status(&d, 0, d.installed, false);
         assert!(s.installed >= s.total, "deleted presets: still shown as in");
         assert_eq!(quiet_count(TOTAL + 5), TOTAL + 5);
+    }
+
+    #[test]
+    fn a_pack_from_the_fallback_reads_as_bare_until_a_retry_brings_the_bundle() {
+        let dir = temp();
+        let dest = dir.join("cream-of-the-crop");
+        assert!(!bare(&dest), "no pack");
+        std::fs::create_dir_all(dest.join("A")).unwrap();
+        std::fs::write(dest.join("A/a.milk"), b"a").unwrap();
+        assert!(!bare(&dest), "a first download cut off part-way: the button finishes it");
+
+        // The bundle can't be had: projectM's bare pack comes instead.
+        let projectm = at(serve(ok(&tar_gz(&[("top/A/a.milk", b"a"), ("top/A/b.milk", b"b")]))), 2);
+        assert_eq!(fetch(&[nowhere(), projectm], &dest, |_| {}, |_, _| {}).unwrap(), 2);
+        assert!(bare(&dest), "the presets are in, without their index or thumbnails");
+        let s = status(&Download { state: State::Idle, received: 0, error: None, installed: 2, size: 1 }, 0, 2, bare(&dest));
+        assert!(serde_json::to_value(&s).unwrap()["bare"].as_bool().unwrap(), "the page is told");
+
+        // The retry tries the bundle alone: a failure says why, and doesn't fetch the bare pack again.
+        let projectm_again = at(serve(ok(&tar_gz(&[("top/A/c.milk", b"c")]))), 2);
+        let err = fetch(&sources_for(vec![nowhere(), projectm_again], true), &dest, |_| {}, |_, _| {}).unwrap_err();
+        assert!(err.contains("couldn't reach"), "{err}");
+        assert!(!dest.join("A/c.milk").exists() && bare(&dest), "still bare, nothing fetched over it");
+
+        // The bundle answers: its index and thumbnails come in over the bare pack.
+        let index = index_of(&[("A/a.milk", b"a"), ("A/b.milk", b"b")], &[]);
+        let (ta, tb) = (thumb(b"a"), thumb(b"b"));
+        let gz = tar_gz(&[("top/A/a.milk", b"a"), ("top/A/b.milk", b"b"), (ta.as_str(), b"RIFFa"), (tb.as_str(), b"RIFFb"), ("top/index.json", &index)]);
+        let bundle = at(serve(ok(&gz)), 3);
+        assert_eq!(fetch(&sources_for(vec![bundle, nowhere()], true), &dest, |_| {}, |_, _| {}).unwrap(), 2);
+        assert!(!bare(&dest), "whole now");
+        assert_eq!(std::fs::read(dest.join(INDEX)).unwrap(), index);
+        assert_eq!(std::fs::read(dest.join(ta.trim_start_matches("top/"))).unwrap(), b"RIFFa");
+        assert_eq!(std::fs::read_to_string(dest.join(RECORD)).unwrap().trim(), bundle.url);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_retry_on_a_whole_or_unfinished_pack_keeps_the_fallback() {
+        let urls = |s: Vec<Source>| s.iter().map(|s| s.url).collect::<Vec<_>>();
+        assert_eq!(urls(sources_for(SOURCES.to_vec(), false)), [BUNDLE.url, PROJECTM.url]);
+        assert_eq!(urls(sources_for(SOURCES.to_vec(), true)), [BUNDLE.url]);
+    }
+
+    #[test]
+    fn after_a_download_the_size_is_the_bundles_not_the_fallbacks() {
+        let mut d = Download { state: State::Downloading, received: PROJECTM.size, error: None, installed: 0, size: PROJECTM.size };
+        finish(&mut d, &Ok(TOTAL), false, TOTAL, BUNDLE.size);
+        assert_eq!((d.state, d.size, d.installed, d.error.clone()), (State::Idle, BUNDLE.size, TOTAL, None));
+        d.state = State::Downloading;
+        finish(&mut d, &Err("no network".into()), false, 10, BUNDLE.size);
+        assert_eq!((d.state, d.error.as_deref()), (State::Failed, Some("no network")));
+        finish(&mut d, &Err("no network".into()), true, 10, BUNDLE.size);
+        assert_eq!((d.state, d.error), (State::Idle, None), "a quiet update's failure isn't shown");
     }
 
     #[test]
