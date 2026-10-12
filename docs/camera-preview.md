@@ -142,3 +142,21 @@ plus mean `X-Snapshot-Ms` reported by the native snapshot path. Resolution, acce
 preset and source changes start a fresh sample. Without valid frame IDs the UI
 explicitly reports reads/second and says native FPS is unavailable. Identity can
 still be recomposited onto a duplicate response without counting a new native frame.
+
+## Hardware-encoded output
+
+**Output transport → Auto** uses the native hardware H.264 stream when this browser
+supports the negotiated High-profile decoder. The browser checks the actual codec
+profile from `X-Video-Codec`, receives independent Annex-B keyframes with SPS/PPS,
+and decodes one frame at a time through WebCodecs. Every decoded `VideoFrame` closes
+after composition; Stop, page exit and decoder failures also dispose the decoder.
+Decode stalls are bounded. A 204 response means no new frame and contributes no FPS;
+unsupported service/codec or decode failure visibly falls back to raw RGBA.
+**Raw RGBA → comparison** retains the original path. Changing transport resets the
+rolling measurement; encode and decode timing appear alongside snapshot, transfer
+and composition costs. FPS is recorded only after decoding and composition.
+
+Browser hardware preference is not proof of its chosen decoder implementation.
+Measure the ten-second distinct-frame rate for each resolution/preset. This transport
+does not change the 320×180 contour preparation budget or request camera/microphone
+permission automatically.

@@ -2,6 +2,7 @@ import './style.css';
 import { TOKEN_KEY, tokenFrom } from '../bridge';
 import { Contours, rawFrameSize } from './contours';
 import { ColorSignal } from './color-signal';
+import { H264Decoder } from './h264-decoder';
 import { videoCapability } from './video-capability';
 import { OutputMeter } from './output-meter';
 import { CameraAudio } from './audio-input';
@@ -22,7 +23,7 @@ root.innerHTML = `
 <label class="knob"><span>Fresh camera <output id="mix-value">9%</output></span><input id="mix" type="range" min="0" max="100" value="9"/><small>Sparse ink → Dense ink</small></label>
 <label class="knob"><span>Afterimage <output id="persistence-value">65%</output></span><input id="persistence" type="range" min="0" max="98" value="65"/><small>Let your past selves linger</small></label>
 <label class="knob"><span>Speed <output id="speed-value">0.8×</output></span><input id="speed" type="range" min="10" max="300" value="80"/><small>Slow hypnosis → Full possession</small></label>
-<label class="knob"><span>Output resolution</span><select id="resolution" aria-label="Output resolution"><option value="720p" selected>720p · HD</option><option value="1080p">1080p · Full HD</option><option value="360p">360p · Faster</option></select></label><label class="mirror"><input id="show-timings" type="checkbox"/> Show timing breakdown</label><label class="mirror"><input id="mirror" type="checkbox" checked/> Mirror source <span>↔</span></label><button id="rescue">Bring my face back <span>↶</span></button></aside></section>
+<label class="knob"><span>Output resolution</span><select id="resolution" aria-label="Output resolution"><option value="720p" selected>720p · HD</option><option value="1080p">1080p · Full HD</option><option value="360p">360p · Faster</option></select></label><label class="knob"><span>Output transport</span><select id="output-transport" aria-label="Output transport"><option value="auto" selected>Auto · hardware H.264</option><option value="raw">Raw RGBA · comparison</option></select><small id="transport-status">Checking local decoder…</small></label><label class="mirror"><input id="show-timings" type="checkbox"/> Show timing breakdown</label><label class="mirror"><input id="mirror" type="checkbox" checked/> Mirror source <span>↔</span></label><button id="rescue">Bring my face back <span>↶</span></button></aside></section>
 <section class="input-tools" aria-label="Source preparation"><div class="input-preview"><canvas id="prepared" width="320" height="180" aria-label="Prepared input sent to feedback"></canvas><span id="input-cost">INPUT TO THE LOOP</span></div><div class="input-choice"><p class="eyebrow">DISTILL THE SIGNAL</p><div class="source-modes"><button id="contour-mode" class="selected" aria-pressed="true">Contours</button><button id="raw-mode" aria-pressed="false">Raw camera</button></div><label class="person-choice"><input id="person-only" type="checkbox" checked/> Person only</label><p id="mask-status" role="status">Local subject isolation for camera input.</p></div><label class="knob"><span>Curve smoothing <output id="smoothing-value">65%</output></span><input id="smoothing" type="range" min="0" max="100" value="65"/><small>Traced strokes → Flowing curves</small></label><label class="knob"><span>Edge detail <output id="detail-value">45%</output></span><input id="detail" type="range" min="0" max="100" value="45"/><small>Soft silhouette → Fine features</small></label><label class="knob"><span>Noise cutoff <output id="threshold-value">12</output></span><input id="threshold" type="range" min="1" max="60" value="12"/><small>Raise to remove room texture</small></label></section><div class="transport"><div><button id="camera" class="primary">Start camera <span>↗</span></button><button id="demo">Run demo</button><button id="stop" disabled>Stop</button></div><p id="source-info">No camera or microphone access until you ask.</p></div>
 <section class="audio-tools" aria-label="Sound reaction"><button id="audio-toggle">Enable audio</button><select id="audio-device" aria-label="Audio input"><option value="">Default microphone / interface</option></select><label class="knob"><span>Sensitivity <output id="gain-value">1.0×</output></span><input id="gain" type="range" min="0" max="400" value="100"/></label><meter id="audio-meter" min="0" max="1" value="0" aria-label="Audio input level"></meter><span id="audio-status" role="status">Audio off</span></section><footer><span>One person → spectral feedback + crisp identity</span><span>Flashing & moving imagery. Start gently.</span></footer><p class="credits" id="credits"></p></main>`;
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -65,6 +66,9 @@ let fetchTotal = 0,
   composeTotal = 0;
 let spectrum: CanvasGradient | null = null;
 let spectrumKey = '';
+let supportedVideoCodec: string | null = null;
+let outputDecoder: H264Decoder | null = null;
+let videoFailed = false;
 const g = input.getContext('2d', { willReadFrequently: true })!;
 const demoPhoto = new Image();
 demoPhoto.src = demoPhotoUrl;
@@ -207,6 +211,10 @@ async function capture(id: number) {
 async function paint(id: number) {
   const meter = new OutputMeter(performance.now());
   let measuredSize = '';
+  let afterSequence = '0';
+  let decodeTotal = 0,
+    encodeTotal = 0,
+    encodeCount = 0;
   let snapshotTotal = 0,
     snapshotCount = 0;
   let nextOutputAt = performance.now();
@@ -220,67 +228,126 @@ async function paint(id: number) {
     const start = performance.now();
     try {
       reading = (async () => {
-        const r = await fetch(path('camera/output'), { cache: 'no-store' });
+        const encoded = $<HTMLSelectElement>('output-transport').value === 'auto' && supportedVideoCodec !== null && !videoFailed;
+        if (!encoded && outputDecoder) {
+          outputDecoder.dispose();
+          outputDecoder = null;
+        }
+        const r = await fetch(path(encoded ? `camera/video?after=${afterSequence}` : 'camera/output'), { cache: 'no-store' });
+        if (id !== generation) return;
+        if (encoded && r.status === 204) return;
+        if (encoded && r.status !== 200) {
+          videoFailed = true;
+          outputDecoder?.dispose();
+          outputDecoder = null;
+          $('transport-status').textContent = `Raw fallback · video ${r.status}: ${await r.text()}`;
+          return;
+        }
         if (r.status !== 200) throw new Error(`Output unavailable (${r.status})`);
         const headersAt = performance.now();
         const buffer = await r.arrayBuffer();
         const bodyAt = performance.now();
-        const [width, height] = rawFrameSize(r.headers, buffer.byteLength);
-        if (id === generation) {
-          const size = `${width}×${height}:${acceptedPresetId}`;
-          if (size !== measuredSize) {
-            meter.reset(performance.now());
-            measuredSize = size;
-          }
-          meter.record(performance.now(), r.headers.get('X-Frame-Sequence'));
-          const snapshotHeader = r.headers.get('X-Snapshot-Ms');
-          const snapshotMs = snapshotHeader === null ? NaN : Number(snapshotHeader);
-          if (Number.isFinite(snapshotMs) && snapshotMs >= 0) {
-            snapshotTotal += snapshotMs;
-            snapshotCount++;
-          }
-          const image = new ImageData(new Uint8ClampedArray(buffer), width, height);
-          if (output.width !== width || output.height !== height) {
-            output.width = width;
-            output.height = height;
-          }
-          ctx.putImageData(image, 0, 0);
-          if (performance.now() - identityAt <= 250 && useContours) {
-            ctx.save();
-            ctx.globalAlpha = performance.now() < rescueUntil ? 1 : value('recognition') / 100;
-            ctx.imageSmoothingEnabled = true;
-            ctx.drawImage(identity, 0, 0, width, height);
-            const saturation = value('color');
-            const key = `${width}:${height}:${saturation}`;
-            if (!spectrum || spectrumKey !== key) {
-              spectrum = ctx.createLinearGradient(0, 0, width, height);
-              spectrum.addColorStop(0, `hsl(170 ${saturation}% 85%)`);
-              spectrum.addColorStop(0.5, `hsl(290 ${saturation}% 85%)`);
-              spectrum.addColorStop(1, `hsl(40 ${saturation}% 85%)`);
-              spectrumKey = key;
+        const [width, height] = rawFrameSize(r.headers, encoded ? Number(r.headers.get('X-Frame-Width')) * Number(r.headers.get('X-Frame-Height')) * 4 : buffer.byteLength);
+        if (id !== generation) return;
+        let decoded: VideoFrame | null = null;
+        let decodingMs = 0;
+        if (encoded) {
+          const decodingAt = performance.now();
+          try {
+            outputDecoder ??= new H264Decoder();
+            const timestampHeader = r.headers.get('X-Frame-Timestamp');
+            const timestamp = timestampHeader === null ? NaN : Number(timestampHeader);
+            if (!Number.isSafeInteger(timestamp) || timestamp < 0 || !buffer.byteLength) throw new Error('Invalid encoded frame metadata');
+            decoded = await outputDecoder.decode(buffer, r.headers.get('X-Video-Codec') ?? supportedVideoCodec!, width, height, timestamp);
+            if (decoded.displayWidth !== width || decoded.displayHeight !== height) throw new Error('Decoded frame dimensions do not match native output');
+            decodingMs = performance.now() - decodingAt;
+          } catch (error) {
+            decoded?.close();
+            outputDecoder?.dispose();
+            outputDecoder = null;
+            if (id === generation) {
+              videoFailed = true;
+              $('transport-status').textContent = `Raw fallback · ${String(error)}`;
             }
-            drawContourPaths(ctx, identityPaths, { scaleX: width / WIDTH, scaleY: height / HEIGHT, lineWidth: 0.85, strokeStyle: spectrum });
-            ctx.restore();
-          } else clearIdentity();
-          frames++;
-          fetchTotal += headersAt - start;
-          bodyTotal += bodyAt - headersAt;
-          composeTotal += performance.now() - bodyAt;
-          if (performance.now() - rateAt >= 1000) {
-            const recent = meter.snapshot(performance.now(), 1000);
-            const sustained = meter.snapshot(performance.now());
-            $('rate').textContent = recent.verified ? `${recent.nativeFps.toFixed(0)} NATIVE FPS / ${width}×${height}` : `${recent.readsPerSecond.toFixed(0)} READS/S / native FPS unavailable`;
-            $('sustained-rate').textContent = sustained.verified
-              ? `${sustained.nativeFps.toFixed(1)} native FPS · ${sustained.seconds.toFixed(1)}s rolling sample`
-              : 'Native frame IDs unavailable · throughput is not render FPS';
-            $('input-cost').textContent = `${((captureFrames * 1000) / (performance.now() - rateAt)).toFixed(0)} INPUT FPS · ${preparationMs.toFixed(1)} MS`;
-            $('timings').textContent =
-              `Native snapshot ${snapshotCount ? (snapshotTotal / snapshotCount).toFixed(1) + ' ms' : 'unavailable'} | Output: fetch ${(fetchTotal / frames).toFixed(1)} ms · body ${(bodyTotal / frames).toFixed(1)} ms · compose ${(composeTotal / frames).toFixed(1)} ms | Input: prep ${(preparationTotal / Math.max(1, captureFrames)).toFixed(1)} ms · upload ${(uploadTotal / Math.max(1, captureFrames)).toFixed(1)} ms`;
-            snapshotTotal = snapshotCount = 0;
-            frames = captureFrames = 0;
-            preparationTotal = uploadTotal = fetchTotal = bodyTotal = composeTotal = 0;
-            rateAt = performance.now();
+            return;
           }
+        }
+        if (id !== generation) {
+          decoded?.close();
+          return;
+        }
+        const composingAt = performance.now();
+        try {
+          if (id === generation) {
+            const size = `${width}×${height}:${acceptedPresetId}:${encoded ? 'h264' : 'raw'}`;
+            if (size !== measuredSize) {
+              meter.reset(performance.now());
+              measuredSize = size;
+            }
+            const snapshotHeader = r.headers.get('X-Snapshot-Ms');
+            const snapshotMs = snapshotHeader === null ? NaN : Number(snapshotHeader);
+            if (Number.isFinite(snapshotMs) && snapshotMs >= 0) {
+              snapshotTotal += snapshotMs;
+              snapshotCount++;
+            }
+            const image = decoded ? null : new ImageData(new Uint8ClampedArray(buffer), width, height);
+            if (output.width !== width || output.height !== height) {
+              output.width = width;
+              output.height = height;
+            }
+            if (decoded) ctx.drawImage(decoded, 0, 0, width, height);
+            else ctx.putImageData(image!, 0, 0);
+            if (performance.now() - identityAt <= 250 && useContours) {
+              ctx.save();
+              ctx.globalAlpha = performance.now() < rescueUntil ? 1 : value('recognition') / 100;
+              ctx.imageSmoothingEnabled = true;
+              ctx.drawImage(identity, 0, 0, width, height);
+              const saturation = value('color');
+              const key = `${width}:${height}:${saturation}`;
+              if (!spectrum || spectrumKey !== key) {
+                spectrum = ctx.createLinearGradient(0, 0, width, height);
+                spectrum.addColorStop(0, `hsl(170 ${saturation}% 85%)`);
+                spectrum.addColorStop(0.5, `hsl(290 ${saturation}% 85%)`);
+                spectrum.addColorStop(1, `hsl(40 ${saturation}% 85%)`);
+                spectrumKey = key;
+              }
+              drawContourPaths(ctx, identityPaths, { scaleX: width / WIDTH, scaleY: height / HEIGHT, lineWidth: 0.85, strokeStyle: spectrum });
+              ctx.restore();
+            } else clearIdentity();
+            meter.record(performance.now(), r.headers.get('X-Frame-Sequence'));
+            if (encoded) {
+              const sequence = r.headers.get('X-Frame-Sequence');
+              if (sequence && /^\d+$/.test(sequence)) afterSequence = sequence;
+              if ($('transport-status').textContent !== 'H.264 · hardware decoding preferred') $('transport-status').textContent = 'H.264 · hardware decoding preferred';
+              const encode = Number(r.headers.get('X-Encode-Ms'));
+              if (r.headers.has('X-Encode-Ms') && Number.isFinite(encode) && encode >= 0) {
+                encodeTotal += encode;
+                encodeCount++;
+              }
+            } else if (!videoFailed) $('transport-status').textContent = 'Raw RGBA · direct comparison';
+            frames++;
+            decodeTotal += decodingMs;
+            fetchTotal += headersAt - start;
+            bodyTotal += bodyAt - headersAt;
+            composeTotal += performance.now() - composingAt;
+            if (performance.now() - rateAt >= 1000) {
+              const recent = meter.snapshot(performance.now(), 1000);
+              const sustained = meter.snapshot(performance.now());
+              $('rate').textContent = recent.verified ? `${recent.nativeFps.toFixed(0)} NATIVE FPS / ${width}×${height}` : `${recent.readsPerSecond.toFixed(0)} READS/S / native FPS unavailable`;
+              $('sustained-rate').textContent = sustained.verified
+                ? `${sustained.nativeFps.toFixed(1)} native FPS · ${sustained.seconds.toFixed(1)}s rolling sample`
+                : 'Native frame IDs unavailable · throughput is not render FPS';
+              $('input-cost').textContent = `${((captureFrames * 1000) / (performance.now() - rateAt)).toFixed(0)} INPUT FPS · ${preparationMs.toFixed(1)} MS`;
+              $('timings').textContent =
+                `Encode ${encodeCount ? (encodeTotal / encodeCount).toFixed(1) + ' ms' : '—'} · decode ${(decodeTotal / frames).toFixed(1)} ms | Native snapshot ${snapshotCount ? (snapshotTotal / snapshotCount).toFixed(1) + ' ms' : 'unavailable'} | Output: fetch ${(fetchTotal / frames).toFixed(1)} ms · body ${(bodyTotal / frames).toFixed(1)} ms · compose ${(composeTotal / frames).toFixed(1)} ms | Input: prep ${(preparationTotal / Math.max(1, captureFrames)).toFixed(1)} ms · upload ${(uploadTotal / Math.max(1, captureFrames)).toFixed(1)} ms`;
+              snapshotTotal = snapshotCount = encodeTotal = encodeCount = decodeTotal = 0;
+              frames = captureFrames = 0;
+              preparationTotal = uploadTotal = fetchTotal = bodyTotal = composeTotal = 0;
+              rateAt = performance.now();
+            }
+          }
+        } finally {
+          decoded?.close();
         }
       })();
       await reading;
@@ -294,6 +361,8 @@ async function paint(id: number) {
   }
 }
 async function stop(releaseAudio = true) {
+  outputDecoder?.dispose();
+  outputDecoder = null;
   const audioStopped = releaseAudio ? audio.stop() : Promise.resolve();
   generation++;
   mode = null;
@@ -348,6 +417,7 @@ async function start(next: 'demo' | 'camera') {
     });
     if (id !== generation) return;
     mode = next;
+    videoFailed = false;
     $('mask-status').textContent = $<HTMLInputElement>('person-only').checked ? 'Loading local person model…' : 'Whole scene · background included.';
     if ($<HTMLInputElement>('person-only').checked) preparePersonMask();
     $('welcome').hidden = true;
@@ -521,6 +591,9 @@ if (token)
 $('show-timings').onchange = () => {
   $('performance-details').hidden = !$<HTMLInputElement>('show-timings').checked;
 };
+$('output-transport').onchange = () => {
+  videoFailed = false;
+};
 $('resolution').onchange = () => {
   void settings().catch((error) => status(String(error)));
 };
@@ -555,6 +628,8 @@ $('gain').oninput = () => {
   $('gain-value').textContent = `${(value('gain') / 100).toFixed(1)}×`;
 };
 addEventListener('pagehide', () => {
+  outputDecoder?.dispose();
+  outputDecoder = null;
   void audio.stop();
   generation++;
   personMask?.dispose();
@@ -646,4 +721,6 @@ $<HTMLInputElement>('mirror').onchange = () => {
 void videoCapability().then(({ codec, message }) => {
   $('video-capability').textContent = message;
   $('video-capability').dataset.codec = codec ?? '';
+  supportedVideoCodec = codec?.startsWith('avc1.64') ? codec : null;
+  $('transport-status').textContent = supportedVideoCodec ? 'Hardware H.264 ready' : 'Raw RGBA · compatible decoder unavailable';
 });

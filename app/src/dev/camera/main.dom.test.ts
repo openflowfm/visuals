@@ -439,3 +439,65 @@ test('legacy output without frame IDs labels request throughput honestly', async
   document.getElementById('demo')!.click();
   await waitFor(() => expect(document.getElementById('rate')!.textContent).toContain('READS/S / native FPS unavailable'), { timeout: 2000 });
 });
+
+test('encoded output closes decoded frames and raw comparison disposes its decoder', async () => {
+  const closed = vi.fn();
+  const decoderClosed = vi.fn();
+  vi.stubGlobal(
+    'EncodedVideoChunk',
+    class {
+      constructor(public options: EncodedVideoChunkInit) {}
+    },
+  );
+  vi.stubGlobal(
+    'VideoDecoder',
+    class {
+      static isConfigSupported = async () => ({ supported: true });
+      state = 'configured';
+      constructor(private callbacks: VideoDecoderInit) {}
+      configure() {}
+      decode() {
+        queueMicrotask(() => this.callbacks.output({ displayWidth: 2, displayHeight: 2, close: closed } as unknown as VideoFrame));
+      }
+      close() {
+        this.state = 'closed';
+        decoderClosed();
+      }
+    },
+  );
+  let sequence = 0;
+  vi.mocked(fetch).mockImplementation(async (url) => {
+    requests.push(String(url));
+    return String(url).includes('camera/video?')
+      ? new Response(new Uint8Array(5), {
+          status: 200,
+          headers: { 'X-Frame-Width': '2', 'X-Frame-Height': '2', 'X-Frame-Sequence': String(++sequence), 'X-Frame-Timestamp': String(sequence * 16667), 'X-Video-Codec': 'avc1.640028' },
+        })
+      : outputResponse(String(url));
+  });
+  vi.resetModules();
+  await import('./main');
+  await waitFor(() => expect(document.getElementById('video-capability')!.textContent).toContain('supported'));
+  document.getElementById('demo')!.click();
+  await waitFor(() => expect(closed).toHaveBeenCalled());
+  const select = document.getElementById('output-transport') as HTMLSelectElement;
+  select.value = 'raw';
+  select.dispatchEvent(new Event('change'));
+  await waitFor(() => expect(requests.some((r) => r.includes('camera/output'))).toBe(true));
+  expect(decoderClosed).toHaveBeenCalledOnce();
+});
+
+test('unavailable encoded service visibly falls back to raw output', async () => {
+  vi.stubGlobal('VideoDecoder', { isConfigSupported: async () => ({ supported: true }) });
+  vi.mocked(fetch).mockImplementation(async (url) => {
+    requests.push(String(url));
+    return String(url).includes('camera/video?') ? new Response('Hardware encoder unavailable', { status: 503 }) : outputResponse(String(url));
+  });
+  vi.resetModules();
+  await import('./main');
+  await waitFor(() => expect(document.getElementById('video-capability')!.textContent).toContain('supported'));
+  document.getElementById('demo')!.click();
+  await waitFor(() => expect(requests.some((r) => r.includes('camera/output'))).toBe(true));
+  expect(document.getElementById('transport-status')!.textContent).toContain('Raw fallback · video 503');
+  expect(document.getElementById('signal')!.textContent).toContain('TEST SUBJECT');
+});
