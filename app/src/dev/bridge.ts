@@ -102,9 +102,10 @@ export function createBridge(o: Options) {
 
   async function call(cmd: string, args: Args): Promise<unknown> {
     if (cmd === 'place_bench' && args && !Array.isArray(args) && !(args instanceof ArrayBuffer) && !(args instanceof Uint8Array)) o.place?.(args as unknown as Rect);
-    const body = args instanceof ArrayBuffer || args instanceof Uint8Array ? Array.from(new Uint8Array(args)) : (args ?? {});
+    const binary = args instanceof ArrayBuffer || ArrayBuffer.isView(args);
+    const body = binary ? { raw: Array.from(args instanceof ArrayBuffer ? new Uint8Array(args) : new Uint8Array(args.buffer, args.byteOffset, args.byteLength)) } : { args: args ?? {} };
     // Numbered as sent, before any await, so the order is the page's own.
-    const response = await post('invoke', { cmd, args: body, session, seq: seq++ });
+    const response = await post('invoke', { cmd, ...body, session, seq: seq++ });
     const type = response.headers.get('content-type') ?? '';
     if (type.startsWith(ERROR_TYPE)) throw await response.json();
     if (type.startsWith('application/octet-stream')) return response.arrayBuffer();

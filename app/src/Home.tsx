@@ -1,3 +1,4 @@
+import { CameraAction } from './camera/CameraPanel';
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
 import * as api from './api.ts';
@@ -678,6 +679,7 @@ export function Home({ start, onMode, library: startOnLibrary = false }: { start
           >
             <span className="vf-fill" />
             <div className="home-toolbar" ref={setToolbar} />
+            <CameraAction className="home-tool" />
             <button
               type="button"
               className="home-tool home-tool-help"

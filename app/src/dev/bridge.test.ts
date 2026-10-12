@@ -134,3 +134,14 @@ describe('the dev bridge shim', () => {
     await expect(b.internals.invoke('plugin:event|listen', { event: 'live', handler })).rejects.toThrow(/refused the token/);
   });
 });
+
+it('sends exact binary view bytes in the raw envelope, not JSON args', async () => {
+  const { fetch, sent } = fakeFetch(() => json(1));
+  const bridge = createBridge({ token: 't', fetch, session: 's' });
+  await bridge.internals.invoke('camera_submit', new Uint8Array([9, 67, 65, 8]).subarray(1, 3));
+  await bridge.internals.invoke('camera_submit', new Uint8Array([77, 49]).buffer);
+  expect(sent.map((item) => item.body)).toEqual([
+    { cmd: 'camera_submit', raw: [67, 65], session: 's', seq: 0 },
+    { cmd: 'camera_submit', raw: [77, 49], session: 's', seq: 1 },
+  ]);
+});

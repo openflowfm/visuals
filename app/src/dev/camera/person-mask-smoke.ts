@@ -1,4 +1,4 @@
-import { PersonMask } from './person-mask';
+import { PersonMask } from '../../camera/person-mask';
 import astronautUrl from './person-assets/astronaut.png?url';
 const photo = document.querySelector<HTMLCanvasElement>('#photo')!;
 const output = document.querySelector<HTMLCanvasElement>('#mask')!;

@@ -1,3 +1,4 @@
+import { CameraAction } from '../camera/CameraPanel';
 import { titleOf } from '../HelpOverlay.tsx';
 import { Icon } from '../layout/icons.tsx';
 import { LinkPanel } from '../LinkPanel.tsx';
@@ -100,6 +101,7 @@ export function StageHead({ live, crateOpen, onCrate, help, onHelp, onView }: St
         <Fps className="stage-fps" />
         <BeatLight live={live} />
         <OutputLight live={live} />
+        <CameraAction className="stage-tool" />
         <button type="button" className="stage-tool" aria-label="Help" aria-haspopup="dialog" aria-expanded={help} aria-keyshortcuts="?" title={titleOf('help')} onClick={onHelp}>
           <Icon name="help" />
         </button>

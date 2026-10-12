@@ -1,0 +1,47 @@
+.camera-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.camera-action.camera-active {
+  color: var(--accent, #c5e3ff);
+}
+.vf-sheet.settings.camera-panel {
+  width: min(380px, calc(100vw - 24px));
+}
+.camera-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px 0;
+}
+.camera-body p {
+  margin: 0;
+}
+.camera-note,
+.camera-control small {
+  opacity: 0.65;
+}
+.camera-status[role='alert'] {
+  color: var(--danger, #ffb0a8);
+}
+.camera-control {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.camera-control > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.camera-control input {
+  width: 100%;
+  accent-color: var(--accent, #bddcff);
+}
+
+.camera-body {
+  min-height: 0;
+  overflow-y: auto;
+}

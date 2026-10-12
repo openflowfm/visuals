@@ -1,9 +1,9 @@
 import './style.css';
 import { TOKEN_KEY, tokenFrom } from '../bridge';
-import { TemporalContours, ContourMotion } from './temporal-contours';
-import { Contours, rawFrameSize } from './contours';
-import { contourPacket } from './contour-packet';
-import { ColorSignal } from './color-signal';
+import { TemporalContours, ContourMotion } from '../../camera/temporal-contours';
+import { Contours, rawFrameSize } from '../../camera/contours';
+import { contourPacket } from '../../camera/contour-packet';
+import { ColorSignal } from '../../camera/color-signal';
 import { closeVideoFrame, videoResourceSummary } from './video-resources';
 import { VideoPackets } from './video-packets';
 import { H264Decoder } from './h264-decoder';
@@ -11,8 +11,8 @@ import { videoCapability } from './video-capability';
 import { OutputMeter } from './output-meter';
 import { CameraAudio } from './audio-input';
 import { LatestSelection, stepPreset, type CameraPreset } from './preset-browser';
-import { traceContours, drawContourPaths, type ContourPath } from './curve-contours';
-import { PersonMask } from './person-mask';
+import { traceContours, drawContourPaths, type ContourPath } from '../../camera/curve-contours';
+import { PersonMask } from '../../camera/person-mask';
 import demoPhotoUrl from './person-assets/astronaut.png?url';
 
 const root = document.querySelector<HTMLDivElement>('#camera-app')!;
