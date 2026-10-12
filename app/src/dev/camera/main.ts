@@ -329,7 +329,7 @@ for (const [id, enabled] of [
       $(key).classList.toggle('selected', active);
       $(key).setAttribute('aria-pressed', String(active));
     }
-    for (const key of ['detail', 'threshold']) $<HTMLInputElement>(key).disabled = !enabled;
+    for (const key of ['detail', 'threshold', 'color', 'recognition']) $<HTMLInputElement>(key).disabled = !enabled;
   };
 }
 

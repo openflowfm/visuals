@@ -286,3 +286,11 @@ test('identity waits for accepted upload and is discarded when its person mask e
   // Drain any next pending upload before teardown Stop waits for it.
   accept();
 });
+
+test('raw comparison disables contour-only controls and returning to Contours restores them', () => {
+  const controls = ['detail', 'threshold', 'color', 'recognition'].map((id) => document.getElementById(id) as HTMLInputElement);
+  document.getElementById('raw-mode')!.click();
+  for (const control of controls) expect(control.disabled).toBe(true);
+  document.getElementById('contour-mode')!.click();
+  for (const control of controls) expect(control.disabled).toBe(false);
+});
