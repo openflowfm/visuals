@@ -1,32 +1,14 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { ThemeRoot } from '@openflow/widgets/theme/ThemeRoot.tsx';
-import { DEFAULT_THEME } from '@openflow/widgets/theme/theme.ts';
-import '@openflow/widgets/palette.css';
-import '@openflow/widgets/tokens.css';
-import './lab.css';
-import Editor from './Editor.tsx';
-import * as output from './output.ts';
+import { VisualsApp, type VisualsAppProps } from '@satoramoto/zen/visuals';
+import { VisualsEditor } from '@satoramoto/zen/visuals/lab';
+import '@satoramoto/zen/visuals-lab.css';
 
 /**
  * A lab build's page (`VITE_LAB=1`; main.tsx loads this module only then, so
- * none of it reaches the app people get): the editor, still on the suite's
- * widgets as the page was before zen, which has no editor. It starts in the
- * editor unless `VISUALS_VIEW` says another view, as the lab always did; that
- * view, or leaving the editor for the home or live, is `app` (zen's UI).
+ * none of it reaches the app people get): zen's whole UI with its preset editor,
+ * `@satoramoto/zen/visuals/lab` (its own package entry, so the editor and its
+ * commands stay in this chunk). It starts in the editor unless `VISUALS_VIEW`
+ * says another view, and every header's switch offers home, editor and live.
  */
-export default function Lab({ app }: { app: ReactNode }) {
-  const [start, setStart] = useState<{ editor: boolean; preset: string | null } | null>(null);
-  useEffect(() => {
-    Promise.all([output.startPreset(), output.liveStart()]).then(
-      ([preset, view]) => setStart({ editor: output.startIn(view, 'editor').view === 'editor', preset }),
-      () => setStart({ editor: true, preset: null }),
-    );
-  }, []);
-  if (!start) return null;
-  if (!start.editor) return app;
-  return (
-    <ThemeRoot theme={DEFAULT_THEME} className="vf-root">
-      <Editor start={start.preset} onMode={() => setStart({ editor: false, preset: null })} />
-    </ThemeRoot>
-  );
+export default function Lab({ cameraController }: Pick<VisualsAppProps, 'cameraController'>) {
+  return <VisualsApp mode="dark" lab={VisualsEditor} cameraController={cameraController} />;
 }

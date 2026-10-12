@@ -29,8 +29,8 @@ export default defineConfig({
     // Strict, because Tauri was told this port before vite started.
     port: Number(process.env.PORT) || 0,
     strictPort: Boolean(process.env.PORT),
-    // A worktree that links the checkout's node_modules: serve its files (the
-    // widgets' font among them) from where the link really points.
+    // A worktree that links the checkout's node_modules: serve its files (zen's
+    // stylesheets among them) from where the link really points.
     fs: { allow: [here, realpathSync(path.join(here, 'node_modules'))] },
   },
 });
