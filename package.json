@@ -32,7 +32,7 @@
   },
   "dependencies": {
     "@openflow/widgets": "git+https://github.com/openflowfm/widgets.git#ef99d1b2331c8ee11ecabdaa5c7328e5fed2ef97",
-    "@satoramoto/zen": "github:satoramoto/zen#e59313c1976b6630cce2ab441b6273459fc729f2",
+    "@satoramoto/zen": "github:satoramoto/zen#fa67878fbc4b950c646b02ec295240025002f9e6",
     "@tauri-apps/api": "^2.12.1",
     "@tauri-apps/plugin-opener": "^2.7.0",
     "react": "^19.0.0",
