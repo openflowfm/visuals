@@ -2,7 +2,7 @@
 
 ## Running state
 
-Resumed at Ryan's request. Coordinator implementation head: `be1e7a98521b4a51d4698fdd9e9535120b2c7dc9`, branch `codex/camera-coordinator`.
+Resumed at Ryan's request. Coordinator implementation head: `f1cde4afd5c41cd2a8a36167942e936fb72f68f9`, branch `codex/camera-coordinator`.
 Persistent coordinator: `/Users/ryan/Documents/Codex/2026-10-11/i-wa/outputs/camera-lab`.
 Unified launcher is running on 4286/6116 (session 11148); read its fresh token from `work/camera-coordinator.log`. Original saved checkout/main remain unchanged; nothing pushed or published.
 
@@ -21,6 +21,10 @@ Latest requested features: compact preset overlay for fast cycling; smooth, almo
 - Native 360p, 720p, 1080p renderer AND output resizing; 720p default. Returned dimensions are authoritative.
 - Explicit Enable audio, microphone/interface selector, sensitivity, input meter. Browser mono PCM snapshots feed native engine FFT; no speaker monitoring. Stop drains requests and releases tracks/context. No automatic microphone permission request on startup.
 - Preset request serialization, rejection rollback to the last accepted preset, and startup ordering fixes.
+
+## Latest user preference: recognizable foreground with strong trails
+
+Ryan clarified that the outline should stay recognizable while shedding strong distorted trails, and the requested fade means camera/outline opacity. The existing foreground-opacity control is now explicitly labeled **Camera / outline opacity**, default 35%; Edge feed stays 30%, speed 0.4x, and temporal smoothing is unchanged. This supersedes the earlier zero-overlay default below. Source `2a1a89b4` → integrated `f1cde4af`; 83 tests and UI checks passed, fresh browser labels/defaults verified. No native changes or server restart. The completed worktree was cleaned up, branch retained.
 
 ## Feed balance follow-up
 
