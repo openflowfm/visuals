@@ -1,3 +1,4 @@
+import { videoResources, receivedVideoFrame, closeVideoFrame } from './video-resources';
 /** One independently decodable Annex-B frame at a time. Caller owns returned frames. */
 export class H264Decoder {
   private decoder: VideoDecoder | null = null;
@@ -9,6 +10,7 @@ export class H264Decoder {
     if (this.disposed) throw new Error('Video decoder stopped');
     if (this.busy) throw new Error('Video decode already in flight');
     this.busy = true;
+    videoResources.pendingDecodes++;
     try {
       const key = `${codec}:${width}:${height}`;
       if (key !== this.configKey) {
@@ -16,12 +18,14 @@ export class H264Decoder {
         const support = await VideoDecoder.isConfigSupported(config);
         if (this.disposed) throw new Error('Video decoder stopped');
         if (!support.supported) throw new Error(`H.264 profile unavailable: ${codec}`);
-        this.decoder?.close();
+        this.closeDecoder();
         this.decoder = new VideoDecoder({
           output: (frame) => {
+            receivedVideoFrame();
             const pending = this.pending;
             if (!pending) {
-              frame.close();
+              videoResources.orphaned++;
+              closeVideoFrame(frame);
               return;
             }
             this.pending = null;
@@ -30,6 +34,7 @@ export class H264Decoder {
           },
           error: (error) => this.fail(error),
         });
+        videoResources.decodersOpened++;
         this.decoder.configure(config);
         this.configKey = key;
       }
@@ -43,6 +48,7 @@ export class H264Decoder {
       });
     } finally {
       this.busy = false;
+      videoResources.pendingDecodes--;
     }
   }
   private fail(error: Error) {
@@ -53,10 +59,15 @@ export class H264Decoder {
       pending.reject(error);
     }
   }
+  private closeDecoder() {
+    if (!this.decoder) return;
+    if (this.decoder.state !== 'closed') this.decoder.close();
+    this.decoder = null;
+    videoResources.decodersClosed++;
+  }
   dispose() {
     this.disposed = true;
     this.fail(new Error('Video decoder stopped'));
-    if (this.decoder && this.decoder.state !== 'closed') this.decoder.close();
-    this.decoder = null;
+    this.closeDecoder();
   }
 }

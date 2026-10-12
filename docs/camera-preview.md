@@ -168,3 +168,14 @@ cannot flood the independent-frame producer. Stop, source reset, raw comparison
 and decode fallback abort and drain that slot. The timing display distinguishes
 critical-path **packet wait** from total fetch time: fetch now overlaps decoding,
 so adding those two service times does not give the presentation interval.
+
+The opt-in timing panel also shows JS heap when the browser exposes
+`performance.memory`, cumulative decoded/closed video-frame counts, orphan callback
+frames, live/created decoder counts and pending decode jobs. Frame tracking uses a
+WeakSet and cannot keep decoded surfaces alive. During steady playback the ownership
+balance should return to zero after each composed frame, with one decoder and no
+queued decoder job at the reporting instant. Stop should leave no live decoder.
+These counters expose application ownership; they cannot measure internal browser,
+GPU or driver allocations. A crash without growing application balances still needs
+browser/process evidence. No periodic decoder recycling is enabled merely to hide
+an unexplained stability problem.

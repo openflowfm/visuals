@@ -80,3 +80,22 @@ test('decode stall has a bounded failure', async () => {
   await rejected;
   decoder.dispose();
 });
+
+test('repeated independent frames balance resource ownership with one live decoder', async () => {
+  const { videoResources, closeVideoFrame } = await import('./video-resources');
+  const before = { ...videoResources };
+  const decoder = new H264Decoder();
+  for (let i = 0; i < 120; i++) {
+    const pending = decoder.decode(bytes, 'avc1.640028', 1280, 720, i);
+    await Promise.resolve();
+    FakeDecoder.instances[0].callbacks.output({ close: vi.fn() } as unknown as VideoFrame);
+    closeVideoFrame(await pending);
+  }
+  decoder.dispose();
+  decoder.dispose();
+  expect(videoResources.decoded - before.decoded).toBe(120);
+  expect(videoResources.closed - before.closed).toBe(120);
+  expect(videoResources.decodersOpened - before.decodersOpened).toBe(1);
+  expect(videoResources.decodersClosed - before.decodersClosed).toBe(1);
+  expect(videoResources.pendingDecodes).toBe(before.pendingDecodes);
+});
