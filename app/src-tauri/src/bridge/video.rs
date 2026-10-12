@@ -40,8 +40,15 @@ impl Video {
         state.error = None;
         self.0.changed.notify_all();
     }
+    // Keep unsupported capability independent of stop/reset's transient state.
+    fn request_state(&self, supported: bool) -> Result<std::sync::MutexGuard<'_, State>, String> {
+        if !supported {
+            return Err("hardware camera encoding is available on macOS only".into());
+        }
+        Ok(self.0.state.lock().unwrap())
+    }
     fn next(&self, app: AppHandle, after: u64) -> Result<Option<Arc<Frame>>, String> {
-        let mut state = self.0.state.lock().unwrap();
+        let mut state = self.request_state(cfg!(target_os = "macos"))?;
         state.requested = Instant::now();
         state.enabled = true;
         if !state.started {
@@ -160,6 +167,23 @@ impl Bridge {
             }
             Ok(None) => respond(stream, "204 No Content", "video/h264", b""),
             Err(error) => respond(stream, "503 Service Unavailable", "text/plain", error.as_bytes()),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn unsupported_requests_fail_before_and_after_stop() {
+        let video = Video::default();
+        for _ in 0..3 {
+            assert!(video.request_state(false).is_err());
+            let state = video.0.state.lock().unwrap();
+            assert!(!state.started);
+            assert!(!state.enabled);
+            drop(state);
+            video.stop();
         }
     }
 }
