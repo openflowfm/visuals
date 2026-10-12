@@ -12,8 +12,9 @@ untouched. Nothing has been pushed or published.
 are historical. Do not restart the browser experiment unless requested.
 
 Open **Camera** from Home or Live. Camera starts off; **Enable camera** requests
-video only. Closing the panel or changing views/presets keeps capture active;
-**Stop camera** releases it. Existing native audio selection, preset library,
+video only. Choose a device in **Source**; camera labels refresh after permission
+and when devices change. Closing the panel or changing views/presets keeps capture
+active; switching **Enable camera** off releases it and cancels pending startup. Existing native audio selection, preset library,
 performance controls and fullscreen output remain authoritative.
 
 ## User direction and implementation
@@ -44,7 +45,30 @@ edges, sound reactivity, high-resolution output and a 60 FPS target.
 Guides: [player](camera-player.md), [native evidence](camera-native-app.md),
 [IPC contract](camera-app-contract.md), [browser experiment](camera-preview.md).
 
+## Camera controls follow-up
+
+The panel now groups controls into Source, Appearance and Motion, with a frosted
+surface and slim glass slider tracks/handles. Camera and outline opacity remain
+independent. The selector uses an exact device ID when a camera is chosen; active
+switches release the old stream and serialize native session transitions. Late
+permission grants cannot revive a canceled source. Selecting while off never
+starts capture. A missing selected camera is shown as unavailable, without silently
+switching to another device.
+
+The glass material uses layered tints/reflections and CSS backdrop filtering for
+page content. WebKit cannot blur the native Metal surface behind it.
+
 ## Verification
+
+The camera-controls follow-up passed 57 camera tests, typecheck, formatting,
+normal/lab UI builds and the production isolation guard. Both updated Chromium
+stories pass, including keyboard device choice, toggle behavior and slider
+endpoint/rail alignment. Review found no remaining actionable issues. A fresh
+local debug app bundle was built; a silent offscreen WebKit capture verified the
+glass panel, corrected tracks and readable status text at
+`outputs/camera-glass-panel.png`. The app exited with zero audio peaks and no
+physical camera/microphone input. Real hardware switching remains untested.
+
 
 Reviewed native and UI implementation plus aspect-ratio fixes; no remaining
 reported findings. Combined UI checks: 129 targeted tests, typecheck, formatting,
@@ -101,7 +125,7 @@ and exits; no server or physical capture is needed. Never rely on null audio
 settings alone to keep a normal app launch silent.
 
 For actual webcam acceptance, Ryan should open the built app, select Camera,
-press Enable, then verify camera opacity 0 with outline/trails visible, the two
+choose a camera and switch Enable camera on, then verify camera opacity 0 with outline/trails visible, the two
 opacity controls independently, stabilization, normal audio input, preset changes,
 Home/Live persistence and fullscreen output. Use the existing native quality
 controls for output performance. Do not auto-enable capture from an agent check.
