@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Popup } from '@openflow/widgets/chrome/Popup.tsx';
 import { Meter } from '@openflow/widgets/music/Meter.tsx';
 import { Select } from '@openflow/widgets/controls/Select.tsx';
 import * as api from './api.ts';
+import { audioStatus, chooseAudioLane, type AudioLane, type AudioLaneStatus, type AudioStatus } from './audio-api.ts';
 import { meterLevel } from './shell.ts';
 import { say, Say } from './words.ts';
 import './audio.css';
@@ -90,180 +92,229 @@ function Levels() {
   );
 }
 
-/**
- * What the app listens to: your DAW (named when one is running), everything on
- * this Mac, another app playing sound, or a microphone or interface
- * (`api.audioSources`, `api.listenToSource`), with a meter so a quiet source is
- * obvious before a preset looks dead. Which two channels are left and right
- * sits under Advanced, or in Settings (`channels`). The choice is the app's — saved, and back next launch —
- * so this only reads it and asks for changes. The sources are read again every
- * couple of seconds, which is also when the app notices a source gone and
- * falls back, or one back and returns to it.
- */
-export function SourcePicker({
-  onError,
-  channels: where = 'advanced',
-  width = 180,
-}: {
-  onError(error: unknown): void;
-  /**
-   * Where the left and right channels are picked: under Advanced (live's
-   * popover, the first run), shown under the picker (Settings, decision 67), or
-   * not here at all (the home's bottom bar, which leaves them to Settings).
-   */
-  channels?: 'advanced' | 'shown' | 'none';
-  /** The picker's width, in px. */
-  width?: number;
-}) {
-  const [sources, setSources] = useState<api.Source[] | null>(null);
-  const [heard, setHeard] = useState<api.Heard>({ choice: null, channels: 0 });
-  const [problem, setProblem] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
+/** Match identities, never a display name when native identity is available. */
+export function sameSource(a: api.SourceId | null, b: api.SourceId | null): boolean {
+  if (!a || !b || a.kind !== b.kind) return a === b;
+  if (a.kind === 'system') return true;
+  if (a.kind === 'app' && b.kind === 'app') return a.bundle === b.bundle;
+  if (a.kind === 'device' && b.kind === 'device') {
+    const auid = (a as typeof a & { uid?: string }).uid;
+    const buid = (b as typeof b & { uid?: string }).uid;
+    return auid && buid ? auid === buid : a.name === b.name && a.size === b.size;
+  }
+  return false;
+}
+const OFF: AudioLaneStatus = { choice: null, channels: 0, source: null, selected: null, enabled: false, unavailable: false };
+// All mounted pickers share command ordering. A poll begun before a choice cannot undo it.
+let revision = 0;
+let commands: Promise<unknown> = Promise.resolve();
 
-  // Held in a ref so a caller passing a new function each render doesn't refetch (or loop on a failure).
+export function SourcePicker({ onError, channels: where = 'advanced', width = 180 }: { onError(error: unknown): void; channels?: 'advanced' | 'shown' | 'none'; width?: number }) {
+  const [sources, setSources] = useState<api.Source[]>([]);
+  const [status, setStatus] = useState<AudioStatus>({ main: OFF, mic: OFF });
+  const [problem, setProblem] = useState<string | null>(null);
+  const [mixerOpen, setMixerOpen] = useState(false);
+  const mixerButton = useRef<HTMLButtonElement>(null);
+  const [pending, setPending] = useState<AudioLane | null>(null);
+  const busy = useRef(false);
+  const alive = useRef(false);
+  const request = useRef(0);
   const errorRef = useRef(onError);
   errorRef.current = onError;
-  // What was heard last, and whether this picker asked for a change since.
-  const last = useRef<string | null>(null);
-  const asked = useRef(false);
-
   const refresh = useCallback(async () => {
-    const [list, now] = await Promise.all([
-      api.audioSources().catch(() => null),
-      api.listening().catch((e) => {
-        errorRef.current(e);
-        return null;
-      }),
-    ]);
-    if (list) setSources((was) => (was && JSON.stringify(was) === JSON.stringify(list.sources) ? was : list.sources));
-    if (!now) return;
-    const name = now.choice?.name ?? null;
-    if (name !== last.current) {
-      // A change asked for here needs no note; one the app made says why, or clears the note when it went back.
-      setNote(asked.current || !list ? null : goneNote(last.current, name, list.sources));
-      last.current = name;
+    const ticket = ++request.current;
+    const version = revision;
+    try {
+      const [list, now] = await Promise.all([api.audioSources(), audioStatus()]);
+      if (!alive.current || busy.current || ticket !== request.current || version !== revision) return;
+      setSources(list.sources ?? []);
+      if (now) setStatus(now);
+    } catch (e) {
+      if (alive.current && ticket === request.current && version === revision) errorRef.current(e);
     }
-    asked.current = false;
-    setHeard((was) => (JSON.stringify(was) === JSON.stringify(now) ? was : now));
   }, []);
-
   useEffect(() => {
-    let live = true;
+    alive.current = true;
+    let timer: ReturnType<typeof setTimeout>;
     const tick = async () => {
-      while (live) {
-        await refresh();
-        await new Promise((done) => setTimeout(done, EVERY));
-      }
+      await refresh();
+      if (alive.current) timer = setTimeout(tick, EVERY);
     };
-    tick();
+    void tick();
     return () => {
-      live = false;
+      alive.current = false;
+      request.current++;
+      clearTimeout(timer);
     };
   }, [refresh]);
 
-  const choice = heard.choice;
-  const denied = deniedNote(heard);
-  const list = sources ?? [];
-  const at = current(list, choice);
-
-  const choose = (source: api.Source, l: number, r: number) => {
-    asked.current = true;
-    return api.listenToSource(source.id, l, r).then(
-      () => {
-        setProblem(null);
-        setNote(null);
-        refresh();
-      },
-      (e) => setProblem(`${source.name}: ${String(e)}`),
-    );
+  const choose = (lane: AudioLane, source: api.Source | null, left = 1, right = 2) => {
+    if (busy.current) return;
+    busy.current = true;
+    revision++;
+    request.current++;
+    setPending(lane);
+    setProblem(null);
+    commands = commands
+      .catch(() => {})
+      .then(() => chooseAudioLane(lane, source?.id ?? null, left, right))
+      .then(
+        (now) => {
+          if (alive.current) setStatus(now);
+        },
+        (e) => {
+          if (alive.current) setProblem(`${lane === 'main' ? 'Main source' : 'Microphone'}: ${String(e)}`);
+        },
+      )
+      .finally(() => {
+        revision++;
+        busy.current = false;
+        if (alive.current) {
+          setPending(null);
+          void refresh();
+        }
+      });
   };
 
-  // Nothing to listen to at all: say what to do instead of an empty picker.
-  if (sources && sources.length === 0) {
+  const sourceList = (lane: AudioLane) => sources.filter((s) => lane === 'main' || s.id.kind === 'device');
+  const picker = (lane: AudioLane) => {
+    const heard = status[lane];
+    const list = sourceList(lane);
+    const at = list.findIndex((s) => sameSource(s.id, heard.selected));
+    const missing = heard.enabled && at < 0;
+    const missingName = heard.selected?.kind === 'device' ? heard.selected.name : (heard.choice?.name ?? 'Selected source');
+    const items = ['Off', ...(missing ? [`${missingName} (unavailable)`] : []), ...list.map(label)];
+    const shown = heard.choice?.name ?? null;
     return (
-      <span className="audio-input">
-        <span className="vf-warning" title="The presets react to sound. Connect a microphone or an audio interface, or allow microphone access in System Settings › Privacy & Security.">
-          nothing to listen to: connect a microphone or interface
-        </span>
-      </span>
-    );
-  }
-
-  const count = heard.channels || 2;
-  const channels = Array.from({ length: count }, (_, i) => i + 1);
-  const channel = (which: 'left' | 'right') => {
-    const n = choice?.[which] ?? (which === 'left' ? 1 : 2);
-    return (
-      <Select
-        items={channels.map((c) => `${which === 'left' ? 'L' : 'R'} ${c}`)}
-        index={n - 1}
-        onChange={(i) => {
-          const source = list[at];
-          if (!source || !choice) return;
-          const c = i + 1;
-          choose(source, which === 'left' ? c : choice.left, which === 'right' ? c : choice.right);
-        }}
-        label={`${which} channel`}
-        title={`which of the source's channels the presets hear as ${which}`}
-        disabled={!choice || at < 0}
-      />
-    );
-  };
-
-  // What the app hears but no longer lists (or nothing yet) is shown first, by name.
-  const missing = at < 0;
-  const items = [...(missing ? [choice?.name ?? `choose what to ${say('audio input')}`] : []), ...list.map(label)];
-
-  return (
-    <span className="audio-input">
       <Select
         items={items}
-        index={missing ? 0 : at}
+        index={!heard.enabled ? 0 : missing ? 1 : at + 1}
         onChange={(i) => {
-          const next = list[missing ? i - 1 : i];
-          if (!next) return;
-          // Keep the channels when the next source has them — moving between two
-          // interfaces wired the same way shouldn't need choosing twice.
-          const [l, r] = keepChannels(choice, next);
-          choose(next, l, r);
+          if (i === 0) {
+            choose(lane, null);
+            return;
+          }
+          const next = list[i - 1 - Number(missing)];
+          if (next) choose(lane, next, ...keepChannels(heard.choice, next));
         }}
-        label={say('audio input')}
-        title={sourceTitle(missing ? (choice?.name ?? null) : items[at])}
+        label={lane === 'main' ? say('audio input') : 'microphone input'}
+        title={lane === 'main' ? sourceTitle(at >= 0 ? label(list[at]) : shown) : 'Optional microphone or interface, mixed with the main source'}
         width={width}
+        disabled={pending !== null}
       />
-      {where === 'advanced' && (
-        <details className="audio-advanced">
-          <summary aria-label="Advanced: the left and right channels" title="which two of the source's channels are left and right">
-            Advanced
-          </summary>
-          <span className="audio-advanced-body">
-            {channel('left')}
-            {channel('right')}
+    );
+  };
+  const channelControls = (lane: AudioLane) => {
+    const heard = status[lane];
+    const source = sources.find((s) => sameSource(s.id, heard.source));
+    const count = heard.channels || 2;
+    return (
+      <span className="audio-channels" role="group" aria-label={lane === 'main' ? say('audio channels') : 'microphone audio channels'}>
+        {(['left', 'right'] as const).map((which) => (
+          <Select
+            key={which}
+            items={Array.from({ length: count }, (_, i) => `${which === 'left' ? 'L' : 'R'} ${i + 1}`)}
+            index={(heard.choice?.[which] ?? (which === 'left' ? 1 : Math.min(2, count))) - 1}
+            onChange={(i) => {
+              if (source && heard.choice) choose(lane, source, which === 'left' ? i + 1 : heard.choice.left, which === 'right' ? i + 1 : heard.choice.right);
+            }}
+            label={lane === 'main' ? `${which} channel` : `microphone ${which} channel`}
+            disabled={pending !== null || !source || !heard.enabled || heard.unavailable}
+          />
+        ))}
+      </span>
+    );
+  };
+  const notices = (lane: AudioLane) => {
+    const heard = status[lane];
+    const denied = deniedNote(heard);
+    const fallback = heard.enabled && heard.source && !sameSource(heard.source, heard.selected);
+    return (
+      <>
+        {denied && <span className="vf-warning audio-note">{denied}</span>}
+        {heard.unavailable && (
+          <span className="vf-warning audio-note" role="status">
+            {lane === 'mic' ? 'Microphone unavailable; waiting for the selected input.' : 'Selected main source unavailable.'}
           </span>
-        </details>
-      )}
-      <Levels />
-      {where === 'shown' && (
-        <span className="audio-channels" role="group" aria-label={say('audio channels')} title="which two of the source's channels are left and right">
-          <span className="audio-channels-name" aria-hidden="true">
-            {say('audio channels')}
+        )}
+        {fallback && (
+          <span className="vf-warning audio-note" role="status">
+            Listening to {heard.choice?.name ?? 'a fallback'} until the main source returns.
           </span>
-          {channel('left')}
-          {channel('right')}
-        </span>
+        )}
+      </>
+    );
+  };
+  const mic = (
+    <span className="audio-lane" role="group" aria-label="Microphone">
+      <span className="audio-lane-name">
+        Microphone <span className="audio-optional">optional</span>
+      </span>
+      {picker('mic')}
+      {channelControls('mic')}
+      {notices('mic')}
+    </span>
+  );
+  return (
+    <span className={`audio-input ${where === 'shown' ? 'audio-mixer-shown' : ''}`} aria-busy={pending !== null}>
+      {where === 'shown' ? (
+        <>
+          <span className="audio-lane" role="group" aria-label="Main source">
+            <span className="audio-lane-name">Main source</span>
+            {picker('main')}
+            {channelControls('main')}
+            {notices('main')}
+          </span>
+          {mic}
+          <span className="audio-mix-levels">
+            Combined level <Levels />
+          </span>
+        </>
+      ) : (
+        <>
+          {picker('main')}
+          <span className="audio-advanced">
+            <button
+              type="button"
+              ref={mixerButton}
+              className="audio-mixer-toggle"
+              aria-expanded={mixerOpen}
+              aria-label="Audio mixer: main and microphone inputs"
+              title="Mix a microphone with the main source"
+              onClick={() => setMixerOpen((open) => !open)}
+            >
+              Mixer{status.mic.enabled ? ' + mic' : ''}
+            </button>
+            {mixerOpen && (
+              <Popup
+                anchor={mixerButton}
+                role="group"
+                label="Audio mixer"
+                className="audio-advanced-body"
+                onDismiss={(how) => {
+                  setMixerOpen(false);
+                  if (how === 'escape') mixerButton.current?.focus();
+                }}
+              >
+                <span className="audio-lane">
+                  <span className="audio-lane-name">Main channels</span>
+                  {channelControls('main')}
+                  {notices('main')}
+                </span>
+                {mic}
+              </Popup>
+            )}
+          </span>
+          <Levels />
+        </>
       )}
-      {denied && (
-        <span className="vf-warning audio-note" title={denied}>
-          {denied}
-        </span>
-      )}
-      {note && (
-        <span className="vf-warning audio-note" role="status" title={note}>
-          {note}
+      {pending && (
+        <span className="audio-note" role="status">
+          Connecting {pending === 'main' ? 'main source' : 'microphone'}…
         </span>
       )}
       {problem && (
-        <span className="vf-warning audio-note" role="status" title={problem}>
+        <span className="vf-warning audio-note" role="alert">
           {problem}
         </span>
       )}

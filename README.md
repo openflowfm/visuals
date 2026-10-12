@@ -64,6 +64,11 @@ any other running music app, **everything on this Mac**, or a mic or interface. 
 once for permission to hear other apps (System Settings › Privacy & Security › Screen &
 System Audio Recording).
 
+Use **Mixer** beside the audio selector, or Audio in Settings, to add a microphone
+or interface alongside the main source. Each has its own channel pair and Off
+choice. Both drive the visuals; the app does not play either input through your
+speakers. [Main audio and microphone](docs/audio-lanes.md) describes the routing.
+
 [`docs/connect-your-daw.md`](docs/connect-your-daw.md) is the full guide: each DAW, the
 permission, Link, BlackHole for older macOS, and what to do when the meter doesn't move.
 
@@ -80,6 +85,16 @@ Live mode is the show: it plays in the window, and **Go full screen on…** puts
 picture full screen on a display of your choice (remembered for next time), performance effects (strobe, blackout, punch, freeze, mirror, speed, trails…)
 with keys, playlists that move on by themselves, and **stay on this one** to hold a
 preset. Hold Esc for 3 s, or press ⌘⇧L, to leave it.
+
+### Camera
+
+Open **Camera** from Home or Live to feed your outlines into the playing preset.
+Person-only isolation removes the room; separate camera and outline opacity controls
+let you hide the photograph while recognizable edges shed trails. Edge steadiness
+and curve smoothing reduce jitter. The existing music input, preset library and
+fullscreen output keep working. Camera starts off, asks for video permission only
+when enabled, and processes images locally. Closing the panel keeps it running;
+**Stop camera** releases capture. See [the camera guide](docs/camera-player.md).
 
 ### Privacy
 
