@@ -32,6 +32,7 @@ export class OutputMeter {
     const duration = Math.max(1, Math.min(windowMs, now - this.startedAt));
     const samples = this.samples.filter((sample) => sample.at > now - windowMs);
     return {
+      ready: duration >= 500 && (samples.length >= 2 || duration >= 1000),
       verified: samples.length > 0 && samples.every((sample) => sample.verified),
       nativeFps: (samples.filter((sample) => sample.unique).length * 1000) / duration,
       readsPerSecond: (samples.length * 1000) / duration,

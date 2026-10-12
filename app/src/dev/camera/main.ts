@@ -323,6 +323,8 @@ async function paint(id: number) {
             if (size !== measuredSize) {
               meter.reset(performance.now());
               measuredSize = size;
+              $('rate').textContent = `WARMING UP / ${width}×${height}`;
+              $('sustained-rate').textContent = 'Warming up · collecting a meaningful frame sample';
             }
             const snapshotHeader = r.headers.get('X-Snapshot-Ms');
             const snapshotMs = snapshotHeader === null ? NaN : Number(snapshotHeader);
@@ -377,10 +379,16 @@ async function paint(id: number) {
             if (performance.now() - rateAt >= 1000) {
               const recent = meter.snapshot(performance.now(), 1000);
               const sustained = meter.snapshot(performance.now());
-              $('rate').textContent = recent.verified ? `${recent.nativeFps.toFixed(0)} NATIVE FPS / ${width}×${height}` : `${recent.readsPerSecond.toFixed(0)} READS/S / native FPS unavailable`;
-              $('sustained-rate').textContent = sustained.verified
-                ? `${sustained.nativeFps.toFixed(1)} native FPS · ${sustained.seconds.toFixed(1)}s rolling sample`
-                : 'Native frame IDs unavailable · throughput is not render FPS';
+              $('rate').textContent = !recent.ready
+                ? `WARMING UP / ${width}×${height}`
+                : recent.verified
+                  ? `${recent.nativeFps.toFixed(0)} NATIVE FPS / ${width}×${height}`
+                  : `${recent.readsPerSecond.toFixed(0)} READS/S / native FPS unavailable`;
+              $('sustained-rate').textContent = !sustained.ready
+                ? 'Warming up · collecting a meaningful frame sample'
+                : sustained.verified
+                  ? `${sustained.nativeFps.toFixed(1)} native FPS · ${sustained.seconds.toFixed(1)}s rolling sample`
+                  : 'Native frame IDs unavailable · throughput is not render FPS';
               $('input-cost').textContent = `${((captureFrames * 1000) / (performance.now() - rateAt)).toFixed(0)} INPUT FPS · ${preparationMs.toFixed(1)} MS`;
               $('timings').textContent =
                 `Encode ${encodeCount ? (encodeTotal / encodeCount).toFixed(1) + ' ms' : '—'} · decode ${(decodeTotal / frames).toFixed(1)} ms | Native snapshot ${snapshotCount ? (snapshotTotal / snapshotCount).toFixed(1) + ' ms' : 'unavailable'} | Output: packet wait ${(packetWaitTotal / frames).toFixed(1)} ms · fetch ${(fetchTotal / frames).toFixed(1)} ms · body ${(bodyTotal / frames).toFixed(1)} ms · compose ${(composeTotal / frames).toFixed(1)} ms | Input: prep ${(preparationTotal / Math.max(1, captureFrames)).toFixed(1)} ms · upload ${(uploadTotal / Math.max(1, captureFrames)).toFixed(1)} ms`;

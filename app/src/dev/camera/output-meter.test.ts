@@ -24,3 +24,18 @@ test('rolling sample expires old duplicates and unknown data, reset clears prior
   meter.record(11500, '600');
   expect(meter.snapshot(12000)).toMatchObject({ verified: true, nativeFps: 1, seconds: 1 });
 });
+
+test('new or reset measurement warms up before a first frame can imply inflated FPS', () => {
+  const meter = new OutputMeter(1000);
+  meter.record(1000, '1');
+  expect(meter.snapshot(1000).ready).toBe(false);
+  meter.record(1016, '2');
+  expect(meter.snapshot(1016).ready).toBe(false);
+  meter.record(1600, '3');
+  expect(meter.snapshot(1600).ready).toBe(true);
+  meter.reset(1700);
+  meter.record(1700, '4');
+  expect(meter.snapshot(1700).ready).toBe(false);
+  // A genuinely slow one-frame-per-second source is measurable after a full second.
+  expect(meter.snapshot(2700).ready).toBe(true);
+});
