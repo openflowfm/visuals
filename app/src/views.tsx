@@ -80,7 +80,7 @@ export function Mark() {
 
 /**
  * Every view's header: the mark, the view switch, then whatever the view puts in
- * it. In the main window it is the title bar too (chrome.ts): its empty space
+ * it. In the main window it is the title bar too (zen's chrome, which VisualsApp starts): its empty space
  * drags the window. `lead` goes before the mark (the home's sidebar toggle).
  * `mark={false}` leaves the mark out (the home shows it atop its sidebar).
  */

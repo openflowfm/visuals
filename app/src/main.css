@@ -1,0 +1,31 @@
+/* The page's frame around zen's VisualsApp, and its type. Everything inside
+   is zen's (`@satoramoto/zen/zen.css`, `@satoramoto/zen/visuals.css`). */
+
+/* Instrument Sans (decision 69): one humane sans for UI, titles and numbers, as
+   zen's `instrument` faces name it. One variable file, weights 400–700 and
+   widths 75–100, bundled beside this file with its licence (fonts/OFL.txt), so
+   it loads from disk with no network fetch; `block` waits for it rather than
+   flashing a fallback. The WOFF2 is made from the TTF beside it, from
+   google/fonts' ofl/instrumentsans:
+   uvx --from 'fonttools[woff]==4.55.0' fonttools ttLib.woff2 compress -o app/src/fonts/InstrumentSans.woff2 app/src/fonts/InstrumentSans.ttf */
+@font-face {
+  font-family: 'Instrument Sans';
+  font-style: normal;
+  font-weight: 400 700;
+  font-stretch: 75% 100%;
+  font-display: block;
+  src: url('./fonts/InstrumentSans.woff2') format('woff2-variations');
+}
+
+/* Transparent all the way down: the window is macOS's frost with the preview a
+   native view under the page, showing through wherever nothing here paints.
+   The window holds still: no page scroll. */
+html,
+body,
+#root,
+#root > .lib-scope {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+}
