@@ -1,10 +1,14 @@
 # Camera lab handoff — 2026-10-12
 
-## Running state
+## Server stopped
 
 Resumed at Ryan's request. Coordinator implementation head: `f1cde4afd5c41cd2a8a36167942e936fb72f68f9`, branch `codex/camera-coordinator`.
 Persistent coordinator: `/Users/ryan/Documents/Codex/2026-10-11/i-wa/outputs/camera-lab`.
-Unified launcher is running on 4286/6116 (session 11148); read its fresh token from `work/camera-coordinator.log`. Original saved checkout/main remain unchanged; nothing pushed or published.
+User requested shutdown after the split-opacity/interpolation work began. Launcher20537 and its children20546–20548 were stopped; ports4286/6116 verified closed. Previous tokens/session11148 are historical. Original saved checkout/main remain unchanged; nothing pushed or published.
+
+## Unintegrated smoothing checkpoint
+
+`work/camera-edge-motion`, branch `codex/camera-edge-motion`, clean commit `abb5c715b383da99bd71dc0a7c9aa06fbbf3c4b3` on base `1ae7a6d`. Implements separate camera opacity (0) and outline opacity (65), wider/stronger temporal stabilization and output geometry interpolation. Existing 83 tests and typecheck passed. New behavior regressions, quantified jitter/performance tests, documentation, full build checks and browser acceptance are unfinished. Not integrated or accepted; preserve this worktree. No assignment server exists.
 
 ## User direction
 
