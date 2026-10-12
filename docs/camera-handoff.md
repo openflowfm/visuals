@@ -2,9 +2,9 @@
 
 ## Running state
 
-Resumed at Ryan's request. Coordinator implementation head: `7609a48c915457b8c34e1680b5eeb4efb2d3ac10`, branch `codex/camera-coordinator`.
+Resumed at Ryan's request. Coordinator implementation head: `70d434b687f6e68a1bfc67ba90918bcc92677105`, branch `codex/camera-coordinator`.
 Persistent coordinator: `/Users/ryan/Documents/Codex/2026-10-11/i-wa/outputs/camera-lab`.
-Unified launcher is running on 4286/6116 (session 73456); read its fresh token from `work/camera-coordinator.log`. Original saved checkout/main remain unchanged; nothing pushed or published.
+Unified launcher is running on 4286/6116 (session 11148); read its fresh token from `work/camera-coordinator.log`. Original saved checkout/main remain unchanged; nothing pushed or published.
 
 ## User direction
 
@@ -21,6 +21,24 @@ Latest requested features: compact preset overlay for fast cycling; smooth, almo
 - Native 360p, 720p, 1080p renderer AND output resizing; 720p default. Returned dimensions are authoritative.
 - Explicit Enable audio, microphone/interface selector, sensitivity, input meter. Browser mono PCM snapshots feed native engine FFT; no speaker monitoring. Stop drains requests and releases tracks/context. No automatic microphone permission request on startup.
 - Preset request serialization, rejection rollback to the last accepted preset, and startup ordering fixes.
+
+## Native contour waveform and temporal steadiness follow-up
+
+Ryan reported that edges did not feel like the waveform and requested reduced jitter. Investigation confirmed the old contour path was opaque RGBA injected after warp/before blur: black outside the strokes dimmed all feedback, while the crisp identity was composed afterward in the browser.
+
+Contour mode now sends bounded colored vector paths to `POST /__bridge/camera/contours`. It replaces the native basic waveform only while active; custom waves/shapes remain. Additive antialiased strokes touch only their coverage, enter recursive feedback at the waveform stage, and have bounded bass brightness modulation. Camera presets deliberately have ordinary wave alpha zero; the contour emission uses its own mix. Raw camera mode retains the RGBA route and disables contour mode. Stop/expiry clears external geometry. Ordinary OpenFlow without contour input follows the unchanged path.
+
+The new Edge steadiness slider applies time-aware matching of nearby, similarly oriented segments, with a bounded spatial grid. It eases small jitter, releases quickly for larger movement, and never retains disappeared edges. This is separate from spatial Curve smoothing. Source/mirror/mode/Stop/stale-mask resets clear history. Native between-step rendering crossfades external geometry instead of morphing vertices by unstable path order. The same stabilized geometry feeds native output and browser identity.
+
+Protocol: `{width,height,mix,paths:[{closed,points:[{x,y,color:[r,g,b]}]}]}`; source pixel coordinates, normalized RGB, at most 512 paths and 8192 points. Renderer accepts optional point/global colors; validation rejects invalid dimensions, values and geometry. Implementation: `engine/src/contours.rs`, `engine/src/draw.rs`, renderer camera integration, bridge/bench; frontend `temporal-contours.ts` and `contour-packet.ts`.
+
+Source → integration: temporal `19097c9c` → `5b2e775b`; frontend vectors `9be3afc5` → `4ca5d9fc`; native `106ed4d1` → `d90fe7ab`. Both independent reviews clear. 82 integrated camera/bridge tests passed; source UI typecheck/format/build/isolation passed. Temporal-only 2000-point synthetic benchmark median 0.387 ms, p95 0.632 ms. Native GPU tests cover wave-alpha-zero visibility, asymmetric orientation, disconnected paths, unattenuated background, recursive trails, mode/clear behavior and ordinary-render equivalence. Engine 151 tests and bin tests passed; app 308 tests passed, four ignored. Normal/lab native builds, production exclusion and formatting passed; 250/250 ordinary presets drew with their own shaders without failures/fallbacks. A later FPS warmup fix (source `4190eb82` → `ea1ef102`) raises frontend tests to 83 and avoids first-frame spikes.
+
+Integrated browser proof: Recognition 0% still shows colored facial contours forming native recursive trails. Raw/contour transitions and Stop work; Stop released all 6015 decoded frames and all decoders. 1080p H.264 sampled ~57.7–60.1 FPS over 10-second windows during the initial vector run; physical webcam jitter remains a user acceptance check.
+
+Additive contour strokes exposed over-retention in the three camera presets formerly balanced by opaque image blending. Their decay alone was corrected from .995 to .91 (source `1dbbeb7b` → `0093463b`), preserving color shaders. A 30-second dense geometry plus synthetic audio fixture showed old Prism/Acid reaching 100% white, while all corrected presets had 0% fully white pixels and at most 0.1% two-channel clipping at 5/15/30 seconds. Regression explicitly uses shipped preset text (`a7358d9b`). Latest app suite: 308 passed, five ignored; explicit sustained fixture and native builds/isolation passed. Test-fix integration `a7358d9b` → `70d434b6`.
+
+Final live corrected Acid tide check: native contours visible at Recognition 0, then left at Recognition 45 and Edge steadiness 85, 1080p H.264. No whiteout in the observed run. Current sampled output fell to 45–50 FPS under substantial concurrent machine load (unrelated processes left untouched); cannot promise sustained 60 on this final run. Snapshot/encode/decode timings all increased. No causal attribution or regression exclusion established. Screenshot `outputs/camera-stable-waveform.png` in the task workspace. Physical moving webcam/microphone remain untested. Both completed temporal/waveform worktrees removed after clean-state and integration audits; branches retained, older worktrees/shared target preserved. Unified server session11148 remains running; fresh token in log.
 
 ## 60 FPS implementation and evidence
 
