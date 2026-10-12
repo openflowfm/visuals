@@ -38,5 +38,7 @@ Verification uses synthetic streams and images only: late permission/session/ack
 rejection, device loss, one-flight pacing, view/sheet persistence, stale masks and
 video, independent opacities, geometry budgets, and exact binary envelopes.
 Storybook checks the actual sheet controls without asking for any camera access.
-Packaged WKWebView camera permission, offline worker/WASM loading and real webcam
-appearance still require device acceptance. No physical capture is used by tests.
+The bundled worker/model/WASM completed synthetic inference in the native WebKit
+app. Real webcam permission, appearance and sustained complete-system frame rate
+still require device acceptance. Automated tests use synthetic capture. See the
+[handoff](camera-handoff.md) for the manual-check audio isolation correction.

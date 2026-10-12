@@ -37,3 +37,18 @@ These are a local fixture run under ordinary machine scheduling, not a universal
 Debug, headless captures can set `VISUALS_SHEET=camera` to open the Camera sheet without enabling a device. The bounded retry ends after five seconds or a dialog appears. With `VISUALS_CAMERA_WORKER_SMOKE=<bundled-worker-basename.js>`, the same guarded hook loads that local worker and submits a synthetic gray OffscreenCanvas. A capture-visible PASS reports the returned mask dimensions and inference time; ERROR/TIMEOUT remains visible on failure. The basename is restricted to ASCII letters/digits, dash, underscore and dot. The hook never requests a camera or microphone and is absent from release builds.
 
 Real packaged webcam permission, device loss and actual capture performance still require device acceptance; synthetic model inference is a separate boundary.
+
+## Final fixture isolation and integrated check
+
+Follow-up `1dbbe551bf76c7a3f0913a60b6186930129c1f95` adds a debug/headless
+Camera-sheet audio-acquisition guard: startup, UI polling and explicit source
+choices cannot open physical input during that fixture. The app suite is now
+312 passed, five manual fixtures ignored; normal/lab builds and isolation checks
+passed. The actual app's normal sound behavior is unchanged.
+
+The integrated normal debug app bundle was built and its camera usage description
+and camera entitlement verified. A final standalone-binary UI-only capture
+returned worker PASS256×144/36,864 values/51ms using a synthetic image, with zero
+audio peaks and no input opened. Capture/image evidence and the earlier manual
+check correction are recorded in [the handoff](camera-handoff.md). Real webcam
+acceptance and complete-system 60FPS remain unverified.
