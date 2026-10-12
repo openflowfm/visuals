@@ -72,6 +72,30 @@ selector now matches source identities, protects against stale polls, reports
 pending/errors and uses the existing top-layer popup so Home’s bottom bar does
 not clip the mixer. See [audio-lanes.md](audio-lanes.md).
 
+## Microphone connection follow-up
+
+Ryan reported that mic setup stays at “Connecting microphone”. No running app was
+available for a stack sample, and the fake complete-command test did not reproduce
+a lockup. The built bundle has its microphone usage description and entitlement.
+The physical device/permission cause remains unconfirmed.
+
+Native acquisition now runs behind a 20-second deadline with named connection
+phases. A timeout leaves the prior sources/preferences intact and returns a
+phase-specific error. Only one hardware-open worker is admitted; a late result
+is disposed on that worker before another attempt is allowed. Cancellation is
+checked between lookup, configuration, stream creation and start. This bounds
+acquisition, not arbitrary native driver cleanup, which cannot be forcibly stopped.
+No physical microphone was opened in agent verification. A user retry with the
+updated app and its exact error is needed to diagnose any remaining hardware hang.
+
+The final connection fix passed 329 app tests (5 ignored), 155 engine library
+tests (1 ignored), and 33 engine binary tests. The lab/dev-bridge build, formatting,
+and diff checks passed; exact-commit review found no actionable issues. Regression
+coverage includes blocked acquisition, late cleanup, retry admission, preservation
+of the main source, and the complete command transaction.
+The integrated normal debug app bundle rebuilt successfully and passed the
+production page/binary no-dev-code guard. No devices or dev servers were started.
+
 ## Verification
 
 Design/audio follow-up: 17 Camera/Home/Stage/icon stories passed before audio
