@@ -1,7 +1,7 @@
 [preset00]
 fRating=5
 fGammaAdj=1.4
-fDecay=0.995
+fDecay=0.91
 fVideoEchoZoom=1
 fVideoEchoAlpha=0
 nVideoEchoOrientation=0

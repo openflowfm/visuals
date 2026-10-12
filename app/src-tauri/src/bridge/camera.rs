@@ -193,6 +193,61 @@ impl Bridge {
 mod tests {
     use super::*;
     #[test]
+    #[ignore = "manual 30-second contour feedback brightness fixture"]
+    fn contour_presets_keep_color_during_sustained_audio() {
+        use engine::contours::{Contours, Path, Point};
+        let (device, queue) = engine::render::headless().expect("GPU");
+        let mut renderer = engine::render::Renderer::new(device, queue, 320, 180);
+        let pcm: Vec<f32> = (0..1024)
+            .map(|i| {
+                let t = i as f32 / 48000.0;
+                0.25 * (t * 180.0 * std::f32::consts::TAU).sin() + 0.2 * (t * 1200.0 * std::f32::consts::TAU).sin() + 0.15 * (t * 6000.0 * std::f32::consts::TAU).sin()
+            })
+            .collect();
+        for (index, preset) in PRESETS.iter().enumerate() {
+            for (label, source) in [("old", preset.replace("fDecay=0.91", "fDecay=0.995")), ("retuned", preset.replace("fDecay=0.995", "fDecay=0.91"))] {
+                assert!(renderer.load(&source, 1).unwrap().fell_back.is_empty());
+                renderer.clear();
+                renderer.set_trails(0.65);
+                let mut audio = engine::audio::Audio::new(48000.0);
+                for step in 0..900 {
+                    let paths = (0..18)
+                        .map(|ring| {
+                            let points = (0..48)
+                                .map(|i| {
+                                    let a = i as f32 * std::f32::consts::TAU / 48.0;
+                                    let phase = step as f32 * 0.011;
+                                    let x = 160.0 + (35.0 + ring as f32 * 3.0) * a.cos() + 5.0 * phase.sin();
+                                    let y = 90.0 + (15.0 + ring as f32 * 2.5) * a.sin() + 3.0 * (phase * 0.7).cos();
+                                    let color = [0.15 + 0.85 * (a + phase).sin().max(0.0), 0.15 + 0.85 * (a + phase + 2.1).sin().max(0.0), 0.15 + 0.85 * (a + phase + 4.2).sin().max(0.0)];
+                                    Point { x, y, color: Some(color) }
+                                })
+                                .collect();
+                            Path { closed: true, points }
+                        })
+                        .collect();
+                    renderer.set_contours(Contours { width: 320, height: 180, mix: 0.09, color: None, paths }).unwrap();
+                    audio.update(&pcm, &pcm);
+                    renderer.render(&mut audio, 1.0 / 30.0);
+                    if [149, 449, 899].contains(&step) {
+                        let pixels = renderer.read_back();
+                        let n = (pixels.len() / 4) as f64;
+                        let white = pixels.chunks_exact(4).filter(|p| p[..3].iter().all(|c| *c >= 235)).count() as f64 / n;
+                        let clipped = pixels.chunks_exact(4).filter(|p| p[..3].iter().filter(|c| **c >= 245).count() >= 2).count() as f64 / n;
+                        let mean = pixels.chunks_exact(4).map(|p| (p[0] as f64 + p[1] as f64 + p[2] as f64) / 765.0).sum::<f64>() / n;
+                        eprintln!("preset{index} {label} {}s white{white:.3} two-channel-clip{clipped:.3} mean{mean:.3}", (step + 1) / 30);
+                        if label == "retuned" {
+                            assert!(white < 0.10, "steady whiteout");
+                            assert!(clipped < 0.15, "steady color clipping");
+                            assert!(mean > 0.02, "visible native emission");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
     fn pcm_rejects_malformed_audio_and_clamps_gain() {
         let mut request =
             Request { method: "POST".into(), path: "".into(), query: vec![("rate".into(), "48000".into()), ("gain".into(), "4".into())], headers: vec![], body: 0.5f32.to_le_bytes().repeat(1024) };
