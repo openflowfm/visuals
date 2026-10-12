@@ -9,6 +9,7 @@
 import { clearMocks, mockIPC, mockWindows } from '@tauri-apps/api/mocks';
 import { emit } from '@tauri-apps/api/event';
 import type * as api from '../api.ts';
+import { validateCameraFrame, type CameraFrame } from '../camera/api.ts';
 import type { AudioStatus, AudioLane } from '../audio-api.ts';
 import { sameSource } from '../SourcePicker.tsx';
 import type * as fx from '../fx.ts';
@@ -126,6 +127,10 @@ function play(lists: pl.Lists, list: pl.Playlist | null, index: number | null, p
 /** The command handler over `w`, which it changes as the app would. */
 export function handler(w: World) {
   const random = seeded(w.seed);
+  // The fixture acknowledges bounded binary frames without retaining pixels or opening hardware.
+  let cameraGeneration = 0;
+  let cameraToken: string | null = null;
+  let cameraSequence = 0;
   const lists = (next: pl.Lists): pl.Lists => {
     w.lists = next;
     void emit('lists', next);
@@ -272,10 +277,30 @@ export function handler(w: World) {
     }
   }
 
-  return (cmd: string, args: Args = {}): unknown => {
+  return (cmd: string, input: Args | Uint8Array | ArrayBuffer = {}): unknown => {
+    const args = input as Args;
     if (w.hang.includes(cmd)) return never;
     if (cmd in w.fail) throw w.fail[cmd];
     switch (cmd) {
+      case 'camera_begin':
+        cameraToken = `fixture-camera-${++cameraGeneration}`;
+        cameraSequence = 0;
+        return cameraToken;
+      case 'camera_end':
+        if (args.sessionToken === cameraToken) cameraToken = null;
+        return null;
+      case 'camera_submit': {
+        if (!(input instanceof Uint8Array) && !(input instanceof ArrayBuffer)) throw new Error('Expected a CAM1 binary packet');
+        const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+        if (bytes.length < 8 || bytes.length > 2 * 1024 * 1024 || new TextDecoder().decode(bytes.subarray(0, 4)) !== 'CAM1') throw new Error('Invalid camera packet');
+        const length = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(4, true);
+        if (length > 1024 * 1024 || length > bytes.length - 8) throw new Error('Invalid camera metadata length');
+        const frame = JSON.parse(new TextDecoder().decode(bytes.subarray(8, 8 + length))) as CameraFrame;
+        validateCameraFrame(frame, bytes.length - 8 - length);
+        if (frame.sessionToken !== cameraToken || frame.sequence <= cameraSequence) throw new Error('Camera session ended or frame is out of order');
+        cameraSequence = frame.sequence;
+        return cameraSequence;
+      }
       // The library.
       case 'presets':
         return w.entries;
