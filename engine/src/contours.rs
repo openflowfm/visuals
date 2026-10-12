@@ -53,7 +53,9 @@ impl Contours {
     pub(crate) fn draw_width(&self, size: &Size, bass: f64, list: &mut DrawList, width: Option<f32>) {
         let first = list.vertices.len() as u32;
         let scale = size.texsize_y as f32 / 720.0;
-        let core = width.map_or(0.65 * scale.max(0.5), |w| w * size.texsize_y as f32 / self.height as f32 * 0.5);
+        let fit = (size.texsize_x as f32 / self.width as f32).min(size.texsize_y as f32 / self.height as f32);
+        let offset = [(size.texsize_x as f32 - self.width as f32 * fit) * 0.5, (size.texsize_y as f32 - self.height as f32 * fit) * 0.5];
+        let core = width.map_or(0.65 * scale.max(0.5), |w| w * fit * 0.5);
         let offsets = [-(core + 1.0), -core, core, core + 1.0];
         let alpha = [0.0, 1.0, 1.0, 0.0];
         let emission = (self.mix * (0.85 + 0.15 * bass.clamp(0.0, 2.0) as f32)).min(1.0);
@@ -62,7 +64,7 @@ impl Contours {
             let n = path.points.len();
             for i in 0..n.saturating_sub(1) + usize::from(path.closed) {
                 let (a, b) = (&path.points[i % n], &path.points[(i + 1) % n]);
-                let pixel = |p: &Point| [p.x / self.width as f32 * size.texsize_x as f32, p.y / self.height as f32 * size.texsize_y as f32];
+                let pixel = |p: &Point| [offset[0] + p.x * fit, offset[1] + p.y * fit];
                 let (a_pos, b_pos) = (pixel(a), pixel(b));
                 let (dx, dy) = (b_pos[0] - a_pos[0], b_pos[1] - a_pos[1]);
                 let length = dx.hypot(dy);

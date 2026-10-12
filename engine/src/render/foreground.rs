@@ -23,6 +23,7 @@ pub(super) struct Foreground {
     uniform: wgpu::Buffer,
     motion: Motion,
     opacity: f32,
+    photo_opacity: f32,
     width: f32,
     epoch: u32,
     list: DrawList,
@@ -134,7 +135,11 @@ struct Out { @builtin(position) pos: vec4f, @location(0) uv: vec2f }
 @group(0) @binding(0) var tex:texture_2d<f32>;
 @group(0) @binding(1) var smp:sampler;
 @group(0) @binding(2) var<uniform> opacity:vec4f;
-@fragment fn fs(o:Out)->@location(0) vec4f {let c=textureSample(tex,smp,o.uv);return vec4f(c.rgb,c.a*opacity.x);}";
+@fragment fn fs(o:Out)->@location(0) vec4f {
+ let uv=(o.uv-0.5)/opacity.yz+0.5;
+ if(any(uv<vec2f(0.0)) || any(uv>vec2f(1.0))) {discard;}
+ let c=textureSample(tex,smp,uv);return vec4f(c.rgb,c.a*opacity.x);
+}";
 
 impl Renderer {
     /// Accept photo and waveform geometry together; neither opacity controls feed strength.
@@ -172,6 +177,7 @@ impl Renderer {
                 uniform: gpu::buffer(&self.device, &[0; 16], wgpu::BufferUsages::UNIFORM),
                 motion: Motion::new(frame.contours.clone()),
                 opacity: frame.outline_opacity,
+                photo_opacity: frame.camera_opacity,
                 width: frame.outline_width,
                 epoch: frame.source_epoch,
                 list: DrawList::default(),
@@ -185,6 +191,7 @@ impl Renderer {
         }
         f.prepared = false;
         f.opacity = frame.outline_opacity;
+        f.photo_opacity = frame.camera_opacity;
         f.width = frame.outline_width;
         self.queue.write_texture(
             f.image.texture.as_image_copy(),
@@ -232,7 +239,7 @@ impl Renderer {
         self.clear_camera();
     }
     pub(super) fn composite_camera(&mut self, encoder: &mut wgpu::CommandEncoder) {
-        if self.foreground.as_ref().is_some_and(|f| !f.prepared) {
+        if self.foreground.as_ref().is_some_and(|f| !f.prepared || f.composite.size != self.comp.size) {
             self.advance_camera(0.0);
         }
         let Some(mut f) = self.foreground.take() else { return };
@@ -240,6 +247,10 @@ impl Renderer {
             f.composite = Target::new(&self.device, self.comp.size, "person composite");
             f.outgoing = Target::new(&self.device, self.comp.size, "person outgoing");
         }
+        let (w, h) = (self.comp.size.0 as f32, self.comp.size.1 as f32);
+        let (iw, ih) = (f.image.size.0 as f32, f.image.size.1 as f32);
+        let fit = (w / iw).min(h / ih);
+        self.queue.write_buffer(&f.uniform, 0, bytemuck::cast_slice(&[f.photo_opacity, iw * fit / w, ih * fit / h, 0.0]));
         let group =
             gpu::bind(&self.device, &f.pipeline, &[wgpu::BindingResource::TextureView(&f.image.view), wgpu::BindingResource::Sampler(&self.samplers.linear_clamp), f.uniform.as_entire_binding()]);
         for (i, (source, target)) in [(&self.comp, &f.composite), (&self.outgoing, &f.outgoing)].into_iter().enumerate() {

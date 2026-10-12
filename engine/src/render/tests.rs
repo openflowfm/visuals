@@ -1008,3 +1008,36 @@ fn person_camera_1080p_performance() {
         );
     }
 }
+
+#[test]
+fn person_aspect_is_preserved_and_feedback_matches_foreground_on_portrait_output() {
+    let Some(mut r) = renderer(64, 96, "[preset00]\nfDecay=1\nfWaveAlpha=0\nzoom=1\nwarp=0\n") else { panic!("GPU required") };
+    let output = Target::new(r.device(), (64, 96), "portrait camera");
+    let shown = |r: &mut Renderer| {
+        r.present(&output.view, FORMAT, (64, 96));
+        read_target(r, &output)
+    };
+    r.clear();
+    r.set_camera_layers(person_layers(1.0, 0.0)).unwrap();
+    let photo = shown(&mut r);
+    let at = |x, y| ((y * 64 + x) * 4) as usize;
+    assert_eq!(&photo[at(32, 10)..at(32, 10) + 3], &[0, 0, 0], "letterbox remains empty");
+    assert!(photo[at(32, 32)] > 240 && photo[at(32, 64) + 2] > 240, "photo retains 64x36 aspect, centered at y30");
+    r.set_camera_layers(person_layers(0.0, 1.0)).unwrap();
+    let outline = shown(&mut r);
+    assert!(outline[at(12, 36)] > 100 && outline[at(48, 59) + 2] > 100, "outline uses same centered fit");
+    assert_eq!(&outline[at(12, 16)..at(12, 16) + 3], &[0, 0, 0], "outline is not stretched");
+    r.resize(128, 96);
+    let resized_target = Target::new(r.device(), (128, 96), "resized person");
+    r.present(&resized_target.view, FORMAT, (128, 96));
+    let resized = read_target(&r, &resized_target);
+    assert!(resized[((24 * 128 + 24) * 4) as usize] > 100 && resized[((70 * 128 + 96) * 4 + 2) as usize] > 100, "resize recomputes the shared fit before presentation");
+    r.resize(64, 96);
+    r.clear_camera_layers();
+    let mut contours = contour_fixture();
+    contours.mix = 1.0;
+    r.set_contours(contours).unwrap();
+    r.render(&mut Audio::default(), 1.0 / 30.0);
+    let feedback = shown(&mut r);
+    assert!(feedback[at(12, 36)] > 100 && feedback[at(48, 59) + 2] > 100, "recursive contour source matches foreground fit");
+}
