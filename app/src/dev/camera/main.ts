@@ -70,6 +70,7 @@ try {
 }
 const authors = ['Chromatic vortex', 'Prism cult', 'Acid tide'];
 let presetId = 'camera:0';
+let acceptedPresetId = presetId;
 let presets: CameraPreset[] = authors.map((title, i) => ({ id: `camera:${i}`, title, authors: ['OpenFlow'], thumbnail: null }));
 const presetSelections = new LatestSelection();
 let mode: 'demo' | 'camera' | null = null;
@@ -99,7 +100,12 @@ async function post(route: string, body?: BodyInit) {
   if (!r.ok) throw new Error(r.status === 403 ? 'Bridge token expired. Open the new launcher URL.' : `Engine: ${await r.text()}`);
 }
 function settings(load = false) {
-  const body = JSON.stringify({ presetId: load ? presetId : undefined, resolution: $<HTMLSelectElement>('resolution').value, speed: value('speed') / 100, persistence: value('persistence') / 100 });
+  const body = JSON.stringify({
+    presetId: load ? acceptedPresetId : undefined,
+    resolution: $<HTMLSelectElement>('resolution').value,
+    speed: value('speed') / 100,
+    persistence: value('persistence') / 100,
+  });
   settingsChain = settingsChain.catch(() => {}).then(() => post('camera/settings', body));
   return settingsChain;
 }
@@ -356,24 +362,33 @@ function renderPresets() {
     list.append(button);
   }
 }
-function selectPreset(item: CameraPreset) {
+function showPreset(item: CameraPreset) {
   presetId = item.id;
   const index = filteredPresets().findIndex((p) => p.id === item.id);
   if (index >= 0 && (index < presetPage || index >= presetPage + 60)) presetPage = Math.floor(index / 60) * 60;
   $('browse-presets').textContent = `${item.title} ▴`;
-  $('preset-error').textContent = '';
   document.querySelectorAll<HTMLElement>('[data-preset]').forEach((b) => b.classList.toggle('selected', `camera:${b.dataset.preset}` === item.id));
   renderPresets();
+}
+function selectPreset(item: CameraPreset) {
+  showPreset(item);
+  $('preset-error').textContent = '';
   const body = JSON.stringify({ presetId: item.id, speed: value('speed') / 100, persistence: value('persistence') / 100, resolution: $<HTMLSelectElement>('resolution').value });
   void presetSelections.request(
-    () => {
+    async () => {
       settingsChain = settingsChain.catch(() => {}).then(() => post('camera/settings', body));
-      return settingsChain;
+      await settingsChain;
+      acceptedPresetId = item.id;
     },
     () => {
       $('credits').textContent = `Preset: ${item.title} · ${item.authors.join(', ') || 'MilkDrop community'}`;
     },
     (error) => {
+      const accepted = presets.find((p) => p.id === acceptedPresetId);
+      if (accepted) {
+        showPreset(accepted);
+        $('credits').textContent = `Preset: ${accepted.title} · ${accepted.authors.join(', ') || 'MilkDrop community'}`;
+      }
       $('preset-error').textContent = String(error);
       status(String(error));
     },

@@ -338,3 +338,38 @@ test('large catalog mounts only sixty rows and searching reaches later pages', a
   expect(document.querySelectorAll('.preset-row')).toHaveLength(1);
   expect(document.querySelector('.preset-row')!.textContent).toContain('119');
 });
+
+test('rejected preset restores accepted choice and a later start uses the accepted ID', async () => {
+  vi.mocked(fetch).mockImplementation(async (url, init) => {
+    requests.push(String(url));
+    if (String(url).includes('camera/settings') && String(init?.body).includes('camera:1')) return new Response('Preset missing', { status: 422 });
+    return outputResponse(String(url));
+  });
+  document.querySelector<HTMLButtonElement>('[data-preset="1"]')!.click();
+  await waitFor(() => expect(document.getElementById('preset-error')!.textContent).toContain('Preset missing'));
+  expect(document.getElementById('browse-presets')!.textContent).toContain('Chromatic vortex');
+  expect(document.querySelector('[data-preset="0"]')!.classList.contains('selected')).toBe(true);
+  document.getElementById('demo')!.click();
+  await waitFor(() => expect(requests.some((r) => r.includes('camera/frame'))).toBe(true));
+  const settings = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('camera/settings'));
+  expect(JSON.parse(String(settings.at(-1)?.[1]?.body)).presetId).toBe('camera:0');
+});
+
+test('late rejected older choice does not restore over the newest selected preset', async () => {
+  let rejectOlder!: () => void;
+  vi.mocked(fetch).mockImplementation(async (url, init) => {
+    requests.push(String(url));
+    if (String(url).includes('camera/settings') && String(init?.body).includes('camera:1')) {
+      await new Promise<void>((r) => (rejectOlder = r));
+      return new Response('Old preset failed', { status: 422 });
+    }
+    return outputResponse(String(url));
+  });
+  document.querySelector<HTMLButtonElement>('[data-preset="1"]')!.click();
+  await waitFor(() => expect(rejectOlder).toBeDefined());
+  document.querySelector<HTMLButtonElement>('[data-preset="2"]')!.click();
+  rejectOlder();
+  await waitFor(() => expect(document.getElementById('credits')!.textContent).toContain('Acid tide'));
+  expect(document.getElementById('browse-presets')!.textContent).toContain('Acid tide');
+  expect(document.getElementById('preset-error')!.textContent).toBe('');
+});
