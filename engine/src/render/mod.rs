@@ -24,6 +24,9 @@
 //! comp. See "The preset clock" in docs/milkdrop-engine.md.
 
 mod blur;
+mod camera;
+mod foreground;
+pub use foreground::CameraLayers;
 mod drawing;
 mod gpu;
 mod output;
@@ -57,6 +60,9 @@ pub struct Loaded {
 }
 
 pub struct Renderer {
+    camera: Option<camera::Camera>,
+    foreground: Option<foreground::Foreground>,
+    contours: Option<crate::contours::Contours>,
     device: wgpu::Device,
     queue: wgpu::Queue,
     /// What presets read: the size they draw at and the mesh.
@@ -249,6 +255,9 @@ impl Renderer {
             })
             .collect();
         let mut renderer = Self {
+            camera: None,
+            foreground: None,
+            contours: None,
             feedback: [Target::mipped(&device, full, "feedback a"), Target::mipped(&device, full, "feedback b")],
             current: 0,
             comp: Target::new(&device, full, "comp"),
@@ -612,6 +621,7 @@ impl Renderer {
             pass.set_bind_group(0, &group, &[]);
             self.mesh_draw(&mut pass, &self.warp_uvs);
         }
+        self.inject_camera(&mut encoder, &self.feedback[self.current].out, 1.0);
         self.preview(&mut encoder, 0, &self.feedback[self.current].view);
         self.blur(&mut encoder, &self.feedback[self.current].view, false);
         if self.blur_passes > 0 {
@@ -692,6 +702,7 @@ impl Renderer {
                 pass.set_bind_group(0, &shaded, &[]);
                 self.mesh_draw(&mut pass, &self.display_shaded_uvs);
             }
+            self.inject_camera(&mut encoder, &self.display.out, fraction);
             self.blur(&mut encoder, &self.display.view, true);
             let textured = self.between_list.vertices.iter().any(|v| v.textured > 0.5);
             if textured {
@@ -762,6 +773,8 @@ impl Renderer {
     /// `rand_frame` and the clock starting where a new renderer's do. Two runs of a
     /// preset with the same seed after this draw the same pictures.
     pub fn clear(&mut self) {
+        self.trails_pass = None;
+        self.trails_on = false;
         let mut encoder = self.device.create_command_encoder(&Default::default());
         let blurs = self.blur.iter().chain(&self.display_blur).flat_map(|(a, b)| [a, b]);
         for t in self.feedback.iter().chain([&self.comp, &self.display, &self.bare, &self.outgoing]).chain(blurs).chain(self.textured_source.as_ref()) {
@@ -825,14 +838,12 @@ impl Renderer {
             self.masters.insert(format, quad(&self.device, "master", &self.master_shader, "fs", format));
         }
         self.queue.write_buffer(&self.master_uniform, 0, bytemuck::cast_slice(&crate::fx::uniforms(&self.master)));
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+        self.composite_camera(&mut encoder);
+        let (picture, outgoing) = self.presented_sources();
         let pipeline = &self.masters[&format];
         let texture = wgpu::BindingResource::TextureView;
-        let group = bind(
-            &self.device,
-            pipeline,
-            &[texture(&self.comp.view), texture(&self.outgoing.view), wgpu::BindingResource::Sampler(&self.samplers.linear_clamp), self.master_uniform.as_entire_binding()],
-        );
-        let mut encoder = self.device.create_command_encoder(&Default::default());
+        let group = bind(&self.device, pipeline, &[texture(picture), texture(outgoing), wgpu::BindingResource::Sampler(&self.samplers.linear_clamp), self.master_uniform.as_entire_binding()]);
         {
             // As the size asked for: at a scale below 1 the picture's own
             // size is that, rounded, and would leave a sliver of a bar.

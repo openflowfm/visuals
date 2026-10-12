@@ -24,6 +24,9 @@
 //! The main window's own page is put away (`about:blank`) so only the browser's
 //! page drives the app.
 
+mod camera;
+mod video;
+
 use crate::{bench, catalog, App};
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Read, Write};
@@ -65,7 +68,7 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
         let _ = window.navigate("about:blank".parse().expect("a URL"));
     }
     eprintln!("visual[flow] dev bridge on http://{addr} (token {token})");
-    let bridge = Arc::new(Bridge { app: app.clone(), token, clients: Mutex::new(Vec::new()), relayed: Mutex::new(HashSet::new()), order: Order::default() });
+    let bridge = Arc::new(Bridge { app: app.clone(), token, clients: Mutex::new(Vec::new()), relayed: Mutex::new(HashSet::new()), order: Order::default(), camera_video: video::Video::default() });
     std::thread::spawn(move || {
         for stream in listener.incoming().flatten() {
             let bridge = bridge.clone();
@@ -96,6 +99,7 @@ struct Bridge {
     relayed: Mutex<HashSet<String>>,
     /// Commands handed to the app in the order the page sent them.
     order: Order,
+    camera_video: video::Video,
 }
 
 /// Each page's commands, handed on in the order it numbered them (`seq` within
@@ -225,6 +229,8 @@ fn respond(stream: &mut TcpStream, status: &str, kind: &str, body: &[u8]) {
 struct Call {
     cmd: String,
     #[serde(default)]
+    raw: Option<Vec<u8>>,
+    #[serde(default)]
     args: serde_json::Value,
     /// The page load that sent it, and its number there; without them it isn't ordered.
     #[serde(default)]
@@ -244,6 +250,15 @@ impl Bridge {
             return respond(&mut stream, "403 Forbidden", "text/plain", b"the dev bridge wants its token");
         }
         match (request.method.as_str(), request.path.as_str()) {
+            ("GET", "/__bridge/camera/presets") => self.camera_presets(&mut stream),
+            ("POST", "/__bridge/camera/audio") => self.camera_audio(&mut stream, &request),
+            ("POST", "/__bridge/camera/audio/stop") => self.camera_audio_stop(&mut stream),
+            ("GET", "/__bridge/camera/video") => self.camera_video(&mut stream, &request),
+            ("GET", "/__bridge/camera/output") => self.camera_output(&mut stream),
+            ("POST", "/__bridge/camera/contours") => self.camera_contours(&mut stream, &request.body),
+            ("POST", "/__bridge/camera/frame") => self.camera_frame(&mut stream, &request),
+            ("POST", "/__bridge/camera/settings") => self.camera_settings(&mut stream, &request.body),
+            ("POST", "/__bridge/camera/stop") => self.camera_stop(&mut stream),
             ("POST", "/__bridge/invoke") => self.invoke(&mut stream, &request.body),
             ("POST", "/__bridge/listen") => self.listen(&mut stream, &request.body),
             ("GET", "/__bridge/events") => self.events(stream),
@@ -277,7 +292,7 @@ impl Bridge {
             callback: CallbackFn(0),
             error: CallbackFn(1),
             url: ORIGIN.parse().expect("a URL"),
-            body: InvokeBody::Json(args),
+            body: call.raw.map(InvokeBody::Raw).unwrap_or(InvokeBody::Json(args)),
             headers: Default::default(),
             invoke_key: self.app.invoke_key().to_string(),
         };

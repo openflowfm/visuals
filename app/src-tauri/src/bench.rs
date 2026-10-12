@@ -38,6 +38,25 @@ pub fn draw_size(output: (u32, u32)) -> (u32, u32) {
 }
 
 pub enum Cmd {
+    PersonBegin(Sender<String>),
+    PersonFrame(crate::camera::Packet, Sender<Result<u32, String>>),
+    PersonEnd(String, Sender<()>),
+    #[cfg(feature = "dev-bridge")]
+    CameraFrame(u32, u32, Vec<u8>, f32, Sender<Result<(), String>>),
+    #[cfg(feature = "dev-bridge")]
+    CameraContours(engine::contours::Contours, Sender<Result<(), String>>),
+    #[cfg(feature = "dev-bridge")]
+    CameraSettings(f64, f32),
+    #[cfg(feature = "dev-bridge")]
+    CameraResize(u32, u32),
+    #[cfg(feature = "dev-bridge")]
+    CameraAudio(Vec<f32>, f32, Sender<()>),
+    #[cfg(feature = "dev-bridge")]
+    CameraAudioStop(Sender<()>),
+    #[cfg(feature = "dev-bridge")]
+    CameraStop(Sender<()>),
+    #[cfg(feature = "dev-bridge")]
+    CameraSnapshot(Sender<Option<(Picture, u64)>>),
     /// Load a preset with this seed; its file, when it has one (the editor's has none),
     /// is what [`on_drawing`] names.
     Load(Box<Preset>, u64, Option<PathBuf>, Sender<Result<engine::render::Loaded, String>>),
@@ -180,6 +199,76 @@ fn snapshot(renderer: &mut Renderer, size: (u32, u32)) -> Option<Picture> {
     Some((w, h, rgba))
 }
 
+/// A single bounded readback allocation, reused only by the experimental camera.
+/// Ordinary application snapshots retain their existing lifetime and behavior.
+#[cfg(feature = "dev-bridge")]
+pub(crate) struct CameraSnapshot {
+    size: (u32, u32),
+    row: u32,
+    texture: wgpu::Texture,
+    view: wgpu::TextureView,
+    staging: wgpu::Buffer,
+}
+
+#[cfg(feature = "dev-bridge")]
+impl CameraSnapshot {
+    pub(crate) fn new(renderer: &Renderer, size: (u32, u32)) -> Self {
+        let (w, h) = size;
+        let device = renderer.device();
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("camera snapshot"),
+            size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let view = texture.create_view(&Default::default());
+        let row = (w * 4).div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT) * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let staging = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("camera snapshot readback"),
+            size: (row * h) as u64,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        Self { size, row, texture, view, staging }
+    }
+
+    pub(crate) fn read(&self, renderer: &mut Renderer) -> Option<Picture> {
+        let (w, h) = self.size;
+        renderer.present(&self.view, wgpu::TextureFormat::Rgba8Unorm, self.size);
+        let device = renderer.device();
+        let mut encoder = device.create_command_encoder(&Default::default());
+        encoder.copy_texture_to_buffer(
+            self.texture.as_image_copy(),
+            wgpu::TexelCopyBufferInfo { buffer: &self.staging, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(self.row), rows_per_image: Some(h) } },
+            wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+        );
+        renderer.queue().submit([encoder.finish()]);
+        let slice = self.staging.slice(..);
+        slice.map_async(wgpu::MapMode::Read, |_| {});
+        // Drop the mapped view before unmapping, including the failure path.
+        let picture = (|| {
+            device.poll(wgpu::PollType::wait_indefinitely()).ok()?;
+            let data = slice.get_mapped_range().ok()?;
+            let rgba = if self.row == w * 4 {
+                data.to_vec()
+            } else {
+                let mut rgba = Vec::with_capacity((w * h * 4) as usize);
+                for row in data.chunks_exact(self.row as usize) {
+                    rgba.extend_from_slice(&row[..w as usize * 4]);
+                }
+                rgba
+            };
+            Some((w, h, rgba))
+        })();
+        self.staging.unmap();
+        picture
+    }
+}
+
 #[derive(Default, Clone, Copy, serde::Serialize)]
 pub struct Stats {
     pub fps: f64,
@@ -260,6 +349,17 @@ pub fn start(instance: wgpu::Instance, surface: wgpu::Surface<'static>, size: (u
     let now = Instant::now();
     let bench = Loop {
         renderer,
+        person: crate::camera::Session::default(),
+        #[cfg(feature = "dev-bridge")]
+        camera: None,
+        #[cfg(feature = "dev-bridge")]
+        camera_audio: None,
+        #[cfg(feature = "dev-bridge")]
+        camera_snapshot: None,
+        #[cfg(feature = "dev-bridge")]
+        camera_sequence: 0,
+        #[cfg(feature = "dev-bridge")]
+        camera_settings: (1.0, 0.0),
         adapter,
         surface,
         config,
@@ -295,6 +395,17 @@ struct Output {
 /// refresh and presents it to the bench and the output.
 struct Loop {
     renderer: Renderer,
+    person: crate::camera::Session,
+    #[cfg(feature = "dev-bridge")]
+    camera: Option<Instant>,
+    #[cfg(feature = "dev-bridge")]
+    camera_audio: Option<(Instant, Vec<f32>)>,
+    #[cfg(feature = "dev-bridge")]
+    camera_snapshot: Option<CameraSnapshot>,
+    #[cfg(feature = "dev-bridge")]
+    camera_sequence: u64,
+    #[cfg(feature = "dev-bridge")]
+    camera_settings: (f64, f32),
     adapter: wgpu::Adapter,
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
@@ -430,6 +541,90 @@ impl Loop {
 
     fn command(&mut self, cmd: Cmd) {
         match cmd {
+            Cmd::PersonBegin(reply) => {
+                self.renderer.clear_camera_layers();
+                let _ = reply.send(self.person.begin());
+            }
+            Cmd::PersonFrame(packet, reply) => {
+                let result = self.person.accepts(&packet).and_then(|()| {
+                    let m = &packet.meta;
+                    let layers = engine::render::CameraLayers {
+                        contours: engine::contours::Contours { width: m.width, height: m.height, mix: m.feed_mix, color: None, paths: m.paths.clone() },
+                        rgba: packet.rgba.clone(),
+                        camera_opacity: m.camera_opacity,
+                        outline_opacity: m.outline_opacity,
+                        outline_width: m.outline_width,
+                        interpolation_ms: m.interpolation_ms,
+                        source_epoch: m.source_epoch,
+                    };
+                    self.renderer.set_camera_layers(layers).map_err(str::to_owned)?;
+                    self.person.accepted(&packet);
+                    if self.person.expired(Instant::now()) {
+                        self.renderer.expire_camera_layers();
+                    }
+                    Ok(packet.meta.sequence)
+                });
+                let _ = reply.send(result);
+            }
+            Cmd::PersonEnd(token, reply) => {
+                if self.person.end(&token) {
+                    self.renderer.clear_camera_layers();
+                }
+                let _ = reply.send(());
+            }
+            #[cfg(feature = "dev-bridge")]
+            Cmd::CameraSnapshot(reply) => {
+                let picture = if self.loaded && self.bench_shown {
+                    let size = (self.config.width, self.config.height);
+                    if self.camera_snapshot.as_ref().is_none_or(|s| s.size != size) {
+                        self.camera_snapshot = Some(CameraSnapshot::new(&self.renderer, size));
+                    }
+                    self.camera_snapshot.as_ref().and_then(|s| s.read(&mut self.renderer)).map(|picture| (picture, self.camera_sequence))
+                } else {
+                    None
+                };
+                let _ = reply.send(picture);
+            }
+            #[cfg(feature = "dev-bridge")]
+            Cmd::CameraContours(contours, reply) => {
+                let result = self.renderer.set_contours(contours).map_err(str::to_owned);
+                if result.is_ok() {
+                    self.camera = Some(Instant::now());
+                }
+                let _ = reply.send(result);
+            }
+            #[cfg(feature = "dev-bridge")]
+            Cmd::CameraFrame(w, h, rgba, mix, reply) => {
+                let result = self.renderer.set_camera_frame(w, h, &rgba, mix).map_err(str::to_owned);
+                if result.is_ok() {
+                    self.camera = Some(Instant::now());
+                }
+                let _ = reply.send(result);
+            }
+            #[cfg(feature = "dev-bridge")]
+            Cmd::CameraAudio(samples, rate, reply) => {
+                self.audio.set_sample_rate(rate);
+                self.camera_audio = Some((Instant::now(), samples));
+                let _ = reply.send(());
+            }
+            #[cfg(feature = "dev-bridge")]
+            Cmd::CameraAudioStop(reply) => {
+                self.camera_audio = None;
+                self.audio = Audio::default();
+                let _ = reply.send(());
+            }
+            #[cfg(feature = "dev-bridge")]
+            Cmd::CameraResize(w, h) => {
+                self.renderer.resize(w, h);
+                self.command(Cmd::Resize(w, h));
+            }
+            #[cfg(feature = "dev-bridge")]
+            Cmd::CameraSettings(speed, persistence) => self.camera_settings = (speed, persistence),
+            #[cfg(feature = "dev-bridge")]
+            Cmd::CameraStop(reply) => {
+                self.stop_camera();
+                let _ = reply.send(());
+            }
             Cmd::Load(preset, seed, source, reply) => {
                 // In the show (the output open), a new preset crossfades from the
                 // last one's picture; the editor's reloads on every edit never do.
@@ -536,7 +731,25 @@ impl Loop {
     /// Frozen, the clock stands still and the picture holds. A window that
     /// isn't on screen gets no refreshes to wait for, and the loop would spin;
     /// below a 4 ms round it is paced by sleeping instead.
+    #[cfg(feature = "dev-bridge")]
+    fn stop_camera(&mut self) {
+        self.camera = None;
+        self.camera_snapshot = None;
+        self.camera_audio = None;
+        self.audio = Audio::default();
+        self.renderer.clear_camera();
+        self.renderer.set_trails(0.0);
+        self.renderer.clear();
+    }
+
     fn frame(&mut self) {
+        #[cfg(feature = "dev-bridge")]
+        if self.camera.is_some_and(|last| last.elapsed() > Duration::from_secs(2)) {
+            self.stop_camera();
+        }
+        if self.person.expired(Instant::now()) {
+            self.renderer.expire_camera_layers();
+        }
         let unpaced = !self.refresh.is_zero() && self.refresh < Duration::from_millis(4);
         if unpaced {
             std::thread::sleep(UNPACED.saturating_sub(self.last.elapsed()));
@@ -546,9 +759,12 @@ impl Loop {
             let fx = self.fx.lock().unwrap();
             (fx.speed_now(now), fx.gain() as f32, fx.echo())
         };
+        #[cfg(feature = "dev-bridge")]
+        let (speed, echo) = if self.camera.is_some() { self.camera_settings } else { (speed, echo) };
         let frozen = speed < STILL;
         // A stall (a slow load, the machine asleep) moves the preset on at most a
         // quarter second; otherwise whole refreshes, evened out (`Pacer`).
+        self.renderer.advance_camera(now.duration_since(self.last).as_secs_f32());
         let elapsed = self.pacer.tick(now.duration_since(self.last).as_secs_f64()).min(0.25);
         self.last = now;
         {
@@ -557,12 +773,23 @@ impl Loop {
                 // Sensitivity: a gain on what the presets hear.
                 (ring.0.iter().map(|s| s * gain).collect(), ring.1.iter().map(|s| s * gain).collect())
             };
+            #[cfg(feature = "dev-bridge")]
+            let (l, r) = if let Some((at, samples)) = &self.camera_audio {
+                let samples = camera_audio_window(*at, samples, now).to_vec();
+                (samples.clone(), samples)
+            } else {
+                (l, r)
+            };
             self.audio.update(&l, &r);
         }
         self.renderer.set_trails(echo);
         let heard = self.renderer.clock.frame;
         let started = Instant::now();
         self.renderer.render(&mut self.audio, if frozen { 0.0 } else { elapsed * speed });
+        #[cfg(feature = "dev-bridge")]
+        {
+            self.camera_sequence = self.camera_sequence.saturating_add(1);
+        }
         let cpu = started.elapsed().as_secs_f64();
         if self.renderer.clock.frame != heard {
             self.fx.lock().unwrap().listen(self.audio.bass(), self.audio.bass_att(), now);
@@ -1117,5 +1344,52 @@ mod tests {
         let mut c = Content(vec![Bench, Frost, Other]);
         c.bench();
         assert_eq!(c.0, [Frost, Bench, Other]);
+    }
+}
+
+#[cfg(feature = "dev-bridge")]
+fn camera_audio_window(at: Instant, samples: &[f32], now: Instant) -> &[f32] {
+    if now.saturating_duration_since(at) <= Duration::from_millis(250) { samples } else { &[] }
+}
+
+#[cfg(all(test, feature = "dev-bridge"))]
+mod camera_audio_tests {
+    use super::*;
+    #[test]
+    fn camera_snapshot_reuses_mapped_buffer_and_preserves_pixels() {
+        let Some((device, queue)) = engine::render::headless() else { panic!("camera readback test requires GPU") };
+        let mut renderer = Renderer::new(device, queue, 65, 37);
+        renderer.load(include_str!("bridge/echo-tunnel.milk"), 1).unwrap();
+        renderer.render(&mut Audio::default(), 1.0 / 60.0);
+        // Padded rows and both HD sizes exercise repeated map/unmap and resize.
+        for size in [(65, 37), (1280, 720), (1920, 1080)] {
+            renderer.resize(size.0, size.1);
+            renderer.render(&mut Audio::default(), 1.0 / 60.0);
+            let expected = snapshot(&mut renderer, size).unwrap();
+            let cached = CameraSnapshot::new(&renderer, size);
+            for _ in 0..3 {
+                let actual = cached.read(&mut renderer).unwrap();
+                assert_eq!(actual, expected);
+                assert_eq!(actual.2.len(), (size.0 * size.1 * 4) as usize);
+            }
+        }
+    }
+
+    #[test]
+    fn real_fft_hears_pcm_and_expired_windows_are_silent() {
+        let now = Instant::now();
+        let pcm: Vec<f32> = (0..1024).map(|i| (i as f32 * std::f32::consts::TAU * 180.0 / 48000.0).sin() * 0.7).collect();
+        let mut audio = Audio::new(48000.0);
+        let fresh = camera_audio_window(now, &pcm, now);
+        audio.update(fresh, fresh);
+        audio.update_levels(60.0, 1);
+        assert!(audio.bass() > 0.0);
+        assert!(audio.freq.iter().any(|v| *v > 0.0));
+        let stale = camera_audio_window(now, &pcm, now + Duration::from_millis(251));
+        assert!(stale.is_empty());
+        audio.update(stale, stale);
+        assert!(audio.freq.iter().all(|v| *v == 0.0));
+        let stopped = Audio::default();
+        assert!(stopped.freq.iter().all(|v| *v == 0.0));
     }
 }

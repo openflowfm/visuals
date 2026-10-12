@@ -1,4 +1,4 @@
-import { VisualsApp } from '@satoramoto/zen/visuals';
+import { VisualsApp, type VisualsAppProps } from '@satoramoto/zen/visuals';
 import { VisualsEditor } from '@satoramoto/zen/visuals/lab';
 import '@satoramoto/zen/visuals-lab.css';
 
@@ -9,6 +9,6 @@ import '@satoramoto/zen/visuals-lab.css';
  * commands stay in this chunk). It starts in the editor unless `VISUALS_VIEW`
  * says another view, and every header's switch offers home, editor and live.
  */
-export default function Lab() {
-  return <VisualsApp mode="dark" lab={VisualsEditor} />;
+export default function Lab({ cameraController }: Pick<VisualsAppProps, 'cameraController'>) {
+  return <VisualsApp mode="dark" lab={VisualsEditor} cameraController={cameraController} />;
 }

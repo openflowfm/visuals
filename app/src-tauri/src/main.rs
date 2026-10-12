@@ -4,9 +4,11 @@
 
 mod access;
 mod actions;
+mod audio;
 mod bench;
 #[cfg(feature = "dev-bridge")]
 mod bridge;
+mod camera;
 mod catalog;
 mod crash;
 #[cfg(target_os = "macos")]
@@ -37,6 +39,9 @@ mod userlib;
 macro_rules! commands {
     ($($lab:ident),* $(,)?) => {
         tauri::generate_handler![
+            camera::camera_begin,
+            camera::camera_submit,
+            camera::camera_end,
             library::presets,
             library::open,
             catalog::library_index,
@@ -51,6 +56,8 @@ macro_rules! commands {
             listen::listen_to,
             listen::listening,
             listen::levels,
+            audio::audio_status,
+            audio::choose_audio_lane,
             actions::act,
             actions::fx_state,
             actions::playlists,
@@ -116,6 +123,7 @@ struct App {
     bench: Mutex<Option<bench::Thread>>,
     ring: listen::Ring,
     listening: Mutex<Option<listen::Listening>>,
+    audio: audio::Runtime,
     library: PathBuf,
     /// The open preset's seed, kept so an edit reruns it with the same randomness.
     seed: AtomicU64,
@@ -161,7 +169,7 @@ fn main() {
     let builder = builder.invoke_handler(commands!());
     #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
     let mut app = builder
-        .manage(App { bench: Mutex::new(None), ring: listen::ring(), listening: Mutex::new(None), library, seed: AtomicU64::new(1) })
+        .manage(App { bench: Mutex::new(None), ring: listen::ring(), listening: Mutex::new(None), audio: Default::default(), library, seed: AtomicU64::new(1) })
         .manage(deck)
         .manage(userlib::Store::open(userlib::default_file()))
         .register_asynchronous_uri_scheme_protocol(catalog::SCHEME, |ctx, request, responder| {
@@ -214,7 +222,10 @@ fn main() {
                 dev::send_fx(app.handle());
                 let thread = bench::start(instance, surface, (1, 1), state.ring.clone(), effects);
                 *state.bench.lock().unwrap() = Some(thread);
-                listen::resume(&state);
+                // The opt-in camera experiment must never resume a saved microphone or system-audio source.
+                if !(cfg!(feature = "dev-bridge") && std::env::var("VISUALS_CAMERA_LAB").as_deref() == Ok("1")) {
+                    listen::resume(&state);
+                }
                 dev::capture(app.handle());
             }
             // `npm run dev`: the page in a browser, over a local bridge (`VISUALS_BRIDGE`).

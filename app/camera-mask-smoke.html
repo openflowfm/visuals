@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body {
+        background: #181818;
+        color: white;
+        font: 16px system-ui;
+      }
+      canvas {
+        vertical-align: top;
+      }
+    </style>
+    <title>Local person mask check</title>
+  </head>
+  <body>
+    <h1>NASA photo → local person mask</h1>
+    <p id="status">Loading model</p>
+    <canvas id="photo" width="512" height="512"></canvas><canvas id="mask" width="256" height="256"></canvas>
+    <script type="module" src="/src/dev/camera/person-mask-smoke.ts"></script>
+  </body>
+</html>

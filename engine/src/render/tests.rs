@@ -791,3 +791,253 @@ comp_3=`}
     let spread = reds.iter().map(|v| (v - 0.5).abs()).fold(0.0, f64::max);
     assert!(spread < 0.15, "every pixel near grey, the furthest {spread} from it");
 }
+
+#[test]
+fn camera_injection_is_oriented_and_recursive_and_can_be_disabled() {
+    let Some(mut r) = renderer(W, H, "[preset00]\nfDecay=1\nfWaveAlpha=0\nzoom=1\nwarp=0\n") else { return };
+    let mut audio = Audio::default();
+    // Top red, bottom blue, deliberately asymmetric to catch vertical flips.
+    r.set_camera_frame(1, 2, &[255, 0, 0, 255, 0, 0, 255, 255], 1.0).unwrap();
+    r.render(&mut audio, 1.0 / 30.0);
+    let pixels = read_targets(r.device(), r.queue(), &[&r.feedback[r.current]], false).unwrap();
+    assert!(pixels[0] > 240 && pixels[2] < 15, "camera top stays at picture top");
+    let bottom = ((H - 1) * W * 4) as usize;
+    assert!(pixels[bottom + 2] > 240 && pixels[bottom] < 15);
+    let output = presented(&mut r, Master::default());
+    assert!(output[0] > 240 && output[2] < 15, "presented top must stay red: {:?}", &output[..4]);
+    r.clear_camera();
+    r.render(&mut audio, 1.0 / 30.0);
+    let kept = read_targets(r.device(), r.queue(), &[&r.feedback[r.current]], false).unwrap();
+    assert!(kept[0] > 200, "input is part of recursive feedback, not only a final overlay");
+    assert!(r.camera.is_none());
+    assert!(r.set_camera_frame(0, 1, &[], 1.0).is_err());
+    assert!(r.set_camera_frame(1, 1, &[0; 4], f32::NAN).is_err());
+    assert!(r.set_camera_frame(u32::MAX, 1, &[], 1.0).is_err());
+}
+
+#[test]
+fn zero_camera_mix_preserves_the_ordinary_render_exactly() {
+    let Some(mut ordinary) = renderer(W, H, SPIRAL) else { return };
+    let Some(mut camera) = renderer(W, H, SPIRAL) else { return };
+    camera.set_camera_frame(1, 1, &[255, 0, 255, 255], 0.0).unwrap();
+    play(&mut ordinary, &mut Audio::default(), 9, 1.0 / 60.0);
+    play(&mut camera, &mut Audio::default(), 9, 1.0 / 60.0);
+    assert_eq!(read_target(&ordinary, &ordinary.comp), read_target(&camera, &camera.comp));
+}
+
+#[test]
+fn camera_fractional_refresh_approaches_the_next_feedback_step() {
+    let Some(mut r) = renderer(W, H, "[preset00]\nfDecay=1\nfWaveAlpha=0\nzoom=1\nwarp=0\n") else { return };
+    let mut audio = Audio::default();
+    r.set_camera_frame(1, 1, &[255, 0, 0, 255], 1.0).unwrap();
+    r.render(&mut audio, 1.0 / 30.0);
+    r.set_camera_frame(1, 1, &[0, 0, 255, 255], 1.0).unwrap();
+    r.render(&mut audio, 1.0 / 60.0);
+    let shown = read_target(&r, &r.display);
+    assert!((120..=136).contains(&shown[0]) && (120..=136).contains(&shown[2]), "half-step should show halfway to fresh blue: {:?}", &shown[..4]);
+    let fed = read_target(&r, &r.feedback[r.current]);
+    assert!(fed[0] > 240 && fed[2] < 15, "fractional refresh must not feed back");
+    r.render(&mut audio, 1.0 / 60.0);
+    let fed = read_target(&r, &r.feedback[r.current]);
+    assert!(fed[0] < 15 && fed[2] > 240);
+}
+
+fn contour_fixture() -> crate::contours::Contours {
+    use crate::contours::{Contours, Path, Point};
+    let path = |x0, y, x1, color| Path { closed: false, points: vec![Point { x: x0, y, color: Some(color) }, Point { x: x1, y, color: Some(color) }] };
+    Contours { width: 64, height: 36, mix: 0.8, color: None, paths: vec![path(6.0, 6.0, 20.0, [1.0, 0.0, 0.0]), path(42.0, 29.0, 57.0, [0.0, 0.0, 1.0])] }
+}
+
+#[test]
+fn contours_are_native_additive_wave_geometry_with_safe_topology_and_lifecycle() {
+    let Some(mut r) = renderer(W, H, "[preset00]\nfDecay=1\nfWaveAlpha=0\nzoom=1\nwarp=0\n") else { return };
+    let mut audio = Audio::default();
+    // A nonblack backing catches any accidental full-screen attenuation.
+    r.set_camera_frame(1, 1, &[30, 30, 30, 255], 1.0).unwrap();
+    r.render(&mut audio, 1.0 / 30.0);
+    r.set_contours(contour_fixture()).unwrap();
+    assert!(r.camera.is_none());
+    r.render(&mut audio, 1.0 / 30.0);
+    let pixels = presented(&mut r, Master::default());
+    let at = |x, y| ((y * W + x) * 4) as usize;
+    let top = at(12, 6);
+    let bottom = at(48, 29);
+    let room = at(32, 18);
+    assert!(pixels[top] > 100 && pixels[top + 2] < 80, "red top stroke: {:?}", &pixels[top..top + 4]);
+    assert!(pixels[bottom + 2] > 100 && pixels[bottom] < 80, "blue bottom stroke: {:?}", &pixels[bottom..bottom + 4]);
+    assert!((55..=65).contains(&pixels[room]), "room unaffected/no false connecting segment: {:?}", &pixels[room..room + 4]);
+    assert!(r.draw_list.cmds.iter().any(|c| c.source == crate::draw::Source::External));
+    assert!(!r.draw_list.cmds.iter().any(|c| c.source == crate::draw::Source::Basic));
+    // Whole snapshots fade; unrelated equal-size paths never morph across the room.
+    let mut changed = contour_fixture();
+    for path in &mut changed.paths {
+        for p in &mut path.points {
+            p.x = 64.0 - p.x;
+        }
+    }
+    r.set_contours(changed).unwrap();
+    r.render(&mut audio, 1.0 / 60.0);
+    assert!(r.between_list.cmds.iter().filter(|c| c.source == crate::draw::Source::External).count() >= 2);
+    r.clear_camera();
+    assert!(r.contours.is_none());
+    assert!(r.draw_list.cmds.iter().all(|c| c.source != crate::draw::Source::External));
+    r.render(&mut audio, 1.0 / 30.0);
+    assert!(presented(&mut r, Master::default())[top] > 60, "contour emission was in recursive feedback");
+    r.set_contours(contour_fixture()).unwrap();
+    r.set_camera_frame(1, 1, &[0, 0, 0, 255], 0.2).unwrap();
+    assert!(r.contours.is_none());
+}
+
+#[test]
+fn disabled_contours_leave_ordinary_render_exactly_unchanged() {
+    let Some(mut ordinary) = renderer(W, H, SPIRAL) else { return };
+    let Some(mut other) = renderer(W, H, SPIRAL) else { return };
+    other.set_contours(contour_fixture()).unwrap();
+    other.clear_camera();
+    play(&mut ordinary, &mut Audio::default(), 9, 1.0 / 60.0);
+    play(&mut other, &mut Audio::default(), 9, 1.0 / 60.0);
+    assert_eq!(read_target(&ordinary, &ordinary.comp), read_target(&other, &other.comp));
+}
+
+fn person_layers(camera: f32, outline: f32) -> CameraLayers {
+    let mut contours = contour_fixture();
+    contours.mix = 0.0;
+    let rgba = (0..H).flat_map(|y| (0..W).flat_map(move |_| if y < H / 2 { [255, 0, 0, 255] } else { [0, 0, 255, 255] })).collect();
+    CameraLayers { contours, rgba, camera_opacity: camera, outline_opacity: outline, outline_width: 1.0, interpolation_ms: 65.0, source_epoch: 0 }
+}
+#[test]
+fn person_foreground_has_independent_opacity_orientation_and_obeys_master_without_feedback() {
+    let Some(mut r) = renderer(W, H, "[preset00]\nfDecay=1\nfWaveAlpha=0\nzoom=1\nwarp=0\n") else { panic!("camera GPU test needs a GPU") };
+    let mut audio = Audio::default();
+    r.render(&mut audio, 1.0 / 60.0);
+    let original = r.read_back();
+    let original_presented = presented(&mut r, Master::default());
+    r.set_camera_layers(person_layers(1.0, 0.0)).unwrap();
+    let photo = presented(&mut r, Master::default());
+    let bottom = ((H - 1) * W * 4) as usize;
+    assert!(photo[0] > 240 && photo[2] < 15, "photo top red {:?}", &photo[..4]);
+    assert!(photo[bottom + 2] > 240 && photo[bottom] < 15);
+    assert_eq!(r.read_back(), original, "presentation never contaminates comp/feedback");
+    assert!(presented(&mut r, Master { black: 1.0, ..Default::default() }).chunks(4).all(|p| p[..3] == [0, 0, 0]));
+    let faded = presented(&mut r, Master { fade: 1.0, ..Default::default() });
+    assert!(faded[0] > 240, "camera survives outgoing preset transition");
+    r.set_camera_layers(person_layers(0.0, 1.0)).unwrap();
+    let edges = presented(&mut r, Master::default());
+    let at = |x, y| ((y * W + x) * 4) as usize;
+    let top = at(12, 6);
+    let low = at(48, 29);
+    assert!(edges[top] > 100 && edges[top + 2] < 15, "red upper outline {:?}", &edges[top..top + 4]);
+    assert!(edges[low + 2] > 100 && edges[low] < 15, "blue lower outline {:?}", &edges[low..low + 4]);
+    assert_eq!(&edges[at(32, 18)..at(32, 18) + 3], &[0, 0, 0]);
+    r.expire_camera_layers();
+    assert!(r.contours.as_ref().unwrap().paths.is_empty());
+    assert!(r.foreground.is_none());
+    assert_eq!(presented(&mut r, Master::default()), original_presented);
+    r.clear_camera_layers();
+    assert!(r.contours.is_none());
+    assert_eq!(r.read_back(), original);
+}
+#[test]
+fn ending_person_camera_restores_ordinary_renderer_exactly() {
+    let Some(mut a) = renderer(W, H, SPIRAL) else { panic!("GPU required") };
+    let Some(mut b) = renderer(W, H, SPIRAL) else { panic!("GPU required") };
+    b.set_camera_layers(person_layers(1.0, 1.0)).unwrap();
+    b.clear_camera_layers();
+    play(&mut a, &mut Audio::default(), 12, 1.0 / 60.0);
+    play(&mut b, &mut Audio::default(), 12, 1.0 / 60.0);
+    assert_eq!(presented(&mut a, Master::default()), presented(&mut b, Master::default()));
+}
+
+#[test]
+#[ignore = "manual 1080p GPU performance fixture, no camera device or server"]
+fn person_camera_1080p_performance() {
+    use crate::contours::{Contours, Path, Point};
+    for points in [0usize, 2048, 4096, 8192] {
+        let Some(mut r) = renderer(1920, 1080, SPIRAL) else { panic!("GPU required") };
+        let mut audio = Audio::default();
+        let output = Target::new(r.device(), (1920, 1080), "performance output");
+        let mut costs = vec![];
+        let mut uploads = vec![];
+        for frame in 0..150 {
+            let started = std::time::Instant::now();
+            if points > 0 && frame % 2 == 0 {
+                let paths = (0..points / 64)
+                    .map(|j| Path {
+                        closed: true,
+                        points: (0..64)
+                            .map(|i| {
+                                let angle = i as f32 / 64.0 * std::f32::consts::TAU;
+                                Point { x: 160.0 + (30.0 + j as f32) * angle.cos() + (frame as f32 * 0.1).sin(), y: 90.0 + (20.0 + j as f32 * 0.25) * angle.sin(), color: Some([0.2, 0.8, 1.0]) }
+                            })
+                            .collect(),
+                    })
+                    .collect();
+                let upload = std::time::Instant::now();
+                r.set_camera_layers(CameraLayers {
+                    contours: Contours { width: 320, height: 180, mix: 0.3, color: None, paths },
+                    rgba: vec![120; 320 * 180 * 4],
+                    camera_opacity: 0.35,
+                    outline_opacity: 0.65,
+                    outline_width: 0.85,
+                    interpolation_ms: 65.0,
+                    source_epoch: 0,
+                })
+                .unwrap();
+                if frame >= 30 {
+                    uploads.push(upload.elapsed().as_secs_f64() * 1000.0);
+                }
+            }
+            r.advance_camera(1.0 / 60.0);
+            audio.update(&tone(), &tone());
+            r.render(&mut audio, 1.0 / 60.0);
+            r.present(&output.view, FORMAT, (1920, 1080));
+            r.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+            if frame >= 30 {
+                costs.push(started.elapsed().as_secs_f64() * 1000.0);
+            }
+        }
+        costs.sort_by(f64::total_cmp);
+        let mean = costs.iter().sum::<f64>() / costs.len() as f64;
+        eprintln!(
+            "camera1080 points={points} frames={} mean_ms={mean:.3} p95_ms={:.3} max_ms={:.3} throughput_fps={:.1} upload_mean_ms={:.3}",
+            costs.len(),
+            costs[costs.len() * 95 / 100],
+            costs.last().unwrap(),
+            1000.0 / mean,
+            uploads.iter().sum::<f64>() / uploads.len().max(1) as f64
+        );
+    }
+}
+
+#[test]
+fn person_aspect_is_preserved_and_feedback_matches_foreground_on_portrait_output() {
+    let Some(mut r) = renderer(64, 96, "[preset00]\nfDecay=1\nfWaveAlpha=0\nzoom=1\nwarp=0\n") else { panic!("GPU required") };
+    let output = Target::new(r.device(), (64, 96), "portrait camera");
+    let shown = |r: &mut Renderer| {
+        r.present(&output.view, FORMAT, (64, 96));
+        read_target(r, &output)
+    };
+    r.clear();
+    r.set_camera_layers(person_layers(1.0, 0.0)).unwrap();
+    let photo = shown(&mut r);
+    let at = |x, y| ((y * 64 + x) * 4) as usize;
+    assert_eq!(&photo[at(32, 10)..at(32, 10) + 3], &[0, 0, 0], "letterbox remains empty");
+    assert!(photo[at(32, 32)] > 240 && photo[at(32, 64) + 2] > 240, "photo retains 64x36 aspect, centered at y30");
+    r.set_camera_layers(person_layers(0.0, 1.0)).unwrap();
+    let outline = shown(&mut r);
+    assert!(outline[at(12, 36)] > 100 && outline[at(48, 59) + 2] > 100, "outline uses same centered fit");
+    assert_eq!(&outline[at(12, 16)..at(12, 16) + 3], &[0, 0, 0], "outline is not stretched");
+    r.resize(128, 96);
+    let resized_target = Target::new(r.device(), (128, 96), "resized person");
+    r.present(&resized_target.view, FORMAT, (128, 96));
+    let resized = read_target(&r, &resized_target);
+    assert!(resized[((24 * 128 + 24) * 4) as usize] > 100 && resized[((70 * 128 + 96) * 4 + 2) as usize] > 100, "resize recomputes the shared fit before presentation");
+    r.resize(64, 96);
+    r.clear_camera_layers();
+    let mut contours = contour_fixture();
+    contours.mix = 1.0;
+    r.set_contours(contours).unwrap();
+    r.render(&mut Audio::default(), 1.0 / 30.0);
+    let feedback = shown(&mut r);
+    assert!(feedback[at(12, 36)] > 100 && feedback[at(48, 59) + 2] > 100, "recursive contour source matches foreground fit");
+}

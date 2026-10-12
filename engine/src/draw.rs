@@ -43,6 +43,8 @@ pub enum Source {
     Shape(usize),
     Wave(usize),
     Basic,
+    /// Optional external contour geometry in the basic waveform slot.
+    External,
     Darken,
     /// The outer border (0) or the inner one (1).
     Border(usize),
@@ -63,7 +65,7 @@ impl Hide {
     /// Whether a command drawn by `source` stays in.
     pub fn keeps(&self, source: Source) -> bool {
         match source {
-            Source::Wave(_) | Source::Basic => !self.waves,
+            Source::Wave(_) | Source::Basic | Source::External => !self.waves,
             Source::Shape(_) => !self.shapes,
             _ => true,
         }
@@ -631,7 +633,7 @@ pub fn between(from: &DrawList, to: &DrawList, f: f32, out: &mut DrawList) {
     }
     for (a, b) in pairs {
         match (a, b) {
-            (Some(a), Some(b)) if (a.topology, a.blend, a.source, a.count) == (b.topology, b.blend, b.source, b.count) => {
+            (Some(a), Some(b)) if b.source != Source::External && (a.topology, a.blend, a.source, a.count) == (b.topology, b.blend, b.source, b.count) => {
                 out.source = b.source;
                 let (va, vb) = (&from.vertices[a.first as usize..][..a.count as usize], &to.vertices[b.first as usize..][..b.count as usize]);
                 out.push(
@@ -661,13 +663,21 @@ pub fn between(from: &DrawList, to: &DrawList, f: f32, out: &mut DrawList) {
 
 /// Everything after the warp, in Butterchurn's order.
 pub fn frame(r: &mut Runner, audio: &Audio, uvs: &[[f32; 2]], globals: &Globals, size: &Size, list: &mut DrawList) {
+    frame_with_contours(r, audio, uvs, globals, size, list, None);
+}
+
+pub(crate) fn frame_with_contours(r: &mut Runner, audio: &Audio, uvs: &[[f32; 2]], globals: &Globals, size: &Size, list: &mut DrawList, contours: Option<&crate::contours::Contours>) {
     list.clear();
     list.source = Source::Motion;
     motion_vectors(r, uvs, size, list);
     shapes(r, globals, size, list);
     custom_waves(r, audio, globals, size, list);
     list.source = Source::Basic;
-    basic_wave(r, audio, size, list);
+    if let Some(contours) = contours {
+        contours.draw(size, audio.bass(), list);
+    } else {
+        basic_wave(r, audio, size, list);
+    }
     list.source = Source::Darken;
     darken_center(r, size, list);
     borders(r, list);
@@ -715,6 +725,16 @@ mod tests {
         assert_eq!((out.cmds[1].count, out.vertices[2].color[3]), (3, 0.75));
         assert_eq!((out.cmds[2].count, out.vertices[5].color[3]), (5, 0.25));
         assert!(out.cmds.iter().skip(1).all(|c| c.source == Source::Shape(0)));
+    }
+
+    #[test]
+    fn external_contours_fade_without_ordinal_vertex_morphing() {
+        let from = list(&[(Source::External, vec![at(-0.8, 1.0); 6])]);
+        let to = list(&[(Source::External, vec![at(0.8, 1.0); 6])]);
+        let mut out = DrawList::default();
+        between(&from, &to, 0.5, &mut out);
+        assert_eq!(out.cmds.len(), 2);
+        assert!(out.vertices.iter().all(|v| v.pos[0].abs() == 0.8 && v.color[3] == 0.5));
     }
 
     #[test]

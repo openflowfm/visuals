@@ -1,0 +1,39 @@
+[preset00]
+fRating=5
+fGammaAdj=1.4
+fDecay=0.91
+fVideoEchoZoom=1
+fVideoEchoAlpha=0
+nVideoEchoOrientation=0
+fWaveAlpha=0
+bTexWrap=1
+bDarkenCenter=0
+bBrighten=0
+bDarken=0
+bSolarize=0
+bInvert=0
+fShader=0
+zoom=1
+rot=0
+cx=0.5
+cy=0.5
+warp=0
+sx=1
+sy=1
+ob_a=0
+ib_a=0
+mv_a=0
+per_frame_1=zoom=1.025+0.012*min(bass,2); rot=0.018+0.012*min(mid,2);
+per_pixel_1=dx=0.009*sin(y*8+time); dy=0.009*cos(x*8-time);
+comp_1=`shader_body
+comp_2=`{
+comp_3=`float2 p = uv - 0.5;
+comp_4=`float r = length(p);
+comp_5=`float a = atan2(p.y,p.x) + time*0.12 + 0.07*min(treb,2);
+comp_6=`a = abs(frac(a/1.04719755)*1.04719755-0.52359877);
+comp_7=`float2 q = 0.5 + r*float2(cos(a),sin(a));
+comp_8=`float3 base = tex2D(sampler_main,q).xyz;
+comp_9=`float3 echo = tex2D(sampler_main,0.5+(q-0.5)*0.78).yzx;
+comp_10=`ret = base*1.4 + echo*0.5;
+comp_11=`ret = min(float3(1,1,1), pow(max(ret,float3(0,0,0)),float3(0.65,0.65,0.65))*1.35);
+comp_12=`}

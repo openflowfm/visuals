@@ -9,7 +9,9 @@
 //! (`NSAudioCaptureUsageDescription` in `Info.plist`); without it a tap hears
 //! silence.
 
-use engine::live::{Ring, WINDOW};
+use engine::live::{Ring, Sink};
+#[cfg(test)]
+use engine::live::WINDOW;
 
 /// The DAWs the picker names first, by the start of their bundle identifier
 /// (Cubase's carries its version).
@@ -51,7 +53,7 @@ pub fn app_of(bundle: &str) -> &str {
 /// each frame. Each buffer is its samples and how many channels are
 /// interleaved in it; channels count on from one buffer into the next, so
 /// one interleaved buffer and one buffer per channel both work.
-fn feed(buffers: &[(&[f32], usize)], (left, right): (usize, usize), ring: &Ring) {
+fn feed_sink(buffers: &[(&[f32], usize)], (left, right): (usize, usize), sink: &Sink) {
     let channel = |c: usize| -> Option<(&[f32], usize, usize)> {
         let mut first = 0;
         for &(samples, n) in buffers {
@@ -66,16 +68,14 @@ fn feed(buffers: &[(&[f32], usize)], (left, right): (usize, usize), ring: &Ring)
         return;
     };
     let frames = (l.0.len() / l.1).min(r.0.len() / r.1);
-    // Never wait on the render thread from the audio thread.
-    if let Ok(mut ring) = ring.try_lock() {
-        for i in 0..frames {
-            ring.0.push_back(l.0[i * l.1 + l.2]);
-            ring.1.push_back(r.0[i * r.1 + r.2]);
+    let mut block = [[0.0; 2]; 256];
+    for start in (0..frames).step_by(256) {
+        let count = (frames - start).min(256);
+        for (offset, frame) in block[..count].iter_mut().enumerate() {
+            let i = start + offset;
+            *frame = [l.0[i * l.1 + l.2], r.0[i * r.1 + r.2]];
         }
-        while ring.0.len() > WINDOW {
-            ring.0.pop_front();
-            ring.1.pop_front();
-        }
+        sink.write(&block[..count]);
     }
 }
 
@@ -119,7 +119,7 @@ pub use other::*;
 #[cfg(not(target_os = "macos"))]
 mod other {
     use super::{Permission, Process, Target};
-    use engine::live::Ring;
+    use engine::live::Sink;
 
     pub fn supported() -> bool {
         false
@@ -137,15 +137,15 @@ mod other {
         pub rate: f32,
         pub channels: usize,
     }
-    pub fn open(_target: &Target, _channels: (usize, usize), _ring: Ring) -> Result<Tap, String> {
+    pub fn open_sink(_target: &Target, _channels: (usize, usize), _ring: Sink) -> Result<Tap, String> {
         Err("listening to apps needs a Mac".into())
     }
 }
 
 #[cfg(target_os = "macos")]
 mod mac {
-    use super::{feed, Permission, Process, Target};
-    use engine::live::Ring;
+    use super::{feed_sink, Permission, Process, Target};
+    use engine::live::Sink;
     use objc2::rc::Retained;
     use objc2::runtime::AnyObject;
     use objc2::AnyThread;
@@ -255,7 +255,7 @@ mod mac {
 
     /// What the IOProc reads: kept boxed at a fixed address for the tap's life.
     struct Feed {
-        ring: Ring,
+        ring: Sink,
         channels: (usize, usize),
         /// How many times Core Audio has handed the tap's sound over.
         reads: AtomicU64,
@@ -305,7 +305,7 @@ mod mac {
             let samples = if b.mData.is_null() { &[][..] } else { unsafe { std::slice::from_raw_parts(b.mData as *const f32, b.mDataByteSize as usize / 4) } };
             *slot = (samples, b.mNumberChannels as usize);
         }
-        feed(&buffers[..n], to.channels, &to.ring);
+        feed_sink(&buffers[..n], to.channels, &to.ring);
         to.reads.fetch_add(1, Ordering::Relaxed);
         0
     }
@@ -320,7 +320,7 @@ mod mac {
     }
 
     /// Start hearing `target` into `ring`, channels `left` and `right` (from 0).
-    pub fn open(target: &Target, channels: (usize, usize), ring: Ring) -> Result<Tap, String> {
+    pub fn open_sink(target: &Target, channels: (usize, usize), ring: Sink) -> Result<Tap, String> {
         let n = COUNT.fetch_add(1, Ordering::Relaxed);
         let pid = std::process::id();
         let description = unsafe {
@@ -466,4 +466,13 @@ mod tests {
         let _ = player.wait();
         assert!(loudest.0 > 0.001 && loudest.1 > 0.001, "the tap heard silence: {loudest:?}");
     }
+}
+
+#[cfg(test)]
+fn feed(buffers: &[(&[f32], usize)], channels: (usize, usize), ring: &Ring) {
+    feed_sink(buffers, channels, &Sink::ring(ring.clone()));
+}
+#[allow(dead_code)]
+pub fn open(target: &Target, channels: (usize, usize), ring: Ring) -> Result<Tap, String> {
+    open_sink(target, channels, Sink::ring(ring))
 }

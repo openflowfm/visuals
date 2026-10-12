@@ -9,12 +9,27 @@
 import { clearMocks, mockIPC, mockWindows } from '@tauri-apps/api/mocks';
 import { emit } from '@tauri-apps/api/event';
 import type * as api from '../api.ts';
+import { validateCameraFrame, type CameraFrame } from '../camera/api.ts';
+import type { AudioStatus, AudioLane } from '../audio-api.ts';
 import type * as fx from '../fx.ts';
 import type * as link from '../link.ts';
 import type * as output from '../output.ts';
 import type * as pack from '../pack.ts';
 import type * as pl from '../playlists.ts';
 import * as F from './fixtures.ts';
+
+/** Two sources are the same by identity, never by display name (zen's SourcePicker matches the same way). */
+function sameSource(a: api.SourceId | null, b: api.SourceId | null): boolean {
+  if (!a || !b || a.kind !== b.kind) return a === b;
+  if (a.kind === 'system') return true;
+  if (a.kind === 'app' && b.kind === 'app') return a.bundle === b.bundle;
+  if (a.kind === 'device' && b.kind === 'device') {
+    const auid = (a as typeof a & { uid?: string }).uid;
+    const buid = (b as typeof b & { uid?: string }).uid;
+    return auid && buid ? auid === buid : a.name === b.name && a.size === b.size;
+  }
+  return false;
+}
 
 /** The app's state, as the commands read it. */
 export interface World {
@@ -39,6 +54,7 @@ export interface World {
   update: api.Update | null;
   sources: api.AudioSources;
   heard: api.Heard;
+  audio?: AudioStatus;
   levels: [number, number];
   stats: api.Stats;
   firstRun: boolean;
@@ -123,6 +139,10 @@ function play(lists: pl.Lists, list: pl.Playlist | null, index: number | null, p
 /** The command handler over `w`, which it changes as the app would. */
 export function handler(w: World) {
   const random = seeded(w.seed);
+  // The fixture acknowledges bounded binary frames without retaining pixels or opening hardware.
+  let cameraGeneration = 0;
+  let cameraToken: string | null = null;
+  let cameraSequence = 0;
   const lists = (next: pl.Lists): pl.Lists => {
     w.lists = next;
     void emit('lists', next);
@@ -269,10 +289,30 @@ export function handler(w: World) {
     }
   }
 
-  return (cmd: string, args: Args = {}): unknown => {
+  return (cmd: string, input: Args | Uint8Array | ArrayBuffer = {}): unknown => {
+    const args = input as Args;
     if (w.hang.includes(cmd)) return never;
     if (cmd in w.fail) throw w.fail[cmd];
     switch (cmd) {
+      case 'camera_begin':
+        cameraToken = `fixture-camera-${++cameraGeneration}`;
+        cameraSequence = 0;
+        return cameraToken;
+      case 'camera_end':
+        if (args.sessionToken === cameraToken) cameraToken = null;
+        return null;
+      case 'camera_submit': {
+        if (!(input instanceof Uint8Array) && !(input instanceof ArrayBuffer)) throw new Error('Expected a CAM1 binary packet');
+        const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+        if (bytes.length < 8 || bytes.length > 2 * 1024 * 1024 || new TextDecoder().decode(bytes.subarray(0, 4)) !== 'CAM1') throw new Error('Invalid camera packet');
+        const length = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(4, true);
+        if (length > 1024 * 1024 || length > bytes.length - 8) throw new Error('Invalid camera metadata length');
+        const frame = JSON.parse(new TextDecoder().decode(bytes.subarray(8, 8 + length))) as CameraFrame;
+        validateCameraFrame(frame, bytes.length - 8 - length);
+        if (frame.sessionToken !== cameraToken || frame.sequence <= cameraSequence) throw new Error('Camera session ended or frame is out of order');
+        cameraSequence = frame.sequence;
+        return cameraSequence;
+      }
       // The library.
       case 'presets':
         return w.entries;
@@ -440,12 +480,50 @@ export function handler(w: World) {
         return new ArrayBuffer(0);
       case 'audio_sources':
         return w.sources;
+      case 'audio_status': {
+        if (!w.audio) {
+          const source = w.sources.sources.find((s) => s.name === w.heard.choice?.name)?.id ?? null;
+          w.audio = {
+            main: { ...w.heard, source, selected: source, enabled: !!source, unavailable: false },
+            mic: { choice: null, channels: 0, source: null, selected: null, enabled: false, unavailable: false },
+          };
+        }
+        return w.audio;
+      }
+      case 'choose_audio_lane': {
+        if (!w.audio) {
+          const source = w.sources.sources.find((s) => s.name === w.heard.choice?.name)?.id ?? null;
+          w.audio = {
+            main: { ...w.heard, source, selected: source, enabled: !!source, unavailable: false },
+            mic: { choice: null, channels: 0, source: null, selected: null, enabled: false, unavailable: false },
+          };
+        }
+        const lane = args.lane as AudioLane;
+        const id = args.source as api.SourceId | null;
+        const source = w.sources.sources.find((s) => sameSource(s.id, id));
+        if (id && (!source || (lane === 'mic' && id.kind !== 'device'))) throw new Error('Input unavailable');
+        w.audio[lane] = {
+          choice: source ? { name: source.name, size: source.channels, left: Number(args.left), right: Number(args.right) } : null,
+          channels: source?.channels ?? 0,
+          source: id,
+          selected: id,
+          enabled: !!id,
+          unavailable: false,
+        };
+        w.heard = w.audio.main;
+        return w.audio;
+      }
       case 'listening':
         return w.heard;
       case 'inputs':
         return w.sources.sources.filter((s) => s.id.kind === 'device').map((s) => ({ name: s.name, channels: s.channels }));
-      case 'listen_to':
-        return (args.source as api.SourceId | undefined)?.kind === 'system' ? 'Everything the Mac plays' : String((args.name as string | undefined) ?? 'Ableton Live 12');
+      case 'listen_to': {
+        const source = w.sources.sources.find((s) => sameSource(s.id, args.source as api.SourceId));
+        if (!source) throw new Error('Source unavailable');
+        w.heard = { choice: { name: source.name, size: source.channels, left: Number(args.left), right: Number(args.right) }, channels: source.channels };
+        if (w.audio) w.audio.main = { ...w.heard, source: source.id, selected: source.id, enabled: true, unavailable: false };
+        return source.name;
+      }
 
       // The pack, settings, privacy, updates.
       case 'pack_status':

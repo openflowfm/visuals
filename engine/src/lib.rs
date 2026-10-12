@@ -10,6 +10,7 @@
 
 pub mod analyse;
 pub mod audio;
+pub mod contours;
 pub mod draw;
 pub mod eel;
 pub mod features;

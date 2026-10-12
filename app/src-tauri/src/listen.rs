@@ -6,7 +6,11 @@
 use crate::tap::{self, Permission, Process, Target};
 use crate::{bench, App};
 use cpal::traits::{DeviceTrait, HostTrait};
-use engine::live::peaks;
+use engine::live::{peaks, Sink};
+#[path = "listen_connect.rs"]
+mod connect;
+use crate::audio::{Lane, LaneStatus, Status};
+use std::sync::atomic::Ordering;
 pub use engine::live::{ring, Ring};
 use std::sync::Mutex;
 use tauri::State;
@@ -17,6 +21,7 @@ fn name_of(d: &cpal::Device) -> String {
 
 #[derive(serde::Serialize)]
 pub struct Input {
+    pub uid: Option<String>,
     pub name: String,
     pub channels: u16,
 }
@@ -24,12 +29,16 @@ pub struct Input {
 #[tauri::command]
 pub fn inputs() -> Vec<Input> {
     let host = cpal::default_host();
-    host.input_devices().into_iter().flatten().map(|d| Input { name: name_of(&d), channels: d.default_input_config().map(|c| c.channels()).unwrap_or(0) }).collect()
+    host.input_devices()
+        .into_iter()
+        .flatten()
+        .map(|d| Input { uid: d.id().ok().map(|id| id.to_string()), name: name_of(&d), channels: d.default_input_config().map(|c| c.channels()).unwrap_or(0) })
+        .collect()
 }
 
 /// Something to listen to: an app's sound or the whole system's, through a
 /// process tap ([`crate::tap`]), or an input device as [`inputs`] lists it.
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum SourceId {
     /// The app with this bundle identifier.
@@ -37,7 +46,12 @@ pub enum SourceId {
     /// Everything the Mac plays.
     System,
     /// An input device, `size` its channel count to tell same-named ones apart.
-    Device { name: String, size: usize },
+    Device {
+        name: String,
+        size: usize,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        uid: Option<String>,
+    },
 }
 
 #[derive(serde::Serialize)]
@@ -128,7 +142,7 @@ pub fn audio_sources() -> AudioSources {
         sources.extend(apps.into_iter().map(|a| Source { name: app_name(&a.bundle, Some(a.pid)), id: SourceId::App { bundle: a.bundle }, channels: 2 }));
         sources.insert(daws, Source { id: SourceId::System, name: EVERYTHING.into(), channels: 2 });
     }
-    sources.extend(inputs().into_iter().map(|i| Source { id: SourceId::Device { name: i.name.clone(), size: i.channels as usize }, name: i.name, channels: i.channels }));
+    sources.extend(inputs().into_iter().map(|i| Source { id: SourceId::Device { name: i.name.clone(), size: i.channels as usize, uid: i.uid }, name: i.name, channels: i.channels }));
     AudioSources { taps, sources }
 }
 
@@ -139,6 +153,16 @@ enum Stream {
     Tap(#[allow(dead_code)] tap::Tap, Vec<u32>, Option<i32>),
     #[cfg(test)]
     Fake,
+    #[cfg(test)]
+    FakeTracked(#[allow(dead_code)] DropNotice),
+}
+#[cfg(test)]
+struct DropNotice(std::sync::mpsc::Sender<()>);
+#[cfg(test)]
+impl Drop for DropNotice {
+    fn drop(&mut self) {
+        let _ = self.0.send(());
+    }
 }
 
 /// What is being listened to. Dropping it stops listening.
@@ -190,10 +214,10 @@ const SAVED: &str = "audio.json";
 
 /// The choice kept for next time: channels count from 1.
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
-struct Saved {
-    source: SourceId,
-    left: usize,
-    right: usize,
+pub(crate) struct Saved {
+    pub source: SourceId,
+    pub left: usize,
+    pub right: usize,
 }
 
 /// `audio.json` as this version writes it, or as 0.2 did (an input by name).
@@ -208,7 +232,7 @@ impl From<SavedFile> for Saved {
     fn from(file: SavedFile) -> Saved {
         match file {
             SavedFile::Now(s) => s,
-            SavedFile::Before(c) => Saved { source: SourceId::Device { name: c.name, size: c.size }, left: c.left, right: c.right },
+            SavedFile::Before(c) => Saved { source: SourceId::Device { name: c.name, size: c.size, uid: None }, left: c.left, right: c.right },
         }
     }
 }
@@ -223,8 +247,14 @@ static WANTED: Mutex<Option<Saved>> = Mutex::new(None);
 /// permission prompt, which must not freeze the window.
 #[tauri::command(async)]
 pub fn listen_to(name: Option<String>, size: Option<usize>, left: Option<usize>, right: Option<usize>, source: Option<SourceId>, app: State<App>) -> Result<String, String> {
-    let source = source.or_else(|| name.map(|name| SourceId::Device { name, size: size.unwrap_or(0) }));
+    let _operation = app.audio.operation.lock().unwrap();
+    if app.audio.suspended.load(Ordering::Relaxed) {
+        return Err("Stop the test sound before changing audio inputs".into());
+    }
+    let source = source.or_else(|| name.map(|name| SourceId::Device { name, size: size.unwrap_or(0), uid: None }));
     let (name, saved) = choose(&Mac, &app, source, left, right)?;
+    app.audio.preferences.lock().unwrap().main_off = false;
+    crate::settings::save_json("audio-lanes.json", &*app.audio.preferences.lock().unwrap());
     crate::settings::save_json(SAVED, &saved);
     Ok(name)
 }
@@ -254,9 +284,14 @@ fn choose(world: &dyn World, app: &App, source: Option<SourceId>, left: Option<u
 
 /// Where sound comes from: this Mac, or a stand-in in tests.
 trait World: Sync {
+    /// A fixture world can forbid acquisition before any source lookup or open.
+    fn acquisition_allowed(&self) -> bool {
+        true
+    }
+
     /// Open `source` (the system input when `None`) on channels `left` and
     /// `right` (from 0), writing into `ring`.
-    fn open(&self, source: Option<&SourceId>, channels: (usize, usize), ring: Ring) -> Result<Listening, String>;
+    fn open(&self, source: Option<&SourceId>, channels: (usize, usize), ring: Sink) -> Result<Listening, String>;
     /// Whether `source` can't be heard any more: its app quit, or its input is unplugged.
     fn gone(&self, source: &SourceId) -> bool;
     fn processes(&self) -> Vec<Process>;
@@ -266,28 +301,39 @@ trait World: Sync {
 struct Mac;
 
 impl World for Mac {
-    fn open(&self, source: Option<&SourceId>, channels: (usize, usize), ring: Ring) -> Result<Listening, String> {
-        match source {
-            None => listen(None, None, channels, ring),
-            Some(SourceId::Device { name, size }) => listen(Some(name), Some(*size), channels, ring),
-            Some(SourceId::System) => tapped(SourceId::System, Target::Everything, EVERYTHING.into(), vec![], None, channels, ring),
-            Some(SourceId::App { bundle }) => {
-                let objects = objects_of(bundle);
-                if objects.is_empty() {
-                    return Err(format!("{} isn't running", app_name(bundle, None)));
+    fn acquisition_allowed(&self) -> bool {
+        !crate::dev::camera_capture_fixture()
+    }
+
+    fn open(&self, source: Option<&SourceId>, channels: (usize, usize), ring: Sink) -> Result<Listening, String> {
+        physical_audio_allowed()?;
+        let source = source.cloned();
+        connect::run(move |attempt| {
+            attempt.stage("finding the audio source")?;
+            let opened = match source.as_ref() {
+                None => listen_device(None, None, None, channels, ring, &attempt),
+                Some(SourceId::Device { name, size, uid }) => listen_device(Some(name), Some(*size), uid.as_deref(), channels, ring, &attempt),
+                Some(SourceId::System) => tapped(SourceId::System, Target::Everything, EVERYTHING.into(), vec![], None, channels, ring),
+                Some(SourceId::App { bundle }) => {
+                    let objects = objects_of(bundle);
+                    if objects.is_empty() {
+                        return Err(format!("{} isn't running", app_name(bundle, None)));
+                    }
+                    // Named by the same process as in `audio_sources`, so the picker finds it.
+                    let pid = pid_of(&tap::processes(), bundle, std::process::id() as i32);
+                    tapped(SourceId::App { bundle: bundle.clone() }, Target::Processes(objects.clone()), app_name(bundle, pid), objects, pid, channels, ring)
                 }
-                // Named by the same process as in `audio_sources`, so the picker finds it.
-                let pid = pid_of(&tap::processes(), bundle, std::process::id() as i32);
-                tapped(SourceId::App { bundle: bundle.clone() }, Target::Processes(objects.clone()), app_name(bundle, pid), objects, pid, channels, ring)
-            }
-        }
+            }?;
+            attempt.stage("returning the audio connection")?;
+            Ok(opened)
+        })
     }
 
     fn gone(&self, source: &SourceId) -> bool {
         match source {
             SourceId::App { bundle } => objects_of(bundle).is_empty(),
             SourceId::System => false,
-            SourceId::Device { name, size } => !inputs().iter().any(|i| i.name == *name && i.channels as usize == *size),
+            SourceId::Device { name, size, uid } => !inputs().iter().any(|i| uid.as_ref().map_or(i.name == *name && i.channels as usize == *size, |id| i.uid.as_ref() == Some(id))),
         }
     }
 
@@ -300,14 +346,15 @@ impl World for Mac {
     }
 }
 
-fn tapped(source: SourceId, target: Target, name: String, objects: Vec<u32>, main: Option<i32>, channels: (usize, usize), ring: Ring) -> Result<Listening, String> {
+fn tapped(source: SourceId, target: Target, name: String, objects: Vec<u32>, main: Option<i32>, channels: (usize, usize), ring: Sink) -> Result<Listening, String> {
+    physical_audio_allowed()?;
     if !tap::supported() {
         return Err("listening to apps needs macOS 14.4 or later".into());
     }
     if tap::permission() == Permission::Denied {
         return Err(NOT_ALLOWED.into());
     }
-    let t = tap::open(&target, channels, ring)?;
+    let t = tap::open_sink(&target, channels, ring)?;
     // The first tap asks; a refusal leaves it open but silent, which `listening` reports.
     if tap::permission() == Permission::Denied {
         eprintln!("{NOT_ALLOWED}");
@@ -321,9 +368,20 @@ fn tapped(source: SourceId, target: Target, name: String, objects: Vec<u32>, mai
 /// closes, so a switch that fails leaves the bench hearing what it heard.
 /// Returns what is heard and its source.
 fn listen_on(world: &dyn World, app: &App, slot: &mut Option<Listening>, source: Option<&SourceId>, left: Option<usize>, right: Option<usize>) -> Result<(Choice, SourceId), String> {
+    if !world.acquisition_allowed() {
+        return Err("Audio acquisition is disabled for the headless Camera UI fixture".into());
+    }
     let channels = (left.unwrap_or(1).max(1) - 1, right.unwrap_or(2).max(1) - 1);
-    let l = world.open(source, channels, app.ring.clone())?;
-    app.send(bench::Cmd::SampleRate(l.rate));
+    if source.is_some_and(|source| app.audio.mic.lock().unwrap().as_ref().is_some_and(|mic| &mic.source == source)) {
+        return Err("This input is already selected as the microphone".into());
+    }
+    let (port, sink) = app.audio.prepare();
+    let l = world.open(source, channels, sink)?;
+    if app.audio.mic.lock().unwrap().as_ref().is_some_and(|mic| mic.source == l.source) {
+        return Err("This input is already selected as the microphone".into());
+    }
+    app.audio.commit(Lane::Main, port, l.rate, app.ring.clone());
+    app.send(bench::Cmd::SampleRate(crate::audio::RATE));
     let choice = l.choice();
     let heard = l.source.clone();
     eprintln!("listening to {} on channels {} and {} of {}, at {} Hz", choice.name, choice.left, choice.right, l.channels, l.rate);
@@ -357,10 +415,16 @@ fn fall_back(world: &dyn World, app: &App, slot: &mut Option<Listening>, gone: &
 /// said why. Nothing chosen once the first run is done (finished, skipped, or an
 /// install from before the welcome): the system's default input, as before.
 pub fn resume(app: &App) {
+    let _operation = app.audio.operation.lock().unwrap();
+    *app.audio.preferences.lock().unwrap() = crate::settings::load("audio-lanes.json").unwrap_or_default();
     resume_with(&Mac, app, crate::settings::load::<SavedFile>(SAVED).map(Saved::from), crate::settings::first_run());
+    follow_mic(&Mac, app);
 }
 
 fn resume_with(world: &dyn World, app: &App, saved: Option<Saved>, first_run: bool) {
+    if !world.acquisition_allowed() || app.audio.preferences.lock().unwrap().main_off || app.audio.suspended.load(Ordering::Relaxed) {
+        return;
+    }
     let mut slot = app.listening.lock().unwrap();
     *WANTED.lock().unwrap() = saved.clone();
     let Some(s) = saved else {
@@ -385,6 +449,9 @@ fn resume_with(world: &dyn World, app: &App, saved: Option<Saved>, first_run: bo
 /// and nothing chosen, the system's default input opens once `first_run` says
 /// the welcome is over (it was skipped without picking a source).
 fn follow(world: &dyn World, app: &App, first_run: impl Fn() -> bool) {
+    if !world.acquisition_allowed() || app.audio.preferences.lock().unwrap().main_off || app.audio.suspended.load(Ordering::Relaxed) {
+        return;
+    }
     let mut slot = app.listening.lock().unwrap();
     let wanted = WANTED.lock().unwrap().clone();
     if slot.is_none() && wanted.is_none() && !first_run() {
@@ -419,7 +486,9 @@ pub struct Heard {
 /// What the bench is listening to, after following the chosen source ([`follow`]).
 #[tauri::command(async)]
 pub fn listening(app: State<App>) -> Heard {
+    let _operation = app.audio.operation.lock().unwrap();
     follow(&Mac, &app, crate::settings::first_run);
+    follow_mic(&Mac, &app);
     let l = app.listening.lock().unwrap();
     let denied = l.as_ref().is_some_and(|l| l.is_tap()) && tap::permission() == Permission::Denied;
     Heard { choice: l.as_ref().map(|l| l.choice()), channels: l.as_ref().map_or(0, |l| l.channels), denied }
@@ -431,26 +500,37 @@ pub fn levels(app: State<App>) -> (f32, f32) {
     peaks(&app.ring)
 }
 
+/// Last boundary before Core Audio device/tap acquisition. Keep this even when
+/// callers already use the World guard: direct low-level callers must be safe.
+fn physical_audio_allowed() -> Result<(), String> {
+    if crate::dev::camera_capture_fixture() { Err("Audio acquisition is disabled for the headless Camera UI fixture".into()) } else { Ok(()) }
+}
+
 /// Open `input` (the system input when `None`) and write channels `left` and
 /// `right` (from 0) into `ring`.
 /// `size`, when given, picks between inputs that share a name — macOS calls
 /// every aggregate device "Aggregate Device" — by their channel count.
-pub fn listen(input: Option<&str>, size: Option<usize>, channels: (usize, usize), ring: Ring) -> Result<Listening, String> {
+fn listen_device(input: Option<&str>, size: Option<usize>, uid: Option<&str>, channels: (usize, usize), ring: Sink, attempt: &connect::Attempt) -> Result<Listening, String> {
+    physical_audio_allowed()?;
     let host = cpal::default_host();
-    let device = match input {
-        Some(want) => {
-            let named: Vec<cpal::Device> = host.input_devices().map_err(|e| e.to_string())?.filter(|d| name_of(d) == want).collect();
-            let channels_of = |d: &cpal::Device| d.default_input_config().map(|c| c.channels() as usize).unwrap_or(0);
-            let at = named.iter().position(|d| Some(channels_of(d)) == size).unwrap_or(0);
-            named.into_iter().nth(at).ok_or_else(|| format!("no input called {want}"))?
+    let device = if let Some(uid) = uid {
+        host.device_by_id(&uid.parse().map_err(|e: cpal::Error| e.to_string())?).ok_or("selected input is disconnected")?
+    } else {
+        match input {
+            Some(want) => {
+                let named: Vec<cpal::Device> = host.input_devices().map_err(|e| e.to_string())?.filter(|d| name_of(d) == want).collect();
+                let channels_of = |d: &cpal::Device| d.default_input_config().map(|c| c.channels() as usize).unwrap_or(0);
+                let at = if size.is_some_and(|n| n > 0) { named.iter().position(|d| Some(channels_of(d)) == size).ok_or("selected input is disconnected")? } else { 0 };
+                named.into_iter().nth(at).ok_or_else(|| format!("no input called {want}"))?
+            }
+            None => host.default_input_device().ok_or("no system input")?,
         }
-        None => host.default_input_device().ok_or("no system input")?,
     };
-    let open = engine::live::open_input(&device, channels, ring)?;
+    let open = engine::live::open_input_sink_with_progress(&device, channels, ring, |stage| attempt.stage(stage))?;
     let name = name_of(&device);
     Ok(Listening {
         stream: Stream::Input(open.stream),
-        source: SourceId::Device { name: name.clone(), size: open.channels },
+        source: SourceId::Device { name: name.clone(), size: open.channels, uid: device.id().ok().map(|id| id.to_string()) },
         name,
         rate: open.rate,
         channels: open.channels,
@@ -467,6 +547,145 @@ mod tests {
         Process { object: pid as u32 + 100, pid, bundle: bundle.into(), playing }
     }
 
+    struct Fake {
+        gone: Mutex<Vec<SourceId>>,
+        fail: Mutex<bool>,
+    }
+    impl World for Fake {
+        fn open(&self, source: Option<&SourceId>, _: (usize, usize), _: Sink) -> Result<Listening, String> {
+            if *self.fail.lock().unwrap() {
+                return Err("input failed".into());
+            }
+            let source = source.cloned().unwrap_or(SourceId::System);
+            Ok(Listening { stream: Stream::Fake, source, name: "fixture".into(), rate: 44100.0, channels: 1, left: 0, right: 0 })
+        }
+        fn gone(&self, s: &SourceId) -> bool {
+            self.gone.lock().unwrap().contains(s)
+        }
+        fn processes(&self) -> Vec<Process> {
+            vec![]
+        }
+        fn taps_allowed(&self) -> bool {
+            true
+        }
+    }
+    fn device(name: &str) -> SourceId {
+        SourceId::Device { name: name.into(), size: 1, uid: Some(name.into()) }
+    }
+    #[test]
+    fn independent_lanes_preserve_other_lane_and_failed_replacement() {
+        let _turn = WANTS.lock().unwrap_or_else(|e| e.into_inner());
+        let app = app();
+        let world = Fake { gone: Mutex::new(vec![]), fail: Mutex::new(false) };
+        choose_lane_with(&world, &app, Lane::Main, Some(SourceId::System), None, None).unwrap();
+        choose_lane_with(&world, &app, Lane::Mic, Some(device("mic")), None, None).unwrap();
+        assert_eq!(app.listening.lock().unwrap().as_ref().unwrap().source, SourceId::System);
+        *world.fail.lock().unwrap() = true;
+        assert!(choose_lane_with(&world, &app, Lane::Mic, Some(device("other")), None, None).is_err());
+        assert_eq!(app.audio.mic.lock().unwrap().as_ref().unwrap().source, device("mic"));
+        assert_eq!(app.audio.preferences.lock().unwrap().mic.as_ref().unwrap().source, device("mic"));
+        choose_lane_with(&world, &app, Lane::Main, None, None, None).unwrap();
+        follow(&world, &app, || false);
+        assert!(app.listening.lock().unwrap().is_none());
+        assert!(app.audio.mic.lock().unwrap().is_some());
+        let persisted = serde_json::to_string(&*app.audio.preferences.lock().unwrap()).unwrap();
+        let next = self::app();
+        *next.audio.preferences.lock().unwrap() = serde_json::from_str(&persisted).unwrap();
+        resume_with(&world, &next, None, false);
+        assert!(next.listening.lock().unwrap().is_none());
+    }
+    #[test]
+    fn mic_loss_waits_for_exact_device_and_recovers_without_fallback() {
+        let _turn = WANTS.lock().unwrap_or_else(|e| e.into_inner());
+        let app = app();
+        let world = Fake { gone: Mutex::new(vec![]), fail: Mutex::new(false) };
+        choose_lane_with(&world, &app, Lane::Mic, Some(device("mic")), None, None).unwrap();
+        world.gone.lock().unwrap().push(device("mic"));
+        follow_mic(&world, &app);
+        assert!(app.audio.mic.lock().unwrap().is_none());
+        assert!(snapshot(&app).mic.unavailable);
+        world.gone.lock().unwrap().clear();
+        follow_mic(&world, &app);
+        assert_eq!(app.audio.mic.lock().unwrap().as_ref().unwrap().source, device("mic"));
+        assert!(choose_lane_with(&world, &app, Lane::Main, Some(device("mic")), None, None).is_err());
+        choose_lane_with(&world, &app, Lane::Mic, None, None, None).unwrap();
+        follow_mic(&world, &app);
+        assert!(app.audio.mic.lock().unwrap().is_none());
+    }
+    #[test]
+    fn timed_out_microphone_transaction_preserves_main_drops_late_stream_and_can_retry() {
+        struct Blocked {
+            connector: connect::Connector,
+            release: std::sync::Arc<Mutex<Option<std::sync::mpsc::Receiver<()>>>>,
+            dropped: std::sync::mpsc::Sender<()>,
+        }
+        impl World for Blocked {
+            fn open(&self, source: Option<&SourceId>, _: (usize, usize), _: Sink) -> Result<Listening, String> {
+                let source = source.unwrap().clone();
+                let release = self.release.clone();
+                let dropped = self.dropped.clone();
+                self.connector.run(std::time::Duration::from_millis(20), move |attempt| {
+                    attempt.stage("building the Core Audio input stream")?;
+                    if let Some(wait) = release.lock().unwrap().take() {
+                        wait.recv().unwrap();
+                    }
+                    Ok(Listening { stream: Stream::FakeTracked(DropNotice(dropped)), source, name: "fixture".into(), rate: 48000.0, channels: 1, left: 0, right: 0 })
+                })
+            }
+            fn gone(&self, _: &SourceId) -> bool {
+                false
+            }
+            fn processes(&self) -> Vec<Process> {
+                vec![]
+            }
+            fn taps_allowed(&self) -> bool {
+                false
+            }
+        }
+        let _turn = WANTS.lock().unwrap_or_else(|e| e.into_inner());
+        let app = app();
+        let ready = Fake { gone: Mutex::new(vec![]), fail: Mutex::new(false) };
+        choose_lane_transaction(&ready, &app, Lane::Main, Some(device("main")), None, None, |_, _| {}).unwrap();
+        let (release, wait) = std::sync::mpsc::channel();
+        let (dropped, was_dropped) = std::sync::mpsc::channel();
+        let world = Blocked { connector: Default::default(), release: std::sync::Arc::new(Mutex::new(Some(wait))), dropped };
+        let error = choose_lane_transaction(&world, &app, Lane::Mic, Some(device("mic")), None, None, |_, _| panic!("failed open must not save")).err().unwrap();
+        assert!(error.contains("timed out"));
+        assert_eq!(app.listening.lock().unwrap().as_ref().unwrap().source, device("main"));
+        assert!(app.audio.mic.lock().unwrap().is_none());
+        assert!(app.audio.preferences.lock().unwrap().mic.is_none());
+        assert!(choose_lane_transaction(&world, &app, Lane::Mic, Some(device("mic")), None, None, |_, _| {}).is_err());
+        release.send(()).unwrap();
+        was_dropped.recv_timeout(std::time::Duration::from_secs(1)).expect("retired stream closes on worker");
+        assert!(app.audio.mic.lock().unwrap().is_none());
+        let stopped = std::time::Instant::now();
+        while world.connector.pending() {
+            assert!(stopped.elapsed() < std::time::Duration::from_secs(1));
+            std::thread::yield_now();
+        }
+        let status = choose_lane_transaction(&world, &app, Lane::Mic, Some(device("mic")), None, None, |prefs, _| assert!(prefs.mic.is_some())).unwrap();
+        assert!(status.main.enabled && status.mic.enabled);
+        assert_eq!(status.main.source, Some(device("main")));
+    }
+    #[test]
+    fn microphone_command_completes_its_full_transaction() {
+        let _turn = WANTS.lock().unwrap_or_else(|e| e.into_inner());
+        let app = std::sync::Arc::new(app());
+        let worker = app.clone();
+        let (done, completed) = std::sync::mpsc::channel();
+        let task = std::thread::spawn(move || {
+            let world = Fake { gone: Mutex::new(vec![]), fail: Mutex::new(false) };
+            let reply = choose_lane_transaction(&world, &worker, Lane::Mic, Some(device("mic")), None, None, |preferences, _| assert!(preferences.mic.is_some()));
+            done.send(reply.map(|status| status.mic.enabled)).unwrap();
+        });
+        assert_eq!(completed.recv_timeout(std::time::Duration::from_secs(2)).expect("command must return after opening"), Ok(true));
+        task.join().unwrap();
+    }
+    #[test]
+    fn device_identity_ignores_changed_labels_but_distinguishes_identical_names() {
+        assert_eq!(device("a"), SourceId::Device { name: "new name".into(), size: 1, uid: Some("a".into()) });
+        assert_ne!(device("a"), SourceId::Device { name: "a".into(), size: 1, uid: Some("b".into()) });
+    }
     #[test]
     fn offers_daws_first_then_apps_playing_and_never_itself() {
         let processes = [
@@ -513,10 +732,10 @@ mod tests {
     struct Slow(std::sync::Mutex<std::sync::mpsc::Sender<()>>);
 
     impl World for Slow {
-        fn open(&self, source: Option<&SourceId>, _: (usize, usize), _: Ring) -> Result<Listening, String> {
+        fn open(&self, source: Option<&SourceId>, _: (usize, usize), _: Sink) -> Result<Listening, String> {
             let _ = self.0.lock().unwrap().send(());
             std::thread::sleep(std::time::Duration::from_millis(200));
-            let source = source.cloned().unwrap_or(SourceId::Device { name: "system input".into(), size: 2 });
+            let source = source.cloned().unwrap_or(SourceId::Device { name: "system input".into(), size: 2, uid: None });
             Ok(Listening { stream: Stream::Fake, name: format!("{source:?}"), source, rate: 48000.0, channels: 2, left: 0, right: 1 })
         }
         fn gone(&self, _: &SourceId) -> bool {
@@ -534,7 +753,49 @@ mod tests {
     static WANTS: Mutex<()> = Mutex::new(());
 
     fn app() -> App {
-        App { bench: Mutex::new(None), ring: ring(), listening: Mutex::new(None), library: Default::default(), seed: Default::default() }
+        App { bench: Mutex::new(None), ring: ring(), listening: Mutex::new(None), audio: Default::default(), library: Default::default(), seed: Default::default() }
+    }
+
+    #[test]
+    fn blocked_fixture_cannot_open_audio_on_resume_poll_or_explicit_choice() {
+        struct Blocked;
+        impl World for Blocked {
+            fn acquisition_allowed(&self) -> bool {
+                false
+            }
+            fn open(&self, _: Option<&SourceId>, _: (usize, usize), _: Sink) -> Result<Listening, String> {
+                panic!("fixture tried to open audio")
+            }
+            fn gone(&self, _: &SourceId) -> bool {
+                panic!("fixture inspected a physical source")
+            }
+            fn processes(&self) -> Vec<Process> {
+                panic!("fixture inspected physical processes")
+            }
+            fn taps_allowed(&self) -> bool {
+                panic!("fixture inspected tap permission")
+            }
+        }
+        let _turn = WANTS.lock().unwrap_or_else(|e| e.into_inner());
+        *WANTED.lock().unwrap() = None;
+        let app = app();
+        let world = Blocked;
+        resume_with(&world, &app, None, false);
+        for _ in 0..10 {
+            follow(&world, &app, || false);
+        }
+        for source in [None, Some(SourceId::Device { name: "fixture mic".into(), size: 2, uid: None }), Some(SourceId::System), Some(SourceId::App { bundle: "fixture.app".into() })] {
+            assert!(choose(&world, &app, source.clone(), None, None).is_err());
+            if let Some(source) = source {
+                resume_with(&world, &app, Some(Saved { source, left: 1, right: 2 }), false);
+            }
+        }
+        assert!(choose_lane_with(&world, &app, Lane::Mic, Some(device("blocked")), None, None).is_err());
+        follow_mic(&world, &app);
+        assert!(app.audio.mic.lock().unwrap().is_none());
+        assert!(app.listening.lock().unwrap().is_none());
+        assert!(WANTED.lock().unwrap().is_none());
+        assert_eq!(peaks(&app.ring), (0.0, 0.0));
     }
 
     #[test]
@@ -552,7 +813,7 @@ mod tests {
         follow(&world, &app, || true);
         assert!(opened.try_recv().is_err());
         // Once chosen, the next launch comes back to it.
-        let mic = SourceId::Device { name: "MacBook Pro Microphone".into(), size: 1 };
+        let mic = SourceId::Device { name: "MacBook Pro Microphone".into(), size: 1, uid: None };
         resume_with(&world, &app, Some(Saved { source: mic.clone(), left: 1, right: 1 }), false);
         assert!(opened.try_recv().is_ok());
         assert_eq!(app.listening.lock().unwrap().as_ref().unwrap().source, mic);
@@ -595,9 +856,9 @@ mod tests {
         let (said, opening) = std::sync::mpsc::channel();
         let world = Slow(std::sync::Mutex::new(said));
         let daw = SourceId::App { bundle: "com.ableton.live".into() };
-        let mic = SourceId::Device { name: "MacBook Pro Microphone".into(), size: 1 };
+        let mic = SourceId::Device { name: "MacBook Pro Microphone".into(), size: 1, uid: None };
         let app = app();
-        *app.listening.lock().unwrap() = Some(world.open(Some(&daw), (0, 1), app.ring.clone()).unwrap());
+        *app.listening.lock().unwrap() = Some(world.open(Some(&daw), (0, 1), Sink::ring(app.ring.clone())).unwrap());
         opening.recv().unwrap();
         *WANTED.lock().unwrap() = Some(Saved { source: daw, left: 1, right: 2 });
         std::thread::scope(|s| {
@@ -616,7 +877,7 @@ mod tests {
         let daw = SourceId::App { bundle: "com.ableton.live".into() };
         assert_eq!(fallback(&daw, true), Some(SourceId::System));
         assert_eq!(fallback(&daw, false), None);
-        assert_eq!(fallback(&SourceId::Device { name: "Scarlett".into(), size: 2 }, true), None);
+        assert_eq!(fallback(&SourceId::Device { name: "Scarlett".into(), size: 2, uid: None }, true), None);
     }
 
     #[test]
@@ -624,12 +885,147 @@ mod tests {
         let now: SavedFile = serde_json::from_str(r#"{"source":{"kind":"app","bundle":"com.ableton.live"},"left":1,"right":2}"#).unwrap();
         assert_eq!(Saved::from(now), Saved { source: SourceId::App { bundle: "com.ableton.live".into() }, left: 1, right: 2 });
         let before: SavedFile = serde_json::from_str(r#"{"name":"Scarlett 18i20","left":3,"right":4,"size":18}"#).unwrap();
-        assert_eq!(Saved::from(before), Saved { source: SourceId::Device { name: "Scarlett 18i20".into(), size: 18 }, left: 3, right: 4 });
+        assert_eq!(Saved::from(before), Saved { source: SourceId::Device { name: "Scarlett 18i20".into(), size: 18, uid: None }, left: 3, right: 4 });
     }
 
     #[test]
     fn names_a_daw_by_the_table_and_an_unknown_app_by_its_bundle() {
         assert_eq!(app_name("com.ableton.live", None), "Ableton Live");
         assert_eq!(app_name("com.example.nothing", None), "com.example.nothing");
+    }
+}
+
+fn lane_status(l: Option<&Listening>, selected: Option<SourceId>, enabled: bool) -> LaneStatus {
+    LaneStatus {
+        source: l.map(|l| l.source.clone()),
+        choice: l.map(Listening::choice),
+        channels: l.map_or(0, |l| l.channels),
+        unavailable: enabled && (l.is_none() || selected.as_ref().is_some_and(|s| l.is_some_and(|l| &l.source != s))),
+        selected,
+        enabled,
+        denied: l.is_some_and(Listening::is_tap) && tap::permission() == Permission::Denied,
+    }
+}
+fn snapshot(app: &App) -> Status {
+    let prefs = app.audio.preferences.lock().unwrap().clone();
+    let main = app.listening.lock().unwrap();
+    let mic = app.audio.mic.lock().unwrap();
+    let selected = WANTED.lock().unwrap().as_ref().map(|s| s.source.clone()).or_else(|| main.as_ref().map(|l| l.source.clone()));
+    Status {
+        main: lane_status(main.as_ref(), if prefs.main_off { None } else { selected }, !prefs.main_off),
+        mic: lane_status(mic.as_ref(), prefs.mic.as_ref().map(|s| s.source.clone()), prefs.mic.is_some()),
+    }
+}
+pub fn status(app: &App) -> Status {
+    let _operation = app.audio.operation.lock().unwrap();
+    follow(&Mac, app, crate::settings::first_run);
+    follow_mic(&Mac, app);
+    snapshot(app)
+}
+fn mic_on(world: &dyn World, app: &App, saved: &Saved) -> Result<Listening, String> {
+    if !world.acquisition_allowed() {
+        return Err("Audio acquisition is disabled for the headless Camera UI fixture".into());
+    }
+    if !matches!(saved.source, SourceId::Device { .. }) {
+        return Err("The microphone lane needs an input device".into());
+    }
+    if app.listening.lock().unwrap().as_ref().is_some_and(|l| l.source == saved.source) {
+        return Err("This input is already selected as the main source".into());
+    }
+    let (port, sink) = app.audio.prepare();
+    let l = world.open(Some(&saved.source), (saved.left.max(1) - 1, saved.right.max(1) - 1), sink)?;
+    if app.listening.lock().unwrap().as_ref().is_some_and(|main| main.source == l.source) {
+        return Err("This input is already selected as the main source".into());
+    }
+    app.audio.commit(Lane::Mic, port, l.rate, app.ring.clone());
+    app.send(bench::Cmd::SampleRate(crate::audio::RATE));
+    Ok(l)
+}
+fn follow_mic(world: &dyn World, app: &App) {
+    if !world.acquisition_allowed() || app.audio.suspended.load(Ordering::Relaxed) {
+        return;
+    }
+    let wanted = app.audio.preferences.lock().unwrap().mic.clone();
+    let Some(wanted) = wanted else { return };
+    let mut slot = app.audio.mic.lock().unwrap();
+    if slot.as_ref().is_some_and(|l| world.gone(&l.source)) {
+        *slot = None;
+        app.audio.clear(Lane::Mic, &app.ring);
+    }
+    if slot.is_none() && !world.gone(&wanted.source) {
+        if let Ok(l) = mic_on(world, app, &wanted) {
+            *slot = Some(l);
+        }
+    }
+}
+fn choose_lane_with(world: &dyn World, app: &App, lane: Lane, source: Option<SourceId>, left: Option<usize>, right: Option<usize>) -> Result<(), String> {
+    if app.audio.suspended.load(Ordering::Relaxed) {
+        return Err("Stop the test sound before changing audio inputs".into());
+    }
+    match lane {
+        Lane::Main => {
+            if let Some(source) = source {
+                choose(world, app, Some(source), left, right)?;
+                app.audio.preferences.lock().unwrap().main_off = false;
+            } else {
+                *app.listening.lock().unwrap() = None;
+                app.audio.preferences.lock().unwrap().main_off = true;
+                app.audio.clear(Lane::Main, &app.ring);
+            }
+        }
+        Lane::Mic => {
+            if let Some(source) = source {
+                let mut saved = Saved { source, left: left.unwrap_or(1), right: right.unwrap_or(2) };
+                let l = mic_on(world, app, &saved)?;
+                saved.left = l.left + 1;
+                saved.right = l.right + 1;
+                saved.source = l.source.clone();
+                *app.audio.mic.lock().unwrap() = Some(l);
+                app.audio.preferences.lock().unwrap().mic = Some(saved);
+            } else {
+                *app.audio.mic.lock().unwrap() = None;
+                app.audio.preferences.lock().unwrap().mic = None;
+                app.audio.clear(Lane::Mic, &app.ring);
+            }
+        }
+    }
+    Ok(())
+}
+pub fn choose_lane(app: &App, lane: Lane, source: Option<SourceId>, left: Option<usize>, right: Option<usize>) -> Result<Status, String> {
+    choose_lane_transaction(&Mac, app, lane, source, left, right, |preferences, wanted| {
+        crate::settings::save_json("audio-lanes.json", preferences);
+        if let Some(saved) = wanted {
+            crate::settings::save_json(SAVED, saved);
+        }
+    })
+}
+fn choose_lane_transaction(
+    world: &dyn World,
+    app: &App,
+    lane: Lane,
+    source: Option<SourceId>,
+    left: Option<usize>,
+    right: Option<usize>,
+    persist: impl FnOnce(&crate::audio::Preferences, Option<&Saved>),
+) -> Result<Status, String> {
+    let _operation = app.audio.operation.lock().unwrap();
+    choose_lane_with(world, app, lane, source, left, right)?;
+    let preferences = app.audio.preferences.lock().unwrap().clone();
+    let wanted = WANTED.lock().unwrap().clone();
+    persist(&preferences, wanted.as_ref());
+    Ok(snapshot(app))
+}
+
+impl PartialEq for SourceId {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::System, Self::System) => true,
+            (Self::App { bundle: a }, Self::App { bundle: b }) => a == b,
+            (Self::Device { name: a, size: sa, uid: ua }, Self::Device { name: b, size: sb, uid: ub }) => match (ua, ub) {
+                (Some(a), Some(b)) => a == b,
+                _ => a == b && sa == sb,
+            },
+            _ => false,
+        }
     }
 }
