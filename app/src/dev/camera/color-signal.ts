@@ -36,15 +36,14 @@ export class ColorSignal {
       const alpha = opacity ? opacity[i] : 1;
       const luma = (source[p] * 0.2126 + source[p + 1] * 0.7152 + source[p + 2] * 0.0722) / 255;
       const band = (Math.floor(i / this.width) * 1.1 + luma * 95) & 255;
-      const shade = Math.round(luma * 5) / 5;
       for (let c = 0; c < 3; c++) {
         const tone = this.palette[band * 3 + c];
         this.emission[p + c] = edge * tone;
-        // Warm original shading plus spectral ink retains eyes, nose and mouth.
-        this.identity[p + c] = source[p + c] * 0.65 + tone * shade * 0.35;
+        // Camera opacity controls the original photograph independently of ink.
+        this.identity[p + c] = source[p + c];
       }
       this.emission[p + 3] = 255;
-      this.identity[p + 3] = alpha * 0.42 * 255;
+      this.identity[p + 3] = alpha * 255;
     }
     return this.emission;
   }

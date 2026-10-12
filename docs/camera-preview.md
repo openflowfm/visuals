@@ -85,8 +85,8 @@ Following satoramoto/web's Tree Museum strategy, one prepared source drives both
 native feedback and a crisp foreground. Colored contours are the actual RGB bytes
 uploaded to MilkDrop, not a tint on the returned picture. **Color** sets their
 saturation (zero returns silver contours). A gently traveling palette varies with
-vertical position and subject luminance. **Camera opacity** mixes the lightly
-posterized camera image above the native output; **Outline opacity** independently
+vertical position and subject luminance. **Camera opacity** mixes the original
+camera image above the native output; **Outline opacity** independently
 adds recognizable edges. Camera opacity defaults to zero and skips the camera-image
 draw entirely. Set both to zero to expose the native loop alone. **Bring my face
 back** briefly boosts only the outline, without restoring the camera image or
@@ -217,7 +217,9 @@ pixels. Raw camera comparison retains the RGBA frame route.
 
 The default balance is **Camera opacity 0%**, **Outline opacity 65%**,
 **Edge feed 30%**, and **Speed 0.4×**: recognizable edges shedding native trails
-without the camera image. Both foreground opacities are independent of native feed.
+without the camera image. Both foreground opacities are independent of native feed. Camera opacity 100%
+shows full original RGB and opacity within the person mask; Color affects the
+colored edge emission, not the photograph.
 
 Synthetic validation at 30 Hz reduced stationary alternating ±2/±3-input-pixel
 jitter RMS by 92.4%/92.1% at the default steadiness. A local Node benchmark of
